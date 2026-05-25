@@ -50,8 +50,9 @@ ready(function () {
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 5;
-    const INTAKE_BURST_DELAY_MS = 10;
+    const INTAKE_CONCURRENCY = 8;
+    const INTAKE_BURST_DELAY_MS = 8;
+    const FIRST_PAINT_INTAKE_DELAY_MS = 16;
 
     let allItems = [];
     let serverPagedMode = false;
@@ -76,7 +77,7 @@ ready(function () {
     // should ask Maru Search to use Sanmaru resident supply first, not re-open every
     // provider from the browser flow. This is non-blocking for page navigation.
     const SANMARU_BOOT_URL = '/.netlify/functions/sanmaru_engine_v2';
-    let sanmaruBootPromise = null;
+    const sanmaruBootPromises = new Map();
 
     function sanmaruSignalParams(q, type, reason){
       const sp = new URLSearchParams();
@@ -90,18 +91,28 @@ ready(function () {
     }
 
     function bootSanmaruOnce(reason, q, type){
-      if (sanmaruBootPromise) return sanmaruBootPromise;
+      const cleanQ = String(q || '').trim();
+      const safeType = normalizeSearchType(type || activeType || 'all');
+      const key = cleanQ ? ('query:' + safeType + ':' + cleanQ.toLowerCase()) : ('global:' + safeType);
+      if (sanmaruBootPromises.has(key)) return sanmaruBootPromises.get(key);
       try {
-        const url = SANMARU_BOOT_URL + '?' + sanmaruSignalParams(q || '', type || activeType || 'all', reason || 'search-ui').toString();
-        sanmaruBootPromise = fetch(url, {
+        const url = SANMARU_BOOT_URL + '?' + sanmaruSignalParams(cleanQ, safeType, reason || 'search-ui').toString();
+        const promise = fetch(url, {
           method: 'GET',
           cache: 'no-store',
           keepalive: true
         }).catch(() => null);
+        sanmaruBootPromises.set(key, promise);
+        if(sanmaruBootPromises.size > 24){
+          const firstKey = sanmaruBootPromises.keys().next().value;
+          sanmaruBootPromises.delete(firstKey);
+        }
+        return promise;
       } catch(e) {
-        sanmaruBootPromise = Promise.resolve(null);
+        const promise = Promise.resolve(null);
+        sanmaruBootPromises.set(key, promise);
+        return promise;
       }
-      return sanmaruBootPromise;
     }
 
     function signalSanmaruSearch(q, type, reason){
@@ -713,26 +724,17 @@ async function checkSourceFramePolicy(target){
     const r = await fetch(url, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
     const json = await r.json().catch(() => null);
     clearTimeout(timer);
-    if(!r.ok || !json) return { ok:false, directAllowed:false, reason:'check-failed' };
+    if(!r.ok || !json) return { ok:false, directAllowed:true, reason:'check-failed' };
     return json;
   }catch(e){
     clearTimeout(timer);
-    return { ok:false, directAllowed:false, reason:'check-timeout' };
+    // If the checker is unavailable, try the real page directly rather than
+    // replacing the viewer with an empty proxy page.
+    return { ok:false, directAllowed:true, reason:'check-timeout' };
   }
 }
 
-function sourceHostForSearchViewer(target){
-  try{ return new URL(String(target || ''), location.href).hostname.toLowerCase(); }catch(e){ return ''; }
-}
-
-function shouldUseProxyFirstForSearchViewer(target){
-  const host = sourceHostForSearchViewer(target);
-  const raw = String(target || '').toLowerCase();
-  return /(^|\.)(archives\.seoul\.go\.kr|namu\.wiki|blog\.naver\.com|m\.blog\.naver\.com|search\.naver\.com|seoultimes\.net|seouladex\.com|skyscanner\.co\.kr|kayak\.co\.kr|expedia\.co\.kr)$/.test(host) ||
-    /where=post|section=blog|blog\.naver\.com|search\.naver\.com|namu\.wiki|archives\.seoul\.go\.kr/.test(raw);
-}
-
-function loadDirectSourceFrame(frame, target, loadingEl, proxyId){
+function loadDirectSourceFrame(frame, target, loadingEl){
   if(!frame || !target) return;
   frame.classList.remove('maru-search-owned-proxy-frame');
   frame.classList.add('maru-search-owned-source-frame');
@@ -758,13 +760,7 @@ function loadDirectSourceFrame(frame, target, loadingEl, proxyId){
   };
   try{ frame.src = 'about:blank'; }
   catch(e){ try{ frame.src = target; }catch(e2){} }
-  setTimeout(() => {
-    if(done) return;
-    try{
-      if(proxyId) loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
-      else finish();
-    }catch(e){ finish(); }
-  }, 5200);
+  setTimeout(finish, 5200);
 }
 
 function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
@@ -773,26 +769,21 @@ function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
   frame.classList.add('maru-search-owned-proxy-frame');
   frame.classList.remove('maru-search-owned-source-frame');
   frame.referrerPolicy = 'no-referrer-when-downgrade';
-  frame.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-downloads';
+  frame.sandbox = 'allow-scripts allow-forms allow-popups allow-presentation allow-downloads';
   frame.dataset.viewerMode = 'static-proxy';
+
+  // Do not navigate the iframe with src for proxy pages. Injecting the proxy
+  // response as srcdoc keeps browser Back owned by IGDC Search, so Back returns
+  // to the result list instead of cycling through iframe/source history.
   loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target);
 }
 
-async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId, opts){
+async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId){
   if(!frame || !target) return;
-  opts = opts || {};
   if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
-  if(opts.forceDirect === true){
-    loadDirectSourceFrame(frame, target, loadingEl, proxyId);
-    return;
-  }
-  if(shouldUseProxyFirstForSearchViewer(target)){
-    loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
-    return;
-  }
   const policy = await checkSourceFramePolicy(target);
   if(policy && policy.directAllowed){
-    loadDirectSourceFrame(frame, target, loadingEl, proxyId);
+    loadDirectSourceFrame(frame, target, loadingEl);
     return;
   }
   loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
@@ -1705,6 +1696,8 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('routeOwner', 'sanmaru');
   sp.set('naturalFlow', '1');
   sp.set('smoothIntake', '1');
+  sp.set('instantFaucet', '1');
+  sp.set('fastPipe', '1');
   sp.set('noBlockingWide', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
@@ -3595,38 +3588,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       return !!grid.childNodes.length;
     }
 
-
-    function cleanOwnedResultUrlForSearchList(){
-      const u = new URL(location.href);
-      u.searchParams.delete('view');
-      u.searchParams.delete('target');
-      u.searchParams.set('page', String(currentPage || Math.max(1, parseInt((new URLSearchParams(location.search)).get('page') || '1', 10) || 1)));
-      u.searchParams.set('block', String(currentBlock || Math.max(0, parseInt((new URLSearchParams(location.search)).get('block') || '0', 10) || 0)));
-      const q = String(lastQuery || input.value || (new URLSearchParams(location.search)).get('q') || '').trim();
-      if(q) u.searchParams.set('q', q);
-      if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
-      else u.searchParams.delete('type');
-      return u;
-    }
-
-    function restoreSearchListFromOwnedResult(){
-      try{
-        const u = cleanOwnedResultUrlForSearchList();
-        history.replaceState({
-          ...(history.state || {}),
-          __maruSearchOwnedResult:false,
-          view:'list',
-          q: String(lastQuery || input.value || '').trim(),
-          page: currentPage || 1,
-          block: currentBlock || 0,
-          type: activeType
-        }, '', u.toString());
-      }catch(e){}
-      try{ document.querySelectorAll('.maru-search-owned-proxy-frame').forEach(f => { if(f.__maruProxyBlobUrl){ URL.revokeObjectURL(f.__maruProxyBlobUrl); f.__maruProxyBlobUrl=''; } }); }catch(e){}
-      renderPage(currentPage || 1, true);
-      status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
-    }
-
     function renderSearchOwnedResultView(url, it, opts){
       opts = opts || {};
       const target = String(url || '').trim();
@@ -3643,20 +3604,35 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       if(!opts.skipHistory) try{
         const currentQ = String(lastQuery || input.value || '').trim();
-        const listUrl = cleanOwnedResultUrlForSearchList();
-        const detailUrl = new URL(listUrl.toString());
-        detailUrl.searchParams.set('view', 'result');
-        detailUrl.searchParams.set('target', target);
-        const listState = {
+
+        // Keep the browser Back button Google/Naver-like: every source view
+        // must go back to the search result list, not to a previously opened
+        // source card. If we are already on a source view, first collapse that
+        // history entry back to the list URL, then push only the new source view.
+        const listUrl = new URL(location.href);
+        listUrl.searchParams.delete('view');
+        listUrl.searchParams.delete('target');
+        listUrl.searchParams.set('page', String(currentPage || 1));
+        listUrl.searchParams.set('block', String(currentBlock || 0));
+        if(currentQ) listUrl.searchParams.set('q', currentQ);
+        if(activeType && activeType !== 'all') listUrl.searchParams.set('type', activeType);
+        else listUrl.searchParams.delete('type');
+
+        history.replaceState({
           ...(history.state || {}),
-          __maruSearchOwnedResult:false,
-          view:'list',
+          __maruSearchOwnedResult: false,
+          view: 'list',
           q: currentQ,
           page: currentPage || 1,
           block: currentBlock || 0,
-          type: activeType
-        };
-        const detailState = {
+          type: activeType,
+          target: ''
+        }, '', listUrl.toString());
+
+        const u = new URL(listUrl.href);
+        u.searchParams.set('view', 'result');
+        u.searchParams.set('target', target);
+        history.pushState({
           __maruSearchOwnedResult: true,
           q: currentQ,
           page: currentPage || 1,
@@ -3665,14 +3641,7 @@ async function fetchInstantSearchPack(q, type = activeType){
           target: target,
           title: displayTitle.slice(0, 180),
           view: 'result'
-        };
-        const alreadyOwned = !!(history.state && history.state.__maruSearchOwnedResult) || ((new URLSearchParams(location.search)).get('view') === 'result');
-        if(alreadyOwned){
-          history.replaceState(detailState, '', detailUrl.toString());
-        }else{
-          history.replaceState(listState, '', listUrl.toString());
-          history.pushState(detailState, '', detailUrl.toString());
-        }
+        }, '', u.toString());
       }catch(e){}
 
       const shell = document.createElement('div');
@@ -3701,17 +3670,35 @@ async function fetchInstantSearchPack(q, type = activeType){
       back.type = 'button';
       back.textContent = uiText('searchList', 'Search list');
       back.addEventListener('click', () => {
-        restoreSearchListFromOwnedResult();
+        try{
+          const u = new URL(location.href);
+          u.searchParams.delete('view');
+          u.searchParams.delete('target');
+          u.searchParams.set('page', String(currentPage || 1));
+          u.searchParams.set('block', String(currentBlock || 0));
+          history.replaceState({
+            ...(history.state || {}),
+            __maruSearchOwnedResult:false,
+            view:'list',
+            target:'',
+            q: String(lastQuery || input.value || '').trim(),
+            page: currentPage || 1,
+            block: currentBlock || 0,
+            type: activeType
+          }, '', u.toString());
+        }catch(e){}
+        try{ document.querySelectorAll('.maru-search-owned-proxy-frame').forEach(f => { if(f.__maruProxyBlobUrl){ URL.revokeObjectURL(f.__maruProxyBlobUrl); f.__maruProxyBlobUrl=''; } }); }catch(e){}
+        renderPage(currentPage || 1, true);
+        status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
       });
 
-      const open = document.createElement('button');
-      open.type = 'button';
-      open.textContent = (getSearchUiLang && getSearchUiLang() === 'ko') ? '사이트 원문' : uiText('sourcePage', 'Original page');
-      open.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        renderSearchOwnedResultView(target, it, { skipHistory:true, forceDirect:true });
-      });
+      const open = document.createElement('a');
+      open.href = target;
+      open.target = '_blank';
+      open.rel = 'noopener noreferrer';
+      open.dataset.maruExternal = '1';
+      open.textContent = uiText('sourcePage', '원문 보기');
+      open.title = '원본 사이트를 새 탭에서 엽니다';
 
       actions.appendChild(back);
       actions.appendChild(open);
@@ -3742,7 +3729,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       proxyBox.appendChild(frame);
       shell.appendChild(proxyBox);
       installProxyViewerMessageBridge();
-      mountOwnedSourceFrame(frame, loading, target, proxyId, opts);
+      mountOwnedSourceFrame(frame, loading, target, proxyId);
 
       results.innerHTML = '';
       results.appendChild(shell);
@@ -4781,7 +4768,7 @@ async function runSearch(q, type = activeType){
     // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
     // shortly after first paint, but let the page-1 300-window seed pages 1~12
     // first when it arrives quickly.
-    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 50);
+    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-frame-faucet'), FIRST_PAINT_INTAKE_DELAY_MS);
 
     maruWindowPromise.then(res => {
       if(runSearch._seq !== seq || !res || res.error) return;
