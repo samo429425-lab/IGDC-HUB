@@ -713,17 +713,26 @@ async function checkSourceFramePolicy(target){
     const r = await fetch(url, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
     const json = await r.json().catch(() => null);
     clearTimeout(timer);
-    if(!r.ok || !json) return { ok:false, directAllowed:true, reason:'check-failed' };
+    if(!r.ok || !json) return { ok:false, directAllowed:false, reason:'check-failed' };
     return json;
   }catch(e){
     clearTimeout(timer);
-    // If the checker is unavailable, try the real page directly rather than
-    // replacing the viewer with an empty proxy page.
-    return { ok:false, directAllowed:true, reason:'check-timeout' };
+    return { ok:false, directAllowed:false, reason:'check-timeout' };
   }
 }
 
-function loadDirectSourceFrame(frame, target, loadingEl){
+function sourceHostForSearchViewer(target){
+  try{ return new URL(String(target || ''), location.href).hostname.toLowerCase(); }catch(e){ return ''; }
+}
+
+function shouldUseProxyFirstForSearchViewer(target){
+  const host = sourceHostForSearchViewer(target);
+  const raw = String(target || '').toLowerCase();
+  return /(^|\.)(archives\.seoul\.go\.kr|namu\.wiki|blog\.naver\.com|m\.blog\.naver\.com|search\.naver\.com|seoultimes\.net|seouladex\.com|skyscanner\.co\.kr|kayak\.co\.kr|expedia\.co\.kr)$/.test(host) ||
+    /where=post|section=blog|blog\.naver\.com|search\.naver\.com|namu\.wiki|archives\.seoul\.go\.kr/.test(raw);
+}
+
+function loadDirectSourceFrame(frame, target, loadingEl, proxyId){
   if(!frame || !target) return;
   frame.classList.remove('maru-search-owned-proxy-frame');
   frame.classList.add('maru-search-owned-source-frame');
@@ -749,7 +758,13 @@ function loadDirectSourceFrame(frame, target, loadingEl){
   };
   try{ frame.src = 'about:blank'; }
   catch(e){ try{ frame.src = target; }catch(e2){} }
-  setTimeout(finish, 5200);
+  setTimeout(() => {
+    if(done) return;
+    try{
+      if(proxyId) loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
+      else finish();
+    }catch(e){ finish(); }
+  }, 5200);
 }
 
 function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
@@ -758,21 +773,26 @@ function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
   frame.classList.add('maru-search-owned-proxy-frame');
   frame.classList.remove('maru-search-owned-source-frame');
   frame.referrerPolicy = 'no-referrer-when-downgrade';
-  frame.sandbox = 'allow-scripts allow-forms allow-popups allow-presentation allow-downloads';
+  frame.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-downloads';
   frame.dataset.viewerMode = 'static-proxy';
-
-  // Do not navigate the iframe with src for proxy pages. Injecting the proxy
-  // response as srcdoc keeps browser Back owned by IGDC Search, so Back returns
-  // to the result list instead of cycling through iframe/source history.
   loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target);
 }
 
-async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId){
+async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId, opts){
   if(!frame || !target) return;
+  opts = opts || {};
   if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
+  if(opts.forceDirect === true){
+    loadDirectSourceFrame(frame, target, loadingEl, proxyId);
+    return;
+  }
+  if(shouldUseProxyFirstForSearchViewer(target)){
+    loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
+    return;
+  }
   const policy = await checkSourceFramePolicy(target);
   if(policy && policy.directAllowed){
-    loadDirectSourceFrame(frame, target, loadingEl);
+    loadDirectSourceFrame(frame, target, loadingEl, proxyId);
     return;
   }
   loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
@@ -3575,6 +3595,38 @@ async function fetchInstantSearchPack(q, type = activeType){
       return !!grid.childNodes.length;
     }
 
+
+    function cleanOwnedResultUrlForSearchList(){
+      const u = new URL(location.href);
+      u.searchParams.delete('view');
+      u.searchParams.delete('target');
+      u.searchParams.set('page', String(currentPage || Math.max(1, parseInt((new URLSearchParams(location.search)).get('page') || '1', 10) || 1)));
+      u.searchParams.set('block', String(currentBlock || Math.max(0, parseInt((new URLSearchParams(location.search)).get('block') || '0', 10) || 0)));
+      const q = String(lastQuery || input.value || (new URLSearchParams(location.search)).get('q') || '').trim();
+      if(q) u.searchParams.set('q', q);
+      if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
+      else u.searchParams.delete('type');
+      return u;
+    }
+
+    function restoreSearchListFromOwnedResult(){
+      try{
+        const u = cleanOwnedResultUrlForSearchList();
+        history.replaceState({
+          ...(history.state || {}),
+          __maruSearchOwnedResult:false,
+          view:'list',
+          q: String(lastQuery || input.value || '').trim(),
+          page: currentPage || 1,
+          block: currentBlock || 0,
+          type: activeType
+        }, '', u.toString());
+      }catch(e){}
+      try{ document.querySelectorAll('.maru-search-owned-proxy-frame').forEach(f => { if(f.__maruProxyBlobUrl){ URL.revokeObjectURL(f.__maruProxyBlobUrl); f.__maruProxyBlobUrl=''; } }); }catch(e){}
+      renderPage(currentPage || 1, true);
+      status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
+    }
+
     function renderSearchOwnedResultView(url, it, opts){
       opts = opts || {};
       const target = String(url || '').trim();
@@ -3591,35 +3643,20 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       if(!opts.skipHistory) try{
         const currentQ = String(lastQuery || input.value || '').trim();
-
-        // Keep the browser Back button Google/Naver-like: every source view
-        // must go back to the search result list, not to a previously opened
-        // source card. If we are already on a source view, first collapse that
-        // history entry back to the list URL, then push only the new source view.
-        const listUrl = new URL(location.href);
-        listUrl.searchParams.delete('view');
-        listUrl.searchParams.delete('target');
-        listUrl.searchParams.set('page', String(currentPage || 1));
-        listUrl.searchParams.set('block', String(currentBlock || 0));
-        if(currentQ) listUrl.searchParams.set('q', currentQ);
-        if(activeType && activeType !== 'all') listUrl.searchParams.set('type', activeType);
-        else listUrl.searchParams.delete('type');
-
-        history.replaceState({
+        const listUrl = cleanOwnedResultUrlForSearchList();
+        const detailUrl = new URL(listUrl.toString());
+        detailUrl.searchParams.set('view', 'result');
+        detailUrl.searchParams.set('target', target);
+        const listState = {
           ...(history.state || {}),
-          __maruSearchOwnedResult: false,
-          view: 'list',
+          __maruSearchOwnedResult:false,
+          view:'list',
           q: currentQ,
           page: currentPage || 1,
           block: currentBlock || 0,
-          type: activeType,
-          target: ''
-        }, '', listUrl.toString());
-
-        const u = new URL(listUrl.href);
-        u.searchParams.set('view', 'result');
-        u.searchParams.set('target', target);
-        history.pushState({
+          type: activeType
+        };
+        const detailState = {
           __maruSearchOwnedResult: true,
           q: currentQ,
           page: currentPage || 1,
@@ -3628,7 +3665,14 @@ async function fetchInstantSearchPack(q, type = activeType){
           target: target,
           title: displayTitle.slice(0, 180),
           view: 'result'
-        }, '', u.toString());
+        };
+        const alreadyOwned = !!(history.state && history.state.__maruSearchOwnedResult) || ((new URLSearchParams(location.search)).get('view') === 'result');
+        if(alreadyOwned){
+          history.replaceState(detailState, '', detailUrl.toString());
+        }else{
+          history.replaceState(listState, '', listUrl.toString());
+          history.pushState(detailState, '', detailUrl.toString());
+        }
       }catch(e){}
 
       const shell = document.createElement('div');
@@ -3657,35 +3701,17 @@ async function fetchInstantSearchPack(q, type = activeType){
       back.type = 'button';
       back.textContent = uiText('searchList', 'Search list');
       back.addEventListener('click', () => {
-        try{
-          const u = new URL(location.href);
-          u.searchParams.delete('view');
-          u.searchParams.delete('target');
-          u.searchParams.set('page', String(currentPage || 1));
-          u.searchParams.set('block', String(currentBlock || 0));
-          history.replaceState({
-            ...(history.state || {}),
-            __maruSearchOwnedResult:false,
-            view:'list',
-            target:'',
-            q: String(lastQuery || input.value || '').trim(),
-            page: currentPage || 1,
-            block: currentBlock || 0,
-            type: activeType
-          }, '', u.toString());
-        }catch(e){}
-        try{ document.querySelectorAll('.maru-search-owned-proxy-frame').forEach(f => { if(f.__maruProxyBlobUrl){ URL.revokeObjectURL(f.__maruProxyBlobUrl); f.__maruProxyBlobUrl=''; } }); }catch(e){}
-        renderPage(currentPage || 1, true);
-        status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
+        restoreSearchListFromOwnedResult();
       });
 
-      const open = document.createElement('a');
-      open.href = target;
-      open.target = '_blank';
-      open.rel = 'noopener noreferrer';
-      open.dataset.maruExternal = '1';
-      open.textContent = uiText('sourcePage', '원문 보기');
-      open.title = '원본 사이트를 새 탭에서 엽니다';
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.textContent = (getSearchUiLang && getSearchUiLang() === 'ko') ? '사이트 원문' : uiText('sourcePage', 'Original page');
+      open.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        renderSearchOwnedResultView(target, it, { skipHistory:true, forceDirect:true });
+      });
 
       actions.appendChild(back);
       actions.appendChild(open);
@@ -3716,7 +3742,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       proxyBox.appendChild(frame);
       shell.appendChild(proxyBox);
       installProxyViewerMessageBridge();
-      mountOwnedSourceFrame(frame, loading, target, proxyId);
+      mountOwnedSourceFrame(frame, loading, target, proxyId, opts);
 
       results.innerHTML = '';
       results.appendChild(shell);
