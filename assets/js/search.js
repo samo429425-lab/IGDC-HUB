@@ -731,6 +731,8 @@ function loadDirectSourceFrame(frame, target, loadingEl){
   frame.referrerPolicy = 'no-referrer-when-downgrade';
   frame.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-presentation';
   frame.dataset.viewerMode = 'direct';
+  // Do not allow the source page to navigate the top IGDC search shell.
+  // Popups are allowed only from explicit user gestures inside the frame.
   let blankLoaded = false;
   let done = false;
   const finish = () => {
@@ -761,52 +763,17 @@ function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
   frame.referrerPolicy = 'no-referrer-when-downgrade';
   frame.sandbox = 'allow-forms allow-popups allow-presentation allow-downloads';
   frame.dataset.viewerMode = 'static-proxy';
-  frame.dataset.targetUrl = target;
-  frame.dataset.proxyId = proxyId || '';
   frame.onload = () => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} };
-  try{ frame.src = proxySrc; }catch(e){ loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target); }
-  try{ bindProxyAutoFallback(frame, proxySrc, target, proxyId); }catch(e){}
-  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 4200);
-}
-
-function sourceHostForViewer(target){
-  try { return new URL(String(target || ''), location.href).hostname.replace(/^www\./,'').toLowerCase(); }
-  catch(e){ return ''; }
-}
-
-function shouldUseDirectSourceFrame(target){
-  // The browser Back button must belong to IGDC Search, not to the nested
-  // source page.  Direct iframes are therefore intentionally narrow.  Most
-  // public/portal pages are rendered through the stable static proxy first;
-  // script-heavy or frame-hostile pages then fall back to snapshot mode instead
-  // of freezing the search shell.
-  const host = sourceHostForViewer(target);
-  if(!host) return false;
-  const neverDirect = [
-    'archives.seoul.go.kr',
-    'gil.seoul.go.kr',
-    'bing.com',
-    'google.com',
-    'naver.com',
-    'news1.kr'
-  ];
-  if(neverDirect.some(h => host === h || host.endsWith('.' + h))) return false;
-  return false;
+  // Load the proxy response as srcdoc so iframe navigation does not take over
+  // the browser Back button. The injected bridge keeps inner links inside the
+  // IGDC viewer.
+  loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target);
+  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 3800);
 }
 
 async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId){
   if(!frame || !target) return;
   if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
-
-  // Stable default: keep the IGDC shell and load the source through the proxy.
-  // Direct source iframes looked cleaner for a few pages but caused blank frames,
-  // nested browser history, and Chrome "unresponsive page" dialogs on many
-  // government/portal pages.
-  if(!shouldUseDirectSourceFrame(target)){
-    loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
-    return;
-  }
-
   const policy = await checkSourceFramePolicy(target);
   if(policy && policy.directAllowed){
     loadDirectSourceFrame(frame, target, loadingEl);
@@ -888,16 +855,6 @@ function installProxyViewerMessageBridge(){
   window.addEventListener('message', function(ev){
     const data = ev && ev.data;
     if(!data || typeof data !== 'object') return;
-    if(data.__igdcProxyStatus === 1){
-      const proxyId0 = String(data.proxyId || '');
-      const frame0 = Array.from(document.querySelectorAll('.maru-search-owned-proxy-frame')).find(f => f && f.dataset && f.dataset.proxyId === proxyId0);
-      if(frame0){
-        frame0.dataset.proxyStatusSeen = '1';
-        frame0.dataset.proxyTextLen = String(Number(data.textLen || 0) || 0);
-        frame0.dataset.proxyMediaCount = String(Number(data.mediaCount || 0) || 0);
-      }
-      return;
-    }
     if(data.__igdcProxyNavigate !== 1) return;
     const proxyId = String(data.proxyId || '');
     const nextUrl = String(data.url || '').trim();
@@ -913,10 +870,8 @@ function installProxyViewerMessageBridge(){
       proxyBox.insertBefore(loading, frame);
     }
     const src = proxyUrlForResult(nextUrl, { mode:'static', proxyId });
-    try{ frame.dataset.targetUrl = nextUrl; frame.dataset.viewerMode = 'static-proxy'; }catch(e){}
-    try{ frame.src = src; }catch(e){ loadProxyHtmlIntoFrame(frame, loading, src, nextUrl); }
-    try{ bindProxyAutoFallback(frame, src, nextUrl, proxyId); }catch(e){}
-    setTimeout(() => { try{ if(loading) loading.remove(); }catch(e){} }, 2200);
+    loadProxyHtmlIntoFrame(frame, loading, src, nextUrl);
+    setTimeout(() => { try{ if(loading) loading.remove(); }catch(e){} }, 1800);
   });
 }
 
@@ -1166,9 +1121,38 @@ function syncSearchFromUrl(run = true) {
   input.value = qp;
 
   if (run && qp) {
+    const viewMode = (sp.get('view') || '').trim();
+    const viewTarget = (sp.get('target') || '').trim();
     runSearch(qp, activeType).then(() => {
       currentPage = pageParam;
       currentBlock = blockParam;
+
+      // If a result-view URL is opened directly in a new tab, build a clean
+      // two-step history stack: Back returns to the exact search-result list,
+      // not to the previous external/browser page.
+      if (viewMode === 'result' && viewTarget) {
+        try {
+          const detailUrl = new URL(location.href);
+          const listUrl = new URL(location.href);
+          listUrl.searchParams.delete('view');
+          listUrl.searchParams.delete('target');
+          const baseState = {
+            q: qp,
+            page: currentPage,
+            block: currentBlock,
+            type: activeType
+          };
+          const st = history.state || {};
+          if (!st.__maruInitialOwnedResultStack) {
+            history.replaceState({ ...baseState, __maruInitialOwnedResultStack: true }, '', listUrl.toString());
+            history.pushState({ ...baseState, __maruSearchOwnedResult: true, __maruInitialOwnedResultStack: true, view: 'result', target: viewTarget }, '', detailUrl.toString());
+          }
+        } catch(e) {}
+        const item = findSearchItemByUrl(viewTarget) || { url:viewTarget, link:viewTarget, title:viewTarget };
+        renderSearchOwnedResultView(viewTarget, item, { skipHistory:true });
+        return;
+      }
+
       loadServerPageAndRender(currentPage);
     });
   } else if (run && !qp) {
@@ -3700,12 +3684,14 @@ async function fetchInstantSearchPack(q, type = activeType){
       });
 
       const open = document.createElement('a');
-      open.href = target;
+      open.href = buildSearchOwnedResultHref(target);
       open.target = '_blank';
       open.rel = 'noopener noreferrer';
+      // This is intentionally treated as an external action by the click guard:
+      // it opens another IGDC search shell, not the raw source site, so the
+      // search header/tabs/pager remain visible in the new tab as well.
       open.dataset.maruExternal = '1';
-      open.textContent = uiText('openNewWindow', '새 창 열기');
-      open.title = 'IGDC 검색 화면은 그대로 두고 원문만 새 탭에서 엽니다.';
+      open.textContent = uiText('openNewWindow', '새 창으로 보기');
 
       actions.appendChild(back);
       actions.appendChild(open);
