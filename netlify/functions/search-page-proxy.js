@@ -169,6 +169,69 @@ function fallbackDocument(title, message, target){
   return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.page{padding:28px 30px}.title{font-size:18px;font-weight:800;color:#111827;margin-bottom:8px}.msg{font-size:14px;line-height:1.65;color:#64748b;max-width:760px}.url{margin-top:14px;font-size:12px;color:#64748b;word-break:break-all;background:#f1f5f9;border-radius:9px;padding:8px 10px}</style></head><body><div class="page"><div class="title">' + escapeHtml(title) + '</div><div class="msg">' + escapeHtml(message) + '</div><div class="url">' + escapeHtml(target || '') + '</div></div></body></html>';
 }
 
+
+function pickMeta(htmlText, names){
+  const html = String(htmlText || '');
+  for(const name of Array.isArray(names) ? names : [names]){
+    const n = String(name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let re = new RegExp("<meta[^>]+(?:name|property)=[\"']" + n + "[\"'][^>]+content=[\"']([^\"']*)[\"'][^>]*>", 'i');
+    let m = html.match(re);
+    if(m && m[1]) return m[1];
+    re = new RegExp("<meta[^>]+content=[\"']([^\"']*)[\"'][^>]+(?:name|property)=[\"']" + n + "[\"'][^>]*>", 'i');
+    m = html.match(re);
+    if(m && m[1]) return m[1];
+  }
+  return '';
+}
+
+function stripForText(htmlText){
+  return String(htmlText || '')
+    .replace(/<script\b[\s\S]*?<\/script>/ig, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/ig, ' ')
+    .replace(/<noscript\b[^>]*>/ig, ' ')
+    .replace(/<\/noscript>/ig, ' ')
+    .replace(/<br\s*\/?>/ig, '\n')
+    .replace(/<\/p>|<\/div>|<\/li>|<\/h[1-6]>/ig, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/[ \t\r\f]+/g, ' ')
+    .replace(/\n\s+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function firstMeaningfulImage(htmlText, baseUrl){
+  const html = String(htmlText || '');
+  const og = pickMeta(html, ['og:image','twitter:image','twitter:image:src']);
+  if(og) return absoluteUrl(og, baseUrl);
+  const re = /<img\b[^>]*\bsrc\s*=\s*(["'])(.*?)\1[^>]*>/ig;
+  let m;
+  while((m = re.exec(html))){
+    const src = String(m[2] || '').trim();
+    if(!src || /logo|favicon|sprite|blank|pixel|icon/i.test(src)) continue;
+    return absoluteUrl(src, baseUrl);
+  }
+  return '';
+}
+
+function snapshotDocument(htmlText, finalUrl){
+  const raw = String(htmlText || '');
+  const titleMatch = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = (pickMeta(raw, ['og:title','twitter:title']) || (titleMatch && titleMatch[1]) || (finalUrl ? new URL(finalUrl).hostname : '원문 페이지'))
+    .replace(/\s+/g, ' ').trim();
+  const desc = (pickMeta(raw, ['description','og:description','twitter:description']) || '').replace(/\s+/g, ' ').trim();
+  const image = firstMeaningfulImage(raw, finalUrl);
+  const bodyText = stripForText(raw).split('\n').map(x => x.trim()).filter(x => x && x.length > 20).slice(0, 12).join('\n\n');
+  const text = desc || bodyText || '이 사이트는 자바스크립트 기반이거나 내부 표시를 제한하여 IGDC 검색 화면 안에서는 요약 스냅샷으로 표시됩니다.';
+  const safeImage = image ? '<img class="hero" src="' + escapeHtml(image) + '" alt="">' : '';
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + escapeHtml(finalUrl || '') + '"><meta name="referrer" content="no-referrer-when-downgrade"><style>html,body{margin:0;background:#fff;color:#111827;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:980px;margin:0 auto;padding:34px 28px 60px}.url{font-size:13px;color:#64748b;word-break:break-all;margin-bottom:12px}.title{font-size:30px;line-height:1.25;font-weight:900;letter-spacing:-.03em;margin:0 0 20px}.hero{display:block;max-width:100%;max-height:360px;object-fit:contain;border:1px solid #eef2f7;border-radius:16px;margin:0 0 22px;background:#f8fafc}.text{font-size:16px;line-height:1.8;white-space:pre-wrap;color:#334155}.notice{margin-top:26px;padding:10px 12px;border-radius:10px;background:#f8fafc;border:1px solid #e5e7eb;color:#64748b;font-size:12px}</style></head><body><main class="wrap"><div class="url">' + escapeHtml(finalUrl || '') + '</div><h1 class="title">' + escapeHtml(title || '원문 페이지') + '</h1>' + safeImage + '<div class="text">' + escapeHtml(text) + '</div><div class="notice">원본 사이트의 보안 정책 또는 자바스크립트 구조 때문에 전체 페이지 대신 안정 스냅샷으로 표시했습니다.</div></main>' + lightweightBridge(finalUrl, {}) + '</body></html>';
+}
+
 function lightweightBridge(finalUrl, opts){
   const proxyId = String((opts && opts.proxyId) || '');
   const baseUrl = String(finalUrl || '');
@@ -194,58 +257,6 @@ function lightweightBridge(finalUrl, opts){
     },true);
     setTimeout(report,450);setTimeout(report,1500);setTimeout(report,3200);window.addEventListener('load',function(){setTimeout(report,100);setTimeout(report,1000)});
   })();</script>`;
-}
-
-
-function firstMatch(text, re){
-  const m = String(text || '').match(re);
-  return m ? (m[1] || '').trim() : '';
-}
-
-function stripTags(text){
-  return String(text || '')
-    .replace(/<script\b[\s\S]*?<\/script>/ig, ' ')
-    .replace(/<style\b[\s\S]*?<\/style>/ig, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-
-function attrValue(tag, attr){
-  const re = new RegExp(`${attr}\\s*=\\s*(['"])(.*?)\\1`, 'i');
-  const m = String(tag || '').match(re);
-  return m ? (m[2] || '').trim() : '';
-}
-
-function metaContent(markup, name){
-  const wanted = String(name || '').toLowerCase();
-  let found = '';
-  String(markup || '').replace(/<meta\b[^>]*>/ig, function(tag){
-    if(found) return tag;
-    const key = (attrValue(tag, 'name') || attrValue(tag, 'property')).toLowerCase();
-    if(key === wanted) found = attrValue(tag, 'content');
-    return tag;
-  });
-  return found;
-}
-
-function snapshotDocument(htmlText, finalUrl){
-  const raw = String(htmlText || '');
-  const title = firstMatch(raw, /<title[^>]*>([\s\S]*?)<\/title>/i) || metaContent(raw, 'og:title') || finalUrl;
-  const desc = metaContent(raw, 'description') || metaContent(raw, 'og:description') || stripTags(raw).slice(0, 900);
-  const image = absoluteUrl(metaContent(raw, 'og:image') || metaContent(raw, 'twitter:image'), finalUrl);
-  const host = (() => { try { return new URL(finalUrl).hostname.replace(/^www\./,''); } catch(e){ return ''; } })();
-  let links = [];
-  raw.replace(/<a\b[^>]*href\s*=\s*(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/ig, function(_, q, href, label){
-    if(links.length >= 12) return '';
-    const abs = absoluteUrl(href, finalUrl);
-    const text = stripTags(label).slice(0, 90);
-    if(/^https?:\/\//i.test(abs) && text) links.push({ href: abs, text });
-    return '';
-  });
-  const linkHtml = links.map(l => '<a href="' + escapeHtml(proxyUrl(l.href, finalUrl, { mode:'static' })) + '">' + escapeHtml(l.text) + '</a>').join('');
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + escapeHtml(finalUrl) + '"><style>html,body{margin:0;background:#fff;color:#111827;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:1060px;margin:0 auto;padding:24px 26px 38px}.host{font-size:13px;font-weight:800;color:#2563eb;margin-bottom:8px}.title{font-size:26px;line-height:1.25;font-weight:900;letter-spacing:-.02em;margin:0 0 10px}.desc{font-size:15px;line-height:1.7;color:#334155;white-space:pre-line}.hero{max-width:100%;max-height:420px;object-fit:contain;border-radius:14px;border:1px solid #e5e7eb;background:#f8fafc;margin:14px 0}.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:18px}.links a{display:block;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;color:#1d4ed8;text-decoration:none;font-weight:700;background:#f8fafc}.url{margin-top:14px;color:#64748b;font-size:12px;word-break:break-all}</style>' + lightweightBridge(finalUrl, { proxyId:'' }) + '</head><body><div class="wrap"><div class="host">' + escapeHtml(host) + '</div><h1 class="title">' + escapeHtml(stripTags(title)) + '</h1>' + (image && /^https?:\/\//i.test(image) ? '<img class="hero" src="' + escapeHtml(image) + '" alt="">' : '') + '<div class="desc">' + escapeHtml(desc || '원문 페이지의 주요 내용을 IGDC 검색 화면 안에서 표시합니다.') + '</div>' + (linkHtml ? '<div class="links">' + linkHtml + '</div>' : '') + '<div class="url">' + escapeHtml(finalUrl) + '</div></div></body></html>';
 }
 
 function injectShell(htmlText, finalUrl, opts){
