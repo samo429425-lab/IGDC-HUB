@@ -196,6 +196,103 @@ function lightweightBridge(finalUrl, opts){
   })();</script>`;
 }
 
+
+function stripTagsForText(markup){
+  return String(markup || '')
+    .replace(/<script\b[\s\S]*?<\/script>/ig, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/ig, ' ')
+    .replace(/<noscript\b[^>]*>/ig, ' ')
+    .replace(/<\/noscript>/ig, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/ig, ' ')
+    .replace(/&amp;/ig, '&')
+    .replace(/&lt;/ig, '<')
+    .replace(/&gt;/ig, '>')
+    .replace(/&#39;/ig, "'")
+    .replace(/&quot;/ig, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isMeaningfullyVisibleHtml(markup){
+  const text = stripTagsForText(markup);
+  if(text.length >= 80) return true;
+  if(/<(img|picture|svg|video|canvas|table)\b/i.test(String(markup || ''))) return true;
+  if(/<h[1-6]\b|<p\b|<article\b|<main\b|<section\b/i.test(String(markup || '')) && text.length >= 35) return true;
+  return false;
+}
+
+function firstMatch(markup, re){
+  const m = String(markup || '').match(re);
+  return m ? (m[1] || m[2] || '').trim() : '';
+}
+
+function metaContent(markup, name){
+  const esc = String(name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const a = new RegExp("<meta\\b[^>]*(?:name|property)=[\"']" + esc + "[\"'][^>]*content=[\"']([\\s\\S]*?)[\"'][^>]*>", 'i');
+  const b = new RegExp("<meta\\b[^>]*content=[\"']([\\s\\S]*?)[\"'][^>]*(?:name|property)=[\"']" + esc + "[\"'][^>]*>", 'i');
+  return firstMatch(markup, a) || firstMatch(markup, b);
+}
+
+function collectSnapshotImages(markup, baseUrl){
+  const out = [];
+  const seen = new Set();
+  function add(v){
+    const raw = String(v || '').trim();
+    if(!raw || /^data:|^blob:|^javascript:/i.test(raw)) return;
+    const u = absoluteUrl(raw, baseUrl);
+    const k = u.split('#')[0];
+    if(seen.has(k)) return;
+    seen.add(k);
+    out.push(u);
+  }
+  add(metaContent(markup, 'og:image'));
+  add(metaContent(markup, 'twitter:image'));
+  String(markup || '').replace(/<img\b[^>]*\ssrc\s*=\s*(["'])(.*?)\1/ig, function(_, q, src){ add(src); return _; });
+  String(markup || '').replace(/<source\b[^>]*\ssrcset\s*=\s*(["'])(.*?)\1/ig, function(_, q, srcset){
+    String(srcset || '').split(',').slice(0,2).forEach(part => add(part.trim().split(/\s+/)[0]));
+    return _;
+  });
+  return out.filter(u => !/favicon|apple-touch-icon|\.ico(\?|#|$)/i.test(u)).slice(0, 12);
+}
+
+function collectSnapshotLinks(markup, baseUrl){
+  const out = [];
+  const seen = new Set();
+  String(markup || '').replace(/<a\b([^>]*?)\shref\s*=\s*(["'])(.*?)\2([^>]*)>([\s\S]*?)<\/a>/ig, function(_, before, q, href, after, labelHtml){
+    const label = stripTagsForText(labelHtml).slice(0, 90);
+    if(!label || label.length < 2) return _;
+    const abs = absoluteUrl(href, baseUrl);
+    if(!/^https?:\/\//i.test(abs)) return _;
+    const k = abs + '|' + label;
+    if(seen.has(k)) return _;
+    seen.add(k);
+    out.push({ href: abs, label });
+    return _;
+  });
+  return out.slice(0, 24);
+}
+
+function snapshotDocument(htmlText, finalUrl){
+  const raw = String(htmlText || '');
+  const title = stripTagsForText(firstMatch(raw, /<title[^>]*>([\s\S]*?)<\/title>/i)) ||
+    metaContent(raw, 'og:title') ||
+    metaContent(raw, 'twitter:title') ||
+    (function(){ try{ return new URL(finalUrl).hostname; }catch(e){ return '원문 스냅샷'; } })();
+  const desc = metaContent(raw, 'description') || metaContent(raw, 'og:description') || metaContent(raw, 'twitter:description') || '';
+  let text = stripTagsForText(raw);
+  if(desc && text.toLowerCase().indexOf(desc.toLowerCase()) !== 0) text = desc + ' ' + text;
+  const images = collectSnapshotImages(raw, finalUrl);
+  const links = collectSnapshotLinks(raw, finalUrl);
+  const safeUrl = escapeHtml(finalUrl || '');
+  const bodyText = escapeHtml(text.slice(0, 2600));
+  const imageHtml = images.length ? '<div class="igdc-snap-images">' + images.map(src => '<img src="' + escapeHtml(src) + '" loading="lazy">').join('') + '</div>' : '';
+  const linksHtml = links.length ? '<div class="igdc-snap-links">' + links.map(l => '<a href="' + escapeHtml(proxyUrl(l.href, finalUrl, { mode:'static' })) + '">' + escapeHtml(l.label) + '</a>').join('') + '</div>' : '';
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + safeUrl + '"><meta name="referrer" content="no-referrer-when-downgrade"><style>' +
+    'html,body{margin:0;background:#fff;color:#1f2937;font-family:system-ui,-apple-system,Segoe UI,sans-serif}body{padding:0}.igdc-snap{padding:28px 34px 42px;max-width:1180px;margin:0 auto}.igdc-url{font-size:12px;color:#64748b;word-break:break-all;margin-bottom:8px}.igdc-title{font-size:28px;line-height:1.25;font-weight:850;letter-spacing:-.03em;color:#111827;margin:0 0 12px}.igdc-desc{font-size:15px;line-height:1.7;color:#334155;white-space:pre-wrap;max-width:920px}.igdc-snap-images{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin:18px 0 22px}.igdc-snap-images img{width:100%;height:180px;object-fit:cover;border-radius:13px;border:1px solid #e5e7eb;background:#f8fafc}.igdc-snap-links{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}.igdc-snap-links a{padding:9px 12px;border:1px solid #e5e7eb;border-radius:999px;text-decoration:none;color:#1d4ed8;background:#fff;font-size:13px;font-weight:700}.igdc-note{margin-top:18px;padding:10px 12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;color:#64748b;font-size:12px;line-height:1.5}@media(max-width:760px){.igdc-snap{padding:20px 16px}.igdc-title{font-size:22px}.igdc-snap-images{grid-template-columns:1fr 1fr}.igdc-snap-images img{height:130px}}' +
+    '</style>' + lightweightBridge(finalUrl, { proxyId: '' }) + '</head><body><main class="igdc-snap"><div class="igdc-url">' + safeUrl + '</div><h1 class="igdc-title">' + escapeHtml(title) + '</h1>' + imageHtml + '<div class="igdc-desc">' + bodyText + '</div>' + linksHtml + '<div class="igdc-note">이 원문은 IGDC 검색 화면 안에서 안정적으로 보기 위해 서버가 읽어 온 공개 HTML을 스냅샷으로 정리한 화면입니다.</div></main></body></html>';
+}
+
 function injectShell(htmlText, finalUrl, opts){
   opts = opts || {};
   const mode = String(opts.mode || 'static').toLowerCase();
@@ -206,6 +303,10 @@ function injectShell(htmlText, finalUrl, opts){
   // freezing the search shell while still showing server-rendered HTML/CSS/images.
   if(mode !== 'live') out = stripActiveScripts(out);
   out = rewriteAttributes(out, finalUrl, { mode: mode === 'live' ? 'live' : 'static', proxyId: opts.proxyId || '' });
+
+  if(mode !== 'live' && !isMeaningfullyVisibleHtml(out)){
+    return snapshotDocument(htmlText, finalUrl);
+  }
 
   const headInject = [
     '<meta charset="utf-8">',
