@@ -663,13 +663,43 @@ ensureSearchCardMediaStyle();
 
 const SEARCH_PAGE_PROXY_URL = '/.netlify/functions/search-page-proxy';
 
+
+function normalizeSourceViewUrl(raw){
+  const value = String(raw || '').trim();
+  if(!value) return '';
+  try{
+    const u = new URL(value, location.href);
+    if(!/^https?:$/.test(u.protocol)) return value;
+    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+    const path = (u.pathname || '/').replace(/\/+/g, '/');
+
+    // Seoul Archives search results often arrive as the bare domain.
+    // The actually rendered public entry point is /main.  If we try the
+    // bare root inside the viewer, it frequently returns a JS/redirect shell
+    // and the IGDC source area stays blank.  Normalize before frame-check,
+    // direct iframe and proxy fallback so it behaves like the original page.
+    if(host === 'archives.seoul.go.kr'){
+      if(path === '/' || path === '' || path.toLowerCase() === '/index.do' || path.toLowerCase() === '/index'){
+        u.pathname = '/main';
+        u.search = '';
+        u.hash = '';
+        return u.href;
+      }
+    }
+
+    return u.href;
+  }catch(e){
+    return value;
+  }
+}
+
 function isSkippableNavigationHref(href){
   const h = String(href || '').trim();
   return !h || h === '#' || h.charAt(0) === '#' || /^javascript:/i.test(h) || /^mailto:|^tel:/i.test(h);
 }
 
 function proxyUrlForResult(target, extraParams){
-  const raw = String(target || '').trim();
+  const raw = normalizeSourceViewUrl(target);
   if(!raw) return '';
   try{
     const u = new URL(raw, location.href);
@@ -692,7 +722,7 @@ function proxyUrlForResult(target, extraParams){
 
 
 function sourceFrameCheckUrl(target){
-  const raw = String(target || '').trim();
+  const raw = normalizeSourceViewUrl(target);
   if(!raw) return '';
   try{
     const u = new URL(raw, location.href);
@@ -723,169 +753,125 @@ async function checkSourceFramePolicy(target){
   }
 }
 
-
-function installFrameHtmlWithoutHistory(frame, htmlText, target, loadingEl){
-  if(!frame) return;
-  const html = String(htmlText || '') || proxyFailSrcdoc(target, 'empty proxy response');
-  try{
-    if(frame.__maruProxyBlobUrl){
-      try{ URL.revokeObjectURL(frame.__maruProxyBlobUrl); }catch(e){}
-      frame.__maruProxyBlobUrl = '';
-    }
-  }catch(e){}
-  frame.removeAttribute('src');
-  frame.srcdoc = html;
-  frame.onload = () => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} };
-  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 2200);
-}
-
-function viewerLoadingDocument(target){
-  const safe = String(target || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{padding:22px 24px}.url{font-size:13px;color:#64748b;word-break:break-all}.bar{margin-top:12px;width:180px;height:3px;border-radius:999px;background:linear-gradient(90deg,#e5e7eb,#6366f1,#e5e7eb);background-size:220% 100%;animation:a 1s linear infinite}@keyframes a{to{background-position:-220% 0}}</style></head><body><div class="wrap"><div class="url">' + safe + '</div><div class="bar"></div></div></body></html>';
-}
-
-function cleanupFrameOwnedUrls(frame){
-  try{
-    if(frame && frame.__maruProxyBlobUrl){
-      try{ URL.revokeObjectURL(frame.__maruProxyBlobUrl); }catch(e){}
-      frame.__maruProxyBlobUrl = '';
-    }
-  }catch(e){}
-}
-
-function navigateFrameReplace(frame, url){
-  if(!frame || !url) return;
-  cleanupFrameOwnedUrls(frame);
-  try{ frame.removeAttribute('srcdoc'); }catch(e){}
-  try{
-    if(frame.contentWindow && frame.contentWindow.location && typeof frame.contentWindow.location.replace === 'function'){
-      frame.contentWindow.location.replace(url);
-      return;
-    }
-  }catch(e){}
-  try{
-    // Last resort only. Most browsers allow contentWindow.location.replace for
-    // cross-origin iframes; using src is kept only as a fallback.
-    frame.src = url;
-  }catch(e){}
-}
-
 function loadDirectSourceFrame(frame, target, loadingEl){
   if(!frame || !target) return;
-  frame.classList.add('maru-search-owned-source-frame');
   frame.classList.remove('maru-search-owned-proxy-frame');
+  frame.classList.add('maru-search-owned-source-frame');
+  frame.removeAttribute('srcdoc');
   frame.referrerPolicy = 'no-referrer-when-downgrade';
-  // Direct pages need their own JS/origin to render like Google/Naver/Bing.
-  // Do not allow top navigation, so the IGDC search shell cannot be replaced.
   frame.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-presentation';
-  frame.dataset.viewerMode = 'direct-source';
-  frame.dataset.targetUrl = target;
-  frame.dataset.__maruVisible = '';
-  if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
-  frame.onload = () => {
+  frame.dataset.viewerMode = 'direct';
+  let blankLoaded = false;
+  let done = false;
+  const finish = () => {
+    if(done) return;
+    done = true;
     try{ if(loadingEl) loadingEl.remove(); }catch(e){}
-    try{ frame.dataset.__maruVisible = '1'; }catch(e){}
   };
-  navigateFrameReplace(frame, target);
-  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 3500);
+  frame.onload = () => {
+    if(!blankLoaded){
+      blankLoaded = true;
+      try{ frame.contentWindow.location.replace(target); }
+      catch(e){ try{ frame.src = target; }catch(e2){} }
+      return;
+    }
+    setTimeout(finish, 600);
+  };
+  try{ frame.src = 'about:blank'; }
+  catch(e){ try{ frame.src = target; }catch(e2){} }
+  setTimeout(finish, 5200);
 }
 
 function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
-  return loadAttachedSourceProxyFrame(frame, target, proxyId, loadingEl);
-}
-
-function loadAttachedSourceProxyFrame(frame, target, proxyId, loadingEl){
   if(!frame || !target) return;
-  const id = proxyId || (frame.dataset && frame.dataset.proxyId) || ('maru-proxy-' + Date.now().toString(36));
-  const staticSrc = proxyUrlForResult(target, { mode:'static', proxyId:id });
-  const snapshotSrc = proxyUrlForResult(target, { mode:'snapshot', proxyId:id });
+  const proxySrc = proxyUrlForResult(target, { mode:'static', proxyId });
   frame.classList.add('maru-search-owned-proxy-frame');
   frame.classList.remove('maru-search-owned-source-frame');
+  frame.removeAttribute('srcdoc');
   frame.referrerPolicy = 'no-referrer-when-downgrade';
-  // Proxy packets are same-origin with IGDC, so keep them sandboxed without
-  // allow-same-origin. This prevents the remote page from owning the shell.
-  frame.sandbox = 'allow-scripts allow-forms allow-popups allow-downloads allow-presentation';
-  frame.dataset.viewerMode = 'attached-proxy';
-  frame.dataset.proxyId = id;
-  frame.dataset.targetUrl = target;
-  frame.dataset.proxyStaticSrc = staticSrc;
-  frame.dataset.proxySnapshotSrc = snapshotSrc;
-  frame.dataset.__maruVisible = '';
-  if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
-  frame.onload = () => {
-    setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 600);
-  };
-  navigateFrameReplace(frame, staticSrc);
-
-  // If the static packet is effectively blank, show the snapshot packet instead
-  // without adding iframe history entries.
-  setTimeout(() => {
-    try{
-      if(frame.dataset.viewerMode !== 'attached-proxy') return;
-      if(frame.dataset.__maruVisible === '1') return;
-      navigateFrameReplace(frame, snapshotSrc);
-      try{ if(loadingEl) loadingEl.remove(); }catch(e){}
-    }catch(e){}
-  }, 5200);
-}
-
-async function fetchProxyText(src, timeoutMs){
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, timeoutMs || 14000);
-  try{
-    const r = await fetch(src, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
-    const text = await r.text();
-    clearTimeout(timer);
-    return { ok:r.ok, status:r.status, text };
-  }catch(e){
-    clearTimeout(timer);
-    return { ok:false, status:0, error:String(e && e.message || e || 'proxy failed'), text:'' };
-  }
-}
-
-async function fetchAndInstallProxyHtml(frame, loadingEl, liveSrc, staticSrc, target, proxyId){
-  // Kept for compatibility with older call paths. The active viewer now loads
-  // proxy packets through location.replace so browser Back is not polluted.
-  const src = staticSrc || liveSrc;
-  if(src) navigateFrameReplace(frame, src);
-  else installFrameHtmlWithoutHistory(frame, proxyFailSrcdoc(target, 'proxy failed'), target, loadingEl);
+  frame.sandbox = 'allow-forms allow-popups allow-presentation allow-downloads';
+  frame.dataset.viewerMode = 'static-proxy';
+  frame.onload = () => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} };
+  try{ frame.src = proxySrc; }catch(e){ loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target); }
+  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 3800);
 }
 
 async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId){
   if(!frame || !target) return;
-  const token = Date.now().toString(36) + Math.random().toString(36).slice(2);
-  frame.dataset.mountToken = token;
-
-  // Immediate path: render the original page under the IGDC shell at once.
-  // This is the path that makes normal sites feel like Naver/Google/Bing.
-  loadDirectSourceFrame(frame, target, loadingEl);
-
-  // Guard path: if the origin says it cannot be framed, swap to the IGDC proxy
-  // packet. This prevents gray/sad-page surfaces for XFO/CSP sites.
-  try{
-    const policy = await checkSourceFramePolicy(target);
-    if(!frame || !frame.dataset || frame.dataset.mountToken !== token) return;
-    if(policy && policy.directAllowed === false){
-      loadAttachedSourceProxyFrame(frame, target, proxyId, loadingEl);
-    }
-  }catch(e){}
+  if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
+  const policy = await checkSourceFramePolicy(target);
+  if(policy && policy.directAllowed){
+    loadDirectSourceFrame(frame, target, loadingEl);
+    return;
+  }
+  loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
 }
 
 function proxyFailSrcdoc(target, message){
   const safeTarget = String(target || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const safeMsg = String(message || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{padding:32px 20px}.url{font-size:13px;color:#64748b;word-break:break-all}.msg{margin-top:10px;font-size:13px;color:#94a3b8}</style></head><body><div class="wrap"><div class="url">' + safeTarget + '</div><div class="msg">' + safeMsg + '</div></div></body></html>';
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{padding:32px 20px}.url{font-size:13px;color:#64748b;word-break:break-all}</style></head><body><div class="wrap"><div class="url">' + safeTarget + '</div></div></body></html>';
 }
 
 async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
   if(!frame || !proxySrc) return;
-  frame.classList.add('maru-search-owned-proxy-frame');
-  frame.classList.remove('maru-search-owned-source-frame');
-  frame.sandbox = 'allow-scripts allow-forms allow-popups allow-downloads allow-presentation';
-  installFrameHtmlWithoutHistory(frame, viewerLoadingDocument(target), target, loadingEl);
-  const stable = await fetchProxyText(proxySrc, 15000);
-  if(stable && stable.ok && stable.text) installFrameHtmlWithoutHistory(frame, stable.text, target, loadingEl);
-  else installFrameHtmlWithoutHistory(frame, proxyFailSrcdoc(target, (stable && stable.error) || ('proxy status ' + (stable && stable.status || 0))), target, loadingEl);
+  let settled = false;
+
+  const finish = () => {
+    if(settled) return;
+    settled = true;
+    try{ if(loadingEl) loadingEl.remove(); }catch(e){}
+  };
+
+  const installHtml = (htmlText) => {
+    const html = String(htmlText || '') || proxyFailSrcdoc(target, 'empty proxy response');
+
+    // Use srcdoc, not iframe.src/blob navigation. This keeps the browser Back
+    // button owned by the IGDC search page instead of being captured by the
+    // nested source page history. The proxy injects a navigation bridge so
+    // links inside the source page reload this same iframe without leaving IGDC.
+    try{
+      if(frame.__maruProxyBlobUrl){
+        try{ URL.revokeObjectURL(frame.__maruProxyBlobUrl); }catch(e){}
+        frame.__maruProxyBlobUrl = '';
+      }
+      frame.removeAttribute('src');
+      frame.srcdoc = html;
+      frame.onload = () => finish();
+      setTimeout(finish, 1800);
+      return;
+    }catch(e){}
+
+    try{
+      const blob = new Blob([html], { type:'text/html;charset=utf-8' });
+      const blobUrl = URL.createObjectURL(blob);
+      frame.__maruProxyBlobUrl = blobUrl;
+      frame.removeAttribute('srcdoc');
+      frame.onload = () => finish();
+      frame.src = blobUrl;
+      setTimeout(finish, 1800);
+      return;
+    }catch(e2){}
+
+    frame.removeAttribute('src');
+    frame.srcdoc = proxyFailSrcdoc(target, 'viewer install failed');
+    finish();
+  };
+
+  try{
+    if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 18000);
+    const r = await fetch(proxySrc, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
+    const text = await r.text();
+    clearTimeout(timer);
+    if(!r.ok){
+      installHtml(proxyFailSrcdoc(target, 'proxy status ' + r.status));
+      return;
+    }
+    installHtml(text);
+  }catch(e){
+    installHtml(proxyFailSrcdoc(target, String(e && e.message || e || 'proxy failed')));
+  }
 }
 
 function installProxyViewerMessageBridge(){
@@ -894,25 +880,6 @@ function installProxyViewerMessageBridge(){
   window.addEventListener('message', function(ev){
     const data = ev && ev.data;
     if(!data || typeof data !== 'object') return;
-    if(data.__igdcProxyStatus === 1){
-      const proxyId = String(data.proxyId || '');
-      if(proxyId){
-        const frame = Array.from(document.querySelectorAll('.maru-search-owned-proxy-frame')).find(f => f && f.dataset && f.dataset.proxyId === proxyId);
-        if(frame){
-          const textLen = Number(data.textLen || 0);
-          const mediaCount = Number(data.mediaCount || 0);
-          frame.dataset.__maruVisible = (textLen > 24 || mediaCount > 0) ? '1' : '0';
-          const h = Number(data.height || 0);
-          if(h > 450){
-            frame.style.height = Math.min(Math.max(h + 20, 560), 1800) + 'px';
-          }
-          const box = frame.closest('.maru-search-owned-proxy');
-          const loading = box && box.querySelector('.maru-search-owned-proxy-loading');
-          try{ if(loading) loading.remove(); }catch(e){}
-        }
-      }
-      return;
-    }
     if(data.__igdcProxyNavigate !== 1) return;
     const proxyId = String(data.proxyId || '');
     const nextUrl = String(data.url || '').trim();
@@ -927,9 +894,12 @@ function installProxyViewerMessageBridge(){
       loading.textContent = uiText('receiving', 'receiving...');
       proxyBox.insertBefore(loading, frame);
     }
-    loadAttachedSourceProxyFrame(frame, nextUrl, proxyId, loading);
+    const src = proxyUrlForResult(nextUrl, { mode:'static', proxyId });
+    try{ frame.src = src; }catch(e){ loadProxyHtmlIntoFrame(frame, loading, src, nextUrl); }
+    setTimeout(() => { try{ if(loading) loading.remove(); }catch(e){} }, 1800);
   });
 }
+
 
 function originalUrlFromMaybeProxy(href){
   const raw = String(href || '').trim();
@@ -1194,19 +1164,39 @@ window.addEventListener('popstate', (e) => {
   if (!isSearchPage) return;
 
   const state = e.state || {};
-  const sp = new URLSearchParams(location.search);
-  const page = Math.max(1, parseInt(sp.get('page') || state.page || '1', 10) || 1);
-  const block = Math.max(0, parseInt(sp.get('block') || state.block || '0', 10) || 0);
-  const q = (sp.get('q') || state.q || input.value || lastQuery || '').trim();
-  const nextType = normalizeSearchType(sp.get('type') || state.type || activeType || 'all');
-  const viewMode = (sp.get('view') || state.view || '').trim();
-  const viewTarget = (sp.get('target') || state.target || '').trim();
 
+  // 1️⃣ 검색 상세/목록 상태에서는 브라우저 뒤로가기가 반드시 검색 목록으로 복원되어야 한다.
+  // from 복귀는 검색어가 없는 순수 진입 상태에서만 허용한다.
+  const sp = new URLSearchParams(location.search);
+  if (state.__searchEntry && state.from && !sp.get('q') && !sp.get('view')) {
+    location.href = state.from;
+    return;
+  }
+
+  // 2️⃣ URL 기준으로 항상 복원 (state 의존 제거)
+
+  const page = Math.max(
+    1,
+    parseInt(sp.get('page') || state.page || '1', 10) || 1
+  );
+
+  const block = Math.max(
+    0,
+    parseInt(sp.get('block') || state.block || '0', 10) || 0
+  );
+
+  const q = (sp.get('q') || state.q || '').trim();
+  const nextType = normalizeSearchType(sp.get('type') || state.type || 'all');
   activeType = nextType;
   updateSearchTabsActive(q);
-  if (q && input.value !== q) input.value = q;
 
-  // Detail state: render the selected source below the fixed IGDC search shell.
+  // 3️⃣ 검색어 동기화
+  if (q && input.value !== q) {
+    input.value = q;
+  }
+
+  const viewMode = (sp.get('view') || state.view || '').trim();
+  const viewTarget = (sp.get('target') || state.target || '').trim();
   if (viewMode === 'result' && viewTarget) {
     const renderOwnedView = () => {
       currentPage = page;
@@ -1222,35 +1212,20 @@ window.addEventListener('popstate', (e) => {
     return;
   }
 
-  // List state: browser Back from any attached source must return to the exact
-  // search result list/page, not to an iframe/internal source history entry.
-  if (q) {
-    const renderList = () => {
+  // 4️⃣ 데이터 없거나 검색어/탭이 바뀌면 다시 검색
+  if (!allItems || !allItems.length || q !== lastQuery || nextType !== lastType) {
+    runSearch(q, nextType).then(() => {
       currentPage = page;
       currentBlock = block;
-      try{ document.querySelectorAll('.maru-search-owned-proxy-frame').forEach(f => { if(f.__maruProxyBlobUrl){ URL.revokeObjectURL(f.__maruProxyBlobUrl); f.__maruProxyBlobUrl=''; } }); }catch(x){}
       loadServerPageAndRender(currentPage);
-    };
-    if (!allItems || !allItems.length || q !== lastQuery || nextType !== lastType) {
-      runSearch(q, nextType).then(renderList);
-    } else {
-      renderList();
-    }
+    });
     return;
   }
 
-  // Only leave the search room when there is truly no query and the user came
-  // from a stored external/home route.
-  if (state.__searchEntry && state.from) {
-    location.href = state.from;
-    return;
-  }
-
-  allItems = [];
-  lastSearchPayload = null;
-  results.innerHTML = '';
-  clearPager();
-  status.textContent = '';
+  // 5️⃣ 바로 페이지 복원
+  currentPage = page;
+  currentBlock = block;
+  loadServerPageAndRender(currentPage);
 });
 
 if (q0) {
@@ -3632,7 +3607,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function renderSearchOwnedResultView(url, it, opts){
       opts = opts || {};
-      const target = String(url || '').trim();
+      const target = normalizeSourceViewUrl(url);
       if(!target) return;
       if(!isSearchPage){
         try { window.location.href = target; } catch(e) {}
@@ -3643,63 +3618,28 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const displayTitle = String((it && it.title) || sourceLabelForOwnedResult(it || {}, target) || domainOf(target) || target).trim() || target;
       const sourceLabel = sourceLabelForOwnedResult(it || {}, target);
-      const currentQ = String(lastQuery || input.value || '').trim();
-      const listPage = Math.max(1, currentPage || parseInt(new URLSearchParams(location.search).get('page') || '1', 10) || 1);
-      const listBlock = Math.max(0, currentBlock || parseInt(new URLSearchParams(location.search).get('block') || '0', 10) || 0);
-
-      const makeListUrl = () => {
-        const u = new URL(location.href);
-        u.searchParams.delete('view');
-        u.searchParams.delete('target');
-        if(currentQ) u.searchParams.set('q', currentQ);
-        u.searchParams.set('page', String(listPage));
-        u.searchParams.set('block', String(listBlock));
-        if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
-        else u.searchParams.delete('type');
-        return u.toString();
-      };
-      const makeDetailUrl = () => {
-        const u = new URL(makeListUrl());
-        u.searchParams.set('view', 'result');
-        u.searchParams.set('target', target);
-        return u.toString();
-      };
 
       if(!opts.skipHistory) try{
-        const existing = history.state || {};
-        const onResult = (new URLSearchParams(location.search).get('view') || '') === 'result' || existing.__maruSearchOwnedResult;
-        if(onResult){
-          history.replaceState({
-            __maruSearchOwnedResult: true,
-            q: currentQ,
-            page: listPage,
-            block: listBlock,
-            type: activeType,
-            target: target,
-            title: displayTitle.slice(0, 180),
-            view: 'result'
-          }, '', makeDetailUrl());
-        }else{
-          history.replaceState({
-            ...(existing || {}),
-            __maruSearchList: true,
-            __maruSearchOwnedResult: false,
-            q: currentQ,
-            page: listPage,
-            block: listBlock,
-            type: activeType
-          }, '', makeListUrl());
-          history.pushState({
-            __maruSearchOwnedResult: true,
-            q: currentQ,
-            page: listPage,
-            block: listBlock,
-            type: activeType,
-            target: target,
-            title: displayTitle.slice(0, 180),
-            view: 'result'
-          }, '', makeDetailUrl());
-        }
+        const currentQ = String(lastQuery || input.value || '').trim();
+        const u = new URL(location.href);
+        u.searchParams.set('view', 'result');
+        u.searchParams.set('target', target);
+        u.searchParams.set('page', String(currentPage || 1));
+        u.searchParams.set('block', String(currentBlock || 0));
+        if(currentQ) u.searchParams.set('q', currentQ);
+        if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
+        else u.searchParams.delete('type');
+        history.pushState({
+          ...(history.state || {}),
+          __maruSearchOwnedResult: true,
+          q: currentQ,
+          page: currentPage || 1,
+          block: currentBlock || 0,
+          type: activeType,
+          target: target,
+          title: displayTitle.slice(0, 180),
+          view: 'result'
+        }, '', u.toString());
       }catch(e){}
 
       const shell = document.createElement('div');
@@ -3728,31 +3668,23 @@ async function fetchInstantSearchPack(q, type = activeType){
       back.type = 'button';
       back.textContent = uiText('searchList', 'Search list');
       back.addEventListener('click', () => {
-        try{ history.replaceState({ __maruSearchList:true, q:currentQ, page:listPage, block:listBlock, type:activeType }, '', makeListUrl()); }catch(e){}
+        try{
+          const u = new URL(location.href);
+          u.searchParams.delete('view');
+          u.searchParams.delete('target');
+          history.replaceState({ ...(history.state || {}), __maruSearchOwnedResult:false }, '', u.toString());
+        }catch(e){}
         try{ document.querySelectorAll('.maru-search-owned-proxy-frame').forEach(f => { if(f.__maruProxyBlobUrl){ URL.revokeObjectURL(f.__maruProxyBlobUrl); f.__maruProxyBlobUrl=''; } }); }catch(e){}
-        currentPage = listPage;
-        currentBlock = listBlock;
         renderPage(currentPage || 1, true);
         status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
       });
 
-      const open = document.createElement('button');
-      open.type = 'button';
-      open.textContent = '사이트 원문';
-      open.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const frame = shell.querySelector('.maru-search-owned-proxy-frame');
-        let loading = shell.querySelector('.maru-search-owned-proxy-loading');
-        const box = shell.querySelector('.maru-search-owned-proxy');
-        if(!loading && box){
-          loading = document.createElement('div');
-          loading.className = 'maru-search-owned-proxy-loading';
-          loading.textContent = uiText('receiving', 'receiving...');
-          box.insertBefore(loading, frame);
-        }
-        if(frame) mountOwnedSourceFrame(frame, loading, target, frame.dataset.proxyId || '');
-      });
+      const open = document.createElement('a');
+      open.href = target;
+      open.target = '_blank';
+      open.rel = 'noopener noreferrer';
+      open.dataset.maruExternal = '1';
+      open.textContent = uiText('openNewWindow', '새 창으로 원문');
 
       actions.appendChild(back);
       actions.appendChild(open);
@@ -3775,14 +3707,10 @@ async function fetchInstantSearchPack(q, type = activeType){
       loading.className = 'maru-search-owned-proxy-loading';
       loading.textContent = uiText('receiving', 'receiving...');
       const frame = document.createElement('iframe');
-      frame.className = 'maru-search-owned-proxy-frame';
+      frame.className = 'maru-search-owned-source-frame';
       frame.dataset.proxyId = proxyId;
       frame.loading = 'eager';
       frame.title = displayTitle.slice(0, 120);
-      frame.style.width = '100%';
-      frame.style.minHeight = '620px';
-      frame.style.height = 'calc(100vh - 245px)';
-      frame.style.border = '0';
       proxyBox.appendChild(loading);
       proxyBox.appendChild(frame);
       shell.appendChild(proxyBox);
@@ -3793,7 +3721,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       results.appendChild(shell);
       drawPager();
       status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
-      // Keep IGDC search header/tabs/pager fixed above the attached source surface.
+      // Keep the current IGDC search header/tabs/pager position; do not auto-scroll the shell away.
     }
 
     function openResultInsideSearchFrame(url, it){
