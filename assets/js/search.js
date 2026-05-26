@@ -719,6 +719,55 @@ function proxyUrlForResult(target, extraParams){
 }
 
 
+function sourceHostForViewer(target){
+  try{ return new URL(normalizeSourceViewUrl(target), location.href).hostname.replace(/^www\./i,'').toLowerCase(); }catch(e){ return ''; }
+}
+
+function isKnownLiveProxyCandidate(target){
+  const host = sourceHostForViewer(target);
+  return /(^|\.)namu\.wiki$/i.test(host) ||
+         /(^|\.)naver\.com$/i.test(host) ||
+         /(^|\.)skyscanner\./i.test(host) ||
+         /(^|\.)seouladex\.com$/i.test(host) ||
+         /(^|\.)nyse?s\.or\.kr$/i.test(host);
+}
+
+function isKnownDirectFriendlyHost(target){
+  const host = sourceHostForViewer(target);
+  return /(^|\.)seoul\.go\.kr$/i.test(host) ||
+         /(^|\.)visitseoul\.net$/i.test(host) ||
+         /(^|\.)land\.seoul\.go\.kr$/i.test(host) ||
+         /(^|\.)gil\.seoul\.go\.kr$/i.test(host);
+}
+
+function buildSearchListUrlForOwnedView(){
+  try{
+    const u = new URL(location.href);
+    u.searchParams.delete('view');
+    u.searchParams.delete('target');
+    const q = String(lastQuery || input.value || u.searchParams.get('q') || '').trim();
+    if(q) u.searchParams.set('q', q);
+    u.searchParams.set('page', String(currentPage || parseInt(u.searchParams.get('page') || '1', 10) || 1));
+    u.searchParams.set('block', String(currentBlock || parseInt(u.searchParams.get('block') || '0', 10) || 0));
+    if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
+    else u.searchParams.delete('type');
+    return u.pathname + u.search + u.hash;
+  }catch(e){
+    return location.pathname + location.search + location.hash;
+  }
+}
+
+function openOriginalWithSearchBack(target){
+  const url = normalizeSourceViewUrl(target);
+  if(!url) return;
+  try{
+    const listUrl = buildSearchListUrlForOwnedView();
+    history.replaceState({ ...(history.state || {}), __maruSearchOwnedResult:false, view:'list', q:String(lastQuery || input.value || '').trim(), page:currentPage || 1, block:currentBlock || 0, type:activeType || 'all' }, '', listUrl);
+  }catch(e){}
+  try{ window.location.assign(url); }catch(e){ window.location.href = url; }
+}
+
+
 
 
 function sourceFrameCheckUrl(target){
@@ -738,7 +787,7 @@ async function checkSourceFramePolicy(target){
   const url = sourceFrameCheckUrl(target);
   if(!url) return { ok:false, directAllowed:false, reason:'invalid-url' };
   const ctrl = new AbortController();
-  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 4200);
+  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 1800);
   try{
     const r = await fetch(url, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
     const json = await r.json().catch(() => null);
@@ -787,24 +836,51 @@ function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
   const proxySrc = proxyUrlForResult(target, { mode:'static', proxyId });
   frame.classList.add('maru-search-owned-proxy-frame');
   frame.classList.remove('maru-search-owned-source-frame');
-  frame.removeAttribute('srcdoc');
   frame.referrerPolicy = 'no-referrer-when-downgrade';
-  frame.sandbox = 'allow-forms allow-popups allow-presentation allow-downloads';
+  frame.sandbox = 'allow-forms allow-popups allow-presentation allow-downloads allow-same-origin';
   frame.dataset.viewerMode = 'static-proxy';
-  frame.onload = () => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} };
-  try{ frame.src = proxySrc; }catch(e){ loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target); }
-  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 3800);
+  loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target);
+  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 3200);
+}
+
+function loadLiveSourceProxyFrame(frame, target, proxyId, loadingEl){
+  if(!frame || !target) return;
+  const proxySrc = proxyUrlForResult(target, { mode:'live', proxyId });
+  frame.classList.add('maru-search-owned-proxy-frame');
+  frame.classList.remove('maru-search-owned-source-frame');
+  frame.referrerPolicy = 'no-referrer-when-downgrade';
+  frame.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-downloads';
+  frame.dataset.viewerMode = 'live-proxy';
+  loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target);
+  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 4200);
 }
 
 async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId){
   if(!frame || !target) return;
+  const normalized = normalizeSourceViewUrl(target);
   if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
-  const policy = await checkSourceFramePolicy(target);
-  if(policy && policy.directAllowed){
-    loadDirectSourceFrame(frame, target, loadingEl);
+
+  // Known script/bot-heavy pages often show a blank or "enable JavaScript" page
+  // when their scripts are stripped.  Try the live proxy first for those, but
+  // keep it inside the IGDC source frame so the top search shell stays intact.
+  if(isKnownLiveProxyCandidate(normalized) && !isKnownDirectFriendlyHost(normalized)){
+    loadLiveSourceProxyFrame(frame, normalized, proxyId, loadingEl);
     return;
   }
-  loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
+
+  // Speed first: attach the original page immediately, then let frame-check
+  // decide whether it must be replaced with proxy.  This removes the initial
+  // waiting gap for Seoul/official pages that are already frame-friendly.
+  loadDirectSourceFrame(frame, normalized, loadingEl);
+
+  checkSourceFramePolicy(normalized).then(policy => {
+    if(!frame || !frame.isConnected) return;
+    if(policy && policy.directAllowed) return;
+    const reason = String((policy && policy.reason) || '').toLowerCase();
+    const modeLive = /script|js|bot|cookie/.test(reason) || isKnownLiveProxyCandidate(normalized);
+    if(modeLive) loadLiveSourceProxyFrame(frame, normalized, proxyId, loadingEl);
+    else loadStaticSourceProxyFrame(frame, normalized, proxyId, loadingEl);
+  }).catch(() => {});
 }
 
 function proxyFailSrcdoc(target, message){
@@ -895,7 +971,7 @@ function installProxyViewerMessageBridge(){
       proxyBox.insertBefore(loading, frame);
     }
     const src = proxyUrlForResult(nextUrl, { mode:'static', proxyId });
-    try{ frame.src = src; }catch(e){ loadProxyHtmlIntoFrame(frame, loading, src, nextUrl); }
+    loadProxyHtmlIntoFrame(frame, loading, src, nextUrl);
     setTimeout(() => { try{ if(loading) loading.remove(); }catch(e){} }, 1800);
   });
 }
@@ -3681,10 +3757,15 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const open = document.createElement('a');
       open.href = target;
-      open.target = '_blank';
+      open.target = '_self';
       open.rel = 'noopener noreferrer';
       open.dataset.maruExternal = '1';
-      open.textContent = uiText('openNewWindow', '새 창으로 원문');
+      open.textContent = '사이트 원문';
+      open.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openOriginalWithSearchBack(target);
+      });
 
       actions.appendChild(back);
       actions.appendChild(open);
