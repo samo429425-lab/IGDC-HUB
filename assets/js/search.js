@@ -71,24 +71,6 @@ ready(function () {
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
 
-    // Vertical-tab cache view:
-    // Keep the original search result pool intact, but allow a tab click
-    // to render the already-received matching items immediately. If the
-    // cache has no reliable matches, fall back to the normal server tab search.
-    let localTabViewItems = null;
-    let localTabViewType = 'all';
-    let localTabHydrateSeq = 0;
-
-    function clearLocalTabView(){
-      localTabViewItems = null;
-      localTabViewType = 'all';
-    }
-
-    function hasActiveLocalTabView(){
-      const t = normalizeSearchType(activeType || 'all');
-      return t !== 'all' && Array.isArray(localTabViewItems) && localTabViewType === t;
-    }
-
     // SANMARU resident switch:
     // The first search signal warms/activates Sanmaru on the server. Later searches
     // should ask Maru Search to use Sanmaru resident supply first, not re-open every
@@ -2220,124 +2202,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       });
     }
 
-    function searchTabGroupsClient(type){
-      const t = normalizeSearchType(type || 'all');
-      const map = {
-        all: [],
-        map: ['local_tour'],
-        tour: ['local_tour'],
-        knowledge: ['knowledge','authority'],
-        wiki: ['wiki','knowledge'],
-        site: ['site','authority','web'],
-        book: ['book'],
-        blog: ['blog'],
-        cafe: ['cafe','community'],
-        shopping: ['shopping'],
-        news: ['news'],
-        image: ['image','media'],
-        video: ['video','media'],
-        sns: ['social','community'],
-        public_data: ['public_data','authority'],
-        academic: ['academic'],
-        sports: ['sports'],
-        finance: ['finance'],
-        webtoon: ['webtoon']
-      };
-      return map[t] || [];
-    }
-
-    function itemMatchesLocalSearchTab(it, type){
-      if(!it || isDisplayGroupModule(it)) return false;
-      const t = normalizeSearchType(type || 'all');
-      if(t === 'all') return true;
-      const groups = searchTabGroupsClient(t);
-      let group = '';
-      try { group = displayGroupOfItem(it); } catch(e) { group = ''; }
-      if(group && groups.includes(group)) return true;
-
-      const rawType = normalizeSearchType(firstNonEmpty(
-        it.type,
-        it.category,
-        it.searchCategory,
-        it.mediaType,
-        it.displayGroup,
-        it.__maruDisplayGroup
-      ));
-      if(rawType === t) return true;
-
-      const sourceObj = (it.source && typeof it.source === 'object') ? it.source : {};
-      const text = String([
-        it.title, it.name, it.summary, it.snippet, it.description, it.contentSnippet,
-        it.url, it.link, it.href, it.provider, it.channel,
-        sourceObj.name, sourceObj.platform, sourceObj.provider,
-        Array.isArray(it.tags) ? it.tags.join(' ') : ''
-      ].filter(Boolean).join(' ')).toLowerCase();
-
-      if(t === 'image') return /image|이미지|사진|photo|picture|gallery|pstatic\.net|googleusercontent|gstatic|imgur|cdn|jpg|jpeg|png|webp/i.test(text);
-      if(t === 'video') return /video|영상|동영상|youtube|youtu\.be|vimeo|shorts|mp4/i.test(text);
-      if(t === 'news') return /news|뉴스|신문|일보|언론|press|article/i.test(text);
-      if(t === 'blog') return /blog|블로그/i.test(text);
-      if(t === 'cafe') return /cafe|카페|community|forum|게시판/i.test(text);
-      if(t === 'sns') return /sns|social|instagram|facebook|tiktok|twitter|x\.com/i.test(text);
-      if(t === 'map' || t === 'tour') return /map|지도|주소|위치|관광|여행|tour|travel|place|hotel|visit/i.test(text);
-      if(t === 'public_data') return /go\.kr|or\.kr|공공|정부|기관|데이터|official|government/i.test(text);
-      if(t === 'academic') return /학술|논문|연구|paper|scholar|academic|journal/i.test(text);
-      if(t === 'shopping') return /쇼핑|상품|가격|구매|shopping|product|price|buy/i.test(text);
-      if(t === 'sports') return /스포츠|축구|야구|농구|sports|football|baseball|basketball/i.test(text);
-      if(t === 'finance') return /금융|증권|주식|환율|finance|stock|market|exchange/i.test(text);
-      if(t === 'book') return /도서|책|출판|book|isbn|author/i.test(text);
-      if(t === 'webtoon') return /웹툰|만화|webtoon|comic|manga/i.test(text);
-      if(t === 'site') return /site|사이트|홈페이지|official|공식|\.com|\.net|\.org|\.kr/i.test(text);
-      if(t === 'knowledge' || t === 'wiki') return /wiki|위키|백과|지식|knowledge|encyclopedia/i.test(text);
-      return false;
-    }
-
-    function localItemsForSearchTab(items, type){
-      const t = normalizeSearchType(type || 'all');
-      const list = Array.isArray(items) ? items : [];
-      if(t === 'all') return list.slice();
-      const out = [];
-      const seen = new Set();
-      list.forEach(it => {
-        if(!itemMatchesLocalSearchTab(it, t)) return;
-        const key = searchDisplayKeyForItem(it) || String((it && (it.url || it.link || it.id || it.title)) || '').toLowerCase();
-        if(key && seen.has(key)) return;
-        if(key) seen.add(key);
-        out.push(it);
-      });
-      return out;
-    }
-
-    function hydrateSearchTabInBackground(q, type, token){
-      const tab = normalizeSearchType(type || activeType || 'all');
-      if(!q || tab === 'all') return;
-      fetchSearch(q, tab, 1).then(pack => {
-        if(localTabHydrateSeq !== token || normalizeSearchType(activeType) !== tab) return;
-        const normalized = normalizeSearchPayload(pack && pack.payload ? pack.payload : pack);
-        const rawItems = dedupeItems(filterSearchResultItems((pack && pack.items) || normalized.items || []));
-        const pageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
-        const incoming = rawItems.length ? rawItems : pageItems;
-        if(incoming && incoming.length){
-          allItems = mergeItemsPreferDisplayRichness(allItems, incoming).slice(0, MAX_SMOOTH_CANDIDATES);
-          lastSearchPayload = (pack && pack.payload) || normalized.payload || lastSearchPayload;
-          updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(allItems.length, incoming.length));
-          const refreshed = localItemsForSearchTab(allItems, tab);
-          if(refreshed.length){
-            localTabViewItems = refreshed;
-            localTabViewType = tab;
-            currentPage = 1;
-            currentBlock = 0;
-            renderPage(1, true);
-          }
-        }
-        status.textContent = statusResultsText(localItemsForSearchTab(allItems, tab).length || actualResultCountForStatus(), q, tab, continuousIntakeActive);
-      }).catch(() => {
-        if(normalizeSearchType(activeType) === tab){
-          status.textContent = statusResultsText(localItemsForSearchTab(allItems, tab).length || actualResultCountForStatus(), q, tab, continuousIntakeActive);
-        }
-      });
-    }
-
     function switchSearchType(type){
       activeType = normalizeSearchType(type);
       updateSearchTabsActive();
@@ -2353,27 +2217,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       else u.searchParams.delete('type');
 
       history.pushState({ q, type: activeType, page: 1, block: 0 }, '', u.toString());
-      currentPage = 1;
-      currentBlock = 0;
-
-      if(activeType === 'all'){
-        clearLocalTabView();
-        runSearch(q, activeType);
-        return;
-      }
-
-      const cached = localItemsForSearchTab(allItems, activeType);
-      if(cached.length){
-        localTabViewItems = cached;
-        localTabViewType = activeType;
-        localTabHydrateSeq += 1;
-        renderPage(1, true);
-        status.textContent = statusResultsText(cached.length, q, activeType, continuousIntakeActive);
-        hydrateSearchTabInBackground(q, activeType, localTabHydrateSeq);
-        return;
-      }
-
-      clearLocalTabView();
       runSearch(q, activeType);
     }
 
@@ -2846,7 +2689,18 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       if (host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr')) return 'authority';
       if (source.includes('public') || provider.includes('public') || type === 'public_data' || category === 'public_data' || text.includes('공공데이터') || text.includes('공공 데이터') || text.includes('데이터포털') || text.includes('open data') || host.includes('data.go.kr')) return 'public_data';
-      if (source.includes('local') || source.includes('map') || type === 'map' || type === 'local' || mediaType === 'map' || category === 'map' || text.includes('관광') || text.includes('여행') || text.includes('지도') || text.includes('주소') || text.includes('위치') || text.includes('맛집') || text.includes('공원') || text.includes('landmark') || text.includes('tour')) return 'local_tour';
+      // Map/local classification must be narrow.  A broad query like "서울" often
+      // contains words such as 관광/주소/위치 inside ordinary news/site snippets;
+      // treating those as map items makes the whole result page fill with maps.
+      // Only explicit map/local providers, map URLs, or clearly local/tour result
+      // records should enter the map/tour lane.
+      const explicitMapSignal = source.includes('local') || source.includes('map') || provider.includes('map') || provider.includes('local') ||
+        type === 'map' || type === 'local' || mediaType === 'map' || category === 'map' || category === 'local';
+      const mapUrlSignal = /google\.com\/maps|map\.naver\.com|maps\.apple\.com|kakaomap|map\.kakao|\/maps?(\/|\?|$)/i.test(url + ' ' + host);
+      const tourHostSignal = /(visitseoul|tour|travel|tripadvisor|lonelyplanet|airbnb|booking|agoda|expedia|hotel)/i.test(host + ' ' + url);
+      const titleLocalSignal = /(지도|길찾기|주소|위치|근처|맛집|호텔|숙소|관광|여행|명소|공원|landmark|tour|travel|place|hotel)/i.test(title);
+      const nonLocalContent = /(뉴스|신문|일보|기사|보도|블로그|카페|위키|논문|쇼핑|상품|증권|주식|영상|동영상|photo|image|news|blog|wiki|shop|video)/i.test(source + ' ' + provider + ' ' + type + ' ' + category + ' ' + host);
+      if (explicitMapSignal || mapUrlSignal || tourHostSignal || (titleLocalSignal && !nonLocalContent)) return 'local_tour';
       if (host.includes('wikipedia.org') || host.includes('namu.wiki') || source.includes('wiki') || type === 'wiki' || text.includes('위키')) return 'wiki';
       if (source.includes('scholar') || source.includes('academic') || source.includes('paper') || source.includes('research') || source.includes('library') || type === 'academic' || type === 'paper' || type === 'research' || category === 'academic' || text.includes('학술') || text.includes('논문') || text.includes('연구') || text.includes('journal') || text.includes('citation') || text.includes('thesis') || host.includes('scholar.google') || host.includes('riss.kr') || host.includes('dbpia.co.kr') || host.includes('kci.go.kr')) return 'academic';
       if (source.includes('encyc') || source.includes('kin') || type === 'knowledge' || category === 'knowledge' || text.includes('지식') || text.includes('백과') || text.includes('사전')) return 'knowledge';
@@ -4667,10 +4521,6 @@ if (it.riskLabel === '⚠️ high-risk') {
         return buildClientVisibleStream(page);
       }
 
-      if(hasActiveLocalTabView()){
-        return localTabViewItems.slice(start, start + PAGE_SIZE);
-      }
-
       if(serverPagedMode && loadedServerPages.has(page)){
         return loadedServerPages.get(page).slice(0, PAGE_SIZE);
       }
@@ -4694,7 +4544,6 @@ if (it.riskLabel === '⚠️ high-risk') {
         const preloadFloor = lastQuery ? INITIAL_PRELOAD_TARGET : 0;
         return Math.max(portalCount, allItems.length || 0, preloadFloor);
       }
-      if(hasActiveLocalTabView()) return Math.max(localTabViewItems.length || 0, currentPage > 1 ? currentPage * PAGE_SIZE : 0);
       if(serverPagedMode && serverTotalItems > 0) return Math.max(INITIAL_PRELOAD_TARGET, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
       return Math.max(lastQuery ? INITIAL_PRELOAD_TARGET : 0, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
     }
@@ -4895,7 +4744,6 @@ function drawPager(){
 async function runSearch(q, type = activeType){
   const qq = (q || '').trim();
   activeType = normalizeSearchType(type);
-  clearLocalTabView();
   lastQuery = qq;
   updateSearchTabsActive(qq);
   stopContinuousIntake();
