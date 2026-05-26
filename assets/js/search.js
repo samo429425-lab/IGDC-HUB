@@ -71,6 +71,24 @@ ready(function () {
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
 
+    // Vertical-tab cache view:
+    // Keep the original search result pool intact, but allow a tab click
+    // to render the already-received matching items immediately. If the
+    // cache has no reliable matches, fall back to the normal server tab search.
+    let localTabViewItems = null;
+    let localTabViewType = 'all';
+    let localTabHydrateSeq = 0;
+
+    function clearLocalTabView(){
+      localTabViewItems = null;
+      localTabViewType = 'all';
+    }
+
+    function hasActiveLocalTabView(){
+      const t = normalizeSearchType(activeType || 'all');
+      return t !== 'all' && Array.isArray(localTabViewItems) && localTabViewType === t;
+    }
+
     // SANMARU resident switch:
     // The first search signal warms/activates Sanmaru on the server. Later searches
     // should ask Maru Search to use Sanmaru resident supply first, not re-open every
@@ -2202,13 +2220,99 @@ async function fetchInstantSearchPack(q, type = activeType){
       });
     }
 
-    function hydrateActiveTabInBackground(q, type){
+    function searchTabGroupsClient(type){
+      const t = normalizeSearchType(type || 'all');
+      const map = {
+        all: [],
+        map: ['local_tour'],
+        tour: ['local_tour'],
+        knowledge: ['knowledge','authority'],
+        wiki: ['wiki','knowledge'],
+        site: ['site','authority','web'],
+        book: ['book'],
+        blog: ['blog'],
+        cafe: ['cafe','community'],
+        shopping: ['shopping'],
+        news: ['news'],
+        image: ['image','media'],
+        video: ['video','media'],
+        sns: ['social','community'],
+        public_data: ['public_data','authority'],
+        academic: ['academic'],
+        sports: ['sports'],
+        finance: ['finance'],
+        webtoon: ['webtoon']
+      };
+      return map[t] || [];
+    }
+
+    function itemMatchesLocalSearchTab(it, type){
+      if(!it || isDisplayGroupModule(it)) return false;
+      const t = normalizeSearchType(type || 'all');
+      if(t === 'all') return true;
+      const groups = searchTabGroupsClient(t);
+      let group = '';
+      try { group = displayGroupOfItem(it); } catch(e) { group = ''; }
+      if(group && groups.includes(group)) return true;
+
+      const rawType = normalizeSearchType(firstNonEmpty(
+        it.type,
+        it.category,
+        it.searchCategory,
+        it.mediaType,
+        it.displayGroup,
+        it.__maruDisplayGroup
+      ));
+      if(rawType === t) return true;
+
+      const sourceObj = (it.source && typeof it.source === 'object') ? it.source : {};
+      const text = String([
+        it.title, it.name, it.summary, it.snippet, it.description, it.contentSnippet,
+        it.url, it.link, it.href, it.provider, it.channel,
+        sourceObj.name, sourceObj.platform, sourceObj.provider,
+        Array.isArray(it.tags) ? it.tags.join(' ') : ''
+      ].filter(Boolean).join(' ')).toLowerCase();
+
+      if(t === 'image') return /image|이미지|사진|photo|picture|gallery|pstatic\.net|googleusercontent|gstatic|imgur|cdn|jpg|jpeg|png|webp/i.test(text);
+      if(t === 'video') return /video|영상|동영상|youtube|youtu\.be|vimeo|shorts|mp4/i.test(text);
+      if(t === 'news') return /news|뉴스|신문|일보|언론|press|article/i.test(text);
+      if(t === 'blog') return /blog|블로그/i.test(text);
+      if(t === 'cafe') return /cafe|카페|community|forum|게시판/i.test(text);
+      if(t === 'sns') return /sns|social|instagram|facebook|tiktok|twitter|x\.com/i.test(text);
+      if(t === 'map' || t === 'tour') return /map|지도|주소|위치|관광|여행|tour|travel|place|hotel|visit/i.test(text);
+      if(t === 'public_data') return /go\.kr|or\.kr|공공|정부|기관|데이터|official|government/i.test(text);
+      if(t === 'academic') return /학술|논문|연구|paper|scholar|academic|journal/i.test(text);
+      if(t === 'shopping') return /쇼핑|상품|가격|구매|shopping|product|price|buy/i.test(text);
+      if(t === 'sports') return /스포츠|축구|야구|농구|sports|football|baseball|basketball/i.test(text);
+      if(t === 'finance') return /금융|증권|주식|환율|finance|stock|market|exchange/i.test(text);
+      if(t === 'book') return /도서|책|출판|book|isbn|author/i.test(text);
+      if(t === 'webtoon') return /웹툰|만화|webtoon|comic|manga/i.test(text);
+      if(t === 'site') return /site|사이트|홈페이지|official|공식|\.com|\.net|\.org|\.kr/i.test(text);
+      if(t === 'knowledge' || t === 'wiki') return /wiki|위키|백과|지식|knowledge|encyclopedia/i.test(text);
+      return false;
+    }
+
+    function localItemsForSearchTab(items, type){
+      const t = normalizeSearchType(type || 'all');
+      const list = Array.isArray(items) ? items : [];
+      if(t === 'all') return list.slice();
+      const out = [];
+      const seen = new Set();
+      list.forEach(it => {
+        if(!itemMatchesLocalSearchTab(it, t)) return;
+        const key = searchDisplayKeyForItem(it) || String((it && (it.url || it.link || it.id || it.title)) || '').toLowerCase();
+        if(key && seen.has(key)) return;
+        if(key) seen.add(key);
+        out.push(it);
+      });
+      return out;
+    }
+
+    function hydrateSearchTabInBackground(q, type, token){
       const tab = normalizeSearchType(type || activeType || 'all');
       if(!q || tab === 'all') return;
-      const token = (hydrateActiveTabInBackground._token || 0) + 1;
-      hydrateActiveTabInBackground._token = token;
       fetchSearch(q, tab, 1).then(pack => {
-        if(hydrateActiveTabInBackground._token !== token || normalizeSearchType(activeType) !== tab) return;
+        if(localTabHydrateSeq !== token || normalizeSearchType(activeType) !== tab) return;
         const normalized = normalizeSearchPayload(pack && pack.payload ? pack.payload : pack);
         const rawItems = dedupeItems(filterSearchResultItems((pack && pack.items) || normalized.items || []));
         const pageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
@@ -2217,16 +2321,19 @@ async function fetchInstantSearchPack(q, type = activeType){
           allItems = mergeItemsPreferDisplayRichness(allItems, incoming).slice(0, MAX_SMOOTH_CANDIDATES);
           lastSearchPayload = (pack && pack.payload) || normalized.payload || lastSearchPayload;
           updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(allItems.length, incoming.length));
-          currentPage = 1;
-          currentBlock = 0;
-          renderPage(1, true);
-        }else{
-          drawPager();
+          const refreshed = localItemsForSearchTab(allItems, tab);
+          if(refreshed.length){
+            localTabViewItems = refreshed;
+            localTabViewType = tab;
+            currentPage = 1;
+            currentBlock = 0;
+            renderPage(1, true);
+          }
         }
-        status.textContent = statusResultsText(filteredItemsForActiveSearchTab(allItems, tab).length, q, tab, continuousIntakeActive);
+        status.textContent = statusResultsText(localItemsForSearchTab(allItems, tab).length || actualResultCountForStatus(), q, tab, continuousIntakeActive);
       }).catch(() => {
         if(normalizeSearchType(activeType) === tab){
-          status.textContent = statusResultsText(filteredItemsForActiveSearchTab(allItems, tab).length, q, tab, continuousIntakeActive);
+          status.textContent = statusResultsText(localItemsForSearchTab(allItems, tab).length || actualResultCountForStatus(), q, tab, continuousIntakeActive);
         }
       });
     }
@@ -2249,16 +2356,24 @@ async function fetchInstantSearchPack(q, type = activeType){
       currentPage = 1;
       currentBlock = 0;
 
-      // Do not restart the whole search just for a vertical tab. Use the
-      // already-received Sanmaru/MaruSearch pool immediately, then enrich this
-      // tab in the background.
-      if(Array.isArray(allItems) && allItems.length){
-        renderPage(1, true);
-        status.textContent = statusResultsText(filteredItemsForActiveSearchTab(allItems, activeType).length, q, activeType, continuousIntakeActive);
-        hydrateActiveTabInBackground(q, activeType);
+      if(activeType === 'all'){
+        clearLocalTabView();
+        runSearch(q, activeType);
         return;
       }
 
+      const cached = localItemsForSearchTab(allItems, activeType);
+      if(cached.length){
+        localTabViewItems = cached;
+        localTabViewType = activeType;
+        localTabHydrateSeq += 1;
+        renderPage(1, true);
+        status.textContent = statusResultsText(cached.length, q, activeType, continuousIntakeActive);
+        hydrateSearchTabInBackground(q, activeType, localTabHydrateSeq);
+        return;
+      }
+
+      clearLocalTabView();
       runSearch(q, activeType);
     }
 
@@ -2790,83 +2905,6 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (!Array.isArray(slice) || !slice.length) return false;
       if (normalizeSearchType(activeType) !== 'all') return false;
       return slice.some(it => it && (it.displayGroup || it.displayGroupLabel));
-    }
-
-
-    function groupsForSearchTabClient(type){
-      const t = normalizeSearchType(type || 'all');
-      const map = {
-        map: ['local_tour'],
-        tour: ['local_tour'],
-        knowledge: ['knowledge'],
-        wiki: ['wiki','knowledge'],
-        site: ['site','authority','public_data','web'],
-        book: ['book'],
-        blog: ['blog'],
-        cafe: ['cafe','community'],
-        shopping: ['shopping'],
-        news: ['news'],
-        image: ['image','media'],
-        video: ['video','media'],
-        sns: ['social','community'],
-        public_data: ['public_data','authority'],
-        academic: ['academic'],
-        sports: ['sports'],
-        finance: ['finance'],
-        webtoon: ['webtoon']
-      };
-      return map[t] || null;
-    }
-
-    function itemMatchesSearchTabClient(it, type){
-      const t = normalizeSearchType(type || 'all');
-      if(t === 'all') return true;
-      const wanted = groupsForSearchTabClient(t);
-      if(!wanted || !wanted.length) return true;
-      const group = displayGroupOfItem(it);
-      if(wanted.includes(group)) return true;
-
-      const rawType = normalizeSearchType(firstNonEmpty(
-        it && it.type,
-        it && it.category,
-        it && it.searchCategory,
-        it && it.mediaType,
-        it && it.displayGroup
-      ));
-      if(rawType === t) return true;
-
-      const text = String([
-        it && it.title,
-        it && it.summary,
-        it && it.snippet,
-        it && it.description,
-        it && it.url,
-        it && it.link,
-        it && it.provider,
-        it && it.source && (it.source.name || it.source.platform || it.source.provider)
-      ].filter(Boolean).join(' ')).toLowerCase();
-
-      if(t === 'image') return /image|이미지|사진|photo|picture|gallery|pstatic\.net|googleusercontent|gstatic|imgur|cdn/i.test(text);
-      if(t === 'video') return /video|영상|동영상|youtube|youtu\.be|vimeo|shorts/i.test(text);
-      if(t === 'news') return /news|뉴스|신문|일보|press|article/i.test(text);
-      if(t === 'blog') return /blog|블로그/i.test(text);
-      if(t === 'cafe') return /cafe|카페|community|forum|게시판/i.test(text);
-      if(t === 'sns') return /sns|social|instagram|facebook|tiktok|twitter|x\.com/i.test(text);
-      if(t === 'map' || t === 'tour') return /map|지도|주소|위치|관광|여행|tour|travel|place|hotel/i.test(text);
-      if(t === 'public_data') return /go\.kr|or\.kr|공공|정부|기관|데이터|official|government/i.test(text);
-      return false;
-    }
-
-    function filteredItemsForActiveSearchTab(items, type){
-      const t = normalizeSearchType(type || activeType || 'all');
-      const list = Array.isArray(items) ? items : [];
-      if(t === 'all') return list.slice();
-      const filtered = list.filter(it => itemMatchesSearchTabClient(it, t));
-      // Never blank the result pane on a vertical tab click. Some MaruSearch
-      // packets arrive before displayGroup/type metadata is attached. In that
-      // case keep the already-rendered search pool visible immediately and let
-      // hydrateActiveTabInBackground() replace it with the refined tab data.
-      return filtered.length ? filtered : list.slice();
     }
 
     function groupSliceForDisplay(slice){
@@ -4598,7 +4636,7 @@ if (it.riskLabel === '⚠️ high-risk') {
     function buildClientVisibleStream(page){
       const sourceItems = Array.isArray(allItems) ? allItems : [];
       if (!sourceItems.length) return [];
-      if (normalizeSearchType(activeType) !== 'all') return filteredItemsForActiveSearchTab(sourceItems, activeType);
+      if (normalizeSearchType(activeType) !== 'all') return sourceItems.slice();
 
       const model = buildPortalPageModel();
       if(model.pageCount){
@@ -4629,9 +4667,13 @@ if (it.riskLabel === '⚠️ high-risk') {
         return buildClientVisibleStream(page);
       }
 
-      // Vertical tabs must switch inside the already-received search pool first.
-      // Do not wait for a new MaruSearch request just because the user clicked
-      // 뉴스/이미지/블로그/지도/etc. Server enrichment can follow in background.
+      if(hasActiveLocalTabView()){
+        return localTabViewItems.slice(start, start + PAGE_SIZE);
+      }
+
+      if(serverPagedMode && loadedServerPages.has(page)){
+        return loadedServerPages.get(page).slice(0, PAGE_SIZE);
+      }
       const stream = buildClientVisibleStream(page);
       return stream.slice(start, start + PAGE_SIZE);
     }
@@ -4652,8 +4694,9 @@ if (it.riskLabel === '⚠️ high-risk') {
         const preloadFloor = lastQuery ? INITIAL_PRELOAD_TARGET : 0;
         return Math.max(portalCount, allItems.length || 0, preloadFloor);
       }
-      const filteredCount = filteredItemsForActiveSearchTab(allItems, activeType).length;
-      return Math.max(filteredCount, currentPage > 1 ? currentPage * PAGE_SIZE : 0);
+      if(hasActiveLocalTabView()) return Math.max(localTabViewItems.length || 0, currentPage > 1 ? currentPage * PAGE_SIZE : 0);
+      if(serverPagedMode && serverTotalItems > 0) return Math.max(INITIAL_PRELOAD_TARGET, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
+      return Math.max(lastQuery ? INITIAL_PRELOAD_TARGET : 0, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
     }
 
     function frontPageSectionSource(){
@@ -4852,6 +4895,7 @@ function drawPager(){
 async function runSearch(q, type = activeType){
   const qq = (q || '').trim();
   activeType = normalizeSearchType(type);
+  clearLocalTabView();
   lastQuery = qq;
   updateSearchTabsActive(qq);
   stopContinuousIntake();
