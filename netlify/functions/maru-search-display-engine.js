@@ -379,7 +379,16 @@ function groupOfItem(item){
 
   if(/\.go\.kr$|\.gov$|\.or\.kr$|\.edu$|\.ac\.kr$/.test(host) || /공식|정부|기관|authority/.test(text)) return 'authority';
   if(type === 'public_data' || /공공데이터|데이터포털|open data/.test(text) || host.includes('data.go.kr')) return 'public_data';
-  if(type === 'map' || type === 'local' || /지도|주소|위치|근처|맛집|관광|여행|호텔|숙박|landmark|tour|travel|place/.test(text)) return 'local_tour';
+  // Keep map/local grouping strict.  Do not classify ordinary search results as
+  // local_tour merely because their summary contains broad words like 관광/주소/위치.
+  // Otherwise search cards become dominated by map previews instead of natural
+  // thumbnails/images/videos.
+  const explicitMapSignal = type === 'map' || type === 'local' || /(^|\s)(map|local|place|tour|travel)(\s|$)/.test(source + ' ' + type);
+  const mapHostSignal = /google\.com\/maps|map\.naver\.com|maps\.apple\.com|kakaomap|map\.kakao|\/maps?(\/|\?|$)/i.test(url + ' ' + host);
+  const tourHostSignal = /(visitseoul|tour|travel|tripadvisor|lonelyplanet|airbnb|booking|agoda|expedia|hotel)/i.test(host + ' ' + url);
+  const titleLocalSignal = /(지도|길찾기|주소|위치|근처|맛집|호텔|숙소|관광|여행|명소|공원|landmark|tour|travel|place|hotel)/i.test(low(firstNonEmpty(item.title, item.name)));
+  const nonLocalSource = /(news|blog|wiki|shopping|shop|finance|sports|video|image|cafe|community|뉴스|블로그|위키|쇼핑|영상|이미지)/i.test(source + ' ' + host + ' ' + type);
+  if(explicitMapSignal || mapHostSignal || tourHostSignal || (titleLocalSignal && !nonLocalSource)) return 'local_tour';
   if(type === 'academic' || /학술|논문|연구|journal|paper|thesis|scholar/.test(text) || host.includes('scholar.google')) return 'academic';
   if(type === 'wiki' || /위키|wiki/.test(text)) return 'wiki';
   if(type === 'knowledge' || /지식|백과|사전|knowledge|encyclopedia/.test(text)) return 'knowledge';
