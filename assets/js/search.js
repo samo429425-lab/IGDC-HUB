@@ -663,13 +663,43 @@ ensureSearchCardMediaStyle();
 
 const SEARCH_PAGE_PROXY_URL = '/.netlify/functions/search-page-proxy';
 
+
+function normalizeSourceViewUrl(raw){
+  const value = String(raw || '').trim();
+  if(!value) return '';
+  try{
+    const u = new URL(value, location.href);
+    if(!/^https?:$/.test(u.protocol)) return value;
+    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+    const path = (u.pathname || '/').replace(/\/+/g, '/');
+
+    // Seoul Archives search results often arrive as the bare domain.
+    // The actually rendered public entry point is /main.  If we try the
+    // bare root inside the viewer, it frequently returns a JS/redirect shell
+    // and the IGDC source area stays blank.  Normalize before frame-check,
+    // direct iframe and proxy fallback so it behaves like the original page.
+    if(host === 'archives.seoul.go.kr'){
+      if(path === '/' || path === '' || path.toLowerCase() === '/index.do' || path.toLowerCase() === '/index'){
+        u.pathname = '/main';
+        u.search = '';
+        u.hash = '';
+        return u.href;
+      }
+    }
+
+    return u.href;
+  }catch(e){
+    return value;
+  }
+}
+
 function isSkippableNavigationHref(href){
   const h = String(href || '').trim();
   return !h || h === '#' || h.charAt(0) === '#' || /^javascript:/i.test(h) || /^mailto:|^tel:/i.test(h);
 }
 
 function proxyUrlForResult(target, extraParams){
-  const raw = String(target || '').trim();
+  const raw = normalizeSourceViewUrl(target);
   if(!raw) return '';
   try{
     const u = new URL(raw, location.href);
@@ -692,7 +722,7 @@ function proxyUrlForResult(target, extraParams){
 
 
 function sourceFrameCheckUrl(target){
-  const raw = String(target || '').trim();
+  const raw = normalizeSourceViewUrl(target);
   if(!raw) return '';
   try{
     const u = new URL(raw, location.href);
@@ -904,6 +934,94 @@ function buildSearchOwnedResultHref(target){
   }
 }
 
+
+function buildSearchListReturnHref(){
+  try{
+    const u = new URL(location.href);
+    u.searchParams.delete('view');
+    u.searchParams.delete('target');
+    u.searchParams.set('page', String(currentPage || 1));
+    u.searchParams.set('block', String(currentBlock || 0));
+    const q = String(lastQuery || input.value || '').trim();
+    if(q) u.searchParams.set('q', q);
+    if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
+    else u.searchParams.delete('type');
+    return u.pathname + u.search + u.hash;
+  }catch(e){
+    return location.pathname + location.search + location.hash;
+  }
+}
+
+function goToOriginalSourceSameTab(target){
+  const raw = normalizeSourceViewUrl(target);
+  if(!raw) return;
+  try{
+    const u = new URL(raw, location.href);
+    if(!/^https?:$/.test(u.protocol)) return;
+  }catch(e){ return; }
+
+  try{
+    const returnUrl = buildSearchListReturnHref();
+    const q = String(lastQuery || input.value || '').trim();
+    try{
+      sessionStorage.setItem('maruSearchReturnUrl', returnUrl);
+      sessionStorage.setItem('maruSearchReturnState', JSON.stringify({
+        q, page: currentPage || 1, block: currentBlock || 0, type: activeType || 'all', scrollY: window.scrollY || 0, ts: Date.now()
+      }));
+      // Keep a light rich-result cache so Browser Back can restore cards with
+      // thumbnails/videos immediately even if the browser does not keep bfcache.
+      try{
+        const cacheItems = (Array.isArray(allItems) ? allItems.slice(0, Math.min(allItems.length, 360)) : []);
+        sessionStorage.setItem('maruSearchReturnItems', JSON.stringify({
+          q, page: currentPage || 1, block: currentBlock || 0, type: activeType || 'all',
+          serverTotalItems: serverTotalItems || 0, authoritativeServerTotalItems: authoritativeServerTotalItems || 0,
+          items: cacheItems, ts: Date.now()
+        }));
+      }catch(cacheErr){}
+    }catch(e){}
+    history.replaceState({
+      ...(history.state || {}),
+      __maruSearchOwnedResult:false,
+      __maruSearchList:true,
+      q,
+      page: currentPage || 1,
+      block: currentBlock || 0,
+      type: activeType || 'all'
+    }, '', returnUrl);
+  }catch(e){}
+
+  try{ window.location.assign(raw); }
+  catch(e){ window.location.href = raw; }
+}
+
+
+function restoreSearchReturnItemsFromSession(expectedQ, expectedType){
+  try{
+    const raw = sessionStorage.getItem('maruSearchReturnItems') || '';
+    if(!raw) return false;
+    const pack = JSON.parse(raw);
+    if(!pack || !Array.isArray(pack.items) || !pack.items.length) return false;
+    const q = String(expectedQ || '').trim();
+    const type = normalizeSearchType(expectedType || activeType || 'all');
+    const packQ = String(pack.q || '').trim();
+    const packType = normalizeSearchType(pack.type || 'all');
+    if(q && packQ && q !== packQ) return false;
+    if(type && packType && type !== packType) return false;
+    allItems = mergeItemsPreferDisplayRichness([], pack.items);
+    loadedServerPages.clear();
+    seedLoadedServerPagesFromItems(allItems, allItems.length);
+    currentPage = Math.max(1, parseInt(pack.page || currentPage || 1, 10) || 1);
+    currentBlock = Math.max(0, parseInt(pack.block || currentBlock || 0, 10) || 0);
+    lastQuery = packQ || q || lastQuery;
+    lastType = packType || type || lastType;
+    activeType = packType || type || activeType;
+    serverTotalItems = Math.max(serverTotalItems || 0, Number(pack.serverTotalItems || 0) || allItems.length);
+    authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, Number(pack.authoritativeServerTotalItems || 0) || allItems.length);
+    progressivePagerPages = Math.max(progressivePagerPages || INITIAL_PROGRESSIVE_PAGER_PAGES, preloadPageCountFromItems(allItems));
+    return true;
+  }catch(e){ return false; }
+}
+
 function findSearchItemByUrl(target){
   const raw = String(target || '').trim();
   if(!raw) return null;
@@ -935,7 +1053,7 @@ function installSearchResultClickGuard(){
     if(!target) return;
     e.preventDefault();
     e.stopPropagation();
-    openResultInsideSearchFrame(target, findSearchItemByUrl(target) || { url: target, title: a.textContent || target });
+    goToOriginalSourceSameTab(target);
   }, true);
 }
 
@@ -1168,18 +1286,14 @@ window.addEventListener('popstate', (e) => {
   const viewMode = (sp.get('view') || state.view || '').trim();
   const viewTarget = (sp.get('target') || state.target || '').trim();
   if (viewMode === 'result' && viewTarget) {
-    const renderOwnedView = () => {
-      currentPage = page;
-      currentBlock = block;
-      const item = findSearchItemByUrl(viewTarget) || { url:viewTarget, link:viewTarget, title: state.title || viewTarget };
-      renderSearchOwnedResultView(viewTarget, item, { skipHistory:true });
-    };
-    if ((!allItems || !allItems.length || q !== lastQuery || nextType !== lastType) && q) {
-      runSearch(q, nextType).then(renderOwnedView);
-    } else {
-      renderOwnedView();
-    }
-    return;
+    // Direct original mode no longer uses internal result views. If an old
+    // history entry remains, normalize it back to the search list.
+    try{
+      const u = new URL(location.href);
+      u.searchParams.delete('view');
+      u.searchParams.delete('target');
+      history.replaceState({ ...(state || {}), __maruSearchOwnedResult:false, view:'' }, '', u.toString());
+    }catch(e){}
   }
 
   // 4️⃣ 데이터 없거나 검색어/탭이 바뀌면 다시 검색
@@ -1208,7 +1322,22 @@ updateSearchTabsActive();
 
 if (q0) {
   signalSanmaruSearch(q0, activeType, 'search-page-url-open');
-  syncSearchFromUrl(true);
+  // When returning from an original source page, restore the previous rich
+  // list first so cards/thumbnails appear immediately, then let Sanmaru
+  // continue refreshing in the background.
+  if(restoreSearchReturnItemsFromSession(q0, activeType)){
+    input.value = q0;
+    updateSearchTabsActive(q0);
+    renderPage(currentPage || 1, true);
+    status.textContent = statusResultsText(actualResultCountForStatus(), q0, activeType);
+    try{
+      const restoreSeq = (Number(runSearch._seq) || 0) + 1;
+      runSearch._seq = restoreSeq;
+      startContinuousIntake(q0, activeType, restoreSeq);
+    }catch(e){}
+  } else {
+    syncSearchFromUrl(true);
+  }
 } else {
   bootSanmaruOnce('search-ui-ready', '', activeType);
   status.textContent = '';
@@ -3567,7 +3696,7 @@ async function fetchInstantSearchPack(q, type = activeType){
           e.preventDefault();
           e.stopPropagation();
           const pageUrl = displayUrlForImageItemClient(imgItem, src);
-          if(pageUrl) openResultInsideSearchFrame(pageUrl, imgItem);
+          if(pageUrl) goToOriginalSourceSameTab(pageUrl);
         });
         grid.appendChild(tile);
       });
@@ -3577,7 +3706,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function renderSearchOwnedResultView(url, it, opts){
       opts = opts || {};
-      const target = String(url || '').trim();
+      const target = normalizeSourceViewUrl(url);
       if(!target) return;
       if(!isSearchPage){
         try { window.location.href = target; } catch(e) {}
@@ -3649,45 +3778,16 @@ async function fetchInstantSearchPack(q, type = activeType){
         status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
       });
 
-      function openOriginalSameTabFromResult(){
-        // Keep the previous browser-history entry as the IGDC search list, not the
-        // internal result-view URL. Then the browser Back button returns directly
-        // to the search list after visiting the original site.
-        try{
-          const listUrl = new URL(location.href);
-          listUrl.searchParams.delete('view');
-          listUrl.searchParams.delete('target');
-          listUrl.searchParams.set('page', String(currentPage || 1));
-          listUrl.searchParams.set('block', String(currentBlock || 0));
-          const q = String(lastQuery || input.value || '').trim();
-          if(q) listUrl.searchParams.set('q', q);
-          if(activeType && activeType !== 'all') listUrl.searchParams.set('type', activeType);
-          else listUrl.searchParams.delete('type');
-          try{
-            sessionStorage.setItem('maruSearchReturnState', JSON.stringify({
-              q, page: currentPage || 1, block: currentBlock || 0, type: activeType || 'all', scrollY: window.scrollY || 0, ts: Date.now()
-            }));
-          }catch(e){}
-          history.replaceState({
-            ...(history.state || {}),
-            __maruSearchOwnedResult:false,
-            __maruSearchReturnList:true,
-            q, page: currentPage || 1, block: currentBlock || 0, type: activeType || 'all'
-          }, '', listUrl.toString());
-        }catch(e){}
-        try{ window.location.assign(target); }catch(e){ window.location.href = target; }
-      }
-
       const open = document.createElement('a');
       open.href = target;
-      open.target = '_self';
+      open.removeAttribute('target');
       open.rel = 'noopener';
       open.dataset.maruExternal = '1';
       open.textContent = '사이트 원문';
-      open.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openOriginalSameTabFromResult();
+      open.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        goToOriginalSourceSameTab(target);
       });
 
       actions.appendChild(back);
@@ -3729,11 +3829,11 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function openResultInsideSearchFrame(url, it){
-      // Google/Naver-style behavior for IGDC:
-      // keep the IGDC search header, tabs, pager and render the selected result
-      // as our own search-owned detail page and load the source through the
-      // server proxy iframe so the browser does not leave IGDC Search.
-      renderSearchOwnedResultView(url, it);
+      // Direct original mode: keep the rich IGDC result list intact, but open
+      // the selected original page in the same tab. Browser Back returns to the
+      // exact IGDC search-list URL because goToOriginalSourceSameTab rewrites
+      // the current history entry before leaving.
+      goToOriginalSourceSameTab(url);
     }
 
     function displayUrlForImageItemClient(it, src){
@@ -3941,7 +4041,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       if (url) {
         const a = document.createElement('a');
-        a.href = buildSearchOwnedResultHref(url);
+        a.href = normalizeSourceViewUrl(url) || url;
         a.dataset.originalUrl = url;
         a.target = '_self';
         a.rel = 'noopener';
@@ -4736,6 +4836,7 @@ async function runSearch(q, type = activeType){
     return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
   }
 
+  // PATCH: first render uses Sanmaru/MaruSearch first supply window, not forced 25-only paint
   const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
 
