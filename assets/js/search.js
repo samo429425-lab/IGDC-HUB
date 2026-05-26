@@ -2861,7 +2861,12 @@ async function fetchInstantSearchPack(q, type = activeType){
       const t = normalizeSearchType(type || activeType || 'all');
       const list = Array.isArray(items) ? items : [];
       if(t === 'all') return list.slice();
-      return list.filter(it => itemMatchesSearchTabClient(it, t));
+      const filtered = list.filter(it => itemMatchesSearchTabClient(it, t));
+      // Never blank the result pane on a vertical tab click. Some MaruSearch
+      // packets arrive before displayGroup/type metadata is attached. In that
+      // case keep the already-rendered search pool visible immediately and let
+      // hydrateActiveTabInBackground() replace it with the refined tab data.
+      return filtered.length ? filtered : list.slice();
     }
 
     function groupSliceForDisplay(slice){
