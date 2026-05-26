@@ -663,43 +663,13 @@ ensureSearchCardMediaStyle();
 
 const SEARCH_PAGE_PROXY_URL = '/.netlify/functions/search-page-proxy';
 
-
-function normalizeSourceViewUrl(raw){
-  const value = String(raw || '').trim();
-  if(!value) return '';
-  try{
-    const u = new URL(value, location.href);
-    if(!/^https?:$/.test(u.protocol)) return value;
-    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
-    const path = (u.pathname || '/').replace(/\/+/g, '/');
-
-    // Seoul Archives search results often arrive as the bare domain.
-    // The actually rendered public entry point is /main.  If we try the
-    // bare root inside the viewer, it frequently returns a JS/redirect shell
-    // and the IGDC source area stays blank.  Normalize before frame-check,
-    // direct iframe and proxy fallback so it behaves like the original page.
-    if(host === 'archives.seoul.go.kr'){
-      if(path === '/' || path === '' || path.toLowerCase() === '/index.do' || path.toLowerCase() === '/index'){
-        u.pathname = '/main';
-        u.search = '';
-        u.hash = '';
-        return u.href;
-      }
-    }
-
-    return u.href;
-  }catch(e){
-    return value;
-  }
-}
-
 function isSkippableNavigationHref(href){
   const h = String(href || '').trim();
   return !h || h === '#' || h.charAt(0) === '#' || /^javascript:/i.test(h) || /^mailto:|^tel:/i.test(h);
 }
 
 function proxyUrlForResult(target, extraParams){
-  const raw = normalizeSourceViewUrl(target);
+  const raw = String(target || '').trim();
   if(!raw) return '';
   try{
     const u = new URL(raw, location.href);
@@ -721,8 +691,71 @@ function proxyUrlForResult(target, extraParams){
 
 
 
+
+function normalizeOwnedViewerUrl(raw, item){
+  const value = String(raw || '').trim();
+  if(!value) return '';
+  try{
+    const u = new URL(value, location.href);
+    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+    let path = u.pathname || '/';
+
+    // 서울기록원은 검색 결과가 루트로 내려오면 실제 진입점이 /main 쪽입니다.
+    // 루트 그대로 iframe/proxy에 넣으면 빈 화면으로 끝나는 경우가 많습니다.
+    if(host === 'archives.seoul.go.kr'){
+      if(path === '/' || path === '' || /^\/(index|index\.do|main\.do)?$/i.test(path)){
+        u.pathname = '/main';
+        u.search = '';
+        u.hash = '';
+      }
+    }
+
+    return u.href;
+  }catch(e){ return value; }
+}
+
+function currentSearchListUrlForBack(){
+  try{
+    const u = new URL(location.href);
+    u.searchParams.delete('view');
+    u.searchParams.delete('target');
+    u.searchParams.set('page', String(currentPage || 1));
+    u.searchParams.set('block', String(currentBlock || 0));
+    const q = String(lastQuery || input.value || '').trim();
+    if(q) u.searchParams.set('q', q);
+    if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
+    else u.searchParams.delete('type');
+    return u.toString();
+  }catch(e){ return location.href; }
+}
+
+function openOriginalSameTabWithSearchBack(target){
+  const url = normalizeOwnedViewerUrl(target || '', null);
+  if(!url) return;
+  try{
+    const listUrl = currentSearchListUrlForBack();
+    history.replaceState({
+      ...(history.state || {}),
+      __maruSearchOwnedResult:false,
+      q: String(lastQuery || input.value || '').trim(),
+      page: currentPage || 1,
+      block: currentBlock || 0,
+      type: activeType || 'all'
+    }, '', listUrl);
+  }catch(e){}
+  try{ window.location.assign(url); }catch(e){ window.location.href = url; }
+}
+
+function isLikelyFrameBlockedDomain(target){
+  try{
+    const u = new URL(String(target || ''), location.href);
+    const h = u.hostname.replace(/^www\./i, '').toLowerCase();
+    return /(^|\.)namu\.wiki$|(^|\.)naver\.com$|(^|\.)blog\.naver\.com$|(^|\.)m\.blog\.naver\.com$|(^|\.)skyscanner\.co\.kr$|(^|\.)skyscanner\.net$/.test(h);
+  }catch(e){ return false; }
+}
+
 function sourceFrameCheckUrl(target){
-  const raw = normalizeSourceViewUrl(target);
+  const raw = String(target || '').trim();
   if(!raw) return '';
   try{
     const u = new URL(raw, location.href);
@@ -738,18 +771,18 @@ async function checkSourceFramePolicy(target){
   const url = sourceFrameCheckUrl(target);
   if(!url) return { ok:false, directAllowed:false, reason:'invalid-url' };
   const ctrl = new AbortController();
-  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 4200);
+  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 1400);
   try{
     const r = await fetch(url, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
     const json = await r.json().catch(() => null);
     clearTimeout(timer);
-    if(!r.ok || !json) return { ok:false, directAllowed:true, reason:'check-failed' };
+    if(!r.ok || !json) return { ok:false, directAllowed:null, reason:'check-failed' };
     return json;
   }catch(e){
     clearTimeout(timer);
     // If the checker is unavailable, try the real page directly rather than
     // replacing the viewer with an empty proxy page.
-    return { ok:false, directAllowed:true, reason:'check-timeout' };
+    return { ok:false, directAllowed:null, reason:'check-timeout' };
   }
 }
 
@@ -787,29 +820,49 @@ function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
   const proxySrc = proxyUrlForResult(target, { mode:'static', proxyId });
   frame.classList.add('maru-search-owned-proxy-frame');
   frame.classList.remove('maru-search-owned-source-frame');
-  frame.removeAttribute('srcdoc');
+  frame.removeAttribute('src');
   frame.referrerPolicy = 'no-referrer-when-downgrade';
   frame.sandbox = 'allow-forms allow-popups allow-presentation allow-downloads';
   frame.dataset.viewerMode = 'static-proxy';
-  frame.onload = () => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} };
-  try{ frame.src = proxySrc; }catch(e){ loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target); }
-  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 3800);
+  // fetch + srcdoc keeps the browser Back button owned by the IGDC search page.
+  loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target);
 }
 
 async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId){
   if(!frame || !target) return;
+  const normalizedTarget = normalizeOwnedViewerUrl(target, null);
   if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
-  const policy = await checkSourceFramePolicy(target);
-  if(policy && policy.directAllowed){
-    loadDirectSourceFrame(frame, target, loadingEl);
+
+  // Fast path: do not wait for HEAD/frame-check before the first paint.
+  // Google/Naver/Bing feel immediate because they paint their shell first and
+  // let the target content attach underneath. We do the same here.
+  if(!isLikelyFrameBlockedDomain(normalizedTarget)){
+    loadDirectSourceFrame(frame, normalizedTarget, loadingEl);
+  }
+
+  const policy = await checkSourceFramePolicy(normalizedTarget);
+  if(policy && policy.directAllowed === false){
+    loadStaticSourceProxyFrame(frame, normalizedTarget, proxyId, loadingEl);
     return;
   }
-  loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
+
+  if(isLikelyFrameBlockedDomain(normalizedTarget)){
+    // Known anti-frame/anti-bot domains should not spend seconds in a gray box.
+    loadStaticSourceProxyFrame(frame, normalizedTarget, proxyId, loadingEl);
+    return;
+  }
+
+  // If the checker timed out or was inconclusive, keep the direct frame already
+  // mounted. This preserves the fast, natural behavior for sites that allow it.
+  if(policy && policy.directAllowed === true && frame.dataset.viewerMode !== 'direct'){
+    loadDirectSourceFrame(frame, normalizedTarget, loadingEl);
+  }
 }
 
 function proxyFailSrcdoc(target, message){
   const safeTarget = String(target || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{padding:32px 20px}.url{font-size:13px;color:#64748b;word-break:break-all}</style></head><body><div class="wrap"><div class="url">' + safeTarget + '</div></div></body></html>';
+  const safeMessage = String(message || '이 사이트는 보안 정책 또는 자바스크립트 렌더링 때문에 검색창 아래에 직접 붙지 않았습니다.').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{padding:32px 24px}.title{font-size:20px;font-weight:850;color:#111827;margin-bottom:10px}.msg{font-size:14px;line-height:1.6;color:#475569}.url{margin-top:16px;font-size:13px;color:#64748b;word-break:break-all;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px}</style></head><body><div class="wrap"><div class="title">원문 표시 대기</div><div class="msg">' + safeMessage + '</div><div class="url">' + safeTarget + '</div></div></body></html>';
 }
 
 async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
@@ -860,7 +913,7 @@ async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
   try{
     if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 18000);
+    const timer = setTimeout(() => ctrl.abort(), 7000);
     const r = await fetch(proxySrc, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
     const text = await r.text();
     clearTimeout(timer);
@@ -3607,7 +3660,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function renderSearchOwnedResultView(url, it, opts){
       opts = opts || {};
-      const target = normalizeSourceViewUrl(url);
+      const target = normalizeOwnedViewerUrl(String(url || '').trim(), it);
       if(!target) return;
       if(!isSearchPage){
         try { window.location.href = target; } catch(e) {}
@@ -3629,7 +3682,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         if(currentQ) u.searchParams.set('q', currentQ);
         if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
         else u.searchParams.delete('type');
-        history.pushState({
+        const detailState = {
           ...(history.state || {}),
           __maruSearchOwnedResult: true,
           q: currentQ,
@@ -3639,7 +3692,12 @@ async function fetchInstantSearchPack(q, type = activeType){
           target: target,
           title: displayTitle.slice(0, 180),
           view: 'result'
-        }, '', u.toString());
+        };
+        if(history.state && history.state.__maruSearchOwnedResult){
+          history.replaceState(detailState, '', u.toString());
+        }else{
+          history.pushState(detailState, '', u.toString());
+        }
       }catch(e){}
 
       const shell = document.createElement('div');
@@ -3681,10 +3739,15 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const open = document.createElement('a');
       open.href = target;
-      open.target = '_blank';
+      open.target = '_self';
       open.rel = 'noopener noreferrer';
       open.dataset.maruExternal = '1';
-      open.textContent = uiText('openNewWindow', '새 창으로 원문');
+      open.textContent = '사이트 원문';
+      open.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openOriginalSameTabWithSearchBack(target);
+      });
 
       actions.appendChild(back);
       actions.appendChild(open);
@@ -3714,12 +3777,12 @@ async function fetchInstantSearchPack(q, type = activeType){
       proxyBox.appendChild(loading);
       proxyBox.appendChild(frame);
       shell.appendChild(proxyBox);
-      installProxyViewerMessageBridge();
-      mountOwnedSourceFrame(frame, loading, target, proxyId);
 
       results.innerHTML = '';
       results.appendChild(shell);
       drawPager();
+      installProxyViewerMessageBridge();
+      setTimeout(() => mountOwnedSourceFrame(frame, loading, target, proxyId), 0);
       status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
       // Keep the current IGDC search header/tabs/pager position; do not auto-scroll the shell away.
     }
