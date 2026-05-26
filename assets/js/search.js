@@ -738,7 +738,7 @@ async function checkSourceFramePolicy(target){
   const url = sourceFrameCheckUrl(target);
   if(!url) return { ok:false, directAllowed:false, reason:'invalid-url' };
   const ctrl = new AbortController();
-  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 4200);
+  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 1200);
   try{
     const r = await fetch(url, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
     const json = await r.json().catch(() => null);
@@ -787,24 +787,48 @@ function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
   const proxySrc = proxyUrlForResult(target, { mode:'static', proxyId });
   frame.classList.add('maru-search-owned-proxy-frame');
   frame.classList.remove('maru-search-owned-source-frame');
-  frame.removeAttribute('srcdoc');
   frame.referrerPolicy = 'no-referrer-when-downgrade';
   frame.sandbox = 'allow-forms allow-popups allow-presentation allow-downloads';
-  frame.dataset.viewerMode = 'static-proxy';
-  frame.onload = () => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} };
-  try{ frame.src = proxySrc; }catch(e){ loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target); }
-  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 3800);
+  frame.dataset.viewerMode = 'static-proxy-srcdoc';
+  // Important: do not navigate the iframe to the proxy URL.  Fetch the proxy
+  // HTML and install it as srcdoc so nested pages do not capture the browser
+  // Back button.  This keeps Back = return to the IGDC result list.
+  loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target);
+  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 4200);
+}
+
+function forceStaticProxyHost(target){
+  try{
+    const host = new URL(normalizeSourceViewUrl(target), location.href).hostname.replace(/^www\./i, '').toLowerCase();
+    // These domains frequently block framing, require bot/cookie checks, or
+    // return JS-only shells.  Do not waste time showing a broken direct frame.
+    return /(^|\.)(naver\.com|namu\.wiki|skyscanner\.(?:net|co\.kr)|seouladex\.com)$/.test(host);
+  }catch(e){ return false; }
 }
 
 async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId){
   if(!frame || !target) return;
   if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
-  const policy = await checkSourceFramePolicy(target);
-  if(policy && policy.directAllowed){
-    loadDirectSourceFrame(frame, target, loadingEl);
+
+  if(forceStaticProxyHost(target)){
+    loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
     return;
   }
-  loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
+
+  // Faster first paint: show the source immediately, then let the lightweight
+  // header check correct only the pages that explicitly reject framing.
+  let switched = false;
+  loadDirectSourceFrame(frame, target, loadingEl);
+  try{
+    const policy = await checkSourceFramePolicy(target);
+    if(policy && policy.directAllowed === false && !switched){
+      switched = true;
+      loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
+    }
+  }catch(e){
+    // Keep the already-started direct frame.  It is usually better than a blank
+    // fallback when the checker itself is slow or unavailable.
+  }
 }
 
 function proxyFailSrcdoc(target, message){
@@ -3679,12 +3703,29 @@ async function fetchInstantSearchPack(q, type = activeType){
         status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
       });
 
-      const open = document.createElement('a');
-      open.href = target;
-      open.target = '_blank';
-      open.rel = 'noopener noreferrer';
+      const open = document.createElement('button');
+      open.type = 'button';
       open.dataset.maruExternal = '1';
-      open.textContent = uiText('openNewWindow', '새 창으로 원문');
+      open.textContent = '사이트 원문';
+      open.addEventListener('click', (ev) => {
+        try{ ev.preventDefault(); ev.stopPropagation(); }catch(e){}
+        try{
+          const listUrl = new URL(location.href);
+          listUrl.searchParams.delete('view');
+          listUrl.searchParams.delete('target');
+          listUrl.searchParams.set('page', String(currentPage || 1));
+          listUrl.searchParams.set('block', String(currentBlock || 0));
+          const q = String(lastQuery || input.value || '').trim();
+          if(q) listUrl.searchParams.set('q', q);
+          if(activeType && activeType !== 'all') listUrl.searchParams.set('type', activeType);
+          else listUrl.searchParams.delete('type');
+          // Replace the current detail state with the list state.  After the
+          // browser leaves for the real source page, one Back returns to the
+          // original IGDC search list rather than to a broken viewer.
+          history.replaceState({ q, page: currentPage || 1, block: currentBlock || 0, type: activeType || 'all' }, '', listUrl.toString());
+        }catch(e){}
+        try{ window.location.assign(target); }catch(e){ window.location.href = target; }
+      });
 
       actions.appendChild(back);
       actions.appendChild(open);
