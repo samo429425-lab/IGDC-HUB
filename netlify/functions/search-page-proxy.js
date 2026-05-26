@@ -169,61 +169,6 @@ function fallbackDocument(title, message, target){
   return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.page{padding:28px 30px}.title{font-size:18px;font-weight:800;color:#111827;margin-bottom:8px}.msg{font-size:14px;line-height:1.65;color:#64748b;max-width:760px}.url{margin-top:14px;font-size:12px;color:#64748b;word-break:break-all;background:#f1f5f9;border-radius:9px;padding:8px 10px}</style></head><body><div class="page"><div class="title">' + escapeHtml(title) + '</div><div class="msg">' + escapeHtml(message) + '</div><div class="url">' + escapeHtml(target || '') + '</div></div></body></html>';
 }
 
-
-function normalizeProxyTargetUrl(raw){
-  try{
-    const u = new URL(String(raw || ''));
-    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
-    if(host === 'archives.seoul.go.kr'){
-      const path = u.pathname || '/';
-      if(path === '/' || path === '' || /^\/(index|index\.do|main\.do)?$/i.test(path)){
-        u.pathname = '/main';
-        u.search = '';
-        u.hash = '';
-      }
-    }
-    return u.href;
-  }catch(e){ return raw; }
-}
-
-function extractFirstMatch(text, re){
-  const m = String(text || '').match(re);
-  return m ? String(m[1] || '').trim() : '';
-}
-
-function textOnlyFromHtml(markup){
-  return String(markup || '')
-    .replace(/<script\b[\s\S]*?<\/script>/ig, ' ')
-    .replace(/<style\b[\s\S]*?<\/style>/ig, ' ')
-    .replace(/<noscript\b[^>]*>/ig, ' ')
-    .replace(/<\/noscript>/ig, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function snapshotDocument(htmlText, finalUrl){
-  const raw = String(htmlText || '');
-  const title = extractFirstMatch(raw, /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
-    extractFirstMatch(raw, /<meta[^>]+name=["']title["'][^>]+content=["']([^"']+)["']/i) ||
-    extractFirstMatch(raw, /<title[^>]*>([\s\S]*?)<\/title>/i) ||
-    (() => { try{return new URL(finalUrl).hostname;}catch(e){return finalUrl;} })();
-  const desc = extractFirstMatch(raw, /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
-    extractFirstMatch(raw, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) ||
-    textOnlyFromHtml(raw).slice(0, 380);
-  const imageRaw = extractFirstMatch(raw, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-    extractFirstMatch(raw, /<img[^>]+src=["']([^"']+)["']/i);
-  const image = imageRaw ? absoluteUrl(imageRaw, finalUrl) : '';
-  const bodyText = textOnlyFromHtml(raw).slice(0, 1200);
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + escapeHtml(finalUrl) + '"><style>html,body{margin:0;background:#fff;color:#111827;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.snap{padding:34px 38px;max-width:1120px}.url{font-size:13px;color:#64748b;word-break:break-all;margin-bottom:14px}.title{font-size:28px;font-weight:850;letter-spacing:-.02em;line-height:1.25;margin:0 0 14px}.desc{font-size:16px;line-height:1.65;color:#334155;max-width:920px}.hero{display:block;max-width:min(560px,100%);max-height:360px;object-fit:cover;border-radius:16px;border:1px solid #e5e7eb;margin:22px 0}.note{margin-top:22px;font-size:13px;color:#64748b;border:1px solid #e2e8f0;background:#f8fafc;border-radius:12px;padding:11px 13px}.body{margin-top:18px;font-size:14px;line-height:1.7;color:#475569;white-space:pre-wrap}</style></head><body><main class="snap"><div class="url">' + escapeHtml(finalUrl) + '</div><h1 class="title">' + escapeHtml(title) + '</h1>' + (image ? '<img class="hero" src="' + escapeHtml(image) + '" alt="">' : '') + '<div class="desc">' + escapeHtml(desc || '이 사이트는 보안 정책 또는 자바스크립트 렌더링 때문에 원문 전체를 직접 표시하지 못했습니다.') + '</div>' + (bodyText && bodyText !== desc ? '<div class="body">' + escapeHtml(bodyText) + '</div>' : '') + '<div class="note">IGDC 검색 화면 아래에 붙여 보기 위한 안정형 스냅샷입니다. 원문 전체 확인은 상단의 사이트 원문 버튼을 사용하십시오.</div></main></body></html>';
-}
-
 function lightweightBridge(finalUrl, opts){
   const proxyId = String((opts && opts.proxyId) || '');
   const baseUrl = String(finalUrl || '');
@@ -342,7 +287,7 @@ async function frameCheck(event, target){
     const policy = directFrameAllowedFromHeaders(upstream.headers, origin);
     return json(200, Object.assign({ ok:true, status:upstream.status || 0, finalUrl: upstream.url || target.href }, policy));
   }catch(e){
-    return json(200, { ok:false, directAllowed:null, reason:String(e && e.message || e || 'frame-check-failed'), finalUrl: target.href });
+    return json(200, { ok:false, directAllowed:true, reason:String(e && e.message || e || 'frame-check-failed'), finalUrl: target.href });
   }finally{
     clearTimeout(timer);
   }
@@ -371,7 +316,7 @@ exports.handler = async function(event){
 
   let target;
   try{
-    target = new URL(normalizeProxyTargetUrl(raw));
+    target = new URL(raw);
     if(!/^https?:$/.test(target.protocol)) throw new Error('unsupported-protocol');
     await assertPublicTarget(target);
   }catch(e){
@@ -383,7 +328,7 @@ exports.handler = async function(event){
   }
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 9000);
+  const timer = setTimeout(() => ctrl.abort(), 16000);
   try{
     const method = String(event.httpMethod || 'GET').toUpperCase();
     const fetchOpts = {
