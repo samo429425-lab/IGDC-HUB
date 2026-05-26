@@ -663,43 +663,13 @@ ensureSearchCardMediaStyle();
 
 const SEARCH_PAGE_PROXY_URL = '/.netlify/functions/search-page-proxy';
 
-
-function normalizeSourceViewUrl(raw){
-  const value = String(raw || '').trim();
-  if(!value) return '';
-  try{
-    const u = new URL(value, location.href);
-    if(!/^https?:$/.test(u.protocol)) return value;
-    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
-    const path = (u.pathname || '/').replace(/\/+/g, '/');
-
-    // Seoul Archives search results often arrive as the bare domain.
-    // The actually rendered public entry point is /main.  If we try the
-    // bare root inside the viewer, it frequently returns a JS/redirect shell
-    // and the IGDC source area stays blank.  Normalize before frame-check,
-    // direct iframe and proxy fallback so it behaves like the original page.
-    if(host === 'archives.seoul.go.kr'){
-      if(path === '/' || path === '' || path.toLowerCase() === '/index.do' || path.toLowerCase() === '/index'){
-        u.pathname = '/main';
-        u.search = '';
-        u.hash = '';
-        return u.href;
-      }
-    }
-
-    return u.href;
-  }catch(e){
-    return value;
-  }
-}
-
 function isSkippableNavigationHref(href){
   const h = String(href || '').trim();
   return !h || h === '#' || h.charAt(0) === '#' || /^javascript:/i.test(h) || /^mailto:|^tel:/i.test(h);
 }
 
 function proxyUrlForResult(target, extraParams){
-  const raw = normalizeSourceViewUrl(target);
+  const raw = String(target || '').trim();
   if(!raw) return '';
   try{
     const u = new URL(raw, location.href);
@@ -722,7 +692,7 @@ function proxyUrlForResult(target, extraParams){
 
 
 function sourceFrameCheckUrl(target){
-  const raw = normalizeSourceViewUrl(target);
+  const raw = String(target || '').trim();
   if(!raw) return '';
   try{
     const u = new URL(raw, location.href);
@@ -3607,7 +3577,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function renderSearchOwnedResultView(url, it, opts){
       opts = opts || {};
-      const target = normalizeSourceViewUrl(url);
+      const target = String(url || '').trim();
       if(!target) return;
       if(!isSearchPage){
         try { window.location.href = target; } catch(e) {}
@@ -3679,12 +3649,46 @@ async function fetchInstantSearchPack(q, type = activeType){
         status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
       });
 
+      function openOriginalSameTabFromResult(){
+        // Keep the previous browser-history entry as the IGDC search list, not the
+        // internal result-view URL. Then the browser Back button returns directly
+        // to the search list after visiting the original site.
+        try{
+          const listUrl = new URL(location.href);
+          listUrl.searchParams.delete('view');
+          listUrl.searchParams.delete('target');
+          listUrl.searchParams.set('page', String(currentPage || 1));
+          listUrl.searchParams.set('block', String(currentBlock || 0));
+          const q = String(lastQuery || input.value || '').trim();
+          if(q) listUrl.searchParams.set('q', q);
+          if(activeType && activeType !== 'all') listUrl.searchParams.set('type', activeType);
+          else listUrl.searchParams.delete('type');
+          try{
+            sessionStorage.setItem('maruSearchReturnState', JSON.stringify({
+              q, page: currentPage || 1, block: currentBlock || 0, type: activeType || 'all', scrollY: window.scrollY || 0, ts: Date.now()
+            }));
+          }catch(e){}
+          history.replaceState({
+            ...(history.state || {}),
+            __maruSearchOwnedResult:false,
+            __maruSearchReturnList:true,
+            q, page: currentPage || 1, block: currentBlock || 0, type: activeType || 'all'
+          }, '', listUrl.toString());
+        }catch(e){}
+        try{ window.location.assign(target); }catch(e){ window.location.href = target; }
+      }
+
       const open = document.createElement('a');
       open.href = target;
-      open.target = '_blank';
-      open.rel = 'noopener noreferrer';
+      open.target = '_self';
+      open.rel = 'noopener';
       open.dataset.maruExternal = '1';
-      open.textContent = uiText('openNewWindow', '새 창으로 원문');
+      open.textContent = '사이트 원문';
+      open.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openOriginalSameTabFromResult();
+      });
 
       actions.appendChild(back);
       actions.appendChild(open);
