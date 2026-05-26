@@ -691,69 +691,6 @@ function proxyUrlForResult(target, extraParams){
 
 
 
-
-function normalizeOwnedViewerUrl(raw, item){
-  const value = String(raw || '').trim();
-  if(!value) return '';
-  try{
-    const u = new URL(value, location.href);
-    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
-    let path = u.pathname || '/';
-
-    // 서울기록원은 검색 결과가 루트로 내려오면 실제 진입점이 /main 쪽입니다.
-    // 루트 그대로 iframe/proxy에 넣으면 빈 화면으로 끝나는 경우가 많습니다.
-    if(host === 'archives.seoul.go.kr'){
-      if(path === '/' || path === '' || /^\/(index|index\.do|main\.do)?$/i.test(path)){
-        u.pathname = '/main';
-        u.search = '';
-        u.hash = '';
-      }
-    }
-
-    return u.href;
-  }catch(e){ return value; }
-}
-
-function currentSearchListUrlForBack(){
-  try{
-    const u = new URL(location.href);
-    u.searchParams.delete('view');
-    u.searchParams.delete('target');
-    u.searchParams.set('page', String(currentPage || 1));
-    u.searchParams.set('block', String(currentBlock || 0));
-    const q = String(lastQuery || input.value || '').trim();
-    if(q) u.searchParams.set('q', q);
-    if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
-    else u.searchParams.delete('type');
-    return u.toString();
-  }catch(e){ return location.href; }
-}
-
-function openOriginalSameTabWithSearchBack(target){
-  const url = normalizeOwnedViewerUrl(target || '', null);
-  if(!url) return;
-  try{
-    const listUrl = currentSearchListUrlForBack();
-    history.replaceState({
-      ...(history.state || {}),
-      __maruSearchOwnedResult:false,
-      q: String(lastQuery || input.value || '').trim(),
-      page: currentPage || 1,
-      block: currentBlock || 0,
-      type: activeType || 'all'
-    }, '', listUrl);
-  }catch(e){}
-  try{ window.location.assign(url); }catch(e){ window.location.href = url; }
-}
-
-function isLikelyFrameBlockedDomain(target){
-  try{
-    const u = new URL(String(target || ''), location.href);
-    const h = u.hostname.replace(/^www\./i, '').toLowerCase();
-    return /(^|\.)namu\.wiki$|(^|\.)naver\.com$|(^|\.)blog\.naver\.com$|(^|\.)m\.blog\.naver\.com$|(^|\.)skyscanner\.co\.kr$|(^|\.)skyscanner\.net$/.test(h);
-  }catch(e){ return false; }
-}
-
 function sourceFrameCheckUrl(target){
   const raw = String(target || '').trim();
   if(!raw) return '';
@@ -771,18 +708,18 @@ async function checkSourceFramePolicy(target){
   const url = sourceFrameCheckUrl(target);
   if(!url) return { ok:false, directAllowed:false, reason:'invalid-url' };
   const ctrl = new AbortController();
-  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 1400);
+  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 4200);
   try{
     const r = await fetch(url, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
     const json = await r.json().catch(() => null);
     clearTimeout(timer);
-    if(!r.ok || !json) return { ok:false, directAllowed:null, reason:'check-failed' };
+    if(!r.ok || !json) return { ok:false, directAllowed:true, reason:'check-failed' };
     return json;
   }catch(e){
     clearTimeout(timer);
     // If the checker is unavailable, try the real page directly rather than
     // replacing the viewer with an empty proxy page.
-    return { ok:false, directAllowed:null, reason:'check-timeout' };
+    return { ok:false, directAllowed:true, reason:'check-timeout' };
   }
 }
 
@@ -820,49 +757,29 @@ function loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl){
   const proxySrc = proxyUrlForResult(target, { mode:'static', proxyId });
   frame.classList.add('maru-search-owned-proxy-frame');
   frame.classList.remove('maru-search-owned-source-frame');
-  frame.removeAttribute('src');
+  frame.removeAttribute('srcdoc');
   frame.referrerPolicy = 'no-referrer-when-downgrade';
   frame.sandbox = 'allow-forms allow-popups allow-presentation allow-downloads';
   frame.dataset.viewerMode = 'static-proxy';
-  // fetch + srcdoc keeps the browser Back button owned by the IGDC search page.
-  loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target);
+  frame.onload = () => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} };
+  try{ frame.src = proxySrc; }catch(e){ loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target); }
+  setTimeout(() => { try{ if(loadingEl) loadingEl.remove(); }catch(e){} }, 3800);
 }
 
 async function mountOwnedSourceFrame(frame, loadingEl, target, proxyId){
   if(!frame || !target) return;
-  const normalizedTarget = normalizeOwnedViewerUrl(target, null);
   if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
-
-  // Fast path: do not wait for HEAD/frame-check before the first paint.
-  // Google/Naver/Bing feel immediate because they paint their shell first and
-  // let the target content attach underneath. We do the same here.
-  if(!isLikelyFrameBlockedDomain(normalizedTarget)){
-    loadDirectSourceFrame(frame, normalizedTarget, loadingEl);
-  }
-
-  const policy = await checkSourceFramePolicy(normalizedTarget);
-  if(policy && policy.directAllowed === false){
-    loadStaticSourceProxyFrame(frame, normalizedTarget, proxyId, loadingEl);
+  const policy = await checkSourceFramePolicy(target);
+  if(policy && policy.directAllowed){
+    loadDirectSourceFrame(frame, target, loadingEl);
     return;
   }
-
-  if(isLikelyFrameBlockedDomain(normalizedTarget)){
-    // Known anti-frame/anti-bot domains should not spend seconds in a gray box.
-    loadStaticSourceProxyFrame(frame, normalizedTarget, proxyId, loadingEl);
-    return;
-  }
-
-  // If the checker timed out or was inconclusive, keep the direct frame already
-  // mounted. This preserves the fast, natural behavior for sites that allow it.
-  if(policy && policy.directAllowed === true && frame.dataset.viewerMode !== 'direct'){
-    loadDirectSourceFrame(frame, normalizedTarget, loadingEl);
-  }
+  loadStaticSourceProxyFrame(frame, target, proxyId, loadingEl);
 }
 
 function proxyFailSrcdoc(target, message){
   const safeTarget = String(target || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const safeMessage = String(message || '이 사이트는 보안 정책 또는 자바스크립트 렌더링 때문에 검색창 아래에 직접 붙지 않았습니다.').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{padding:32px 24px}.title{font-size:20px;font-weight:850;color:#111827;margin-bottom:10px}.msg{font-size:14px;line-height:1.6;color:#475569}.url{margin-top:16px;font-size:13px;color:#64748b;word-break:break-all;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px}</style></head><body><div class="wrap"><div class="title">원문 표시 대기</div><div class="msg">' + safeMessage + '</div><div class="url">' + safeTarget + '</div></div></body></html>';
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{padding:32px 20px}.url{font-size:13px;color:#64748b;word-break:break-all}</style></head><body><div class="wrap"><div class="url">' + safeTarget + '</div></div></body></html>';
 }
 
 async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
@@ -913,7 +830,7 @@ async function loadProxyHtmlIntoFrame(frame, loadingEl, proxySrc, target){
   try{
     if(loadingEl) loadingEl.textContent = uiText('receiving', 'receiving...');
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 7000);
+    const timer = setTimeout(() => ctrl.abort(), 18000);
     const r = await fetch(proxySrc, { cache:'no-store', credentials:'same-origin', signal:ctrl.signal });
     const text = await r.text();
     clearTimeout(timer);
@@ -3660,7 +3577,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function renderSearchOwnedResultView(url, it, opts){
       opts = opts || {};
-      const target = normalizeOwnedViewerUrl(String(url || '').trim(), it);
+      const target = String(url || '').trim();
       if(!target) return;
       if(!isSearchPage){
         try { window.location.href = target; } catch(e) {}
@@ -3668,12 +3585,31 @@ async function fetchInstantSearchPack(q, type = activeType){
       }
 
       ensureSearchOwnedResultViewStyle();
+      ensureSearchPortalDetailStyle();
 
+      const currentQ = String(lastQuery || input.value || '').trim();
       const displayTitle = String((it && it.title) || sourceLabelForOwnedResult(it || {}, target) || domainOf(target) || target).trim() || target;
       const sourceLabel = sourceLabelForOwnedResult(it || {}, target);
+      const host = domainOf(target);
+      const desc = detailTextForOwnedResult(it || {}) || descriptionForItemClient(it || {}) || '';
+      const images = dedupeImageVariantsClient(collectNaturalImages(it || {})).slice(0, 6);
+      const related = relatedTermsForOwnedResult(it || {}).slice(0, 8);
+      const sourceType = String((it && (it.type || it.category || it.group || it.kind)) || '').trim();
+      const lang = String((it && (it.lang || it.language)) || '').trim();
+
+      function listUrl(){
+        const u = new URL(location.href);
+        u.searchParams.delete('view');
+        u.searchParams.delete('target');
+        u.searchParams.set('page', String(currentPage || 1));
+        u.searchParams.set('block', String(currentBlock || 0));
+        if(currentQ) u.searchParams.set('q', currentQ);
+        if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
+        else u.searchParams.delete('type');
+        return u;
+      }
 
       if(!opts.skipHistory) try{
-        const currentQ = String(lastQuery || input.value || '').trim();
         const u = new URL(location.href);
         u.searchParams.set('view', 'result');
         u.searchParams.set('target', target);
@@ -3682,7 +3618,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         if(currentQ) u.searchParams.set('q', currentQ);
         if(activeType && activeType !== 'all') u.searchParams.set('type', activeType);
         else u.searchParams.delete('type');
-        const detailState = {
+        history.pushState({
           ...(history.state || {}),
           __maruSearchOwnedResult: true,
           q: currentQ,
@@ -3692,19 +3628,14 @@ async function fetchInstantSearchPack(q, type = activeType){
           target: target,
           title: displayTitle.slice(0, 180),
           view: 'result'
-        };
-        if(history.state && history.state.__maruSearchOwnedResult){
-          history.replaceState(detailState, '', u.toString());
-        }else{
-          history.pushState(detailState, '', u.toString());
-        }
+        }, '', u.toString());
       }catch(e){}
 
       const shell = document.createElement('div');
-      shell.className = 'maru-search-owned-result';
+      shell.className = 'maru-search-owned-result maru-portal-result-view';
 
       const head = document.createElement('div');
-      head.className = 'maru-search-owned-result-head';
+      head.className = 'maru-search-owned-result-head maru-portal-result-head';
 
       const titleWrap = document.createElement('div');
       titleWrap.className = 'maru-search-owned-result-head-main';
@@ -3724,13 +3655,19 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const back = document.createElement('button');
       back.type = 'button';
-      back.textContent = uiText('searchList', 'Search list');
+      back.textContent = uiText('searchList', '검색 목록');
       back.addEventListener('click', () => {
         try{
-          const u = new URL(location.href);
-          u.searchParams.delete('view');
-          u.searchParams.delete('target');
-          history.replaceState({ ...(history.state || {}), __maruSearchOwnedResult:false }, '', u.toString());
+          const u = listUrl();
+          history.replaceState({
+            ...(history.state || {}),
+            __maruSearchOwnedResult:false,
+            view:'list',
+            q: currentQ,
+            page: currentPage || 1,
+            block: currentBlock || 0,
+            type: activeType
+          }, '', u.toString());
         }catch(e){}
         try{ document.querySelectorAll('.maru-search-owned-proxy-frame').forEach(f => { if(f.__maruProxyBlobUrl){ URL.revokeObjectURL(f.__maruProxyBlobUrl); f.__maruProxyBlobUrl=''; } }); }catch(e){}
         renderPage(currentPage || 1, true);
@@ -3739,14 +3676,25 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const open = document.createElement('a');
       open.href = target;
-      open.target = '_self';
       open.rel = 'noopener noreferrer';
       open.dataset.maruExternal = '1';
       open.textContent = '사이트 원문';
-      open.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openOriginalSameTabWithSearchBack(target);
+      open.addEventListener('click', function(ev){
+        // Naver/Google/Bing-style source opening:
+        // leave IGDC only when the user explicitly asks for the source, but
+        // replace the current detail history entry with the list URL first.
+        // Then one browser Back returns to the original search result list.
+        try{
+          const u = listUrl();
+          history.replaceState({
+            __maruSearchOwnedResult:false,
+            view:'list',
+            q: currentQ,
+            page: currentPage || 1,
+            block: currentBlock || 0,
+            type: activeType
+          }, '', u.toString());
+        }catch(e){}
       });
 
       actions.appendChild(back);
@@ -3755,36 +3703,219 @@ async function fetchInstantSearchPack(q, type = activeType){
       head.appendChild(actions);
       shell.appendChild(head);
 
-      if(isImageProviderResult(target, it) && appendNativeImageProviderView(shell, it)){
-        results.innerHTML = '';
-        results.appendChild(shell);
-        drawPager();
-        status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
-        return;
+      const body = document.createElement('div');
+      body.className = 'maru-portal-detail-body';
+
+      const mainCard = document.createElement('section');
+      mainCard.className = 'maru-portal-main-card';
+
+      const topRow = document.createElement('div');
+      topRow.className = 'maru-portal-top-row';
+
+      const favicon = faviconOf(target);
+      if(favicon){
+        const ico = document.createElement('img');
+        ico.className = 'maru-portal-favicon';
+        ico.src = favicon;
+        ico.alt = '';
+        ico.loading = 'lazy';
+        topRow.appendChild(ico);
       }
 
-      const proxyId = 'maru-proxy-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-      const proxyBox = document.createElement('div');
-      proxyBox.className = 'maru-search-owned-proxy';
-      const loading = document.createElement('div');
-      loading.className = 'maru-search-owned-proxy-loading';
-      loading.textContent = uiText('receiving', 'receiving...');
-      const frame = document.createElement('iframe');
-      frame.className = 'maru-search-owned-source-frame';
-      frame.dataset.proxyId = proxyId;
-      frame.loading = 'eager';
-      frame.title = displayTitle.slice(0, 120);
-      proxyBox.appendChild(loading);
-      proxyBox.appendChild(frame);
-      shell.appendChild(proxyBox);
+      const topText = document.createElement('div');
+      topText.className = 'maru-portal-top-text';
+      const h = document.createElement('h2');
+      h.textContent = displayTitle;
+      topText.appendChild(h);
+      const urlLine = document.createElement('div');
+      urlLine.className = 'maru-portal-url';
+      urlLine.textContent = target;
+      topText.appendChild(urlLine);
+      topRow.appendChild(topText);
+      mainCard.appendChild(topRow);
+
+      if(desc){
+        const summary = document.createElement('p');
+        summary.className = 'maru-portal-summary';
+        summary.textContent = desc;
+        mainCard.appendChild(summary);
+      }else{
+        const summary = document.createElement('p');
+        summary.className = 'maru-portal-summary maru-portal-summary-muted';
+        summary.textContent = '이 결과는 IGDC 검색 색인에 등록된 원문입니다. 사이트 원문은 보조 버튼으로 열 수 있고, 브라우저 뒤로가기로 검색 목록에 복귀합니다.';
+        mainCard.appendChild(summary);
+      }
+
+      const chips = document.createElement('div');
+      chips.className = 'maru-portal-chips';
+      const chipData = [
+        sourceLabel ? ['출처', sourceLabel] : null,
+        host ? ['도메인', host] : null,
+        sourceType ? ['분류', sourceType] : null,
+        lang ? ['언어', lang] : null
+      ].filter(Boolean);
+      chipData.forEach(pair => {
+        const c = document.createElement('span');
+        c.textContent = pair[0] + ' ' + pair[1];
+        chips.appendChild(c);
+      });
+      if(chips.childNodes.length) mainCard.appendChild(chips);
+
+      const primaryActions = document.createElement('div');
+      primaryActions.className = 'maru-portal-primary-actions';
+      const visit = document.createElement('a');
+      visit.href = target;
+      visit.rel = 'noopener noreferrer';
+      visit.dataset.maruExternal = '1';
+      visit.textContent = '사이트 원문 열기';
+      visit.addEventListener('click', function(){
+        try{
+          const u = listUrl();
+          history.replaceState({ __maruSearchOwnedResult:false, view:'list', q:currentQ, page:currentPage || 1, block:currentBlock || 0, type:activeType }, '', u.toString());
+        }catch(e){}
+      });
+      primaryActions.appendChild(visit);
+      mainCard.appendChild(primaryActions);
+
+      body.appendChild(mainCard);
+
+      if(images.length){
+        const media = document.createElement('aside');
+        media.className = 'maru-portal-media-card';
+        const img = document.createElement('img');
+        img.src = images[0];
+        img.loading = 'eager';
+        img.alt = displayTitle;
+        img.onerror = () => media.remove();
+        media.appendChild(img);
+        if(images.length > 1){
+          const thumbs = document.createElement('div');
+          thumbs.className = 'maru-portal-thumbs';
+          images.slice(1, 5).forEach(src => {
+            const t = document.createElement('img');
+            t.src = src;
+            t.loading = 'lazy';
+            t.alt = '';
+            t.onerror = () => t.remove();
+            thumbs.appendChild(t);
+          });
+          media.appendChild(thumbs);
+        }
+        body.appendChild(media);
+      }
+
+      shell.appendChild(body);
+
+      const sameDomain = [];
+      const seenLinks = new Set();
+      try{
+        const baseHost = host;
+        (Array.isArray(allItems) ? allItems : []).forEach(row => {
+          const u0 = String(row && (row.url || row.link || row.openUrl || row.href) || '').trim();
+          if(!u0 || u0 === target) return;
+          let h0 = '';
+          try{ h0 = domainOf(new URL(u0, location.href).href); }catch(e){}
+          if(!baseHost || h0 !== baseHost) return;
+          const key = u0.toLowerCase();
+          if(seenLinks.has(key)) return;
+          seenLinks.add(key);
+          sameDomain.push(row);
+        });
+      }catch(e){}
+
+      if(sameDomain.length){
+        const links = document.createElement('section');
+        links.className = 'maru-portal-section maru-portal-sitelinks';
+        const lh = document.createElement('h3');
+        lh.textContent = '같은 사이트의 검색 결과';
+        links.appendChild(lh);
+        const grid = document.createElement('div');
+        grid.className = 'maru-portal-link-grid';
+        sameDomain.slice(0, 6).forEach(row => {
+          const a = document.createElement('a');
+          const u0 = String(row && (row.url || row.link || row.openUrl || row.href) || '').trim();
+          a.href = buildSearchOwnedResultHref(u0);
+          a.textContent = String((row && row.title) || u0).trim();
+          a.addEventListener('click', ev => {
+            ev.preventDefault();
+            openResultInsideSearchFrame(u0, row);
+          });
+          grid.appendChild(a);
+        });
+        links.appendChild(grid);
+        shell.appendChild(links);
+      }
+
+      if(related.length){
+        const rel = document.createElement('section');
+        rel.className = 'maru-portal-section maru-portal-related';
+        const rh = document.createElement('h3');
+        rh.textContent = uiText('relatedSearch', '연관 검색');
+        rel.appendChild(rh);
+        const chipsBox = document.createElement('div');
+        chipsBox.className = 'maru-portal-related-chips';
+        related.forEach(term => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = term;
+          b.addEventListener('click', () => {
+            input.value = term;
+            try{ btn.click(); }catch(e){ runSearch(term, 'all'); }
+          });
+          chipsBox.appendChild(b);
+        });
+        rel.appendChild(chipsBox);
+        shell.appendChild(rel);
+      }
+
+      // Optional preview is deliberately not auto-loaded. Search engines show
+      // their own instant result first; source pages are opened only by explicit
+      // action so blocked iframes cannot create gray/blank screens or slow the UI.
+      const note = document.createElement('div');
+      note.className = 'maru-portal-source-note';
+      note.textContent = '원문 전체가 필요한 경우 사이트 원문을 여십시오. 브라우저 뒤로가기는 검색 목록으로 복귀합니다.';
+      shell.appendChild(note);
 
       results.innerHTML = '';
       results.appendChild(shell);
       drawPager();
-      installProxyViewerMessageBridge();
-      setTimeout(() => mountOwnedSourceFrame(frame, loading, target, proxyId), 0);
       status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
-      // Keep the current IGDC search header/tabs/pager position; do not auto-scroll the shell away.
+    }
+
+    function ensureSearchPortalDetailStyle(){
+      if(document.getElementById('maru-search-portal-detail-style')) return;
+      const style = document.createElement('style');
+      style.id = 'maru-search-portal-detail-style';
+      style.textContent = `
+        .maru-portal-result-view{background:#fff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;margin:10px 0 24px;box-shadow:0 1px 2px rgba(15,23,42,.03)}
+        .maru-portal-result-head{position:sticky;top:0;z-index:4;background:#fff;border-bottom:1px solid #edf0f5}
+        .maru-portal-detail-body{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;padding:22px 26px 16px;align-items:start}
+        .maru-portal-main-card{min-width:0}
+        .maru-portal-top-row{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px}
+        .maru-portal-favicon{width:34px;height:34px;border-radius:8px;object-fit:contain;background:#f8fafc;border:1px solid #e5e7eb;flex:0 0 auto}
+        .maru-portal-top-text{min-width:0}
+        .maru-portal-top-text h2{font-size:25px;line-height:1.25;margin:0 0 5px;color:#111827;letter-spacing:-.03em}
+        .maru-portal-url{font-size:13px;color:#64748b;word-break:break-all}
+        .maru-portal-summary{font-size:15px;line-height:1.75;color:#334155;margin:12px 0 14px;max-width:980px}
+        .maru-portal-summary-muted{color:#64748b;background:#f8fafc;border:1px solid #edf0f5;border-radius:12px;padding:12px 14px}
+        .maru-portal-chips{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 16px}
+        .maru-portal-chips span{font-size:12px;font-weight:700;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:6px 9px}
+        .maru-portal-primary-actions{display:flex;gap:8px;margin-top:8px}
+        .maru-portal-primary-actions a{display:inline-flex;align-items:center;justify-content:center;height:38px;padding:0 16px;border-radius:10px;background:#4f46e5;color:#fff;text-decoration:none;font-size:13px;font-weight:900}
+        .maru-portal-media-card{border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;background:#f8fafc}
+        .maru-portal-media-card>img{display:block;width:100%;height:210px;object-fit:cover;background:#eef2f7}
+        .maru-portal-thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:4px}
+        .maru-portal-thumbs img{width:100%;height:58px;object-fit:cover;border-radius:8px;background:#eef2f7}
+        .maru-portal-section{padding:4px 26px 20px;background:#fff}
+        .maru-portal-section h3{font-size:15px;margin:8px 0 10px;color:#0f172a;letter-spacing:-.02em}
+        .maru-portal-link-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px}
+        .maru-portal-link-grid a{display:block;padding:10px 12px;border:1px solid #e5e7eb;border-radius:11px;color:#1d4ed8;background:#fff;text-decoration:none;font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .maru-portal-related-chips{display:flex;flex-wrap:wrap;gap:8px}
+        .maru-portal-related-chips button{border:1px solid #dbe2ea;background:#fff;border-radius:999px;height:34px;padding:0 13px;color:#334155;font-size:13px;font-weight:800;cursor:pointer}
+        .maru-portal-source-note{margin:0 26px 24px;padding:12px 14px;border:1px solid #edf0f5;border-radius:12px;background:#f8fafc;color:#64748b;font-size:13px;line-height:1.55}
+        @media(max-width:900px){.maru-portal-detail-body{grid-template-columns:1fr;padding:18px}.maru-portal-media-card>img{height:220px}.maru-portal-section{padding-left:18px;padding-right:18px}.maru-portal-link-grid{grid-template-columns:1fr}.maru-portal-source-note{margin-left:18px;margin-right:18px}.maru-portal-top-text h2{font-size:21px}}
+      `;
+      document.head.appendChild(style);
     }
 
     function openResultInsideSearchFrame(url, it){
