@@ -4,6 +4,17 @@ const https = require("https");
 const OPENAI_HOST = "api.openai.com";
 const OPENAI_PATH = "/v1/chat/completions";
 const MODEL = process.env.OPENAI_SUBTITLE_MODEL || "gpt-4o-mini";
+const LANG_NAMES = {
+  ko: "Korean", en: "English", zh: "Simplified Chinese", zht: "Traditional Chinese", ja: "Japanese",
+  es: "Spanish", fr: "French", de: "German", ru: "Russian", pt: "Portuguese", it: "Italian",
+  ar: "Arabic", vi: "Vietnamese", th: "Thai", id: "Indonesian", hi: "Hindi", tr: "Turkish",
+  ta: "Tamil", sw: "Swahili", ur: "Urdu", bn: "Bengali", fa: "Persian", hu: "Hungarian",
+  ms: "Malay", nl: "Dutch", pl: "Polish", sv: "Swedish", tl: "Filipino", uk: "Ukrainian", uz: "Uzbek"
+};
+function targetLanguageName(code, fallback) {
+  const key = String(code || "").trim().toLowerCase();
+  return String(fallback || LANG_NAMES[key] || key || "English");
+}
 
 function headers(extra = {}) {
   return {
@@ -73,17 +84,18 @@ function splitSubtitle(text, maxChars) {
   return chunks;
 }
 
-async function translateChunk(apiKey, chunk, targetLang, fileName, index, total) {
+async function translateChunk(apiKey, chunk, targetLang, targetName, fileName, index, total) {
   const system = [
     "You are a subtitle translation engine.",
     "Translate only subtitle dialogue text to the requested target language.",
+    "The target language below is authoritative. Do not default to Korean unless Korean is explicitly selected.",
     "Preserve subtitle format exactly: numbering, timestamps, WEBVTT header, tags, line breaks, and blank lines.",
     "Do not add commentary, markdown, explanations, or code fences.",
     "If a line is only a number, timestamp, cue setting, tag, or empty, keep it unchanged."
   ].join(" ");
 
   const user = [
-    `Target language code: ${targetLang}`,
+    `Target language: ${targetName} (${targetLang})`,
     `File name: ${fileName || "subtitle"}`,
     `Chunk: ${index + 1}/${total}`,
     "Subtitle text:",
@@ -113,7 +125,7 @@ exports.handler = async function(event) {
     return json(200, {
       ok: true,
       service: "maru-subtitle-translate",
-      version: "r4",
+      version: "r5",
       configured: !!process.env.OPENAI_API_KEY,
       method: "POST_REQUIRED"
     });
@@ -129,7 +141,8 @@ exports.handler = async function(event) {
 
     const body = JSON.parse(event.body || "{}");
     const subtitle = String(body.subtitle || "");
-    const targetLang = String(body.targetLang || "ko").slice(0, 16);
+    const targetLang = String(body.targetLang || "en").slice(0, 16);
+    const targetName = targetLanguageName(targetLang, body.targetName).slice(0, 80);
     const fileName = String(body.fileName || "subtitle.srt").slice(0, 200);
 
     if (!subtitle.trim()) return json(400, { ok: false, error: "empty_subtitle" });
@@ -138,12 +151,13 @@ exports.handler = async function(event) {
     const chunks = splitSubtitle(subtitle, 9000);
     const translated = [];
     for (let i = 0; i < chunks.length; i++) {
-      translated.push(await translateChunk(apiKey, chunks[i], targetLang, fileName, i, chunks.length));
+      translated.push(await translateChunk(apiKey, chunks[i], targetLang, targetName, fileName, i, chunks.length));
     }
 
     return json(200, {
       ok: true,
       targetLang,
+      targetName,
       translatedSubtitle: translated.join("\n")
     });
   } catch (err) {
