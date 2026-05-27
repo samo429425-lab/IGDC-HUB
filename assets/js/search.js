@@ -1797,24 +1797,42 @@ function mergeItemsPreferDisplayRichness(baseItems, incomingItems){
 
 async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
-  signalSanmaruSearch(q, safeType, 'maru-search-fetch');
+  const pageNum = Math.max(1, Number(page) || 1);
+  const firstPageWindow = pageNum <= 1;
+  const adaptiveTarget = adaptiveSearchTarget(q, safeType);
+  const providerStart = ((pageNum - 1) * PAGE_SIZE) + 1;
+  const windowOffset = (pageNum - 1) * PAGE_SIZE;
+  signalSanmaruSearch(q, safeType, firstPageWindow ? 'maru-search-first-window' : 'maru-search-continuation-window');
 
   const sp = new URLSearchParams();
   sp.set('q', q);
-  sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('limit', String(adaptiveTarget));
+  sp.set('candidatePoolTarget', String(adaptiveTarget));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('page', String(Math.max(1, Number(page) || 1)));
-  sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
+  sp.set('page', String(pageNum));
+  sp.set('visiblePage', String(pageNum));
+  sp.set('start', String(providerStart));
+  sp.set('providerStart', String(providerStart));
+  sp.set('searchBankOffset', String(windowOffset));
+  sp.set('windowOffset', String(windowOffset));
+  sp.set('offset', String(windowOffset));
   sp.set('pageWindowOnly', '1');
+  sp.set('serverPageWindow', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('routeOwner', 'sanmaru');
   sp.set('naturalFlow', '1');
   sp.set('smoothIntake', '1');
-  sp.set('noBlockingWide', '1');
+  sp.set('firstPaint', firstPageWindow ? '1' : '0');
+  sp.set('fastFirstWindow', firstPageWindow ? '1' : '0');
+  sp.set('continuationWindow', firstPageWindow ? '0' : '1');
+  sp.set('wideContinuation', firstPageWindow ? '0' : '1');
+  sp.set('noBlockingWide', firstPageWindow ? '1' : '0');
+  sp.set('firstPaintLimit', String(firstPageWindow ? INITIAL_PRELOAD_TARGET : PAGE_SIZE));
+  sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
@@ -4948,6 +4966,7 @@ async function runSearch(q, type = activeType){
 
     const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
     if(!firstCount){
+      intakeTimer = setTimeout(() => startIntakeOnce('empty-first-race-open-pipe'), 16);
       const second = first && first.kind === 'sanmaru-instant' ? await maruWindowPromise : await instantPromise;
       if(runSearch._seq !== seq) return;
       if(second && !second.error) applySupplyPack(second.pack, second.kind);
@@ -4961,7 +4980,7 @@ async function runSearch(q, type = activeType){
     // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
     // shortly after first paint, but let the page-1 300-window seed pages 1~12
     // first when it arrives quickly.
-    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 50);
+    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 16);
 
     maruWindowPromise.then(res => {
       if(runSearch._seq !== seq || !res || res.error) return;
