@@ -52,6 +52,10 @@ ready(function () {
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
     const INTAKE_CONCURRENCY = 5;
     const INTAKE_BURST_DELAY_MS = 10;
+    // Search HTML should behave as an immediate receiver: once Sanmaru/MaruSearch
+    // sends any real packet, open the follow-up faucet on the next short UI beat.
+    // This is a handoff cadence, not a network timeout or a result cutoff.
+    const FIRST_PIPE_HANDOFF_MS = 10;
 
     let allItems = [];
     let serverPagedMode = false;
@@ -77,6 +81,7 @@ ready(function () {
     // provider from the browser flow. This is non-blocking for page navigation.
     const SANMARU_BOOT_URL = '/.netlify/functions/sanmaru_engine_v2';
     let sanmaruBootPromise = null;
+    let sanmaruBootKey = '';
 
     function sanmaruSignalParams(q, type, reason){
       const sp = new URLSearchParams();
@@ -90,9 +95,13 @@ ready(function () {
     }
 
     function bootSanmaruOnce(reason, q, type){
-      if (sanmaruBootPromise) return sanmaruBootPromise;
+      const safeQ = String(q || '').trim();
+      const safeType = normalizeSearchType(type || activeType || 'all');
+      const key = [safeQ, safeType, reason || 'search-ui'].join('|');
+      if (sanmaruBootPromise && sanmaruBootKey === key) return sanmaruBootPromise;
+      sanmaruBootKey = key;
       try {
-        const url = SANMARU_BOOT_URL + '?' + sanmaruSignalParams(q || '', type || activeType || 'all', reason || 'search-ui').toString();
+        const url = SANMARU_BOOT_URL + '?' + sanmaruSignalParams(safeQ, safeType, reason || 'search-ui').toString();
         sanmaruBootPromise = fetch(url, {
           method: 'GET',
           cache: 'no-store',
@@ -1503,24 +1512,86 @@ function normalizeSearchPayload(payload){
     (root.sectionPack && Array.isArray(root.sectionPack.viewportSections) && root.sectionPack.viewportSections) ||
     (Array.isArray(root.displaySections) && root.displaySections) ||
     [];
-  return { payload: root, items, pageItems, viewportSections };
+  return { payload: root, items, pageItems, viewportSections, supplySignal: supplySignalFromPayload(root, Math.max(items.length, pageItems.length)) };
+}
+
+function boolishSearchSignal(v){
+  if(v === true) return true;
+  if(v === false || v == null) return false;
+  const s = String(v).trim().toLowerCase();
+  return ['1','true','yes','on','ok'].includes(s);
+}
+
+function firstFiniteSearchNumber(){
+  for(let i=0; i<arguments.length; i++){
+    const n = Number(arguments[i]);
+    if(Number.isFinite(n) && n >= 0) return n;
+  }
+  return 0;
+}
+
+function maxFiniteSearchNumber(){
+  let out = 0;
+  for(let i=0; i<arguments.length; i++){
+    const n = Number(arguments[i]);
+    if(Number.isFinite(n) && n >= 0) out = Math.max(out, n);
+  }
+  return out;
+}
+
+function supplySignalFromPayload(payload, fallbackCount){
+  const root = unwrap(payload) || payload || {};
+  const meta = root.meta || {};
+  const readiness = meta.supplyReadiness || root.supplyReadiness || {};
+  const vp = root.visiblePagePack || meta.viewport || (root.sectionPack && root.sectionPack.visiblePagePack) || {};
+  const count = firstFiniteSearchNumber(meta.count, root.count, fallbackCount);
+  const availableNow = maxFiniteSearchNumber(
+    count,
+    meta.responseWindowCount,
+    meta.visibleCount,
+    readiness.available,
+    vp.visibleCount,
+    fallbackCount
+  );
+  const estimatedTotal = maxFiniteSearchNumber(
+    vp.totalVisibleItems,
+    vp.fullCandidateCount,
+    vp.totalCandidates,
+    meta.totalCandidates,
+    meta.fullCandidateCount,
+    meta.totalItems,
+    root.totalCandidates,
+    root.fullCandidateCount,
+    root.totalItems,
+    availableNow,
+    fallbackCount
+  );
+  const explicitHasMore = root.hasMore !== undefined || meta.hasMore !== undefined || vp.hasNextPage !== undefined;
+  const hasMore = explicitHasMore
+    ? !!(boolishSearchSignal(root.hasMore) || boolishSearchSignal(meta.hasMore) || boolishSearchSignal(vp.hasNextPage))
+    : estimatedTotal > Math.max(availableNow, fallbackCount || 0);
+  const exhausted = !!(
+    boolishSearchSignal(root.exhausted) ||
+    boolishSearchSignal(meta.exhausted) ||
+    boolishSearchSignal(meta.sourceExhausted) ||
+    boolishSearchSignal(readiness.exhausted) ||
+    boolishSearchSignal(root.sourceExhausted)
+  );
+  return {
+    availableNow,
+    estimatedTotal,
+    authoritativeTotal: maxFiniteSearchNumber(meta.authoritativeTotal, root.authoritativeTotal, estimatedTotal),
+    hasMore: exhausted ? false : hasMore,
+    exhausted,
+    partial: !exhausted && (hasMore || estimatedTotal > availableNow),
+    realDataOnly: readiness.realItemsOnly !== false,
+    shortage: firstFiniteSearchNumber(readiness.shortage, 0)
+  };
 }
 
 function serverTotalFromPayload(payload, fallbackCount){
-  const root = unwrap(payload) || payload || {};
-  const meta = root.meta || {};
-  const vp = root.visiblePagePack || meta.viewport || (root.sectionPack && root.sectionPack.visiblePagePack) || {};
-  const total = Number(
-    vp.totalVisibleItems ||
-    vp.fullCandidateCount ||
-    meta.totalCandidates ||
-    meta.fullCandidateCount ||
-    meta.totalItems ||
-    root.totalCandidates ||
-    root.totalItems ||
-    fallbackCount ||
-    0
-  ) || 0;
+  const signal = supplySignalFromPayload(payload, fallbackCount || 0);
+  const total = signal.estimatedTotal || fallbackCount || 0;
   const cappedTotal = Math.min(Math.max(total, fallbackCount || 0), MAX_PAGER_PAGES * PAGE_SIZE);
   return cappedTotal;
 }
@@ -1580,16 +1651,30 @@ function seedLoadedServerPagesFromItems(items, maxItems){
 }
 
 function updateProgressiveTotalFromPayload(payload, fallbackCount, opts){
+  const signal = supplySignalFromPayload(payload, fallbackCount || 0);
   const total = serverTotalFromPayload(payload, fallbackCount || 0);
-  authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, total || 0, fallbackCount || 0);
-  const minPages = Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, preloadPageCountFromItems(allItems));
-  const wantedPages = Math.max(minPages, Math.ceil((authoritativeServerTotalItems || fallbackCount || 0) / PAGE_SIZE));
+  const floorCount = Math.max(fallbackCount || 0, allItems.length || 0);
+
+  if(signal.exhausted && total > 0){
+    authoritativeServerTotalItems = Math.max(total, floorCount);
+  }else{
+    authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, total || 0, floorCount || 0);
+  }
+
+  const minPages = signal.exhausted
+    ? Math.max(1, preloadPageCountFromItems(allItems))
+    : Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, preloadPageCountFromItems(allItems));
+  const wantedPages = Math.max(minPages, Math.ceil((authoritativeServerTotalItems || floorCount || 0) / PAGE_SIZE));
   const previousPages = Math.max(progressivePagerPages || 0, Math.ceil((serverTotalItems || 0) / PAGE_SIZE));
-  const nextPages = opts && opts.expandAll
+  const nextPages = signal.exhausted
     ? Math.min(MAX_PROGRESSIVE_PAGER_PAGES, wantedPages)
-    : Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(minPages, previousPages, Math.min(wantedPages, previousPages + 8 || minPages)));
+    : (opts && opts.expandAll
+      ? Math.min(MAX_PROGRESSIVE_PAGER_PAGES, wantedPages)
+      : Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(minPages, previousPages, Math.min(wantedPages, previousPages + 8 || minPages))));
   progressivePagerPages = Math.max(minPages, nextPages);
-  serverTotalItems = Math.max(serverTotalItems || 0, Math.min(authoritativeServerTotalItems || 0, progressivePagerPages * PAGE_SIZE));
+  serverTotalItems = signal.exhausted
+    ? Math.max(floorCount, Math.min(authoritativeServerTotalItems || 0, progressivePagerPages * PAGE_SIZE))
+    : Math.max(serverTotalItems || 0, Math.min(authoritativeServerTotalItems || 0, progressivePagerPages * PAGE_SIZE));
   return serverTotalItems;
 }
 
@@ -1644,11 +1729,16 @@ function startContinuousIntake(q, type, seq){
           if(page === currentPage) renderPage(page, true);
           else drawPager();
           status.textContent = statusResultsText(actualResultCountForStatus(), q, type, true);
-        }else if(allItems.length < target){
-          const tried = retryCounts.get(page) || 0;
-          if(tried < 3){
-            retryCounts.set(page, tried + 1);
-            retryPages.push(page);
+        }else{
+          const signal = supplySignalFromPayload(pack && pack.payload, 0);
+          if(signal.exhausted){
+            retryCounts.delete(page);
+          }else if(allItems.length < target){
+            const tried = retryCounts.get(page) || 0;
+            if(tried < 3){
+              retryCounts.set(page, tried + 1);
+              retryPages.push(page);
+            }
           }
         }
       }catch(e){
@@ -1797,42 +1887,24 @@ function mergeItemsPreferDisplayRichness(baseItems, incomingItems){
 
 async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
-  const pageNum = Math.max(1, Number(page) || 1);
-  const firstPageWindow = pageNum <= 1;
-  const adaptiveTarget = adaptiveSearchTarget(q, safeType);
-  const providerStart = ((pageNum - 1) * PAGE_SIZE) + 1;
-  const windowOffset = (pageNum - 1) * PAGE_SIZE;
-  signalSanmaruSearch(q, safeType, firstPageWindow ? 'maru-search-first-window' : 'maru-search-continuation-window');
+  signalSanmaruSearch(q, safeType, 'maru-search-fetch');
 
   const sp = new URLSearchParams();
   sp.set('q', q);
-  sp.set('limit', String(adaptiveTarget));
-  sp.set('candidatePoolTarget', String(adaptiveTarget));
+  sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('page', String(pageNum));
-  sp.set('visiblePage', String(pageNum));
-  sp.set('start', String(providerStart));
-  sp.set('providerStart', String(providerStart));
-  sp.set('searchBankOffset', String(windowOffset));
-  sp.set('windowOffset', String(windowOffset));
-  sp.set('offset', String(windowOffset));
+  sp.set('page', String(Math.max(1, Number(page) || 1)));
+  sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
   sp.set('pageWindowOnly', '1');
-  sp.set('serverPageWindow', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('routeOwner', 'sanmaru');
   sp.set('naturalFlow', '1');
   sp.set('smoothIntake', '1');
-  sp.set('firstPaint', firstPageWindow ? '1' : '0');
-  sp.set('fastFirstWindow', firstPageWindow ? '1' : '0');
-  sp.set('continuationWindow', firstPageWindow ? '0' : '1');
-  sp.set('wideContinuation', firstPageWindow ? '0' : '1');
-  sp.set('noBlockingWide', firstPageWindow ? '1' : '0');
-  sp.set('firstPaintLimit', String(firstPageWindow ? INITIAL_PRELOAD_TARGET : PAGE_SIZE));
-  sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
+  sp.set('noBlockingWide', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
@@ -4909,6 +4981,13 @@ async function runSearch(q, type = activeType){
     status.textContent = statusResultsText(actualResultCountForStatus(), qq, activeType, true);
   }
 
+  function schedulePipeHandoff(reason, delayMs){
+    if(intakeStarted || runSearch._seq !== seq) return;
+    if(intakeTimer) clearTimeout(intakeTimer);
+    const ms = Math.max(0, Math.min(16, Number(delayMs) || 0));
+    intakeTimer = setTimeout(() => startIntakeOnce(reason), ms);
+  }
+
   function applySupplyPack(pack, sourceName){
     if(runSearch._seq !== seq || !pack) return 0;
     const normalized = normalizeSearchPayload(pack && pack.payload ? pack.payload : pack);
@@ -4920,7 +4999,11 @@ async function runSearch(q, type = activeType){
       : dedupeItems(filterSearchResultItems((pack && pack.items) || normalized.items || []));
     const pageItems = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
     const incoming = rawItems && rawItems.length ? rawItems : pageItems;
-    if(!incoming || !incoming.length) return 0;
+    const supplySignal = supplySignalFromPayload(payload, incoming && incoming.length ? incoming.length : 0);
+    if(!incoming || !incoming.length){
+      updateProgressiveTotalFromPayload(payload, Math.max(allItems.length || 0, supplySignal.estimatedTotal || 0));
+      return 0;
+    }
 
     // Cache the supply window immediately. Rendering still shows only the current
     // viewport, but pages 2~12 are already in memory when the user clicks them.
@@ -4945,9 +5028,9 @@ async function runSearch(q, type = activeType){
     }else if(firstPaintDone){
       drawPager();
     }
-    status.textContent = statusResultsText(actualResultCountForStatus(), qq, activeType, true);
-    if(!intakeStarted && allItems.length >= 250){
-      setTimeout(() => startIntakeOnce('receiver-250-open-pipe'), 0);
+    status.textContent = statusResultsText(actualResultCountForStatus(), qq, activeType, supplySignal.exhausted ? false : true);
+    if(!intakeStarted && !supplySignal.exhausted){
+      schedulePipeHandoff('receiver-packet-open-pipe', allItems.length >= INITIAL_PRELOAD_TARGET ? 0 : FIRST_PIPE_HANDOFF_MS);
     }
     return incoming.length;
   }
@@ -4966,7 +5049,6 @@ async function runSearch(q, type = activeType){
 
     const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
     if(!firstCount){
-      intakeTimer = setTimeout(() => startIntakeOnce('empty-first-race-open-pipe'), 16);
       const second = first && first.kind === 'sanmaru-instant' ? await maruWindowPromise : await instantPromise;
       if(runSearch._seq !== seq) return;
       if(second && !second.error) applySupplyPack(second.pack, second.kind);
@@ -4980,7 +5062,7 @@ async function runSearch(q, type = activeType){
     // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
     // shortly after first paint, but let the page-1 300-window seed pages 1~12
     // first when it arrives quickly.
-    intakeTimer = setTimeout(() => startIntakeOnce('first-paint-timer'), 16);
+    schedulePipeHandoff('first-paint-handoff', FIRST_PIPE_HANDOFF_MS);
 
     maruWindowPromise.then(res => {
       if(runSearch._seq !== seq || !res || res.error) return;
