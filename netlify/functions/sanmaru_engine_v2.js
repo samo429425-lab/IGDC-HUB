@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.8.0-instant-supply-os";
+const VERSION = "sanmaru-engine-v2.8.1-three-lane-instant-supply-os";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 3000;
@@ -3173,6 +3173,30 @@ function buildSanmaruFrontSupplyPackage(q, opts){
   return pack;
 }
 
+function buildSanmaruInsightSupplyPackage(q, opts){
+  opts = opts || {};
+  const pack = buildSanmaruInstantOsPackage(q || firstNonEmpty(opts.q, opts.query, opts.topic, opts.issue, "global-insight"), Object.assign({}, opts, {
+    reason: opts.reason || "global-insight-supply",
+    frontSupply: false,
+    slotSupply: false,
+    includeFrontSupply: false,
+    includeFrontSlots: false,
+    candidatePoolTarget: firstNonEmpty(opts.candidatePool, opts.candidatePoolTarget, SANMARU_INSTANT_SUPPLY_TARGET),
+    limit: firstNonEmpty(opts.limit, SANMARU_INSTANT_SUPPLY_TARGET)
+  }));
+  pack.action = "insight-supply";
+  pack.source = pack.items && pack.items.length ? "sanmaru-global-insight-resident-supply" : "sanmaru-global-insight-route-supply";
+  pack.meta = Object.assign({}, pack.meta || {}, {
+    globalInsightSupply: true,
+    insightSupply: true,
+    frontSupply: false,
+    slotSupply: false,
+    line: "maru-global-insight",
+    policy: "global-insight-resident-first-no-front-snapshot-mixing"
+  });
+  return pack;
+}
+
 
 async function handler(event){
   if(event && event.httpMethod === "OPTIONS") return ok({ status:"ok" });
@@ -3198,10 +3222,15 @@ async function handler(event){
     const country = firstNonEmpty(merged.country, merged.region, merged.geo, detectRuntimeRegion(event || {}, firstNonEmpty(merged.lang, merged.uiLang, merged.locale), qx));
     return ok(buildSanmaruInstantOsPackage(qx, Object.assign({}, merged, { country, reason:action || "instant-os" })));
   }
-  if(action === "front-supply" || action === "slot-supply" || action === "content-supply" || action === "snapshot-supply" || action === "searchbank-supply" || action === "insight-supply" || action === "global-insight" || action === "issue-supply") {
+  if(action === "front-supply" || action === "slot-supply" || action === "content-supply" || action === "snapshot-supply" || action === "searchbank-supply") {
     const qx = firstNonEmpty(merged.q, merged.query, merged.section, merged.slot, merged.page, merged.targetPage, action);
     const country = firstNonEmpty(merged.country, merged.region, merged.geo, detectRuntimeRegion(event || {}, firstNonEmpty(merged.lang, merged.uiLang, merged.locale), qx));
     return ok(buildSanmaruFrontSupplyPackage(qx, Object.assign({}, merged, { country, reason:action })));
+  }
+  if(action === "insight-supply" || action === "global-insight" || action === "issue-supply") {
+    const qx = firstNonEmpty(merged.q, merged.query, merged.topic, merged.issue, merged.section, merged.slot, action);
+    const country = firstNonEmpty(merged.country, merged.region, merged.geo, detectRuntimeRegion(event || {}, firstNonEmpty(merged.lang, merged.uiLang, merged.locale), qx));
+    return ok(buildSanmaruInsightSupplyPackage(qx, Object.assign({}, merged, { country, reason:action })));
   }
   if(action === "geo-route" || action === "ip-route" || action === "country-route") return ok(Object.assign({ action:"geo-route" }, geoIpRouteMatrixSnapshot(firstNonEmpty(merged.q, merged.query), { lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), country:firstNonEmpty(merged.country, merged.region, merged.geo, detectRuntimeRegion(event || {}, firstNonEmpty(merged.lang, merged.uiLang, merged.locale), firstNonEmpty(merged.q, merged.query))) }), { resident:touchResidentSwitch({ reason:"geo-route", q:firstNonEmpty(merged.q, merged.query) }) }));
   if(action === "route-plan") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"route-plan", routePlan:residentRoutePlanFor(firstNonEmpty(merged.q, merged.query), { searchType:firstNonEmpty(merged.type, merged.category, merged.tab, merged.vertical), lang:firstNonEmpty(merged.lang, merged.uiLang, merged.locale), country:firstNonEmpty(merged.country, merged.region, merged.geo, detectRuntimeRegion(event || {}, firstNonEmpty(merged.lang, merged.uiLang, merged.locale), firstNonEmpty(merged.q, merged.query))) }), resident:touchResidentSwitch({ reason:"route-plan", q:firstNonEmpty(merged.q, merged.query) }) });
