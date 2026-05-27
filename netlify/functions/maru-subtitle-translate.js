@@ -1,6 +1,8 @@
 "use strict";
 
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const https = require("https");
+const OPENAI_HOST = "api.openai.com";
+const OPENAI_PATH = "/v1/chat/completions";
 const MODEL = process.env.OPENAI_SUBTITLE_MODEL || "gpt-4o-mini";
 
 function headers(extra = {}) {
@@ -8,13 +10,48 @@ function headers(extra = {}) {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     ...extra
   };
 }
 
 function json(statusCode, body) {
   return { statusCode, headers: headers(), body: JSON.stringify(body) };
+}
+
+function postOpenAI(apiKey, payload) {
+  return new Promise((resolve, reject) => {
+    const raw = JSON.stringify(payload);
+    const req = https.request({
+      hostname: OPENAI_HOST,
+      path: OPENAI_PATH,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Length": Buffer.byteLength(raw)
+      },
+      timeout: 120000
+    }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error(`openai_${res.statusCode}: ${body.slice(0, 300)}`));
+          return;
+        }
+        try { resolve(JSON.parse(body)); }
+        catch (e) { reject(new Error("openai_invalid_json")); }
+      });
+    });
+    req.on("timeout", () => {
+      req.destroy(new Error("openai_timeout"));
+    });
+    req.on("error", reject);
+    req.write(raw);
+    req.end();
+  });
 }
 
 function splitSubtitle(text, maxChars) {
@@ -53,25 +90,15 @@ async function translateChunk(apiKey, chunk, targetLang, fileName, index, total)
     chunk
   ].join("\n");
 
-  const res = await fetch(OPENAI_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ]
-    })
+  const data = await postOpenAI(apiKey, {
+    model: MODEL,
+    temperature: 0.2,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user }
+    ]
   });
 
-  const raw = await res.text();
-  if (!res.ok) throw new Error(`openai ${res.status}: ${raw.slice(0, 300)}`);
-  const data = JSON.parse(raw);
   return data && data.choices && data.choices[0] && data.choices[0].message
     ? String(data.choices[0].message.content || "")
     : "";
@@ -81,6 +108,17 @@ exports.handler = async function(event) {
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: headers(), body: "" };
   }
+
+  if (event.httpMethod === "GET") {
+    return json(200, {
+      ok: true,
+      service: "maru-subtitle-translate",
+      version: "r4",
+      configured: !!process.env.OPENAI_API_KEY,
+      method: "POST_REQUIRED"
+    });
+  }
+
   if (event.httpMethod !== "POST") {
     return json(405, { ok: false, error: "method_not_allowed" });
   }
@@ -109,6 +147,7 @@ exports.handler = async function(event) {
       translatedSubtitle: translated.join("\n")
     });
   } catch (err) {
-    return json(500, { ok: false, error: "translate_failed", message: String(err && err.message || err) });
+    const message = String(err && err.message || err).slice(0, 500);
+    return json(500, { ok: false, error: "translate_failed", message });
   }
 };
