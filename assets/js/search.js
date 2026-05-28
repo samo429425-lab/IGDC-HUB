@@ -262,10 +262,10 @@ function inferSearchTabsForQuery(q, active){
   const base = ['all'];
   const activeTypeForKeep = normalizeSearchType(active || activeType || 'all');
 
-  const placeSignal = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|뉴욕|도쿄|오사카|파리|런던|베트남|하노이|호치민|방콕|로마|시카고|워싱턴|상하이|베이징|city|seoul|busan|new\s*york|tokyo|osaka|paris|london|vietnam|hanoi|bangkok)/i.test(text);
-  const localSignal = /(지도|주소|위치|길찾기|근처|맛집|호텔|숙소|관광|여행|축제|명소|교통|지하철|버스|공항|map|maps|address|near|nearby|local|hotel|travel|tour|restaurant|attraction)/i.test(text);
-  const publicSignal = /(정부|공공|기관|시청|구청|도청|군청|공식|민원|행정|공공자료|공공데이터|open\s*data|government|official|public\s*data)/i.test(text);
-  const personSignal = /(배우|가수|연예인|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|선수|축구선수|야구선수|인물|프로필|나이|키|학력|출연|필모그래피|손예진|아이유|김수현|유재석|bts|blackpink|actor|actress|singer|celebrity|profile|biography)/i.test(text) || (/^[가-힣]{2,4}$/.test(compact) && !placeSignal);
+  const placeSignal = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|뉴욕|도쿄|오사카|파리|런던|베트남|하노이|호치민|방콕|로마|시카고|워싱턴|상하이|베이징|대한민국|한국|미국|중국|일본|영국|프랑스|독일|인도|태국|필리핀|인도네시아|말레이시아|싱가포르|캐나다|호주|국가|나라|지역|city|country|nation|seoul|busan|korea|usa|united\s*states|china|japan|new\s*york|tokyo|osaka|paris|london|vietnam|hanoi|bangkok)/i.test(text);
+  const localSignal = /(지도|주소|위치|길찾기|근처|맛집|호텔|숙소|관광|여행|축제|명소|교통|지하철|버스|공항|행정구역|도시|지역정보|map|maps|address|near|nearby|local|hotel|travel|tour|restaurant|attraction|landmark|city\s*guide)/i.test(text);
+  const publicSignal = /(정부|공공|기관|시청|구청|도청|군청|공식|민원|행정|공공자료|공공데이터|통계|정책|법령|open\s*data|government|official|public\s*data|statistics|policy)/i.test(text);
+  const personSignal = /(배우|가수|연예인|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|선수|축구선수|야구선수|인물|프로필|나이|키|학력|출연|필모그래피|작품|저서|업적|수상|손예진|아이유|김수현|유재석|bts|blackpink|actor|actress|singer|celebrity|profile|biography|works|filmography|career|awards)/i.test(text) || (/^[가-힣]{2,4}$/.test(compact) && !placeSignal);
   const productSignal = /(상품|제품|가격|구매|쇼핑|브랜드|후기|리뷰|인삼|홍삼|화장품|폰|자동차|노트북|product|price|buy|shopping|brand|review)/i.test(text);
   const mediaSignal = /(영상|동영상|유튜브|영화|드라마|음악|뮤직|앨범|video|youtube|movie|drama|music|album)/i.test(text);
   const imageSignal = /(이미지|사진|포토|갤러리|짤|화보|image|photo|picture|gallery)/i.test(text);
@@ -277,9 +277,9 @@ function inferSearchTabsForQuery(q, active){
 
   let tabs;
   if(placeSignal || localSignal){
-    tabs = base.concat(['map','site','tour','news','image','video','blog','sns','public_data','knowledge','wiki']);
+    tabs = base.concat(['knowledge','wiki','site','map','tour','public_data','news','image','video','blog','sns']);
   }else if(personSignal){
-    tabs = base.concat(['knowledge','wiki','news','image','video','sns','blog','site','book']);
+    tabs = base.concat(['knowledge','wiki','news','image','video','blog','sns','site','book']);
   }else if(productSignal){
     tabs = base.concat(['shopping','site','image','video','blog','cafe','news','knowledge','wiki']);
   }else if(academicSignal){
@@ -304,12 +304,6 @@ function inferSearchTabsForQuery(q, active){
 
   if(activeTypeForKeep && activeTypeForKeep !== 'all' && !tabs.includes(activeTypeForKeep)) tabs.splice(1, 0, activeTypeForKeep);
 
-  // Keep the full search OS category rail visible.  Query inference only changes
-  // the order of the leading tabs; it must not remove tabs such as image/video
-  // just because their first thumbnails have not arrived yet.
-  SEARCH_TAB_KEYS.forEach(key => {
-    if(key && !tabs.includes(key)) tabs.push(key);
-  });
 
   return uniqueSearchTabs(tabs);
 }
@@ -427,8 +421,7 @@ function ensureSearchCardMediaStyle(){
 
     .maru-display-section[data-group="image"] .maru-image-gallery-grid,
     .maru-display-section[data-group="media"] .maru-image-gallery-grid {
-      margin: 6px 0 8px;
-      grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+      margin: 8px 0 10px;
     }
 
     .maru-display-section {
@@ -555,30 +548,35 @@ function ensureSearchCardMediaStyle(){
 
     .maru-image-gallery-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
       align-items: stretch;
-      margin: 10px 0 18px;
+      margin: 12px 0 18px;
+      width: 100%;
     }
     .maru-image-tile {
       position: relative;
-      min-height: 158px;
+      min-height: 0;
       border: 1px solid #e5e7eb;
       border-radius: 13px;
       overflow: hidden;
-      background: #f8fafc;
+      background: #ffffff;
       cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 1px 3px rgba(15,23,42,.04);
     }
     .maru-image-tile img {
       display: block;
       width: 100%;
-      height: 100%;
-      min-height: 158px;
+      height: 150px;
+      min-height: 150px;
       object-fit: cover;
       background: #f1f5f9;
+      flex: 0 0 auto;
     }
-    .maru-image-tile[data-orientation="portrait"] { grid-row: span 2; }
-    .maru-image-tile[data-orientation="portrait"] img { min-height: 326px; }
+    .maru-image-tile[data-orientation="portrait"] { grid-row: auto; }
+    .maru-image-tile[data-orientation="portrait"] img { min-height: 150px; }
     .maru-image-gallery-pending .maru-image-tile-pending {
       cursor: default;
       background: linear-gradient(90deg, #f1f5f9 0%, #f8fafc 50%, #f1f5f9 100%);
@@ -594,18 +592,35 @@ function ensureSearchCardMediaStyle(){
       background: rgba(148, 163, 184, .28);
     }
     .maru-image-tile-caption {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: 7px 9px;
-      background: linear-gradient(180deg, rgba(15,23,42,0), rgba(15,23,42,.72));
-      color: #fff;
+      position: static;
+      padding: 8px 9px 9px;
+      background: #ffffff;
+      color: #0f172a;
       font-size: 12px;
-      font-weight: 700;
-      line-height: 1.25;
-      text-shadow: 0 1px 2px rgba(0,0,0,.35);
+      font-weight: 800;
+      line-height: 1.35;
+      text-shadow: none;
+      border-top: 1px solid #eef2f7;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
+    .maru-image-tile-summary {
+      padding: 0 9px 9px;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    @media (max-width: 1200px) { .maru-image-gallery-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    @media (max-width: 900px) { .maru-image-gallery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 640px) { .maru-image-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 420px) { .maru-image-gallery-grid { grid-template-columns: 1fr; } }
     .maru-result-viewer {
       margin: 10px 0 18px;
       border: 1px solid #e5e7eb;
@@ -4231,6 +4246,13 @@ async function fetchInstantSearchPack(q, type = activeType){
           cap.textContent = capText;
           tile.appendChild(cap);
         }
+        const summaryText = String(descriptionForItemClient(it) || '').trim();
+        if(summaryText && summaryText !== capText){
+          const summary = document.createElement('div');
+          summary.className = 'maru-image-tile-summary';
+          summary.textContent = summaryText;
+          tile.appendChild(summary);
+        }
 
         tile.addEventListener('click', (e) => {
           e.preventDefault();
@@ -4967,10 +4989,26 @@ if (it.riskLabel === '⚠️ high-risk') {
       return source.slice(0, Math.min(source.length, 600));
     }
 
+    function renderEmptyPageState(page, message){
+      results.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.className = 'card maru-empty-page-card';
+      empty.style.padding = '18px 20px';
+      empty.style.color = '#64748b';
+      empty.style.fontWeight = '800';
+      empty.style.border = '1px solid #eef2f7';
+      empty.style.borderRadius = '14px';
+      empty.style.background = '#fff';
+      empty.textContent = message || `${page}페이지 데이터가 아직 내려오지 않았습니다.`;
+      results.appendChild(empty);
+      drawPager();
+    }
+
     function renderPage(page, skipEnrich = false){
       if(serverPagedMode && !loadedServerPages.has(page)){
         const preloadedPageCount = preloadPageCountFromItems(allItems);
         if(page > preloadedPageCount && !renderPage._serverWindowLoading){
+          renderEmptyPageState(page, `${page}페이지 데이터를 요청했습니다. 아직 내려온 카드가 없으면 이 페이지는 비어 있습니다.`);
           renderPage._serverWindowLoading = true;
           loadServerPageAndRender(page).finally(() => { renderPage._serverWindowLoading = false; });
           return;
@@ -4979,25 +5017,22 @@ if (it.riskLabel === '⚠️ high-risk') {
       const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
 
-      if (!slice.length && normalizeSearchType(activeType) === 'all') {
-        if(!results.children.length) renderSkeleton();
-        drawPager();
+      if (!slice.length) {
+        if(normalizeSearchType(activeType) === 'all') {
+          if(page <= 1 && !results.children.length && !(Array.isArray(allItems) && allItems.length)) {
+            renderSkeleton();
+            drawPager();
+            return;
+          }
+          renderEmptyPageState(page, `${page}페이지에는 현재 내려온 검색 카드가 없습니다.`);
+          return;
+        }
+        renderEmptyPageState(page, `${getTypeLabel(activeType)} 항목은 현재 받은 검색 목록 안에서 아직 발견되지 않았습니다.`);
+        clearPager();
         return;
       }
 
       results.innerHTML = '';
-
-      if (!slice.length && normalizeSearchType(activeType) !== 'all') {
-        const empty = document.createElement('div');
-        empty.className = 'card';
-        empty.style.padding = '16px 18px';
-        empty.style.color = '#64748b';
-        empty.style.fontWeight = '700';
-        empty.textContent = `${getTypeLabel(activeType)} 항목은 현재 받은 검색 목록 안에서 아직 발견되지 않았습니다.`;
-        results.appendChild(empty);
-        clearPager();
-        return;
-      }
 
       // Image search should render as a gallery grid instead of stacked cards.
       if (normalizeSearchType(activeType) === 'image') {
@@ -5053,6 +5088,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         return;
       }
       status.textContent = `${uiText('loadingPage', 'Loading page')} ${page} ${uiText('resultsFor', 'for')} "${q}"...`;
+      renderEmptyPageState(page, `${page}페이지 데이터를 요청했습니다. 아직 내려온 카드가 없으면 이 페이지는 비어 있습니다.`);
       try{
         const pack = await fetchSearch(q, activeType, page);
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
@@ -5061,17 +5097,17 @@ if (it.riskLabel === '⚠️ high-risk') {
           allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
-        } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
-          // Do not silently render a blank page when the pager says that page exists.
-          // Keep the loading state visible and let the user retry by clicking the page again.
-          status.textContent = `${uiText('pageDataSupplying', 'Page data is being supplied')} ${page} · "${q}"...`;
+          renderPage(page);
+          status.textContent = statusResultsText(actualResultCountForStatus(), q, activeType);
+          return;
         }
+        loadedServerPages.set(page, []);
+        renderEmptyPageState(page, `${page}페이지에는 현재 내려온 검색 카드가 없습니다.`);
+        status.textContent = `${page}페이지에는 현재 내려온 검색 카드가 없습니다. · "${q}"`;
       }catch(e){
         console.warn('server page fetch skipped:', e);
-      }
-      if(loadedServerPages.has(page) || page <= preloadPageCountFromItems(allItems)){
-        renderPage(page);
-        status.textContent = statusResultsText(actualResultCountForStatus(), q, activeType);
+        loadedServerPages.set(page, []);
+        renderEmptyPageState(page, `${page}페이지 데이터를 아직 받을 수 없습니다.`);
       }
     }
 
