@@ -255,107 +255,156 @@ function queryTextForTabs(fallback){
   return String(fallback || fromInput || lastQuery || fromUrl || '').trim();
 }
 
-function inferSearchTabsForQuery(q, active){
-  const text = String(q || '').trim();
-  const low = text.toLowerCase();
-  const compact = low.replace(/\s+/g, '');
-  const activeTypeForKeep = normalizeSearchType(active || activeType || 'all');
+function maruIntentItemTextClient(it){
+  if(!it || typeof it !== 'object') return '';
+  function flat(v){
+    if(v == null) return '';
+    if(typeof v === 'string' || typeof v === 'number') return String(v);
+    if(Array.isArray(v)) return v.slice(0, 12).map(flat).join(' ');
+    if(typeof v === 'object') return Object.keys(v).slice(0, 24).map(k => flat(v[k])).join(' ');
+    return '';
+  }
+  return [
+    it.title, it.name, it.subtitle, it.summary, it.description, it.snippet,
+    it.contentSnippet, it.excerpt, it.abstract, it.body, it.category, it.group,
+    it.displayGroup, it.displayGroupLabel, it.type, it.kind, it.mediaType,
+    it.domain, it.publisher, it.channel, it.provider, it.url, it.link,
+    flat(it.source), flat(it.media), flat(it.displayCard), flat(it.payload), flat(it.data)
+  ].filter(Boolean).join(' ');
+}
 
-  // Category inference is allowed to change priority/order only. It must not
-  // remove the full search OS categories from the rail.
-  function collectSearchEvidence(){
+function maruIntentEvidenceClient(items){
+  const source = Array.isArray(items) ? items.slice(0, 180) : [];
+  const counts = {};
+  const textParts = [];
+  source.forEach(it => {
+    const itemText = maruIntentItemTextClient(it);
+    if(itemText) textParts.push(itemText);
     try{
-      const rows = Array.isArray(allItems) ? allItems.slice(0, 80) : [];
-      return rows.map(it => {
-        if(!it || typeof it !== 'object') return '';
-        const source = typeof it.source === 'object' ? Object.values(it.source || {}).join(' ') : it.source;
-        const media = typeof it.media === 'object' ? Object.values(it.media || {}).join(' ') : it.media;
-        const dc = it.displayCard && typeof it.displayCard === 'object' ? Object.values(it.displayCard).join(' ') : '';
-        return [
-          it.title, it.name, it.subtitle, it.summary, it.description, it.snippet,
-          it.contentSnippet, it.body, it.category, it.group, it.type, it.kind,
-          it.domain, it.publisher, it.channel, source, media, dc
-        ].filter(Boolean).join(' ');
-      }).join(' ').toLowerCase();
-    }catch(e){ return ''; }
-  }
+      const g = displayGroupOfItem(it);
+      if(g) counts[g] = (counts[g] || 0) + 1;
+    }catch(e){
+      const raw = String((it && (it.displayGroup || it.group || it.category || it.type)) || '').toLowerCase();
+      if(raw) counts[raw] = (counts[raw] || 0) + 1;
+    }
+  });
+  return { text: textParts.join(' ').toLowerCase(), counts };
+}
 
-  const evidence = collectSearchEvidence();
-  const hay = (low + ' ' + evidence).toLowerCase();
+function inferMaruSearchIntentProfile(q, items){
+  const query = String(q || '').trim();
+  const low = query.toLowerCase();
+  const compact = low.replace(/\s+/g, '');
+  const ev = maruIntentEvidenceClient(items || allItems);
+  const hay = `${low} ${ev.text}`.toLowerCase();
+  const counts = ev.counts || {};
 
-  const citySignal = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|수원|성남|고양|용인|청주|전주|천안|포항|창원|김해|평양|뉴욕|도쿄|오사카|파리|런던|로마|시카고|워싱턴|상하이|베이징|홍콩|싱가포르|하노이|호치민|방콕|city|seoul|busan|new\s*york|tokyo|osaka|paris|london|rome|chicago|washington|shanghai|beijing|hong\s*kong|singapore|hanoi|bangkok)/i.test(text);
-  const countrySignal = /(대한민국|한국|미국|일본|중국|영국|프랑스|독일|러시아|인도|베트남|태국|인도네시아|필리핀|캐나다|호주|브라질|멕시코|이탈리아|스페인|네덜란드|스웨덴|노르웨이|핀란드|덴마크|폴란드|우크라이나|이스라엘|사우디|아랍에미리트|uae|korea|south\s*korea|usa|united\s*states|japan|china|uk|united\s*kingdom|france|germany|russia|india|vietnam|thailand|indonesia|philippines|canada|australia|brazil|mexico|italy|spain)/i.test(text);
-  const localSignal = /(지도|주소|위치|길찾기|근처|맛집|호텔|숙소|관광|여행|축제|명소|교통|지하철|버스|공항|주변|방문|코스|map|maps|address|near|nearby|local|hotel|travel|tour|restaurant|attraction|airport|transit)/i.test(text);
-  const publicSignal = /(정부|공공|기관|시청|구청|도청|군청|공식|민원|행정|공공자료|공공데이터|통계청|법령|고시|open\s*data|government|official|public\s*data|administration|statistics)/i.test(text);
-
+  const citySignal = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|수원|성남|고양|용인|청주|전주|천안|포항|창원|김해|평양|뉴욕|도쿄|오사카|파리|런던|로마|시카고|워싱턴|상하이|베이징|홍콩|싱가포르|하노이|호치민|방콕|city|seoul|busan|new\s*york|tokyo|osaka|paris|london|rome|chicago|washington|shanghai|beijing|hong\s*kong|singapore|hanoi|bangkok)/i.test(query);
+  const countrySignal = /(대한민국|한국|미국|일본|중국|영국|프랑스|독일|러시아|인도|베트남|태국|인도네시아|필리핀|캐나다|호주|브라질|멕시코|이탈리아|스페인|네덜란드|스웨덴|노르웨이|핀란드|덴마크|폴란드|우크라이나|이스라엘|사우디|아랍에미리트|uae|korea|south\s*korea|usa|united\s*states|japan|china|uk|united\s*kingdom|france|germany|russia|india|vietnam|thailand|indonesia|philippines|canada|australia|brazil|mexico|italy|spain)/i.test(query);
+  const localSignal = /(지도|주소|위치|길찾기|근처|맛집|호텔|숙소|관광|여행|축제|명소|교통|지하철|버스|공항|주변|방문|코스|map|maps|address|near|nearby|local|hotel|travel|tour|restaurant|attraction|airport|transit)/i.test(query);
   const companySignal = /(회사|기업|브랜드|그룹|재단|협회|법인|주식회사|상장|상장사|본사|지점|매장|영업점|대표이사|ceo|ir|실적|매출|채용|주가|삼성|현대|기아|엘지|lg|sk|네이버|카카오|롯데|포스코|한화|두산|cj|gs|쿠팡|배민|스타벅스|테슬라|애플|구글|마이크로소프트|아마존|메타|엔비디아|company|corporation|corp|inc|ltd|brand|enterprise|startup|headquarters|store|stock|earnings|revenue|recruit)/i.test(hay);
-  const issueSignal = /(이슈|논란|사건|사고|속보|현안|정책|선거|후보|토론|전쟁|분쟁|시위|집회|파업|재판|수사|폭우|태풍|지진|화재|감염|위기|갈등|issue|breaking|controversy|election|policy|war|conflict|protest|strike|trial|investigation|crisis|disaster)/i.test(text);
-  const personKeywordSignal = /(배우|가수|연예인|아이돌|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|후보|선수|축구선수|야구선수|인물|프로필|나이|키|학력|출연|필모그래피|앨범|곡|작품|업적|수상|손예진|아이유|김수현|유재석|bts|blackpink|actor|actress|singer|celebrity|artist|profile|biography|filmography|album|discography|career|awards)/i.test(hay);
+  const issueSignal = /(이슈|논란|사건|사고|속보|현안|정책|선거|후보|토론|전쟁|분쟁|시위|집회|파업|재판|수사|폭우|태풍|지진|화재|감염|위기|갈등|issue|breaking|controversy|election|policy|war|conflict|protest|strike|trial|investigation|crisis|disaster)/i.test(query);
+
+  const personEvidence = /(프로필|인물|나이|키|학력|출생|소속사|배우|가수|연예인|아이돌|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|후보|선수|축구선수|야구선수|출연|필모그래피|앨범|곡|작품|업적|수상|biography|profile|actor|actress|singer|celebrity|artist|filmography|discography|career|awards)/i.test(hay);
   const compactKoreanNameSignal = /^[가-힣]{2,4}$/.test(compact) && !citySignal && !countrySignal && !companySignal;
-  const personSignal = (personKeywordSignal || compactKoreanNameSignal) && !companySignal;
+  const personSignal = (personEvidence || compactKoreanNameSignal) && !companySignal && !(citySignal || countrySignal || localSignal);
 
-  const productSignal = /(상품|제품|가격|구매|쇼핑|브랜드|후기|리뷰|인삼|홍삼|화장품|폰|자동차|노트북|가전|의류|신발|product|price|buy|shopping|brand|review|spec|model)/i.test(text) && !companySignal;
-  const mediaSignal = /(영상|동영상|유튜브|영화|드라마|음악|뮤직|앨범|공연|콘서트|방송|예능|video|youtube|movie|drama|music|album|concert|show|clip)/i.test(text);
-  const imageSignal = /(이미지|사진|포토|갤러리|화보|풍경|전경|야경|image|photo|picture|gallery|scenery|landscape)/i.test(text);
-  const academicSignal = /(논문|연구|학술|저널|대학|도서관|인용|학회|paper|research|scholar|academic|journal|university|library|citation)/i.test(text);
-  const bookSignal = /(책|도서|출판|저자|소설|문학|book|author|novel|literature|publication)/i.test(text);
-  const financeSignal = /(주식|증권|환율|금융|코인|가상화폐|경제|실적|매출|stock|finance|market|crypto|exchange\s*rate|earnings|revenue)/i.test(text);
-  const sportsSignal = /(스포츠|축구|야구|농구|배구|골프|올림픽|월드컵|sports|football|baseball|basketball|golf|olympic|world\s*cup)/i.test(text);
-  const webtoonSignal = /(웹툰|만화|애니|webtoon|comic|manga|anime)/i.test(text);
+  const productSignal = /(상품|제품|가격|구매|쇼핑|브랜드|후기|리뷰|인삼|홍삼|화장품|폰|자동차|노트북|가전|의류|신발|product|price|buy|shopping|brand|review|spec|model)/i.test(query) && !companySignal;
+  const academicSignal = /(논문|연구|학술|저널|대학|도서관|인용|학회|paper|research|scholar|academic|journal|university|library|citation)/i.test(query);
+  const bookSignal = /(책|도서|출판|저자|소설|문학|book|author|novel|literature|publication)/i.test(query);
+  const financeSignal = /(주식|증권|환율|금융|코인|가상화폐|경제|실적|매출|stock|finance|market|crypto|exchange\s*rate|earnings|revenue)/i.test(query);
+  const sportsSignal = /(스포츠|축구|야구|농구|배구|골프|올림픽|월드컵|sports|football|baseball|basketball|golf|olympic|world\s*cup)/i.test(query);
+  const webtoonSignal = /(웹툰|만화|애니|webtoon|comic|manga|anime)/i.test(query);
+  const mediaSignal = /(영상|동영상|유튜브|영화|드라마|음악|뮤직|앨범|공연|콘서트|방송|예능|video|youtube|movie|drama|music|album|concert|show|clip)/i.test(query);
+  const imageSignal = /(이미지|사진|포토|갤러리|화보|풍경|전경|야경|image|photo|picture|gallery|scenery|landscape)/i.test(query);
+  const publicSignal = /(정부|공공|기관|시청|구청|도청|군청|공식|민원|행정|공공자료|공공데이터|통계청|법령|고시|open\s*data|government|official|public\s*data|administration|statistics)/i.test(query);
 
-  let lead;
-  if(productSignal){
-    lead = ['shopping','site','image','video','blog','cafe','news','knowledge','wiki'];
-  }else if(academicSignal){
-    lead = ['academic','knowledge','wiki','book','site','news','image','video'];
-  }else if(bookSignal){
-    lead = ['book','knowledge','wiki','site','blog','news','image','shopping','video'];
-  }else if(financeSignal && companySignal){
-    lead = ['finance','news','site','knowledge','wiki','map','image','video','blog','sns','public_data'];
-  }else if(financeSignal){
-    lead = ['finance','news','site','knowledge','wiki','blog','image','video'];
-  }else if(sportsSignal){
-    lead = ['sports','news','video','image','sns','blog','site','knowledge','wiki'];
-  }else if(webtoonSignal){
-    lead = ['webtoon','image','video','site','blog','sns','shopping','news','knowledge','wiki'];
-  }else if(personSignal){
-    lead = ['knowledge','wiki','news','video','image','sns','blog','site','book'];
-  }else if(companySignal){
-    // Companies and venues may need maps, but official/site/business context stays first.
-    lead = ['site','knowledge','wiki','news','finance','map','image','video','blog','sns','shopping','public_data'];
-  }else if(issueSignal){
-    lead = ['news','video','image','sns','blog','site','knowledge','wiki','public_data'];
-  }else if(countrySignal){
-    lead = ['knowledge','wiki','site','news','map','tour','public_data','image','video','blog','sns','academic','finance','sports'];
-  }else if(citySignal || localSignal){
-    lead = ['knowledge','wiki','site','map','tour','public_data','news','image','video','blog','sns'];
-  }else if(mediaSignal){
-    lead = ['video','image','news','sns','blog','site','knowledge','wiki'];
-  }else if(imageSignal){
-    lead = ['image','video','site','news','blog','sns','knowledge','wiki'];
-  }else if(publicSignal){
-    lead = ['public_data','site','knowledge','wiki','news','map','image','video'];
-  }else{
-    lead = ['knowledge','wiki','site','news','image','video','blog','sns'];
-  }
+  // Returned evidence can override a vague query.  This is what prevents a
+  // person name from staying on a city/nation category profile after results arrive.
+  const returnedPersonProfile = personEvidence && ((counts.knowledge || 0) + (counts.wiki || 0) + (counts.news || 0) + (counts.video || 0) + (counts.image || 0) + (counts.social || 0) >= 2);
+  if(personSignal || returnedPersonProfile) return 'person';
+  if(companySignal) return 'company';
+  if(issueSignal || (counts.news || 0) >= 4 && /(논란|사건|속보|issue|breaking|뉴스|보도)/i.test(hay)) return 'issue';
+  if(productSignal) return 'product';
+  if(academicSignal) return 'academic';
+  if(bookSignal) return 'book';
+  if(financeSignal) return 'finance';
+  if(sportsSignal) return 'sports';
+  if(webtoonSignal) return 'webtoon';
+  if(countrySignal) return 'country';
+  if(citySignal || localSignal) return 'place';
+  if(mediaSignal) return 'media';
+  if(imageSignal) return 'image';
+  if(publicSignal) return 'public';
+  return 'general';
+}
 
-  const tabs = ['all'];
-  lead.forEach(key => { if(key && key !== 'all' && !tabs.includes(key)) tabs.push(key); });
+function maruTabLeadForIntent(intent){
+  const table = {
+    person:  ['all','knowledge','wiki','news','video','image','sns','blog','site','book'],
+    place:   ['all','knowledge','wiki','site','map','tour','public_data','news','image','video','blog','sns'],
+    country: ['all','knowledge','wiki','site','news','map','tour','public_data','image','video','blog','sns'],
+    company: ['all','site','knowledge','wiki','news','finance','map','image','video','blog','sns','shopping','public_data'],
+    issue:   ['all','news','video','image','sns','blog','site','knowledge','wiki','public_data'],
+    product: ['all','shopping','site','image','video','blog','cafe','news','knowledge','wiki'],
+    academic:['all','academic','knowledge','wiki','book','site','news','image','video'],
+    book:    ['all','book','knowledge','wiki','site','blog','news','image','shopping'],
+    finance: ['all','finance','news','site','knowledge','blog','image','video'],
+    sports:  ['all','sports','news','video','image','sns','blog','site','knowledge'],
+    webtoon: ['all','webtoon','image','video','site','blog','sns','shopping','news'],
+    media:   ['all','video','image','news','sns','blog','site','knowledge'],
+    image:   ['all','image','video','site','news','blog','sns','knowledge'],
+    public:  ['all','public_data','site','knowledge','wiki','news','map','image','video'],
+    general: ['all','site','knowledge','wiki','news','image','video','blog','sns']
+  };
+  return table[intent] || table.general;
+}
 
-  // Keep the actively selected tab visible, but do not let a stale tab from a
-  // previous search take over the front of a new intent profile.
-  if(activeTypeForKeep && activeTypeForKeep !== 'all' && !tabs.includes(activeTypeForKeep)) tabs.push(activeTypeForKeep);
-
-  SEARCH_TAB_KEYS.forEach(key => {
-    if(key && !tabs.includes(key)) tabs.push(key);
+function inferSearchTabsForQuery(q, active){
+  const intent = inferMaruSearchIntentProfile(q, allItems);
+  const activeTypeForKeep = normalizeSearchType(active || activeType || 'all');
+  const evidence = maruIntentEvidenceClient(allItems);
+  const countByTab = {};
+  const groupToTab = {
+    authority:'site', local_tour:'map', public_data:'public_data', knowledge:'knowledge', wiki:'wiki',
+    academic:'academic', site:'site', book:'book', news:'news', blog:'blog', cafe:'cafe',
+    community:'cafe', image:'image', media:'image', video:'video', social:'sns', shopping:'shopping',
+    sports:'sports', finance:'finance', webtoon:'webtoon', web:'site'
+  };
+  Object.keys(evidence.counts || {}).forEach(g => {
+    const tab = groupToTab[g] || normalizeSearchType(g);
+    if(tab && SEARCH_TAB_KEYS.includes(tab)) countByTab[tab] = (countByTab[tab] || 0) + evidence.counts[g];
   });
 
-  return uniqueSearchTabs(tabs);
+  const lead = maruTabLeadForIntent(intent).slice();
+  if(activeTypeForKeep && activeTypeForKeep !== 'all' && !lead.includes(activeTypeForKeep)) lead.splice(1, 0, activeTypeForKeep);
+
+  const out = [];
+  const seen = new Set();
+  function push(type){
+    const t = normalizeSearchType(type);
+    if(!t || seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  }
+  lead.forEach(push);
+
+  // After the intent lead, categories that are actually present in the returned
+  // pool move up, but low-relevance categories remain available later.
+  SEARCH_TAB_KEYS
+    .filter(k => !seen.has(k) && (countByTab[k] || 0) > 0)
+    .sort((a,b) => (countByTab[b] || 0) - (countByTab[a] || 0))
+    .forEach(push);
+
+  SEARCH_TAB_KEYS.forEach(push);
+  return uniqueSearchTabs(out);
 }
 
 function searchTabsProfileKey(q, active){
+  const intent = inferMaruSearchIntentProfile(q, allItems);
   const tabs = inferSearchTabsForQuery(q, active).map(x => x[0]).join('|');
-  return tabs + '::' + normalizeSearchType(active || activeType || 'all') + '::' + getSearchUiLang();
+  const received = Array.isArray(allItems) ? allItems.length : 0;
+  return intent + '::' + tabs + '::' + received + '::' + normalizeSearchType(active || activeType || 'all') + '::' + getSearchUiLang();
 }
 
 
@@ -3102,8 +3151,36 @@ function displayGroupOfItem(it){
       return slice.some(it => it && (it.displayGroup || it.displayGroupLabel));
     }
 
+    function displayGroupOrderForCurrentSearch(){
+      const q = queryTextForTabs(lastQuery || (input && input.value) || '');
+      const intent = inferMaruSearchIntentProfile(q, allItems);
+      const orders = {
+        person:  ['authority','knowledge','wiki','news','video','image','media','social','blog','site','book','community','web','academic','public_data','local_tour','shopping','sports','finance','webtoon'],
+        place:   ['authority','knowledge','wiki','site','local_tour','public_data','news','image','media','video','blog','social','community','web','book','academic','shopping','sports','finance','webtoon'],
+        country: ['authority','knowledge','wiki','site','news','local_tour','public_data','image','media','video','blog','social','community','web','book','academic','shopping','sports','finance','webtoon'],
+        company: ['authority','site','knowledge','wiki','news','finance','local_tour','image','media','video','blog','social','shopping','public_data','community','web','book','academic','sports','webtoon'],
+        issue:   ['news','video','image','media','social','blog','community','site','knowledge','wiki','authority','public_data','web','local_tour','book','academic','shopping','sports','finance','webtoon'],
+        product: ['shopping','site','image','media','video','blog','community','cafe','news','knowledge','wiki','authority','web','local_tour','book','public_data','academic','sports','finance','webtoon'],
+        academic:['academic','knowledge','wiki','book','site','news','image','media','video','authority','public_data','web','blog','community','local_tour','shopping','sports','finance','webtoon'],
+        book:    ['book','knowledge','wiki','site','blog','news','image','media','shopping','authority','web','video','social','community','local_tour','public_data','academic','sports','finance','webtoon'],
+        finance: ['finance','news','site','knowledge','wiki','blog','image','media','video','authority','web','social','public_data','local_tour','book','academic','shopping','sports','webtoon'],
+        sports:  ['sports','news','video','image','media','social','blog','site','knowledge','wiki','authority','web','community','local_tour','book','public_data','academic','shopping','finance','webtoon'],
+        webtoon: ['webtoon','image','media','video','site','blog','social','shopping','news','knowledge','wiki','authority','web','community','local_tour','book','public_data','academic','sports','finance'],
+        media:   ['video','image','media','news','social','blog','site','knowledge','wiki','authority','web','community','local_tour','book','public_data','academic','shopping','sports','finance','webtoon'],
+        image:   ['image','media','video','site','news','blog','social','knowledge','wiki','authority','web','community','local_tour','book','public_data','academic','shopping','sports','finance','webtoon'],
+        public:  ['public_data','authority','site','knowledge','wiki','news','local_tour','image','media','video','web','blog','community','book','academic','shopping','sports','finance','webtoon'],
+        general: ['authority','knowledge','wiki','site','book','blog','cafe','community','shopping','news','image','media','video','social','public_data','academic','local_tour','sports','finance','webtoon','web']
+      };
+      const base = orders[intent] || orders.general;
+      const full = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
+      const out = [];
+      const seen = new Set();
+      base.concat(full).forEach(g => { if(g && !seen.has(g)){ seen.add(g); out.push(g); } });
+      return out;
+    }
+
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
+      const order = displayGroupOrderForCurrentSearch();
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -4909,7 +4986,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
+      const categoryOrder = displayGroupOrderForCurrentSearch().filter(g => g !== 'web');
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -5133,6 +5210,7 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function renderPage(page, skipEnrich = false){
+      try{ updateSearchTabsActive(lastQuery || (input && input.value) || ''); }catch(e){}
       if(serverPagedMode && !loadedServerPages.has(page)){
         const preloadedPageCount = preloadPageCountFromItems(allItems);
         if(page > preloadedPageCount && !renderPage._serverWindowLoading){
