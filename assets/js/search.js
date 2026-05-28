@@ -303,14 +303,6 @@ function inferSearchTabsForQuery(q, active){
   }
 
   if(activeTypeForKeep && activeTypeForKeep !== 'all' && !tabs.includes(activeTypeForKeep)) tabs.splice(1, 0, activeTypeForKeep);
-
-  // Keep the full search OS category rail visible.  Query inference only changes
-  // the order of the leading tabs; it must not remove tabs such as image/video
-  // just because their first thumbnails have not arrived yet.
-  SEARCH_TAB_KEYS.forEach(key => {
-    if(key && !tabs.includes(key)) tabs.push(key);
-  });
-
   return uniqueSearchTabs(tabs);
 }
 
@@ -2315,29 +2307,10 @@ async function fetchInstantSearchPack(q, type = activeType){
       if(!bar) return;
       const q = queryTextForTabs(qOverride);
       const key = searchTabsProfileKey(q, activeType);
-      // Category rail is a fixed search-OS navigation surface.  It must never
-      // be shortened by the currently received result pool, thumbnail readiness,
-      // page model, or provider timing.  Query inference only changes the lead
-      // order; every original category remains present.
-      let tabs = inferSearchTabsForQuery(q, activeType);
-      const seen = new Set(tabs.map(x => x && x[0]).filter(Boolean));
-      SEARCH_TAB_KEYS.forEach(type => {
-        if(!seen.has(type)){
-          seen.add(type);
-          tabs.push(searchTabDef(type));
-        }
-      });
-      if(tabs.length < SEARCH_TAB_KEYS.length){
-        tabs = SEARCH_TAB_KEYS.map(type => searchTabDef(type));
-      }
-      const stableKey = key + '::count=' + tabs.length + '::fullRail=' + SEARCH_TAB_KEYS.join('|');
-      if(bar.dataset.profileKey === stableKey && bar.childNodes.length >= SEARCH_TAB_KEYS.length) return;
-      bar.dataset.profileKey = stableKey;
-      bar.dataset.categoryCount = String(tabs.length);
+      if(bar.dataset.profileKey === key && bar.childNodes.length) return;
+      bar.dataset.profileKey = key;
       bar.innerHTML = '';
-      bar.style.display = 'flex';
-      bar.style.visibility = 'visible';
-      tabs.forEach(([type, label]) => {
+      inferSearchTabsForQuery(q, activeType).forEach(([type, label]) => {
         bar.appendChild(buildSearchTabButton(type, label));
       });
     }
@@ -2359,9 +2332,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         bar.style.position = 'sticky';
         bar.style.top = '65px';
         bar.style.zIndex = '90';
-        const tabAnchor = (statusEl && statusEl.parentNode) ? statusEl : ((resultsEl && resultsEl.parentNode) ? resultsEl : input);
-        if(tabAnchor && tabAnchor.parentNode) tabAnchor.parentNode.insertBefore(bar, tabAnchor);
-        else document.body.insertBefore(bar, document.body.firstChild);
+        status.parentNode.insertBefore(bar, status);
       }
       renderSearchTabsForQuery(bar, qOverride);
       return bar;
@@ -2765,7 +2736,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function collectNaturalImages(it){
-      const sourceText = String((it && it.source) || '').toLowerCase();
+      const sourceText = sourceHostTextForItemClient(it);
       const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
@@ -2831,7 +2802,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function classifyVisualKindClient(it){
-      const source = String((it && it.source) || '').toLowerCase();
+      const source = sourceHostTextForItemClient(it);
       const type = String((it && it.type) || '').toLowerCase();
       const mediaType = String((it && it.mediaType) || '').toLowerCase();
       const title = String((it && it.title) || '').toLowerCase();
@@ -2938,19 +2909,26 @@ async function fetchInstantSearchPack(q, type = activeType){
     function sourceHostTextForItemClient(it){
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
       const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      const origin = String(payload.originallink || payload.originalLink || it && (it.originallink || it.originalLink) || '').trim();
-      const url = String(origin || (it && (it.url || it.link || it.openUrl || it.href)) || displayCard.url || '').trim();
+      const sourceObj = (it && it.source && typeof it.source === 'object') ? it.source : {};
+      const providerObj = (it && it.provider && typeof it.provider === 'object') ? it.provider : {};
+      const channelObj = (it && it.channel && typeof it.channel === 'object') ? it.channel : {};
+      const origin = String(payload.originallink || payload.originalLink || (it && (it.originallink || it.originalLink)) || displayCard.originallink || displayCard.originalLink || '').trim();
+      const url = String(origin || (it && (it.url || it.link || it.openUrl || it.href)) || displayCard.url || displayCard.link || displayCard.openUrl || payload.url || payload.link || '').trim();
       const host = domainOf(url).toLowerCase();
-      return String([
+      const fields = [
         host,
         url,
         it && it.source,
         it && it.provider,
         it && it.channel,
+        sourceObj.name, sourceObj.title, sourceObj.provider, sourceObj.platform, sourceObj.publisher, sourceObj.media, sourceObj.domain, sourceObj.host, sourceObj.url,
+        providerObj.name, providerObj.title, providerObj.provider, providerObj.platform, providerObj.publisher, providerObj.media, providerObj.domain, providerObj.host, providerObj.url,
+        channelObj.name, channelObj.title, channelObj.provider, channelObj.platform, channelObj.publisher, channelObj.media, channelObj.domain, channelObj.host, channelObj.url,
         it && it.type,
         it && it.category,
         it && it.mediaType,
         it && it.title,
+        it && it.name,
         it && it.summary,
         it && it.description,
         it && it.snippet,
@@ -2959,19 +2937,37 @@ async function fetchInstantSearchPack(q, type = activeType){
         payload.provider,
         payload.publisher,
         payload.media,
+        payload.channel,
+        payload.origin,
+        payload.originName,
         payload.title,
+        payload.name,
         payload.summary,
         payload.description,
+        payload.snippet,
+        payload.url,
+        payload.link,
+        payload.originallink,
+        payload.originalLink,
         displayCard.source,
+        displayCard.provider,
         displayCard.publisher,
+        displayCard.media,
+        displayCard.channel,
         displayCard.title,
+        displayCard.name,
         displayCard.summary,
         displayCard.description,
         displayCard.snippet,
         displayCard.url,
         displayCard.link,
         displayCard.openUrl
-      ].filter(Boolean).join(' ')).toLowerCase();
+      ];
+      return String(fields.map(v => {
+        if(!v) return '';
+        if(typeof v === 'object') return [v.name, v.title, v.provider, v.platform, v.publisher, v.media, v.channel, v.domain, v.host, v.url, v.link].filter(Boolean).join(' ');
+        return v;
+      }).filter(Boolean).join(' ')).replace(/\s+/g, ' ').toLowerCase();
     }
 
     function isNewsLikeItemClient(it){
@@ -2996,22 +2992,21 @@ async function fetchInstantSearchPack(q, type = activeType){
     function newsSourcePriorityClient(it){
       const text = sourceHostTextForItemClient(it);
 
-      // User-facing news lane order:
-      // SBS/KBS first, then YTN, then major wire/current sources,
-      // then channel/cable news. MBC is kept, but later than the lead slots.
-      if(/(sbs\.co\.kr|news\.sbs|\bsbs\b)/i.test(text)) return 1;
-      if(/(kbs\.co\.kr|news\.kbs|\bkbs\b)/i.test(text)) return 2;
-      if(/(ytn\.co\.kr|\bytn\b)/i.test(text)) return 3;
+      // Korea-facing news lane order only.  Global/non-Korean searches still fall
+      // back to relevance and source diversity because unknown outlets return 20.
+      if(/(sbs\.co\.kr|news\.sbs|\bsbs\b|에스비에스)/i.test(text)) return 1;
+      if(/(kbs\.co\.kr|news\.kbs|\bkbs\b|한국방송|케이비에스)/i.test(text)) return 2;
+      if(/(ytn\.co\.kr|\bytn\b|와이티엔)/i.test(text)) return 3;
       if(/(yna\.co\.kr|연합뉴스)/i.test(text)) return 4;
-      if(/(ichannela\.com|channel-a\.co\.kr|채널a|channel\s*a|mbn\.co\.kr|\bmbn\b)/i.test(text)) return 5;
+      if(/(ichannela\.com|channel-a\.co\.kr|채널a|channel\s*a|mbn\.co\.kr|\bmbn\b|매일방송)/i.test(text)) return 5;
       if(/(tvchosun\.com|티비조선|tv조선|조선일보|chosun\.com)/i.test(text)) return 6;
       if(/(jtbc\.co\.kr|\bjtbc\b)/i.test(text)) return 7;
-      if(/(ikbc\.co\.kr|kbc\.co\.kr|\bkbc\b)/i.test(text)) return 8;
-      if(/(seoul\.co\.kr|서울신문|mk\.co\.kr|매일경제|imaeil\.com|매일신문|hankyung\.com|한국경제|joongang|joins\.com|중앙일보|donga\.com|동아일보|segye\.com|세계일보|kmib\.co\.kr|국민일보)/i.test(text)) return 9;
-      if(/(reuters\.com|apnews\.com|bbc\.com|bloomberg\.com|nytimes\.com|washingtonpost\.com)/i.test(text)) return 10;
+      if(/(ikbc\.co\.kr|kbc\.co\.kr|\bkbc\b|광주방송)/i.test(text)) return 8;
+      if(/(seoul\.co\.kr|서울신문|mk\.co\.kr|매일경제|imaeil\.com|매일신문|hankyung\.com|한국경제|joongang|joins\.com|중앙일보|donga\.com|동아일보|segye\.com|세계일보|kmib\.co\.kr|국민일보|fnnews\.com|파이낸셜뉴스|edaily\.co\.kr|이데일리|newsis\.com|뉴시스)/i.test(text)) return 9;
+      if(/(reuters\.com|apnews\.com|bbc\.com|bloomberg\.com|nytimes\.com|washingtonpost\.com|theguardian\.com|ft\.com|wsj\.com|cnn\.com)/i.test(text)) return 10;
       if(/(khan\.co\.kr|경향신문|hani\.co\.kr|한겨레)/i.test(text)) return 14;
-      if(/(imbc\.com|mbc\.co\.kr|\bmbc\b)/i.test(text)) return 30;
-      if(/(ohmynews\.com|오마이뉴스)/i.test(text)) return 90;
+      if(/(imbc\.com|mbc\.co\.kr|\bmbc\b|문화방송)/i.test(text)) return 30;
+      if(/(ohmynews\.com|오마이뉴스)/i.test(text)) return 95;
       return 20;
     }
 
@@ -3193,11 +3188,20 @@ async function fetchInstantSearchPack(q, type = activeType){
 
     function sourceKeyForDisplayGroupItem(it){
       const payload = it && it.payload && typeof it.payload === 'object' ? it.payload : {};
+      const displayCard = it && it.displayCard && typeof it.displayCard === 'object' ? it.displayCard : {};
+      const sourceObj = it && it.source && typeof it.source === 'object' ? it.source : {};
       const group = displayGroupOfItem(it);
-      const newsOrigin = group === 'news' ? String(payload.originallink || payload.originalLink || it.originallink || it.originalLink || '').trim() : '';
-      const url = String(newsOrigin || (it && (it.url || it.link || it.openUrl)) || '').trim();
+      const newsOrigin = group === 'news' ? String(payload.originallink || payload.originalLink || displayCard.originallink || displayCard.originalLink || it.originallink || it.originalLink || '').trim() : '';
+      const url = String(newsOrigin || (it && (it.url || it.link || it.openUrl || it.href)) || displayCard.url || displayCard.link || payload.url || payload.link || '').trim();
       const host = domainOf(url).toLowerCase();
-      const source = String((it && (it.source || it.provider || it.channel)) || '').toLowerCase();
+      const source = String([
+        sourceObj.name, sourceObj.provider, sourceObj.platform, sourceObj.publisher, sourceObj.media, sourceObj.domain,
+        it && (typeof it.source === 'string' ? it.source : ''),
+        it && (typeof it.provider === 'string' ? it.provider : ''),
+        it && (typeof it.channel === 'string' ? it.channel : ''),
+        payload.source, payload.provider, payload.publisher, payload.media,
+        displayCard.source, displayCard.provider, displayCard.publisher, displayCard.media
+      ].filter(Boolean).join(' ')).toLowerCase().replace(/\s+/g, ' ').trim();
       if(host) return host.replace(/^www\./, '');
       return source || String((it && it.title) || '').slice(0, 40).toLowerCase();
     }
@@ -3205,15 +3209,18 @@ async function fetchInstantSearchPack(q, type = activeType){
     function diversifyGroupPreviewItems(group, items){
       let list = Array.isArray(items) ? items.slice() : [];
       if(!list.length) return list;
-      if(group === 'news') {
-        list = list.slice().sort((a, b) => {
-          const ap = newsSourcePriorityClient(a);
-          const bp = newsSourcePriorityClient(b);
-          return (ap - bp);
-        });
-      }
       const verticals = new Set(['news','blog','cafe','community','social','image','video','media']);
       if(!verticals.has(group)) return list;
+
+      if(group === 'news') {
+        list = list.filter(it => !isSyntheticProviderGuideCardClient(it));
+        list.sort((a, b) => {
+          const ap = newsSourcePriorityClient(a);
+          const bp = newsSourcePriorityClient(b);
+          if(ap !== bp) return ap - bp;
+          return (isLowPrestigePoliticalNewsClient(a) ? 1 : 0) - (isLowPrestigePoliticalNewsClient(b) ? 1 : 0);
+        });
+      }
 
       const firstBySource = [];
       const rest = [];
@@ -3227,6 +3234,11 @@ async function fetchInstantSearchPack(q, type = activeType){
           rest.push(it);
         }
       });
+
+      if(group === 'news') {
+        firstBySource.sort((a, b) => newsSourcePriorityClient(a) - newsSourcePriorityClient(b));
+        rest.sort((a, b) => newsSourcePriorityClient(a) - newsSourcePriorityClient(b));
+      }
       return firstBySource.concat(rest);
     }
 
@@ -3619,19 +3631,43 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function getPlayableMediaInfo(it, url){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
+      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const candidates = [
         url,
         it && it.url,
         it && it.link,
         it && it.videoUrl,
-        it && it.media && it.media.url,
-        it && it.media && it.media.videoUrl
+        it && it.watchUrl,
+        it && it.embedUrl,
+        media && media.url,
+        media && media.videoUrl,
+        media && media.watchUrl,
+        media && media.embedUrl,
+        payload && payload.url,
+        payload && payload.link,
+        payload && payload.videoUrl,
+        payload && payload.watchUrl,
+        payload && payload.embedUrl,
+        data && data.url,
+        data && data.link,
+        data && data.videoUrl,
+        data && data.watchUrl,
+        data && data.embedUrl,
+        displayCard && displayCard.url,
+        displayCard && displayCard.link,
+        displayCard && displayCard.videoUrl,
+        displayCard && displayCard.watchUrl,
+        displayCard && displayCard.embedUrl,
+        deepMediaTextClient({ displayCard, payload, data, media, item: it }, 4)
       ].filter(Boolean);
 
       for (const u of candidates) {
         const s = String(u || '').trim();
         if (isYouTubeUrl(s)) {
-          const id = extractYouTubeIdFromUrl(s);
+          const id = extractYouTubeIdFromUrl(s) || extractYouTubeIdQuickClient(s);
           if (isValidYouTubeId(id)) {
             return {
               kind: 'youtube',
@@ -3643,7 +3679,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         }
       }
 
-      const direct = getDirectVideoUrl(it);
+      const direct = getDirectVideoUrl(it) || getDirectVideoUrl(displayCard) || getDirectVideoUrl(payload) || getDirectVideoUrl(data) || getDirectVideoUrl(media);
       if (direct) {
         return {
           kind: 'direct',
