@@ -259,54 +259,93 @@ function inferSearchTabsForQuery(q, active){
   const text = String(q || '').trim();
   const low = text.toLowerCase();
   const compact = low.replace(/\s+/g, '');
-  const base = ['all'];
   const activeTypeForKeep = normalizeSearchType(active || activeType || 'all');
 
-  const placeSignal = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|뉴욕|도쿄|오사카|파리|런던|베트남|하노이|호치민|방콕|로마|시카고|워싱턴|상하이|베이징|city|seoul|busan|new\s*york|tokyo|osaka|paris|london|vietnam|hanoi|bangkok)/i.test(text);
-  const localSignal = /(지도|주소|위치|길찾기|근처|맛집|호텔|숙소|관광|여행|축제|명소|교통|지하철|버스|공항|map|maps|address|near|nearby|local|hotel|travel|tour|restaurant|attraction)/i.test(text);
-  const publicSignal = /(정부|공공|기관|시청|구청|도청|군청|공식|민원|행정|공공자료|공공데이터|open\s*data|government|official|public\s*data)/i.test(text);
-  const personSignal = /(배우|가수|연예인|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|선수|축구선수|야구선수|인물|프로필|나이|키|학력|출연|필모그래피|손예진|아이유|김수현|유재석|bts|blackpink|actor|actress|singer|celebrity|profile|biography)/i.test(text) || (/^[가-힣]{2,4}$/.test(compact) && !placeSignal);
-  const productSignal = /(상품|제품|가격|구매|쇼핑|브랜드|후기|리뷰|인삼|홍삼|화장품|폰|자동차|노트북|product|price|buy|shopping|brand|review)/i.test(text);
-  const mediaSignal = /(영상|동영상|유튜브|영화|드라마|음악|뮤직|앨범|video|youtube|movie|drama|music|album)/i.test(text);
-  const imageSignal = /(이미지|사진|포토|갤러리|짤|화보|image|photo|picture|gallery)/i.test(text);
-  const academicSignal = /(논문|연구|학술|저널|대학|도서관|인용|paper|research|scholar|academic|journal|university|library)/i.test(text);
-  const bookSignal = /(책|도서|출판|저자|소설|문학|book|author|novel|literature)/i.test(text);
-  const financeSignal = /(주식|증권|환율|금융|코인|가상화폐|경제|stock|finance|market|crypto|exchange\s*rate)/i.test(text);
-  const sportsSignal = /(스포츠|축구|야구|농구|배구|골프|올림픽|sports|football|baseball|basketball|golf|olympic)/i.test(text);
-  const webtoonSignal = /(웹툰|만화|애니|webtoon|comic|manga|anime)/i.test(text);
-
-  let tabs;
-  if(placeSignal || localSignal){
-    tabs = base.concat(['map','site','tour','news','image','video','blog','sns','public_data','knowledge','wiki']);
-  }else if(personSignal){
-    tabs = base.concat(['knowledge','wiki','news','image','video','sns','blog','site','book']);
-  }else if(productSignal){
-    tabs = base.concat(['shopping','site','image','video','blog','cafe','news','knowledge','wiki']);
-  }else if(academicSignal){
-    tabs = base.concat(['academic','knowledge','wiki','book','site','news','image','video']);
-  }else if(bookSignal){
-    tabs = base.concat(['book','knowledge','wiki','site','blog','news','image','shopping']);
-  }else if(financeSignal){
-    tabs = base.concat(['finance','news','site','knowledge','blog','image','video']);
-  }else if(sportsSignal){
-    tabs = base.concat(['sports','news','video','image','sns','blog','site','knowledge']);
-  }else if(webtoonSignal){
-    tabs = base.concat(['webtoon','image','video','site','blog','sns','shopping','news']);
-  }else if(mediaSignal){
-    tabs = base.concat(['video','image','news','sns','blog','site','knowledge']);
-  }else if(imageSignal){
-    tabs = base.concat(['image','video','site','news','blog','sns','knowledge']);
-  }else if(publicSignal){
-    tabs = base.concat(['public_data','site','knowledge','wiki','news','map','image','video']);
-  }else{
-    tabs = base.concat(['site','knowledge','wiki','news','image','video','blog','sns']);
+  // Category inference is allowed to change priority/order only. It must not
+  // remove the full search OS categories from the rail.
+  function collectSearchEvidence(){
+    try{
+      const rows = Array.isArray(allItems) ? allItems.slice(0, 80) : [];
+      return rows.map(it => {
+        if(!it || typeof it !== 'object') return '';
+        const source = typeof it.source === 'object' ? Object.values(it.source || {}).join(' ') : it.source;
+        const media = typeof it.media === 'object' ? Object.values(it.media || {}).join(' ') : it.media;
+        const dc = it.displayCard && typeof it.displayCard === 'object' ? Object.values(it.displayCard).join(' ') : '';
+        return [
+          it.title, it.name, it.subtitle, it.summary, it.description, it.snippet,
+          it.contentSnippet, it.body, it.category, it.group, it.type, it.kind,
+          it.domain, it.publisher, it.channel, source, media, dc
+        ].filter(Boolean).join(' ');
+      }).join(' ').toLowerCase();
+    }catch(e){ return ''; }
   }
 
-  if(activeTypeForKeep && activeTypeForKeep !== 'all' && !tabs.includes(activeTypeForKeep)) tabs.splice(1, 0, activeTypeForKeep);
+  const evidence = collectSearchEvidence();
+  const hay = (low + ' ' + evidence).toLowerCase();
 
-  // Keep the full search OS category rail visible.  Query inference only changes
-  // the order of the leading tabs; it must not remove tabs such as image/video
-  // just because their first thumbnails have not arrived yet.
+  const citySignal = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|수원|성남|고양|용인|청주|전주|천안|포항|창원|김해|평양|뉴욕|도쿄|오사카|파리|런던|로마|시카고|워싱턴|상하이|베이징|홍콩|싱가포르|하노이|호치민|방콕|city|seoul|busan|new\s*york|tokyo|osaka|paris|london|rome|chicago|washington|shanghai|beijing|hong\s*kong|singapore|hanoi|bangkok)/i.test(text);
+  const countrySignal = /(대한민국|한국|미국|일본|중국|영국|프랑스|독일|러시아|인도|베트남|태국|인도네시아|필리핀|캐나다|호주|브라질|멕시코|이탈리아|스페인|네덜란드|스웨덴|노르웨이|핀란드|덴마크|폴란드|우크라이나|이스라엘|사우디|아랍에미리트|uae|korea|south\s*korea|usa|united\s*states|japan|china|uk|united\s*kingdom|france|germany|russia|india|vietnam|thailand|indonesia|philippines|canada|australia|brazil|mexico|italy|spain)/i.test(text);
+  const localSignal = /(지도|주소|위치|길찾기|근처|맛집|호텔|숙소|관광|여행|축제|명소|교통|지하철|버스|공항|주변|방문|코스|map|maps|address|near|nearby|local|hotel|travel|tour|restaurant|attraction|airport|transit)/i.test(text);
+  const publicSignal = /(정부|공공|기관|시청|구청|도청|군청|공식|민원|행정|공공자료|공공데이터|통계청|법령|고시|open\s*data|government|official|public\s*data|administration|statistics)/i.test(text);
+
+  const companySignal = /(회사|기업|브랜드|그룹|재단|협회|법인|주식회사|상장|상장사|본사|지점|매장|영업점|대표이사|ceo|ir|실적|매출|채용|주가|삼성|현대|기아|엘지|lg|sk|네이버|카카오|롯데|포스코|한화|두산|cj|gs|쿠팡|배민|스타벅스|테슬라|애플|구글|마이크로소프트|아마존|메타|엔비디아|company|corporation|corp|inc|ltd|brand|enterprise|startup|headquarters|store|stock|earnings|revenue|recruit)/i.test(hay);
+  const issueSignal = /(이슈|논란|사건|사고|속보|현안|정책|선거|후보|토론|전쟁|분쟁|시위|집회|파업|재판|수사|폭우|태풍|지진|화재|감염|위기|갈등|issue|breaking|controversy|election|policy|war|conflict|protest|strike|trial|investigation|crisis|disaster)/i.test(text);
+  const personKeywordSignal = /(배우|가수|연예인|아이돌|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|후보|선수|축구선수|야구선수|인물|프로필|나이|키|학력|출연|필모그래피|앨범|곡|작품|업적|수상|손예진|아이유|김수현|유재석|bts|blackpink|actor|actress|singer|celebrity|artist|profile|biography|filmography|album|discography|career|awards)/i.test(hay);
+  const compactKoreanNameSignal = /^[가-힣]{2,4}$/.test(compact) && !citySignal && !countrySignal && !companySignal;
+  const personSignal = (personKeywordSignal || compactKoreanNameSignal) && !companySignal;
+
+  const productSignal = /(상품|제품|가격|구매|쇼핑|브랜드|후기|리뷰|인삼|홍삼|화장품|폰|자동차|노트북|가전|의류|신발|product|price|buy|shopping|brand|review|spec|model)/i.test(text) && !companySignal;
+  const mediaSignal = /(영상|동영상|유튜브|영화|드라마|음악|뮤직|앨범|공연|콘서트|방송|예능|video|youtube|movie|drama|music|album|concert|show|clip)/i.test(text);
+  const imageSignal = /(이미지|사진|포토|갤러리|화보|풍경|전경|야경|image|photo|picture|gallery|scenery|landscape)/i.test(text);
+  const academicSignal = /(논문|연구|학술|저널|대학|도서관|인용|학회|paper|research|scholar|academic|journal|university|library|citation)/i.test(text);
+  const bookSignal = /(책|도서|출판|저자|소설|문학|book|author|novel|literature|publication)/i.test(text);
+  const financeSignal = /(주식|증권|환율|금융|코인|가상화폐|경제|실적|매출|stock|finance|market|crypto|exchange\s*rate|earnings|revenue)/i.test(text);
+  const sportsSignal = /(스포츠|축구|야구|농구|배구|골프|올림픽|월드컵|sports|football|baseball|basketball|golf|olympic|world\s*cup)/i.test(text);
+  const webtoonSignal = /(웹툰|만화|애니|webtoon|comic|manga|anime)/i.test(text);
+
+  let lead;
+  if(productSignal){
+    lead = ['shopping','site','image','video','blog','cafe','news','knowledge','wiki'];
+  }else if(academicSignal){
+    lead = ['academic','knowledge','wiki','book','site','news','image','video'];
+  }else if(bookSignal){
+    lead = ['book','knowledge','wiki','site','blog','news','image','shopping','video'];
+  }else if(financeSignal && companySignal){
+    lead = ['finance','news','site','knowledge','wiki','map','image','video','blog','sns','public_data'];
+  }else if(financeSignal){
+    lead = ['finance','news','site','knowledge','wiki','blog','image','video'];
+  }else if(sportsSignal){
+    lead = ['sports','news','video','image','sns','blog','site','knowledge','wiki'];
+  }else if(webtoonSignal){
+    lead = ['webtoon','image','video','site','blog','sns','shopping','news','knowledge','wiki'];
+  }else if(personSignal){
+    lead = ['knowledge','wiki','news','video','image','sns','blog','site','book'];
+  }else if(companySignal){
+    // Companies and venues may need maps, but official/site/business context stays first.
+    lead = ['site','knowledge','wiki','news','finance','map','image','video','blog','sns','shopping','public_data'];
+  }else if(issueSignal){
+    lead = ['news','video','image','sns','blog','site','knowledge','wiki','public_data'];
+  }else if(countrySignal){
+    lead = ['knowledge','wiki','site','news','map','tour','public_data','image','video','blog','sns','academic','finance','sports'];
+  }else if(citySignal || localSignal){
+    lead = ['knowledge','wiki','site','map','tour','public_data','news','image','video','blog','sns'];
+  }else if(mediaSignal){
+    lead = ['video','image','news','sns','blog','site','knowledge','wiki'];
+  }else if(imageSignal){
+    lead = ['image','video','site','news','blog','sns','knowledge','wiki'];
+  }else if(publicSignal){
+    lead = ['public_data','site','knowledge','wiki','news','map','image','video'];
+  }else{
+    lead = ['knowledge','wiki','site','news','image','video','blog','sns'];
+  }
+
+  const tabs = ['all'];
+  lead.forEach(key => { if(key && key !== 'all' && !tabs.includes(key)) tabs.push(key); });
+
+  // Keep the actively selected tab visible, but do not let a stale tab from a
+  // previous search take over the front of a new intent profile.
+  if(activeTypeForKeep && activeTypeForKeep !== 'all' && !tabs.includes(activeTypeForKeep)) tabs.push(activeTypeForKeep);
+
   SEARCH_TAB_KEYS.forEach(key => {
     if(key && !tabs.includes(key)) tabs.push(key);
   });
