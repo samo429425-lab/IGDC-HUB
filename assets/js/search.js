@@ -555,14 +555,16 @@ function ensureSearchCardMediaStyle(){
 
     .maru-image-gallery-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
       align-items: stretch;
-      margin: 10px 0 18px;
+      width: 100%;
+      margin: 12px 0 18px;
     }
     .maru-image-tile {
       position: relative;
-      min-height: 158px;
+      min-height: 188px;
+      aspect-ratio: 16 / 10;
       border: 1px solid #e5e7eb;
       border-radius: 13px;
       overflow: hidden;
@@ -573,25 +575,34 @@ function ensureSearchCardMediaStyle(){
       display: block;
       width: 100%;
       height: 100%;
-      min-height: 158px;
+      min-height: 188px;
       object-fit: cover;
       background: #f1f5f9;
     }
-    .maru-image-tile[data-orientation="portrait"] { grid-row: span 2; }
-    .maru-image-tile[data-orientation="portrait"] img { min-height: 326px; }
-    .maru-image-gallery-pending .maru-image-tile-pending {
-      cursor: default;
-      background: linear-gradient(90deg, #f1f5f9 0%, #f8fafc 50%, #f1f5f9 100%);
+    .maru-image-tile[data-orientation="portrait"] { grid-row: auto; }
+    .maru-image-tile[data-orientation="portrait"] img { min-height: 188px; }
+    .maru-image-gallery-pending-note {
+      width: 100%;
+      margin: 10px 0 14px;
+      padding: 14px 16px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 12px;
+      background: #f8fafc;
+      color: #64748b;
+      font-size: 13px;
+      font-weight: 800;
     }
-    .maru-image-gallery-pending .maru-image-tile-pending::after {
-      content: '';
-      position: absolute;
-      left: 14px;
-      right: 14px;
-      bottom: 14px;
-      height: 12px;
-      border-radius: 999px;
-      background: rgba(148, 163, 184, .28);
+    @media (max-width: 1180px) {
+      .maru-image-gallery-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 900px) {
+      .maru-image-gallery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .maru-image-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 420px) {
+      .maru-image-gallery-grid { grid-template-columns: 1fr; }
     }
     .maru-image-tile-caption {
       position: absolute;
@@ -2619,36 +2630,82 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const raw = []
         .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
+        .concat(displayCard.thumbnailUrl ? [displayCard.thumbnailUrl] : [])
+        .concat(displayCard.thumbnail_url ? [displayCard.thumbnail_url] : [])
         .concat(displayCard.image ? [displayCard.image] : [])
+        .concat(displayCard.imageUrl ? [displayCard.imageUrl] : [])
+        .concat(displayCard.image_url ? [displayCard.image_url] : [])
+        .concat(displayCard.originalImage ? [displayCard.originalImage] : [])
+        .concat(displayCard.contentUrl ? [displayCard.contentUrl] : [])
+        .concat(displayCard.poster ? [displayCard.poster] : [])
         .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
+        .concat(Array.isArray(displayCard.images) ? displayCard.images : [])
+        .concat(Array.isArray(displayCard.thumbnails) ? displayCard.thumbnails : [])
         .concat(displayCard.preview && displayCard.preview.thumbnail ? [displayCard.preview.thumbnail] : [])
+        .concat(displayCard.preview && displayCard.preview.thumbnailUrl ? [displayCard.preview.thumbnailUrl] : [])
         .concat(displayCard.preview && displayCard.preview.image ? [displayCard.preview.image] : [])
+        .concat(displayCard.preview && displayCard.preview.imageUrl ? [displayCard.preview.imageUrl] : [])
+        .concat(displayCard.preview && displayCard.preview.url ? [displayCard.preview.url] : [])
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
+        .concat(it && it.thumbnailUrl ? [it.thumbnailUrl] : [])
+        .concat(it && it.thumbnail_url ? [it.thumbnail_url] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
+        .concat(it && it.imageUrl ? [it.imageUrl] : [])
+        .concat(it && it.image_url ? [it.image_url] : [])
+        .concat(it && it.originalImage ? [it.originalImage] : [])
+        .concat(it && it.contentUrl ? [it.contentUrl] : [])
+        .concat(it && it.mediaUrl ? [it.mediaUrl] : [])
+        .concat(it && it.previewImage ? [it.previewImage] : [])
         .concat(it && it.poster ? [it.poster] : [])
         .concat(it && it.cover ? [it.cover] : [])
+        .concat(it && it.urlToImage ? [it.urlToImage] : [])
         .concat(it && it.og_image ? [it.og_image] : [])
         .concat(it && it.ogImage ? [it.ogImage] : [])
         .concat(payload.thumbnail ? [payload.thumbnail] : [])
+        .concat(payload.thumbnailUrl ? [payload.thumbnailUrl] : [])
+        .concat(payload.thumbnail_url ? [payload.thumbnail_url] : [])
         .concat(payload.thumb ? [payload.thumb] : [])
         .concat(payload.image ? [payload.image] : [])
+        .concat(payload.imageUrl ? [payload.imageUrl] : [])
         .concat(payload.image_url ? [payload.image_url] : [])
+        .concat(payload.originalImage ? [payload.originalImage] : [])
+        .concat(payload.contentUrl ? [payload.contentUrl] : [])
+        .concat(payload.urlToImage ? [payload.urlToImage] : [])
         .concat(payload.og_image ? [payload.og_image] : [])
         .concat(payload.ogImage ? [payload.ogImage] : [])
         .concat(payload.poster ? [payload.poster] : [])
         .concat(payload.cover ? [payload.cover] : [])
         .concat(data.thumbnail ? [data.thumbnail] : [])
+        .concat(data.thumbnailUrl ? [data.thumbnailUrl] : [])
+        .concat(data.thumbnail_url ? [data.thumbnail_url] : [])
         .concat(data.thumb ? [data.thumb] : [])
         .concat(data.image ? [data.image] : [])
+        .concat(data.imageUrl ? [data.imageUrl] : [])
+        .concat(data.image_url ? [data.image_url] : [])
+        .concat(data.originalImage ? [data.originalImage] : [])
+        .concat(data.contentUrl ? [data.contentUrl] : [])
         .concat(data.og_image ? [data.og_image] : [])
+        .concat(data.ogImage ? [data.ogImage] : [])
         .concat(data.poster ? [data.poster] : [])
         .concat(preview.poster ? [preview.poster] : [])
         .concat(preview.thumbnail ? [preview.thumbnail] : [])
+        .concat(preview.thumbnailUrl ? [preview.thumbnailUrl] : [])
         .concat(preview.image ? [preview.image] : [])
+        .concat(preview.imageUrl ? [preview.imageUrl] : [])
+        .concat(preview.url ? [preview.url] : [])
+        .concat(media.thumbnail ? [media.thumbnail] : [])
+        .concat(media.image ? [media.image] : [])
+        .concat(media.poster ? [media.poster] : [])
         .concat(Array.isArray(it && it.imageSet) ? it.imageSet : [])
+        .concat(Array.isArray(it && it.images) ? it.images : [])
+        .concat(Array.isArray(it && it.thumbnails) ? it.thumbnails : [])
         .concat(Array.isArray(payload.imageSet) ? payload.imageSet : [])
-        .concat(Array.isArray(data.imageSet) ? data.imageSet : []);
+        .concat(Array.isArray(payload.images) ? payload.images : [])
+        .concat(Array.isArray(payload.thumbnails) ? payload.thumbnails : [])
+        .concat(Array.isArray(data.imageSet) ? data.imageSet : [])
+        .concat(Array.isArray(data.images) ? data.images : [])
+        .concat(Array.isArray(data.thumbnails) ? data.thumbnails : []);
 
       const out = [];
       const seen = new Set();
@@ -3136,16 +3193,16 @@ async function fetchInstantSearchPack(q, type = activeType){
         if (visualSection) {
           const gallerySource = visualGalleryItemsClient((groupInfo.items || []).concat(previewItems || [], hiddenItems || []));
           if(gallerySource.length) {
-            renderImageGalleryInto(gallerySource.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, false)), body, Math.max(previewLimit, 12));
+            renderImageGalleryInto(gallerySource.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, false)), body, Math.max(5, Math.min(previewLimit || 5, 5)));
           } else {
-            renderVisualPendingPlaceholderClient(body, 8);
+            renderVisualPendingPlaceholderClient(body, 1);
           }
         } else if (videoSection) {
           const videoSource = videoSnapshotItemsClient(previewItems);
           if(videoSource.length) {
             videoSource.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
           } else {
-            renderVisualPendingPlaceholderClient(body, 6);
+            renderVisualPendingPlaceholderClient(body, 1);
           }
         } else {
           previewItems.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
@@ -3653,11 +3710,55 @@ async function fetchInstantSearchPack(q, type = activeType){
       return !!(it && collectNaturalImages(it).length);
     }
 
+    function imageChildItemsClient(parent){
+      const out = [];
+      const p = parent && typeof parent === 'object' ? parent : {};
+      const payload = p.payload && typeof p.payload === 'object' ? p.payload : {};
+      const data = p.data && typeof p.data === 'object' ? p.data : {};
+      const displayCard = p.displayCard && typeof p.displayCard === 'object' ? p.displayCard : {};
+      const buckets = [
+        p.items, p.results, p.images, p.imageItems, p.photos, p.thumbnails,
+        payload.items, payload.results, payload.images, payload.imageItems, payload.photos, payload.thumbnails,
+        data.items, data.results, data.images, data.imageItems, data.photos, data.thumbnails,
+        displayCard.items, displayCard.results, displayCard.images, displayCard.imageItems, displayCard.photos, displayCard.thumbnails
+      ];
+      buckets.forEach(list => {
+        if(!Array.isArray(list)) return;
+        list.forEach(child => {
+          if(!child) return;
+          if(typeof child === 'string') {
+            out.push({
+              title: p.title || p.name || '',
+              url: p.url || p.link || p.openUrl || '',
+              source: p.source || p.provider || '',
+              type: 'image',
+              mediaType: 'image',
+              image: child,
+              thumbnail: child,
+              parentImageProvider: true
+            });
+            return;
+          }
+          if(typeof child === 'object') {
+            out.push(Object.assign({}, child, {
+              title: child.title || child.name || p.title || '',
+              url: child.url || child.link || child.openUrl || child.pageUrl || p.url || p.link || '',
+              source: child.source || p.source || p.provider || '',
+              type: child.type || 'image',
+              mediaType: child.mediaType || 'image',
+              parentImageProvider: true
+            }));
+          }
+        });
+      });
+      return out;
+    }
+
     function visualGalleryItemsClient(items){
       const out = [];
       const seenItems = new Set();
       const seenImages = new Set();
-      (Array.isArray(items) ? items : []).forEach(it => {
+      function pushCandidate(it){
         if(!it || isSyntheticProviderGuideCardClient(it)) return;
         const images = dedupeImageVariantsClient(collectNaturalImages(it));
         if(!images.length) return;
@@ -3667,6 +3768,10 @@ async function fetchInstantSearchPack(q, type = activeType){
         if(itemKey) seenItems.add(itemKey);
         if(imageKey) seenImages.add(imageKey);
         out.push(it);
+      }
+      (Array.isArray(items) ? items : []).forEach(it => {
+        imageChildItemsClient(it).forEach(pushCandidate);
+        pushCandidate(it);
       });
       return out;
     }
@@ -4178,17 +4283,11 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function renderVisualPendingPlaceholderClient(mountTarget, count){
-      const grid = document.createElement('div');
-      grid.className = 'maru-image-gallery-grid maru-image-gallery-pending';
-      const n = Math.max(1, Math.min(12, parseInt(count, 10) || 6));
-      for(let i = 0; i < n; i++){
-        const tile = document.createElement('div');
-        tile.className = 'maru-image-tile maru-image-tile-pending';
-        tile.setAttribute('aria-hidden', 'true');
-        grid.appendChild(tile);
-      }
-      (mountTarget || results).appendChild(grid);
-      return grid;
+      const note = document.createElement('div');
+      note.className = 'maru-image-gallery-pending-note';
+      note.textContent = '이미지 썸네일 수신 중입니다. 실제 썸네일이 도착하면 이 영역에 표시됩니다.';
+      (mountTarget || results).appendChild(note);
+      return note;
     }
 
     function renderImageGalleryInto(slice, mountTarget, maxTiles){
@@ -4245,9 +4344,10 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function renderImageGalleryPage(slice){
+      results.innerHTML = '';
       const grid = renderImageGalleryInto(slice, results);
       if(!grid || !grid.children.length){
-        renderVisualPendingPlaceholderClient(results, 12);
+        renderVisualPendingPlaceholderClient(results, 1);
       }
     }
 
@@ -4628,16 +4728,17 @@ if (it.riskLabel === '⚠️ high-risk') {
       if(pageImageEnrichCache.has(cacheKey)) return;
       pageImageEnrichCache.add(cacheKey);
 
-      const candidates = slice
+      const enrichSource = flattenDisplayModulesForClient(slice);
+      const candidates = enrichSource
         .map((it, idx) => ({ it, idx }))
         .filter(x => {
           const key = itemStableKey(x.it);
           if(key && itemImageEnrichCache.has(key)) return false;
           if(collectNaturalImages(x.it).length) return false;
-          const url = String((x.it && (x.it.url || x.it.link)) || '').trim();
+          const url = String((x.it && (x.it.url || x.it.link || x.it.openUrl || x.it.href)) || '').trim();
           return /^https?:\/\//i.test(url);
         })
-        .slice(0, PAGE_SIZE);
+        .slice(0, PAGE_SIZE * 2);
 
       if(!candidates.length) return;
 
@@ -4665,13 +4766,21 @@ if (it.riskLabel === '⚠️ high-risk') {
         const updatedCandidates = mergeEnrichedItems(candidates.map(x => x.it), enriched);
         let changed = false;
 
-        updatedCandidates.forEach((item, i) => {
-          const globalIdx = startIndex + candidates[i].idx;
-          if(globalIdx >= 0 && globalIdx < allItems.length && collectNaturalImages(item).length){
-            allItems[globalIdx] = item;
-            changed = true;
-          }
+        const enrichedByKey = new Map();
+        updatedCandidates.forEach((item) => {
+          if(!collectNaturalImages(item).length) return;
+          const key = itemStableKey(item);
+          if(key) enrichedByKey.set(key, item);
         });
+
+        if(enrichedByKey.size){
+          allItems = (Array.isArray(allItems) ? allItems : []).map(base => {
+            const key = itemStableKey(base);
+            const hit = key ? enrichedByKey.get(key) : null;
+            if(hit){ changed = true; return hit; }
+            return base;
+          });
+        }
 
         if(changed && page === currentPage){
           renderPage(page, true);
@@ -4967,12 +5076,42 @@ if (it.riskLabel === '⚠️ high-risk') {
       return source.slice(0, Math.min(source.length, 600));
     }
 
+    function renderPageDataPendingClient(page, message){
+      results.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.className = 'card maru-page-data-pending';
+      empty.style.padding = '18px 20px';
+      empty.style.color = '#64748b';
+      empty.style.fontWeight = '800';
+      empty.style.borderStyle = 'dashed';
+      empty.textContent = message || `${page}페이지 데이터는 아직 내려오지 않았습니다.`;
+      results.appendChild(empty);
+      drawPager();
+    }
+
+    function flattenDisplayModulesForClient(slice){
+      const out = [];
+      (Array.isArray(slice) ? slice : []).forEach(entry => {
+        if(isDisplayGroupModule(entry)) {
+          (Array.isArray(entry.previewItems) ? entry.previewItems : []).forEach(it => out.push(it));
+          (Array.isArray(entry.items) ? entry.items : []).forEach(it => out.push(it));
+          (Array.isArray(entry.hiddenItems) ? entry.hiddenItems : []).forEach(it => out.push(it));
+        } else {
+          out.push(entry);
+        }
+      });
+      return out;
+    }
+
     function renderPage(page, skipEnrich = false){
       if(serverPagedMode && !loadedServerPages.has(page)){
         const preloadedPageCount = preloadPageCountFromItems(allItems);
-        if(page > preloadedPageCount && !renderPage._serverWindowLoading){
-          renderPage._serverWindowLoading = true;
-          loadServerPageAndRender(page).finally(() => { renderPage._serverWindowLoading = false; });
+        if(page > preloadedPageCount){
+          renderPageDataPendingClient(page, `${page}페이지 데이터는 아직 내려오지 않았습니다. 산마루/마루서치에서 도착하는 즉시 표시됩니다.`);
+          if(!renderPage._serverWindowLoading){
+            renderPage._serverWindowLoading = true;
+            loadServerPageAndRender(page).finally(() => { renderPage._serverWindowLoading = false; });
+          }
           return;
         }
       }
@@ -4980,8 +5119,14 @@ if (it.riskLabel === '⚠️ high-risk') {
       const start = (page - 1) * PAGE_SIZE;
 
       if (!slice.length && normalizeSearchType(activeType) === 'all') {
-        if(!results.children.length) renderSkeleton();
-        drawPager();
+        if((Array.isArray(allItems) && allItems.length) || lastQuery) {
+          renderPageDataPendingClient(page, `${page}페이지에 표시할 항목은 아직 내려오지 않았습니다.`);
+        } else if(!results.children.length) {
+          renderSkeleton();
+          drawPager();
+        } else {
+          drawPager();
+        }
         return;
       }
 
@@ -5003,6 +5148,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (normalizeSearchType(activeType) === 'image') {
         renderImageGalleryPage(slice);
         drawPager();
+        if(!skipEnrich) enrichRenderedPageImages(page, slice, start);
         return;
       }
 
@@ -5061,10 +5207,11 @@ if (it.riskLabel === '⚠️ high-risk') {
           allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
-        } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
-          // Do not silently render a blank page when the pager says that page exists.
-          // Keep the loading state visible and let the user retry by clicking the page again.
+        } else {
           status.textContent = `${uiText('pageDataSupplying', 'Page data is being supplied')} ${page} · "${q}"...`;
+          if(page === currentPage){
+            renderPageDataPendingClient(page, `${page}페이지 데이터는 아직 내려오지 않았습니다.`);
+          }
         }
       }catch(e){
         console.warn('server page fetch skipped:', e);
