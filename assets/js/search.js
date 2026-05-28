@@ -311,88 +311,6 @@ function searchTabsProfileKey(q, active){
   return tabs + '::' + normalizeSearchType(active || activeType || 'all') + '::' + getSearchUiLang();
 }
 
-function queryIntentProfileClient(q){
-  const text = String(q || '').trim();
-  const low = text.toLowerCase();
-  const compact = low.replace(/\s+/g, '');
-  const placeSignal = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|뉴욕|도쿄|오사카|파리|런던|베트남|하노이|호치민|방콕|로마|시카고|워싱턴|상하이|베이징|city|seoul|busan|new\s*york|tokyo|osaka|paris|london|vietnam|hanoi|bangkok)/i.test(text);
-  const localSignal = /(지도|주소|위치|길찾기|근처|맛집|호텔|숙소|관광|여행|축제|명소|교통|지하철|버스|공항|map|maps|address|near|nearby|local|hotel|travel|tour|restaurant|attraction)/i.test(text);
-  const personSignal = /(배우|가수|연예인|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|선수|축구선수|야구선수|인물|프로필|나이|키|학력|출연|필모그래피|actor|actress|singer|celebrity|profile|biography)/i.test(text) || (/^[가-힣]{2,4}$/.test(compact) && !placeSignal);
-  const companySignal = /(회사|기업|법인|그룹|재단|협회|조합|스타트업|대표|ceo|채용|ir|실적|매출|company|corporation|corp|inc|ltd|startup|recruit|career)/i.test(text);
-  const productSignal = /(상품|제품|가격|구매|쇼핑|브랜드|후기|리뷰|인삼|홍삼|화장품|폰|자동차|노트북|product|price|buy|shopping|brand|review)/i.test(text);
-  const issueSignal = /(사건|사고|논란|이슈|속보|재난|전쟁|선거|정책|발표|공시|today|latest|breaking|issue|incident|policy|election)/i.test(text);
-  const academicSignal = /(논문|연구|학술|저널|대학|도서관|인용|paper|research|scholar|academic|journal|university|library)/i.test(text);
-  const bookSignal = /(책|도서|출판|저자|소설|문학|book|author|novel|literature)/i.test(text);
-  const financeSignal = /(주식|증권|환율|금융|코인|가상화폐|경제|stock|finance|market|crypto|exchange\s*rate)/i.test(text);
-  const sportsSignal = /(스포츠|축구|야구|농구|배구|골프|올림픽|sports|football|baseball|basketball|golf|olympic)/i.test(text);
-  const webtoonSignal = /(웹툰|만화|애니|webtoon|comic|manga|anime)/i.test(text);
-  const imageSignal = /(이미지|사진|포토|갤러리|짤|화보|image|photo|picture|gallery)/i.test(text);
-  const videoSignal = /(영상|동영상|유튜브|영화|드라마|음악|뮤직|앨범|video|youtube|movie|drama|music|album)/i.test(text);
-
-  let kind = 'general';
-  if(placeSignal || localSignal) kind = 'place';
-  else if(personSignal) kind = 'person';
-  else if(companySignal) kind = 'company';
-  else if(productSignal) kind = 'product';
-  else if(issueSignal) kind = 'issue';
-  else if(academicSignal) kind = 'academic';
-  else if(bookSignal) kind = 'book';
-  else if(financeSignal) kind = 'finance';
-  else if(sportsSignal) kind = 'sports';
-  else if(webtoonSignal) kind = 'webtoon';
-  else if(videoSignal) kind = 'video';
-  else if(imageSignal) kind = 'image';
-
-  return {
-    kind, text,
-    placeSignal, localSignal, personSignal, companySignal, productSignal, issueSignal,
-    academicSignal, bookSignal, financeSignal, sportsSignal, webtoonSignal, imageSignal, videoSignal
-  };
-}
-
-function displayGroupOrderForQueryClient(q, active){
-  const intent = queryIntentProfileClient(q);
-  const activeNorm = normalizeSearchType(active || activeType || 'all');
-  const orders = {
-    place: ['local_tour','authority','site','news','image','video','blog','social','public_data','knowledge','wiki','shopping','web'],
-    person: ['knowledge','wiki','news','image','video','social','site','blog','book','academic','web'],
-    company: ['site','authority','news','finance','shopping','image','video','social','blog','knowledge','wiki','web'],
-    product: ['shopping','image','video','site','blog','cafe','community','news','knowledge','wiki','web'],
-    issue: ['news','video','image','social','knowledge','wiki','blog','community','site','web'],
-    academic: ['academic','knowledge','wiki','book','site','news','image','video','web'],
-    book: ['book','knowledge','wiki','site','blog','news','image','shopping','web'],
-    finance: ['finance','news','site','knowledge','blog','image','video','web'],
-    sports: ['sports','news','video','image','social','blog','site','knowledge','web'],
-    webtoon: ['webtoon','image','video','site','blog','social','shopping','news','web'],
-    video: ['video','image','news','social','blog','site','knowledge','web'],
-    image: ['image','video','site','news','blog','social','knowledge','web'],
-    general: ['authority','knowledge','wiki','site','news','image','video','blog','cafe','community','social','shopping','public_data','academic','book','sports','finance','webtoon','web']
-  };
-  let order = (orders[intent.kind] || orders.general).slice();
-  const tabToGroup = { map:'local_tour', tour:'local_tour', sns:'social', public_data:'public_data', image:'image', video:'video', shopping:'shopping', news:'news', site:'site', knowledge:'knowledge', wiki:'wiki', book:'book', blog:'blog', cafe:'cafe', academic:'academic', sports:'sports', finance:'finance', webtoon:'webtoon' };
-  const activeGroup = tabToGroup[activeNorm];
-  if(activeGroup && activeNorm !== 'all'){
-    order = [activeGroup].concat(order.filter(g => g !== activeGroup));
-  }
-  ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'].forEach(g => {
-    if(!order.includes(g)) order.push(g);
-  });
-  return order;
-}
-
-function realtimeBoardGroupsForQueryClient(q, active){
-  const order = displayGroupOrderForQueryClient(q, active);
-  const activeNorm = normalizeSearchType(active || 'all');
-  if(activeNorm === 'image') return ['image'];
-  if(activeNorm === 'video') return ['video'];
-  if(activeNorm === 'map' || activeNorm === 'tour') return ['local_tour','image','news','web'];
-  if(activeNorm !== 'all'){
-    const map = { sns:'social', public_data:'public_data' };
-    return [map[activeNorm] || activeNorm, 'web'].filter(Boolean);
-  }
-  return order.filter(g => g !== 'web').slice(0, 8).concat(['web']);
-}
-
 
 function ensureSearchCardMediaStyle(){
   if (document.getElementById('maru-search-media-style')) return;
@@ -477,6 +395,32 @@ function ensureSearchCardMediaStyle(){
     .maru-card-media[data-kind="gallery"] {
       flex-basis: 330px;
       width: 330px;
+    }
+
+    /* Video results are shown as lightweight snapshots in the card, not as heavy embeds. */
+    .maru-card-media[data-kind="video"] {
+      position: relative;
+      flex-basis: 310px;
+      width: 310px;
+    }
+    .maru-card-media[data-kind="video"]::after {
+      content: '▶ 영상';
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, .78);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: -0.01em;
+    }
+
+    .maru-display-section[data-group="image"] .maru-image-gallery-grid,
+    .maru-display-section[data-group="media"] .maru-image-gallery-grid {
+      margin: 6px 0 8px;
+      grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
     }
 
     .maru-display-section {
@@ -639,59 +583,6 @@ function ensureSearchCardMediaStyle(){
       font-weight: 700;
       line-height: 1.25;
       text-shadow: 0 1px 2px rgba(0,0,0,.35);
-    }
-    .maru-section-image-grid {
-      margin: 2px 0 4px;
-      grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-    }
-    .maru-section-image-grid .maru-image-tile {
-      min-height: 126px;
-    }
-    .maru-section-image-grid .maru-image-tile img {
-      min-height: 126px;
-    }
-    .maru-realtime-board {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .maru-realtime-section {
-      border-style: dashed;
-      border-color: #e2e8f0;
-    }
-    .maru-realtime-body {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 10px;
-      padding: 10px;
-    }
-    .maru-realtime-card {
-      min-height: 78px;
-      border: 1px solid #eef2f7;
-      border-radius: 12px;
-      background: linear-gradient(90deg, #f8fafc 0%, #eef2ff 46%, #f8fafc 100%);
-      background-size: 220% 100%;
-      animation: maruRealtimePulse 1.05s ease-in-out infinite;
-    }
-    .maru-realtime-card[data-kind="image"],
-    .maru-realtime-card[data-kind="video"] {
-      min-height: 130px;
-    }
-    .maru-realtime-card[data-kind="map"] {
-      min-height: 150px;
-      background: linear-gradient(135deg, #e0f2fe 0%, #f8fafc 55%, #dcfce7 100%);
-    }
-    .maru-realtime-line {
-      height: 10px;
-      margin: 12px;
-      border-radius: 999px;
-      background: rgba(148,163,184,.28);
-    }
-    .maru-realtime-line.short { width: 48%; }
-    .maru-realtime-line.long { width: 76%; }
-    @keyframes maruRealtimePulse {
-      0% { background-position: 0% 0; }
-      100% { background-position: -220% 0; }
     }
     .maru-result-viewer {
       margin: 10px 0 18px;
@@ -1822,31 +1713,6 @@ function sleepIntake(ms){
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-let realtimeRenderHandle = 0;
-let realtimeRenderArgs = null;
-let realtimePagerHandle = 0;
-
-function scheduleRealtimeRender(page, skipEnrich){
-  realtimeRenderArgs = { page: Math.max(1, Number(page) || 1), skipEnrich: !!skipEnrich };
-  if(realtimeRenderHandle) return;
-  const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : (fn => setTimeout(fn, 16));
-  realtimeRenderHandle = raf(() => {
-    realtimeRenderHandle = 0;
-    const args = realtimeRenderArgs || { page: currentPage || 1, skipEnrich: true };
-    realtimeRenderArgs = null;
-    renderPage(args.page, args.skipEnrich);
-  });
-}
-
-function scheduleRealtimePager(){
-  if(realtimePagerHandle) return;
-  const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : (fn => setTimeout(fn, 16));
-  realtimePagerHandle = raf(() => {
-    realtimePagerHandle = 0;
-    drawPager();
-  });
-}
-
 function startContinuousIntake(q, type, seq){
   if(!q || runSearch._seq !== seq) return;
   const token = ++continuousIntakeSeq;
@@ -1886,8 +1752,8 @@ function startContinuousIntake(q, type, seq){
           allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice).slice(0, MAX_SMOOTH_CANDIDATES);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
           updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(target, allItems.length));
-          if(page === currentPage) scheduleRealtimeRender(page, true);
-          else scheduleRealtimePager();
+          if(page === currentPage) renderPage(page, true);
+          else drawPager();
           status.textContent = statusResultsText(actualResultCountForStatus(), q, type, true);
         }else{
           const signal = supplySignalFromPayload(pack && pack.payload, 0);
@@ -1912,7 +1778,7 @@ function startContinuousIntake(q, type, seq){
       await sleepIntake(INTAKE_BURST_DELAY_MS);
     }
     if(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq){
-      scheduleRealtimePager();
+      drawPager();
       if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES)) {
         status.textContent = statusResultsText(actualResultCountForStatus(), q, type);
       }
@@ -2094,8 +1960,8 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('query', q);
   sp.set('type', safeType);
   sp.set('tab', safeType);
-  sp.set('limit', String(firstPaintLimitFor(q, safeType)));
-  sp.set('firstPaintLimit', String(firstPaintLimitFor(q, safeType)));
+  sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('firstPaintLimit', String(INITIAL_PRELOAD_TARGET));
   sp.set('candidatePool', String(adaptiveSearchTarget(q, safeType)));
   sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
   sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
@@ -2133,61 +1999,6 @@ async function fetchInstantSearchPack(q, type = activeType){
         `;
         results.appendChild(card);
       }
-    }
-
-    function renderRealtimeCategoryBoard(q, type){
-      const qq = String(q || '').trim();
-      const safeType = normalizeSearchType(type || activeType || 'all');
-      results.innerHTML = '';
-
-      const groups = realtimeBoardGroupsForQueryClient(qq, safeType);
-      const board = document.createElement('div');
-      board.className = 'maru-realtime-board';
-      board.dataset.query = qq;
-      board.dataset.type = safeType;
-
-      groups.forEach((group, idx) => {
-        const section = document.createElement('section');
-        section.className = 'maru-display-section maru-realtime-section';
-        section.dataset.group = group;
-        section.dataset.realtime = '1';
-
-        const head = document.createElement('div');
-        head.className = 'maru-display-section-head';
-        const title = document.createElement('div');
-        title.className = 'maru-display-section-title';
-        title.textContent = displayGroupLabel(group, null);
-        const meta = document.createElement('div');
-        meta.className = 'maru-display-section-meta';
-        meta.textContent = idx === 0 ? '실시간 연결 중' : '대기 중';
-        head.appendChild(title);
-        head.appendChild(meta);
-
-        const body = document.createElement('div');
-        body.className = 'maru-realtime-body';
-        const placeholderCount = group === 'image' ? 8 : (group === 'video' ? 4 : (group === 'local_tour' ? 3 : 3));
-        for(let i = 0; i < placeholderCount; i++){
-          const card = document.createElement('div');
-          card.className = 'maru-realtime-card';
-          card.dataset.kind = group === 'image' ? 'image' : (group === 'video' ? 'video' : (group === 'local_tour' ? 'map' : 'web'));
-          if(group !== 'image' && group !== 'video' && group !== 'local_tour'){
-            const line1 = document.createElement('div');
-            line1.className = 'maru-realtime-line long';
-            const line2 = document.createElement('div');
-            line2.className = 'maru-realtime-line short';
-            card.appendChild(line1);
-            card.appendChild(line2);
-          }
-          body.appendChild(card);
-        }
-
-        section.appendChild(head);
-        section.appendChild(body);
-        board.appendChild(section);
-      });
-
-      results.appendChild(board);
-      drawPager();
     }
 
 
@@ -2889,6 +2700,19 @@ async function fetchInstantSearchPack(q, type = activeType){
       }
 
       if (
+        mediaType === 'video' ||
+        type === 'video' ||
+        source.includes('youtube') ||
+        source.includes('video') ||
+        isYoutubeLikeItemClient(it) ||
+        text.includes('영상') ||
+        text.includes('동영상') ||
+        text.includes('유튜브')
+      ) {
+        return 'video';
+      }
+
+      if (
         source.includes('image') ||
         mediaType === 'image' ||
         type === 'image'
@@ -2991,6 +2815,26 @@ async function fetchInstantSearchPack(q, type = activeType){
         /(news|blog|cafe|shopping|shop|book|maps|map|finance|sports|webtoon)/i.test(host);
     }
 
+    function isVisualSearchCandidateClient(it){
+      it = it && typeof it === 'object' ? it : {};
+      const sourceObj = it.source && typeof it.source === 'object' ? it.source : null;
+      const source = String(sourceObj ? (sourceObj.name || sourceObj.provider || sourceObj.platform || '') : (it.source || '')).toLowerCase();
+      const provider = String(it.provider || it.channel || (sourceObj && (sourceObj.provider || sourceObj.platform)) || '').toLowerCase();
+      const type = String(it.type || '').toLowerCase();
+      const category = String(it.category || '').toLowerCase();
+      const mediaType = String(it.mediaType || '').toLowerCase();
+      const title = String(it.title || it.name || '').toLowerCase();
+      const summary = String(it.summary || it.snippet || it.description || it.contentSnippet || it.excerpt || it.abstract || '').toLowerCase();
+      const url = String(it.url || it.link || it.openUrl || it.href || it.videoUrl || it.embedUrl || '').toLowerCase();
+      const host = domainOf(url).toLowerCase();
+      const text = `${source} ${provider} ${type} ${category} ${mediaType} ${title} ${summary} ${host} ${url}`;
+      const naturalImages = collectNaturalImages(it);
+      const explicitImage = mediaType === 'image' || type === 'image' || category === 'image' || source.includes('image') || naturalImages.length > 0;
+      const visualTerms = /(사진|포토|풍경|전경|경관|갤러리|화보|스냅|홍보|관광|명소|랜드마크|야경|전망|브이로그|영상\s*소개|둘러보기|visual|photo|picture|scenery|landscape|gallery|promo|promotional|tourism|travel|landmark|night\s*view|view|vlog|video\s*guide)/i.test(text);
+      const visualVideo = /(youtube|youtu\.be|video|영상|동영상|브이로그|vlog)/i.test(text) && /(홍보|관광|명소|풍경|전경|경관|소개|둘러보기|travel|tourism|landmark|scenery|landscape|guide|promo)/i.test(text);
+      return explicitImage || visualVideo || visualTerms;
+    }
+
     function inferDisplayGroupClient(it){
       const source = String((it && it.source) || '').toLowerCase();
       const provider = String((it && (it.provider || it.channel)) || '').toLowerCase();
@@ -3036,8 +2880,9 @@ async function fetchInstantSearchPack(q, type = activeType){
       if (source.includes('sports') || type === 'sports' || category === 'sports' || text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('배구')) return 'sports';
       if (source.includes('finance') || type === 'finance' || category === 'finance' || text.includes('금융') || text.includes('증권') || text.includes('주식') || text.includes('환율') || text.includes('코스피') || text.includes('나스닥')) return 'finance';
       if (source.includes('webtoon') || type === 'webtoon' || category === 'webtoon' || text.includes('웹툰') || text.includes('만화') || text.includes('comic') || text.includes('manga')) return 'webtoon';
-      if (mediaType === 'image' || type === 'image' || category === 'image' || source.includes('image') || text.includes('이미지') || text.includes('사진')) return 'image';
+      if (isVisualSearchCandidateClient(it) && (mediaType === 'image' || type === 'image' || category === 'image' || source.includes('image') || text.includes('사진') || text.includes('풍경') || text.includes('홍보'))) return 'image';
       if (mediaType === 'video' || type === 'video' || category === 'video' || source.includes('youtube') || source.includes('video') || host.includes('youtube.com') || host.includes('youtu.be') || text.includes('영상') || text.includes('유튜브')) return 'video';
+      if (isVisualSearchCandidateClient(it)) return 'image';
       if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social') || type === 'sns' || category === 'sns') return 'social';
       return 'web';
     }
@@ -3083,7 +2928,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function groupSliceForDisplay(slice){
-      const order = displayGroupOrderForQueryClient(queryTextForTabs(lastQuery), activeType);
+      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -3109,7 +2954,10 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function sourceKeyForDisplayGroupItem(it){
-      const url = String((it && (it.url || it.link || it.openUrl)) || '').trim();
+      const payload = it && it.payload && typeof it.payload === 'object' ? it.payload : {};
+      const group = displayGroupOfItem(it);
+      const newsOrigin = group === 'news' ? String(payload.originallink || payload.originalLink || it.originallink || it.originalLink || '').trim() : '';
+      const url = String(newsOrigin || (it && (it.url || it.link || it.openUrl)) || '').trim();
       const host = domainOf(url).toLowerCase();
       const source = String((it && (it.source || it.provider || it.channel)) || '').toLowerCase();
       if(host) return host.replace(/^www\./, '');
@@ -3201,7 +3049,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       // Only top-ranked map/local cards get live map preview + place info.
       // Later local results remain normal cards with summary text, preventing
       // long map iframes from flooding the search pages.
-      copy.__maruAllowMapPreview = group === 'local_tour' && !hidden && copy.__maruGroupPreviewIndex < 3;
+      copy.__maruAllowMapPreview = group === 'local_tour' && !hidden && copy.__maruGroupPreviewIndex < 1;
       return copy;
     }
 
@@ -3252,12 +3100,9 @@ async function fetchInstantSearchPack(q, type = activeType){
         let hiddenMounted = false;
         let hiddenWrap = null;
 
-        if(groupInfo.group === 'image'){
-          const imageGrid = document.createElement('div');
-          imageGrid.className = 'maru-image-gallery-grid maru-section-image-grid';
-          previewItems.forEach((it, idx) => renderImageTileItem(decorateDisplayItemForRender(it, groupInfo, idx, false), imageGrid));
-          body.appendChild(imageGrid);
-        }else{
+        if ((groupInfo.group === 'image' || groupInfo.group === 'media') && previewItems.some(it => collectNaturalImages(it).length)) {
+          renderImageGalleryInto(previewItems.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, false)), body, previewItems.length);
+        } else {
           previewItems.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
         }
 
@@ -3283,12 +3128,13 @@ async function fetchInstantSearchPack(q, type = activeType){
             section.dataset.expanded = '1';
             if(!hiddenMounted){
               hiddenWrap = document.createElement('div');
-              hiddenWrap.className = groupInfo.group === 'image' ? 'maru-display-hidden-wrap maru-image-gallery-grid maru-section-image-grid' : 'maru-display-hidden-wrap';
-              hiddenItems.slice(0, displayGroupModuleTotalCap(groupInfo.group)).forEach((it, idx) => {
-                const decorated = decorateDisplayItemForRender(it, groupInfo, idx, true);
-                if(groupInfo.group === 'image') renderImageTileItem(decorated, hiddenWrap);
-                else renderItem(decorated, hiddenWrap);
-              });
+              hiddenWrap.className = 'maru-display-hidden-wrap';
+              const hiddenSlice = hiddenItems.slice(0, displayGroupModuleTotalCap(groupInfo.group));
+              if ((groupInfo.group === 'image' || groupInfo.group === 'media') && hiddenSlice.some(it => collectNaturalImages(it).length)) {
+                renderImageGalleryInto(hiddenSlice.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, true)), hiddenWrap, hiddenSlice.length);
+              } else {
+                hiddenSlice.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, true), hiddenWrap));
+              }
               body.appendChild(hiddenWrap);
               hiddenMounted = true;
             }
@@ -4198,6 +4044,10 @@ async function fetchInstantSearchPack(q, type = activeType){
       const raw = String(imageUrl || '').trim();
       if(!raw) return '';
       try{
+        const yt = extractYouTubeIdQuickClient(raw);
+        if(yt) return 'youtube-video-thumb/' + yt;
+      }catch(e){}
+      try{
         const u = new URL(raw, location.origin);
         let path = decodeURIComponent(u.pathname || '').toLowerCase();
         path = path.replace(/\/thumb\//g, '/');
@@ -4224,51 +4074,62 @@ async function fetchInstantSearchPack(q, type = activeType){
       return out;
     }
 
-    function renderImageTileItem(it, mountTarget){
-      const images = dedupeImageVariantsClient(collectNaturalImages(it));
-      const src = images[0] || String((it && (it.image || it.thumbnail || it.thumb)) || '').trim();
-      if(!src) return null;
-      const tile = document.createElement('div');
-      tile.className = 'maru-image-tile';
-      tile.title = String((it && it.title) || '').trim();
+    function renderImageGalleryInto(slice, mountTarget, maxTiles){
+      const source = Array.isArray(slice) ? slice : [];
+      const list = source.filter(it => collectNaturalImages(it).length || it.image || it.thumbnail || it.url || it.link);
+      const grid = document.createElement('div');
+      grid.className = 'maru-image-gallery-grid';
+      const usedImages = new Set();
+      const limit = Math.max(0, parseInt(maxTiles, 10) || list.length);
+      list.some((it) => {
+        if(limit && grid.children.length >= limit) return true;
+        const images = dedupeImageVariantsClient(collectNaturalImages(it));
+        const src = images[0] || String((it && (it.image || it.thumbnail || it.thumb)) || '').trim();
+        if(!src) return false;
+        const imageKey = normalizeImageVariantKeyClient(src) || src.toLowerCase();
+        if(usedImages.has(imageKey)) return false;
+        usedImages.add(imageKey);
 
-      const img = document.createElement('img');
-      img.src = src;
-      img.loading = 'lazy';
-      img.alt = String((it && it.title) || '').trim();
-      img.onload = () => {
-        try{
-          const w = img.naturalWidth || 0;
-          const h = img.naturalHeight || 0;
-          tile.dataset.orientation = h > w * 1.18 ? 'portrait' : (w > h * 1.25 ? 'landscape' : 'square');
-        }catch(e){}
-      };
-      img.onerror = () => tile.remove();
-      tile.appendChild(img);
+        const tile = document.createElement('div');
+        tile.className = 'maru-image-tile';
+        tile.title = String((it && it.title) || '').trim();
 
-      const capText = String((it && it.title) || '').trim();
-      if(capText){
-        const cap = document.createElement('div');
-        cap.className = 'maru-image-tile-caption';
-        cap.textContent = capText;
-        tile.appendChild(cap);
-      }
+        const img = document.createElement('img');
+        img.src = src;
+        img.loading = 'lazy';
+        img.alt = String((it && it.title) || '').trim();
+        img.onload = () => {
+          try{
+            const w = img.naturalWidth || 0;
+            const h = img.naturalHeight || 0;
+            tile.dataset.orientation = h > w * 1.18 ? 'portrait' : (w > h * 1.25 ? 'landscape' : 'square');
+          }catch(e){}
+        };
+        img.onerror = () => tile.remove();
+        tile.appendChild(img);
 
-      tile.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openResultInsideSearchFrame(displayUrlForImageItemClient(it, src), it);
+        const capText = String((it && it.title) || '').trim();
+        if(capText){
+          const cap = document.createElement('div');
+          cap.className = 'maru-image-tile-caption';
+          cap.textContent = capText;
+          tile.appendChild(cap);
+        }
+
+        tile.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openResultInsideSearchFrame(displayUrlForImageItemClient(it, src), it);
+        });
+        grid.appendChild(tile);
+        return false;
       });
-      (mountTarget || results).appendChild(tile);
-      return tile;
+      (mountTarget || results).appendChild(grid);
+      return grid;
     }
 
     function renderImageGalleryPage(slice){
-      const list = (Array.isArray(slice) ? slice : []).filter(it => collectNaturalImages(it).length || it.image || it.thumbnail || it.url || it.link);
-      const grid = document.createElement('div');
-      grid.className = 'maru-image-gallery-grid';
-      list.forEach((it) => renderImageTileItem(it, grid));
-      results.appendChild(grid);
+      renderImageGalleryInto(slice, results);
     }
 
     function descriptionForItemClient(it){
@@ -4476,16 +4337,19 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       body.appendChild(textCol);
 
-      const shouldRenderInlinePlayable = !!(playableMedia && !isYoutubeLikeItemClient(it) && normalizeSearchType(activeType) === 'video');
-      const playableMediaNode = shouldRenderInlinePlayable ? renderPlayableMedia(playableMedia, it) : null;
-      if (playableMedia) {
+      const forcePlayableEmbed = !!(it && it.displayCard && it.displayCard.forceEmbed === true);
+      const playableMediaNode = forcePlayableEmbed ? renderPlayableMedia(playableMedia, it) : null;
+      if (playableMediaNode) {
         const badge = document.createElement('div');
         badge.className = 'maru-video-badge';
-        badge.textContent = playableMedia.kind === 'youtube' ? '영상' : '동영상';
+        badge.textContent = playableMedia.kind === 'youtube' ? '영상 재생' : '동영상';
         textCol.appendChild(badge);
-      }
-      if (playableMediaNode) {
         body.appendChild(playableMediaNode);
+      } else if (playableMedia || isYoutubeLikeItemClient(it)) {
+        const badge = document.createElement('div');
+        badge.className = 'maru-video-badge';
+        badge.textContent = '영상 스냅샷';
+        textCol.appendChild(badge);
       }
 
       const mapPreviewNode = (!playableMediaNode && shouldRenderMapPreviewForItemClient(it)) ? renderMapPreviewClient(it) : null;
@@ -4745,7 +4609,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = displayGroupOrderForQueryClient(queryTextForTabs(lastQuery), activeType).filter(g => g !== 'web');
+      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -4847,7 +4711,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if(group === 'cafe' || group === 'community' || /cafe|카페|community|forum/.test(text)) return 'cafe';
       if(group === 'shopping' || /shopping|shop|commerce|product|쇼핑|상품|가격/.test(text)) return 'shopping';
       if(group === 'news' || /news|뉴스|신문|일보|press/.test(text)) return 'news';
-      if(group === 'image' || /image|images|photo|picture|이미지|사진/.test(raw)) return 'image';
+      if(group === 'image' || isVisualSearchCandidateClient(it) || /image|images|photo|picture|사진|포토|풍경|전경|갤러리|홍보/.test(raw + ' ' + text)) return 'image';
       if(group === 'video' || group === 'media' || /video|youtube|youtu\.be|영상|동영상/.test(text)) return 'video';
       if(group === 'social' || /sns|social|instagram|facebook|tiktok|twitter|x\.com|소셜/.test(text)) return 'sns';
       if(group === 'sports' || /sports|스포츠|축구|야구|농구/.test(text)) return 'sports';
@@ -4871,7 +4735,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if(t === 'knowledge') return ['knowledge','wiki','site'].includes(itemType) || ['knowledge','wiki','authority'].includes(group);
       if(t === 'wiki') return itemType === 'wiki' || /wiki|wikipedia|namu\.wiki|위키/.test(url);
       if(t === 'sns') return itemType === 'sns' || group === 'social';
-      if(t === 'image') return itemType === 'image' || !!(it && (it.image || it.thumbnail || it.imageUrl || it.ogImage || it.og_image || (Array.isArray(it.imageSet) && it.imageSet.length)));
+      if(t === 'image') return itemType === 'image' || isVisualSearchCandidateClient(it) || !!(it && (it.image || it.thumbnail || it.imageUrl || it.ogImage || it.og_image || (Array.isArray(it.imageSet) && it.imageSet.length))); 
       if(t === 'video') return itemType === 'video' || !!(it && (it.videoId || it.videoUrl || it.embedUrl));
       if(t === 'cafe') return itemType === 'cafe' || group === 'community';
       return false;
@@ -4881,7 +4745,10 @@ if (it.riskLabel === '⚠️ high-risk') {
       const source = Array.isArray(sourceItems) ? sourceItems : [];
       const t = normalizeSearchType(activeType || 'all');
       if(t === 'all') return source.slice();
-      return source.filter(it => itemMatchesActiveSearchTab(it, t));
+      const filtered = source.filter(it => itemMatchesActiveSearchTab(it, t));
+      if(t === 'news') return diversifyGroupPreviewItems('news', filtered);
+      if(t === 'image') return diversifyGroupPreviewItems('image', filtered);
+      return filtered;
     }
 
     function buildClientVisibleStream(page){
@@ -4964,9 +4831,16 @@ if (it.riskLabel === '⚠️ high-risk') {
           return;
         }
       }
-      results.innerHTML = '';
       const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
+
+      if (!slice.length && normalizeSearchType(activeType) === 'all') {
+        if(!results.children.length) renderSkeleton();
+        drawPager();
+        return;
+      }
+
+      results.innerHTML = '';
 
       if (!slice.length && normalizeSearchType(activeType) !== 'all') {
         const empty = document.createElement('div');
@@ -5190,10 +5064,14 @@ async function runSearch(q, type = activeType){
 
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `${uiText('receiving', 'receiving...')} ${getTypeLabel(activeType)} · "${qq}"...`;
+  renderSkeleton();
+  // Search.js is ready to receive the first 12 pages immediately. Show the
+  // basic pager while Sanmaru/MaruSearch fills the packet, instead of leaving
+  // the page with no page structure.
+  drawPager();
 
   currentBlock = 0;
   currentPage = 1;
-  renderRealtimeCategoryBoard(qq, activeType);
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
@@ -5270,36 +5148,52 @@ async function runSearch(q, type = activeType){
     return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
   }
 
-  // Realtime receiver mode: open the UI first, then consume Sanmaru, MaruSearch
-  // and the progressive page faucet as simultaneous lanes. No lane is allowed to
-  // hold the screen blank while another lane is still preparing data.
+  // PATCH: first render uses Sanmaru/MaruSearch first supply window, not forced 25-only paint
   const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
 
-  function consumeRealtimeSupply(res){
-    if(runSearch._seq !== seq || !res || res.error) return 0;
-    return applySupplyPack(res.pack, res.kind);
-  }
-
-  instantPromise.then(res => {
-    consumeRealtimeSupply(res);
-  });
-
-  maruWindowPromise.then(res => {
-    const count = consumeRealtimeSupply(res);
-    if(count || !intakeStarted) startIntakeOnce('maru-page1-window-ready');
-  });
-
-  schedulePipeHandoff('parallel-realtime-faucet', FIRST_PIPE_HANDOFF_MS);
-
-  Promise.allSettled([instantPromise, maruWindowPromise]).then(() => {
+  try{
+    const first = await Promise.race([instantPromise, maruWindowPromise]);
     if(runSearch._seq !== seq) return;
-    if(!firstPaintDone && !(Array.isArray(allItems) && allItems.length)){
-      status.textContent = `${uiText('receiving', 'receiving...')} ${getTypeLabel(activeType)} · "${qq}"...`;
-      // Keep the query-aware realtime category board mounted. Continuous intake
-      // may still be receiving pages even when the first two lanes had no items.
+
+    const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
+    if(!firstCount){
+      const second = first && first.kind === 'sanmaru-instant' ? await maruWindowPromise : await instantPromise;
+      if(runSearch._seq !== seq) return;
+      if(second && !second.error) applySupplyPack(second.pack, second.kind);
     }
-  });
+
+    if(!firstPaintDone){
+      if(!results.children.length) renderSkeleton();
+      status.textContent = `${uiText('noQuickResults', 'No quick results')} "${qq}" · ${uiText('receiving', 'receiving...')}`;
+    }
+
+    // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
+    // shortly after first paint, but let the page-1 300-window seed pages 1~12
+    // first when it arrives quickly.
+    schedulePipeHandoff('first-paint-handoff', FIRST_PIPE_HANDOFF_MS);
+
+    maruWindowPromise.then(res => {
+      if(runSearch._seq !== seq || !res || res.error) return;
+      applySupplyPack(res.pack, res.kind);
+      startIntakeOnce('maru-page1-window-ready');
+    });
+    instantPromise.then(res => {
+      if(runSearch._seq !== seq || !res || res.error) return;
+      applySupplyPack(res.pack, res.kind);
+    });
+  }catch(e){
+    console.error(e);
+    const fallbackPack = await fetchSearch(qq, activeType, 1);
+    if (runSearch._seq !== seq) return;
+    applySupplyPack(fallbackPack, 'fallback-maru-search');
+    if(!firstPaintDone){
+      if(!results.children.length) renderSkeleton();
+      clearPager();
+      status.textContent = `${uiText('noResults', 'No results')} "${qq}"`;
+    }
+    startIntakeOnce('fallback');
+  }
 }
 
 
