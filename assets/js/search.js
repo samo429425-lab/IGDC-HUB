@@ -2836,6 +2836,7 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function inferDisplayGroupClient(it){
+      if(isSyntheticProviderGuideCardClient(it)) return 'web';
       const source = String((it && it.source) || '').toLowerCase();
       const provider = String((it && (it.provider || it.channel)) || '').toLowerCase();
       const type = String((it && it.type) || '').toLowerCase();
@@ -3056,7 +3057,12 @@ async function fetchInstantSearchPack(q, type = activeType){
     function renderGroupedSlice(slice, page){
       const groups = (Array.isArray(slice) && slice.length && slice[0] && Array.isArray(slice[0].items) && slice[0].group) ? slice : groupSliceForDisplay(slice);
       groups.forEach(groupInfo => {
+        groupInfo.items = (Array.isArray(groupInfo.items) ? groupInfo.items : []).filter(it => {
+          if(!isSyntheticProviderGuideCardClient(it)) return true;
+          return !/^(news|image|video|media)$/.test(String(groupInfo.group || ''));
+        });
         groupInfo.items = diversifyGroupPreviewItems(groupInfo.group, groupInfo.items);
+        if(!groupInfo.items.length) return;
 
         const section = document.createElement('section');
         section.className = 'maru-display-section';
@@ -3100,8 +3106,16 @@ async function fetchInstantSearchPack(q, type = activeType){
         let hiddenMounted = false;
         let hiddenWrap = null;
 
-        if ((groupInfo.group === 'image' || groupInfo.group === 'media') && previewItems.some(it => collectNaturalImages(it).length)) {
-          renderImageGalleryInto(previewItems.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, false)), body, previewItems.length);
+        const visualSection = groupInfo.group === 'image' || groupInfo.group === 'media';
+        const videoSection = groupInfo.group === 'video';
+        if (visualSection) {
+          const gallerySource = visualGalleryItemsClient((groupInfo.items || []).concat(previewItems || [], hiddenItems || []));
+          if(!gallerySource.length) return;
+          renderImageGalleryInto(gallerySource.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, false)), body, Math.max(previewLimit, 12));
+        } else if (videoSection) {
+          const videoSource = videoSnapshotItemsClient(previewItems);
+          if(!videoSource.length) return;
+          videoSource.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
         } else {
           previewItems.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
         }
@@ -3129,9 +3143,12 @@ async function fetchInstantSearchPack(q, type = activeType){
             if(!hiddenMounted){
               hiddenWrap = document.createElement('div');
               hiddenWrap.className = 'maru-display-hidden-wrap';
-              const hiddenSlice = hiddenItems.slice(0, displayGroupModuleTotalCap(groupInfo.group));
-              if ((groupInfo.group === 'image' || groupInfo.group === 'media') && hiddenSlice.some(it => collectNaturalImages(it).length)) {
-                renderImageGalleryInto(hiddenSlice.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, true)), hiddenWrap, hiddenSlice.length);
+              const hiddenSlice = hiddenItems.slice(0, displayGroupModuleTotalCap(groupInfo.group)).filter(it => !isSyntheticProviderGuideCardClient(it));
+              if (groupInfo.group === 'image' || groupInfo.group === 'media') {
+                const hiddenVisuals = visualGalleryItemsClient(hiddenSlice);
+                if(hiddenVisuals.length) renderImageGalleryInto(hiddenVisuals.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, true)), hiddenWrap, hiddenVisuals.length);
+              } else if (groupInfo.group === 'video') {
+                videoSnapshotItemsClient(hiddenSlice).forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, true), hiddenWrap));
               } else {
                 hiddenSlice.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, true), hiddenWrap));
               }
@@ -3574,6 +3591,61 @@ async function fetchInstantSearchPack(q, type = activeType){
         ]);
       }
       return '';
+    }
+
+    function isGeneratedGuideTextClient(v){
+      const text = compactCardTextClient(v);
+      if(!text) return false;
+      const low = text.toLowerCase();
+      return /(확인할 수 있는 결과입니다|연결되는 결과입니다|표시됩니다|함께 표시|대표 이미지가 있으면|대표 스냅샷|본문 요약이 제공|2~3줄|사진·그래픽·이미지|현장 화면·리뷰|최신 보도·이슈·기사|통합 검색 결과|검색 결과로 연결|자료를 확인할 수 있는|news 흐름|image 자료|video 자료)/i.test(text) ||
+        /(google news|bing images|bing videos|naver images|naver videos|google images)/i.test(low);
+    }
+
+    function isSyntheticProviderGuideCardClient(it){
+      it = it && typeof it === 'object' ? it : {};
+      const payload = it.payload && typeof it.payload === 'object' ? it.payload : {};
+      const displayCard = it.displayCard && typeof it.displayCard === 'object' ? it.displayCard : {};
+      const title = compactCardTextClient([it.title, displayCard.title, payload.title]).toLowerCase();
+      const desc = compactCardTextClient([
+        it.summary, it.description, it.snippet, it.contentSnippet,
+        displayCard.summary, displayCard.description, displayCard.snippet,
+        payload.summary, payload.description, payload.snippet
+      ]);
+      const url = String(it.url || it.link || it.openUrl || payload.url || payload.link || '').toLowerCase();
+      const source = String(it.source || it.provider || it.channel || payload.source || '').toLowerCase();
+      const shortcutTitle = /(google news|bing images|bing videos|google images|naver images|naver videos|통합 검색|이미지 검색|동영상 검색|뉴스 검색)/i.test(title);
+      const providerShortcut = /(google\.com|bing\.com|naver\.com|news\.google\.com)/i.test(url + ' ' + source) && shortcutTitle;
+      return (shortcutTitle || providerShortcut) && (!desc || isGeneratedGuideTextClient(desc));
+    }
+
+    function hasRenderableVisualClient(it){
+      return !!(it && collectNaturalImages(it).length);
+    }
+
+    function visualGalleryItemsClient(items){
+      const out = [];
+      const seenItems = new Set();
+      const seenImages = new Set();
+      (Array.isArray(items) ? items : []).forEach(it => {
+        if(!it || isSyntheticProviderGuideCardClient(it)) return;
+        const images = dedupeImageVariantsClient(collectNaturalImages(it));
+        if(!images.length) return;
+        const itemKey = displayItemKey ? displayItemKey(it) : String((it.url || it.link || it.title || '')).toLowerCase();
+        const imageKey = normalizeImageVariantKeyClient(images[0]) || images[0].toLowerCase();
+        if((itemKey && seenItems.has(itemKey)) || (imageKey && seenImages.has(imageKey))) return;
+        if(itemKey) seenItems.add(itemKey);
+        if(imageKey) seenImages.add(imageKey);
+        out.push(it);
+      });
+      return out;
+    }
+
+    function videoSnapshotItemsClient(items){
+      return (Array.isArray(items) ? items : []).filter(it => {
+        if(!it || isSyntheticProviderGuideCardClient(it)) return false;
+        if(hasRenderableVisualClient(it)) return true;
+        return !!(getPlayableMediaInfo(it, String((it && (it.url || it.link || it.videoUrl || it.embedUrl)) || '')));
+      });
     }
 
     function ensureSearchOwnedResultViewStyle(){
@@ -4075,16 +4147,15 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function renderImageGalleryInto(slice, mountTarget, maxTiles){
-      const source = Array.isArray(slice) ? slice : [];
-      const list = source.filter(it => collectNaturalImages(it).length || it.image || it.thumbnail || it.url || it.link);
+      const source = visualGalleryItemsClient(slice);
       const grid = document.createElement('div');
       grid.className = 'maru-image-gallery-grid';
       const usedImages = new Set();
-      const limit = Math.max(0, parseInt(maxTiles, 10) || list.length);
-      list.some((it) => {
+      const limit = Math.max(0, parseInt(maxTiles, 10) || source.length);
+      source.some((it) => {
         if(limit && grid.children.length >= limit) return true;
         const images = dedupeImageVariantsClient(collectNaturalImages(it));
-        const src = images[0] || String((it && (it.image || it.thumbnail || it.thumb)) || '').trim();
+        const src = images[0] || '';
         if(!src) return false;
         const imageKey = normalizeImageVariantKeyClient(src) || src.toLowerCase();
         if(usedImages.has(imageKey)) return false;
@@ -4124,12 +4195,21 @@ async function fetchInstantSearchPack(q, type = activeType){
         grid.appendChild(tile);
         return false;
       });
-      (mountTarget || results).appendChild(grid);
+      if(grid.children.length) (mountTarget || results).appendChild(grid);
       return grid;
     }
 
     function renderImageGalleryPage(slice){
-      renderImageGalleryInto(slice, results);
+      const grid = renderImageGalleryInto(slice, results);
+      if(!grid || !grid.children.length){
+        const empty = document.createElement('div');
+        empty.className = 'card';
+        empty.style.padding = '16px 18px';
+        empty.style.color = '#64748b';
+        empty.style.fontWeight = '700';
+        empty.textContent = '이미지 썸네일을 수신 중입니다. 실제 사진·영상 스냅샷이 도착하면 갤러리로 표시됩니다.';
+        results.appendChild(empty);
+      }
     }
 
     function descriptionForItemClient(it){
@@ -4138,70 +4218,86 @@ async function fetchInstantSearchPack(q, type = activeType){
       const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+      const titleText = compactCardTextClient([it && it.title, displayCard.title, payload.title]).toLowerCase();
+
+      // Body/snippet fields must win over displayCard guide copy.  The displayCard
+      // summary often contains a generic provider explanation such as “사진 자료를
+      // 확인할 수 있는 결과입니다”; that text is UI guidance, not searched body text.
       const candidates = [
-        displayCard.summary,
-        displayCard.description,
-        displayCard.body,
-        displayCard.text,
-        displayCard.snippet,
-        displayCard.htmlSnippet,
-        displayCard.html,
-        it && it.displaySummary,
-        it && it.summary,
         it && it.snippet,
-        it && it.htmlSnippet,
-        it && it.html,
-        it && it.description,
         it && it.contentSnippet,
         it && it.excerpt,
         it && it.abstract,
         it && it.content,
         it && it.text,
-        payload.summary,
+        it && it.body,
+        it && it.bodyText,
+        it && it.lead,
+        it && it.subtitle,
+        it && it.description,
+        it && it.summary,
+        it && it.displaySummary,
         payload.snippet,
-        payload.htmlSnippet,
-        payload.html,
-        payload.description,
         payload.contentSnippet,
         payload.excerpt,
         payload.abstract,
         payload.content,
         payload.text,
-        data.summary,
+        payload.body,
+        payload.bodyText,
+        payload.lead,
+        payload.subtitle,
+        payload.description,
+        payload.summary,
         data.snippet,
-        data.htmlSnippet,
-        data.html,
-        data.description,
         data.contentSnippet,
         data.excerpt,
         data.abstract,
         data.content,
         data.text,
+        data.body,
+        data.bodyText,
+        data.lead,
+        data.subtitle,
+        data.description,
+        data.summary,
+        displayCard.body,
+        displayCard.text,
+        displayCard.snippet,
+        displayCard.htmlSnippet,
+        displayCard.html,
+        displayCard.description,
+        displayCard.summary,
+        it && it.htmlSnippet,
+        it && it.html,
+        payload.htmlSnippet,
+        payload.html,
+        data.htmlSnippet,
+        data.html,
         it && it.desc,
         it && it.metaDescription,
         it && it.ogDescription,
-        it && it.lead,
-        it && it.subtitle,
-        it && it.bodyText,
         payload.desc,
         payload.metaDescription,
         payload.ogDescription,
-        payload.lead,
-        payload.subtitle,
-        payload.bodyText,
         data.desc,
         data.metaDescription,
         data.ogDescription,
-        data.lead,
-        data.subtitle,
-        data.bodyText,
         preview.summary,
         preview.description,
         preview.caption
       ];
+      const seen = new Set();
       for(const v of candidates){
         const text = compactCardTextClient(v);
-        if(text) return text.slice(0, 360);
+        if(!text) continue;
+        const key = text.toLowerCase();
+        if(seen.has(key)) continue;
+        seen.add(key);
+        if(isGeneratedGuideTextClient(text)) continue;
+        if(titleText && key === titleText) continue;
+        if(/^(google news|bing images|bing videos|google images|naver images|naver videos)$/i.test(key)) continue;
+        return text.slice(0, 620);
       }
       return '';
     }
@@ -4318,7 +4414,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 4);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 5);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -4617,6 +4713,15 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       function pushCategoryModule(g){
         if(!g || !Array.isArray(g.items) || !g.items.length) return;
+        if(/^(news|image|video|media)$/.test(String(g.group || ''))) {
+          g = Object.assign({}, g, { items: g.items.filter(it => !isSyntheticProviderGuideCardClient(it)) });
+        }
+        if(g.group === 'image' || g.group === 'media') {
+          g = Object.assign({}, g, { items: visualGalleryItemsClient(g.items) });
+        } else if(g.group === 'video') {
+          g = Object.assign({}, g, { items: videoSnapshotItemsClient(g.items) });
+        }
+        if(!g.items.length) return;
         const previewLimit = Math.max(1, displayGroupPreviewLimit(g.group, g.items[0]));
         const moduleCap = Math.max(previewLimit, displayGroupModuleTotalCap(g.group));
         const moduleItems = g.items.slice(0, moduleCap);
@@ -4735,7 +4840,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if(t === 'knowledge') return ['knowledge','wiki','site'].includes(itemType) || ['knowledge','wiki','authority'].includes(group);
       if(t === 'wiki') return itemType === 'wiki' || /wiki|wikipedia|namu\.wiki|위키/.test(url);
       if(t === 'sns') return itemType === 'sns' || group === 'social';
-      if(t === 'image') return itemType === 'image' || isVisualSearchCandidateClient(it) || !!(it && (it.image || it.thumbnail || it.imageUrl || it.ogImage || it.og_image || (Array.isArray(it.imageSet) && it.imageSet.length))); 
+      if(t === 'image') return hasRenderableVisualClient(it); 
       if(t === 'video') return itemType === 'video' || !!(it && (it.videoId || it.videoUrl || it.embedUrl));
       if(t === 'cafe') return itemType === 'cafe' || group === 'community';
       return false;
@@ -4745,9 +4850,11 @@ if (it.riskLabel === '⚠️ high-risk') {
       const source = Array.isArray(sourceItems) ? sourceItems : [];
       const t = normalizeSearchType(activeType || 'all');
       if(t === 'all') return source.slice();
-      const filtered = source.filter(it => itemMatchesActiveSearchTab(it, t));
+      let filtered = source.filter(it => itemMatchesActiveSearchTab(it, t));
+      if(/^(news|image|video)$/.test(t)) filtered = filtered.filter(it => !isSyntheticProviderGuideCardClient(it));
       if(t === 'news') return diversifyGroupPreviewItems('news', filtered);
-      if(t === 'image') return diversifyGroupPreviewItems('image', filtered);
+      if(t === 'image') return diversifyGroupPreviewItems('image', visualGalleryItemsClient(filtered));
+      if(t === 'video') return diversifyGroupPreviewItems('video', videoSnapshotItemsClient(filtered));
       return filtered;
     }
 
