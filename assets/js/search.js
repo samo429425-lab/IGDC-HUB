@@ -2315,10 +2315,29 @@ async function fetchInstantSearchPack(q, type = activeType){
       if(!bar) return;
       const q = queryTextForTabs(qOverride);
       const key = searchTabsProfileKey(q, activeType);
-      if(bar.dataset.profileKey === key && bar.childNodes.length) return;
-      bar.dataset.profileKey = key;
+      // Category rail is a fixed search-OS navigation surface.  It must never
+      // be shortened by the currently received result pool, thumbnail readiness,
+      // page model, or provider timing.  Query inference only changes the lead
+      // order; every original category remains present.
+      let tabs = inferSearchTabsForQuery(q, activeType);
+      const seen = new Set(tabs.map(x => x && x[0]).filter(Boolean));
+      SEARCH_TAB_KEYS.forEach(type => {
+        if(!seen.has(type)){
+          seen.add(type);
+          tabs.push(searchTabDef(type));
+        }
+      });
+      if(tabs.length < SEARCH_TAB_KEYS.length){
+        tabs = SEARCH_TAB_KEYS.map(type => searchTabDef(type));
+      }
+      const stableKey = key + '::count=' + tabs.length + '::fullRail=' + SEARCH_TAB_KEYS.join('|');
+      if(bar.dataset.profileKey === stableKey && bar.childNodes.length >= SEARCH_TAB_KEYS.length) return;
+      bar.dataset.profileKey = stableKey;
+      bar.dataset.categoryCount = String(tabs.length);
       bar.innerHTML = '';
-      inferSearchTabsForQuery(q, activeType).forEach(([type, label]) => {
+      bar.style.display = 'flex';
+      bar.style.visibility = 'visible';
+      tabs.forEach(([type, label]) => {
         bar.appendChild(buildSearchTabButton(type, label));
       });
     }
@@ -2340,7 +2359,9 @@ async function fetchInstantSearchPack(q, type = activeType){
         bar.style.position = 'sticky';
         bar.style.top = '65px';
         bar.style.zIndex = '90';
-        status.parentNode.insertBefore(bar, status);
+        const tabAnchor = (statusEl && statusEl.parentNode) ? statusEl : ((resultsEl && resultsEl.parentNode) ? resultsEl : input);
+        if(tabAnchor && tabAnchor.parentNode) tabAnchor.parentNode.insertBefore(bar, tabAnchor);
+        else document.body.insertBefore(bar, document.body.firstChild);
       }
       renderSearchTabsForQuery(bar, qOverride);
       return bar;
@@ -5249,6 +5270,7 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function renderPage(page, skipEnrich = false){
+      updateSearchTabsActive(lastQuery || input.value || '');
       if(serverPagedMode && !loadedServerPages.has(page)){
         const preloadedPageCount = preloadPageCountFromItems(allItems);
         if(page > preloadedPageCount){
