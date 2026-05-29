@@ -657,6 +657,42 @@ function ensureSearchCardMediaStyle(){
     }
 
 
+    /* Corrected overview + media placeholders: do not show large fake gray cards. */
+    .maru-entity-overview.maru-entity-overview--text-only {
+      grid-template-columns: 1fr;
+    }
+    .maru-entity-overview.maru-entity-overview--text-only .maru-entity-overview-media {
+      display: none;
+    }
+    .maru-visual-pending-note {
+      padding: 12px 14px;
+      border: 1px dashed #dbe2ea;
+      border-radius: 12px;
+      background: #f8fafc;
+      color: #64748b;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .maru-image-gallery-grid {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+    @media (max-width: 1320px) {
+      .maru-image-gallery-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    }
+    @media (max-width: 1080px) {
+      .maru-image-gallery-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 860px) {
+      .maru-image-gallery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .maru-image-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 430px) {
+      .maru-image-gallery-grid { grid-template-columns: 1fr; }
+    }
+
+
     .maru-search-home-link {
       display: inline-flex;
       align-items: center;
@@ -4368,17 +4404,11 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function renderVisualPendingPlaceholderClient(mountTarget, count){
-      const grid = document.createElement('div');
-      grid.className = 'maru-image-gallery-grid maru-image-gallery-pending';
-      const n = Math.max(1, Math.min(12, parseInt(count, 10) || 6));
-      for(let i = 0; i < n; i++){
-        const tile = document.createElement('div');
-        tile.className = 'maru-image-tile maru-image-tile-pending';
-        tile.setAttribute('aria-hidden', 'true');
-        grid.appendChild(tile);
-      }
-      (mountTarget || results).appendChild(grid);
-      return grid;
+      const note = document.createElement('div');
+      note.className = 'maru-visual-pending-note';
+      note.textContent = '실제 이미지·영상 썸네일 수신 중';
+      (mountTarget || results).appendChild(note);
+      return note;
     }
 
     function renderImageGalleryInto(slice, mountTarget, maxTiles){
@@ -5130,8 +5160,15 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function overviewIsCompanyQueryClient(q, text){
-      const hay = String(q || '') + ' ' + String(text || '');
-      return /(주식회사|기업|회사|그룹|브랜드|본사|대표이사|매출|주가|채용|제품|서비스|삼성|현대|기아|엘지|lg|sk|naver|네이버|kakao|카카오|company|corporation|corp\.?|inc\.?|brand|stock|market cap|ceo|headquarters)/i.test(hay);
+      const query = String(q || '').trim();
+      const compact = query.replace(/\s+/g, '').toLowerCase();
+      const queryCompany = /(주식회사|유한회사|기업|회사|그룹|브랜드|본사|대표이사|주가|상장|코스피|코스닥|corp\.?|inc\.?|ltd\.?|company|corporation|brand)/i.test(query)
+        || /(삼성전자|삼성|현대자동차|현대차|기아|엘지|lg|sk|네이버|naver|카카오|kakao|쿠팡|coupang|롯데|신세계|cj|한화|포스코|posco|두산|셀트리온|하이브|hybe|카페24|우아한형제들)/i.test(compact);
+      if(queryCompany) return true;
+      // Do not classify a place as a company merely because a received item says
+      // 채용/취업/제품/서비스.  Those words often appear in city official pages.
+      const hay = String(text || '');
+      return /(공식\s*기업정보|기업개요|stock price|market cap|headquarters|ceo\s*:|대표이사)/i.test(hay);
     }
 
     function overviewIsPersonQueryClient(q, itemsText){
@@ -5146,14 +5183,18 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function inferOverviewEntityTypeClient(q, items){
-      const pool = Array.isArray(items) ? items.slice(0, 80) : [];
+      const pool = Array.isArray(items) ? items.slice(0, 100) : [];
       const text = pool.map(overviewTextOfItemClient).join(' ');
       const groups = pool.map(displayGroupOfItem);
       const newsCount = groups.filter(g => g === 'news').length;
+
+      // Order is important: cities/countries must not be stolen by company words
+      // found in job portals or service pages.
+      if(overviewIsCountryQueryClient(q)) return 'country';
+      if(overviewIsPlaceQueryClient(q)) return 'place';
       if(overviewIsPersonQueryClient(q, text)) return 'person';
       if(overviewIsCompanyQueryClient(q, text)) return 'company';
-      if(overviewIsCountryQueryClient(q)) return 'country';
-      if(overviewIsPlaceQueryClient(q) || /지도|주소|관광|여행|명소|날씨|교통|맛집|호텔|숙소|map|travel|tour|local/.test(text)) return 'place';
+      if(/지도|주소|관광|여행|명소|날씨|교통|맛집|호텔|숙소|map|travel|tour|local/.test(text)) return 'place';
       if(newsCount >= Math.max(3, Math.ceil(pool.length * 0.35)) || /(이슈|사건|논란|속보|선거|전쟁|사고|재난|issue|breaking|election|war|accident)/i.test(String(q || '') + ' ' + text)) return 'issue';
       return 'generic';
     }
@@ -5184,11 +5225,15 @@ if (it.riskLabel === '⚠️ high-risk') {
 
     function overviewSubtitleClient(type, q, items){
       const pool = Array.isArray(items) ? items : [];
-      const preferred = pool.find(it => {
-        const g = displayGroupOfItem(it);
-        const u = overviewUrlOfItemClient(it).toLowerCase();
-        return g === 'wiki' || g === 'knowledge' || g === 'authority' || /wikipedia|namu\.wiki|official|go\.kr|gov/.test(u);
-      }) || pool[0];
+      const rejectForPlace = /(일자리|취업|채용|구직|알바|공고|job|career|recruit)/i;
+      const rank = { wiki: 1, knowledge: 2, authority: 3, site: 4, public_data: 5, news: 6, video: 7, image: 8 };
+      const candidates = pool.filter(it => {
+        if(!it || isSyntheticProviderGuideCardClient(it)) return false;
+        const txt = overviewTextOfItemClient(it);
+        if((type === 'place' || type === 'country') && rejectForPlace.test(txt)) return false;
+        return true;
+      }).sort((a,b) => (rank[displayGroupOfItem(a)] || 50) - (rank[displayGroupOfItem(b)] || 50));
+      const preferred = candidates[0] || pool.find(it => it && !isSyntheticProviderGuideCardClient(it)) || pool[0];
       const desc = compactCardTextClient([
         preferred && preferred.summary,
         preferred && preferred.snippet,
@@ -5198,12 +5243,12 @@ if (it.riskLabel === '⚠️ high-risk') {
       ]);
       if(desc && !isGeneratedGuideTextClient(desc)) return desc.slice(0, 180);
       const fallback = {
-        person: `${q} 관련 프로필, 뉴스, 영상, 이미지, 소셜 정보를 한눈에 볼 수 있는 대표 모듈입니다.`,
-        place: `${q} 관련 지도, 관광, 공식 정보, 뉴스와 시각 자료를 모은 대표 모듈입니다.`,
-        country: `${q} 관련 국가 개요, 지도, 공식 정보, 뉴스와 관광 자료를 모은 대표 모듈입니다.`,
-        company: `${q} 관련 공식 사이트, 기업 정보, 뉴스, 금융, 위치와 제품 정보를 모은 대표 모듈입니다.`,
-        issue: `${q} 관련 주요 뉴스 흐름, 영상, 이미지와 관련 자료를 모은 대표 모듈입니다.`,
-        generic: `${q} 관련 주요 정보를 먼저 모은 대표 모듈입니다.`
+        person: `${q} 관련 프로필, 뉴스, 영상, 이미지, 소셜 정보를 모은 대표 정보입니다.`,
+        place: `${q} 관련 지도, 관광, 공식 정보, 뉴스와 시각 자료를 모은 지역 대표 정보입니다.`,
+        country: `${q} 관련 국가 개요, 지도, 공식 정보, 뉴스와 관광 자료를 모은 대표 정보입니다.`,
+        company: `${q} 관련 공식 사이트, 기업 정보, 뉴스, 금융, 위치와 제품 정보를 모은 대표 정보입니다.`,
+        issue: `${q} 관련 주요 뉴스 흐름, 영상, 이미지와 관련 자료를 모은 대표 정보입니다.`,
+        generic: `${q} 관련 주요 정보를 먼저 모은 대표 정보입니다.`
       };
       return fallback[type] || fallback.generic;
     }
@@ -5320,6 +5365,7 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       const section = document.createElement('section');
       section.className = 'maru-entity-overview';
+      if(!images.length) section.classList.add('maru-entity-overview--text-only');
       section.dataset.entityType = type;
 
       const media = document.createElement('div');
@@ -5344,17 +5390,6 @@ if (it.riskLabel === '⚠️ high-risk') {
         a.appendChild(cap);
         media.appendChild(a);
       });
-      if(!images.length){
-        const fallback = document.createElement('div');
-        fallback.className = 'maru-entity-overview-tile';
-        fallback.style.gridColumn = '1 / -1';
-        fallback.style.display = 'grid';
-        fallback.style.placeItems = 'center';
-        fallback.style.color = '#64748b';
-        fallback.style.fontWeight = '900';
-        fallback.textContent = '대표 이미지 수신 중';
-        media.appendChild(fallback);
-      }
 
       const info = document.createElement('div');
       info.className = 'maru-entity-overview-info';
@@ -5420,7 +5455,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       info.appendChild(chips);
       info.appendChild(facts);
       if(linkWrap.childNodes.length) info.appendChild(linkWrap);
-      section.appendChild(media);
+      if(images.length) section.appendChild(media);
       section.appendChild(info);
       return section;
     }
