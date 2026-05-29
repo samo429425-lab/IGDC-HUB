@@ -303,6 +303,10 @@ function inferMaruSearchIntentProfile(q, items){
   const countrySignal = /(대한민국|한국|미국|일본|중국|영국|프랑스|독일|러시아|인도|베트남|태국|인도네시아|필리핀|캐나다|호주|브라질|멕시코|이탈리아|스페인|네덜란드|스웨덴|노르웨이|핀란드|덴마크|폴란드|우크라이나|이스라엘|사우디|아랍에미리트|uae|korea|south\s*korea|usa|united\s*states|japan|china|uk|united\s*kingdom|france|germany|russia|india|vietnam|thailand|indonesia|philippines|canada|australia|brazil|mexico|italy|spain)/i.test(query);
   const localSignal = /(지도|주소|위치|길찾기|근처|맛집|호텔|숙소|관광|여행|축제|명소|교통|지하철|버스|공항|주변|방문|코스|map|maps|address|near|nearby|local|hotel|travel|tour|restaurant|attraction|airport|transit)/i.test(query);
   const companySignal = /(회사|기업|브랜드|그룹|재단|협회|법인|주식회사|상장|상장사|본사|지점|매장|영업점|대표이사|ceo|ir|실적|매출|채용|주가|삼성|현대|기아|엘지|lg|sk|네이버|카카오|롯데|포스코|한화|두산|cj|gs|쿠팡|배민|스타벅스|테슬라|애플|구글|마이크로소프트|아마존|메타|엔비디아|company|corporation|corp|inc|ltd|brand|enterprise|startup|headquarters|store|stock|earnings|revenue|recruit)/i.test(hay);
+  // Do not let company/employment words found inside returned snippets override
+  // an obvious city/country query such as "서울" or "인도".  Company intent
+  // may override place only when the query itself has a strong company/brand signal.
+  const strongCompanyQuerySignal = /(회사|기업|브랜드|그룹|재단|협회|법인|주식회사|상장|상장사|본사|지점|매장|영업점|대표이사|ceo|ir|실적|매출|채용|주가|삼성전자|현대자동차|기아|엘지|lg|sk|네이버|카카오|롯데|포스코|한화|두산|cj|gs|쿠팡|배민|스타벅스|테슬라|애플|구글|마이크로소프트|아마존|메타|엔비디아|company|corporation|corp|inc|ltd|brand|enterprise|startup|headquarters|store|stock|earnings|revenue|recruit)/i.test(query);
   const issueSignal = /(이슈|논란|사건|사고|속보|현안|정책|선거|후보|토론|전쟁|분쟁|시위|집회|파업|재판|수사|폭우|태풍|지진|화재|감염|위기|갈등|issue|breaking|controversy|election|policy|war|conflict|protest|strike|trial|investigation|crisis|disaster)/i.test(query);
 
   const personEvidence = /(프로필|인물|나이|키|학력|출생|소속사|배우|가수|연예인|아이돌|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|후보|선수|축구선수|야구선수|출연|필모그래피|앨범|곡|작품|업적|수상|biography|profile|actor|actress|singer|celebrity|artist|filmography|discography|career|awards)/i.test(hay);
@@ -323,6 +327,11 @@ function inferMaruSearchIntentProfile(q, items){
   // person name from staying on a city/nation category profile after results arrive.
   const returnedPersonProfile = personEvidence && ((counts.knowledge || 0) + (counts.wiki || 0) + (counts.news || 0) + (counts.video || 0) + (counts.image || 0) + (counts.social || 0) >= 2);
   if(personSignal || returnedPersonProfile) return 'person';
+  // Place/country intent must win for direct geographic queries.  Returned cards
+  // often contain jobs, companies, or services, but that must not push 지도/지역
+  // behind 사이트/뉴스/금융 for city/country searches.
+  if(countrySignal && !strongCompanyQuerySignal) return 'country';
+  if((citySignal || localSignal) && !strongCompanyQuerySignal) return 'place';
   if(companySignal) return 'company';
   if(issueSignal || (counts.news || 0) >= 4 && /(논란|사건|속보|issue|breaking|뉴스|보도)/i.test(hay)) return 'issue';
   if(productSignal) return 'product';
@@ -342,8 +351,8 @@ function inferMaruSearchIntentProfile(q, items){
 function maruTabLeadForIntent(intent){
   const table = {
     person:  ['all','knowledge','wiki','news','video','image','sns','blog','site','book'],
-    place:   ['all','map','tour','knowledge','wiki','site','public_data','news','image','video','blog','sns'],
-    country: ['all','map','tour','knowledge','wiki','site','public_data','news','image','video','blog','sns'],
+    place:   ['all','map','knowledge','wiki','site','tour','public_data','news','image','video','blog','sns'],
+    country: ['all','map','knowledge','wiki','site','tour','public_data','news','image','video','blog','sns'],
     company: ['all','site','knowledge','wiki','news','finance','map','image','video','blog','sns','shopping','public_data'],
     issue:   ['all','news','video','image','sns','blog','site','knowledge','wiki','public_data'],
     product: ['all','shopping','site','image','video','blog','cafe','news','knowledge','wiki'],
