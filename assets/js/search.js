@@ -336,6 +336,51 @@ function ensureSearchCardMediaStyle(){
       min-width: 0;
       flex: 1 1 auto;
     }
+    .maru-card-preview-facts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 7px 0 0;
+    }
+    .maru-card-preview-fact {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid #e5e7eb;
+      background: #f8fafc;
+      color: #475569;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .maru-card-preview-detail {
+      margin-top: 7px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: #f8fafc;
+      border: 1px solid #eef2f7;
+      color: #334155;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .maru-card-preview-line {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      word-break: keep-all;
+    }
+    .maru-card-preview-line + .maru-card-preview-line {
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px dashed #e2e8f0;
+    }
     .maru-card-media {
       flex: 0 0 280px;
       width: 280px;
@@ -657,42 +702,6 @@ function ensureSearchCardMediaStyle(){
     }
 
 
-    /* Corrected overview + media placeholders: do not show large fake gray cards. */
-    .maru-entity-overview.maru-entity-overview--text-only {
-      grid-template-columns: 1fr;
-    }
-    .maru-entity-overview.maru-entity-overview--text-only .maru-entity-overview-media {
-      display: none;
-    }
-    .maru-visual-pending-note {
-      padding: 12px 14px;
-      border: 1px dashed #dbe2ea;
-      border-radius: 12px;
-      background: #f8fafc;
-      color: #64748b;
-      font-size: 13px;
-      font-weight: 800;
-    }
-    .maru-image-gallery-grid {
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-    }
-    @media (max-width: 1320px) {
-      .maru-image-gallery-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    }
-    @media (max-width: 1080px) {
-      .maru-image-gallery-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    }
-    @media (max-width: 860px) {
-      .maru-image-gallery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    }
-    @media (max-width: 640px) {
-      .maru-image-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-    @media (max-width: 430px) {
-      .maru-image-gallery-grid { grid-template-columns: 1fr; }
-    }
-
-
     .maru-search-home-link {
       display: inline-flex;
       align-items: center;
@@ -726,196 +735,6 @@ function ensureSearchCardMediaStyle(){
       align-items: center;
       gap: 0;
     }
-
-
-    /* MARU entity overview module: inserted above the existing result/category board only. */
-    .maru-entity-overview {
-      margin: 12px 24px 14px;
-      padding: 14px;
-      border: 1px solid #e5e7eb;
-      border-radius: 18px;
-      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-      display: grid;
-      grid-template-columns: minmax(300px, 1.05fr) minmax(320px, .95fr);
-      gap: 14px;
-      align-items: stretch;
-    }
-    .maru-entity-overview-media {
-      display: grid;
-      grid-template-columns: 1.25fr .78fr .78fr;
-      grid-template-rows: 118px 118px;
-      gap: 8px;
-      min-height: 244px;
-    }
-    .maru-entity-overview-tile {
-      position: relative;
-      display: block;
-      overflow: hidden;
-      border-radius: 14px;
-      background: #e5e7eb;
-      border: 1px solid #e2e8f0;
-      text-decoration: none;
-      color: inherit;
-    }
-    .maru-entity-overview-tile:first-child {
-      grid-row: 1 / span 2;
-    }
-    .maru-entity-overview-tile img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      transition: transform .18s ease;
-    }
-    .maru-entity-overview-tile:hover img {
-      transform: scale(1.025);
-    }
-    .maru-entity-overview-caption {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: 7px 9px;
-      color: #fff;
-      font-size: 12px;
-      font-weight: 800;
-      line-height: 1.22;
-      background: linear-gradient(180deg, rgba(15,23,42,0), rgba(15,23,42,.78));
-      text-shadow: 0 1px 2px rgba(0,0,0,.35);
-    }
-    .maru-entity-overview-info {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      justify-content: flex-start;
-      padding: 2px 2px 0;
-    }
-    .maru-entity-overview-kicker {
-      display: inline-flex;
-      width: fit-content;
-      padding: 4px 9px;
-      border-radius: 999px;
-      background: #eef2ff;
-      color: #3730a3;
-      font-size: 12px;
-      font-weight: 900;
-      letter-spacing: -0.01em;
-    }
-    .maru-entity-overview-title {
-      margin: 0;
-      font-size: 24px;
-      line-height: 1.18;
-      color: #0f172a;
-      letter-spacing: -0.025em;
-    }
-    .maru-entity-overview-subtitle {
-      margin: -3px 0 0;
-      color: #475569;
-      font-size: 14px;
-      line-height: 1.55;
-      max-height: 44px;
-      overflow: hidden;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-    }
-    .maru-entity-overview-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 7px;
-    }
-    .maru-entity-overview-chip {
-      border: 1px solid #dbeafe;
-      background: #eff6ff;
-      color: #1d4ed8;
-      border-radius: 999px;
-      padding: 5px 9px;
-      font-size: 12px;
-      font-weight: 900;
-      white-space: nowrap;
-    }
-    .maru-entity-overview-facts {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-    .maru-entity-overview-fact {
-      border: 1px solid #e2e8f0;
-      background: rgba(255,255,255,.82);
-      border-radius: 12px;
-      padding: 9px 10px;
-      min-width: 0;
-    }
-    .maru-entity-overview-fact-label {
-      color: #64748b;
-      font-size: 11px;
-      font-weight: 900;
-      margin-bottom: 3px;
-    }
-    .maru-entity-overview-fact-value {
-      color: #111827;
-      font-size: 13px;
-      font-weight: 800;
-      line-height: 1.35;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .maru-entity-overview-links {
-      display: grid;
-      gap: 6px;
-      margin-top: 2px;
-    }
-    .maru-entity-overview-link {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
-      align-items: center;
-      color: #1e1b4b;
-      font-size: 13px;
-      font-weight: 800;
-      text-decoration: none;
-      border-top: 1px solid #eef2f7;
-      padding-top: 7px;
-      min-width: 0;
-    }
-    .maru-entity-overview-link span:first-child {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .maru-entity-overview-link span:last-child {
-      color: #64748b;
-      font-size: 11px;
-      font-weight: 800;
-      white-space: nowrap;
-    }
-    @media (max-width: 980px) {
-      .maru-entity-overview {
-        grid-template-columns: 1fr;
-      }
-    }
-    @media (max-width: 720px) {
-      .maru-entity-overview {
-        margin: 10px 12px 12px;
-        padding: 11px;
-      }
-      .maru-entity-overview-media {
-        grid-template-columns: 1fr 1fr;
-        grid-template-rows: 140px 110px;
-      }
-      .maru-entity-overview-tile:first-child {
-        grid-column: 1 / span 2;
-        grid-row: auto;
-      }
-      .maru-entity-overview-facts {
-        grid-template-columns: 1fr;
-      }
-    }
-
     @media (max-width: 720px) {
       .maru-search-home-link {
         min-height: 34px;
@@ -4404,11 +4223,17 @@ async function fetchInstantSearchPack(q, type = activeType){
     }
 
     function renderVisualPendingPlaceholderClient(mountTarget, count){
-      const note = document.createElement('div');
-      note.className = 'maru-visual-pending-note';
-      note.textContent = '실제 이미지·영상 썸네일 수신 중';
-      (mountTarget || results).appendChild(note);
-      return note;
+      const grid = document.createElement('div');
+      grid.className = 'maru-image-gallery-grid maru-image-gallery-pending';
+      const n = Math.max(1, Math.min(12, parseInt(count, 10) || 6));
+      for(let i = 0; i < n; i++){
+        const tile = document.createElement('div');
+        tile.className = 'maru-image-tile maru-image-tile-pending';
+        tile.setAttribute('aria-hidden', 'true');
+        grid.appendChild(tile);
+      }
+      (mountTarget || results).appendChild(grid);
+      return grid;
     }
 
     function renderImageGalleryInto(slice, mountTarget, maxTiles){
@@ -4469,6 +4294,146 @@ async function fetchInstantSearchPack(q, type = activeType){
       if(!grid || !grid.children.length){
         renderVisualPendingPlaceholderClient(results, 12);
       }
+    }
+
+    function decodeSearchPreviewEntitiesClient(v){
+      return String(v || '')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&apos;/g, "'")
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\u003c/gi, '<')
+        .replace(/\u003e/gi, '>')
+        .replace(/\u0026/gi, '&')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function cleanSearchPreviewTextClient(v){
+      const text = decodeSearchPreviewEntitiesClient(compactCardTextClient(v));
+      if(!text) return '';
+      return text
+        .replace(/\s*[-–—]\s*$/, '')
+        .replace(/^(요약|본문|소개|설명|내용)\s*[:：]\s*/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function shouldSkipSearchPreviewLineClient(text, titleText, mainDesc){
+      const t = cleanSearchPreviewTextClient(text);
+      if(!t || t.length < 16) return true;
+      const low = t.toLowerCase();
+      const titleLow = String(titleText || '').toLowerCase();
+      const descLow = String(mainDesc || '').toLowerCase();
+      if(isGeneratedGuideTextClient(t)) return true;
+      if(titleLow && low === titleLow) return true;
+      if(descLow && low === descLow) return true;
+      if(/^(google news|bing images|bing videos|google images|naver images|naver videos)$/i.test(low)) return true;
+      if(/^(뉴스|이미지|영상|지도|사이트|블로그|카페|쇼핑|도서|위키|지식)$/.test(t)) return true;
+      return false;
+    }
+
+    function pushSearchPreviewLineClient(out, seen, value, titleText, mainDesc, maxLen){
+      const text = cleanSearchPreviewTextClient(value);
+      if(shouldSkipSearchPreviewLineClient(text, titleText, mainDesc)) return;
+      const key = text.toLowerCase().replace(/\s+/g, ' ').slice(0, 220);
+      if(seen.has(key)) return;
+      seen.add(key);
+      out.push(text.length > (maxLen || 260) ? text.slice(0, maxLen || 260).replace(/\s+\S*$/, '') + '…' : text);
+    }
+
+    function sourceNameForPreviewClient(it){
+      const src = it && it.source;
+      if(src && typeof src === 'object') return cleanSearchPreviewTextClient(src.name || src.title || src.platform || src.site || src.domain || src.publisher);
+      return cleanSearchPreviewTextClient(src || it?.provider || it?.publisher || it?.channel || it?.media || '');
+    }
+
+    function dateTextForPreviewClient(it){
+      const payload = it && it.payload && typeof it.payload === 'object' ? it.payload : {};
+      const data = it && it.data && typeof it.data === 'object' ? it.data : {};
+      const raw = it?.publishedAt || it?.pubDate || it?.date || it?.datetime || it?.createdAt || it?.updatedAt || payload.publishedAt || payload.pubDate || payload.date || data.publishedAt || data.pubDate || data.date || '';
+      const text = cleanSearchPreviewTextClient(raw);
+      if(!text) return '';
+      return text.replace(/T.*$/, '').slice(0, 16);
+    }
+
+    function categoryTextForPreviewClient(it){
+      const payload = it && it.payload && typeof it.payload === 'object' ? it.payload : {};
+      const data = it && it.data && typeof it.data === 'object' ? it.data : {};
+      return cleanSearchPreviewTextClient(it?.category || it?.section || it?.type || it?.kind || payload.category || payload.section || data.category || data.section || '');
+    }
+
+    function buildSearchCardPreviewPackClient(it, mainDesc){
+      it = it && typeof it === 'object' ? it : {};
+      const displayCard = it.displayCard && typeof it.displayCard === 'object' ? it.displayCard : {};
+      const payload = it.payload && typeof it.payload === 'object' ? it.payload : {};
+      const data = it.data && typeof it.data === 'object' ? it.data : {};
+      const media = it.media && typeof it.media === 'object' ? it.media : {};
+      const preview = media.preview && typeof media.preview === 'object' ? media.preview : {};
+      const titleText = cleanSearchPreviewTextClient(it.title || displayCard.title || payload.title || data.title || '');
+      const lines = [];
+      const seen = new Set();
+
+      const richCandidates = [
+        it.lead, it.subtitle, it.contentSnippet, it.excerpt, it.abstract, it.bodyText, it.body, it.content, it.text,
+        payload.lead, payload.subtitle, payload.contentSnippet, payload.excerpt, payload.abstract, payload.bodyText, payload.body, payload.content, payload.text,
+        data.lead, data.subtitle, data.contentSnippet, data.excerpt, data.abstract, data.bodyText, data.body, data.content, data.text,
+        displayCard.body, displayCard.text, displayCard.snippet, displayCard.htmlSnippet, displayCard.description,
+        preview.caption, preview.summary, preview.description,
+        it.metaDescription, it.ogDescription, payload.metaDescription, payload.ogDescription, data.metaDescription, data.ogDescription
+      ];
+      richCandidates.forEach(v => pushSearchPreviewLineClient(lines, seen, v, titleText, mainDesc, 300));
+
+      const tagLine = Array.isArray(it.tags) ? it.tags.slice(0, 8).map(cleanSearchPreviewTextClient).filter(Boolean).join(' · ') : '';
+      if(tagLine) pushSearchPreviewLineClient(lines, seen, tagLine, titleText, mainDesc, 180);
+
+      const facts = [];
+      function addFact(v){
+        const text = cleanSearchPreviewTextClient(v);
+        if(!text || text.length > 40) return;
+        if(isGeneratedGuideTextClient(text)) return;
+        if(facts.map(x => x.toLowerCase()).includes(text.toLowerCase())) return;
+        facts.push(text);
+      }
+      addFact(sourceNameForPreviewClient(it));
+      addFact(dateTextForPreviewClient(it));
+      addFact(categoryTextForPreviewClient(it));
+      if(it.lang) addFact(String(it.lang).toUpperCase());
+      if(it.geo && typeof it.geo === 'object') addFact([it.geo.country, it.geo.state, it.geo.city].filter(Boolean).join(' · '));
+
+      return { facts: facts.slice(0, 4), lines: lines.slice(0, 3) };
+    }
+
+    function renderSearchCardPreviewPackClient(pack){
+      if(!pack || (!pack.facts?.length && !pack.lines?.length)) return null;
+      const wrap = document.createElement('div');
+      wrap.className = 'maru-card-preview-wrap';
+      if(pack.facts && pack.facts.length){
+        const facts = document.createElement('div');
+        facts.className = 'maru-card-preview-facts';
+        pack.facts.forEach(v => {
+          const chip = document.createElement('span');
+          chip.className = 'maru-card-preview-fact';
+          chip.textContent = v;
+          facts.appendChild(chip);
+        });
+        wrap.appendChild(facts);
+      }
+      if(pack.lines && pack.lines.length){
+        const detail = document.createElement('div');
+        detail.className = 'maru-card-preview-detail';
+        pack.lines.forEach(v => {
+          const line = document.createElement('div');
+          line.className = 'maru-card-preview-line';
+          line.textContent = v;
+          detail.appendChild(line);
+        });
+        wrap.appendChild(detail);
+      }
+      return wrap;
     }
 
     function descriptionForItemClient(it){
@@ -4556,7 +4521,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         if(isGeneratedGuideTextClient(text)) continue;
         if(titleText && key === titleText) continue;
         if(/^(google news|bing images|bing videos|google images|naver images|naver videos)$/i.test(key)) continue;
-        return text.slice(0, 620);
+        return decodeSearchPreviewEntitiesClient(text).slice(0, 760);
       }
       return '';
     }
@@ -4673,11 +4638,14 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 5);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(6, cardLineClamp) : 6);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
       }
+
+      const previewPackNode = renderSearchCardPreviewPackClient(buildSearchCardPreviewPackClient(it, d.textContent || ''));
+      if (previewPackNode) textCol.appendChild(previewPackNode);
 
       const hasImageSet = Array.isArray(it.imageSet) && it.imageSet.length > 0;
 
@@ -5116,359 +5084,6 @@ if (it.riskLabel === '⚠️ high-risk') {
       return filtered;
     }
 
-
-
-    // MARU entity overview module.  This does not change existing category,
-    // pager, gallery, or result-card logic; it only adds one Google/Naver-like
-    // overview block above page 1 when enough received items exist.
-    function overviewTextOfItemClient(it){
-      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      return compactCardTextClient([
-        it && it.title, it && it.name, it && it.summary, it && it.snippet, it && it.description,
-        it && it.contentSnippet, it && it.excerpt, displayCard.title, displayCard.summary,
-        displayCard.description, displayCard.snippet, payload.title, payload.summary,
-        payload.description, payload.snippet,
-        it && it.source, it && it.provider, it && it.channel,
-        it && it.url, it && it.link
-      ]);
-    }
-
-    function overviewUrlOfItemClient(it){
-      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
-      return String((it && (it.url || it.link || it.openUrl || it.href)) || payload.url || payload.link || '').trim();
-    }
-
-    function overviewHostLabelClient(it){
-      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
-      const raw = String((it && (it.source || it.provider || it.channel)) || payload.source || payload.provider || '').trim();
-      if(raw && raw !== '[object Object]') return raw.slice(0, 48);
-      const url = overviewUrlOfItemClient(it);
-      const host = domainOf(url);
-      return host || 'source';
-    }
-
-    function overviewIsPlaceQueryClient(q){
-      const t = String(q || '').trim().toLowerCase();
-      const known = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|도쿄|오사카|뉴욕|파리|런던|베이징|상하이|방콕|하노이|호치민|city|seoul|busan|tokyo|osaka|new\s*york|paris|london|beijing|shanghai|bangkok|hanoi)/i;
-      return known.test(t);
-    }
-
-    function overviewIsCountryQueryClient(q){
-      const t = String(q || '').trim().toLowerCase();
-      return /(한국|대한민국|미국|일본|중국|인도|영국|프랑스|독일|베트남|태국|러시아|브라질|캐나다|호주|스페인|이탈리아|멕시코|인도네시아|country|korea|usa|united states|japan|china|india|united kingdom|france|germany|vietnam|thailand|russia|brazil|canada|australia)/i.test(t);
-    }
-
-    function overviewIsCompanyQueryClient(q, text){
-      const query = String(q || '').trim();
-      const compact = query.replace(/\s+/g, '').toLowerCase();
-      const queryCompany = /(주식회사|유한회사|기업|회사|그룹|브랜드|본사|대표이사|주가|상장|코스피|코스닥|corp\.?|inc\.?|ltd\.?|company|corporation|brand)/i.test(query)
-        || /(삼성전자|삼성|현대자동차|현대차|기아|엘지|lg|sk|네이버|naver|카카오|kakao|쿠팡|coupang|롯데|신세계|cj|한화|포스코|posco|두산|셀트리온|하이브|hybe|카페24|우아한형제들)/i.test(compact);
-      if(queryCompany) return true;
-      // Do not classify a place as a company merely because a received item says
-      // 채용/취업/제품/서비스.  Those words often appear in city official pages.
-      const hay = String(text || '');
-      return /(공식\s*기업정보|기업개요|stock price|market cap|headquarters|ceo\s*:|대표이사)/i.test(hay);
-    }
-
-    function overviewIsPersonQueryClient(q, itemsText){
-      const query = String(q || '').trim();
-      const compact = query.replace(/\s+/g, '');
-      if(overviewIsPlaceQueryClient(query) || overviewIsCountryQueryClient(query)) return false;
-      if(overviewIsCompanyQueryClient(query, itemsText)) return false;
-      const hay = String(itemsText || '');
-      const personSignals = /(프로필|인물|나이|출생|학력|가수|배우|방송인|정치인|의원|대통령|선수|감독|작가|소설가|시인|교수|연구자|출연|필모그래피|앨범|노래|방송|소속사|official|instagram|tiktok|youtube|profile|biography|actor|actress|singer|celebrity|artist|album|filmography)/i;
-      if(personSignals.test(hay)) return true;
-      return /^[가-힣]{2,4}$/.test(compact) || /^[A-Za-z]+\s+[A-Za-z]+$/.test(query);
-    }
-
-    function inferOverviewEntityTypeClient(q, items){
-      const pool = Array.isArray(items) ? items.slice(0, 100) : [];
-      const text = pool.map(overviewTextOfItemClient).join(' ');
-      const groups = pool.map(displayGroupOfItem);
-      const newsCount = groups.filter(g => g === 'news').length;
-
-      // Order is important: cities/countries must not be stolen by company words
-      // found in job portals or service pages.
-      if(overviewIsCountryQueryClient(q)) return 'country';
-      if(overviewIsPlaceQueryClient(q)) return 'place';
-      if(overviewIsPersonQueryClient(q, text)) return 'person';
-      if(overviewIsCompanyQueryClient(q, text)) return 'company';
-      if(/지도|주소|관광|여행|명소|날씨|교통|맛집|호텔|숙소|map|travel|tour|local/.test(text)) return 'place';
-      if(newsCount >= Math.max(3, Math.ceil(pool.length * 0.35)) || /(이슈|사건|논란|속보|선거|전쟁|사고|재난|issue|breaking|election|war|accident)/i.test(String(q || '') + ' ' + text)) return 'issue';
-      return 'generic';
-    }
-
-    function overviewKickerClient(type){
-      const labels = {
-        person: '인물 대표 정보',
-        place: '지역·도시 대표 정보',
-        country: '국가 대표 정보',
-        company: '기업·브랜드 대표 정보',
-        issue: '이슈 대표 정보',
-        generic: '주요 정보'
-      };
-      return labels[type] || labels.generic;
-    }
-
-    function overviewChipsClient(type){
-      const chips = {
-        person: ['개요', '프로필', '뉴스', '영상', '이미지', '소셜'],
-        place: ['개요', '지도', '관광', '공식', '뉴스', '이미지'],
-        country: ['개요', '지도', '공식', '뉴스', '관광', '공공자료'],
-        company: ['공식', '기업 정보', '뉴스', '금융', '지도', '제품'],
-        issue: ['뉴스', '영상', '이미지', '소셜', '분석', '관련 자료'],
-        generic: ['주요 정보', '사이트', '뉴스', '이미지', '영상']
-      };
-      return chips[type] || chips.generic;
-    }
-
-    function overviewSubtitleClient(type, q, items){
-      const pool = Array.isArray(items) ? items : [];
-      const rejectForPlace = /(일자리|취업|채용|구직|알바|공고|job|career|recruit)/i;
-      const rank = { wiki: 1, knowledge: 2, authority: 3, site: 4, public_data: 5, news: 6, video: 7, image: 8 };
-      const candidates = pool.filter(it => {
-        if(!it || isSyntheticProviderGuideCardClient(it)) return false;
-        const txt = overviewTextOfItemClient(it);
-        if((type === 'place' || type === 'country') && rejectForPlace.test(txt)) return false;
-        return true;
-      }).sort((a,b) => (rank[displayGroupOfItem(a)] || 50) - (rank[displayGroupOfItem(b)] || 50));
-      const preferred = candidates[0] || pool.find(it => it && !isSyntheticProviderGuideCardClient(it)) || pool[0];
-      const desc = compactCardTextClient([
-        preferred && preferred.summary,
-        preferred && preferred.snippet,
-        preferred && preferred.description,
-        preferred && preferred.contentSnippet,
-        preferred && preferred.excerpt
-      ]);
-      if(desc && !isGeneratedGuideTextClient(desc)) return desc.slice(0, 180);
-      const fallback = {
-        person: `${q} 관련 프로필, 뉴스, 영상, 이미지, 소셜 정보를 모은 대표 정보입니다.`,
-        place: `${q} 관련 지도, 관광, 공식 정보, 뉴스와 시각 자료를 모은 지역 대표 정보입니다.`,
-        country: `${q} 관련 국가 개요, 지도, 공식 정보, 뉴스와 관광 자료를 모은 대표 정보입니다.`,
-        company: `${q} 관련 공식 사이트, 기업 정보, 뉴스, 금융, 위치와 제품 정보를 모은 대표 정보입니다.`,
-        issue: `${q} 관련 주요 뉴스 흐름, 영상, 이미지와 관련 자료를 모은 대표 정보입니다.`,
-        generic: `${q} 관련 주요 정보를 먼저 모은 대표 정보입니다.`
-      };
-      return fallback[type] || fallback.generic;
-    }
-
-    function overviewFactCandidatesClient(type, items){
-      const groups = groupSliceForDisplay(items || []);
-      const countOf = (g) => {
-        const hit = groups.find(x => x.group === g);
-        return hit && Array.isArray(hit.items) ? hit.items.length : 0;
-      };
-      const factsByType = {
-        person: [
-          ['프로필', countOf('knowledge') + countOf('wiki') + countOf('authority')],
-          ['뉴스', countOf('news')],
-          ['영상', countOf('video') + countOf('media')],
-          ['이미지', countOf('image')]
-        ],
-        place: [
-          ['지도·지역', countOf('local_tour')],
-          ['공식·사이트', countOf('authority') + countOf('site') + countOf('public_data')],
-          ['관광·여행', countOf('local_tour') + countOf('blog')],
-          ['뉴스', countOf('news')]
-        ],
-        country: [
-          ['국가 개요', countOf('knowledge') + countOf('wiki')],
-          ['공식·공공', countOf('authority') + countOf('public_data')],
-          ['지도·관광', countOf('local_tour')],
-          ['뉴스', countOf('news')]
-        ],
-        company: [
-          ['공식·사이트', countOf('authority') + countOf('site')],
-          ['뉴스', countOf('news')],
-          ['금융', countOf('finance')],
-          ['위치·지도', countOf('local_tour')]
-        ],
-        issue: [
-          ['뉴스', countOf('news')],
-          ['영상', countOf('video') + countOf('media')],
-          ['이미지', countOf('image')],
-          ['소셜·블로그', countOf('social') + countOf('blog') + countOf('community')]
-        ],
-        generic: [
-          ['주요 정보', countOf('authority') + countOf('knowledge') + countOf('wiki')],
-          ['사이트', countOf('site')],
-          ['뉴스', countOf('news')],
-          ['이미지·영상', countOf('image') + countOf('video') + countOf('media')]
-        ]
-      };
-      return (factsByType[type] || factsByType.generic).map(([label, n]) => [label, n > 0 ? `${n}개 수신` : '수신 대기']);
-    }
-
-    function overviewImagesClient(items, type){
-      const out = [];
-      const seen = new Set();
-      (Array.isArray(items) ? items : []).forEach(it => {
-        if(out.length >= 5 || !it || isSyntheticProviderGuideCardClient(it)) return;
-        const images = dedupeImageVariantsClient(collectNaturalImages(it));
-        images.forEach(src => {
-          if(out.length >= 5) return;
-          const key = normalizeImageVariantKeyClient(src) || String(src || '').toLowerCase();
-          if(!src || seen.has(key)) return;
-          seen.add(key);
-          out.push({ item: it, src });
-        });
-      });
-      return out;
-    }
-
-    function overviewLinksClient(items, type){
-      const wanted = type === 'person'
-        ? ['wiki','knowledge','news','video','image','social','site']
-        : type === 'place' || type === 'country'
-          ? ['authority','wiki','knowledge','site','local_tour','news']
-          : type === 'company'
-            ? ['authority','site','news','finance','local_tour']
-            : type === 'issue'
-              ? ['news','video','image','social','blog','site']
-              : ['authority','knowledge','wiki','site','news'];
-      const out = [];
-      const seen = new Set();
-      wanted.forEach(group => {
-        const hit = (Array.isArray(items) ? items : []).find(it => {
-          if(!it || isSyntheticProviderGuideCardClient(it)) return false;
-          if(displayGroupOfItem(it) !== group) return false;
-          const key = displayItemKey(it);
-          return key && !seen.has(key);
-        });
-        if(hit){
-          const key = displayItemKey(hit);
-          if(key) seen.add(key);
-          out.push(hit);
-        }
-      });
-      if(out.length < 3){
-        (Array.isArray(items) ? items : []).forEach(it => {
-          if(out.length >= 4 || !it || isSyntheticProviderGuideCardClient(it)) return;
-          const key = displayItemKey(it);
-          if(key && seen.has(key)) return;
-          if(key) seen.add(key);
-          out.push(it);
-        });
-      }
-      return out.slice(0, 4);
-    }
-
-    function buildEntityOverviewModuleClient(q, items){
-      const source = Array.isArray(items) ? items.filter(Boolean) : [];
-      if(!q || !source.length) return null;
-      const type = inferOverviewEntityTypeClient(q, source);
-      const images = overviewImagesClient(source, type);
-      const links = overviewLinksClient(source, type);
-      const hasUsefulContent = images.length || links.length >= 2;
-      if(!hasUsefulContent) return null;
-
-      const section = document.createElement('section');
-      section.className = 'maru-entity-overview';
-      if(!images.length) section.classList.add('maru-entity-overview--text-only');
-      section.dataset.entityType = type;
-
-      const media = document.createElement('div');
-      media.className = 'maru-entity-overview-media';
-      images.slice(0, 5).forEach(pair => {
-        const a = document.createElement('a');
-        a.className = 'maru-entity-overview-tile';
-        a.href = overviewUrlOfItemClient(pair.item) || pair.src || '#';
-        a.onclick = (e) => {
-          e.preventDefault();
-          openResultInsideSearchFrame(overviewUrlOfItemClient(pair.item) || pair.src, pair.item);
-        };
-        const img = document.createElement('img');
-        img.loading = 'lazy';
-        img.src = pair.src;
-        img.alt = '';
-        img.onerror = () => a.remove();
-        const cap = document.createElement('div');
-        cap.className = 'maru-entity-overview-caption';
-        cap.textContent = compactCardTextClient(pair.item && pair.item.title).slice(0, 44) || q;
-        a.appendChild(img);
-        a.appendChild(cap);
-        media.appendChild(a);
-      });
-
-      const info = document.createElement('div');
-      info.className = 'maru-entity-overview-info';
-      const kicker = document.createElement('div');
-      kicker.className = 'maru-entity-overview-kicker';
-      kicker.textContent = overviewKickerClient(type);
-      const title = document.createElement('h2');
-      title.className = 'maru-entity-overview-title';
-      title.textContent = q;
-      const subtitle = document.createElement('p');
-      subtitle.className = 'maru-entity-overview-subtitle';
-      subtitle.textContent = overviewSubtitleClient(type, q, source);
-
-      const chips = document.createElement('div');
-      chips.className = 'maru-entity-overview-chips';
-      overviewChipsClient(type).forEach(label => {
-        const chip = document.createElement('span');
-        chip.className = 'maru-entity-overview-chip';
-        chip.textContent = label;
-        chips.appendChild(chip);
-      });
-
-      const facts = document.createElement('div');
-      facts.className = 'maru-entity-overview-facts';
-      overviewFactCandidatesClient(type, source).forEach(([label, value]) => {
-        const box = document.createElement('div');
-        box.className = 'maru-entity-overview-fact';
-        const l = document.createElement('div');
-        l.className = 'maru-entity-overview-fact-label';
-        l.textContent = label;
-        const v = document.createElement('div');
-        v.className = 'maru-entity-overview-fact-value';
-        v.textContent = value;
-        box.appendChild(l);
-        box.appendChild(v);
-        facts.appendChild(box);
-      });
-
-      const linkWrap = document.createElement('div');
-      linkWrap.className = 'maru-entity-overview-links';
-      links.forEach(it => {
-        const url = overviewUrlOfItemClient(it);
-        if(!url) return;
-        const a = document.createElement('a');
-        a.href = url;
-        a.className = 'maru-entity-overview-link';
-        a.onclick = (e) => {
-          e.preventDefault();
-          openResultInsideSearchFrame(url, it);
-        };
-        const left = document.createElement('span');
-        left.textContent = compactCardTextClient(it && it.title).slice(0, 92) || domainOf(url) || url;
-        const right = document.createElement('span');
-        right.textContent = overviewHostLabelClient(it);
-        a.appendChild(left);
-        a.appendChild(right);
-        linkWrap.appendChild(a);
-      });
-
-      info.appendChild(kicker);
-      info.appendChild(title);
-      info.appendChild(subtitle);
-      info.appendChild(chips);
-      info.appendChild(facts);
-      if(linkWrap.childNodes.length) info.appendChild(linkWrap);
-      if(images.length) section.appendChild(media);
-      section.appendChild(info);
-      return section;
-    }
-
-    function renderEntityOverviewIfNeededClient(page){
-      if(normalizeSearchType(activeType) !== 'all') return;
-      if(Math.max(1, parseInt(page, 10) || 1) !== 1) return;
-      const q = (lastQuery || input.value || queryTextForTabs('') || '').trim();
-      if(!q) return;
-      const node = buildEntityOverviewModuleClient(q, allItems);
-      if(node) results.appendChild(node);
-    }
-
     function buildClientVisibleStream(page){
       const sourceItems = Array.isArray(allItems) ? allItems : [];
       if (!sourceItems.length) return [];
@@ -5559,7 +5174,6 @@ if (it.riskLabel === '⚠️ high-risk') {
       }
 
       results.innerHTML = '';
-      renderEntityOverviewIfNeededClient(page);
 
       if (!slice.length && normalizeSearchType(activeType) !== 'all') {
         const empty = document.createElement('div');
