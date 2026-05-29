@@ -342,8 +342,10 @@ function inferMaruSearchIntentProfile(q, items){
 function maruTabLeadForIntent(intent){
   const table = {
     person:  ['all','knowledge','wiki','news','video','image','sns','blog','site','book'],
-    place:   ['all','knowledge','wiki','site','map','tour','public_data','news','image','video','blog','sns'],
-    country: ['all','knowledge','wiki','site','news','map','tour','public_data','image','video','blog','sns'],
+    // 지명/도시/국가는 주요 정보 다음에 지도/지역이 바로 이어져야 한다.
+    // 인물/사건 검색에서는 지도 탭이 앞에 올라오지 않도록 다른 intent order는 유지한다.
+    place:   ['all','map','tour','knowledge','wiki','site','public_data','news','image','video','blog','sns'],
+    country: ['all','map','knowledge','wiki','site','public_data','news','tour','image','video','blog','sns'],
     company: ['all','site','knowledge','wiki','news','finance','map','image','video','blog','sns','shopping','public_data'],
     issue:   ['all','news','video','image','sns','blog','site','knowledge','wiki','public_data'],
     product: ['all','shopping','site','image','video','blog','cafe','news','knowledge','wiki'],
@@ -3156,8 +3158,9 @@ function displayGroupOfItem(it){
       const intent = inferMaruSearchIntentProfile(q, allItems);
       const orders = {
         person:  ['authority','knowledge','wiki','news','video','image','media','social','blog','site','book','community','web','academic','public_data','local_tour','shopping','sports','finance','webtoon'],
-        place:   ['authority','knowledge','wiki','site','local_tour','public_data','news','image','media','video','blog','social','community','web','book','academic','shopping','sports','finance','webtoon'],
-        country: ['authority','knowledge','wiki','site','news','local_tour','public_data','image','media','video','blog','social','community','web','book','academic','shopping','sports','finance','webtoon'],
+        // 지명/도시/국가 intent에서는 지도/지역 섹션을 주요 정보 바로 다음에 배치한다.
+        place:   ['authority','local_tour','knowledge','wiki','site','public_data','news','image','media','video','blog','social','community','web','book','academic','shopping','sports','finance','webtoon'],
+        country: ['authority','local_tour','knowledge','wiki','site','public_data','news','image','media','video','blog','social','community','web','book','academic','shopping','sports','finance','webtoon'],
         company: ['authority','site','knowledge','wiki','news','finance','local_tour','image','media','video','blog','social','shopping','public_data','community','web','book','academic','sports','webtoon'],
         issue:   ['news','video','image','media','social','blog','community','site','knowledge','wiki','authority','public_data','web','local_tour','book','academic','shopping','sports','finance','webtoon'],
         product: ['shopping','site','image','media','video','blog','community','cafe','news','knowledge','wiki','authority','web','local_tour','book','public_data','academic','sports','finance','webtoon'],
