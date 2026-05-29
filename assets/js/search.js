@@ -255,68 +255,156 @@ function queryTextForTabs(fallback){
   return String(fallback || fromInput || lastQuery || fromUrl || '').trim();
 }
 
-function inferSearchTabsForQuery(q, active){
-  const text = String(q || '').trim();
-  const low = text.toLowerCase();
-  const compact = low.replace(/\s+/g, '');
-  const base = ['all'];
-  const activeTypeForKeep = normalizeSearchType(active || activeType || 'all');
-
-  const placeSignal = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|뉴욕|도쿄|오사카|파리|런던|베트남|하노이|호치민|방콕|로마|시카고|워싱턴|상하이|베이징|city|seoul|busan|new\s*york|tokyo|osaka|paris|london|vietnam|hanoi|bangkok)/i.test(text);
-  const localSignal = /(지도|주소|위치|길찾기|근처|맛집|호텔|숙소|관광|여행|축제|명소|교통|지하철|버스|공항|map|maps|address|near|nearby|local|hotel|travel|tour|restaurant|attraction)/i.test(text);
-  const publicSignal = /(정부|공공|기관|시청|구청|도청|군청|공식|민원|행정|공공자료|공공데이터|open\s*data|government|official|public\s*data)/i.test(text);
-  const personSignal = /(배우|가수|연예인|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|선수|축구선수|야구선수|인물|프로필|나이|키|학력|출연|필모그래피|손예진|아이유|김수현|유재석|bts|blackpink|actor|actress|singer|celebrity|profile|biography)/i.test(text) || (/^[가-힣]{2,4}$/.test(compact) && !placeSignal);
-  const productSignal = /(상품|제품|가격|구매|쇼핑|브랜드|후기|리뷰|인삼|홍삼|화장품|폰|자동차|노트북|product|price|buy|shopping|brand|review)/i.test(text);
-  const mediaSignal = /(영상|동영상|유튜브|영화|드라마|음악|뮤직|앨범|video|youtube|movie|drama|music|album)/i.test(text);
-  const imageSignal = /(이미지|사진|포토|갤러리|짤|화보|image|photo|picture|gallery)/i.test(text);
-  const academicSignal = /(논문|연구|학술|저널|대학|도서관|인용|paper|research|scholar|academic|journal|university|library)/i.test(text);
-  const bookSignal = /(책|도서|출판|저자|소설|문학|book|author|novel|literature)/i.test(text);
-  const financeSignal = /(주식|증권|환율|금융|코인|가상화폐|경제|stock|finance|market|crypto|exchange\s*rate)/i.test(text);
-  const sportsSignal = /(스포츠|축구|야구|농구|배구|골프|올림픽|sports|football|baseball|basketball|golf|olympic)/i.test(text);
-  const webtoonSignal = /(웹툰|만화|애니|webtoon|comic|manga|anime)/i.test(text);
-
-  let tabs;
-  if(placeSignal || localSignal){
-    tabs = base.concat(['map','site','tour','news','image','video','blog','sns','public_data','knowledge','wiki']);
-  }else if(personSignal){
-    tabs = base.concat(['knowledge','wiki','news','image','video','sns','blog','site','book']);
-  }else if(productSignal){
-    tabs = base.concat(['shopping','site','image','video','blog','cafe','news','knowledge','wiki']);
-  }else if(academicSignal){
-    tabs = base.concat(['academic','knowledge','wiki','book','site','news','image','video']);
-  }else if(bookSignal){
-    tabs = base.concat(['book','knowledge','wiki','site','blog','news','image','shopping']);
-  }else if(financeSignal){
-    tabs = base.concat(['finance','news','site','knowledge','blog','image','video']);
-  }else if(sportsSignal){
-    tabs = base.concat(['sports','news','video','image','sns','blog','site','knowledge']);
-  }else if(webtoonSignal){
-    tabs = base.concat(['webtoon','image','video','site','blog','sns','shopping','news']);
-  }else if(mediaSignal){
-    tabs = base.concat(['video','image','news','sns','blog','site','knowledge']);
-  }else if(imageSignal){
-    tabs = base.concat(['image','video','site','news','blog','sns','knowledge']);
-  }else if(publicSignal){
-    tabs = base.concat(['public_data','site','knowledge','wiki','news','map','image','video']);
-  }else{
-    tabs = base.concat(['site','knowledge','wiki','news','image','video','blog','sns']);
+function maruIntentItemTextClient(it){
+  if(!it || typeof it !== 'object') return '';
+  function flat(v){
+    if(v == null) return '';
+    if(typeof v === 'string' || typeof v === 'number') return String(v);
+    if(Array.isArray(v)) return v.slice(0, 12).map(flat).join(' ');
+    if(typeof v === 'object') return Object.keys(v).slice(0, 24).map(k => flat(v[k])).join(' ');
+    return '';
   }
+  return [
+    it.title, it.name, it.subtitle, it.summary, it.description, it.snippet,
+    it.contentSnippet, it.excerpt, it.abstract, it.body, it.category, it.group,
+    it.displayGroup, it.displayGroupLabel, it.type, it.kind, it.mediaType,
+    it.domain, it.publisher, it.channel, it.provider, it.url, it.link,
+    flat(it.source), flat(it.media), flat(it.displayCard), flat(it.payload), flat(it.data)
+  ].filter(Boolean).join(' ');
+}
 
-  if(activeTypeForKeep && activeTypeForKeep !== 'all' && !tabs.includes(activeTypeForKeep)) tabs.splice(1, 0, activeTypeForKeep);
+function maruIntentEvidenceClient(items){
+  const source = Array.isArray(items) ? items.slice(0, 180) : [];
+  const counts = {};
+  const textParts = [];
+  source.forEach(it => {
+    const itemText = maruIntentItemTextClient(it);
+    if(itemText) textParts.push(itemText);
+    try{
+      const g = displayGroupOfItem(it);
+      if(g) counts[g] = (counts[g] || 0) + 1;
+    }catch(e){
+      const raw = String((it && (it.displayGroup || it.group || it.category || it.type)) || '').toLowerCase();
+      if(raw) counts[raw] = (counts[raw] || 0) + 1;
+    }
+  });
+  return { text: textParts.join(' ').toLowerCase(), counts };
+}
 
-  // Keep the full search OS category rail visible.  Query inference only changes
-  // the order of the leading tabs; it must not remove tabs such as image/video
-  // just because their first thumbnails have not arrived yet.
-  SEARCH_TAB_KEYS.forEach(key => {
-    if(key && !tabs.includes(key)) tabs.push(key);
+function inferMaruSearchIntentProfile(q, items){
+  const query = String(q || '').trim();
+  const low = query.toLowerCase();
+  const compact = low.replace(/\s+/g, '');
+  const ev = maruIntentEvidenceClient(items || allItems);
+  const hay = `${low} ${ev.text}`.toLowerCase();
+  const counts = ev.counts || {};
+
+  const citySignal = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|수원|성남|고양|용인|청주|전주|천안|포항|창원|김해|평양|뉴욕|도쿄|오사카|파리|런던|로마|시카고|워싱턴|상하이|베이징|홍콩|싱가포르|하노이|호치민|방콕|city|seoul|busan|new\s*york|tokyo|osaka|paris|london|rome|chicago|washington|shanghai|beijing|hong\s*kong|singapore|hanoi|bangkok)/i.test(query);
+  const countrySignal = /(대한민국|한국|미국|일본|중국|영국|프랑스|독일|러시아|인도|베트남|태국|인도네시아|필리핀|캐나다|호주|브라질|멕시코|이탈리아|스페인|네덜란드|스웨덴|노르웨이|핀란드|덴마크|폴란드|우크라이나|이스라엘|사우디|아랍에미리트|uae|korea|south\s*korea|usa|united\s*states|japan|china|uk|united\s*kingdom|france|germany|russia|india|vietnam|thailand|indonesia|philippines|canada|australia|brazil|mexico|italy|spain)/i.test(query);
+  const localSignal = /(지도|주소|위치|길찾기|근처|맛집|호텔|숙소|관광|여행|축제|명소|교통|지하철|버스|공항|주변|방문|코스|map|maps|address|near|nearby|local|hotel|travel|tour|restaurant|attraction|airport|transit)/i.test(query);
+  const companySignal = /(회사|기업|브랜드|그룹|재단|협회|법인|주식회사|상장|상장사|본사|지점|매장|영업점|대표이사|ceo|ir|실적|매출|채용|주가|삼성|현대|기아|엘지|lg|sk|네이버|카카오|롯데|포스코|한화|두산|cj|gs|쿠팡|배민|스타벅스|테슬라|애플|구글|마이크로소프트|아마존|메타|엔비디아|company|corporation|corp|inc|ltd|brand|enterprise|startup|headquarters|store|stock|earnings|revenue|recruit)/i.test(hay);
+  const issueSignal = /(이슈|논란|사건|사고|속보|현안|정책|선거|후보|토론|전쟁|분쟁|시위|집회|파업|재판|수사|폭우|태풍|지진|화재|감염|위기|갈등|issue|breaking|controversy|election|policy|war|conflict|protest|strike|trial|investigation|crisis|disaster)/i.test(query);
+
+  const personEvidence = /(프로필|인물|나이|키|학력|출생|소속사|배우|가수|연예인|아이돌|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|후보|선수|축구선수|야구선수|출연|필모그래피|앨범|곡|작품|업적|수상|biography|profile|actor|actress|singer|celebrity|artist|filmography|discography|career|awards)/i.test(hay);
+  const compactKoreanNameSignal = /^[가-힣]{2,4}$/.test(compact) && !citySignal && !countrySignal && !companySignal;
+  const personSignal = (personEvidence || compactKoreanNameSignal) && !companySignal && !(citySignal || countrySignal || localSignal);
+
+  const productSignal = /(상품|제품|가격|구매|쇼핑|브랜드|후기|리뷰|인삼|홍삼|화장품|폰|자동차|노트북|가전|의류|신발|product|price|buy|shopping|brand|review|spec|model)/i.test(query) && !companySignal;
+  const academicSignal = /(논문|연구|학술|저널|대학|도서관|인용|학회|paper|research|scholar|academic|journal|university|library|citation)/i.test(query);
+  const bookSignal = /(책|도서|출판|저자|소설|문학|book|author|novel|literature|publication)/i.test(query);
+  const financeSignal = /(주식|증권|환율|금융|코인|가상화폐|경제|실적|매출|stock|finance|market|crypto|exchange\s*rate|earnings|revenue)/i.test(query);
+  const sportsSignal = /(스포츠|축구|야구|농구|배구|골프|올림픽|월드컵|sports|football|baseball|basketball|golf|olympic|world\s*cup)/i.test(query);
+  const webtoonSignal = /(웹툰|만화|애니|webtoon|comic|manga|anime)/i.test(query);
+  const mediaSignal = /(영상|동영상|유튜브|영화|드라마|음악|뮤직|앨범|공연|콘서트|방송|예능|video|youtube|movie|drama|music|album|concert|show|clip)/i.test(query);
+  const imageSignal = /(이미지|사진|포토|갤러리|화보|풍경|전경|야경|image|photo|picture|gallery|scenery|landscape)/i.test(query);
+  const publicSignal = /(정부|공공|기관|시청|구청|도청|군청|공식|민원|행정|공공자료|공공데이터|통계청|법령|고시|open\s*data|government|official|public\s*data|administration|statistics)/i.test(query);
+
+  // Returned evidence can override a vague query.  This is what prevents a
+  // person name from staying on a city/nation category profile after results arrive.
+  const returnedPersonProfile = personEvidence && ((counts.knowledge || 0) + (counts.wiki || 0) + (counts.news || 0) + (counts.video || 0) + (counts.image || 0) + (counts.social || 0) >= 2);
+  if(personSignal || returnedPersonProfile) return 'person';
+  if(companySignal) return 'company';
+  if(issueSignal || (counts.news || 0) >= 4 && /(논란|사건|속보|issue|breaking|뉴스|보도)/i.test(hay)) return 'issue';
+  if(productSignal) return 'product';
+  if(academicSignal) return 'academic';
+  if(bookSignal) return 'book';
+  if(financeSignal) return 'finance';
+  if(sportsSignal) return 'sports';
+  if(webtoonSignal) return 'webtoon';
+  if(countrySignal) return 'country';
+  if(citySignal || localSignal) return 'place';
+  if(mediaSignal) return 'media';
+  if(imageSignal) return 'image';
+  if(publicSignal) return 'public';
+  return 'general';
+}
+
+function maruTabLeadForIntent(intent){
+  const table = {
+    person:  ['all','knowledge','wiki','news','video','image','sns','blog','site','book'],
+    place:   ['all','knowledge','wiki','site','map','tour','public_data','news','image','video','blog','sns'],
+    country: ['all','knowledge','wiki','site','news','map','tour','public_data','image','video','blog','sns'],
+    company: ['all','site','knowledge','wiki','news','finance','map','image','video','blog','sns','shopping','public_data'],
+    issue:   ['all','news','video','image','sns','blog','site','knowledge','wiki','public_data'],
+    product: ['all','shopping','site','image','video','blog','cafe','news','knowledge','wiki'],
+    academic:['all','academic','knowledge','wiki','book','site','news','image','video'],
+    book:    ['all','book','knowledge','wiki','site','blog','news','image','shopping'],
+    finance: ['all','finance','news','site','knowledge','blog','image','video'],
+    sports:  ['all','sports','news','video','image','sns','blog','site','knowledge'],
+    webtoon: ['all','webtoon','image','video','site','blog','sns','shopping','news'],
+    media:   ['all','video','image','news','sns','blog','site','knowledge'],
+    image:   ['all','image','video','site','news','blog','sns','knowledge'],
+    public:  ['all','public_data','site','knowledge','wiki','news','map','image','video'],
+    general: ['all','site','knowledge','wiki','news','image','video','blog','sns']
+  };
+  return table[intent] || table.general;
+}
+
+function inferSearchTabsForQuery(q, active){
+  const intent = inferMaruSearchIntentProfile(q, allItems);
+  const activeTypeForKeep = normalizeSearchType(active || activeType || 'all');
+  const evidence = maruIntentEvidenceClient(allItems);
+  const countByTab = {};
+  const groupToTab = {
+    authority:'site', local_tour:'map', public_data:'public_data', knowledge:'knowledge', wiki:'wiki',
+    academic:'academic', site:'site', book:'book', news:'news', blog:'blog', cafe:'cafe',
+    community:'cafe', image:'image', media:'image', video:'video', social:'sns', shopping:'shopping',
+    sports:'sports', finance:'finance', webtoon:'webtoon', web:'site'
+  };
+  Object.keys(evidence.counts || {}).forEach(g => {
+    const tab = groupToTab[g] || normalizeSearchType(g);
+    if(tab && SEARCH_TAB_KEYS.includes(tab)) countByTab[tab] = (countByTab[tab] || 0) + evidence.counts[g];
   });
 
-  return uniqueSearchTabs(tabs);
+  const lead = maruTabLeadForIntent(intent).slice();
+  if(activeTypeForKeep && activeTypeForKeep !== 'all' && !lead.includes(activeTypeForKeep)) lead.splice(1, 0, activeTypeForKeep);
+
+  const out = [];
+  const seen = new Set();
+  function push(type){
+    const t = normalizeSearchType(type);
+    if(!t || seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  }
+  lead.forEach(push);
+
+  // After the intent lead, categories that are actually present in the returned
+  // pool move up, but low-relevance categories remain available later.
+  SEARCH_TAB_KEYS
+    .filter(k => !seen.has(k) && (countByTab[k] || 0) > 0)
+    .sort((a,b) => (countByTab[b] || 0) - (countByTab[a] || 0))
+    .forEach(push);
+
+  SEARCH_TAB_KEYS.forEach(push);
+  return uniqueSearchTabs(out);
 }
 
 function searchTabsProfileKey(q, active){
+  const intent = inferMaruSearchIntentProfile(q, allItems);
   const tabs = inferSearchTabsForQuery(q, active).map(x => x[0]).join('|');
-  return tabs + '::' + normalizeSearchType(active || activeType || 'all') + '::' + getSearchUiLang();
+  const received = Array.isArray(allItems) ? allItems.length : 0;
+  return intent + '::' + tabs + '::' + received + '::' + normalizeSearchType(active || activeType || 'all') + '::' + getSearchUiLang();
 }
 
 
@@ -335,51 +423,6 @@ function ensureSearchCardMediaStyle(){
     .maru-search-card-text {
       min-width: 0;
       flex: 1 1 auto;
-    }
-    .maru-card-preview-facts {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin: 7px 0 0;
-    }
-    .maru-card-preview-fact {
-      display: inline-flex;
-      align-items: center;
-      max-width: 100%;
-      padding: 3px 7px;
-      border-radius: 999px;
-      border: 1px solid #e5e7eb;
-      background: #f8fafc;
-      color: #475569;
-      font-size: 11px;
-      font-weight: 800;
-      line-height: 1.25;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .maru-card-preview-detail {
-      margin-top: 7px;
-      padding: 8px 10px;
-      border-radius: 10px;
-      background: #f8fafc;
-      border: 1px solid #eef2f7;
-      color: #334155;
-      font-size: 12px;
-      line-height: 1.5;
-    }
-    .maru-card-preview-line {
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      word-break: keep-all;
-    }
-    .maru-card-preview-line + .maru-card-preview-line {
-      margin-top: 4px;
-      padding-top: 4px;
-      border-top: 1px dashed #e2e8f0;
     }
     .maru-card-media {
       flex: 0 0 280px;
@@ -735,6 +778,97 @@ function ensureSearchCardMediaStyle(){
       align-items: center;
       gap: 0;
     }
+
+
+    /* PATCH: image gallery layout is full-width visual grid, max 6 columns.
+       This only affects gallery presentation and does not touch category tabs. */
+    .maru-display-section[data-group="image"] .maru-display-section-body,
+    .maru-display-section[data-group="media"] .maru-display-section-body {
+      padding: 12px 12px 14px;
+    }
+    .maru-display-section[data-group="image"] .maru-image-gallery-grid,
+    .maru-display-section[data-group="media"] .maru-image-gallery-grid,
+    .maru-image-gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 12px;
+      align-items: stretch;
+      width: 100%;
+      margin: 8px 0 12px;
+    }
+    .maru-image-tile {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid #e5e7eb;
+      border-radius: 13px;
+      overflow: hidden;
+      background: #ffffff;
+      cursor: pointer;
+    }
+    .maru-image-tile img {
+      width: 100%;
+      height: 138px;
+      min-height: 0;
+      object-fit: cover;
+      border: 0;
+      border-radius: 0;
+      background: #f1f5f9;
+      flex: 0 0 auto;
+    }
+    .maru-image-tile[data-orientation="portrait"] { grid-row: auto; }
+    .maru-image-tile[data-orientation="portrait"] img { min-height: 0; height: 138px; }
+    .maru-image-tile-caption {
+      position: static;
+      padding: 8px 9px 3px;
+      background: #ffffff;
+      color: #111827;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.28;
+      text-shadow: none;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .maru-image-tile-summary {
+      padding: 0 9px 9px;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    @media (max-width: 1340px) {
+      .maru-display-section[data-group="image"] .maru-image-gallery-grid,
+      .maru-display-section[data-group="media"] .maru-image-gallery-grid,
+      .maru-image-gallery-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    }
+    @media (max-width: 1120px) {
+      .maru-display-section[data-group="image"] .maru-image-gallery-grid,
+      .maru-display-section[data-group="media"] .maru-image-gallery-grid,
+      .maru-image-gallery-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 900px) {
+      .maru-display-section[data-group="image"] .maru-image-gallery-grid,
+      .maru-display-section[data-group="media"] .maru-image-gallery-grid,
+      .maru-image-gallery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .maru-display-section[data-group="image"] .maru-image-gallery-grid,
+      .maru-display-section[data-group="media"] .maru-image-gallery-grid,
+      .maru-image-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 420px) {
+      .maru-display-section[data-group="image"] .maru-image-gallery-grid,
+      .maru-display-section[data-group="media"] .maru-image-gallery-grid,
+      .maru-image-gallery-grid { grid-template-columns: 1fr; }
+    }
+
     @media (max-width: 720px) {
       .maru-search-home-link {
         min-height: 34px;
@@ -2574,11 +2708,11 @@ async function fetchInstantSearchPack(q, type = activeType){
     function isProviderLogoOrBannerImageClient(imageUrl, it){
       const s = String(imageUrl || '').toLowerCase();
       const host = (() => { try { return new URL(s, location.origin).hostname.toLowerCase(); } catch(e){ return ''; } })();
-      const titleSummary = String([it && it.title, it && it.summary, it && it.description].filter(Boolean).join(' ')).toLowerCase();
+      const titleSummary = String([it && it.title, it && it.summary, it && it.description, it && it.alt, it && it.caption].filter(Boolean).join(' ')).toLowerCase();
       if(/google\.com\/s2\/favicons|favicon|apple-touch-icon|logo|logotype|brandmark|symbol|emblem|\/ci[\/_-]|\/bi[\/_-]/i.test(s)) return true;
       if(/(naver|google|youtube|facebook|instagram|tiktok|twitter|x)[^?#]*(logo|favicon|brand|symbol|icon)/i.test(s)) return true;
-      if(/banner|placard|adserver|doubleclick|advertisement|promo-banner|popup/i.test(s)) return true;
-      if(/banner|placard|현수막|배너|광고/.test(titleSummary) && !/news|article|photo|image|youtube|ytimg|sns|instagram|tiktok/i.test(host + ' ' + s)) return true;
+      if(/banner|placard|adserver|doubleclick|advertisement|promo-banner|popup|slogan|billboard/i.test(s)) return true;
+      if(/(로고|logo|ci|bi|심벌|심볼|슬로건|현수막|플래카드|플랜카드|배너|광고판|광고|banner|placard|slogan|billboard)/i.test(titleSummary)) return true;
       return false;
     }
 
@@ -2850,10 +2984,32 @@ async function fetchInstantSearchPack(q, type = activeType){
       return map[raw] || raw;
     }
 
-    function displayGroupOfItem(it){
+    
+    function isNewsLikeItemClient(it){
+      if(!it || typeof it !== 'object') return false;
+      const sourceObj = it.source && typeof it.source === 'object' ? it.source : null;
+      const source = String(sourceObj ? (sourceObj.name || sourceObj.provider || sourceObj.platform || '') : (it.source || '')).toLowerCase();
+      const provider = String(it.provider || it.channel || (sourceObj && (sourceObj.provider || sourceObj.platform)) || '').toLowerCase();
+      const type = String(it.type || '').toLowerCase();
+      const category = String(it.category || '').toLowerCase();
+      const title = String(it.title || '').toLowerCase();
+      const summary = String(it.summary || it.snippet || it.description || it.contentSnippet || it.excerpt || '').toLowerCase();
+      const url = String(it.url || it.link || it.originallink || it.originalLink || '').toLowerCase();
+      const host = domainOf(url).toLowerCase();
+      const text = `${source} ${provider} ${type} ${category} ${title} ${summary} ${host} ${url}`;
+      if(type === 'news' || category === 'news' || source.includes('news') || provider.includes('news')) return true;
+      if(/(뉴스|신문|일보|기사|보도|언론|속보|취재|기자|news|press|journal|daily|times|herald|tribune)/i.test(text)) return true;
+      if(/(^|\.)(ohmynews\.com|hani\.co\.kr|chosun\.com|joongang\.co\.kr|donga\.com|khan\.co\.kr|mk\.co\.kr|hankyung\.com|sedaily\.com|seoul\.co\.kr|yna\.co\.kr|ytn\.co\.kr|sbs\.co\.kr|kbs\.co\.kr|jtbc\.co\.kr|ichannela\.com|mbn\.co\.kr|tvchosun\.com|news\.|press\.)/i.test(host)) return true;
+      return false;
+    }
+
+function displayGroupOfItem(it){
       const rawGroup = String((it && (it.displayGroup || it.displayGroupLabel || it.group)) || '').trim();
       const normalized = normalizeDisplayGroupClient(rawGroup);
       const inferred = inferDisplayGroupClient(it);
+      // Server-side broad labels can occasionally mis-place news into map/local.
+      // Keep the category rail intact, but never let news cards occupy 지도/지역.
+      if(isNewsLikeItemClient(it) && !['video','image','social'].includes(inferred)) return 'news';
 
       // Keep server groups when they are already precise, but allow broad groups
       // such as web/media/knowledge/community to split into richer portal lanes.
@@ -2933,7 +3089,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       const tourHostSignal = /(visitseoul|tour|travel|tripadvisor|lonelyplanet|airbnb|booking|agoda|expedia|hotel)/i.test(host + ' ' + url);
       const titleLocalSignal = /(지도|길찾기|주소|위치|근처|맛집|호텔|숙소|관광|여행|명소|공원|landmark|tour|travel|place|hotel)/i.test(title);
       const nonLocalContent = /(뉴스|신문|일보|기사|보도|블로그|카페|위키|논문|쇼핑|상품|증권|주식|영상|동영상|photo|image|news|blog|wiki|shop|video)/i.test(source + ' ' + provider + ' ' + type + ' ' + category + ' ' + host);
-      if (explicitMapSignal || mapUrlSignal || tourHostSignal || (titleLocalSignal && !nonLocalContent)) return 'local_tour';
+      if (!isNewsLikeItemClient(it) && (explicitMapSignal || mapUrlSignal || tourHostSignal || (titleLocalSignal && !nonLocalContent))) return 'local_tour';
       if (host.includes('wikipedia.org') || host.includes('namu.wiki') || source.includes('wiki') || type === 'wiki' || text.includes('위키')) return 'wiki';
       if (source.includes('scholar') || source.includes('academic') || source.includes('paper') || source.includes('research') || source.includes('library') || type === 'academic' || type === 'paper' || type === 'research' || category === 'academic' || text.includes('학술') || text.includes('논문') || text.includes('연구') || text.includes('journal') || text.includes('citation') || text.includes('thesis') || host.includes('scholar.google') || host.includes('riss.kr') || host.includes('dbpia.co.kr') || host.includes('kci.go.kr')) return 'academic';
       if (source.includes('encyc') || source.includes('kin') || type === 'knowledge' || category === 'knowledge' || text.includes('지식') || text.includes('백과') || text.includes('사전')) return 'knowledge';
@@ -2995,8 +3151,36 @@ async function fetchInstantSearchPack(q, type = activeType){
       return slice.some(it => it && (it.displayGroup || it.displayGroupLabel));
     }
 
+    function displayGroupOrderForCurrentSearch(){
+      const q = queryTextForTabs(lastQuery || (input && input.value) || '');
+      const intent = inferMaruSearchIntentProfile(q, allItems);
+      const orders = {
+        person:  ['authority','knowledge','wiki','news','video','image','media','social','blog','site','book','community','web','academic','public_data','local_tour','shopping','sports','finance','webtoon'],
+        place:   ['authority','knowledge','wiki','site','local_tour','public_data','news','image','media','video','blog','social','community','web','book','academic','shopping','sports','finance','webtoon'],
+        country: ['authority','knowledge','wiki','site','news','local_tour','public_data','image','media','video','blog','social','community','web','book','academic','shopping','sports','finance','webtoon'],
+        company: ['authority','site','knowledge','wiki','news','finance','local_tour','image','media','video','blog','social','shopping','public_data','community','web','book','academic','sports','webtoon'],
+        issue:   ['news','video','image','media','social','blog','community','site','knowledge','wiki','authority','public_data','web','local_tour','book','academic','shopping','sports','finance','webtoon'],
+        product: ['shopping','site','image','media','video','blog','community','cafe','news','knowledge','wiki','authority','web','local_tour','book','public_data','academic','sports','finance','webtoon'],
+        academic:['academic','knowledge','wiki','book','site','news','image','media','video','authority','public_data','web','blog','community','local_tour','shopping','sports','finance','webtoon'],
+        book:    ['book','knowledge','wiki','site','blog','news','image','media','shopping','authority','web','video','social','community','local_tour','public_data','academic','sports','finance','webtoon'],
+        finance: ['finance','news','site','knowledge','wiki','blog','image','media','video','authority','web','social','public_data','local_tour','book','academic','shopping','sports','webtoon'],
+        sports:  ['sports','news','video','image','media','social','blog','site','knowledge','wiki','authority','web','community','local_tour','book','public_data','academic','shopping','finance','webtoon'],
+        webtoon: ['webtoon','image','media','video','site','blog','social','shopping','news','knowledge','wiki','authority','web','community','local_tour','book','public_data','academic','sports','finance'],
+        media:   ['video','image','media','news','social','blog','site','knowledge','wiki','authority','web','community','local_tour','book','public_data','academic','shopping','sports','finance','webtoon'],
+        image:   ['image','media','video','site','news','blog','social','knowledge','wiki','authority','web','community','local_tour','book','public_data','academic','shopping','sports','finance','webtoon'],
+        public:  ['public_data','authority','site','knowledge','wiki','news','local_tour','image','media','video','web','blog','community','book','academic','shopping','sports','finance','webtoon'],
+        general: ['authority','knowledge','wiki','site','book','blog','cafe','community','shopping','news','image','media','video','social','public_data','academic','local_tour','sports','finance','webtoon','web']
+      };
+      const base = orders[intent] || orders.general;
+      const full = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
+      const out = [];
+      const seen = new Set();
+      base.concat(full).forEach(g => { if(g && !seen.has(g)){ seen.add(g); out.push(g); } });
+      return out;
+    }
+
     function groupSliceForDisplay(slice){
-      const order = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon','web'];
+      const order = displayGroupOrderForCurrentSearch();
       const orderIndex = new Map(order.map((g, i) => [g, i]));
       const groups = new Map();
 
@@ -4276,6 +4460,13 @@ async function fetchInstantSearchPack(q, type = activeType){
           cap.textContent = capText;
           tile.appendChild(cap);
         }
+        const summaryText = descriptionForItemClient(it);
+        if(summaryText){
+          const summary = document.createElement('div');
+          summary.className = 'maru-image-tile-summary';
+          summary.textContent = summaryText;
+          tile.appendChild(summary);
+        }
 
         tile.addEventListener('click', (e) => {
           e.preventDefault();
@@ -4292,148 +4483,14 @@ async function fetchInstantSearchPack(q, type = activeType){
     function renderImageGalleryPage(slice){
       const grid = renderImageGalleryInto(slice, results);
       if(!grid || !grid.children.length){
-        renderVisualPendingPlaceholderClient(results, 12);
+        const pending = document.createElement('div');
+        pending.className = 'card';
+        pending.style.padding = '16px 18px';
+        pending.style.color = '#64748b';
+        pending.style.fontWeight = '700';
+        pending.textContent = '이미지 썸네일을 수신 중입니다. 실제 이미지가 도착하면 갤러리로 표시됩니다.';
+        results.appendChild(pending);
       }
-    }
-
-    function decodeSearchPreviewEntitiesClient(v){
-      return String(v || '')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&apos;/g, "'")
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/\u003c/gi, '<')
-        .replace(/\u003e/gi, '>')
-        .replace(/\u0026/gi, '&')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
-
-    function cleanSearchPreviewTextClient(v){
-      const text = decodeSearchPreviewEntitiesClient(compactCardTextClient(v));
-      if(!text) return '';
-      return text
-        .replace(/\s*[-–—]\s*$/, '')
-        .replace(/^(요약|본문|소개|설명|내용)\s*[:：]\s*/i, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
-
-    function shouldSkipSearchPreviewLineClient(text, titleText, mainDesc){
-      const t = cleanSearchPreviewTextClient(text);
-      if(!t || t.length < 16) return true;
-      const low = t.toLowerCase();
-      const titleLow = String(titleText || '').toLowerCase();
-      const descLow = String(mainDesc || '').toLowerCase();
-      if(isGeneratedGuideTextClient(t)) return true;
-      if(titleLow && low === titleLow) return true;
-      if(descLow && low === descLow) return true;
-      if(/^(google news|bing images|bing videos|google images|naver images|naver videos)$/i.test(low)) return true;
-      if(/^(뉴스|이미지|영상|지도|사이트|블로그|카페|쇼핑|도서|위키|지식)$/.test(t)) return true;
-      return false;
-    }
-
-    function pushSearchPreviewLineClient(out, seen, value, titleText, mainDesc, maxLen){
-      const text = cleanSearchPreviewTextClient(value);
-      if(shouldSkipSearchPreviewLineClient(text, titleText, mainDesc)) return;
-      const key = text.toLowerCase().replace(/\s+/g, ' ').slice(0, 220);
-      if(seen.has(key)) return;
-      seen.add(key);
-      out.push(text.length > (maxLen || 260) ? text.slice(0, maxLen || 260).replace(/\s+\S*$/, '') + '…' : text);
-    }
-
-    function sourceNameForPreviewClient(it){
-      const src = it && it.source;
-      if(src && typeof src === 'object') return cleanSearchPreviewTextClient(src.name || src.title || src.platform || src.site || src.domain || src.publisher);
-      return cleanSearchPreviewTextClient(src || it?.provider || it?.publisher || it?.channel || it?.media || '');
-    }
-
-    function dateTextForPreviewClient(it){
-      const payload = it && it.payload && typeof it.payload === 'object' ? it.payload : {};
-      const data = it && it.data && typeof it.data === 'object' ? it.data : {};
-      const raw = it?.publishedAt || it?.pubDate || it?.date || it?.datetime || it?.createdAt || it?.updatedAt || payload.publishedAt || payload.pubDate || payload.date || data.publishedAt || data.pubDate || data.date || '';
-      const text = cleanSearchPreviewTextClient(raw);
-      if(!text) return '';
-      return text.replace(/T.*$/, '').slice(0, 16);
-    }
-
-    function categoryTextForPreviewClient(it){
-      const payload = it && it.payload && typeof it.payload === 'object' ? it.payload : {};
-      const data = it && it.data && typeof it.data === 'object' ? it.data : {};
-      return cleanSearchPreviewTextClient(it?.category || it?.section || it?.type || it?.kind || payload.category || payload.section || data.category || data.section || '');
-    }
-
-    function buildSearchCardPreviewPackClient(it, mainDesc){
-      it = it && typeof it === 'object' ? it : {};
-      const displayCard = it.displayCard && typeof it.displayCard === 'object' ? it.displayCard : {};
-      const payload = it.payload && typeof it.payload === 'object' ? it.payload : {};
-      const data = it.data && typeof it.data === 'object' ? it.data : {};
-      const media = it.media && typeof it.media === 'object' ? it.media : {};
-      const preview = media.preview && typeof media.preview === 'object' ? media.preview : {};
-      const titleText = cleanSearchPreviewTextClient(it.title || displayCard.title || payload.title || data.title || '');
-      const lines = [];
-      const seen = new Set();
-
-      const richCandidates = [
-        it.lead, it.subtitle, it.contentSnippet, it.excerpt, it.abstract, it.bodyText, it.body, it.content, it.text,
-        payload.lead, payload.subtitle, payload.contentSnippet, payload.excerpt, payload.abstract, payload.bodyText, payload.body, payload.content, payload.text,
-        data.lead, data.subtitle, data.contentSnippet, data.excerpt, data.abstract, data.bodyText, data.body, data.content, data.text,
-        displayCard.body, displayCard.text, displayCard.snippet, displayCard.htmlSnippet, displayCard.description,
-        preview.caption, preview.summary, preview.description,
-        it.metaDescription, it.ogDescription, payload.metaDescription, payload.ogDescription, data.metaDescription, data.ogDescription
-      ];
-      richCandidates.forEach(v => pushSearchPreviewLineClient(lines, seen, v, titleText, mainDesc, 300));
-
-      const tagLine = Array.isArray(it.tags) ? it.tags.slice(0, 8).map(cleanSearchPreviewTextClient).filter(Boolean).join(' · ') : '';
-      if(tagLine) pushSearchPreviewLineClient(lines, seen, tagLine, titleText, mainDesc, 180);
-
-      const facts = [];
-      function addFact(v){
-        const text = cleanSearchPreviewTextClient(v);
-        if(!text || text.length > 40) return;
-        if(isGeneratedGuideTextClient(text)) return;
-        if(facts.map(x => x.toLowerCase()).includes(text.toLowerCase())) return;
-        facts.push(text);
-      }
-      addFact(sourceNameForPreviewClient(it));
-      addFact(dateTextForPreviewClient(it));
-      addFact(categoryTextForPreviewClient(it));
-      if(it.lang) addFact(String(it.lang).toUpperCase());
-      if(it.geo && typeof it.geo === 'object') addFact([it.geo.country, it.geo.state, it.geo.city].filter(Boolean).join(' · '));
-
-      return { facts: facts.slice(0, 4), lines: lines.slice(0, 3) };
-    }
-
-    function renderSearchCardPreviewPackClient(pack){
-      if(!pack || (!pack.facts?.length && !pack.lines?.length)) return null;
-      const wrap = document.createElement('div');
-      wrap.className = 'maru-card-preview-wrap';
-      if(pack.facts && pack.facts.length){
-        const facts = document.createElement('div');
-        facts.className = 'maru-card-preview-facts';
-        pack.facts.forEach(v => {
-          const chip = document.createElement('span');
-          chip.className = 'maru-card-preview-fact';
-          chip.textContent = v;
-          facts.appendChild(chip);
-        });
-        wrap.appendChild(facts);
-      }
-      if(pack.lines && pack.lines.length){
-        const detail = document.createElement('div');
-        detail.className = 'maru-card-preview-detail';
-        pack.lines.forEach(v => {
-          const line = document.createElement('div');
-          line.className = 'maru-card-preview-line';
-          line.textContent = v;
-          detail.appendChild(line);
-        });
-        wrap.appendChild(detail);
-      }
-      return wrap;
     }
 
     function descriptionForItemClient(it){
@@ -4521,7 +4578,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         if(isGeneratedGuideTextClient(text)) continue;
         if(titleText && key === titleText) continue;
         if(/^(google news|bing images|bing videos|google images|naver images|naver videos)$/i.test(key)) continue;
-        return decodeSearchPreviewEntitiesClient(text).slice(0, 760);
+        return text.slice(0, 620);
       }
       return '';
     }
@@ -4638,14 +4695,11 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(6, cardLineClamp) : 6);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 5);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
       }
-
-      const previewPackNode = renderSearchCardPreviewPackClient(buildSearchCardPreviewPackClient(it, d.textContent || ''));
-      if (previewPackNode) textCol.appendChild(previewPackNode);
 
       const hasImageSet = Array.isArray(it.imageSet) && it.imageSet.length > 0;
 
@@ -4932,7 +4986,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         items: diversifyGroupPreviewItems(g.group, g.items || [])
       }));
       const byGroup = new Map(grouped.map(g => [g.group, g]));
-      const categoryOrder = ['authority','local_tour','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','media','social','public_data','academic','community','sports','finance','webtoon'];
+      const categoryOrder = displayGroupOrderForCurrentSearch().filter(g => g !== 'web');
       const categoryOverflowItems = [];
       const categoryPages = [];
       let page = [];
@@ -5060,8 +5114,8 @@ if (it.riskLabel === '⚠️ high-risk') {
       const url = String((it && (it.url || it.link || it.openUrl || it.href)) || '').toLowerCase();
 
       if(t === itemType) return true;
-      if(t === 'map') return itemType === 'map' || group === 'local_tour';
-      if(t === 'tour') return itemType === 'map' || group === 'local_tour' || /visit|tour|travel|관광|여행/.test(url);
+      if(t === 'map') return !isNewsLikeItemClient(it) && (itemType === 'map' || group === 'local_tour');
+      if(t === 'tour') return !isNewsLikeItemClient(it) && (itemType === 'map' || group === 'local_tour' || /visit|tour|travel|관광|여행/.test(url));
       if(t === 'site') return ['site','knowledge','wiki','public_data'].includes(itemType) || ['authority','site','public_data'].includes(group);
       if(t === 'knowledge') return ['knowledge','wiki','site'].includes(itemType) || ['knowledge','wiki','authority'].includes(group);
       if(t === 'wiki') return itemType === 'wiki' || /wiki|wikipedia|namu\.wiki|위키/.test(url);
@@ -5156,6 +5210,7 @@ if (it.riskLabel === '⚠️ high-risk') {
     }
 
     function renderPage(page, skipEnrich = false){
+      try{ updateSearchTabsActive(lastQuery || (input && input.value) || ''); }catch(e){}
       if(serverPagedMode && !loadedServerPages.has(page)){
         const preloadedPageCount = preloadPageCountFromItems(allItems);
         if(page > preloadedPageCount && !renderPage._serverWindowLoading){
@@ -5168,7 +5223,14 @@ if (it.riskLabel === '⚠️ high-risk') {
       const start = (page - 1) * PAGE_SIZE;
 
       if (!slice.length && normalizeSearchType(activeType) === 'all') {
-        if(!results.children.length) renderSkeleton();
+        results.innerHTML = '';
+        const empty = document.createElement('div');
+        empty.className = 'card';
+        empty.style.padding = '16px 18px';
+        empty.style.color = '#64748b';
+        empty.style.fontWeight = '700';
+        empty.textContent = `현재 ${page}페이지에 내려온 검색 카드가 없습니다.`;
+        results.appendChild(empty);
         drawPager();
         return;
       }
@@ -5249,17 +5311,20 @@ if (it.riskLabel === '⚠️ high-risk') {
           allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice);
           const total = serverTotalFromPayload(pack && pack.payload, serverTotalItems || pageSlice.length);
           serverTotalItems = Math.max(serverTotalItems || 0, total || 0, INITIAL_PRELOAD_TARGET);
-        } else if(serverTotalItems > ((page - 1) * PAGE_SIZE)){
-          // Do not silently render a blank page when the pager says that page exists.
-          // Keep the loading state visible and let the user retry by clicking the page again.
-          status.textContent = `${uiText('pageDataSupplying', 'Page data is being supplied')} ${page} · "${q}"...`;
+        } else {
+          loadedServerPages.set(page, []);
+          status.textContent = `현재 ${page}페이지에 내려온 검색 카드가 없습니다.`;
         }
       }catch(e){
         console.warn('server page fetch skipped:', e);
       }
       if(loadedServerPages.has(page) || page <= preloadPageCountFromItems(allItems)){
         renderPage(page);
-        status.textContent = statusResultsText(actualResultCountForStatus(), q, activeType);
+        if(loadedServerPages.has(page) && !(loadedServerPages.get(page) || []).length && page > preloadPageCountFromItems(allItems)){
+          status.textContent = `현재 ${page}페이지에 내려온 검색 카드가 없습니다.`;
+        } else {
+          status.textContent = statusResultsText(actualResultCountForStatus(), q, activeType);
+        }
       }
     }
 
