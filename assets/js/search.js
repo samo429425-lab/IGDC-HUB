@@ -342,10 +342,8 @@ function inferMaruSearchIntentProfile(q, items){
 function maruTabLeadForIntent(intent){
   const table = {
     person:  ['all','knowledge','wiki','news','video','image','sns','blog','site','book'],
-    // 지명/도시/국가는 주요 정보 다음에 지도/지역이 바로 이어져야 한다.
-    // 인물/사건 검색에서는 지도 탭이 앞에 올라오지 않도록 다른 intent order는 유지한다.
     place:   ['all','map','tour','knowledge','wiki','site','public_data','news','image','video','blog','sns'],
-    country: ['all','map','knowledge','wiki','site','public_data','news','tour','image','video','blog','sns'],
+    country: ['all','map','tour','knowledge','wiki','site','public_data','news','image','video','blog','sns'],
     company: ['all','site','knowledge','wiki','news','finance','map','image','video','blog','sns','shopping','public_data'],
     issue:   ['all','news','video','image','sns','blog','site','knowledge','wiki','public_data'],
     product: ['all','shopping','site','image','video','blog','cafe','news','knowledge','wiki'],
@@ -3158,7 +3156,6 @@ function displayGroupOfItem(it){
       const intent = inferMaruSearchIntentProfile(q, allItems);
       const orders = {
         person:  ['authority','knowledge','wiki','news','video','image','media','social','blog','site','book','community','web','academic','public_data','local_tour','shopping','sports','finance','webtoon'],
-        // 지명/도시/국가 intent에서는 지도/지역 섹션을 주요 정보 바로 다음에 배치한다.
         place:   ['authority','local_tour','knowledge','wiki','site','public_data','news','image','media','video','blog','social','community','web','book','academic','shopping','sports','finance','webtoon'],
         country: ['authority','local_tour','knowledge','wiki','site','public_data','news','image','media','video','blog','social','community','web','book','academic','shopping','sports','finance','webtoon'],
         company: ['authority','site','knowledge','wiki','news','finance','local_tour','image','media','video','blog','social','shopping','public_data','community','web','book','academic','sports','webtoon'],
@@ -3182,67 +3179,6 @@ function displayGroupOfItem(it){
       return out;
     }
 
-
-    function maruOfficialAuthorityRankClient(it, group){
-      it = it && typeof it === 'object' ? it : {};
-      const q = queryTextForTabs(lastQuery || (input && input.value) || '');
-      const intent = inferMaruSearchIntentProfile(q, allItems);
-      const title = String(it.title || it.name || '').toLowerCase();
-      const url = String(it.url || it.link || it.href || '').toLowerCase();
-      const source = String(
-        (it.source && typeof it.source === 'object' ? (it.source.name || it.source.provider || it.source.platform) : it.source) ||
-        it.provider || it.channel || ''
-      ).toLowerCase();
-      const domain = domainOf(url).toLowerCase();
-      const text = [
-        q, title, url, domain, source,
-        it.summary, it.description, it.snippet, it.contentSnippet,
-        it.displayCard && (it.displayCard.title || it.displayCard.summary || it.displayCard.source)
-      ].filter(Boolean).join(' ').toLowerCase();
-
-      let score = 0;
-      const isAuthorityGroup = group === 'authority' || group === 'public_data' || group === 'site';
-      if(!isAuthorityGroup) return 0;
-
-      const qv = String(q || '').trim().toLowerCase();
-      if(qv && text.indexOf(qv) > -1) score += 20;
-
-      const officialHost = /(\.go\.kr$|\.gov$|\.gov\.|\.gouv\.|\.go\.jp$|\.gov\.in$|\.gov\.uk$|\.gov\.cn$|\.go\.th$|\.gov\.au$)/i.test(domain);
-      const officialText = /(공식|정부|시청|구청|도청|군청|특별시|광역시|대사관|영사관|외교부|행정|민원|청사|official|government|city hall|municipal|embassy|ministry|administration)/i.test(text);
-      if(officialHost) score += 90;
-      if(officialText) score += 60;
-
-      // For cities and countries, the core official/government page must win over
-      // specialized sub-services such as job portals, archive pages or event pages.
-      if(intent === 'place' || intent === 'country' || intent === 'public'){
-        if(officialHost || officialText) score += 80;
-        if(/(^|\.)seoul\.go\.kr$/.test(domain)) score += 120;
-        if(/(^|\.)metro\.seoul\.go\.kr$/.test(domain)) score += 110;
-        if(/(^|\.)korea\.kr$|(^|\.)mofa\.go\.kr$|(^|\.)gov\.kr$/.test(domain)) score += 100;
-        if(/시청|구청|도청|군청|정부|대사관|영사관|city hall|government|embassy|ministry/.test(title + ' ' + source)) score += 80;
-        if(/공식\s*(홈페이지|사이트)|official\s*(site|homepage)/i.test(text)) score += 60;
-      }
-
-      // Strongly prefer the main government/home page over sub-services in "주요 정보".
-      if(/^(seoul\.go\.kr|www\.seoul\.go\.kr|gov\.kr|www\.gov\.kr)$/i.test(domain)) score += 100;
-      if(/(^|\.)job\.|일자리|채용|박람회|취업|archive|archives|기록원|cleanair|대기환경|상담센터|festival|축제|행사|portal|센터/.test(domain + ' ' + title + ' ' + source)) score -= 70;
-
-      // News/blog/community must never outrank official authority pages inside "주요 정보".
-      if(/news|뉴스|신문|일보|방송|blog|블로그|cafe|카페|youtube|tiktok|instagram|facebook|x\.com|twitter/.test(domain + ' ' + source)) score -= 160;
-
-      return score;
-    }
-
-    function sortItemsForDisplayGroupClient(group, items){
-      const list = Array.isArray(items) ? items.slice() : [];
-      if(!list.length) return list;
-      if(group !== 'authority' && group !== 'public_data' && group !== 'site') return list;
-      return list
-        .map((item, idx) => ({ item, idx, rank: maruOfficialAuthorityRankClient(item, group) }))
-        .sort((a, b) => (b.rank - a.rank) || (a.idx - b.idx))
-        .map(x => x.item);
-    }
-
     function groupSliceForDisplay(slice){
       const order = displayGroupOrderForCurrentSearch();
       const orderIndex = new Map(order.map((g, i) => [g, i]));
@@ -3260,10 +3196,6 @@ function displayGroupOfItem(it){
           });
         }
         groups.get(group).items.push(it);
-      });
-
-      groups.forEach(g => {
-        if(g && Array.isArray(g.items)) g.items = sortItemsForDisplayGroupClient(g.group, g.items);
       });
 
       return Array.from(groups.values()).sort((a, b) => {
