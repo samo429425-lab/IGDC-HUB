@@ -12,7 +12,7 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.4.1-rich-media-body-contract';
+const VERSION = 'maru-search-display-engine-v1.4.2-official-authority-rich-card-contract';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
@@ -26,7 +26,7 @@ const BASE_TABS = [
 ];
 
 const DEFAULT_PREVIEW_LIMITS = {
-  authority:3, public_data:2, local_tour:2, knowledge:3, wiki:3, academic:4, site:5,
+  authority:5, public_data:3, local_tour:2, knowledge:3, wiki:3, academic:4, site:5,
   book:4, news:5, blog:5, cafe:5, community:5, image:5, video:5, media:5,
   social:4, shopping:5, sports:4, finance:4, webtoon:4, web:18
 };
@@ -226,6 +226,67 @@ function cardTypeForGroup(group, item){
   if(g === 'authority' || g === 'public_data' || g === 'site' || g === 'knowledge' || g === 'wiki' || g === 'academic') return 'article';
   return 'web';
 }
+function bodyLinesForCardType(cardType, group, mapLike){
+  if(mapLike) return 3;
+  if(group === 'authority' || group === 'public_data') return 5;
+  if(group === 'site' || group === 'knowledge' || group === 'wiki') return 4;
+  if(cardType === 'article-media') return 4;
+  return 3;
+}
+function officialAuthorityRank(item, query, group){
+  item = item && typeof item === 'object' ? item : {};
+  const q = compact(query || '');
+  const title = low(firstNonEmpty(item.title, item.name));
+  const url = low(firstNonEmpty(item.url, item.link, item.href));
+  const host = low(domainOf(url));
+  const source = low(firstNonEmpty(
+    item.source && typeof item.source === 'object' ? (item.source.name || item.source.provider || item.source.platform) : item.source,
+    item.provider, item.channel
+  ));
+  const payload = pickObject(item.payload);
+  const data = pickObject(item.data);
+  const displayCard = pickObject(item.displayCard, item.card, item.presentation);
+  const text = low([
+    q, title, url, host, source,
+    item.summary, item.snippet, item.description, item.contentSnippet, item.excerpt,
+    payload.summary, payload.snippet, payload.description,
+    data.summary, data.snippet, data.description,
+    displayCard.title, displayCard.summary, displayCard.source
+  ].filter(Boolean).join(' '));
+
+  const g = normalizeGroup(group || groupOfItem(item));
+  if(g !== 'authority' && g !== 'public_data' && g !== 'site') return 0;
+
+  let score = 0;
+  if(q && text.indexOf(low(q)) >= 0) score += 20;
+
+  const officialHost = /(\.go\.kr$|\.gov$|\.gov\.|\.gouv\.|\.go\.jp$|\.gov\.in$|\.gov\.uk$|\.gov\.cn$|\.go\.th$|\.gov\.au$|\.gc\.ca$)/i.test(host);
+  const officialText = /(공식|정부|시청|구청|도청|군청|특별시|광역시|대사관|영사관|외교부|행정|민원|청사|공공|official|government|city hall|municipal|embassy|ministry|administration|public service)/i.test(text);
+  const mainGovHost = /^(seoul\.go\.kr|www\.seoul\.go\.kr|gov\.kr|www\.gov\.kr|korea\.kr|www\.korea\.kr|mofa\.go\.kr|www\.mofa\.go\.kr)$/i.test(host);
+  if(officialHost) score += 90;
+  if(officialText) score += 60;
+  if(mainGovHost) score += 130;
+  if(/시청|구청|도청|군청|정부|대사관|영사관|city hall|government|embassy|ministry/.test(title + ' ' + source)) score += 75;
+  if(/공식\s*(홈페이지|사이트)|official\s*(site|homepage)/i.test(text)) score += 50;
+
+  // Specialized official sub-services stay official, but do not outrank the
+  // core city/country/government page in the "주요 정보" block.
+  if(/(^|\.)job\.|일자리|채용|취업|박람회|archive|archives|기록원|cleanair|대기환경|상담센터|축제|행사|festival|portal|센터/.test(host + ' ' + title + ' ' + source)) score -= 65;
+
+  // Never let media/community items outrank government/official records inside authority.
+  if(/news|뉴스|신문|일보|방송|blog|블로그|cafe|카페|youtube|tiktok|instagram|facebook|x\.com|twitter/.test(host + ' ' + source)) score -= 160;
+
+  return score;
+}
+function prioritizeDisplayItems(items, ctx){
+  const list = Array.isArray(items) ? items.slice() : [];
+  const q = firstNonEmpty(ctx && ctx.q, ctx && ctx.query);
+  return list
+    .map((item, idx) => ({ item, idx, rank: officialAuthorityRank(item, q, groupOfItem(item)) }))
+    .sort((a, b) => (b.rank - a.rank) || (a.idx - b.idx))
+    .map(x => x.item);
+}
+
 function decorateDisplayItem(item, ctx, index){
   item = item && typeof item === 'object' ? item : {};
   ctx = ctx || {};
@@ -275,8 +336,8 @@ function decorateDisplayItem(item, ctx, index){
       body: summary,
       description: summary,
       snippet: summary,
-      lineClamp: mapLike ? 3 : (cardType === 'article-media' ? 4 : 3),
-      bodyLines: mapLike ? 3 : (cardType === 'article-media' ? 4 : 3),
+      lineClamp: bodyLinesForCardType(cardType, group, mapLike),
+      bodyLines: bodyLinesForCardType(cardType, group, mapLike),
       thumbnail: images[0] || '',
       image: images[0] || '',
       imageUrl: images[0] || '',
@@ -331,7 +392,8 @@ function decorateDisplayItem(item, ctx, index){
   return copy;
 }
 function decorateItems(items, ctx){
-  return (Array.isArray(items) ? items : []).map((item, idx) => decorateDisplayItem(item, ctx || {}, idx));
+  const ordered = prioritizeDisplayItems(Array.isArray(items) ? items : [], ctx || {});
+  return ordered.map((item, idx) => decorateDisplayItem(item, ctx || {}, idx));
 }
 
 function normalizeGroup(group){
@@ -532,7 +594,7 @@ function buildDisplayPolicy(input){
     visibleTabs:p.visibleTabs,
     hiddenTabs:p.hiddenTabs,
     groupCounts:counts,
-    cardContract:{ enabled:true, bodyLines:4, minimumBodyLines:2, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', executor:'search.js' },
+    cardContract:{ enabled:true, bodyLines:5, minimumBodyLines:2, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', authorityPriority:'city-country-government-official-first', executor:'search.js' },
     execution:'search-js-applies-policy; maru-search-attaches-display-card-contract',
     externalCall:false,
     storageWrite:false
@@ -579,7 +641,8 @@ module.exports = {
   groupOfItem,
   inferIntent,
   decorateDisplayItem,
-  decorateItems
+  decorateItems,
+  prioritizeDisplayItems
 };
 exports.version = VERSION;
 exports.engine = ENGINE_NAME;
@@ -588,3 +651,4 @@ exports.runEngine = runEngine;
 exports.handler = handler;
 exports.decorateDisplayItem = decorateDisplayItem;
 exports.decorateItems = decorateItems;
+exports.prioritizeDisplayItems = prioritizeDisplayItems;
