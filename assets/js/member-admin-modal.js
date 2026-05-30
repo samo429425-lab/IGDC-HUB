@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.4.2';
+  var VERSION = '2.4.3-sync';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -219,45 +219,75 @@
       return window.IGDC_ROLE_PERM.hasPermission(roleEngineRole(), window.IGDC_ROLE_PERM.PERMISSIONS[perm]);
     } catch (e) { return false; }
   }
-  function readRoles() {
+
+  function roleTextCandidate(v) {
+    v = String(v == null ? '' : v).trim();
+    if (!v) return '';
+    var n = normalizeRole(v);
+    if (!n || n === 'guest' || n === 'os-login' || n === 'os_login' || n === 'login' || n === 'logout' || n === 'log_out' || n === '로그인' || n === '로그아웃' || n === '회원전용' || n === 'members_only') return '';
+    if (ROLE_LEVEL[n] || n.indexOf('site_manager') === 0 || n.indexOf('member') === 0 || n === 'owner' || n === 'admin' || n === 'director') return n;
+    return '';
+  }
+  function pushRoleValue(list, v) {
+    var n = roleTextCandidate(v);
+    if (n) list.push(n);
+  }
+  function visibleHeaderRoles() {
     var roles = [];
-    function pushRole(v) {
-      v = String(v == null ? '' : v).trim();
-      if (!v) return;
-      if (/^(os[- ]?login|login|logout|log out|로그인|로그아웃|회원전용|members only)$/i.test(v)) return;
-      roles.push(v);
-    }
     function pushTextById(id) {
       try {
         var el = document.getElementById(id);
-        if (el && el.textContent) pushRole(el.textContent);
+        if (el && el.textContent) pushRoleValue(roles, el.textContent);
+        if (el) {
+          pushRoleValue(roles, el.getAttribute('data-role-base'));
+          pushRoleValue(roles, el.getAttribute('data-current-role'));
+          pushRoleValue(roles, el.getAttribute('data-igdc-role'));
+        }
       } catch (e) {}
     }
-    try { pushRole(window.__IGDC_ROLE); } catch (e) {}
-    try { pushRole(window.__IGDC_ROLE_LABEL); } catch (e) {}
-    try { pushRole(window.__IGTC_ROLE); } catch (e) {}
-    try { pushRole(window.__IGTC_ROLE_LABEL); } catch (e) {}
-    try { pushRole(window.USER_ROLE); } catch (e) {}
-    try { if (roleEngineRole()) pushRole(roleEngineRole()); } catch (e) {}
-    try { if (document.documentElement && document.documentElement.dataset && document.documentElement.dataset.role) pushRole(document.documentElement.dataset.role); } catch (e) {}
     pushTextById('igtcRoleText3');
     pushTextById('roleStatusBtn');
     pushTextById('igtcRoleInline3');
     pushTextById('userRole');
     try {
+      var login = document.getElementById('osLoginBtn');
+      if (login && login.nextElementSibling) pushRoleValue(roles, login.nextElementSibling.textContent);
+    } catch (e) {}
+    try {
       var roleNodes = document.querySelectorAll('[data-role-base], [data-current-role], [data-igdc-role], .role-display');
       Array.prototype.forEach.call(roleNodes, function (el) {
-        pushRole(el.getAttribute('data-role-base'));
-        pushRole(el.getAttribute('data-current-role'));
-        pushRole(el.getAttribute('data-igdc-role'));
-        if (el.textContent) pushRole(el.textContent);
+        pushRoleValue(roles, el.getAttribute('data-role-base'));
+        pushRoleValue(roles, el.getAttribute('data-current-role'));
+        pushRoleValue(roles, el.getAttribute('data-igdc-role'));
+        if (el.textContent) pushRoleValue(roles, el.textContent);
       });
     } catch (e) {}
+    if (!roles.length) {
+      try {
+        Array.prototype.forEach.call(document.querySelectorAll('button,span,div'), function (el) {
+          var r = el.getBoundingClientRect();
+          if (r.top < 130 && r.left < 420 && r.width < 280 && r.height < 80) pushRoleValue(roles, el.textContent);
+        });
+      } catch (e) {}
+    }
+    return unique(roles);
+  }
+
+  function readRoles() {
+    var roles = [];
+    try { pushRoleValue(roles, window.__IGDC_ROLE); } catch (e) {}
+    try { pushRoleValue(roles, window.__IGDC_ROLE_LABEL); } catch (e) {}
+    try { pushRoleValue(roles, window.__IGTC_ROLE); } catch (e) {}
+    try { pushRoleValue(roles, window.__IGTC_ROLE_LABEL); } catch (e) {}
+    try { pushRoleValue(roles, window.USER_ROLE); } catch (e) {}
+    try { if (roleEngineRole()) pushRoleValue(roles, roleEngineRole()); } catch (e) {}
+    try { if (document.documentElement && document.documentElement.dataset && document.documentElement.dataset.role) pushRoleValue(roles, document.documentElement.dataset.role); } catch (e) {}
+    roles = roles.concat(visibleHeaderRoles());
     try {
       var stored = localStorage.getItem('igdc_role') || localStorage.getItem('igdc_roles');
       var storedLabel = localStorage.getItem('igdc_role_label');
-      if (stored) roles = roles.concat(stored.indexOf('[') === 0 ? safeJsonParse(stored, []) : stored.split(','));
-      if (storedLabel) pushRole(storedLabel);
+      if (stored) roles = roles.concat(stored.indexOf('[') === 0 ? safeJsonParse(stored, []) : stored.split(',')).map(normalizeRole);
+      if (storedLabel) pushRoleValue(roles, storedLabel);
     } catch (e) {}
     try {
       if (window.osAuth && typeof window.osAuth.getIdTokenPayload === 'function') {
@@ -276,6 +306,11 @@
   function hasPlatformRole() {
     var roles = readRoles();
     return roles.length > 0 && roles.indexOf('guest') === -1;
+  }
+  function hasKnownSession() {
+    try { if (window.osAuth && typeof window.osAuth.isAuthenticated === 'function' && window.osAuth.isAuthenticated()) return true; } catch (e) {}
+    if (hasValidToken()) return true;
+    return hasPlatformRole();
   }
   function readStorageItem(key) {
     try { return localStorage.getItem(key) || sessionStorage.getItem(key) || ''; } catch (e) { return ''; }
@@ -309,10 +344,7 @@
     }
     return '';
   }
-  function isLoggedIn() {
-    try { if (window.osAuth && typeof window.osAuth.isAuthenticated === 'function' && window.osAuth.isAuthenticated()) return true; } catch (e) {}
-    return hasPlatformRole();
-  }
+  function isLoggedIn() { return hasKnownSession(); }
   function storedTokens() {
     var keys = ['osauth.tokens.v2', 'igdc.tokens', 'igdc_auth_tokens', 'auth0_tokens', 'auth0spa'];
     var stores = [];
@@ -350,7 +382,8 @@
     };
   }
   function openLogin() {
-    if (hasValidToken()) {
+    if (hasKnownSession()) {
+      try { if (window.IGDCMemberAdminModal && typeof window.IGDCMemberAdminModal.open === 'function') { window.IGDCMemberAdminModal.open('member-home'); return; } } catch (e) {}
       try { alert('이미 로그인되어 있습니다.'); } catch (e) {}
       return;
     }
@@ -819,7 +852,7 @@
     apiPost('request-upgrade', {role:role}).then(function () { alert('신청되었습니다.'); }).catch(function (e) { setError(e.message); });
   }
   function open(preferredTab) {
-    if (!hasPlatformRole() && !hasValidToken()) { openLogin(); return; }
+    if (!hasKnownSession()) { openLogin(); return; }
     STATE.lastFocus = document.activeElement;
     STATE.opened = true;
     STATE.tab = preferredTab || 'member-home';
