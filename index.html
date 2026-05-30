@@ -1253,6 +1253,7 @@ window.addEventListener('DOMContentLoaded', function() {
 
   window.osAuth = {
     isAuthenticated(){ const t=load(STORAGE.TOKENS); return !!t && (Math.floor(Date.now()/1000) < Number(t.exp||0)); },
+    getIdToken(){ const t=load(STORAGE.TOKENS); return t ? (t.id_token||null) : null; },
     getIdTokenPayload(){ const t=load(STORAGE.TOKENS); if(!t) return null; const p=(t.id_token||"").split("."); if(p.length<2) return null; try{ return JSON.parse(atob(p[1].replace(/-/g,"+").replace(/_/g,"/"))); }catch(_){ return null; } },
     getAccessToken(){ const t=load(STORAGE.TOKENS); return t ? (t.access_token||null) : null; },
     logout(to){ del(STORAGE.TOKENS); if(to) location.href=to; else location.reload(); }
@@ -2761,6 +2762,8 @@ var MAP={ko:'🔒 회원전용',en:'🔒 Members Only',zh:'🔒 会员专用',zh
     if(a){
       a.addEventListener('click', function(ev){
         ev.preventDefault();
+        try{ if (window.IGDCMemberAdminModal && typeof window.IGDCMemberAdminModal.open==='function'){ window.IGDCMemberAdminModal.open('member-home'); return; } }catch(e){}
+        try{ if (typeof openMemberAdminModal==='function'){ openMemberAdminModal('member-home'); return; } }catch(e){}
         try{ if (typeof openModal==='function'){ openModal('apply'); return; } }catch(e){}
         try{ if (typeof injectModal==='function'){ injectModal(); return; } }catch(e){}
       });
