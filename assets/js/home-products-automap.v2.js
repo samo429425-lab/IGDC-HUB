@@ -92,6 +92,86 @@
     return /^https?:\/\//i.test(String(url || ''));
   }
 
+
+  function isBadUrl(url) {
+    const u = String(url || '').trim();
+    return !u || u === '#' || /^javascript:/i.test(u) || /^about:blank$/i.test(u);
+  }
+
+  function isExampleUrl(url) {
+    const u = String(url || '').trim();
+    if (!u) return false;
+    try {
+      const parsed = new URL(u, window.location.origin);
+      return /(^|\.)example\.(com|org|net)$/i.test(parsed.hostname);
+    } catch (e) {
+      return /example\.(com|org|net)/i.test(u);
+    }
+  }
+
+  function pad3(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x) || x <= 0) return '001';
+    return String(Math.floor(x)).padStart(3, '0');
+  }
+
+  function numberFromUrl(url) {
+    try {
+      const parsed = new URL(String(url || ''), window.location.origin);
+      const last = (parsed.pathname.split('/').filter(Boolean).pop() || '');
+      const m = last.match(/(\d+)/);
+      return m ? Number(m[1]) : null;
+    } catch (e) {
+      const m = String(url || '').match(/(\d+)(?!.*\d)/);
+      return m ? Number(m[1]) : null;
+    }
+  }
+
+  function makeStableContentId(src, fb, page, section, url, priority, order) {
+    const explicit = pick(src, ['id', 'contentId', 'productId', 'itemId', 'sku', 'code', 'pid']) || pick(fb, ['id', 'contentId', 'productId', 'itemId', 'sku', 'code', 'pid']);
+    if (explicit) return explicit;
+    const base = section || page || 'home';
+    const n = priority || order || numberFromUrl(url) || 1;
+    return base + '-' + pad3(n);
+  }
+
+  function contentHref(id) {
+    return id ? ('/content.html?id=' + encodeURIComponent(id)) : '';
+  }
+
+  function resolveSlotHref(item) {
+    if (!item) return '';
+    if (item.id) return contentHref(item.id);
+    const url = item.url || '';
+    if (isBadUrl(url) || isExampleUrl(url)) return '';
+    return url;
+  }
+
+  function applyAnchorDestination(a, item) {
+    const href = resolveSlotHref(item);
+    a.removeAttribute('target');
+    a.removeAttribute('rel');
+
+    if (!href) {
+      a.href = '#';
+      a.tabIndex = -1;
+      a.setAttribute('aria-disabled', 'true');
+      a.setAttribute('data-igdc-disabled', '1');
+      a.addEventListener('click', function (ev) { ev.preventDefault(); }, { passive: false });
+      return;
+    }
+
+    a.href = href;
+    if (item && item.id) a.setAttribute('data-igdc-content-id', item.id);
+    if (item && item.sourceUrl) a.setAttribute('data-igdc-source-url', item.sourceUrl);
+
+    if (isExternal(href)) {
+      a.target = '_top';
+      a.rel = 'noopener';
+      a.setAttribute('data-igdc-external', 'top');
+    }
+  }
+
   function safeNumber(v, fallback) {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
@@ -101,20 +181,28 @@
     const src = it || {};
     const fb = fallback || {};
 
+    const page = src.page || fb.page || 'home';
+    const section = src.section || fb.section || null;
+    const sourceUrl = pick(src, ['checkoutUrl', 'paymentUrl', 'productUrl', 'purchaseUrl', 'orderUrl', 'url', 'href', 'link', 'path', 'detailUrl', 'contentUrl', 'pageUrl']) || '#';
+    const priority = (typeof src.priority === 'number')
+      ? src.priority
+      : (Number.isFinite(Number(src.priority)) ? Number(src.priority) : safeNumber(fb.priority, null));
+    const order = safeNumber(src.order, safeNumber(fb.order, 0));
+    const id = makeStableContentId(src, fb, page, section, sourceUrl, priority, order);
+
     return {
-      id: src.id || fb.id || null,
+      id,
       title: pick(src, ['title', 'name', 'label', 'caption']) || 'Item',
       thumb: pick(src, ['thumb', 'image', 'image_url', 'img', 'photo', 'thumbnail', 'thumbnailUrl', 'cover', 'coverUrl']),
-      url: pick(src, ['checkoutUrl', 'productUrl', 'url', 'href', 'link', 'path', 'detailUrl']) || '#',
-      priority: (typeof src.priority === 'number')
-        ? src.priority
-        : (Number.isFinite(Number(src.priority)) ? Number(src.priority) : safeNumber(fb.priority, null)),
+      url: sourceUrl,
+      sourceUrl,
+      priority,
       weight: safeNumber(src.weight, safeNumber(fb.weight, 0)),
-      order: safeNumber(src.order, safeNumber(fb.order, 0)),
+      order,
       enabled: src.enabled !== false && fb.enabled !== false,
       lang: Array.isArray(src.lang) ? src.lang : (Array.isArray(fb.lang) ? fb.lang : []),
-      page: src.page || fb.page || 'home',
-      section: src.section || fb.section || null
+      page,
+      section
     };
   }
 
@@ -219,11 +307,7 @@
   function buildMainCard(item) {
     const a = document.createElement('a');
     a.className = 'shop-card';
-    a.href = item.url || '#';
-    if (isExternal(item.url)) {
-      a.target = '_blank';
-      a.rel = 'noopener';
-    }
+    applyAnchorDestination(a, item);
 
     if (item.thumb) {
       a.style.backgroundImage = 'url("' + escAttr(item.thumb) + '")';
@@ -258,11 +342,7 @@
   function buildRightCard(item) {
     const a = document.createElement('a');
     a.className = 'ad-box news-btn';
-    a.href = item.url || '#';
-    if (isExternal(item.url)) {
-      a.target = '_blank';
-      a.rel = 'noopener';
-    }
+    applyAnchorDestination(a, item);
 
     const img = document.createElement('img');
     img.loading = 'lazy';
@@ -463,6 +543,25 @@ function bindIncremental(target, items) {
     }
   }
 
+
+  function installHomeNewsTopNavigation() {
+    if (window.__IGDC_HOME_NEWS_TOP_NAV_INSTALLED__) return;
+    window.__IGDC_HOME_NEWS_TOP_NAV_INSTALLED__ = true;
+    document.addEventListener('click', function (ev) {
+      const target = ev.target;
+      const a = target && target.closest && target.closest('.news-section a.news-btn[href^="http"], a.news-btn[data-igdc-external="top"][href^="http"]');
+      if (!a) return;
+      const href = a.href;
+      if (!href) return;
+      ev.preventDefault();
+      try {
+        (window.top || window).location.assign(href);
+      } catch (e) {
+        window.location.href = href;
+      }
+    }, true);
+  }
+
   async function boot() {
     try {
       const loaded = await loadSections();
@@ -490,8 +589,13 @@ function bindIncremental(target, items) {
     }
   }
 
+  installHomeNewsTopNavigation();
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
+    document.addEventListener('DOMContentLoaded', function(){
+      installHomeNewsTopNavigation();
+      boot();
+    });
   } else {
     boot();
   }

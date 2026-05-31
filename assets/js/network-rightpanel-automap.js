@@ -1,20 +1,21 @@
-// network-rightpanel-automap.js (PRODUCTION v5 - DESKTOP HOOK 유지 + MOBILE RAIL 정합)
-// - sweeper 없이도 안전
-// - 모바일 레일은 #nh-mobile-rail-list 에 .card 구조로 렌더 + 캡션(타이틀) 포함
-// - 데스크탑은 window.__IGDC_RIGHTPANEL_RENDER(items) 그대로 사용
+// network-rightpanel-automap.js (PRODUCTION v6 - internal content page routing + top external main links)
+// - Right panel product slots open IGDC internal /content.html?id=...
+// - Placeholder/# links are disabled unless an item id exists
+// - Main hub external .link-btn anchors use top navigation so browser Back returns to IGDC
+// - Desktop/mobile rail rendering and revenue autohook are preserved
 
 (function () {
   'use strict';
 
-  if (window.__NETWORK_AUTOMAP_V5__) return;
-  window.__NETWORK_AUTOMAP_V5__ = true;
+  if (window.__NETWORK_AUTOMAP_V6__) return;
+  window.__NETWORK_AUTOMAP_V6__ = true;
 
   const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
   const FEED_URL = '/.netlify/functions/feed-network?limit=100';
   const LIMIT = 100;
 
   const MOBILE_ID = 'nh-mobile-rail-list';
-  const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v1';
+  const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v2';
 
   function $(id){ return document.getElementById(id); }
 
@@ -22,13 +23,70 @@
     for (const k of keys){
       const v = it && it[k];
       if (typeof v === 'string' && v.trim()) return v.trim();
+      if (typeof v === 'number' && Number.isFinite(v)) return String(v);
     }
     return '';
   }
 
-  function pickLink(it){ return pick(it, ['link','url','href']) || '#'; }
-  function pickThumb(it){ return pick(it, ['thumb','image','thumbnail','img','photo','cover']); }
-  function pickTitle(it){ return pick(it, ['title','name','label']); }
+  function pickId(it){ return pick(it, ['id','contentId','productId','itemId','sku','code','pid']); }
+  function pickLink(it){ return pick(it, ['contentUrl','pageUrl','detailUrl','checkoutUrl','paymentUrl','productUrl','purchaseUrl','orderUrl','link','url','href']) || '#'; }
+  function pickThumb(it){ return pick(it, ['thumb','image','thumbnail','img','photo','cover','coverUrl','thumbnailUrl']); }
+  function pickTitle(it){ return pick(it, ['title','name','label','caption']); }
+
+  function isExternal(url){ return /^https?:\/\//i.test(String(url || '')); }
+  function isBadUrl(url){
+    const u = String(url || '').trim();
+    return !u || u === '#' || /^javascript:/i.test(u) || /^about:blank$/i.test(u);
+  }
+  function isExampleUrl(url){
+    const u = String(url || '').trim();
+    if (!u) return false;
+    try { return /(^|\.)example\.(com|org|net)$/i.test(new URL(u, window.location.origin).hostname); }
+    catch(e){ return /example\.(com|org|net)/i.test(u); }
+  }
+  function contentHref(id){ return id ? ('/content.html?id=' + encodeURIComponent(id)) : ''; }
+  function resolveItemHref(item){
+    if (item && item.id) return contentHref(item.id);
+    const link = item && item.link;
+    if (isBadUrl(link) || isExampleUrl(link)) return '';
+    return link || '';
+  }
+
+  function applyAnchor(a, item){
+    const href = resolveItemHref(item);
+    a.removeAttribute('target');
+    a.removeAttribute('rel');
+    if (!href){
+      a.href = '#';
+      a.tabIndex = -1;
+      a.setAttribute('aria-disabled','true');
+      a.setAttribute('data-igdc-disabled','1');
+      a.addEventListener('click', function(ev){ ev.preventDefault(); }, { passive:false });
+      return;
+    }
+    a.href = href;
+    if (item && item.id) a.setAttribute('data-igdc-content-id', item.id);
+    if (item && item.sourceUrl) a.setAttribute('data-igdc-source-url', item.sourceUrl);
+    if (isExternal(href)){
+      a.target = '_top';
+      a.rel = 'noopener';
+      a.setAttribute('data-igdc-external','top');
+    }
+  }
+
+  function installExternalTopNavigation(){
+    if (window.__IGDC_NETWORK_TOP_NAV_INSTALLED__) return;
+    window.__IGDC_NETWORK_TOP_NAV_INSTALLED__ = true;
+    document.addEventListener('click', function(ev){
+      const a = ev.target && ev.target.closest && ev.target.closest('a.link-btn[href^="http"], a[data-igdc-external="top"][href^="http"]');
+      if (!a) return;
+      const href = a.href;
+      if (!href) return;
+      ev.preventDefault();
+      try { (window.top || window).location.assign(href); }
+      catch(e){ window.location.href = href; }
+    }, true);
+  }
 
   function ensureMobileCss(){
     if (document.getElementById(MOBILE_CSS_ID)) return;
@@ -67,22 +125,47 @@
     const out = [];
     for (const it of arr){
       const thumb = pickThumb(it);
-      if (!thumb) continue;
+      const title = pickTitle(it);
+      if (!thumb || !title) continue;
       out.push({
-        title: pickTitle(it),
+        id: pickId(it),
+        title,
         thumb,
-        link: pickLink(it)
+        link: pickLink(it),
+        sourceUrl: pickLink(it)
       });
       if (out.length >= LIMIT) break;
     }
     return out;
   }
 
+  function createCard(item, mobile){
+    const card = document.createElement('div');
+    card.className = mobile ? 'card' : 'ad-box';
+
+    const a = document.createElement('a');
+    applyAnchor(a, item);
+
+    const img = document.createElement('img');
+    img.src = item.thumb;
+    img.alt = item.title || '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+
+    a.appendChild(img);
+    card.appendChild(a);
+
+    const cap = document.createElement('div');
+    cap.className = mobile ? 'cap' : 'ad-title';
+    cap.textContent = item.title || '';
+    card.appendChild(cap);
+
+    return card;
+  }
+
   function renderMobile(items){
     const list = $(MOBILE_ID);
     if (!list) return;
-
-    // 아이템이 없으면 기존 더미/기존 상태 유지 (절대 wipe 금지)
     if (!items || !items.length) return;
 
     ensureMobileCss();
@@ -90,99 +173,52 @@
 
     const frag = document.createDocumentFragment();
     for (const item of items){
-      const card = document.createElement('div');
-      card.className = 'card'; // ✅ CSS가 기대하는 클래스
-
-      const a = document.createElement('a');
-      a.href = item.link || '#';
-      if (item.link && item.link !== '#'){
-        a.target = '_blank';
-        a.rel = 'noopener';
-      }else{
-        a.tabIndex = -1;
-        a.setAttribute('aria-hidden','true');
-      }
-
-      const img = document.createElement('img');
-      img.src = item.thumb;
-      img.alt = item.title || '';
-      img.loading = 'lazy';
-      img.decoding = 'async';
-
-      a.appendChild(img);
-      card.appendChild(a);
-
-      const cap = document.createElement('div');
-      cap.className = 'cap';
-      cap.textContent = item.title || '';
-      card.appendChild(cap);
-
-      frag.appendChild(card);
+      frag.appendChild(createCard(item, true));
     }
     list.appendChild(frag);
   }
 
- // ✅ 데스크탑 직접 렌더 함수 (hook 제거)
-function renderDesktopDirect(items){
-  const panel = document.getElementById('rightAutoPanel');
-  if (!panel) return;
+  function renderDesktopDirect(items){
+    const panel = document.getElementById('rightAutoPanel');
+    if (!panel) return;
+    if (!items || !items.length) return;
 
-  // 데이터 없으면 기존 유지 (안전)
-  if (!items || !items.length) return;
-
-  panel.innerHTML = '';
-
-  const frag = document.createDocumentFragment();
-
-  for (const item of items){
-    const box = document.createElement('div');
-    box.className = 'ad-box';
-
-    box.innerHTML = `
-      <a href="${item.link || '#'}" target="_blank" rel="noopener">
-        <img src="${item.thumb}" alt="${item.title || ''}" />
-        <div class="ad-title">${item.title || ''}</div>
-      </a>
-    `;
-
-    frag.appendChild(box);
+    panel.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    for (const item of items){
+      frag.appendChild(createCard(item, false));
+    }
+    panel.appendChild(frag);
   }
 
-  panel.appendChild(frag);
-}
+  async function run(){
+    installExternalTopNavigation();
+    const snap = await fetchJson(SNAPSHOT_URL);
 
-// ✅ run 함수 교체
-async function run(){
-  const snap = await fetchJson(SNAPSHOT_URL);
-
-  let items = snap && Array.isArray(snap.items)
-    ? normalizeItems(snap.items)
-    : [];
-
-  if (!items.length){
-    const feed = await fetchJson(FEED_URL);
-    items = feed && Array.isArray(feed.items)
-      ? normalizeItems(feed.items)
+    let items = snap && Array.isArray(snap.items)
+      ? normalizeItems(snap.items)
       : [];
+
+    if (!items.length){
+      const feed = await fetchJson(FEED_URL);
+      items = feed && Array.isArray(feed.items)
+        ? normalizeItems(feed.items)
+        : [];
+    }
+
+    renderMobile(items);
+    renderDesktopDirect(items);
   }
 
-  // 모바일
-  renderMobile(items);
-
-  // 🔥 데스크탑 → 직접 렌더 (핵심 변경)
-  renderDesktopDirect(items);
-}
-
-  // load + DOMContentLoaded 이중 안전
   if (document.readyState === 'complete' || document.readyState === 'interactive'){
     setTimeout(run, 0);
   } else {
+    installExternalTopNavigation();
     document.addEventListener('DOMContentLoaded', run, { once:true });
     window.addEventListener('load', run, { once:true });
   }
 
 })();
-
 
 /* ------------------------------------------------------------------
  * MARU Revenue AutoHook Loader
