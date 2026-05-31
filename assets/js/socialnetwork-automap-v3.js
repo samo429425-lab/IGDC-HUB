@@ -28,7 +28,7 @@
   }
 
   function pickUrl(it){
-    return safeText(it && (it.checkoutUrl || it.productUrl || it.productLink || it.detailUrl || it.url || it.href || it.link || it.path || it.redirectUrl || it.permalink)) || '#';
+    return safeText(it && (it.url || it.href || it.link || it.productUrl || it.detailUrl)) || '#';
   }
 
   function pickThumb(it){
@@ -449,110 +449,4 @@ window.addEventListener('igdc:rightpanel:refresh', function(){
       );
     }
   );
-})();
-
-/* ------------------------------------------------------------------
- * IGDC Social RightPanel Click Router - PINPOINT PATCH
- * Scope:
- * - rightPanel only: #rightAutoPanel / #rpMobileGrid / [data-psom-key="rightPanel"]
- * - no rendering pipeline changes
- * - no snapshot loading changes
- * - no revenue/tracking hook changes
- * Purpose:
- * - Make the whole right-panel card open its resolved secondary URL.
- * ------------------------------------------------------------------ */
-(function installSocialRightPanelClickRouter(){
-  "use strict";
-
-  if (typeof window === "undefined" || typeof document === "undefined") return;
-  if (window.__IGDC_SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__) return;
-  window.__IGDC_SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__ = true;
-
-  function trim(v){
-    return v == null ? "" : String(v).trim();
-  }
-
-  function getDataUrl(el){
-    if (!el) return "";
-    return trim(
-      (el.dataset && (
-        el.dataset.checkoutUrl ||
-        el.dataset.productUrl ||
-        el.dataset.productLink ||
-        el.dataset.detailUrl ||
-        el.dataset.href ||
-        el.dataset.url ||
-        el.dataset.link ||
-        el.dataset.path ||
-        el.dataset.redirectUrl ||
-        el.dataset.permalink
-      )) ||
-      el.getAttribute("data-checkout-url") ||
-      el.getAttribute("data-product-url") ||
-      el.getAttribute("data-product-link") ||
-      el.getAttribute("data-detail-url") ||
-      el.getAttribute("data-href") ||
-      el.getAttribute("data-url") ||
-      el.getAttribute("data-link") ||
-      el.getAttribute("data-path") ||
-      el.getAttribute("data-redirect-url") ||
-      el.getAttribute("data-permalink") ||
-      el.getAttribute("href") ||
-      ""
-    );
-  }
-
-  function isUsableUrl(url){
-    url = trim(url);
-    return !!url && url !== "#" && !/^javascript:/i.test(url);
-  }
-
-  function isExternalUrl(url){
-    try {
-      var u = new URL(url, window.location.href);
-      return /^https?:$/i.test(u.protocol) && u.origin !== window.location.origin;
-    } catch (_) {
-      return /^https?:\/\//i.test(url);
-    }
-  }
-
-  document.addEventListener("click", function(e){
-    if (!e || e.defaultPrevented) return;
-    if (e.button && e.button !== 0) return;
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-
-    var target = e.target;
-    if (!target || !target.closest) return;
-
-    /* 결제 버튼/결제 훅은 기존 IGTC.checkout 흐름에 맡긴다. */
-    if (target.closest("[data-checkout]")) return;
-
-    var hit = target.closest(
-      '[data-psom-key="rightPanel"] .product-card, ' +
-      '[data-psom-key="rightPanel"] .ad-box, ' +
-      '[data-psom-key="rightPanel"] a[href]'
-    );
-
-    if (!hit) return;
-    if (!hit.closest('[data-psom-key="rightPanel"]')) return;
-
-    var anchor = target.closest('[data-psom-key="rightPanel"] a[href]') ||
-      (hit.querySelector ? hit.querySelector('a[href]') : null);
-
-    var url = getDataUrl(target) || getDataUrl(anchor) || getDataUrl(hit);
-    if (!isUsableUrl(url)) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (isExternalUrl(url)) {
-      window.open(url, "_blank", "noopener");
-    } else {
-      window.location.assign(url);
-    }
-  }, true);
 })();
