@@ -5487,10 +5487,168 @@ document.addEventListener("DOMContentLoaded",function(){
 <script src="/assets/js/maru-search.js"></script>
 <script src="/assets/js/maru-searchbank-sync.js"></script>
 
-<style id="igdc-donation-writer-save-final-style">
-/* === IGDC Donation Writer V5: section board list, viewer, edit/delete === */
-#composerModal input#composeTitle,
-#composerModal .igdc-donation-title-input{
+
+<style id="igdc-donation-board-v6-style">
+/* IGDC Donation V6: right panel width + section board list UX only */
+@media (min-width:1025px){
+  :root{
+    --right-col:375px !important;
+    --right-max:375px !important;
+    --igdc-donation-right-col:375px;
+  }
+  html, body{ overflow-x:hidden !important; }
+  body > .container,
+  body > div.container,
+  .container{
+    width:100vw !important;
+    max-width:none !important;
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    align-items:stretch !important;
+    box-sizing:border-box !important;
+    gap:15px !important;
+    column-gap:15px !important;
+    padding-right:10px !important;
+  }
+  body > .container > .sidebar{ flex:0 0 210px !important; min-width:210px !important; max-width:210px !important; }
+  body > .container > .right,
+  body > div.container > .right,
+  aside.right{
+    flex:0 0 var(--igdc-donation-right-col) !important;
+    width:var(--igdc-donation-right-col) !important;
+    min-width:var(--igdc-donation-right-col) !important;
+    max-width:var(--igdc-donation-right-col) !important;
+    margin-right:10px !important;
+    padding:8px !important;
+    box-sizing:border-box !important;
+  }
+  body > .container > .main,
+  body > div.container > .main,
+  main.main{
+    flex:1 1 auto !important;
+    min-width:0 !important;
+    width:auto !important;
+    max-width:none !important;
+    box-sizing:border-box !important;
+  }
+  body > .container > .main .hero,
+  body > .container > .main #topWritePanel,
+  body > .container > .main .people-news,
+  body > .container > .main .feed-wrapper{
+    width:100% !important;
+    max-width:none !important;
+  }
+}
+
+.right .topic-panel{
+  height:230px !important;
+  max-height:230px !important;
+  min-height:230px !important;
+  overflow:hidden !important;
+  display:flex !important;
+  flex-direction:column !important;
+  padding:9px !important;
+  box-sizing:border-box !important;
+}
+.right .topic-panel h3{
+  flex:0 0 auto !important;
+  margin:0 0 7px 0 !important;
+  font-size:.98rem !important;
+  line-height:1.2 !important;
+}
+.right .topic-panel .list{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  display:block !important;
+  padding-right:3px !important;
+  scroll-behavior:smooth !important;
+}
+.right .topic-panel .list::-webkit-scrollbar{ width:7px; }
+.right .topic-panel .list::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:999px; }
+.right .topic-panel .item.igdc-local-post,
+.right .topic-panel .item.igdc-board-row,
+.mobile-news-clone .topic-panel .item.igdc-board-row{
+  display:block !important;
+  border:1px solid rgba(226,232,240,.95) !important;
+  background:#fff !important;
+  border-radius:8px !important;
+  padding:5px 6px !important;
+  margin:0 0 5px 0 !important;
+  min-height:0 !important;
+  box-shadow:none !important;
+}
+.igdc-board-line{
+  display:flex !important;
+  align-items:center !important;
+  gap:5px !important;
+  min-width:0 !important;
+  line-height:1.2 !important;
+}
+.igdc-board-title{
+  flex:1 1 auto !important;
+  min-width:0 !important;
+  display:block !important;
+  border:0 !important;
+  background:transparent !important;
+  padding:0 !important;
+  margin:0 !important;
+  color:#0b4a77 !important;
+  font-weight:700 !important;
+  font-size:12px !important;
+  text-align:left !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  cursor:pointer !important;
+}
+.igdc-board-title:hover{ text-decoration:underline !important; }
+.igdc-board-actions{
+  flex:0 0 auto !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:flex-end !important;
+  gap:3px !important;
+  white-space:nowrap !important;
+}
+.igdc-board-meta{
+  margin:2px 0 0 0 !important;
+  padding-left:1px !important;
+  color:#6b7280 !important;
+  font-size:10px !important;
+  line-height:1.15 !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+}
+.igdc-board-mini,
+.igdc-board-act{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  min-width:auto !important;
+  height:20px !important;
+  line-height:18px !important;
+  padding:1px 4px !important;
+  border-radius:6px !important;
+  border:1px solid #dbe3ee !important;
+  background:#f8fafc !important;
+  color:#334155 !important;
+  font-size:10px !important;
+  font-weight:600 !important;
+  writing-mode:horizontal-tb !important;
+  white-space:nowrap !important;
+  cursor:pointer !important;
+}
+.igdc-board-mini{ border-color:transparent !important; background:transparent !important; padding:0 2px !important; color:#475569 !important; }
+.igdc-board-act.edit{ background:#eef6ff !important; color:#2563eb !important; }
+.igdc-board-act.del{ background:#fff1f2 !important; color:#dc2626 !important; }
+.igdc-board-empty{ color:#94a3b8 !important; font-size:12px !important; padding:6px 2px !important; }
+#composerModal input,
+#composerModal input[type="text"],
+#composerModal input:not([type]),
+.igdc-donation-title-input{
   min-height:46px !important;
   height:auto !important;
   padding:12px 14px !important;
@@ -5499,280 +5657,84 @@ document.addEventListener("DOMContentLoaded",function(){
   box-sizing:border-box !important;
   border-radius:10px !important;
 }
-#composerModal textarea#composeBody{
+#composerModal textarea{
   padding:12px 14px !important;
   line-height:1.45 !important;
   box-sizing:border-box !important;
   border-radius:10px !important;
 }
-.title-preview{ min-height:34px !important; display:inline-flex !important; align-items:center !important; }
-.title-preview .tp-text{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; }
 .igdc-donation-save-status{ font-size:.78rem; color:#0f766e; margin-left:6px; white-space:nowrap; }
-
-/* Section post box: the section panel is the box; posts are compact rows inside it. */
-.right .topic-panel,
-.mobile-news-clone .topic-panel{
-  display:flex !important;
-  flex-direction:column !important;
-  min-height:176px;
-  max-height:260px;
-  overflow:hidden !important;
-}
-.right .topic-panel h3,
-.mobile-news-clone .topic-panel h3{
-  flex:0 0 auto;
-  margin-bottom:6px !important;
-}
-.right .topic-panel .list,
-.mobile-news-clone .topic-panel .list{
-  flex:1 1 auto;
-  min-height:0;
-  overflow-y:auto !important;
-  overflow-x:hidden !important;
-  display:block !important;
-  padding:3px 2px 8px 2px !important;
-  scroll-behavior:smooth;
-}
-.right .topic-panel .list:empty::before,
-.mobile-news-clone .topic-panel .list:empty::before{
-  content:'작성된 글이 없습니다.';
-  display:block;
-  color:#9ca3af;
-  font-size:.78rem;
-  padding:8px 4px;
-}
-.igdc-donation-post-row{
-  display:block !important;
-  width:100%;
-  box-sizing:border-box;
-  padding:6px 4px 6px 4px;
-  border-bottom:1px dashed rgba(148,163,184,.45);
-  background:transparent !important;
-}
-.igdc-donation-post-row:last-child{ border-bottom:none; }
-.igdc-donation-post-row .igdc-post-title{
-  display:block;
-  width:100%;
-  border:0;
-  background:transparent;
-  padding:0;
-  margin:0 0 3px 0;
-  color:#111827;
-  font-size:.86rem;
-  font-weight:700;
-  text-align:left;
-  line-height:1.28;
-  cursor:pointer;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.igdc-donation-post-row .igdc-post-title:hover{ color:#0b63ce; text-decoration:underline; }
-.igdc-donation-post-row .igdc-post-sub{
-  display:flex;
-  align-items:center;
-  gap:5px;
-  min-width:0;
-  flex-wrap:nowrap;
-  color:#6b7280;
-  font-size:.68rem;
-  line-height:1.2;
-}
-.igdc-donation-post-row .igdc-post-date{
-  flex:1 1 auto;
-  min-width:0;
-  overflow:hidden;
-  white-space:nowrap;
-  text-overflow:ellipsis;
-}
-.igdc-donation-post-row .igdc-post-stat{
-  display:inline-flex;
-  align-items:center;
-  gap:2px;
-  white-space:nowrap;
-}
-.igdc-donation-post-row .igdc-post-mini-btn{
-  border:1px solid #dbeafe;
-  background:#f8fbff;
-  color:#1d4ed8;
-  border-radius:6px;
-  padding:2px 5px;
-  font-size:.66rem;
-  line-height:1.05;
-  cursor:pointer;
-  min-width:auto;
-}
-.igdc-donation-post-row .igdc-post-mini-btn.reco{ color:#047857; border-color:#bbf7d0; background:#f0fdf4; }
-.igdc-donation-post-row .igdc-post-mini-btn.like{ color:#be123c; border-color:#fecdd3; background:#fff1f2; }
-.igdc-donation-post-row .igdc-post-mini-btn.delete{ color:#b91c1c; border-color:#fecaca; background:#fff1f2; }
-.igdc-donation-post-row .igdc-post-mini-btn:hover{ filter:brightness(.97); }
-
-.igdc-donation-viewer{
-  position:fixed;
-  inset:0;
-  z-index:10050;
+#igdcDonationPostViewer{
+  position:fixed !important;
+  inset:0 !important;
   display:none;
-  align-items:center;
-  justify-content:center;
-  background:rgba(15,23,42,.48);
-  padding:18px;
+  align-items:center !important;
+  justify-content:center !important;
+  background:rgba(15,23,42,.45) !important;
+  z-index:10050 !important;
+  padding:18px !important;
+  box-sizing:border-box !important;
 }
-.igdc-donation-viewer.open{ display:flex; }
-.igdc-donation-viewer .viewer-panel{
-  width:min(92vw, 720px);
-  max-height:82vh;
-  overflow:auto;
-  background:#fff;
-  border-radius:14px;
-  box-shadow:0 18px 48px rgba(0,0,0,.26);
-  padding:18px;
+#igdcDonationPostViewer .igdc-viewer-box{
+  width:min(92vw,680px) !important;
+  max-height:82vh !important;
+  overflow:auto !important;
+  background:#fff !important;
+  border-radius:14px !important;
+  border:1px solid #dbe3ee !important;
+  box-shadow:0 18px 44px rgba(0,0,0,.25) !important;
+  padding:18px !important;
 }
-.igdc-donation-viewer .viewer-title{
-  margin:0 0 5px 0;
-  font-size:1.05rem;
-  line-height:1.35;
-  color:#111827;
-}
-.igdc-donation-viewer .viewer-meta{
-  color:#6b7280;
-  font-size:.78rem;
-  margin-bottom:12px;
-}
-.igdc-donation-viewer .viewer-body{
-  white-space:pre-wrap;
-  line-height:1.55;
-  font-size:.93rem;
-  color:#1f2937;
-  border:1px solid #e5e7eb;
-  border-radius:10px;
-  padding:12px;
-  min-height:120px;
-  background:#f9fafb;
-}
-.igdc-donation-viewer input.viewer-edit-title,
-.igdc-donation-viewer textarea.viewer-edit-body{
-  width:100%; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:10px; padding:10px 12px; font-size:.92rem;
-}
-.igdc-donation-viewer textarea.viewer-edit-body{ min-height:180px; resize:vertical; margin-top:8px; line-height:1.5; }
-.igdc-donation-viewer .viewer-actions{
-  display:flex; justify-content:flex-end; gap:8px; margin-top:12px; flex-wrap:wrap;
-}
-.igdc-donation-viewer .viewer-actions button{
-  border:1px solid #d1d5db;
-  background:#f8fafc;
-  border-radius:8px;
-  padding:6px 10px;
-  font-size:.8rem;
-  cursor:pointer;
-}
-.igdc-donation-viewer .viewer-actions button.primary{ background:#0b63ce; color:#fff; border-color:#0b63ce; }
-.igdc-donation-viewer .viewer-actions button.danger{ background:#fff1f2; color:#b91c1c; border-color:#fecaca; }
-@media (max-width: 720px){
-  .right .topic-panel, .mobile-news-clone .topic-panel{ max-height:220px; }
-  .igdc-donation-post-row .igdc-post-sub{ gap:4px; }
-  .igdc-donation-post-row .igdc-post-mini-btn{ padding:2px 4px; font-size:.64rem; }
+#igdcDonationPostViewer .igdc-viewer-title{ margin:0 0 4px 0 !important; color:#0b4a77 !important; font-size:1.12rem !important; }
+#igdcDonationPostViewer .igdc-viewer-meta{ color:#64748b !important; font-size:.82rem !important; margin-bottom:12px !important; }
+#igdcDonationPostViewer .igdc-viewer-body{ white-space:pre-wrap !important; line-height:1.55 !important; font-size:.96rem !important; color:#111827 !important; }
+#igdcDonationPostViewer .igdc-viewer-actions{ display:flex !important; justify-content:flex-end !important; gap:8px !important; margin-top:14px !important; }
+#igdcDonationPostViewer button{ border:1px solid #cbd5e1; border-radius:8px; background:#fff; padding:7px 11px; cursor:pointer; }
+@media (max-width:1024px){
+  .right .topic-panel{ height:220px !important; max-height:220px !important; }
 }
 </style>
-<script id="igdc-donation-writer-save-final">
+<script id="igdc-donation-board-v6">
 (function(){
-  if(window.__IGDC_DONATION_WRITER_SAVE_V5__) return;
-  window.__IGDC_DONATION_WRITER_SAVE_V5__ = true;
+  if(window.__IGDC_DONATION_BOARD_V6__) return;
+  window.__IGDC_DONATION_BOARD_V6__ = true;
 
-  var STORE_KEY = 'igdc_donation_posts_v5';
-  var MIRROR_KEYS = ['igdc_donation_posts_v4','igdc_donation_posts_v3','igdc_donation_posts_v2'];
-  var DRAFT_KEY = 'igdc_donation_draft_v5';
-  var OLD_DRAFT_KEYS = ['igdc_donation_draft_v4'];
+  var STORE_KEY = 'igdc_donation_posts_v6';
+  var MIGRATED_KEY = 'igdc_donation_posts_v6_migrated';
+  var DRAFT_KEY = 'igdc_donation_draft_v6';
+  var OLD_KEYS = ['igdc_donation_posts_v4','igdc_donation_posts_v3','igdc_donation_posts_v2'];
   var MAX_POSTS = 500;
+  var editingId = null;
+  var installTimer = null;
+  var suppressMutation = false;
   var $ = function(sel, root){ return (root || document).querySelector(sel); };
   var $$ = function(sel, root){ return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
 
-  function text(el){ return el ? ((el.value != null ? el.value : el.textContent) || '').trim() : ''; }
-  function safeId(){ return 'don_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9); }
+  function text(el){ return el ? ((el.textContent || el.value || '').trim()) : ''; }
+  function readJSON(key, fallback){ try{ var v=localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch(e){ return fallback; } }
+  function writeJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); return true; }catch(e){ return false; } }
   function nowText(){ try{ return new Date().toLocaleString(); }catch(e){ return String(new Date()); } }
-  function readJSON(key, fallback){ try{ var raw = localStorage.getItem(key); if(!raw) return fallback; var val = JSON.parse(raw); return val == null ? fallback : val; }catch(e){ return fallback; } }
-  function writeJSON(key, value){ try{ localStorage.setItem(key, JSON.stringify(value)); return true; }catch(e){ console.warn('[IGDC Donation] localStorage write failed:', key, e); return false; } }
-  function normalizeCat(cat){
-    cat = String(cat || 'etc').toLowerCase();
-    var valid = { iesf:1, ngo:1, mission:1, service:1, relief:1, edu:1, env:1, etc:1 };
-    if(cat === 'education') cat = 'edu';
-    if(cat === 'environment') cat = 'env';
-    return valid[cat] ? cat : 'etc';
-  }
-  function normalizePost(raw, fallbackCat){
-    if(!raw || typeof raw !== 'object') return null;
-    var title = (raw.title || raw.subject || raw.name || '').toString().trim();
-    var body = (raw.body || raw.content || raw.preview || raw.text || '').toString().trim();
-    var cat = normalizeCat(raw.cat || raw.category || raw.section || fallbackCat || 'etc');
-    var id = (raw.id || raw.postId || '').toString().trim() || safeId();
-    return {
-      id: id,
-      cat: cat,
-      title: title || '제목 없음',
-      body: body || '(등록된 본문이 없습니다.)',
-      meta: (raw.meta || raw.date || raw.time || raw.createdAt || nowText()).toString(),
-      ts: Number(raw.ts || raw.createdTs || Date.now()),
-      views: Number(raw.views || raw.view || 0) || 0,
-      reco: Number(raw.reco || raw.recommend || raw.recommendations || 0) || 0,
-      likes: Number(raw.likes || raw.like || 0) || 0,
-      author: raw.author || window.USER_ID || 'local-user',
-      attachments: Array.isArray(raw.attachments) ? raw.attachments : (raw.attachments ? [String(raw.attachments)] : [])
-    };
-  }
-  function uniquePosts(list){
-    var out=[], seen={};
-    (Array.isArray(list) ? list : []).forEach(function(p){
-      var n = normalizePost(p);
-      if(!n) return;
-      var key = n.id || (n.cat + '|' + n.title + '|' + n.meta);
-      if(seen[key]) return;
-      seen[key] = true;
-      out.push(n);
-    });
-    out.sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
-    return out.slice(0, MAX_POSTS);
-  }
-  function readPosts(){
-    var arr = readJSON(STORE_KEY, null);
-    if(!Array.isArray(arr)){
-      for(var i=0;i<MIRROR_KEYS.length;i++){
-        arr = readJSON(MIRROR_KEYS[i], null);
-        if(Array.isArray(arr)) break;
-      }
-    }
-    return uniquePosts(Array.isArray(arr) ? arr : []);
-  }
-  function writePosts(posts){
-    var arr = uniquePosts(posts).slice(0, MAX_POSTS);
-    var ok = writeJSON(STORE_KEY, arr);
-    MIRROR_KEYS.forEach(function(key){ writeJSON(key, arr); });
-    return ok;
-  }
-  function readDraft(){
-    var d = readJSON(DRAFT_KEY, null);
-    if(!d){ for(var i=0;i<OLD_DRAFT_KEYS.length;i++){ d = readJSON(OLD_DRAFT_KEYS[i], null); if(d) break; } }
-    return d && typeof d === 'object' ? d : {};
-  }
-  function writeDraft(d){ writeJSON(DRAFT_KEY, d || {}); OLD_DRAFT_KEYS.forEach(function(k){ writeJSON(k, d || {}); }); }
+  function safeId(){ return 'don_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,9); }
+  function readPosts(){ var arr=readJSON(STORE_KEY, []); return Array.isArray(arr) ? arr : []; }
+  function writePosts(arr){ return writeJSON(STORE_KEY, (Array.isArray(arr) ? arr : []).slice(0, MAX_POSTS)); }
+  function readDraft(){ var d=readJSON(DRAFT_KEY, {}); return d && typeof d === 'object' ? d : {}; }
+  function writeDraft(d){ return writeJSON(DRAFT_KEY, d || {}); }
+  function clearDraft(){ try{ localStorage.removeItem(DRAFT_KEY); }catch(e){} }
 
   function modal(){ return $('#composerModal') || $('[id*="composerModal"]'); }
-  function controls(){ return $('#composeControls') || $('.compose-wrap'); }
+  function controls(){ return $('#composeControls') || $('.compose-wrap') || $('.compose-row'); }
   function titleInput(){ var m=modal(); return $('#composeTitle') || (m && (m.querySelector('input:not([type="file"])') || m.querySelector('input'))); }
   function bodyInput(){ var m=modal(); return $('#composeBody') || (m && m.querySelector('textarea')); }
   function categorySelect(){ var c=controls(); return $('#postCategory') || (c && c.querySelector('select')) || $('.field-category select') || $('.compose-wrap select'); }
-  function finalButton(){ var c=controls(); return $('#btnSubmitPost') || (c && (c.querySelector('button.accent') || Array.prototype.slice.call(c.querySelectorAll('button')).filter(function(b){ return /save|저장|salva|guardar|保存|提交|حفظ|kaydet|сохран|저장/i.test(text(b)); }).pop())); }
+  function finalButton(){ var c=controls(); return $('#btnSubmitPost') || (c && (c.querySelector('button.accent') || Array.prototype.slice.call(c.querySelectorAll('button')).filter(function(b){ return /save|저장|salva|guardar|保存|提交|حفظ|kaydet|сохран/i.test(text(b)); }).pop())); }
   function openButton(){ var c=controls(); return $('#btnOpenComposer') || (c && Array.prototype.slice.call(c.querySelectorAll('button')).filter(function(b){ return /글쓰기|write|scrivi|escribir|작성|쓰기|寫|写|كتابة|écrire/i.test(text(b)); })[0]); }
   function draftButton(){ var m=modal(); return $('#btnDraftSave') || (m && Array.prototype.slice.call(m.querySelectorAll('button')).filter(function(b){ return /draft|임시|bozza|brouillon|entwurf|草稿|下書き|rascunho|taslak|مسودة/i.test(text(b)); })[0]) || (m && m.querySelector('button.outline')); }
-  function cancelButton(){ var m=modal(); return $('#btnCancel') || (m && Array.prototype.slice.call(m.querySelectorAll('button')).filter(function(b){ return /cancel|취소|annulla|annuler|取消|キャンセル|إلغاء|batal|iptal|취소/i.test(text(b)); })[0]); }
+  function cancelButton(){ var m=modal(); return $('#btnCancel') || (m && Array.prototype.slice.call(m.querySelectorAll('button')).filter(function(b){ return /cancel|취소|annulla|annuler|取消|キャンセル|إلغاء|batal|iptal/i.test(text(b)); })[0]); }
   function previewText(){ return $('.title-preview .tp-text') || ($('#titlePreview') && $('#titlePreview').querySelector('.tp-text')); }
-  function updatePreview(value){ var p=previewText(); if(!p) return; if(!p.getAttribute('data-empty-text')) p.setAttribute('data-empty-text', (p.textContent || '제목 미입력').trim() || '제목 미입력'); p.textContent = (value || '').trim() || p.getAttribute('data-empty-text') || '제목 미입력'; }
-  function showStatus(msg){
-    var p = $('#titlePreview') || (controls() && controls().querySelector('.title-preview'));
-    if(!p) return;
-    var s = p.parentNode && p.parentNode.querySelector('.igdc-donation-save-status');
-    if(!s){ s=document.createElement('span'); s.className='igdc-donation-save-status'; p.insertAdjacentElement('afterend', s); }
-    s.textContent = msg || '';
-    if(msg){ setTimeout(function(){ if(s.textContent === msg) s.textContent=''; }, 2200); }
-  }
+  function emptyTitle(){ var p=previewText(); return (p && (p.getAttribute('data-empty-text') || p.textContent || '').trim()) || '제목 미입력'; }
+  function updatePreview(v){ var p=previewText(); if(!p) return; if(!p.getAttribute('data-empty-text')) p.setAttribute('data-empty-text', (p.textContent||'제목 미입력').trim() || '제목 미입력'); p.textContent=(v||'').trim() || p.getAttribute('data-empty-text') || '제목 미입력'; }
+  function showStatus(msg){ var p=$('#titlePreview') || (controls() && controls().querySelector('.title-preview')); if(!p) return; var s=p.parentNode && p.parentNode.querySelector('.igdc-donation-save-status'); if(!s){ s=document.createElement('span'); s.className='igdc-donation-save-status'; p.insertAdjacentElement('afterend', s); } s.textContent=msg||''; if(msg){ setTimeout(function(){ if(s.textContent===msg) s.textContent=''; }, 2200); } }
+
   function normalizeIds(){
     var cs=categorySelect(); if(cs) cs.id='postCategory';
     var fb=finalButton(); if(fb) fb.id='btnSubmitPost';
@@ -5782,217 +5744,204 @@ document.addEventListener("DOMContentLoaded",function(){
     var db=draftButton(); if(db) db.id='btnDraftSave';
     var cb=cancelButton(); if(cb) cb.id='btnCancel';
   }
-  function replaceButton(btn, key){
+  function cloneButton(btn, mark){
     if(!btn) return null;
-    if(btn.dataset && btn.dataset.igdcV5Bound === key) return btn;
-    var clone = btn.cloneNode(true);
-    clone.dataset.igdcV5Bound = key;
-    clone.type = 'button';
-    clone.disabled = false;
-    if(btn.parentNode) btn.parentNode.replaceChild(clone, btn);
+    if(btn.dataset.igdcV6Bound === mark) return btn;
+    var clone=btn.cloneNode(true);
+    clone.dataset.igdcV6Bound = mark;
+    clone.type='button';
+    clone.disabled=false;
+    btn.parentNode.replaceChild(clone, btn);
     return clone;
   }
-  function openModal(){ var m=modal(); if(!m) return; m.classList.remove('hidden'); m.style.display='flex'; setTimeout(function(){ var t=titleInput(); if(t) t.focus(); }, 30); }
-  function closeModal(){ var m=modal(); if(!m) return; m.classList.add('hidden'); }
+  function openModal(){ var m=modal(); if(!m) return; m.classList.remove('hidden'); m.style.display='flex'; setTimeout(function(){ var ti=titleInput(); if(ti) ti.focus(); }, 30); }
+  function closeModal(){ var m=modal(); if(!m) return; m.classList.add('hidden'); m.style.display='none'; }
+  function clearComposer(){
+    editingId = null;
+    var ti=titleInput(), bi=bodyInput();
+    if(ti) ti.value='';
+    if(bi) bi.value='';
+    ['#postFile','#postImage','#postAttach'].forEach(function(sel){ var i=$(sel); if(i) i.value=''; });
+    ['#fileChosen','#imgChosen','#attachName'].forEach(function(sel){ var el=$(sel); if(el) el.textContent=''; });
+    updatePreview('');
+    clearDraft();
+  }
   function collectAttachments(){
     var names=[];
     ['#postAttach','#postFile','#postImage'].forEach(function(sel){ var input=$(sel); if(input && input.files){ Array.prototype.forEach.call(input.files, function(f){ if(f && f.name && names.indexOf(f.name)<0) names.push(f.name); }); } });
-    $$('#attachPreview .name, #fileChosen, #imgChosen, #attachName, .attach-list li').forEach(function(el){ var t=text(el).replace(/^첨부\s*:\s*/,''); if(t && names.indexOf(t)<0) names.push(t); });
+    $$('#attachPreview .name, #fileChosen, #imgChosen, #attachName').forEach(function(el){ var t=text(el); if(t && names.indexOf(t)<0) names.push(t); });
     return names;
   }
-  function listNodes(cat){ cat = normalizeCat(cat); return $$('.right .topic-panel .list[data-cat="'+cat+'"], .mobile-news-clone .topic-panel .list[data-cat="'+cat+'"]').filter(Boolean); }
-  function allPostLists(){ return $$('.right .topic-panel .list[data-cat], .mobile-news-clone .topic-panel .list[data-cat]').filter(Boolean); }
-
-  function makeRow(post){
-    var row = document.createElement('div');
-    row.className = 'igdc-donation-post-row';
-    row.dataset.postId = post.id;
-    row.dataset.cat = post.cat;
-
-    var title = document.createElement('button');
-    title.type = 'button';
-    title.className = 'igdc-post-title';
-    title.textContent = post.title || '제목 없음';
-    title.title = post.title || '제목 없음';
-    title.addEventListener('click', function(e){ e.preventDefault(); openViewer(post.id, false); });
-    row.appendChild(title);
-
-    var sub = document.createElement('div');
-    sub.className = 'igdc-post-sub';
-    var date = document.createElement('span');
-    date.className = 'igdc-post-date';
-    date.textContent = post.meta || nowText();
-    sub.appendChild(date);
-
-    [['views','⊙'],['reco','👍'],['likes','♥']].forEach(function(pair){
-      var span = document.createElement('span');
-      span.className = 'igdc-post-stat';
-      span.textContent = pair[1] + ' ' + (Number(post[pair[0]]) || 0);
-      sub.appendChild(span);
+  function listNodes(cat){ cat=(cat||'etc').toLowerCase(); return $$('.right .topic-panel .list[data-cat="'+cat+'"], .mobile-news-clone .topic-panel .list[data-cat="'+cat+'"]').filter(Boolean); }
+  function primaryList(cat){ return $('.right .topic-panel .list[data-cat="'+(cat||'etc').toLowerCase()+'"]'); }
+  function ensureCat(cat){ cat=(cat||'etc').toLowerCase(); return primaryList(cat) ? cat : 'etc'; }
+  function uniquePosts(arr){
+    var seen={}, out=[];
+    (Array.isArray(arr)?arr:[]).forEach(function(p){
+      if(!p || typeof p !== 'object') return;
+      var id=p.id || safeId();
+      if(seen[id]) return;
+      seen[id]=1;
+      out.push({ id:id, cat:ensureCat(p.cat || p.category || 'etc'), title:(p.title||'제목 없음'), body:(p.body||p.content||'(등록된 본문이 없습니다.)'), meta:(p.meta||p.date||nowText()), ts:p.ts||Date.now(), views:p.views||0, likes:p.likes||0, recommends:p.recommends||p.ups||0, attachments:Array.isArray(p.attachments)?p.attachments:[] });
     });
+    return out.slice(0, MAX_POSTS);
+  }
+  function migrateOld(){
+    if(localStorage.getItem(MIGRATED_KEY)==='1') return;
+    var arr=readPosts();
+    OLD_KEYS.forEach(function(k){
+      var old=readJSON(k, []);
+      if(Array.isArray(old)) old.forEach(function(p){ arr.push(p); });
+    });
+    arr=uniquePosts(arr);
+    writePosts(arr);
+    try{ localStorage.setItem(MIGRATED_KEY,'1'); }catch(e){}
+  }
 
-    var reco = document.createElement('button');
-    reco.type='button'; reco.className='igdc-post-mini-btn reco'; reco.textContent='추천';
-    reco.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); bump(post.id, 'reco'); });
-    sub.appendChild(reco);
-
-    var like = document.createElement('button');
-    like.type='button'; like.className='igdc-post-mini-btn like'; like.textContent='좋아요';
+  function viewer(){
+    var v=$('#igdcDonationPostViewer');
+    if(v) return v;
+    v=document.createElement('div');
+    v.id='igdcDonationPostViewer';
+    v.innerHTML='<div class="igdc-viewer-box" role="dialog" aria-modal="true"><h3 class="igdc-viewer-title"></h3><div class="igdc-viewer-meta"></div><div class="igdc-viewer-body"></div><div class="igdc-viewer-actions"><button type="button" class="igdc-viewer-edit">Edit</button><button type="button" class="igdc-viewer-close">닫기</button></div></div>';
+    document.body.appendChild(v);
+    v.addEventListener('click', function(e){ if(e.target===v || e.target.classList.contains('igdc-viewer-close')) closeViewer(); });
+    v.querySelector('.igdc-viewer-edit').addEventListener('click', function(){ var id=v.dataset.postId; closeViewer(); editPost(id); });
+    return v;
+  }
+  function closeViewer(){ var v=$('#igdcDonationPostViewer'); if(v) v.style.display='none'; }
+  function viewPost(id){
+    var arr=readPosts(), p=arr.filter(function(x){ return x.id===id; })[0];
+    if(!p) return;
+    p.views=(p.views||0)+1; writePosts(arr); renderAll();
+    var v=viewer(); v.dataset.postId=id;
+    v.querySelector('.igdc-viewer-title').textContent=p.title||'제목 없음';
+    v.querySelector('.igdc-viewer-meta').textContent=(p.meta||'') + ' · 조회 ' + (p.views||0) + ' · 추천 ' + (p.recommends||0) + ' · 좋아요 ' + (p.likes||0);
+    v.querySelector('.igdc-viewer-body').textContent=p.body||'(등록된 본문이 없습니다.)';
+    v.style.display='flex';
+  }
+  function editPost(id){
+    var p=readPosts().filter(function(x){ return x.id===id; })[0]; if(!p) return;
+    editingId=id;
+    var cs=categorySelect(), ti=titleInput(), bi=bodyInput();
+    if(cs) cs.value=p.cat || 'etc';
+    if(ti) ti.value=p.title || '';
+    if(bi) bi.value=p.body || '';
+    updatePreview(p.title || '');
+    openModal();
+  }
+  function deletePost(id){
+    var arr=readPosts().filter(function(p){ return p.id!==id; });
+    writePosts(arr); renderAll(); showStatus('삭제됨');
+  }
+  function bump(id, key){
+    var arr=readPosts();
+    arr.forEach(function(p){ if(p.id===id) p[key]=(p[key]||0)+1; });
+    writePosts(arr); renderAll();
+  }
+  function makeRow(post){
+    var item=document.createElement('div');
+    item.className='item igdc-board-row';
+    item.dataset.postId=post.id;
+    item.dataset.cat=post.cat;
+    var line=document.createElement('div'); line.className='igdc-board-line';
+    var title=document.createElement('button'); title.type='button'; title.className='igdc-board-title'; title.textContent=post.title||'제목 없음'; title.title=post.title||'제목 없음';
+    var actions=document.createElement('div'); actions.className='igdc-board-actions';
+    var view=document.createElement('span'); view.className='igdc-board-mini'; view.textContent='◉ '+(post.views||0);
+    var rec=document.createElement('button'); rec.type='button'; rec.className='igdc-board-mini'; rec.textContent='👍 '+(post.recommends||0); rec.title='추천';
+    var like=document.createElement('button'); like.type='button'; like.className='igdc-board-mini'; like.textContent='♥ '+(post.likes||0); like.title='좋아요';
+    var edit=document.createElement('button'); edit.type='button'; edit.className='igdc-board-act edit'; edit.textContent='Edit';
+    var del=document.createElement('button'); del.type='button'; del.className='igdc-board-act del'; del.textContent='Delete';
+    actions.appendChild(view); actions.appendChild(rec); actions.appendChild(like); actions.appendChild(edit); actions.appendChild(del);
+    line.appendChild(title); line.appendChild(actions);
+    var meta=document.createElement('div'); meta.className='igdc-board-meta'; meta.textContent=post.meta||nowText();
+    item.appendChild(line); item.appendChild(meta);
+    title.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); viewPost(post.id); });
+    rec.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); bump(post.id, 'recommends'); });
     like.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); bump(post.id, 'likes'); });
-    sub.appendChild(like);
-
-    var edit = document.createElement('button');
-    edit.type='button'; edit.className='igdc-post-mini-btn edit'; edit.textContent='Edit';
-    edit.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openViewer(post.id, true); });
-    sub.appendChild(edit);
-
-    var del = document.createElement('button');
-    del.type='button'; del.className='igdc-post-mini-btn delete'; del.textContent='Delete';
+    edit.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); editPost(post.id); });
     del.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); deletePost(post.id); });
-    sub.appendChild(del);
-
-    row.appendChild(sub);
-    return row;
+    return item;
+  }
+  function clearRendered(){
+    $$('.right .topic-panel .list .igdc-board-row, .mobile-news-clone .topic-panel .list .igdc-board-row, .right .topic-panel .list .igdc-local-post, .mobile-news-clone .topic-panel .list .igdc-local-post').forEach(function(el){ el.remove(); });
   }
   function renderAll(){
-    var posts = readPosts();
-    allPostLists().forEach(function(list){
-      list.innerHTML = '';
-      var cat = normalizeCat(list.getAttribute('data-cat'));
-      posts.filter(function(p){ return normalizeCat(p.cat) === cat; }).forEach(function(post){ list.appendChild(makeRow(post)); });
+    if(suppressMutation) return;
+    suppressMutation=true;
+    clearRendered();
+    var posts=readPosts().slice().sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+    var has={};
+    posts.forEach(function(p){
+      p.cat=ensureCat(p.cat||'etc');
+      listNodes(p.cat).forEach(function(list){
+        $$('.item.placeholder', list).forEach(function(x){ x.style.display='none'; });
+        list.insertBefore(makeRow(p), list.firstChild);
+        has[p.cat]=true;
+      });
     });
+    $$('.right .topic-panel .list').forEach(function(list){
+      var cat=list.getAttribute('data-cat')||'etc';
+      var old=list.querySelector('.igdc-board-empty'); if(old) old.remove();
+      if(!list.querySelector('.igdc-board-row') && list.children.length===0){
+        var e=document.createElement('div'); e.className='igdc-board-empty'; e.textContent='등록된 글이 없습니다.'; list.appendChild(e);
+      }
+    });
+    suppressMutation=false;
+  }
+  function currentValues(){ var ti=titleInput(), bi=bodyInput(); return { title:((ti&&ti.value)||'').trim(), body:((bi&&bi.value)||'').trim() }; }
+  function saveDraft(ev){
+    if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
+    var v=currentValues(); writeDraft({ title:v.title, body:v.body, ts:Date.now() }); updatePreview(v.title); showStatus('임시저장됨'); closeModal(); return false;
   }
   function saveFinal(ev){
     if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
     normalizeIds();
-    var ti=titleInput(), bi=bodyInput(), cs=categorySelect(), draft=readDraft();
-    var title = ((ti && ti.value) || draft.title || '').trim() || '제목 없음';
-    var body = ((bi && bi.value) || draft.body || '').trim() || '(등록된 본문이 없습니다.)';
-    var cat = normalizeCat((cs && cs.value) || draft.cat || 'etc');
-    var post = normalizePost({ id:safeId(), cat:cat, title:title, body:body, meta:nowText(), ts:Date.now(), author:window.USER_ID || 'local-user', attachments:collectAttachments() });
-    var posts = readPosts();
-    posts.unshift(post);
-    if(writePosts(posts)){
-      writeDraft({ title:title, body:body, cat:cat, ts:Date.now() });
-      renderAll();
-      closeModal();
-      showStatus('저장됨');
-      try{ window.dispatchEvent(new CustomEvent('IGDC_DONATION_POST_SAVED', { detail: post })); }catch(e){}
-      return false;
+    var v=currentValues();
+    var cs=categorySelect();
+    var cat=ensureCat((cs&&cs.value)||'etc');
+    var arr=readPosts();
+    if(editingId){
+      var found=false;
+      arr=arr.map(function(p){ if(p.id===editingId){ found=true; p.cat=cat; p.title=v.title||'제목 없음'; p.body=v.body||'(등록된 본문이 없습니다.)'; p.meta=nowText(); p.ts=Date.now(); p.attachments=collectAttachments(); } return p; });
+      if(!found) editingId=null;
     }
-    showStatus('저장 실패');
-    alert('저장 공간을 사용할 수 없습니다. 브라우저 저장소 권한을 확인해 주세요.');
+    if(!editingId){
+      arr.unshift({ id:safeId(), cat:cat, title:v.title||'제목 없음', body:v.body||'(등록된 본문이 없습니다.)', meta:nowText(), ts:Date.now(), views:0, likes:0, recommends:0, attachments:collectAttachments() });
+    }
+    writePosts(uniquePosts(arr));
+    renderAll();
+    showStatus(editingId ? '수정됨' : '저장됨');
+    clearComposer();
+    closeModal();
     return false;
   }
-  function saveDraft(ev){
+  function cancelWrite(ev){
     if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
-    var ti=titleInput(), bi=bodyInput(), cs=categorySelect();
-    var d={ title:(ti && ti.value)||'', body:(bi && bi.value)||'', cat:(cs && cs.value)||'etc', ts:Date.now() };
-    writeDraft(d); updatePreview(d.title || ''); showStatus('임시저장됨'); closeModal();
-    return false;
+    clearComposer(); closeModal(); showStatus('취소됨'); return false;
   }
-  function updatePost(id, patch){
-    var posts = readPosts();
-    var changed = false;
-    posts = posts.map(function(p){ if(p.id === id){ changed = true; for(var k in patch){ p[k] = patch[k]; } } return p; });
-    if(changed){ writePosts(posts); renderAll(); }
-    return changed;
-  }
-  function bump(id, field){
-    var posts=readPosts(), changed=false;
-    posts.forEach(function(p){ if(p.id===id){ p[field] = (Number(p[field]) || 0) + 1; changed=true; }});
-    if(changed){ writePosts(posts); renderAll(); }
-  }
-  function deletePost(id){
-    if(!confirm('이 글을 삭제하시겠습니까?')) return;
-    var posts = readPosts();
-    var next = posts.filter(function(p){ return p.id !== id; });
-    writePosts(next); renderAll(); closeViewer(); showStatus('삭제됨');
-  }
-
-  function ensureViewer(){
-    var v = $('#igdcDonationViewer');
-    if(v) return v;
-    v = document.createElement('div');
-    v.id = 'igdcDonationViewer';
-    v.className = 'igdc-donation-viewer';
-    v.innerHTML = '<div class="viewer-panel" role="dialog" aria-modal="true">' +
-      '<h3 class="viewer-title"></h3><div class="viewer-meta"></div><div class="viewer-body"></div>' +
-      '<div class="viewer-editor" style="display:none"><input class="viewer-edit-title"/><textarea class="viewer-edit-body"></textarea></div>' +
-      '<div class="viewer-actions"><button type="button" data-act="close">닫기</button><button type="button" data-act="edit">Edit</button><button type="button" class="primary" data-act="save" style="display:none">저장</button><button type="button" class="danger" data-act="delete">Delete</button></div>' +
-      '</div>';
-    document.body.appendChild(v);
-    v.addEventListener('click', function(e){ if(e.target === v) closeViewer(); });
-    v.querySelector('[data-act="close"]').addEventListener('click', closeViewer);
-    v.querySelector('[data-act="edit"]').addEventListener('click', function(){ setViewerEdit(true); });
-    v.querySelector('[data-act="save"]').addEventListener('click', saveViewerEdit);
-    v.querySelector('[data-act="delete"]').addEventListener('click', function(){ var id=v.dataset.postId; if(id) deletePost(id); });
-    return v;
-  }
-  function getPost(id){ return readPosts().filter(function(p){ return p.id === id; })[0] || null; }
-  function openViewer(id, editMode){
-    var post = getPost(id); if(!post) return;
-    updatePost(id, { views:(Number(post.views)||0)+1 });
-    post = getPost(id) || post;
-    var v = ensureViewer();
-    v.dataset.postId = id;
-    v.querySelector('.viewer-title').textContent = post.title || '제목 없음';
-    v.querySelector('.viewer-meta').textContent = (post.meta || '') + ' · ' + (post.cat || 'etc');
-    v.querySelector('.viewer-body').textContent = post.body || '(등록된 본문이 없습니다.)';
-    v.querySelector('.viewer-edit-title').value = post.title || '';
-    v.querySelector('.viewer-edit-body').value = post.body || '';
-    v.classList.add('open');
-    setViewerEdit(!!editMode);
-  }
-  function setViewerEdit(on){
-    var v=ensureViewer();
-    v.querySelector('.viewer-body').style.display = on ? 'none' : 'block';
-    v.querySelector('.viewer-editor').style.display = on ? 'block' : 'none';
-    v.querySelector('[data-act="edit"]').style.display = on ? 'none' : '';
-    v.querySelector('[data-act="save"]').style.display = on ? '' : 'none';
-    if(on) v.querySelector('.viewer-edit-title').focus();
-  }
-  function saveViewerEdit(){
-    var v=ensureViewer(), id=v.dataset.postId;
-    if(!id) return;
-    var title = v.querySelector('.viewer-edit-title').value.trim() || '제목 없음';
-    var body = v.querySelector('.viewer-edit-body').value.trim() || '(등록된 본문이 없습니다.)';
-    updatePost(id, { title:title, body:body, editedAt:nowText() });
-    var post=getPost(id);
-    v.querySelector('.viewer-title').textContent = post.title;
-    v.querySelector('.viewer-body').textContent = post.body;
-    setViewerEdit(false);
-    showStatus('수정됨');
-  }
-  function closeViewer(){ var v=$('#igdcDonationViewer'); if(v) v.classList.remove('open'); }
-
   function bind(){
-    normalizeIds();
-    var d=readDraft(), ti=titleInput(), bi=bodyInput(), cs=categorySelect();
-    if(ti && !ti.value && d.title) ti.value = d.title;
-    if(bi && !bi.value && d.body) bi.value = d.body;
-    if(cs && d.cat) try{ cs.value = normalizeCat(d.cat); }catch(e){}
-    if(ti){ ti.addEventListener('input', function(){ updatePreview(ti.value); }, true); updatePreview(ti.value || d.title || ''); }
-
-    var fb=replaceButton(finalButton(), 'final');
-    if(fb) fb.addEventListener('click', saveFinal, true);
-    var ob=replaceButton(openButton(), 'open');
-    if(ob) ob.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation) e.stopImmediatePropagation(); openModal(); }, true);
-    var db=replaceButton(draftButton(), 'draft');
-    if(db) db.addEventListener('click', saveDraft, true);
-    var cb=replaceButton(cancelButton(), 'cancel');
-    if(cb) cb.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation) e.stopImmediatePropagation(); closeModal(); }, true);
+    normalizeIds(); migrateOld();
+    var fb=cloneButton(finalButton(), 'save');
+    if(fb){ fb.addEventListener('click', saveFinal, true); }
+    var ob=cloneButton(openButton(), 'open');
+    if(ob){ ob.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation) e.stopImmediatePropagation(); if(!editingId){ var d=readDraft(); var ti=titleInput(), bi=bodyInput(); if(d && (d.title||d.body)){ if(ti) ti.value=d.title||''; if(bi) bi.value=d.body||''; updatePreview(d.title||''); } } openModal(); }, true); }
+    var db=cloneButton(draftButton(), 'draft');
+    if(db){ db.addEventListener('click', saveDraft, true); }
+    var cb=cloneButton(cancelButton(), 'cancel');
+    if(cb){ cb.addEventListener('click', cancelWrite, true); }
+    var ti=titleInput(); if(ti){ ti.addEventListener('input', function(){ updatePreview(ti.value||''); }, true); updatePreview(ti.value||''); }
     renderAll();
   }
+  function scheduleBind(){ clearTimeout(installTimer); installTimer=setTimeout(bind, 60); }
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind); else bind();
-  var timer=null;
-  try{
-    new MutationObserver(function(){ clearTimeout(timer); timer=setTimeout(function(){ normalizeIds(); renderAll(); }, 180); }).observe(document.body, { childList:true, subtree:true });
-  }catch(e){}
-  window.igdcDonationSaveNow = saveFinal;
-  window.igdcDonationRenderPosts = renderAll;
+  setTimeout(bind, 300); setTimeout(bind, 1000); setTimeout(renderAll, 1800);
+  try{ new MutationObserver(function(){ if(!suppressMutation) scheduleBind(); }).observe(document.body, { childList:true, subtree:true }); }catch(e){}
+  window.igdcDonationBoardSave = saveFinal;
+  window.igdcDonationBoardRender = renderAll;
 })();
 </script>
+
 </body>
 </html>
