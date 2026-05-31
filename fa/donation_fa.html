@@ -5048,6 +5048,8 @@ window.addEventListener("message",function(ev){
     });
   }
 
+  window.normalizeItemFooter = window.normalizeItemFooter || normalizeItemFooter;
+
   function apply(){
     capture();
 
@@ -5619,5 +5621,333 @@ document.addEventListener("DOMContentLoaded",function(){
 <script src="/assets/js/maru-search.js"></script>
 <script src="/assets/js/maru-searchbank-sync.js"></script>
 
+
+<style id="igdc-donation-writer-final-fix-style">
+/* IGDC Donation writer final stabilization: title input height + list/mobile consistency */
+#composerModal input,
+#composerModal input[type="text"],
+#composerModal input:not([type]){
+  min-height:44px !important;
+  height:44px !important;
+  padding:10px 12px !important;
+  font-size:.96rem !important;
+  line-height:1.35 !important;
+  border:1px solid #cbd5e1 !important;
+  border-radius:8px !important;
+  box-sizing:border-box !important;
+}
+#composerModal textarea{
+  margin-top:8px !important;
+  padding:10px 12px !important;
+  box-sizing:border-box !important;
+}
+.title-preview .tp-text{display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.right .topic-panel .list .item[data-igdc-local-post="1"],
+.mobile-news-clone .topic-panel .list .item[data-igdc-local-post="1"]{background:#fff; border:1px solid #e5e7eb;}
+</style>
+
+<script id="igdc-donation-writer-final-fix">
+(function(){
+  if(window.__IGDC_DONATION_WRITER_FINAL_FIX__) return;
+  window.__IGDC_DONATION_WRITER_FINAL_FIX__ = true;
+
+  var STORE_KEY = 'igdc_donation_posts_v2';
+  var $ = function(sel, root){ return (root || document).querySelector(sel); };
+  var $$ = function(sel, root){ return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
+
+  function safeId(){
+    return 'post_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+  }
+  function getModal(){ return $('#composerModal'); }
+  function getTitleInput(){
+    var modal = getModal();
+    return $('#composeTitle') || (modal && (modal.querySelector('input[type="text"]') || modal.querySelector('input:not([type])') || modal.querySelector('input')));
+  }
+  function getBodyInput(){
+    var modal = getModal();
+    return $('#composeBody') || (modal && modal.querySelector('textarea'));
+  }
+  function getCategorySelect(){
+    return $('#postCategory') || $('.field-category select') || $('#composeControls select') || $('.compose-wrap select');
+  }
+  function getSubmitButtonFromTarget(target){
+    return target && target.closest && target.closest('#btnSubmitPost, .compose-wrap .row-top button.accent, .compose-wrap [id^="btn"][id$="Post"]');
+  }
+  function getDraftButtonFromTarget(target){
+    return target && target.closest && target.closest('#btnDraftSave');
+  }
+  function getOpenButtonFromTarget(target){
+    return target && target.closest && target.closest('#btnOpenComposer');
+  }
+  function getCancelButtonFromTarget(target){
+    return target && target.closest && target.closest('#btnCancel');
+  }
+  function getTitlePreviewText(){
+    return $('.title-preview .tp-text') || ($('#titlePreview') && $('#titlePreview').querySelector('.tp-text'));
+  }
+  function defaultTitleText(){
+    var tp = getTitlePreviewText();
+    var text = tp ? (tp.getAttribute('data-empty-text') || tp.textContent || '') : '';
+    text = (text || '').trim();
+    if(!text || /^(title\s*not\s*entered|제목\s*미입력|무제|無題|无标题|sin\s*título|untitled)$/i.test(text)) return '제목 미입력';
+    return text;
+  }
+  function updateTitlePreview(value){
+    var tp = getTitlePreviewText();
+    if(!tp) return;
+    if(!tp.getAttribute('data-empty-text')) tp.setAttribute('data-empty-text', (tp.textContent || '제목 미입력').trim() || '제목 미입력');
+    var t = (value || '').trim();
+    tp.textContent = t || tp.getAttribute('data-empty-text') || '제목 미입력';
+  }
+  function openModal(){
+    var modal = getModal();
+    if(!modal) return;
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    setTimeout(function(){ var ti=getTitleInput(); if(ti) ti.focus(); }, 20);
+  }
+  function closeModal(){
+    var modal = getModal();
+    if(!modal) return;
+    modal.classList.add('hidden');
+  }
+  function listForCat(cat){
+    cat = (cat || 'etc').toLowerCase();
+    return document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
+  }
+  function readStore(){
+    try{
+      var arr = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
+      return Array.isArray(arr) ? arr : [];
+    }catch(e){ return []; }
+  }
+  function writeStore(arr){
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(arr || [])); }catch(e){}
+  }
+  function collectAttachments(){
+    var names = [];
+    ['#postAttach','#postFile'].forEach(function(sel){
+      var input = $(sel);
+      if(input && input.files && input.files.length){
+        Array.prototype.forEach.call(input.files, function(f){ if(f && f.name && names.indexOf(f.name) < 0) names.push(f.name); });
+      }
+    });
+    $$('#attachPreview .name, #fileChosen, #imgChosen, #attachName').forEach(function(el){
+      var t = (el.textContent || '').trim();
+      if(t && names.indexOf(t) < 0) names.push(t);
+    });
+    return names;
+  }
+  function clearFiles(){
+    ['#postAttach','#postFile','#postImage'].forEach(function(sel){ var input=$(sel); if(input){ try{ input.value=''; }catch(e){} } });
+    ['#attachPreview','#fileChosen','#imgChosen','#attachName'].forEach(function(sel){ var el=$(sel); if(el){ el.textContent=''; if(sel==='#attachPreview') el.innerHTML=''; } });
+    var clear=$('#btnAttachClear'); if(clear) clear.style.display='none';
+  }
+  function normalizeFooter(item){
+    if(window.normalizeItemFooter){ try{ window.normalizeItemFooter(item.parentNode || document); return; }catch(e){} }
+    if(!item || item.querySelector('.item-footer')) return;
+    var footer = document.createElement('div');
+    footer.className = 'item-footer';
+    item.appendChild(footer);
+  }
+  function makeItem(post){
+    var item = document.createElement('div');
+    item.className = 'item';
+    item.dataset.igdcLocalPost = '1';
+    item.dataset.postId = post.id || safeId();
+    item.dataset.author = post.author || (window.USER_ID || 'local-user');
+
+    var title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = post.title || '제목 없음';
+
+    var meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = post.meta || new Date(post.ts || Date.now()).toLocaleString();
+
+    var preview = document.createElement('div');
+    preview.className = 'preview';
+    preview.style.cssText = 'font-size:.85rem; color:#444; margin-top:4px;';
+    preview.textContent = post.body || '(등록된 본문이 없습니다.)';
+
+    item.appendChild(title);
+    item.appendChild(meta);
+    item.appendChild(preview);
+
+    if(post.attachments && post.attachments.length){
+      var ul = document.createElement('ul');
+      ul.className = 'attach-list';
+      ul.style.cssText = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
+      post.attachments.forEach(function(name){
+        var li = document.createElement('li');
+        li.textContent = '첨부: ' + name;
+        ul.appendChild(li);
+      });
+      item.appendChild(ul);
+      item.classList.add('has-attach');
+    }
+
+    var del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'button tiny danger delete-post';
+    del.textContent = 'Delete';
+    del.style.cssText = 'margin-top:6px; display:inline-block;';
+    del.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      deletePost(item.dataset.postId);
+    });
+    item.appendChild(del);
+    normalizeFooter(item);
+    return item;
+  }
+  function removePlaceholder(list){
+    if(!list) return;
+    $$('.item.placeholder', list).forEach(function(p){ p.remove(); });
+  }
+  function renderOne(post, prepend){
+    var list = listForCat(post.cat || 'etc');
+    if(!list) return;
+    removePlaceholder(list);
+    var old = list.querySelector('[data-post-id="'+post.id+'"]');
+    if(old) old.remove();
+    var item = makeItem(post);
+    if(prepend) list.insertBefore(item, list.firstChild);
+    else list.appendChild(item);
+  }
+  function renderStored(){
+    var arr = readStore();
+    arr.forEach(function(post){ renderOne(post, false); });
+    refreshMobile();
+  }
+  function deletePost(id){
+    var arr = readStore().filter(function(p){ return p.id !== id; });
+    writeStore(arr);
+    $$('[data-post-id="'+id+'"]').forEach(function(el){ el.remove(); });
+    refreshMobile();
+  }
+  function refreshMobile(){
+    try{ window.dispatchEvent(new Event('resize')); }catch(e){}
+    setTimeout(function(){ try{ window.dispatchEvent(new Event('resize')); }catch(e){} }, 120);
+  }
+  async function trySyncSupabase(post){
+    try{
+      if(typeof window.ensureSupabase !== 'function') return;
+      var sb = window.ensureSupabase();
+      if(!sb || !sb.from) return;
+      await sb.from('igdc_donation_posts').insert({
+        page: 'donation',
+        category: post.cat || 'etc',
+        title: post.title || null,
+        meta: post.meta || null,
+        body: post.body || null,
+        attachments: post.attachments && post.attachments.length ? post.attachments : null
+      });
+    }catch(err){
+      try{ console.warn('[donation] Supabase sync skipped:', err && (err.message || err)); }catch(e){}
+    }
+  }
+
+  function saveFinal(){
+    var titleI = getTitleInput();
+    var bodyI = getBodyInput();
+    var catSel = getCategorySelect();
+    var cat = (catSel && catSel.value) || 'etc';
+    var title = (titleI && titleI.value ? titleI.value.trim() : '') || '제목 없음';
+    var body = (bodyI && bodyI.value ? bodyI.value.trim() : '') || '(등록된 본문이 없습니다.)';
+    var list = listForCat(cat);
+    if(!list){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+
+    var post = {
+      id: safeId(), cat: cat, title: title, body: body,
+      meta: new Date().toLocaleString(), ts: Date.now(),
+      attachments: collectAttachments(), author: window.USER_ID || 'local-user'
+    };
+    var arr = readStore();
+    arr.unshift(post);
+    writeStore(arr.slice(0, 200));
+    renderOne(post, true);
+    trySyncSupabase(post);
+
+    if(titleI) titleI.value = '';
+    if(bodyI) bodyI.value = '';
+    clearFiles();
+    updateTitlePreview('');
+    closeModal();
+    refreshMobile();
+
+    try{
+      window.dispatchEvent(new CustomEvent('IGDC_DONATION_POST_SAVED', { detail: post }));
+    }catch(e){}
+  }
+  function openPreview(item){
+    var modal = $('#newsPreviewModal') || $('#previewModal');
+    var npTitle = $('#npTitle') || $('#newsPreviewTitle');
+    var npTime = $('#npTime') || $('#newsPreviewTime');
+    var npBody = $('#npBody') || $('#newsPreviewBody');
+    var npAttach = $('#npAttach') || $('#newsPreviewAttach');
+    if(!modal || !npTitle || !npBody) return;
+    var title = (item.querySelector('.h-title') || item.querySelector('.title') || {}).textContent || '';
+    var meta = (item.querySelector('.h-time') || item.querySelector('.meta') || {}).textContent || '';
+    var body = (item.querySelector('.preview') || item.querySelector('.body') || item.querySelector('.content') || {}).textContent || '';
+    var attachList = item.querySelectorAll('.attach-list li');
+    npTitle.textContent = title.trim() || '제목 없음';
+    if(npTime) npTime.textContent = meta.trim() || '';
+    npBody.textContent = body.trim() || '(등록된 본문이 없습니다.)';
+    if(npAttach){
+      npAttach.innerHTML = attachList.length ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + Array.prototype.map.call(attachList, function(li){ return li.textContent || ''; }).join('<br/>') : '';
+    }
+    modal.style.display = 'flex';
+  }
+
+  document.addEventListener('click', function(e){
+    if(getOpenButtonFromTarget(e.target)){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      openModal();
+      return;
+    }
+    if(getCancelButtonFromTarget(e.target)){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      closeModal();
+      return;
+    }
+    if(getDraftButtonFromTarget(e.target)){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      var ti = getTitleInput();
+      updateTitlePreview(ti ? ti.value : '');
+      closeModal();
+      return;
+    }
+    if(getSubmitButtonFromTarget(e.target)){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      saveFinal();
+      return;
+    }
+    if(e.target.closest && e.target.closest('.delete-post, .btn-edit, .btn-delete')) return;
+    var item = e.target.closest && e.target.closest('.right .topic-panel .list .item, .mobile-news-clone .topic-panel .list .item');
+    if(item && !item.classList.contains('placeholder')) openPreview(item);
+  }, true);
+
+  document.addEventListener('input', function(e){
+    var ti = getTitleInput();
+    if(ti && e.target === ti) updateTitlePreview(ti.value);
+  }, true);
+
+  document.addEventListener('DOMContentLoaded', function(){
+    var ti = getTitleInput();
+    if(ti){
+      ti.classList.add('igdc-donation-title-input');
+      updateTitlePreview(ti.value || '');
+    }
+    renderStored();
+    setTimeout(refreshMobile, 250);
+  });
+})();
+</script>
 </body>
 </html>
