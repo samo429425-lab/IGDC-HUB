@@ -37,7 +37,7 @@ async function withTimeout(promise, ms){
       reject(new Error("engine_timeout"));
     }, ms);
 
-    Promise.resolve(promise)
+    promise
       .then(v => {
         clearTimeout(timer);
         resolve(v);
@@ -238,44 +238,16 @@ function asArray(v){
   return Array.isArray(v) ? v : [];
 }
 
-function truthy(v){
-  if(v === true) return true;
-  if(v === false || v == null) return false;
-  const s = String(v).trim().toLowerCase();
-  return !!s && !["0","false","no","off","disabled","disable","null","undefined"].includes(s);
-}
-
 function normalizeEngineItems(v){
   if(Array.isArray(v)) return v;
-  if(!v || typeof v !== "object") return [];
-
-  const probes = [
-    v.items,
-    v.results,
-    v.pageItems,
-    v.data && v.data.items,
-    v.data && v.data.results,
-    v.baseResult && v.baseResult.items,
-    v.baseResult && v.baseResult.results,
-    v.baseResult && v.baseResult.data && v.baseResult.data.items,
-    v.visiblePagePack && v.visiblePagePack.pageItems,
-    v.sectionPack && v.sectionPack.pageItems,
-    v.cognition && v.cognition.unifiedInsight,
-    v.cognition && v.cognition.items,
-    v.unifiedInsight,
-    v.guidance,
-    v.strategy,
-    v.evolutionPlan,
-    v.result && v.result.items,
-    v.result && v.result.results
-  ];
-
-  for(const probe of probes){
-    if(Array.isArray(probe)) return probe;
-  }
-
+  if(v && Array.isArray(v.items)) return v.items;
+  if(v && Array.isArray(v.results)) return v.results;
+  if(v && v.data && Array.isArray(v.data.items)) return v.data.items;
+  if(v && v.baseResult && Array.isArray(v.baseResult.items)) return v.baseResult.items;
+  if(v && v.baseResult && v.baseResult.data && Array.isArray(v.baseResult.data.items)) return v.baseResult.data.items;
   return [];
 }
+
 function createIntelligenceEngine(mod){
   if(!mod) return null;
 
@@ -307,68 +279,16 @@ function createIntelligenceEngine(mod){
 function resolveRunEngine(mod){
   if(!mod) return null;
 
-  function wrapRun(instance, method){
-    if(!instance || typeof instance[method] !== "function") return null;
-    return async function(event, params){
-      params = params || {};
-
-      if(method === "runEngine"){
-        return await instance.runEngine(event, params);
-      }
-
-      if(method === "process"){
-        return await instance.process(params.items || params.results || []);
-      }
-
-      if(method === "analyzeQuery"){
-        return await instance.analyzeQuery(params.query || params.q || "");
-      }
-
-      if(method === "run"){
-        const signals = params.guidance || params.signals || params.items || params.results || [];
-        return await instance.run(signals);
-      }
-
-      return await instance[method](event, params);
-    };
-  }
-
   if(typeof mod.runEngine === "function") return mod.runEngine.bind(mod);
-
-  if(mod.EngineInstance){
-    return wrapRun(mod.EngineInstance, "runEngine") || wrapRun(mod.EngineInstance, "run") || wrapRun(mod.EngineInstance, "process") || wrapRun(mod.EngineInstance, "analyzeQuery");
-  }
 
   if(typeof mod === "function"){
     try{
       const instance = new mod();
-      const runner = wrapRun(instance, "runEngine") || wrapRun(instance, "run") || wrapRun(instance, "process") || wrapRun(instance, "analyzeQuery");
-      if(runner) return runner;
+      if(instance && typeof instance.runEngine === "function"){
+        return instance.runEngine.bind(instance);
+      }
     }catch(e){}
   }
-
-  const classKeys = [
-    "CivilizationIntelligenceEngine",
-    "ConsciousnessEngine",
-    "LogosEngine",
-    "AutonomousEvolutionEngine",
-    "CognitiveEngine",
-    "IntelligenceEngine"
-  ];
-
-  for(const key of classKeys){
-    if(mod && typeof mod[key] === "function"){
-      try{
-        const instance = new mod[key]();
-        const runner = wrapRun(instance, "runEngine") || wrapRun(instance, "run") || wrapRun(instance, "process") || wrapRun(instance, "analyzeQuery");
-        if(runner) return runner;
-      }catch(e){}
-    }
-  }
-
-  if(mod && typeof mod.process === "function") return wrapRun(mod, "process");
-  if(mod && typeof mod.run === "function") return wrapRun(mod, "run");
-  if(mod && typeof mod.analyzeQuery === "function") return wrapRun(mod, "analyzeQuery");
 
   if(mod && typeof mod.handler === "function"){
     return async function(event, params){
@@ -389,6 +309,7 @@ function resolveRunEngine(mod){
 
   return null;
 }
+
 function createResilienceAdapter(mod){
   const adapter = {
     guard(items){
@@ -478,8 +399,8 @@ async function runDynamicEngines(query, items){
 
       if(name === "intelligence" && intelligenceEngine && typeof intelligenceEngine.process === "function"){
         const out = intelligenceEngine.process(data);
-        const normalized = normalizeEngineItems(out);
-        data = normalized.length ? normalized : data;
+        data = normalizeEngineItems(out).length ? normalizeEngineItems(out) : (out || data);
+        data = Array.isArray(data) ? data : normalizeEngineItems(data);
       }
 
       if(name === "civilization" && civilizationRunner){
@@ -648,6 +569,34 @@ try{
 }catch(e){}
 
 return result;
+  
+  /* SNAPSHOT WRITE PIPELINE */
+try{
+  const Snapshot = require("./snapshot-engine");
+
+  const items = result?.items || result?.results || [];
+
+  if(
+    Snapshot &&
+    typeof Snapshot.run === "function" &&
+    Array.isArray(items)
+  ){
+    await Snapshot.run({
+      section:"search",
+      items: items,
+      meta:{
+        source:"collector",
+        engine:VERSION,
+        timestamp:Date.now()
+      }
+    });
+  }
+
+}catch(e){
+  console.error("snapshot_write_fail", e?.message);
+}
+
+  return result;
 }
 
 /* --------------------------------------------------

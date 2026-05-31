@@ -68,7 +68,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.48-597-ranked-real-results-continuous-supply';
+const VERSION = 'A1.5.52-maru-cpu-final-verify-rich-firstwave';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -131,6 +131,41 @@ function isPublicSearchRequest(raw){
   const action = safeString(raw.action).toLowerCase();
   if(['front-supply','slot-supply','content-supply','snapshot-supply','searchbank-supply'].includes(action)) return false;
   return truthy(raw.publicSearch) || truthy(raw.pageWindowOnly) || isOpenPipeRequest(raw) || !action;
+}
+
+function maruPageNumber(raw){
+  raw = raw || {};
+  return clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage, raw.start), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES || 499);
+}
+
+function isMaruSearchUiFirstWave(raw){
+  raw = raw || {};
+  if(resolveMaruConsumer(raw) !== 'search-ui') return false;
+  if(maruPageNumber(raw) !== 1) return false;
+  const action = safeString(raw.action || raw.mode || raw.fn).trim().toLowerCase();
+  const explicitFirstWave = !!(
+    truthy(raw.sanmaruFirst) || truthy(raw.residentFirst) || truthy(raw.naturalFlow) ||
+    truthy(raw.residentSwitch) || truthy(raw.pageWindowOnly) || truthy(raw.smoothIntake) ||
+    truthy(raw.handoff) || safeString(raw.routeOwner).toLowerCase() === 'sanmaru'
+  );
+  // Plain public search requests must also behave as first-wave searches.
+  // Otherwise a bare q= search can fall into the heavy provider gateway before
+  // search.js receives the first paint. Explicit wait/deep/provider refresh
+  // requests remain opt-in and are handled by shouldDeferHeavyGatewayBeforeFirstWave().
+  return explicitFirstWave || (!action && !truthy(raw.deep) && !truthy(raw.waitProviders) && !truthy(raw.waitExternal) && !truthy(raw.forceWide));
+}
+
+function shouldDeferHeavyGatewayBeforeFirstWave(raw){
+  raw = raw || {};
+  if(!isMaruSearchUiFirstWave(raw)) return false;
+  if(truthy(raw.forceWide) || truthy(raw.forceProviderRefresh) || truthy(raw.waitProviders) || truthy(raw.waitExternal) || truthy(raw.waitSanmaru)) return false;
+  if(explicitExternalRequested(raw) && !truthy(raw.noBlockingWide)) return false;
+  return true;
+}
+
+function allowProviderRoadsInResults(raw){
+  raw = raw || {};
+  return !!(truthy(raw.includeProviderRoads) || truthy(raw.showProviderRoads) || truthy(raw.debugProviderRoads));
 }
 
 function normalizeSearchType(v){
@@ -307,7 +342,7 @@ function maruRichSummaryFallback(item, q){
     item.metaDescription, item.ogDescription,
     p.summary, p.snippet, p.description, p.contentSnippet, p.excerpt, p.abstract, p.metaDescription, p.ogDescription
   );
-  const cleanReal = stripInlineHtml(real).slice(0, 520);
+  const cleanReal = stripInlineHtml(real).slice(0, 720);
   if(cleanReal && cleanReal.length >= 18 && !isSyntheticSearchSummaryText(cleanReal)) return cleanReal;
 
   // Do not manufacture 안내문/provider-route text as if it were a real result body.
@@ -339,7 +374,7 @@ function ensureMaruSearchCardContract(items, q, raw, ctx){
     const summary = maruRichSummaryFallback(item, q);
     const images = maruImagesForCardContract(item);
     const primary = images[0] || '';
-    const lineClamp = group === 'local_tour' ? 3 : (/news|blog|cafe|community|social|web/.test(group) ? 4 : 3);
+    const lineClamp = group === 'local_tour' ? 3 : (/authority|public_data/.test(group) ? 5 : (/news|blog|cafe|community|social|site|knowledge|wiki|web/.test(group) ? 5 : 4));
     const nextCard = Object.assign({}, displayCard, {
       engine:firstNonEmpty(displayCard.engine, 'maru-search-display-engine'),
       maruGatewayContract:'rich-search-card-v2',
@@ -410,7 +445,7 @@ function buildFallbackDisplayPolicyForMaru(items, q, raw, reason, error){
     visibleTabs:['all','map','knowledge','wiki','site','book','blog','cafe','shopping','news','image','video','sns','tour','public_data','academic','sports','finance','webtoon'],
     hiddenTabs:[],
     groupCounts:counts,
-    cardContract:{ enabled:true, bodyLines:4, minimumBodyLines:2, thumbnailPolicy:'actual-content-image-only', executor:'search.js' },
+    cardContract:{ enabled:true, bodyLines:5, minimumBodyLines:3, thumbnailPolicy:'actual-content-image-only', executor:'search.js' },
     externalCall:false,
     storageWrite:false
   };
@@ -1240,7 +1275,7 @@ function resultSummaryText(it){
   ];
   for(const v of candidates){
     const clean = stripInlineHtml(v);
-    if(clean && clean.length >= 18 && !isSyntheticSearchSummaryText(clean)) return clean.slice(0, 300);
+    if(clean && clean.length >= 18 && !isSyntheticSearchSummaryText(clean)) return clean.slice(0, 720);
   }
 
   // Do not manufacture card summaries such as "...검색 결과입니다".
@@ -1459,7 +1494,8 @@ const SEARCH_SECTION_META = {
 };
 
 function sectionIdForItem(it){
-  const category = safeString((it && (it._category || it.searchCategory || it.searchType || it.type)) || '').toLowerCase() || classifySearchCategory(it);
+  const explicitGroup = safeString(it && (it.displayGroup || it.sectionId || (it.displayCard && it.displayCard.group))).toLowerCase();
+  const category = safeString((it && (it.searchCategory || it.searchType || it.type || it._category)) || '').toLowerCase() || classifySearchCategory(it);
   const url = safeString(firstNonEmpty(it && it.url, it && it.link, it && it.pageUrl)).toLowerCase();
   const host = domainOf(url).toLowerCase();
   const source = safeString(it && it.source).toLowerCase();
@@ -1467,16 +1503,27 @@ function sectionIdForItem(it){
   const type = safeString(it && it.type).toLowerCase();
   const text = [host, source, type, mediaType, safeString(it && it.title), safeString(firstNonEmpty(it && it.summary, it && it.description))].join(' ').toLowerCase();
 
-  if(category === 'official' || host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || /공식|관공서|시청|구청|정부|공공기관|official|government office/.test(text)) return 'official_authority';
-  if(category === 'map' || category === 'tour' || mediaType === 'map' || type === 'map' || /지도|주소|위치|길찾기|관광|여행|맛집|명소|랜드마크|박물관|미술관|축제|교통|지하철|map|nearby|travel|tour|restaurant|landmark|attraction/.test(text)) return 'map_local_tour';
+  if(explicitGroup === 'authority' || explicitGroup === 'official' || explicitGroup === 'public_data') return 'official_authority';
+  if(explicitGroup === 'knowledge' || explicitGroup === 'wiki' || explicitGroup === 'academic' || explicitGroup === 'book') return 'knowledge_wiki';
+  if(explicitGroup === 'local_tour' || explicitGroup === 'map' || explicitGroup === 'tour') return 'map_local_tour';
+  if(explicitGroup === 'news') return 'news';
+  if(explicitGroup === 'video' || explicitGroup === 'media') return 'video_vlog';
+  if(explicitGroup === 'image') return 'image_gallery';
+  if(explicitGroup === 'social' || explicitGroup === 'sns' || explicitGroup === 'community' || explicitGroup === 'cafe') return 'community_sns';
+  if(explicitGroup === 'blog') return 'blog_review';
+  if(explicitGroup === 'shopping') return 'shopping_product';
+  if(explicitGroup === 'finance' || explicitGroup === 'sports' || explicitGroup === 'site' || explicitGroup === 'web') return 'company_web';
+
+  if(category === 'authority' || category === 'official' || category === 'public_data' || host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || /공식|관공서|시청|구청|정부|공공기관|official|government office/.test(text)) return 'official_authority';
+  if(category === 'knowledge' || category === 'wiki' || category === 'book' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.moe') || host.includes('namu.wiki') || /위키|백과|지식|논문|연구|자료|encyclopedia|knowledge|research|paper/.test(text)) return 'knowledge_wiki';
   if(category === 'cafe' || category === 'sns' || type === 'sns' || mediaType === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|SNS|community|forum|instagram|facebook|tiktok/.test(text)) return 'community_sns';
-  if(category === 'knowledge' || category === 'book' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|논문|연구|자료|encyclopedia|knowledge|research|paper/.test(text)) return 'knowledge_wiki';
   if(category === 'news' || source.includes('news') || /뉴스|속보|보도|신문|latest|breaking|press/.test(text)) return 'news';
   if(category === 'video' || mediaType === 'video' || type === 'video' || source.includes('youtube') || host.includes('youtube') || host.includes('youtu.be') || /동영상|영상|유튜브|브이로그|쇼츠|릴스|vlog|video|shorts|reels/.test(text)) return 'video_vlog';
   if(category === 'image' || mediaType === 'image' || type === 'image' || source.includes('image') || /이미지|사진|갤러리|포토|스냅샷|photo|image|gallery/.test(text)) return 'image_gallery';
+  if(category === 'map' || category === 'tour' || mediaType === 'map' || type === 'map' || /지도|주소|위치|길찾기|관광|여행|맛집|명소|랜드마크|박물관|미술관|축제|교통|지하철|map|nearby|travel|tour|restaurant|landmark|attraction/.test(text)) return 'map_local_tour';
   if(category === 'blog' || source.includes('blog') || host.includes('blog') || /블로그|후기|리뷰|방문기|blog|review/.test(text)) return 'blog_review';
   if(category === 'shopping' || mediaType === 'product' || type === 'product' || /쇼핑|상품|가격|구매|판매|광고|프로모션|shopping|product|price|buy|sale|ad\b/.test(text)) return 'shopping_product';
-  if(/회사|기업|브랜드|홈페이지|공식 사이트|company|corporate|brand|homepage|official site/.test(text)) return 'company_web';
+  if(category === 'finance' || category === 'sports' || /회사|기업|브랜드|홈페이지|공식 사이트|company|corporate|brand|homepage|official site/.test(text)) return 'company_web';
   return 'general_web';
 }
 
@@ -2224,21 +2271,114 @@ function buildKoreaLocalAuthorityCardsForSearch(q, region){
   return rows.filter(r => q.indexOf(r[0]) >= 0).map((r, idx) => canonicalizeItem({
     id:'maru-local-authority-' + safeString([q,r[0],r[1]].join('|')).replace(/[^a-z0-9가-힣]+/gi,'-').slice(0,80),
     title:r[1],
-    summary:'',
-    description:'',
+    summary: r[3] === 'map' ? (r[0] + '의 공식 관광·지역 안내 및 방문 정보를 확인할 수 있는 공개 페이지입니다. 위치, 관광, 교통, 방문 정보를 지역 결과로 분리해 보여주기 위한 1차 공식 경로입니다.') : (r[0] + '의 공식 행정·공공자료·기관 정보를 확인할 수 있는 공개 공식 페이지입니다. 일반 뉴스나 블로그보다 먼저 배치되는 주요 정보 카드입니다.'),
+    description: r[3] === 'map' ? (r[0] + '의 공식 관광·지역 안내 및 방문 정보를 확인할 수 있는 공개 페이지입니다. 위치, 관광, 교통, 방문 정보를 지역 결과로 분리해 보여주기 위한 1차 공식 경로입니다.') : (r[0] + '의 공식 행정·공공자료·기관 정보를 확인할 수 있는 공개 공식 페이지입니다. 일반 뉴스나 블로그보다 먼저 배치되는 주요 정보 카드입니다.'),
     url:r[2], link:r[2],
     source:'local_authority', provider:'local-authority',
-    type:r[3], searchCategory:r[3], mediaType:'article', route:'local-authority',
+    type:r[3] === 'official' ? 'authority' : r[3], searchCategory:r[3] === 'official' ? 'authority' : r[3], displayGroup:r[3] === 'official' ? 'authority' : 'local_tour', sectionId:r[3] === 'official' ? 'authority' : 'local_tour', mediaType:'article', route:'local-authority',
     region:region || 'KR', generatedBy:'maru-local-authority-first-rank', sourceType:'official-authority',
     sanmaruFirstPaint:true, passthrough:false, placeholder:false,
     score:30 + r[4] - idx * 0.0001,
     _finalScore:30 + r[4] - idx * 0.0001,
     _authorityScore:30 + r[4] - idx * 0.0001,
-    searchCategory:r[3],
-    _category:r[3],
+    searchCategory:r[3] === 'official' ? 'authority' : r[3],
+    displayGroup:r[3] === 'official' ? 'authority' : 'local_tour',
+    sectionId:r[3] === 'official' ? 'authority' : 'local_tour',
+    _category:r[3] === 'official' ? 'authority' : r[3],
     tags:['official','authority','public',r[0]].filter(Boolean)
   }, q, 'local_authority'));
 }
+
+
+function buildCountryAuthorityCardsForSearch(q){
+  q = safeString(q || '').trim();
+  if(!q) return [];
+  const qq = q.toLowerCase();
+  const rows = [
+    { keys:['대한민국','한국','korea','south korea','republic of korea'], title:'대한민국 정부 대표 포털', url:'https://www.korea.kr', type:'authority', score:31.20, tags:['official','government','country','korea'], summary:'대한민국 정부의 정책·국정·공공 정보를 확인할 수 있는 대표 공식 포털입니다. 국가 검색에서는 일반 뉴스나 블로그보다 먼저 배치되는 공식 주요 정보입니다.' },
+    { keys:['대한민국','한국','korea','south korea','republic of korea'], title:'정부24', url:'https://www.gov.kr', type:'public_data', score:31.12, tags:['official','government','public-service','korea'], summary:'대한민국 정부 민원·서비스·공공자료를 제공하는 공식 서비스 포털입니다. 행정 서비스와 공공자료 성격의 결과로 분리해 표시합니다.' },
+    { keys:['대한민국','한국','korea','south korea','republic of korea'], title:'외교부 대한민국 국가/외교 정보', url:'https://www.mofa.go.kr', type:'authority', score:31.08, tags:['official','foreign-ministry','embassy','korea'], summary:'외교부의 대한민국 외교·영사·국가 관련 공식 정보입니다. 국가 검색에서 대사관·외교부·공식 국가 정보 라인에 우선 배치됩니다.' },
+    { keys:['인도','india','bharat'], title:'Government of India 공식 포털', url:'https://www.india.gov.in', type:'authority', score:31.20, tags:['official','government','country','india'], summary:'인도 정부의 공식 국가 포털입니다. 국가·정부·공공 서비스 정보를 확인할 수 있는 주요 공식 결과로 우선 배치됩니다.' },
+    { keys:['인도','india','bharat'], title:'Ministry of External Affairs, Government of India', url:'https://www.mea.gov.in', type:'authority', score:31.10, tags:['official','foreign-ministry','embassy','india'], summary:'인도 외교부의 공식 외교·대사관·국가 관련 정보입니다. 국가 검색에서 외교부·대사관 계열 주요 정보로 분리됩니다.' },
+    { keys:['인도','india','bharat'], title:'Incredible India 공식 관광 정보', url:'https://www.incredibleindia.gov.in', type:'local_tour', score:31.00, tags:['official','tourism','country','india'], summary:'인도 공식 관광 정보 페이지입니다. 국가 검색에서 지도·지역·관광 정보로 분리되어 정부 공식 정보 다음에 배치됩니다.' }
+  ];
+  const matched = rows.filter(r => r.keys.some(k => qq === k || qq.indexOf(k) >= 0 || k.indexOf(qq) >= 0));
+  return matched.map((r, idx) => canonicalizeItem({
+    id:'maru-country-authority-' + safeString([q,r.title].join('|')).replace(/[^a-z0-9가-힣]+/gi,'-').slice(0,90),
+    title:r.title,
+    summary:r.summary || '',
+    description:r.summary || '',
+    url:r.url,
+    link:r.url,
+    source:'country_authority',
+    provider:'country-authority',
+    type:r.type,
+    searchCategory:r.type,
+    displayGroup:r.type,
+    sectionId:r.type,
+    mediaType:'article',
+    route:'country-authority',
+    generatedBy:'maru-country-authority-first-rank',
+    sourceType:'official-authority',
+    sanmaruFirstPaint:true,
+    passthrough:false,
+    placeholder:false,
+    score:r.score - idx * 0.0001,
+    _finalScore:r.score - idx * 0.0001,
+    _authorityScore:r.score - idx * 0.0001,
+    _category:r.type,
+    displayGroup:r.type,
+    sectionId:r.type,
+    tags:r.tags || []
+  }, q, 'country_authority'));
+}
+
+function buildMaruDirectSeedCardsForSearch(q){
+  q = safeString(q || '').trim();
+  if(!q) return [];
+  const qq = q.toLowerCase().replace(/\s+/g, '');
+  const rows = [
+    { keys:['삼성전자','samsungelectronics','samsung'], title:'삼성전자 공식 홈페이지', url:'https://www.samsung.com/sec/', group:'authority', score:30.70, summary:'삼성전자의 공식 제품·서비스·회사 정보를 확인할 수 있는 대표 공식 홈페이지입니다. 기업명 검색에서는 뉴스·블로그보다 공식 사이트와 기업 정보를 먼저 보여주도록 배치합니다.' },
+    { keys:['삼성전자','samsungelectronics','samsung'], title:'Samsung Electronics Investor Relations', url:'https://www.samsung.com/global/ir/', group:'finance', score:30.62, summary:'삼성전자의 투자자 정보와 경영·재무 공시 관련 자료를 확인할 수 있는 공식 IR 페이지입니다. 기업 검색에서 금융·기업 정보 라인으로 분리됩니다.' },
+    { keys:['삼성전자','samsungelectronics','samsung'], title:'삼성전자 뉴스룸', url:'https://news.samsung.com/kr/', group:'news', score:30.45, summary:'삼성전자의 공식 뉴스룸입니다. 제품 발표, 기업 소식, 기술 관련 공식 보도자료를 확인할 수 있는 뉴스 성격의 공식 결과입니다.' },
+    { keys:['손흥민','sonheungmin','heungminson'], title:'손흥민 - 위키백과', url:'https://ko.wikipedia.org/wiki/%EC%86%90%ED%9D%A5%EB%AF%BC', group:'wiki', score:30.20, summary:'손흥민 인물 정보와 선수 경력, 소속 이력, 국가대표 기록 등을 확인할 수 있는 공개 백과 문서입니다. 인물 검색에서는 지도/지역보다 프로필·지식·뉴스·영상 라인이 우선됩니다.' },
+    { keys:['손흥민','sonheungmin','heungminson'], title:'Son Heung-min - Wikipedia', url:'https://en.wikipedia.org/wiki/Son_Heung-min', group:'wiki', score:30.16, summary:'Son Heung-min의 공개 백과 프로필입니다. 영문 인물 정보, 선수 경력, 대표팀 기록과 관련 항목을 확인할 수 있는 지식/위키 결과입니다.' },
+    { keys:['손흥민','sonheungmin','heungminson'], title:'Transfermarkt - Heung-min Son profile', url:'https://www.transfermarkt.com/heung-min-son/profil/spieler/91845', group:'sports', score:30.08, summary:'손흥민 선수의 프로필, 포지션, 경기·시장가치 관련 정보를 확인할 수 있는 스포츠 데이터 페이지입니다. 인물/스포츠 검색에서 프로필·기록 라인으로 분리됩니다.' },
+    { keys:['이찬원','leechanwon','chanwonlee'], title:'이찬원 - 위키백과', url:'https://ko.wikipedia.org/wiki/%EC%9D%B4%EC%B0%AC%EC%9B%90', group:'wiki', score:30.20, summary:'이찬원의 공개 백과 프로필 문서입니다. 방송 활동, 음악 활동, 데뷔 이후 주요 이력 등 인물 기본 정보를 확인할 수 있는 지식/위키 결과입니다.' },
+    { keys:['이찬원','leechanwon','chanwonlee'], title:'이찬원 - 나무위키', url:'https://namu.moe/w/%EC%9D%B4%EC%B0%AC%EC%9B%90', group:'knowledge', score:30.08, summary:'이찬원 관련 공개 인물 정보와 활동 이력을 정리한 지식 문서입니다. 인물 검색에서는 지도/지역보다 프로필·뉴스·영상·SNS 라인을 우선합니다.' },
+    { keys:['김문수','kimmunsu','kimmoonsoo'], title:'김문수(1951년) - 위키백과', url:'https://ko.wikipedia.org/wiki/%EA%B9%80%EB%AC%B8%EC%88%98_(1951%EB%85%84)', group:'wiki', score:30.18, summary:'김문수 인물·정치 활동 관련 공개 백과 문서입니다. 정치인·인물 검색에서는 지도/지역보다 프로필·뉴스·공식자료 라인을 우선합니다.' },
+    { keys:['김문수','kimmunsu','kimmoonsoo'], title:'김문수(정치인) - 나무위키', url:'https://namu.moe/w/%EA%B9%80%EB%AC%B8%EC%88%98(%EC%A0%95%EC%B9%98%EC%9D%B8)', group:'knowledge', score:30.06, summary:'김문수 정치인 관련 공개 지식 문서입니다. 인물 기본 정보, 정치 활동, 관련 이슈를 지식/프로필 라인에서 확인할 수 있습니다.' }
+  ];
+  const matched = rows.filter(r => (r.keys || []).some(k => qq === safeString(k).toLowerCase().replace(/\s+/g, '') || qq.includes(safeString(k).toLowerCase().replace(/\s+/g, '')) || safeString(k).toLowerCase().replace(/\s+/g, '').includes(qq)));
+  return matched.map((r, idx) => canonicalizeItem({
+    id:'maru-direct-seed-' + safeString([q,r.title].join('|')).replace(/[^a-z0-9가-힣]+/gi,'-').slice(0,96),
+    title:r.title,
+    summary:r.summary,
+    description:r.summary,
+    snippet:r.summary,
+    url:r.url,
+    link:r.url,
+    source:'maru_direct_seed',
+    provider:'maru-direct-seed',
+    type:r.group,
+    searchCategory:r.group,
+    displayGroup:r.group,
+    sectionId:r.group,
+    mediaType:'article',
+    route:'maru-direct-seed',
+    generatedBy:'maru-direct-real-source-first-wave',
+    sourceType:'direct-real-source',
+    sanmaruFirstPaint:true,
+    passthrough:false,
+    placeholder:false,
+    score:r.score - idx * 0.0001,
+    _finalScore:r.score - idx * 0.0001,
+    _authorityScore:r.score - idx * 0.0001,
+    _category:r.group,
+    tags:['direct-source','real-page',r.group].filter(Boolean)
+  }, q, 'maru_direct_seed'));
+}
+
 
 function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, existingCount){
   function localStableHash(v){ try { return crypto.createHash('sha1').update(safeString(v)).digest('hex').slice(0, 16); } catch(e){ return safeString(v).replace(/[^a-z0-9]+/gi,'-').slice(0,40); } }
@@ -2457,7 +2597,13 @@ function buildSanmaruFastLayerBase(q, residentPack, raw, ctx){
   const requestedLimit = Math.min(MAX_LIMIT, Math.max(clampInt(raw && raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
   const residentItems = (residentPack && residentPack.items || [])
     .map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident-fast-layer')));
-  const providerLaneItems = buildSanmaruProviderLaneExpansionCards(q, raw || {}, ctx || {}, requestedLimit, residentItems.length);
+  const providerLaneItems = allowProviderRoadsInResults(raw || {})
+    ? buildSanmaruProviderLaneExpansionCards(q, raw || {}, ctx || {}, requestedLimit, residentItems.length)
+    : [];
+  const providerHints = allowProviderRoadsInResults(raw || {})
+    ? []
+    : buildSanmaruProviderLaneExpansionCards(q, raw || {}, ctx || {}, Math.min(120, requestedLimit), residentItems.length)
+      .map(x => ({ title:x.title, url:x.url || x.link, source:x.source || null, provider:x.provider || null, type:x.type || x.searchCategory || null, role:'providerHint' }));
   const items = dedupeCanonicalItems([].concat(residentItems, providerLaneItems))
     .slice(0, requestedLimit);
   return {
@@ -2467,12 +2613,15 @@ function buildSanmaruFastLayerBase(q, residentPack, raw, ctx){
     region:(ctx && ctx.region) || 'GLOBAL',
     items,
     results:items,
+    providerHints,
     meta:{
       count:items.length,
       requestedLimit,
       target:requestedLimit,
       residentFastCount:residentItems.length,
       providerLaneFastExpansionCount:providerLaneItems.length,
+      providerLaneHintsSeparatedCount:providerHints.length,
+      providerLaneItemsExcludedFromResults:!allowProviderRoadsInResults(raw || {}),
       totalCandidates:items.length,
       deduped:0,
       trace:[{
@@ -2752,7 +2901,8 @@ function maruResultDedupeKey(it){
   return title ? 't:' + title + '|' + src : '';
 }
 
-function splitRealResultsAndProviderHints(items){
+function splitRealResultsAndProviderHints(items, raw){
+  const includeProviderRoads = allowProviderRoadsInResults(raw || {});
   const real = [];
   const hints = [];
   const seenReal = new Set();
@@ -2769,8 +2919,11 @@ function splitRealResultsAndProviderHints(items){
         seenHint.add(hk);
         hints.push({ title, url, source:it.source || null, provider:it.provider || null, type:it.type || it.searchCategory || null, role:'providerHint' });
       }
+      if(!includeProviderRoads){
+        continue;
+      }
     }
-    const clean = Object.assign({}, it, isProviderRoad ? { summary:'', description:'', snippet:'', displaySummary:'' } : {});
+    const clean = Object.assign({}, it, isProviderRoad ? { summary:'', description:'', snippet:'', displaySummary:'', _providerRoadDebugOnly:true } : {});
     const summary = isProviderRoad ? '' : resultSummaryText(clean);
     clean.summary = summary;
     clean.description = summary;
@@ -2792,7 +2945,7 @@ function prepareRankedSearchUiItems(items, q, raw, opts){
   opts = opts || {};
   const requested = clampInt(firstNonEmpty(opts.target, raw.limit, raw.max, raw.count), SEARCH_UI_CONTINUOUS_MAX_TARGET, 1, MAX_LIMIT);
   const target = Math.min(SEARCH_UI_CONTINUOUS_MAX_TARGET, Math.max(requested, SEARCH_UI_INITIAL_WINDOW));
-  const split = splitRealResultsAndProviderHints(items);
+  const split = splitRealResultsAndProviderHints(items, raw);
   let ranked = dedupeCanonicalItems(split.real);
   ranked = applyServerSideBoosts(ranked, { q, lang:opts.lang || raw.lang, searchType:opts.searchType || raw.type || raw.tab || raw.category || raw.vertical || 'all' });
   ranked = ranked.slice(0, target);
@@ -5357,20 +5510,18 @@ exports.handler = async function(event){
     // into Sanmaru. items/results are never capped to the viewport; only
     // visiblePagePack.pageItems is page-sized.
     const fastDisplayFirstWindow = isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceResident || raw.waitResident || raw.waitProviders || raw.waitExternal));
-    const sanmaruRouteContext = fastDisplayFirstWindow
-      ? { available:true, routePlan:null, providerHealth:[], meta:{ status:'fast-display-first-window', nonBlockingSanmaru:true, reason:'skip-heavy-sanmaru-require-for-first-paint' } }
-      : getSanmaruRouteContextForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-route-owner-context' });
+    const deferHeavyFirstWave = shouldDeferHeavyGatewayBeforeFirstWave(raw || {});
+    const sanmaruRouteContext = getSanmaruRouteContextForMaru(q, raw || {}, { searchType, lang, limit, reason: fastDisplayFirstWindow ? 'maru-top-route-owner-first-wave' : 'maru-top-route-owner-context' });
     let residentSeedPack = null;
     let residentRefreshSignal = null;
-    if(!fastDisplayFirstWindow && !truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
-      residentSeedPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-resident-seed-preserve-wide-search' });
-      residentRefreshSignal = triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
-    }else if(fastDisplayFirstWindow){
-      // First paint must not block on the heavy Sanmaru resident hydrate path.
-      // Rich cards are supplied by the quick display probe below, then Sanmaru
-      // refreshes resident layers asynchronously.
-      residentSeedPack = { items: [], meta:{ status:'fast-display-first-window-no-blocking-resident-read' } };
-      residentRefreshSignal = { status:'queued-by-first-window', nonBlocking:true };
+    if(!truthy(raw && (raw.noResident || raw.skipResident || raw.disableResident))){
+      residentSeedPack = getSanmaruResidentForMaru(q, raw || {}, { searchType, lang, limit, reason: fastDisplayFirstWindow ? 'maru-first-wave-resident-pass-through' : 'maru-top-resident-seed-preserve-wide-search' });
+      residentRefreshSignal = deferHeavyFirstWave
+        ? { status:'deferred-by-maru-first-wave', nonBlocking:true, reason:'search.js already signals Sanmaru; do not start deep refresh inside first HTTP paint' }
+        : triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit });
+    }else{
+      residentSeedPack = { items: [], meta:{ status:'resident-disabled-by-request' } };
+      residentRefreshSignal = { status:'disabled-by-request', nonBlocking:true };
     }
 
     let base = null;
@@ -5378,7 +5529,8 @@ exports.handler = async function(event){
     const fastOpenPipeFirstWindow = sanmaruOpenGateRequested && isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
     const explicitFastLayerOnly = truthy(raw && (raw.sanmaruFastOnly || raw.cacheOnly || raw.instantOnly || raw.fastOnly || raw.sanmaruOnly));
     const residentLayerReallyEnough = !!(residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, limit, raw || {}));
-    const sanmaruCanServeFromFastLayer = sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (residentLayerReallyEnough || (explicitFastLayerOnly && residentLayerReallyEnough));
+    const residentFirstWaveCount = Array.isArray(residentSeedPack && residentSeedPack.items) ? residentSeedPack.items.length : 0;
+    const sanmaruCanServeFromFastLayer = sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (residentFirstWaveCount > 0 || residentLayerReallyEnough || (explicitFastLayerOnly && residentLayerReallyEnough));
     if(sanmaruCanServeFromFastLayer){
       base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit: fastDisplayFirstWindow ? Math.min(limit, Math.max(visibleNeed * 12, 300)) : limit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
@@ -5389,6 +5541,21 @@ exports.handler = async function(event){
           visibleNeed,
           principle:'Sanmaru already holds the mounted web information layer; Maru Search only formats and pages it.'
         })
+      });
+    }else if(deferHeavyFirstWave){
+      base = buildSanmaruFastLayerBase(q, residentSeedPack || { items: [], meta:{} }, Object.assign({}, raw || {}, { limit: Math.min(limit, Math.max(visibleNeed * 12, 300)) }), { region:detectRuntimeRegion(event, lang, q) });
+      const snapshotFirstWave = (loadSnapshotLocal(q, Math.min(limit, SEARCH_UI_INITIAL_WINDOW)) || [])
+        .map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'search-bank-snapshot-first-wave')));
+      if(snapshotFirstWave.length){
+        base.items = dedupeCanonicalItems([].concat(base.items || [], snapshotFirstWave)).slice(0, Math.min(limit, SEARCH_UI_CONTINUOUS_MAX_TARGET));
+        base.results = base.items;
+      }
+      base.meta = Object.assign({}, base.meta || {}, {
+        heavyGatewayDeferredForFirstWave:true,
+        firstWavePolicy:'resident/snapshot/local-authority first; external/media/AI enrichment after first paint',
+        snapshotFirstWaveCount:snapshotFirstWave.length,
+        directSeedFirstWaveCount:(Array.isArray(buildMaruDirectSeedCardsForSearch(q)) ? buildMaruDirectSeedCardsForSearch(q).length : 0),
+        trace:[].concat(base.meta && base.meta.trace || [], [{ name:'maru-cpu-first-wave-short-path', status:'ok', count:(base.items || []).length, skipped:'blocking-wide-provider-search' }])
       });
     }else{
       try{
@@ -5444,7 +5611,7 @@ exports.handler = async function(event){
     const providerLaneTarget = fastDisplayFirstWindow
       ? fastWindowCandidateTarget
       : Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, visibleNeed * 12, requestedPageForWindow * visibleNeed));
-    if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
+    if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh && allowProviderRoadsInResults(raw || {})){
       const laneItems = buildSanmaruProviderLaneExpansionCards(q, Object.assign({}, raw || {}, { limit: providerLaneTarget }), { region:detectRuntimeRegion(event, lang, q) }, providerLaneTarget, (base.items || []).length);
       base.items = dedupeCanonicalItems([].concat(base.items || [], laneItems)).slice(0, providerLaneTarget);
       base.results = base.items;
@@ -5454,6 +5621,15 @@ exports.handler = async function(event){
         candidatePoolPreserved:true,
         currentHttpResponsePaged:true,
         trace:[].concat(base.meta && base.meta.trace || [], [{ name:'sanmaru-provider-lane-paged-expansion', status:laneItems.length ? 'ok' : 'empty', count:laneItems.length, responsePolicy:'preload-window-plus-page-slice' }])
+      });
+    }else if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
+      base.meta = Object.assign({}, base.meta || {}, {
+        sanmaruPagedProviderLaneExpansion:false,
+        providerLaneExpansionCount:0,
+        providerLaneTarget,
+        providerLaneItemsExcludedFromResults:true,
+        providerLaneHintsOnly:true,
+        trace:[].concat(base.meta && base.meta.trace || [], [{ name:'sanmaru-provider-lane-paged-expansion', status:'hints-only-no-result-cards', count:0, responsePolicy:'provider-hints-separated-from-items' }])
       });
     }
 
@@ -5467,7 +5643,7 @@ exports.handler = async function(event){
       MAX_LIMIT,
       Math.max(visibleNeed * 12, requestedPageForWindowGuarantee * visibleNeed + visibleNeed, fastDisplayFirstWindow ? 300 : 0)
     );
-    if((base.items || []).length < pageWindowCandidateNeed){
+    if((base.items || []).length < pageWindowCandidateNeed && allowProviderRoadsInResults(raw || {})){
       const guaranteedLaneItems = buildSanmaruProviderLaneExpansionCards(
         q,
         Object.assign({}, raw || {}, { limit: pageWindowCandidateNeed, providerLaneTarget: pageWindowCandidateNeed }),
@@ -5483,6 +5659,14 @@ exports.handler = async function(event){
         pageWindowGuaranteedCount: guaranteedLaneItems.length,
         trace:[].concat(base.meta && base.meta.trace || [], [{ name:'page-window-guarantee', status:guaranteedLaneItems.length ? 'ok' : 'covered', count:guaranteedLaneItems.length, requestedPage:requestedPageForWindowGuarantee }])
       });
+    }else if((base.items || []).length < pageWindowCandidateNeed){
+      base.meta = Object.assign({}, base.meta || {}, {
+        pageWindowGuaranteed:false,
+        pageWindowCandidateNeed,
+        pageWindowGuaranteedCount:0,
+        providerRoadsExcludedFromPageWindow:true,
+        trace:[].concat(base.meta && base.meta.trace || [], [{ name:'page-window-guarantee', status:'not-filled-with-provider-road-cards', count:0, requestedPage:requestedPageForWindowGuarantee }])
+      });
     }
     // Make provider/category diagnostics explicit even when Sanmaru cache serves fast.
     base.meta = Object.assign({}, base.meta || {});
@@ -5493,7 +5677,11 @@ exports.handler = async function(event){
       }
     });
 
-    base = await attachFastDisplayRichProbe(base, event, { q, raw: raw || {}, searchType, lang });
+    if(deferHeavyFirstWave){
+      base.meta = Object.assign({}, base.meta || {}, { fastDisplayRichProbeDeferred:true });
+    }else{
+      base = await attachFastDisplayRichProbe(base, event, { q, raw: raw || {}, searchType, lang });
+    }
 
     // Search must not trigger heavy settlement/distribution by default.
     // Analytics is opt-in for this endpoint; weekly settlement is handled by revenue/commerce engines.
@@ -5503,8 +5691,11 @@ exports.handler = async function(event){
     const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
     const maruLocalAuthorityCards = buildKoreaLocalAuthorityCardsForSearch(q, base.region || base.route || 'KR');
-    if(maruLocalAuthorityCards.length){
-      base.items = dedupeCanonicalItems([].concat(maruLocalAuthorityCards, base.items || []));
+    const maruCountryAuthorityCards = buildCountryAuthorityCardsForSearch(q);
+    const maruDirectSeedCards = buildMaruDirectSeedCardsForSearch(q);
+    const authorityFirstCards = [].concat(maruLocalAuthorityCards, maruCountryAuthorityCards, maruDirectSeedCards);
+    if(authorityFirstCards.length){
+      base.items = dedupeCanonicalItems([].concat(authorityFirstCards, base.items || []));
     }
     const searchUiPrepared = prepareRankedSearchUiItems(base.items || [], q, raw || {}, { lang, searchType, target: Math.min(SEARCH_UI_CONTINUOUS_MAX_TARGET, Math.max(limit, MIN_RESULT_TARGET)) });
     base.items = searchUiPrepared.items;
@@ -5555,9 +5746,9 @@ exports.handler = async function(event){
       doesNotLimitItemsResults: true
     });
     const fullCandidateCount = Array.isArray(base.items) ? base.items.length : 0;
-    const firstResponseWindow = Math.max(visiblePagePack.perPage, Math.min(visiblePagePack.perPage * 12, 300));
+    const firstResponseWindow = visiblePagePack.page <= 1 ? fullCandidateCount : visiblePagePack.perPage;
     const responseItems = visiblePagePack.page <= 1
-      ? base.items.slice(0, Math.min(fullCandidateCount, firstResponseWindow))
+      ? base.items.slice()
       : visiblePagePack.pageItems.slice();
     if(!revenueOff) distributeRevenue(event, visiblePagePack.pageItems).catch(() => null);
     return ok({
@@ -5572,7 +5763,7 @@ exports.handler = async function(event){
       sectionPack: sectionPackWithViewport,
       providerHints: base.providerHints || [],
       displayPolicy: base.displayPolicy || null,
-      meta: Object.assign({}, base.meta || {}, { count: responseItems.length, fullCandidateCount, totalCandidates: fullCandidateCount, responseWindowCount: responseItems.length, initialResponseWindow: firstResponseWindow, pagedCandidatePool: true, maxPagerPages: MARU_SEARCH_MAX_PAGER_PAGES, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, fullCandidateCount, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', consumerContract:maruConsumerContract('search-ui'), itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'skip-only-when-sanmaru-holds-broad-query-cache; otherwise preserve-google-naver-sns-wide-gateway', cardContract:'rich-body-2-to-4-lines-plus-natural-media' }, preservationPatch: 'A1.5.48-597-ranked-real-results-continuous-supply' })
+      meta: Object.assign({}, base.meta || {}, { count: responseItems.length, fullCandidateCount, totalCandidates: fullCandidateCount, responseWindowCount: responseItems.length, initialResponseWindow: firstResponseWindow, pagedCandidatePool: true, maxPagerPages: MARU_SEARCH_MAX_PAGER_PAGES, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, fullCandidateCount, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', consumerContract:maruConsumerContract('search-ui'), itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'first-wave-never-blocks; external/media/AI enrichment deferred unless explicitly requested', cardContract:'rich-body-5-to-6-lines-plus-natural-media' }, preservationPatch: 'A1.5.52-maru-cpu-final-verify-rich-firstwave' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
@@ -5717,6 +5908,10 @@ exports.runEngine = async function(event, params){
     base = await attachSanmaruAugmentResults(base, syntheticEvent, { q, limit, start, lang, searchType, raw, noMedia:truthy(raw.noMedia) || truthy(raw.disableMedia) }).catch(() => base);
   }
 
+  if(consumer === 'search-ui'){
+    const authorityFirstCards = [].concat(buildKoreaLocalAuthorityCardsForSearch(q, base.region || base.route || 'KR'), buildCountryAuthorityCardsForSearch(q), buildMaruDirectSeedCardsForSearch(q));
+    if(authorityFirstCards.length) base.items = dedupeCanonicalItems([].concat(authorityFirstCards, base.items || []));
+  }
   const prepared = prepareRankedSearchUiItems(base.items || [], q, raw, { searchType, lang, target: Math.min(SEARCH_UI_CONTINUOUS_MAX_TARGET, Math.max(limit, MIN_RESULT_TARGET)) });
   let items = prepared.items.map(compactResultItem);
   let displayPolicy = null;

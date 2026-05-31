@@ -57,9 +57,19 @@ function setSnapshotSections(snapshot, pageName, sections) {
   return snapshot;
 }
 
-function normalizeLimitCard(raw) {
+function normalizeLimitCard(raw, context = {}) {
+  const id = raw?.id || stableId(JSON.stringify(raw));
+  const sectionKey = val(
+    context.sectionKey,
+    raw?.psom_key,
+    raw?.bind?.section,
+    raw?.section,
+    raw?.category,
+    "unknown"
+  );
+
   return {
-    id: raw.id || stableId(JSON.stringify(raw)),
+    id,
     title: raw.title || raw.name || "Untitled",
     summary: raw.summary || "",
     url: raw.url || raw.link || "#",
@@ -68,7 +78,12 @@ function normalizeLimitCard(raw) {
       raw.thumb ||
       raw.image ||
       "/assets/img/placeholder.png",
-    priority: raw.priority || raw.score || 0
+    priority: raw.priority || raw.score || 0,
+    ...buildTrackingMeta(raw, {
+      ...context,
+      id,
+      sectionKey
+    })
   };
 }
 
@@ -200,7 +215,7 @@ function enforceSnapshotFileLimit(pageName, bankItems) {
     const sectionKey = resolveLimitSectionKey(pageName, raw, sections);
     if (!sectionKey || !sections[sectionKey]) continue;
 
-    sections[sectionKey].push(normalizeLimitCard(raw));
+    sections[sectionKey].push(normalizeLimitCard(raw, { pageName, sectionKey }));
     usedIds.add(id);
     filled++;
   }
@@ -220,6 +235,184 @@ function writeJson(p, data) {
 function stableId(str) {
   return crypto.createHash("sha1").update(String(str)).digest("hex").slice(0, 16);
 }
+
+function val() {
+  for (const v of arguments) {
+    if (v === undefined || v === null) continue;
+    if (typeof v === "string" && !v.trim()) continue;
+    return v;
+  }
+  return "";
+}
+
+function safeObj(v) {
+  return v && typeof v === "object" && !Array.isArray(v) ? v : undefined;
+}
+
+function toKey(v) {
+  return String(v || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣_-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "item";
+}
+
+function inferRevenueLine(raw, context) {
+  raw = raw || {};
+  context = context || {};
+
+  const direct = val(
+    raw.revenueLine,
+    raw.revenue_line,
+    raw?.content?.revenue_line,
+    raw?.monetization?.revenueLine,
+    raw?.revenue?.line,
+    context.revenueLine
+  );
+  if (direct) return direct;
+
+  const text = [
+    raw.kind,
+    raw.type,
+    raw.mediaType,
+    raw.category,
+    raw.section,
+    raw.psom_key,
+    raw.title,
+    raw.summary,
+    raw.url,
+    raw.link,
+    context.pageName,
+    context.sectionKey
+  ].join(" ").toLowerCase();
+
+  if (raw?.linkRevenue?.enabled || raw.affiliate) return "product_affiliate";
+  if (raw?.directSale?.enabled || raw?.payment?.enabled || raw?.commerce?.directSale) return "commerce_direct";
+  if (raw?.donation?.enabled || text.includes("donation") || text.includes("donate") || text.includes("후원") || text.includes("기부")) return "donation_intent";
+  if (text.includes("ad") || text.includes("sponsor") || text.includes("banner")) return "display_ad";
+  if (text.includes("tour") || text.includes("travel") || text.includes("hotel") || text.includes("관광") || text.includes("여행")) return "tour_commission";
+  if (
+    text.includes("media") || text.includes("video") || text.includes("movie") || text.includes("drama") ||
+    text.includes("shorts") || text.includes("youtube") || text.includes("vimeo") || text.includes("tiktok")
+  ) return "media_engagement";
+  if (raw.price || raw.amount || raw.productId || raw.sku || text.includes("product") || text.includes("commerce") || text.includes("shop") || text.includes("상품")) return "product_affiliate";
+
+  return "slot_click";
+}
+
+function buildTrackingMeta(raw, context) {
+  raw = raw || {};
+  context = context || {};
+
+  const id = val(
+    context.id,
+    raw.id,
+    raw.uid,
+    raw.item_id,
+    raw.contentId,
+    raw.content_id,
+    raw.productId,
+    raw.product_id,
+    raw.sku,
+    stableId(JSON.stringify(raw))
+  );
+
+  const sectionKey = val(
+    context.sectionKey,
+    raw.psom_key,
+    raw.psomKey,
+    raw?.bind?.psom_key,
+    raw?.bind?.section,
+    raw.section,
+    raw.category,
+    "unknown"
+  );
+
+  const pageName = val(
+    context.pageName,
+    raw.page,
+    raw.channel,
+    raw?._snapshotPage,
+    raw?.bind?.page,
+    "unknown"
+  );
+
+  const trackId = val(
+    raw.trackId,
+    raw.track_id,
+    raw?.track?.track_id,
+    raw?.monetization?.impression?.trackId,
+    raw?.monetization?.click?.trackId,
+    raw?.monetization?.searchClick?.trackId,
+    raw?.monetization?.referral?.trackCode,
+    raw?.linkRevenue?.trackId,
+    `igdc-${toKey(pageName)}-${toKey(sectionKey)}-${toKey(id)}`
+  );
+
+  const snapshotRecordId = val(
+    raw.snapshotRecordId,
+    raw.snapshot_record_id,
+    raw?.bank_ref?.record_id,
+    raw?.sourceRecordId,
+    raw?.source_id,
+    id
+  );
+
+  const price = val(
+    raw.price,
+    raw.amount,
+    raw.value,
+    raw?.transaction?.price,
+    raw?.commerce?.price,
+    raw?.directSale?.price,
+    raw?.payment?.price,
+    raw?.donation?.amount
+  );
+
+  const currency = val(
+    raw.currency,
+    raw.ccy,
+    raw.priceCurrency,
+    raw?.commerce?.currency,
+    raw?.directSale?.currency,
+    raw?.payment?.currency,
+    raw?.donation?.currency,
+    "KRW"
+  );
+
+  const meta = {
+    contentId: val(raw.contentId, raw.content_id, raw.uid, id),
+    productId: val(raw.productId, raw.product_id, raw.sku, raw?.directSale?.productSku, raw?.commerce?.sku, ""),
+    slotId: val(context.slotId, raw.slotId, raw.slot_id, trackId),
+    trackId,
+    revenueLine: inferRevenueLine(raw, context),
+    providerId: val(raw.providerId, raw.provider_id, raw.provider, raw.producerId, raw.creatorId, raw?.commerce?.provider, raw?.source?.platform, raw?.source?.name, raw.source, "igdc"),
+    sellerId: val(raw.sellerId, raw.seller_id, raw.seller, raw.merchant, raw?.commerce?.seller, raw.provider, ""),
+    campaignId: val(raw.campaignId, raw.campaign_id, raw?.donation?.campaign_id, raw?.monetization?.campaignId, ""),
+    price: price === "" ? raw.price : price,
+    currency,
+    page: pageName,
+    section: sectionKey,
+    snapshotSource: val(context.snapshotSource, raw.snapshotSource, raw._snapshotSource, "search-bank.snapshot.json"),
+    snapshotRecordId,
+    sourceType: "snapshot_seed"
+  };
+
+  if (safeObj(raw.monetization)) meta.monetization = raw.monetization;
+  if (safeObj(raw.linkRevenue)) meta.linkRevenue = raw.linkRevenue;
+  if (safeObj(raw.directSale)) meta.directSale = raw.directSale;
+  if (safeObj(raw.payment)) meta.payment = raw.payment;
+  if (safeObj(raw.revenue)) meta.revenue = raw.revenue;
+  if (safeObj(raw.revenueDestination)) meta.revenueDestination = raw.revenueDestination;
+  if (safeObj(raw.blockchainPayment)) meta.blockchainPayment = raw.blockchainPayment;
+  if (safeObj(raw.metrics)) meta.metrics = raw.metrics;
+  if (safeObj(raw.donation)) meta.donation = raw.donation;
+  if (safeObj(raw.commerce)) meta.commerce = raw.commerce;
+  if (safeObj(raw.mediaRevenue)) meta.mediaRevenue = raw.mediaRevenue;
+
+  return meta;
+}
+
 
 function loadSearchBank() {
   const bankPath = path.join(ROOT, "search-bank.snapshot.json");
@@ -281,9 +474,18 @@ function mergeItems(snapshot, sectionKey, items, slotLimit) {
       id,
       title: item.title || item.name || "Untitled",
       summary: item.summary || "",
-      url: item.url || "#",
-      thumb: item.thumb || item.image || "/assets/img/placeholder.png",
-      priority: item.priority || 0
+      url: item.url || item.link || "#",
+      thumb:
+        item.thumbnail ||
+        item.thumb ||
+        item.image ||
+        "/assets/img/placeholder.png",
+      priority: item.priority || item.score || 0,
+      ...buildTrackingMeta(item, {
+        id,
+        pageName: item.page || item.channel || "snapshot",
+        sectionKey
+      })
     };
 
     existing.push(converted);
@@ -366,10 +568,19 @@ if (existing.length >= 5) continue;
 
 existing.push({
   id,
-  title: item.title || "Untitled",
+  title: item.title || item.name || "Untitled",
   summary: item.summary || "",
-  url: item.url || "#",
-  thumb: item.thumbnail || "/assets/img/placeholder.png"
+  url: item.url || item.link || "#",
+  thumb:
+    item.thumbnail ||
+    item.thumb ||
+    item.image ||
+    "/assets/img/placeholder.png",
+  ...buildTrackingMeta(item, {
+    id,
+    pageName: "home",
+    sectionKey
+  })
 });
   }
 
@@ -441,7 +652,13 @@ function handleNetworkSnapshot(bank) {
       psom_key: "network-right",
       route: item.route || "distribution",
       type: item.type || "product",
-      priority: item.priority || 0
+      priority: item.priority || 0,
+      ...buildTrackingMeta(item, {
+        id,
+        pageName: "network",
+        sectionKey: "network-right",
+        revenueLine: item.revenueLine || item.revenue_line || "product_affiliate"
+      })
     });
 
     existingIds.add(id);
@@ -507,7 +724,16 @@ REQUIRED_SECTION_KEYS.forEach(key => {
       tag: item.tag || "",
       psom_key: item.psom_key || null,
       source: item.source || "",
-      seller: item.seller || item.source || ""
+      seller: item.seller || item.source || "",
+      ...buildTrackingMeta(item, {
+        pageName: "distribution",
+        sectionKey:
+          item.psom_key ||
+          item?.bind?.section ||
+          item?.section ||
+          item?.category ||
+          "distribution"
+      })
     };
   }
 
@@ -724,13 +950,18 @@ function handleSocialSnapshot(bank) {
         id,
         title: item.title || item.name || "Untitled",
         summary: item.summary || "",
-        url: item.url || "#",
+        url: item.url || item.link || "#",
         thumb:
           item.thumbnail ||
           item.thumb ||
           item.image ||
           "/assets/img/placeholder.png",
-        priority: item.priority || item.score || 0
+        priority: item.priority || item.score || 0,
+        ...buildTrackingMeta(item, {
+          id,
+          pageName: "social",
+          sectionKey
+        })
       });
 
       existingIds.add(id);
@@ -921,7 +1152,18 @@ function isVideoLike(item) {
         affiliate: true,
         provider: true,
         directSale: true
-      }
+      },
+      ...buildTrackingMeta(raw, {
+        id: raw.id || stableId(JSON.stringify(raw)),
+        slotId: fallbackSlotId,
+        pageName: "media",
+        sectionKey:
+          raw?.psom_key ||
+          raw?.bind?.section ||
+          raw?.category ||
+          "media",
+        revenueLine: raw.revenueLine || raw.revenue_line || "media_engagement"
+      })
     };
   }
 
@@ -1032,11 +1274,18 @@ function handleTourSnapshot(bank) {
 
     items.push({
       id,
-      title: item.title || "",
+      title: item.title || item.name || "",
       thumb: buildTourThumbnail(item),
       link: item.link || item.url || "#",
-      priority: item.priority || 0,
-      createdAt: item.createdAt || 0
+      url: item.url || item.link || "#",
+      priority: item.priority || item.score || 0,
+      createdAt: item.createdAt || item.timestamp || 0,
+      ...buildTrackingMeta(item, {
+        id,
+        pageName: "tour",
+        sectionKey: item.psom_key || item.section || item.category || "tour",
+        revenueLine: item.revenueLine || item.revenue_line || "tour_commission"
+      })
     });
 
     existingIds.add(id);

@@ -12,7 +12,7 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.4.2-official-authority-rich-card-contract';
+const VERSION = 'maru-search-display-engine-v1.4.4-rich-body-firstwave-contract-final';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
@@ -107,7 +107,7 @@ function naturalSummary(item, query){
   ];
   for(const v of candidates){
     const clean = compactTextFromAny(v);
-    if(clean && clean.length >= 12) return clean.slice(0, 360);
+    if(clean && clean.length >= 12) return clean.slice(0, 640);
   }
   return '';
 }
@@ -228,10 +228,11 @@ function cardTypeForGroup(group, item){
 }
 function bodyLinesForCardType(cardType, group, mapLike){
   if(mapLike) return 3;
-  if(group === 'authority' || group === 'public_data') return 5;
-  if(group === 'site' || group === 'knowledge' || group === 'wiki') return 4;
-  if(cardType === 'article-media') return 4;
-  return 3;
+  if(group === 'authority' || group === 'public_data') return 6;
+  if(group === 'site' || group === 'knowledge' || group === 'wiki') return 5;
+  if(cardType === 'article-media') return 5;
+  if(group === 'web') return 5;
+  return 4;
 }
 function officialAuthorityRank(item, query, group){
   item = item && typeof item === 'object' ? item : {};
@@ -384,7 +385,7 @@ function decorateDisplayItem(item, ctx, index){
   // Ensure minimal displayCard contract: bodyLines and thumbnail must exist
   try{
     if(!copy.displayCard) copy.displayCard = {};
-    if(!copy.displayCard.lineClamp) copy.displayCard.lineClamp = (cardType === 'article-media' ? 4 : 3);
+    if(!copy.displayCard.lineClamp) copy.displayCard.lineClamp = (cardType === 'article-media' ? 5 : 4);
     if(!copy.displayCard.bodyLines) copy.displayCard.bodyLines = parseInt(copy.displayCard.lineClamp, 10) || 3;
     if(!copy.displayCard.thumbnail && images && images.length) copy.displayCard.thumbnail = images[0];
     if(!copy.thumbnail) copy.thumbnail = copy.displayCard.thumbnail || images[0] || '';
@@ -489,6 +490,11 @@ function inferIntent(q, counts, rawType){
   const shortNameLike = compact(q).split(/\s+/).filter(Boolean).length <= 2 && compact(q).length <= 18;
 
   if(type && type !== 'all' && type !== 'web') return { intent:type, confidence:0.88, reason:'explicit-type' };
+
+  // 도시/지역/국가명 자체가 검색어인 경우에는 사용자가 '지도'라고 쓰지 않아도
+  // 주요 정보 다음에 지도/지역 모듈을 열어야 한다.
+  const placeNameSignal = /(서울|부산|대구|인천|광주|대전|울산|세종|제주|강남|홍대|명동|종로|여의도|수원|성남|고양|용인|청주|전주|천안|포항|창원|김해|평양|뉴욕|도쿄|오사카|파리|런던|로마|시카고|워싱턴|상하이|베이징|홍콩|싱가포르|하노이|호치민|방콕|대한민국|한국|미국|일본|중국|영국|프랑스|독일|러시아|인도|베트남|태국|인도네시아|필리핀|캐나다|호주|브라질|멕시코|이탈리아|스페인|korea|south korea|usa|united states|japan|china|uk|france|germany|russia|india|vietnam|thailand|canada|australia|brazil|mexico|italy|spain|seoul|busan|tokyo|osaka|paris|london|rome|new york|beijing|shanghai|singapore|hanoi|bangkok)/.test(text);
+  if(placeNameSignal) return { intent:'local', confidence:0.93, reason:'place-or-country-name-token' };
   if(/맛집|근처|주소|지도|위치|가는길|여행|관광|숙박|호텔|병원|약국|학교|교회|카페|restaurant|near me|map|address|travel|tour|hotel/.test(text)) return { intent:'local', confidence:0.92, reason:'local-query-token' };
   if(/가격|구매|최저가|할인|비교|추천|판매|쇼핑|상품|노트북|핸드폰|폰|buy|price|deal|shopping|product/.test(text)) return { intent:'shopping', confidence:0.9, reason:'shopping-query-token' };
   if(/주가|환율|코스피|코스닥|나스닥|증권|금리|비트코인|코인|시세|finance|stock|market|exchange rate|crypto/.test(text)) return { intent:'finance', confidence:0.9, reason:'finance-query-token' };
@@ -511,7 +517,8 @@ function inferIntent(q, counts, rawType){
 function policyForIntent(intentInfo, counts){
   const intent = intentInfo.intent || 'general';
   const profiles = {
-    local: ['authority','local_tour','blog','image','video','news','site','web'],
+    // 도시/지역/국가 검색: 주요 정보 다음에 지도/지역이 바로 이어지고, 지식/위키/공식/공공자료가 뒤따른다.
+    local: ['authority','local_tour','knowledge','wiki','site','public_data','image','video','news','blog','web'],
     shopping: ['shopping','image','video','blog','site','news','web'],
     finance: ['finance','news','authority','site','blog','video','web'],
     issue: ['news','social','blog','video','image','wiki','authority','web'],
@@ -537,7 +544,7 @@ function policyForIntent(intentInfo, counts){
   const groupOrder = unique(visibleGroups.concat(BASE_GROUP_ORDER));
 
   const visibleTabsMap = {
-    local: ['all','map','tour','blog','image','video','news','site'],
+    local: ['all','map','tour','knowledge','wiki','site','public_data','image','video','news','blog'],
     shopping: ['all','shopping','image','video','blog','site','news'],
     finance: ['all','finance','news','site','blog','video'],
     issue: ['all','news','sns','blog','video','image','wiki','site'],
@@ -556,7 +563,7 @@ function policyForIntent(intentInfo, counts){
   const moduleCapByGroup = Object.assign({}, DEFAULT_MODULE_CAPS);
   if(intent === 'issue') Object.assign(previewLimitByGroup, { news:6, social:5, blog:5, video:5, image:4, wiki:2, authority:2 });
   if(intent === 'celebrity' || intent === 'celebrity_or_person') Object.assign(previewLimitByGroup, { news:5, video:6, social:5, image:6, blog:5, cafe:4, wiki:2, local_tour:1 });
-  if(intent === 'local') Object.assign(previewLimitByGroup, { local_tour:4, blog:5, image:5, video:4, news:3 });
+  if(intent === 'local') Object.assign(previewLimitByGroup, { local_tour:4, authority:5, knowledge:3, wiki:3, site:4, public_data:3, image:5, video:4, news:3, blog:4 });
   if(intent === 'shopping') Object.assign(previewLimitByGroup, { shopping:6, image:6, video:5, blog:5, site:4 });
   if(intent === 'finance') Object.assign(previewLimitByGroup, { finance:6, news:5, authority:3, site:4 });
   if(intent === 'academic') Object.assign(previewLimitByGroup, { academic:6, knowledge:4, wiki:3, site:4, book:4 });
@@ -594,7 +601,7 @@ function buildDisplayPolicy(input){
     visibleTabs:p.visibleTabs,
     hiddenTabs:p.hiddenTabs,
     groupCounts:counts,
-    cardContract:{ enabled:true, bodyLines:5, minimumBodyLines:2, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', authorityPriority:'city-country-government-official-first', executor:'search.js' },
+    cardContract:{ enabled:true, bodyLines:6, minimumBodyLines:3, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', authorityPriority:'city-country-government-official-first', executor:'search.js' },
     execution:'search-js-applies-policy; maru-search-attaches-display-card-contract',
     externalCall:false,
     storageWrite:false

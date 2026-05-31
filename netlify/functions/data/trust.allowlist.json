@@ -1,5 +1,9 @@
 {
   "domains": [
+
+    /* =========================
+       GLOBAL / MULTI-REGION
+    ========================= */
     "shopify.com",
     "myshopify.com",
     "woocommerce.com",
@@ -8,6 +12,10 @@
     "adyen.com",
     "checkout.com",
     "braintreepayments.com",
+
+    /* =========================
+       KOREA
+    ========================= */
     "coupang.com",
     "11st.co.kr",
     "gmarket.co.kr",
@@ -17,16 +25,28 @@
     "tmon.co.kr",
     "naver.com",
     "smartstore.naver.com",
+
+    /* =========================
+       JAPAN
+    ========================= */
     "amazon.co.jp",
     "rakuten.co.jp",
     "yahoo.co.jp",
     "paypaymall.yahoo.co.jp",
+
+    /* =========================
+       CHINA
+    ========================= */
     "taobao.com",
     "tmall.com",
     "jd.com",
     "1688.com",
     "alibaba.com",
     "aliexpress.com",
+
+    /* =========================
+       SOUTHEAST ASIA
+    ========================= */
     "shopee.sg",
     "shopee.co.th",
     "shopee.co.id",
@@ -39,10 +59,18 @@
     "tokopedia.com",
     "bukalapak.com",
     "tiki.vn",
+
+    /* =========================
+       INDIA / SOUTH ASIA
+    ========================= */
     "amazon.in",
     "flipkart.com",
     "snapdeal.com",
     "paytm.com",
+
+    /* =========================
+       EUROPE (WEST / EAST)
+    ========================= */
     "amazon.de",
     "amazon.fr",
     "amazon.it",
@@ -53,21 +81,37 @@
     "allegro.pl",
     "emag.ro",
     "wildberries.ru",
+
+    /* =========================
+       RUSSIA / CIS
+    ========================= */
     "ozon.ru",
     "wildberries.ru",
     "yandex.ru",
     "market.yandex.ru",
     "kaspi.kz",
+
+    /* =========================
+       MIDDLE EAST
+    ========================= */
     "noon.com",
     "souq.com",
     "amazon.ae",
     "amazon.sa",
+
+    /* =========================
+       AFRICA
+    ========================= */
     "jumia.com",
     "jumia.co.ke",
     "jumia.ng",
     "jumia.gh",
     "takealot.com",
     "konga.com",
+
+    /* =========================
+       AMERICAS
+    ========================= */
     "amazon.com",
     "amazon.ca",
     "amazon.com.mx",
@@ -75,20 +119,32 @@
     "etsy.com",
     "walmart.com",
     "mercadolibre.com",
+	
+	 /* GOOGLE */
     "google.com",
     "shopping.google.com",
     "store.google.com",
     "sites.google.com",
     "firebaseapp.com",
     "cloudfront.net",
+
+    /* MICROSOFT */
     "microsoft.com",
     "store.microsoft.com",
     "azurewebsites.net",
+
+    /* META */
     "facebook.com",
     "instagram.com",
+
+    /* APPLE */
     "apple.com",
+
+    /* SEARCH / DISCOVERY */
     "bing.com",
     "duckduckgo.com",
+
+    /* CDN / HOSTING (신뢰 인프라) */
     "fastly.net",
     "vercel.app",
     "netlify.app",
