@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IGDC Deploy Audit Check</title>
+  <style>
+    body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#0f172a;color:#e5e7eb;}
+    main{max-width:1100px;margin:0 auto;padding:28px 18px 60px;}
+    h1{font-size:24px;margin:0 0 8px;}
+    p{color:#cbd5e1;line-height:1.55;}
+    .bar{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;}
+    button{border:0;border-radius:10px;padding:11px 14px;font-weight:700;cursor:pointer;background:#38bdf8;color:#082f49;}
+    button.secondary{background:#e2e8f0;color:#0f172a;}
+    button:disabled{opacity:.5;cursor:not-allowed;}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:18px;}
+    .card{background:#111827;border:1px solid #334155;border-radius:14px;padding:14px;}
+    .card h2{font-size:15px;margin:0 0 8px;color:#f8fafc;}
+    .status{font-weight:800;}
+    .ok{color:#22c55e}.warn{color:#f59e0b}.fail{color:#ef4444}.info{color:#93c5fd}
+    pre{white-space:pre-wrap;word-break:break-word;background:#020617;border:1px solid #1e293b;border-radius:14px;padding:14px;max-height:520px;overflow:auto;font-size:12px;}
+    table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;}
+    td,th{border-bottom:1px solid #334155;padding:8px;text-align:left;vertical-align:top;}
+    .small{font-size:12px;color:#94a3b8;}
+  </style>
+</head>
+<body>
+<main>
+  <h1>IGDC 전체 배포 점검 리포트</h1>
+  <p>Netlify 배포 후 이 페이지에서 Search Bank, Search Bank Index, Snapshot, Maru Search, Sanmaru, Global Insight, 프론트 페이지, 다국어 사이드바, 회원 모달, trust filter 상태를 점검하고 JSON/HTML 리포트를 다운로드합니다.</p>
+  <div class="bar">
+    <button id="runAuditBtn">전체 진단 실행</button>
+    <button id="downloadJsonBtn" class="secondary" disabled>JSON 리포트 다운로드</button>
+    <button id="downloadHtmlBtn" class="secondary" disabled>HTML 요약 다운로드</button>
+  </div>
+  <div id="status" class="small">대기 중</div>
+  <div id="summary" class="grid"></div>
+  <h2>상세 결과</h2>
+  <pre id="rawOutput">아직 실행되지 않았습니다.</pre>
+</main>
+<script src="/assets/js/igdc-deploy-checker.js" defer></script>
+</body>
+</html>
