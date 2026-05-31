@@ -128,11 +128,26 @@ function guardIndexRequest(event, params, action){
 }
 
 function candidatePaths(name){
+  const cwd = process.cwd();
   return unique([
+    // Function-local candidates
     path.join(__dirname, name),
     path.join(__dirname, "data", name),
-    path.join(process.cwd(), name),
-    path.join(process.cwd(), "data", name),
+
+    // Repository/static root candidates
+    path.join(cwd, name),
+    path.join(cwd, "data", name),
+
+    // Netlify included_files candidates. Bundled functions may run from /var/task while
+    // included files stay under netlify/functions/**.
+    path.join(cwd, "netlify", "functions", name),
+    path.join(cwd, "netlify", "functions", "data", name),
+    path.join(cwd, "functions", name),
+    path.join(cwd, "functions", "data", name),
+    path.join(__dirname, "netlify", "functions", name),
+    path.join(__dirname, "netlify", "functions", "data", name),
+
+    // Runtime writable fallback
     path.join("/tmp", name)
   ]);
 }

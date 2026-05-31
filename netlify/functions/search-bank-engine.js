@@ -143,15 +143,41 @@ function tryReadJsonFile(p){
   try{ return JSON.parse(fs.readFileSync(p,"utf8")); }catch(e){ return null; }
 }
 
+function uniquePaths(arr){
+  const out = [];
+  const seen = new Set();
+  for(const p of Array.isArray(arr) ? arr : []){
+    const x = s(p);
+    if(!x || seen.has(x)) continue;
+    seen.add(x);
+    out.push(x);
+  }
+  return out;
+}
+
 function snapshotCandidates(){
   const cwd = process.cwd();
-  return [
+  return uniquePaths([
+    // Static publish root / repository root candidates
+    path.join(cwd,"search-bank.snapshot.json"),
     path.join(cwd,"data","search-bank.snapshot.json"),
+
+    // Netlify included_files candidates. In production, bundled functions often run from /var/task,
+    // so files included from netlify/functions/** may exist under /var/task/netlify/functions/**.
     path.join(cwd,"netlify","functions","data","search-bank.snapshot.json"),
+    path.join(cwd,"netlify","functions","search-bank.snapshot.json"),
     path.join(cwd,"functions","data","search-bank.snapshot.json"),
+    path.join(cwd,"functions","search-bank.snapshot.json"),
+
+    // Local/function-directory candidates
     path.join(__dirname,"data","search-bank.snapshot.json"),
     path.join(__dirname,"search-bank.snapshot.json"),
-  ];
+    path.join(__dirname,"netlify","functions","data","search-bank.snapshot.json"),
+    path.join(__dirname,"netlify","functions","search-bank.snapshot.json"),
+
+    // Last-resort runtime copy location
+    path.join("/tmp","search-bank.snapshot.json")
+  ]);
 }
 
 function fetchJsonNode(url){
@@ -1736,10 +1762,12 @@ function dedup(items){
 function writeSearchBankSnapshots(bank){
   const cwd = process.cwd();
 
-  const targets = [
+  const targets = uniquePaths([
     path.join(cwd,"data","search-bank.snapshot.json"),
-    path.join(cwd,"netlify","functions","data","search-bank.snapshot.json")
-  ];
+    path.join(cwd,"netlify","functions","data","search-bank.snapshot.json"),
+    path.join(cwd,"netlify","functions","search-bank.snapshot.json"),
+    path.join("/tmp","search-bank.snapshot.json")
+  ]);
 
   for(const p of targets){
     try{

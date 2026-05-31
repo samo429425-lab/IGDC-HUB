@@ -46,10 +46,38 @@ function existsRel(root, p){ return statFile(path.join(root, p)); }
 function readJsonRel(root, p){
   const f = path.join(root, p);
   const r = readText(f);
-  if(!r.ok) return { exists:false, ok:false, error:r.error };
+  if(!r.ok) return { exists:false, ok:false, error:r.error, path:p };
   const parsed = safeJsonParse(r.text);
-  if(!parsed.ok) return { exists:true, ok:false, error:parsed.error, size:Buffer.byteLength(r.text), hash:hashText(r.text) };
-  return { exists:true, ok:true, value:parsed.value, size:Buffer.byteLength(r.text), hash:hashText(r.text) };
+  if(!parsed.ok) return { exists:true, ok:false, error:parsed.error, size:Buffer.byteLength(r.text), hash:hashText(r.text), path:p };
+  return { exists:true, ok:true, value:parsed.value, size:Buffer.byteLength(r.text), hash:hashText(r.text), path:p };
+}
+function readJsonFirst(root, paths){
+  const tried = [];
+  for(const p of Array.isArray(paths) ? paths : []){
+    const rec = readJsonRel(root, p);
+    tried.push({ path:p, exists:!!rec.exists, ok:!!rec.ok, error:rec.error });
+    if(rec.exists) return Object.assign({ tried }, rec);
+  }
+  return { exists:false, ok:false, error:'not found in candidate paths', tried };
+}
+function existsFirst(root, paths){
+  const tried = [];
+  for(const p of Array.isArray(paths) ? paths : []){
+    const st = existsRel(root, p);
+    tried.push(Object.assign({ path:p }, st));
+    if(st.exists) return Object.assign({ path:p, tried }, st);
+  }
+  return { exists:false, tried };
+}
+function searchBankSnapshotCandidateRelPaths(){
+  return [
+    'search-bank.snapshot.json',
+    'data/search-bank.snapshot.json',
+    'netlify/functions/data/search-bank.snapshot.json',
+    'netlify/functions/search-bank.snapshot.json',
+    'functions/data/search-bank.snapshot.json',
+    'functions/search-bank.snapshot.json'
+  ];
 }
 function extractItems(json){
   if(Array.isArray(json)) return json;
@@ -231,12 +259,13 @@ function audit(){
   const importantFiles = [
     'index.html','home.html','distributionhub.html','socialnetwork.html','mediahub.html','tour.html','donation.html','networkhub.html','search.html','admin.html',
     'assets/js/search.js','assets/js/igdc-core.min.js','assets/js/member-admin-modal.js','assets/js/maru-global-insight.js','assets/js/maru-search.js','assets/js/maru-searchbank-sync.js',
-    'search-bank.snapshot.json','netlify/functions/data/trust.allowlist.json','netlify/functions/data/trust.blocklist.json'
+    'search-bank.snapshot.json','data/search-bank.snapshot.json','netlify/functions/data/search-bank.snapshot.json','netlify/functions/search-bank.snapshot.json',
+    'netlify/functions/data/trust.allowlist.json','netlify/functions/data/trust.blocklist.json'
   ];
   report.files.important = importantFiles.map(p => Object.assign({ path:p }, existsRel(root,p)));
   report.functions = scanFunctionExports(root);
-  const snap = readJsonRel(root, 'search-bank.snapshot.json');
-  report.searchBank.snapshotFile = { exists:snap.exists, ok:snap.ok, size:snap.size, hash:snap.hash, error:snap.error };
+  const snap = readJsonFirst(root, searchBankSnapshotCandidateRelPaths());
+  report.searchBank.snapshotFile = { exists:snap.exists, ok:snap.ok, path:snap.path, size:snap.size, hash:snap.hash, error:snap.error, tried:snap.tried };
   report.searchBank.snapshot = snap.ok ? snapshotStats(snap.value) : null;
   const allow = readJsonRel(root, 'netlify/functions/data/trust.allowlist.json');
   const block = readJsonRel(root, 'netlify/functions/data/trust.blocklist.json');
