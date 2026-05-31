@@ -5845,6 +5845,22 @@ exports.runEngine = async function(event, params){
   const deep = truthy(raw.deep) || String(raw.external || '').toLowerCase() === 'deep';
   const searchType = raw.type || raw.category || raw.tab || raw.vertical || 'all';
 
+  // Search UI callers that mount runEngine should receive the same non-blocking
+  // first-wave contract as the HTTP handler. This keeps Maru Search acting as
+  // the platform CPU/pass-through for search.js instead of doing a separate
+  // wide/provider/media search before the first render.
+  if(consumer === 'search-ui' && !truthy(raw.__fromSearchUiHandler)){
+    const delegatedRaw = Object.assign({}, raw, {
+      consumer:'search-ui',
+      __fromRunEngineSearchUi:'1',
+      noAnalytics: raw.noAnalytics == null ? '1' : raw.noAnalytics,
+      noRevenue: raw.noRevenue == null ? '1' : raw.noRevenue
+    });
+    const delegatedRes = await exports.handler(Object.assign({}, syntheticEvent, { queryStringParameters: delegatedRaw }));
+    try{ return JSON.parse(delegatedRes && delegatedRes.body || '{}'); }
+    catch(e){ return { status:'fail', engine:'maru-search', version:VERSION, consumer:'search-ui', query:q, items:[], results:[], meta:{ error:'DELEGATED_HANDLER_BAD_JSON' } }; }
+  }
+
   // Isolation: when the request explicitly targets the search-bank consumer,
   // return only search-bank results and do not merge with other providers
   // or enrich with external/e-data. This preserves the front-page search-bank

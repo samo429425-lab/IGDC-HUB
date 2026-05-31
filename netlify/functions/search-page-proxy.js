@@ -64,29 +64,6 @@ function escapeHtml(v){
     .replace(/'/g, '&#39;');
 }
 
-
-function normalizeTargetUrl(raw){
-  const value = String(raw || '').trim();
-  if(!value) return value;
-  try{
-    const u = new URL(value);
-    if(!/^https?:$/.test(u.protocol)) return value;
-    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
-    const path = (u.pathname || '/').replace(/\/+/g, '/');
-    if(host === 'archives.seoul.go.kr'){
-      if(path === '/' || path === '' || path.toLowerCase() === '/index.do' || path.toLowerCase() === '/index'){
-        u.pathname = '/main';
-        u.search = '';
-        u.hash = '';
-        return u.href;
-      }
-    }
-    return u.href;
-  }catch(e){
-    return value;
-  }
-}
-
 function absoluteUrl(v, baseUrl){
   const raw = String(v || '').trim();
   if(!raw || raw.charAt(0) === '#' || /^javascript:/i.test(raw) || /^mailto:|^tel:|^data:|^blob:/i.test(raw)) return raw;
@@ -188,35 +165,71 @@ function rewriteAttributes(markup, baseUrl, opts){
   return out;
 }
 
-
-function attrContent(markup, re){
-  const m = String(markup || '').match(re);
-  return m ? String(m[1] || '').trim() : '';
+function fallbackDocument(title, message, target){
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.page{padding:28px 30px}.title{font-size:18px;font-weight:800;color:#111827;margin-bottom:8px}.msg{font-size:14px;line-height:1.65;color:#64748b;max-width:760px}.url{margin-top:14px;font-size:12px;color:#64748b;word-break:break-all;background:#f1f5f9;border-radius:9px;padding:8px 10px}</style></head><body><div class="page"><div class="title">' + escapeHtml(title) + '</div><div class="msg">' + escapeHtml(message) + '</div><div class="url">' + escapeHtml(target || '') + '</div></div></body></html>';
 }
 
-function stripTags(v){
-  return String(v || '')
+
+function pickMeta(htmlText, names){
+  const html = String(htmlText || '');
+  for(const name of Array.isArray(names) ? names : [names]){
+    const n = String(name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let re = new RegExp("<meta[^>]+(?:name|property)=[\"']" + n + "[\"'][^>]+content=[\"']([^\"']*)[\"'][^>]*>", 'i');
+    let m = html.match(re);
+    if(m && m[1]) return m[1];
+    re = new RegExp("<meta[^>]+content=[\"']([^\"']*)[\"'][^>]+(?:name|property)=[\"']" + n + "[\"'][^>]*>", 'i');
+    m = html.match(re);
+    if(m && m[1]) return m[1];
+  }
+  return '';
+}
+
+function stripForText(htmlText){
+  return String(htmlText || '')
     .replace(/<script\b[\s\S]*?<\/script>/ig, ' ')
     .replace(/<style\b[\s\S]*?<\/style>/ig, ' ')
+    .replace(/<noscript\b[^>]*>/ig, ' ')
+    .replace(/<\/noscript>/ig, ' ')
+    .replace(/<br\s*\/?>/ig, '\n')
+    .replace(/<\/p>|<\/div>|<\/li>|<\/h[1-6]>/ig, '\n')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/[ \t\r\f]+/g, ' ')
+    .replace(/\n\s+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
-function snapshotDocument(htmlText, finalUrl){
-  const markup = String(htmlText || '');
-  const title = attrContent(markup, /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/i) ||
-                attrContent(markup, /<title[^>]*>([\s\S]*?)<\/title>/i) ||
-                finalUrl;
-  const desc = attrContent(markup, /<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']+)["'][^>]*>/i);
-  const img = attrContent(markup, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i);
-  const text = stripTags(markup).slice(0, 900);
-  const imageHtml = img ? '<img class="hero" src="' + escapeHtml(absoluteUrl(img, finalUrl)) + '" alt="">' : '';
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + escapeHtml(finalUrl) + '"><style>html,body{margin:0;background:#fff;color:#111827;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.page{max-width:980px;padding:32px 44px}.url{font-size:13px;color:#64748b;word-break:break-all;margin-bottom:14px}.title{font-size:30px;line-height:1.25;font-weight:850;letter-spacing:-.03em;margin:0 0 14px}.desc{font-size:16px;line-height:1.65;color:#334155;margin:0 0 18px}.hero{display:block;max-width:520px;max-height:320px;object-fit:cover;border:1px solid #e5e7eb;border-radius:14px;margin:18px 0}.note{margin-top:20px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;color:#64748b;font-size:13px}.text{font-size:14px;line-height:1.7;color:#475569;white-space:pre-wrap}</style></head><body><main class="page"><div class="url">' + escapeHtml(finalUrl) + '</div><h1 class="title">' + escapeHtml(title) + '</h1>' + imageHtml + (desc ? '<p class="desc">' + escapeHtml(desc) + '</p>' : '') + (text ? '<div class="text">' + escapeHtml(text) + '</div>' : '') + '<div class="note">IGDC 검색 화면 아래에 붙여 보기 위한 안정형 스냅샷입니다.</div></main></body></html>';
+function firstMeaningfulImage(htmlText, baseUrl){
+  const html = String(htmlText || '');
+  const og = pickMeta(html, ['og:image','twitter:image','twitter:image:src']);
+  if(og) return absoluteUrl(og, baseUrl);
+  const re = /<img\b[^>]*\bsrc\s*=\s*(["'])(.*?)\1[^>]*>/ig;
+  let m;
+  while((m = re.exec(html))){
+    const src = String(m[2] || '').trim();
+    if(!src || /logo|favicon|sprite|blank|pixel|icon/i.test(src)) continue;
+    return absoluteUrl(src, baseUrl);
+  }
+  return '';
 }
 
-function fallbackDocument(title, message, target){
-  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#334155;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.page{padding:28px 30px}.title{font-size:18px;font-weight:800;color:#111827;margin-bottom:8px}.msg{font-size:14px;line-height:1.65;color:#64748b;max-width:760px}.url{margin-top:14px;font-size:12px;color:#64748b;word-break:break-all;background:#f1f5f9;border-radius:9px;padding:8px 10px}</style></head><body><div class="page"><div class="title">' + escapeHtml(title) + '</div><div class="msg">' + escapeHtml(message) + '</div><div class="url">' + escapeHtml(target || '') + '</div></div></body></html>';
+function snapshotDocument(htmlText, finalUrl){
+  const raw = String(htmlText || '');
+  const titleMatch = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = (pickMeta(raw, ['og:title','twitter:title']) || (titleMatch && titleMatch[1]) || (finalUrl ? new URL(finalUrl).hostname : '원문 페이지'))
+    .replace(/\s+/g, ' ').trim();
+  const desc = (pickMeta(raw, ['description','og:description','twitter:description']) || '').replace(/\s+/g, ' ').trim();
+  const image = firstMeaningfulImage(raw, finalUrl);
+  const bodyText = stripForText(raw).split('\n').map(x => x.trim()).filter(x => x && x.length > 20).slice(0, 12).join('\n\n');
+  const text = desc || bodyText || '이 사이트는 자바스크립트 기반이거나 내부 표시를 제한하여 IGDC 검색 화면 안에서는 요약 스냅샷으로 표시됩니다.';
+  const safeImage = image ? '<img class="hero" src="' + escapeHtml(image) + '" alt="">' : '';
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><base href="' + escapeHtml(finalUrl || '') + '"><meta name="referrer" content="no-referrer-when-downgrade"><style>html,body{margin:0;background:#fff;color:#111827;font-family:system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:980px;margin:0 auto;padding:34px 28px 60px}.url{font-size:13px;color:#64748b;word-break:break-all;margin-bottom:12px}.title{font-size:30px;line-height:1.25;font-weight:900;letter-spacing:-.03em;margin:0 0 20px}.hero{display:block;max-width:100%;max-height:360px;object-fit:contain;border:1px solid #eef2f7;border-radius:16px;margin:0 0 22px;background:#f8fafc}.text{font-size:16px;line-height:1.8;white-space:pre-wrap;color:#334155}.notice{margin-top:26px;padding:10px 12px;border-radius:10px;background:#f8fafc;border:1px solid #e5e7eb;color:#64748b;font-size:12px}</style></head><body><main class="wrap"><div class="url">' + escapeHtml(finalUrl || '') + '</div><h1 class="title">' + escapeHtml(title || '원문 페이지') + '</h1>' + safeImage + '<div class="text">' + escapeHtml(text) + '</div><div class="notice">원본 사이트의 보안 정책 또는 자바스크립트 구조 때문에 전체 페이지 대신 안정 스냅샷으로 표시했습니다.</div></main>' + lightweightBridge(finalUrl, {}) + '</body></html>';
 }
 
 function lightweightBridge(finalUrl, opts){
@@ -359,7 +372,7 @@ function copyRequestHeaders(event, target){
 exports.handler = async function(event){
   if(event.httpMethod === 'OPTIONS') return json(200, { ok:true });
   const qp = event.queryStringParameters || {};
-  const raw = normalizeTargetUrl(qp.url);
+  const raw = qp.url;
   const mode = qp.mode || (qp.snapshot === '1' ? 'snapshot' : (qp.static === '1' ? 'static' : 'static'));
   const proxyId = qp.proxyId || '';
   if(!raw) return html(400, fallbackDocument('Missing url', '표시할 원문 주소가 없습니다.', ''));
