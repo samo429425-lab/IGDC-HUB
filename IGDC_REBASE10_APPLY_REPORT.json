@@ -1,0 +1,181 @@
+{
+  "baseline": "@@ 완성 업로드용(10).zip",
+  "removed_api_netlify_tags": [
+    [
+      "mediahub.html",
+      2
+    ],
+    [
+      "ar/mediahub_ar.html",
+      2
+    ],
+    [
+      "bn/mediahub_bn.html",
+      2
+    ],
+    [
+      "de/mediahub_de.html",
+      2
+    ],
+    [
+      "en/mediahub_en.html",
+      2
+    ],
+    [
+      "es/mediahub_es.html",
+      2
+    ],
+    [
+      "fa/mediahub_fa.html",
+      2
+    ],
+    [
+      "fr/mediahub_fr.html",
+      2
+    ],
+    [
+      "hi/mediahub_hi.html",
+      2
+    ],
+    [
+      "hu/mediahub_hu.html",
+      2
+    ],
+    [
+      "id/mediahub_id.html",
+      2
+    ],
+    [
+      "it/mediahub_it.html",
+      2
+    ],
+    [
+      "ja/mediahub_ja.html",
+      2
+    ],
+    [
+      "ms/mediahub_ms.html",
+      2
+    ],
+    [
+      "nl/mediahub_nl.html",
+      2
+    ],
+    [
+      "pl/mediahub_pl.html",
+      2
+    ],
+    [
+      "pt/mediahub_pt.html",
+      2
+    ],
+    [
+      "ru/mediahub_ru.html",
+      2
+    ],
+    [
+      "sv/mediahub_sv.html",
+      2
+    ],
+    [
+      "sw/mediahub_sw.html",
+      2
+    ],
+    [
+      "ta/mediahub_ta.html",
+      2
+    ],
+    [
+      "th/mediahub_th.html",
+      2
+    ],
+    [
+      "tl/mediahub_tl.html",
+      2
+    ],
+    [
+      "tr/mediahub_tr.html",
+      2
+    ],
+    [
+      "uk/mediahub_uk.html",
+      2
+    ],
+    [
+      "ur/mediahub_ur.html",
+      2
+    ],
+    [
+      "uz/mediahub_uz.html",
+      2
+    ],
+    [
+      "vi/mediahub_vi.html",
+      2
+    ],
+    [
+      "zh/mediahub_zh.html",
+      2
+    ],
+    [
+      "zht/mediahub_zht.html",
+      2
+    ]
+  ],
+  "preserved_files_changed": [],
+  "applied_mapping": {
+    "netlify_functions__maru-search.js": "netlify/functions/maru-search.js",
+    "maru-search-display-engine.js": "netlify/functions/maru-search-display-engine.js",
+    "search-bank-engine.js": "netlify/functions/search-bank-engine.js",
+    "search-bank-index-engine.js": "netlify/functions/search-bank-index-engine.js",
+    "netlify_maru__core.js": "netlify/maru/core.js",
+    "netlify_functions__core.js": "netlify/functions/core.js"
+  },
+  "added_helpers": {
+    "assets_js__maru-search.js": "assets/js/maru-search.js",
+    "maru-searchbank-sync.js": "assets/js/maru-searchbank-sync.js",
+    "feed.js": "assets/js/feed.js",
+    "sn-automap.v1.js": "assets/js/sn-automap.v1.js",
+    "media-hero-engine.js": "assets/js/media-hero-engine.js",
+    "media-empty-handler.js": "assets/js/media-empty-handler.js",
+    "igdc-system-checker.js": "assets/js/diagnostics/igdc-system-checker.js",
+    "igdc-diag-admin-bridge.js": "assets/js/diagnostics/igdc-diag-admin-bridge.js",
+    "igdc-system-diagnostic-full.js": "assets/js/diagnostics/igdc-system-diagnostic-full.js",
+    "frontbus.parent.js": "frontbus.parent.js",
+    "frontbus.child.js": "frontbus.child.js",
+    "edge-autohide-mobile.js": "edge-autohide-mobile.js",
+    "thumbnail-loader.min.js": "CoreLogic/modules/thumbnail-feed/thumbnail-loader.min.js",
+    "search-bank.snapshot.json": "search-bank.snapshot.json"
+  },
+  "lang_frontbus_copies": [
+    "ar",
+    "bn",
+    "de",
+    "en",
+    "es",
+    "fa",
+    "fr",
+    "hi",
+    "hu",
+    "id",
+    "it",
+    "ja",
+    "ms",
+    "nl",
+    "pl",
+    "pt",
+    "ru",
+    "sv",
+    "sw",
+    "ta",
+    "th",
+    "tl",
+    "tr",
+    "uk",
+    "ur",
+    "uz",
+    "vi",
+    "zh",
+    "zht"
+  ]
+}
