@@ -28,7 +28,23 @@
   }
 
   function pickUrl(it){
-    return safeText(it && (it.url || it.href || it.link || it.productUrl || it.detailUrl)) || '#';
+    return safeText(it && (
+      it.checkoutUrl ||
+      it.paymentUrl ||
+      it.contentUrl ||
+      it.pageUrl ||
+      it.internalUrl ||
+      it.productUrl ||
+      it.productLink ||
+      it.detailUrl ||
+      it.redirectUrl ||
+      it.permalink ||
+      it.path ||
+      it.url ||
+      it.href ||
+      it.link ||
+      ''
+    )) || '#';
   }
 
   function pickThumb(it){
@@ -44,6 +60,127 @@
         ''
       )
     );
+  }
+
+  function pickProductId(it){
+    return safeText(it && (
+      it.productId ||
+      it.product_id ||
+      it.contentId ||
+      it.content_id ||
+      it.itemId ||
+      it.item_id ||
+      it.sku ||
+      it.code ||
+      it.id ||
+      ''
+    )).trim();
+  }
+
+  function isExternalUrl(url){
+    return /^https?:\/\//i.test(safeText(url).trim());
+  }
+
+  function isInternalUrl(url){
+    url = safeText(url).trim();
+    return !!url && (
+      url.charAt(0) === '/' ||
+      url.startsWith('./') ||
+      url.startsWith('../') ||
+      /^[^?#]+\.html(?:$|[?#])/i.test(url)
+    );
+  }
+
+  function isBadPlaceholderUrl(url){
+    url = safeText(url).trim();
+    if(!url || url === '#') return true;
+    if(/^javascript:/i.test(url)) return true;
+    if(/\/pages\/coming-soon\.html/i.test(url)) return true;
+    if(/(?:^|\.)example\.com(?:[\/:?#]|$)/i.test(url)) return true;
+    return false;
+  }
+
+  function isValidSecondUrl(url){
+    url = safeText(url).trim();
+    if(isBadPlaceholderUrl(url)) return false;
+    return isExternalUrl(url) || isInternalUrl(url);
+  }
+
+  function isPlaceholderItem(it){
+    if(!it) return true;
+
+    const title = pickTitle(it).trim();
+    const url = pickUrl(it).trim();
+    const id = pickProductId(it);
+    const type = safeText(it.type).trim().toLowerCase();
+    const sourcePlatform = safeText(it && it.source && it.source.platform).trim().toLowerCase();
+
+    if(type === 'placeholder') return true;
+    if(sourcePlatform === 'placeholder') return true;
+    if(/^ph_/i.test(id)) return true;
+    if(title === 'Loading…' || title === 'Loading...' || title === 'Loading' || title === 'RIGHT SAMPLE') return true;
+    if(isBadPlaceholderUrl(url) && !pickThumb(it).trim()) return true;
+
+    return false;
+  }
+
+  function resolveItemUrl(it){
+    if(!it || isPlaceholderItem(it)) return '';
+
+    const id = pickProductId(it);
+    const explicitInternal = safeText(it && (
+      it.contentUrl ||
+      it.pageUrl ||
+      it.internalUrl ||
+      it.detailPage ||
+      it.detailUrl ||
+      it.path ||
+      ''
+    )).trim();
+
+    if(isInternalUrl(explicitInternal) && !isBadPlaceholderUrl(explicitInternal)){
+      return explicitInternal;
+    }
+
+    // 우측 상품/콘텐츠 슬롯의 원칙: 실 ID가 있으면 IGDC 내부 원페이지를 우선 사용한다.
+    if(id && !/^ph_/i.test(id)){
+      return '/content.html?id=' + encodeURIComponent(id);
+    }
+
+    const raw = pickUrl(it).trim();
+    if(isValidSecondUrl(raw)) return raw;
+
+    return '';
+  }
+
+  function resolveElementUrl(el){
+    if(!el) return '';
+
+    return safeText(
+      (el.dataset && (
+        el.dataset.checkoutUrl ||
+        el.dataset.paymentUrl ||
+        el.dataset.contentUrl ||
+        el.dataset.pageUrl ||
+        el.dataset.internalUrl ||
+        el.dataset.productUrl ||
+        el.dataset.productLink ||
+        el.dataset.detailUrl ||
+        el.dataset.href ||
+        el.dataset.url
+      )) ||
+      el.getAttribute('data-checkout-url') ||
+      el.getAttribute('data-payment-url') ||
+      el.getAttribute('data-content-url') ||
+      el.getAttribute('data-page-url') ||
+      el.getAttribute('data-internal-url') ||
+      el.getAttribute('data-product-url') ||
+      el.getAttribute('data-product-link') ||
+      el.getAttribute('data-detail-url') ||
+      el.getAttribute('data-href') ||
+      el.getAttribute('href') ||
+      ''
+    ).trim();
   }
 
 function isRealItem(it){
@@ -195,7 +332,13 @@ function getRightCards(panel){
       const box = document.createElement('div');
       box.className = 'ad-box product-card';
       box.dataset.dummy = '1';
-      box.innerHTML = '<a href="/pages/coming-soon.html?from=social-rightpanel" data-product-id="" data-product-title="RIGHT SAMPLE" data-product-link="/pages/coming-soon.html?from=social-rightpanel">RIGHT SAMPLE</a>';
+      box.dataset.productId = '';
+      box.dataset.productTitle = 'RIGHT SAMPLE';
+      box.dataset.productLink = '';
+      box.dataset.productUrl = '';
+      box.dataset.detailUrl = '';
+      box.dataset.href = '';
+      box.innerHTML = '<a href="javascript:void(0)" aria-disabled="true" data-product-id="" data-product-title="RIGHT SAMPLE" data-product-link="">RIGHT SAMPLE</a>';
       frag.appendChild(box);
     }
 
@@ -209,15 +352,27 @@ function getRightCards(panel){
 function paintRightCard(box, it){
   if(!box) return;
 
-  const url = pickUrl(it) || '/pages/coming-soon.html?from=social-rightpanel';
-  const title = pickTitle(it) || 'RIGHT SAMPLE';
-  const productId = safeText(it && (it.productId || it.product_id || it.id || it.sku || it.code));
+  if(isPlaceholderItem(it)){
+    resetRightCardToDummy(box);
+    return;
+  }
+
+  const url = resolveItemUrl(it);
+  const title = pickTitle(it) || 'Item';
+  const productId = pickProductId(it);
+  const rawUrl = pickUrl(it).trim();
+  const externalUrl = (rawUrl && isExternalUrl(rawUrl) && !isBadPlaceholderUrl(rawUrl)) ? rawUrl : '';
 
   box.className = 'ad-box product-card';
   box.removeAttribute('data-dummy');
   box.dataset.productId = productId;
   box.dataset.productTitle = title;
   box.dataset.productLink = url;
+  box.dataset.productUrl = url;
+  box.dataset.detailUrl = url;
+  box.dataset.href = url;
+  if(externalUrl) box.dataset.externalUrl = externalUrl;
+  else delete box.dataset.externalUrl;
 
   let a = qs('a', box);
   if(!a){
@@ -226,25 +381,38 @@ function paintRightCard(box, it){
     box.appendChild(a);
   }
 
-  a.href = url;
-  a.target = (url && url !== '#' && !url.includes('/pages/coming-soon.html')) ? '_blank' : '_self';
+  a.href = url || 'javascript:void(0)';
+  a.target = url ? (isExternalUrl(url) ? '_blank' : '_self') : '_self';
   a.rel = 'noopener';
   a.textContent = title;
   a.dataset.productId = productId;
   a.dataset.productTitle = title;
   a.dataset.productLink = url;
+  a.dataset.productUrl = url;
+  a.dataset.detailUrl = url;
+  a.dataset.href = url;
+  if(externalUrl) a.dataset.externalUrl = externalUrl;
+  else delete a.dataset.externalUrl;
+
+  if(url){
+    a.removeAttribute('aria-disabled');
+  }else{
+    a.setAttribute('aria-disabled', 'true');
+  }
 }
 
 function resetRightCardToDummy(box){
   if(!box) return;
 
-  const fallback = '/pages/coming-soon.html?from=social-rightpanel';
-
   box.className = 'ad-box product-card';
   box.dataset.dummy = '1';
   box.dataset.productId = '';
   box.dataset.productTitle = 'RIGHT SAMPLE';
-  box.dataset.productLink = fallback;
+  box.dataset.productLink = '';
+  box.dataset.productUrl = '';
+  box.dataset.detailUrl = '';
+  box.dataset.href = '';
+  delete box.dataset.externalUrl;
 
   let a = qs('a', box);
   if(!a){
@@ -253,13 +421,75 @@ function resetRightCardToDummy(box){
     box.appendChild(a);
   }
 
-  a.href = fallback;
+  a.href = 'javascript:void(0)';
   a.target = '_self';
   a.rel = 'noopener';
   a.textContent = 'RIGHT SAMPLE';
   a.dataset.productId = '';
   a.dataset.productTitle = 'RIGHT SAMPLE';
-  a.dataset.productLink = fallback;
+  a.dataset.productLink = '';
+  a.dataset.productUrl = '';
+  a.dataset.detailUrl = '';
+  a.dataset.href = '';
+  delete a.dataset.externalUrl;
+  a.setAttribute('aria-disabled', 'true');
+}
+
+function installRightPanelClickRouter(){
+  if(window.__SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__) return;
+  window.__SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__ = true;
+
+  document.addEventListener('click', function(e){
+    if(e.defaultPrevented) return;
+    if(e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
+    if(e.target && e.target.closest && e.target.closest('.rscroll')) return;
+
+    const hit = e.target && e.target.closest && e.target.closest(
+      '[data-psom-key="rightPanel"] [data-checkout], ' +
+      '[data-psom-key="rightPanel"] .product-card, ' +
+      '[data-psom-key="rightPanel"] .ad-box, ' +
+      '[data-psom-key="rightPanel"] a[href]'
+    );
+
+    if(!hit) return;
+
+    // 결제 훅은 기존 IGTC checkout 로직에 맡긴다.
+    if(hit.closest && hit.closest('[data-checkout]')) return;
+
+    const box = hit.closest ? (hit.closest('.product-card, .ad-box') || hit) : hit;
+    const a = (hit.matches && hit.matches('a[href]'))
+      ? hit
+      : (box.querySelector ? box.querySelector('a[href]') : null);
+
+    const url = resolveElementUrl(box) || resolveElementUrl(a);
+
+    if(!isValidSecondUrl(url)){
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    if(isExternalUrl(url)){
+      window.open(url, '_blank', 'noopener');
+    }else{
+      window.location.assign(url);
+    }
+  }, true);
+}
+
+function installRightPanelRenderOverride(){
+  if(window.__SOCIAL_RIGHTPANEL_RENDER_OVERRIDE_READY__) return;
+  window.__SOCIAL_RIGHTPANEL_RENDER_OVERRIDE_READY__ = true;
+
+  window.__IGDC_RIGHTPANEL_RENDER = function(items){
+    const rightPanels = getRightPanels();
+    rightPanels.forEach(function(panel){
+      mountRightPanel(panel, Array.isArray(items) ? items : []);
+    });
+  };
 }
 
 function mountRightPanel(panel, items){
@@ -269,16 +499,13 @@ function mountRightPanel(panel, items){
 
   const usable = raw.filter(function(it){
     if(!it) return false;
+    if(isPlaceholderItem(it)) return false;
 
     const title = pickTitle(it).trim();
-    const url = pickUrl(it).trim();
+    const url = resolveItemUrl(it);
     const thumb = pickThumb(it).trim();
 
-    // placeholder/빈데이터는 실카드로 취급하지 않음
-    if(title === 'Loading…' || title === 'Loading...' || title === 'RIGHT SAMPLE') return false;
-    if(url === '#' && !thumb) return false;
-
-    return !!(title || thumb || (url && url !== '#'));
+    return !!(title || thumb || url);
   });
 
   const displayItems = usable.slice(0, RIGHT_LIMIT);
@@ -341,10 +568,7 @@ if(rightPanels.length){
       ? sections.rightPanel
       : (Array.isArray(sections.rightPanel?.items) ? sections.rightPanel.items : []);
 
-  const finalItems = raw.length > 0 ? raw : [{
-    title: "RIGHT SAMPLE",
-    url: "/pages/coming-soon.html?from=social-rightpanel"
-  }];
+  const finalItems = raw.length > 0 ? raw : [];
 
   rightPanels.forEach(function(panel){
     mountRightPanel(panel, finalItems);
@@ -358,6 +582,8 @@ if(rightPanels.length){
   }
 
   function boot(){
+    installRightPanelClickRouter();
+    installRightPanelRenderOverride();
     run();
   }
 window.addEventListener('igdc:rightpanel:refresh', function(){
