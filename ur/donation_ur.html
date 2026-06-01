@@ -5696,8 +5696,8 @@ document.addEventListener("DOMContentLoaded",function(){
 
 
 
-<style id="igdc-donation-board-v10-style">
-/* IGDC Donation V10: stable board list, attachment names, one-vote-per-client, right panel -15% from V9 */
+<style id="igdc-donation-board-v11-style">
+/* IGDC Donation V11: attachment download, top legacy attach/save hidden, vote toggle, board height -15% */
 @media (min-width:1025px){
   :root{ --igdc-donation-right-col:333px !important; --right-col:333px !important; --right-max:333px !important; }
   html,body{ overflow-x:hidden !important; }
@@ -5735,16 +5735,21 @@ document.addEventListener("DOMContentLoaded",function(){
   body > .container > .main .feed-wrapper{ width:100% !important; max-width:none !important; }
 }
 
-/* old composer/file row disabled: V10 owns writing + attachments in one stable modal */
+/* old composer/file row disabled: V11 owns writing + attachments in one stable modal */
 #composerModal{ display:none !important; pointer-events:none !important; }
 .compose-wrap .row-bottom,
 .compose-wrap .field-file,
 .compose-wrap .field-image{ display:none !important; }
+/* top hero legacy attach/save controls are removed because the composer has its own attachment + save */
+#btnAttach,
+#attachPreview,
+#btnSubmitPost,
+#postAttach{ display:none !important; }
 
 .right .topic-panel{
-  height:332px !important;
-  max-height:332px !important;
-  min-height:332px !important;
+  height:282px !important;
+  max-height:282px !important;
+  min-height:282px !important;
   overflow:hidden !important;
   display:flex !important;
   flex-direction:column !important;
@@ -5870,7 +5875,8 @@ button.igdc-v10-tool{ cursor:pointer !important; }
 #igdcV10Title{ width:100% !important; height:42px !important; min-height:42px !important; padding:10px 12px !important; box-sizing:border-box !important; border:1px solid #cbd5e1 !important; border-radius:9px !important; font-size:15px !important; line-height:1.35 !important; background:#fff !important; color:#111827 !important; pointer-events:auto !important; }
 #igdcV10Body{ width:100% !important; min-height:220px !important; padding:12px !important; box-sizing:border-box !important; border:1px solid #cbd5e1 !important; border-radius:9px !important; font-size:15px !important; line-height:1.45 !important; background:#fff !important; color:#111827 !important; pointer-events:auto !important; resize:vertical !important; }
 .igdc-v10-attach-row{ display:flex !important; align-items:center !important; gap:8px !important; flex-wrap:nowrap !important; }
-#igdcV10File{ flex:0 0 auto !important; width:118px !important; max-width:118px !important; font-size:12.7px !important; line-height:1.2 !important; }
+#igdcV10File{ flex:0 0 auto !important; width:126px !important; max-width:126px !important; font-size:13.2px !important; line-height:1.2 !important; }
+#igdcV10File::file-selector-button{ font-size:13.2px !important; padding:5px 9px !important; border-radius:7px !important; border:1px solid #94a3b8 !important; background:#f8fafc !important; color:#0f172a !important; cursor:pointer !important; }
 #igdcV10FileNames{ flex:1 1 auto !important; min-width:0 !important; min-height:30px !important; display:flex !important; align-items:center !important; border:1px solid #cbd5e1 !important; border-radius:8px !important; background:#fff !important; color:#334155 !important; padding:5px 8px !important; font-size:12px !important; line-height:1.25 !important; overflow:hidden !important; white-space:nowrap !important; text-overflow:ellipsis !important; }
 .igdc-v10-attach-help{ font-size:11px !important; color:#64748b !important; margin-top:4px !important; }
 .igdc-v10-modal-actions{ display:flex !important; justify-content:flex-end !important; align-items:center !important; gap:7px !important; margin-top:11px !important; }
@@ -5880,19 +5886,23 @@ button.igdc-v10-tool{ cursor:pointer !important; }
 #igdcDonationViewerV10 .body{ white-space:pre-wrap !important; line-height:1.55 !important; color:#111827 !important; font-size:.96rem !important; }
 #igdcDonationViewerV10 .meta{ color:#64748b !important; font-size:.82rem !important; margin:0 0 12px 0 !important; }
 #igdcDonationViewerV10 .attachments{ margin-top:12px !important; padding:8px 10px !important; border:1px solid #e2e8f0 !important; border-radius:9px !important; background:#f8fafc !important; color:#334155 !important; font-size:12px !important; line-height:1.35 !important; }
+#igdcDonationViewerV10 .igdc-v11-attach-item{ display:flex !important; align-items:center !important; justify-content:space-between !important; gap:8px !important; padding:5px 0 !important; border-bottom:1px dashed #e2e8f0 !important; }
+#igdcDonationViewerV10 .igdc-v11-attach-item:last-child{ border-bottom:0 !important; }
+#igdcDonationViewerV10 .igdc-v11-attach-name{ min-width:0 !important; overflow:hidden !important; text-overflow:ellipsis !important; white-space:nowrap !important; }
+#igdcDonationViewerV10 .igdc-v11-download{ flex:0 0 auto !important; border:1px solid #bfdbfe !important; background:#eff6ff !important; color:#1d4ed8 !important; border-radius:7px !important; padding:3px 7px !important; font-size:11px !important; font-weight:700 !important; text-decoration:none !important; }
 .igdc-donation-save-status{ font-size:.78rem; color:#0f766e; margin-left:6px; white-space:nowrap; }
 @media (max-width:1024px){
   .right .topic-panel{ height:260px !important; max-height:260px !important; min-height:260px !important; }
   .igdc-v10-row{ min-height:28px !important; }
   .igdc-v10-tools{ gap:1px !important; }
   .igdc-v10-tool,.igdc-v10-act{ font-size:8.2px !important; padding:0 2px !important; height:18px !important; }
-  #igdcV10File{ width:112px !important; max-width:112px !important; }
+  #igdcV10File{ width:120px !important; max-width:120px !important; }
 }
 </style>
-<script id="igdc-donation-board-v10">
+<script id="igdc-donation-board-v11">
 (function(){
-  if(window.__IGDC_DONATION_BOARD_V10__) return;
-  window.__IGDC_DONATION_BOARD_V10__ = true;
+  if(window.__IGDC_DONATION_BOARD_V11__) return;
+  window.__IGDC_DONATION_BOARD_V11__ = true;
 
   var STORE_KEY='igdc_donation_posts_v9';
   var LEGACY_KEYS=['igdc_donation_posts_v8','igdc_donation_posts_v7','igdc_donation_posts_v6','igdc_donation_posts_v5','igdc_donation_posts'];
@@ -5968,17 +5978,50 @@ button.igdc-v10-tool{ cursor:pointer !important; }
     }
     return a;
   }
+  function readFileAsAttachment(file){
+    return new Promise(function(resolve){
+      if(!file){ resolve(null); return; }
+      var reader=new FileReader();
+      reader.onload=function(){ resolve({name:file.name||'attachment', size:file.size||0, type:file.type||'', dataUrl:String(reader.result||'')}); };
+      reader.onerror=function(){ resolve({name:file.name||'attachment', size:file.size||0, type:file.type||'', dataUrl:''}); };
+      try{ reader.readAsDataURL(file); }catch(e){ resolve({name:file.name||'attachment', size:file.size||0, type:file.type||'', dataUrl:''}); }
+    });
+  }
+  function readCurrentFileData(){
+    var f=$('#igdcV10File'); var jobs=[];
+    if(f && f.files && f.files.length){ for(var i=0;i<f.files.length;i++){ jobs.push(readFileAsAttachment(f.files[i])); } }
+    return Promise.all(jobs).then(function(arr){ return arr.filter(Boolean); });
+  }
   function attachmentLabel(arr){
     arr=Array.isArray(arr)?arr:[];
     if(!arr.length) return '첨부 파일 없음';
     return arr.map(function(x){ return (x&&x.name)?x.name:String(x||''); }).join(', ');
   }
   function updateFileNames(arr){ var s=$('#igdcV10FileNames'); if(s){ s.textContent=attachmentLabel(arr||currentFiles()); s.title=s.textContent; } }
+  function renderAttachments(el, arr){
+    if(!el) return;
+    arr=Array.isArray(arr)?arr:[];
+    el.innerHTML='';
+    if(!arr.length){ el.textContent='첨부 파일 없음'; return; }
+    var head=document.createElement('div'); head.style.fontWeight='700'; head.style.marginBottom='4px'; head.textContent='첨부 파일'; el.appendChild(head);
+    arr.forEach(function(x,idx){
+      x=x||{};
+      var item=document.createElement('div'); item.className='igdc-v11-attach-item';
+      var name=document.createElement('span'); name.className='igdc-v11-attach-name'; name.textContent=x.name||('첨부 '+(idx+1)); name.title=name.textContent;
+      item.appendChild(name);
+      if(x.dataUrl && /^data:/i.test(x.dataUrl)){
+        var a=document.createElement('a'); a.className='igdc-v11-download'; a.href=x.dataUrl; a.download=x.name||('attachment-'+(idx+1)); a.textContent='다운로드'; item.appendChild(a);
+      }else{
+        var s=document.createElement('span'); s.className='igdc-v11-download'; s.style.opacity='.55'; s.textContent='파일명'; item.appendChild(s);
+      }
+      el.appendChild(item);
+    });
+  }
 
   function makeComposer(){
     var m=$('#igdcDonationComposerV10'); if(m) return m;
     m=document.createElement('div'); m.id='igdcDonationComposerV10';
-    m.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true"><h3 class="igdc-v10-modal-title">글쓰기</h3><div class="igdc-v10-form-row"><label for="igdcV10Title">Title</label><input id="igdcV10Title" type="text" autocomplete="off" placeholder="제목을 입력하세요"></div><div class="igdc-v10-form-row"><label for="igdcV10Body">Content</label><textarea id="igdcV10Body" placeholder="본문을 입력하세요"></textarea></div><div class="igdc-v10-form-row"><label for="igdcV10File">Attachment optional</label><div class="igdc-v10-attach-row"><input id="igdcV10File" type="file" multiple><span id="igdcV10FileNames">첨부 파일 없음</span></div><div class="igdc-v10-attach-help">파일은 선택한 이름을 글에 함께 저장합니다. 실제 서버 업로드는 Storage 연결 후 활성화됩니다.</div></div><div class="igdc-v10-modal-actions"><button type="button" id="igdcV10Draft">임시저장</button><button type="button" id="igdcV10Cancel">취소</button><button type="button" class="primary" id="igdcV10Save">저장</button></div></div>';
+    m.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true"><h3 class="igdc-v10-modal-title">글쓰기</h3><div class="igdc-v10-form-row"><label for="igdcV10Title">Title</label><input id="igdcV10Title" type="text" autocomplete="off" placeholder="제목을 입력하세요"></div><div class="igdc-v10-form-row"><label for="igdcV10Body">Content</label><textarea id="igdcV10Body" placeholder="본문을 입력하세요"></textarea></div><div class="igdc-v10-form-row"><label for="igdcV10File">Attachment optional</label><div class="igdc-v10-attach-row"><input id="igdcV10File" type="file" multiple><span id="igdcV10FileNames">첨부 파일 없음</span></div><div class="igdc-v10-attach-help">선택한 파일 이름과 다운로드 데이터를 글에 함께 저장합니다. 대용량 파일은 브라우저 저장 한도에 영향을 받을 수 있습니다.</div></div><div class="igdc-v10-modal-actions"><button type="button" id="igdcV10Draft">임시저장</button><button type="button" id="igdcV10Cancel">취소</button><button type="button" class="primary" id="igdcV10Save">저장</button></div></div>';
     document.body.appendChild(m);
     m.addEventListener('click',function(e){ if(e.target===m){ e.preventDefault(); e.stopPropagation(); } },true);
     $('#igdcV10Draft',m).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); draftFromComposer(true); },true);
@@ -6009,20 +6052,21 @@ button.igdc-v10-tool{ cursor:pointer !important; }
     var d={ title:($('#igdcV10Title',m).value||'').trim(), body:($('#igdcV10Body',m).value||'').trim(), cat:activeCat(), ts:Date.now(), attachments:files };
     saveDraft(d); if(showStatus) status('임시저장됨'); return d;
   }
-  function values(){
+  function valuesAsync(){
     var m=makeComposer(); var ti=$('#igdcV10Title',m), bi=$('#igdcV10Body',m);
     var d=draft(); var title='', body='';
     if(composerVisible()){ title=(ti.value||'').trim(); body=(bi.value||'').trim(); }
     if(!title) title=(d.title||'').trim();
     if(!body) body=(d.body||'').trim();
     if(!body){ var top=$('#topPostBody'); if(top){ var tv=(top.value||'').trim(); if(tv && !/^이곳은 IGDC Global Platform/.test(tv)) body=tv; } }
-    if(!title && body) title=body.split(/\n/)[0].slice(0,42).trim();
+    if(!title && body) title=body.split(String.fromCharCode(10))[0].slice(0,42).trim();
     if(!title) title='제목 없음';
     if(!body) body='(본문 없음)';
-    var files=currentFiles();
-    if(!files.length && editingId && editingOldAttachments.length) files=editingOldAttachments.slice();
-    if(!files.length && Array.isArray(d.attachments)) files=d.attachments;
-    return {title:title, body:body, cat:activeCat(), attachments:files};
+    return readCurrentFileData().then(function(files){
+      if(!files.length && editingId && editingOldAttachments.length) files=editingOldAttachments.slice();
+      if(!files.length && Array.isArray(d.attachments)) files=d.attachments;
+      return {title:title, body:body, cat:activeCat(), attachments:files};
+    });
   }
 
   function makeViewer(){
@@ -6037,20 +6081,22 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   }
   function hideViewer(){ var v=$('#igdcDonationViewerV10'); if(v) v.style.display='none'; }
   function findPost(pid){ return posts().filter(function(p){return p.id===pid;})[0] || null; }
-  function viewPost(pid){ var arr=posts(), p=null; arr.forEach(function(x){ if(x.id===pid){ x.views=(x.views||0)+1; p=x; } }); if(!p) return; savePosts(arr); renderAll(); var v=makeViewer(); v.dataset.postId=pid; $('.igdc-v10-modal-title',v).textContent=p.title||'제목 없음'; $('.meta',v).textContent=(p.meta||'')+' · 👁 '+(p.views||0)+' · 👍 '+(p.recommends||0)+' · ❤️ '+(p.likes||0); $('.body',v).textContent=p.body||'(본문 없음)'; $('.attachments',v).textContent='첨부: '+attachmentLabel(p.attachments); v.style.display='flex'; }
+  function viewPost(pid){ var arr=posts(), p=null; arr.forEach(function(x){ if(x.id===pid){ x.views=(x.views||0)+1; p=x; } }); if(!p) return; savePosts(arr); renderAll(); var v=makeViewer(); v.dataset.postId=pid; $('.igdc-v10-modal-title',v).textContent=p.title||'제목 없음'; $('.meta',v).textContent=(p.meta||'')+' · 👁 '+(p.views||0)+' · 👍 '+(p.recommends||0)+' · ❤️ '+(p.likes||0); $('.body',v).textContent=p.body||'(본문 없음)'; renderAttachments($('.attachments',v), p.attachments); v.style.display='flex'; }
   function editPost(pid){ var p=findPost(pid); if(p) openComposer(p); }
   function removePost(pid){ savePosts(posts().filter(function(p){return p.id!==pid;})); renderAll(); status('삭제됨'); }
-  function bumpOnce(pid,key){
-    var cid=clientId(); var changed=false; var arr=posts();
+  function toggleVote(pid,key){
+    var cid=clientId(); var changed=false; var added=false; var arr=posts();
     arr.forEach(function(p){
       if(p.id!==pid) return;
       p.votes=p.votes||{};
       var arrKey=key==='recommends'?'recommends':'likes';
       if(!Array.isArray(p.votes[arrKey])) p.votes[arrKey]=[];
-      if(p.votes[arrKey].indexOf(cid)!==-1){ status('이미 반영됨'); return; }
-      p.votes[arrKey].push(cid); p[key]=(p[key]||0)+1; changed=true;
+      var idx=p.votes[arrKey].indexOf(cid);
+      if(idx!==-1){ p.votes[arrKey].splice(idx,1); p[key]=Math.max(0,(p[key]||0)-1); added=false; }
+      else{ p.votes[arrKey].push(cid); p[key]=(p[key]||0)+1; added=true; }
+      changed=true;
     });
-    if(changed){ savePosts(arr); renderAll(); status('반영됨'); }
+    if(changed){ savePosts(arr); renderAll(); status(added?'반영됨':'취소됨'); }
   }
 
   function makeRow(p){
@@ -6075,14 +6121,22 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   }
   function saveFinal(ev){
     if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
-    var v=values(); var arr=posts(); var now=Date.now();
-    if(editingId){
-      var done=false;
-      arr=arr.map(function(p){ if(p.id===editingId){ done=true; p.cat=normalizeCat(v.cat); p.title=v.title; p.body=v.body; p.meta=nowText(); p.ts=now; p.attachments=v.attachments; } return p; });
-      if(!done){ editingId=null; }
-    }
-    if(!editingId){ arr.unshift({id:makeId(),cat:normalizeCat(v.cat),title:v.title,body:v.body,meta:nowText(),ts:now,views:0,recommends:0,likes:0,attachments:v.attachments,votes:{recommends:[],likes:[]}}); }
-    savePosts(arr); renderAll(); status(editingId?'수정됨':'저장됨'); clearComposer(); closeComposer(); return false;
+    return valuesAsync().then(function(v){
+      var arr=posts(); var now=Date.now(); var wasEditing=!!editingId;
+      if(editingId){
+        var done=false;
+        arr=arr.map(function(p){ if(p.id===editingId){ done=true; p.cat=normalizeCat(v.cat); p.title=v.title; p.body=v.body; p.meta=nowText(); p.ts=now; p.attachments=v.attachments; } return p; });
+        if(!done){ editingId=null; wasEditing=false; }
+      }
+      if(!editingId){ arr.unshift({id:makeId(),cat:normalizeCat(v.cat),title:v.title,body:v.body,meta:nowText(),ts:now,views:0,recommends:0,likes:0,attachments:v.attachments,votes:{recommends:[],likes:[]}}); }
+      if(!savePosts(arr)){
+        arr=arr.map(function(p){ p.attachments=(p.attachments||[]).map(function(a){ return {name:a.name||'attachment',size:a.size||0,type:a.type||''}; }); return p; });
+        savePosts(arr); status('파일 용량이 커서 파일명만 저장됨');
+      }else{
+        status(wasEditing?'수정됨':'저장됨');
+      }
+      renderAll(); clearComposer(); closeComposer(); return false;
+    });
   }
 
   function normalizeTopButtons(){
@@ -6105,7 +6159,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
     if(row){
       var pid=row.dataset.postId; var a=t.closest('[data-action]'); var act=a && a.dataset ? a.dataset.action : '';
       e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation)e.stopImmediatePropagation();
-      if(act==='view') viewPost(pid); else if(act==='edit') editPost(pid); else if(act==='del') removePost(pid); else if(act==='reco') bumpOnce(pid,'recommends'); else if(act==='like') bumpOnce(pid,'likes'); else viewPost(pid);
+      if(act==='view') viewPost(pid); else if(act==='edit') editPost(pid); else if(act==='del') removePost(pid); else if(act==='reco') toggleVote(pid,'recommends'); else if(act==='like') toggleVote(pid,'likes'); else viewPost(pid);
       return false;
     }
   },true);
@@ -6114,8 +6168,8 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   window.addEventListener('load',function(){ setTimeout(install,80); setTimeout(renderAll,500); });
   setTimeout(install,250); setTimeout(renderAll,700); setTimeout(renderAll,1500); setTimeout(renderAll,3000);
   setTimeout(function(){ install(); renderAll(); },5000);
-  window.igdcDonationBoardV10Render=renderAll;
-  window.igdcDonationBoardV10Save=saveFinal;
+  window.igdcDonationBoardV11Render=renderAll;
+  window.igdcDonationBoardV11Save=saveFinal;
 })();
 </script>
 </body>
