@@ -5392,10 +5392,10 @@ document.addEventListener("DOMContentLoaded",function(){
 
 
 
-<style id="igdc-donation-board-v9-style">
-/* IGDC Donation V9: stable user board list, compact action tools, desktop right width -15% from V8 */
+<style id="igdc-donation-board-v10-style">
+/* IGDC Donation V10: stable board list, attachment names, one-vote-per-client, right panel -15% from V9 */
 @media (min-width:1025px){
-  :root{ --igdc-donation-right-col:391px !important; --right-col:391px !important; --right-max:391px !important; }
+  :root{ --igdc-donation-right-col:333px !important; --right-col:333px !important; --right-max:333px !important; }
   html,body{ overflow-x:hidden !important; }
   body > .container,
   body > div.container,
@@ -5431,20 +5431,23 @@ document.addEventListener("DOMContentLoaded",function(){
   body > .container > .main .feed-wrapper{ width:100% !important; max-width:none !important; }
 }
 
-/* original composer is disabled; V9 uses an isolated composer to avoid old event conflicts */
+/* old composer/file row disabled: V10 owns writing + attachments in one stable modal */
 #composerModal{ display:none !important; pointer-events:none !important; }
+.compose-wrap .row-bottom,
+.compose-wrap .field-file,
+.compose-wrap .field-image{ display:none !important; }
 
 .right .topic-panel{
-  height:390px !important;
-  max-height:390px !important;
-  min-height:390px !important;
+  height:332px !important;
+  max-height:332px !important;
+  min-height:332px !important;
   overflow:hidden !important;
   display:flex !important;
   flex-direction:column !important;
-  padding:9px !important;
+  padding:8px !important;
   box-sizing:border-box !important;
 }
-.right .topic-panel h3{ flex:0 0 auto !important; margin:0 0 7px 0 !important; font-size:.98rem !important; line-height:1.2 !important; }
+.right .topic-panel h3{ flex:0 0 auto !important; margin:0 0 6px 0 !important; font-size:.96rem !important; line-height:1.18 !important; }
 .right .topic-panel .list,
 .mobile-news-clone .topic-panel .list{
   flex:1 1 auto !important;
@@ -5452,20 +5455,21 @@ document.addEventListener("DOMContentLoaded",function(){
   overflow-y:auto !important;
   overflow-x:hidden !important;
   display:block !important;
-  padding:0 3px 0 0 !important;
+  padding:0 2px 0 0 !important;
   scroll-behavior:smooth !important;
 }
 .right .topic-panel .list::-webkit-scrollbar,
 .mobile-news-clone .topic-panel .list::-webkit-scrollbar{ width:7px; }
 .right .topic-panel .list::-webkit-scrollbar-thumb,
 .mobile-news-clone .topic-panel .list::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:999px; }
-.right .topic-panel .list > *:not(.igdc-v9-row):not(.igdc-v9-empty),
-.mobile-news-clone .topic-panel .list > *:not(.igdc-v9-row):not(.igdc-v9-empty){ display:none !important; }
+.right .topic-panel .list > *:not(.igdc-v10-row):not(.igdc-v10-empty),
+.mobile-news-clone .topic-panel .list > *:not(.igdc-v10-row):not(.igdc-v10-empty){ display:none !important; }
 
-.igdc-v9-row{
-  display:flex !important;
+.igdc-v10-row{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto !important;
   align-items:center !important;
-  gap:4px !important;
+  column-gap:4px !important;
   width:100% !important;
   box-sizing:border-box !important;
   border:1px solid rgba(226,232,240,.96) !important;
@@ -5474,12 +5478,11 @@ document.addEventListener("DOMContentLoaded",function(){
   padding:4px 4px 4px 6px !important;
   margin:0 0 4px 0 !important;
   min-height:27px !important;
-  max-height:32px !important;
+  max-height:33px !important;
   box-shadow:none !important;
   writing-mode:horizontal-tb !important;
 }
-.igdc-v9-title{
-  flex:1 1 auto !important;
+.igdc-v10-title{
   min-width:0 !important;
   display:block !important;
   border:0 !important;
@@ -5497,44 +5500,44 @@ document.addEventListener("DOMContentLoaded",function(){
   cursor:pointer !important;
   writing-mode:horizontal-tb !important;
 }
-.igdc-v9-title:hover{ text-decoration:underline !important; }
-.igdc-v9-tools{
-  flex:0 0 auto !important;
+.igdc-v10-title:hover{ text-decoration:underline !important; }
+.igdc-v10-tools{
   display:inline-flex !important;
   align-items:center !important;
   justify-content:flex-end !important;
-  gap:2px !important;
+  gap:1px !important;
   white-space:nowrap !important;
   writing-mode:horizontal-tb !important;
 }
-.igdc-v9-tool,
-.igdc-v9-act{
+.igdc-v10-tool,
+.igdc-v10-act{
   display:inline-flex !important;
   align-items:center !important;
   justify-content:center !important;
-  height:18px !important;
-  min-width:18px !important;
+  height:17px !important;
+  min-width:16px !important;
   max-width:none !important;
-  line-height:16px !important;
-  padding:0 3px !important;
+  line-height:15px !important;
+  padding:0 2px !important;
   margin:0 !important;
-  border-radius:5px !important;
-  font-size:9px !important;
+  border-radius:4px !important;
+  font-size:8.5px !important;
   font-weight:700 !important;
   white-space:nowrap !important;
   writing-mode:horizontal-tb !important;
   vertical-align:middle !important;
   box-sizing:border-box !important;
 }
-.igdc-v9-tool{ border:0 !important; background:transparent !important; color:#475569 !important; }
-button.igdc-v9-tool{ cursor:pointer !important; }
-.igdc-v9-act{ border:1px solid #dbe3ee !important; background:#f8fafc !important; color:#334155 !important; cursor:pointer !important; }
-.igdc-v9-act.edit{ min-width:25px !important; background:#eef6ff !important; color:#2563eb !important; border-color:#bfdbfe !important; }
-.igdc-v9-act.del{ min-width:23px !important; background:#fff1f2 !important; color:#dc2626 !important; border-color:#fecdd3 !important; }
-.igdc-v9-empty{ color:#94a3b8 !important; font-size:12px !important; padding:7px 2px !important; }
+.igdc-v10-tool{ border:0 !important; background:transparent !important; color:#475569 !important; }
+button.igdc-v10-tool{ cursor:pointer !important; }
+.igdc-v10-tool.voted{ color:#db2777 !important; background:#fdf2f8 !important; }
+.igdc-v10-act{ border:1px solid #dbe3ee !important; background:#f8fafc !important; color:#334155 !important; cursor:pointer !important; }
+.igdc-v10-act.edit{ min-width:22px !important; background:#eef6ff !important; color:#2563eb !important; border-color:#bfdbfe !important; }
+.igdc-v10-act.del{ min-width:18px !important; background:#fff1f2 !important; color:#dc2626 !important; border-color:#fecdd3 !important; }
+.igdc-v10-empty{ color:#94a3b8 !important; font-size:12px !important; padding:7px 2px !important; }
 
-#igdcDonationComposerV9,
-#igdcDonationViewerV9{
+#igdcDonationComposerV10,
+#igdcDonationViewerV10{
   position:fixed !important;
   inset:0 !important;
   display:none;
@@ -5546,7 +5549,7 @@ button.igdc-v9-tool{ cursor:pointer !important; }
   box-sizing:border-box !important;
   pointer-events:auto !important;
 }
-.igdc-v9-modal-box{
+.igdc-v10-modal-box{
   width:min(92vw,720px) !important;
   max-height:86vh !important;
   overflow:auto !important;
@@ -5557,42 +5560,55 @@ button.igdc-v9-tool{ cursor:pointer !important; }
   padding:16px !important;
   box-sizing:border-box !important;
 }
-.igdc-v9-modal-title{ margin:0 0 10px 0 !important; color:#0b4a77 !important; font-size:1.05rem !important; }
-.igdc-v9-form-row{ margin:0 0 10px 0 !important; }
-.igdc-v9-form-row label{ display:block !important; font-size:12px !important; font-weight:700 !important; color:#475569 !important; margin:0 0 4px 0 !important; }
-#igdcV9Title{ width:100% !important; height:42px !important; min-height:42px !important; padding:10px 12px !important; box-sizing:border-box !important; border:1px solid #cbd5e1 !important; border-radius:9px !important; font-size:15px !important; line-height:1.35 !important; background:#fff !important; color:#111827 !important; pointer-events:auto !important; }
-#igdcV9Body{ width:100% !important; min-height:220px !important; padding:12px !important; box-sizing:border-box !important; border:1px solid #cbd5e1 !important; border-radius:9px !important; font-size:15px !important; line-height:1.45 !important; background:#fff !important; color:#111827 !important; pointer-events:auto !important; resize:vertical !important; }
-#igdcV9File{ width:100% !important; font-size:12px !important; }
-.igdc-v9-modal-actions{ display:flex !important; justify-content:flex-end !important; align-items:center !important; gap:7px !important; margin-top:11px !important; }
-.igdc-v9-modal-actions button{ border:1px solid #cbd5e1 !important; border-radius:8px !important; background:#fff !important; padding:7px 11px !important; cursor:pointer !important; font-size:13px !important; line-height:1.2 !important; }
-.igdc-v9-modal-actions .primary{ background:#ec4899 !important; border-color:#db2777 !important; color:#fff !important; }
-.igdc-v9-modal-actions .danger{ background:#fff1f2 !important; border-color:#fecdd3 !important; color:#dc2626 !important; }
-#igdcDonationViewerV9 .body{ white-space:pre-wrap !important; line-height:1.55 !important; color:#111827 !important; font-size:.96rem !important; }
-#igdcDonationViewerV9 .meta{ color:#64748b !important; font-size:.82rem !important; margin:0 0 12px 0 !important; }
+.igdc-v10-modal-title{ margin:0 0 10px 0 !important; color:#0b4a77 !important; font-size:1.05rem !important; }
+.igdc-v10-form-row{ margin:0 0 10px 0 !important; }
+.igdc-v10-form-row label{ display:block !important; font-size:12px !important; font-weight:700 !important; color:#475569 !important; margin:0 0 4px 0 !important; }
+#igdcV10Title{ width:100% !important; height:42px !important; min-height:42px !important; padding:10px 12px !important; box-sizing:border-box !important; border:1px solid #cbd5e1 !important; border-radius:9px !important; font-size:15px !important; line-height:1.35 !important; background:#fff !important; color:#111827 !important; pointer-events:auto !important; }
+#igdcV10Body{ width:100% !important; min-height:220px !important; padding:12px !important; box-sizing:border-box !important; border:1px solid #cbd5e1 !important; border-radius:9px !important; font-size:15px !important; line-height:1.45 !important; background:#fff !important; color:#111827 !important; pointer-events:auto !important; resize:vertical !important; }
+.igdc-v10-attach-row{ display:flex !important; align-items:center !important; gap:8px !important; flex-wrap:nowrap !important; }
+#igdcV10File{ flex:0 0 auto !important; width:118px !important; max-width:118px !important; font-size:12.7px !important; line-height:1.2 !important; }
+#igdcV10FileNames{ flex:1 1 auto !important; min-width:0 !important; min-height:30px !important; display:flex !important; align-items:center !important; border:1px solid #cbd5e1 !important; border-radius:8px !important; background:#fff !important; color:#334155 !important; padding:5px 8px !important; font-size:12px !important; line-height:1.25 !important; overflow:hidden !important; white-space:nowrap !important; text-overflow:ellipsis !important; }
+.igdc-v10-attach-help{ font-size:11px !important; color:#64748b !important; margin-top:4px !important; }
+.igdc-v10-modal-actions{ display:flex !important; justify-content:flex-end !important; align-items:center !important; gap:7px !important; margin-top:11px !important; }
+.igdc-v10-modal-actions button{ border:1px solid #cbd5e1 !important; border-radius:8px !important; background:#fff !important; padding:7px 11px !important; cursor:pointer !important; font-size:13px !important; line-height:1.2 !important; }
+.igdc-v10-modal-actions .primary{ background:#ec4899 !important; border-color:#db2777 !important; color:#fff !important; }
+.igdc-v10-modal-actions .danger{ background:#fff1f2 !important; border-color:#fecdd3 !important; color:#dc2626 !important; }
+#igdcDonationViewerV10 .body{ white-space:pre-wrap !important; line-height:1.55 !important; color:#111827 !important; font-size:.96rem !important; }
+#igdcDonationViewerV10 .meta{ color:#64748b !important; font-size:.82rem !important; margin:0 0 12px 0 !important; }
+#igdcDonationViewerV10 .attachments{ margin-top:12px !important; padding:8px 10px !important; border:1px solid #e2e8f0 !important; border-radius:9px !important; background:#f8fafc !important; color:#334155 !important; font-size:12px !important; line-height:1.35 !important; }
 .igdc-donation-save-status{ font-size:.78rem; color:#0f766e; margin-left:6px; white-space:nowrap; }
 @media (max-width:1024px){
   .right .topic-panel{ height:260px !important; max-height:260px !important; min-height:260px !important; }
-  .igdc-v9-row{ min-height:28px !important; }
-  .igdc-v9-tools{ gap:2px !important; }
-  .igdc-v9-tool,.igdc-v9-act{ font-size:8.5px !important; padding:0 2px !important; height:18px !important; }
+  .igdc-v10-row{ min-height:28px !important; }
+  .igdc-v10-tools{ gap:1px !important; }
+  .igdc-v10-tool,.igdc-v10-act{ font-size:8.2px !important; padding:0 2px !important; height:18px !important; }
+  #igdcV10File{ width:112px !important; max-width:112px !important; }
 }
 </style>
-<script id="igdc-donation-board-v9">
+<script id="igdc-donation-board-v10">
 (function(){
-  if(window.__IGDC_DONATION_BOARD_V9__) return;
-  window.__IGDC_DONATION_BOARD_V9__ = true;
+  if(window.__IGDC_DONATION_BOARD_V10__) return;
+  window.__IGDC_DONATION_BOARD_V10__ = true;
 
   var STORE_KEY='igdc_donation_posts_v9';
   var LEGACY_KEYS=['igdc_donation_posts_v8','igdc_donation_posts_v7','igdc_donation_posts_v6','igdc_donation_posts_v5','igdc_donation_posts'];
-  var DRAFT_KEY='igdc_donation_draft_v9';
+  var DRAFT_KEY='igdc_donation_draft_v10';
+  var CLIENT_KEY='igdc_donation_client_id_v10';
   var editingId=null;
+  var editingOldAttachments=[];
   var renderBusy=false;
   var installTimer=null;
   var $=function(s,r){ return (r||document).querySelector(s); };
   var $$=function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
   function esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
-  function id(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }
+  function makeId(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }
   function nowText(){ try{return new Date().toLocaleString();}catch(e){return '';} }
+  function clientId(){
+    var v='';
+    try{ v=localStorage.getItem(CLIENT_KEY)||''; }catch(e){}
+    if(!v){ v='client_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10); try{localStorage.setItem(CLIENT_KEY,v);}catch(e){} }
+    return v;
+  }
   function normalizeCat(c){
     c=String(c||'etc').toLowerCase().trim();
     var map={global:'iesf', wam:'iesf', iesf:'iesf', ngo:'ngo', mission:'mission', church:'mission', service:'service', volunteer:'service', relief:'relief', aid:'relief', edu:'edu', education:'edu', env:'env', environment:'env', etc:'etc', other:'etc', others:'etc'};
@@ -5600,65 +5616,97 @@ button.igdc-v9-tool{ cursor:pointer !important; }
   }
   function activeCat(){ var s=$('#postCategory'); return normalizeCat(s&&s.value); }
   function readJSON(k, fallback){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):fallback; }catch(e){ return fallback; } }
-  function writeJSON(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
-  function canonicalPost(p){
-    p=p||{};
-    return { id:p.id||id(), cat:normalizeCat(p.cat||p.category), title:String(p.title||p.name||'제목 없음'), body:String(p.body||p.content||p.text||''), meta:p.meta||p.date||p.time||nowText(), ts:Number(p.ts||p.createdAt||Date.now()), views:Number(p.views||0), recommends:Number(p.recommends||p.reco||0), likes:Number(p.likes||0), attachments:p.attachments||[] };
-  }
+  function writeJSON(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
   function posts(){
     var arr=readJSON(STORE_KEY,null);
-    if(Array.isArray(arr)) return arr.map(canonicalPost);
-    for(var i=0;i<LEGACY_KEYS.length;i++){
-      var old=readJSON(LEGACY_KEYS[i],null);
-      if(Array.isArray(old) && old.length){ arr=old.map(canonicalPost); savePosts(arr); return arr; }
+    if(!Array.isArray(arr)){
+      arr=[];
+      for(var i=0;i<LEGACY_KEYS.length;i++){ var old=readJSON(LEGACY_KEYS[i],null); if(Array.isArray(old)&&old.length){ arr=old; break; } }
+      savePosts(arr);
     }
-    return [];
+    return arr.map(normalizePost);
   }
-  function savePosts(arr){ writeJSON(STORE_KEY,(arr||[]).map(canonicalPost).slice(0,1000)); }
-  function draft(){ return readJSON(DRAFT_KEY,{title:'',body:'',cat:activeCat(),attachments:[]}); }
-  function saveDraft(d){ writeJSON(DRAFT_KEY,d||{title:'',body:'',cat:activeCat(),attachments:[]}); }
-  function clearDraft(){ try{ localStorage.removeItem(DRAFT_KEY); }catch(e){} }
-  function setPreview(t){ var p=$('#titlePreview .tp-text') || $('#titlePreview'); if(p) p.textContent=(t&&String(t).trim())?String(t).trim():'제목 미입력'; }
-  function status(msg){
-    var s=$('#igdcDonationV9Status');
-    if(!s){ s=document.createElement('span'); s.id='igdcDonationV9Status'; s.className='igdc-donation-save-status'; var b=$('#btnSubmitPost'); if(b&&b.parentNode) b.parentNode.insertBefore(s,b.nextSibling); }
-    s.textContent=msg||''; if(msg) setTimeout(function(){ if(s.textContent===msg) s.textContent=''; },1800);
+  function normalizePost(p){
+    p=p||{}; p.id=p.id||makeId(); p.cat=normalizeCat(p.cat||p.category); p.title=p.title||'제목 없음'; p.body=p.body||''; p.meta=p.meta||p.date||nowText(); p.ts=p.ts||Date.now();
+    p.views=Number(p.views||0); p.recommends=Number(p.recommends||0); p.likes=Number(p.likes||0);
+    if(!Array.isArray(p.attachments)) p.attachments=[];
+    if(!p.votes) p.votes={};
+    if(!Array.isArray(p.votes.recommends)) p.votes.recommends=[];
+    if(!Array.isArray(p.votes.likes)) p.votes.likes=[];
+    return p;
   }
-  function listNodes(cat){ cat=normalizeCat(cat); return $$('.topic-panel .list[data-cat="'+cat+'"]'); }
+  function savePosts(arr){ return writeJSON(STORE_KEY,(arr||[]).map(normalizePost)); }
+  function draft(){ return readJSON(DRAFT_KEY,{}); }
+  function saveDraft(d){ writeJSON(DRAFT_KEY,d||{}); }
+  function clearDraft(){ try{localStorage.removeItem(DRAFT_KEY);}catch(e){} }
+  function setPreview(t){ var p=$('#composePreviewTitle'); if(p) p.textContent=t||''; }
+  function status(t){ var s=$('#igdcDonationStatusV10'); if(!s){ s=document.createElement('span'); s.id='igdcDonationStatusV10'; s.className='igdc-donation-save-status'; var b=$('#btnSubmitPost')||$('#btnOpenComposer'); if(b&&b.parentNode) b.parentNode.appendChild(s); } s.textContent=t||''; if(t) setTimeout(function(){ if(s.textContent===t) s.textContent=''; },2200); }
+  function panelCat(panel){
+    var txt=((panel.querySelector('h3')||{}).textContent||'').toLowerCase();
+    if(/ngo/.test(txt)) return 'ngo';
+    if(/mission|church|선교|교회/.test(txt)) return 'mission';
+    if(/service|volunteer|봉사/.test(txt)) return 'service';
+    if(/relief|aid|구호/.test(txt)) return 'relief';
+    if(/edu|교육/.test(txt)) return 'edu';
+    if(/env|환경/.test(txt)) return 'env';
+    if(/etc|기타/.test(txt)) return 'etc';
+    return 'iesf';
+  }
+  function listNodes(cat){
+    cat=normalizeCat(cat); var out=[];
+    $$('.topic-panel').forEach(function(p){ var list=p.querySelector('.list'); if(list && panelCat(p)===cat) out.push(list); });
+    return out;
+  }
+  function currentFiles(){
+    var f=$('#igdcV10File'); var a=[];
+    if(f && f.files && f.files.length){
+      for(var i=0;i<f.files.length;i++){ var file=f.files[i]; a.push({name:file.name||('file'+(i+1)), size:file.size||0, type:file.type||''}); }
+    }
+    return a;
+  }
+  function attachmentLabel(arr){
+    arr=Array.isArray(arr)?arr:[];
+    if(!arr.length) return '첨부 파일 없음';
+    return arr.map(function(x){ return (x&&x.name)?x.name:String(x||''); }).join(', ');
+  }
+  function updateFileNames(arr){ var s=$('#igdcV10FileNames'); if(s){ s.textContent=attachmentLabel(arr||currentFiles()); s.title=s.textContent; } }
 
   function makeComposer(){
-    var m=$('#igdcDonationComposerV9'); if(m) return m;
-    m=document.createElement('div'); m.id='igdcDonationComposerV9';
-    m.innerHTML='<div class="igdc-v9-modal-box" role="dialog" aria-modal="true"><h3 class="igdc-v9-modal-title">글쓰기</h3><div class="igdc-v9-form-row"><label for="igdcV9Title">Title</label><input id="igdcV9Title" type="text" autocomplete="off" placeholder="제목을 입력하세요"></div><div class="igdc-v9-form-row"><label for="igdcV9Body">Content</label><textarea id="igdcV9Body" placeholder="본문을 입력하세요"></textarea></div><div class="igdc-v9-form-row"><label for="igdcV9File">Attachment optional</label><input id="igdcV9File" type="file"></div><div class="igdc-v9-modal-actions"><button type="button" id="igdcV9Draft">임시저장</button><button type="button" id="igdcV9Cancel">취소</button><button type="button" class="primary" id="igdcV9Save">저장</button></div></div>';
+    var m=$('#igdcDonationComposerV10'); if(m) return m;
+    m=document.createElement('div'); m.id='igdcDonationComposerV10';
+    m.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true"><h3 class="igdc-v10-modal-title">글쓰기</h3><div class="igdc-v10-form-row"><label for="igdcV10Title">Title</label><input id="igdcV10Title" type="text" autocomplete="off" placeholder="제목을 입력하세요"></div><div class="igdc-v10-form-row"><label for="igdcV10Body">Content</label><textarea id="igdcV10Body" placeholder="본문을 입력하세요"></textarea></div><div class="igdc-v10-form-row"><label for="igdcV10File">Attachment optional</label><div class="igdc-v10-attach-row"><input id="igdcV10File" type="file" multiple><span id="igdcV10FileNames">첨부 파일 없음</span></div><div class="igdc-v10-attach-help">파일은 선택한 이름을 글에 함께 저장합니다. 실제 서버 업로드는 Storage 연결 후 활성화됩니다.</div></div><div class="igdc-v10-modal-actions"><button type="button" id="igdcV10Draft">임시저장</button><button type="button" id="igdcV10Cancel">취소</button><button type="button" class="primary" id="igdcV10Save">저장</button></div></div>';
     document.body.appendChild(m);
     m.addEventListener('click',function(e){ if(e.target===m){ e.preventDefault(); e.stopPropagation(); } },true);
-    $('#igdcV9Draft',m).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); draftFromComposer(true); },true);
-    $('#igdcV9Cancel',m).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); clearComposer(); closeComposer(); status('취소됨'); },true);
-    $('#igdcV9Save',m).addEventListener('click',function(e){ saveFinal(e); },true);
-    $('#igdcV9Title',m).addEventListener('input',function(){ setPreview(this.value); draftFromComposer(false); },true);
-    $('#igdcV9Body',m).addEventListener('input',function(){ draftFromComposer(false); },true);
+    $('#igdcV10Draft',m).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); draftFromComposer(true); },true);
+    $('#igdcV10Cancel',m).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); clearComposer(); closeComposer(); status('취소됨'); },true);
+    $('#igdcV10Save',m).addEventListener('click',function(e){ saveFinal(e); },true);
+    $('#igdcV10Title',m).addEventListener('input',function(){ setPreview(this.value); draftFromComposer(false); },true);
+    $('#igdcV10Body',m).addEventListener('input',function(){ draftFromComposer(false); },true);
+    $('#igdcV10File',m).addEventListener('change',function(){ updateFileNames(currentFiles()); draftFromComposer(false); },true);
     return m;
   }
-  function composerVisible(){ var m=$('#igdcDonationComposerV9'); return !!(m && m.style.display==='flex'); }
+  function composerVisible(){ var m=$('#igdcDonationComposerV10'); return !!(m && m.style.display==='flex'); }
   function openComposer(post){
-    var m=makeComposer(); editingId=post ? post.id : null;
+    var m=makeComposer(); editingId=post ? post.id : null; editingOldAttachments=post && Array.isArray(post.attachments) ? post.attachments.slice() : [];
     var d=draft();
-    $('#igdcV9Title',m).value=post ? (post.title||'') : (d.title||'');
-    $('#igdcV9Body',m).value=post ? (post.body||'') : (d.body||'');
-    var f=$('#igdcV9File',m); if(f) f.value='';
-    setPreview($('#igdcV9Title',m).value);
+    $('#igdcV10Title',m).value=post ? (post.title||'') : (d.title||'');
+    $('#igdcV10Body',m).value=post ? (post.body||'') : (d.body||'');
+    var f=$('#igdcV10File',m); if(f) f.value='';
+    updateFileNames(post ? editingOldAttachments : (Array.isArray(d.attachments)?d.attachments:[]));
+    setPreview($('#igdcV10Title',m).value);
     m.style.display='flex';
-    setTimeout(function(){ var ti=$('#igdcV9Title',m); if(ti) ti.focus(); },30);
+    setTimeout(function(){ var ti=$('#igdcV10Title',m); if(ti) ti.focus(); },30);
   }
-  function closeComposer(){ var m=$('#igdcDonationComposerV9'); if(m) m.style.display='none'; }
-  function clearComposer(){ editingId=null; var m=makeComposer(); $('#igdcV9Title',m).value=''; $('#igdcV9Body',m).value=''; var f=$('#igdcV9File',m); if(f) f.value=''; setPreview(''); clearDraft(); }
+  function closeComposer(){ var m=$('#igdcDonationComposerV10'); if(m) m.style.display='none'; }
+  function clearComposer(){ editingId=null; editingOldAttachments=[]; var m=makeComposer(); $('#igdcV10Title',m).value=''; $('#igdcV10Body',m).value=''; var f=$('#igdcV10File',m); if(f) f.value=''; updateFileNames([]); setPreview(''); clearDraft(); }
   function draftFromComposer(showStatus){
     var m=makeComposer();
-    var d={ title:($('#igdcV9Title',m).value||'').trim(), body:($('#igdcV9Body',m).value||'').trim(), cat:activeCat(), ts:Date.now(), attachments:[] };
+    var files=currentFiles(); if(!files.length && editingOldAttachments.length) files=editingOldAttachments.slice();
+    var d={ title:($('#igdcV10Title',m).value||'').trim(), body:($('#igdcV10Body',m).value||'').trim(), cat:activeCat(), ts:Date.now(), attachments:files };
     saveDraft(d); if(showStatus) status('임시저장됨'); return d;
   }
   function values(){
-    var m=makeComposer(); var ti=$('#igdcV9Title',m), bi=$('#igdcV9Body',m);
+    var m=makeComposer(); var ti=$('#igdcV10Title',m), bi=$('#igdcV10Body',m);
     var d=draft(); var title='', body='';
     if(composerVisible()){ title=(ti.value||'').trim(); body=(bi.value||'').trim(); }
     if(!title) title=(d.title||'').trim();
@@ -5667,46 +5715,58 @@ button.igdc-v9-tool{ cursor:pointer !important; }
     if(!title && body) title=body.split(/\n/)[0].slice(0,42).trim();
     if(!title) title='제목 없음';
     if(!body) body='(본문 없음)';
-    return {title:title, body:body, cat:activeCat(), attachments:fileNames()};
-  }
-  function fileNames(){
-    var names=[]; var f=$('#igdcV9File');
-    if(f && f.files && f.files.length){ for(var i=0;i<f.files.length;i++) names.push(f.files[i].name); }
-    return names;
+    var files=currentFiles();
+    if(!files.length && editingId && editingOldAttachments.length) files=editingOldAttachments.slice();
+    if(!files.length && Array.isArray(d.attachments)) files=d.attachments;
+    return {title:title, body:body, cat:activeCat(), attachments:files};
   }
 
   function makeViewer(){
-    var v=$('#igdcDonationViewerV9'); if(v) return v;
-    v=document.createElement('div'); v.id='igdcDonationViewerV9';
-    v.innerHTML='<div class="igdc-v9-modal-box" role="dialog" aria-modal="true"><h3 class="igdc-v9-modal-title"></h3><div class="meta"></div><div class="body"></div><div class="igdc-v9-modal-actions"><button type="button" class="edit">Edit</button><button type="button" class="danger del">Del</button><button type="button" class="close">닫기</button></div></div>';
+    var v=$('#igdcDonationViewerV10'); if(v) return v;
+    v=document.createElement('div'); v.id='igdcDonationViewerV10';
+    v.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true"><h3 class="igdc-v10-modal-title"></h3><div class="meta"></div><div class="body"></div><div class="attachments"></div><div class="igdc-v10-modal-actions"><button type="button" class="edit">Edit</button><button type="button" class="danger del">Del</button><button type="button" class="close">닫기</button></div></div>';
     document.body.appendChild(v);
-    v.addEventListener('click',function(e){ if(e.target===v || e.target.classList.contains('close')){ e.preventDefault(); e.stopPropagation(); hideViewer(); } },true);
+    v.addEventListener('click',function(e){ if(e.target===v || (e.target.classList && e.target.classList.contains('close'))){ e.preventDefault(); e.stopPropagation(); hideViewer(); } },true);
     $('.edit',v).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); var p=findPost(v.dataset.postId); hideViewer(); if(p) openComposer(p); },true);
     $('.del',v).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); var pid=v.dataset.postId; hideViewer(); removePost(pid); },true);
     return v;
   }
-  function hideViewer(){ var v=$('#igdcDonationViewerV9'); if(v) v.style.display='none'; }
+  function hideViewer(){ var v=$('#igdcDonationViewerV10'); if(v) v.style.display='none'; }
   function findPost(pid){ return posts().filter(function(p){return p.id===pid;})[0] || null; }
-  function viewPost(pid){ var arr=posts(), p=null; arr.forEach(function(x){ if(x.id===pid){ x.views=(x.views||0)+1; p=x; } }); if(!p) return; savePosts(arr); renderAll(); var v=makeViewer(); v.dataset.postId=pid; $('.igdc-v9-modal-title',v).textContent=p.title||'제목 없음'; $('.meta',v).textContent=(p.meta||'')+' · 👁 '+(p.views||0)+' · 👍 '+(p.recommends||0)+' · ❤️ '+(p.likes||0); $('.body',v).textContent=p.body||'(본문 없음)'; v.style.display='flex'; }
+  function viewPost(pid){ var arr=posts(), p=null; arr.forEach(function(x){ if(x.id===pid){ x.views=(x.views||0)+1; p=x; } }); if(!p) return; savePosts(arr); renderAll(); var v=makeViewer(); v.dataset.postId=pid; $('.igdc-v10-modal-title',v).textContent=p.title||'제목 없음'; $('.meta',v).textContent=(p.meta||'')+' · 👁 '+(p.views||0)+' · 👍 '+(p.recommends||0)+' · ❤️ '+(p.likes||0); $('.body',v).textContent=p.body||'(본문 없음)'; $('.attachments',v).textContent='첨부: '+attachmentLabel(p.attachments); v.style.display='flex'; }
   function editPost(pid){ var p=findPost(pid); if(p) openComposer(p); }
   function removePost(pid){ savePosts(posts().filter(function(p){return p.id!==pid;})); renderAll(); status('삭제됨'); }
-  function bump(pid,key){ var arr=posts(); arr.forEach(function(p){ if(p.id===pid) p[key]=(p[key]||0)+1; }); savePosts(arr); renderAll(); }
+  function bumpOnce(pid,key){
+    var cid=clientId(); var changed=false; var arr=posts();
+    arr.forEach(function(p){
+      if(p.id!==pid) return;
+      p.votes=p.votes||{};
+      var arrKey=key==='recommends'?'recommends':'likes';
+      if(!Array.isArray(p.votes[arrKey])) p.votes[arrKey]=[];
+      if(p.votes[arrKey].indexOf(cid)!==-1){ status('이미 반영됨'); return; }
+      p.votes[arrKey].push(cid); p[key]=(p[key]||0)+1; changed=true;
+    });
+    if(changed){ savePosts(arr); renderAll(); status('반영됨'); }
+  }
 
   function makeRow(p){
-    var row=document.createElement('div'); row.className='igdc-v9-row'; row.dataset.postId=p.id; row.dataset.cat=p.cat;
-    var title=document.createElement('button'); title.type='button'; title.className='igdc-v9-title'; title.dataset.action='view'; title.textContent=p.title||'제목 없음'; title.title=p.title||'제목 없음';
-    var tools=document.createElement('div'); tools.className='igdc-v9-tools';
-    tools.innerHTML='<span class="igdc-v9-tool" title="조회">👁 '+(p.views||0)+'</span><button type="button" class="igdc-v9-tool" data-action="reco" title="추천">👍 '+(p.recommends||0)+'</button><button type="button" class="igdc-v9-tool" data-action="like" title="좋아요">❤️ '+(p.likes||0)+'</button><button type="button" class="igdc-v9-act edit" data-action="edit" title="수정">Edit</button><button type="button" class="igdc-v9-act del" data-action="del" title="삭제">Del</button>';
+    var cid=clientId();
+    var row=document.createElement('div'); row.className='igdc-v10-row'; row.dataset.postId=p.id; row.dataset.cat=p.cat;
+    var title=document.createElement('button'); title.type='button'; title.className='igdc-v10-title'; title.dataset.action='view'; title.textContent=p.title||'제목 없음'; title.title=p.title||'제목 없음';
+    var votedReco=p.votes&&Array.isArray(p.votes.recommends)&&p.votes.recommends.indexOf(cid)!==-1;
+    var votedLike=p.votes&&Array.isArray(p.votes.likes)&&p.votes.likes.indexOf(cid)!==-1;
+    var tools=document.createElement('div'); tools.className='igdc-v10-tools';
+    tools.innerHTML='<span class="igdc-v10-tool" title="조회">👁 '+(p.views||0)+'</span><button type="button" class="igdc-v10-tool '+(votedReco?'voted':'')+'" data-action="reco" title="추천">👍 '+(p.recommends||0)+'</button><button type="button" class="igdc-v10-tool '+(votedLike?'voted':'')+'" data-action="like" title="좋아요">❤️ '+(p.likes||0)+'</button><button type="button" class="igdc-v10-act edit" data-action="edit" title="수정">Edit</button><button type="button" class="igdc-v10-act del" data-action="del" title="삭제">Del</button>';
     row.appendChild(title); row.appendChild(tools); return row;
   }
   function renderAll(){
     if(renderBusy) return; renderBusy=true;
     try{
       var lists=$$('.topic-panel .list');
-      lists.forEach(function(list){ list.dataset.igdcV9='1'; list.innerHTML=''; });
+      lists.forEach(function(list){ list.dataset.igdcV10='1'; list.innerHTML=''; });
       var arr=posts().slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);});
       arr.forEach(function(p){ p.cat=normalizeCat(p.cat); listNodes(p.cat).forEach(function(list){ list.appendChild(makeRow(p)); }); });
-      lists.forEach(function(list){ if(!list.querySelector('.igdc-v9-row')){ var e=document.createElement('div'); e.className='igdc-v9-empty'; e.textContent='등록된 글이 없습니다.'; list.appendChild(e); } });
+      lists.forEach(function(list){ if(!list.querySelector('.igdc-v10-row')){ var e=document.createElement('div'); e.className='igdc-v10-empty'; e.textContent='등록된 글이 없습니다.'; list.appendChild(e); } });
     }finally{ renderBusy=false; }
   }
   function saveFinal(ev){
@@ -5717,7 +5777,7 @@ button.igdc-v9-tool{ cursor:pointer !important; }
       arr=arr.map(function(p){ if(p.id===editingId){ done=true; p.cat=normalizeCat(v.cat); p.title=v.title; p.body=v.body; p.meta=nowText(); p.ts=now; p.attachments=v.attachments; } return p; });
       if(!done){ editingId=null; }
     }
-    if(!editingId){ arr.unshift({id:id(),cat:normalizeCat(v.cat),title:v.title,body:v.body,meta:nowText(),ts:now,views:0,recommends:0,likes:0,attachments:v.attachments}); }
+    if(!editingId){ arr.unshift({id:makeId(),cat:normalizeCat(v.cat),title:v.title,body:v.body,meta:nowText(),ts:now,views:0,recommends:0,likes:0,attachments:v.attachments,votes:{recommends:[],likes:[]}}); }
     savePosts(arr); renderAll(); status(editingId?'수정됨':'저장됨'); clearComposer(); closeComposer(); return false;
   }
 
@@ -5737,11 +5797,11 @@ button.igdc-v9-tool{ cursor:pointer !important; }
     if(open){ e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation)e.stopImmediatePropagation(); openComposer(null); return false; }
     var submit=t.closest('#btnSubmitPost');
     if(submit){ return saveFinal(e); }
-    var row=t.closest('.igdc-v9-row');
+    var row=t.closest('.igdc-v10-row');
     if(row){
-      var pid=row.dataset.postId; var act=(t.closest('[data-action]')||{}).dataset && (t.closest('[data-action]')||{}).dataset.action;
+      var pid=row.dataset.postId; var a=t.closest('[data-action]'); var act=a && a.dataset ? a.dataset.action : '';
       e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation)e.stopImmediatePropagation();
-      if(act==='view') viewPost(pid); else if(act==='edit') editPost(pid); else if(act==='del') removePost(pid); else if(act==='reco') bump(pid,'recommends'); else if(act==='like') bump(pid,'likes'); else viewPost(pid);
+      if(act==='view') viewPost(pid); else if(act==='edit') editPost(pid); else if(act==='del') removePost(pid); else if(act==='reco') bumpOnce(pid,'recommends'); else if(act==='like') bumpOnce(pid,'likes'); else viewPost(pid);
       return false;
     }
   },true);
@@ -5750,8 +5810,8 @@ button.igdc-v9-tool{ cursor:pointer !important; }
   window.addEventListener('load',function(){ setTimeout(install,80); setTimeout(renderAll,500); });
   setTimeout(install,250); setTimeout(renderAll,700); setTimeout(renderAll,1500); setTimeout(renderAll,3000);
   setTimeout(function(){ install(); renderAll(); },5000);
-  window.igdcDonationBoardV9Render=renderAll;
-  window.igdcDonationBoardV9Save=saveFinal;
+  window.igdcDonationBoardV10Render=renderAll;
+  window.igdcDonationBoardV10Save=saveFinal;
 })();
 </script>
 </body>
