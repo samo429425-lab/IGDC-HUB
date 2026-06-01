@@ -5600,6 +5600,41 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   #igdcV10File{ width:120px !important; max-width:120px !important; }
 }
 </style>
+<style>
+/* IGDC Donation V13: translated custom file picker; hide browser-native file label */
+#igdcDonationComposerV10 #igdcV10File.igdc-v13-file-native{
+  position:absolute !important;
+  left:-9999px !important;
+  width:1px !important;
+  height:1px !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+}
+#igdcDonationComposerV10 .igdc-v13-file-btn{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  min-height:30px !important;
+  padding:6px 11px !important;
+  border:1px solid #cbd5e1 !important;
+  border-radius:8px !important;
+  background:#f8fafc !important;
+  color:#0f172a !important;
+  font-size:12.5px !important;
+  font-weight:700 !important;
+  line-height:1 !important;
+  cursor:pointer !important;
+  white-space:nowrap !important;
+}
+#igdcDonationComposerV10 .igdc-v13-file-btn:hover{ background:#eef6ff !important; border-color:#93c5fd !important; }
+#igdcDonationComposerV10 #igdcV10FileNames{
+  flex:1 1 auto !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+}
+</style>
 <script id="igdc-donation-board-v11">
 (function(){
   if(window.__IGDC_DONATION_BOARD_V11__) return;
@@ -5724,7 +5759,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   function makeComposer(){
     var m=$('#igdcDonationComposerV10'); if(m) return m;
     m=document.createElement('div'); m.id='igdcDonationComposerV10';
-    m.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true">'+'<h3 class="igdc-v10-modal-title">'+esc(tr('writePost'))+'</h3>'+'<div class="igdc-v10-form-row"><label for="igdcV10Title">'+esc(tr('title'))+'</label><input id="igdcV10Title" type="text" autocomplete="off" placeholder="'+esc(tr('titlePlaceholder'))+'"></div>'+'<div class="igdc-v10-form-row"><label for="igdcV10Body">'+esc(tr('content'))+'</label><textarea id="igdcV10Body" placeholder="'+esc(tr('contentPlaceholder'))+'"></textarea></div>'+'<div class="igdc-v10-form-row"><label for="igdcV10File">'+esc(tr('attachmentOptional'))+'</label><div class="igdc-v10-attach-row"><input id="igdcV10File" type="file" multiple><span id="igdcV10FileNames">'+esc(tr('noAttachment'))+'</span></div><div class="igdc-v10-attach-help">'+esc(tr('attachHelp'))+'</div></div>'+'<div class="igdc-v10-modal-actions"><button type="button" id="igdcV10Draft">'+esc(tr('draft'))+'</button><button type="button" id="igdcV10Cancel">'+esc(tr('cancel'))+'</button><button type="button" class="primary" id="igdcV10Save">'+esc(tr('save'))+'</button></div></div>';
+    m.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true">'+'<h3 class="igdc-v10-modal-title">'+esc(tr('writePost'))+'</h3>'+'<div class="igdc-v10-form-row"><label for="igdcV10Title">'+esc(tr('title'))+'</label><input id="igdcV10Title" type="text" autocomplete="off" placeholder="'+esc(tr('titlePlaceholder'))+'"></div>'+'<div class="igdc-v10-form-row"><label for="igdcV10Body">'+esc(tr('content'))+'</label><textarea id="igdcV10Body" placeholder="'+esc(tr('contentPlaceholder'))+'"></textarea></div>'+'<div class="igdc-v10-form-row"><label for="igdcV10File">'+esc(tr('attachmentOptional'))+'</label><div class="igdc-v10-attach-row"><input id="igdcV10File" class="igdc-v13-file-native" type="file" multiple aria-label="'+esc(tr('attachmentOptional'))+'"><button type="button" id="igdcV13PickFile" class="igdc-v13-file-btn">'+esc(tr('attachmentOptional'))+'</button><span id="igdcV10FileNames">'+esc(tr('noAttachment'))+'</span></div><div class="igdc-v10-attach-help">'+esc(tr('attachHelp'))+'</div></div>'+'<div class="igdc-v10-modal-actions"><button type="button" id="igdcV10Draft">'+esc(tr('draft'))+'</button><button type="button" id="igdcV10Cancel">'+esc(tr('cancel'))+'</button><button type="button" class="primary" id="igdcV10Save">'+esc(tr('save'))+'</button></div></div>';
     document.body.appendChild(m);
     m.addEventListener('click',function(e){ if(e.target===m){ e.preventDefault(); e.stopPropagation(); } },true);
     $('#igdcV10Draft',m).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); draftFromComposer(true); },true);
@@ -5732,6 +5767,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
     $('#igdcV10Save',m).addEventListener('click',function(e){ saveFinal(e); },true);
     $('#igdcV10Title',m).addEventListener('input',function(){ setPreview(this.value); draftFromComposer(false); },true);
     $('#igdcV10Body',m).addEventListener('input',function(){ draftFromComposer(false); },true);
+    var fp=$('#igdcV13PickFile',m); if(fp){ fp.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); var fi=$('#igdcV10File',m); if(fi) fi.click(); },true); }
     $('#igdcV10File',m).addEventListener('change',function(){ updateFileNames(currentFiles()); draftFromComposer(false); },true);
     return m;
   }
@@ -5753,7 +5789,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
     var m=makeComposer();
     var files=currentFiles(); if(!files.length && editingOldAttachments.length) files=editingOldAttachments.slice();
     var d={ title:($('#igdcV10Title',m).value||'').trim(), body:($('#igdcV10Body',m).value||'').trim(), cat:activeCat(), ts:Date.now(), attachments:files };
-    saveDraft(d); if(showStatus) status('임시저장됨'); return d;
+    saveDraft(d); if(showStatus) status(tr('draftSaved')); return d;
   }
   function valuesAsync(){
     var m=makeComposer(); var ti=$('#igdcV10Title',m), bi=$('#igdcV10Body',m);
