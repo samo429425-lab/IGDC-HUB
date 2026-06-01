@@ -1,6 +1,7 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
 // PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
 // PATCH: search-owned proxy viewer + continuous 4,500 intake + 30-language search UI labels
+// PATCH A1.5.59: Sanmaru/SearchBank direct first-paint + rich media/body search cards
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -46,11 +47,19 @@ ready(function () {
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
-    const MAX_PROGRESSIVE_PAGER_PAGES = 180;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 480;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 5;
+    // Search UI first-paint should receive a large cached packet from Sanmaru, but
+    // render only the current viewport.  This keeps the screen fast while avoiding
+    // the old 200~300 item choke point.
+    const SANMARU_FIRST_PAINT_TARGET = 3000;
+    const SANMARU_DIRECT_POOL_TARGET = 12000;
+    const MARU_FAST_RICH_PROBE_MS = 650;
+    const FIRST_SUPPLY_WAIT_MS = 1800;
+    const INTAKE_PAGE_WAIT_MS = 2400;
+    const INTAKE_CONCURRENCY = 7;
     const INTAKE_BURST_DELAY_MS = 10;
     // Search HTML should behave as an immediate receiver: once Sanmaru/MaruSearch
     // sends any real packet, open the follow-up faucet on the next short UI beat.
@@ -1869,11 +1878,10 @@ function adaptiveSearchTarget(q, type){
 }
 
 function firstPaintLimitFor(q, type){
-  // Keep the UI first paint light, but ask Sanmaru for the first 12 pages of
-  // already-prepared resident candidates. The DOM still renders only the
-  // current viewport; the extra candidates keep the initial pager at 10~12 pages
-  // and let page navigation feel immediate.
-  return Math.min(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(q, type));
+  // The browser renders only the current viewport, but it should receive a
+  // substantial first cache window immediately from Sanmaru. This prevents the
+  // old 200~300 result choke point while keeping DOM paint light.
+  return Math.min(SANMARU_FIRST_PAINT_TARGET, adaptiveSearchTarget(q, type));
 }
 
 function seedLoadedServerPagesFromItems(items, maxItems){
@@ -1953,7 +1961,7 @@ function startContinuousIntake(q, type, seq){
       const page = takeNextIntakePage();
       if(!page) break;
       try{
-        const pack = await fetchSearch(q, type, page);
+        const pack = await fetchFastIntakePage(q, type, page);
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
         if(pageSlice.length){
@@ -2127,11 +2135,21 @@ async function fetchSearch(q, type = activeType, page = 1){
 
   const sp = new URLSearchParams();
   sp.set('q', q);
-  sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('limit', String(Math.max(SANMARU_DIRECT_POOL_TARGET, adaptiveSearchTarget(q, safeType))));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
+  sp.set('firstPaintLimit', String(firstPaintLimitFor(q, safeType)));
+  sp.set('initialPreloadTarget', String(firstPaintLimitFor(q, safeType)));
+  sp.set('candidatePoolTarget', String(Math.max(SANMARU_DIRECT_POOL_TARGET, adaptiveSearchTarget(q, safeType))));
+  sp.set('searchUiFastFirst', '1');
+  sp.set('fastRichProbeMs', String(MARU_FAST_RICH_PROBE_MS));
+  sp.set('displayRich', '1');
+  sp.set('noProviderLane', '1');
+  sp.set('noRouteCards', '1');
+  sp.set('noOpeningCards', '1');
+  sp.set('publicSearch', '1');
   sp.set('page', String(Math.max(1, Number(page) || 1)));
   sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
   sp.set('pageWindowOnly', '1');
@@ -2162,6 +2180,46 @@ async function fetchSearch(q, type = activeType, page = 1){
   }
 }
 
+async function fetchMaruWideSearchPage(q, type = activeType, page = 1){
+  const safeType = normalizeSearchType(type);
+  const target = Math.max(SANMARU_DIRECT_POOL_TARGET, adaptiveSearchTarget(q, safeType));
+  const sp = new URLSearchParams();
+  sp.set('q', q);
+  sp.set('query', q);
+  sp.set('limit', String(target));
+  sp.set('type', safeType);
+  sp.set('tab', safeType);
+  sp.set('perPage', String(PAGE_SIZE));
+  sp.set('visibleCardsPerPage', String(PAGE_SIZE));
+  sp.set('candidatePoolTarget', String(target));
+  sp.set('firstPaintLimit', String(Math.min(firstPaintLimitFor(q, safeType), target)));
+  sp.set('initialPreloadTarget', String(Math.min(firstPaintLimitFor(q, safeType), target)));
+  sp.set('page', String(Math.max(1, Number(page) || 1)));
+  sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
+  sp.set('publicSearch', '1');
+  sp.set('openPipe', '1');
+  sp.set('smoothIntake', '1');
+  sp.set('naturalFlow', '1');
+  sp.set('residentFirst', '1');
+  sp.set('sanmaruFirst', '1');
+  sp.set('noProviderLane', '1');
+  sp.set('noRouteCards', '1');
+  sp.set('noOpeningCards', '1');
+  sp.set('displayRich', '1');
+  sp.set('reason', 'search-ui-wide-background-intake');
+
+  try {
+    const r = await fetch('/.netlify/functions/maru-search?' + sp.toString(), { cache: 'no-store' });
+    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
+    const json = await r.json();
+    if (!json || json.status === 'error' || json.status === 'blocked') return { items: [], payload: json || null, pageItems: [], viewportSections: [] };
+    return normalizeSearchPayload(json);
+  } catch(e) {
+    console.warn('fetchMaruWideSearchPage failed:', e);
+    return { items: [], payload: null, pageItems: [], viewportSections: [] };
+  }
+}
+
 async function fetchInstantSearchPack(q, type = activeType){
   const safeType = normalizeSearchType(type);
   const sp = new URLSearchParams();
@@ -2170,15 +2228,20 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('query', q);
   sp.set('type', safeType);
   sp.set('tab', safeType);
-  sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
-  sp.set('firstPaintLimit', String(INITIAL_PRELOAD_TARGET));
-  sp.set('candidatePool', String(adaptiveSearchTarget(q, safeType)));
-  sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
+  sp.set('limit', String(Math.max(SANMARU_DIRECT_POOL_TARGET, adaptiveSearchTarget(q, safeType))));
+  sp.set('firstPaintLimit', String(firstPaintLimitFor(q, safeType)));
+  sp.set('candidatePool', String(Math.max(SANMARU_DIRECT_POOL_TARGET, adaptiveSearchTarget(q, safeType))));
+  sp.set('candidatePoolTarget', String(Math.max(SANMARU_DIRECT_POOL_TARGET, adaptiveSearchTarget(q, safeType))));
   sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
-  sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
+  sp.set('initialPreloadTarget', String(firstPaintLimitFor(q, safeType)));
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('providerPassthrough', '1');
+  sp.set('providerPassthrough', '0');
+  sp.set('noProviderLane', '1');
+  sp.set('noRouteCards', '1');
+  sp.set('noOpeningCards', '1');
+  sp.set('publicSearch', '1');
+  sp.set('openPipe', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('reason', 'search-ui-first-paint');
@@ -2193,6 +2256,144 @@ async function fetchInstantSearchPack(q, type = activeType){
     console.warn('fetchInstantSearchPack failed:', e);
     return { items: [], payload: null, pageItems: [], viewportSections: [] };
   }
+}
+
+async function fetchSanmaruDirectPage(q, type = activeType, page = 1){
+  const safeType = normalizeSearchType(type);
+  const pageNo = Math.max(1, Number(page) || 1);
+  const target = Math.max(SANMARU_DIRECT_POOL_TARGET, adaptiveSearchTarget(q, safeType));
+  const sp = new URLSearchParams();
+  sp.set('action', 'instant-supply');
+  sp.set('q', q);
+  sp.set('query', q);
+  sp.set('type', safeType);
+  sp.set('tab', safeType);
+  sp.set('page', String(pageNo));
+  sp.set('visiblePage', String(pageNo));
+  sp.set('perPage', String(PAGE_SIZE));
+  sp.set('visibleCardsPerPage', String(PAGE_SIZE));
+  sp.set('limit', String(target));
+  sp.set('candidatePool', String(target));
+  sp.set('candidatePoolTarget', String(target));
+  sp.set('firstPaintLimit', String(pageNo <= 1 ? Math.min(firstPaintLimitFor(q, safeType), target) : PAGE_SIZE));
+  sp.set('initialPreloadTarget', String(Math.min(firstPaintLimitFor(q, safeType), target)));
+  sp.set('residentFirst', '1');
+  sp.set('sanmaruFirst', '1');
+  sp.set('publicSearch', '1');
+  sp.set('openPipe', '1');
+  sp.set('noProviderLane', '1');
+  sp.set('noRouteCards', '1');
+  sp.set('noOpeningCards', '1');
+  sp.set('providerPassthrough', '0');
+  sp.set('reason', pageNo <= 1 ? 'search-ui-direct-first-paint' : 'search-ui-direct-intake-page');
+
+  try {
+    const r = await fetch(`${SANMARU_BOOT_URL}?${sp.toString()}`, { cache: 'no-store' });
+    if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
+    const json = await r.json();
+    if (!json || json.status === 'error' || json.status === 'blocked') return { items: [], payload: json || null, pageItems: [], viewportSections: [] };
+    return normalizeSearchPayload(json);
+  } catch(e) {
+    console.warn('fetchSanmaruDirectPage failed:', e);
+    return { items: [], payload: null, pageItems: [], viewportSections: [] };
+  }
+}
+
+async function fetchSearchBankIndexDirectPage(q, type = activeType, page = 1){
+  const safeType = normalizeSearchType(type);
+  const pageNo = Math.max(1, Number(page) || 1);
+  const target = Math.max(SANMARU_DIRECT_POOL_TARGET, adaptiveSearchTarget(q, safeType));
+  const sp = new URLSearchParams();
+  sp.set('q', q);
+  sp.set('query', q);
+  sp.set('type', safeType);
+  sp.set('tab', safeType);
+  sp.set('page', String(pageNo));
+  sp.set('perPage', String(PAGE_SIZE));
+  sp.set('limit', String(pageNo <= 1 ? target : PAGE_SIZE));
+  sp.set('publicSearch', '1');
+  sp.set('includeFacets', '1');
+  sp.set('includePlaceholders', '0');
+  sp.set('frontSupply', '0');
+
+  try {
+    const r = await fetch('/.netlify/functions/search-bank-index-engine?' + sp.toString(), { cache: 'no-store' });
+    if (!r.ok) return { items: [], payload: null, pageItems: [] };
+    const json = await r.json();
+    if (!json || json.status === 'error' || json.status === 'blocked') return { items: [], payload: json || null, pageItems: [] };
+    return normalizeSearchPayload(json);
+  } catch(e) {
+    console.warn('fetchSearchBankIndexDirectPage failed:', e);
+    return { items: [], payload: null, pageItems: [] };
+  }
+}
+
+function supplyPackItemCount(pack){
+  try{
+    const p = pack && pack.payload ? pack.payload : pack;
+    const arr = pageItemsFromPack(pack).concat(Array.isArray(pack && pack.items) ? pack.items : [], Array.isArray(p && p.items) ? p.items : [], Array.isArray(p && p.results) ? p.results : []);
+    return dedupeItems(filterSearchResultItems(arr)).length;
+  }catch(e){ return 0; }
+}
+
+function firstNonEmptySupplyPack(tasks, timeoutMs){
+  const rows = Array.isArray(tasks) ? tasks : [];
+  if(!rows.length) return Promise.resolve({ items: [], payload: null, pageItems: [] });
+  const ms = Math.max(400, Math.min(5000, Number(timeoutMs) || 1800));
+  return new Promise(resolve => {
+    let done = false;
+    let pending = rows.length;
+    const settled = [];
+    const timer = setTimeout(() => {
+      if(done) return;
+      done = true;
+      const best = settled.slice().sort((a,b) => (b.count - a.count))[0];
+      resolve(best ? best.pack : { items: [], payload: { meta:{ timeout:true } }, pageItems: [] });
+    }, ms);
+
+    rows.forEach(row => {
+      const label = row && row.label || 'supply';
+      Promise.resolve(row && row.promise).then(pack => {
+        const count = supplyPackItemCount(pack);
+        settled.push({ label, pack, count });
+        if(!done && count > 0){
+          done = true;
+          clearTimeout(timer);
+          resolve(pack);
+          return;
+        }
+        pending -= 1;
+        if(!done && pending <= 0){
+          done = true;
+          clearTimeout(timer);
+          const best = settled.slice().sort((a,b) => (b.count - a.count))[0];
+          resolve(best ? best.pack : { items: [], payload: null, pageItems: [] });
+        }
+      }).catch(error => {
+        settled.push({ label, pack:{ items:[], payload:{ error:String((error && error.message) || error), label }, pageItems:[] }, count:0 });
+        pending -= 1;
+        if(!done && pending <= 0){
+          done = true;
+          clearTimeout(timer);
+          const best = settled.slice().sort((a,b) => (b.count - a.count))[0];
+          resolve(best ? best.pack : { items: [], payload: null, pageItems: [] });
+        }
+      });
+    });
+  });
+}
+
+async function fetchFastIntakePage(q, type = activeType, page = 1){
+  // Page intake must not wait for one slow lane.  Race Sanmaru, SearchBank Index,
+  // and MaruSearch wide-normalizer; use the first non-empty packet and let later
+  // pages continue filling through the normal worker pool.
+  const tasks = [
+    { label:'sanmaru-direct', promise:fetchSanmaruDirectPage(q, type, page) },
+    { label:'search-bank-index', promise:fetchSearchBankIndexDirectPage(q, type, page) },
+    { label:'maru-wide', promise:fetchMaruWideSearchPage(q, type, page) },
+    { label:'maru-search', promise:fetchSearch(q, type, page) }
+  ];
+  return await firstNonEmptySupplyPack(tasks, INTAKE_PAGE_WAIT_MS);
 }
 
     function renderSkeleton(count = 6){
@@ -3603,8 +3804,22 @@ function displayGroupOfItem(it){
       });
     }
 
+    function isProviderLaneGuideItemClient(it){
+      if(!it || typeof it !== 'object') return false;
+      const tags = Array.isArray(it.tags) ? it.tags.join(' ') : '';
+      const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const text = [
+        it.source, it.provider, it.sourceType, it.generatedBy, it.route,
+        tags, payload.providerLane, payload.providerUrl
+      ].join(' ').toLowerCase();
+      return /provider-lane|provider-window|passthrough|search-link|search_link|sanmaru-fast-provider-lane|emergency-discovery|_discovery|google_maps|naver_map|google_map/.test(text) ||
+        it.passthrough === true || it.sanmaruEmergencyDiscovery === true || it.placeholder === true;
+    }
+
     function shouldRejectSearchResultItem(it){
       if (!it) return true;
+      if (isProviderLaneGuideItemClient(it)) return true;
+      if (typeof isSyntheticProviderGuideCardClient === 'function' && isSyntheticProviderGuideCardClient(it)) return true;
       if (isSeedPlaceholderItem(it)) return true;
       if (hasInvalidYouTubeVideoUrl(it)) return true;
       return false;
@@ -3866,7 +4081,7 @@ function displayGroupOfItem(it){
       const text = compactCardTextClient(v);
       if(!text) return false;
       const low = text.toLowerCase();
-      return /(확인할 수 있는 결과입니다|연결되는 결과입니다|표시됩니다|함께 표시|대표 이미지가 있으면|대표 스냅샷|본문 요약이 제공|2~3줄|사진·그래픽·이미지|현장 화면·리뷰|최신 보도·이슈·기사|통합 검색 결과|검색 결과로 연결|자료를 확인할 수 있는|news 흐름|image 자료|video 자료)/i.test(text) ||
+      return /(확인할 수 있는 결과입니다|연결되는 결과입니다|표시됩니다|함께 표시|대표 이미지가 있으면|대표 스냅샷|본문 요약이 제공|2~3줄|사진·그래픽·이미지|현장 화면·리뷰|최신 보도·이슈·기사|통합 검색 결과|검색 결과로 연결|자료를 확인할 수 있는|news 흐름|image 자료|video 자료|관련된 공식 사이트|공공자료·주요 기관|공개 정보를 기준으로 연결|지도·지역 결과|지도 미리보기와 관련 장소)/i.test(text) ||
         /(google news|bing images|bing videos|naver images|naver videos|google images)/i.test(low);
     }
 
@@ -4497,7 +4712,7 @@ function displayGroupOfItem(it){
         pending.style.padding = '16px 18px';
         pending.style.color = '#64748b';
         pending.style.fontWeight = '700';
-        pending.textContent = '이미지 썸네일을 수신 중입니다. 실제 이미지가 도착하면 갤러리로 표시됩니다.';
+        pending.textContent = '이미지 결과를 계속 수신 중입니다.';
         results.appendChild(pending);
       }
     }
@@ -4587,7 +4802,7 @@ function displayGroupOfItem(it){
         if(isGeneratedGuideTextClient(text)) continue;
         if(titleText && key === titleText) continue;
         if(/^(google news|bing images|bing videos|google images|naver images|naver videos)$/i.test(key)) continue;
-        return text.slice(0, 620);
+        return text.slice(0, 900);
       }
       return '';
     }
@@ -4704,7 +4919,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(6, cardLineClamp) : 6);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(8, cardLineClamp) : 8);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -5313,7 +5528,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       }
       status.textContent = `${uiText('loadingPage', 'Loading page')} ${page} ${uiText('resultsFor', 'for')} "${q}"...`;
       try{
-        const pack = await fetchSearch(q, activeType, page);
+        const pack = await fetchFastIntakePage(q, activeType, page);
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack)));
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice.slice(0, PAGE_SIZE));
@@ -5557,22 +5772,25 @@ async function runSearch(q, type = activeType){
 
   // PATCH: first render uses Sanmaru/MaruSearch first supply window, not forced 25-only paint
   const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
+  const bankIndexPromise = wrapSupply(fetchSearchBankIndexDirectPage(qq, activeType, 1), 'search-bank-index-direct');
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
+  // Open the direct Sanmaru/SearchBank page faucet immediately.  It can cache
+  // pages 2+ while page 1 first-paint races in, without blocking visual render.
+  schedulePipeHandoff('parallel-direct-intake', 0);
 
   try{
-    const first = await Promise.race([instantPromise, maruWindowPromise]);
+    const firstPack = await firstNonEmptySupplyPack([
+      { label:'sanmaru-instant', promise:instantPromise.then(x => x && !x.error ? x.pack : null) },
+      { label:'search-bank-index-direct', promise:bankIndexPromise.then(x => x && !x.error ? x.pack : null) },
+      { label:'maru-search-window', promise:maruWindowPromise.then(x => x && !x.error ? x.pack : null) }
+    ], FIRST_SUPPLY_WAIT_MS);
     if(runSearch._seq !== seq) return;
 
-    const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
-    if(!firstCount){
-      const second = first && first.kind === 'sanmaru-instant' ? await maruWindowPromise : await instantPromise;
-      if(runSearch._seq !== seq) return;
-      if(second && !second.error) applySupplyPack(second.pack, second.kind);
-    }
+    if(firstPack) applySupplyPack(firstPack, 'first-non-empty-supply');
 
     if(!firstPaintDone){
       if(!results.children.length) renderSkeleton();
-      status.textContent = `${uiText('noQuickResults', 'No quick results')} "${qq}" · ${uiText('receiving', 'receiving...')}`;
+      status.textContent = `${uiText('receiving', 'receiving...')} ${getTypeLabel(activeType)} · "${qq}"...`;
     }
 
     // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
@@ -5580,6 +5798,11 @@ async function runSearch(q, type = activeType){
     // first when it arrives quickly.
     schedulePipeHandoff('first-paint-handoff', FIRST_PIPE_HANDOFF_MS);
 
+    bankIndexPromise.then(res => {
+      if(runSearch._seq !== seq || !res || res.error) return;
+      applySupplyPack(res.pack, res.kind);
+      if(allItems.length >= INITIAL_PRELOAD_TARGET) startIntakeOnce('search-bank-index-page1-ready');
+    });
     maruWindowPromise.then(res => {
       if(runSearch._seq !== seq || !res || res.error) return;
       applySupplyPack(res.pack, res.kind);
