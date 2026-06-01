@@ -5712,6 +5712,8 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   var installTimer=null;
   var $=function(s,r){ return (r||document).querySelector(s); };
   var $$=function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+  var IGDC_I18N={"category":"வகை","writePost":"பதிவு எழுதுக","title":"தலைப்பு","titlePlaceholder":"தலைப்பை உள்ளிடவும்","content":"உள்ளடக்கம்","contentPlaceholder":"உள்ளடக்கத்தை உள்ளிடவும்","attachmentOptional":"கோப்புகளை இணைக்கவும்","noAttachment":"இணைப்பு இல்லை","attachHelp":"Selected file names and download data are saved with the post. Large files may be limited by browser storage.","draft":"வரைவை சேமி","cancel":"ரத்து","save":"சேமி","close":"மூடு","edit":"Edit","del":"Del","untitled":"தலைப்பு இல்லை","emptyBody":"(உள்ளடக்கம் இல்லை)","noTitleInput":"தலைப்பு இல்லை","attachments":"இணைப்புகள்","attachment":"Attachment","download":"பதிவிறக்கு","fileNameOnly":"File name","emptyList":"பதிவுகள் இல்லை.","view":"Views","recommend":"Recommend","like":"Like","modify":"Edit","delete":"Delete","saved":"சேமிக்கப்பட்டது","updated":"புதுப்பிக்கப்பட்டது","canceled":"ரத்து செய்யப்பட்டது","draftSaved":"வரைவு சேமிக்கப்பட்டது","deleted":"நீக்கப்பட்டது","applied":"Applied","undone":"Canceled","largeFile":"File is large; only file names were saved."};
+  function tr(k){ return IGDC_I18N[k] || (k||''); }
   function esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
   function makeId(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }
   function nowText(){ try{return new Date().toLocaleString();}catch(e){return '';} }
@@ -5739,7 +5741,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
     return arr.map(normalizePost);
   }
   function normalizePost(p){
-    p=p||{}; p.id=p.id||makeId(); p.cat=normalizeCat(p.cat||p.category); p.title=p.title||'제목 없음'; p.body=p.body||''; p.meta=p.meta||p.date||nowText(); p.ts=p.ts||Date.now();
+    p=p||{}; p.id=p.id||makeId(); p.cat=normalizeCat(p.cat||p.category); p.title=p.title||tr('untitled'); p.body=p.body||''; p.meta=p.meta||p.date||nowText(); p.ts=p.ts||Date.now();
     p.views=Number(p.views||0); p.recommends=Number(p.recommends||0); p.likes=Number(p.likes||0);
     if(!Array.isArray(p.attachments)) p.attachments=[];
     if(!p.votes) p.votes={};
@@ -5751,7 +5753,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   function draft(){ return readJSON(DRAFT_KEY,{}); }
   function saveDraft(d){ writeJSON(DRAFT_KEY,d||{}); }
   function clearDraft(){ try{localStorage.removeItem(DRAFT_KEY);}catch(e){} }
-  function setPreview(t){ var p=$('#composePreviewTitle'); if(p) p.textContent=t||''; }
+  function setPreview(t){ var p=$('#composePreviewTitle')||$('#titlePreview .tp-text'); if(p) p.textContent=t||tr('noTitleInput'); }
   function status(t){ var s=$('#igdcDonationStatusV10'); if(!s){ s=document.createElement('span'); s.id='igdcDonationStatusV10'; s.className='igdc-donation-save-status'; var b=$('#btnSubmitPost')||$('#btnOpenComposer'); if(b&&b.parentNode) b.parentNode.appendChild(s); } s.textContent=t||''; if(t) setTimeout(function(){ if(s.textContent===t) s.textContent=''; },2200); }
   function panelCat(panel){
     var txt=((panel.querySelector('h3')||{}).textContent||'').toLowerCase();
@@ -5792,7 +5794,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   }
   function attachmentLabel(arr){
     arr=Array.isArray(arr)?arr:[];
-    if(!arr.length) return '첨부 파일 없음';
+    if(!arr.length) return tr('noAttachment');
     return arr.map(function(x){ return (x&&x.name)?x.name:String(x||''); }).join(', ');
   }
   function updateFileNames(arr){ var s=$('#igdcV10FileNames'); if(s){ s.textContent=attachmentLabel(arr||currentFiles()); s.title=s.textContent; } }
@@ -5800,17 +5802,17 @@ button.igdc-v10-tool{ cursor:pointer !important; }
     if(!el) return;
     arr=Array.isArray(arr)?arr:[];
     el.innerHTML='';
-    if(!arr.length){ el.textContent='첨부 파일 없음'; return; }
-    var head=document.createElement('div'); head.style.fontWeight='700'; head.style.marginBottom='4px'; head.textContent='첨부 파일'; el.appendChild(head);
+    if(!arr.length){ el.textContent=tr('noAttachment'); return; }
+    var head=document.createElement('div'); head.style.fontWeight='700'; head.style.marginBottom='4px'; head.textContent=tr('attachments'); el.appendChild(head);
     arr.forEach(function(x,idx){
       x=x||{};
       var item=document.createElement('div'); item.className='igdc-v11-attach-item';
-      var name=document.createElement('span'); name.className='igdc-v11-attach-name'; name.textContent=x.name||('첨부 '+(idx+1)); name.title=name.textContent;
+      var name=document.createElement('span'); name.className='igdc-v11-attach-name'; name.textContent=x.name||(tr('attachment')+' '+(idx+1)); name.title=name.textContent;
       item.appendChild(name);
       if(x.dataUrl && /^data:/i.test(x.dataUrl)){
-        var a=document.createElement('a'); a.className='igdc-v11-download'; a.href=x.dataUrl; a.download=x.name||('attachment-'+(idx+1)); a.textContent='다운로드'; item.appendChild(a);
+        var a=document.createElement('a'); a.className='igdc-v11-download'; a.href=x.dataUrl; a.download=x.name||('attachment-'+(idx+1)); a.textContent=tr('download'); item.appendChild(a);
       }else{
-        var s=document.createElement('span'); s.className='igdc-v11-download'; s.style.opacity='.55'; s.textContent='파일명'; item.appendChild(s);
+        var s=document.createElement('span'); s.className='igdc-v11-download'; s.style.opacity='.55'; s.textContent=tr('fileNameOnly'); item.appendChild(s);
       }
       el.appendChild(item);
     });
@@ -5819,11 +5821,11 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   function makeComposer(){
     var m=$('#igdcDonationComposerV10'); if(m) return m;
     m=document.createElement('div'); m.id='igdcDonationComposerV10';
-    m.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true"><h3 class="igdc-v10-modal-title">글쓰기</h3><div class="igdc-v10-form-row"><label for="igdcV10Title">Title</label><input id="igdcV10Title" type="text" autocomplete="off" placeholder="제목을 입력하세요"></div><div class="igdc-v10-form-row"><label for="igdcV10Body">Content</label><textarea id="igdcV10Body" placeholder="본문을 입력하세요"></textarea></div><div class="igdc-v10-form-row"><label for="igdcV10File">Attachment optional</label><div class="igdc-v10-attach-row"><input id="igdcV10File" type="file" multiple><span id="igdcV10FileNames">첨부 파일 없음</span></div><div class="igdc-v10-attach-help">선택한 파일 이름과 다운로드 데이터를 글에 함께 저장합니다. 대용량 파일은 브라우저 저장 한도에 영향을 받을 수 있습니다.</div></div><div class="igdc-v10-modal-actions"><button type="button" id="igdcV10Draft">임시저장</button><button type="button" id="igdcV10Cancel">취소</button><button type="button" class="primary" id="igdcV10Save">저장</button></div></div>';
+    m.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true">'+'<h3 class="igdc-v10-modal-title">'+esc(tr('writePost'))+'</h3>'+'<div class="igdc-v10-form-row"><label for="igdcV10Title">'+esc(tr('title'))+'</label><input id="igdcV10Title" type="text" autocomplete="off" placeholder="'+esc(tr('titlePlaceholder'))+'"></div>'+'<div class="igdc-v10-form-row"><label for="igdcV10Body">'+esc(tr('content'))+'</label><textarea id="igdcV10Body" placeholder="'+esc(tr('contentPlaceholder'))+'"></textarea></div>'+'<div class="igdc-v10-form-row"><label for="igdcV10File">'+esc(tr('attachmentOptional'))+'</label><div class="igdc-v10-attach-row"><input id="igdcV10File" type="file" multiple><span id="igdcV10FileNames">'+esc(tr('noAttachment'))+'</span></div><div class="igdc-v10-attach-help">'+esc(tr('attachHelp'))+'</div></div>'+'<div class="igdc-v10-modal-actions"><button type="button" id="igdcV10Draft">'+esc(tr('draft'))+'</button><button type="button" id="igdcV10Cancel">'+esc(tr('cancel'))+'</button><button type="button" class="primary" id="igdcV10Save">'+esc(tr('save'))+'</button></div></div>';
     document.body.appendChild(m);
     m.addEventListener('click',function(e){ if(e.target===m){ e.preventDefault(); e.stopPropagation(); } },true);
     $('#igdcV10Draft',m).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); draftFromComposer(true); },true);
-    $('#igdcV10Cancel',m).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); clearComposer(); closeComposer(); status('취소됨'); },true);
+    $('#igdcV10Cancel',m).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); clearComposer(); closeComposer(); status(tr('canceled')); },true);
     $('#igdcV10Save',m).addEventListener('click',function(e){ saveFinal(e); },true);
     $('#igdcV10Title',m).addEventListener('input',function(){ setPreview(this.value); draftFromComposer(false); },true);
     $('#igdcV10Body',m).addEventListener('input',function(){ draftFromComposer(false); },true);
@@ -5857,9 +5859,9 @@ button.igdc-v10-tool{ cursor:pointer !important; }
     if(!title) title=(d.title||'').trim();
     if(!body) body=(d.body||'').trim();
     if(!body){ var top=$('#topPostBody'); if(top){ var tv=(top.value||'').trim(); if(tv && !/^이곳은 IGDC Global Platform/.test(tv)) body=tv; } }
-    if(!title && body) title=body.split(String.fromCharCode(10))[0].slice(0,42).trim();
-    if(!title) title='제목 없음';
-    if(!body) body='(본문 없음)';
+    if(!title && body) title=body.split(/\n/)[0].slice(0,42).trim();
+    if(!title) title=tr('untitled');
+    if(!body) body=tr('emptyBody');
     return readCurrentFileData().then(function(files){
       if(!files.length && editingId && editingOldAttachments.length) files=editingOldAttachments.slice();
       if(!files.length && Array.isArray(d.attachments)) files=d.attachments;
@@ -5870,7 +5872,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   function makeViewer(){
     var v=$('#igdcDonationViewerV10'); if(v) return v;
     v=document.createElement('div'); v.id='igdcDonationViewerV10';
-    v.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true"><h3 class="igdc-v10-modal-title"></h3><div class="meta"></div><div class="body"></div><div class="attachments"></div><div class="igdc-v10-modal-actions"><button type="button" class="edit">Edit</button><button type="button" class="danger del">Del</button><button type="button" class="close">닫기</button></div></div>';
+    v.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true"><h3 class="igdc-v10-modal-title"></h3><div class="meta"></div><div class="body"></div><div class="attachments"></div><div class="igdc-v10-modal-actions"><button type="button" class="edit">'+esc(tr('edit'))+'</button><button type="button" class="danger del">'+esc(tr('del'))+'</button><button type="button" class="close">'+esc(tr('close'))+'</button></div></div>';
     document.body.appendChild(v);
     v.addEventListener('click',function(e){ if(e.target===v || (e.target.classList && e.target.classList.contains('close'))){ e.preventDefault(); e.stopPropagation(); hideViewer(); } },true);
     $('.edit',v).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); var p=findPost(v.dataset.postId); hideViewer(); if(p) openComposer(p); },true);
@@ -5879,9 +5881,9 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   }
   function hideViewer(){ var v=$('#igdcDonationViewerV10'); if(v) v.style.display='none'; }
   function findPost(pid){ return posts().filter(function(p){return p.id===pid;})[0] || null; }
-  function viewPost(pid){ var arr=posts(), p=null; arr.forEach(function(x){ if(x.id===pid){ x.views=(x.views||0)+1; p=x; } }); if(!p) return; savePosts(arr); renderAll(); var v=makeViewer(); v.dataset.postId=pid; $('.igdc-v10-modal-title',v).textContent=p.title||'제목 없음'; $('.meta',v).textContent=(p.meta||'')+' · 👁 '+(p.views||0)+' · 👍 '+(p.recommends||0)+' · ❤️ '+(p.likes||0); $('.body',v).textContent=p.body||'(본문 없음)'; renderAttachments($('.attachments',v), p.attachments); v.style.display='flex'; }
+  function viewPost(pid){ var arr=posts(), p=null; arr.forEach(function(x){ if(x.id===pid){ x.views=(x.views||0)+1; p=x; } }); if(!p) return; savePosts(arr); renderAll(); var v=makeViewer(); v.dataset.postId=pid; $('.igdc-v10-modal-title',v).textContent=p.title||tr('untitled'); $('.meta',v).textContent=(p.meta||'')+' · 👁 '+(p.views||0)+' · 👍 '+(p.recommends||0)+' · ❤️ '+(p.likes||0); $('.body',v).textContent=p.body||tr('emptyBody'); renderAttachments($('.attachments',v), p.attachments); v.style.display='flex'; }
   function editPost(pid){ var p=findPost(pid); if(p) openComposer(p); }
-  function removePost(pid){ savePosts(posts().filter(function(p){return p.id!==pid;})); renderAll(); status('삭제됨'); }
+  function removePost(pid){ savePosts(posts().filter(function(p){return p.id!==pid;})); renderAll(); status(tr('deleted')); }
   function toggleVote(pid,key){
     var cid=clientId(); var changed=false; var added=false; var arr=posts();
     arr.forEach(function(p){
@@ -5894,7 +5896,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
       else{ p.votes[arrKey].push(cid); p[key]=(p[key]||0)+1; added=true; }
       changed=true;
     });
-    if(changed){ savePosts(arr); renderAll(); status(added?'반영됨':'취소됨'); }
+    if(changed){ savePosts(arr); renderAll(); status(added?tr('applied'):tr('undone')); }
   }
 
   function makeRow(p){
@@ -5904,7 +5906,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
     var votedReco=p.votes&&Array.isArray(p.votes.recommends)&&p.votes.recommends.indexOf(cid)!==-1;
     var votedLike=p.votes&&Array.isArray(p.votes.likes)&&p.votes.likes.indexOf(cid)!==-1;
     var tools=document.createElement('div'); tools.className='igdc-v10-tools';
-    tools.innerHTML='<span class="igdc-v10-tool" title="조회">👁 '+(p.views||0)+'</span><button type="button" class="igdc-v10-tool '+(votedReco?'voted':'')+'" data-action="reco" title="추천">👍 '+(p.recommends||0)+'</button><button type="button" class="igdc-v10-tool '+(votedLike?'voted':'')+'" data-action="like" title="좋아요">❤️ '+(p.likes||0)+'</button><button type="button" class="igdc-v10-act edit" data-action="edit" title="수정">Edit</button><button type="button" class="igdc-v10-act del" data-action="del" title="삭제">Del</button>';
+    tools.innerHTML='<span class="igdc-v10-tool" title="'+esc(tr('view'))+'">👁 '+(p.views||0)+'</span><button type="button" class="igdc-v10-tool '+(votedReco?'voted':'')+'" data-action="reco" title="'+esc(tr('recommend'))+'">👍 '+(p.recommends||0)+'</button><button type="button" class="igdc-v10-tool '+(votedLike?'voted':'')+'" data-action="like" title="'+esc(tr('like'))+'">❤️ '+(p.likes||0)+'</button><button type="button" class="igdc-v10-act edit" data-action="edit" title="'+esc(tr('modify'))+'">'+esc(tr('edit'))+'</button><button type="button" class="igdc-v10-act del" data-action="del" title="'+esc(tr('delete'))+'">'+esc(tr('del'))+'</button>';
     row.appendChild(title); row.appendChild(tools); return row;
   }
   function renderAll(){
@@ -5914,7 +5916,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
       lists.forEach(function(list){ list.dataset.igdcV10='1'; list.innerHTML=''; });
       var arr=posts().slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);});
       arr.forEach(function(p){ p.cat=normalizeCat(p.cat); listNodes(p.cat).forEach(function(list){ list.appendChild(makeRow(p)); }); });
-      lists.forEach(function(list){ if(!list.querySelector('.igdc-v10-row')){ var e=document.createElement('div'); e.className='igdc-v10-empty'; e.textContent='등록된 글이 없습니다.'; list.appendChild(e); } });
+      lists.forEach(function(list){ if(!list.querySelector('.igdc-v10-row')){ var e=document.createElement('div'); e.className='igdc-v10-empty'; e.textContent=tr('emptyList'); list.appendChild(e); } });
     }finally{ renderBusy=false; }
   }
   function saveFinal(ev){
@@ -5929,9 +5931,9 @@ button.igdc-v10-tool{ cursor:pointer !important; }
       if(!editingId){ arr.unshift({id:makeId(),cat:normalizeCat(v.cat),title:v.title,body:v.body,meta:nowText(),ts:now,views:0,recommends:0,likes:0,attachments:v.attachments,votes:{recommends:[],likes:[]}}); }
       if(!savePosts(arr)){
         arr=arr.map(function(p){ p.attachments=(p.attachments||[]).map(function(a){ return {name:a.name||'attachment',size:a.size||0,type:a.type||''}; }); return p; });
-        savePosts(arr); status('파일 용량이 커서 파일명만 저장됨');
+        savePosts(arr); status(tr('largeFile'));
       }else{
-        status(wasEditing?'수정됨':'저장됨');
+        status(wasEditing?tr('updated'):tr('saved'));
       }
       renderAll(); clearComposer(); closeComposer(); return false;
     });
@@ -5941,8 +5943,11 @@ button.igdc-v10-tool{ cursor:pointer !important; }
     ['btnOpenComposer','btnSubmitPost'].forEach(function(idv){
       var b=document.getElementById(idv); if(!b) return;
       b.setAttribute('type','button');
-      if(idv==='btnSubmitPost') b.textContent='저장';
+      if(idv==='btnSubmitPost') b.textContent=tr('save');
+      if(idv==='btnOpenComposer') b.textContent=tr('writePost');
     });
+    var lc=document.getElementById('labelCategory'); if(lc) lc.textContent=tr('category');
+    var tp=document.querySelector('#titlePreview .tp-text'); if(tp && (!tp.textContent || /제목 미입력|No title/i.test(tp.textContent))) tp.textContent=tr('noTitleInput');
   }
   function install(){ normalizeTopButtons(); makeComposer(); makeViewer(); renderAll(); }
   function schedule(){ clearTimeout(installTimer); installTimer=setTimeout(install,60); }
