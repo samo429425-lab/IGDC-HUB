@@ -60,12 +60,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.63-sustained-intake-from-a1546-stable';
-const DEFAULT_LIMIT = 4500;
-const MAX_LIMIT = 20000;
-const MIN_RESULT_TARGET = 4500;
+const VERSION = 'A1.5.46-595-sanmaru-cpu-direct-page25-sns-google-fix';
+const DEFAULT_LIMIT = 2000;
+const MAX_LIMIT = 12000;
+const MIN_RESULT_TARGET = 1500;
 const MARU_SEARCH_MAX_PAGER_PAGES = 499;
-const DEFAULT_SOFT_TIMEOUT_MS = 12500;
+const DEFAULT_SOFT_TIMEOUT_MS = 10500;
 
 // MARU gateway policy:
 // - Internal search-bank first.
@@ -2891,35 +2891,25 @@ function sourceCaps(opts){
   const deep = !!opts.deep;
   const raw = opts.raw || {};
   const fast = isOpenPipeRequest(raw);
-
-  // A1.5.63 sustained intake:
-  // Keep the stable A1.5.46 gateway shape, but stop the search UI lane from
-  // running with a tiny "first paint only" provider budget forever.  The browser
-  // may still render only a small viewport, but Maru Search must keep enough
-  // candidates in items/results for search.js to accumulate several thousand
-  // results on broad queries.
-  const sustained = fast || truthy(raw.sustainedIntake) || truthy(raw.streamFullWindow) || truthy(raw.smoothIntake) || truthy(raw.naturalFlow);
-
   return {
     searchBankPages: 0,
-    // Search Bank raw/snapshot remains front-supply memory, not default UI mixing.
-    // Public search volume is widened through controlled provider/vertical windows.
-    naverPages: sustained ? 10 : (deep ? 12 : 8),
-    naverBlogPages: sustained ? 8 : (deep ? 10 : 5),
-    naverNewsPages: sustained ? 8 : (deep ? 10 : 5),
-    naverCafePages: sustained ? 8 : (deep ? 10 : 5),
-    naverEncycPages: sustained ? 5 : (deep ? 5 : 3),
-    naverKinPages: sustained ? 5 : (deep ? 5 : 3),
-    naverBookPages: sustained ? 4 : (deep ? 5 : 3),
-    naverLocalPages: sustained ? 3 : (deep ? 4 : 2),
-    googlePages: sustained ? 8 : (deep ? 10 : 5),
-    bingPages: sustained ? 8 : (deep ? 8 : 4),
-    imagePages: sustained ? 5 : (deep ? 8 : 3),
-    naverImagePages: sustained ? 8 : (deep ? 8 : 3),
-    youtubeLimit: sustained ? 180 : (deep ? 220 : 120),
-    timeoutMs: sustained ? 8500 : (deep ? 15000 : DEFAULT_SOFT_TIMEOUT_MS),
-    fastFirstWindow: fast,
-    sustainedIntake: sustained
+    // 일반 검색 첫 응답은 30초짜리 전체 수집이 아니라 빠른 창을 먼저 열어야 한다.
+    // 뒤쪽 보강은 search.js의 열린 수신 루프가 page window로 계속 받는다.
+    naverPages: fast ? 3 : (deep ? 10 : 6),
+    naverBlogPages: fast ? 1 : (deep ? 8 : 4),
+    naverNewsPages: fast ? 2 : (deep ? 8 : 4),
+    naverCafePages: fast ? 1 : (deep ? 8 : 4),
+    naverEncycPages: fast ? 1 : (deep ? 3 : 2),
+    naverKinPages: fast ? 1 : (deep ? 3 : 2),
+    naverBookPages: fast ? 1 : (deep ? 4 : 2),
+    naverLocalPages: fast ? 1 : (deep ? 3 : 2),
+    googlePages: fast ? 2 : (deep ? 9 : 4),
+    bingPages: fast ? 2 : (deep ? 6 : 3),
+    imagePages: fast ? 1 : (deep ? 6 : 2),
+    naverImagePages: fast ? 1 : (deep ? 6 : 2),
+    youtubeLimit: fast ? 40 : (deep ? 180 : 100),
+    timeoutMs: fast ? 2800 : (deep ? 15000 : DEFAULT_SOFT_TIMEOUT_MS),
+    fastFirstWindow: fast
   };
 }
 
@@ -3377,27 +3367,13 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
 
       const afterPrimaryExternal = collected.length;
       const naturalExpansionTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
-      const shouldRunSustainedVerticals =
-        timeLeft() > 1200 &&
-        (!caps.fastFirstWindow || caps.sustainedIntake || afterPrimaryExternal < Math.min(naturalExpansionTarget, 3000));
-
-      if(shouldRunSustainedVerticals){
+      if(!caps.fastFirstWindow && timeLeft() > 1200){
         await pullFromNaverVerticals();
       } else {
-        record('naver_verticals', 'skipped-time-or-covered', 0, { afterPrimaryExternal, naturalExpansionTarget, fastFirstWindow:!!caps.fastFirstWindow });
+        record('naver_verticals', 'skipped-time', 0, { afterPrimaryExternal, naturalExpansionTarget });
       }
 
-      const afterVerticals = collected.length;
-      const shouldRunIntentExpansion =
-        timeLeft() > 1300 &&
-        (
-          !caps.fastFirstWindow ||
-          viewType !== 'all' ||
-          detectQueryIntentCluster(q) !== 'general' ||
-          afterVerticals < Math.min(naturalExpansionTarget, 3200)
-        );
-
-      if(shouldRunIntentExpansion){
+      if(!caps.fastFirstWindow && (viewType !== 'all' || detectQueryIntentCluster(q) !== 'general') && timeLeft() > 1300){
         await pullFromIntentExpansion();
       }
 
@@ -5198,12 +5174,10 @@ exports.handler = async function(event){
       doesNotLimitItemsResults: true
     });
     const fullCandidateCount = Array.isArray(base.items) ? base.items.length : 0;
-    const sustainedResponseRequested = isOpenPipeRequest(raw || {}) || truthy(raw && (raw.sustainedIntake || raw.streamFullWindow || raw.smoothIntake || raw.naturalFlow));
-    const firstResponseWindow = sustainedResponseRequested
-      ? Math.max(visiblePagePack.perPage, Math.min(fullCandidateCount, Math.max(visiblePagePack.perPage * 80, 2400)))
-      : Math.max(visiblePagePack.perPage, Math.min(visiblePagePack.perPage * 12, 300));
-    const responseOffset = visiblePagePack.page <= 1 ? 0 : Math.max(0, (visiblePagePack.page - 1) * visiblePagePack.perPage);
-    const responseItems = base.items.slice(responseOffset, Math.min(fullCandidateCount, responseOffset + firstResponseWindow));
+    const firstResponseWindow = Math.max(visiblePagePack.perPage, Math.min(visiblePagePack.perPage * 12, 300));
+    const responseItems = visiblePagePack.page <= 1
+      ? base.items.slice(0, Math.min(fullCandidateCount, firstResponseWindow))
+      : visiblePagePack.pageItems.slice();
     if(!revenueOff) distributeRevenue(event, visiblePagePack.pageItems).catch(() => null);
     return ok({
       status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: base.source,
