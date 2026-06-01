@@ -12,7 +12,7 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.4.4-rich-body-firstwave-contract-final';
+const VERSION = 'maru-search-display-engine-v1.4.6-search-ui-stable-rich-body-no-guide-contract';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
@@ -93,44 +93,34 @@ function compactTextFromAny(v){
   }
   return '';
 }
+function isGeneratedDisplayGuideText(v){
+  const low = compactTextFromAny(v).toLowerCase();
+  if(!low) return false;
+  return /(확인할 수 있는 결과입니다|표시됩니다|대표 이미지가 있으면|본문 요약이 제공|검색 결과로 연결|공개 정보를 기준으로 연결|지도·지역 결과|사진 자료|영상 자료|관련 장소 정보|google images|bing images|google news|naver images)/i.test(low);
+}
 function naturalSummary(item, query){
   item = item && typeof item === 'object' ? item : {};
   const payload = pickObject(item.payload);
   const data = pickObject(item.data);
   const displayCard = pickObject(item.displayCard, item.card, item.presentation);
   const candidates = [
-    displayCard.summary, displayCard.body, displayCard.description,
-    item.displaySummary, item.summary, item.snippet, item.description, item.contentSnippet,
-    item.excerpt, item.abstract, item.text, item.content, item.metaDescription, item.ogDescription,
-    payload.summary, payload.snippet, payload.description, payload.contentSnippet, payload.excerpt, payload.abstract, payload.text, payload.content, payload.metaDescription, payload.ogDescription,
-    data.summary, data.snippet, data.description, data.contentSnippet, data.excerpt, data.abstract, data.text, data.content, data.metaDescription, data.ogDescription
+    item.snippet, item.contentSnippet, item.excerpt, item.abstract, item.text, item.content, item.body, item.description, item.summary, item.displaySummary,
+    payload.snippet, payload.contentSnippet, payload.excerpt, payload.abstract, payload.text, payload.content, payload.body, payload.description, payload.summary,
+    data.snippet, data.contentSnippet, data.excerpt, data.abstract, data.text, data.content, data.body, data.description, data.summary,
+    item.metaDescription, item.ogDescription, payload.metaDescription, payload.ogDescription, data.metaDescription, data.ogDescription,
+    displayCard.body, displayCard.text, displayCard.snippet, displayCard.description, displayCard.summary
   ];
   for(const v of candidates){
     const clean = compactTextFromAny(v);
-    if(clean && clean.length >= 12) return clean.slice(0, 640);
+    if(clean && clean.length >= 12 && !isGeneratedDisplayGuideText(clean)) return clean.slice(0, 900);
   }
   return '';
 }
 function fallbackDisplaySummary(item, query, group){
-  item = item && typeof item === 'object' ? item : {};
-  const title = firstNonEmpty(item.title, item.name, query);
-  const url = firstNonEmpty(item.url, item.link, item.href);
-  const host = domainOf(url);
-  const q = compact(query || title);
-  const label = ({
-    authority:'공식·기관', public_data:'공공자료', local_tour:'지도·지역', knowledge:'지식', wiki:'위키', site:'사이트', book:'도서',
-    blog:'블로그', cafe:'카페', shopping:'쇼핑', news:'뉴스', image:'이미지', video:'영상', media:'미디어', social:'소셜',
-    academic:'학술', community:'커뮤니티', sports:'스포츠', finance:'금융', webtoon:'웹툰', web:'웹'
-  })[group] || '웹';
-  if(group === 'local_tour') return `${q}의 위치·관광·교통·주변 정보를 확인할 수 있는 ${label} 결과입니다. 지도 미리보기와 관련 장소 정보가 함께 표시됩니다.`.slice(0, 300);
-  if(group === 'image') return `${q}와 관련된 사진·그래픽·이미지 자료를 확인할 수 있는 결과입니다. 원본 페이지가 제공하는 대표 이미지가 있으면 카드 오른쪽에 표시됩니다.`.slice(0, 300);
-  if(group === 'video' || group === 'media') return `${q} 관련 영상·현장 화면·리뷰 콘텐츠로 연결되는 결과입니다. 영상 대표 스냅샷이 있는 경우 검색 카드에 함께 표시됩니다.`.slice(0, 300);
-  if(group === 'blog' || group === 'cafe' || group === 'community' || group === 'social') return `${q}에 대한 현장 후기, 소셜 반응, 커뮤니티 글을 확인할 수 있는 결과입니다. 제공된 본문·이미지가 있으면 검색 카드에 같이 표시됩니다.`.slice(0, 300);
-  if(group === 'news') return `${q}와 관련된 최신 보도·이슈·기사 흐름을 확인할 수 있는 결과입니다. 언론사 본문 요약이 제공되면 2~3줄로 표시됩니다.`.slice(0, 300);
-  if(group === 'authority' || group === 'public_data' || group === 'site') return `${q}와 관련된 공식 사이트·공공자료·주요 기관 페이지입니다. ${host || '해당 출처'}의 공개 정보를 기준으로 연결됩니다.`.slice(0, 300);
-  const line1 = q ? `${q} 관련 ${label} 결과입니다.` : `${label} 결과입니다.`;
-  const line2 = host ? `${host}에서 제공되는 공개 페이지이며, 본문 요약이나 대표 이미지가 있으면 검색 카드에 함께 표시됩니다.` : `${title} 항목의 공개 페이지로 연결됩니다.`;
-  return `${line1} ${line2}`.slice(0, 300);
+  // Do not invent guide copy as card body. Search cards should show provider/body
+  // text only; when no body exists, search.js renders title/source/link and waits
+  // for later enrichment instead of showing 안내문.
+  return '';
 }
 function collectDisplayImages(item){
   item = item && typeof item === 'object' ? item : {};
@@ -227,12 +217,14 @@ function cardTypeForGroup(group, item){
   return 'web';
 }
 function bodyLinesForCardType(cardType, group, mapLike){
-  if(mapLike) return 3;
-  if(group === 'authority' || group === 'public_data') return 6;
-  if(group === 'site' || group === 'knowledge' || group === 'wiki') return 5;
-  if(cardType === 'article-media') return 5;
-  if(group === 'web') return 5;
-  return 4;
+  if(mapLike) return 4;
+  if(group === 'authority' || group === 'public_data') return 8;
+  if(group === 'site' || group === 'knowledge' || group === 'wiki') return 7;
+  if(cardType === 'article-media') return 8;
+  if(group === 'news' || group === 'blog' || group === 'cafe' || group === 'community' || group === 'social') return 8;
+  if(group === 'image' || group === 'video' || group === 'media') return 6;
+  if(group === 'web') return 7;
+  return 6;
 }
 function officialAuthorityRank(item, query, group){
   item = item && typeof item === 'object' ? item : {};
@@ -385,7 +377,7 @@ function decorateDisplayItem(item, ctx, index){
   // Ensure minimal displayCard contract: bodyLines and thumbnail must exist
   try{
     if(!copy.displayCard) copy.displayCard = {};
-    if(!copy.displayCard.lineClamp) copy.displayCard.lineClamp = (cardType === 'article-media' ? 5 : 4);
+    if(!copy.displayCard.lineClamp) copy.displayCard.lineClamp = bodyLinesForCardType(cardType, group, mapLike);
     if(!copy.displayCard.bodyLines) copy.displayCard.bodyLines = parseInt(copy.displayCard.lineClamp, 10) || 3;
     if(!copy.displayCard.thumbnail && images && images.length) copy.displayCard.thumbnail = images[0];
     if(!copy.thumbnail) copy.thumbnail = copy.displayCard.thumbnail || images[0] || '';
@@ -601,7 +593,7 @@ function buildDisplayPolicy(input){
     visibleTabs:p.visibleTabs,
     hiddenTabs:p.hiddenTabs,
     groupCounts:counts,
-    cardContract:{ enabled:true, bodyLines:6, minimumBodyLines:3, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', authorityPriority:'city-country-government-official-first', executor:'search.js' },
+    cardContract:{ enabled:true, bodyLines:8, minimumBodyLines:4, thumbnailPolicy:'natural-content-image-only; reject-logo-banner-placard; do-not-promote-poster-field', mapPolicy:'show-map-preview-for-local-tour', authorityPriority:'city-country-government-official-first', executor:'search.js' },
     execution:'search-js-applies-policy; maru-search-attaches-display-card-contract',
     externalCall:false,
     storageWrite:false

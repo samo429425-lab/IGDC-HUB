@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.8.0-instant-supply-os";
+const VERSION = "sanmaru-engine-v2.8.1-instant-supply-os-search-ui-window";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 3000;
@@ -2999,8 +2999,10 @@ function buildSanmaruInstantOsPackage(q, opts){
     page: firstNonEmpty(opts.page, opts.p, opts.start, 1),
     perPage: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
     visibleNeed: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
-    allowRouteCards: true,
-    allowOpeningCards: true,
+    allowRouteCards: !(truthy(opts.noRouteCards || opts.publicSearch || opts.openPipe || opts.noProviderLane)),
+    noRouteCards: truthy(opts.noRouteCards || opts.publicSearch || opts.openPipe || opts.noProviderLane),
+    allowOpeningCards: !(truthy(opts.noOpeningCards || opts.publicSearch || opts.openPipe || opts.noProviderLane)),
+    noOpeningCards: truthy(opts.noOpeningCards || opts.publicSearch || opts.openPipe || opts.noProviderLane),
     frontSupply: truthy(opts.frontSupply || opts.slotSupply || opts.contentSupply || opts.snapshotSupply || opts.searchbankSupply || opts.includeFrontSupply || opts.includeFrontSlots),
     country: effectiveCountry
   });
@@ -3058,7 +3060,7 @@ function buildSanmaruInstantOsPackage(q, opts){
   // search.js will render page 1 first and cache the rest.
   const requestedFirstWindow = clampInt(
     firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit),
-    Math.max(perPage * 12, 300),
+    Math.max(perPage * 12, 1800),
     perPage,
     MAX_LIMIT
   );

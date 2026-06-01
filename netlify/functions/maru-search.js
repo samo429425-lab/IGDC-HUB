@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-595-sanmaru-cpu-direct-page25-sns-google-fix';
+const VERSION = 'A1.5.60-search-ui-stable-no-guide-fast-race';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -991,7 +991,7 @@ function resultSummaryText(it){
   ];
   for(const v of candidates){
     const clean = stripInlineHtml(v);
-    if(clean && clean.length >= 18 && !isSyntheticSearchSummaryText(clean)) return clean.slice(0, 300);
+    if(clean && clean.length >= 18 && !isSyntheticSearchSummaryText(clean)) return clean.slice(0, 900);
   }
 
   // Do not manufacture card summaries such as "...검색 결과입니다".
@@ -2200,7 +2200,8 @@ function buildSanmaruFastLayerBase(q, residentPack, raw, ctx){
   const requestedLimit = Math.min(MAX_LIMIT, Math.max(clampInt(raw && raw.limit, DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
   const residentItems = (residentPack && residentPack.items || [])
     .map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident-fast-layer')));
-  const providerLaneItems = buildSanmaruProviderLaneExpansionCards(q, raw || {}, ctx || {}, requestedLimit, residentItems.length);
+  const providerLaneSuppressed = truthy(raw && (raw.noProviderLane || raw.noRouteCards || raw.publicSearch || raw.openPipe || raw.searchUiRealOnly));
+  const providerLaneItems = providerLaneSuppressed ? [] : buildSanmaruProviderLaneExpansionCards(q, raw || {}, ctx || {}, requestedLimit, residentItems.length);
   const items = dedupeCanonicalItems([].concat(residentItems, providerLaneItems))
     .slice(0, requestedLimit);
   return {
@@ -3382,40 +3383,42 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
       record('external-gateway', externalOff ? 'blocked-by-request' : 'skipped-internal-enough', 0, { internalCount, trigger: externalTriggerMin, mode });
     }
 
-    const publicProviderCards = publicPlatformResultCards(q);
-    if(publicProviderCards.length){
-      collected.push.apply(collected, publicProviderCards);
-      record('public-provider-roads', 'ok', publicProviderCards.length, { includes:['google','naver','youtube','instagram','facebook','tiktok','x-twitter','threads'], role:'category-and-provider-road-preservation-not-result-suppression' });
-    }
-
-    const directMapCards = mapCards(q, region);
-    if(directMapCards.length){
-      collected.push.apply(collected, directMapCards);
-      record('map-link-cards', 'ok', directMapCards.length, { mode: 'direct-navigation-links' });
-    }
-
-    if(viewType === 'map' || viewType === 'tour'){
-      const directTransportCards = transportCards(q);
-      if(directTransportCards.length){
-        collected.push.apply(collected, directTransportCards);
-        record('transport-link-cards', 'ok', directTransportCards.length, { mode: 'direct-navigation-links' });
+    const rawParamsForGuideCards = (event && event.queryStringParameters) || {};
+    const allowGuideCards = truthy(rawParamsForGuideCards.allowGuideCards || rawParamsForGuideCards.debugGuideCards || rawParamsForGuideCards.providerCards || rawParamsForGuideCards.routeCards);
+    if(allowGuideCards){
+      const publicProviderCards = publicPlatformResultCards(q);
+      if(publicProviderCards.length){
+        collected.push.apply(collected, publicProviderCards);
+        record('public-provider-roads', 'ok', publicProviderCards.length, { includes:['google','naver','youtube','instagram','facebook','tiktok','x-twitter','threads'], role:'debug-provider-road-cards-explicitly-enabled' });
       }
-    }
 
-    // Open/public discovery surfaces: SNS, company/official pages, blogs, communities, videos, vlogs and news.
-    // These are additive bridge cards only; they do not replace provider/API results and do not touch media/image fields.
-    const discoveryCards = openDiscoverySurfaceCards(q);
-    if(discoveryCards.length){
-      collected.push.apply(collected, discoveryCards);
-      record('open-discovery-surfaces', 'ok', discoveryCards.length, {
-        includes: ['news','youtube','vlog','instagram','facebook','tiktok','x-twitter','company-official','blog','cafe','community','knowledge']
-      });
-    }
+      const directMapCards = mapCards(q, region);
+      if(directMapCards.length){
+        collected.push.apply(collected, directMapCards);
+        record('map-link-cards', 'ok', directMapCards.length, { mode: 'debug-direct-navigation-links' });
+      }
 
-    if(collected.length < 25){
-      const emergencyCards = sanmaruEmergencyDiscoveryCards(q);
-      collected.push.apply(collected, emergencyCards);
-      record('sanmaru-emergency-discovery', emergencyCards.length ? 'ok' : 'empty', emergencyCards.length, { reason:'prevent-empty-result-while-provider-cache-warms' });
+      if(viewType === 'map' || viewType === 'tour'){
+        const directTransportCards = transportCards(q);
+        if(directTransportCards.length){
+          collected.push.apply(collected, directTransportCards);
+          record('transport-link-cards', 'ok', directTransportCards.length, { mode: 'debug-direct-navigation-links' });
+        }
+      }
+
+      const discoveryCards = openDiscoverySurfaceCards(q);
+      if(discoveryCards.length){
+        collected.push.apply(collected, discoveryCards);
+        record('open-discovery-surfaces', 'ok', discoveryCards.length, { mode:'debug-guide-cards' });
+      }
+
+      if(collected.length < 25){
+        const emergencyCards = sanmaruEmergencyDiscoveryCards(q);
+        collected.push.apply(collected, emergencyCards);
+        record('sanmaru-emergency-discovery', emergencyCards.length ? 'ok' : 'empty', emergencyCards.length, { reason:'debug-guide-card-fallback' });
+      }
+    }else{
+      record('guide-cards', 'suppressed-public-search-results', 0, { policy:'do-not-show-provider-route-or-search-guide-cards-as-results' });
     }
 
     let unique = dedupeCanonicalItems(collected);
@@ -4860,6 +4863,146 @@ function parseEventJsonBody(event){
 
 
 
+
+function decodeXmlEntities(v){
+  return safeString(v)
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => { try { return String.fromCharCode(parseInt(h,16)); } catch(e){ return ''; } })
+    .replace(/&#(\d+);/g, (_, n) => { try { return String.fromCharCode(parseInt(n,10)); } catch(e){ return ''; } });
+}
+function xmlTag(block, tag){
+  const m = safeString(block).match(new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'i'));
+  return m ? compactCardPlainText(decodeXmlEntities(m[1])) : '';
+}
+function compactCardPlainText(v){
+  return safeString(v).replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+}
+async function fetchJsonWithTimeout(url, opts, ms){
+  const r = await fetchWithTimeout(url, Object.assign({ method:'GET', headers:{ 'Accept':'application/json, text/plain, */*', 'User-Agent':'IGDC-MARU-Search/1.0' } }, opts || {}), ms || 1200);
+  if(!r || !r.ok) return null;
+  return await r.json();
+}
+async function fetchTextWithTimeout(url, opts, ms){
+  const r = await fetchWithTimeout(url, Object.assign({ method:'GET', headers:{ 'Accept':'application/rss+xml, application/xml, text/xml, text/plain, */*', 'User-Agent':'IGDC-MARU-Search/1.0' } }, opts || {}), ms || 1200);
+  if(!r || !r.ok) return '';
+  return await r.text();
+}
+async function publicWikipediaQuick(q, lang, limit, timeoutMs){
+  const l = /^en/i.test(safeString(lang)) ? 'en' : (/^ja/i.test(safeString(lang)) ? 'ja' : 'ko');
+  const url = 'https://' + l + '.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srlimit=' + encodeURIComponent(String(Math.max(3, Math.min(12, limit || 8)))) + '&srsearch=' + encodeURIComponent(q);
+  const json = await fetchJsonWithTimeout(url, null, timeoutMs || 1100);
+  const rows = json && json.query && Array.isArray(json.query.search) ? json.query.search : [];
+  return rows.map(row => {
+    const title = compactCardPlainText(row.title || '');
+    const pageUrl = 'https://' + l + '.wikipedia.org/wiki/' + encodeURIComponent(title.replace(/\s+/g, '_'));
+    return canonicalizeItem({
+      id:'public-wiki-' + localStableHash([l, row.pageid, title].join('|')),
+      title,
+      summary: compactCardPlainText(row.snippet || ''),
+      snippet: compactCardPlainText(row.snippet || ''),
+      url:pageUrl, link:pageUrl,
+      source:'wikipedia_public_api', provider:'wikipedia', type:'knowledge', searchCategory:'knowledge', mediaType:'article', score:0.82
+    }, q, 'wikipedia_public_api');
+  }).filter(it => it.title && it.url);
+}
+async function publicGoogleNewsRssQuick(q, lang, limit, timeoutMs){
+  const isKo = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(q) || /^ko/i.test(safeString(lang));
+  const hl = isKo ? 'ko' : 'en-US';
+  const gl = isKo ? 'KR' : 'US';
+  const ceid = isKo ? 'KR:ko' : 'US:en';
+  const url = 'https://news.google.com/rss/search?q=' + encodeURIComponent(q) + '&hl=' + encodeURIComponent(hl) + '&gl=' + encodeURIComponent(gl) + '&ceid=' + encodeURIComponent(ceid);
+  const xml = await fetchTextWithTimeout(url, null, timeoutMs || 1100);
+  const blocks = safeString(xml).match(/<item[\s\S]*?<\/item>/gi) || [];
+  return blocks.slice(0, Math.max(3, Math.min(18, limit || 10))).map((block, idx) => {
+    const title = xmlTag(block, 'title');
+    const link = xmlTag(block, 'link');
+    const desc = xmlTag(block, 'description');
+    const source = xmlTag(block, 'source') || 'Google News';
+    const pubDate = xmlTag(block, 'pubDate');
+    return canonicalizeItem({
+      id:'public-google-news-' + localStableHash([q, title, link, idx].join('|')),
+      title, summary:desc, snippet:desc, description:desc,
+      url:link, link,
+      source:'google_news_rss', provider:source, type:'news', searchCategory:'news', mediaType:'article', publishedAt:pubDate, score:0.78
+    }, q, 'google_news_rss');
+  }).filter(it => it.title && it.url);
+}
+async function publicDuckDuckGoInstantQuick(q, limit, timeoutMs){
+  const url = 'https://api.duckduckgo.com/?q=' + encodeURIComponent(q) + '&format=json&no_html=1&skip_disambig=1';
+  const json = await fetchJsonWithTimeout(url, null, timeoutMs || 1000);
+  const out = [];
+  if(json && (json.AbstractText || json.AbstractURL)){
+    out.push(canonicalizeItem({
+      id:'public-ddg-abstract-' + localStableHash(q),
+      title:firstNonEmpty(json.Heading, q),
+      summary:firstNonEmpty(json.AbstractText, json.Abstract),
+      snippet:firstNonEmpty(json.AbstractText, json.Abstract),
+      url:firstNonEmpty(json.AbstractURL, json.Results && json.Results[0] && json.Results[0].FirstURL),
+      link:firstNonEmpty(json.AbstractURL, json.Results && json.Results[0] && json.Results[0].FirstURL),
+      image:firstNonEmpty(json.Image), thumbnail:firstNonEmpty(json.Image),
+      source:'duckduckgo_instant_answer', provider:'duckduckgo', type:'knowledge', searchCategory:'knowledge', mediaType:'article', score:0.76
+    }, q, 'duckduckgo_instant_answer'));
+  }
+  const topics = [];
+  function walk(arr){
+    (Array.isArray(arr) ? arr : []).forEach(x => { if(x && x.FirstURL) topics.push(x); if(x && Array.isArray(x.Topics)) walk(x.Topics); });
+  }
+  walk(json && json.RelatedTopics);
+  topics.slice(0, Math.max(0, Math.min(8, (limit || 8) - out.length))).forEach((x, idx) => {
+    out.push(canonicalizeItem({
+      id:'public-ddg-topic-' + localStableHash([q, x.FirstURL, idx].join('|')),
+      title:compactCardPlainText(x.Text || q).slice(0, 120),
+      summary:compactCardPlainText(x.Text || ''), snippet:compactCardPlainText(x.Text || ''),
+      url:x.FirstURL, link:x.FirstURL,
+      image:x.Icon && x.Icon.URL ? x.Icon.URL : '', thumbnail:x.Icon && x.Icon.URL ? x.Icon.URL : '',
+      source:'duckduckgo_related_topic', provider:'duckduckgo', type:'web', searchCategory:'web', mediaType:'article', score:0.62
+    }, q, 'duckduckgo_related_topic'));
+  });
+  return out.filter(it => it.title && it.url);
+}
+async function publicOpenStreetMapQuick(q, lang, limit, timeoutMs){
+  const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=' + encodeURIComponent(String(Math.max(2, Math.min(6, limit || 4)))) + '&accept-language=' + encodeURIComponent(firstNonEmpty(lang, 'ko')) + '&q=' + encodeURIComponent(q);
+  const rows = await fetchJsonWithTimeout(url, null, timeoutMs || 1100);
+  return (Array.isArray(rows) ? rows : []).map((row, idx) => {
+    const title = firstNonEmpty(row.name, row.display_name, q);
+    const url = row.osm_id ? ('https://www.openstreetmap.org/' + safeString(row.osm_type || 'node') + '/' + encodeURIComponent(row.osm_id)) : ('https://www.openstreetmap.org/search?query=' + encodeURIComponent(q));
+    return canonicalizeItem({
+      id:'public-osm-' + localStableHash([q, row.osm_type, row.osm_id, idx].join('|')),
+      title, summary:row.display_name || '', snippet:row.display_name || '',
+      url, link:url,
+      source:'openstreetmap_nominatim', provider:'openstreetmap', type:'map', searchCategory:'local_tour', mediaType:'map', lat:row.lat, lon:row.lon, score:0.7
+    }, q, 'openstreetmap_nominatim');
+  }).filter(it => it.title && it.url);
+}
+async function publicOpenProviderQuickPack(q, raw, ctx){
+  raw = raw || {}; ctx = ctx || {};
+  const searchType = normalizeSearchType(ctx.searchType || raw.type || raw.tab || raw.category || raw.vertical || 'all');
+  const budgetMs = Math.max(500, Math.min(2200, Number(raw.openProviderMs || raw.publicProviderMs || raw.fastRichProbeMs || 1600) || 1600));
+  const lang = ctx.lang || raw.lang || raw.uiLang || raw.locale || '';
+  const tasks = [];
+  const perTaskMs = Math.max(450, Math.min(1200, budgetMs));
+  function add(name, condition, promise){ if(condition) tasks.push(Promise.resolve(promise).then(items => ({ name, items: Array.isArray(items) ? items : [] })).catch(e => ({ name, items:[], error:safeString((e && e.message) || e).slice(0,120) }))); }
+  add('public_wikipedia', ['all','knowledge','wiki','web','site'].includes(searchType), publicWikipediaQuick(q, lang, 10, perTaskMs));
+  add('public_google_news_rss', ['all','news','web'].includes(searchType), publicGoogleNewsRssQuick(q, lang, 12, perTaskMs));
+  add('public_duckduckgo_instant', ['all','knowledge','web','site'].includes(searchType), publicDuckDuckGoInstantQuick(q, 8, perTaskMs));
+  add('public_openstreetmap', ['all','map','tour','local'].includes(searchType), publicOpenStreetMapQuick(q, lang, 5, perTaskMs));
+  let settled = [];
+  try { settled = await Promise.all(tasks); }
+  catch(e) { settled = []; }
+  const trace = [];
+  const items = [];
+  for(const row of Array.isArray(settled) ? settled : []){
+    trace.push({ name:row.name, status:row.items && row.items.length ? 'ok' : (row.error || 'empty-or-timeout'), count:row.items ? row.items.length : 0 });
+    items.push.apply(items, row.items || []);
+  }
+  return { items:dedupeCanonicalItems(items), trace, budgetMs };
+}
+
 async function attachFastDisplayRichProbe(base, event, ctx){
   base = base && typeof base === 'object' ? base : { items:[], results:[], meta:{} };
   ctx = ctx || {};
@@ -4978,6 +5121,112 @@ exports.handler = async function(event){
       return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
     }
 
+    const searchUiFastFirst = truthy(raw && (raw.searchUiFastFirst || raw.fastFirstResponse || raw.firstPaintDirect)) && isOpenPipeRequest(raw || {}) && !deep && !explicitExternalRequested(raw) && !truthy(raw && (raw.waitProviders || raw.waitExternal || raw.forceWide || raw.forceProviderRefresh));
+    if(searchUiFastFirst){
+      const startedFastFirst = nowMs();
+      const fastBudgetMs = Math.max(350, Math.min(1000, Number(raw.fastRichProbeMs || raw.displayProbeMs || 900) || 900));
+      const region = detectRuntimeRegion(event, lang, q);
+      let base = { source:'maru-search-fast-first-response', route:sourceOrderForRegion(region), sourceRoute:sourceOrderForRegion(region), region, items:[], results:[], meta:{ trace:[{ name:'search-ui-fast-first-response', status:'started', budgetMs:fastBudgetMs }] } };
+      if(truthy(raw && raw.fastUseResident)){
+        try{
+          const seed = getSanmaruResidentForMaru(q, Object.assign({}, raw || {}, { noRouteCards:'1', noOpeningCards:'1', noProviderLane:'1', publicSearch:'1', openPipe:'1' }), { searchType, lang, limit:Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET)), reason:'search-ui-fast-first-seed' });
+          const seedItems = (seed && Array.isArray(seed.items) ? seed.items : []).map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-fast-first-seed')));
+          if(seedItems.length){
+            base.items = dedupeCanonicalItems([].concat(base.items, seedItems)).slice(0, Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET)));
+            base.results = base.items;
+            base.meta.sanmaruSeed = Object.assign({}, seed.meta || {}, { count:seedItems.length });
+          }
+        }catch(e){
+          base.meta.sanmaruSeed = { status:'soft-failed', error:safeString((e && e.message) || e).slice(0,120) };
+        }
+      }else{
+        base.meta.sanmaruSeed = { status:'skipped-for-fast-first-response', reason:'search.js calls Sanmaru direct in parallel' };
+      }
+      try{
+        let IndexEngine = null;
+        try { IndexEngine = require('./search-bank-index-engine'); } catch(_) { IndexEngine = null; }
+        if(IndexEngine && typeof IndexEngine.query === 'function'){
+          const ix = IndexEngine.query({
+            q, query:q, type:searchType, tab:searchType,
+            limit:Math.min(MAX_LIMIT, Math.max(limit || 0, MIN_RESULT_TARGET)),
+            perPage:25, publicSearch:'1', frontSupply:'0', includePlaceholders:'0'
+          });
+          const ixRawItems = ix && (Array.isArray(ix.items) ? ix.items : (Array.isArray(ix.results) ? ix.results : []));
+          const ixItems = ixRawItems.map(x => canonicalizeItem(x, q, x && (x.source || 'search-bank-index-fast-first')));
+          if(ixItems.length){
+            base.items = dedupeCanonicalItems([].concat(base.items || [], ixItems)).slice(0, Math.min(MAX_LIMIT, Math.max(limit || 0, MIN_RESULT_TARGET)));
+            base.results = base.items;
+          }
+          base.meta.searchBankIndexFastFirst = { status: ixItems.length ? 'ok' : 'empty', count: ixItems.length, engine: ix && ix.engine };
+        }else{
+          base.meta.searchBankIndexFastFirst = { status:'unavailable' };
+        }
+      }catch(e){
+        base.meta.searchBankIndexFastFirst = { status:'soft-failed', error:safeString((e && e.message) || e).slice(0,120) };
+      }
+      try{
+        const publicPack = await publicOpenProviderQuickPack(q, Object.assign({}, raw || {}, { fastRichProbeMs:fastBudgetMs }), { searchType, lang });
+        if(publicPack.items && publicPack.items.length){
+          base.items = dedupeCanonicalItems([].concat(publicPack.items, base.items || [])).slice(0, Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET)));
+          base.results = base.items;
+        }
+        base.meta.publicOpenProviders = { status: publicPack.items && publicPack.items.length ? 'ok' : 'empty-or-timeout', count:(publicPack.items || []).length, budgetMs:publicPack.budgetMs, trace:publicPack.trace };
+      }catch(e){
+        base.meta.publicOpenProviders = { status:'soft-failed', error:safeString((e && e.message) || e).slice(0,120) };
+      }
+      try{
+        base = await Promise.race([
+          attachFastDisplayRichProbe(base, event, { q, raw:Object.assign({}, raw || {}, { displayRich:'1', fastRichProbeMs:fastBudgetMs, noProviderLane:'1', publicSearch:'1', openPipe:'1' }), searchType, lang }),
+          new Promise(resolve => setTimeout(() => resolve(base), fastBudgetMs + 80))
+        ]);
+      }catch(e){
+        base.meta.fastDisplayRichProbe = { status:'soft-failed', error:safeString((e && e.message) || e).slice(0,120) };
+      }
+      if((base.items || []).length < 8){
+        const authority = buildKoreaLocalAuthorityCardsForSearch(q, region).map(x => canonicalizeItem(x, q, x && (x.source || 'local-authority-fast-first')));
+        base.items = dedupeCanonicalItems([].concat(base.items || [], authority)).slice(0, Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET)));
+        base.results = base.items;
+      }
+      base.items = (Array.isArray(base.items) ? base.items : []).filter(it => {
+        if(!it || it.sanmaruEmergencyDiscovery || it.sanmaruOpeningCard || it.publicProviderRoad || it.placeholder) return false;
+        const guideText = safeString([it.sourceType, it.generatedBy, it.source, it.provider, it.title, it.url, it.link].join(' ')).toLowerCase();
+        if(/search-link|provider-lane|provider-window|opening|discovery|google_sns_|google_news_discovery|naver_news_discovery|youtube_search|bing_images|google_images/.test(guideText)) return false;
+        return true;
+      }).map(compactResultItem);
+      const displayPack = applySearchDisplayEngineToItems(base.items, q, raw || {}, { searchType, lang, region:base.region || null, mode:'search-ui-fast-first' });
+      base.items = displayPack.items;
+      base.results = base.items;
+      base.displayPolicy = displayPack.displayPolicy || null;
+      const fullSectionPack = buildSearchSections(base.items, q, { searchType });
+      const visiblePagePack = buildCollapseAwareVisiblePagePack(base.items, q, raw || {}, fullSectionPack);
+      const responseWindow = clampInt(firstNonEmpty(raw.firstPaintLimit, raw.initialPreloadTarget, raw.limit), Math.max(visiblePagePack.perPage * 12, Math.min(1500, limit)), visiblePagePack.perPage, MAX_LIMIT);
+      const responseItems = visiblePagePack.page <= 1 ? base.items.slice(0, Math.min(base.items.length, responseWindow)) : visiblePagePack.pageItems.slice();
+      try{ triggerSanmaruResidentRefresh(q, raw || {}, { searchType, lang, limit }); }catch(_){}
+      return ok({
+        status:'ok', engine:'maru-search', version:VERSION, query:q, source:base.source,
+        items:responseItems, results:responseItems,
+        pageItems:visiblePagePack.pageItems,
+        visiblePagePack,
+        sectionPack:fullSectionPack,
+        displayPolicy:base.displayPolicy || null,
+        meta:Object.assign({}, base.meta || {}, {
+          count:responseItems.length,
+          fullCandidateCount:base.items.length,
+          totalCandidates:Math.max(base.items.length, Number(raw.candidatePoolTarget || raw.limit || 0) || 0),
+          responseWindowCount:responseItems.length,
+          initialResponseWindow:responseWindow,
+          elapsedMs:nowMs() - startedFastFirst,
+          searchUiFastFirst:true,
+          firstResponsePolicy:'return-fast-real-provider-and-resident-items; do-not-wait-wide-gateway',
+          deferredWideGateway:true,
+          providerGuidesExcludedFromItems:true,
+          displayEngineStatus:displayPack.displayEngineStatus,
+          displayPolicy:displayPack.displayPolicy || null,
+          trace:[].concat(base.meta && base.meta.trace || [], [{ name:'search-ui-fast-first-response', status:'ok', count:responseItems.length, elapsedMs:nowMs() - startedFastFirst }])
+        })
+      });
+    }
+
     const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 25), 25, 1, 100);
     const forceProviderRefresh = deep || explicitExternalRequested(raw) || truthy(raw && (raw.refresh || raw.forceRefresh || raw.waitProviders || raw.waitExternal));
 
@@ -5076,7 +5325,8 @@ exports.handler = async function(event){
     const providerLaneTarget = fastDisplayFirstWindow
       ? fastWindowCandidateTarget
       : Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET, visibleNeed * 12, requestedPageForWindow * visibleNeed));
-    if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
+    const providerLaneGuideSuppressedEarly = truthy(raw && (raw.noProviderLane || raw.noRouteCards || raw.publicSearch || raw.openPipe || raw.searchUiRealOnly));
+    if(!providerLaneGuideSuppressedEarly && sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
       const laneItems = buildSanmaruProviderLaneExpansionCards(q, Object.assign({}, raw || {}, { limit: providerLaneTarget }), { region:detectRuntimeRegion(event, lang, q) }, providerLaneTarget, (base.items || []).length);
       base.items = dedupeCanonicalItems([].concat(base.items || [], laneItems)).slice(0, providerLaneTarget);
       base.results = base.items;
@@ -5099,7 +5349,8 @@ exports.handler = async function(event){
       MAX_LIMIT,
       Math.max(visibleNeed * 12, requestedPageForWindowGuarantee * visibleNeed + visibleNeed, fastDisplayFirstWindow ? 300 : 0)
     );
-    if((base.items || []).length < pageWindowCandidateNeed){
+    const providerLaneGuideSuppressed = truthy(raw && (raw.noProviderLane || raw.noRouteCards || raw.publicSearch || raw.openPipe || raw.searchUiRealOnly));
+    if(!providerLaneGuideSuppressed && (base.items || []).length < pageWindowCandidateNeed){
       const guaranteedLaneItems = buildSanmaruProviderLaneExpansionCards(
         q,
         Object.assign({}, raw || {}, { limit: pageWindowCandidateNeed, providerLaneTarget: pageWindowCandidateNeed }),
@@ -5174,7 +5425,8 @@ exports.handler = async function(event){
       doesNotLimitItemsResults: true
     });
     const fullCandidateCount = Array.isArray(base.items) ? base.items.length : 0;
-    const firstResponseWindow = Math.max(visiblePagePack.perPage, Math.min(visiblePagePack.perPage * 12, 300));
+    const requestedFirstWindow = clampInt(firstNonEmpty(raw && (raw.firstPaintLimit || raw.initialPreloadTarget || raw.initialRenderTarget || raw.responseWindow || raw.limit), visiblePagePack.perPage * 12), visiblePagePack.perPage * 12, visiblePagePack.perPage, MAX_LIMIT);
+    const firstResponseWindow = Math.max(visiblePagePack.perPage, Math.min(Math.max(visiblePagePack.perPage * 12, requestedFirstWindow), MAX_LIMIT));
     const responseItems = visiblePagePack.page <= 1
       ? base.items.slice(0, Math.min(fullCandidateCount, firstResponseWindow))
       : visiblePagePack.pageItems.slice();
