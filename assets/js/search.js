@@ -1304,14 +1304,28 @@ function installSearchResultClickGuard(){
 
 
 function resolveSearchHomeUrl(){
-  try {
-    const rawFrom = (new URLSearchParams(location.search).get('from') || '').trim();
-    if (rawFrom) {
-      const u = new URL(rawFrom, location.origin);
-      if (u.origin === location.origin) return u.pathname + u.search + u.hash;
-    }
-  } catch(e) {}
+  // Search header Home must return to the IGDC shell/root, not to a naked
+  // home.html document.  The browser Back button may still use the original
+  // history/from flow, but the visible Home title link is always the platform home.
   return '/';
+}
+
+function goSearchHomeShell(e){
+  try {
+    if(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  } catch(err) {}
+  const target = resolveSearchHomeUrl();
+  try {
+    if (window.top && window.top !== window) {
+      window.top.location.assign(target);
+      return;
+    }
+  } catch(err) {}
+  try { window.location.assign(target); }
+  catch(err) { location.href = target; }
 }
 
 function ensureSearchHeaderHomeLink(){
@@ -1336,6 +1350,7 @@ function ensureSearchHeaderHomeLink(){
     home.href = resolveSearchHomeUrl();
     home.textContent = uiText('home', 'Home');
     home.setAttribute('aria-label', 'Go to Home');
+    home.addEventListener('click', goSearchHomeShell, true);
 
     wrap.appendChild(home);
     wrap.appendChild(document.createTextNode(' ' + uiText('globalSearchTitle', 'Global Search')));
@@ -1355,7 +1370,10 @@ function applySearchUiI18n(){
   try{ if(btn) btn.textContent = uiText('search', 'Search'); }catch(e){}
   try{
     const home = document.getElementById('maru-search-home-title-link');
-    if(home) home.textContent = uiText('home', 'Home');
+    if(home) {
+      home.textContent = uiText('home', 'Home');
+      home.href = resolveSearchHomeUrl();
+    }
     const brand = document.querySelector('.brand');
     if(brand){
       const titleWrap = brand.querySelector('.maru-search-header-title');
@@ -4704,7 +4722,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(6, cardLineClamp) : 6);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(5, cardLineClamp) : 5);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
