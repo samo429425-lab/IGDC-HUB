@@ -332,6 +332,131 @@ function getMode(event){
   if(['pre','preproduct','pre-product','before-product','staging','full'].includes(raw)) return 'pre-product';
   return 'pre-product';
 }
+
+const SNAPSHOT_AUDIT_TARGETS = [
+  { page:'home', file:'front.snapshot.json', server:'netlify/functions/data/front.snapshot.json', public:'data/front.snapshot.json' },
+  { page:'distribution', file:'distribution.snapshot.json', server:'netlify/functions/data/distribution.snapshot.json', public:'data/distribution.snapshot.json' },
+  { page:'media', file:'media.snapshot.json', server:'netlify/functions/data/media.snapshot.json', public:'data/media.snapshot.json' },
+  { page:'social', file:'social.snapshot.json', server:'netlify/functions/data/social.snapshot.json', public:'data/social.snapshot.json' },
+  { page:'network', file:'networkhub-snapshot.json', server:'netlify/functions/data/networkhub-snapshot.json', public:'data/networkhub-snapshot.json' },
+  { page:'tour', file:'tour-snapshot.json', server:'netlify/functions/data/tour-snapshot.json', public:'data/tour-snapshot.json' },
+  { page:'donation', file:'donation.snapshot.json', server:'netlify/functions/data/donation.snapshot.json', public:'data/donation.snapshot.json' }
+];
+function itemUrl(it){ return low(field(it, ['url','link','href','targetUrl','video','videoUrl','outbound.url'])); }
+function itemImage(it){ return field(it, ['image','thumb','thumbnail','imageUrl','poster','ogImage']); }
+function itemTrack(it){ return field(it, ['trackId','track_id','slotId','slot_id','contentId','content_id','productId','product_id','snapshotRecordId']); }
+function extractSectionItems(v){
+  if(Array.isArray(v)) return v;
+  if(isObj(v)){
+    if(Array.isArray(v.slots)) return v.slots;
+    if(Array.isArray(v.items)) return v.items;
+    if(Array.isArray(v.data)) return v.data;
+    const flat = [];
+    Object.keys(v).forEach(k => { if(Array.isArray(v[k])) flat.push.apply(flat, v[k]); });
+    return flat;
+  }
+  return [];
+}
+function mergeSection(map, key, source, items, raw){
+  key = s(key || 'unknown') || 'unknown';
+  if(!map[key]) map[key] = { section:key, sources:[], items:[], rawMeta:{} };
+  if(source && map[key].sources.indexOf(source) < 0) map[key].sources.push(source);
+  if(items && items.length) map[key].items = map[key].items.concat(items);
+  if(isObj(raw)){
+    ['slot_limit','limit','capacity','title','key','psom_key'].forEach(k => { if(raw[k] != null && map[key].rawMeta[k] == null) map[key].rawMeta[k] = raw[k]; });
+  }
+}
+function collectSnapshotSections(json, pageName){
+  const out = Object.create(null);
+  function addMap(map, source){
+    if(!isObj(map)) return;
+    Object.keys(map).forEach(k => mergeSection(out, k, source, extractSectionItems(map[k]), map[k]));
+  }
+  if(isObj(json) && isObj(json.pages) && isObj(json.pages[pageName]) && isObj(json.pages[pageName].sections)) addMap(json.pages[pageName].sections, 'pages.' + pageName + '.sections');
+  if(isObj(json) && isObj(json.sections)) addMap(json.sections, 'sections');
+  const items = extractItems(json);
+  if(items.length){
+    for(const it of items){ mergeSection(out, sectionOf(it), 'items', [it], null); }
+  }
+  return Object.keys(out).sort().map(k => out[k]);
+}
+function sectionStats(section, mode){
+  const items = section.items || [];
+  const st = {
+    section:section.section,
+    sources:section.sources,
+    expectedLimit:Number(section.rawMeta && (section.rawMeta.slot_limit || section.rawMeta.limit || section.rawMeta.capacity)) || null,
+    itemCount:items.length,
+    missingTitle:0,
+    missingImage:0,
+    emptyOrHashUrl:0,
+    exampleUrl:0,
+    nonHttpUrl:0,
+    placeholderLikeCount:0,
+    trackingCount:0,
+    monetizationCount:0,
+    priceCount:0,
+    currencyCount:0,
+    sampleIssues:[],
+    status:'ok',
+    note:''
+  };
+  for(const it of items){
+    const title = field(it, ['title','name','label']);
+    const url = itemUrl(it);
+    const img = itemImage(it);
+    const issues = [];
+    if(!title){ st.missingTitle++; issues.push('missing-title'); }
+    if(!img){ st.missingImage++; issues.push('missing-image'); }
+    if(!url || url === '#' || url.startsWith('#') || url === 'javascript:void(0)'){ st.emptyOrHashUrl++; issues.push('empty-or-hash-url'); }
+    if(url && !url.startsWith('http') && !url.startsWith('/')){ st.nonHttpUrl++; issues.push('non-http-url'); }
+    if(url.includes('example.com')){ st.exampleUrl++; issues.push('example-url'); }
+    if(isPlaceholderLike(it)){ st.placeholderLikeCount++; issues.push('placeholder-like'); }
+    if(itemTrack(it)) st.trackingCount++;
+    if(isObj(it) && (it.monetization || it.linkRevenue || it.revenue || it.directSale || it.payment || it.mediaRevenue || it.donation)) st.monetizationCount++;
+    if(field(it, ['price','amount','directSale.price','commerce.price','payment.price','donation.amount'])) st.priceCount++;
+    if(field(it, ['currency','directSale.currency','commerce.currency','payment.currency','donation.currency'])) st.currencyCount++;
+    if(issues.length && st.sampleIssues.length < 8){
+      st.sampleIssues.push({ id:s(field(it,['id','uid','contentId','slotId'])).slice(0,80), title:s(title).slice(0,120), url:s(url).slice(0,180), issues });
+    }
+  }
+  if(!st.itemCount){ st.status = 'warn'; st.note = 'empty section'; }
+  else if(mode === 'production' && (st.emptyOrHashUrl || st.exampleUrl || st.missingTitle)){ st.status = 'fail'; st.note = 'production-blocking item issues'; }
+  else if(mode === 'production' && st.placeholderLikeCount > Math.max(2, st.itemCount * 0.15)){ st.status = 'warn'; st.note = 'production placeholder ratio high'; }
+  else if(mode !== 'production' && (st.emptyOrHashUrl || st.exampleUrl || st.placeholderLikeCount)){ st.status = 'ok'; st.note = 'pre-product seed/placeholder accepted'; }
+  return st;
+}
+function analyzeSnapshotJson(json, pageName, mode){
+  const rows = collectSnapshotSections(json, pageName).map(sec => sectionStats(sec, mode));
+  const totalItems = rows.reduce((a,b)=>a + b.itemCount, 0);
+  const counts = { ok:0, warn:0, fail:0 };
+  rows.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+  return {
+    page:pageName,
+    totalSections:rows.length,
+    totalItems,
+    statusCounts:counts,
+    sections:rows,
+    topProblemSections:rows.filter(r => r.status !== 'ok' || r.sampleIssues.length).slice(0,30)
+  };
+}
+function scanServerSnapshots(root, mode){
+  const pages = SNAPSHOT_AUDIT_TARGETS.map(t => {
+    const r = readJsonRel(root, t.server);
+    const out = { page:t.page, serverPath:t.server, publicPath:t.public, exists:r.exists, ok:r.ok, size:r.size, hash:r.hash, error:r.error || null };
+    if(r.ok) out.analysis = analyzeSnapshotJson(r.value, t.page, mode);
+    return out;
+  });
+  return {
+    source:'server-fs',
+    totalPages:pages.length,
+    okPages:pages.filter(p => p.ok).length,
+    totalSections:pages.reduce((a,p)=>a + (p.analysis ? p.analysis.totalSections : 0), 0),
+    totalItems:pages.reduce((a,p)=>a + (p.analysis ? p.analysis.totalItems : 0), 0),
+    pages
+  };
+}
+
 function buildWarnings(report){
   const w = [];
   const mode = report.mode || 'pre-product';
@@ -352,6 +477,8 @@ function buildWarnings(report){
   if(copies && copies.searchBankAllSame === false) w.push('SearchBank snapshot copies have different hashes. Confirm intended sync state.');
   if(report.productSupply && report.productSupply.enabled && mode === 'pre-product') w.push('Product supply gate is ON while audit mode is pre-product. Confirm this is intended.');
   if(report.productSupply && !report.productSupply.enabled && mode === 'production') w.push('Production mode: product supply gate is OFF.');
+  if(report.serverSnapshots && report.serverSnapshots.okPages < report.serverSnapshots.totalPages) w.push('Server snapshot pages are missing or invalid. Check netlify/functions/data/*.snapshot.json.');
+  if(mode === 'production' && report.serverSnapshots && report.serverSnapshots.pages && report.serverSnapshots.pages.some(p => p.analysis && p.analysis.statusCounts && p.analysis.statusCounts.fail)) w.push('Production mode: one or more server snapshot sections have blocking item issues.');
   return w;
 }
 function computeSummary(report){
@@ -374,6 +501,11 @@ function computeSummary(report){
   }
   if(report.snapshotCopies && report.snapshotCopies.searchBankAllSame === false) score -= 8;
   if(report.functions && report.functions.requireCoreFiles && report.functions.requireCoreFiles.length && !report.functions.coreBridgeExists) score -= 10;
+  if(report.serverSnapshots && report.serverSnapshots.okPages < report.serverSnapshots.totalPages) score -= Math.min(12, (report.serverSnapshots.totalPages - report.serverSnapshots.okPages) * 3);
+  if(mode === 'production' && report.serverSnapshots && report.serverSnapshots.pages){
+    const badSections = report.serverSnapshots.pages.reduce((n,p)=> n + (p.analysis && p.analysis.statusCounts ? (p.analysis.statusCounts.fail || 0) : 0), 0);
+    score -= Math.min(20, badSections);
+  }
   score = Math.max(0, Math.min(100, score));
   let level = 'ok';
   if(score < 80) level = 'warn';
@@ -419,6 +551,7 @@ function audit(event){
   report.globalInsight = scanGlobalInsight(root);
   report.payment = scanPayment(root);
   report.snapshotCopies = scanSnapshotCopies(root);
+  report.serverSnapshots = scanServerSnapshots(root, mode);
   report.warnings = buildWarnings(report);
   report.summary = computeSummary(report);
   return report;
