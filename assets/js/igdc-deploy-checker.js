@@ -175,7 +175,7 @@
   function sectionStats(section, mode){
     var items = section.items || [];
     var st = { section:section.section, sources:section.sources, expectedLimit:Number(section.rawMeta && (section.rawMeta.slot_limit || section.rawMeta.limit || section.rawMeta.capacity)) || null, itemCount:items.length, missingTitle:0, missingImage:0, emptyOrHashUrl:0, exampleUrl:0, nonHttpUrl:0, placeholderLikeCount:0, potentialIssueCount:0, slotIssueCount:0, slotIssueList:[], trackingCount:0, monetizationCount:0, priceCount:0, currencyCount:0, sampleIssues:[], status:'ok', note:'' };
-    items.forEach(function(it){
+    items.forEach(function(it, slotIndex){
       var title = field(it, ['title','name','label']);
       var url = itemUrl(it);
       var img = itemImage(it);
@@ -223,9 +223,10 @@
         rec.exists = res.ok;
         if(!res.ok) throw new Error('HTTP ' + res.status);
         var json = await res.json();
-        rec.ok = true;
         rec.analysis = analyzeSnapshotJson(json, t.page, mode);
-      }catch(e){ rec.error = String(e && e.message || e); }
+        rec.ok = !!(rec.analysis && Array.isArray(rec.analysis.sections));
+        if(!rec.ok) throw new Error('snapshot analysis missing sections');
+      }catch(e){ rec.ok = false; rec.error = String(e && e.message || e); }
       pages.push(rec);
     }
     return { source:'public-http', totalPages:pages.length, okPages:pages.filter(function(p){ return p.ok; }).length, totalSections:pages.reduce(function(a,p){ return a + (p.analysis ? p.analysis.totalSections : 0); },0), totalItems:pages.reduce(function(a,p){ return a + (p.analysis ? p.analysis.totalItems : 0); },0), pages:pages };
@@ -269,6 +270,7 @@
     html += '<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px"><thead><tr>'+['페이지','섹션','상태','슬롯/항목','문제슬롯','잠재이슈','추적ID','이미지누락','URL#','example','placeholder','가격','통화','비고'].map(function(h){ return '<th style="border:1px solid #ddd;padding:6px;text-align:left">'+escapeHtml(h)+'</th>'; }).join('')+'</tr></thead><tbody>';
     audit.pages.forEach(function(p){
       if(!p.ok){ html += '<tr><td style="border:1px solid #ddd;padding:6px">'+escapeHtml(p.page)+'</td><td colspan="11" style="border:1px solid #ddd;padding:6px;color:#b91c1c">'+escapeHtml(p.url+' / '+(p.error||'fetch failed'))+'</td></tr>'; return; }
+      if(!p.analysis || !Array.isArray(p.analysis.sections)){ html += '<tr><td style="border:1px solid #ddd;padding:6px">'+escapeHtml(p.page)+'</td><td colspan="13" style="border:1px solid #ddd;padding:6px;color:#b91c1c">'+escapeHtml((p.url || '')+' / snapshot analysis missing sections')+'</td></tr>'; return; }
       (p.analysis.sections || []).forEach(function(r){
         html += '<tr>'+[
           p.page, r.section, String(r.status).toUpperCase(), r.itemCount, r.slotIssueCount || 0, r.potentialIssueCount || 0, r.trackingCount, r.missingImage, r.emptyOrHashUrl, r.exampleUrl, r.placeholderLikeCount, r.priceCount, r.currencyCount, r.note || ''
