@@ -1,10 +1,4 @@
 /**
- * 적용 위치: assets/js/maru-health.js 전용 파일
- * 주의: netlify/functions/maru-health.js 에 덮어쓰지 마세요.
- * 기능: 관리자 우측 패널의 수익 · 썸네일 · 상품 맵핑 상세 점검 JSON 다운로드 버튼.
- */
-
-/**
  * assets/js/maru-health.js
  * ------------------------------------------------------------
  * MARU HEALTH FRONT — Slot / Delivery / Front Render / Revenue Line Audit
@@ -29,7 +23,7 @@
 
   if(!global || !document) return;
 
-  var VERSION = "front-slot-revenue-final-v1.2.1-probe-stable-json-download";
+  var VERSION = "front-slot-revenue-final-v1.1-sample-revenue-warn";
   var MODAL_ID = "maru-health-final-slot-modal";
   var STYLE_ID = "maru-health-final-slot-style";
   var TARGET_TEXTS = ["수익", "썸네일", "상품", "맵핑"];
@@ -57,54 +51,6 @@
 
   function shortError(e){
     return s((e && (e.message || e.statusText)) || e || "unknown_error").slice(0, 220);
-  }
-
-  function safeTimestamp(ts){
-    var d = ts ? new Date(ts) : new Date();
-    if(!isFinite(d.getTime())) d = new Date();
-    function p(n){ return String(n).padStart(2, "0"); }
-    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "_" + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
-  }
-
-  function downloadJsonReport(result){
-    result = result || LAST_RESULT;
-    if(!result){
-      alert("다운로드할 점검 결과가 아직 없습니다. 먼저 점검을 실행하세요.");
-      return false;
-    }
-
-    var payload = {
-      reportType:"igdc-revenue-thumbnail-product-mapping",
-      version:VERSION,
-      generatedAt:new Date().toISOString(),
-      source:{
-        href:s(location && location.href),
-        origin:s(location && location.origin),
-        host:s(location && location.host),
-        pathname:s(location && location.pathname),
-        userAgent:s(navigator && navigator.userAgent)
-      },
-      result:result
-    };
-
-    try{
-      var blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json;charset=utf-8"});
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url;
-      a.download = "IGDC_REVENUE_MAPPING_REPORT_pre-product_" + safeTimestamp(result.ts) + ".json";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(function(){
-        try{ URL.revokeObjectURL(url); }catch(_){}
-        if(a && a.parentNode) a.parentNode.removeChild(a);
-      }, 120);
-    }catch(e){
-      console.warn("[MARU_HEALTH] JSON report download failed:", e);
-      alert("JSON 다운로드 중 오류가 발생했습니다: " + shortError(e));
-    }
-
-    return false;
   }
 
   function statusLabel(st){
@@ -139,9 +85,6 @@
       ".mhf-head{padding:14px 16px;background:linear-gradient(180deg,#fffaf0,#ffffff);border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;gap:12px;}" +
       ".mhf-title{font-size:16px;font-weight:900;color:#5a3c19;}" +
       ".mhf-sub{font-size:11px;color:#8a6d3b;margin-top:3px;}" +
-      ".mhf-actions{display:flex;align-items:center;gap:6px;margin-left:auto;}" +
-      ".mhf-json-download{border:1px solid #f5b7c8;background:#fff0f5;color:#8a2444;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:800;}" +
-      ".mhf-json-download:hover{background:#ffe4ee;border-color:#ec8faf;}" +
       ".mhf-close{border:1px solid #e5e7eb;background:#fff;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:700;}" +
       ".mhf-body{padding:14px 16px;overflow:auto;font-size:12px;color:#333;}" +
       ".mhf-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:12px;}" +
@@ -818,8 +761,8 @@
 
   async function mediaProbe(){
     var endpoints = [
-      "/.netlify/functions/maru-search?q=media&limit=20&type=image&external=off&noExternal=1&disableExternal=1&probe=1&audit=1&fast=1&diagnostic=front-slot-revenue&noRevenue=1&noAnalytics=1",
-      "/.netlify/functions/maru-search?q=video&limit=20&type=video&external=off&noExternal=1&disableExternal=1&probe=1&audit=1&fast=1&diagnostic=front-slot-revenue&noRevenue=1&noAnalytics=1"
+      "/.netlify/functions/maru-search?q=media&limit=20&type=image&external=off",
+      "/.netlify/functions/maru-search?q=video&limit=20&type=video&external=off"
     ];
     var attempts = [];
     for(var i=0;i<endpoints.length;i++){
@@ -840,7 +783,7 @@
 
   async function revenueProbe(){
     var endpoints = [
-      "/.netlify/functions/maru-revenue-engine?action=report&fast=1&probe=1&audit=1&summary=1&limit=50",
+      "/.netlify/functions/maru-revenue-engine?action=report",
       "/.netlify/functions/maru-revenue-engine?mode=health",
       "/api/igdc/income/summary"
     ];
@@ -1126,10 +1069,7 @@
             '<div class="mhf-title">수익 · 썸네일 · 상품 맵핑 상세 점검</div>' +
             '<div class="mhf-sub">설계 슬롯, 내려간 데이터, 프론트 구현, 수익 라인을 함께 점검합니다. · ' + escapeHtml(result.ts || "") + '</div>' +
           '</div>' +
-          '<div class="mhf-actions">' +
-            '<button type="button" class="mhf-json-download">JSON 다운로드</button>' +
-            '<button type="button" class="mhf-close">닫기</button>' +
-          '</div>' +
+          '<button type="button" class="mhf-close">닫기</button>' +
         '</div>' +
         '<div class="mhf-body">' +
           '<div class="mhf-grid">' +
@@ -1165,14 +1105,6 @@
     backdrop.addEventListener("click", function(ev){
       if(ev.target === backdrop) closeModal();
     });
-    var dl = backdrop.querySelector(".mhf-json-download");
-    if(dl) dl.addEventListener("click", function(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      downloadJsonReport(result);
-      return false;
-    });
-
     var close = backdrop.querySelector(".mhf-close");
     if(close) close.addEventListener("click", closeModal);
     document.body.appendChild(backdrop);
@@ -1212,7 +1144,6 @@
   global.MaruHealth.finalSlotRevenueVersion = VERSION;
   global.MaruHealth.runFinalSlotRevenueCheck = runCheck;
   global.MaruHealth.openFinalSlotRevenueModal = function(){ openModal(LAST_RESULT); };
-  global.MaruHealth.downloadFinalSlotRevenueJson = function(){ return downloadJsonReport(LAST_RESULT); };
 
   global.IGDC_HEALTH = global.IGDC_HEALTH || {};
   global.IGDC_HEALTH.runFinalSlotRevenueCheck = runCheck;
