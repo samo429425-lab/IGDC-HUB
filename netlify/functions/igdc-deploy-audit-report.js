@@ -133,7 +133,8 @@ function snapshotStats(json, mode){
     ratios:{}
   };
   const ids = new Set();
-  for(const it of items){
+  for(let slotIndex = 0; slotIndex < items.length; slotIndex++){
+    const it = items[slotIndex];
     const title = field(it, ['title','name','label']);
     const summary = field(it, ['summary','description','snippet','excerpt','body']);
     const image = field(it, ['image','thumb','thumbnail','imageUrl','poster','ogImage']);
@@ -393,6 +394,9 @@ function sectionStats(section, mode){
     exampleUrl:0,
     nonHttpUrl:0,
     placeholderLikeCount:0,
+    potentialIssueCount:0,
+    slotIssueCount:0,
+    slotIssueList:[],
     trackingCount:0,
     monetizationCount:0,
     priceCount:0,
@@ -401,7 +405,8 @@ function sectionStats(section, mode){
     status:'ok',
     note:''
   };
-  for(const it of items){
+  for(let slotIndex = 0; slotIndex < items.length; slotIndex++){
+    const it = items[slotIndex];
     const title = field(it, ['title','name','label']);
     const url = itemUrl(it);
     const img = itemImage(it);
@@ -416,10 +421,21 @@ function sectionStats(section, mode){
     if(isObj(it) && (it.monetization || it.linkRevenue || it.revenue || it.directSale || it.payment || it.mediaRevenue || it.donation)) st.monetizationCount++;
     if(field(it, ['price','amount','directSale.price','commerce.price','payment.price','donation.amount'])) st.priceCount++;
     if(field(it, ['currency','directSale.currency','commerce.currency','payment.currency','donation.currency'])) st.currencyCount++;
-    if(issues.length && st.sampleIssues.length < 8){
-      st.sampleIssues.push({ id:s(field(it,['id','uid','contentId','slotId'])).slice(0,80), title:s(title).slice(0,120), url:s(url).slice(0,180), issues });
+    if(issues.length){
+      st.potentialIssueCount++;
+      const issueRec = {
+        slotIndex: slotIndex + 1,
+        slotId: s(field(it,['slotId','slot_id'])).slice(0,80),
+        id: s(field(it,['id','uid','contentId','content_id','productId','product_id'])).slice(0,100),
+        title: s(title).slice(0,160),
+        url: s(url).slice(0,240),
+        issues
+      };
+      if(st.sampleIssues.length < 8) st.sampleIssues.push(issueRec);
+      if(mode === 'production') st.slotIssueList.push(issueRec);
     }
   }
+  st.slotIssueCount = st.slotIssueList.length;
   if(!st.itemCount){ st.status = 'warn'; st.note = 'empty section'; }
   else if(mode === 'production' && (st.emptyOrHashUrl || st.exampleUrl || st.missingTitle)){ st.status = 'fail'; st.note = 'production-blocking item issues'; }
   else if(mode === 'production' && st.placeholderLikeCount > Math.max(2, st.itemCount * 0.15)){ st.status = 'warn'; st.note = 'production placeholder ratio high'; }
@@ -431,11 +447,17 @@ function analyzeSnapshotJson(json, pageName, mode){
   const totalItems = rows.reduce((a,b)=>a + b.itemCount, 0);
   const counts = { ok:0, warn:0, fail:0 };
   rows.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+  const slotIssueList = [];
+  rows.forEach(r => {
+    (r.slotIssueList || []).forEach(issue => slotIssueList.push({ page:pageName, section:r.section, ...issue }));
+  });
   return {
     page:pageName,
     totalSections:rows.length,
     totalItems,
     statusCounts:counts,
+    slotIssueCount:slotIssueList.length,
+    slotIssueList,
     sections:rows,
     topProblemSections:rows.filter(r => r.status !== 'ok' || r.sampleIssues.length).slice(0,30)
   };
@@ -625,7 +647,7 @@ function audit(event){
   const mode = getMode(event);
   const report = {
     ok:true,
-    auditVersion:'engine-diagnostic-v4',
+    auditVersion:'engine-diagnostic-v4.1-slot-precision',
     mode,
     generatedAt:nowIso(),
     root,
