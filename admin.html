@@ -3497,6 +3497,156 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 <!-- 5. maru addon -->
 <script src="/assets/js/maru-site-control-addon.js"></script>
 
+
+
+<!-- IGDC admin right-panel audit link: current-domain safe launcher -->
+<style id="igdc-admin-audit-link-style">
+  .igdc-admin-audit-link-card {
+    border-color: #f3bfd0 !important;
+    background: #fff6fa !important;
+  }
+  .igdc-admin-audit-link-card:hover {
+    border-color: #e497b2 !important;
+    background: #fff0f6 !important;
+  }
+  .igdc-admin-audit-link-card .igdc-admin-audit-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #7a2947;
+  }
+  .igdc-admin-audit-link-card .igdc-admin-audit-desc {
+    font-size: 11px;
+    color: #754457;
+    line-height: 1.35;
+    margin: 3px 0 6px;
+  }
+  .igdc-admin-audit-link-card .igdc-admin-audit-btn {
+    width: 100%;
+    padding: 5px 7px;
+    font-size: 11px;
+    font-weight: 800;
+    border-radius: 5px;
+    border: 1px solid #e5a7bb;
+    background: linear-gradient(180deg, #fffafd 0%, #ffe6f0 100%);
+    color: #7a2947;
+    cursor: pointer;
+  }
+  .igdc-admin-audit-link-card .igdc-admin-audit-btn:hover {
+    background: #ffddec;
+  }
+  .igdc-admin-audit-link-card .igdc-admin-audit-mini {
+    margin-top: 4px;
+    font-size: 10px;
+    color: #9a6074;
+  }
+</style>
+<script id="igdc-admin-audit-link-script">
+(function(){
+  if (window.__IGDC_ADMIN_AUDIT_LINK_INSTALLED__) return;
+  window.__IGDC_ADMIN_AUDIT_LINK_INSTALLED__ = true;
+
+  function auditUrl(){
+    var u = new URL('/admin-deploy-check.html', window.location.origin);
+    u.searchParams.set('mode', 'pre-product');
+    u.searchParams.set('source', 'admin-right-panel');
+    u.searchParams.set('targetOrigin', window.location.origin);
+    u.searchParams.set('returnPath', window.location.pathname + window.location.search + window.location.hash);
+    return u.pathname + u.search;
+  }
+
+  function makeCard(){
+    var card = document.createElement('div');
+    card.id = 'igdc-admin-audit-link-card';
+    card.className = 'igdc-sc-card igdc-admin-audit-link-card';
+    card.setAttribute('data-igdc-admin-audit-link', '1');
+    card.innerHTML = '' +
+      '<div class="igdc-sc-card-header">' +
+        '<span class="igdc-admin-audit-title">🩺 시스템 점검 · 엔진 헬스체크</span>' +
+        '<span class="igdc-sc-card-status">↗</span>' +
+      '</div>' +
+      '<div class="igdc-admin-audit-desc">현재 접속 중인 도메인의 점검 페이지로 이동합니다.</div>' +
+      '<button class="igdc-admin-audit-btn" type="button">전체 점검 실행</button>' +
+      '<div class="igdc-admin-audit-mini">점검 후 브라우저 뒤로가기로 관리자 화면 복귀</div>';
+
+    var btn = card.querySelector('button');
+    if (btn) {
+      btn.addEventListener('click', function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        window.location.href = auditUrl();
+        return false;
+      });
+    }
+
+    card.addEventListener('click', function(ev){
+      if (ev.target && ev.target.tagName === 'BUTTON') return;
+      ev.preventDefault();
+      window.location.href = auditUrl();
+    });
+
+    return card;
+  }
+
+  function findCard(panel, re){
+    var cards = Array.prototype.slice.call(panel.querySelectorAll('.igdc-sc-card'));
+    for (var i = 0; i < cards.length; i++) {
+      var txt = (cards[i].textContent || '').replace(/\s+/g, ' ');
+      if (re.test(txt)) return cards[i];
+    }
+    return null;
+  }
+
+  function install(){
+    var panel = document.getElementById('igdc-site-control');
+    if (!panel) return false;
+
+    var existing = document.getElementById('igdc-admin-audit-link-card');
+    if (existing && panel.contains(existing)) return true;
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+    var card = makeCard();
+    var ux = findCard(panel, /기기\s*\/\s*브라우저|기기\s*·\s*브라우저|UX/i);
+    var insight = findCard(panel, /MARU\s*Global\s*Insight|마루\s*Global\s*Insight/i);
+
+    if (ux && ux.parentNode) {
+      ux.insertAdjacentElement('afterend', card);
+      return true;
+    }
+
+    if (insight && insight.parentNode) {
+      insight.parentNode.insertBefore(card, insight);
+      return true;
+    }
+
+    var grid = panel.querySelector('.igdc-sc-grid') || panel;
+    grid.appendChild(card);
+    return true;
+  }
+
+  function arm(){
+    var tries = 0;
+    var timer = setInterval(function(){
+      tries += 1;
+      if (install() || tries > 80) clearInterval(timer);
+    }, 250);
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', install);
+    } else {
+      install();
+    }
+
+    var panel = document.getElementById('igdc-site-control');
+    if (panel && window.MutationObserver) {
+      var obs = new MutationObserver(function(){ install(); });
+      obs.observe(panel, { childList: true, subtree: true });
+    }
+  }
+
+  arm();
+})();
+</script>
+
 <!-- 5-1. maru detached pane (FINAL) -->
 <script src="/assets/js/maru-detached-pane.js"></script>
 
