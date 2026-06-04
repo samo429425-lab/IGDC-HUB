@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-595-sanmaru-cpu-direct-page25-sns-google-fix';
+const VERSION = 'A1.5.46-596-probe-stable-fastpath';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -2289,6 +2289,84 @@ function loadSnapshotLocal(q, limit){
     });
     return filtered.slice(0, Math.min(limit || MAX_LIMIT, MAX_LIMIT));
   }catch(e){ return null; }
+}
+
+
+function hasSnapshotThumbSignal(it){
+  it = it || {};
+  const p = it.payload && typeof it.payload === 'object' ? it.payload : {};
+  const media = it.media && typeof it.media === 'object' ? it.media : {};
+  const preview = media.preview && typeof media.preview === 'object' ? media.preview : {};
+  return !!(
+    it.thumbnail || it.thumb || it.image || it.imageUrl || it.og_image || it.poster || it.cardImage ||
+    p.thumbnail || p.thumb || p.image || p.imageUrl || p.og_image || p.poster ||
+    preview.poster || preview.image || preview.thumbnail || preview.thumb ||
+    (Array.isArray(it.imageSet) && it.imageSet.length) ||
+    (Array.isArray(p.imageSet) && p.imageSet.length)
+  );
+}
+
+function isSnapshotVideoSignal(it){
+  it = it || {};
+  const p = it.payload && typeof it.payload === 'object' ? it.payload : {};
+  const media = it.media && typeof it.media === 'object' ? it.media : {};
+  const txt = [it.type, it.mediaType, it.category, it.section, it.page, it.channel, it.source, it.provider, it.title, it.summary, it.url, it.link, p.type, p.mediaType, p.videoId, p.videoUrl, media.type].join(' ').toLowerCase();
+  return /video|youtube|movie|drama|shorts|media|watch\?|youtu\.be|embed/.test(txt);
+}
+
+function isFrontRevenueDiagnosticMediaProbe(raw, q, limit, searchType, externalOff){
+  raw = raw || {};
+  const qq = safeString(q).trim().toLowerCase();
+  const st = normalizeSearchType(searchType || raw.type || raw.tab || raw.category || raw.vertical || 'all');
+  const flagged = truthy(raw.probe) || truthy(raw.audit) || truthy(raw.fast) || truthy(raw.diagnostic) || truthy(raw.health) || safeString(raw.diagnostic).toLowerCase() === 'front-slot-revenue';
+  const legacyProbeShape = externalOff && limit <= 25 && ['media','video','image'].includes(qq) && ['image','video'].includes(st);
+  return !!((flagged || legacyProbeShape) && externalOff && limit <= 50 && ['media','video','image'].includes(qq) && ['image','video','all'].includes(st));
+}
+
+function buildFrontRevenueDiagnosticMediaProbe(q, limit, searchType, raw){
+  const started = nowMs();
+  const st = normalizeSearchType(searchType || raw && (raw.type || raw.tab || raw.category || raw.vertical) || 'all');
+  const cap = clampInt(limit, 20, 1, 50);
+  const sourceRows = loadSnapshotLocal('', Math.max(5000, cap * 50)) || [];
+  let rows = sourceRows.filter(it => {
+    if(st === 'video') return isSnapshotVideoSignal(it) && hasSnapshotThumbSignal(it);
+    if(st === 'image') return hasSnapshotThumbSignal(it);
+    return hasSnapshotThumbSignal(it) || isSnapshotVideoSignal(it);
+  });
+  if(!rows.length){
+    rows = sourceRows.filter(it => st === 'video' ? isSnapshotVideoSignal(it) : hasSnapshotThumbSignal(it));
+  }
+  if(!rows.length){
+    rows = sourceRows.slice(0, cap);
+  }
+  let items = rows.slice(0, cap).map((it, idx) => compactResultItem(canonicalizeItem(Object.assign({}, it, {
+    diagnosticProbe:true,
+    source: firstNonEmpty(it && it.source, it && it.provider, 'search-bank-snapshot-diagnostic'),
+    provider: firstNonEmpty(it && it.provider, it && it.source, 'search-bank-snapshot-diagnostic'),
+    mediaType: st === 'video' ? 'video' : firstNonEmpty(it && it.mediaType, it && it.type, st === 'image' ? 'image' : 'article'),
+    type: st === 'video' ? 'video' : firstNonEmpty(it && it.type, it && it.mediaType, st === 'image' ? 'image' : 'article')
+  }), q, 'search-bank-snapshot-diagnostic')));
+
+  return {
+    status:'ok',
+    engine:'maru-search',
+    version:VERSION,
+    action:'front-slot-revenue-diagnostic-media-probe',
+    query:q,
+    source:'search-bank-snapshot-diagnostic-fast-path',
+    items,
+    results:items,
+    meta:{
+      count:items.length,
+      fullCandidateCount:sourceRows.length,
+      diagnosticProbe:true,
+      externalSuppressed:true,
+      noWrite:true,
+      searchType:st,
+      elapsedMs:nowMs()-started,
+      stabilizationPatch:'A1.5.46-596-front-revenue-probe-fast-path'
+    }
+  };
 }
 
 
@@ -4976,6 +5054,10 @@ exports.handler = async function(event){
 
     if(!q){
       return ok({ status: 'ok', engine: 'maru-search', version: VERSION, query: q, source: null, items: [], results: [], meta: { count: 0, limit } });
+    }
+
+    if(isFrontRevenueDiagnosticMediaProbe(raw || {}, q, limit, searchType, externalOff)){
+      return ok(buildFrontRevenueDiagnosticMediaProbe(q, limit, searchType, raw || {}));
     }
 
     const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 25), 25, 1, 100);
