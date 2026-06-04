@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>IGDC Help · Download Center</title>
+<!-- support.html v2.1: email-triggered AI answer, visible Q&A block removed -->
 <style>
   :root { --igdc-blue:#004080; --igdc-line:#d9e4f2; --igdc-bg:#f5f8fc; --igdc-card:#ffffff; --igdc-text:#17324d; }
   * { box-sizing:border-box; }
@@ -18,14 +19,17 @@
   .emailLabel { font-weight:700; color:#183e63; }
   .email { color:#004080; font-weight:700; text-decoration:none; background:#eef6ff; border:1px solid #cfe4fa; border-radius:9px; padding:9px 12px; }
 
-  .qnaBox { margin-top:16px; background:#ffffff; border:1px solid #cfe4fa; border-radius:14px; padding:14px; }
-  .qnaBox h2 { margin:0 0 8px; font-size:18px; color:#004080; }
-  .qnaBox p { margin:0 0 10px; color:#4c6177; line-height:1.55; }
   .qnaForm { display:grid; gap:8px; }
   .qnaForm input, .qnaForm textarea { width:100%; border:1px solid #bfd0e3; border-radius:9px; padding:9px 10px; font:inherit; }
   .qnaForm textarea { min-height:92px; resize:vertical; }
   .qnaActions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .qnaAnswer { display:none; margin-top:10px; white-space:pre-wrap; line-height:1.55; background:#f7fbff; border:1px solid #dcecff; border-radius:10px; padding:10px 12px; }
+  .aiMailModal[hidden] { display:none !important; }
+  .aiMailModal { position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.38); display:flex; align-items:center; justify-content:center; padding:18px; }
+  .aiMailDialog { width:min(620px, 100%); background:#fff; border:1px solid var(--igdc-line); border-radius:16px; padding:18px; box-shadow:0 12px 40px rgba(0,0,0,.2); position:relative; }
+  .aiMailDialog h2 { margin:0 34px 8px 0; font-size:20px; color:#004080; }
+  .aiMailDialog p { margin:0 0 12px; color:#4c6177; line-height:1.55; }
+  .aiMailClose { position:absolute; top:10px; right:12px; width:30px; height:30px; border:0; border-radius:50%; background:#eef6ff; color:#004080; font-size:20px; cursor:pointer; }
   .officialEmail { margin-top:18px; background:#fff; border:1px solid var(--igdc-line); border-radius:14px; padding:16px; text-align:center; }
   .officialEmail p { margin:0 0 10px; color:#5b7189; line-height:1.55; }
   .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:18px; }
@@ -54,19 +58,6 @@
     <div class="guideLines">
       <p id="upgradeLine"></p>
       <p id="qnaLine"></p>
-    </div>
-    <div class="qnaBox" id="supportQnaBox">
-      <h2 id="qnaAskTitle"></h2>
-      <p id="qnaAskText"></p>
-      <div class="qnaForm">
-        <input id="qnaContact" type="text" autocomplete="email" />
-        <textarea id="qnaQuestion" maxlength="1600"></textarea>
-        <div class="qnaActions">
-          <button class="btn" type="button" id="qnaSubmit"></button>
-          <span class="notice" id="qnaStatus" style="display:none;margin:0;"></span>
-        </div>
-        <div class="qnaAnswer" id="qnaAnswerBox"></div>
-      </div>
     </div>
   </section>
 
@@ -105,8 +96,25 @@
   <section class="officialEmail">
     <p id="officialEmailNote"></p>
     <span class="emailLabel" id="emailLabel"></span>
-    <a class="email" href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>
+    <a class="email" href="#" id="supportAiEmailLink" role="button">igdcplatform@gmail.com</a>
   </section>
+
+  <div class="aiMailModal" id="supportAiMailModal" hidden aria-hidden="true">
+    <div class="aiMailDialog" role="dialog" aria-modal="true" aria-labelledby="qnaAskTitle">
+      <button class="aiMailClose" type="button" id="supportAiMailClose" aria-label="Close">×</button>
+      <h2 id="qnaAskTitle"></h2>
+      <p id="qnaAskText"></p>
+      <div class="qnaForm">
+        <input id="qnaContact" type="text" autocomplete="email" />
+        <textarea id="qnaQuestion" maxlength="1600"></textarea>
+        <div class="qnaActions">
+          <button class="btn" type="button" id="qnaSubmit"></button>
+          <span class="notice" id="qnaStatus" style="display:none;margin:0;"></span>
+        </div>
+        <div class="qnaAnswer" id="qnaAnswerBox"></div>
+      </div>
+    </div>
+  </div>
   <div class="footer" id="footer"></div>
 </div>
 <script>
@@ -116,7 +124,7 @@ const I18N = {
     "title": "IGDC 도움말 · 다운로드 센터",
     "subtitle": "플랫폼 이용, 권한, 결제 안내, 프로그램 다운로드를 한곳에서 확인합니다.",
     "upgradeLine": "회원 승급 신청은 회원 전용 페이지에서 신청할 수 있습니다.",
-    "qnaLine": "간단한 질문은 Q&A 질의란을 통해 질문하면 AI 상담사가 신속히 답변을 드립니다.",
+    "qnaLine": "간단한 질문은 AI 상담사를 통해 바로 답변드립니다.",
     "emailLabel": "대표 이메일",
     "platform": "플랫폼 이용 안내",
     "platformText": "상단 메뉴에서 홈, 마켓/네트워크, 유통허브, 소셜 네트워크, 미디어 허브, 관광, 후원 페이지를 이용할 수 있습니다. 각 페이지는 선택한 언어에 맞춰 표시됩니다.",
@@ -1044,8 +1052,8 @@ const I18N = {
 };
 
 const QNA_I18N_EXTRA = {
-  ko:{qnaAskTitle:"Q&A 질의하기",qnaAskText:"일반 문의는 이곳에서 먼저 질문해 주세요. AI 상담사가 이메일 답변 형식으로 1차 안내하고, 중요한 문의는 관리자 검토 대상으로 전달됩니다.",qnaContactPlaceholder:"답변 받을 이메일 또는 연락처(선택)",qnaQuestionPlaceholder:"질문 내용을 입력하세요.",qnaSubmit:"AI 답변 받기",qnaSending:"답변을 준비하는 중입니다...",qnaAnswerTitle:"AI 1차 답변",qnaAdminNote:"관리자 검토 대상으로 접수되었습니다.",qnaError:"답변 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",officialEmailNote:"대표 이메일은 기관·기업·계약·법적 문의 등 직접 확인이 필요한 공식 연락용입니다. 일반 질문은 Q&A를 우선 이용해 주세요."},
-  en:{qnaAskTitle:"Ask Q&A",qnaAskText:"Please submit general questions here first. The AI consultant gives an email-style first answer, and important cases are routed to admin review.",qnaContactPlaceholder:"Reply email or contact (optional)",qnaQuestionPlaceholder:"Enter your question.",qnaSubmit:"Get AI answer",qnaSending:"Preparing an answer...",qnaAnswerTitle:"AI first answer",qnaAdminNote:"This has been submitted for admin review.",qnaError:"An error occurred while processing the answer. Please try again later.",officialEmailNote:"The official email is for organization, business, contract, legal, or other direct official inquiries. Please use Q&A first for general questions."},
+  ko:{qnaAskTitle:"질문하기",qnaAskText:"AI 상담사가 이메일 답변 형식으로 1차 안내합니다.",qnaContactPlaceholder:"답변 받을 이메일 또는 연락처(선택)",qnaQuestionPlaceholder:"질문 내용을 입력하세요.",qnaSubmit:"AI 답변 받기",qnaSending:"답변을 준비하는 중입니다...",qnaAnswerTitle:"AI 1차 답변",qnaAdminNote:"관리자 검토 대상으로 접수되었습니다.",qnaError:"답변 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",officialEmailNote:"대표 이메일은 공식 연락처입니다. 이메일 주소를 클릭하면 AI 상담사가 이메일 답변 형식으로 1차 안내합니다."},
+  en:{qnaAskTitle:"Ask a question",qnaAskText:"The AI consultant provides a first response in an email-style format.",qnaContactPlaceholder:"Reply email or contact (optional)",qnaQuestionPlaceholder:"Enter your question.",qnaSubmit:"Get AI answer",qnaSending:"Preparing an answer...",qnaAnswerTitle:"AI first answer",qnaAdminNote:"This has been submitted for admin review.",qnaError:"An error occurred while processing the answer. Please try again later.",officialEmailNote:"This is the official contact email. Click the email address to receive a first response from the AI consultant in an email-style format."},
   zh:{qnaAskTitle:"Q&A 咨询",qnaAskText:"一般问题请先在这里提交。AI 顾问会以邮件式回复进行初步 안내，重要问题会转交管理员审核。",qnaContactPlaceholder:"回复邮箱或联系方式（可选）",qnaQuestionPlaceholder:"请输入问题内容。",qnaSubmit:"获取 AI 回复",qnaSending:"正在准备回复...",qnaAnswerTitle:"AI 初步回复",qnaAdminNote:"此问题已提交管理员审核。",qnaError:"处理回复时发生错误，请稍后再试。",officialEmailNote:"代表邮箱用于机构、企业、合同、法律等需要直接确认的正式联系。一般问题请优先使用 Q&A。"},
   zht:{qnaAskTitle:"Q&A 諮詢",qnaAskText:"一般問題請先在此提交。AI 顧問會以郵件式回覆進行初步 안내，重要問題會轉交管理員審核。",qnaContactPlaceholder:"回覆電子郵件或聯絡方式（選填）",qnaQuestionPlaceholder:"請輸入問題內容。",qnaSubmit:"取得 AI 回覆",qnaSending:"正在準備回覆...",qnaAnswerTitle:"AI 初步回覆",qnaAdminNote:"此問題已提交管理員審核。",qnaError:"處理回覆時發生錯誤，請稍後再試。",officialEmailNote:"代表電子郵件用於機構、企業、合約、法律等需要直接確認的正式聯絡。一般問題請優先使用 Q&A。"},
   ja:{qnaAskTitle:"Q&Aで質問",qnaAskText:"一般的な質問はまずこちらから送信してください。AI相談員がメール形式で一次回答し、重要な内容は管理者確認へ送られます。",qnaContactPlaceholder:"返信用メールまたは連絡先（任意）",qnaQuestionPlaceholder:"質問内容を入力してください。",qnaSubmit:"AI回答を受け取る",qnaSending:"回答を準備しています...",qnaAnswerTitle:"AI一次回答",qnaAdminNote:"管理者確認対象として受け付けました。",qnaError:"回答処理中にエラーが発生しました。後でもう一度お試しください。",officialEmailNote:"代表メールは機関・企業・契約・法的事項など直接確認が必要な公式連絡用です。一般質問はQ&Aを優先してください。"},
@@ -1079,36 +1087,36 @@ Object.keys(QNA_I18N_EXTRA).forEach(function(code){ I18N[code] = Object.assign(I
 
 
 const SUPPORT_EXTRA = {
-  ko:{commerceTitle:"상품 · 거래 책임 안내",commerceText:"IGDC는 상품, 콘텐츠, 서비스와 판매자·제공자를 연결하는 플랫폼입니다. IGDC가 직접 판매자로 명시된 경우를 제외하고, 상품 상세, 가격, 배송, 환불, 이용 조건과 거래 이행 책임은 해당 판매자 또는 제공자와 이용자 사이의 조건을 우선 확인해야 합니다. 분쟁이나 중요한 거래 문제는 Q&A로 접수하면 관리자 검토 대상으로 전달됩니다."},
-  en:{commerceTitle:"Product and transaction responsibility notice",commerceText:"IGDC provides a platform that connects products, content, services, sellers, and providers. Unless IGDC is clearly stated as the direct seller, item details, pricing, delivery, refund terms, usage conditions, and transaction performance should be checked with the seller or provider. Disputes or important transaction issues submitted through Q&A may be routed for admin review."},
-  zh:{commerceTitle:"商品与交易责任说明",commerceText:"IGDC 是连接商品、内容、服务、卖家和提供者的平台。除非明确标注 IGDC 为直接卖家，否则商品详情、价格、配送、退款、使用条件和交易履行责任应优先与卖家或提供者确认。纠纷或重要交易问题可通过 Q&A 提交并转交管理员审核。"},
-  zht:{commerceTitle:"商品與交易責任說明",commerceText:"IGDC 是連接商品、內容、服務、賣家與提供者的平台。除非明確標示 IGDC 為直接賣家，商品詳情、價格、配送、退款、使用條件與交易履行責任應優先與賣家或提供者確認。糾紛或重要交易問題可透過 Q&A 提交並轉交管理員審核。"},
-  ja:{commerceTitle:"商品・取引責任に関する案内",commerceText:"IGDCは商品、コンテンツ、サービス、販売者および提供者をつなぐプラットフォームです。IGDCが直接販売者と明示される場合を除き、商品詳細、価格、配送、返金、利用条件、取引履行責任は販売者または提供者との条件を確認してください。紛争や重要な取引問題はQ&Aから送信すると管理者確認に回されます。"},
-  es:{commerceTitle:"Aviso sobre productos y transacciones",commerceText:"IGDC ofrece una plataforma que conecta productos, contenidos, servicios, vendedores y proveedores. Salvo que IGDC figure como vendedor directo, los detalles, precios, entrega, reembolsos, condiciones y cumplimiento deben verificarse con el vendedor o proveedor. Las disputas o asuntos importantes pueden enviarse por Q&A para revisión."},
-  fr:{commerceTitle:"Avis sur les produits et transactions",commerceText:"IGDC fournit une plateforme reliant produits, contenus, services, vendeurs et fournisseurs. Sauf si IGDC est indiqué comme vendeur direct, les détails, prix, livraison, remboursements, conditions et exécution doivent être vérifiés avec le vendeur ou fournisseur. Les litiges importants peuvent être transmis via Q&A pour revue."},
-  de:{commerceTitle:"Hinweis zu Produkten und Transaktionen",commerceText:"IGDC stellt eine Plattform bereit, die Produkte, Inhalte, Dienste, Verkäufer und Anbieter verbindet. Sofern IGDC nicht als direkter Verkäufer genannt ist, sind Details, Preise, Lieferung, Erstattung, Bedingungen und Erfüllung mit Verkäufer oder Anbieter zu prüfen. Streitfälle können über Q&A zur Admin-Prüfung eingereicht werden."},
-  ru:{commerceTitle:"Уведомление о товарах и сделках",commerceText:"IGDC предоставляет платформу, соединяющую товары, контент, услуги, продавцов и поставщиков. Если IGDC не указан прямым продавцом, детали, цены, доставка, возврат, условия и исполнение проверяются с продавцом или поставщиком. Споры можно отправить через Q&A на проверку администратора."},
-  pt:{commerceTitle:"Aviso sobre produtos e transações",commerceText:"A IGDC fornece uma plataforma que conecta produtos, conteúdos, serviços, vendedores e fornecedores. Salvo indicação de venda direta pela IGDC, detalhes, preço, entrega, reembolso, condições e execução devem ser verificados com o vendedor ou fornecedor. Disputas podem ser enviadas pelo Q&A para revisão."},
-  it:{commerceTitle:"Avviso su prodotti e transazioni",commerceText:"IGDC offre una piattaforma che collega prodotti, contenuti, servizi, venditori e fornitori. Salvo indicazione di vendita diretta da parte di IGDC, dettagli, prezzo, consegna, rimborso, condizioni e adempimento vanno verificati con venditore o fornitore. Le controversie possono essere inviate tramite Q&A per revisione."},
-  ar:{commerceTitle:"إشعار مسؤولية المنتجات والمعاملات",commerceText:"توفر IGDC منصة تربط المنتجات والمحتوى والخدمات والبائعين ومقدمي الخدمة. ما لم تُذكر IGDC كبائع مباشر، يجب التحقق من التفاصيل والسعر والتسليم والاسترداد والشروط ومسؤولية التنفيذ مع البائع أو المزود. يمكن إرسال النزاعات عبر Q&A لمراجعة الإدارة."},
-  vi:{commerceTitle:"Thông báo trách nhiệm sản phẩm và giao dịch",commerceText:"IGDC là nền tảng kết nối sản phẩm, nội dung, dịch vụ, người bán và nhà cung cấp. Trừ khi IGDC được nêu rõ là người bán trực tiếp, chi tiết, giá, giao hàng, hoàn tiền, điều kiện sử dụng và trách nhiệm giao dịch cần kiểm tra với người bán hoặc nhà cung cấp. Tranh chấp quan trọng có thể gửi qua Q&A để quản trị viên xem xét."},
-  th:{commerceTitle:"ประกาศความรับผิดชอบสินค้าและธุรกรรม",commerceText:"IGDC เป็นแพลตฟอร์มเชื่อมต่อสินค้า เนื้อหา บริการ ผู้ขาย และผู้ให้บริการ เว้นแต่ระบุว่า IGDC เป็นผู้ขายโดยตรง รายละเอียดสินค้า ราคา การจัดส่ง การคืนเงิน เงื่อนไข และความรับผิดชอบในการทำธุรกรรมควรตรวจสอบกับผู้ขายหรือผู้ให้บริการ หากมีข้อพิพาทสำคัญให้ส่งผ่าน Q&A เพื่อให้ผู้ดูแลตรวจสอบ"},
-  id:{commerceTitle:"Pemberitahuan tanggung jawab produk dan transaksi",commerceText:"IGDC menyediakan platform yang menghubungkan produk, konten, layanan, penjual, dan penyedia. Kecuali IGDC dinyatakan sebagai penjual langsung, detail, harga, pengiriman, pengembalian dana, syarat penggunaan, dan pelaksanaan transaksi harus diperiksa dengan penjual atau penyedia. Sengketa penting dapat dikirim melalui Q&A untuk ditinjau admin."},
-  hi:{commerceTitle:"उत्पाद और लेन-देन जिम्मेदारी सूचना",commerceText:"IGDC उत्पादों, सामग्री, सेवाओं, विक्रेताओं और प्रदाताओं को जोड़ने वाला प्लेटफॉर्म है। जब तक IGDC को प्रत्यक्ष विक्रेता न बताया गया हो, विवरण, मूल्य, डिलीवरी, रिफंड, शर्तें और लेन-देन की जिम्मेदारी विक्रेता या प्रदाता से पुष्टि करें। महत्वपूर्ण विवाद Q&A से प्रशासनिक समीक्षा हेतु भेजे जा सकते हैं।"},
-  tr:{commerceTitle:"Ürün ve işlem sorumluluğu bildirimi",commerceText:"IGDC ürünleri, içerikleri, hizmetleri, satıcıları ve sağlayıcıları bağlayan bir platformdur. IGDC doğrudan satıcı olarak belirtilmedikçe ürün detayı, fiyat, teslimat, iade, kullanım koşulları ve işlem sorumluluğu satıcı veya sağlayıcı ile kontrol edilmelidir. Önemli uyuşmazlıklar Q&A üzerinden yönetici incelemesine iletilebilir."},
-  fa:{commerceTitle:"اطلاعیه مسئولیت محصول و معامله",commerceText:"IGDC بستری برای اتصال محصولات، محتوا، خدمات، فروشندگان و ارائه‌دهندگان است. مگر اینکه IGDC صراحتاً فروشنده مستقیم باشد، جزئیات، قیمت، تحویل، بازپرداخت، شرایط استفاده و مسئولیت انجام معامله باید با فروشنده یا ارائه‌دهنده بررسی شود. اختلافات مهم از طریق Q&A برای بررسی مدیر ارسال می‌شود."},
-  bn:{commerceTitle:"পণ্য ও লেনদেন দায়িত্ব সংক্রান্ত নোটিশ",commerceText:"IGDC পণ্য, কনটেন্ট, সেবা, বিক্রেতা ও প্রদানকারীদের সংযুক্ত করার প্ল্যাটফর্ম। IGDC সরাসরি বিক্রেতা হিসেবে উল্লেখ না থাকলে পণ্যের বিবরণ, মূল্য, ডেলিভারি, রিফান্ড, শর্ত ও লেনদেনের দায়িত্ব বিক্রেতা বা প্রদানকারীর সঙ্গে যাচাই করতে হবে। গুরুত্বপূর্ণ বিরোধ Q&A দিয়ে প্রশাসক পর্যালোচনায় পাঠানো যাবে।"},
-  ur:{commerceTitle:"مصنوعات اور لین دین کی ذمہ داری کا نوٹس",commerceText:"IGDC مصنوعات، مواد، خدمات، فروخت کنندگان اور فراہم کنندگان کو جوڑنے والا پلیٹ فارم ہے۔ جب تک IGDC کو براہ راست فروخت کنندہ نہ بتایا جائے، تفصیل، قیمت، ترسیل، رقم واپسی، شرائط اور لین دین کی ذمہ داری فروخت کنندہ یا فراہم کنندہ سے چیک کریں۔ اہم تنازعات Q&A کے ذریعے منتظم کو بھیجے جا سکتے ہیں۔"},
-  sw:{commerceTitle:"Taarifa ya wajibu wa bidhaa na miamala",commerceText:"IGDC ni jukwaa linalounganisha bidhaa, maudhui, huduma, wauzaji na watoa huduma. Isipokuwa IGDC imeelezwa kuwa muuzaji wa moja kwa moja, maelezo, bei, usafirishaji, marejesho, masharti na utekelezaji wa muamala uthibitishwe na muuzaji au mtoa huduma. Migogoro muhimu inaweza kutumwa kupitia Q&A kwa ukaguzi wa msimamizi."},
-  ta:{commerceTitle:"தயாரிப்பு மற்றும் பரிவர்த்தனை பொறுப்பு அறிவிப்பு",commerceText:"IGDC தயாரிப்புகள், உள்ளடக்கம், சேவைகள், விற்பனையாளர்கள் மற்றும் வழங்குநர்களை இணைக்கும் தளம். IGDC நேரடி விற்பனையாளராக தெளிவாக குறிப்பிடப்படாவிட்டால், விவரம், விலை, விநியோகம், பணத்தைத் திரும்பப் பெறுதல், நிபந்தனைகள் மற்றும் பரிவர்த்தனை பொறுப்பு விற்பனையாளர் அல்லது வழங்குநருடன் உறுதிப்படுத்தப்பட வேண்டும். முக்கிய பிரச்சினைகள் Q&A மூலம் நிர்வாகி பரிசீலனைக்கு அனுப்பலாம்."},
-  hu:{commerceTitle:"Termék- és tranzakciós felelősségi tájékoztató",commerceText:"Az IGDC platformként termékeket, tartalmakat, szolgáltatásokat, eladókat és szolgáltatókat kapcsol össze. Hacsak az IGDC nincs közvetlen eladóként megjelölve, a részleteket, árat, szállítást, visszatérítést, feltételeket és teljesítést az eladóval vagy szolgáltatóval kell ellenőrizni. Fontos viták Q&A-n át admin ellenőrzésre kerülhetnek."},
-  ms:{commerceTitle:"Notis tanggungjawab produk dan transaksi",commerceText:"IGDC ialah platform yang menghubungkan produk, kandungan, perkhidmatan, penjual dan penyedia. Melainkan IGDC dinyatakan sebagai penjual langsung, butiran, harga, penghantaran, bayaran balik, syarat dan pelaksanaan transaksi perlu disemak dengan penjual atau penyedia. Pertikaian penting boleh dihantar melalui Q&A untuk semakan admin."},
-  nl:{commerceTitle:"Kennisgeving product- en transactieverantwoordelijkheid",commerceText:"IGDC biedt een platform dat producten, content, diensten, verkopers en aanbieders verbindt. Tenzij IGDC als directe verkoper is vermeld, moeten details, prijs, levering, terugbetaling, voorwaarden en uitvoering met verkoper of aanbieder worden gecontroleerd. Belangrijke geschillen kunnen via Q&A aan admin review worden doorgegeven."},
-  pl:{commerceTitle:"Informacja o odpowiedzialności za produkty i transakcje",commerceText:"IGDC zapewnia platformę łączącą produkty, treści, usługi, sprzedawców i dostawców. O ile IGDC nie jest wyraźnie wskazany jako bezpośredni sprzedawca, szczegóły, cena, dostawa, zwroty, warunki i realizacja powinny być sprawdzone u sprzedawcy lub dostawcy. Ważne spory można zgłosić przez Q&A do przeglądu administratora."},
-  sv:{commerceTitle:"Meddelande om produkt- och transaktionsansvar",commerceText:"IGDC tillhandahåller en plattform som kopplar samman produkter, innehåll, tjänster, säljare och leverantörer. Om IGDC inte anges som direkt säljare ska detaljer, pris, leverans, återbetalning, villkor och transaktionsansvar kontrolleras med säljaren eller leverantören. Viktiga tvister kan skickas via Q&A för administratörsgranskning."},
-  tl:{commerceTitle:"Paunawa sa responsibilidad ng produkto at transaksyon",commerceText:"Ang IGDC ay platform na nag-uugnay ng produkto, content, serbisyo, seller at provider. Maliban kung malinaw na direktang seller ang IGDC, dapat suriin sa seller o provider ang detalye, presyo, delivery, refund, terms at pagtupad ng transaksyon. Mahahalagang dispute ay maaaring isumite sa Q&A para sa admin review."},
-  uk:{commerceTitle:"Повідомлення про відповідальність за товари й транзакції",commerceText:"IGDC є платформою, що з’єднує товари, контент, послуги, продавців і постачальників. Якщо IGDC не зазначений як прямий продавець, деталі, ціна, доставка, повернення, умови та виконання мають перевірятися з продавцем або постачальником. Важливі спори можна подати через Q&A на розгляд адміністратора."},
-  uz:{commerceTitle:"Mahsulot va tranzaksiya javobgarligi haqida xabar",commerceText:"IGDC mahsulotlar, kontent, xizmatlar, sotuvchilar va ta’minotchilarni bog‘lovchi platformadir. IGDC bevosita sotuvchi sifatida ko‘rsatilmagan bo‘lsa, tafsilot, narx, yetkazib berish, qaytarish, shartlar va bitim bajarilishi sotuvchi yoki ta’minotchi bilan tekshirilishi kerak. Muhim nizolar Q&A orqali admin ko‘rib chiqishiga yuborilishi mumkin."}
+  ko:{commerceTitle:"상품 · 거래 책임 안내",commerceText:"IGDC는 상품, 콘텐츠, 서비스와 판매자·제공자를 연결하는 플랫폼입니다. IGDC가 직접 판매자로 명시된 경우를 제외하고, 상품 상세, 가격, 배송, 환불, 이용 조건과 거래 이행 책임은 해당 판매자 또는 제공자와 이용자 사이의 조건을 우선 확인해야 합니다."},
+  en:{commerceTitle:"Product and transaction responsibility notice",commerceText:"IGDC provides a platform that connects products, content, services, sellers, and providers. Unless IGDC is clearly stated as the direct seller, item details, pricing, delivery, refund terms, usage conditions, and transaction performance should be checked with the seller or provider."},
+  zh:{commerceTitle:"商品与交易责任说明",commerceText:"IGDC 是连接商品、内容、服务、卖家和提供者的平台。除非明确标注 IGDC 为直接卖家，否则商品详情、价格、配送、退款、使用条件和交易履行责任应优先与卖家或提供者确认。"},
+  zht:{commerceTitle:"商品與交易責任說明",commerceText:"IGDC 是連接商品、內容、服務、賣家與提供者的平台。除非明確標示 IGDC 為直接賣家，商品詳情、價格、配送、退款、使用條件與交易履行責任應優先與賣家或提供者確認。"},
+  ja:{commerceTitle:"商品・取引責任に関する案内",commerceText:"IGDCは商品、コンテンツ、サービス、販売者および提供者をつなぐプラットフォームです。IGDCが直接販売者と明示される場合を除き、商品詳細、価格、配送、返金、利用条件、取引履行責任は販売者または提供者との条件を確認してください。"},
+  es:{commerceTitle:"Aviso sobre productos y transacciones",commerceText:"IGDC ofrece una plataforma que conecta productos, contenidos, servicios, vendedores y proveedores. Salvo que IGDC figure como vendedor directo, los detalles, precios, entrega, reembolsos, condiciones y cumplimiento deben verificarse con el vendedor o proveedor."},
+  fr:{commerceTitle:"Avis sur les produits et transactions",commerceText:"IGDC fournit une plateforme reliant produits, contenus, services, vendeurs et fournisseurs. Sauf si IGDC est indiqué comme vendeur direct, les détails, prix, livraison, remboursements, conditions et exécution doivent être vérifiés avec le vendeur ou fournisseur."},
+  de:{commerceTitle:"Hinweis zu Produkten und Transaktionen",commerceText:"IGDC stellt eine Plattform bereit, die Produkte, Inhalte, Dienste, Verkäufer und Anbieter verbindet. Sofern IGDC nicht als direkter Verkäufer genannt ist, sind Details, Preise, Lieferung, Erstattung, Bedingungen und Erfüllung mit Verkäufer oder Anbieter zu prüfen."},
+  ru:{commerceTitle:"Уведомление о товарах и сделках",commerceText:"IGDC предоставляет платформу, соединяющую товары, контент, услуги, продавцов и поставщиков. Если IGDC не указан прямым продавцом, детали, цены, доставка, возврат, условия и исполнение проверяются с продавцом или поставщиком."},
+  pt:{commerceTitle:"Aviso sobre produtos e transações",commerceText:"A IGDC fornece uma plataforma que conecta produtos, conteúdos, serviços, vendedores e fornecedores. Salvo indicação de venda direta pela IGDC, detalhes, preço, entrega, reembolso, condições e execução devem ser verificados com o vendedor ou fornecedor."},
+  it:{commerceTitle:"Avviso su prodotti e transazioni",commerceText:"IGDC offre una piattaforma che collega prodotti, contenuti, servizi, venditori e fornitori. Salvo indicazione di vendita diretta da parte di IGDC, dettagli, prezzo, consegna, rimborso, condizioni e adempimento vanno verificati con venditore o fornitore."},
+  ar:{commerceTitle:"إشعار مسؤولية المنتجات والمعاملات",commerceText:"توفر IGDC منصة تربط المنتجات والمحتوى والخدمات والبائعين ومقدمي الخدمة. ما لم تُذكر IGDC كبائع مباشر، يجب التحقق من التفاصيل والسعر والتسليم والاسترداد والشروط ومسؤولية التنفيذ مع البائع أو المزود."},
+  vi:{commerceTitle:"Thông báo trách nhiệm sản phẩm và giao dịch",commerceText:"IGDC là nền tảng kết nối sản phẩm, nội dung, dịch vụ, người bán và nhà cung cấp. Trừ khi IGDC được nêu rõ là người bán trực tiếp, chi tiết, giá, giao hàng, hoàn tiền, điều kiện sử dụng và trách nhiệm giao dịch cần kiểm tra với người bán hoặc nhà cung cấp."},
+  th:{commerceTitle:"ประกาศความรับผิดชอบสินค้าและธุรกรรม",commerceText:""},
+  id:{commerceTitle:"Pemberitahuan tanggung jawab produk dan transaksi",commerceText:"IGDC menyediakan platform yang menghubungkan produk, konten, layanan, penjual, dan penyedia. Kecuali IGDC dinyatakan sebagai penjual langsung, detail, harga, pengiriman, pengembalian dana, syarat penggunaan, dan pelaksanaan transaksi harus diperiksa dengan penjual atau penyedia."},
+  hi:{commerceTitle:"उत्पाद और लेन-देन जिम्मेदारी सूचना",commerceText:""},
+  tr:{commerceTitle:"Ürün ve işlem sorumluluğu bildirimi",commerceText:"IGDC ürünleri, içerikleri, hizmetleri, satıcıları ve sağlayıcıları bağlayan bir platformdur. IGDC doğrudan satıcı olarak belirtilmedikçe ürün detayı, fiyat, teslimat, iade, kullanım koşulları ve işlem sorumluluğu satıcı veya sağlayıcı ile kontrol edilmelidir."},
+  fa:{commerceTitle:"اطلاعیه مسئولیت محصول و معامله",commerceText:"IGDC بستری برای اتصال محصولات، محتوا، خدمات، فروشندگان و ارائه‌دهندگان است. مگر اینکه IGDC صراحتاً فروشنده مستقیم باشد، جزئیات، قیمت، تحویل، بازپرداخت، شرایط استفاده و مسئولیت انجام معامله باید با فروشنده یا ارائه‌دهنده بررسی شود."},
+  bn:{commerceTitle:"পণ্য ও লেনদেন দায়িত্ব সংক্রান্ত নোটিশ",commerceText:""},
+  ur:{commerceTitle:"مصنوعات اور لین دین کی ذمہ داری کا نوٹس",commerceText:""},
+  sw:{commerceTitle:"Taarifa ya wajibu wa bidhaa na miamala",commerceText:"IGDC ni jukwaa linalounganisha bidhaa, maudhui, huduma, wauzaji na watoa huduma. Isipokuwa IGDC imeelezwa kuwa muuzaji wa moja kwa moja, maelezo, bei, usafirishaji, marejesho, masharti na utekelezaji wa muamala uthibitishwe na muuzaji au mtoa huduma."},
+  ta:{commerceTitle:"தயாரிப்பு மற்றும் பரிவர்த்தனை பொறுப்பு அறிவிப்பு",commerceText:"IGDC தயாரிப்புகள், உள்ளடக்கம், சேவைகள், விற்பனையாளர்கள் மற்றும் வழங்குநர்களை இணைக்கும் தளம். IGDC நேரடி விற்பனையாளராக தெளிவாக குறிப்பிடப்படாவிட்டால், விவரம், விலை, விநியோகம், பணத்தைத் திரும்பப் பெறுதல், நிபந்தனைகள் மற்றும் பரிவர்த்தனை பொறுப்பு விற்பனையாளர் அல்லது வழங்குநருடன் உறுதிப்படுத்தப்பட வேண்டும்."},
+  hu:{commerceTitle:"Termék- és tranzakciós felelősségi tájékoztató",commerceText:"Az IGDC platformként termékeket, tartalmakat, szolgáltatásokat, eladókat és szolgáltatókat kapcsol össze. Hacsak az IGDC nincs közvetlen eladóként megjelölve, a részleteket, árat, szállítást, visszatérítést, feltételeket és teljesítést az eladóval vagy szolgáltatóval kell ellenőrizni."},
+  ms:{commerceTitle:"Notis tanggungjawab produk dan transaksi",commerceText:"IGDC ialah platform yang menghubungkan produk, kandungan, perkhidmatan, penjual dan penyedia. Melainkan IGDC dinyatakan sebagai penjual langsung, butiran, harga, penghantaran, bayaran balik, syarat dan pelaksanaan transaksi perlu disemak dengan penjual atau penyedia."},
+  nl:{commerceTitle:"Kennisgeving product- en transactieverantwoordelijkheid",commerceText:"IGDC biedt een platform dat producten, content, diensten, verkopers en aanbieders verbindt. Tenzij IGDC als directe verkoper is vermeld, moeten details, prijs, levering, terugbetaling, voorwaarden en uitvoering met verkoper of aanbieder worden gecontroleerd."},
+  pl:{commerceTitle:"Informacja o odpowiedzialności za produkty i transakcje",commerceText:"IGDC zapewnia platformę łączącą produkty, treści, usługi, sprzedawców i dostawców. O ile IGDC nie jest wyraźnie wskazany jako bezpośredni sprzedawca, szczegóły, cena, dostawa, zwroty, warunki i realizacja powinny być sprawdzone u sprzedawcy lub dostawcy."},
+  sv:{commerceTitle:"Meddelande om produkt- och transaktionsansvar",commerceText:"IGDC tillhandahåller en plattform som kopplar samman produkter, innehåll, tjänster, säljare och leverantörer. Om IGDC inte anges som direkt säljare ska detaljer, pris, leverans, återbetalning, villkor och transaktionsansvar kontrolleras med säljaren eller leverantören."},
+  tl:{commerceTitle:"Paunawa sa responsibilidad ng produkto at transaksyon",commerceText:"Ang IGDC ay platform na nag-uugnay ng produkto, content, serbisyo, seller at provider. Maliban kung malinaw na direktang seller ang IGDC, dapat suriin sa seller o provider ang detalye, presyo, delivery, refund, terms at pagtupad ng transaksyon."},
+  uk:{commerceTitle:"Повідомлення про відповідальність за товари й транзакції",commerceText:"IGDC є платформою, що з’єднує товари, контент, послуги, продавців і постачальників. Якщо IGDC не зазначений як прямий продавець, деталі, ціна, доставка, повернення, умови та виконання мають перевірятися з продавцем або постачальником."},
+  uz:{commerceTitle:"Mahsulot va tranzaksiya javobgarligi haqida xabar",commerceText:"IGDC mahsulotlar, kontent, xizmatlar, sotuvchilar va ta’minotchilarni bog‘lovchi platformadir. IGDC bevosita sotuvchi sifatida ko‘rsatilmagan bo‘lsa, tafsilot, narx, yetkazib berish, qaytarish, shartlar va bitim bajarilishi sotuvchi yoki ta’minotchi bilan tekshirilishi kerak."}
 };
 Object.keys(SUPPORT_EXTRA).forEach(function(code){ I18N[code]=Object.assign(I18N[code]||{}, SUPPORT_EXTRA[code]); });
 
@@ -1169,6 +1177,30 @@ function render(lang){
 render(getLang());
 window.addEventListener('storage', e=>{ if(e.key==='igdc_lang' && I18N[e.newValue]) render(e.newValue); });
 window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang || e.data.igdc_lang); if(lang && I18N[lang]) render(lang); }catch(_e){} });
+
+
+(function(){
+  const link=document.getElementById('supportAiEmailLink');
+  const modal=document.getElementById('supportAiMailModal');
+  const close=document.getElementById('supportAiMailClose');
+  function openModal(ev){
+    if(ev) ev.preventDefault();
+    if(!modal) return false;
+    modal.hidden=false;
+    modal.setAttribute('aria-hidden','false');
+    try{ const q=document.getElementById('qnaQuestion'); if(q) setTimeout(()=>q.focus(), 20); }catch(e){}
+    return false;
+  }
+  function closeModal(){
+    if(!modal) return;
+    modal.hidden=true;
+    modal.setAttribute('aria-hidden','true');
+  }
+  if(link) link.addEventListener('click', openModal);
+  if(close) close.addEventListener('click', closeModal);
+  if(modal) modal.addEventListener('click', function(e){ if(e.target===modal) closeModal(); });
+  window.addEventListener('keydown', function(e){ if(e.key==='Escape') closeModal(); });
+})();
 
 (function(){
   const btn=document.getElementById('qnaSubmit');
