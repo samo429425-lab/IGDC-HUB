@@ -251,6 +251,103 @@
     return html;
   }
 
+
+  var ENGINE_PROBE_TARGETS = [
+    { key:'maru-search', label:'MaruSearch CPU', endpoint:'/.netlify/functions/maru-search', role:'CPU / search dispatcher', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', limit:'3', page:'home', section:'home_1' } },
+    { key:'sanmaru', label:'Sanmaru OSAI', endpoint:'/.netlify/functions/sanmaru_engine_v2', role:'global information integrator', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', action:'front-supply', page:'home', section:'home_1', limit:'3' } },
+    { key:'search-bank-index', label:'SearchBank Index', endpoint:'/.netlify/functions/search-bank-index-engine', role:'front reservoir/index supplier', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'3' } },
+    { key:'search-bank-engine', label:'SearchBank Engine', endpoint:'/.netlify/functions/search-bank-engine', role:'snapshot request/router', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'3' } },
+    { key:'maru-search-display', label:'Search Display', endpoint:'/.netlify/functions/maru-search-display-engine', role:'search display bridge', critical:false, expectItems:false, params:{ q:'igdc audit', query:'igdc audit', limit:'3' } },
+    { key:'global-insight', label:'Global Insight', endpoint:'/.netlify/functions/maru-global-insight-engine', role:'global insight/right panel', critical:false, expectItems:false, params:{ q:'igdc audit', query:'igdc audit', region:'global', limit:'3' } },
+    { key:'collector', label:'Collector', endpoint:'/.netlify/functions/collector', role:'auxiliary data feeder', critical:false, expectItems:false, params:{ audit:'1', probe:'1', dryRun:'1', limit:'1' } },
+    { key:'planetary', label:'Planetary', endpoint:'/.netlify/functions/planetary-data-connector', role:'planetary connector', critical:false, expectItems:false, params:{ audit:'1', probe:'1', dryRun:'1', q:'igdc audit', limit:'1' } }
+  ];
+  function probeUrl(target){
+    var p = new URLSearchParams();
+    p.set('audit','1'); p.set('probe','1'); p.set('dryRun','1'); p.set('noWrite','1'); p.set('t', String(Date.now()));
+    Object.keys(target.params || {}).forEach(function(k){ p.set(k, target.params[k]); });
+    return target.endpoint + '?' + p.toString();
+  }
+  function countJsonItems(json){
+    try{
+      if(Array.isArray(json)) return json.length;
+      var paths = ['items','data','results','cards','records','snapshot.items','payload.items','payload.results','output.items','result.items'];
+      for(var i=0;i<paths.length;i++){
+        var v = val(json, paths[i], null);
+        if(Array.isArray(v)) return v.length;
+      }
+      if(isObj(json)){
+        var total = val(json, 'totalItems', null) || val(json, 'count', null) || val(json, 'total', null);
+        if(typeof total === 'number') return total;
+      }
+    }catch(e){}
+    return 0;
+  }
+  async function fetchWithTimeout(url, ms){
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, ms || 5500);
+    try{ return await fetch(url, { cache:'no-store', signal:ctrl.signal, headers:{ 'X-IGDC-Audit-Probe':'1' } }); }
+    finally{ clearTimeout(timer); }
+  }
+  async function probeOneEngine(target){
+    var started = performance.now();
+    var rec = { key:target.key, label:target.label, role:target.role, endpoint:target.endpoint, critical:!!target.critical, ok:false, status:0, ms:null, itemCount:0, bytes:0, level:'info', bottleneck:null, error:null };
+    try{
+      var res = await fetchWithTimeout(probeUrl(target), 6500);
+      rec.status = res.status;
+      rec.ms = Math.round(performance.now() - started);
+      var text = await res.text();
+      rec.bytes = text.length;
+      var json = null;
+      try{ json = text ? JSON.parse(text) : null; }catch(e){ rec.parseError = String(e && e.message || e); }
+      if(json) {
+        rec.itemCount = countJsonItems(json);
+        rec.keys = Object.keys(json).slice(0, 12);
+        rec.version = json.version || val(json,'meta.version',null) || val(json,'engine.version',null) || null;
+        rec.reportedOk = json.ok == null ? null : !!json.ok;
+      }
+      rec.ok = res.ok && (json ? (json.ok !== false) : true);
+      if(!res.ok) { rec.level = target.critical ? 'fail' : 'warn'; rec.bottleneck = 'HTTP ' + res.status; }
+      else if(rec.ms > 5000) { rec.level = 'warn'; rec.bottleneck = 'slow-response'; }
+      else if(target.expectItems && rec.itemCount <= 0) { rec.level = 'warn'; rec.bottleneck = 'no-items-returned'; }
+      else { rec.level = 'ok'; rec.bottleneck = 'none'; }
+    }catch(e){
+      rec.ms = Math.round(performance.now() - started);
+      rec.error = String(e && e.name === 'AbortError' ? 'timeout' : (e && e.message || e));
+      rec.level = target.critical ? 'fail' : 'warn';
+      rec.bottleneck = rec.error === 'timeout' ? 'timeout' : 'fetch-error';
+    }
+    return rec;
+  }
+  async function runEngineProbes(){
+    var rows = [];
+    for(var i=0;i<ENGINE_PROBE_TARGETS.length;i++) rows.push(await probeOneEngine(ENGINE_PROBE_TARGETS[i]));
+    var counts = { ok:0, warn:0, fail:0, info:0 };
+    rows.forEach(function(r){ counts[r.level] = (counts[r.level] || 0) + 1; });
+    var criticalFail = rows.filter(function(r){ return r.critical && r.level === 'fail'; });
+    var slow = rows.filter(function(r){ return r.ms != null && r.ms > 5000; });
+    var zero = rows.filter(function(r){ return r.bottleneck === 'no-items-returned'; });
+    var bottleneck = 'none';
+    if(criticalFail.length) bottleneck = criticalFail.map(function(r){ return r.key; }).join(', ') + ' critical failure';
+    else if(slow.length) bottleneck = slow.map(function(r){ return r.key; }).join(', ') + ' slow response';
+    else if(zero.length) bottleneck = zero.map(function(r){ return r.key; }).join(', ') + ' returned no items';
+    var level = criticalFail.length ? 'fail' : ((counts.warn || counts.fail) ? 'warn' : 'ok');
+    return { source:'browser-runtime-probe', generatedAt:new Date().toISOString(), total:rows.length, counts:counts, level:level, bottleneck:bottleneck, rows:rows };
+  }
+  function engineRuntimeHtml(engine){
+    if(!engine || !engine.rows) return '<div class="small">엔진 런타임 점검 결과 없음</div>';
+    var html = '<div class="audit-engine-runtime"><h2>엔진 런타임 상태표</h2>'+
+      '<div class="small">bottleneck: '+escapeHtml(engine.bottleneck || 'none')+' / level: <b class="'+statusClass(engine.level)+'">'+escapeHtml(String(engine.level||'info').toUpperCase())+'</b></div>'+
+      '<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px"><thead><tr>'+['엔진','역할','상태','HTTP','응답ms','결과수','병목/메모'].map(function(h){return '<th style="border:1px solid #ddd;padding:6px;text-align:left">'+escapeHtml(h)+'</th>';}).join('')+'</tr></thead><tbody>';
+    engine.rows.forEach(function(r){
+      html += '<tr>'+[
+        r.label || r.key, r.role || '', String(r.level || '').toUpperCase(), r.status || '-', r.ms == null ? '-' : r.ms, r.itemCount || 0, r.bottleneck || r.error || ''
+      ].map(function(v, idx){ return '<td class="'+(idx===2?statusClass(r.level):'')+'" style="border:1px solid #ddd;padding:6px">'+escapeHtml(v)+'</td>'; }).join('')+'</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+
   function buildSummaryHtml(report){
     var score = report && report.summary ? report.summary.score : null;
     var level = report && report.summary ? report.summary.level : 'info';
@@ -272,7 +369,10 @@
     lines.push('<tr><th>Warnings</th><td>'+count(report.warnings)+'</td></tr>');
     lines.push('<tr><th>Public snapshot pages</th><td>'+escapeHtml(val(report,'publicSnapshots.okPages','-'))+' / '+escapeHtml(val(report,'publicSnapshots.totalPages','-'))+'</td></tr>');
     lines.push('<tr><th>Public snapshot sections</th><td>'+escapeHtml(val(report,'publicSnapshots.totalSections','-'))+' sections / '+escapeHtml(val(report,'publicSnapshots.totalItems','-'))+' items</td></tr>');
+    lines.push('<tr><th>Engine runtime</th><td>'+escapeHtml(val(report,'engineRuntime.counts.ok','-'))+' ok / '+escapeHtml(val(report,'engineRuntime.counts.warn','-'))+' warn / '+escapeHtml(val(report,'engineRuntime.counts.fail','-'))+' fail</td></tr>');
     lines.push('</tbody></table>');
+    lines.push('<h2>Engine Runtime Table</h2>');
+    lines.push(engineRuntimeHtml(report.engineRuntime));
     lines.push('<h2>Public Snapshot Section Table</h2>');
     lines.push(snapshotTablesHtml(report.publicSnapshots));
     lines.push('<h2>Warnings</h2><pre>'+escapeHtml((report.warnings || []).join('\n'))+'</pre>');
@@ -301,9 +401,10 @@
     card('Product Supply Gate', report.productSupply ? (report.productSupply.enabled ? 'ON' : 'OFF') : 'N/A', (report.productSupply && report.productSupply.enabled && mode === 'pre-product') ? 'warn':'ok', mode === 'pre-product' ? 'OFF is expected before real product upload' : 'ON is expected in production');
     card('Payment Line', val(report,'productSupply.flags.PAYMENT_LIVE','false'), mode === 'production' && val(report,'productSupply.flags.PAYMENT_LIVE','false') !== 'true' ? 'warn':'info', 'payment config files/readers are included in raw JSON');
     card('Public Snapshots', String(val(report,'publicSnapshots.okPages','-')) + '/' + String(val(report,'publicSnapshots.totalPages','-')) + ' pages', val(report,'publicSnapshots.okPages',0) === val(report,'publicSnapshots.totalPages',-1) ? 'ok':'warn', String(val(report,'publicSnapshots.totalSections','-')) + ' sections / ' + String(val(report,'publicSnapshots.totalItems','-')) + ' items');
+    card('Engine Runtime', val(report,'engineRuntime.level','N/A').toString().toUpperCase(), val(report,'engineRuntime.level','info'), 'ok: ' + val(report,'engineRuntime.counts.ok','-') + ', warn: ' + val(report,'engineRuntime.counts.warn','-') + ', fail: ' + val(report,'engineRuntime.counts.fail','-') + ', bottleneck: ' + val(report,'engineRuntime.bottleneck','-'));
     card('Warnings', String(count(report.warnings)), count(report.warnings) ? 'warn':'ok', 'download JSON and send for full review');
     if($('summary')) $('summary').innerHTML = cards.join('');
-    ensureSnapshotDetailsHost().innerHTML = snapshotTablesHtml(report.publicSnapshots);
+    ensureSnapshotDetailsHost().innerHTML = engineRuntimeHtml(report.engineRuntime) + snapshotTablesHtml(report.publicSnapshots);
   }
   async function runAudit(){
     var runBtn = $('runAuditBtn');
@@ -318,6 +419,9 @@
       data.httpStatus = res.status;
       data = addFrontRuntimeChecks(data);
       data.publicSnapshots = await fetchPublicSnapshots(mode);
+      if($('status')) $('status').textContent = '엔진 런타임 점검 중...';
+      data.engineRuntime = await runEngineProbes();
+      if(data.engineRuntime && data.engineRuntime.level !== 'ok'){ data.warnings = data.warnings || []; data.warnings.push('Engine runtime probe detected: ' + (data.engineRuntime.bottleneck || data.engineRuntime.level)); }
       if(data.publicSnapshots && data.publicSnapshots.okPages < data.publicSnapshots.totalPages){
         data.warnings = data.warnings || [];
         data.warnings.push('Some public /data/*.snapshot.json files are missing or invalid.');
