@@ -515,6 +515,52 @@ function scanEngineTopology(root){
   };
 }
 
+
+function scanEngineDiagnosticReadiness(root){
+  const targets = [
+    { key:'maru-search', path:'netlify/functions/maru-search.js', critical:true },
+    { key:'sanmaru', path:'netlify/functions/sanmaru_engine_v2.js', critical:true },
+    { key:'search-bank-engine', path:'netlify/functions/search-bank-engine.js', critical:true },
+    { key:'search-bank-index', path:'netlify/functions/search-bank-index-engine.js', critical:true },
+    { key:'maru-search-display', path:'netlify/functions/maru-search-display-engine.js', critical:true },
+    { key:'global-insight', path:'netlify/functions/maru-global-insight-engine.js', critical:false },
+    { key:'collector', path:'netlify/functions/collector.js', critical:false },
+    { key:'planetary', path:'netlify/functions/planetary-data-connector.js', critical:false }
+  ];
+  const rows = targets.map(t => {
+    const file = path.join(root, t.path);
+    const st = statFile(file);
+    const rec = { key:t.key, path:t.path, critical:!!t.critical, exists:st.exists, size:st.size || 0 };
+    if(st.exists){
+      const txt = readText(file).text || '';
+      rec.hash = hashText(txt);
+      rec.hasHandler = /exports\.handler|module\.exports\s*=\s*\{[^}]*handler|handler\s*=/.test(txt);
+      rec.hasFastHealthBranch = /(health|ping|probe|audit|dryRun|noWrite)/i.test(txt);
+      rec.hasTimeoutGuard = /(AbortController|timeout|setTimeout|Promise\.race)/i.test(txt);
+      rec.mentionsSearchBank = /search[-_ ]?bank/i.test(txt);
+      rec.mentionsSnapshot = /snapshot/i.test(txt);
+      rec.mentionsDisplay = /display/i.test(txt);
+      rec.mentionsGlobalInsight = /global[-_ ]?insight/i.test(txt);
+      rec.readiness = rec.hasHandler && rec.hasFastHealthBranch ? 'probe-ready' : (rec.hasHandler ? 'callable-no-fast-probe' : 'not-http-callable');
+      rec.recommendation = rec.readiness === 'probe-ready'
+        ? 'fast audit/probe branch appears present or referenced'
+        : 'add an explicit early-return branch for ?audit=1&probe=1&health=1 that does not run heavy collection/search';
+    } else {
+      rec.readiness = t.critical ? 'missing-critical' : 'missing-optional';
+      rec.recommendation = 'file missing or not bundled';
+    }
+    return rec;
+  });
+  return {
+    source:'server-fs-static-v4',
+    total:rows.length,
+    probeReady:rows.filter(r => r.readiness === 'probe-ready').length,
+    callableNoFastProbe:rows.filter(r => r.readiness === 'callable-no-fast-probe').map(r => r.key),
+    criticalWithoutFastProbe:rows.filter(r => r.critical && r.readiness !== 'probe-ready').map(r => r.key),
+    rows
+  };
+}
+
 function buildWarnings(report){
   const w = [];
   const mode = report.mode || 'pre-product';
@@ -531,6 +577,7 @@ function buildWarnings(report){
   if(report.functions && report.functions.missing && report.functions.missing.length) w.push('Some important Netlify function/core files are missing.');
   if(report.functions && report.functions.requireCoreFiles && report.functions.requireCoreFiles.length && !report.functions.coreBridgeExists) w.push('Some functions require ./core but netlify/functions/core.js is missing.');
   if(report.engineTopology && report.engineTopology.missingCritical && report.engineTopology.missingCritical.length) w.push('Critical engine files are missing: ' + report.engineTopology.missingCritical.join(', '));
+  if(report.engineDiagnosticReadiness && report.engineDiagnosticReadiness.criticalWithoutFastProbe && report.engineDiagnosticReadiness.criticalWithoutFastProbe.length) w.push('Engine diagnostic readiness: add fast health/probe branches to critical engines: ' + report.engineDiagnosticReadiness.criticalWithoutFastProbe.join(', '));
   const copies = report.snapshotCopies;
   if(copies && copies.searchBankOkCount < 2) w.push('SearchBank snapshot copy count is low. Confirm data/ and function-side copies before production.');
   if(copies && copies.searchBankAllSame === false) w.push('SearchBank snapshot copies have different hashes. Confirm intended sync state.');
@@ -561,6 +608,7 @@ function computeSummary(report){
   if(report.snapshotCopies && report.snapshotCopies.searchBankAllSame === false) score -= 8;
   if(report.functions && report.functions.requireCoreFiles && report.functions.requireCoreFiles.length && !report.functions.coreBridgeExists) score -= 10;
   if(report.engineTopology && report.engineTopology.missingCritical && report.engineTopology.missingCritical.length) score -= Math.min(25, report.engineTopology.missingCritical.length * 7);
+  if(report.engineDiagnosticReadiness && report.engineDiagnosticReadiness.criticalWithoutFastProbe && report.engineDiagnosticReadiness.criticalWithoutFastProbe.length) score -= Math.min(8, report.engineDiagnosticReadiness.criticalWithoutFastProbe.length * 2);
   if(report.serverSnapshots && report.serverSnapshots.okPages < report.serverSnapshots.totalPages) score -= Math.min(12, (report.serverSnapshots.totalPages - report.serverSnapshots.okPages) * 3);
   if(mode === 'production' && report.serverSnapshots && report.serverSnapshots.pages){
     const badSections = report.serverSnapshots.pages.reduce((n,p)=> n + (p.analysis && p.analysis.statusCounts ? (p.analysis.statusCounts.fail || 0) : 0), 0);
@@ -577,6 +625,7 @@ function audit(event){
   const mode = getMode(event);
   const report = {
     ok:true,
+    auditVersion:'engine-diagnostic-v4',
     mode,
     generatedAt:nowIso(),
     root,
@@ -611,6 +660,7 @@ function audit(event){
   report.globalInsight = scanGlobalInsight(root);
   report.payment = scanPayment(root);
   report.engineTopology = scanEngineTopology(root);
+  report.engineDiagnosticReadiness = scanEngineDiagnosticReadiness(root);
   report.snapshotCopies = scanSnapshotCopies(root);
   report.serverSnapshots = scanServerSnapshots(root, mode);
   report.warnings = buildWarnings(report);
