@@ -1,0 +1,220 @@
+{
+  "version": "igdc-support-knowledge-v1.1.0-membership-commerce-ai30",
+  "platform": {
+    "name": "IGDC Global Hub",
+    "domain": "igdcglobal.com",
+    "supportEmail": "igdcplatform@gmail.com",
+    "primaryInquiryFlow": "Q&A first, admin review only when needed",
+    "publicPages": [
+      "Home",
+      "Network Hub",
+      "Distribution Hub",
+      "Social Network",
+      "Media Hub",
+      "Travel",
+      "Donation",
+      "Support / Help"
+    ]
+  },
+  "publicGuidance": {
+    "upgrade": "회원 승급 신청은 회원 전용 페이지에서 신청할 수 있습니다.",
+    "qna": "간단한 질문은 Q&A 질의란을 통해 질문하면 AI 상담사가 신속히 답변을 드립니다.",
+    "downloads": "프로그램 다운로드 파일은 도메인의 /downloads/ 경로에 게시된 뒤 활성화됩니다. 파일이 아직 업로드되지 않은 경우 다운로드가 열리지 않을 수 있습니다.",
+    "payment": "결제 기능은 PG/카드사 승인 및 운영자 설정 이후 활성화됩니다. 가격, 결제 주기, 제공 내용, 해지 방법은 결제 전에 표시되어야 하며, 결제·환불·정기결제 확정은 관리자 검토가 필요한 항목입니다.",
+    "memberOnly": "회원 전용 페이지는 로그인 후 사용할 수 있으며, 권한이 필요한 기능은 승인된 회원에게만 표시됩니다.",
+    "admin": "관리자 기능, 수익·정산 정보, 운영 설정은 승인된 관리자 또는 소유자 권한에서만 접근할 수 있습니다.",
+    "email": "대표 이메일은 기관, 기업, 계약, 법적 문의 등 직접 확인이 필요한 공식 연락용으로 유지합니다. 일반 질문은 Q&A를 우선 사용합니다.",
+    "registration": "회원 등록은 플랫폼의 로그인/회원 전용 흐름을 통해 진행합니다. 가입 또는 로그인에는 사용자가 실제로 확인 가능한 본인 이메일을 사용해야 하며, 계정 이메일은 권한 확인, 답변 확인, 복구 안내에 사용될 수 있습니다. 비밀번호, 인증코드, 결제정보 등 민감정보는 Q&A에 입력하지 않도록 안내합니다.",
+    "accountEmail": "가입 이메일은 본인이 수신할 수 있는 이메일을 사용해야 합니다. 이메일을 잘못 입력했거나 로그인/인증 문제가 있는 경우에는 계정 확인이 필요하므로 관리자 검토 대상으로 분류합니다.",
+    "commerceDisclaimer": "IGDC는 상품, 콘텐츠, 서비스, 외부 판매자 또는 제공자를 연결하는 플랫폼 역할을 합니다. 각 상품의 상세 내용, 가격, 배송, 환불, 이용 조건, 거래 이행 책임은 해당 판매자 또는 제공자와 이용자 사이의 조건을 우선 확인해야 합니다. IGDC가 직접 판매자로 명시된 경우를 제외하고 개별 거래의 법적·상업적 책임을 자동으로 확정하지 않으며, 분쟁 또는 중요한 거래 문제는 관리자 검토 대상으로 접수합니다.",
+    "aiEmailStyle": "AI 1차 답변은 이메일 답변처럼 정중하게 작성하되, 승인·환불·법적 판단·권한 부여를 확정하지 않습니다."
+  },
+  "aiAnswerPolicy": {
+    "tone": "email-style polite support answer",
+    "answerOnlyFromKnownGuidance": true,
+    "noLegalAdvice": true,
+    "noPaymentApproval": true,
+    "noRefundApproval": true,
+    "noAdminApproval": true,
+    "noSensitiveDisclosure": true,
+    "hideInternalPaths": true,
+    "hideBankOrSettlementDetails": true,
+    "hideEngineStackTrace": true,
+    "safeFallback": "정확한 확인이 필요한 내용은 관리자 검토 대상으로 전달됩니다."
+  },
+  "adminRequiredCategories": [
+    "access",
+    "payment",
+    "download",
+    "bug",
+    "business",
+    "legal",
+    "security"
+  ],
+  "adminRequiredKeywords": [
+    "관리자",
+    "권한",
+    "승급",
+    "로그인 오류",
+    "결제",
+    "카드",
+    "정기결제",
+    "환불",
+    "취소",
+    "다운로드 오류",
+    "설치 오류",
+    "오류",
+    "에러",
+    "버그",
+    "접속 불가",
+    "기업",
+    "기관",
+    "제휴",
+    "계약",
+    "법적",
+    "보안",
+    "개인정보",
+    "admin",
+    "access",
+    "permission",
+    "upgrade",
+    "login error",
+    "payment",
+    "card",
+    "subscription",
+    "refund",
+    "cancel",
+    "download error",
+    "install error",
+    "bug",
+    "error",
+    "business",
+    "enterprise",
+    "organization",
+    "partnership",
+    "contract",
+    "legal",
+    "security",
+    "privacy",
+    "회원가입 오류",
+    "가입 오류",
+    "계정 이메일 변경",
+    "이메일 인증 오류",
+    "비밀번호 재설정",
+    "계정 삭제",
+    "계정 도용",
+    "본인인증",
+    "판매자 분쟁",
+    "구매 분쟁",
+    "배송 문제",
+    "상품 환불",
+    "거래 분쟁",
+    "사기 의심",
+    "책임",
+    "면책",
+    "약관 위반",
+    "account issue",
+    "email verification",
+    "password reset",
+    "account deletion",
+    "seller dispute",
+    "purchase dispute",
+    "delivery issue",
+    "marketplace dispute",
+    "fraud",
+    "liability",
+    "disclaimer"
+  ],
+  "routing": {
+    "general": {
+      "adminRequired": false,
+      "answerMode": "instant_ai_email_style"
+    },
+    "access": {
+      "adminRequired": true,
+      "answerMode": "guide_then_admin_review"
+    },
+    "payment": {
+      "adminRequired": true,
+      "answerMode": "safe_payment_notice_then_admin_review"
+    },
+    "download": {
+      "adminRequired": true,
+      "answerMode": "download_status_notice_then_review_if_error"
+    },
+    "bug": {
+      "adminRequired": true,
+      "answerMode": "collect_environment_and_admin_review"
+    },
+    "business": {
+      "adminRequired": true,
+      "answerMode": "admin_review"
+    },
+    "legal": {
+      "adminRequired": true,
+      "answerMode": "admin_review_no_legal_advice"
+    },
+    "security": {
+      "adminRequired": true,
+      "answerMode": "urgent_admin_review"
+    }
+  },
+  "downloadLinks": {
+    "windowsPlayer": "/downloads/maru-media-player-setup.exe",
+    "androidPlayer": "/downloads/maru-media-player.apk",
+    "downloadGuide": "/downloads/IGDC_DOWNLOAD_GUIDE.pdf"
+  },
+  "adminInbox": {
+    "defaultLimit": 50,
+    "loadOnlyAdminRequired": true,
+    "statuses": [
+      "pending",
+      "reviewing",
+      "done"
+    ],
+    "priorityOrder": [
+      "urgent",
+      "high",
+      "normal",
+      "low"
+    ]
+  },
+  "answerLanguages": [
+    "ko",
+    "en",
+    "zh",
+    "zht",
+    "ja",
+    "es",
+    "fr",
+    "de",
+    "ru",
+    "pt",
+    "it",
+    "ar",
+    "vi",
+    "th",
+    "id",
+    "hi",
+    "tr",
+    "fa",
+    "bn",
+    "ur",
+    "sw",
+    "ta",
+    "hu",
+    "ms",
+    "nl",
+    "pl",
+    "sv",
+    "tl",
+    "uk",
+    "uz"
+  ],
+  "routingGuidance": {
+    "general": "간단한 사용 안내는 AI가 1차로 답변합니다.",
+    "membership": "회원 등록, 가입 이메일, 로그인 절차는 AI가 기본 안내하되, 계정 확인이 필요한 문제는 관리자 검토로 넘깁니다.",
+    "commerce": "일반 상품 이용/구매 안내와 플랫폼 면책 안내는 AI가 설명하되, 분쟁·환불·사기·법적 책임 문제는 관리자 검토로 넘깁니다.",
+    "admin": "권한, 결제, 보안, 법적, 기업/기관, 오류, 다운로드 장애는 관리자 검토 대상입니다."
+  }
+}
