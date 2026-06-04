@@ -17,6 +17,17 @@
   .emailRow { margin-top:18px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .emailLabel { font-weight:700; color:#183e63; }
   .email { color:#004080; font-weight:700; text-decoration:none; background:#eef6ff; border:1px solid #cfe4fa; border-radius:9px; padding:9px 12px; }
+
+  .qnaBox { margin-top:16px; background:#ffffff; border:1px solid #cfe4fa; border-radius:14px; padding:14px; }
+  .qnaBox h2 { margin:0 0 8px; font-size:18px; color:#004080; }
+  .qnaBox p { margin:0 0 10px; color:#4c6177; line-height:1.55; }
+  .qnaForm { display:grid; gap:8px; }
+  .qnaForm input, .qnaForm textarea { width:100%; border:1px solid #bfd0e3; border-radius:9px; padding:9px 10px; font:inherit; }
+  .qnaForm textarea { min-height:92px; resize:vertical; }
+  .qnaActions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .qnaAnswer { display:none; margin-top:10px; white-space:pre-wrap; line-height:1.55; background:#f7fbff; border:1px solid #dcecff; border-radius:10px; padding:10px 12px; }
+  .officialEmail { margin-top:18px; background:#fff; border:1px solid var(--igdc-line); border-radius:14px; padding:16px; text-align:center; }
+  .officialEmail p { margin:0 0 10px; color:#5b7189; line-height:1.55; }
   .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:18px; }
   .card { background:var(--igdc-card); border:1px solid var(--igdc-line); border-radius:14px; padding:18px; box-shadow:0 2px 10px rgba(0,0,0,.03); }
   .card h2 { margin:0 0 10px; font-size:20px; color:#004080; }
@@ -44,9 +55,18 @@
       <p id="upgradeLine"></p>
       <p id="qnaLine"></p>
     </div>
-    <div class="emailRow">
-      <span class="emailLabel" id="emailLabel"></span>
-      <a class="email" href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>
+    <div class="qnaBox" id="supportQnaBox">
+      <h2 id="qnaAskTitle"></h2>
+      <p id="qnaAskText"></p>
+      <div class="qnaForm">
+        <input id="qnaContact" type="text" autocomplete="email" />
+        <textarea id="qnaQuestion" maxlength="1600"></textarea>
+        <div class="qnaActions">
+          <button class="btn" type="button" id="qnaSubmit"></button>
+          <span class="notice" id="qnaStatus" style="display:none;margin:0;"></span>
+        </div>
+        <div class="qnaAnswer" id="qnaAnswerBox"></div>
+      </div>
     </div>
   </section>
 
@@ -64,6 +84,10 @@
       <ul id="paymentItems"></ul>
     </article>
     <article class="card">
+      <h2 id="commerceTitle"></h2>
+      <p id="commerceText"></p>
+    </article>
+    <article class="card">
       <h2 id="policyTitle"></h2>
       <p id="policyText"></p>
     </article>
@@ -77,6 +101,11 @@
       </div>
       <div class="notice" id="downloadNotice"></div>
     </article>
+  </section>
+  <section class="officialEmail">
+    <p id="officialEmailNote"></p>
+    <span class="emailLabel" id="emailLabel"></span>
+    <a class="email" href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>
   </section>
   <div class="footer" id="footer"></div>
 </div>
@@ -1013,6 +1042,76 @@ const I18N = {
     "footer": "© IGDC Global Hub. Support and download information page."
   }
 };
+
+const QNA_I18N_EXTRA = {
+  ko:{qnaAskTitle:"Q&A 질의하기",qnaAskText:"일반 문의는 이곳에서 먼저 질문해 주세요. AI 상담사가 이메일 답변 형식으로 1차 안내하고, 중요한 문의는 관리자 검토 대상으로 전달됩니다.",qnaContactPlaceholder:"답변 받을 이메일 또는 연락처(선택)",qnaQuestionPlaceholder:"질문 내용을 입력하세요.",qnaSubmit:"AI 답변 받기",qnaSending:"답변을 준비하는 중입니다...",qnaAnswerTitle:"AI 1차 답변",qnaAdminNote:"관리자 검토 대상으로 접수되었습니다.",qnaError:"답변 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",officialEmailNote:"대표 이메일은 기관·기업·계약·법적 문의 등 직접 확인이 필요한 공식 연락용입니다. 일반 질문은 Q&A를 우선 이용해 주세요."},
+  en:{qnaAskTitle:"Ask Q&A",qnaAskText:"Please submit general questions here first. The AI consultant gives an email-style first answer, and important cases are routed to admin review.",qnaContactPlaceholder:"Reply email or contact (optional)",qnaQuestionPlaceholder:"Enter your question.",qnaSubmit:"Get AI answer",qnaSending:"Preparing an answer...",qnaAnswerTitle:"AI first answer",qnaAdminNote:"This has been submitted for admin review.",qnaError:"An error occurred while processing the answer. Please try again later.",officialEmailNote:"The official email is for organization, business, contract, legal, or other direct official inquiries. Please use Q&A first for general questions."},
+  zh:{qnaAskTitle:"Q&A 咨询",qnaAskText:"一般问题请先在这里提交。AI 顾问会以邮件式回复进行初步 안내，重要问题会转交管理员审核。",qnaContactPlaceholder:"回复邮箱或联系方式（可选）",qnaQuestionPlaceholder:"请输入问题内容。",qnaSubmit:"获取 AI 回复",qnaSending:"正在准备回复...",qnaAnswerTitle:"AI 初步回复",qnaAdminNote:"此问题已提交管理员审核。",qnaError:"处理回复时发生错误，请稍后再试。",officialEmailNote:"代表邮箱用于机构、企业、合同、法律等需要直接确认的正式联系。一般问题请优先使用 Q&A。"},
+  zht:{qnaAskTitle:"Q&A 諮詢",qnaAskText:"一般問題請先在此提交。AI 顧問會以郵件式回覆進行初步 안내，重要問題會轉交管理員審核。",qnaContactPlaceholder:"回覆電子郵件或聯絡方式（選填）",qnaQuestionPlaceholder:"請輸入問題內容。",qnaSubmit:"取得 AI 回覆",qnaSending:"正在準備回覆...",qnaAnswerTitle:"AI 初步回覆",qnaAdminNote:"此問題已提交管理員審核。",qnaError:"處理回覆時發生錯誤，請稍後再試。",officialEmailNote:"代表電子郵件用於機構、企業、合約、法律等需要直接確認的正式聯絡。一般問題請優先使用 Q&A。"},
+  ja:{qnaAskTitle:"Q&Aで質問",qnaAskText:"一般的な質問はまずこちらから送信してください。AI相談員がメール形式で一次回答し、重要な内容は管理者確認へ送られます。",qnaContactPlaceholder:"返信用メールまたは連絡先（任意）",qnaQuestionPlaceholder:"質問内容を入力してください。",qnaSubmit:"AI回答を受け取る",qnaSending:"回答を準備しています...",qnaAnswerTitle:"AI一次回答",qnaAdminNote:"管理者確認対象として受け付けました。",qnaError:"回答処理中にエラーが発生しました。後でもう一度お試しください。",officialEmailNote:"代表メールは機関・企業・契約・法的事項など直接確認が必要な公式連絡用です。一般質問はQ&Aを優先してください。"},
+  es:{qnaAskTitle:"Preguntar en Q&A",qnaAskText:"Envíe primero las preguntas generales aquí. El asesor de IA responde en formato de correo y los casos importantes pasan a revisión administrativa.",qnaContactPlaceholder:"Correo o contacto de respuesta (opcional)",qnaQuestionPlaceholder:"Escriba su pregunta.",qnaSubmit:"Recibir respuesta IA",qnaSending:"Preparando respuesta...",qnaAnswerTitle:"Primera respuesta de IA",qnaAdminNote:"Se envió para revisión administrativa.",qnaError:"Ocurrió un error. Inténtelo más tarde.",officialEmailNote:"El correo oficial es para consultas institucionales, empresariales, contractuales o legales. Use primero Q&A para preguntas generales."},
+  fr:{qnaAskTitle:"Poser une question Q&A",qnaAskText:"Veuillez d’abord poser les questions générales ici. Le conseiller IA répond au format e-mail et les cas importants sont transmis à l’admin.",qnaContactPlaceholder:"E-mail ou contact de réponse (facultatif)",qnaQuestionPlaceholder:"Saisissez votre question.",qnaSubmit:"Obtenir une réponse IA",qnaSending:"Préparation de la réponse...",qnaAnswerTitle:"Première réponse IA",qnaAdminNote:"Transmis pour examen administrateur.",qnaError:"Une erreur est survenue. Réessayez plus tard.",officialEmailNote:"L’e-mail officiel sert aux demandes institutionnelles, commerciales, contractuelles ou juridiques. Utilisez d’abord Q&A pour les questions générales."},
+  de:{qnaAskTitle:"Q&A fragen",qnaAskText:"Bitte stellen Sie allgemeine Fragen zuerst hier. Der KI-Berater antwortet im E-Mail-Stil; wichtige Fälle gehen an die Admin-Prüfung.",qnaContactPlaceholder:"Antwort-E-Mail oder Kontakt (optional)",qnaQuestionPlaceholder:"Geben Sie Ihre Frage ein.",qnaSubmit:"KI-Antwort erhalten",qnaSending:"Antwort wird vorbereitet...",qnaAnswerTitle:"KI-Erstantwort",qnaAdminNote:"Zur Admin-Prüfung eingereicht.",qnaError:"Beim Verarbeiten trat ein Fehler auf. Bitte später erneut versuchen.",officialEmailNote:"Die offizielle E-Mail ist für Institutionen, Unternehmen, Verträge und rechtliche Anfragen. Für allgemeine Fragen bitte zuerst Q&A nutzen."},
+  ru:{qnaAskTitle:"Задать вопрос Q&A",qnaAskText:"Общие вопросы сначала отправляйте здесь. ИИ-консультант даст ответ в формате письма, важные вопросы передаются администратору.",qnaContactPlaceholder:"E-mail или контакт для ответа (необязательно)",qnaQuestionPlaceholder:"Введите вопрос.",qnaSubmit:"Получить ответ ИИ",qnaSending:"Подготовка ответа...",qnaAnswerTitle:"Первичный ответ ИИ",qnaAdminNote:"Передано на проверку администратору.",qnaError:"Ошибка обработки. Повторите позже.",officialEmailNote:"Официальный e-mail предназначен для организаций, бизнеса, договоров и юридических вопросов. Для обычных вопросов сначала используйте Q&A."},
+  pt:{qnaAskTitle:"Perguntar no Q&A",qnaAskText:"Envie perguntas gerais aqui primeiro. O consultor de IA responde em formato de e-mail e casos importantes seguem para revisão administrativa.",qnaContactPlaceholder:"E-mail ou contato para resposta (opcional)",qnaQuestionPlaceholder:"Digite sua pergunta.",qnaSubmit:"Obter resposta da IA",qnaSending:"Preparando resposta...",qnaAnswerTitle:"Primeira resposta da IA",qnaAdminNote:"Enviado para revisão administrativa.",qnaError:"Ocorreu um erro. Tente novamente mais tarde.",officialEmailNote:"O e-mail oficial é para instituições, empresas, contratos e questões legais. Use Q&A primeiro para perguntas gerais."},
+  it:{qnaAskTitle:"Fai una domanda Q&A",qnaAskText:"Invia prima qui le domande generali. Il consulente IA risponde in formato e-mail e i casi importanti vanno all’admin.",qnaContactPlaceholder:"Email o contatto per risposta (opzionale)",qnaQuestionPlaceholder:"Inserisci la domanda.",qnaSubmit:"Ricevi risposta IA",qnaSending:"Preparazione risposta...",qnaAnswerTitle:"Prima risposta IA",qnaAdminNote:"Inviato alla revisione admin.",qnaError:"Errore durante l’elaborazione. Riprova più tardi.",officialEmailNote:"L’e-mail ufficiale è per richieste istituzionali, aziendali, contrattuali o legali. Usa prima Q&A per domande generali."},
+  ar:{qnaAskTitle:"اسأل عبر Q&A",qnaAskText:"يرجى إرسال الأسئلة العامة هنا أولاً. يجيب مستشار الذكاء الاصطناعي بصيغة بريدية، وتُحال الحالات المهمة للمسؤول.",qnaContactPlaceholder:"بريد أو وسيلة تواصل للرد (اختياري)",qnaQuestionPlaceholder:"اكتب سؤالك.",qnaSubmit:"الحصول على رد AI",qnaSending:"جارٍ إعداد الرد...",qnaAnswerTitle:"الرد الأولي من AI",qnaAdminNote:"تم إرساله لمراجعة المسؤول.",qnaError:"حدث خطأ. حاول لاحقاً.",officialEmailNote:"البريد الرسمي مخصص للمؤسسات والشركات والعقود والمسائل القانونية. للأسئلة العامة استخدم Q&A أولاً."},
+  vi:{qnaAskTitle:"Hỏi Q&A",qnaAskText:"Vui lòng gửi câu hỏi chung tại đây trước. Tư vấn AI trả lời theo dạng email; vấn đề quan trọng sẽ chuyển cho quản trị viên.",qnaContactPlaceholder:"Email hoặc liên hệ nhận trả lời (tùy chọn)",qnaQuestionPlaceholder:"Nhập câu hỏi của bạn.",qnaSubmit:"Nhận trả lời AI",qnaSending:"Đang chuẩn bị trả lời...",qnaAnswerTitle:"Trả lời AI bước đầu",qnaAdminNote:"Đã chuyển để quản trị viên xem xét.",qnaError:"Có lỗi xảy ra. Vui lòng thử lại sau.",officialEmailNote:"Email chính thức dành cho tổ chức, doanh nghiệp, hợp đồng và pháp lý. Câu hỏi chung hãy dùng Q&A trước."},
+  th:{qnaAskTitle:"ถามผ่าน Q&A",qnaAskText:"โปรดส่งคำถามทั่วไปที่นี่ก่อน ที่ปรึกษา AI จะตอบในรูปแบบอีเมล และเรื่องสำคัญจะส่งให้ผู้ดูแลตรวจสอบ",qnaContactPlaceholder:"อีเมลหรือช่องทางติดต่อสำหรับตอบกลับ (ไม่บังคับ)",qnaQuestionPlaceholder:"กรอกคำถามของคุณ",qnaSubmit:"รับคำตอบจาก AI",qnaSending:"กำลังเตรียมคำตอบ...",qnaAnswerTitle:"คำตอบเบื้องต้นจาก AI",qnaAdminNote:"ส่งให้ผู้ดูแลตรวจสอบแล้ว",qnaError:"เกิดข้อผิดพลาด โปรดลองใหม่ภายหลัง",officialEmailNote:"อีเมลหลักใช้สำหรับหน่วยงาน ธุรกิจ สัญญา และเรื่องกฎหมาย โปรดใช้ Q&A ก่อนสำหรับคำถามทั่วไป"},
+  id:{qnaAskTitle:"Tanya Q&A",qnaAskText:"Ajukan pertanyaan umum di sini terlebih dahulu. Konsultan AI menjawab dalam format email, dan kasus penting dikirim ke admin.",qnaContactPlaceholder:"Email atau kontak balasan (opsional)",qnaQuestionPlaceholder:"Masukkan pertanyaan Anda.",qnaSubmit:"Dapatkan jawaban AI",qnaSending:"Menyiapkan jawaban...",qnaAnswerTitle:"Jawaban awal AI",qnaAdminNote:"Dikirim untuk tinjauan admin.",qnaError:"Terjadi kesalahan. Coba lagi nanti.",officialEmailNote:"Email resmi untuk institusi, bisnis, kontrak, dan hukum. Gunakan Q&A dulu untuk pertanyaan umum."},
+  hi:{qnaAskTitle:"Q&A में पूछें",qnaAskText:"सामान्य प्रश्न पहले यहाँ भेजें। AI सलाहकार ईमेल शैली में पहला उत्तर देगा और महत्वपूर्ण मामले व्यवस्थापक को भेजे जाएंगे।",qnaContactPlaceholder:"उत्तर ईमेल या संपर्क (वैकल्पिक)",qnaQuestionPlaceholder:"अपना प्रश्न लिखें।",qnaSubmit:"AI उत्तर प्राप्त करें",qnaSending:"उत्तर तैयार हो रहा है...",qnaAnswerTitle:"AI प्रारंभिक उत्तर",qnaAdminNote:"व्यवस्थापक समीक्षा के लिए भेजा गया।",qnaError:"उत्तर प्रक्रिया में त्रुटि हुई। बाद में प्रयास करें।",officialEmailNote:"आधिकारिक ईमेल संस्थान, व्यवसाय, अनुबंध और कानूनी प्रश्नों के लिए है। सामान्य प्रश्नों के लिए पहले Q&A उपयोग करें।"},
+  tr:{qnaAskTitle:"Q&A sor",qnaAskText:"Genel soruları önce buradan gönderin. AI danışmanı e-posta biçiminde ilk yanıtı verir; önemli konular admine yönlendirilir.",qnaContactPlaceholder:"Yanıt e-postası veya iletişim (isteğe bağlı)",qnaQuestionPlaceholder:"Sorunuzu yazın.",qnaSubmit:"AI yanıtı al",qnaSending:"Yanıt hazırlanıyor...",qnaAnswerTitle:"AI ilk yanıt",qnaAdminNote:"Admin incelemesine gönderildi.",qnaError:"Bir hata oluştu. Lütfen sonra tekrar deneyin.",officialEmailNote:"Resmi e-posta kurum, işletme, sözleşme ve hukuki konular içindir. Genel sorular için önce Q&A kullanın."},
+  fa:{qnaAskTitle:"پرسش در Q&A",qnaAskText:"لطفاً پرسش‌های عمومی را ابتدا اینجا بفرستید. مشاور AI پاسخ اولیه را به شکل ایمیل می‌دهد و موارد مهم به مدیر ارجاع می‌شود.",qnaContactPlaceholder:"ایمیل یا راه تماس برای پاسخ (اختیاری)",qnaQuestionPlaceholder:"پرسش خود را وارد کنید.",qnaSubmit:"دریافت پاسخ AI",qnaSending:"در حال آماده‌سازی پاسخ...",qnaAnswerTitle:"پاسخ اولیه AI",qnaAdminNote:"برای بررسی مدیر ارسال شد.",qnaError:"خطا رخ داد. بعداً دوباره تلاش کنید.",officialEmailNote:"ایمیل رسمی برای نهادها، شرکت‌ها، قراردادها و امور حقوقی است. برای پرسش عمومی ابتدا از Q&A استفاده کنید."},
+  bn:{qnaAskTitle:"Q&A প্রশ্ন",qnaAskText:"সাধারণ প্রশ্ন আগে এখানে পাঠান। AI পরামর্শদাতা ইমেইল-শৈলীতে প্রথম উত্তর দেবেন; গুরুত্বপূর্ণ বিষয় অ্যাডমিনে যাবে।",qnaContactPlaceholder:"উত্তরের ইমেইল বা যোগাযোগ (ঐচ্ছিক)",qnaQuestionPlaceholder:"আপনার প্রশ্ন লিখুন।",qnaSubmit:"AI উত্তর নিন",qnaSending:"উত্তর প্রস্তুত হচ্ছে...",qnaAnswerTitle:"AI প্রাথমিক উত্তর",qnaAdminNote:"অ্যাডমিন পর্যালোচনার জন্য পাঠানো হয়েছে।",qnaError:"ত্রুটি হয়েছে। পরে আবার চেষ্টা করুন।",officialEmailNote:"অফিসিয়াল ইমেইল প্রতিষ্ঠান, ব্যবসা, চুক্তি ও আইনি বিষয়ের জন্য। সাধারণ প্রশ্নে আগে Q&A ব্যবহার করুন।"},
+  ur:{qnaAskTitle:"Q&A میں سوال",qnaAskText:"عام سوالات پہلے یہاں بھیجیں۔ AI مشیر ای میل طرز میں ابتدائی جواب دے گا، اہم سوالات ایڈمن کو جائیں گے۔",qnaContactPlaceholder:"جوابی ای میل یا رابطہ (اختیاری)",qnaQuestionPlaceholder:"اپنا سوال درج کریں۔",qnaSubmit:"AI جواب حاصل کریں",qnaSending:"جواب تیار ہو رہا ہے...",qnaAnswerTitle:"AI ابتدائی جواب",qnaAdminNote:"ایڈمن جائزہ کے لیے بھیجا گیا۔",qnaError:"خرابی ہوئی۔ بعد میں دوبارہ کوشش کریں۔",officialEmailNote:"سرکاری ای میل اداروں، کاروبار، معاہدوں اور قانونی امور کے لیے ہے۔ عام سوالات کے لیے پہلے Q&A استعمال کریں۔"},
+  sw:{qnaAskTitle:"Uliza Q&A",qnaAskText:"Tuma maswali ya kawaida hapa kwanza. Mshauri wa AI atajibu kwa mtindo wa barua pepe; masuala muhimu yataenda kwa msimamizi.",qnaContactPlaceholder:"Barua pepe au mawasiliano ya jibu (hiari)",qnaQuestionPlaceholder:"Andika swali lako.",qnaSubmit:"Pata jibu la AI",qnaSending:"Kuandaa jibu...",qnaAnswerTitle:"Jibu la kwanza la AI",qnaAdminNote:"Imetumwa kwa ukaguzi wa msimamizi.",qnaError:"Hitilafu imetokea. Jaribu tena baadaye.",officialEmailNote:"Barua pepe rasmi ni kwa taasisi, biashara, mikataba na masuala ya kisheria. Tumia Q&A kwanza kwa maswali ya kawaida."},
+  ta:{qnaAskTitle:"Q&A கேள்வி",qnaAskText:"பொதுக் கேள்விகளை முதலில் இங்கே அனுப்பவும். AI ஆலோசகர் மின்னஞ்சல் வடிவில் முதற்கட்ட பதில் அளிப்பார்; முக்கியமானவை நிர்வாகிக்கு அனுப்பப்படும்.",qnaContactPlaceholder:"பதில் மின்னஞ்சல் அல்லது தொடர்பு (விருப்பம்)",qnaQuestionPlaceholder:"உங்கள் கேள்வியை உள்ளிடவும்.",qnaSubmit:"AI பதில் பெறுக",qnaSending:"பதில் தயாராகிறது...",qnaAnswerTitle:"AI முதற்கட்ட பதில்",qnaAdminNote:"நிர்வாகி பரிசீலனைக்கு அனுப்பப்பட்டது.",qnaError:"பிழை ஏற்பட்டது. பின்னர் முயற்சிக்கவும்.",officialEmailNote:"அதிகாரப்பூர்வ மின்னஞ்சல் நிறுவனம், வணிகம், ஒப்பந்தம், சட்டம் போன்றவற்றுக்கு. பொதுக் கேள்விகளுக்கு முதலில் Q&A பயன்படுத்தவும்."},
+  hu:{qnaAskTitle:"Q&A kérdés",qnaAskText:"Az általános kérdéseket először itt küldje el. Az AI tanácsadó e-mail formában válaszol, a fontos ügyek adminhoz kerülnek.",qnaContactPlaceholder:"Válasz e-mail vagy kapcsolat (opcionális)",qnaQuestionPlaceholder:"Írja be a kérdését.",qnaSubmit:"AI válasz kérése",qnaSending:"Válasz előkészítése...",qnaAnswerTitle:"AI első válasz",qnaAdminNote:"Adminisztrátori felülvizsgálatra elküldve.",qnaError:"Hiba történt. Próbálja később.",officialEmailNote:"A hivatalos e-mail intézményi, üzleti, szerződéses és jogi ügyekre szolgál. Általános kérdéshez először használja a Q&A-t."},
+  ms:{qnaAskTitle:"Tanya Q&A",qnaAskText:"Hantar soalan umum di sini dahulu. Penasihat AI menjawab dalam format e-mel; perkara penting dihantar kepada admin.",qnaContactPlaceholder:"E-mel balasan atau hubungan (pilihan)",qnaQuestionPlaceholder:"Masukkan soalan anda.",qnaSubmit:"Dapatkan jawapan AI",qnaSending:"Menyediakan jawapan...",qnaAnswerTitle:"Jawapan awal AI",qnaAdminNote:"Dihantar untuk semakan admin.",qnaError:"Ralat berlaku. Cuba lagi kemudian.",officialEmailNote:"E-mel rasmi untuk institusi, perniagaan, kontrak dan hal undang-undang. Gunakan Q&A dahulu untuk soalan umum."},
+  nl:{qnaAskTitle:"Vraag via Q&A",qnaAskText:"Stel algemene vragen eerst hier. De AI-adviseur antwoordt in e-mailvorm; belangrijke zaken gaan naar adminreview.",qnaContactPlaceholder:"Antwoordmail of contact (optioneel)",qnaQuestionPlaceholder:"Voer uw vraag in.",qnaSubmit:"Ontvang AI-antwoord",qnaSending:"Antwoord voorbereiden...",qnaAnswerTitle:"Eerste AI-antwoord",qnaAdminNote:"Ingediend voor adminreview.",qnaError:"Er is een fout opgetreden. Probeer later opnieuw.",officialEmailNote:"De officiële e-mail is voor instellingen, bedrijven, contracten en juridische zaken. Gebruik eerst Q&A voor algemene vragen."},
+  pl:{qnaAskTitle:"Zapytaj Q&A",qnaAskText:"Pytania ogólne najpierw wyślij tutaj. Konsultant AI odpowie w formie e-maila, a ważne sprawy trafią do admina.",qnaContactPlaceholder:"E-mail zwrotny lub kontakt (opcjonalnie)",qnaQuestionPlaceholder:"Wpisz pytanie.",qnaSubmit:"Uzyskaj odpowiedź AI",qnaSending:"Przygotowywanie odpowiedzi...",qnaAnswerTitle:"Pierwsza odpowiedź AI",qnaAdminNote:"Przekazano do przeglądu administratora.",qnaError:"Wystąpił błąd. Spróbuj później.",officialEmailNote:"Oficjalny e-mail służy do spraw instytucji, biznesu, umów i kwestii prawnych. Najpierw użyj Q&A dla pytań ogólnych."},
+  sv:{qnaAskTitle:"Fråga Q&A",qnaAskText:"Skicka allmänna frågor här först. AI-rådgivaren svarar i e-postformat; viktiga ärenden går till admin.",qnaContactPlaceholder:"Svarsmail eller kontakt (valfritt)",qnaQuestionPlaceholder:"Ange din fråga.",qnaSubmit:"Få AI-svar",qnaSending:"Förbereder svar...",qnaAnswerTitle:"Första AI-svar",qnaAdminNote:"Skickat för admin-granskning.",qnaError:"Ett fel uppstod. Försök senare.",officialEmailNote:"Den officiella e-posten är för institutioner, företag, avtal och juridiska ärenden. Använd först Q&A för allmänna frågor."},
+  tl:{qnaAskTitle:"Magtanong sa Q&A",qnaAskText:"Ipadala muna dito ang pangkalahatang tanong. Sasagot ang AI consultant sa anyong email; ipapasa sa admin ang mahahalagang kaso.",qnaContactPlaceholder:"Reply email o contact (opsyonal)",qnaQuestionPlaceholder:"Ilagay ang iyong tanong.",qnaSubmit:"Kumuha ng sagot ng AI",qnaSending:"Inihahanda ang sagot...",qnaAnswerTitle:"Unang sagot ng AI",qnaAdminNote:"Naipasa para sa admin review.",qnaError:"Nagkaroon ng error. Subukan muli mamaya.",officialEmailNote:"Ang opisyal na email ay para sa institusyon, negosyo, kontrata at legal. Gamitin muna ang Q&A para sa pangkalahatang tanong."},
+  uk:{qnaAskTitle:"Запитати Q&A",qnaAskText:"Загальні питання спочатку надсилайте тут. AI-консультант відповість у форматі листа; важливі справи підуть адміністратору.",qnaContactPlaceholder:"E-mail або контакт для відповіді (необов’язково)",qnaQuestionPlaceholder:"Введіть питання.",qnaSubmit:"Отримати відповідь AI",qnaSending:"Підготовка відповіді...",qnaAnswerTitle:"Перша відповідь AI",qnaAdminNote:"Надіслано на перевірку адміністратору.",qnaError:"Сталася помилка. Спробуйте пізніше.",officialEmailNote:"Офіційний e-mail для установ, бізнесу, договорів і юридичних питань. Для загальних питань спочатку використовуйте Q&A."},
+  uz:{qnaAskTitle:"Q&A orqali so‘rash",qnaAskText:"Umumiy savollarni avval shu yerga yuboring. AI maslahatchi email uslubida javob beradi; muhim masalalar adminga yuboriladi.",qnaContactPlaceholder:"Javob emaili yoki aloqa (ixtiyoriy)",qnaQuestionPlaceholder:"Savolingizni kiriting.",qnaSubmit:"AI javobini olish",qnaSending:"Javob tayyorlanmoqda...",qnaAnswerTitle:"AI birinchi javobi",qnaAdminNote:"Admin ko‘rib chiqishi uchun yuborildi.",qnaError:"Xatolik yuz berdi. Keyinroq urinib ko‘ring.",officialEmailNote:"Rasmiy email muassasa, biznes, shartnoma va huquqiy masalalar uchun. Umumiy savollar uchun avval Q&A dan foydalaning."}
+};
+Object.keys(QNA_I18N_EXTRA).forEach(function(code){ I18N[code] = Object.assign(I18N[code] || {}, QNA_I18N_EXTRA[code]); });
+
+
+const SUPPORT_EXTRA = {
+  ko:{commerceTitle:"상품 · 거래 책임 안내",commerceText:"IGDC는 상품, 콘텐츠, 서비스와 판매자·제공자를 연결하는 플랫폼입니다. IGDC가 직접 판매자로 명시된 경우를 제외하고, 상품 상세, 가격, 배송, 환불, 이용 조건과 거래 이행 책임은 해당 판매자 또는 제공자와 이용자 사이의 조건을 우선 확인해야 합니다. 분쟁이나 중요한 거래 문제는 Q&A로 접수하면 관리자 검토 대상으로 전달됩니다."},
+  en:{commerceTitle:"Product and transaction responsibility notice",commerceText:"IGDC provides a platform that connects products, content, services, sellers, and providers. Unless IGDC is clearly stated as the direct seller, item details, pricing, delivery, refund terms, usage conditions, and transaction performance should be checked with the seller or provider. Disputes or important transaction issues submitted through Q&A may be routed for admin review."},
+  zh:{commerceTitle:"商品与交易责任说明",commerceText:"IGDC 是连接商品、内容、服务、卖家和提供者的平台。除非明确标注 IGDC 为直接卖家，否则商品详情、价格、配送、退款、使用条件和交易履行责任应优先与卖家或提供者确认。纠纷或重要交易问题可通过 Q&A 提交并转交管理员审核。"},
+  zht:{commerceTitle:"商品與交易責任說明",commerceText:"IGDC 是連接商品、內容、服務、賣家與提供者的平台。除非明確標示 IGDC 為直接賣家，商品詳情、價格、配送、退款、使用條件與交易履行責任應優先與賣家或提供者確認。糾紛或重要交易問題可透過 Q&A 提交並轉交管理員審核。"},
+  ja:{commerceTitle:"商品・取引責任に関する案内",commerceText:"IGDCは商品、コンテンツ、サービス、販売者および提供者をつなぐプラットフォームです。IGDCが直接販売者と明示される場合を除き、商品詳細、価格、配送、返金、利用条件、取引履行責任は販売者または提供者との条件を確認してください。紛争や重要な取引問題はQ&Aから送信すると管理者確認に回されます。"},
+  es:{commerceTitle:"Aviso sobre productos y transacciones",commerceText:"IGDC ofrece una plataforma que conecta productos, contenidos, servicios, vendedores y proveedores. Salvo que IGDC figure como vendedor directo, los detalles, precios, entrega, reembolsos, condiciones y cumplimiento deben verificarse con el vendedor o proveedor. Las disputas o asuntos importantes pueden enviarse por Q&A para revisión."},
+  fr:{commerceTitle:"Avis sur les produits et transactions",commerceText:"IGDC fournit une plateforme reliant produits, contenus, services, vendeurs et fournisseurs. Sauf si IGDC est indiqué comme vendeur direct, les détails, prix, livraison, remboursements, conditions et exécution doivent être vérifiés avec le vendeur ou fournisseur. Les litiges importants peuvent être transmis via Q&A pour revue."},
+  de:{commerceTitle:"Hinweis zu Produkten und Transaktionen",commerceText:"IGDC stellt eine Plattform bereit, die Produkte, Inhalte, Dienste, Verkäufer und Anbieter verbindet. Sofern IGDC nicht als direkter Verkäufer genannt ist, sind Details, Preise, Lieferung, Erstattung, Bedingungen und Erfüllung mit Verkäufer oder Anbieter zu prüfen. Streitfälle können über Q&A zur Admin-Prüfung eingereicht werden."},
+  ru:{commerceTitle:"Уведомление о товарах и сделках",commerceText:"IGDC предоставляет платформу, соединяющую товары, контент, услуги, продавцов и поставщиков. Если IGDC не указан прямым продавцом, детали, цены, доставка, возврат, условия и исполнение проверяются с продавцом или поставщиком. Споры можно отправить через Q&A на проверку администратора."},
+  pt:{commerceTitle:"Aviso sobre produtos e transações",commerceText:"A IGDC fornece uma plataforma que conecta produtos, conteúdos, serviços, vendedores e fornecedores. Salvo indicação de venda direta pela IGDC, detalhes, preço, entrega, reembolso, condições e execução devem ser verificados com o vendedor ou fornecedor. Disputas podem ser enviadas pelo Q&A para revisão."},
+  it:{commerceTitle:"Avviso su prodotti e transazioni",commerceText:"IGDC offre una piattaforma che collega prodotti, contenuti, servizi, venditori e fornitori. Salvo indicazione di vendita diretta da parte di IGDC, dettagli, prezzo, consegna, rimborso, condizioni e adempimento vanno verificati con venditore o fornitore. Le controversie possono essere inviate tramite Q&A per revisione."},
+  ar:{commerceTitle:"إشعار مسؤولية المنتجات والمعاملات",commerceText:"توفر IGDC منصة تربط المنتجات والمحتوى والخدمات والبائعين ومقدمي الخدمة. ما لم تُذكر IGDC كبائع مباشر، يجب التحقق من التفاصيل والسعر والتسليم والاسترداد والشروط ومسؤولية التنفيذ مع البائع أو المزود. يمكن إرسال النزاعات عبر Q&A لمراجعة الإدارة."},
+  vi:{commerceTitle:"Thông báo trách nhiệm sản phẩm và giao dịch",commerceText:"IGDC là nền tảng kết nối sản phẩm, nội dung, dịch vụ, người bán và nhà cung cấp. Trừ khi IGDC được nêu rõ là người bán trực tiếp, chi tiết, giá, giao hàng, hoàn tiền, điều kiện sử dụng và trách nhiệm giao dịch cần kiểm tra với người bán hoặc nhà cung cấp. Tranh chấp quan trọng có thể gửi qua Q&A để quản trị viên xem xét."},
+  th:{commerceTitle:"ประกาศความรับผิดชอบสินค้าและธุรกรรม",commerceText:"IGDC เป็นแพลตฟอร์มเชื่อมต่อสินค้า เนื้อหา บริการ ผู้ขาย และผู้ให้บริการ เว้นแต่ระบุว่า IGDC เป็นผู้ขายโดยตรง รายละเอียดสินค้า ราคา การจัดส่ง การคืนเงิน เงื่อนไข และความรับผิดชอบในการทำธุรกรรมควรตรวจสอบกับผู้ขายหรือผู้ให้บริการ หากมีข้อพิพาทสำคัญให้ส่งผ่าน Q&A เพื่อให้ผู้ดูแลตรวจสอบ"},
+  id:{commerceTitle:"Pemberitahuan tanggung jawab produk dan transaksi",commerceText:"IGDC menyediakan platform yang menghubungkan produk, konten, layanan, penjual, dan penyedia. Kecuali IGDC dinyatakan sebagai penjual langsung, detail, harga, pengiriman, pengembalian dana, syarat penggunaan, dan pelaksanaan transaksi harus diperiksa dengan penjual atau penyedia. Sengketa penting dapat dikirim melalui Q&A untuk ditinjau admin."},
+  hi:{commerceTitle:"उत्पाद और लेन-देन जिम्मेदारी सूचना",commerceText:"IGDC उत्पादों, सामग्री, सेवाओं, विक्रेताओं और प्रदाताओं को जोड़ने वाला प्लेटफॉर्म है। जब तक IGDC को प्रत्यक्ष विक्रेता न बताया गया हो, विवरण, मूल्य, डिलीवरी, रिफंड, शर्तें और लेन-देन की जिम्मेदारी विक्रेता या प्रदाता से पुष्टि करें। महत्वपूर्ण विवाद Q&A से प्रशासनिक समीक्षा हेतु भेजे जा सकते हैं।"},
+  tr:{commerceTitle:"Ürün ve işlem sorumluluğu bildirimi",commerceText:"IGDC ürünleri, içerikleri, hizmetleri, satıcıları ve sağlayıcıları bağlayan bir platformdur. IGDC doğrudan satıcı olarak belirtilmedikçe ürün detayı, fiyat, teslimat, iade, kullanım koşulları ve işlem sorumluluğu satıcı veya sağlayıcı ile kontrol edilmelidir. Önemli uyuşmazlıklar Q&A üzerinden yönetici incelemesine iletilebilir."},
+  fa:{commerceTitle:"اطلاعیه مسئولیت محصول و معامله",commerceText:"IGDC بستری برای اتصال محصولات، محتوا، خدمات، فروشندگان و ارائه‌دهندگان است. مگر اینکه IGDC صراحتاً فروشنده مستقیم باشد، جزئیات، قیمت، تحویل، بازپرداخت، شرایط استفاده و مسئولیت انجام معامله باید با فروشنده یا ارائه‌دهنده بررسی شود. اختلافات مهم از طریق Q&A برای بررسی مدیر ارسال می‌شود."},
+  bn:{commerceTitle:"পণ্য ও লেনদেন দায়িত্ব সংক্রান্ত নোটিশ",commerceText:"IGDC পণ্য, কনটেন্ট, সেবা, বিক্রেতা ও প্রদানকারীদের সংযুক্ত করার প্ল্যাটফর্ম। IGDC সরাসরি বিক্রেতা হিসেবে উল্লেখ না থাকলে পণ্যের বিবরণ, মূল্য, ডেলিভারি, রিফান্ড, শর্ত ও লেনদেনের দায়িত্ব বিক্রেতা বা প্রদানকারীর সঙ্গে যাচাই করতে হবে। গুরুত্বপূর্ণ বিরোধ Q&A দিয়ে প্রশাসক পর্যালোচনায় পাঠানো যাবে।"},
+  ur:{commerceTitle:"مصنوعات اور لین دین کی ذمہ داری کا نوٹس",commerceText:"IGDC مصنوعات، مواد، خدمات، فروخت کنندگان اور فراہم کنندگان کو جوڑنے والا پلیٹ فارم ہے۔ جب تک IGDC کو براہ راست فروخت کنندہ نہ بتایا جائے، تفصیل، قیمت، ترسیل، رقم واپسی، شرائط اور لین دین کی ذمہ داری فروخت کنندہ یا فراہم کنندہ سے چیک کریں۔ اہم تنازعات Q&A کے ذریعے منتظم کو بھیجے جا سکتے ہیں۔"},
+  sw:{commerceTitle:"Taarifa ya wajibu wa bidhaa na miamala",commerceText:"IGDC ni jukwaa linalounganisha bidhaa, maudhui, huduma, wauzaji na watoa huduma. Isipokuwa IGDC imeelezwa kuwa muuzaji wa moja kwa moja, maelezo, bei, usafirishaji, marejesho, masharti na utekelezaji wa muamala uthibitishwe na muuzaji au mtoa huduma. Migogoro muhimu inaweza kutumwa kupitia Q&A kwa ukaguzi wa msimamizi."},
+  ta:{commerceTitle:"தயாரிப்பு மற்றும் பரிவர்த்தனை பொறுப்பு அறிவிப்பு",commerceText:"IGDC தயாரிப்புகள், உள்ளடக்கம், சேவைகள், விற்பனையாளர்கள் மற்றும் வழங்குநர்களை இணைக்கும் தளம். IGDC நேரடி விற்பனையாளராக தெளிவாக குறிப்பிடப்படாவிட்டால், விவரம், விலை, விநியோகம், பணத்தைத் திரும்பப் பெறுதல், நிபந்தனைகள் மற்றும் பரிவர்த்தனை பொறுப்பு விற்பனையாளர் அல்லது வழங்குநருடன் உறுதிப்படுத்தப்பட வேண்டும். முக்கிய பிரச்சினைகள் Q&A மூலம் நிர்வாகி பரிசீலனைக்கு அனுப்பலாம்."},
+  hu:{commerceTitle:"Termék- és tranzakciós felelősségi tájékoztató",commerceText:"Az IGDC platformként termékeket, tartalmakat, szolgáltatásokat, eladókat és szolgáltatókat kapcsol össze. Hacsak az IGDC nincs közvetlen eladóként megjelölve, a részleteket, árat, szállítást, visszatérítést, feltételeket és teljesítést az eladóval vagy szolgáltatóval kell ellenőrizni. Fontos viták Q&A-n át admin ellenőrzésre kerülhetnek."},
+  ms:{commerceTitle:"Notis tanggungjawab produk dan transaksi",commerceText:"IGDC ialah platform yang menghubungkan produk, kandungan, perkhidmatan, penjual dan penyedia. Melainkan IGDC dinyatakan sebagai penjual langsung, butiran, harga, penghantaran, bayaran balik, syarat dan pelaksanaan transaksi perlu disemak dengan penjual atau penyedia. Pertikaian penting boleh dihantar melalui Q&A untuk semakan admin."},
+  nl:{commerceTitle:"Kennisgeving product- en transactieverantwoordelijkheid",commerceText:"IGDC biedt een platform dat producten, content, diensten, verkopers en aanbieders verbindt. Tenzij IGDC als directe verkoper is vermeld, moeten details, prijs, levering, terugbetaling, voorwaarden en uitvoering met verkoper of aanbieder worden gecontroleerd. Belangrijke geschillen kunnen via Q&A aan admin review worden doorgegeven."},
+  pl:{commerceTitle:"Informacja o odpowiedzialności za produkty i transakcje",commerceText:"IGDC zapewnia platformę łączącą produkty, treści, usługi, sprzedawców i dostawców. O ile IGDC nie jest wyraźnie wskazany jako bezpośredni sprzedawca, szczegóły, cena, dostawa, zwroty, warunki i realizacja powinny być sprawdzone u sprzedawcy lub dostawcy. Ważne spory można zgłosić przez Q&A do przeglądu administratora."},
+  sv:{commerceTitle:"Meddelande om produkt- och transaktionsansvar",commerceText:"IGDC tillhandahåller en plattform som kopplar samman produkter, innehåll, tjänster, säljare och leverantörer. Om IGDC inte anges som direkt säljare ska detaljer, pris, leverans, återbetalning, villkor och transaktionsansvar kontrolleras med säljaren eller leverantören. Viktiga tvister kan skickas via Q&A för administratörsgranskning."},
+  tl:{commerceTitle:"Paunawa sa responsibilidad ng produkto at transaksyon",commerceText:"Ang IGDC ay platform na nag-uugnay ng produkto, content, serbisyo, seller at provider. Maliban kung malinaw na direktang seller ang IGDC, dapat suriin sa seller o provider ang detalye, presyo, delivery, refund, terms at pagtupad ng transaksyon. Mahahalagang dispute ay maaaring isumite sa Q&A para sa admin review."},
+  uk:{commerceTitle:"Повідомлення про відповідальність за товари й транзакції",commerceText:"IGDC є платформою, що з’єднує товари, контент, послуги, продавців і постачальників. Якщо IGDC не зазначений як прямий продавець, деталі, ціна, доставка, повернення, умови та виконання мають перевірятися з продавцем або постачальником. Важливі спори можна подати через Q&A на розгляд адміністратора."},
+  uz:{commerceTitle:"Mahsulot va tranzaksiya javobgarligi haqida xabar",commerceText:"IGDC mahsulotlar, kontent, xizmatlar, sotuvchilar va ta’minotchilarni bog‘lovchi platformadir. IGDC bevosita sotuvchi sifatida ko‘rsatilmagan bo‘lsa, tafsilot, narx, yetkazib berish, qaytarish, shartlar va bitim bajarilishi sotuvchi yoki ta’minotchi bilan tekshirilishi kerak. Muhim nizolar Q&A orqali admin ko‘rib chiqishiga yuborilishi mumkin."}
+};
+Object.keys(SUPPORT_EXTRA).forEach(function(code){ I18N[code]=Object.assign(I18N[code]||{}, SUPPORT_EXTRA[code]); });
+
 const RTL = new Set(['ar','fa','ur']);
 function getLang(){
   try{
@@ -1044,12 +1143,21 @@ function render(lang){
   fillText('upgradeLine', t.upgradeLine);
   fillText('qnaLine', t.qnaLine);
   fillText('emailLabel', t.emailLabel);
+
+  fillText('qnaAskTitle', t.qnaAskTitle);
+  fillText('qnaAskText', t.qnaAskText);
+  fillText('officialEmailNote', t.officialEmailNote);
+  const qContact=document.getElementById('qnaContact'); if(qContact) qContact.placeholder=t.qnaContactPlaceholder||'';
+  const qQuestion=document.getElementById('qnaQuestion'); if(qQuestion) qQuestion.placeholder=t.qnaQuestionPlaceholder||'';
+  fillText('qnaSubmit', t.qnaSubmit);
   fillText('platformTitle', t.platform);
   fillText('platformText', t.platformText);
   fillText('accessTitle', t.access);
   fillList('accessItems', t.accessItems);
   fillText('paymentTitle', t.payment);
   fillList('paymentItems', t.paymentItems);
+  fillText('commerceTitle', t.commerceTitle || (I18N.en && I18N.en.commerceTitle) || 'Marketplace notice');
+  fillText('commerceText', t.commerceText || (I18N.en && I18N.en.commerceText) || 'IGDC provides a platform connection service. Please check each seller or provider terms for product transactions.');
   fillText('policyTitle', t.policy);
   fillText('policyText', t.policyText);
   fillText('downloadsTitle', t.downloads);
@@ -1061,6 +1169,37 @@ function render(lang){
 render(getLang());
 window.addEventListener('storage', e=>{ if(e.key==='igdc_lang' && I18N[e.newValue]) render(e.newValue); });
 window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang || e.data.igdc_lang); if(lang && I18N[lang]) render(lang); }catch(_e){} });
+
+(function(){
+  const btn=document.getElementById('qnaSubmit');
+  const q=document.getElementById('qnaQuestion');
+  const contact=document.getElementById('qnaContact');
+  const status=document.getElementById('qnaStatus');
+  const answerBox=document.getElementById('qnaAnswerBox');
+  function currentText(){ return I18N[getLang()] || I18N.ko; }
+  function setStatus(msg, show){ if(status){ status.textContent=msg||''; status.style.display=show?'inline-block':'none'; } }
+  if(btn){
+    btn.addEventListener('click', async function(){
+      const t=currentText();
+      const question=(q && q.value || '').trim();
+      if(!question){ setStatus(t.qnaQuestionPlaceholder || 'Enter your question.', true); return; }
+      btn.disabled=true; setStatus(t.qnaSending || 'Preparing...', true);
+      if(answerBox){ answerBox.style.display='none'; answerBox.textContent=''; }
+      try{
+        const res=await fetch('/.netlify/functions/qa-proxy', {
+          method:'POST', headers:{'Content-Type':'application/json'}, cache:'no-store',
+          body:JSON.stringify({ question, lang:getLang(), source:'support.html', page:'support', meta:{ contact:(contact&&contact.value||'').trim(), href:location.href, userAgent:navigator.userAgent } })
+        });
+        const data=await res.json();
+        if(!res.ok || !data || data.ok===false) throw new Error((data&&data.error)||('HTTP '+res.status));
+        const note=data.admin_required ? ('\n\n' + (t.qnaAdminNote || 'Submitted for admin review.')) : '';
+        if(answerBox){ answerBox.textContent=(t.qnaAnswerTitle || 'AI answer')+'\n\n'+(data.answer || '')+note; answerBox.style.display='block'; }
+        setStatus('', false);
+      }catch(e){ setStatus((t.qnaError || 'An error occurred.') + ' ' + (e && e.message ? e.message : ''), true); }
+      finally{ btn.disabled=false; }
+    });
+  }
+})();
 </script>
 </body>
 </html>
