@@ -1,7 +1,8 @@
 /**
  * 적용 위치: assets/js/maru-health.js 전용 파일
  * 주의: netlify/functions/maru-health.js 에 덮어쓰지 마세요.
- * 기능: 관리자 우측 패널의 수익 · 썸네일 · 상품 맵핑 상세 점검 JSON 다운로드 버튼.
+ * 기능: 관리자 우측 패널의 수익 · 썸네일 · 상품 맵핑 JSON 다운로드 + 수익 정산 정밀 점검 버튼.
+ * 적용: assets/js/maru-health.js 전용. functions/maru-health.js에는 적용하지 마세요.
  */
 
 /**
@@ -29,12 +30,14 @@
 
   if(!global || !document) return;
 
-  var VERSION = "front-slot-revenue-final-v1.2.1-probe-stable-json-download";
+  var VERSION = "front-slot-revenue-final-v1.2.2-probe-stable-json-download-settlement-check";
   var MODAL_ID = "maru-health-final-slot-modal";
   var STYLE_ID = "maru-health-final-slot-style";
   var TARGET_TEXTS = ["수익", "썸네일", "상품", "맵핑"];
   var LAST_RESULT = null;
+  var LAST_SETTLEMENT_RESULT = null;
   var RUNNING = false;
+  var SETTLEMENT_RUNNING = false;
   var TIMEOUT = 8000;
 
   function s(v){ return String(v == null ? "" : v); }
@@ -107,6 +110,49 @@
     return false;
   }
 
+
+
+  function downloadSettlementJsonReport(result){
+    result = result || LAST_SETTLEMENT_RESULT;
+    if(!result){
+      alert("다운로드할 수익 정산 점검 결과가 아직 없습니다. 먼저 점검을 실행하세요.");
+      return false;
+    }
+
+    var payload = {
+      reportType:"igdc-revenue-settlement-diagnostic",
+      version:VERSION,
+      generatedAt:new Date().toISOString(),
+      source:{
+        href:s(location && location.href),
+        origin:s(location && location.origin),
+        host:s(location && location.host),
+        pathname:s(location && location.pathname),
+        userAgent:s(navigator && navigator.userAgent)
+      },
+      result:result
+    };
+
+    try{
+      var blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json;charset=utf-8"});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "IGDC_REVENUE_SETTLEMENT_AUDIT_pre-product_" + safeTimestamp(result.ts) + ".json";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){
+        try{ URL.revokeObjectURL(url); }catch(_){}
+        if(a && a.parentNode) a.parentNode.removeChild(a);
+      }, 120);
+    }catch(e){
+      console.warn("[MARU_HEALTH] settlement JSON report download failed:", e);
+      alert("JSON 다운로드 중 오류가 발생했습니다: " + shortError(e));
+    }
+
+    return false;
+  }
+
   function statusLabel(st){
     if(st === "ok") return "OK";
     if(st === "warn") return "부분확인";
@@ -142,6 +188,10 @@
       ".mhf-actions{display:flex;align-items:center;gap:6px;margin-left:auto;}" +
       ".mhf-json-download{border:1px solid #f5b7c8;background:#fff0f5;color:#8a2444;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:800;}" +
       ".mhf-json-download:hover{background:#ffe4ee;border-color:#ec8faf;}" +
+      ".mhf-settlement-card{background:linear-gradient(180deg,#f0fff7,#eef8ff)!important;border-color:#b7e4c7!important;}" +
+      ".mhf-settlement-card:hover{background:linear-gradient(180deg,#eafff2,#e4f4ff)!important;border-color:#80cfa2!important;}" +
+      ".mhf-settle-download{border:1px solid #9bd3c2;background:#f0fff7;color:#065f46;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:800;}" +
+      ".mhf-settle-download:hover{background:#dcfce7;border-color:#68bd9c;}" +
       ".mhf-close{border:1px solid #e5e7eb;background:#fff;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:700;}" +
       ".mhf-body{padding:14px 16px;overflow:auto;font-size:12px;color:#333;}" +
       ".mhf-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:12px;}" +
@@ -858,6 +908,318 @@
     return { ok:false, attempts:attempts };
   }
 
+
+
+  function normalizeAttempt(endpoint, r, count){
+    return {
+      endpoint:endpoint,
+      ok:!!(r && r.ok),
+      status:r && r.status,
+      elapsed:r && r.elapsed,
+      count:Number(count || 0)
+    };
+  }
+
+  function revenueSummaryFromReport(json){
+    json = json || {};
+    var summary = json.summary || {};
+    var income = json.income || {};
+    var lineHealth = json.lineHealth || {};
+    var ledgerRows = Array.isArray(json.ledgerRows) ? json.ledgerRows : [];
+    var items = extractItems(json);
+
+    return {
+      ok:!!json.ok,
+      engine:json.engine || "-",
+      version:json.version || "-",
+      mode:json.mode || json.reportMode || "-",
+      pgExecution:json.pgExecution === true,
+      pgStatus:json.pgStatus || (json.pgExecution ? "active" : "dry-run/read-only"),
+      totalRevenueKrw:Number(json.totalRevenue || (income.summary && income.summary.total) || 0),
+      totalRevenueUsd:Number(json.totalRevenueUsd || summary.totalUsd || 0),
+      summaryCount:Number(summary.count || json.snapshot && json.snapshot.count || items.length || 0),
+      lineOk:Number(lineHealth.ok || summary.ok || 0),
+      lineWarn:Number(lineHealth.warn || summary.warn || 0),
+      lineError:Number(lineHealth.error || summary.error || 0),
+      ledgerRows:ledgerRows.length,
+      incomeRows:Array.isArray(income.rows) ? income.rows.length : (Array.isArray(income.items) ? income.items.length : 0),
+      byComponent:summary.byComponent || json.breakdown || {},
+      byPage:summary.byPage || json.byPage || {},
+      raw:json
+    };
+  }
+
+  function revenueHealthSummary(json){
+    json = json || {};
+    var features = json.features || {};
+    var featureRows = Object.keys(features).sort().map(function(k){
+      return { key:k, value:features[k] };
+    });
+    var config = json.config || {};
+    return {
+      ok:!!json.ok,
+      engine:json.engine || "-",
+      version:json.version || "-",
+      pgExecution:features.pgExecution === true,
+      pgStatus:features.pgStatus || (features.pgExecution ? "active" : "pending_pg_approval"),
+      weeklyBatchSettlement:features.weeklyBatchSettlement === true,
+      ledgerRowsEstimated:features.ledgerRowsEstimated === true,
+      featureRows:featureRows,
+      config:config,
+      raw:json
+    };
+  }
+
+  function ledgerSummary(json){
+    json = json || {};
+    var rows = [];
+    if(Array.isArray(json.rows)) rows = json.rows;
+    else if(Array.isArray(json.items)) rows = json.items;
+    else if(Array.isArray(json.wallets)) rows = json.wallets;
+    return {
+      ok:!!json.ok,
+      mode:json.mode || json.status || "-",
+      rows:rows.length,
+      sample:rows.slice(0, 20),
+      raw:json
+    };
+  }
+
+  async function settlementProbe(){
+    var started = now();
+    var attempts = [];
+
+    async function call(ep, timeout){
+      try{
+        var r = await fetchText(ep, timeout || 8000);
+        var cnt = extractItems(r.json).length;
+        if(!cnt && r.json && Array.isArray(r.json.ledgerRows)) cnt = r.json.ledgerRows.length;
+        if(!cnt && r.json && Array.isArray(r.json.rows)) cnt = r.json.rows.length;
+        attempts.push(normalizeAttempt(ep, r, cnt));
+        return { ok:r.ok, endpoint:ep, elapsed:r.elapsed, json:r.json, status:r.status };
+      }catch(e){
+        attempts.push({ endpoint:ep, ok:false, error:shortError(e), count:0 });
+        return { ok:false, endpoint:ep, error:shortError(e), json:null };
+      }
+    }
+
+    var health = await call("/.netlify/functions/maru-revenue-engine?mode=health&probe=1&audit=1&dryRun=1&noWrite=1", 7000);
+    var report = await call("/.netlify/functions/maru-revenue-engine?action=report&fast=1&probe=1&audit=1&summary=1&dryRun=1&noWrite=1&limit=200&ledgerLimit=200", 9000);
+    var ledger = await call("/.netlify/functions/ledger?audit=1&probe=1&dryRun=1&noWrite=1&limit=50", 7000);
+    var income = await call("/api/igdc/income/summary?audit=1&probe=1&dryRun=1&noWrite=1", 7000);
+
+    var h = revenueHealthSummary(health.json || {});
+    var rsum = revenueSummaryFromReport(report.json || {});
+    var lsum = ledgerSummary(ledger.json || {});
+    var incomeJson = income.json || {};
+
+    var status = "ok";
+    var notes = [];
+    if(!health.ok && !report.ok){
+      status = "error";
+      notes.push("수익 엔진 health/report 양쪽 응답 실패");
+    }else if(!health.ok || !report.ok || !ledger.ok || !income.ok || rsum.lineError > 0){
+      status = "warn";
+      if(!health.ok) notes.push("수익 엔진 health 응답 확인 필요");
+      if(!report.ok) notes.push("수익 report 요약 응답 확인 필요");
+      if(!ledger.ok) notes.push("ledger 조회 경로 확인 필요");
+      if(!income.ok) notes.push("income summary 조회 경로 확인 필요");
+      if(rsum.lineError > 0) notes.push("수익 라인 error 항목 존재");
+    }
+    if(rsum.totalRevenueKrw === 0 && rsum.totalRevenueUsd === 0){
+      if(status === "ok") status = "warn";
+      notes.push("실수익 데이터 투입 전 또는 현재 집계 금액 0");
+    }
+    if(!h.pgExecution){
+      notes.push("PG/지급 실행 없음: read-only 점검 상태");
+    }
+
+    return {
+      version:"revenue-settlement-diagnostic-v1-readonly",
+      status:status,
+      ts:new Date().toISOString(),
+      elapsed:now() - started,
+      noWrite:true,
+      dryRun:true,
+      settlementExecution:false,
+      payoutExecution:false,
+      health:h,
+      report:rsum,
+      ledger:lsum,
+      income:{ ok:!!income.ok, status:income.status, endpoint:income.endpoint, raw:incomeJson },
+      attempts:attempts,
+      notes:notes
+    };
+  }
+
+  function featureTable(rows){
+    rows = rows || [];
+    if(!rows.length) return '<div class="mhf-note">feature 정보가 없습니다.</div>';
+    return '<div class="mhf-scroll"><table class="mhf-table"><thead><tr><th>기능</th><th>상태</th></tr></thead><tbody>' +
+      rows.map(function(r){ return '<tr><td>' + escapeHtml(r.key) + '</td><td>' + escapeHtml(r.value === true ? 'ON' : r.value === false ? 'OFF' : r.value) + '</td></tr>'; }).join('') +
+      '</tbody></table></div>';
+  }
+
+  function componentTable(map){
+    map = map || {};
+    var rows = Object.keys(map).sort().map(function(k){ return { key:k, value:map[k] }; });
+    if(!rows.length) return '<div class="mhf-note">수익 component 집계가 아직 없습니다.</div>';
+    return '<div class="mhf-scroll"><table class="mhf-table"><thead><tr><th>수익 component</th><th>금액/값</th></tr></thead><tbody>' +
+      rows.map(function(r){ return '<tr><td>' + escapeHtml(r.key) + '</td><td>' + escapeHtml(r.value) + '</td></tr>'; }).join('') +
+      '</tbody></table></div>';
+  }
+
+  function openSettlementModal(result){
+    closeSettlementModal();
+    if(!result){
+      result = LAST_SETTLEMENT_RESULT || { status:"pending", ts:new Date().toISOString(), attempts:[], notes:["아직 점검 전입니다."] };
+    }
+    var backdrop = document.createElement("div");
+    backdrop.id = "maru-revenue-settlement-modal";
+    backdrop.className = "mhf-backdrop";
+    var h = result.health || {};
+    var rp = result.report || {};
+    var ledger = result.ledger || {};
+    var notes = result.notes || [];
+    var lite = {
+      version:result.version,
+      ts:result.ts,
+      status:result.status,
+      noWrite:result.noWrite,
+      dryRun:result.dryRun,
+      settlementExecution:result.settlementExecution,
+      payoutExecution:result.payoutExecution,
+      health:{ ok:h.ok, version:h.version, pgExecution:h.pgExecution, pgStatus:h.pgStatus, weeklyBatchSettlement:h.weeklyBatchSettlement, ledgerRowsEstimated:h.ledgerRowsEstimated },
+      report:{ totalRevenueKrw:rp.totalRevenueKrw, totalRevenueUsd:rp.totalRevenueUsd, summaryCount:rp.summaryCount, lineHealth:rp.lineOk + '/' + rp.lineWarn + '/' + rp.lineError, ledgerRows:rp.ledgerRows, incomeRows:rp.incomeRows },
+      ledger:{ ok:ledger.ok, mode:ledger.mode, rows:ledger.rows },
+      notes:notes
+    };
+
+    backdrop.innerHTML =
+      '<div class="mhf-modal" role="dialog" aria-modal="true">' +
+        '<div class="mhf-head">' +
+          '<div>' +
+            '<div class="mhf-title">수익 정산 정밀 점검</div>' +
+            '<div class="mhf-sub">정산 실행 없이 read-only/dry-run으로 수익 엔진, ledger, income summary를 확인합니다. · ' + escapeHtml(result.ts || '') + '</div>' +
+          '</div>' +
+          '<div class="mhf-actions">' +
+            '<button type="button" class="mhf-settle-download">JSON 다운로드</button>' +
+            '<button type="button" class="mhf-close">닫기</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="mhf-body">' +
+          '<div class="mhf-grid">' +
+            metric('전체 상태', statusKo(result.status), '최종 판정') +
+            metric('수익 엔진', h.ok ? 'OK' : '확인필요', h.version || '-') +
+            metric('정산 실행', result.settlementExecution ? 'ON' : 'OFF', 'read-only/dry-run') +
+            metric('지급 실행', result.payoutExecution ? 'ON' : 'OFF', 'no-write') +
+            metric('총 수익 KRW', Math.round(Number(rp.totalRevenueKrw || 0)), '요약 집계') +
+            metric('라인 OK/W/E', (rp.lineOk||0) + '/' + (rp.lineWarn||0) + '/' + (rp.lineError||0), '수익 라인') +
+          '</div>' +
+          '<div class="mhf-section"><div class="mhf-section-head"><div class="mhf-section-title">정산 점검 요약</div>' + badge(result.status) + '</div>' +
+            '<div class="mhf-note">' + escapeHtml(notes.join(' · ') || '특이사항 없음') + '</div></div>' +
+          '<div class="mhf-section"><div class="mhf-section-head"><div class="mhf-section-title">수익 엔진 기능 플래그</div>' + badge(h.ok ? 'ok' : 'warn') + '</div>' + featureTable(h.featureRows || []) + '</div>' +
+          '<div class="mhf-section"><div class="mhf-section-head"><div class="mhf-section-title">수익 component / 분배 후보 집계</div>' + badge(rp.lineError ? 'warn' : 'ok') + '</div>' + componentTable(rp.byComponent || {}) + '</div>' +
+          attemptsTable('수익 정산 Probe 경로', result.attempts || [], result.status === 'error' ? 'error' : result.status) +
+          '<div class="mhf-section"><div class="mhf-section-head"><div class="mhf-section-title">점검 원칙</div>' + badge('ok') + '</div>' +
+            '<div class="mhf-note">이 버튼은 실제 정산·지급·PG 실행을 하지 않습니다. 수익 엔진 health, 요약 report, ledger/income 연결 상태만 읽어서 판단합니다. 실제 지급 실행 버튼이 아닙니다.</div></div>' +
+          '<div class="mhf-section"><div class="mhf-section-head"><div class="mhf-section-title">요약 JSON</div><span class="mhf-badge ok">DEBUG</span></div>' +
+            '<div style="padding:10px;"><div class="mhf-json">' + escapeHtml(JSON.stringify(lite, null, 2)) + '</div></div></div>' +
+        '</div>' +
+      '</div>';
+
+    backdrop.addEventListener("click", function(ev){
+      if(ev.target === backdrop) closeSettlementModal();
+    });
+    var dl = backdrop.querySelector(".mhf-settle-download");
+    if(dl) dl.addEventListener("click", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      downloadSettlementJsonReport(result);
+      return false;
+    });
+    var close = backdrop.querySelector(".mhf-close");
+    if(close) close.addEventListener("click", closeSettlementModal);
+    document.body.appendChild(backdrop);
+  }
+
+  function closeSettlementModal(){
+    var m = byId("maru-revenue-settlement-modal");
+    if(m && m.parentNode) m.parentNode.removeChild(m);
+  }
+
+  function findSettlementCard(){
+    return byId("maru-revenue-settlement-card") || document.querySelector("[data-maru-revenue-settlement-card='1']");
+  }
+
+  function setSettlementCard(st, body){
+    var card = findSettlementCard();
+    if(!card) return;
+    var p = cardParts(card);
+    if(p.status){
+      p.status.textContent = statusLabel(st);
+      p.status.className = "igdc-sc-card-status " + statusClass(st);
+    }
+    if(p.body) p.body.textContent = body || "";
+    card.dataset.maruSettlementStatus = st;
+  }
+
+  async function runSettlementCheck(opts){
+    opts = opts || {};
+    if(SETTLEMENT_RUNNING) return LAST_SETTLEMENT_RESULT;
+    SETTLEMENT_RUNNING = true;
+    setSettlementCard("pending", "수익 정산 read-only 점검 중…");
+    try{
+      var result = await settlementProbe();
+      LAST_SETTLEMENT_RESULT = result;
+      if(result.status === "ok") setSettlementCard("ok", "정산 엔진/ledger/income summary 연결 정상");
+      else if(result.status === "warn") setSettlementCard("warn", "정산 실행 없이 준비 상태 확인 · 일부 경로 주의");
+      else setSettlementCard("error", "수익 정산 점검 경로 확인 필요");
+      if(opts.open !== false) openSettlementModal(result);
+      return result;
+    }catch(e){
+      var fail = { version:"revenue-settlement-diagnostic-v1-readonly", status:"error", ts:new Date().toISOString(), noWrite:true, dryRun:true, settlementExecution:false, payoutExecution:false, error:shortError(e), attempts:[], notes:[shortError(e)] };
+      LAST_SETTLEMENT_RESULT = fail;
+      setSettlementCard("error", "수익 정산 점검 실패: " + shortError(e));
+      if(opts.open !== false) openSettlementModal(fail);
+      return fail;
+    }finally{
+      SETTLEMENT_RUNNING = false;
+    }
+  }
+
+  function insertSettlementCard(referenceCard){
+    var host = byId("igdc-site-control") || document.querySelector(".igdc-site-control");
+    if(!host || findSettlementCard()) return findSettlementCard();
+    var card = document.createElement("div");
+    card.id = "maru-revenue-settlement-card";
+    card.className = "igdc-sc-card mhf-settlement-card";
+    card.setAttribute("data-maru-revenue-settlement-card", "1");
+    card.innerHTML =
+      '<div class="igdc-sc-card-header">' +
+        '<span class="igdc-sc-card-title">수익 정산 정밀 점검</span>' +
+        '<span class="igdc-sc-card-status">-</span>' +
+      '</div>' +
+      '<div class="igdc-sc-card-body">정산 실행 없이 수익 엔진·ledger·income summary를 read-only로 점검합니다.</div>';
+    card.addEventListener("click", function(ev){
+      try{ ev.preventDefault(); ev.stopPropagation(); }catch(_){}
+      if(!LAST_SETTLEMENT_RESULT){
+        runSettlementCheck({manual:true, open:true});
+      }else{
+        openSettlementModal(LAST_SETTLEMENT_RESULT);
+      }
+      return false;
+    }, true);
+    if(referenceCard && referenceCard.parentNode){
+      referenceCard.parentNode.insertBefore(card, referenceCard.nextSibling);
+    }else{
+      var grid = host.querySelector(".igdc-sc-grid") || host;
+      grid.appendChild(card);
+    }
+    setSettlementCard("pending", "정산 실행 없는 read-only 점검 대기");
+    return card;
+  }
+
   function mergePageViews(designAnalysis, deliveryAnalysis, frontend){
     var frontByKey = {};
     (frontend.rows || []).forEach(function(r){ frontByKey[r.key] = r; });
@@ -1188,6 +1550,7 @@
     var card = findTargetCard();
     if(card){
       hookCard(card);
+      insertSettlementCard(card);
       setCard(card, "pending", "전체 헬스체크 실행 시 슬롯·수익 라인을 점검합니다.");
       hookRunButton();
       return true;
@@ -1200,6 +1563,8 @@
     injectStyle();
     waitCard(0);
     setTimeout(function(){
+      var card = findTargetCard();
+      if(card) insertSettlementCard(card);
       hookRunButton();
       var flag = (location.search || "") + " " + (location.hash || "");
       if(/health=1|health-run|maru-health/i.test(flag)){
@@ -1213,11 +1578,16 @@
   global.MaruHealth.runFinalSlotRevenueCheck = runCheck;
   global.MaruHealth.openFinalSlotRevenueModal = function(){ openModal(LAST_RESULT); };
   global.MaruHealth.downloadFinalSlotRevenueJson = function(){ return downloadJsonReport(LAST_RESULT); };
+  global.MaruHealth.runRevenueSettlementCheck = runSettlementCheck;
+  global.MaruHealth.openRevenueSettlementModal = function(){ openSettlementModal(LAST_SETTLEMENT_RESULT); };
+  global.MaruHealth.downloadRevenueSettlementJson = function(){ return downloadSettlementJsonReport(LAST_SETTLEMENT_RESULT); };
 
   global.IGDC_HEALTH = global.IGDC_HEALTH || {};
   global.IGDC_HEALTH.runFinalSlotRevenueCheck = runCheck;
+  global.IGDC_HEALTH.runRevenueSettlementCheck = runSettlementCheck;
 
   global.runMaruFinalSlotRevenueHealth = runCheck;
+  global.runMaruRevenueSettlementHealth = runSettlementCheck;
 
   ready(init);
 
