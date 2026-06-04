@@ -457,6 +457,64 @@ function scanServerSnapshots(root, mode){
   };
 }
 
+
+function scanEngineTopology(root){
+  const targets = [
+    { key:'maru-search', role:'CPU search dispatcher', path:'netlify/functions/maru-search.js', critical:true, downstream:['search-bank-engine','search-bank-index-engine','maru-search-display-engine','sanmaru'] },
+    { key:'sanmaru', role:'OSAI global information integrator', path:'netlify/functions/sanmaru_engine_v2.js', critical:true, downstream:['maru-search','search-bank-engine','front-supply','slot-supply'] },
+    { key:'search-bank-engine', role:'SearchBank snapshot request/router', path:'netlify/functions/search-bank-engine.js', critical:true, downstream:['data/search-bank.snapshot.json','front snapshots'] },
+    { key:'search-bank-index', role:'front reservoir/index supplier', path:'netlify/functions/search-bank-index-engine.js', critical:true, downstream:['search-bank-engine','front slot candidates'] },
+    { key:'maru-search-display', role:'search result display bridge', path:'netlify/functions/maru-search-display-engine.js', critical:true, downstream:['front cards','search UI'] },
+    { key:'global-insight', role:'regional/global insight supplier', path:'netlify/functions/maru-global-insight-engine.js', critical:false, downstream:['right panel','admin insight'] },
+    { key:'collector', role:'external/data collection feeder', path:'netlify/functions/collector.js', critical:false, downstream:['search-bank','sanmaru'] },
+    { key:'planetary', role:'planetary data connector', path:'netlify/functions/planetary-data-connector.js', critical:false, downstream:['sanmaru','search-bank'] },
+    { key:'snapshot-engine', role:'SearchBank to front snapshot merger', path:'netlify/functions/snapshot-engine.js', critical:true, downstream:['front.snapshot','distribution.snapshot','media.snapshot','social.snapshot','network.snapshot','tour.snapshot'] }
+  ];
+  const nodes = targets.map(t => {
+    const file = path.join(root, t.path);
+    const st = statFile(file);
+    const rec = Object.assign({ key:t.key, role:t.role, path:t.path, critical:!!t.critical, downstream:t.downstream, exists:st.exists, size:st.size || 0 }, {});
+    if(st.exists){
+      const txt = readText(file).text || '';
+      rec.hash = hashText(txt);
+      rec.version = ((txt.match(/VERSION\s*=\s*["']([^"']+)/) || [])[1]) || null;
+      rec.requireCore = /require\(["']\.\/core["']\)/.test(txt);
+      rec.hasHandler = /exports\.handler|module\.exports\s*=\s*\{[^}]*handler|handler\s*=/.test(txt);
+      rec.hasRunEngine = /exports\.runEngine|runEngine\s*[:=]/.test(txt);
+      rec.hasQueryIndex = /exports\.queryIndex|queryIndex\s*[:=]/.test(txt);
+      rec.mentions = {
+        sanmaru:/sanmaru/i.test(txt),
+        searchBank:/search[-_ ]?bank/i.test(txt),
+        index:/index/i.test(txt),
+        display:/display/i.test(txt),
+        snapshot:/snapshot/i.test(txt),
+        collector:/collector/i.test(txt),
+        planetary:/planetary/i.test(txt),
+        globalInsight:/global[-_ ]?insight/i.test(txt)
+      };
+    }
+    rec.staticStatus = !rec.exists && rec.critical ? 'fail' : (!rec.exists ? 'warn' : 'ok');
+    return rec;
+  });
+  const missingCritical = nodes.filter(n => n.critical && !n.exists).map(n => n.key);
+  const criticalOk = missingCritical.length === 0;
+  return {
+    source:'server-fs-static',
+    criticalOk,
+    missingCritical,
+    total:nodes.length,
+    ok:nodes.filter(n => n.exists).length,
+    nodes,
+    pipeline:[
+      'sanmaru → maru-search → search-bank-index → search-bank-engine → search-bank.snapshot.json',
+      'search-bank.snapshot.json → snapshot-engine → /data/*.snapshot.json → automap/front slots',
+      'collector/planetary → sanmaru/search-bank auxiliary supply',
+      'maru-global-insight-engine → insight/right-panel/admin insight',
+      'maru-search-display-engine → search/display presentation layer'
+    ]
+  };
+}
+
 function buildWarnings(report){
   const w = [];
   const mode = report.mode || 'pre-product';
@@ -472,6 +530,7 @@ function buildWarnings(report){
   if(report.frontend && report.frontend.suspiciousApiNetlifyScripts && report.frontend.suspiciousApiNetlifyScripts.length) w.push('Suspicious api.netlify.com script references remain. Remove them before production.');
   if(report.functions && report.functions.missing && report.functions.missing.length) w.push('Some important Netlify function/core files are missing.');
   if(report.functions && report.functions.requireCoreFiles && report.functions.requireCoreFiles.length && !report.functions.coreBridgeExists) w.push('Some functions require ./core but netlify/functions/core.js is missing.');
+  if(report.engineTopology && report.engineTopology.missingCritical && report.engineTopology.missingCritical.length) w.push('Critical engine files are missing: ' + report.engineTopology.missingCritical.join(', '));
   const copies = report.snapshotCopies;
   if(copies && copies.searchBankOkCount < 2) w.push('SearchBank snapshot copy count is low. Confirm data/ and function-side copies before production.');
   if(copies && copies.searchBankAllSame === false) w.push('SearchBank snapshot copies have different hashes. Confirm intended sync state.');
@@ -501,6 +560,7 @@ function computeSummary(report){
   }
   if(report.snapshotCopies && report.snapshotCopies.searchBankAllSame === false) score -= 8;
   if(report.functions && report.functions.requireCoreFiles && report.functions.requireCoreFiles.length && !report.functions.coreBridgeExists) score -= 10;
+  if(report.engineTopology && report.engineTopology.missingCritical && report.engineTopology.missingCritical.length) score -= Math.min(25, report.engineTopology.missingCritical.length * 7);
   if(report.serverSnapshots && report.serverSnapshots.okPages < report.serverSnapshots.totalPages) score -= Math.min(12, (report.serverSnapshots.totalPages - report.serverSnapshots.okPages) * 3);
   if(mode === 'production' && report.serverSnapshots && report.serverSnapshots.pages){
     const badSections = report.serverSnapshots.pages.reduce((n,p)=> n + (p.analysis && p.analysis.statusCounts ? (p.analysis.statusCounts.fail || 0) : 0), 0);
@@ -550,6 +610,7 @@ function audit(event){
   report.frontend = Object.assign(scanScripts(root), { psom: scanDataPsom(root) });
   report.globalInsight = scanGlobalInsight(root);
   report.payment = scanPayment(root);
+  report.engineTopology = scanEngineTopology(root);
   report.snapshotCopies = scanSnapshotCopies(root);
   report.serverSnapshots = scanServerSnapshots(root, mode);
   report.warnings = buildWarnings(report);
