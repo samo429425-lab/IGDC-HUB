@@ -30,7 +30,7 @@
 
   if(!global || !document) return;
 
-  var VERSION = "front-slot-revenue-final-v1.2.3-settlement-card-below-ux";
+  var VERSION = "front-slot-revenue-final-v1.2.4-settlement-card-between-ux-and-health";
   var MODAL_ID = "maru-health-final-slot-modal";
   var STYLE_ID = "maru-health-final-slot-style";
   var TARGET_TEXTS = ["수익", "썸네일", "상품", "맵핑"];
@@ -1156,17 +1156,20 @@
     var host = byId("igdc-site-control") || document.querySelector(".igdc-site-control");
     if(!host) return null;
     words = words || [];
-    var cards = Array.prototype.slice.call(host.querySelectorAll(".igdc-sc-card, [data-card], section, div, button"));
-    for(var i=0;i<cards.length;i++){
-      var el = cards[i];
-      var text = s(el.textContent).replace(/\s+/g," ").trim();
+
+    // IMPORTANT:
+    // Do not return broad container divs whose text merely contains all card titles.
+    // Returning the panel/grid container makes insertBefore() place the settlement card
+    // at the very top of the right panel. Only real card elements are valid anchors.
+    var nodes = Array.prototype.slice.call(host.querySelectorAll(".igdc-sc-card, [data-card], button"));
+    for(var i=0;i<nodes.length;i++){
+      var el = nodes[i];
+      var card = (el.classList && el.classList.contains("igdc-sc-card")) ? el : (el.closest && el.closest(".igdc-sc-card"));
+      if(!card || card === findSettlementCard()) continue;
+      var text = s(card.textContent).replace(/\s+/g," ").trim();
       if(!text) continue;
       var ok = words.every(function(k){ return text.indexOf(k) >= 0; });
-      if(!ok) continue;
-      if(el.classList && el.classList.contains("igdc-sc-card")) return el;
-      var parent = el.closest && el.closest(".igdc-sc-card");
-      if(parent) return parent;
-      return el;
+      if(ok) return card;
     }
     return null;
   }
@@ -1225,19 +1228,25 @@
     var uxCard = findUxCard();
     var grid = host.querySelector(".igdc-sc-grid") || host;
 
-    // Preferred order requested by ADMIN panel:
+    // Fixed ADMIN right-panel order:
     // 기기/브라우저 · UX
     // ↓
     // 수익 정산 정밀 점검
     // ↓
     // 시스템 점검 / 엔진 헬스체크
-    if(systemCard && systemCard !== card && systemCard.parentNode){
+    // Other existing cards/functions are not touched.
+    if(uxCard && systemCard && uxCard !== card && systemCard !== card && uxCard.parentNode === systemCard.parentNode){
       systemCard.parentNode.insertBefore(card, systemCard);
       return;
     }
 
     if(uxCard && uxCard !== card && uxCard.parentNode){
       uxCard.parentNode.insertBefore(card, uxCard.nextSibling);
+      return;
+    }
+
+    if(systemCard && systemCard !== card && systemCard.parentNode){
+      systemCard.parentNode.insertBefore(card, systemCard);
       return;
     }
 
@@ -1635,6 +1644,15 @@
         runCheck({auto:true, reason:"url-flag"});
       }
     }, 900);
+
+    // The right panel may be re-rendered after this script loads. Re-place only the
+    // settlement card a few times so it lands between UX and engine health check.
+    [1300, 2200, 3500].forEach(function(delay){
+      setTimeout(function(){
+        var settlement = findSettlementCard();
+        if(settlement) placeSettlementCard(settlement, findTargetCard());
+      }, delay);
+    });
   }
 
   global.MaruHealth = global.MaruHealth || {};
