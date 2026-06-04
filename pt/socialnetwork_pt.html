@@ -484,7 +484,7 @@
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>Pergunta</label><textarea class="igdc-qa-text q" placeholder="Digite sua pergunta..."></textarea><label>Resposta</label><textarea class="igdc-qa-text a" placeholder="Aguarde um momento. Responderemos em breve."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Enviar</button><button class="igdc-qa-btn muted">Limpar</button></div><div class="igdc-qa-note">※ Perguntas simples são respondidas imediatamente pela IA. Questões técnicas, erros ou assuntos operacionais são encaminhados automaticamente para o Perguntas e respostas do administrador.</div><div class="igdc-qa-threads"></div><p class="contact-email">E-mail principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>Pergunta</label><textarea class="igdc-qa-text q" placeholder="Digite sua pergunta..."></textarea><label>Resposta</label><textarea class="igdc-qa-text a" placeholder="Aguarde um momento. Responderemos em breve."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Enviar</button><button class="igdc-qa-btn muted">Limpar</button></div><div class="igdc-qa-note">※ Perguntas simples são respondidas imediatamente pela IA. Questões técnicas, erros ou assuntos operacionais são encaminhados automaticamente para o Perguntas e respostas do administrador.</div><div class="igdc-qa-threads"></div>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -529,8 +529,7 @@
         const lA = el('label'); lA.textContent='Resposta'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='Aguarde um momento. Responderemos em breve.';
         const actions = el('div','igdc-qa-actions'); const btnEnviar = el('button','igdc-qa-btn primary'); btnEnviar.textContent='Enviar'; const btnLimpar = el('button','igdc-qa-btn muted'); btnLimpar.textContent='Limpar';
         const note = el('div','igdc-qa-note'); note.textContent='※ Perguntas simples são respondidas imediatamente pela IA. Questões técnicas, erros ou assuntos operacionais são encaminhados automaticamente para o Perguntas e respostas do administrador.';
-        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='E-mail principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        actions.append(btnEnviar, btnLimpar); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
+        const list = el('div','igdc-qa-threads');         actions.append(btnEnviar, btnLimpar); body.append(lQ,tQ,lA,tA,actions,note,list); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
       }
       function bindExisting(modal){
@@ -567,7 +566,7 @@
         var modal = document.querySelector('.igdc-qa-modal');
         if(!modal) return;
         var body = modal.querySelector('.igdc-qa-body') || modal;
-        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='E-mail principal: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
+        if(body && !body.querySelector('.contact-email')){  }
       }
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
     })();

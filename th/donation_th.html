@@ -4312,9 +4312,6 @@ document.addEventListener('DOMContentLoaded', function(){
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-	const ce = el("p","contact-email");
-    ce.innerHTML = 'อีเมลตัวแทน: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-    body.append(ce);
     actions.append(btnส่ง, btnล้าง);
     panel.append(header, body);
     modal.append(backdrop, panel);

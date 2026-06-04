@@ -486,7 +486,6 @@
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = 'பிரதிநிதி மின்னஞ்சல்: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -531,8 +530,7 @@
         const lA = el('label'); lA.textContent='பதில்'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='தயவுசெய்து சிறிது காத்திருக்கவும். விரைவில் பதிலளிக்கிறோம்.';
         const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='சமர்ப்பி'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='அழி';
         const note = el('div','igdc-qa-note'); note.textContent='※ எளிய கேள்விகளுக்கு AI உடனடியாக பதிலளிக்கும். தொழில்நுட்ப, பிழை அல்லது செயல்பாட்டு பிரச்சினைகள் தானாகவே Admin Q&A-க்கு அனுப்பப்படும்.';
-        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='பிரதிநிதி மின்னஞ்சல்: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
+        const list = el('div','igdc-qa-threads');         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
       }
       function bindExisting(modal){
@@ -569,7 +567,7 @@
         var modal = document.querySelector('.igdc-qa-modal');
         if(!modal) return;
         var body = modal.querySelector('.igdc-qa-body') || modal;
-        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='பிரதிநிதி மின்னஞ்சல்: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
+        if(body && !body.querySelector('.contact-email')){  }
       }
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
     })();

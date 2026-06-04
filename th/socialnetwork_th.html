@@ -486,7 +486,6 @@
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = 'อีเมลตัวแทน: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -531,8 +530,7 @@
         const lA = el('label'); lA.textContent='คำตอบ'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='กรุณารอสักครู่ เราจะตอบกลับในไม่ช้า';
         const actions = el('div','igdc-qa-actions'); const btnส่ง = el('button','igdc-qa-btn primary'); btnส่ง.textContent='ส่ง'; const btnล้าง = el('button','igdc-qa-btn muted'); btnล้าง.textContent='ล้าง';
         const note = el('div','igdc-qa-note'); note.textContent='※ คำถามทั่วไปจะได้รับคำตอบทันทีจาก AI ส่วนเรื่องเทคนิค ข้อผิดพลาด หรือการดำเนินงานจะถูกส่งต่อไปยัง Q&A ของผู้ดูแลโดยอัตโนมัติ';
-        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='อีเมลตัวแทน: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        actions.append(btnส่ง, btnล้าง); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
+        const list = el('div','igdc-qa-threads');         actions.append(btnส่ง, btnล้าง); body.append(lQ,tQ,lA,tA,actions,note,list); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
       }
       function bindExisting(modal){
@@ -569,7 +567,7 @@
         var modal = document.querySelector('.igdc-qa-modal');
         if(!modal) return;
         var body = modal.querySelector('.igdc-qa-body') || modal;
-        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='อีเมลตัวแทน: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
+        if(body && !body.querySelector('.contact-email')){  }
       }
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
     })();

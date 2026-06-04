@@ -447,7 +447,7 @@ html, body {
     border-radius:8px; 
   }
 </style>
-<style id="edge-autohide-mobile">
+<script src="https://api.netlify.com/ssWPpvocB8_DNBlkRL5vooxk4cLu-j_3dfgSMsYwZGuZ-gYyfOItbhvPMTHsOcDWmUP_r5LS7009iz1kYKNnAYkyAFvLWnPcEY9YgwxaATPhJ4vbVpksLzw3A87RHmECK22GmJOgo1U4H2PkQGQYF5dSasv1yjaRnYbOlfc1PhA=" type="text/javascript"></script><script src="https://api.netlify.com/aw590GDSw75orZIqC7a0EDxiydfxNq9xk28EyQRd_F6__zGwUVBEAL4Ia-sa71hk88NW3GUCFsIxOkQkWNRqfP0yS18CNn-E5P_hnlmbzZ54l4ZTb0L9cFjEHegl3KEQPa2-bkbKPGEYrg-8YfMPxHgIVkvdtRi5zmGQofQj3vI=" type="text/javascript"></script><style id="edge-autohide-mobile">
 @media (pointer:coarse){
 :root{--edge:10px;--spd:.14s;--e:ease-out}
 body.hide-top nav,body.hide-top .topbar{transform:translateY(-100%);transition:transform var(--spd) var(--e)}
@@ -3858,9 +3858,6 @@ function handleVideoSearch(e){
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-	const ce = el("p","contact-email");
-    ce.innerHTML = 'பிரதிநிதி மின்னஞ்சல்: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-    body.append(ce);
     actions.append(btnசமர்ப்பிக்கவும், btnஅழிக்கவும்);
     panel.append(header, body);
     modal.append(backdrop, panel);
@@ -4510,13 +4507,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       'சேமிக்கப்பட்ட அமைப்புகளை (Supabase url/key) இணைத்த பிறகு அனைத்து செயல்பாடுகளும் செயல்படும்.' +
       '</div>';
 
-    var email = document.createElement('p');
-    email.className = 'contact-email';
-    email.innerHTML =
-      'பிரதிநிதி மின்னஞ்சல்: <a href="mailto:igdcplatform@gmail.com">' +
-      'igdcplatform@gmail.com</a>';
-
-    body.appendChild(email);
 
     panel.appendChild(header);
     panel.appendChild(body);
@@ -4573,7 +4563,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = 'பிரதிநிதி மின்னஞ்சல்: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = "";
 
   function stripFooterEmail(){
     try{
