@@ -526,7 +526,7 @@ html[lang="ur"] .ad-box a{
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>سوال</label><textarea class="igdc-qa-text q" placeholder="براہ کرم اپنا سوال درج کریں..."></textarea><label>جواب</label><textarea class="igdc-qa-text a" placeholder="براہ کرم ایک لمحہ انتظار کریں۔ ہم جلد جواب دیں گے۔"></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">جمع کریں</button><button class="igdc-qa-btn muted">صاف کریں</button></div><div class="igdc-qa-note">※ سادہ سوالات کا جواب AI فوری طور پر دیتا ہے۔ تکنیکی، خرابی یا آپریشن سے متعلق مسائل خودکار طور پر Admin Q&A کو بھیج دیے جاتے ہیں۔</div><div class="igdc-qa-threads"></div><p class="contact-email">نمائندہ ای میل: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>سوال</label><textarea class="igdc-qa-text q" placeholder="براہ کرم اپنا سوال درج کریں..."></textarea><label>جواب</label><textarea class="igdc-qa-text a" placeholder="براہ کرم ایک لمحہ انتظار کریں۔ ہم جلد جواب دیں گے۔"></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">جمع کریں</button><button class="igdc-qa-btn muted">صاف کریں</button></div><div class="igdc-qa-note">※ سادہ سوالات کا جواب AI فوری طور پر دیتا ہے۔ تکنیکی، خرابی یا آپریشن سے متعلق مسائل خودکار طور پر Admin Q&A کو بھیج دیے جاتے ہیں۔</div><div class="igdc-qa-threads"></div>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -571,8 +571,7 @@ html[lang="ur"] .ad-box a{
         const lA = el('label'); lA.textContent='جواب'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='براہ کرم ایک لمحہ انتظار کریں۔ ہم جلد جواب دیں گے۔';
         const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='جمع کریں'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='صاف کریں';
         const note = el('div','igdc-qa-note'); note.textContent='※ سادہ سوالات کا جواب AI فوری طور پر دیتا ہے۔ تکنیکی، خرابی یا آپریشن سے متعلق مسائل خودکار طور پر Admin Q&A کو بھیج دیے جاتے ہیں۔';
-        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='نمائندہ ای میل: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
+        const list = el('div','igdc-qa-threads');         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
       }
       function bindExisting(modal){
@@ -609,7 +608,7 @@ html[lang="ur"] .ad-box a{
         var modal = document.querySelector('.igdc-qa-modal');
         if(!modal) return;
         var body = modal.querySelector('.igdc-qa-body') || modal;
-        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='نمائندہ ای میل: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
+        if(body && !body.querySelector('.contact-email')){  }
       }
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
     })();

@@ -493,7 +493,7 @@ a[id*="qna"]{
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>질문</label><textarea class="igdc-qa-text q" placeholder="질문을 입력하세요..."></textarea><label>답변</label><textarea class="igdc-qa-text a" placeholder="조금만 기다리시면 금방 답변을 드리겠습니다."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">등록하기</button><button class="igdc-qa-btn muted">지우기</button></div><div class="igdc-qa-note">※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.</div><div class="igdc-qa-threads"></div><p class="contact-email">대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>질문</label><textarea class="igdc-qa-text q" placeholder="질문을 입력하세요..."></textarea><label>답변</label><textarea class="igdc-qa-text a" placeholder="조금만 기다리시면 금방 답변을 드리겠습니다."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">등록하기</button><button class="igdc-qa-btn muted">지우기</button></div><div class="igdc-qa-note">※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.</div><div class="igdc-qa-threads"></div>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -538,8 +538,7 @@ a[id*="qna"]{
         const lA = el('label'); lA.textContent='답변'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='조금만 기다리시면 금방 답변을 드리겠습니다.';
         const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Submit'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
         const note = el('div','igdc-qa-note'); note.textContent='※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.';
-        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
+        const list = el('div','igdc-qa-threads');         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
       }
       function bindExisting(modal){
@@ -576,7 +575,7 @@ a[id*="qna"]{
         var modal = document.querySelector('.igdc-qa-modal');
         if(!modal) return;
         var body = modal.querySelector('.igdc-qa-body') || modal;
-        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
+        if(body && !body.querySelector('.contact-email')){  }
       }
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
     })();

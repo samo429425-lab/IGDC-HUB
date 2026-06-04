@@ -480,7 +480,7 @@
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>問題</label><textarea class="igdc-qa-text q" placeholder="請輸入您的問題..."></textarea><label>回答</label><textarea class="igdc-qa-text a" placeholder="請稍候，我們將盡快回覆。"></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">提交</button><button class="igdc-qa-btn muted">清除</button></div><div class="igdc-qa-note">※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。</div><div class="igdc-qa-threads"></div><p class="contact-email">代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>問題</label><textarea class="igdc-qa-text q" placeholder="請輸入您的問題..."></textarea><label>回答</label><textarea class="igdc-qa-text a" placeholder="請稍候，我們將盡快回覆。"></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">提交</button><button class="igdc-qa-btn muted">清除</button></div><div class="igdc-qa-note">※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。</div><div class="igdc-qa-threads"></div>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -525,8 +525,7 @@
         const lA = el('label'); lA.textContent='回答'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='請稍候，我們將盡快回覆。';
         const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='提交'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='清除';
         const note = el('div','igdc-qa-note'); note.textContent='※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。';
-        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
+        const list = el('div','igdc-qa-threads');         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
       }
       function bindExisting(modal){
@@ -563,7 +562,7 @@
         var modal = document.querySelector('.igdc-qa-modal');
         if(!modal) return;
         var body = modal.querySelector('.igdc-qa-body') || modal;
-        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
+        if(body && !body.querySelector('.contact-email')){  }
       }
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
     })();

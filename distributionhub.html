@@ -1990,7 +1990,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 <style>.is-hidden-lit{ display:none !important; }</style>
-
 <script id="rscroll-bind-from-socialnet">
 (function(){
   function stepFor(scroller){
@@ -2388,10 +2387,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
 
       // ensure the "대표 이메일" is shown only inside the modal
-      var ce = document.createElement('p');
-      ce.className = 'contact-email';
-      ce.innerHTML = '대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-      body.appendChild(ce);
 
       p.appendChild(h); p.appendChild(body);
       m.appendChild(b); m.appendChild(p);
@@ -2408,10 +2403,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       // if exists, make sure contact email is present exactly once
       var body = modal.querySelector('.igdc-qa-body') || modal;
       if(body && !body.querySelector('.contact-email')){
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = '대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
       }
     }
   }
@@ -2451,7 +2442,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = '대표 이메일: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = "";
 
   function stripFooterEmail(){
     try{
@@ -2492,10 +2483,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
-      var ce = document.createElement('p');
-      ce.className = 'contact-email';
-      ce.innerHTML = CONTACT_HTML;
-      body.appendChild(ce);
 
       p.appendChild(h); p.appendChild(body);
       m.appendChild(b); m.appendChild(p);
@@ -2514,10 +2501,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if(body){
         var exists = body.querySelector('.contact-email');
         if(!exists){
-          var ce = document.createElement('p');
-          ce.className = 'contact-email';
-          ce.innerHTML = CONTACT_HTML;
-          body.appendChild(ce);
         }
       }
     }

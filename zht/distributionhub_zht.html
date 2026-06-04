@@ -2608,9 +2608,6 @@ window.addEventListener("message",function(ev){
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-	const ce = el("p","contact-email");
-    ce.innerHTML = '代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-    body.append(ce);
     actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
@@ -2795,10 +2792,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var body = document.createElement('div'); body.className='igdc-qa-body';
         body.innerHTML = '<div class="igdc-qa-note">※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。</div>';
 
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = '代表電子郵件: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
 
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
