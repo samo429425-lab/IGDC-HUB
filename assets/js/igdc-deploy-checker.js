@@ -174,7 +174,7 @@
   }
   function sectionStats(section, mode){
     var items = section.items || [];
-    var st = { section:section.section, sources:section.sources, expectedLimit:Number(section.rawMeta && (section.rawMeta.slot_limit || section.rawMeta.limit || section.rawMeta.capacity)) || null, itemCount:items.length, missingTitle:0, missingImage:0, emptyOrHashUrl:0, exampleUrl:0, nonHttpUrl:0, placeholderLikeCount:0, trackingCount:0, monetizationCount:0, priceCount:0, currencyCount:0, sampleIssues:[], status:'ok', note:'' };
+    var st = { section:section.section, sources:section.sources, expectedLimit:Number(section.rawMeta && (section.rawMeta.slot_limit || section.rawMeta.limit || section.rawMeta.capacity)) || null, itemCount:items.length, missingTitle:0, missingImage:0, emptyOrHashUrl:0, exampleUrl:0, nonHttpUrl:0, placeholderLikeCount:0, potentialIssueCount:0, slotIssueCount:0, slotIssueList:[], trackingCount:0, monetizationCount:0, priceCount:0, currencyCount:0, sampleIssues:[], status:'ok', note:'' };
     items.forEach(function(it){
       var title = field(it, ['title','name','label']);
       var url = itemUrl(it);
@@ -190,7 +190,12 @@
       if(isObj(it) && (it.monetization || it.linkRevenue || it.revenue || it.directSale || it.payment || it.mediaRevenue || it.donation)) st.monetizationCount++;
       if(field(it, ['price','amount','directSale.price','commerce.price','payment.price','donation.amount'])) st.priceCount++;
       if(field(it, ['currency','directSale.currency','commerce.currency','payment.currency','donation.currency'])) st.currencyCount++;
-      if(issues.length && st.sampleIssues.length < 8) st.sampleIssues.push({ id:str(field(it,['id','uid','contentId','slotId'])).slice(0,80), title:str(title).slice(0,120), url:str(url).slice(0,180), issues:issues });
+      if(issues.length){
+        st.potentialIssueCount++;
+        var issueRec = { slotIndex:slotIndex + 1, slotId:str(field(it,['slotId','slot_id'])).slice(0,80), id:str(field(it,['id','uid','contentId','content_id','productId','product_id'])).slice(0,100), title:str(title).slice(0,160), url:str(url).slice(0,240), issues:issues };
+        if(st.sampleIssues.length < 8) st.sampleIssues.push(issueRec);
+        if(mode === 'production') st.slotIssueList.push(issueRec);
+      }
     });
     if(!st.itemCount){ st.status = 'warn'; st.note = 'empty section'; }
     else if(mode === 'production' && (st.emptyOrHashUrl || st.exampleUrl || st.missingTitle)){ st.status = 'fail'; st.note = 'production-blocking item issues'; }
@@ -203,7 +208,9 @@
     var counts = { ok:0, warn:0, fail:0 };
     var totalItems = 0;
     rows.forEach(function(r){ counts[r.status] = (counts[r.status] || 0) + 1; totalItems += r.itemCount; });
-    return { page:pageName, totalSections:rows.length, totalItems:totalItems, statusCounts:counts, sections:rows, topProblemSections:rows.filter(function(r){ return r.status !== 'ok' || r.sampleIssues.length; }).slice(0,30) };
+    var slotIssueList = [];
+    rows.forEach(function(r){ (r.slotIssueList || []).forEach(function(issue){ var copy = {}; Object.keys(issue).forEach(function(k){ copy[k] = issue[k]; }); copy.page = pageName; copy.section = r.section; slotIssueList.push(copy); }); });
+    return { page:pageName, totalSections:rows.length, totalItems:totalItems, statusCounts:counts, slotIssueCount:slotIssueList.length, slotIssueList:slotIssueList, sections:rows, topProblemSections:rows.filter(function(r){ return r.status !== 'ok' || r.sampleIssues.length; }).slice(0,30) };
   }
   async function fetchPublicSnapshots(mode){
     var pages = [];
@@ -234,20 +241,41 @@
     else document.body.appendChild(host);
     return host;
   }
+
+  function slotIssuesHtml(audit){
+    if(!audit || !audit.pages) return '';
+    var issues = [];
+    audit.pages.forEach(function(p){
+      var list = p.analysis && p.analysis.slotIssueList || [];
+      list.forEach(function(x){ issues.push(x); });
+    });
+    if(!issues.length) return '<div class="small" style="margin-top:8px">문제 슬롯 전체 목록: 현재 모드에서 별도 출력 대상 없음</div>';
+    var shown = issues.slice(0, 500);
+    var html = '<h3 style="margin-top:14px">문제 슬롯 전체 목록</h3><div class="small">전체 '+issues.length+'개 중 '+shown.length+'개 표시. JSON 리포트에는 slotIssueList로 저장됩니다.</div>';
+    html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px"><thead><tr>'+['페이지','섹션','슬롯','ID/SlotID','제목','문제','URL'].map(function(h){ return '<th style="border:1px solid #ddd;padding:6px;text-align:left">'+escapeHtml(h)+'</th>'; }).join('')+'</tr></thead><tbody>';
+    shown.forEach(function(x){
+      html += '<tr>'+[
+        x.page || '', x.section || '', x.slotIndex || '', (x.id || x.slotId || ''), x.title || '', (x.issues || []).join(', '), x.url || ''
+      ].map(function(v){ return '<td style="border:1px solid #ddd;padding:6px;vertical-align:top">'+escapeHtml(v)+'</td>'; }).join('')+'</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+  }
+
   function snapshotTablesHtml(audit){
     if(!audit || !audit.pages) return '';
     var html = '<div class="card" style="padding:14px;margin:12px 0;"><h2>프론트 공개 스냅샷 섹션 점검표</h2>';
     html += '<div class="small">/data/*.snapshot.json을 브라우저에서 직접 읽어 페이지·섹션·슬롯 상태를 확인합니다.</div>';
-    html += '<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px"><thead><tr>'+['페이지','섹션','상태','슬롯/항목','추적ID','이미지누락','URL#','example','placeholder','가격','통화','비고'].map(function(h){ return '<th style="border:1px solid #ddd;padding:6px;text-align:left">'+escapeHtml(h)+'</th>'; }).join('')+'</tr></thead><tbody>';
+    html += '<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px"><thead><tr>'+['페이지','섹션','상태','슬롯/항목','문제슬롯','잠재이슈','추적ID','이미지누락','URL#','example','placeholder','가격','통화','비고'].map(function(h){ return '<th style="border:1px solid #ddd;padding:6px;text-align:left">'+escapeHtml(h)+'</th>'; }).join('')+'</tr></thead><tbody>';
     audit.pages.forEach(function(p){
       if(!p.ok){ html += '<tr><td style="border:1px solid #ddd;padding:6px">'+escapeHtml(p.page)+'</td><td colspan="11" style="border:1px solid #ddd;padding:6px;color:#b91c1c">'+escapeHtml(p.url+' / '+(p.error||'fetch failed'))+'</td></tr>'; return; }
       (p.analysis.sections || []).forEach(function(r){
         html += '<tr>'+[
-          p.page, r.section, String(r.status).toUpperCase(), r.itemCount, r.trackingCount, r.missingImage, r.emptyOrHashUrl, r.exampleUrl, r.placeholderLikeCount, r.priceCount, r.currencyCount, r.note || ''
+          p.page, r.section, String(r.status).toUpperCase(), r.itemCount, r.slotIssueCount || 0, r.potentialIssueCount || 0, r.trackingCount, r.missingImage, r.emptyOrHashUrl, r.exampleUrl, r.placeholderLikeCount, r.priceCount, r.currencyCount, r.note || ''
         ].map(function(v, idx){ var cls = (idx===2 ? statusClass(r.status) : ''); return '<td class="'+cls+'" style="border:1px solid #ddd;padding:6px">'+escapeHtml(v)+'</td>'; }).join('')+'</tr>';
       });
     });
-    html += '</tbody></table></div>';
+    html += '</tbody></table>' + slotIssuesHtml(audit) + '</div>';
     return html;
   }
 
@@ -419,7 +447,7 @@
       if(warn.length) bottleneck = warn.map(function(r){ return r.key + ':' + r.bottleneck; }).join(', ');
     }
     var level = criticalFail.length ? 'fail' : (criticalWarn.length || counts.warn ? 'warn' : 'ok');
-    return { source:'browser-engine-diagnostic-v4', generatedAt:new Date().toISOString(), total:rows.length, counts:counts, level:level, bottleneck:bottleneck, rows:rows, pipeline:buildPipelineDiagnosis(rows) };
+    return { source:'browser-engine-diagnostic-v4.1-slot-precision', generatedAt:new Date().toISOString(), total:rows.length, counts:counts, level:level, bottleneck:bottleneck, rows:rows, pipeline:buildPipelineDiagnosis(rows) };
   }
   function applyEngineDiagnosticsToReport(report){
     if(!report || !report.engineRuntime) return report;
