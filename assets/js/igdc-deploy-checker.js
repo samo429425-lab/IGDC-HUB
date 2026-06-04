@@ -253,31 +253,39 @@
 
 
   var ENGINE_PROBE_TARGETS = [
-    { key:'maru-search', label:'MaruSearch CPU', endpoint:'/.netlify/functions/maru-search', role:'CPU / search dispatcher', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', limit:'3', page:'home', section:'home_1' } },
-    { key:'sanmaru', label:'Sanmaru OSAI', endpoint:'/.netlify/functions/sanmaru_engine_v2', role:'global information integrator', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', action:'front-supply', page:'home', section:'home_1', limit:'3' } },
-    { key:'search-bank-index', label:'SearchBank Index', endpoint:'/.netlify/functions/search-bank-index-engine', role:'front reservoir/index supplier', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'3' } },
-    { key:'search-bank-engine', label:'SearchBank Engine', endpoint:'/.netlify/functions/search-bank-engine', role:'snapshot request/router', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'3' } },
-    { key:'maru-search-display', label:'Search Display', endpoint:'/.netlify/functions/maru-search-display-engine', role:'search display bridge', critical:false, expectItems:false, params:{ q:'igdc audit', query:'igdc audit', limit:'3' } },
-    { key:'global-insight', label:'Global Insight', endpoint:'/.netlify/functions/maru-global-insight-engine', role:'global insight/right panel', critical:false, expectItems:false, params:{ q:'igdc audit', query:'igdc audit', region:'global', limit:'3' } },
+    { key:'maru-search', label:'MaruSearch CPU', endpoint:'/.netlify/functions/maru-search', role:'CPU / search dispatcher', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', limit:'5', page:'home', section:'home_1' }, supplyParams:{ q:'igdc audit', query:'igdc audit', limit:'25', page:'home', section:'home_1', action:'front-supply' } },
+    { key:'sanmaru', label:'Sanmaru OSAI', endpoint:'/.netlify/functions/sanmaru_engine_v2', role:'global information integrator', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', action:'front-supply', page:'home', section:'home_1', limit:'5' }, supplyParams:{ q:'igdc audit', query:'igdc audit', action:'front-supply', page:'home', section:'home_1', limit:'25' } },
+    { key:'search-bank-index', label:'SearchBank Index', endpoint:'/.netlify/functions/search-bank-index-engine', role:'front reservoir/index supplier', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'5' }, supplyParams:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'50' } },
+    { key:'search-bank-engine', label:'SearchBank Engine', endpoint:'/.netlify/functions/search-bank-engine', role:'snapshot request/router', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'5' }, supplyParams:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'25' } },
+    { key:'maru-search-display', label:'Search Display', endpoint:'/.netlify/functions/maru-search-display-engine', role:'search display bridge', critical:false, expectItems:false, params:{ q:'igdc audit', query:'igdc audit', limit:'5' } },
+    { key:'global-insight', label:'Global Insight', endpoint:'/.netlify/functions/maru-global-insight-engine', role:'global insight/right panel', critical:false, expectItems:false, params:{ q:'igdc audit', query:'igdc audit', region:'global', limit:'5' } },
     { key:'collector', label:'Collector', endpoint:'/.netlify/functions/collector', role:'auxiliary data feeder', critical:false, expectItems:false, params:{ audit:'1', probe:'1', dryRun:'1', limit:'1' } },
     { key:'planetary', label:'Planetary', endpoint:'/.netlify/functions/planetary-data-connector', role:'planetary connector', critical:false, expectItems:false, params:{ audit:'1', probe:'1', dryRun:'1', q:'igdc audit', limit:'1' } }
   ];
-  function probeUrl(target){
+  function probeUrl(target, phase, params){
     var p = new URLSearchParams();
-    p.set('audit','1'); p.set('probe','1'); p.set('dryRun','1'); p.set('noWrite','1'); p.set('t', String(Date.now()));
-    Object.keys(target.params || {}).forEach(function(k){ p.set(k, target.params[k]); });
+    p.set('audit','1');
+    p.set('probe','1');
+    p.set('dryRun','1');
+    p.set('noWrite','1');
+    p.set('phase', phase || 'light');
+    p.set('t', String(Date.now()));
+    if(phase === 'ping'){
+      p.set('health','1'); p.set('ping','1'); p.set('limit','0');
+    }
+    Object.keys(params || target.params || {}).forEach(function(k){ p.set(k, params[k]); });
     return target.endpoint + '?' + p.toString();
   }
   function countJsonItems(json){
     try{
       if(Array.isArray(json)) return json.length;
-      var paths = ['items','data','results','cards','records','snapshot.items','payload.items','payload.results','output.items','result.items'];
+      var paths = ['items','data','results','cards','records','snapshot.items','payload.items','payload.results','output.items','result.items','response.items','front.items'];
       for(var i=0;i<paths.length;i++){
         var v = val(json, paths[i], null);
         if(Array.isArray(v)) return v.length;
       }
       if(isObj(json)){
-        var total = val(json, 'totalItems', null) || val(json, 'count', null) || val(json, 'total', null);
+        var total = val(json, 'totalItems', null) || val(json, 'count', null) || val(json, 'total', null) || val(json, 'meta.total', null);
         if(typeof total === 'number') return total;
       }
     }catch(e){}
@@ -285,15 +293,15 @@
   }
   async function fetchWithTimeout(url, ms){
     var ctrl = new AbortController();
-    var timer = setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, ms || 5500);
-    try{ return await fetch(url, { cache:'no-store', signal:ctrl.signal, headers:{ 'X-IGDC-Audit-Probe':'1' } }); }
+    var timer = setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, ms || 4500);
+    try{ return await fetch(url, { cache:'no-store', signal:ctrl.signal, headers:{ 'X-IGDC-Audit-Probe':'1', 'X-IGDC-No-Write':'1' } }); }
     finally{ clearTimeout(timer); }
   }
-  async function probeOneEngine(target){
+  async function probePhase(target, phase, params, timeoutMs){
     var started = performance.now();
-    var rec = { key:target.key, label:target.label, role:target.role, endpoint:target.endpoint, critical:!!target.critical, ok:false, status:0, ms:null, itemCount:0, bytes:0, level:'info', bottleneck:null, error:null };
+    var rec = { phase:phase, url:target.endpoint, ok:false, status:0, ms:null, itemCount:0, bytes:0, level:'info', bottleneck:null, error:null, parseError:null, keys:[] };
     try{
-      var res = await fetchWithTimeout(probeUrl(target), 6500);
+      var res = await fetchWithTimeout(probeUrl(target, phase, params), timeoutMs);
       rec.status = res.status;
       rec.ms = Math.round(performance.now() - started);
       var text = await res.text();
@@ -302,49 +310,157 @@
       try{ json = text ? JSON.parse(text) : null; }catch(e){ rec.parseError = String(e && e.message || e); }
       if(json) {
         rec.itemCount = countJsonItems(json);
-        rec.keys = Object.keys(json).slice(0, 12);
+        rec.keys = Object.keys(json).slice(0, 14);
         rec.version = json.version || val(json,'meta.version',null) || val(json,'engine.version',null) || null;
         rec.reportedOk = json.ok == null ? null : !!json.ok;
+        rec.engineMode = json.mode || val(json,'meta.mode',null) || null;
       }
       rec.ok = res.ok && (json ? (json.ok !== false) : true);
-      if(!res.ok) { rec.level = target.critical ? 'fail' : 'warn'; rec.bottleneck = 'HTTP ' + res.status; }
+      if(!res.ok) { rec.level = res.status >= 500 ? 'fail' : 'warn'; rec.bottleneck = 'HTTP ' + res.status; }
+      else if(rec.parseError && text && text.trim().charAt(0) !== '<') { rec.level = 'warn'; rec.bottleneck = 'json-parse-warning'; }
       else if(rec.ms > 5000) { rec.level = 'warn'; rec.bottleneck = 'slow-response'; }
-      else if(target.expectItems && rec.itemCount <= 0) { rec.level = 'warn'; rec.bottleneck = 'no-items-returned'; }
       else { rec.level = 'ok'; rec.bottleneck = 'none'; }
     }catch(e){
       rec.ms = Math.round(performance.now() - started);
       rec.error = String(e && e.name === 'AbortError' ? 'timeout' : (e && e.message || e));
-      rec.level = target.critical ? 'fail' : 'warn';
-      rec.bottleneck = rec.error === 'timeout' ? 'timeout' : 'fetch-error';
+      rec.level = rec.error === 'timeout' ? 'warn' : 'fail';
+      rec.bottleneck = rec.error === 'timeout' ? (phase + '-timeout') : 'fetch-error';
     }
     return rec;
   }
+  function engineUpgradeHints(target, phases, row){
+    var hints = [];
+    var ping = phases.ping || {};
+    var light = phases.light || {};
+    var supply = phases.supply || {};
+    if(ping.bottleneck === 'ping-timeout' || ping.error === 'timeout') hints.push('add ultra-fast ?audit=1&probe=1&health=1 branch before heavy search/collection logic');
+    if(light.error === 'timeout' || light.bottleneck === 'light-timeout') hints.push('split light query path from full search path and cap internal fan-out for audit/light requests');
+    if(supply.error === 'timeout' || supply.bottleneck === 'supply-timeout') hints.push('add front-supply reservoir fallback and page/section prefiltered supply path');
+    if((light.status || 0) >= 500 || (supply.status || 0) >= 500) hints.push('inspect server error stack for this engine; add guarded fallback and structured error body');
+    if(target.expectItems && light.ok && row.lightItems <= 0) hints.push('verify item extraction contract: return items/data/results array for search-bank/front-supply requests');
+    if(row.level === 'ok' && !hints.length) hints.push('runtime path is healthy for current probe level');
+    if(target.key === 'maru-search') hints.push('MaruSearch CPU should route fast path: query validation → SearchBank/Index first → Sanmaru/global expansion only after first batch');
+    if(target.key === 'sanmaru') hints.push('Sanmaru OSAI should keep global web expansion async/non-blocking and return front-supply seed quickly');
+    if(target.key === 'search-bank-index') hints.push('Index engine should expose reservoir count and page/section candidate count without scanning full snapshot');
+    if(target.key === 'search-bank-engine') hints.push('SearchBank engine should expose exact section routing stats and avoid full JSON scan for every light query');
+    if(target.key === 'global-insight') hints.push('Global Insight should return cached regional summary when live aggregation is slow');
+    if(target.key === 'planetary') hints.push('Planetary connector should never block critical search; keep it optional with clear 502/fallback state');
+    return hints.filter(function(v, i, a){ return a.indexOf(v) === i; });
+  }
+  function summarizeEngineRow(target, phases){
+    var ping = phases.ping || {}, light = phases.light || {}, supply = phases.supply || null;
+    var critical = !!target.critical;
+    var row = { key:target.key, label:target.label, role:target.role, endpoint:target.endpoint, critical:critical, phases:phases, ok:false, level:'info', bottleneck:'none', diagnosis:'', upgradeHints:[], pingMs:ping.ms, lightMs:light.ms, supplyMs:supply && supply.ms, lightItems:light.itemCount || 0, supplyItems:supply ? (supply.itemCount || 0) : null };
+    var httpFail = [ping, light, supply].filter(Boolean).some(function(p){ return (p.status || 0) >= 500 || p.level === 'fail'; });
+    var pingTimeout = ping.error === 'timeout' || ping.bottleneck === 'ping-timeout';
+    var lightTimeout = light.error === 'timeout' || light.bottleneck === 'light-timeout';
+    var supplyTimeout = supply && (supply.error === 'timeout' || supply.bottleneck === 'supply-timeout');
+    var noItems = target.expectItems && light.ok && (light.itemCount || 0) <= 0;
+    if(httpFail){ row.level = critical ? 'fail' : 'warn'; row.bottleneck = 'server-error'; row.diagnosis = 'HTTP 5xx or fetch failure on runtime probe'; }
+    else if(pingTimeout){ row.level = 'warn'; row.bottleneck = 'no-fast-ping-or-cold-start'; row.diagnosis = 'ping/health request did not return quickly; engine may be entering heavy path even for audit probe'; }
+    else if(lightTimeout){ row.level = critical ? 'warn' : 'warn'; row.bottleneck = 'light-query-timeout'; row.diagnosis = 'light query path is too heavy or waiting on downstream dependency'; }
+    else if(supplyTimeout){ row.level = 'warn'; row.bottleneck = 'supply-path-timeout'; row.diagnosis = 'front supply capacity test is slow; use reservoir/cached response before expansion'; }
+    else if(noItems){ row.level = 'warn'; row.bottleneck = 'no-items-returned'; row.diagnosis = 'engine responded but did not return items in known contract fields'; }
+    else if((light.ms || 0) > 4000 || (supply && (supply.ms || 0) > 5000)){ row.level = 'warn'; row.bottleneck = 'slow-response'; row.diagnosis = 'engine responds but is slower than expected for audit/light mode'; }
+    else { row.level = 'ok'; row.bottleneck = 'none'; row.diagnosis = 'engine responded within current probe limits'; }
+    row.ok = row.level === 'ok';
+    row.upgradeHints = engineUpgradeHints(target, phases, row);
+    return row;
+  }
+  async function probeOneEngineV4(target){
+    var phases = {};
+    phases.ping = await probePhase(target, 'ping', {}, 2500);
+    var pingUsable = phases.ping.ok || phases.ping.status > 0 || phases.ping.error !== 'timeout';
+    if(pingUsable){
+      phases.light = await probePhase(target, 'light', target.params || {}, 5000);
+      if(target.critical && phases.light.ok && phases.light.ms < 4500){
+        phases.supply = await probePhase(target, 'supply', target.supplyParams || target.params || {}, 7000);
+      }
+    } else {
+      phases.light = { phase:'light', skipped:true, ok:false, level:'info', bottleneck:'skipped-after-ping-timeout', itemCount:0, ms:null };
+    }
+    return summarizeEngineRow(target, phases);
+  }
+  function buildPipelineDiagnosis(rows){
+    function byKey(k){ return rows.filter(function(r){ return r.key === k; })[0] || {}; }
+    var maru = byKey('maru-search'), san = byKey('sanmaru'), idx = byKey('search-bank-index'), bank = byKey('search-bank-engine'), disp = byKey('maru-search-display'), insight = byKey('global-insight'), col = byKey('collector'), planet = byKey('planetary');
+    var candidates = [];
+    if(maru.level !== 'ok' && idx.level === 'ok') candidates.push('MaruSearch CPU dispatch layer is slower than SearchBank Index; check fan-out/order/fallback in maru-search.');
+    if(idx.level !== 'ok' && bank.level !== 'ok') candidates.push('SearchBank reservoir/request layer is bottleneck; add light-index path and avoid full snapshot scans.');
+    if(disp.level === 'ok' && maru.level !== 'ok') candidates.push('Display engine is not the main bottleneck; issue is before presentation layer.');
+    if(san.level !== 'ok') candidates.push('Sanmaru OSAI global expansion should be made non-blocking for front-supply requests.');
+    if(insight.level !== 'ok') candidates.push('Global Insight should use cached regional summary for audit/right-panel requests.');
+    if(planet.level !== 'ok') candidates.push('Planetary connector is optional; isolate from critical search path and return fallback status.');
+    if(col.level === 'ok' && planet.level !== 'ok') candidates.push('Collector path is healthier than Planetary path; keep planetary auxiliary until stable.');
+    if(!candidates.length) candidates.push('No clear runtime bottleneck found under current light probes.');
+    return {
+      maruSearchCpu: maru.level || 'unknown',
+      sanmaruOsai: san.level || 'unknown',
+      searchBankIndex: idx.level || 'unknown',
+      searchBankEngine: bank.level || 'unknown',
+      displayBridge: disp.level || 'unknown',
+      globalInsight: insight.level || 'unknown',
+      auxiliary: { collector: col.level || 'unknown', planetary: planet.level || 'unknown' },
+      bottleneckCandidates:candidates
+    };
+  }
   async function runEngineProbes(){
     var rows = [];
-    for(var i=0;i<ENGINE_PROBE_TARGETS.length;i++) rows.push(await probeOneEngine(ENGINE_PROBE_TARGETS[i]));
+    for(var i=0;i<ENGINE_PROBE_TARGETS.length;i++) rows.push(await probeOneEngineV4(ENGINE_PROBE_TARGETS[i]));
     var counts = { ok:0, warn:0, fail:0, info:0 };
     rows.forEach(function(r){ counts[r.level] = (counts[r.level] || 0) + 1; });
     var criticalFail = rows.filter(function(r){ return r.critical && r.level === 'fail'; });
-    var slow = rows.filter(function(r){ return r.ms != null && r.ms > 5000; });
-    var zero = rows.filter(function(r){ return r.bottleneck === 'no-items-returned'; });
+    var criticalWarn = rows.filter(function(r){ return r.critical && r.level === 'warn'; });
     var bottleneck = 'none';
-    if(criticalFail.length) bottleneck = criticalFail.map(function(r){ return r.key; }).join(', ') + ' critical failure';
-    else if(slow.length) bottleneck = slow.map(function(r){ return r.key; }).join(', ') + ' slow response';
-    else if(zero.length) bottleneck = zero.map(function(r){ return r.key; }).join(', ') + ' returned no items';
-    var level = criticalFail.length ? 'fail' : ((counts.warn || counts.fail) ? 'warn' : 'ok');
-    return { source:'browser-runtime-probe', generatedAt:new Date().toISOString(), total:rows.length, counts:counts, level:level, bottleneck:bottleneck, rows:rows };
+    if(criticalFail.length) bottleneck = criticalFail.map(function(r){ return r.key + ':' + r.bottleneck; }).join(', ');
+    else if(criticalWarn.length) bottleneck = criticalWarn.map(function(r){ return r.key + ':' + r.bottleneck; }).join(', ');
+    else {
+      var warn = rows.filter(function(r){ return r.level === 'warn'; });
+      if(warn.length) bottleneck = warn.map(function(r){ return r.key + ':' + r.bottleneck; }).join(', ');
+    }
+    var level = criticalFail.length ? 'fail' : (criticalWarn.length || counts.warn ? 'warn' : 'ok');
+    return { source:'browser-engine-diagnostic-v4', generatedAt:new Date().toISOString(), total:rows.length, counts:counts, level:level, bottleneck:bottleneck, rows:rows, pipeline:buildPipelineDiagnosis(rows) };
+  }
+  function applyEngineDiagnosticsToReport(report){
+    if(!report || !report.engineRuntime) return report;
+    report.summary = report.summary || { level:'info', score:0 };
+    var score = Number(report.summary.score == null ? 100 : report.summary.score);
+    var engine = report.engineRuntime;
+    var criticalFail = (engine.rows || []).filter(function(r){ return r.critical && r.level === 'fail'; }).length;
+    var criticalWarn = (engine.rows || []).filter(function(r){ return r.critical && r.level === 'warn'; }).length;
+    if(criticalFail) score = Math.min(score, Math.max(45, 75 - criticalFail * 8));
+    else if(criticalWarn) score = Math.min(score, Math.max(70, 90 - criticalWarn * 4));
+    else if(engine.counts && engine.counts.warn) score = Math.min(score, 94);
+    report.summary.score = Math.max(0, Math.min(100, Math.round(score)));
+    report.summary.engineRuntimeLevel = engine.level;
+    if(report.summary.score < 55) report.summary.level = 'fail';
+    else if(report.summary.score < 90 || engine.level !== 'ok') report.summary.level = 'warn';
+    else report.summary.level = report.summary.level || 'ok';
+    var hints = [];
+    (engine.rows || []).forEach(function(r){ (r.upgradeHints || []).forEach(function(h){ if(hints.indexOf(h) < 0) hints.push(h); }); });
+    report.engineUpgradeHints = hints.slice(0, 40);
+    return report;
   }
   function engineRuntimeHtml(engine){
     if(!engine || !engine.rows) return '<div class="small">엔진 런타임 점검 결과 없음</div>';
-    var html = '<div class="audit-engine-runtime"><h2>엔진 런타임 상태표</h2>'+
-      '<div class="small">bottleneck: '+escapeHtml(engine.bottleneck || 'none')+' / level: <b class="'+statusClass(engine.level)+'">'+escapeHtml(String(engine.level||'info').toUpperCase())+'</b></div>'+
-      '<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px"><thead><tr>'+['엔진','역할','상태','HTTP','응답ms','결과수','병목/메모'].map(function(h){return '<th style="border:1px solid #ddd;padding:6px;text-align:left">'+escapeHtml(h)+'</th>';}).join('')+'</tr></thead><tbody>';
+    var html = '<div class="audit-engine-runtime"><h2>엔진 정밀 런타임 상태표 v4</h2>'+ 
+      '<div class="small">mode: ping → light → supply / bottleneck: '+escapeHtml(engine.bottleneck || 'none')+' / level: <b class="'+statusClass(engine.level)+'">'+escapeHtml(String(engine.level||'info').toUpperCase())+'</b></div>'+
+      '<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px"><thead><tr>'+['엔진','역할','상태','Ping','Light','Supply','결과수','병목','진단/업그레이드 힌트'].map(function(h){return '<th style="border:1px solid #ddd;padding:6px;text-align:left">'+escapeHtml(h)+'</th>';}).join('')+'</tr></thead><tbody>';
     engine.rows.forEach(function(r){
+      var ping = r.phases && r.phases.ping ? ((r.phases.ping.status||'-') + ' / ' + (r.phases.ping.ms==null?'-':r.phases.ping.ms+'ms') + (r.phases.ping.error?' / '+r.phases.ping.error:'')) : '-';
+      var light = r.phases && r.phases.light ? ((r.phases.light.skipped?'skipped':(r.phases.light.status||'-')) + ' / ' + (r.phases.light.ms==null?'-':r.phases.light.ms+'ms') + (r.phases.light.error?' / '+r.phases.light.error:'')) : '-';
+      var supply = r.phases && r.phases.supply ? ((r.phases.supply.status||'-') + ' / ' + (r.phases.supply.ms==null?'-':r.phases.supply.ms+'ms') + (r.phases.supply.error?' / '+r.phases.supply.error:'')) : '-';
+      var items = 'light ' + (r.lightItems || 0) + (r.supplyItems == null ? '' : ' / supply ' + r.supplyItems);
+      var hint = (r.diagnosis || '') + (r.upgradeHints && r.upgradeHints.length ? '\n- ' + r.upgradeHints.slice(0,4).join('\n- ') : '');
       html += '<tr>'+[
-        r.label || r.key, r.role || '', String(r.level || '').toUpperCase(), r.status || '-', r.ms == null ? '-' : r.ms, r.itemCount || 0, r.bottleneck || r.error || ''
-      ].map(function(v, idx){ return '<td class="'+(idx===2?statusClass(r.level):'')+'" style="border:1px solid #ddd;padding:6px">'+escapeHtml(v)+'</td>'; }).join('')+'</tr>';
+        r.label || r.key, r.role || '', String(r.level || '').toUpperCase(), ping, light, supply, items, r.bottleneck || '', hint
+      ].map(function(v, idx){ return '<td class="'+(idx===2?statusClass(r.level):'')+'" style="border:1px solid #ddd;padding:6px;white-space:pre-wrap">'+escapeHtml(v)+'</td>'; }).join('')+'</tr>';
     });
-    html += '</tbody></table></div>';
+    html += '</tbody></table>';
+    if(engine.pipeline && engine.pipeline.bottleneckCandidates){
+      html += '<h3>파이프라인 병목 해석</h3><pre style="background:#f5f5f5;padding:10px;white-space:pre-wrap">'+escapeHtml(engine.pipeline.bottleneckCandidates.join('\n'))+'</pre>';
+    }
+    html += '</div>';
     return html;
   }
 
@@ -421,6 +537,7 @@
       data.publicSnapshots = await fetchPublicSnapshots(mode);
       if($('status')) $('status').textContent = '엔진 런타임 점검 중...';
       data.engineRuntime = await runEngineProbes();
+      applyEngineDiagnosticsToReport(data);
       if(data.engineRuntime && data.engineRuntime.level !== 'ok'){ data.warnings = data.warnings || []; data.warnings.push('Engine runtime probe detected: ' + (data.engineRuntime.bottleneck || data.engineRuntime.level)); }
       if(data.publicSnapshots && data.publicSnapshots.okPages < data.publicSnapshots.totalPages){
         data.warnings = data.warnings || [];
