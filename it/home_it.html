@@ -2909,9 +2909,6 @@ window.addEventListener('DOMContentLoaded', initNewsRows);
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-	const ce = el("p","contact-email");
-    ce.innerHTML = 'Email principale: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-    body.append(ce);
     actions.append(btnInvia, btnCancella);
     panel.append(header, body);
     modal.append(backdrop, panel);

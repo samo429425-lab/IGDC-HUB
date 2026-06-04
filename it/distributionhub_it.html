@@ -2407,7 +2407,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = 'Email principale: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = "";
 
   function stripFooterEmail(){
     try{
@@ -2448,10 +2448,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
-      var ce = document.createElement('p');
-      ce.className = 'contact-email';
-      ce.innerHTML = CONTACT_HTML;
-      body.appendChild(ce);
 
       p.appendChild(h); p.appendChild(body);
       m.appendChild(b); m.appendChild(p);
@@ -2470,10 +2466,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       if(body){
         var exists = body.querySelector('.contact-email');
         if(!exists){
-          var ce = document.createElement('p');
-          ce.className = 'contact-email';
-          ce.innerHTML = CONTACT_HTML;
-          body.appendChild(ce);
         }
       }
     }

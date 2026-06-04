@@ -480,7 +480,7 @@
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>Pregunta</label><textarea class="igdc-qa-text q" placeholder="Escribe tu pregunta…"></textarea><label>Respuesta</label><textarea class="igdc-qa-text a" placeholder="Espera un momento: responderemos en breve."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Enviar</button><button class="igdc-qa-btn muted">Borrar</button></div><div class="igdc-qa-note">Nota: Las preguntas simples pueden ser respondidas al instante por la IA. Los temas técnicos, de errores u operaciones se envían automáticamente al canal de preguntas y respuestas de administración.</div><div class="igdc-qa-threads"></div><p class="contact-email">Correo del representante: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>Pregunta</label><textarea class="igdc-qa-text q" placeholder="Escribe tu pregunta…"></textarea><label>Respuesta</label><textarea class="igdc-qa-text a" placeholder="Espera un momento: responderemos en breve."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">Enviar</button><button class="igdc-qa-btn muted">Borrar</button></div><div class="igdc-qa-note">Nota: Las preguntas simples pueden ser respondidas al instante por la IA. Los temas técnicos, de errores u operaciones se envían automáticamente al canal de preguntas y respuestas de administración.</div><div class="igdc-qa-threads"></div>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -525,8 +525,7 @@
         const lA = el('label'); lA.textContent='Respuesta'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='Espera un momento: responderemos en breve.';
         const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Enviar'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Borrar';
         const note = el('div','igdc-qa-note'); note.textContent='Nota: Las preguntas simples pueden ser respondidas al instante por la IA. Los temas técnicos, de errores u operaciones se envían automáticamente al canal de preguntas y respuestas de administración.';
-        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='Correo del representante: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
+        const list = el('div','igdc-qa-threads');         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
       }
       function bindExisting(modal){
@@ -563,7 +562,7 @@
         var modal = document.querySelector('.igdc-qa-modal');
         if(!modal) return;
         var body = modal.querySelector('.igdc-qa-body') || modal;
-        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='Correo del representante: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
+        if(body && !body.querySelector('.contact-email')){  }
       }
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
     })();

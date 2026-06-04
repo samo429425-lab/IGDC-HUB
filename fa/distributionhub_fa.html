@@ -1188,9 +1188,6 @@ a[href^="mailto:"]:hover {
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-	const ce = el("p","contact-email");
-    ce.innerHTML = 'ایمیل اصلی: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-    body.append(ce);
     actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
@@ -1375,10 +1372,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var body = document.createElement('div'); body.className='igdc-qa-body';
         body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after the save settings (Supabase url/key) are connected.</div>';
 
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = 'ایمیل اصلی: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
 
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
@@ -2442,10 +2435,6 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after the save settings (Supabase url/key) are connected.</div>';
 
       // ensure the "대표 이메일" is shown only inside the modal
-      var ce = document.createElement('p');
-      ce.className = 'contact-email';
-      ce.innerHTML = 'ایمیل اصلی: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-      body.appendChild(ce);
 
       p.appendChild(h); p.appendChild(body);
       m.appendChild(b); m.appendChild(p);
@@ -2462,10 +2451,6 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       // if exists, make sure contact email is present exactly once
       var body = modal.querySelector('.igdc-qa-body') || modal;
       if(body && !body.querySelector('.contact-email')){
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = 'ایمیل اصلی: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
       }
     }
   }
@@ -2505,7 +2490,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = 'ایمیل اصلی: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
+  var CONTACT_HTML = "";
 
   function stripFooterEmail(){
     try{
@@ -2546,10 +2531,6 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
-      var ce = document.createElement('p');
-      ce.className = 'contact-email';
-      ce.innerHTML = CONTACT_HTML;
-      body.appendChild(ce);
 
       p.appendChild(h); p.appendChild(body);
       m.appendChild(b); m.appendChild(p);
@@ -2568,10 +2549,6 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       if(body){
         var exists = body.querySelector('.contact-email');
         if(!exists){
-          var ce = document.createElement('p');
-          ce.className = 'contact-email';
-          ce.innerHTML = CONTACT_HTML;
-          body.appendChild(ce);
         }
       }
     }

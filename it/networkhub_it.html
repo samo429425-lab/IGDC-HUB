@@ -1129,9 +1129,6 @@ a[href^="mailto:"]:hover {
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-	const ce = el("p","contact-email");
-    ce.innerHTML = 'Email di riferimento: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-    body.append(ce);
     actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
@@ -1357,10 +1354,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var body = document.createElement('div'); body.className='igdc-qa-body';
         body.innerHTML = '<div class="igdc-qa-note">※ Le domande semplici ricevono una risposta immediata dall’IA. I problemi tecnici, gli errori o le questioni operative vengono inoltrati automaticamente al Domande e risposte Admin.</div>';
 
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = 'Email di riferimento: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
 
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);

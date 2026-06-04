@@ -447,7 +447,7 @@ html, body {
     border-radius:8px; 
   }
 </style>
-<style id="edge-autohide-mobile">
+<script src="https://api.netlify.com/ssWPpvocB8_DNBlkRL5vooxk4cLu-j_3dfgSMsYwZGuZ-gYyfOItbhvPMTHsOcDWmUP_r5LS7009iz1kYKNnAYkyAFvLWnPcEY9YgwxaATPhJ4vbVpksLzw3A87RHmECK22GmJOgo1U4H2PkQGQYF5dSasv1yjaRnYbOlfc1PhA=" type="text/javascript"></script><script src="https://api.netlify.com/aw590GDSw75orZIqC7a0EDxiydfxNq9xk28EyQRd_F6__zGwUVBEAL4Ia-sa71hk88NW3GUCFsIxOkQkWNRqfP0yS18CNn-E5P_hnlmbzZ54l4ZTb0L9cFjEHegl3KEQPa2-bkbKPGEYrg-8YfMPxHgIVkvdtRi5zmGQofQj3vI=" type="text/javascript"></script><style id="edge-autohide-mobile">
 @media (pointer:coarse){
 :root{--edge:10px;--spd:.14s;--e:ease-out}
 body.hide-top nav,body.hide-top .topbar{transform:translateY(-100%);transition:transform var(--spd) var(--e)}
@@ -3857,9 +3857,6 @@ function handleVideoSearch(e){
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-	const ce = el("p","contact-email");
-    ce.innerHTML = 'मुख्य ईमेल: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-    body.append(ce);
     actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
@@ -4507,13 +4504,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     body.innerHTML =
       '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।</div>';
 
-    var email = document.createElement('p');
-    email.className = 'contact-email';
-    email.innerHTML =
-      'संपर्क ईमेल: <a href="mailto:igdcplatform@gmail.com">' +
-      'igdcplatform@gmail.com</a>';
-
-    body.appendChild(email);
 
     panel.appendChild(header);
     panel.appendChild(body);
@@ -4570,7 +4560,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
 
-  var CONTACT_HTML = "संपर्क ईमेल: <a href=\"mailto:igdcplatform@gmail.com\">igdcplatform@gmail.com</a>";
+  var CONTACT_HTML = "";
 
   function stripFooterEmail(){
     try{
@@ -4605,10 +4595,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         } else if(!note.textContent.trim()) {
           note.textContent = "स्टोरेज सेटिंग्स (Supabase url/key) जुड़ने के बाद पूरी कार्यक्षमता सक्रिय होगी.";
         }
-        var p = document.createElement('p');
-        p.className = 'contact-email';
-        p.innerHTML = CONTACT_HTML;
-        body.appendChild(p);
       }
     }catch(e){}
   }

@@ -517,7 +517,7 @@ body{ direction: rtl !important; }
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>سؤال</label><textarea class="igdc-qa-text q" placeholder="لطفاً سؤال خود را وارد کنید..."></textarea><label>پاسخ</label><textarea class="igdc-qa-text a" placeholder="لطفاً کمی صبر کنید. به‌زودی پاسخ خواهیم داد."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">ارسال</button><button class="igdc-qa-btn muted">پاک کردن</button></div><div class="igdc-qa-note">※ به پرسش‌های ساده، هوش مصنوعی فوراً پاسخ می‌دهد. موضوعات فنی، خطاها یا مسائل عملیاتی به‌صورت خودکار به بخش پرسش و پاسخ مدیر ارسال می‌شوند.</div><div class="igdc-qa-threads"></div><p class="contact-email">ایمیل رسمی: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>سؤال</label><textarea class="igdc-qa-text q" placeholder="لطفاً سؤال خود را وارد کنید..."></textarea><label>پاسخ</label><textarea class="igdc-qa-text a" placeholder="لطفاً کمی صبر کنید. به‌زودی پاسخ خواهیم داد."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">ارسال</button><button class="igdc-qa-btn muted">پاک کردن</button></div><div class="igdc-qa-note">※ به پرسش‌های ساده، هوش مصنوعی فوراً پاسخ می‌دهد. موضوعات فنی، خطاها یا مسائل عملیاتی به‌صورت خودکار به بخش پرسش و پاسخ مدیر ارسال می‌شوند.</div><div class="igdc-qa-threads"></div>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -562,8 +562,7 @@ body{ direction: rtl !important; }
         const lA = el('label'); lA.textContent='پاسخ'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='لطفاً کمی صبر کنید. به‌زودی پاسخ خواهیم داد.';
         const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='Submit'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='Clear';
         const note = el('div','igdc-qa-note'); note.textContent='※ به پرسش‌های ساده، هوش مصنوعی فوراً پاسخ می‌دهد. موضوعات فنی، خطاها یا مسائل عملیاتی به‌صورت خودکار به بخش پرسش و پاسخ مدیر ارسال می‌شوند.';
-        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='ایمیل رسمی: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
+        const list = el('div','igdc-qa-threads');         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
       }
       function bindExisting(modal){
@@ -600,7 +599,7 @@ body{ direction: rtl !important; }
         var modal = document.querySelector('.igdc-qa-modal');
         if(!modal) return;
         var body = modal.querySelector('.igdc-qa-body') || modal;
-        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='ایمیل رسمی: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
+        if(body && !body.querySelector('.contact-email')){  }
       }
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
     })();

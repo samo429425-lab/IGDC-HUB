@@ -2588,9 +2588,6 @@ window.addEventListener("message",function(ev){
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-	const ce = el("p","contact-email");
-    ce.innerHTML = 'Kapcsolattartói e-mail: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-    body.append(ce);
     actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
@@ -2775,10 +2772,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         var body = document.createElement('div'); body.className='igdc-qa-body';
         body.innerHTML = '<div class="igdc-qa-note">※ Az egyszerű kérdésekre a mesterséges intelligencia azonnal válaszol. A technikai, hibával kapcsolatos vagy működési kérdések automatikusan az adminisztrátori kérdések-válaszokhoz kerülnek továbbításra.</div>';
 
-        var ce = document.createElement('p');
-        ce.className = 'contact-email';
-        ce.innerHTML = 'Kapcsolattartói e-mail: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        body.appendChild(ce);
 
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);

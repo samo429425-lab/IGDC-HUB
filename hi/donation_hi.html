@@ -4311,9 +4311,6 @@ document.addEventListener('DOMContentLoaded', function(){
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-	const ce = el("p","contact-email");
-    ce.innerHTML = 'मुख्य ईमेल: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-    body.append(ce);
     actions.append(btnSubmitPost, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
@@ -5515,8 +5512,7 @@ document.addEventListener("DOMContentLoaded",function(){
               <button type="button" data-close style="background:#9ca3af;color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;">साफ़ करें</button>
             </div>
             <div style="font-size:12px;color:#666;">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से एडमिन प्रश्नोत्तर को भेजे जाते हैं।</div>
-            <p style="font-size:12px;color:#666;">मुख्य ईमेल: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>
-            <div style="padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;">अभी तक कोई प्रश्नोत्तर प्रविष्टि दर्ज नहीं हुई है</div>
+            <p style="font-size:12px;color:#666;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;">अभी तक कोई प्रश्नोत्तर प्रविष्टि दर्ज नहीं हुई है</div>
           </div>
         </div>`;
       document.body.appendChild(modal);

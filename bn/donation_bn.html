@@ -4306,9 +4306,6 @@ document.addEventListener('DOMContentLoaded', function(){
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-	const ce = el("p","contact-email");
-    ce.innerHTML = 'প্রধান ইমেইল: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-    body.append(ce);
     actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
@@ -5510,8 +5507,7 @@ document.addEventListener("DOMContentLoaded",function(){
               <button type="button" data-close style="background:#9ca3af;color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;">মুছুন</button>
             </div>
             <div style="font-size:12px;color:#666;">※ সহজ প্রশ্নের উত্তর AI সঙ্গে সঙ্গে দেয়। প্রযুক্তিগত, ত্রুটি বা পরিচালনাসংক্রান্ত বিষয়গুলো স্বয়ংক্রিয়ভাবে অ্যাডমিন Q&A-তে পাঠানো হয়।</div>
-            <p style="font-size:12px;color:#666;">প্রধান ইমেইল: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>
-            <div style="padding:10px 12px;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;">এখনও কোনো প্রশ্নোত্তর এন্ট্রি নিবন্ধিত হয়নি</div>
+            <p style="font-size:12px;color:#666;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;">এখনও কোনো প্রশ্নোত্তর এন্ট্রি নিবন্ধিত হয়নি</div>
           </div>
         </div>`;
       document.body.appendChild(modal);

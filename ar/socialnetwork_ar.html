@@ -549,7 +549,7 @@ body{ direction: rtl !important; }
             var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
             h.appendChild(t); h.appendChild(x);
             var body = document.createElement('div'); body.className='igdc-qa-body';
-            body.innerHTML = '<label>السؤال</label><textarea class="igdc-qa-text q" placeholder="يرجى إدخال سؤالك..."></textarea><label>الإجابة</label><textarea class="igdc-qa-text a" placeholder="يرجى الانتظار لحظة. سنرد عليك قريبًا."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">إرسال</button><button class="igdc-qa-btn muted">مسح</button></div><div class="igdc-qa-note">※ يتم الرد على الأسئلة البسيطة فورًا بواسطة الذكاء الاصطناعي. ويتم تحويل المشكلات الفنية أو الأخطاء أو القضايا التشغيلية تلقائيًا إلى قسم أسئلة وأجوبة المشرف.</div><div class="igdc-qa-threads"></div><p class="contact-email">البريد الإلكتروني الرئيسي: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' ;
+            body.innerHTML = '<label>السؤال</label><textarea class="igdc-qa-text q" placeholder="يرجى إدخال سؤالك..."></textarea><label>الإجابة</label><textarea class="igdc-qa-text a" placeholder="يرجى الانتظار لحظة. سنرد عليك قريبًا."></textarea><div class="igdc-qa-actions"><button class="igdc-qa-btn primary">إرسال</button><button class="igdc-qa-btn muted">مسح</button></div><div class="igdc-qa-note">※ يتم الرد على الأسئلة البسيطة فورًا بواسطة الذكاء الاصطناعي. ويتم تحويل المشكلات الفنية أو الأخطاء أو القضايا التشغيلية تلقائيًا إلى قسم أسئلة وأجوبة المشرف.</div><div class="igdc-qa-threads"></div>' ;
             p.appendChild(h); p.appendChild(body); m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
             function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
             function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
@@ -594,8 +594,7 @@ body{ direction: rtl !important; }
         const lA = el('label'); lA.textContent='الإجابة'; const tA = el('textarea','igdc-qa-text a'); tA.placeholder='يرجى الانتظار لحظة. سنرد عليك قريبًا.';
         const actions = el('div','igdc-qa-actions'); const btnSubmit = el('button','igdc-qa-btn primary'); btnSubmit.textContent='إرسال'; const btnClear = el('button','igdc-qa-btn muted'); btnClear.textContent='مسح';
         const note = el('div','igdc-qa-note'); note.textContent='※ يتم الرد على الأسئلة البسيطة فورًا بواسطة الذكاء الاصطناعي. ويتم تحويل المشكلات الفنية أو الأخطاء أو القضايا التشغيلية تلقائيًا إلى قسم أسئلة وأجوبة المشرف.';
-        const list = el('div','igdc-qa-threads'); const email = document.createElement('p'); email.className='contact-email'; email.innerHTML='البريد الإلكتروني الرئيسي: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>';
-        actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list,email); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
+        const list = el('div','igdc-qa-threads');         actions.append(btnSubmit, btnClear); body.append(lQ,tQ,lA,tA,actions,note,list); panel.append(header, body); modal.append(backdrop, panel); document.body.append(modal);
         return bindExisting(modal);
       }
       function bindExisting(modal){
@@ -632,7 +631,7 @@ body{ direction: rtl !important; }
         var modal = document.querySelector('.igdc-qa-modal');
         if(!modal) return;
         var body = modal.querySelector('.igdc-qa-body') || modal;
-        if(body && !body.querySelector('.contact-email')){ var ce = document.createElement('p'); ce.className='contact-email'; ce.innerHTML='البريد الإلكتروني الرئيسي: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>'; body.appendChild(ce); }
+        if(body && !body.querySelector('.contact-email')){  }
       }
       if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ stripFooterEmail(); ensureContactEmail(); }, { once:true }); } else { stripFooterEmail(); ensureContactEmail(); }
     })();
@@ -1631,7 +1630,7 @@ window.addEventListener('resize', function(){
           '</div>' +
           '<div class="igdc-qa-note">※ الأسئلة البسيطة يجيب عنها الذكاء الاصطناعي فورًا. أما المشكلات التقنية والأخطاء والموضوعات التشغيلية فتُحال تلقائيًا إلى قسم أسئلة وأجوبة المدير.</div>' +
           '<div class="igdc-qa-threads"></div>' +
-          '<p class="contact-email">البريد الإلكتروني الرئيسي: <a href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a></p>' +
+          '' +
         '</div>' +
       '</div>';
     document.body.appendChild(modal);
