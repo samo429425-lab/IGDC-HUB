@@ -10,18 +10,18 @@
   body { margin:0; font-family:Arial, Helvetica, sans-serif; background:var(--igdc-bg); color:var(--igdc-text); }
   .wrap { max-width:1100px; margin:0 auto; padding:26px 18px 60px; }
   .hero { background:linear-gradient(135deg,#eaf4ff,#ffffff); border:1px solid var(--igdc-line); border-radius:18px; padding:26px; box-shadow:0 4px 18px rgba(0,0,0,.05); }
-  .topline { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap; }
   h1 { margin:0 0 8px; color:#003b75; font-size:30px; }
-  .subtitle { margin:0; line-height:1.6; color:#4c6177; }
-  select { border:1px solid #bfd0e3; border-radius:9px; padding:8px 10px; background:#fff; color:#123; }
+  .subtitle { margin:0 0 18px; line-height:1.6; color:#4c6177; }
+  .guideLines { margin-top:14px; color:#33485e; line-height:1.55; }
+  .guideLines p { margin:0; }
+  .emailRow { margin-top:18px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .emailLabel { font-weight:700; color:#183e63; }
+  .email { color:#004080; font-weight:700; text-decoration:none; background:#eef6ff; border:1px solid #cfe4fa; border-radius:9px; padding:9px 12px; }
   .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:18px; }
   .card { background:var(--igdc-card); border:1px solid var(--igdc-line); border-radius:14px; padding:18px; box-shadow:0 2px 10px rgba(0,0,0,.03); }
   .card h2 { margin:0 0 10px; font-size:20px; color:#004080; }
   .card p { margin:0 0 10px; line-height:1.65; }
   ul { margin:8px 0 0 20px; padding:0; line-height:1.7; }
-  .contactBox { margin-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  .email { color:#004080; font-weight:700; text-decoration:none; background:#eef6ff; border:1px solid #cfe4fa; border-radius:9px; padding:9px 12px; }
-  .supportLine { flex-basis:100%; margin:2px 0 0; line-height:1.55; color:#4c6177; }
   .downloadList { display:grid; grid-template-columns:1fr; gap:10px; margin-top:12px; }
   .downloadItem { border:1px solid #e0e8f2; background:#fbfdff; border-radius:12px; padding:14px; display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; }
   .downloadItem b { display:block; color:#183e63; margin-bottom:4px; }
@@ -38,17 +38,15 @@
 <body>
 <div class="wrap">
   <section class="hero">
-    <div class="topline">
-      <div>
-        <h1 id="title">IGDC Help · Download Center</h1>
-        <p class="subtitle" id="subtitle"></p>
-      </div>
+    <h1 id="title">IGDC Help · Download Center</h1>
+    <p class="subtitle" id="subtitle"></p>
+    <div class="guideLines">
+      <p id="upgradeLine"></p>
+      <p id="qnaLine"></p>
     </div>
-    <div class="contactBox">
-      <span id="contactText"></span>
+    <div class="emailRow">
+      <span class="emailLabel" id="emailLabel"></span>
       <a class="email" href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>
-      <p class="supportLine" id="upgradeText"></p>
-      <p class="supportLine" id="qnaText"></p>
     </div>
   </section>
 
@@ -73,18 +71,9 @@
       <h2 id="downloadsTitle"></h2>
       <p id="downloadText"></p>
       <div class="downloadList">
-        <div class="downloadItem">
-          <div><b>MARU Media Player · Windows</b><span>EXE installer / setup file</span></div>
-          <a class="btn" href="/downloads/maru-media-player-setup.exe" download data-i18n-btn></a>
-        </div>
-        <div class="downloadItem">
-          <div><b>MARU Media Player · Android</b><span>APK release file</span></div>
-          <a class="btn" href="/downloads/maru-media-player.apk" download data-i18n-btn></a>
-        </div>
-        <div class="downloadItem">
-          <div><b>IGDC Download Guide</b><span>PDF / install and update guide</span></div>
-          <a class="btn" href="/downloads/IGDC_DOWNLOAD_GUIDE.pdf" download data-i18n-btn></a>
-        </div>
+        <div class="downloadItem"><div><b>MARU Media Player · Windows</b><span>EXE installer / setup file</span></div><a class="btn" href="/downloads/maru-media-player-setup.exe" download data-i18n-btn></a></div>
+        <div class="downloadItem"><div><b>MARU Media Player · Android</b><span>APK release file</span></div><a class="btn" href="/downloads/maru-media-player.apk" download data-i18n-btn></a></div>
+        <div class="downloadItem"><div><b>IGDC Download Guide</b><span>PDF / install and update guide</span></div><a class="btn" href="/downloads/IGDC_DOWNLOAD_GUIDE.pdf" download data-i18n-btn></a></div>
       </div>
       <div class="notice" id="downloadNotice"></div>
     </article>
@@ -97,8 +86,9 @@ const I18N = {
     "name": "한국어",
     "title": "IGDC 도움말 · 다운로드 센터",
     "subtitle": "플랫폼 이용, 권한, 결제 안내, 프로그램 다운로드를 한곳에서 확인합니다.",
-    "contact": "문의",
-    "contactText": "일반 문의, 권한 요청, 결제·다운로드 문제는 아래 이메일로 보내주세요.",
+    "upgradeLine": "회원 승급 신청은 회원 전용 페이지에서 신청할 수 있습니다.",
+    "qnaLine": "간단한 질문은 Q&A 질의란을 통해 질문하면 AI 상담사가 신속히 답변을 드립니다.",
+    "emailLabel": "대표 이메일",
     "platform": "플랫폼 이용 안내",
     "platformText": "상단 메뉴에서 홈, 마켓/네트워크, 유통허브, 소셜 네트워크, 미디어 허브, 관광, 후원 페이지를 이용할 수 있습니다. 각 페이지는 선택한 언어에 맞춰 표시됩니다.",
     "access": "회원 및 고유 권한 안내",
@@ -106,32 +96,30 @@ const I18N = {
       "방문자는 공개 페이지와 공개 다운로드 안내를 볼 수 있습니다.",
       "회원 전용 페이지, 관리자 기능, 수익·정산 정보는 로그인 및 승인된 권한이 필요합니다.",
       "관리자/소유자 권한은 운영자가 확인한 계정에만 부여됩니다.",
-      "권한 요청 시 이름, 계정 이메일, 필요한 권한, 요청 사유를 함께 보내주세요."
+      "권한 요청은 회원 전용 페이지의 승급 신청을 통해 접수할 수 있습니다."
     ],
     "payment": "결제 · 정기결제 · 환불 안내",
     "paymentItems": [
       "결제 기능은 PG/카드사 승인 및 운영자 설정이 완료된 뒤 활성화됩니다.",
       "유료 서비스는 가격, 결제 주기, 제공 내용, 해지 방법을 결제 전에 표시합니다.",
       "정기결제는 사용자가 해지 요청을 할 수 있어야 하며, 해지 후 적용 시점은 상품 안내에 따릅니다.",
-      "환불, 취소, 다운로드 오류는 문의 이메일로 접수하면 운영자가 확인합니다."
+      "환불, 취소, 다운로드 오류는 안내된 절차에 따라 운영자가 확인합니다."
     ],
     "downloads": "프로그램 다운로드",
     "downloadText": "출시 파일을 도메인의 /downloads/ 경로에 업로드하면 아래 버튼이 바로 다운로드 링크로 작동합니다.",
     "notice": "파일이 아직 업로드되지 않은 경우 다운로드가 열리지 않을 수 있습니다.",
-    "upgradeText": "회원 승급 신청은 회원 전용 페이지에서 신청할 수 있습니다.",
-    "qnaText": "간단한 질문은 Q&A 질의란을 통해 질문하면 AI 상담사가 신속히 답변을 드립니다.",
     "policy": "운영 고지",
     "policyText": "본 페이지는 고객지원, 다운로드, 권한, 결제 안내의 기본 고지 페이지입니다. 실제 약관·개인정보처리방침·환불정책은 필요 시 별도 문서로 확장할 수 있습니다.",
     "btnDownload": "다운로드",
-    "btnPending": "출시 후 활성화",
-    "footer": "© IGDC Global Hub. 고객지원 및 다운로드 안내 페이지."
+    "footer": "© IGDC Global Hub. 도움말 및 다운로드 안내 페이지입니다."
   },
   "en": {
     "name": "English",
     "title": "IGDC Help · Download Center",
     "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
-    "contact": "Contact",
-    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "upgradeLine": "Membership upgrade requests can be submitted from the member-only page.",
+    "qnaLine": "For simple questions, submit them through the Q&A inquiry area and an AI consultant will respond quickly.",
+    "emailLabel": "Representative email",
     "platform": "Platform guide",
     "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
     "access": "Membership and access permissions",
@@ -139,32 +127,30 @@ const I18N = {
       "Visitors can view public pages and public download information.",
       "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
       "Admin/owner access is granted only to accounts verified by the operator.",
-      "When requesting access, include your name, account email, required permission, and reason."
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
     "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
       "Payment functions become active after PG/card approval and operator setup.",
       "Paid services show price, billing cycle, included service, and cancellation method before payment.",
       "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
-      "Refunds, cancellations, and download errors can be reported by email for review."
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
     "downloads": "Program downloads",
     "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
     "notice": "If a release file has not been uploaded yet, the download may not open.",
-    "upgradeText": "Membership upgrade requests can be submitted from the member-only page.",
-    "qnaText": "For simple questions, use the Q&A question area and the AI assistant will respond quickly.",
     "policy": "Operational notice",
     "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
     "btnDownload": "Download",
-    "btnPending": "Available after release",
     "footer": "© IGDC Global Hub. Support and download information page."
   },
   "zh": {
     "name": "中文",
     "title": "IGDC 帮助 · 下载中心",
     "subtitle": "在此查看平台使用、权限、支付说明和程序下载。",
-    "contact": "联系",
-    "contactText": "一般咨询、权限申请、支付或下载问题，请通过电子邮件联系我们。",
+    "upgradeLine": "会员升级申请可在会员专用页面提交。",
+    "qnaLine": "简单问题可通过 Q&A 咨询栏提问，AI 顾问会快速回复。",
+    "emailLabel": "代表邮箱",
     "platform": "平台使用说明",
     "platformText": "可通过顶部菜单进入主页、网络中心、分销中心、社交网络、媒体中心、旅游和捐赠页面。页面会按照所选语言显示。",
     "access": "会员和权限说明",
@@ -172,32 +158,30 @@ const I18N = {
       "访客可以查看公开页面和公开下载信息。",
       "会员专用页面、管理员工具、收益和结算信息需要登录并获得授权。",
       "管理员/所有者权限只授予经运营方确认的账号。",
-      "申请权限时请提供姓名、账号邮箱、所需权限和申请理由。"
+      "权限申请可通过会员专用页面的升级申请提交。"
     ],
     "payment": "支付 · 订阅 · 退款说明",
     "paymentItems": [
       "支付功能将在 PG/银行卡审批和运营设置完成后启用。",
       "付费服务会在付款前显示价格、周期、内容和取消方式。",
       "定期付款应允许用户申请取消，生效时间以服务说明为准。",
-      "退款、取消、下载错误可通过邮件提交审核。"
+      "退款、取消和下载错误将按 안내 절차由运营方确认。"
     ],
     "downloads": "程序下载",
     "downloadText": "发布文件上传到本域名 /downloads/ 路径后，下方按钮即可作为下载链接使用。",
     "notice": "如果文件尚未上传，下载可能无法打开。",
-    "upgradeText": "会员升级申请可在会员专用页面提交。",
-    "qnaText": "简单问题可通过 Q&A 提问栏咨询，AI 客服会快速答复。",
     "policy": "运营公告",
     "policyText": "本页是客服、下载、权限和支付说明的基础公告页。必要时可扩展为条款、隐私政策和退款政策等独立文档。",
     "btnDownload": "下载",
-    "btnPending": "发布后启用",
     "footer": "© IGDC Global Hub. 支持与下载信息页面。"
   },
   "zht": {
     "name": "繁體中文",
     "title": "IGDC 說明 · 下載中心",
     "subtitle": "在此查看平台使用、權限、付款說明與程式下載。",
-    "contact": "聯絡",
-    "contactText": "一般諮詢、權限申請、付款或下載問題，請透過電子郵件聯絡。",
+    "upgradeLine": "會員升級申請可在會員專用頁面提交。",
+    "qnaLine": "簡單問題可透過 Q&A 諮詢欄提問，AI 顧問會快速回覆。",
+    "emailLabel": "代表電子郵件",
     "platform": "平台使用說明",
     "platformText": "可透過上方選單進入首頁、網絡中心、分銷中心、社交網絡、媒體中心、旅遊與捐贈頁面。頁面會依所選語言顯示。",
     "access": "會員與權限說明",
@@ -205,32 +189,30 @@ const I18N = {
       "訪客可查看公開頁面與公開下載資訊。",
       "會員專用頁面、管理工具、收益與結算資訊需要登入及核准權限。",
       "管理員/所有者權限只授予經營運方確認的帳號。",
-      "申請權限時請提供姓名、帳號電子郵件、所需權限與原因。"
+      "權限申請可透過會員專用頁面的升級申請提交。"
     ],
     "payment": "付款 · 訂閱 · 退款說明",
     "paymentItems": [
       "付款功能會在 PG/刷卡審核及營運設定完成後啟用。",
       "付費服務會在付款前顯示價格、週期、內容與取消方式。",
       "定期付款應允許使用者申請取消，生效時間依服務說明為準。",
-      "退款、取消、下載錯誤可透過郵件提交審核。"
+      "退款、取消與下載錯誤會依公告流程由營運方確認。"
     ],
     "downloads": "程式下載",
     "downloadText": "發布檔案上傳至本網域 /downloads/ 路徑後，下方按鈕即可作為下載連結。",
     "notice": "若檔案尚未上傳，下載可能無法開啟。",
-    "upgradeText": "會員升級申請可在會員專用頁面提交。",
-    "qnaText": "簡單問題可透過 Q&A 提問欄提出，AI 客服會快速回覆。",
     "policy": "營運告知",
     "policyText": "本頁是客服、下載、權限與付款說明的基本告知頁。必要時可擴充為條款、隱私權政策與退款政策等獨立文件。",
     "btnDownload": "下載",
-    "btnPending": "發布後啟用",
     "footer": "© IGDC Global Hub. 支援與下載資訊頁。"
   },
   "ja": {
     "name": "日本語",
     "title": "IGDC ヘルプ · ダウンロードセンター",
     "subtitle": "プラットフォーム利用、権限、決済案内、プログラムダウンロードを確認できます。",
-    "contact": "お問い合わせ",
-    "contactText": "一般問い合わせ、権限申請、決済・ダウンロードの問題はメールでご連絡ください。",
+    "upgradeLine": "会員アップグレード申請は会員専用ページから申請できます。",
+    "qnaLine": "簡単な質問は Q&A 質問欄から送信すると、AI相談員が迅速に回答します。",
+    "emailLabel": "代表メール",
     "platform": "プラットフォーム案内",
     "platformText": "上部メニューからホーム、ネットワーク、流通、ソーシャル、メディア、観光、寄付ページを利用できます。選択言語に合わせて表示されます。",
     "access": "会員・権限案内",
@@ -238,854 +220,800 @@ const I18N = {
       "訪問者は公開ページと公開ダウンロード情報を閲覧できます。",
       "会員専用ページ、管理機能、収益・精算情報はログインと承認権限が必要です。",
       "管理者/所有者権限は運営者が確認したアカウントにのみ付与されます。",
-      "権限申請時は氏名、アカウントメール、必要権限、理由を送信してください。"
+      "権限申請は会員専用ページのアップグレード申請から行えます。"
     ],
     "payment": "決済 · 定期決済 · 返金案内",
     "paymentItems": [
       "決済機能はPG/カード承認と運営設定後に有効化されます。",
       "有料サービスは価格、請求周期、提供内容、解約方法を決済前に表示します。",
       "定期決済は解約申請が可能で、適用時点は案内に従います。",
-      "返金、取消、ダウンロードエラーはメールで受付します。"
+      "返金、取消、ダウンロードエラーは案内手順に従って運営者が確認します。"
     ],
     "downloads": "プログラムダウンロード",
-    "downloadText": "公開ファイルをこのドメインの /downloads/ にアップロードすると、下のボタンがダウンロードリンクとして動作します。",
-    "notice": "ファイルがまだアップロードされていない場合、ダウンロードが開かないことがあります。",
-    "upgradeText": "会員アップグレード申請は会員専用ページから申請できます。",
-    "qnaText": "簡単な質問はQ&A欄で送信すると、AI相談員が迅速に回答します。",
+    "downloadText": "リリースファイルを本ドメインの /downloads/ にアップロードすると、下のボタンがダウンロードリンクとして動作します。",
+    "notice": "ファイルが未アップロードの場合、ダウンロードは開けないことがあります。",
     "policy": "運営告知",
-    "policyText": "このページはサポート、ダウンロード、権限、決済案内の基本告知ページです。必要に応じて利用規約、プライバシーポリシー、返金ポリシーを別文書として拡張できます。",
+    "policyText": "本ページはサポート、ダウンロード、権限、決済案内の基本告知ページです。必要に応じて利用規約、プライバシー、返金ポリシーを別文書に拡張できます。",
     "btnDownload": "ダウンロード",
-    "btnPending": "公開後に有効",
-    "footer": "© IGDC Global Hub. サポートとダウンロード案内ページ。"
+    "footer": "© IGDC Global Hub. サポートとダウンロード情報ページ。"
   },
   "es": {
     "name": "Español",
     "title": "Ayuda IGDC · Centro de descargas",
-    "subtitle": "Ayuda de plataforma, permisos de acceso, pagos y descargas en un solo lugar.",
-    "contact": "Contacto",
-    "contactText": "Para ayuda general, solicitudes de acceso, problemas de pago o descarga, contáctenos por correo electrónico.",
+    "subtitle": "Ayuda de plataforma, permisos, pagos y descargas en un solo lugar.",
+    "upgradeLine": "Las solicitudes de mejora de membresía se pueden enviar desde la página exclusiva para miembros.",
+    "qnaLine": "Para preguntas sencillas, use el área de Q&A y un asesor de IA responderá rápidamente.",
+    "emailLabel": "Correo representante",
     "platform": "Guía de plataforma",
-    "platformText": "Use el menú superior para abrir Inicio, Network Hub, Distribution Hub, Red Social, Media Hub, Viajes y Donación. Las páginas siguen el idioma seleccionado.",
+    "platformText": "Use el menú superior para abrir Inicio, Red, Distribución, Social, Medios, Turismo y Donación. Las páginas siguen el idioma seleccionado.",
     "access": "Membresía y permisos",
     "accessItems": [
-      "Los visitantes pueden ver páginas públicas e información de descarga pública.",
-      "Las páginas para miembros, herramientas de administración, ingresos y liquidaciones requieren inicio de sesión y permiso aprobado.",
-      "El acceso de administrador/propietario se otorga solo a cuentas verificadas por el operador.",
-      "Al solicitar acceso, incluya nombre, correo de cuenta, permiso necesario y motivo."
+      "Los visitantes pueden ver páginas públicas e información de descargas públicas.",
+      "Las páginas de miembros, herramientas de administración, ingresos y liquidaciones requieren inicio de sesión y permiso aprobado.",
+      "El acceso admin/propietario solo se concede a cuentas verificadas por el operador.",
+      "Las solicitudes de acceso se pueden enviar mediante la solicitud de mejora en la página de miembros."
     ],
-    "payment": "Pago · suscripción · reembolso",
+    "payment": "Pagos · suscripción · reembolso",
     "paymentItems": [
-      "Las funciones de pago se activan después de la aprobación del PG/tarjeta y la configuración del operador.",
-      "Los servicios de pago muestran precio, ciclo de cobro, contenido y método de cancelación antes del pago.",
+      "Los pagos se activan tras la aprobación PG/tarjeta y la configuración del operador.",
+      "Los servicios de pago muestran precio, ciclo, contenido y cancelación antes de pagar.",
       "Los pagos recurrentes deben permitir solicitudes de cancelación; el momento efectivo sigue el aviso del servicio.",
-      "Reembolsos, cancelaciones y errores de descarga se pueden informar por correo para revisión."
+      "Reembolsos, cancelaciones y errores de descarga se revisan según el proceso anunciado."
     ],
     "downloads": "Descargas de programas",
-    "downloadText": "Después de subir los archivos de lanzamiento a /downloads/ en este dominio, los botones funcionarán como enlaces de descarga.",
-    "notice": "Si el archivo aún no se ha subido, la descarga puede no abrirse.",
-    "upgradeText": "Las solicitudes de actualización de membresía se pueden enviar desde la página exclusiva para miembros.",
-    "qnaText": "Para preguntas sencillas, use el área de Q&A y el asesor de IA responderá rápidamente.",
+    "downloadText": "Cuando los archivos se suban a /downloads/ en este dominio, los botones funcionarán como enlaces.",
+    "notice": "Si el archivo aún no está subido, la descarga puede no abrirse.",
     "policy": "Aviso operativo",
-    "policyText": "Esta página es el aviso básico para soporte, descargas, acceso y pagos. Los términos, privacidad y reembolsos pueden ampliarse como documentos separados si es necesario.",
+    "policyText": "Esta es la página básica de soporte, descargas, permisos y pagos. Términos, privacidad y reembolsos pueden separarse si es necesario.",
     "btnDownload": "Descargar",
-    "btnPending": "Disponible tras el lanzamiento",
     "footer": "© IGDC Global Hub. Página de soporte y descargas."
   },
   "fr": {
     "name": "Français",
     "title": "Aide IGDC · Centre de téléchargement",
-    "subtitle": "Aide de plateforme, permissions, paiement et téléchargements au même endroit.",
-    "contact": "Contact",
-    "contactText": "Pour l’aide générale, les demandes d’accès, les problèmes de paiement ou de téléchargement, contactez-nous par e-mail.",
+    "subtitle": "Aide, permissions, paiement et téléchargements au même endroit.",
+    "upgradeLine": "Les demandes de mise à niveau de membre peuvent être soumises depuis la page réservée aux membres.",
+    "qnaLine": "Pour les questions simples, utilisez l’espace Q&A; un conseiller IA répondra rapidement.",
+    "emailLabel": "E-mail représentatif",
     "platform": "Guide de la plateforme",
-    "platformText": "Utilisez le menu supérieur pour ouvrir Accueil, Network Hub, Distribution Hub, Réseau social, Media Hub, Voyage et Don. Les pages suivent la langue sélectionnée.",
+    "platformText": "Utilisez le menu supérieur pour Accueil, Réseau, Distribution, Social, Médias, Voyage et Don. Les pages suivent la langue choisie.",
     "access": "Adhésion et permissions",
     "accessItems": [
-      "Les visiteurs peuvent voir les pages publiques et les informations de téléchargement publiques.",
-      "Les pages membres, outils admin, revenus et règlements nécessitent une connexion et une autorisation approuvée.",
-      "L’accès administrateur/propriétaire est accordé uniquement aux comptes vérifiés par l’opérateur.",
-      "Pour demander un accès, indiquez votre nom, e-mail de compte, permission requise et motif."
+      "Les visiteurs voient les pages publiques et les téléchargements publics.",
+      "Les pages membres, outils admin, revenus et règlements nécessitent connexion et autorisation.",
+      "Les droits admin/propriétaire sont accordés uniquement aux comptes vérifiés.",
+      "Les demandes d’accès peuvent être soumises via la demande de mise à niveau sur la page membre."
     ],
     "payment": "Paiement · abonnement · remboursement",
     "paymentItems": [
-      "Les fonctions de paiement s’activent après l’approbation PG/carte et la configuration de l’opérateur.",
-      "Les services payants affichent le prix, le cycle de facturation, le contenu et la méthode d’annulation avant paiement.",
-      "Les paiements récurrents doivent permettre une demande d’annulation ; l’effet suit l’avis du service.",
-      "Remboursements, annulations et erreurs de téléchargement peuvent être signalés par e-mail pour examen."
+      "Le paiement est activé après approbation PG/carte et configuration.",
+      "Les services payants affichent prix, cycle, contenu et annulation avant paiement.",
+      "Les paiements récurrents doivent permettre une demande d’annulation; la date d’effet suit l’avis du service.",
+      "Remboursements, annulations et erreurs de téléchargement sont traités selon la procédure indiquée."
     ],
-    "downloads": "Téléchargements de programmes",
-    "downloadText": "Après téléversement des fichiers de sortie dans /downloads/ sur ce domaine, les boutons ci-dessous fonctionneront comme liens de téléchargement.",
-    "notice": "Si un fichier n’est pas encore téléversé, le téléchargement peut ne pas s’ouvrir.",
-    "upgradeText": "Les demandes de montée de niveau peuvent être envoyées depuis la page réservée aux membres.",
-    "qnaText": "Pour les questions simples, utilisez la zone Q&A ; l’assistant IA répondra rapidement.",
+    "downloads": "Téléchargements",
+    "downloadText": "Après dépôt des fichiers dans /downloads/ sur ce domaine, les boutons deviennent des liens.",
+    "notice": "Si le fichier n’est pas encore publié, le téléchargement peut échouer.",
     "policy": "Avis opérationnel",
-    "policyText": "Cette page est l’avis de base pour l’assistance, les téléchargements, l’accès et les paiements. Les conditions, la confidentialité et les remboursements peuvent être développés en documents séparés si nécessaire.",
+    "policyText": "Page de base pour support, téléchargements, accès et paiement. Les conditions, confidentialité et remboursements peuvent être séparés.",
     "btnDownload": "Télécharger",
-    "btnPending": "Disponible après lancement",
-    "footer": "© IGDC Global Hub. Page d’assistance et de téléchargement."
+    "footer": "© IGDC Global Hub. Page support et téléchargement."
   },
   "de": {
     "name": "Deutsch",
     "title": "IGDC Hilfe · Download-Center",
-    "subtitle": "Plattformhilfe, Zugriffsrechte, Zahlungsinformationen und Programmdownloads an einem Ort.",
-    "contact": "Kontakt",
-    "contactText": "Für allgemeine Hilfe, Zugriffsanfragen, Zahlungsprobleme oder Downloadprobleme kontaktieren Sie uns per E-Mail.",
-    "platform": "Plattformanleitung",
-    "platformText": "Nutzen Sie das obere Menü für Startseite, Network Hub, Distribution Hub, soziales Netzwerk, Media Hub, Reisen und Spenden. Die Seiten folgen der ausgewählten Sprache.",
-    "access": "Mitgliedschaft und Zugriffsrechte",
+    "subtitle": "Plattformhilfe, Rechte, Zahlungen und Downloads an einem Ort.",
+    "upgradeLine": "Anträge auf Mitglieds-Upgrade können auf der Mitgliederseite gestellt werden.",
+    "qnaLine": "Einfache Fragen können im Q&A-Bereich gestellt werden; ein KI-Berater antwortet schnell.",
+    "emailLabel": "Vertretungs-E-Mail",
+    "platform": "Plattform-Leitfaden",
+    "platformText": "Nutzen Sie das obere Menü für Home, Netzwerk, Distribution, Social, Medien, Reisen und Spenden. Seiten folgen der gewählten Sprache.",
+    "access": "Mitgliedschaft und Rechte",
     "accessItems": [
-      "Besucher können öffentliche Seiten und öffentliche Downloadinformationen ansehen.",
-      "Mitgliederseiten, Admin-Tools, Einnahmen und Abrechnungen erfordern Anmeldung und genehmigte Rechte.",
-      "Admin-/Owner-Zugriff wird nur vom Betreiber bestätigten Konten gewährt.",
-      "Geben Sie bei einer Anfrage Name, Konto-E-Mail, benötigte Berechtigung und Grund an."
+      "Besucher sehen öffentliche Seiten und Downloadinformationen.",
+      "Mitgliederseiten, Admin-Tools, Umsatz und Abrechnung erfordern Login und Genehmigung.",
+      "Admin-/Owner-Rechte erhalten nur verifizierte Konten.",
+      "Rechteanfragen können über den Upgrade-Antrag auf der Mitgliederseite gestellt werden."
     ],
-    "payment": "Zahlung · Abo · Rückerstattung",
+    "payment": "Zahlung · Abo · Erstattung",
     "paymentItems": [
-      "Zahlungsfunktionen werden nach PG-/Kartengenehmigung und Betreibereinrichtung aktiviert.",
-      "Kostenpflichtige Dienste zeigen vor der Zahlung Preis, Abrechnungszyklus, Inhalt und Kündigungsmethode.",
-      "Wiederkehrende Zahlungen müssen Kündigungsanfragen ermöglichen; der wirksame Zeitpunkt folgt dem Diensthinweis.",
-      "Rückerstattungen, Stornierungen und Downloadfehler können per E-Mail geprüft werden."
+      "Zahlungen werden nach PG/Kartenfreigabe und Einrichtung aktiviert.",
+      "Bezahldienste zeigen Preis, Zyklus, Leistung und Kündigung vor Zahlung.",
+      "Wiederkehrende Zahlungen müssen Kündigungsanfragen erlauben; der Zeitpunkt folgt dem Hinweis.",
+      "Erstattungen, Stornos und Downloadfehler werden gemäß Prozess geprüft."
     ],
-    "downloads": "Programmdownloads",
-    "downloadText": "Nach dem Hochladen der Release-Dateien unter /downloads/ auf dieser Domain funktionieren die Schaltflächen unten als Downloadlinks.",
-    "notice": "Wenn eine Release-Datei noch nicht hochgeladen wurde, kann der Download nicht geöffnet werden.",
-    "upgradeText": "Anträge auf Mitgliedschafts-Upgrade können über die Mitgliederseite gestellt werden.",
-    "qnaText": "Für einfache Fragen nutzen Sie den Q&A-Bereich; der KI-Assistent antwortet schnell.",
+    "downloads": "Programm-Downloads",
+    "downloadText": "Nach Upload der Dateien unter /downloads/ funktionieren die Buttons als Downloadlinks.",
+    "notice": "Wenn die Datei noch nicht hochgeladen ist, öffnet der Download evtl. nicht.",
     "policy": "Betriebshinweis",
-    "policyText": "Diese Seite ist die grundlegende Hinweisseite für Support, Downloads, Zugriff und Zahlungen. AGB, Datenschutz und Rückerstattung können bei Bedarf als separate Dokumente erweitert werden.",
-    "btnDownload": "Herunterladen",
-    "btnPending": "Nach Veröffentlichung verfügbar",
-    "footer": "© IGDC Global Hub. Support- und Downloadinformationsseite."
+    "policyText": "Grundseite für Support, Downloads, Rechte und Zahlungen. AGB, Datenschutz und Erstattung können separat erweitert werden.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support- und Downloadseite."
   },
   "ru": {
     "name": "Русский",
-    "title": "Помощь IGDC · Центр загрузок",
-    "subtitle": "Справка по платформе, права доступа, платежи и загрузки программ в одном месте.",
-    "contact": "Контакт",
-    "contactText": "По общим вопросам, запросам доступа, проблемам оплаты или загрузки пишите на электронную почту.",
-    "platform": "Руководство по платформе",
-    "platformText": "Используйте верхнее меню для перехода на Главную, Network Hub, Distribution Hub, Социальную сеть, Media Hub, Туризм и Пожертвования. Страницы отображаются на выбранном языке.",
-    "access": "Членство и права доступа",
+    "title": "Справка IGDC · Центр загрузок",
+    "subtitle": "Помощь, права доступа, платежи и загрузки в одном месте.",
+    "upgradeLine": "Заявку на повышение статуса участника можно подать на странице для участников.",
+    "qnaLine": "Простые вопросы задавайте в разделе Q&A; ИИ-консультант быстро ответит.",
+    "emailLabel": "Основной e-mail",
+    "platform": "Руководство платформы",
+    "platformText": "Используйте верхнее меню: Главная, Сеть, Дистрибуция, Соцсеть, Медиа, Туризм, Пожертвование. Язык зависит от выбора.",
+    "access": "Участие и права",
     "accessItems": [
-      "Посетители могут просматривать публичные страницы и публичную информацию о загрузках.",
-      "Страницы для участников, инструменты администрирования, доходы и расчеты требуют входа и утвержденных прав.",
-      "Доступ администратора/владельца предоставляется только аккаунтам, подтвержденным оператором.",
-      "При запросе доступа укажите имя, e-mail аккаунта, нужные права и причину."
+      "Гости видят публичные страницы и информацию о загрузках.",
+      "Страницы участников, админ-инструменты, доходы и расчёты требуют входа и разрешения.",
+      "Права администратора/владельца выдаются только проверенным аккаунтам.",
+      "Запрос доступа можно подать через заявку на повышение на странице участника."
     ],
-    "payment": "Оплата · подписка · возврат",
+    "payment": "Платежи · подписка · возврат",
     "paymentItems": [
-      "Платежные функции активируются после одобрения PG/карты и настройки оператором.",
-      "Платные услуги показывают цену, цикл списания, состав услуги и способ отмены до оплаты.",
-      "Регулярные платежи должны позволять запрос отмены; срок вступления в силу указан в описании услуги.",
-      "Возвраты, отмены и ошибки загрузки можно отправить на проверку по e-mail."
+      "Платежи активируются после одобрения PG/карты и настройки.",
+      "Платные услуги показывают цену, цикл, состав и отмену до оплаты.",
+      "Регулярные платежи должны позволять запрос отмены; сроки указаны в уведомлении.",
+      "Возвраты, отмены и ошибки загрузки проверяются по опубликованной процедуре."
     ],
     "downloads": "Загрузки программ",
-    "downloadText": "После загрузки файлов релиза в /downloads/ на этом домене кнопки ниже будут работать как ссылки для загрузки.",
-    "notice": "Если файл релиза еще не загружен, скачивание может не открыться.",
-    "upgradeText": "Заявку на повышение статуса участника можно подать на странице только для участников.",
-    "qnaText": "Для простых вопросов используйте раздел Q&A; ИИ-консультант быстро ответит.",
+    "downloadText": "После загрузки файлов в /downloads/ кнопки станут ссылками скачивания.",
+    "notice": "Если файл ещё не загружен, скачивание может не открыться.",
     "policy": "Операционное уведомление",
-    "policyText": "Эта страница является базовым уведомлением по поддержке, загрузкам, доступу и платежам. Условия, политика конфиденциальности и политика возврата могут быть вынесены в отдельные документы при необходимости.",
+    "policyText": "Базовая страница поддержки, загрузок, прав и платежей. Условия, конфиденциальность и возврат могут быть отдельными документами.",
     "btnDownload": "Скачать",
-    "btnPending": "Доступно после выпуска",
     "footer": "© IGDC Global Hub. Страница поддержки и загрузок."
   },
   "pt": {
     "name": "Português",
     "title": "Ajuda IGDC · Centro de downloads",
-    "subtitle": "Ajuda da plataforma, permissões de acesso, pagamentos e downloads em um só lugar.",
-    "contact": "Contato",
-    "contactText": "Para ajuda geral, solicitações de acesso, problemas de pagamento ou download, entre em contato por e-mail.",
+    "subtitle": "Ajuda da plataforma, permissões, pagamentos e downloads em um só lugar.",
+    "upgradeLine": "Solicitações de upgrade de membro podem ser feitas na página exclusiva para membros.",
+    "qnaLine": "Perguntas simples podem ser enviadas pela área Q&A; um consultor de IA responderá rapidamente.",
+    "emailLabel": "E-mail principal",
     "platform": "Guia da plataforma",
-    "platformText": "Use o menu superior para abrir Início, Network Hub, Distribution Hub, Rede Social, Media Hub, Viagens e Doação. As páginas seguem o idioma selecionado.",
+    "platformText": "Use o menu superior para abrir Início, Rede, Distribuição, Social, Mídia, Viagem e Doação. As páginas seguem o idioma selecionado.",
     "access": "Associação e permissões",
     "accessItems": [
       "Visitantes podem ver páginas públicas e informações públicas de download.",
-      "Páginas de membros, ferramentas de admin, receitas e liquidações exigem login e permissão aprovada.",
-      "Acesso de administrador/proprietário é concedido apenas a contas verificadas pelo operador.",
-      "Ao solicitar acesso, informe nome, e-mail da conta, permissão necessária e motivo."
+      "Páginas de membros, ferramentas admin, receita e liquidação exigem login e permissão aprovada.",
+      "Acesso admin/proprietário é concedido apenas a contas verificadas.",
+      "Solicitações de acesso podem ser enviadas pelo pedido de upgrade na página de membros."
     ],
     "payment": "Pagamento · assinatura · reembolso",
     "paymentItems": [
-      "Funções de pagamento são ativadas após aprovação PG/cartão e configuração do operador.",
-      "Serviços pagos mostram preço, ciclo de cobrança, conteúdo e método de cancelamento antes do pagamento.",
-      "Pagamentos recorrentes devem permitir solicitação de cancelamento; a data efetiva segue o aviso do serviço.",
-      "Reembolsos, cancelamentos e erros de download podem ser informados por e-mail para análise."
+      "Pagamentos são ativados após aprovação PG/cartão e configuração.",
+      "Serviços pagos mostram preço, ciclo, conteúdo e cancelamento antes do pagamento.",
+      "Pagamentos recorrentes devem permitir cancelamento; o prazo segue o aviso do serviço.",
+      "Reembolsos, cancelamentos e erros de download são analisados conforme o processo anunciado."
     ],
     "downloads": "Downloads de programas",
-    "downloadText": "Depois que os arquivos de lançamento forem enviados para /downloads/ neste domínio, os botões abaixo funcionarão como links de download.",
-    "notice": "Se o arquivo ainda não tiver sido enviado, o download pode não abrir.",
-    "upgradeText": "As solicitações de upgrade de associação podem ser enviadas na página exclusiva para membros.",
-    "qnaText": "Para perguntas simples, use a área de Q&A; o assistente de IA responderá rapidamente.",
+    "downloadText": "Após enviar arquivos para /downloads/ neste domínio, os botões funcionarão como links.",
+    "notice": "Se o arquivo ainda não foi enviado, o download pode não abrir.",
     "policy": "Aviso operacional",
-    "policyText": "Esta página é o aviso básico de suporte, downloads, acesso e pagamentos. Termos, privacidade e política de reembolso podem ser expandidos em documentos separados quando necessário.",
+    "policyText": "Página básica de suporte, downloads, acesso e pagamento. Termos, privacidade e reembolso podem ser documentos separados.",
     "btnDownload": "Download",
-    "btnPending": "Disponível após lançamento",
-    "footer": "© IGDC Global Hub. Página de suporte e downloads."
+    "footer": "© IGDC Global Hub. Página de suporte e download."
   },
   "it": {
     "name": "Italiano",
     "title": "Aiuto IGDC · Centro download",
-    "subtitle": "Aiuto piattaforma, permessi di accesso, pagamenti e download in un unico posto.",
-    "contact": "Contatto",
-    "contactText": "Per assistenza generale, richieste di accesso, problemi di pagamento o download, contattateci via e-mail.",
-    "platform": "Guida della piattaforma",
-    "platformText": "Usa il menu superiore per aprire Home, Network Hub, Distribution Hub, Social Network, Media Hub, Viaggi e Donazioni. Le pagine seguono la lingua selezionata.",
+    "subtitle": "Aiuto piattaforma, permessi, pagamenti e download in un unico posto.",
+    "upgradeLine": "Le richieste di upgrade membro possono essere inviate dalla pagina riservata ai membri.",
+    "qnaLine": "Per domande semplici, usa l’area Q&A; un consulente IA risponderà rapidamente.",
+    "emailLabel": "E-mail principale",
+    "platform": "Guida alla piattaforma",
+    "platformText": "Usa il menu superiore per Home, Rete, Distribuzione, Social, Media, Viaggi e Donazioni. Le pagine seguono la lingua selezionata.",
     "access": "Iscrizione e permessi",
     "accessItems": [
-      "I visitatori possono vedere pagine pubbliche e informazioni pubbliche sui download.",
-      "Pagine membri, strumenti admin, ricavi e liquidazioni richiedono login e permessi approvati.",
-      "L’accesso admin/proprietario è concesso solo ad account verificati dall’operatore.",
-      "Per richiedere accesso, includi nome, e-mail account, permesso richiesto e motivo."
+      "I visitatori possono vedere pagine pubbliche e informazioni di download pubbliche.",
+      "Pagine membri, strumenti admin, ricavi e liquidazioni richiedono login e permesso approvato.",
+      "L’accesso admin/proprietario è concesso solo ad account verificati.",
+      "Le richieste di accesso possono essere inviate dalla richiesta di upgrade nella pagina membri."
     ],
     "payment": "Pagamento · abbonamento · rimborso",
     "paymentItems": [
-      "Le funzioni di pagamento si attivano dopo approvazione PG/carta e configurazione dell’operatore.",
-      "I servizi a pagamento mostrano prezzo, ciclo di fatturazione, contenuto e metodo di cancellazione prima del pagamento.",
-      "I pagamenti ricorrenti devono permettere richieste di cancellazione; il momento effettivo segue l’avviso del servizio.",
-      "Rimborsi, cancellazioni ed errori di download possono essere segnalati via e-mail per verifica."
+      "I pagamenti si attivano dopo approvazione PG/carta e configurazione.",
+      "I servizi a pagamento mostrano prezzo, ciclo, contenuto e cancellazione prima del pagamento.",
+      "I pagamenti ricorrenti devono permettere richieste di cancellazione; i tempi seguono l’avviso.",
+      "Rimborsi, cancellazioni ed errori di download sono esaminati secondo la procedura."
     ],
     "downloads": "Download programmi",
-    "downloadText": "Dopo il caricamento dei file di rilascio in /downloads/ su questo dominio, i pulsanti sotto funzioneranno come link di download.",
-    "notice": "Se un file di rilascio non è ancora stato caricato, il download potrebbe non aprirsi.",
-    "upgradeText": "Le richieste di upgrade dell’iscrizione possono essere inviate dalla pagina riservata ai membri.",
-    "qnaText": "Per domande semplici, usa l’area Q&A: l’assistente AI risponderà rapidamente.",
+    "downloadText": "Dopo il caricamento dei file in /downloads/ su questo dominio, i pulsanti funzionano come link.",
+    "notice": "Se il file non è ancora caricato, il download potrebbe non aprirsi.",
     "policy": "Avviso operativo",
-    "policyText": "Questa pagina è l’avviso di base per supporto, download, accesso e pagamenti. Termini, privacy e rimborsi possono essere ampliati in documenti separati se necessario.",
-    "btnDownload": "Scarica",
-    "btnPending": "Disponibile dopo il rilascio",
-    "footer": "© IGDC Global Hub. Pagina di supporto e download."
+    "policyText": "Pagina base per supporto, download, accessi e pagamenti. Termini, privacy e rimborso possono essere documenti separati.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Pagina supporto e download."
   },
   "ar": {
     "name": "العربية",
     "title": "مساعدة IGDC · مركز التنزيل",
-    "subtitle": "مساعدة المنصة، صلاحيات الوصول، إرشادات الدفع، وتنزيل البرامج في مكان واحد.",
-    "contact": "اتصال",
-    "contactText": "للاستفسارات العامة وطلبات الصلاحية ومشكلات الدفع أو التنزيل، تواصل معنا عبر البريد الإلكتروني.",
-    "platform": "دليل المنصة",
-    "platformText": "استخدم القائمة العلوية لفتح الصفحة الرئيسية، مركز الشبكة، مركز التوزيع، الشبكة الاجتماعية، مركز الوسائط، السفر والتبرع. تظهر الصفحات حسب اللغة المختارة.",
-    "access": "العضوية وصلاحيات الوصول",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "يمكن تقديم طلب ترقية العضوية من صفحة الأعضاء فقط.",
+    "qnaLine": "للأسئلة البسيطة، اطرحها عبر قسم Q&A وسيجيب مستشار الذكاء الاصطناعي بسرعة.",
+    "emailLabel": "البريد الإلكتروني الرسمي",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "يمكن للزوار مشاهدة الصفحات العامة ومعلومات التنزيل العامة.",
-      "صفحات الأعضاء وأدوات الإدارة ومعلومات الإيرادات والتسوية تتطلب تسجيل الدخول وصلاحية معتمدة.",
-      "تُمنح صلاحية المدير/المالك فقط للحسابات التي يتحقق منها المشغّل.",
-      "عند طلب الصلاحية، أرسل الاسم وبريد الحساب والصلاحية المطلوبة وسبب الطلب."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "الدفع · الاشتراك · الاسترداد",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "تُفعّل وظائف الدفع بعد موافقة مزود الدفع/البطاقة وإعداد المشغّل.",
-      "تعرض الخدمات المدفوعة السعر ودورة الفوترة والمحتوى وطريقة الإلغاء قبل الدفع.",
-      "يجب أن تسمح المدفوعات المتكررة بطلب الإلغاء، ويخضع وقت التطبيق لإشعار الخدمة.",
-      "يمكن إرسال طلبات الاسترداد أو الإلغاء أو أخطاء التنزيل عبر البريد للمراجعة."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "تنزيل البرامج",
-    "downloadText": "بعد رفع ملفات الإصدار إلى مسار /downloads/ في هذا النطاق، ستعمل الأزرار أدناه كروابط تنزيل.",
-    "notice": "إذا لم يتم رفع ملف الإصدار بعد، فقد لا يفتح التنزيل.",
-    "upgradeText": "يمكن تقديم طلب ترقية العضوية من صفحة الأعضاء فقط.",
-    "qnaText": "للأسئلة البسيطة، استخدم خانة الأسئلة والأجوبة وسيجيب مستشار الذكاء الاصطناعي بسرعة.",
-    "policy": "إشعار تشغيلي",
-    "policyText": "هذه الصفحة هي إشعار أساسي للدعم والتنزيلات والصلاحيات والدفع. يمكن توسيع الشروط وسياسة الخصوصية وسياسة الاسترداد إلى مستندات منفصلة عند الحاجة.",
-    "btnDownload": "تنزيل",
-    "btnPending": "متاح بعد الإصدار",
-    "footer": "© IGDC Global Hub. صفحة الدعم والتنزيل."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "vi": {
     "name": "Tiếng Việt",
     "title": "Trợ giúp IGDC · Trung tâm tải xuống",
-    "subtitle": "Trợ giúp nền tảng, quyền truy cập, hướng dẫn thanh toán và tải chương trình tại một nơi.",
-    "contact": "Liên hệ",
-    "contactText": "Với hỗ trợ chung, yêu cầu quyền, vấn đề thanh toán hoặc tải xuống, hãy liên hệ qua email.",
-    "platform": "Hướng dẫn nền tảng",
-    "platformText": "Dùng menu trên cùng để mở Trang chủ, Network Hub, Distribution Hub, Mạng xã hội, Media Hub, Du lịch và Quyên góp. Trang hiển thị theo ngôn ngữ đã chọn.",
-    "access": "Thành viên và quyền truy cập",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "Yêu cầu nâng cấp thành viên có thể gửi từ trang dành riêng cho thành viên.",
+    "qnaLine": "Với câu hỏi đơn giản, hãy gửi qua mục Q&A; tư vấn AI sẽ trả lời nhanh chóng.",
+    "emailLabel": "Email đại diện",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "Khách truy cập có thể xem trang công khai và thông tin tải xuống công khai.",
-      "Trang thành viên, công cụ quản trị, doanh thu và quyết toán cần đăng nhập và quyền đã duyệt.",
-      "Quyền quản trị/chủ sở hữu chỉ cấp cho tài khoản đã được nhà vận hành xác minh.",
-      "Khi yêu cầu quyền, hãy gửi tên, email tài khoản, quyền cần thiết và lý do."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Thanh toán · định kỳ · hoàn tiền",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "Chức năng thanh toán được bật sau khi PG/thẻ được phê duyệt và nhà vận hành thiết lập.",
-      "Dịch vụ trả phí hiển thị giá, chu kỳ thanh toán, nội dung và cách hủy trước khi thanh toán.",
-      "Thanh toán định kỳ phải cho phép yêu cầu hủy; thời điểm hiệu lực theo thông báo dịch vụ.",
-      "Hoàn tiền, hủy và lỗi tải xuống có thể được gửi qua email để kiểm tra."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "Tải chương trình",
-    "downloadText": "Sau khi tệp phát hành được tải lên đường dẫn /downloads/ trên miền này, các nút bên dưới sẽ hoạt động như liên kết tải xuống.",
-    "notice": "Nếu tệp phát hành chưa được tải lên, tải xuống có thể không mở.",
-    "upgradeText": "Yêu cầu nâng cấp thành viên có thể được gửi từ trang dành riêng cho thành viên.",
-    "qnaText": "Với câu hỏi đơn giản, hãy dùng mục Q&A; trợ lý AI sẽ trả lời nhanh chóng.",
-    "policy": "Thông báo vận hành",
-    "policyText": "Trang này là thông báo cơ bản cho hỗ trợ, tải xuống, quyền truy cập và thanh toán. Điều khoản, quyền riêng tư và hoàn tiền có thể được mở rộng thành tài liệu riêng khi cần.",
-    "btnDownload": "Tải xuống",
-    "btnPending": "Có sau khi phát hành",
-    "footer": "© IGDC Global Hub. Trang hỗ trợ và tải xuống."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "th": {
     "name": "ไทย",
-    "title": "ศูนย์ช่วยเหลือ IGDC · ศูนย์ดาวน์โหลด",
-    "subtitle": "รวมคำแนะนำแพลตฟอร์ม สิทธิ์การเข้าถึง การชำระเงิน และการดาวน์โหลดโปรแกรมไว้ในที่เดียว",
-    "contact": "ติดต่อ",
-    "contactText": "สำหรับคำถามทั่วไป การขอสิทธิ์ ปัญหาการชำระเงินหรือดาวน์โหลด กรุณาติดต่อทางอีเมล",
-    "platform": "คู่มือแพลตฟอร์ม",
-    "platformText": "ใช้เมนูด้านบนเพื่อเปิดหน้า Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel และ Donation หน้าเว็บจะแสดงตามภาษาที่เลือก",
-    "access": "สมาชิกและสิทธิ์การเข้าถึง",
+    "title": "ความช่วยเหลือ IGDC · ศูนย์ดาวน์โหลด",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "สามารถส่งคำขออัปเกรดสมาชิกได้จากหน้าสำหรับสมาชิกเท่านั้น",
+    "qnaLine": "สำหรับคำถามทั่วไป ให้ถามผ่านช่อง Q&A แล้วที่ปรึกษา AI จะตอบอย่างรวดเร็ว",
+    "emailLabel": "อีเมลหลัก",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "ผู้เยี่ยมชมสามารถดูหน้าสาธารณะและข้อมูลดาวน์โหลดสาธารณะได้",
-      "หน้าสำหรับสมาชิก เครื่องมือผู้ดูแล รายได้ และข้อมูลการชำระบัญชีต้องเข้าสู่ระบบและได้รับอนุมัติสิทธิ์",
-      "สิทธิ์ผู้ดูแล/เจ้าของจะมอบให้เฉพาะบัญชีที่ผู้ดำเนินการยืนยันแล้ว",
-      "เมื่อขอสิทธิ์ กรุณาระบุชื่อ อีเมลบัญชี สิทธิ์ที่ต้องการ และเหตุผล"
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "การชำระเงิน · สมัครสมาชิก · คืนเงิน",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "ฟังก์ชันชำระเงินจะเปิดใช้งานหลังจากได้รับอนุมัติ PG/บัตรและตั้งค่าโดยผู้ดำเนินการ",
-      "บริการแบบชำระเงินจะแสดงราคา รอบบิล รายละเอียดบริการ และวิธียกเลิกก่อนชำระเงิน",
-      "การชำระเงินประจำต้องอนุญาตให้ขอยกเลิกได้ และเวลามีผลตามประกาศบริการ",
-      "การคืนเงิน การยกเลิก และข้อผิดพลาดดาวน์โหลดสามารถแจ้งทางอีเมลเพื่อตรวจสอบ"
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "ดาวน์โหลดโปรแกรม",
-    "downloadText": "หลังจากอัปโหลดไฟล์รุ่นเผยแพร่ไปยัง /downloads/ ในโดเมนนี้ ปุ่มด้านล่างจะทำงานเป็นลิงก์ดาวน์โหลด",
-    "notice": "หากยังไม่ได้อัปโหลดไฟล์รุ่นเผยแพร่ การดาวน์โหลดอาจไม่เปิด",
-    "upgradeText": "สามารถส่งคำขออัปเกรดสมาชิกได้จากหน้าสำหรับสมาชิกเท่านั้น",
-    "qnaText": "สำหรับคำถามง่าย ๆ ให้ใช้ช่อง Q&A แล้วที่ปรึกษา AI จะตอบกลับอย่างรวดเร็ว",
-    "policy": "ประกาศการดำเนินงาน",
-    "policyText": "หน้านี้เป็นประกาศพื้นฐานสำหรับการสนับสนุน ดาวน์โหลด สิทธิ์ และการชำระเงิน สามารถขยายเงื่อนไข นโยบายความเป็นส่วนตัว และนโยบายคืนเงินเป็นเอกสารแยกได้เมื่อจำเป็น",
-    "btnDownload": "ดาวน์โหลด",
-    "btnPending": "เปิดใช้หลังเผยแพร่",
-    "footer": "© IGDC Global Hub. หน้าข้อมูลสนับสนุนและดาวน์โหลด"
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "id": {
     "name": "Bahasa Indonesia",
     "title": "Bantuan IGDC · Pusat Unduhan",
-    "subtitle": "Bantuan platform, izin akses, panduan pembayaran, dan unduhan program dalam satu tempat.",
-    "contact": "Kontak",
-    "contactText": "Untuk bantuan umum, permintaan akses, masalah pembayaran, atau unduhan, hubungi kami melalui email.",
-    "platform": "Panduan platform",
-    "platformText": "Gunakan menu atas untuk membuka Beranda, Network Hub, Distribution Hub, Jejaring Sosial, Media Hub, Perjalanan, dan Donasi. Halaman mengikuti bahasa yang dipilih.",
-    "access": "Keanggotaan dan izin akses",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "Permohonan peningkatan anggota dapat diajukan melalui halaman khusus anggota.",
+    "qnaLine": "Untuk pertanyaan sederhana, ajukan melalui area Q&A dan konsultan AI akan menjawab dengan cepat.",
+    "emailLabel": "Email perwakilan",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "Pengunjung dapat melihat halaman publik dan informasi unduhan publik.",
-      "Halaman khusus anggota, alat admin, pendapatan, dan penyelesaian memerlukan login dan izin yang disetujui.",
-      "Akses admin/pemilik hanya diberikan kepada akun yang diverifikasi operator.",
-      "Saat meminta akses, sertakan nama, email akun, izin yang diperlukan, dan alasan."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Pembayaran · langganan · pengembalian dana",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "Fungsi pembayaran aktif setelah persetujuan PG/kartu dan pengaturan operator.",
-      "Layanan berbayar menampilkan harga, siklus tagihan, isi layanan, dan cara pembatalan sebelum pembayaran.",
-      "Pembayaran berulang harus memungkinkan permintaan pembatalan; waktu berlaku mengikuti pemberitahuan layanan.",
-      "Pengembalian dana, pembatalan, dan kesalahan unduhan dapat dilaporkan melalui email untuk ditinjau."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "Unduhan program",
-    "downloadText": "Setelah file rilis diunggah ke jalur /downloads/ pada domain ini, tombol di bawah akan berfungsi sebagai tautan unduhan.",
-    "notice": "Jika file rilis belum diunggah, unduhan mungkin tidak terbuka.",
-    "upgradeText": "Permintaan peningkatan keanggotaan dapat diajukan dari halaman khusus anggota.",
-    "qnaText": "Untuk pertanyaan sederhana, gunakan kolom Q&A; konsultan AI akan menjawab dengan cepat.",
-    "policy": "Pemberitahuan operasional",
-    "policyText": "Halaman ini adalah pemberitahuan dasar untuk dukungan, unduhan, akses, dan pembayaran. Syarat, privasi, dan kebijakan pengembalian dana dapat diperluas menjadi dokumen terpisah bila diperlukan.",
-    "btnDownload": "Unduh",
-    "btnPending": "Tersedia setelah rilis",
-    "footer": "© IGDC Global Hub. Halaman dukungan dan unduhan."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "hi": {
     "name": "हिन्दी",
     "title": "IGDC सहायता · डाउनलोड केंद्र",
-    "subtitle": "प्लेटफ़ॉर्म सहायता, पहुँच अनुमतियाँ, भुगतान मार्गदर्शन और प्रोग्राम डाउनलोड एक ही स्थान पर।",
-    "contact": "संपर्क",
-    "contactText": "सामान्य सहायता, पहुँच अनुरोध, भुगतान या डाउनलोड समस्याओं के लिए ईमेल से संपर्क करें।",
-    "platform": "प्लेटफ़ॉर्म मार्गदर्शिका",
-    "platformText": "ऊपरी मेनू से Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel और Donation पृष्ठ खोलें। पृष्ठ चुनी गई भाषा के अनुसार दिखाई देंगे।",
-    "access": "सदस्यता और पहुँच अनुमतियाँ",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "सदस्यता अपग्रेड अनुरोध सदस्य-विशेष पेज से जमा किए जा सकते हैं।",
+    "qnaLine": "सरल प्रश्न Q&A क्षेत्र में पूछें; AI सलाहकार शीघ्र उत्तर देगा।",
+    "emailLabel": "प्रतिनिधि ईमेल",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "आगंतुक सार्वजनिक पृष्ठ और सार्वजनिक डाउनलोड जानकारी देख सकते हैं।",
-      "सदस्य-विशेष पृष्ठ, व्यवस्थापक टूल, राजस्व और निपटान जानकारी के लिए लॉगिन और स्वीकृत अनुमति आवश्यक है।",
-      "व्यवस्थापक/स्वामी पहुँच केवल ऑपरेटर द्वारा सत्यापित खातों को दी जाती है।",
-      "पहुँच अनुरोध करते समय नाम, खाते का ईमेल, आवश्यक अनुमति और कारण शामिल करें।"
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "भुगतान · सदस्यता · धनवापसी मार्गदर्शन",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "भुगतान फ़ंक्शन PG/कार्ड स्वीकृति और ऑपरेटर सेटअप के बाद सक्रिय होते हैं।",
-      "भुगतान सेवाएँ भुगतान से पहले मूल्य, बिलिंग चक्र, सेवा सामग्री और रद्द करने की विधि दिखाती हैं।",
-      "आवर्ती भुगतान में रद्दीकरण अनुरोध की अनुमति होनी चाहिए; प्रभावी समय सेवा सूचना के अनुसार होगा।",
-      "धनवापसी, रद्दीकरण और डाउनलोड त्रुटियाँ समीक्षा के लिए ईमेल से भेजी जा सकती हैं।"
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "प्रोग्राम डाउनलोड",
-    "downloadText": "रिलीज़ फ़ाइलें इस डोमेन के /downloads/ पथ में अपलोड होने के बाद नीचे के बटन डाउनलोड लिंक के रूप में काम करेंगे।",
-    "notice": "यदि रिलीज़ फ़ाइल अभी अपलोड नहीं हुई है, तो डाउनलोड नहीं खुल सकता।",
-    "upgradeText": "सदस्यता उन्नयन अनुरोध सदस्य-विशेष पृष्ठ से भेजे जा सकते हैं।",
-    "qnaText": "सरल प्रश्नों के लिए Q&A प्रश्न क्षेत्र का उपयोग करें; AI सलाहकार शीघ्र उत्तर देगा।",
-    "policy": "संचालन सूचना",
-    "policyText": "यह पृष्ठ समर्थन, डाउनलोड, पहुँच और भुगतान मार्गदर्शन के लिए मूल सूचना पृष्ठ है। आवश्यकता होने पर शर्तें, गोपनीयता नीति और धनवापसी नीति अलग दस्तावेज़ों में विस्तारित की जा सकती हैं।",
-    "btnDownload": "डाउनलोड",
-    "btnPending": "रिलीज़ के बाद उपलब्ध",
-    "footer": "© IGDC Global Hub. सहायता और डाउनलोड जानकारी पृष्ठ।"
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "tr": {
     "name": "Türkçe",
     "title": "IGDC Yardım · İndirme Merkezi",
-    "subtitle": "Platform yardımı, erişim izinleri, ödeme rehberi ve program indirmeleri tek yerde.",
-    "contact": "İletişim",
-    "contactText": "Genel yardım, erişim talepleri, ödeme veya indirme sorunları için e-posta ile iletişime geçin.",
-    "platform": "Platform kılavuzu",
-    "platformText": "Üst menüden Ana sayfa, Network Hub, Distribution Hub, Sosyal Ağ, Media Hub, Seyahat ve Bağış sayfalarını açabilirsiniz. Sayfalar seçilen dile göre görünür.",
-    "access": "Üyelik ve erişim izinleri",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "Üyelik yükseltme başvuruları üyelere özel sayfadan yapılabilir.",
+    "qnaLine": "Basit sorular Q&A alanından sorulursa AI danışmanı hızlı yanıt verir.",
+    "emailLabel": "Temsilci e-posta",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "Ziyaretçiler herkese açık sayfaları ve indirme bilgilerini görebilir.",
-      "Üyelere özel sayfalar, admin araçları, gelir ve mutabakat bilgileri giriş ve onaylı izin gerektirir.",
-      "Admin/sahip erişimi yalnızca operatör tarafından doğrulanan hesaplara verilir.",
-      "Erişim isterken ad, hesap e-postası, gerekli izin ve nedeni ekleyin."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Ödeme · abonelik · iade rehberi",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "Ödeme işlevleri PG/kart onayı ve operatör kurulumu tamamlandıktan sonra etkinleşir.",
-      "Ücretli hizmetler ödeme öncesinde fiyatı, fatura döngüsünü, içeriği ve iptal yöntemini gösterir.",
-      "Tekrarlayan ödemeler iptal talebine izin vermelidir; geçerlilik zamanı hizmet bildirimine göre olur.",
-      "İade, iptal ve indirme hataları e-posta ile incelemeye gönderilebilir."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "Program indirmeleri",
-    "downloadText": "Sürüm dosyaları bu alan adındaki /downloads/ yoluna yüklendiğinde aşağıdaki düğmeler indirme bağlantısı olarak çalışır.",
-    "notice": "Sürüm dosyası henüz yüklenmediyse indirme açılmayabilir.",
-    "upgradeText": "Üyelik yükseltme talepleri üyeye özel sayfadan gönderilebilir.",
-    "qnaText": "Basit sorular için Q&A alanını kullanın; AI danışmanı hızlıca yanıt verir.",
-    "policy": "Operasyon bildirimi",
-    "policyText": "Bu sayfa destek, indirmeler, erişim ve ödeme rehberi için temel bildirim sayfasıdır. Gerekirse şartlar, gizlilik ve iade politikası ayrı belgelere genişletilebilir.",
-    "btnDownload": "İndir",
-    "btnPending": "Yayından sonra kullanılabilir",
-    "footer": "© IGDC Global Hub. Destek ve indirme bilgi sayfası."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "fa": {
     "name": "فارسی",
     "title": "راهنمای IGDC · مرکز دانلود",
-    "subtitle": "راهنمای پلتفرم، مجوزهای دسترسی، راهنمای پرداخت و دانلود برنامه‌ها در یک مکان.",
-    "contact": "تماس",
-    "contactText": "برای راهنمایی عمومی، درخواست دسترسی، مشکلات پرداخت یا دانلود از طریق ایمیل تماس بگیرید.",
-    "platform": "راهنمای پلتفرم",
-    "platformText": "از منوی بالا برای باز کردن خانه، Network Hub، Distribution Hub، شبکه اجتماعی، Media Hub، سفر و اهدا استفاده کنید. صفحات بر اساس زبان انتخاب‌شده نمایش داده می‌شوند.",
-    "access": "عضویت و مجوزهای دسترسی",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "درخواست ارتقای عضویت از صفحه مخصوص اعضا قابل ثبت است.",
+    "qnaLine": "برای پرسش‌های ساده، از بخش Q&A سؤال کنید تا مشاور هوش مصنوعی سریع پاسخ دهد.",
+    "emailLabel": "ایمیل اصلی",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "بازدیدکنندگان می‌توانند صفحات عمومی و اطلاعات دانلود عمومی را مشاهده کنند.",
-      "صفحات ویژه اعضا، ابزارهای مدیریت، درآمد و اطلاعات تسویه نیازمند ورود و مجوز تأییدشده است.",
-      "دسترسی مدیر/مالک فقط به حساب‌های تأییدشده توسط اپراتور داده می‌شود.",
-      "هنگام درخواست دسترسی، نام، ایمیل حساب، مجوز لازم و دلیل را ارسال کنید."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "پرداخت · اشتراک · بازپرداخت",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "امکانات پرداخت پس از تأیید PG/کارت و تنظیمات اپراتور فعال می‌شود.",
-      "خدمات پولی پیش از پرداخت قیمت، دوره صورتحساب، محتوای خدمت و روش لغو را نشان می‌دهند.",
-      "پرداخت‌های دوره‌ای باید امکان درخواست لغو داشته باشند؛ زمان اثرگذاری طبق اطلاعیه خدمت است.",
-      "بازپرداخت، لغو و خطاهای دانلود را می‌توان برای بررسی از طریق ایمیل ارسال کرد."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "دانلود برنامه‌ها",
-    "downloadText": "پس از بارگذاری فایل‌های انتشار در مسیر /downloads/ این دامنه، دکمه‌های زیر به‌عنوان لینک دانلود عمل می‌کنند.",
-    "notice": "اگر فایل انتشار هنوز بارگذاری نشده باشد، دانلود ممکن است باز نشود.",
-    "upgradeText": "درخواست ارتقای عضویت از صفحه ویژه اعضا قابل ارسال است.",
-    "qnaText": "برای پرسش‌های ساده، از بخش Q&A استفاده کنید؛ مشاور هوش مصنوعی سریع پاسخ می‌دهد.",
-    "policy": "اطلاعیه عملیاتی",
-    "policyText": "این صفحه، اطلاعیه پایه برای پشتیبانی، دانلود، دسترسی و راهنمای پرداخت است. در صورت نیاز، شرایط، حریم خصوصی و سیاست بازپرداخت می‌تواند به اسناد جداگانه گسترش یابد.",
-    "btnDownload": "دانلود",
-    "btnPending": "پس از انتشار فعال می‌شود",
-    "footer": "© IGDC Global Hub. صفحه پشتیبانی و دانلود."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "bn": {
     "name": "বাংলা",
-    "title": "IGDC সহায়তা · ডাউনলোড কেন্দ্র",
-    "subtitle": "প্ল্যাটফর্ম সহায়তা, প্রবেশাধিকার, পেমেন্ট নির্দেশনা এবং প্রোগ্রাম ডাউনলোড এক স্থানে।",
-    "contact": "যোগাযোগ",
-    "contactText": "সাধারণ সহায়তা, অ্যাক্সেস অনুরোধ, পেমেন্ট বা ডাউনলোড সমস্যার জন্য ইমেইলে যোগাযোগ করুন।",
-    "platform": "প্ল্যাটফর্ম নির্দেশিকা",
-    "platformText": "উপরের মেনু থেকে Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel এবং Donation পৃষ্ঠা খুলুন। পৃষ্ঠাগুলো নির্বাচিত ভাষা অনুসরণ করে।",
-    "access": "সদস্যপদ ও প্রবেশাধিকার",
+    "title": "IGDC সহায়তা · ডাউনলোড সেন্টার",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "সদস্যতা আপগ্রেডের আবেদন সদস্য-নির্দিষ্ট পেজ থেকে করা যায়।",
+    "qnaLine": "সহজ প্রশ্ন Q&A অংশে করলে AI পরামর্শদাতা দ্রুত উত্তর দেবেন।",
+    "emailLabel": "প্রতিনিধি ইমেল",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "ভিজিটররা পাবলিক পৃষ্ঠা ও পাবলিক ডাউনলোড তথ্য দেখতে পারেন।",
-      "সদস্য-নির্দিষ্ট পৃষ্ঠা, অ্যাডমিন টুল, আয় এবং নিষ্পত্তি তথ্যের জন্য লগইন ও অনুমোদিত অধিকার প্রয়োজন।",
-      "অ্যাডমিন/মালিক অধিকার কেবল অপারেটর যাচাই করা অ্যাকাউন্টে দেওয়া হয়।",
-      "অ্যাক্সেস চাইলে নাম, অ্যাকাউন্ট ইমেইল, প্রয়োজনীয় অধিকার ও কারণ লিখুন।"
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "পেমেন্ট · সাবস্ক্রিপশন · রিফান্ড নির্দেশনা",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "PG/কার্ড অনুমোদন ও অপারেটর সেটআপ সম্পন্ন হলে পেমেন্ট ফাংশন সক্রিয় হয়।",
-      "পেইড সার্ভিস পেমেন্টের আগে মূল্য, বিলিং চক্র, বিষয়বস্তু ও বাতিল পদ্ধতি দেখায়।",
-      "পুনরাবৃত্ত পেমেন্টে বাতিলের অনুরোধের সুযোগ থাকতে হবে; কার্যকর সময় সার্ভিস নোটিশ অনুযায়ী।",
-      "রিফান্ড, বাতিল ও ডাউনলোড ত্রুটি ইমেইলে পর্যালোচনার জন্য পাঠানো যায়।"
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "প্রোগ্রাম ডাউনলোড",
-    "downloadText": "রিলিজ ফাইল এই ডোমেইনের /downloads/ পথে আপলোড হলে নিচের বোতামগুলো ডাউনলোড লিংক হিসেবে কাজ করবে।",
-    "notice": "রিলিজ ফাইল এখনো আপলোড না হলে ডাউনলোড খুলতে নাও পারে।",
-    "upgradeText": "সদস্যপদ উন্নয়নের আবেদন সদস্য-নির্দিষ্ট পৃষ্ঠা থেকে জমা দেওয়া যায়।",
-    "qnaText": "সহজ প্রশ্নের জন্য Q&A প্রশ্নক্ষেত্র ব্যবহার করুন; AI পরামর্শদাতা দ্রুত উত্তর দেবে।",
-    "policy": "অপারেশনাল নোটিশ",
-    "policyText": "এই পৃষ্ঠা সহায়তা, ডাউনলোড, অ্যাক্সেস ও পেমেন্ট নির্দেশনার মৌলিক নোটিশ পৃষ্ঠা। প্রয়োজন হলে শর্তাবলি, গোপনীয়তা নীতি ও রিফান্ড নীতি আলাদা নথিতে সম্প্রসারিত করা যাবে।",
-    "btnDownload": "ডাউনলোড",
-    "btnPending": "রিলিজের পরে উপলব্ধ",
-    "footer": "© IGDC Global Hub. সহায়তা ও ডাউনলোড তথ্য পৃষ্ঠা।"
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "ur": {
     "name": "اردو",
-    "title": "IGDC مدد · ڈاؤن لوڈ مرکز",
-    "subtitle": "پلیٹ فارم مدد، رسائی اجازتیں، ادائیگی رہنمائی اور پروگرام ڈاؤن لوڈ ایک جگہ۔",
-    "contact": "رابطہ",
-    "contactText": "عام مدد، رسائی درخواست، ادائیگی یا ڈاؤن لوڈ مسائل کے لیے ای میل سے رابطہ کریں۔",
-    "platform": "پلیٹ فارم رہنما",
-    "platformText": "اوپر کے مینو سے Home، Network Hub، Distribution Hub، Social Network، Media Hub، Travel اور Donation صفحات کھولیں۔ صفحات منتخب زبان کے مطابق دکھتے ہیں۔",
-    "access": "رکنیت اور رسائی اجازتیں",
+    "title": "IGDC مدد · ڈاؤن لوڈ سینٹر",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "رکنیت اپ گریڈ کی درخواست ممبر-only صفحے سے دی جا سکتی ہے۔",
+    "qnaLine": "سادہ سوالات Q&A حصے میں پوچھیں؛ AI مشیر جلد جواب دے گا۔",
+    "emailLabel": "نمائندہ ای میل",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "زائرین عوامی صفحات اور عوامی ڈاؤن لوڈ معلومات دیکھ سکتے ہیں۔",
-      "ممبرز کے صفحات، ایڈمن ٹولز، آمدنی اور سیٹلمنٹ معلومات کے لیے لاگ اِن اور منظور شدہ اجازت درکار ہے۔",
-      "ایڈمن/مالک رسائی صرف آپریٹر کے تصدیق شدہ اکاؤنٹس کو دی جاتی ہے۔",
-      "رسائی کی درخواست کرتے وقت نام، اکاؤنٹ ای میل، مطلوبہ اجازت اور وجہ شامل کریں۔"
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "ادائیگی · سبسکرپشن · ریفنڈ رہنمائی",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "ادائیگی فنکشن PG/کارڈ منظوری اور آپریٹر سیٹ اپ کے بعد فعال ہوتے ہیں۔",
-      "ادا شدہ خدمات ادائیگی سے پہلے قیمت، بلنگ سائیکل، مواد اور منسوخی طریقہ دکھاتی ہیں۔",
-      "دہرائی جانے والی ادائیگیوں میں منسوخی درخواست کی اجازت ہونی چاہیے؛ مؤثر وقت خدمت نوٹس کے مطابق ہے۔",
-      "ریفنڈ، منسوخی اور ڈاؤن لوڈ غلطیاں ای میل کے ذریعے جائزہ کے لیے بھیجی جا سکتی ہیں۔"
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "پروگرام ڈاؤن لوڈ",
-    "downloadText": "ریلیز فائلیں اس ڈومین کے /downloads/ راستے میں اپ لوڈ ہونے کے بعد نیچے کے بٹن ڈاؤن لوڈ لنکس کے طور پر کام کریں گے۔",
-    "notice": "اگر ریلیز فائل ابھی اپ لوڈ نہیں ہوئی تو ڈاؤن لوڈ نہیں کھل سکتا۔",
-    "upgradeText": "رکنیت کی اپ گریڈ درخواست ممبرز کے مخصوص صفحے سے جمع کی جا سکتی ہے۔",
-    "qnaText": "سادہ سوالات کے لیے Q&A سوال کے حصے کو استعمال کریں؛ AI مشیر جلد جواب دے گا۔",
-    "policy": "آپریشنل نوٹس",
-    "policyText": "یہ صفحہ مدد، ڈاؤن لوڈ، رسائی اور ادائیگی رہنمائی کا بنیادی نوٹس صفحہ ہے۔ ضرورت پر شرائط، پرائیویسی پالیسی اور ریفنڈ پالیسی الگ دستاویزات میں بڑھائی جا سکتی ہیں۔",
-    "btnDownload": "ڈاؤن لوڈ",
-    "btnPending": "ریلیز کے بعد دستیاب",
-    "footer": "© IGDC Global Hub. مدد اور ڈاؤن لوڈ معلومات صفحہ۔"
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "sw": {
     "name": "Kiswahili",
     "title": "Msaada wa IGDC · Kituo cha Upakuaji",
-    "subtitle": "Msaada wa jukwaa, ruhusa za ufikiaji, mwongozo wa malipo na upakuaji wa programu mahali pamoja.",
-    "contact": "Mawasiliano",
-    "contactText": "Kwa msaada wa jumla, maombi ya ufikiaji, matatizo ya malipo au upakuaji, wasiliana nasi kwa barua pepe.",
-    "platform": "Mwongozo wa jukwaa",
-    "platformText": "Tumia menyu ya juu kufungua Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel na Donation. Kurasa hufuata lugha iliyochaguliwa.",
-    "access": "Uanachama na ruhusa za ufikiaji",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "Maombi ya kupandisha uanachama yanaweza kutumwa kwenye ukurasa wa wanachama pekee.",
+    "qnaLine": "Kwa maswali rahisi, uliza kupitia sehemu ya Q&A na mshauri wa AI atajibu haraka.",
+    "emailLabel": "Barua pepe kuu",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "Wageni wanaweza kuona kurasa za umma na taarifa za upakuaji wa umma.",
-      "Kurasa za wanachama, zana za admin, mapato na taarifa za malipo zinahitaji kuingia na ruhusa iliyoidhinishwa.",
-      "Ufikiaji wa admin/mmiliki hutolewa tu kwa akaunti zilizothibitishwa na msimamizi.",
-      "Unapoomba ufikiaji, jumuisha jina, barua pepe ya akaunti, ruhusa inayohitajika na sababu."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Malipo · usajili · marejesho",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "Kazi za malipo huwashwa baada ya idhini ya PG/kadi na usanidi wa msimamizi.",
-      "Huduma za kulipia huonyesha bei, mzunguko wa bili, maudhui na njia ya kughairi kabla ya malipo.",
-      "Malipo ya mara kwa mara lazima yaruhusu ombi la kughairi; muda wa kuanza hufuata tangazo la huduma.",
-      "Marejesho, kughairi na makosa ya upakuaji yanaweza kuripotiwa kwa barua pepe ili yakaguliwe."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "Upakuaji wa programu",
-    "downloadText": "Baada ya faili za kutolewa kupakiwa kwenye /downloads/ kwenye kikoa hiki, vitufe hapa chini vitafanya kazi kama viungo vya upakuaji.",
-    "notice": "Ikiwa faili bado haijapakiwa, upakuaji unaweza usifunguke.",
-    "upgradeText": "Maombi ya kuboresha uanachama yanaweza kuwasilishwa kwenye ukurasa wa wanachama pekee.",
-    "qnaText": "Kwa maswali rahisi, tumia sehemu ya Q&A; mshauri wa AI atajibu haraka.",
-    "policy": "Tangazo la uendeshaji",
-    "policyText": "Ukurasa huu ni tangazo la msingi kwa msaada, upakuaji, ufikiaji na mwongozo wa malipo. Masharti, sera ya faragha na sera ya marejesho zinaweza kupanuliwa kuwa hati tofauti inapohitajika.",
-    "btnDownload": "Pakua",
-    "btnPending": "Inapatikana baada ya kutolewa",
-    "footer": "© IGDC Global Hub. Ukurasa wa msaada na taarifa za upakuaji."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "ta": {
     "name": "தமிழ்",
     "title": "IGDC உதவி · பதிவிறக்க மையம்",
-    "subtitle": "தள உதவி, அணுகல் அனுமதிகள், கட்டண வழிகாட்டல் மற்றும் நிரல் பதிவிறக்கங்கள் ஒரே இடத்தில்.",
-    "contact": "தொடர்பு",
-    "contactText": "பொது உதவி, அணுகல் கோரிக்கை, கட்டணம் அல்லது பதிவிறக்க சிக்கல்களுக்கு மின்னஞ்சல் மூலம் தொடர்புகொள்ளுங்கள்.",
-    "platform": "தள வழிகாட்டி",
-    "platformText": "மேல்மெனுவில் Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, Donation பக்கங்களைத் திறக்கலாம். பக்கங்கள் தேர்ந்தெடுத்த மொழியின்படி காட்டப்படும்.",
-    "access": "உறுப்பினர் மற்றும் அணுகல் அனுமதிகள்",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "உறுப்பினர் மேம்பாட்டு விண்ணப்பம் உறுப்பினர் மட்டும் பக்கத்தில் செய்யலாம்.",
+    "qnaLine": "எளிய கேள்விகளை Q&A பகுதியில் கேட்டால் AI ஆலோசகர் விரைவில் பதிலளிப்பார்.",
+    "emailLabel": "முக்கிய மின்னஞ்சல்",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "பார்வையாளர்கள் பொது பக்கங்களையும் பொது பதிவிறக்க தகவல்களையும் பார்க்கலாம்.",
-      "உறுப்பினர் பக்கங்கள், நிர்வாக கருவிகள், வருவாய் மற்றும் தீர்வுத் தகவல்களுக்கு உள்நுழைவு மற்றும் அங்கீகரிக்கப்பட்ட அனுமதி தேவை.",
-      "நிர்வாகி/உரிமையாளர் அணுகல் இயக்குநர் உறுதிப்படுத்திய கணக்குகளுக்கு மட்டும் வழங்கப்படும்.",
-      "அணுகல் கோரும்போது பெயர், கணக்கு மின்னஞ்சல், தேவைப்படும் அனுமதி மற்றும் காரணத்தைச் சேர்க்கவும்."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "கட்டணம் · சந்தா · பணத்தீர்வு வழிகாட்டல்",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "PG/கார்டு அங்கீகாரம் மற்றும் இயக்குநர் அமைப்பு முடிந்த பிறகு கட்டண செயல்பாடுகள் இயங்கும்.",
-      "கட்டண சேவைகள் கட்டணம் செலுத்துவதற்கு முன் விலை, பில்லிங் சுழற்சி, உள்ளடக்கம் மற்றும் ரத்து முறையை காட்டும்.",
-      "மீளச்செலுத்தும் கட்டணங்கள் ரத்து கோரிக்கையை அனுமதிக்க வேண்டும்; அமல்படும் நேரம் சேவை அறிவிப்பைப் பின்பற்றும்.",
-      "பணத்தீர்வு, ரத்து, பதிவிறக்கப் பிழைகள் மதிப்பாய்வுக்காக மின்னஞ்சலில் அனுப்பலாம்."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "நிரல் பதிவிறக்கங்கள்",
-    "downloadText": "இந்த டொமைனின் /downloads/ பாதையில் வெளியீட்டு கோப்புகள் பதிவேற்றப்பட்ட பிறகு கீழே உள்ள பொத்தான்கள் பதிவிறக்க இணைப்பாக செயல்படும்.",
-    "notice": "வெளியீட்டு கோப்பு இன்னும் பதிவேற்றப்படவில்லை என்றால் பதிவிறக்கம் திறக்காமல் இருக்கலாம்.",
-    "upgradeText": "உறுப்பினர் மேம்பாட்டு கோரிக்கையை உறுப்பினர்-சிறப்பு பக்கத்தில் சமர்ப்பிக்கலாம்.",
-    "qnaText": "எளிய கேள்விகளுக்கு Q&A கேள்வி பகுதியைப் பயன்படுத்துங்கள்; AI ஆலோசகர் விரைவாக பதிலளிப்பார்.",
-    "policy": "இயக்க அறிவிப்பு",
-    "policyText": "இந்த பக்கம் ஆதரவு, பதிவிறக்கங்கள், அணுகல் மற்றும் கட்டண வழிகாட்டலுக்கான அடிப்படை அறிவிப்பு பக்கம். தேவைக்கேற்ப விதிமுறைகள், தனியுரிமைக் கொள்கை மற்றும் பணத்தீர்வு கொள்கை தனி ஆவணங்களாக விரிவாக்கப்படலாம்.",
-    "btnDownload": "பதிவிறக்கு",
-    "btnPending": "வெளியீட்டுக்குப் பின் கிடைக்கும்",
-    "footer": "© IGDC Global Hub. ஆதரவு மற்றும் பதிவிறக்க தகவல் பக்கம்."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "hu": {
     "name": "Magyar",
-    "title": "IGDC Súgó · Letöltőközpont",
-    "subtitle": "Platformsegítség, hozzáférési jogosultságok, fizetési útmutató és programletöltések egy helyen.",
-    "contact": "Kapcsolat",
-    "contactText": "Általános segítség, hozzáférési kérelmek, fizetési vagy letöltési problémák esetén írjon e-mailt.",
-    "platform": "Platform útmutató",
-    "platformText": "A felső menüben nyissa meg a Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel és Donation oldalakat. Az oldalak a kiválasztott nyelvet követik.",
-    "access": "Tagság és hozzáférési jogosultságok",
+    "title": "IGDC Súgó · Letöltési központ",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "A tagsági szintemelési kérelmek a csak tagoknak szóló oldalon nyújthatók be.",
+    "qnaLine": "Egyszerű kérdéseket a Q&A mezőben tehet fel; az AI tanácsadó gyorsan válaszol.",
+    "emailLabel": "Képviselő e-mail",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "A látogatók megtekinthetik a nyilvános oldalakat és letöltési információkat.",
-      "A csak tagoknak szóló oldalak, admin eszközök, bevételi és elszámolási adatok bejelentkezést és jóváhagyott jogosultságot igényelnek.",
-      "Admin/tulajdonosi hozzáférést csak az üzemeltető által ellenőrzött fiókok kapnak.",
-      "Hozzáférési kérelemnél adja meg nevét, fiók e-mailjét, szükséges jogosultságot és indokot."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Fizetés · előfizetés · visszatérítés",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "A fizetési funkciók PG/kártya jóváhagyás és üzemeltetői beállítás után aktiválódnak.",
-      "A fizetős szolgáltatások fizetés előtt megjelenítik az árat, számlázási ciklust, tartalmat és lemondási módot.",
-      "Az ismétlődő fizetéseknek engedniük kell a lemondási kérelmet; a hatálybalépés a szolgáltatási tájékoztató szerint történik.",
-      "Visszatérítés, lemondás és letöltési hiba e-mailben jelenthető felülvizsgálatra."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "Programletöltések",
-    "downloadText": "Miután a kiadási fájlokat feltöltik a domain /downloads/ útvonalára, az alábbi gombok letöltési linkként működnek.",
-    "notice": "Ha a kiadási fájl még nincs feltöltve, a letöltés nem biztos, hogy megnyílik.",
-    "upgradeText": "A tagsági szintemelési kérelmek a csak tagoknak szóló oldalon nyújthatók be.",
-    "qnaText": "Egyszerű kérdésekhez használja a Q&A kérdésmezőt; az AI tanácsadó gyorsan válaszol.",
-    "policy": "Üzemeltetési értesítés",
-    "policyText": "Ez az oldal a támogatás, letöltések, hozzáférés és fizetési útmutató alapvető értesítő oldala. Szükség esetén a feltételek, adatvédelem és visszatérítési szabályzat külön dokumentumokká bővíthetők.",
-    "btnDownload": "Letöltés",
-    "btnPending": "Megjelenés után elérhető",
-    "footer": "© IGDC Global Hub. Támogatási és letöltési információs oldal."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "ms": {
     "name": "Bahasa Melayu",
     "title": "Bantuan IGDC · Pusat Muat Turun",
-    "subtitle": "Bantuan platform, kebenaran akses, panduan pembayaran dan muat turun program di satu tempat.",
-    "contact": "Hubungi",
-    "contactText": "Untuk bantuan umum, permohonan akses, masalah pembayaran atau muat turun, hubungi kami melalui e-mel.",
-    "platform": "Panduan platform",
-    "platformText": "Gunakan menu atas untuk membuka Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel dan Donation. Halaman mengikut bahasa yang dipilih.",
-    "access": "Keahlian dan kebenaran akses",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "Permohonan naik taraf ahli boleh dihantar melalui halaman khas ahli.",
+    "qnaLine": "Untuk soalan ringkas, tanya melalui ruangan Q&A dan penasihat AI akan menjawab dengan pantas.",
+    "emailLabel": "E-mel wakil",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "Pelawat boleh melihat halaman awam dan maklumat muat turun awam.",
-      "Halaman ahli, alat admin, pendapatan dan maklumat penyelesaian memerlukan log masuk dan kebenaran diluluskan.",
-      "Akses admin/pemilik hanya diberi kepada akaun yang disahkan oleh pengendali.",
-      "Apabila memohon akses, sertakan nama, e-mel akaun, kebenaran diperlukan dan sebab."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Pembayaran · langganan · bayaran balik",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "Fungsi pembayaran aktif selepas kelulusan PG/kad dan tetapan pengendali.",
-      "Perkhidmatan berbayar memaparkan harga, kitaran bil, kandungan dan cara pembatalan sebelum bayaran.",
-      "Pembayaran berulang mesti membenarkan permohonan pembatalan; masa berkuat kuasa mengikut notis perkhidmatan.",
-      "Bayaran balik, pembatalan dan ralat muat turun boleh dilaporkan melalui e-mel untuk semakan."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "Muat turun program",
-    "downloadText": "Selepas fail keluaran dimuat naik ke laluan /downloads/ pada domain ini, butang di bawah akan berfungsi sebagai pautan muat turun.",
-    "notice": "Jika fail keluaran belum dimuat naik, muat turun mungkin tidak dibuka.",
-    "upgradeText": "Permohonan naik taraf keahlian boleh dihantar melalui halaman khusus ahli.",
-    "qnaText": "Untuk soalan ringkas, gunakan ruang Q&A; penasihat AI akan menjawab dengan cepat.",
-    "policy": "Notis operasi",
-    "policyText": "Halaman ini ialah notis asas untuk sokongan, muat turun, akses dan panduan pembayaran. Terma, privasi dan polisi bayaran balik boleh diperluas menjadi dokumen berasingan jika perlu.",
-    "btnDownload": "Muat turun",
-    "btnPending": "Tersedia selepas keluaran",
-    "footer": "© IGDC Global Hub. Halaman sokongan dan muat turun."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "nl": {
     "name": "Nederlands",
     "title": "IGDC Help · Downloadcentrum",
-    "subtitle": "Platformhulp, toegangsrechten, betalingsinformatie en programmadownloads op één plek.",
-    "contact": "Contact",
-    "contactText": "Voor algemene hulp, toegangsverzoeken, betalingsproblemen of downloadproblemen neemt u contact op per e-mail.",
-    "platform": "Platformgids",
-    "platformText": "Gebruik het bovenste menu voor Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel en Donation. Pagina’s volgen de gekozen taal.",
-    "access": "Lidmaatschap en toegangsrechten",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "Aanvragen voor lidmaatschapsupgrade kunnen via de ledenpagina worden ingediend.",
+    "qnaLine": "Voor eenvoudige vragen gebruikt u het Q&A-vak; een AI-adviseur antwoordt snel.",
+    "emailLabel": "Vertegenwoordigend e-mailadres",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "Bezoekers kunnen openbare pagina’s en openbare downloadinformatie bekijken.",
-      "Ledenpagina’s, admin-tools, inkomsten en afrekeninformatie vereisen login en goedgekeurde rechten.",
-      "Admin-/eigenaarstoegang wordt alleen verleend aan accounts die door de operator zijn geverifieerd.",
-      "Vermeld bij een toegangsverzoek naam, account-e-mail, benodigde rechten en reden."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Betaling · abonnement · terugbetaling",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "Betaalfuncties worden actief na PG-/kaartgoedkeuring en operatorinstelling.",
-      "Betaalde diensten tonen vóór betaling prijs, factureringscyclus, inhoud en annuleringsmethode.",
-      "Terugkerende betalingen moeten annuleringsverzoeken toestaan; de ingangsdatum volgt de servicemelding.",
-      "Terugbetalingen, annuleringen en downloadfouten kunnen per e-mail worden gemeld voor beoordeling."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "Programmadownloads",
-    "downloadText": "Nadat releasebestanden zijn geüpload naar /downloads/ op dit domein, werken de knoppen hieronder als downloadlinks.",
-    "notice": "Als een releasebestand nog niet is geüpload, kan de download niet openen.",
-    "upgradeText": "Aanvragen voor een lidmaatschapsupgrade kunnen worden ingediend via de ledenpagina.",
-    "qnaText": "Gebruik voor eenvoudige vragen het Q&A-vraagveld; de AI-assistent antwoordt snel.",
-    "policy": "Operationele melding",
-    "policyText": "Deze pagina is de basiskennisgeving voor support, downloads, toegang en betalingsinformatie. Voorwaarden, privacybeleid en terugbetalingsbeleid kunnen indien nodig als aparte documenten worden uitgebreid.",
-    "btnDownload": "Downloaden",
-    "btnPending": "Beschikbaar na release",
-    "footer": "© IGDC Global Hub. Support- en downloadinformatiepagina."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "pl": {
     "name": "Polski",
     "title": "Pomoc IGDC · Centrum pobierania",
-    "subtitle": "Pomoc platformy, uprawnienia dostępu, płatności i pobieranie programów w jednym miejscu.",
-    "contact": "Kontakt",
-    "contactText": "W sprawach ogólnych, dostępu, płatności lub problemów z pobieraniem prosimy o kontakt e-mail.",
-    "platform": "Przewodnik platformy",
-    "platformText": "Użyj górnego menu, aby otworzyć Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel i Donation. Strony działają w wybranym języku.",
-    "access": "Członkostwo i uprawnienia dostępu",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "Wnioski o podniesienie członkostwa można składać na stronie tylko dla członków.",
+    "qnaLine": "Proste pytania zadaj w sekcji Q&A; konsultant AI szybko odpowie.",
+    "emailLabel": "Główny e-mail",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "Odwiedzający mogą przeglądać strony publiczne i publiczne informacje o pobieraniu.",
-      "Strony członków, narzędzia admina, przychody i rozliczenia wymagają logowania i zatwierdzonych uprawnień.",
-      "Dostęp admina/właściciela otrzymują tylko konta zweryfikowane przez operatora.",
-      "W prośbie o dostęp podaj imię, e-mail konta, wymagane uprawnienie i powód."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Płatność · subskrypcja · zwrot",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "Funkcje płatności aktywują się po zatwierdzeniu PG/karty i konfiguracji operatora.",
-      "Usługi płatne pokazują przed płatnością cenę, cykl rozliczeń, zakres i sposób anulowania.",
-      "Płatności cykliczne muszą umożliwiać prośbę o anulowanie; termin skutku wynika z informacji o usłudze.",
-      "Zwroty, anulacje i błędy pobierania można zgłaszać e-mailem do sprawdzenia."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "Pobieranie programów",
-    "downloadText": "Po przesłaniu plików wydania do /downloads/ w tej domenie poniższe przyciski będą działać jako linki pobierania.",
-    "notice": "Jeśli plik wydania nie został jeszcze przesłany, pobieranie może się nie otworzyć.",
-    "upgradeText": "Wniosek o podniesienie poziomu członkostwa można złożyć na stronie tylko dla członków.",
-    "qnaText": "W przypadku prostych pytań użyj pola Q&A; konsultant AI szybko odpowie.",
-    "policy": "Informacja operacyjna",
-    "policyText": "Ta strona jest podstawową informacją dotyczącą wsparcia, pobierania, dostępu i płatności. Regulamin, prywatność i polityka zwrotów mogą zostać rozszerzone do oddzielnych dokumentów, jeśli będzie to potrzebne.",
-    "btnDownload": "Pobierz",
-    "btnPending": "Dostępne po wydaniu",
-    "footer": "© IGDC Global Hub. Strona wsparcia i pobierania."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "sv": {
     "name": "Svenska",
     "title": "IGDC Hjälp · Nedladdningscenter",
-    "subtitle": "Plattformshjälp, åtkomsträttigheter, betalningsvägledning och programnedladdningar på ett ställe.",
-    "contact": "Kontakt",
-    "contactText": "För allmän hjälp, åtkomstförfrågningar, betalnings- eller nedladdningsproblem, kontakta oss via e-post.",
-    "platform": "Plattformsguide",
-    "platformText": "Använd toppmenyn för att öppna Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel och Donation. Sidorna följer valt språk.",
-    "access": "Medlemskap och åtkomsträttigheter",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "Begäran om medlemsuppgradering kan skickas från medlemssidan.",
+    "qnaLine": "För enkla frågor, använd Q&A-fältet; en AI-rådgivare svarar snabbt.",
+    "emailLabel": "Representativ e-post",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "Besökare kan se offentliga sidor och offentlig nedladdningsinformation.",
-      "Medlemssidor, adminverktyg, intäkter och avräkning kräver inloggning och godkänd behörighet.",
-      "Admin-/ägaråtkomst ges endast till konton som verifierats av operatören.",
-      "När du begär åtkomst, ange namn, konto-e-post, nödvändig behörighet och skäl."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Betalning · prenumeration · återbetalning",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "Betalfunktioner aktiveras efter PG-/kortgodkännande och operatörsinställning.",
-      "Betalda tjänster visar pris, faktureringscykel, innehåll och avbokningsmetod före betalning.",
-      "Återkommande betalningar måste tillåta avbokningsbegäran; giltighetstid följer tjänsteinformationen.",
-      "Återbetalningar, avbokningar och nedladdningsfel kan rapporteras via e-post för granskning."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "Programnedladdningar",
-    "downloadText": "När releasefiler har laddats upp till /downloads/ på denna domän fungerar knapparna nedan som nedladdningslänkar.",
-    "notice": "Om en releasefil inte har laddats upp ännu kanske nedladdningen inte öppnas.",
-    "upgradeText": "Begäran om uppgradering av medlemskap kan skickas från medlemssidan.",
-    "qnaText": "För enkla frågor, använd Q&A-fältet; AI-rådgivaren svarar snabbt.",
-    "policy": "Driftmeddelande",
-    "policyText": "Denna sida är grundinformationen för support, nedladdningar, åtkomst och betalningsvägledning. Villkor, integritet och återbetalningspolicy kan vid behov utvecklas som separata dokument.",
-    "btnDownload": "Ladda ner",
-    "btnPending": "Tillgängligt efter release",
-    "footer": "© IGDC Global Hub. Support- och nedladdningsinformationssida."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "tl": {
     "name": "Filipino",
     "title": "Tulong IGDC · Download Center",
-    "subtitle": "Tulong sa platform, access permission, gabay sa bayad, at program downloads sa iisang lugar.",
-    "contact": "Makipag-ugnayan",
-    "contactText": "Para sa pangkalahatang tulong, access request, isyu sa bayad o download, makipag-ugnayan sa email.",
-    "platform": "Gabay sa platform",
-    "platformText": "Gamitin ang itaas na menu upang buksan ang Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel at Donation. Susunod ang mga pahina sa napiling wika.",
-    "access": "Membership at access permission",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "Ang membership upgrade request ay maaaring isumite sa member-only page.",
+    "qnaLine": "Para sa simpleng tanong, gamitin ang Q&A area at mabilis na sasagot ang AI consultant.",
+    "emailLabel": "Pangunahing email",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "Maaaring makita ng mga bisita ang pampublikong pahina at pampublikong impormasyon sa download.",
-      "Ang member-only pages, admin tools, revenue at settlement information ay nangangailangan ng login at aprubadong permiso.",
-      "Ang admin/owner access ay ibinibigay lamang sa account na na-verify ng operator.",
-      "Kapag humihiling ng access, isama ang pangalan, account email, kinakailangang permiso at dahilan."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Bayad · subscription · refund guide",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "Magiging aktibo ang payment functions matapos ang PG/card approval at setup ng operator.",
-      "Ipinapakita ng paid services ang presyo, billing cycle, nilalaman at paraan ng pagkansela bago magbayad.",
-      "Dapat payagan ng recurring payments ang cancellation request; ang bisa ay ayon sa service notice.",
-      "Refund, cancellation at download errors ay maaaring ireport sa email para mareview."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
     "downloads": "Program downloads",
-    "downloadText": "Kapag na-upload ang release files sa /downloads/ path ng domain na ito, gagana ang mga button sa ibaba bilang download links.",
-    "notice": "Kung hindi pa na-upload ang release file, maaaring hindi bumukas ang download.",
-    "upgradeText": "Maaaring isumite ang kahilingan sa pag-upgrade ng membership sa member-only page.",
-    "qnaText": "Para sa simpleng tanong, gamitin ang Q&A question area; mabilis na sasagot ang AI assistant.",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
     "policy": "Operational notice",
-    "policyText": "Ang pahinang ito ay pangunahing notice para sa support, downloads, access at payment guidance. Maaaring palawakin ang terms, privacy policy at refund policy bilang hiwalay na dokumento kapag kailangan.",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
     "btnDownload": "Download",
-    "btnPending": "Available pagkatapos ng release",
-    "footer": "© IGDC Global Hub. Support at download information page."
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "uk": {
     "name": "Українська",
-    "title": "Допомога IGDC · Центр завантажень",
-    "subtitle": "Допомога платформи, права доступу, платежі та завантаження програм в одному місці.",
-    "contact": "Контакт",
-    "contactText": "Для загальної допомоги, запитів доступу, проблем з оплатою або завантаженням звертайтеся електронною поштою.",
-    "platform": "Посібник платформи",
-    "platformText": "Використовуйте верхнє меню для відкриття Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel і Donation. Сторінки відображаються вибраною мовою.",
-    "access": "Членство та права доступу",
+    "title": "Довідка IGDC · Центр завантажень",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "Заявку на підвищення рівня членства можна подати на сторінці для учасників.",
+    "qnaLine": "Прості запитання ставте в розділі Q&A; AI-консультант швидко відповість.",
+    "emailLabel": "Основна електронна пошта",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "Відвідувачі можуть переглядати публічні сторінки та публічну інформацію про завантаження.",
-      "Сторінки для учасників, інструменти адміна, доходи та розрахунки потребують входу і затверджених прав.",
-      "Доступ адміністратора/власника надається лише акаунтам, перевіреним оператором.",
-      "Під час запиту доступу вкажіть ім’я, e-mail акаунта, потрібне право та причину."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Оплата · підписка · повернення",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "Платіжні функції активуються після схвалення PG/картки та налаштування оператором.",
-      "Платні сервіси до оплати показують ціну, цикл списання, вміст послуги та спосіб скасування.",
-      "Регулярні платежі мають дозволяти запит на скасування; час набуття чинності визначається повідомленням сервісу.",
-      "Повернення, скасування та помилки завантаження можна надіслати на перевірку електронною поштою."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "Завантаження програм",
-    "downloadText": "Після завантаження файлів релізу до /downloads/ у цьому домені кнопки нижче працюватимуть як посилання для завантаження.",
-    "notice": "Якщо файл релізу ще не завантажено, завантаження може не відкритися.",
-    "upgradeText": "Заявку на підвищення рівня членства можна подати на сторінці лише для учасників.",
-    "qnaText": "Для простих запитань скористайтеся полем Q&A; AI-консультант швидко відповість.",
-    "policy": "Операційне повідомлення",
-    "policyText": "Ця сторінка є базовим повідомленням щодо підтримки, завантажень, доступу та платежів. Умови, політика конфіденційності та політика повернення можуть бути розширені в окремі документи за потреби.",
-    "btnDownload": "Завантажити",
-    "btnPending": "Доступно після релізу",
-    "footer": "© IGDC Global Hub. Сторінка підтримки та завантажень."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   },
   "uz": {
     "name": "Oʻzbekcha",
     "title": "IGDC Yordam · Yuklab olish markazi",
-    "subtitle": "Platforma yordami, kirish ruxsatlari, toʻlov yoʻriqnomasi va dastur yuklab olishlari bir joyda.",
-    "contact": "Aloqa",
-    "contactText": "Umumiy yordam, kirish soʻrovlari, toʻlov yoki yuklab olish muammolari uchun email orqali murojaat qiling.",
-    "platform": "Platforma qoʻllanmasi",
-    "platformText": "Yuqori menyudan Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel va Donation sahifalarini oching. Sahifalar tanlangan tilga mos koʻrsatiladi.",
-    "access": "A’zolik va kirish ruxsatlari",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "upgradeLine": "A’zolikni oshirish so‘rovi faqat a’zolar sahifasidan yuboriladi.",
+    "qnaLine": "Oddiy savollarni Q&A bo‘limida bering; AI maslahatchi tez javob beradi.",
+    "emailLabel": "Vakillik e-pochtasi",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
     "accessItems": [
-      "Mehmonlar ommaviy sahifalar va ommaviy yuklab olish ma’lumotlarini ko‘rishi mumkin.",
-      "Faqat a’zolar sahifalari, admin vositalari, daromad va hisob-kitob ma’lumotlari login va tasdiqlangan ruxsatni talab qiladi.",
-      "Admin/egalik huquqi faqat operator tasdiqlagan akkauntlarga beriladi.",
-      "Kirish so‘raganda ism, akkaunt emaili, kerakli ruxsat va sababni kiriting."
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "Access requests can be submitted through the upgrade request on the member-only page."
     ],
-    "payment": "Toʻlov · obuna · qaytarish yoʻriqnomasi",
+    "payment": "Payment · subscription · refund guidance",
     "paymentItems": [
-      "Toʻlov funksiyalari PG/karta tasdig‘i va operator sozlamasidan keyin faollashadi.",
-      "Pullik xizmatlar to‘lovdan oldin narx, hisob-kitob davri, xizmat mazmuni va bekor qilish usulini ko‘rsatadi.",
-      "Takroriy to‘lovlar bekor qilish so‘roviga ruxsat berishi kerak; amal qilish vaqti xizmat xabarnomasiga bog‘liq.",
-      "Qaytarish, bekor qilish va yuklab olish xatolari email orqali ko‘rib chiqish uchun yuborilishi mumkin."
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors are reviewed by the operator according to the posted process."
     ],
-    "downloads": "Dastur yuklab olishlari",
-    "downloadText": "Chiqarilish fayllari ushbu domendagi /downloads/ yo‘liga yuklangandan so‘ng, quyidagi tugmalar yuklab olish havolasi bo‘lib ishlaydi.",
-    "notice": "Chiqarilish fayli hali yuklanmagan bo‘lsa, yuklab olish ochilmasligi mumkin.",
-    "upgradeText": "A’zolik darajasini oshirish so‘rovi faqat a’zolar sahifasidan yuborilishi mumkin.",
-    "qnaText": "Oddiy savollar uchun Q&A savol maydonidan foydalaning; AI maslahatchi tez javob beradi.",
-    "policy": "Operatsion xabarnoma",
-    "policyText": "Ushbu sahifa yordam, yuklab olishlar, kirish va to‘lov yo‘riqnomasi uchun asosiy xabarnoma sahifasidir. Zarur bo‘lsa, shartlar, maxfiylik siyosati va qaytarish siyosati alohida hujjatlar sifatida kengaytirilishi mumkin.",
-    "btnDownload": "Yuklab olish",
-    "btnPending": "Chiqarilgandan keyin mavjud",
-    "footer": "© IGDC Global Hub. Yordam va yuklab olish ma’lumotlari sahifasi."
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "footer": "© IGDC Global Hub. Support and download information page."
   }
 };
 const RTL = new Set(['ar','fa','ur']);
-const ORDER = ["ko", "en", "zh", "zht", "ja", "es", "fr", "de", "ru", "pt", "it", "ar", "vi", "th", "id", "hi", "tr", "fa", "bn", "ur", "sw", "ta", "hu", "ms", "nl", "pl", "sv", "tl", "uk", "uz"];
 function getLang(){
   try{
     const q = new URLSearchParams(location.search).get('lang');
@@ -1094,56 +1022,45 @@ function getLang(){
     if(saved && I18N[saved]) return saved;
     const doc = (document.documentElement.lang||'').toLowerCase();
     if(doc && I18N[doc]) return doc;
-    const nav = (navigator.language||'').toLowerCase().split(/[-_]/)[0];
-    if(I18N[nav]) return nav;
+    const nav = (navigator.language||'').toLowerCase();
+    if(nav === 'zh-tw' || nav === 'zh-hk' || nav === 'zh-hant') return 'zht';
+    const base = nav.split(/[-_]/)[0];
+    if(I18N[base]) return base;
   }catch(e){}
   return 'ko';
 }
+function fillText(id, text){ const el=document.getElementById(id); if(el) el.textContent=text||''; }
 function fillList(id, arr){
   const el=document.getElementById(id); if(!el) return;
   el.innerHTML=''; (arr||[]).forEach(t=>{ const li=document.createElement('li'); li.textContent=t; el.appendChild(li); });
 }
 function render(lang){
-  const t=I18N[lang]||I18N.en;
+  const t=I18N[lang]||I18N.ko;
   document.documentElement.lang=lang;
   document.body.classList.toggle('rtl', RTL.has(lang));
   document.title=t.title || 'IGDC Help';
-  document.getElementById('title').textContent=t.title;
-  document.getElementById('subtitle').textContent=t.subtitle;
-  document.getElementById('contactText').textContent=t.contactText;
-  document.getElementById('upgradeText').textContent=t.upgradeText || '';
-  document.getElementById('qnaText').textContent=t.qnaText || '';
-  document.getElementById('platformTitle').textContent=t.platform;
-  document.getElementById('platformText').textContent=t.platformText;
-  document.getElementById('accessTitle').textContent=t.access;
+  fillText('title', t.title);
+  fillText('subtitle', t.subtitle);
+  fillText('upgradeLine', t.upgradeLine);
+  fillText('qnaLine', t.qnaLine);
+  fillText('emailLabel', t.emailLabel);
+  fillText('platformTitle', t.platform);
+  fillText('platformText', t.platformText);
+  fillText('accessTitle', t.access);
   fillList('accessItems', t.accessItems);
-  document.getElementById('paymentTitle').textContent=t.payment;
+  fillText('paymentTitle', t.payment);
   fillList('paymentItems', t.paymentItems);
-  document.getElementById('policyTitle').textContent=t.policy;
-  document.getElementById('policyText').textContent=t.policyText;
-  document.getElementById('downloadsTitle').textContent=t.downloads;
-  document.getElementById('downloadText').textContent=t.downloadText;
-  document.getElementById('downloadNotice').textContent=t.notice;
-  document.getElementById('footer').textContent=t.footer;
+  fillText('policyTitle', t.policy);
+  fillText('policyText', t.policyText);
+  fillText('downloadsTitle', t.downloads);
+  fillText('downloadText', t.downloadText);
+  fillText('downloadNotice', t.notice);
+  fillText('footer', t.footer);
   document.querySelectorAll('[data-i18n-btn]').forEach(a=>a.textContent=t.btnDownload||'Download');
-  const sel=document.getElementById('langSelect'); if(sel) sel.value=lang;
 }
-function initSelect(){
-  // The index page already owns the language selector.
-  // This support page only follows localStorage/query/html lang.
-  const sel=document.getElementById('langSelect');
-  if(!sel) return;
-  ORDER.forEach(code=>{ const opt=document.createElement('option'); opt.value=code; opt.textContent=(I18N[code]&&I18N[code].name)||code; sel.appendChild(opt); });
-  sel.addEventListener('change', function(){
-    try{ localStorage.setItem('igdc_lang', this.value); }catch(e){}
-    render(this.value);
-    try{ if(parent && parent!==window && typeof parent.changeLanguage==='function') parent.changeLanguage(this.value); }catch(e){}
-  });
-}
-initSelect();
 render(getLang());
 window.addEventListener('storage', e=>{ if(e.key==='igdc_lang' && I18N[e.newValue]) render(e.newValue); });
-window.addEventListener('message', e=>{ try{ const lang=e && e.data && (e.data.lang || e.data.igdc_lang); if(lang && I18N[lang]) render(lang); }catch(_){} });
+window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang || e.data.igdc_lang); if(lang && I18N[lang]) render(lang); }catch(_e){} });
 </script>
 </body>
 </html>
