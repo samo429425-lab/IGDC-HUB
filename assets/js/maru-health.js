@@ -29,7 +29,7 @@
 
   if(!global || !document) return;
 
-  var VERSION = "front-slot-revenue-final-v1.2-json-download";
+  var VERSION = "front-slot-revenue-final-v1.2.1-probe-stable-json-download";
   var MODAL_ID = "maru-health-final-slot-modal";
   var STYLE_ID = "maru-health-final-slot-style";
   var TARGET_TEXTS = ["수익", "썸네일", "상품", "맵핑"];
@@ -818,8 +818,8 @@
 
   async function mediaProbe(){
     var endpoints = [
-      "/.netlify/functions/maru-search?q=media&limit=20&type=image&external=off",
-      "/.netlify/functions/maru-search?q=video&limit=20&type=video&external=off"
+      "/.netlify/functions/maru-search?q=media&limit=20&type=image&external=off&noExternal=1&disableExternal=1&probe=1&audit=1&fast=1&diagnostic=front-slot-revenue&noRevenue=1&noAnalytics=1",
+      "/.netlify/functions/maru-search?q=video&limit=20&type=video&external=off&noExternal=1&disableExternal=1&probe=1&audit=1&fast=1&diagnostic=front-slot-revenue&noRevenue=1&noAnalytics=1"
     ];
     var attempts = [];
     for(var i=0;i<endpoints.length;i++){
@@ -840,7 +840,7 @@
 
   async function revenueProbe(){
     var endpoints = [
-      "/.netlify/functions/maru-revenue-engine?action=report",
+      "/.netlify/functions/maru-revenue-engine?action=report&fast=1&probe=1&audit=1&summary=1&limit=50",
       "/.netlify/functions/maru-revenue-engine?mode=health",
       "/api/igdc/income/summary"
     ];
