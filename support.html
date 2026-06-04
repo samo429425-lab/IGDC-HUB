@@ -1233,57 +1233,556 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
 })();
 
 
+
 (function(){
   const guideBtn = document.getElementById('igdcDownloadGuideBtn');
   if(!guideBtn) return;
+  const GUIDE_TEXT = {
+  "ko": [
+    "IGDC 다운로드 가이드",
+    "MARU Media Player · Windows",
+    "Windows 설치 파일 안내입니다.",
+    "1. IGDC 도움말 · 다운로드 센터 페이지를 엽니다.",
+    "2. MARU Media Player · Windows 다운로드 버튼을 클릭합니다.",
+    "3. maru-media-player-setup.exe 파일을 컴퓨터에 저장합니다.",
+    "4. 다운로드가 완료되면 설치 파일을 실행합니다.",
+    "5. Windows 보안 확인 창이 표시되면 IGDC 공식 사이트에서 받은 파일인지 확인한 뒤 진행해 주세요.",
+    "참고",
+    "- Windows 설치 파일은 약 197MB의 대용량 파일입니다.",
+    "- 네트워크 상태에 따라 다운로드 시간이 달라질 수 있습니다.",
+    "- 모바일 앱은 현재 이 페이지에서 배포하지 않습니다.",
+    "- 새 버전이 나오면 같은 공식 다운로드 위치에서 파일만 교체할 수 있습니다.",
+    "공식 지원 연락처",
+    "igdcplatform@gmail.com"
+  ],
+  "en": [
+    "IGDC Download Guide",
+    "MARU Media Player · Windows",
+    "Windows installer guide.",
+    "1. Open the IGDC Help · Download Center page.",
+    "2. Click the download button for MARU Media Player · Windows.",
+    "3. Save maru-media-player-setup.exe to your computer.",
+    "4. After the download is complete, run the installer.",
+    "5. If Windows displays a security confirmation, check that the file was downloaded from the official IGDC site before continuing.",
+    "Notes",
+    "- The Windows installer is a large file, about 197 MB.",
+    "- Download time may vary depending on the network.",
+    "- The Android/mobile app is not distributed on this page at this stage.",
+    "- If a new version is released later, the file may be replaced at the same official download location.",
+    "Official support contact",
+    "igdcplatform@gmail.com"
+  ],
+  "zh": [
+    "IGDC 下载指南",
+    "MARU Media Player · Windows",
+    "Windows 安装文件说明。",
+    "1. 打开 IGDC 帮助 · 下载中心页面。",
+    "2. 点击 MARU Media Player · Windows 下载按钮。",
+    "3. 将 maru-media-player-setup.exe 保存到电脑。",
+    "4. 下载完成后运行安装程序。",
+    "5. 如果 Windows 显示安全确认，请确认文件来自 IGDC 官方网站后再继续。",
+    "注意",
+    "- Windows 安装文件约为 197MB。",
+    "- 下载时间会因网络状况而不同。",
+    "- 当前本页面不发布 Android/移动应用。",
+    "- 以后发布新版本时，可在同一官方下载位置替换文件。",
+    "官方支持联系方式",
+    "igdcplatform@gmail.com"
+  ],
+  "zht": [
+    "IGDC 下載指南",
+    "MARU Media Player · Windows",
+    "Windows 安裝檔案說明。",
+    "1. 開啟 IGDC 說明 · 下載中心頁面。",
+    "2. 點擊 MARU Media Player · Windows 下載按鈕。",
+    "3. 將 maru-media-player-setup.exe 儲存到電腦。",
+    "4. 下載完成後執行安裝程式。",
+    "5. 若 Windows 顯示安全確認，請確認檔案來自 IGDC 官方網站後再繼續。",
+    "注意",
+    "- Windows 安裝檔約 197MB。",
+    "- 下載時間會依網路狀態而不同。",
+    "- 目前本頁不提供 Android/行動應用程式。",
+    "- 日後發布新版時，可在同一官方下载位置替換檔案。",
+    "官方支援聯絡方式",
+    "igdcplatform@gmail.com"
+  ],
+  "ja": [
+    "IGDC ダウンロードガイド",
+    "MARU Media Player · Windows",
+    "Windows インストーラーの案内です。",
+    "1. IGDC ヘルプ · ダウンロードセンターを開きます。",
+    "2. MARU Media Player · Windows のダウンロードボタンをクリックします。",
+    "3. maru-media-player-setup.exe をコンピューターに保存します。",
+    "4. ダウンロード完了後、インストーラーを実行します。",
+    "5. Windows のセキュリティ確認が表示された場合、IGDC 公式サイトから取得したファイルか確認してから続行してください。",
+    "注意",
+    "- Windows インストーラーは約 197MB の大容量ファイルです。",
+    "- ダウンロード時間はネットワーク環境により変わります。",
+    "- 現段階では Android/モバイルアプリはこのページで配布しません。",
+    "- 新しいバージョンは同じ公式ダウンロード場所で置き換えられる場合があります。",
+    "公式サポート連絡先",
+    "igdcplatform@gmail.com"
+  ],
+  "es": [
+    "Guía de descarga de IGDC",
+    "MARU Media Player · Windows",
+    "Guía del instalador para Windows.",
+    "1. Abra la página IGDC Help · Download Center.",
+    "2. Haga clic en el botón de descarga de MARU Media Player · Windows.",
+    "3. Guarde maru-media-player-setup.exe en su computadora.",
+    "4. Cuando termine la descarga, ejecute el instalador.",
+    "5. Si Windows muestra una confirmación de seguridad, verifique que el archivo provenga del sitio oficial de IGDC antes de continuar.",
+    "Notas",
+    "- El instalador de Windows pesa aproximadamente 197 MB.",
+    "- El tiempo de descarga puede variar según la red.",
+    "- La app Android/móvil no se distribuye en esta página por ahora.",
+    "- Si se publica una nueva versión, el archivo puede reemplazarse en la misma ubicación oficial.",
+    "Contacto oficial de soporte",
+    "igdcplatform@gmail.com"
+  ],
+  "fr": [
+    "Guide de téléchargement IGDC",
+    "MARU Media Player · Windows",
+    "Guide du programme d’installation Windows.",
+    "1. Ouvrez la page IGDC Help · Download Center.",
+    "2. Cliquez sur le bouton de téléchargement MARU Media Player · Windows.",
+    "3. Enregistrez maru-media-player-setup.exe sur votre ordinateur.",
+    "4. Une fois le téléchargement terminé, lancez l’installateur.",
+    "5. Si Windows affiche une confirmation de sécurité, vérifiez que le fichier vient du site officiel IGDC avant de continuer.",
+    "Notes",
+    "- Le fichier d’installation Windows fait environ 197 Mo.",
+    "- Le temps de téléchargement varie selon le réseau.",
+    "- L’application Android/mobile n’est pas distribuée sur cette page pour le moment.",
+    "- Une nouvelle version pourra remplacer le fichier au même emplacement officiel.",
+    "Contact officiel du support",
+    "igdcplatform@gmail.com"
+  ],
+  "de": [
+    "IGDC Download-Anleitung",
+    "MARU Media Player · Windows",
+    "Anleitung für den Windows-Installer.",
+    "1. Öffnen Sie die Seite IGDC Help · Download Center.",
+    "2. Klicken Sie auf den Download-Button für MARU Media Player · Windows.",
+    "3. Speichern Sie maru-media-player-setup.exe auf Ihrem Computer.",
+    "4. Führen Sie nach Abschluss des Downloads den Installer aus.",
+    "5. Wenn Windows eine Sicherheitsabfrage zeigt, prüfen Sie, ob die Datei von der offiziellen IGDC-Seite stammt.",
+    "Hinweise",
+    "- Der Windows-Installer ist ca. 197 MB groß.",
+    "- Die Downloadzeit hängt vom Netzwerk ab.",
+    "- Die Android/Mobile-App wird derzeit nicht auf dieser Seite verteilt.",
+    "- Bei neuen Versionen kann die Datei am gleichen offiziellen Downloadort ersetzt werden.",
+    "Offizieller Supportkontakt",
+    "igdcplatform@gmail.com"
+  ],
+  "ru": [
+    "Руководство по загрузке IGDC",
+    "MARU Media Player · Windows",
+    "Инструкция для установщика Windows.",
+    "1. Откройте страницу IGDC Help · Download Center.",
+    "2. Нажмите кнопку загрузки MARU Media Player · Windows.",
+    "3. Сохраните maru-media-player-setup.exe на компьютер.",
+    "4. После завершения загрузки запустите установщик.",
+    "5. Если Windows покажет предупреждение безопасности, убедитесь, что файл получен с официального сайта IGDC.",
+    "Примечания",
+    "- Установочный файл Windows имеет размер около 197 МБ.",
+    "- Время загрузки зависит от сети.",
+    "- Android/мобильное приложение сейчас не распространяется на этой странице.",
+    "- При выходе новой версии файл может быть заменён в том же официальном месте загрузки.",
+    "Официальный контакт поддержки",
+    "igdcplatform@gmail.com"
+  ],
+  "pt": [
+    "Guia de download IGDC",
+    "MARU Media Player · Windows",
+    "Guia do instalador para Windows.",
+    "1. Abra a página IGDC Help · Download Center.",
+    "2. Clique no botão de download do MARU Media Player · Windows.",
+    "3. Salve maru-media-player-setup.exe no computador.",
+    "4. Após o download, execute o instalador.",
+    "5. Se o Windows exibir uma confirmação de segurança, verifique se o arquivo veio do site oficial da IGDC antes de continuar.",
+    "Notas",
+    "- O instalador do Windows tem cerca de 197 MB.",
+    "- O tempo de download pode variar conforme a rede.",
+    "- O app Android/mobile não é distribuído nesta página nesta etapa.",
+    "- Se uma nova versão for lançada, o arquivo poderá ser substituído no mesmo local oficial.",
+    "Contato oficial de suporte",
+    "igdcplatform@gmail.com"
+  ],
+  "it": [
+    "Guida al download IGDC",
+    "MARU Media Player · Windows",
+    "Guida all’installer Windows.",
+    "1. Aprire la pagina IGDC Help · Download Center.",
+    "2. Fare clic sul pulsante di download per MARU Media Player · Windows.",
+    "3. Salvare maru-media-player-setup.exe sul computer.",
+    "4. Al termine del download, eseguire l’installer.",
+    "5. Se Windows mostra una conferma di sicurezza, verificare che il file provenga dal sito ufficiale IGDC prima di continuare.",
+    "Note",
+    "- L’installer Windows è un file di grandi dimensioni, circa 197 MB.",
+    "- Il tempo di download può variare in base alla rete.",
+    "- L’app Android/mobile non viene distribuita in questa pagina in questa fase.",
+    "- In caso di nuova versione, il file potrà essere sostituito nella stessa posizione ufficiale.",
+    "Contatto ufficiale di supporto",
+    "igdcplatform@gmail.com"
+  ],
+  "ar": [
+    "دليل تنزيل IGDC",
+    "MARU Media Player · Windows",
+    "دليل ملف تثبيت Windows.",
+    "1. افتح صفحة IGDC Help · Download Center.",
+    "2. اضغط زر تنزيل MARU Media Player · Windows.",
+    "3. احفظ ملف maru-media-player-setup.exe على جهازك.",
+    "4. بعد اكتمال التنزيل، شغّل ملف التثبيت.",
+    "5. إذا ظهرت رسالة أمان من Windows، تأكد أن الملف من موقع IGDC الرسمي قبل المتابعة.",
+    "ملاحظات",
+    "- ملف تثبيت Windows كبير، حوالي 197 ميغابايت.",
+    "- قد يختلف وقت التنزيل حسب الشبكة.",
+    "- تطبيق Android/الجوال غير موزع في هذه الصفحة حالياً.",
+    "- عند إصدار نسخة جديدة يمكن استبدال الملف في نفس موقع التنزيل الرسمي.",
+    "جهة الدعم الرسمية",
+    "igdcplatform@gmail.com"
+  ],
+  "vi": [
+    "Hướng dẫn tải xuống IGDC",
+    "MARU Media Player · Windows",
+    "Hướng dẫn bộ cài Windows.",
+    "1. Mở trang IGDC Help · Download Center.",
+    "2. Nhấn nút tải MARU Media Player · Windows.",
+    "3. Lưu maru-media-player-setup.exe vào máy tính.",
+    "4. Sau khi tải xong, chạy bộ cài.",
+    "5. Nếu Windows hiển thị xác nhận bảo mật, hãy kiểm tra tệp được tải từ trang IGDC chính thức trước khi tiếp tục.",
+    "Ghi chú",
+    "- Bộ cài Windows có dung lượng khoảng 197 MB.",
+    "- Thời gian tải phụ thuộc vào mạng.",
+    "- Ứng dụng Android/mobile hiện không được phân phối trên trang này.",
+    "- Khi có phiên bản mới, tệp có thể được thay thế tại cùng vị trí tải chính thức.",
+    "Liên hệ hỗ trợ chính thức",
+    "igdcplatform@gmail.com"
+  ],
+  "th": [
+    "คู่มือดาวน์โหลด IGDC",
+    "MARU Media Player · Windows",
+    "คำแนะนำไฟล์ติดตั้ง Windows",
+    "1. เปิดหน้า IGDC Help · Download Center",
+    "2. คลิกปุ่มดาวน์โหลด MARU Media Player · Windows",
+    "3. บันทึกไฟล์ maru-media-player-setup.exe ลงในคอมพิวเตอร์",
+    "4. เมื่อดาวน์โหลดเสร็จแล้ว ให้เรียกใช้ไฟล์ติดตั้ง",
+    "5. หาก Windows แสดงหน้าต่างยืนยันความปลอดภัย โปรดตรวจสอบว่าไฟล์มาจากเว็บไซต์ IGDC อย่างเป็นทางการก่อนดำเนินการต่อ",
+    "หมายเหตุ",
+    "- ไฟล์ติดตั้ง Windows มีขนาดใหญ่ ประมาณ 197 MB",
+    "- เวลาในการดาวน์โหลดอาจแตกต่างกันตามเครือข่าย",
+    "- ขณะนี้ไม่ได้เผยแพร่แอป Android/มือถือในหน้านี้",
+    "- หากมีเวอร์ชันใหม่ ไฟล์อาจถูกแทนที่ในตำแหน่งดาวน์โหลดอย่างเป็นทางการเดิม",
+    "ช่องทางติดต่อฝ่ายสนับสนุนอย่างเป็นทางการ",
+    "igdcplatform@gmail.com"
+  ],
+  "id": [
+    "Panduan Unduhan IGDC",
+    "MARU Media Player · Windows",
+    "Panduan berkas instalasi Windows.",
+    "1. Buka halaman IGDC Help · Download Center.",
+    "2. Klik tombol unduh untuk MARU Media Player · Windows.",
+    "3. Simpan maru-media-player-setup.exe ke komputer Anda.",
+    "4. Setelah unduhan selesai, jalankan installer.",
+    "5. Jika Windows menampilkan konfirmasi keamanan, pastikan file berasal dari situs resmi IGDC sebelum melanjutkan.",
+    "Catatan",
+    "- Installer Windows berukuran besar, sekitar 197 MB.",
+    "- Waktu unduhan dapat berbeda tergantung jaringan.",
+    "- Aplikasi Android/mobile tidak didistribusikan di halaman ini pada tahap ini.",
+    "- Jika versi baru dirilis, file dapat diganti di lokasi unduhan resmi yang sama.",
+    "Kontak dukungan resmi",
+    "igdcplatform@gmail.com"
+  ],
+  "hi": [
+    "IGDC डाउनलोड गाइड",
+    "MARU Media Player · Windows",
+    "Windows इंस्टॉलर गाइड।",
+    "1. IGDC Help · Download Center पेज खोलें।",
+    "2. MARU Media Player · Windows डाउनलोड बटन पर क्लिक करें।",
+    "3. maru-media-player-setup.exe को अपने कंप्यूटर में सेव करें।",
+    "4. डाउनलोड पूरा होने के बाद इंस्टॉलर चलाएँ।",
+    "5. यदि Windows सुरक्षा पुष्टि दिखाए, तो आगे बढ़ने से पहले जाँचें कि फ़ाइल आधिकारिक IGDC साइट से डाउनलोड हुई है।",
+    "नोट्स",
+    "- Windows इंस्टॉलर लगभग 197 MB की बड़ी फ़ाइल है।",
+    "- डाउनलोड समय नेटवर्क के अनुसार बदल सकता है।",
+    "- Android/mobile ऐप इस चरण में इस पेज पर वितरित नहीं किया जाता।",
+    "- नई संस्करण जारी होने पर फ़ाइल उसी आधिकारिक डाउनलोड स्थान पर बदली जा सकती है।",
+    "आधिकारिक सहायता संपर्क",
+    "igdcplatform@gmail.com"
+  ],
+  "tr": [
+    "IGDC İndirme Kılavuzu",
+    "MARU Media Player · Windows",
+    "Windows kurulum dosyası kılavuzu.",
+    "1. IGDC Help · Download Center sayfasını açın.",
+    "2. MARU Media Player · Windows indirme düğmesine tıklayın.",
+    "3. maru-media-player-setup.exe dosyasını bilgisayarınıza kaydedin.",
+    "4. İndirme tamamlandıktan sonra kurulum dosyasını çalıştırın.",
+    "5. Windows güvenlik onayı gösterirse, devam etmeden önce dosyanın resmi IGDC sitesinden indirildiğini kontrol edin.",
+    "Notlar",
+    "- Windows kurulum dosyası yaklaşık 197 MB büyüklüğündedir.",
+    "- İndirme süresi ağa göre değişebilir.",
+    "- Android/mobil uygulama bu aşamada bu sayfada dağıtılmamaktadır.",
+    "- Yeni sürüm çıkarsa dosya aynı resmi indirme konumunda değiştirilebilir.",
+    "Resmi destek iletişimi",
+    "igdcplatform@gmail.com"
+  ],
+  "fa": [
+    "راهنمای دانلود IGDC",
+    "MARU Media Player · Windows",
+    "راهنمای فایل نصب ویندوز.",
+    "1. صفحه IGDC Help · Download Center را باز کنید.",
+    "2. روی دکمه دانلود MARU Media Player · Windows کلیک کنید.",
+    "3. فایل maru-media-player-setup.exe را در رایانه خود ذخیره کنید.",
+    "4. پس از پایان دانلود، فایل نصب را اجرا کنید.",
+    "5. اگر Windows تأیید امنیتی نشان داد، پیش از ادامه بررسی کنید که فایل از سایت رسمی IGDC دانلود شده باشد.",
+    "یادداشت‌ها",
+    "- فایل نصب ویندوز بزرگ است و حدود 197 مگابایت حجم دارد.",
+    "- زمان دانلود بسته به شبکه متفاوت است.",
+    "- برنامه Android/mobile در حال حاضر از این صفحه توزیع نمی‌شود.",
+    "- در صورت انتشار نسخه جدید، فایل ممکن است در همان محل رسمی دانلود جایگزین شود.",
+    "تماس رسمی پشتیبانی",
+    "igdcplatform@gmail.com"
+  ],
+  "bn": [
+    "IGDC ডাউনলোড গাইড",
+    "MARU Media Player · Windows",
+    "Windows ইনস্টলার নির্দেশিকা।",
+    "1. IGDC Help · Download Center পৃষ্ঠা খুলুন।",
+    "2. MARU Media Player · Windows ডাউনলোড বোতামে ক্লিক করুন।",
+    "3. maru-media-player-setup.exe ফাইলটি আপনার কম্পিউটারে সংরক্ষণ করুন।",
+    "4. ডাউনলোড শেষ হলে ইনস্টলার চালান।",
+    "5. Windows নিরাপত্তা নিশ্চিতকরণ দেখালে, এগোনোর আগে ফাইলটি IGDC অফিসিয়াল সাইট থেকে ডাউনলোড হয়েছে কিনা নিশ্চিত করুন।",
+    "নোট",
+    "- Windows ইনস্টলারটি প্রায় 197 MB আকারের বড় ফাইল।",
+    "- নেটওয়ার্কের ওপর ডাউনলোড সময় পরিবর্তিত হতে পারে।",
+    "- Android/mobile অ্যাপ এই পর্যায়ে এই পৃষ্ঠায় বিতরণ করা হচ্ছে না।",
+    "- নতুন সংস্করণ প্রকাশ হলে একই অফিসিয়াল ডাউনলোড স্থানে ফাইলটি প্রতিস্থাপন করা যেতে পারে।",
+    "অফিসিয়াল সহায়তা যোগাযোগ",
+    "igdcplatform@gmail.com"
+  ],
+  "ur": [
+    "IGDC ڈاؤن لوڈ گائیڈ",
+    "MARU Media Player · Windows",
+    "Windows انسٹالر گائیڈ۔",
+    "1. IGDC Help · Download Center صفحہ کھولیں۔",
+    "2. MARU Media Player · Windows کے ڈاؤن لوڈ بٹن پر کلک کریں۔",
+    "3. maru-media-player-setup.exe کو اپنے کمپیوٹر میں محفوظ کریں۔",
+    "4. ڈاؤن لوڈ مکمل ہونے کے بعد انسٹالر چلائیں۔",
+    "5. اگر Windows سیکیورٹی تصدیق دکھائے تو جاری رکھنے سے پہلے چیک کریں کہ فائل IGDC کی آفیشل سائٹ سے ڈاؤن لوڈ ہوئی ہے۔",
+    "نوٹس",
+    "- Windows انسٹالر تقریباً 197 MB کی بڑی فائل ہے۔",
+    "- ڈاؤن لوڈ وقت نیٹ ورک کے مطابق بدل سکتا ہے۔",
+    "- Android/mobile ایپ اس مرحلے پر اس صفحے سے تقسیم نہیں کی جاتی۔",
+    "- نئی ورژن آنے پر فائل اسی آفیشل ڈاؤن لوڈ مقام پر تبدیل کی جا سکتی ہے۔",
+    "آفیشل سپورٹ رابطہ",
+    "igdcplatform@gmail.com"
+  ],
+  "sw": [
+    "Mwongozo wa Upakuaji wa IGDC",
+    "MARU Media Player · Windows",
+    "Mwongozo wa kisakinishi cha Windows.",
+    "1. Fungua ukurasa wa IGDC Help · Download Center.",
+    "2. Bofya kitufe cha kupakua MARU Media Player · Windows.",
+    "3. Hifadhi maru-media-player-setup.exe kwenye kompyuta yako.",
+    "4. Baada ya upakuaji kukamilika, endesha kisakinishi.",
+    "5. Ikiwa Windows itaonyesha uthibitisho wa usalama, hakikisha faili imetoka kwenye tovuti rasmi ya IGDC kabla ya kuendelea.",
+    "Vidokezo",
+    "- Kisakinishi cha Windows ni faili kubwa, takribani 197 MB.",
+    "- Muda wa kupakua unaweza kutofautiana kulingana na mtandao.",
+    "- Programu ya Android/mobile haisambazwi kwenye ukurasa huu kwa sasa.",
+    "- Toleo jipya likitolewa, faili inaweza kubadilishwa katika eneo lile lile rasmi la upakuaji.",
+    "Mawasiliano rasmi ya usaidizi",
+    "igdcplatform@gmail.com"
+  ],
+  "ta": [
+    "IGDC பதிவிறக்க வழிகாட்டி",
+    "MARU Media Player · Windows",
+    "Windows நிறுவி வழிகாட்டி.",
+    "1. IGDC Help · Download Center பக்கத்தைத் திறக்கவும்.",
+    "2. MARU Media Player · Windows பதிவிறக்க பொத்தானை அழுத்தவும்.",
+    "3. maru-media-player-setup.exe கோப்பை உங்கள் கணினியில் சேமிக்கவும்.",
+    "4. பதிவிறக்கம் முடிந்ததும் நிறுவியை இயக்கவும்.",
+    "5. Windows பாதுகாப்பு உறுதிப்படுத்தலைக் காட்டினால், தொடர்வதற்கு முன் கோப்பு IGDC அதிகாரப்பூர்வ தளத்திலிருந்து பதிவிறக்கம் செய்யப்பட்டதா என சரிபார்க்கவும்.",
+    "குறிப்புகள்",
+    "- Windows நிறுவி சுமார் 197 MB அளவுடைய பெரிய கோப்பு.",
+    "- பதிவிறக்க நேரம் நெட்வொர்க்கைப் பொறுத்து மாறலாம்.",
+    "- Android/mobile பயன்பாடு தற்போது இந்தப் பக்கத்தில் வழங்கப்படவில்லை.",
+    "- புதிய பதிப்பு வெளியிடப்பட்டால், அதே அதிகாரப்பூர்வ பதிவிறக்க இடத்தில் கோப்பு மாற்றப்படலாம்.",
+    "அதிகாரப்பூர்வ ஆதரவு தொடர்பு",
+    "igdcplatform@gmail.com"
+  ],
+  "hu": [
+    "IGDC letöltési útmutató",
+    "MARU Media Player · Windows",
+    "Windows telepítő útmutató.",
+    "1. Nyissa meg az IGDC Help · Download Center oldalt.",
+    "2. Kattintson a MARU Media Player · Windows letöltés gombra.",
+    "3. Mentse a maru-media-player-setup.exe fájlt a számítógépére.",
+    "4. A letöltés után futtassa a telepítőt.",
+    "5. Ha a Windows biztonsági megerősítést kér, ellenőrizze, hogy a fájl a hivatalos IGDC oldalról származik-e.",
+    "Megjegyzések",
+    "- A Windows telepítő nagy fájl, körülbelül 197 MB.",
+    "- A letöltési idő a hálózattól függ.",
+    "- Az Android/mobile alkalmazás jelenleg nem ezen az oldalon kerül terjesztésre.",
+    "- Új verzió esetén a fájl ugyanazon a hivatalos letöltési helyen cserélhető.",
+    "Hivatalos támogatási kapcsolat",
+    "igdcplatform@gmail.com"
+  ],
+  "ms": [
+    "Panduan Muat Turun IGDC",
+    "MARU Media Player · Windows",
+    "Panduan pemasang Windows.",
+    "1. Buka halaman IGDC Help · Download Center.",
+    "2. Klik butang muat turun MARU Media Player · Windows.",
+    "3. Simpan maru-media-player-setup.exe ke komputer anda.",
+    "4. Selepas muat turun selesai, jalankan pemasang.",
+    "5. Jika Windows memaparkan pengesahan keselamatan, pastikan fail dimuat turun dari laman rasmi IGDC sebelum meneruskan.",
+    "Nota",
+    "- Pemasang Windows ialah fail besar, kira-kira 197 MB.",
+    "- Masa muat turun bergantung pada rangkaian.",
+    "- Aplikasi Android/mobile tidak diedarkan di halaman ini pada peringkat ini.",
+    "- Jika versi baharu dikeluarkan, fail boleh diganti di lokasi muat turun rasmi yang sama.",
+    "Hubungan sokongan rasmi",
+    "igdcplatform@gmail.com"
+  ],
+  "nl": [
+    "IGDC downloadgids",
+    "MARU Media Player · Windows",
+    "Handleiding voor Windows-installatiebestand.",
+    "1. Open de pagina IGDC Help · Download Center.",
+    "2. Klik op de downloadknop voor MARU Media Player · Windows.",
+    "3. Sla maru-media-player-setup.exe op uw computer op.",
+    "4. Voer na het downloaden het installatiebestand uit.",
+    "5. Als Windows een beveiligingsbevestiging toont, controleer dan of het bestand van de officiële IGDC-site komt voordat u doorgaat.",
+    "Opmerkingen",
+    "- Het Windows-installatiebestand is groot, ongeveer 197 MB.",
+    "- De downloadtijd kan per netwerk verschillen.",
+    "- De Android/mobile-app wordt in deze fase niet via deze pagina verspreid.",
+    "- Bij een nieuwe versie kan het bestand op dezelfde officiële downloadlocatie worden vervangen.",
+    "Officieel supportcontact",
+    "igdcplatform@gmail.com"
+  ],
+  "pl": [
+    "Przewodnik pobierania IGDC",
+    "MARU Media Player · Windows",
+    "Instrukcja instalatora Windows.",
+    "1. Otwórz stronę IGDC Help · Download Center.",
+    "2. Kliknij przycisk pobierania MARU Media Player · Windows.",
+    "3. Zapisz maru-media-player-setup.exe na komputerze.",
+    "4. Po zakończeniu pobierania uruchom instalator.",
+    "5. Jeśli Windows pokaże potwierdzenie bezpieczeństwa, sprawdź, czy plik pochodzi z oficjalnej strony IGDC.",
+    "Uwagi",
+    "- Instalator Windows ma około 197 MB.",
+    "- Czas pobierania zależy od sieci.",
+    "- Aplikacja Android/mobile nie jest obecnie dystrybuowana na tej stronie.",
+    "- Po wydaniu nowej wersji plik może zostać zastąpiony w tej samej oficjalnej lokalizacji.",
+    "Oficjalny kontakt wsparcia",
+    "igdcplatform@gmail.com"
+  ],
+  "sv": [
+    "IGDC nedladdningsguide",
+    "MARU Media Player · Windows",
+    "Guide för Windows-installationsfil.",
+    "1. Öppna sidan IGDC Help · Download Center.",
+    "2. Klicka på nedladdningsknappen för MARU Media Player · Windows.",
+    "3. Spara maru-media-player-setup.exe på datorn.",
+    "4. Kör installationsfilen när nedladdningen är klar.",
+    "5. Om Windows visar en säkerhetsbekräftelse, kontrollera att filen laddats ner från den officiella IGDC-webbplatsen innan du fortsätter.",
+    "Anteckningar",
+    "- Windows-installationsfilen är stor, cirka 197 MB.",
+    "- Nedladdningstiden kan variera beroende på nätverket.",
+    "- Android/mobile-appen distribueras inte på denna sida i detta skede.",
+    "- Vid ny version kan filen ersättas på samma officiella nedladdningsplats.",
+    "Officiell supportkontakt",
+    "igdcplatform@gmail.com"
+  ],
+  "tl": [
+    "Gabay sa Pag-download ng IGDC",
+    "MARU Media Player · Windows",
+    "Gabay para sa Windows installer.",
+    "1. Buksan ang IGDC Help · Download Center page.",
+    "2. I-click ang download button para sa MARU Media Player · Windows.",
+    "3. I-save ang maru-media-player-setup.exe sa iyong computer.",
+    "4. Kapag tapos na ang download, patakbuhin ang installer.",
+    "5. Kung magpakita ang Windows ng security confirmation, tiyaking mula sa opisyal na IGDC site ang file bago magpatuloy.",
+    "Mga tala",
+    "- Malaking file ang Windows installer, humigit-kumulang 197 MB.",
+    "- Maaaring mag-iba ang oras ng download depende sa network.",
+    "- Ang Android/mobile app ay hindi muna ipinamamahagi sa pahinang ito.",
+    "- Kapag may bagong bersyon, maaaring palitan ang file sa parehong opisyal na download location.",
+    "Opisyal na support contact",
+    "igdcplatform@gmail.com"
+  ],
+  "uk": [
+    "Посібник із завантаження IGDC",
+    "MARU Media Player · Windows",
+    "Інструкція для інсталятора Windows.",
+    "1. Відкрийте сторінку IGDC Help · Download Center.",
+    "2. Натисніть кнопку завантаження MARU Media Player · Windows.",
+    "3. Збережіть maru-media-player-setup.exe на комп’ютер.",
+    "4. Після завершення завантаження запустіть інсталятор.",
+    "5. Якщо Windows покаже підтвердження безпеки, перевірте, що файл отримано з офіційного сайту IGDC.",
+    "Примітки",
+    "- Інсталятор Windows має розмір близько 197 MB.",
+    "- Час завантаження залежить від мережі.",
+    "- Android/mobile додаток наразі не розповсюджується на цій сторінці.",
+    "- У разі нової версії файл може бути замінено в тому самому офіційному місці завантаження.",
+    "Офіційний контакт підтримки",
+    "igdcplatform@gmail.com"
+  ],
+  "uz": [
+    "IGDC yuklab olish qoʻllanmasi",
+    "MARU Media Player · Windows",
+    "Windows oʻrnatish fayli boʻyicha qoʻllanma.",
+    "1. IGDC Help · Download Center sahifasini oching.",
+    "2. MARU Media Player · Windows yuklab olish tugmasini bosing.",
+    "3. maru-media-player-setup.exe faylini kompyuteringizga saqlang.",
+    "4. Yuklab olish tugagach, oʻrnatuvchini ishga tushiring.",
+    "5. Agar Windows xavfsizlik tasdigʻini koʻrsatsa, davom etishdan oldin fayl IGDC rasmiy saytidan olinganini tekshiring.",
+    "Eslatmalar",
+    "- Windows oʻrnatuvchisi katta fayl, taxminan 197 MB.",
+    "- Yuklab olish vaqti tarmoqqa qarab farq qilishi mumkin.",
+    "- Android/mobile ilova hozircha bu sahifada tarqatilmaydi.",
+    "- Yangi versiya chiqsa, fayl shu rasmiy yuklab olish joyida almashtirilishi mumkin.",
+    "Rasmiy qoʻllab-quvvatlash aloqasi",
+    "igdcplatform@gmail.com"
+  ]
+};
   function safe(v){ return (v == null ? '' : String(v)); }
   function buildGuideText(){
     const lang = (typeof getLang === 'function' ? getLang() : 'ko');
     const t = (typeof I18N !== 'undefined' && (I18N[lang] || I18N.ko || I18N.en)) || {};
+    const base = GUIDE_TEXT[lang] || GUIDE_TEXT.en || GUIDE_TEXT.ko;
     const lines = [];
-    lines.push('IGDC DOWNLOAD GUIDE');
+    lines.push(base[0] || 'IGDC Download Guide');
     lines.push('===================');
     lines.push('');
-    lines.push('MARU Media Player · Windows');
+    lines.push(base[1] || 'MARU Media Player · Windows');
     lines.push('');
-    lines.push(safe(t.downloadText) || 'The Windows installer is provided through the official IGDC download link.');
+    lines.push(base[2] || safe(t.downloadText) || 'Windows installer guide.');
     lines.push('');
-    lines.push('1. Open the IGDC Help · Download Center page.');
-    lines.push('2. Click the download button for MARU Media Player · Windows.');
-    lines.push('3. Save maru-media-player-setup.exe to your computer.');
-    lines.push('4. After the download is complete, run the installer.');
-    lines.push('5. If Windows displays a security confirmation, check that the file was downloaded from the official IGDC site before continuing.');
+    for(let i=3;i<=7;i++){ if(base[i]) lines.push(base[i]); }
     lines.push('');
-    lines.push('Notes');
+    lines.push(base[8] || 'Notes');
     lines.push('-----');
-    lines.push('- The Windows installer is a large file, about 197 MB.');
-    lines.push('- Download time may vary depending on the network.');
-    lines.push('- The Android/mobile app is not distributed on this page at this stage.');
-    lines.push('- If a new version is released later, the file may be replaced at the same official download location.');
+    for(let i=9;i<=12;i++){ if(base[i]) lines.push(base[i]); }
     if(t.notice){ lines.push('- ' + safe(t.notice)); }
     lines.push('');
-    lines.push('Korean 안내');
-    lines.push('-----------');
-    lines.push('MARU Media Player Windows 설치 파일 안내입니다.');
-    lines.push('');
-    lines.push('1. IGDC 도움말 · 다운로드 센터 페이지를 엽니다.');
-    lines.push('2. MARU Media Player · Windows 다운로드 버튼을 클릭합니다.');
-    lines.push('3. maru-media-player-setup.exe 파일을 컴퓨터에 저장합니다.');
-    lines.push('4. 다운로드가 완료되면 설치 파일을 실행합니다.');
-    lines.push('5. Windows 보안 확인 창이 표시되면 IGDC 공식 사이트에서 받은 파일인지 확인한 뒤 진행해 주세요.');
-    lines.push('');
-    lines.push('참고');
-    lines.push('----');
-    lines.push('- Windows 설치 파일은 약 197MB의 대용량 파일입니다.');
-    lines.push('- 네트워크 상태에 따라 다운로드 시간이 달라질 수 있습니다.');
-    lines.push('- 모바일 앱은 현재 이 페이지에서 배포하지 않습니다.');
-    lines.push('- 새 버전이 나오면 같은 공식 다운로드 위치에서 파일만 교체할 수 있습니다.');
-    lines.push('');
-    lines.push('Official support contact');
+    lines.push(base[13] || 'Official support contact');
     lines.push('------------------------');
-    lines.push('igdcplatform@gmail.com');
+    lines.push(base[14] || 'igdcplatform@gmail.com');
     lines.push('');
-    return lines.join('\r\n');
+    if(lang !== 'ko'){
+      const ko = GUIDE_TEXT.ko;
+      lines.push('');
+      lines.push('한국어 안내');
+      lines.push('-----------');
+      ko.slice(1, 13).forEach(function(line, idx){ if(idx !== 7) lines.push(line); });
+      lines.push('');
+    }
+    return lines.join('
+');
   }
   guideBtn.addEventListener('click', function(ev){
     ev.preventDefault();
