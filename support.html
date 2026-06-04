@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>IGDC Help · Download Center</title>
+<style>
+  :root { --igdc-blue:#004080; --igdc-line:#d9e4f2; --igdc-bg:#f5f8fc; --igdc-card:#ffffff; --igdc-text:#17324d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Arial, Helvetica, sans-serif; background:var(--igdc-bg); color:var(--igdc-text); }
+  .wrap { max-width:1100px; margin:0 auto; padding:26px 18px 60px; }
+  .hero { background:linear-gradient(135deg,#eaf4ff,#ffffff); border:1px solid var(--igdc-line); border-radius:18px; padding:26px; box-shadow:0 4px 18px rgba(0,0,0,.05); }
+  .topline { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+  h1 { margin:0 0 8px; color:#003b75; font-size:30px; }
+  .subtitle { margin:0; line-height:1.6; color:#4c6177; }
+  select { border:1px solid #bfd0e3; border-radius:9px; padding:8px 10px; background:#fff; color:#123; }
+  .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:18px; }
+  .card { background:var(--igdc-card); border:1px solid var(--igdc-line); border-radius:14px; padding:18px; box-shadow:0 2px 10px rgba(0,0,0,.03); }
+  .card h2 { margin:0 0 10px; font-size:20px; color:#004080; }
+  .card p { margin:0 0 10px; line-height:1.65; }
+  ul { margin:8px 0 0 20px; padding:0; line-height:1.7; }
+  .contactBox { margin-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .email { color:#004080; font-weight:700; text-decoration:none; background:#eef6ff; border:1px solid #cfe4fa; border-radius:9px; padding:9px 12px; }
+  .downloadList { display:grid; grid-template-columns:1fr; gap:10px; margin-top:12px; }
+  .downloadItem { border:1px solid #e0e8f2; background:#fbfdff; border-radius:12px; padding:14px; display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; }
+  .downloadItem b { display:block; color:#183e63; margin-bottom:4px; }
+  .downloadItem span { color:#5b7189; font-size:13px; }
+  .btn { display:inline-block; text-decoration:none; border-radius:9px; padding:9px 12px; border:1px solid #b9d2ee; color:#004080; background:#eef7ff; font-weight:700; }
+  .notice { margin-top:12px; color:#7a5600; background:#fff8e5; border:1px solid #f2dfad; border-radius:10px; padding:10px 12px; font-size:14px; }
+  .full { grid-column:1/-1; }
+  .footer { margin-top:18px; color:#6f7f8f; font-size:13px; text-align:center; }
+  body.rtl { direction:rtl; }
+  body.rtl ul { margin:8px 20px 0 0; }
+  @media (max-width:760px) { .grid { grid-template-columns:1fr; } h1 { font-size:25px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <div class="topline">
+      <div>
+        <h1 id="title">IGDC Help · Download Center</h1>
+        <p class="subtitle" id="subtitle"></p>
+      </div>
+      <select id="langSelect" aria-label="Language"></select>
+    </div>
+    <div class="contactBox">
+      <span id="contactText"></span>
+      <a class="email" href="mailto:igdcplatform@gmail.com">igdcplatform@gmail.com</a>
+    </div>
+  </section>
+
+  <section class="grid">
+    <article class="card">
+      <h2 id="platformTitle"></h2>
+      <p id="platformText"></p>
+    </article>
+    <article class="card">
+      <h2 id="accessTitle"></h2>
+      <ul id="accessItems"></ul>
+    </article>
+    <article class="card">
+      <h2 id="paymentTitle"></h2>
+      <ul id="paymentItems"></ul>
+    </article>
+    <article class="card">
+      <h2 id="policyTitle"></h2>
+      <p id="policyText"></p>
+    </article>
+    <article class="card full">
+      <h2 id="downloadsTitle"></h2>
+      <p id="downloadText"></p>
+      <div class="downloadList">
+        <div class="downloadItem">
+          <div><b>MARU Media Player · Windows</b><span>EXE installer / setup file</span></div>
+          <a class="btn" href="/downloads/maru-media-player-setup.exe" download data-i18n-btn></a>
+        </div>
+        <div class="downloadItem">
+          <div><b>MARU Media Player · Android</b><span>APK release file</span></div>
+          <a class="btn" href="/downloads/maru-media-player.apk" download data-i18n-btn></a>
+        </div>
+        <div class="downloadItem">
+          <div><b>IGDC Download Guide</b><span>PDF / install and update guide</span></div>
+          <a class="btn" href="/downloads/IGDC_DOWNLOAD_GUIDE.pdf" download data-i18n-btn></a>
+        </div>
+      </div>
+      <div class="notice" id="downloadNotice"></div>
+    </article>
+  </section>
+  <div class="footer" id="footer"></div>
+</div>
+<script>
+const I18N = {
+  "ko": {
+    "name": "한국어",
+    "title": "IGDC 도움말 · 다운로드 센터",
+    "subtitle": "플랫폼 이용, 권한, 결제 안내, 프로그램 다운로드를 한곳에서 확인합니다.",
+    "contact": "문의",
+    "contactText": "일반 문의, 권한 요청, 결제·다운로드 문제는 아래 이메일로 보내주세요.",
+    "platform": "플랫폼 이용 안내",
+    "platformText": "상단 메뉴에서 홈, 마켓/네트워크, 유통허브, 소셜 네트워크, 미디어 허브, 관광, 후원 페이지를 이용할 수 있습니다. 각 페이지는 선택한 언어에 맞춰 표시됩니다.",
+    "access": "회원 및 고유 권한 안내",
+    "accessItems": [
+      "방문자는 공개 페이지와 공개 다운로드 안내를 볼 수 있습니다.",
+      "회원 전용 페이지, 관리자 기능, 수익·정산 정보는 로그인 및 승인된 권한이 필요합니다.",
+      "관리자/소유자 권한은 운영자가 확인한 계정에만 부여됩니다.",
+      "권한 요청 시 이름, 계정 이메일, 필요한 권한, 요청 사유를 함께 보내주세요."
+    ],
+    "payment": "결제 · 정기결제 · 환불 안내",
+    "paymentItems": [
+      "결제 기능은 PG/카드사 승인 및 운영자 설정이 완료된 뒤 활성화됩니다.",
+      "유료 서비스는 가격, 결제 주기, 제공 내용, 해지 방법을 결제 전에 표시합니다.",
+      "정기결제는 사용자가 해지 요청을 할 수 있어야 하며, 해지 후 적용 시점은 상품 안내에 따릅니다.",
+      "환불, 취소, 다운로드 오류는 문의 이메일로 접수하면 운영자가 확인합니다."
+    ],
+    "downloads": "프로그램 다운로드",
+    "downloadText": "출시 파일을 도메인의 /downloads/ 경로에 업로드하면 아래 버튼이 바로 다운로드 링크로 작동합니다.",
+    "notice": "파일이 아직 업로드되지 않은 경우 다운로드가 열리지 않을 수 있습니다.",
+    "policy": "운영 고지",
+    "policyText": "본 페이지는 고객지원, 다운로드, 권한, 결제 안내의 기본 고지 페이지입니다. 실제 약관·개인정보처리방침·환불정책은 필요 시 별도 문서로 확장할 수 있습니다.",
+    "btnDownload": "다운로드",
+    "btnPending": "출시 후 활성화",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "en": {
+    "name": "English",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "zh": {
+    "name": "中文",
+    "title": "IGDC 帮助 · 下载中心",
+    "subtitle": "在此查看平台使用、权限、支付说明和程序下载。",
+    "contact": "联系",
+    "contactText": "一般咨询、权限申请、支付或下载问题，请通过电子邮件联系我们。",
+    "platform": "平台使用说明",
+    "platformText": "可通过顶部菜单进入主页、网络中心、分销中心、社交网络、媒体中心、旅游和捐赠页面。页面会按照所选语言显示。",
+    "access": "会员和权限说明",
+    "accessItems": [
+      "访客可以查看公开页面和公开下载信息。",
+      "会员专用页面、管理员工具、收益和结算信息需要登录并获得授权。",
+      "管理员/所有者权限只授予经运营方确认的账号。",
+      "申请权限时请提供姓名、账号邮箱、所需权限和申请理由。"
+    ],
+    "payment": "支付 · 订阅 · 退款说明",
+    "paymentItems": [
+      "支付功能将在 PG/银行卡审批和运营设置完成后启用。",
+      "付费服务会在付款前显示价格、周期、内容和取消方式。",
+      "定期付款应允许用户申请取消，生效时间以服务说明为准。",
+      "退款、取消、下载错误可通过邮件提交审核。"
+    ],
+    "downloads": "程序下载",
+    "downloadText": "发布文件上传到本域名 /downloads/ 路径后，下方按钮即可作为下载链接使用。",
+    "notice": "如果文件尚未上传，下载可能无法打开。",
+    "policy": "运营公告",
+    "policyText": "本页是客服、下载、权限和支付说明的基础公告页。必要时可扩展为条款、隐私政策和退款政策等独立文档。",
+    "btnDownload": "下载",
+    "btnPending": "发布后启用",
+    "footer": "© IGDC Global Hub. 支持与下载信息页面。"
+  },
+  "zht": {
+    "name": "繁體中文",
+    "title": "IGDC 說明 · 下載中心",
+    "subtitle": "在此查看平台使用、權限、付款說明與程式下載。",
+    "contact": "聯絡",
+    "contactText": "一般諮詢、權限申請、付款或下載問題，請透過電子郵件聯絡。",
+    "platform": "平台使用說明",
+    "platformText": "可透過上方選單進入首頁、網絡中心、分銷中心、社交網絡、媒體中心、旅遊與捐贈頁面。頁面會依所選語言顯示。",
+    "access": "會員與權限說明",
+    "accessItems": [
+      "訪客可查看公開頁面與公開下載資訊。",
+      "會員專用頁面、管理工具、收益與結算資訊需要登入及核准權限。",
+      "管理員/所有者權限只授予經營運方確認的帳號。",
+      "申請權限時請提供姓名、帳號電子郵件、所需權限與原因。"
+    ],
+    "payment": "付款 · 訂閱 · 退款說明",
+    "paymentItems": [
+      "付款功能會在 PG/刷卡審核及營運設定完成後啟用。",
+      "付費服務會在付款前顯示價格、週期、內容與取消方式。",
+      "定期付款應允許使用者申請取消，生效時間依服務說明為準。",
+      "退款、取消、下載錯誤可透過郵件提交審核。"
+    ],
+    "downloads": "程式下載",
+    "downloadText": "發布檔案上傳至本網域 /downloads/ 路徑後，下方按鈕即可作為下載連結。",
+    "notice": "若檔案尚未上傳，下載可能無法開啟。",
+    "policy": "營運告知",
+    "policyText": "本頁是客服、下載、權限與付款說明的基本告知頁。必要時可擴充為條款、隱私權政策與退款政策等獨立文件。",
+    "btnDownload": "下載",
+    "btnPending": "發布後啟用",
+    "footer": "© IGDC Global Hub. 支援與下載資訊頁。"
+  },
+  "ja": {
+    "name": "日本語",
+    "title": "IGDC ヘルプ · ダウンロードセンター",
+    "subtitle": "プラットフォーム利用、権限、決済案内、プログラムダウンロードを確認できます。",
+    "contact": "お問い合わせ",
+    "contactText": "一般問い合わせ、権限申請、決済・ダウンロードの問題はメールでご連絡ください。",
+    "platform": "プラットフォーム案内",
+    "platformText": "上部メニューからホーム、ネットワーク、流通、ソーシャル、メディア、観光、寄付ページを利用できます。選択言語に合わせて表示されます。",
+    "access": "会員・権限案内",
+    "accessItems": [
+      "訪問者は公開ページと公開ダウンロード情報を閲覧できます。",
+      "会員専用ページ、管理機能、収益・精算情報はログインと承認権限が必要です。",
+      "管理者/所有者権限は運営者が確認したアカウントにのみ付与されます。",
+      "権限申請時は氏名、アカウントメール、必要権限、理由を送信してください。"
+    ],
+    "payment": "決済 · 定期決済 · 返金案内",
+    "paymentItems": [
+      "決済機能はPG/カード承認と運営設定後に有効化されます。",
+      "有料サービスは価格、請求周期、提供内容、解約方法を決済前に表示します。",
+      "定期決済は解約申請が可能で、適用時点は案内に従います。",
+      "返金、取消、ダウンロードエラーはメールで受付します。"
+    ],
+    "downloads": "プログラムダウンロード",
+    "downloadText": "リリースファイルを本ドメインの /downloads/ にアップロードすると、下のボタンがダウンロードリンクとして動作します。",
+    "notice": "ファイルが未アップロードの場合、ダウンロードは開けないことがあります。",
+    "policy": "運営告知",
+    "policyText": "本ページはサポート、ダウンロード、権限、決済案内の基本告知ページです。必要に応じて利用規約、プライバシー、返金ポリシーを別文書に拡張できます。",
+    "btnDownload": "ダウンロード",
+    "btnPending": "リリース後有効",
+    "footer": "© IGDC Global Hub. サポートとダウンロード情報ページ。"
+  },
+  "es": {
+    "name": "Español",
+    "title": "Ayuda IGDC · Centro de descargas",
+    "subtitle": "Ayuda de plataforma, permisos, pagos y descargas en un solo lugar.",
+    "contact": "Contacto",
+    "contactText": "Para ayuda, permisos, pagos o descargas, contáctenos por correo electrónico.",
+    "platform": "Guía de plataforma",
+    "platformText": "Use el menú superior para abrir Inicio, Red, Distribución, Social, Medios, Turismo y Donación. Las páginas siguen el idioma seleccionado.",
+    "access": "Membresía y permisos",
+    "accessItems": [
+      "Los visitantes pueden ver páginas públicas e información de descargas públicas.",
+      "Páginas de miembros, herramientas de administración, ingresos y liquidaciones requieren inicio de sesión y permiso aprobado.",
+      "El acceso admin/propietario solo se concede a cuentas verificadas por el operador.",
+      "Al solicitar acceso incluya nombre, correo, permiso requerido y motivo."
+    ],
+    "payment": "Pagos · suscripción · reembolso",
+    "paymentItems": [
+      "Los pagos se activan tras aprobación PG/tarjeta y configuración del operador.",
+      "Los servicios de pago muestran precio, ciclo, contenido y cancelación antes de pagar.",
+      "Los pagos recurrentes deben permitir solicitud de cancelación.",
+      "Reembolsos, cancelaciones y errores de descarga se revisan por correo."
+    ],
+    "downloads": "Descargas de programas",
+    "downloadText": "Cuando los archivos se suban a /downloads/ en este dominio, los botones funcionarán como enlaces.",
+    "notice": "Si el archivo aún no está subido, la descarga puede no abrirse.",
+    "policy": "Aviso operativo",
+    "policyText": "Esta es la página básica de soporte, descargas, permisos y pagos. Términos, privacidad y reembolsos pueden separarse si es necesario.",
+    "btnDownload": "Descargar",
+    "btnPending": "Activo tras lanzamiento",
+    "footer": "© IGDC Global Hub. Página de soporte y descargas."
+  },
+  "fr": {
+    "name": "Français",
+    "title": "Aide IGDC · Centre de téléchargement",
+    "subtitle": "Aide, permissions, paiement et téléchargements au même endroit.",
+    "contact": "Contact",
+    "contactText": "Pour l’aide, les accès, les paiements ou les téléchargements, contactez-nous par e-mail.",
+    "platform": "Guide de la plateforme",
+    "platformText": "Utilisez le menu supérieur pour Accueil, Réseau, Distribution, Social, Médias, Voyage et Don. Les pages suivent la langue choisie.",
+    "access": "Adhésion et permissions",
+    "accessItems": [
+      "Les visiteurs voient les pages publiques et les téléchargements publics.",
+      "Les pages membres, outils admin, revenus et règlements nécessitent connexion et autorisation.",
+      "Les droits admin/propriétaire sont accordés uniquement aux comptes vérifiés.",
+      "Pour demander un accès, indiquez nom, e-mail, permission et motif."
+    ],
+    "payment": "Paiement · abonnement · remboursement",
+    "paymentItems": [
+      "Le paiement est activé après approbation PG/carte et configuration.",
+      "Les services payants affichent prix, cycle, contenu et annulation avant paiement.",
+      "Les paiements récurrents doivent permettre une demande d’annulation.",
+      "Remboursements, annulations et erreurs de téléchargement sont traités par e-mail."
+    ],
+    "downloads": "Téléchargements",
+    "downloadText": "Après dépôt des fichiers dans /downloads/ sur ce domaine, les boutons deviennent des liens.",
+    "notice": "Si le fichier n’est pas encore publié, le téléchargement peut échouer.",
+    "policy": "Avis opérationnel",
+    "policyText": "Page de base pour support, téléchargements, accès et paiement. Les conditions, confidentialité et remboursements peuvent être séparés.",
+    "btnDownload": "Télécharger",
+    "btnPending": "Actif après sortie",
+    "footer": "© IGDC Global Hub. Page support et téléchargement."
+  },
+  "de": {
+    "name": "Deutsch",
+    "title": "IGDC Hilfe · Download-Center",
+    "subtitle": "Plattformhilfe, Rechte, Zahlungen und Downloads an einem Ort.",
+    "contact": "Kontakt",
+    "contactText": "Für Hilfe, Rechte, Zahlungen oder Downloadprobleme kontaktieren Sie uns per E-Mail.",
+    "platform": "Plattform-Leitfaden",
+    "platformText": "Nutzen Sie das obere Menü für Home, Netzwerk, Distribution, Social, Medien, Reisen und Spenden. Seiten folgen der gewählten Sprache.",
+    "access": "Mitgliedschaft und Rechte",
+    "accessItems": [
+      "Besucher sehen öffentliche Seiten und Downloadinformationen.",
+      "Mitgliederseiten, Admin-Tools, Umsatz und Abrechnung erfordern Login und Genehmigung.",
+      "Admin-/Owner-Rechte erhalten nur verifizierte Konten.",
+      "Für Rechteanfragen Name, Konto-E-Mail, benötigte Rechte und Grund senden."
+    ],
+    "payment": "Zahlung · Abo · Erstattung",
+    "paymentItems": [
+      "Zahlungen werden nach PG/Kartenfreigabe und Einrichtung aktiviert.",
+      "Bezahldienste zeigen Preis, Zyklus, Leistung und Kündigung vor Zahlung.",
+      "Wiederkehrende Zahlungen müssen Kündigungsanfragen erlauben.",
+      "Erstattung, Storno und Downloadfehler werden per E-Mail geprüft."
+    ],
+    "downloads": "Programm-Downloads",
+    "downloadText": "Nach Upload der Dateien unter /downloads/ funktionieren die Buttons als Downloadlinks.",
+    "notice": "Wenn die Datei noch nicht hochgeladen ist, öffnet der Download evtl. nicht.",
+    "policy": "Betriebshinweis",
+    "policyText": "Grundseite für Support, Downloads, Rechte und Zahlungen. AGB, Datenschutz und Erstattung können separat erweitert werden.",
+    "btnDownload": "Download",
+    "btnPending": "Nach Release aktiv",
+    "footer": "© IGDC Global Hub. Support- und Downloadseite."
+  },
+  "ru": {
+    "name": "Русский",
+    "title": "Справка IGDC · Центр загрузок",
+    "subtitle": "Помощь, права доступа, платежи и загрузки в одном месте.",
+    "contact": "Контакт",
+    "contactText": "По вопросам помощи, прав, платежей или загрузок пишите на e-mail.",
+    "platform": "Руководство платформы",
+    "platformText": "Используйте верхнее меню: Главная, Сеть, Дистрибуция, Соцсеть, Медиа, Туризм, Пожертвование. Язык зависит от выбора.",
+    "access": "Участие и права",
+    "accessItems": [
+      "Гости видят публичные страницы и информацию о загрузках.",
+      "Страницы участников, админ-инструменты, доходы и расчёты требуют входа и разрешения.",
+      "Права администратора/владельца выдаются только проверенным аккаунтам.",
+      "Для запроса укажите имя, e-mail, нужные права и причину."
+    ],
+    "payment": "Платежи · подписка · возврат",
+    "paymentItems": [
+      "Платежи активируются после одобрения PG/карты и настройки.",
+      "Платные услуги показывают цену, цикл, состав и отмену до оплаты.",
+      "Регулярные платежи должны позволять запрос отмены.",
+      "Возвраты, отмены и ошибки загрузки проверяются по e-mail."
+    ],
+    "downloads": "Загрузки программ",
+    "downloadText": "После загрузки файлов в /downloads/ кнопки станут ссылками скачивания.",
+    "notice": "Если файл ещё не загружен, скачивание может не открыться.",
+    "policy": "Операционное уведомление",
+    "policyText": "Базовая страница поддержки, загрузок, прав и платежей. Условия, конфиденциальность и возврат могут быть отдельными документами.",
+    "btnDownload": "Скачать",
+    "btnPending": "Активно после релиза",
+    "footer": "© IGDC Global Hub. Страница поддержки и загрузок."
+  },
+  "pt": {
+    "name": "Português",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "it": {
+    "name": "Italiano",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "ar": {
+    "name": "العربية",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "vi": {
+    "name": "Tiếng Việt",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "th": {
+    "name": "ไทย",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "id": {
+    "name": "Bahasa Indonesia",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "hi": {
+    "name": "हिन्दी",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "tr": {
+    "name": "Türkçe",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "fa": {
+    "name": "فارسی",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "bn": {
+    "name": "বাংলা",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "ur": {
+    "name": "اردو",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "sw": {
+    "name": "Kiswahili",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "ta": {
+    "name": "தமிழ்",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "hu": {
+    "name": "Magyar",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "ms": {
+    "name": "Bahasa Melayu",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "nl": {
+    "name": "Nederlands",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "pl": {
+    "name": "Polski",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "sv": {
+    "name": "Svenska",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "tl": {
+    "name": "Filipino",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "uk": {
+    "name": "Українська",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  },
+  "uz": {
+    "name": "Oʻzbekcha",
+    "title": "IGDC Help · Download Center",
+    "subtitle": "Platform help, access permissions, payment guidance, and program downloads in one place.",
+    "contact": "Contact",
+    "contactText": "For general help, access requests, payment issues, or download problems, contact us by email.",
+    "platform": "Platform guide",
+    "platformText": "Use the top menu to open Home, Network Hub, Distribution Hub, Social Network, Media Hub, Travel, and Donation pages. Pages follow the selected language.",
+    "access": "Membership and access permissions",
+    "accessItems": [
+      "Visitors can view public pages and public download information.",
+      "Member-only pages, admin tools, revenue, and settlement information require login and approved permission.",
+      "Admin/owner access is granted only to accounts verified by the operator.",
+      "When requesting access, include your name, account email, required permission, and reason."
+    ],
+    "payment": "Payment · subscription · refund guidance",
+    "paymentItems": [
+      "Payment functions become active after PG/card approval and operator setup.",
+      "Paid services show price, billing cycle, included service, and cancellation method before payment.",
+      "Recurring payments must allow cancellation requests; the effective timing follows the service notice.",
+      "Refunds, cancellations, and download errors can be reported by email for review."
+    ],
+    "downloads": "Program downloads",
+    "downloadText": "After release files are uploaded under the /downloads/ path on this domain, the buttons below work as download links.",
+    "notice": "If a release file has not been uploaded yet, the download may not open.",
+    "policy": "Operational notice",
+    "policyText": "This page is the basic notice page for support, downloads, access, and payment guidance. Terms, privacy policy, and refund policy may be expanded into separate documents when needed.",
+    "btnDownload": "Download",
+    "btnPending": "Available after release",
+    "footer": "© IGDC Global Hub. Support and download information page."
+  }
+};
+const RTL = new Set(['ar','fa','ur']);
+const ORDER = ["ko", "en", "zh", "zht", "ja", "es", "fr", "de", "ru", "pt", "it", "ar", "vi", "th", "id", "hi", "tr", "fa", "bn", "ur", "sw", "ta", "hu", "ms", "nl", "pl", "sv", "tl", "uk", "uz"];
+function getLang(){
+  try{
+    const q = new URLSearchParams(location.search).get('lang');
+    if(q && I18N[q]) return q;
+    const saved = (localStorage.getItem('igdc_lang')||'').toLowerCase();
+    if(saved && I18N[saved]) return saved;
+    const doc = (document.documentElement.lang||'').toLowerCase();
+    if(doc && I18N[doc]) return doc;
+    const nav = (navigator.language||'').toLowerCase().split(/[-_]/)[0];
+    if(I18N[nav]) return nav;
+  }catch(e){}
+  return 'ko';
+}
+function fillList(id, arr){
+  const el=document.getElementById(id); if(!el) return;
+  el.innerHTML=''; (arr||[]).forEach(t=>{ const li=document.createElement('li'); li.textContent=t; el.appendChild(li); });
+}
+function render(lang){
+  const t=I18N[lang]||I18N.en;
+  document.documentElement.lang=lang;
+  document.body.classList.toggle('rtl', RTL.has(lang));
+  document.title=t.title || 'IGDC Help';
+  document.getElementById('title').textContent=t.title;
+  document.getElementById('subtitle').textContent=t.subtitle;
+  document.getElementById('contactText').textContent=t.contactText;
+  document.getElementById('platformTitle').textContent=t.platform;
+  document.getElementById('platformText').textContent=t.platformText;
+  document.getElementById('accessTitle').textContent=t.access;
+  fillList('accessItems', t.accessItems);
+  document.getElementById('paymentTitle').textContent=t.payment;
+  fillList('paymentItems', t.paymentItems);
+  document.getElementById('policyTitle').textContent=t.policy;
+  document.getElementById('policyText').textContent=t.policyText;
+  document.getElementById('downloadsTitle').textContent=t.downloads;
+  document.getElementById('downloadText').textContent=t.downloadText;
+  document.getElementById('downloadNotice').textContent=t.notice;
+  document.getElementById('footer').textContent=t.footer;
+  document.querySelectorAll('[data-i18n-btn]').forEach(a=>a.textContent=t.btnDownload||'Download');
+  const sel=document.getElementById('langSelect'); if(sel) sel.value=lang;
+}
+function initSelect(){
+  const sel=document.getElementById('langSelect');
+  ORDER.forEach(code=>{ const opt=document.createElement('option'); opt.value=code; opt.textContent=(I18N[code]&&I18N[code].name)||code; sel.appendChild(opt); });
+  sel.addEventListener('change', function(){
+    try{ localStorage.setItem('igdc_lang', this.value); }catch(e){}
+    render(this.value);
+    try{ if(parent && parent!==window && typeof parent.changeLanguage==='function') parent.changeLanguage(this.value); }catch(e){}
+  });
+}
+initSelect();
+render(getLang());
+window.addEventListener('storage', e=>{ if(e.key==='igdc_lang' && I18N[e.newValue]) render(e.newValue); });
+</script>
+</body>
+</html>
