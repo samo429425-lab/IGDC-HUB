@@ -3449,6 +3449,141 @@ function normLang(l){
 
 <script src="/assets/js/member-admin-modal.js?v=2.4.3-sync"></script>
 
+<!-- IGDC mobile logout final guard v1 -->
+<script id="igdc-mobile-logout-final-guard-v1">
+(function(){
+  'use strict';
+  var SYNC_MS = 700;
+  var stopAfter = 0;
+
+  function byId(id){ return document.getElementById(id); }
+  function tokenObj(){
+    try { return JSON.parse(localStorage.getItem('osauth.tokens.v2') || 'null'); } catch(e){ return null; }
+  }
+  function hasFreshToken(){
+    try{
+      var t = tokenObj();
+      if(!t) return false;
+      var exp = Number(t.exp || 0);
+      if(exp && Math.floor(Date.now()/1000) < exp) return true;
+      if(t.id_token || t.access_token) return true;
+    }catch(e){}
+    try{
+      return !!(localStorage.getItem('id_token') || localStorage.getItem('os_id_token') || localStorage.getItem('access_token') || localStorage.getItem('os_access_token'));
+    }catch(e){ return false; }
+  }
+  function isAuthed(){
+    try{
+      if(window.osAuth && typeof window.osAuth.isAuthenticated === 'function' && window.osAuth.isAuthenticated()) return true;
+    }catch(e){}
+    return hasFreshToken();
+  }
+  function modalConfirm(){
+    return new Promise(function(resolve){
+      var mask = byId('os-modal-mask');
+      var box  = byId('os-modal');
+      var ok   = byId('os-modal-ok');
+      var no   = byId('os-modal-cancel');
+      var title = byId('os-modal-title');
+      var body  = byId('os-modal-body');
+      if(!(mask && box && ok && no)){
+        resolve(window.confirm('정말 로그아웃 하시겠습니까?'));
+        return;
+      }
+      if(title) title.textContent = 'Confirm';
+      if(body) body.textContent = '정말 로그아웃 하시겠습니까?';
+      function off(result){
+        try{ mask.style.display='none'; box.style.display='none'; }catch(e){}
+        ok.onclick = null; no.onclick = null; mask.onclick = null;
+        resolve(!!result);
+      }
+      ok.onclick = function(){ off(true); };
+      no.onclick = function(){ off(false); };
+      mask.onclick = function(){ off(false); };
+      try{ mask.style.display='block'; box.style.display='block'; }catch(e){ resolve(false); }
+    });
+  }
+  function clearAuthStorage(){
+    var keys = [
+      'osauth.tokens.v2','osauth.pkce.v1','id_token','os_id_token','access_token','os_access_token',
+      'auth_token','igdc_token','IGDC_AUTH_TOKEN'
+    ];
+    keys.forEach(function(k){ try{ localStorage.removeItem(k); }catch(e){} });
+    try{ window.__IGDC_ROLE='guest'; document.documentElement.dataset.role='guest'; }catch(e){}
+  }
+  function doLogin(){
+    try{
+      if(typeof window.osLogin === 'function') { window.osLogin(); return; }
+    }catch(e){}
+    try{ location.href='/login'; }catch(e){}
+  }
+  function doLogout(){
+    clearAuthStorage();
+    try{
+      if(window.osAuth && typeof window.osAuth.logout === 'function'){
+        window.osAuth.logout();
+        return;
+      }
+    }catch(e){}
+    try{
+      if(window.osauth && typeof window.osauth.logout === 'function'){
+        window.osauth.logout();
+        return;
+      }
+    }catch(e){}
+    try{ location.reload(); }catch(e){ location.href='/index.html'; }
+  }
+  function syncLoginButton(){
+    var btn = byId('osLoginBtn');
+    if(!btn) return;
+    var authed = isAuthed();
+    if(authed){
+      if(btn.textContent !== 'Logout') btn.textContent = 'Logout';
+      btn.setAttribute('aria-label','Logout');
+      btn.setAttribute('data-igdc-auth-state','logout');
+      btn.removeAttribute('data-os-login');
+      btn.removeAttribute('data-os-logout');
+    } else {
+      if(btn.textContent !== 'OS‑Login') btn.textContent = 'OS‑Login';
+      btn.setAttribute('aria-label','OS-Login');
+      btn.setAttribute('data-igdc-auth-state','login');
+      btn.setAttribute('data-os-login','1');
+      btn.removeAttribute('data-os-logout');
+    }
+  }
+  document.addEventListener('click', async function(ev){
+    var btn = ev.target && ev.target.closest && ev.target.closest('#osLoginBtn');
+    if(!btn) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+    if(isAuthed()){
+      syncLoginButton();
+      var ok = await modalConfirm();
+      if(ok) doLogout();
+    } else {
+      syncLoginButton();
+      doLogin();
+    }
+  }, true);
+
+  function boot(){
+    syncLoginButton();
+    stopAfter = Date.now() + 30000;
+    var timer = setInterval(function(){
+      syncLoginButton();
+      if(Date.now() > stopAfter) clearInterval(timer);
+    }, SYNC_MS);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
+  else boot();
+  document.addEventListener('osauth:ready', function(){ stopAfter = Date.now() + 30000; syncLoginButton(); });
+  window.addEventListener('pageshow', syncLoginButton);
+})();
+</script>
+<!-- /IGDC mobile logout final guard v1 -->
+
+
 </body>
 
 
