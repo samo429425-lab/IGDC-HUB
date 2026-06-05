@@ -3258,12 +3258,24 @@ function normLang(l){
 (function(){
   var BTN_ID = "mobileQnaLink";
   var FRAME_ID = "mainFrame";
+  function isMobileQnaScope(){
+    try{
+      return !!(
+        window.matchMedia && (
+          matchMedia("(max-width: 768px)").matches ||
+          matchMedia("(hover: none) and (pointer: coarse)").matches ||
+          matchMedia("(max-height: 480px) and (orientation: landscape)").matches
+        )
+      );
+    }catch(e){ return false; }
+  }
   function getFrame(){ return document.getElementById(FRAME_ID); }
   function onClick(ev){
     try{
+      if (!isMobileQnaScope()) return;
       if (ev) ev.preventDefault();
       var f = getFrame(); if (!f) return;
-      // Always route to home.html with ?open=qna — no returnTo navigation
+      // Mobile index Q&A fallback only: route to home.html with ?open=qna.
       var u = new URL("home.html", location.href);
       u.searchParams.set("open","qna");
       f.src = u.href;
@@ -3279,24 +3291,30 @@ function normLang(l){
   window.addEventListener("resize", function(){ setTimeout(wire, 120); });
   window.addEventListener("orientationchange", function(){ setTimeout(wire, 120); });
   window.IGTC_LINKS = window.IGTC_LINKS || {};
-  window.IGTC_LINKS.openQnaFromIndex = function(){ onClick(); };
+  window.IGTC_LINKS.openQnaFromIndex = function(){ if (isMobileQnaScope()) onClick(); };
 })();
 </script>
 
 <script id="igdc-qna-router-support-fallback-v2">
 (function(){
-  var SEL=["#mobileQnaLink",'[data-igtc-qna="1"]'],F="mainFrame",W=3000,I=120;
-  function fr(){return document.getElementById(F)}
-  function currentLangSafe(){
+  var SEL=["#mobileQnaLink"],F="mainFrame",W=3000,I=120;
+  function isMobileQnaScope(){
     try{
-      var lang = (window.currentLang || localStorage.getItem('igdc_lang') || document.documentElement.getAttribute('lang') || 'ko').toLowerCase();
-      return lang || 'ko';
-    }catch(_){ return 'ko'; }
+      return !!(
+        window.matchMedia && (
+          matchMedia("(max-width: 768px)").matches ||
+          matchMedia("(hover: none) and (pointer: coarse)").matches ||
+          matchMedia("(max-height: 480px) and (orientation: landscape)").matches
+        )
+      );
+    }catch(e){ return false; }
   }
+  function fr(){return document.getElementById(F)}
   function homeQna(f){
     try{
       f = f || fr(); if(!f) return;
-      var lang = currentLangSafe();
+      var lang = '';
+      try{ lang = (window.currentLang || localStorage.getItem('igdc_lang') || document.documentElement.getAttribute('lang') || 'ko').toLowerCase(); }catch(_){ lang='ko'; }
       var home = 'home.html';
       try{
         if(window.pageMap && window.pageMap[lang] && window.pageMap[lang][0]) home = window.pageMap[lang][0];
@@ -3318,20 +3336,23 @@ function normLang(l){
   }
   function pm(f){try{f&&f.contentWindow&&f.contentWindow.postMessage({type:"IGTC_OPEN_QNA"},"*");return true}catch(e){}return false}
   function openQna(){
-    var f=fr(); if(!f) return;
-    if(direct(f)) return;
-    if(!hasQnaBridge(f)){ homeQna(f); return; }
+    if(!isMobileQnaScope()) return false;
+    var f=fr(); if(!f) return false;
+    if(direct(f)) return true;
+    if(!hasQnaBridge(f)){ homeQna(f); return true; }
     pm(f);
     var t=Date.now(),h=setInterval(function(){
       if(direct(f)){clearInterval(h);return}
       if(Date.now()-t>W){clearInterval(h); if(!hasQnaBridge(f)) homeQna(f);}
     },I);
+    return true;
   }
   function bind(btn){
-    if(btn.__igtc_wired_no_touch) return;
-    btn.__igtc_wired_no_touch = true;
+    if(btn.__igtc_wired_mobile_qna_fallback) return;
+    btn.__igtc_wired_mobile_qna_fallback = true;
     btn.addEventListener("click", function(e){
-      try{e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();}catch(_){}
+      if(!isMobileQnaScope()) return;
+      try{e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();}catch(_){ }
       openQna();
     }, true);
   }
@@ -3339,8 +3360,8 @@ function normLang(l){
   document.addEventListener("DOMContentLoaded",scan);
   window.addEventListener("resize",function(){setTimeout(scan,120)});
   window.addEventListener("orientationchange",function(){setTimeout(scan,120)});
-  try{ new MutationObserver(function(){ scan(); }).observe(document.documentElement,{childList:true,subtree:true}); }catch(_){}
-  window.IGTC_LINKS=window.IGTC_LINKS||{};window.IGTC_LINKS.openQnaFromIndex=openQna;
+  try{ new MutationObserver(function(){ scan(); }).observe(document.documentElement,{childList:true,subtree:true}); }catch(_){ }
+  window.IGTC_LINKS=window.IGTC_LINKS||{};window.IGTC_LINKS.openQnaFromIndex=function(){return openQna();};
 })();
 </script>
 
