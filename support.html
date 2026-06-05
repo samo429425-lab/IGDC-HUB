@@ -48,50 +48,158 @@
   body.rtl { direction:rtl; }
   body.rtl ul { margin:8px 20px 0 0; }
   @media (max-width:760px) { .grid { grid-template-columns:1fr; } h1 { font-size:25px; } }
+</style>
 
-  /* Support page sidebar graft: desktop only, matching front sidebar spacing */
-  .support-shell { display:flex; align-items:stretch; min-height:100vh; background:var(--igdc-bg); }
-  .support-sidebar {
-    flex:0 0 210px; width:210px; background:#e0e0e0;
-    display:flex; flex-direction:column; padding-top:20px;
-    border-right:1px solid #d6d6d6;
-  }
-  .support-sidebar a {
-    display:block; background:#fff4e0; color:#804000; text-decoration:none;
-    padding:12px 8px; font-weight:700; font-size:1rem;
-    border:1px solid #f3d9b0; border-radius:8px; margin:10px 12px;
-    transition:background-color .2s ease, text-decoration .2s ease;
-  }
-  .support-sidebar a:hover { background:#ffe5b4; text-decoration:underline; }
-  .support-sidebar a.support-qna-link { background:#001f4d; color:#fff; border-color:#001f4d; }
-  .support-main { flex:1 1 auto; min-width:0; }
-  .support-main .wrap { max-width:1100px; margin:0 auto; padding:26px 18px 60px; }
-  body.rtl .support-shell { direction:rtl; }
-  body.rtl .support-sidebar { border-right:0; border-left:1px solid #d6d6d6; }
-  body.rtl .support-main { direction:rtl; }
-  @media (max-width:1023.98px) {
-    .support-shell { display:block; }
-    .support-sidebar { display:none !important; }
-    .support-main .wrap { padding:18px 14px 52px; }
-  }
+<style id="support-sidebar-shell-css">
+/* Support page sidebar: desktop only, left fixed in all languages including RTL. */
+.support-shell{
+  display:flex;
+  flex-direction:row;
+  align-items:stretch;
+  width:100%;
+  min-height:100vh;
+  direction:ltr !important;
+}
+.support-sidebar{
+  flex:0 0 210px;
+  width:210px;
+  background:#e0e0e0;
+  display:flex;
+  flex-direction:column;
+  padding-top:30px;
+  min-height:100vh;
+}
+.support-sidebar a{
+  display:block;
+  background-color:#fff4e0;
+  color:#804000;
+  text-decoration:none;
+  padding:12px 8px;
+  font-weight:bold;
+  font-size:1rem;
+  border:1px solid #f3d9b0;
+  border-radius:8px;
+  margin:10px 5px;
+  transition:background-color .3s, text-decoration .3s;
+  direction:inherit;
+}
+.support-sidebar a:hover{background-color:#ffe5b4;text-decoration:underline;}
+.support-sidebar #qnaOpenBtn{background-color:#001f4d !important;color:#ffffff !important;}
+.support-main{
+  flex:1 1 auto;
+  min-width:0;
+  direction:ltr;
+}
+body.rtl .support-main{direction:rtl;}
+body.rtl .support-sidebar{direction:rtl; text-align:right;}
+body.rtl .support-shell{direction:ltr !important;}
+@media (max-width:1023.98px){
+  .support-shell{display:block;}
+  .support-sidebar{display:none !important;}
+  .support-main{width:100%;}
+}
+</style>
 
+<style id="igdc-qa-style">
+:root{
+  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
+  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
+  --qa-left:260px;
+  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
+  --blue:#2563eb; --muted:#9ca3af;
+}
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+#qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
+/* Modal near the left sidebar, with smooth transitions */
+.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
+.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
+.igdc-qa-panel{
+  position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
+  max-height:min(82vh,900px); display:flex; flex-direction:column;
+  background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
+  overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
+  transition:opacity .18s ease, transform .18s ease;
+  border:1px solid var(--old-border);
+}
+.igdc-qa-modal.open{pointer-events:auto}
+.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
+.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
+/* Old-style header tint */
+.igdc-qa-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid var(--old-border);
+  background:var(--old-bg);
+}
+.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
+.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
+.igdc-qa-body{display:flex; flex-direction:column; gap:10px; padding:12px; overflow:auto}
+.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
+.igdc-qa-text{
+  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
+  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
+  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
+}
+.igdc-qa-text.q{ min-height: 96px; }
+.igdc-qa-text.a{ min-height: 128px; }
+.igdc-qa-actions{display:flex; gap:8px; align-items:center}
+.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
+.igdc-qa-btn.primary{background:var(--blue); color:#fff}
+.igdc-qa-btn.muted{background:var(--muted); color:#fff}
+.igdc-qa-threads{display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px}
+.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
+.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
+.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
+.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
+.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
+.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
+@media (max-width:900px){
+  .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
+}
+</style>
+<style id="igdc-qa-panel-position-final-v1">
+/* IGDC Q&A modal position final: keep button/function intact, lift the modal near the index nav bottom. */
+.igdc-qa-modal .igdc-qa-panel,
+.igdc-qa-panel{
+  top:18px !important;
+  bottom:auto !important;
+  max-height:calc(100dvh - 36px) !important;
+  overflow:hidden !important;
+}
+.igdc-qa-modal .igdc-qa-body,
+.igdc-qa-panel .igdc-qa-body{
+  max-height:calc(100dvh - 150px) !important;
+  overflow-y:auto !important;
+  -webkit-overflow-scrolling:touch !important;
+}
+@media (max-width:768px){
+  .igdc-qa-modal .igdc-qa-panel,
+  .igdc-qa-panel{
+    top:14px !important;
+    bottom:auto !important;
+    max-height:calc(100dvh - 28px) !important;
+  }
+  .igdc-qa-modal .igdc-qa-body,
+  .igdc-qa-panel .igdc-qa-body{
+    max-height:calc(100dvh - 132px) !important;
+  }
+}
 </style>
 </head>
 <body>
-<div class="support-shell">
-  <aside class="support-sidebar" aria-label="IGDC front page navigation">
-    <a data-support-side="home" href="home.html">🏠 홈</a>
-    <a data-support-side="network" href="networkhub.html">🛒 마켓 허브</a>
-    <a data-support-side="distribution" href="distributionhub.html">🏭 유통허브</a>
-    <a data-support-side="social" href="socialnetwork.html">📢 소셜 네트워크</a>
-    <a data-support-side="media" href="mediahub.html">🎬 미디어 허브</a>
-    <a data-support-side="tour" href="tour.html">🧳 여행·관광·숙박</a>
-    <!-- Reserved for future activation: 문학·학술교류 sidebar button
-    <a data-support-side="literature" href="literature_academic.html">📚 문학 학술교류</a>
-    -->
-    <a data-support-side="qna" href="#support-qna" id="supportSideQnaBtn" class="support-qna-link">💬 Q&amp;A 문의</a>
-  </aside>
-  <main class="support-main">
+<div class="support-shell" id="supportShell">
+<aside class="support-sidebar" id="supportSidebar" aria-label="Support sidebar">
+<a href="home.html" data-side-key="home">🏠 홈</a>
+<a href="networkhub.html" data-side-key="network">🛒 마켓 허브</a>
+<a href="distributionhub.html" data-side-key="distribution">🏭 유통허브</a>
+<a href="socialnetwork.html" data-side-key="social">📢 소셜 네트워크</a>
+<a href="mediahub.html" data-side-key="media">🎬 미디어 허브</a>
+<a href="tour.html" data-side-key="tour">🧳 여행·관광·숙박</a>
+<!-- Reserved for later activation:
+<a href="literature_academic.html" data-side-key="literature">📚 문학·학술교류</a>
+-->
+<a href="javascript:void(0)" id="qnaOpenBtn" data-side-key="qna">💬 Q&amp;A 문의</a>
+</aside>
+<main class="support-main" id="supportMain">
 <div class="wrap">
   <section class="hero">
     <h1 id="title">IGDC Help · Download Center</h1>
@@ -157,7 +265,7 @@
   </div>
   <div class="footer" id="footer"></div>
 </div>
-  </main>
+</main>
 </div>
 <script>
 const I18N = {
@@ -1162,334 +1270,6 @@ const SUPPORT_EXTRA = {
 };
 Object.keys(SUPPORT_EXTRA).forEach(function(code){ I18N[code]=Object.assign(I18N[code]||{}, SUPPORT_EXTRA[code]); });
 
-const SUPPORT_SIDEBAR_I18N = {
-  "ko": {
-    "home": "🏠 홈",
-    "network": "🛒 마켓 허브",
-    "distribution": "🏭 유통허브",
-    "social": "📢 쇼셜 네트워크",
-    "media": "🎬 미디어 허브",
-    "tour": "🧳 여행·관광·숙박",
-    "literature": "📚 문학 학술교류",
-    "qna": "💬 Q&A 문의"
-  },
-  "en": {
-    "home": "🏠 Home",
-    "network": "🛒 Market Hub",
-    "distribution": "🏭 Distribution Hub",
-    "social": "📢 Social Network",
-    "media": "🎬 Media Hub",
-    "tour": "🧳 Travel · Tourism",
-    "literature": "📚 Literature & Academic Exchange",
-    "qna": "💬 Q&A Contact"
-  },
-  "zh": {
-    "home": "🏠 首页",
-    "network": "🛒 市场中心",
-    "distribution": "🏭 流通中心",
-    "social": "📢 社交网络",
-    "media": "🎬 媒体中心",
-    "tour": "🧳 旅行 · 旅游 · 住宿",
-    "literature": "📚 文学与学术交流",
-    "qna": "💬 问答咨询"
-  },
-  "zht": {
-    "home": "🏠 首頁",
-    "network": "🛒 市場中心",
-    "distribution": "🏭 分銷中心",
-    "social": "📢 社交網絡",
-    "media": "🎬 媒體中心",
-    "tour": "🧳 旅遊 · 觀光",
-    "literature": "📚 Literature & Academic Exchange",
-    "qna": "💬 問答諮詢"
-  },
-  "ja": {
-    "home": "🏠 ホーム",
-    "network": "🛒 マーケットハブ",
-    "distribution": "🏭 流通ハブ",
-    "social": "📢 ソーシャルネットワーク",
-    "media": "🎬 メディアハブ",
-    "tour": "🧳 旅行・観光・宿泊",
-    "literature": "📚 文学・学術交流",
-    "qna": "💬 質問と回答"
-  },
-  "es": {
-    "home": "🏠 Inicio",
-    "network": "🛒 Centro de Mercado",
-    "distribution": "🏭 Centro de Distribución",
-    "social": "📢 Red Social",
-    "media": "🎬 Centro de Medios",
-    "tour": "🧳 Viajes · Turismo · Alojamiento",
-    "literature": "📚 Intercambio Literario y Académico",
-    "qna": "💬 Preguntas y respuestas"
-  },
-  "fr": {
-    "home": "🏠 Accueil",
-    "network": "🛒 Hub Marché",
-    "distribution": "🏭 Hub Distribution",
-    "social": "📢 Réseau Social",
-    "media": "🎬 Hub Média",
-    "tour": "🧳 Voyage · Tourisme · Hébergement",
-    "literature": "📚 Échange Littéraire et Académique",
-    "qna": "💬 Questions-réponses"
-  },
-  "de": {
-    "home": "🏠 Startseite",
-    "network": "🛒 Marktplatz-Hub",
-    "distribution": "🏭 Vertriebs-Hub",
-    "social": "📢 Soziales Netzwerk",
-    "media": "🎬 Medien-Hub",
-    "tour": "🧳 Reisen · Tourismus · Unterkunft",
-    "literature": "📚 Literatur & Akademischer Austausch",
-    "qna": "💬 Fragen und Antworten"
-  },
-  "ru": {
-    "home": "🏠 Главная",
-    "network": "🛒 Маркет-хаб",
-    "distribution": "🏭 Дистрибуционный хаб",
-    "social": "📢 Социальная сеть",
-    "media": "🎬 Медиа-хаб",
-    "tour": "🧳 Путешествия · Туризм · Проживание",
-    "literature": "📚 Литературный и академический обмен",
-    "qna": "💬 Вопросы и ответы"
-  },
-  "pt": {
-    "home": "🏠 Início",
-    "network": "🛒 Hub de Mercado",
-    "distribution": "🏭 Hub de Distribuição",
-    "social": "📢 Rede Social",
-    "media": "🎬 Hub de Mídia",
-    "tour": "🧳 Viagem · Turismo · Hospedagem",
-    "literature": "📚 Intercâmbio Literário e Acadêmico",
-    "qna": "💬 Consulta Perguntas e respostas"
-  },
-  "it": {
-    "home": "🏠 Home",
-    "network": "🛒 Hub del Mercato",
-    "distribution": "🏭 Hub di Distribuzione",
-    "social": "📢 Rete Sociale",
-    "media": "🎬 Hub dei Media",
-    "tour": "🧳 Viaggi · Turismo · Alloggio",
-    "literature": "📚 Scambio Letterario e Accademico",
-    "qna": "💬 Domande e risposte"
-  },
-  "ar": {
-    "home": "🏠 الرئيسية",
-    "network": "🛒 مركز السوق",
-    "distribution": "🏭 مركز التوزيع",
-    "social": "📢 الشبكة الاجتماعية",
-    "media": "🎬 مركز الوسائط",
-    "tour": "🧳 السفر · السياحة · الإقامة",
-    "literature": "📚 التبادل الأدبي والعلمي",
-    "qna": "💬 الأسئلة والأجوبة"
-  },
-  "vi": {
-    "home": "🏠 Trang chủ",
-    "network": "🛒 Trung tâm thị trường",
-    "distribution": "🏭 Trung tâm phân phối",
-    "social": "📢 Mạng xã hội",
-    "media": "🎬 Trung tâm truyền thông",
-    "tour": "🧳 Du lịch · Lữ hành · Lưu trú",
-    "literature": "📚 Giao lưu Văn học & Học thuật",
-    "qna": "💬 Hỏi & Đáp"
-  },
-  "th": {
-    "home": "🏠 หน้าแรก",
-    "network": "🛒 ศูนย์กลางตลาด",
-    "distribution": "🏭 ศูนย์กระจายสินค้า",
-    "social": "📢 โซเชียลเน็ตเวิร์ก",
-    "media": "🎬 ศูนย์กลางสื่อ",
-    "tour": "🧳 การเดินทาง · การท่องเที่ยว · ที่พัก",
-    "literature": "📚 การแลกเปลี่ยนวรรณกรรมและวิชาการ",
-    "qna": "💬 ถาม-ตอบ"
-  },
-  "id": {
-    "home": "🏠 Beranda",
-    "network": "🛒 Pusat Pasar",
-    "distribution": "🏭 Pusat Distribusi",
-    "social": "📢 Jaringan Sosial",
-    "media": "🎬 Pusat Media",
-    "tour": "🧳 Perjalanan · Pariwisata · Akomodasi",
-    "literature": "📚 Pertukaran Sastra & Akademik",
-    "qna": "💬 Tanya Jawab"
-  },
-  "hi": {
-    "home": "🏠 होम",
-    "network": "🛒 मार्केट हब",
-    "distribution": "🏭 डिस्ट्रीब्यूशन हब",
-    "social": "📢 सोशल नेटवर्क",
-    "media": "🎬 मीडिया हब",
-    "tour": "🧳 यात्रा · पर्यटन · आवास",
-    "literature": "📚 साहित्य एवं शैक्षणिक आदान-प्रदान",
-    "qna": "💬 प्रश्नोत्तर संपर्क"
-  },
-  "tr": {
-    "home": "🏠 Ana Sayfa",
-    "network": "🛒 Pazar Merkezi",
-    "distribution": "🏭 Dağıtım Merkezi",
-    "social": "📢 Sosyal Ağ",
-    "media": "🎬 Medya Merkezi",
-    "tour": "🧳 Seyahat · Turizm · Konaklama",
-    "literature": "📚 Edebiyat ve Akademik Değişim",
-    "qna": "💬 Soru-Cevap"
-  },
-  "fa": {
-    "home": "🏠 خانه",
-    "network": "🛒 مرکز بازار",
-    "distribution": "🏭 مرکز توزیع",
-    "social": "📢 شبکه اجتماعی",
-    "media": "🎬 مرکز رسانه",
-    "tour": "🧳 سفر · گردشگری · اقامت",
-    "literature": "📚 تبادل ادبی و علمی",
-    "qna": "💬 پرسش و پاسخ"
-  },
-  "bn": {
-    "home": "🏠 হোম",
-    "network": "🛒 মার্কেট হাব",
-    "distribution": "🏭 ডিস্ট্রিবিউশন হাব",
-    "social": "📢 সোশ্যাল নেটওয়ার্ক",
-    "media": "🎬 মিডিয়া হাব",
-    "tour": "🧳 ভ্রমণ · পর্যটন",
-    "literature": "📚 সাহিত্য ও একাডেমিক বিনিময়",
-    "qna": "💬 প্রশ্নোত্তর যোগাযোগ"
-  },
-  "ur": {
-    "home": "🏠 ہوم",
-    "network": "🛒 مارکیٹ ہب",
-    "distribution": "🏭 ڈسٹری بیوشن ہب",
-    "social": "📢 سوشل نیٹ ورک",
-    "media": "🎬 میڈیا ہب",
-    "tour": "🧳 سفر · سیاحت · رہائش",
-    "literature": "📚 ادبی و علمی تبادلہ",
-    "qna": "💬 سوال و جواب"
-  },
-  "sw": {
-    "home": "🏠 Nyumbani",
-    "network": "🛒 Kitovu cha Soko",
-    "distribution": "🏭 Kitovu cha Usambazaji",
-    "social": "📢 Mtandao wa Kijamii",
-    "media": "🎬 Kitovu cha Vyombo vya Habari",
-    "tour": "🧳 Safari · Utalii · Malazi",
-    "literature": "📚 Fasihi na Mabadilishano ya Kitaaluma",
-    "qna": "💬 Maswali na majibu"
-  },
-  "ta": {
-    "home": "🏠 முகப்பு",
-    "network": "🛒 சந்தை மையம்",
-    "distribution": "🏭 விநியோக மையம்",
-    "social": "📢 சமூக வலைப்பின்னல்",
-    "media": "🎬 ஊடக மையம்",
-    "tour": "🧳 பயணம் · சுற்றுலா · தங்குமிடம்",
-    "literature": "📚 இலக்கியம் மற்றும் கல்வி பரிமாற்றம்",
-    "qna": "💬 கேள்வி-பதில் தொடர்பு"
-  },
-  "hu": {
-    "home": "🏠 Főoldal",
-    "network": "🛒 Piaci központ",
-    "distribution": "🏭 Disztribúciós központ",
-    "social": "📢 Közösségi hálózat",
-    "media": "🎬 Médiaközpont",
-    "tour": "🧳 Utazás · Turizmus",
-    "literature": "📚 Literature & Academic Exchange",
-    "qna": "💬 Kérdések és válaszok"
-  },
-  "ms": {
-    "home": "🏠 Laman Utama",
-    "network": "🛒 Hab Pasaran",
-    "distribution": "🏭 Hab Pengedaran",
-    "social": "📢 Rangkaian Sosial",
-    "media": "🎬 Hab Media",
-    "tour": "🧳 Perjalanan · Pelancongan",
-    "literature": "📚 Pertukaran Sastera & Akademik",
-    "qna": "💬 Soal Jawab"
-  },
-  "nl": {
-    "home": "🏠 Home",
-    "network": "🛒 Markthub",
-    "distribution": "🏭 Distributiehub",
-    "social": "📢 Sociaal netwerk",
-    "media": "🎬 Mediahub",
-    "tour": "🧳 Reizen · Toerisme",
-    "literature": "📚 Literaire en academische uitwisseling",
-    "qna": "💬 Vragen en antwoorden"
-  },
-  "pl": {
-    "home": "🏠 Strona główna",
-    "network": "🛒 Centrum rynku",
-    "distribution": "🏭 Centrum dystrybucji",
-    "social": "📢 Sieć społecznościowa",
-    "media": "🎬 Centrum mediów",
-    "tour": "🧳 Podróże · Turystyka",
-    "literature": "📚 Wymiana literacka i akademicka",
-    "qna": "💬 Pytania i odpowiedzi"
-  },
-  "sv": {
-    "home": "🏠 Hem",
-    "network": "🛒 Marknadshubb",
-    "distribution": "🏭 Distributionshubb",
-    "social": "📢 Socialt nätverk",
-    "media": "🎬 Mediehubb",
-    "tour": "🧳 Resor · Turism",
-    "literature": "📚 Litterärt och akademiskt utbyte",
-    "qna": "💬 Frågor och svar"
-  },
-  "tl": {
-    "home": "🏠 Tahanan",
-    "network": "🛒 Sentro ng Pamilihan",
-    "distribution": "🏭 Sentro ng Distribusyon",
-    "social": "📢 Sosyal na Network",
-    "media": "🎬 Sentro ng Media",
-    "tour": "🧳 Paglalakbay · Turismo",
-    "literature": "📚 Palitang Pampanitikan at Akademiko",
-    "qna": "💬 Tanong at Sagot"
-  },
-  "uk": {
-    "home": "🏠 Головна",
-    "network": "🛒 Маркет-хаб",
-    "distribution": "🏭 Дистрибуційний хаб",
-    "social": "📢 Соціальна мережа",
-    "media": "🎬 Медіа-хаб",
-    "tour": "🧳 Подорожі · Туризм",
-    "literature": "📚 Literature & Academic Exchange",
-    "qna": "💬 Запитання й відповіді"
-  },
-  "uz": {
-    "home": "🏠 Bosh sahifa",
-    "network": "🛒 Market markazi",
-    "distribution": "🏭 Tarqatish markazi",
-    "social": "📢 Ijtimoiy tarmoq",
-    "media": "🎬 Media markazi",
-    "tour": "🧳 Sayohat · Turizm",
-    "literature": "📚 Literature & Academic Exchange",
-    "qna": "💬 Savol-javob"
-  }
-};
-const SUPPORT_SIDE_FILES = {
-  home: 'home',
-  network: 'networkhub',
-  distribution: 'distributionhub',
-  social: 'socialnetwork',
-  media: 'mediahub',
-  tour: 'tour'
-};
-function supportSideHref(lang, key){
-  const safeLang = I18N[lang] ? lang : 'ko';
-  const file = SUPPORT_SIDE_FILES[key];
-  if(!file) return '#support-qna';
-  if(safeLang === 'ko') return file + '.html';
-  return safeLang + '/' + file + '_' + safeLang + '.html';
-}
-function renderSupportSidebar(lang){
-  const safeLang = SUPPORT_SIDEBAR_I18N[lang] ? lang : 'ko';
-  const labels = SUPPORT_SIDEBAR_I18N[safeLang] || SUPPORT_SIDEBAR_I18N.ko || {};
-  document.querySelectorAll('[data-support-side]').forEach(function(a){
-    const key = a.getAttribute('data-support-side');
-    if(labels[key]) a.textContent = labels[key];
-    if(key !== 'qna') a.setAttribute('href', supportSideHref(safeLang, key));
-  });
-}
-
-
 const RTL = new Set(['ar','fa','ur']);
 function getLang(){
   try{
@@ -1543,7 +1323,6 @@ function render(lang){
   fillText('downloadNotice', t.notice);
   fillText('footer', t.footer);
   document.querySelectorAll('[data-i18n-btn]').forEach(a=>a.textContent=t.btnDownload||'Download');
-  renderSupportSidebar(lang);
 }
 render(getLang());
 window.addEventListener('storage', e=>{ if(e.key==='igdc_lang' && I18N[e.newValue]) render(e.newValue); });
@@ -1568,14 +1347,6 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
     modal.setAttribute('aria-hidden','true');
   }
   if(link) link.addEventListener('click', openModal);
-  const sideQnaBtn=document.getElementById('supportSideQnaBtn');
-  if(sideQnaBtn) sideQnaBtn.addEventListener('click', openModal);
-  window.IGDC_QA = window.IGDC_QA || {};
-  window.IGDC_QA.open = function(){ return openModal(); };
-  window.IGDC_QA.close = closeModal;
-  window.addEventListener('message', function(e){
-    try{ if(e && e.data && e.data.type === 'IGTC_OPEN_QNA') openModal(); }catch(_e){}
-  });
   if(close) close.addEventListener('click', closeModal);
   if(modal) modal.addEventListener('click', function(e){ if(e.target===modal) closeModal(); });
   window.addEventListener('keydown', function(e){ if(e.key==='Escape') closeModal(); });
@@ -1662,6 +1433,352 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
     setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 500);
   });
 })();
+</script>
+
+
+<script id="support-sidebar-lang-sync">
+(function(){
+  var SUPPORT_SIDE_LABELS = {"ko": {"home": "🏠 홈", "network": "🛒 마켓 허브", "distribution": "🏭 유통허브", "social": "📢 쇼셜 네트워크", "media": "🎬 미디어 허브", "tour": "🧳 여행·관광·숙박", "qna": "💬 Q&A 문의", "literature": "📚 문학 학술교류"}, "en": {"home": "🏠 Home", "network": "🛒 Market Hub", "distribution": "🏭 Distribution Hub", "social": "📢 Social Network", "media": "🎬 Media Hub", "tour": "🧳 Travel · Tourism", "qna": "💬 Q&A Contact", "literature": "📚 Literature & Academic Exchange"}, "zh": {"home": "🏠 首页", "network": "🛒 市场中心", "distribution": "🏭 流通中心", "social": "📢 社交网络", "media": "🎬 媒体中心", "tour": "🧳 旅行 · 旅游 · 住宿", "qna": "💬 问答咨询", "literature": "📚 文学与学术交流"}, "zht": {"home": "🏠 首頁", "network": "🛒 市場中心", "distribution": "🏭 分銷中心", "social": "📢 社交網絡", "media": "🎬 媒體中心", "tour": "🧳 旅遊 · 觀光", "qna": "💬 問答諮詢", "literature": "📚 Literature & Academic Exchange"}, "ja": {"home": "🏠 ホーム", "network": "🛒 マーケットハブ", "distribution": "🏭 流通ハブ", "social": "📢 ソーシャルネットワーク", "media": "🎬 メディアハブ", "tour": "🧳 旅行・観光・宿泊", "qna": "💬 質問と回答", "literature": "📚 文学・学術交流"}, "es": {"home": "🏠 Inicio", "network": "🛒 Centro de Mercado", "distribution": "🏭 Centro de Distribución", "social": "📢 Red Social", "media": "🎬 Centro de Medios", "tour": "🧳 Viajes · Turismo · Alojamiento", "qna": "💬 Preguntas y respuestas", "literature": "📚 Intercambio Literario y Académico"}, "fr": {"home": "🏠 Accueil", "network": "🛒 Hub Marché", "distribution": "🏭 Hub Distribution", "social": "📢 Réseau Social", "media": "🎬 Hub Média", "tour": "🧳 Voyage · Tourisme · Hébergement", "qna": "💬 Questions-réponses", "literature": "📚 Échange Littéraire et Académique"}, "de": {"home": "🏠 Startseite", "network": "🛒 Marktplatz-Hub", "distribution": "🏭 Vertriebs-Hub", "social": "📢 Soziales Netzwerk", "media": "🎬 Medien-Hub", "tour": "🧳 Reisen · Tourismus · Unterkunft", "qna": "💬 Fragen und Antworten", "literature": "📚 Literatur & Akademischer Austausch"}, "ru": {"home": "🏠 Главная", "network": "🛒 Маркет-хаб", "distribution": "🏭 Дистрибуционный хаб", "social": "📢 Социальная сеть", "media": "🎬 Медиа-хаб", "tour": "🧳 Путешествия · Туризм · Проживание", "qna": "💬 Вопросы и ответы", "literature": "📚 Литературный и академический обмен"}, "pt": {"home": "🏠 Início", "network": "🛒 Hub de Mercado", "distribution": "🏭 Hub de Distribuição", "social": "📢 Rede Social", "media": "🎬 Hub de Mídia", "tour": "🧳 Viagem · Turismo · Hospedagem", "qna": "💬 Consulta Perguntas e respostas", "literature": "📚 Intercâmbio Literário e Acadêmico"}, "it": {"home": "🏠 Home", "network": "🛒 Hub del Mercato", "distribution": "🏭 Hub di Distribuzione", "social": "📢 Rete Sociale", "media": "🎬 Hub dei Media", "tour": "🧳 Viaggi · Turismo · Alloggio", "qna": "💬 Domande e risposte", "literature": "📚 Scambio Letterario e Accademico"}, "ar": {"home": "🏠 الرئيسية", "network": "🛒 مركز السوق", "distribution": "🏭 مركز التوزيع", "social": "📢 الشبكة الاجتماعية", "media": "🎬 مركز الوسائط", "tour": "🧳 السفر · السياحة · الإقامة", "qna": "💬 الأسئلة والأجوبة", "literature": "📚 التبادل الأدبي والعلمي"}, "vi": {"home": "🏠 Trang chủ", "network": "🛒 Trung tâm thị trường", "distribution": "🏭 Trung tâm phân phối", "social": "📢 Mạng xã hội", "media": "🎬 Trung tâm truyền thông", "tour": "🧳 Du lịch · Lữ hành · Lưu trú", "qna": "💬 Hỏi & Đáp", "literature": "📚 Giao lưu Văn học & Học thuật"}, "th": {"home": "🏠 หน้าแรก", "network": "🛒 ศูนย์กลางตลาด", "distribution": "🏭 ศูนย์กระจายสินค้า", "social": "📢 โซเชียลเน็ตเวิร์ก", "media": "🎬 ศูนย์กลางสื่อ", "tour": "🧳 การเดินทาง · การท่องเที่ยว · ที่พัก", "qna": "💬 ถาม-ตอบ", "literature": "📚 การแลกเปลี่ยนวรรณกรรมและวิชาการ"}, "id": {"home": "🏠 Beranda", "network": "🛒 Pusat Pasar", "distribution": "🏭 Pusat Distribusi", "social": "📢 Jaringan Sosial", "media": "🎬 Pusat Media", "tour": "🧳 Perjalanan · Pariwisata · Akomodasi", "qna": "💬 Tanya Jawab", "literature": "📚 Pertukaran Sastra & Akademik"}, "hi": {"home": "🏠 होम", "network": "🛒 मार्केट हब", "distribution": "🏭 डिस्ट्रीब्यूशन हब", "social": "📢 सोशल नेटवर्क", "media": "🎬 मीडिया हब", "tour": "🧳 यात्रा · पर्यटन · आवास", "qna": "💬 प्रश्नोत्तर संपर्क", "literature": "📚 साहित्य एवं शैक्षणिक आदान-प्रदान"}, "tr": {"home": "🏠 Ana Sayfa", "network": "🛒 Pazar Merkezi", "distribution": "🏭 Dağıtım Merkezi", "social": "📢 Sosyal Ağ", "media": "🎬 Medya Merkezi", "tour": "🧳 Seyahat · Turizm · Konaklama", "qna": "💬 Soru-Cevap", "literature": "📚 Edebiyat ve Akademik Değişim"}, "fa": {"home": "🏠 خانه", "network": "🛒 مرکز بازار", "distribution": "🏭 مرکز توزیع", "social": "📢 شبکه اجتماعی", "media": "🎬 مرکز رسانه", "tour": "🧳 سفر · گردشگری · اقامت", "qna": "💬 پرسش و پاسخ", "literature": "📚 تبادل ادبی و علمی"}, "bn": {"home": "🏠 হোম", "network": "🛒 মার্কেট হাব", "distribution": "🏭 ডিস্ট্রিবিউশন হাব", "social": "📢 সোশ্যাল নেটওয়ার্ক", "media": "🎬 মিডিয়া হাব", "tour": "🧳 ভ্রমণ · পর্যটন", "qna": "💬 প্রশ্নোত্তর যোগাযোগ", "literature": "📚 সাহিত্য ও একাডেমিক বিনিময়"}, "ur": {"home": "🏠 ہوم", "network": "🛒 مارکیٹ ہب", "distribution": "🏭 ڈسٹری بیوشن ہب", "social": "📢 سوشل نیٹ ورک", "media": "🎬 میڈیا ہب", "tour": "🧳 سفر · سیاحت · رہائش", "qna": "💬 سوال و جواب", "literature": "📚 ادبی و علمی تبادلہ"}, "sw": {"home": "🏠 Nyumbani", "network": "🛒 Kitovu cha Soko", "distribution": "🏭 Kitovu cha Usambazaji", "social": "📢 Mtandao wa Kijamii", "media": "🎬 Kitovu cha Vyombo vya Habari", "tour": "🧳 Safari · Utalii · Malazi", "qna": "💬 Maswali na majibu", "literature": "📚 Fasihi na Mabadilishano ya Kitaaluma"}, "ta": {"home": "🏠 முகப்பு", "network": "🛒 சந்தை மையம்", "distribution": "🏭 விநியோக மையம்", "social": "📢 சமூக வலைப்பின்னல்", "media": "🎬 ஊடக மையம்", "tour": "🧳 பயணம் · சுற்றுலா · தங்குமிடம்", "qna": "💬 கேள்வி-பதில் தொடர்பு", "literature": "📚 இலக்கியம் மற்றும் கல்வி பரிமாற்றம்"}, "hu": {"home": "🏠 Főoldal", "network": "🛒 Piaci központ", "distribution": "🏭 Disztribúciós központ", "social": "📢 Közösségi hálózat", "media": "🎬 Médiaközpont", "tour": "🧳 Utazás · Turizmus", "qna": "💬 Kérdések és válaszok", "literature": "📚 Literature & Academic Exchange"}, "ms": {"home": "🏠 Laman Utama", "network": "🛒 Hab Pasaran", "distribution": "🏭 Hab Pengedaran", "social": "📢 Rangkaian Sosial", "media": "🎬 Hab Media", "tour": "🧳 Perjalanan · Pelancongan", "qna": "💬 Soal Jawab", "literature": "📚 Pertukaran Sastera & Akademik"}, "nl": {"home": "🏠 Home", "network": "🛒 Markthub", "distribution": "🏭 Distributiehub", "social": "📢 Sociaal netwerk", "media": "🎬 Mediahub", "tour": "🧳 Reizen · Toerisme", "qna": "💬 Vragen en antwoorden", "literature": "📚 Literaire en academische uitwisseling"}, "pl": {"home": "🏠 Strona główna", "network": "🛒 Centrum rynku", "distribution": "🏭 Centrum dystrybucji", "social": "📢 Sieć społecznościowa", "media": "🎬 Centrum mediów", "tour": "🧳 Podróże · Turystyka", "qna": "💬 Pytania i odpowiedzi", "literature": "📚 Wymiana literacka i akademicka"}, "sv": {"home": "🏠 Hem", "network": "🛒 Marknadshubb", "distribution": "🏭 Distributionshubb", "social": "📢 Socialt nätverk", "media": "🎬 Mediehubb", "tour": "🧳 Resor · Turism", "qna": "💬 Frågor och svar", "literature": "📚 Litterärt och akademiskt utbyte"}, "tl": {"home": "🏠 Tahanan", "network": "🛒 Sentro ng Pamilihan", "distribution": "🏭 Sentro ng Distribusyon", "social": "📢 Sosyal na Network", "media": "🎬 Sentro ng Media", "tour": "🧳 Paglalakbay · Turismo", "qna": "💬 Tanong at Sagot", "literature": "📚 Palitang Pampanitikan at Akademiko"}, "uk": {"home": "🏠 Головна", "network": "🛒 Маркет-хаб", "distribution": "🏭 Дистрибуційний хаб", "social": "📢 Соціальна мережа", "media": "🎬 Медіа-хаб", "tour": "🧳 Подорожі · Туризм", "qna": "💬 Запитання й відповіді", "literature": "📚 Literature & Academic Exchange"}, "uz": {"home": "🏠 Bosh sahifa", "network": "🛒 Market markazi", "distribution": "🏭 Tarqatish markazi", "social": "📢 Ijtimoiy tarmoq", "media": "🎬 Media markazi", "tour": "🧳 Sayohat · Turizm", "qna": "💬 Savol-javob", "literature": "📚 Literature & Academic Exchange"}};
+  var SUPPORT_SIDE_PAGES = {"ko": ["home.html", "networkhub.html", "distributionhub.html", "socialnetwork.html", "mediahub.html", "tour.html"], "en": ["en/home_en.html", "en/networkhub_en.html", "en/distributionhub_en.html", "en/socialnetwork_en.html", "en/mediahub_en.html", "en/tour_en.html"], "zh": ["zh/home_zh.html", "zh/networkhub_zh.html", "zh/distributionhub_zh.html", "zh/socialnetwork_zh.html", "zh/mediahub_zh.html", "zh/tour_zh.html"], "zht": ["zht/home_zht.html", "zht/networkhub_zht.html", "zht/distributionhub_zht.html", "zht/socialnetwork_zht.html", "zht/mediahub_zht.html", "zht/tour_zht.html"], "ja": ["ja/home_ja.html", "ja/networkhub_ja.html", "ja/distributionhub_ja.html", "ja/socialnetwork_ja.html", "ja/mediahub_ja.html", "ja/tour_ja.html"], "es": ["es/home_es.html", "es/networkhub_es.html", "es/distributionhub_es.html", "es/socialnetwork_es.html", "es/mediahub_es.html", "es/tour_es.html"], "fr": ["fr/home_fr.html", "fr/networkhub_fr.html", "fr/distributionhub_fr.html", "fr/socialnetwork_fr.html", "fr/mediahub_fr.html", "fr/tour_fr.html"], "de": ["de/home_de.html", "de/networkhub_de.html", "de/distributionhub_de.html", "de/socialnetwork_de.html", "de/mediahub_de.html", "de/tour_de.html"], "ru": ["ru/home_ru.html", "ru/networkhub_ru.html", "ru/distributionhub_ru.html", "ru/socialnetwork_ru.html", "ru/mediahub_ru.html", "ru/tour_ru.html"], "pt": ["pt/home_pt.html", "pt/networkhub_pt.html", "pt/distributionhub_pt.html", "pt/socialnetwork_pt.html", "pt/mediahub_pt.html", "pt/tour_pt.html"], "it": ["it/home_it.html", "it/networkhub_it.html", "it/distributionhub_it.html", "it/socialnetwork_it.html", "it/mediahub_it.html", "it/tour_it.html"], "ar": ["ar/home_ar.html", "ar/networkhub_ar.html", "ar/distributionhub_ar.html", "ar/socialnetwork_ar.html", "ar/mediahub_ar.html", "ar/tour_ar.html"], "vi": ["vi/home_vi.html", "vi/networkhub_vi.html", "vi/distributionhub_vi.html", "vi/socialnetwork_vi.html", "vi/mediahub_vi.html", "vi/tour_vi.html"], "th": ["th/home_th.html", "th/networkhub_th.html", "th/distributionhub_th.html", "th/socialnetwork_th.html", "th/mediahub_th.html", "th/tour_th.html"], "id": ["id/home_id.html", "id/networkhub_id.html", "id/distributionhub_id.html", "id/socialnetwork_id.html", "id/mediahub_id.html", "id/tour_id.html"], "hi": ["hi/home_hi.html", "hi/networkhub_hi.html", "hi/distributionhub_hi.html", "hi/socialnetwork_hi.html", "hi/mediahub_hi.html", "hi/tour_hi.html"], "tr": ["tr/home_tr.html", "tr/networkhub_tr.html", "tr/distributionhub_tr.html", "tr/socialnetwork_tr.html", "tr/mediahub_tr.html", "tr/tour_tr.html"], "fa": ["fa/home_fa.html", "fa/networkhub_fa.html", "fa/distributionhub_fa.html", "fa/socialnetwork_fa.html", "fa/mediahub_fa.html", "fa/tour_fa.html"], "bn": ["bn/home_bn.html", "bn/networkhub_bn.html", "bn/distributionhub_bn.html", "bn/socialnetwork_bn.html", "bn/mediahub_bn.html", "bn/tour_bn.html"], "ur": ["ur/home_ur.html", "ur/networkhub_ur.html", "ur/distributionhub_ur.html", "ur/socialnetwork_ur.html", "ur/mediahub_ur.html", "ur/tour_ur.html"], "sw": ["sw/home_sw.html", "sw/networkhub_sw.html", "sw/distributionhub_sw.html", "sw/socialnetwork_sw.html", "sw/mediahub_sw.html", "sw/tour_sw.html"], "ta": ["ta/home_ta.html", "ta/networkhub_ta.html", "ta/distributionhub_ta.html", "ta/socialnetwork_ta.html", "ta/mediahub_ta.html", "ta/tour_ta.html"], "hu": ["hu/home_hu.html", "hu/networkhub_hu.html", "hu/distributionhub_hu.html", "hu/socialnetwork_hu.html", "hu/mediahub_hu.html", "hu/tour_hu.html"], "ms": ["ms/home_ms.html", "ms/networkhub_ms.html", "ms/distributionhub_ms.html", "ms/socialnetwork_ms.html", "ms/mediahub_ms.html", "ms/tour_ms.html"], "nl": ["nl/home_nl.html", "nl/networkhub_nl.html", "nl/distributionhub_nl.html", "nl/socialnetwork_nl.html", "nl/mediahub_nl.html", "nl/tour_nl.html"], "pl": ["pl/home_pl.html", "pl/networkhub_pl.html", "pl/distributionhub_pl.html", "pl/socialnetwork_pl.html", "pl/mediahub_pl.html", "pl/tour_pl.html"], "sv": ["sv/home_sv.html", "sv/networkhub_sv.html", "sv/distributionhub_sv.html", "sv/socialnetwork_sv.html", "sv/mediahub_sv.html", "sv/tour_sv.html"], "tl": ["tl/home_tl.html", "tl/networkhub_tl.html", "tl/distributionhub_tl.html", "tl/socialnetwork_tl.html", "tl/mediahub_tl.html", "tl/tour_tl.html"], "uk": ["uk/home_uk.html", "uk/networkhub_uk.html", "uk/distributionhub_uk.html", "uk/socialnetwork_uk.html", "uk/mediahub_uk.html", "uk/tour_uk.html"], "uz": ["uz/home_uz.html", "uz/networkhub_uz.html", "uz/distributionhub_uz.html", "uz/socialnetwork_uz.html", "uz/mediahub_uz.html", "uz/tour_uz.html"]};
+  var KEYS = ['home','network','distribution','social','media','tour'];
+  function normalizeLang(v){
+    var s=String(v||'').trim().toLowerCase().replace('_','-');
+    if(!s) return 'ko';
+    if(s==='zh-tw'||s==='zh-hk'||s==='zh-hant'||s==='zht') return 'zht';
+    if(s==='zh-cn'||s==='zh-hans') return 'zh';
+    if(s.indexOf('-')>-1) s=s.split('-')[0];
+    return SUPPORT_SIDE_LABELS[s] ? s : 'ko';
+  }
+  function readLang(){
+    try{
+      var q=new URLSearchParams(location.search).get('lang');
+      if(q) return normalizeLang(q);
+    }catch(e){}
+    try{
+      var saved=localStorage.getItem('igdc_lang');
+      if(saved) return normalizeLang(saved);
+    }catch(e){}
+    try{
+      var doc=document.documentElement && document.documentElement.getAttribute('lang');
+      if(doc) return normalizeLang(doc);
+    }catch(e){}
+    try{ return normalizeLang(navigator.language||'ko'); }catch(e){ return 'ko'; }
+  }
+  function applySidebarLang(lang){
+    var code=normalizeLang(lang||readLang());
+    var labels=SUPPORT_SIDE_LABELS[code]||SUPPORT_SIDE_LABELS.ko;
+    var pages=SUPPORT_SIDE_PAGES[code]||SUPPORT_SIDE_PAGES.ko;
+    KEYS.forEach(function(key, idx){
+      var a=document.querySelector('#supportSidebar [data-side-key="'+key+'"]');
+      if(!a) return;
+      a.textContent=labels[key] || ((SUPPORT_SIDE_LABELS.ko||{})[key]||a.textContent);
+      if(pages[idx]) a.setAttribute('href', pages[idx]);
+    });
+    var q=document.getElementById('qnaOpenBtn');
+    if(q) q.textContent=labels.qna || '💬 Q&A 문의';
+    try{
+      document.body.classList.toggle('rtl', ['ar','fa','ur'].indexOf(code)>-1);
+    }catch(e){}
+  }
+  window.applySupportSidebarLang = applySidebarLang;
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ applySidebarLang(); });
+  else applySidebarLang();
+  window.addEventListener('storage', function(e){ if(e && e.key==='igdc_lang') applySidebarLang(e.newValue); });
+  window.addEventListener('message', function(e){ try{ var lang=e.data && (e.data.lang||e.data.igdc_lang); if(lang) applySidebarLang(lang); }catch(_e){} });
+})();
+</script>
+
+<script id="igdc-qa-config">
+  (function () {
+    // 1) 민감정보 없는 기본 설정
+    const baseConfig = {
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
+
+    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
+
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
+
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
+      }
+
+      window.SUPER_VARSAR = Object.assign(
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
+
+    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var env = data && (data.env || data);
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        applyConfig(null);
+      });
+  })();
+</script>
+<script id="igdc-qa-script">
+(function(){
+  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
+  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
+  let isOpen=false, isAnimating=false;
+
+  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+  const fmtDate = (s)=> new Date(s).toLocaleString();
+  const nowISO = ()=> new Date().toISOString();
+  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
+  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+
+  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
+  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
+
+  async function ensureSupabase(){
+    if(STATE.sb) return STATE.sb;
+    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
+    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+    if(!url || !key || !window.supabase || !window.supabase.createClient){
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      return null;
+    }
+    STATE.sb = window.supabase.createClient(url, key);
+    return STATE.sb;
+  }
+  async function ensureAuth(){
+    const sb = await ensureSupabase(); if(!sb) return;
+    let { data: { session } } = await sb.auth.getSession();
+    if(!session){
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      ({ data: { session } } = await sb.auth.getSession());
+    }
+    if(session){
+      const uid = session.user.id;
+      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
+      STATE.user = session.user;
+      STATE.isAdmin = Array.isArray(data) && data.length>0;
+    }
+  }
+
+  function mountUI(){
+    const modal = el("div","igdc-qa-modal");
+    const backdrop = el("div","igdc-qa-backdrop");
+    const panel = el("div","igdc-qa-panel");
+    const header = el("div","igdc-qa-header");
+    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    header.append(title, close);
+
+    const body = el("div","igdc-qa-body");
+    const lQ = el("label"); lQ.textContent="질문";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="질문을 입력하세요...";
+    const lA = el("label"); lA.textContent="답변";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="조금만 기다리시면 금방 답변을 드리겠습니다.";
+    const actions = el("div","igdc-qa-actions");
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="등록하기";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="지우기";
+    const note = el("div","igdc-qa-note"); note.textContent="※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.";
+    const list = el("div","igdc-qa-threads");
+
+    body.append(lQ,tQ,lA,tA,actions,note,list);
+    actions.append(btnSubmit, btnClear);
+    panel.append(header, body);
+    modal.append(backdrop, panel);
+    document.body.append(modal);
+
+    // position near sidebar
+    function positionNearSidebar(){
+      try{
+        const sb = document.querySelector('.sidebar');
+        if(sb){
+          const rect = sb.getBoundingClientRect();
+          const left = Math.round(rect.right + 12);
+          panel.style.left = left + "px";
+        }
+      }catch(e){}
+    }
+    positionNearSidebar();
+    window.addEventListener('resize', positionNearSidebar);
+    window.addEventListener('scroll', positionNearSidebar, { passive:true });
+
+    function openModal(){
+      if(isAnimating || isOpen) return;
+      isAnimating = true;
+      modal.style.display = "block";
+      requestAnimationFrame(()=>{
+        modal.classList.add('open');
+        isOpen = true;
+        setTimeout(()=>{ isAnimating = false; }, 220);
+      });
+    }
+    function closeModal(){
+      if(isAnimating || !isOpen) return;
+      isAnimating = true;
+      modal.classList.remove('open');
+      setTimeout(()=>{
+        modal.style.display = "none";
+        isOpen = false;
+        isAnimating = false;
+      }, 220);
+    }
+
+    // Sidebar trigger
+    const sideBtn = document.querySelector('#qnaOpenBtn');
+    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
+    close.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
+
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+
+    async function fetchThreads(){
+      const sb = await ensureSupabase(); if(!sb) return;
+      const { data, error } = await sb.from("igdc_qna_threads")
+        .select("*")
+        .eq("project", STATE.project)
+        .eq("page_id", STATE.pageId)
+        .order("created_at", { ascending:false }).limit(100);
+      if(error){ console.error(error); return; }
+      renderList(data||[]);
+    }
+    function renderList(rows){
+      list.innerHTML="";
+      rows.forEach(row=>{
+        const box = el("div","igdc-qa-thread");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
+        const meta = el("div","igdc-qa-thread-meta");
+        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
+        const tag = el("span"); tag.textContent = row.is_admin? "관리요청":"일반";
+        const actions = el("div","igdc-qa-thread-actions");
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
+          del.addEventListener("click", async ()=>{
+            const sb = await ensureSupabase(); if(!sb) return;
+            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
+            if(error){ alert("삭제 실패(권한/정책)"); return; }
+            await fetchThreads();
+          });
+          actions.append(del);
+        }
+        meta.append(time, tag, actions);
+        box.append(q,a,meta);
+        list.append(box);
+      });
+    }
+
+    async function autoAnswerIfNeeded(text){
+      const technical = classifyTech(text);
+      let answer = null;
+      if(!technical){
+        const ep = getAIEndpoint();
+        if(ep){
+          try{
+            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
+            const j = await res.json(); answer = j && (j.answer||j.text||null);
+          }catch(e){}
+        }
+        if(!answer){
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
+          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
+          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
+        }
+      }
+      return { technical, answer };
+    }
+
+    async function submit(){
+      const q = (tQ.value||"").trim();
+      let a = (tA.value||"").trim();
+      if(!q){ tQ.focus(); return; }
+      const { technical, answer } = await autoAnswerIfNeeded(q);
+      if(!a && answer) a = answer;
+      const sb = await ensureSupabase();
+      if(!sb){
+        alert("저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        return;
+      }
+      const record = {
+        project: STATE.project, page_id: STATE.pageId,
+        user_id: (STATE.user && STATE.user.id) || null,
+        question: q, answer: a || null, is_admin: technical,
+        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
+      };
+      const { error } = await sb.from("igdc_qna_threads").insert(record);
+      if(error){ alert("등록 실패"); return; }
+      tQ.value=""; tA.value = a || "";
+      await fetchThreads();
+    }
+    btnSubmit.addEventListener("click", submit);
+
+    // realtime refresh
+    (async()=>{ try{
+      const sb = await ensureSupabase(); if(!sb) return;
+      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
+    }catch(e){} })();
+
+    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
+    fetchThreads();
+  }
+
+  async function boot(){
+  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
+  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
+  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
+  // 1) Always mount UI so the popup can open
+  mountUI();
+  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+}
+if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
+})();
+</script>
+<script>
+window.IGDC_QA=window.IGDC_QA||{};
+if(typeof window.IGDC_QA.open!=="function"){
+  window.IGDC_QA.open=function(){
+    if(window.QnaCore&&typeof QnaCore.open==="function"){QnaCore.open();}
+    else if(typeof openModal==="function"){openModal();}
+  };
+}
+window.addEventListener("message",function(ev){
+  try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
+});
 </script>
 </body>
 </html>
