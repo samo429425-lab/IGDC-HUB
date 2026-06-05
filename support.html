@@ -1563,6 +1563,63 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
   const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
 
+
+  const SUPPORT_QA_UI_FALLBACK = {
+    ko:{clear:'지우기',close:'닫기',question:'질문',answer:'답변',answerPlaceholder:'조금만 기다리시면 금방 답변을 드리겠습니다.',note:'※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.',pending:'대기중',normal:'일반',admin:'관리요청',delete:'삭제',deleteFail:'삭제 실패(권한/정책)',saveDisabled:'저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.',saveFail:'등록 실패',fallbackOps:'운영 관련 문의는 관리자 확인 후 회신됩니다.',fallbackPrice:'가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.',fallbackThanks:'문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.'},
+    en:{clear:'Clear',close:'Close',question:'Question',answer:'Answer',answerPlaceholder:'Please wait a moment. We will respond shortly.',note:'※ Simple questions can receive an immediate AI answer. Technical, error, or operation issues are automatically sent to admin Q&A.',pending:'Pending',normal:'General',admin:'Admin request',delete:'Delete',deleteFail:'Delete failed (permission/policy).',saveDisabled:'Server saving is disabled because Supabase url/key is not connected yet. It will connect automatically after SUPER_VARSAR.url/anonKey is set.',saveFail:'Submit failed',fallbackOps:'Operational inquiries will be reviewed and answered by the administrator.',fallbackPrice:'Please refer to the page notice for price or fee details. Leave an additional inquiry if needed.',fallbackThanks:'Thank you for your inquiry. We will review it quickly and help you.'},
+    zh:{clear:'清除',close:'关闭',question:'问题',answer:'回答',answerPlaceholder:'请稍候，我们会尽快回复。',note:'※ 简单问题可由 AI 即时回答。技术、错误或运营相关问题会自动转交管理员 Q&A。',pending:'等待中',normal:'一般',admin:'管理请求',delete:'删除',deleteFail:'删除失败（权限/政策）',saveDisabled:'Supabase url/key 尚未连接，服务器保存目前不可用。部署时设置 SUPER_VARSAR.url/anonKey 后会自动连接。',saveFail:'提交失败',fallbackOps:'运营相关问题会由管理员确认后回复。',fallbackPrice:'价格/费用信息请参考页面说明。如需补充，请留下咨询。',fallbackThanks:'感谢您的咨询。我们会尽快确认并协助。'},
+    zht:{clear:'清除',close:'關閉',question:'問題',answer:'回答',answerPlaceholder:'請稍候，我們會盡快回覆。',note:'※ 簡單問題可由 AI 即時回答。技術、錯誤或營運相關問題會自動轉交管理員 Q&A。',pending:'等待中',normal:'一般',admin:'管理請求',delete:'刪除',deleteFail:'刪除失敗（權限/政策）',saveDisabled:'Supabase url/key 尚未連接，伺服器儲存目前不可用。部署時設定 SUPER_VARSAR.url/anonKey 後會自動連接。',saveFail:'提交失敗',fallbackOps:'營運相關問題會由管理員確認後回覆。',fallbackPrice:'價格/費用資訊請參考頁面說明。如需補充，請留下諮詢。',fallbackThanks:'感謝您的諮詢。我們會盡快確認並協助。'},
+    ja:{clear:'クリア',close:'閉じる',question:'質問',answer:'回答',answerPlaceholder:'少々お待ちください。まもなく回答いたします。',note:'※ 簡単な質問はAIが即時回答します。技術・エラー・運営関連は管理者Q&Aへ自動転送されます。',pending:'待機中',normal:'一般',admin:'管理要請',delete:'削除',deleteFail:'削除失敗（権限/ポリシー）',saveDisabled:'Supabase url/key が未接続のため、サーバー保存は無効です。SUPER_VARSAR.url/anonKey 設定後に自動接続されます。',saveFail:'登録失敗',fallbackOps:'運営関連のお問い合わせは管理者確認後に返信されます。',fallbackPrice:'価格/料金情報はページ内案内をご確認ください。追加のお問い合わせを残してください。',fallbackThanks:'お問い合わせありがとうございます。速やかに確認して対応いたします。'},
+    es:{clear:'Borrar',close:'Cerrar',question:'Pregunta',answer:'Respuesta',answerPlaceholder:'Espere un momento. Responderemos pronto.',note:'※ Las preguntas simples pueden recibir respuesta inmediata de IA. Los temas técnicos, errores u operación se envían al Q&A del administrador.',pending:'Pendiente',normal:'General',admin:'Solicitud admin',delete:'Eliminar',deleteFail:'Error al eliminar (permiso/política).',saveDisabled:'El guardado del servidor está desactivado porque Supabase url/key aún no está conectado.',saveFail:'Error al enviar',fallbackOps:'Las consultas operativas serán revisadas y respondidas por el administrador.',fallbackPrice:'Consulte el aviso de la página para precios o tarifas. Deje otra consulta si es necesario.',fallbackThanks:'Gracias por su consulta. La revisaremos rápidamente y le ayudaremos.'},
+    fr:{clear:'Effacer',close:'Fermer',question:'Question',answer:'Réponse',answerPlaceholder:'Veuillez patienter. Nous répondrons bientôt.',note:'※ Les questions simples peuvent recevoir une réponse IA immédiate. Les sujets techniques, erreurs ou opérationnels sont transmis à l’admin Q&A.',pending:'En attente',normal:'Général',admin:'Demande admin',delete:'Supprimer',deleteFail:'Échec de suppression (permission/politique).',saveDisabled:'L’enregistrement serveur est désactivé car Supabase url/key n’est pas encore connecté.',saveFail:'Échec d’envoi',fallbackOps:'Les questions opérationnelles seront vérifiées par l’administrateur.',fallbackPrice:'Veuillez consulter l’avis de la page pour les prix/frais. Laissez une question supplémentaire si besoin.',fallbackThanks:'Merci pour votre question. Nous la vérifierons rapidement.'},
+    de:{clear:'Leeren',close:'Schließen',question:'Frage',answer:'Antwort',answerPlaceholder:'Bitte warten Sie kurz. Wir antworten bald.',note:'※ Einfache Fragen können sofort von KI beantwortet werden. Technik-, Fehler- oder Betriebsfragen werden an Admin-Q&A weitergeleitet.',pending:'Ausstehend',normal:'Allgemein',admin:'Admin-Anfrage',delete:'Löschen',deleteFail:'Löschen fehlgeschlagen (Berechtigung/Richtlinie).',saveDisabled:'Serverspeicherung ist deaktiviert, da Supabase url/key noch nicht verbunden ist.',saveFail:'Senden fehlgeschlagen',fallbackOps:'Betriebsfragen werden vom Administrator geprüft und beantwortet.',fallbackPrice:'Bitte beachten Sie die Seitenhinweise zu Preisen/Gebühren. Hinterlassen Sie bei Bedarf eine weitere Anfrage.',fallbackThanks:'Vielen Dank für Ihre Anfrage. Wir prüfen sie schnell.'},
+    ar:{clear:'مسح',close:'إغلاق',question:'السؤال',answer:'الإجابة',answerPlaceholder:'يرجى الانتظار قليلاً. سنرد قريباً.',note:'※ يمكن للذكاء الاصطناعي الرد فوراً على الأسئلة البسيطة. أما المسائل التقنية أو الأخطاء أو التشغيل فتُحال تلقائياً إلى Q&A المسؤول.',pending:'قيد الانتظار',normal:'عام',admin:'طلب مسؤول',delete:'حذف',deleteFail:'فشل الحذف (صلاحية/سياسة).',saveDisabled:'الحفظ في الخادم غير مفعّل لأن Supabase url/key غير متصل بعد.',saveFail:'فشل الإرسال',fallbackOps:'سيتم الرد على استفسارات التشغيل بعد مراجعة المسؤول.',fallbackPrice:'يرجى مراجعة إرشادات الصفحة لمعلومات السعر/الرسوم. اترك استفساراً إضافياً إذا لزم الأمر.',fallbackThanks:'شكراً لاستفسارك. سنراجعه سريعاً ونساعدك.'},
+    fa:{clear:'پاک کردن',close:'بستن',question:'پرسش',answer:'پاسخ',answerPlaceholder:'کمی صبر کنید. به‌زودی پاسخ می‌دهیم.',note:'※ پرسش‌های ساده می‌توانند فوراً توسط AI پاسخ داده شوند. موارد فنی، خطا یا 운영 به Q&A مدیر ارسال می‌شوند.',pending:'در انتظار',normal:'عمومی',admin:'درخواست مدیر',delete:'حذف',deleteFail:'حذف ناموفق بود (مجوز/سیاست).',saveDisabled:'ذخیره‌سازی سرور غیرفعال است چون Supabase url/key هنوز متصل نیست.',saveFail:'ثبت ناموفق بود',fallbackOps:'پرسش‌های عملیاتی پس از بررسی مدیر پاسخ داده می‌شوند.',fallbackPrice:'برای اطلاعات قیمت/هزینه به راهنمای صفحه مراجعه کنید. در صورت نیاز پرسش دیگری ثبت کنید.',fallbackThanks:'از پرسش شما سپاسگزاریم. سریع بررسی می‌کنیم و کمک می‌کنیم.'},
+    ur:{clear:'صاف کریں',close:'بند کریں',question:'سوال',answer:'جواب',answerPlaceholder:'براہ کرم تھوڑی دیر انتظار کریں۔ ہم جلد جواب دیں گے۔',note:'※ سادہ سوالات کا AI فوری جواب دے سکتا ہے۔ تکنیکی، خرابی یا آپریشن سے متعلق سوالات خود بخود ایڈمن Q&A کو بھیجے جاتے ہیں۔',pending:'منتظر',normal:'عام',admin:'ایڈمن درخواست',delete:'حذف',deleteFail:'حذف ناکام (اجازت/پالیسی).',saveDisabled:'سرور محفوظ کاری غیر فعال ہے کیونکہ Supabase url/key ابھی منسلک نہیں۔',saveFail:'جمع کرانا ناکام',fallbackOps:'آپریشن سے متعلق سوالات ایڈمن کی جانچ کے بعد جواب دیے جائیں گے۔',fallbackPrice:'قیمت/فیس کی معلومات کے لیے صفحہ کی ہدایات دیکھیں۔ ضرورت ہو تو اضافی سوال چھوڑیں۔',fallbackThanks:'آپ کے سوال کا شکریہ۔ ہم جلد جائزہ لے کر مدد کریں گے۔'}
+  };
+
+
+  Object.assign(SUPPORT_QA_UI_FALLBACK, {
+    ru:{clear:'Очистить',close:'Закрыть',question:'Вопрос',answer:'Ответ',answerPlaceholder:'Пожалуйста, подождите. Мы скоро ответим.',note:'※ На простые вопросы может ответить ИИ. Технические вопросы, ошибки и операционные вопросы отправляются администратору Q&A.',pending:'Ожидает',normal:'Общее',admin:'Запрос администратору',delete:'Удалить',deleteFail:'Не удалось удалить (права/политика).',saveDisabled:'Сохранение на сервере отключено: Supabase url/key ещё не подключены.',saveFail:'Отправка не удалась',fallbackOps:'Операционные вопросы будут проверены администратором.',fallbackPrice:'Информацию о ценах/тарифах смотрите на странице.',fallbackThanks:'Спасибо за вопрос. Мы быстро проверим и поможем.'},
+    pt:{clear:'Limpar',close:'Fechar',question:'Pergunta',answer:'Resposta',answerPlaceholder:'Aguarde um momento. Responderemos em breve.',note:'※ Perguntas simples podem receber resposta imediata da IA. Questões técnicas, erros ou operação são enviadas ao Q&A do administrador.',pending:'Pendente',normal:'Geral',admin:'Solicitação admin',delete:'Excluir',deleteFail:'Falha ao excluir (permissão/política).',saveDisabled:'O salvamento no servidor está desativado porque Supabase url/key ainda não está conectado.',saveFail:'Falha ao enviar',fallbackOps:'Consultas operacionais serão revisadas pelo administrador.',fallbackPrice:'Consulte o aviso da página para preços/taxas.',fallbackThanks:'Obrigado pela consulta. Vamos verificar rapidamente.'},
+    it:{clear:'Cancella',close:'Chiudi',question:'Domanda',answer:'Risposta',answerPlaceholder:'Attenda un momento. Risponderemo presto.',note:'※ Le domande semplici possono ricevere risposta immediata dall’IA. Problemi tecnici, errori o operativi vengono inviati al Q&A admin.',pending:'In attesa',normal:'Generale',admin:'Richiesta admin',delete:'Elimina',deleteFail:'Eliminazione non riuscita (permesso/policy).',saveDisabled:'Il salvataggio server è disattivato perché Supabase url/key non è ancora collegato.',saveFail:'Invio non riuscito',fallbackOps:'Le domande operative saranno esaminate dall’amministratore.',fallbackPrice:'Consulti l’avviso della pagina per prezzi/tariffe.',fallbackThanks:'Grazie per la domanda. Verificheremo rapidamente.'},
+    vi:{clear:'Xóa',close:'Đóng',question:'Câu hỏi',answer:'Trả lời',answerPlaceholder:'Vui lòng chờ một chút. Chúng tôi sẽ trả lời sớm.',note:'※ Câu hỏi đơn giản có thể được AI trả lời ngay. Vấn đề kỹ thuật, lỗi hoặc vận hành sẽ chuyển đến Q&A quản trị.',pending:'Đang chờ',normal:'Chung',admin:'Yêu cầu quản trị',delete:'Xóa',deleteFail:'Xóa thất bại (quyền/chính sách).',saveDisabled:'Lưu máy chủ đang tắt vì Supabase url/key chưa được kết nối.',saveFail:'Gửi thất bại',fallbackOps:'Câu hỏi vận hành sẽ được quản trị viên xem xét.',fallbackPrice:'Vui lòng xem thông báo trên trang về giá/phí.',fallbackThanks:'Cảm ơn câu hỏi của bạn. Chúng tôi sẽ kiểm tra nhanh.'},
+    th:{clear:'ล้าง',close:'ปิด',question:'คำถาม',answer:'คำตอบ',answerPlaceholder:'โปรดรอสักครู่ เราจะตอบกลับเร็ว ๆ นี้',note:'※ คำถามทั่วไปอาจได้รับคำตอบจาก AI ทันที ปัญหาทางเทคนิค ข้อผิดพลาด หรือการดำเนินงานจะส่งต่อไปยัง Q&A ผู้ดูแล',pending:'รอดำเนินการ',normal:'ทั่วไป',admin:'คำขอผู้ดูแล',delete:'ลบ',deleteFail:'ลบไม่สำเร็จ (สิทธิ์/นโยบาย)',saveDisabled:'การบันทึกบนเซิร์ฟเวอร์ถูกปิดเพราะยังไม่ได้เชื่อมต่อ Supabase url/key',saveFail:'ส่งไม่สำเร็จ',fallbackOps:'คำถามด้านการดำเนินงานจะได้รับการตรวจสอบโดยผู้ดูแล',fallbackPrice:'โปรดดูประกาศบนหน้าเกี่ยวกับราคา/ค่าธรรมเนียม',fallbackThanks:'ขอบคุณสำหรับคำถาม เราจะตรวจสอบโดยเร็ว'},
+    id:{clear:'Bersihkan',close:'Tutup',question:'Pertanyaan',answer:'Jawaban',answerPlaceholder:'Harap tunggu sebentar. Kami akan segera menjawab.',note:'※ Pertanyaan sederhana dapat dijawab langsung oleh AI. Masalah teknis, error, atau operasional dikirim ke Q&A admin.',pending:'Menunggu',normal:'Umum',admin:'Permintaan admin',delete:'Hapus',deleteFail:'Gagal menghapus (izin/kebijakan).',saveDisabled:'Penyimpanan server dinonaktifkan karena Supabase url/key belum terhubung.',saveFail:'Gagal mengirim',fallbackOps:'Pertanyaan operasional akan ditinjau admin.',fallbackPrice:'Lihat pemberitahuan halaman untuk harga/biaya.',fallbackThanks:'Terima kasih atas pertanyaannya. Kami akan segera memeriksa.'},
+    hi:{clear:'मिटाएँ',close:'बंद करें',question:'प्रश्न',answer:'उत्तर',answerPlaceholder:'कृपया थोड़ा प्रतीक्षा करें। हम जल्द उत्तर देंगे।',note:'※ सरल प्रश्नों का AI तुरंत उत्तर दे सकता है। तकनीकी, त्रुटि या संचालन संबंधी प्रश्न व्यवस्थापक Q&A को भेजे जाते हैं।',pending:'प्रतीक्षा में',normal:'सामान्य',admin:'व्यवस्थापक अनुरोध',delete:'हटाएँ',deleteFail:'हटाना विफल (अनुमति/नीति)।',saveDisabled:'सर्वर सेव बंद है क्योंकि Supabase url/key अभी जुड़ा नहीं है।',saveFail:'भेजना विफल',fallbackOps:'संचालन संबंधी प्रश्न व्यवस्थापक द्वारा जाँचे जाएँगे।',fallbackPrice:'मूल्य/शुल्क के लिए पेज सूचना देखें।',fallbackThanks:'प्रश्न के लिए धन्यवाद। हम जल्दी जाँच करेंगे।'},
+    tr:{clear:'Temizle',close:'Kapat',question:'Soru',answer:'Yanıt',answerPlaceholder:'Lütfen biraz bekleyin. Yakında yanıt vereceğiz.',note:'※ Basit sorulara AI hemen yanıt verebilir. Teknik, hata veya işletim konuları admin Q&A’ya gönderilir.',pending:'Beklemede',normal:'Genel',admin:'Admin isteği',delete:'Sil',deleteFail:'Silme başarısız (izin/politika).',saveDisabled:'Supabase url/key bağlı olmadığı için sunucu kaydı devre dışı.',saveFail:'Gönderilemedi',fallbackOps:'İşletim soruları admin tarafından incelenecektir.',fallbackPrice:'Fiyat/ücret bilgisi için sayfa duyurusuna bakın.',fallbackThanks:'Sorunuz için teşekkürler. Hızla inceleyeceğiz.'},
+    bn:{clear:'মুছুন',close:'বন্ধ',question:'প্রশ্ন',answer:'উত্তর',answerPlaceholder:'অনুগ্রহ করে একটু অপেক্ষা করুন। আমরা শিগগির উত্তর দেব।',note:'※ সহজ প্রশ্নে AI তাৎক্ষণিক উত্তর দিতে পারে। প্রযুক্তিগত, ত্রুটি বা পরিচালনাসংক্রান্ত প্রশ্ন অ্যাডমিন Q&A-তে পাঠানো হয়।',pending:'অপেক্ষমাণ',normal:'সাধারণ',admin:'অ্যাডমিন অনুরোধ',delete:'মুছুন',deleteFail:'মুছতে ব্যর্থ (অনুমতি/নীতি)।',saveDisabled:'Supabase url/key সংযুক্ত নয় বলে সার্ভার সংরক্ষণ নিষ্ক্রিয়।',saveFail:'জমা ব্যর্থ',fallbackOps:'পরিচালনাসংক্রান্ত প্রশ্ন অ্যাডমিন যাচাই করবেন।',fallbackPrice:'মূল্য/ফি তথ্যের জন্য পেজের নোটিশ দেখুন।',fallbackThanks:'আপনার প্রশ্নের জন্য ধন্যবাদ। আমরা দ্রুত যাচাই করব।'},
+    sw:{clear:'Futa',close:'Funga',question:'Swali',answer:'Jibu',answerPlaceholder:'Tafadhali subiri kidogo. Tutajibu hivi karibuni.',note:'※ Maswali rahisi yanaweza kujibiwa mara moja na AI. Masuala ya kiufundi, hitilafu au uendeshaji hutumwa kwa Q&A ya admin.',pending:'Inasubiri',normal:'Jumla',admin:'Ombi la admin',delete:'Futa',deleteFail:'Kufuta kumeshindikana (ruhusa/sera).',saveDisabled:'Uhifadhi wa seva umezimwa kwa sababu Supabase url/key haijaunganishwa.',saveFail:'Kutuma kumeshindikana',fallbackOps:'Maswali ya uendeshaji yatakaguliwa na admin.',fallbackPrice:'Tazama tangazo la ukurasa kwa bei/ada.',fallbackThanks:'Asante kwa swali lako. Tutalikagua haraka.'},
+    ta:{clear:'அழி',close:'மூடு',question:'கேள்வி',answer:'பதில்',answerPlaceholder:'சிறிது காத்திருக்கவும். விரைவில் பதிலளிப்போம்.',note:'※ எளிய கேள்விகளுக்கு AI உடனடி பதில் அளிக்கலாம். தொழில்நுட்பம், பிழை அல்லது செயல்பாடு தொடர்பானவை நிர்வாகி Q&A-க்கு அனுப்பப்படும்.',pending:'நிலுவையில்',normal:'பொது',admin:'நிர்வாக கோரிக்கை',delete:'நீக்கு',deleteFail:'நீக்கம் தோல்வி (அனுமதி/கொள்கை).',saveDisabled:'Supabase url/key இணைக்கப்படாததால் சேவையக சேமிப்பு முடக்கப்பட்டுள்ளது.',saveFail:'சமர்ப்பிப்பு தோல்வி',fallbackOps:'செயல்பாடு தொடர்பான கேள்விகள் நிர்வாகி மூலம் பரிசீலிக்கப்படும்.',fallbackPrice:'விலை/கட்டண விவரங்களுக்கு பக்க அறிவிப்பைப் பார்க்கவும்.',fallbackThanks:'உங்கள் கேள்விக்கு நன்றி. விரைவாகப் பார்க்கிறோம்.'},
+    hu:{clear:'Törlés',close:'Bezárás',question:'Kérdés',answer:'Válasz',answerPlaceholder:'Kérjük, várjon egy kicsit. Hamarosan válaszolunk.',note:'※ Az egyszerű kérdésekre az AI azonnal válaszolhat. Technikai, hiba- vagy üzemeltetési ügyek admin Q&A-ba kerülnek.',pending:'Függőben',normal:'Általános',admin:'Admin kérés',delete:'Törlés',deleteFail:'Törlés sikertelen (engedély/szabályzat).',saveDisabled:'A szervermentés ki van kapcsolva, mert a Supabase url/key még nincs csatlakoztatva.',saveFail:'Küldés sikertelen',fallbackOps:'Az üzemeltetési kérdéseket admin vizsgálja.',fallbackPrice:'Ár/díj információért nézze meg az oldalon lévő tájékoztatót.',fallbackThanks:'Köszönjük kérdését. Gyorsan ellenőrizzük.'},
+    ms:{clear:'Kosongkan',close:'Tutup',question:'Soalan',answer:'Jawapan',answerPlaceholder:'Sila tunggu sebentar. Kami akan menjawab tidak lama lagi.',note:'※ Soalan ringkas boleh dijawab segera oleh AI. Isu teknikal, ralat atau operasi dihantar ke Q&A admin.',pending:'Menunggu',normal:'Umum',admin:'Permintaan admin',delete:'Padam',deleteFail:'Gagal memadam (kebenaran/polisi).',saveDisabled:'Simpanan pelayan dilumpuhkan kerana Supabase url/key belum disambungkan.',saveFail:'Gagal hantar',fallbackOps:'Soalan operasi akan disemak oleh admin.',fallbackPrice:'Sila rujuk notis halaman untuk harga/yuran.',fallbackThanks:'Terima kasih atas soalan anda. Kami akan semak segera.'},
+    nl:{clear:'Wissen',close:'Sluiten',question:'Vraag',answer:'Antwoord',answerPlaceholder:'Even geduld. We antwoorden spoedig.',note:'※ Eenvoudige vragen kunnen direct door AI worden beantwoord. Technische, fout- of operationele zaken gaan naar admin Q&A.',pending:'In afwachting',normal:'Algemeen',admin:'Adminverzoek',delete:'Verwijderen',deleteFail:'Verwijderen mislukt (rechten/beleid).',saveDisabled:'Serveropslag is uitgeschakeld omdat Supabase url/key nog niet is verbonden.',saveFail:'Verzenden mislukt',fallbackOps:'Operationele vragen worden door admin beoordeeld.',fallbackPrice:'Zie de paginamelding voor prijs-/kosteninformatie.',fallbackThanks:'Bedankt voor uw vraag. We controleren dit snel.'},
+    pl:{clear:'Wyczyść',close:'Zamknij',question:'Pytanie',answer:'Odpowiedź',answerPlaceholder:'Proszę chwilę poczekać. Wkrótce odpowiemy.',note:'※ Proste pytania mogą otrzymać natychmiastową odpowiedź AI. Techniczne, błędy lub operacyjne sprawy trafiają do admin Q&A.',pending:'Oczekuje',normal:'Ogólne',admin:'Prośba admin',delete:'Usuń',deleteFail:'Usuwanie nie powiodło się (uprawnienia/polityka).',saveDisabled:'Zapis serwerowy jest wyłączony, bo Supabase url/key nie jest połączony.',saveFail:'Wysyłka nieudana',fallbackOps:'Pytania operacyjne zostaną sprawdzone przez administratora.',fallbackPrice:'Sprawdź informację na stronie dotyczącą ceny/opłat.',fallbackThanks:'Dziękujemy za pytanie. Szybko je sprawdzimy.'},
+    sv:{clear:'Rensa',close:'Stäng',question:'Fråga',answer:'Svar',answerPlaceholder:'Vänta en stund. Vi svarar snart.',note:'※ Enkla frågor kan få omedelbart AI-svar. Tekniska, fel- eller driftfrågor skickas till admin Q&A.',pending:'Väntar',normal:'Allmänt',admin:'Adminbegäran',delete:'Radera',deleteFail:'Radering misslyckades (behörighet/policy).',saveDisabled:'Serversparning är avstängd eftersom Supabase url/key inte är anslutet ännu.',saveFail:'Skicka misslyckades',fallbackOps:'Driftfrågor granskas av admin.',fallbackPrice:'Se sidans meddelande för pris-/avgiftsinformation.',fallbackThanks:'Tack för din fråga. Vi granskar snabbt.'},
+    tl:{clear:'I-clear',close:'Isara',question:'Tanong',answer:'Sagot',answerPlaceholder:'Maghintay sandali. Sasagot kami sa lalong madaling panahon.',note:'※ Ang simpleng tanong ay maaaring sagutin agad ng AI. Ang technical, error o operation issues ay ipapasa sa admin Q&A.',pending:'Nakabinbin',normal:'Pangkalahatan',admin:'Admin request',delete:'Burahin',deleteFail:'Nabigong burahin (permission/policy).',saveDisabled:'Naka-disable ang server saving dahil hindi pa nakakonekta ang Supabase url/key.',saveFail:'Nabigong isumite',fallbackOps:'Susuriin ng admin ang operational inquiries.',fallbackPrice:'Tingnan ang page notice para sa presyo/bayad.',fallbackThanks:'Salamat sa iyong tanong. Susuriin namin agad.'},
+    uk:{clear:'Очистити',close:'Закрити',question:'Питання',answer:'Відповідь',answerPlaceholder:'Будь ласка, зачекайте. Ми скоро відповімо.',note:'※ На прості питання може одразу відповісти AI. Технічні, помилки або операційні питання надсилаються до admin Q&A.',pending:'Очікує',normal:'Загальне',admin:'Запит адміну',delete:'Видалити',deleteFail:'Не вдалося видалити (дозвіл/політика).',saveDisabled:'Серверне збереження вимкнено, бо Supabase url/key ще не підключені.',saveFail:'Надсилання не вдалося',fallbackOps:'Операційні питання перевірить адміністратор.',fallbackPrice:'Дивіться повідомлення на сторінці щодо ціни/плати.',fallbackThanks:'Дякуємо за питання. Ми швидко перевіримо.'},
+    uz:{clear:'Tozalash',close:'Yopish',question:'Savol',answer:'Javob',answerPlaceholder:'Iltimos, biroz kuting. Tez orada javob beramiz.',note:'※ Oddiy savollarga AI darhol javob berishi mumkin. Texnik, xato yoki operatsion masalalar admin Q&A ga yuboriladi.',pending:'Kutilmoqda',normal:'Umumiy',admin:'Admin so‘rovi',delete:'O‘chirish',deleteFail:'O‘chirish amalga oshmadi (ruxsat/siyosat).',saveDisabled:'Supabase url/key ulanmagani uchun serverga saqlash o‘chirilgan.',saveFail:'Yuborish amalga oshmadi',fallbackOps:'Operatsion savollar admin tomonidan ko‘rib chiqiladi.',fallbackPrice:'Narx/to‘lov uchun sahifa bildirishnomasini ko‘ring.',fallbackThanks:'Savolingiz uchun rahmat. Tezda tekshiramiz.'}
+  });
+
+  function qnaLang(){
+    try{ if(typeof getLang === 'function') return getLang(); }catch(e){}
+    try{ var s=(localStorage.getItem('igdc_lang')||'').toLowerCase(); if(s) return s; }catch(e){}
+    try{ return (document.documentElement.lang||'ko').toLowerCase(); }catch(e){}
+    return 'ko';
+  }
+  function qnaBaseText(){
+    try{ var lang=qnaLang(); return (typeof I18N !== 'undefined' && (I18N[lang] || I18N.en || I18N.ko)) || {}; }catch(e){ return {}; }
+  }
+  function qnaFallbackText(){
+    var lang=qnaLang();
+    return SUPPORT_QA_UI_FALLBACK[lang] || SUPPORT_QA_UI_FALLBACK.en || SUPPORT_QA_UI_FALLBACK.ko || {};
+  }
+  function qnaText(key, fallback){
+    var t=qnaBaseText();
+    var f=qnaFallbackText();
+    return (t && t[key]) || (f && f[key]) || fallback || key;
+  }
+
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
 
@@ -1597,20 +1654,35 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    const title = el("div","igdc-qa-title");
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;";
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="질문";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="질문을 입력하세요...";
-    const lA = el("label"); lA.textContent="답변";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="조금만 기다리시면 금방 답변을 드리겠습니다.";
+    const lQ = el("label");
+    const tQ = el("textarea","igdc-qa-text q");
+    const lA = el("label");
+    const tA = el("textarea","igdc-qa-text a");
     const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="등록하기";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="지우기";
-    const note = el("div","igdc-qa-note"); note.textContent="※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.";
+    const btnSubmit = el("button","igdc-qa-btn primary");
+    const btnClear = el("button","igdc-qa-btn muted");
+    const note = el("div","igdc-qa-note");
     const list = el("div","igdc-qa-threads");
+
+    function applyQaLanguage(){
+      title.textContent = qnaText("qnaAskTitle", "Q&A");
+      close.setAttribute("aria-label", qnaText("close", "Close"));
+      lQ.textContent = qnaText("question", "Question");
+      tQ.placeholder = qnaText("qnaQuestionPlaceholder", qnaText("question", "Question"));
+      lA.textContent = qnaText("answer", "Answer");
+      tA.placeholder = qnaText("answerPlaceholder", qnaText("qnaSending", "Please wait a moment."));
+      btnSubmit.textContent = qnaText("qnaSubmit", "Submit");
+      btnClear.textContent = qnaText("clear", "Clear");
+      note.textContent = qnaText("note", qnaText("qnaAskText", "Simple questions can receive an immediate answer."));
+    }
+    applyQaLanguage();
+    window.addEventListener("storage", function(e){ if(e.key === "igdc_lang") applyQaLanguage(); });
+    window.addEventListener("message", function(e){ try{ if(e.data && (e.data.lang || e.data.igdc_lang)) setTimeout(applyQaLanguage, 0); }catch(_e){} });
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
     actions.append(btnSubmit, btnClear);
@@ -1680,18 +1752,18 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):("A. (" + qnaText("pending", "Pending") + ")");
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "관리요청":"일반";
+        const tag = el("span"); tag.textContent = row.is_admin ? qnaText("admin", "Admin request") : qnaText("normal", "General");
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
+          const del = el("button","igdc-qa-btn muted"); del.textContent=qnaText("delete", "Delete");
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("삭제 실패(권한/정책)"); return; }
+            if(error){ alert(qnaText("deleteFail", "Delete failed.")); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1714,9 +1786,9 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
-          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
-          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
+          if(/시간|운영시간|오픈|문의|hours|open|contact|support/i.test(text)) answer=qnaText("fallbackOps", "Operational inquiries will be reviewed by the administrator.");
+          else if(/가격|비용|요금|price|cost|fee/i.test(text)) answer=qnaText("fallbackPrice", "Please refer to the page notice for price or fee details.");
+          else answer=qnaText("fallbackThanks", "Thank you for your inquiry. We will review it quickly.");
         }
       }
       return { technical, answer };
@@ -1730,7 +1802,7 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert(qnaText("saveDisabled", "Server saving is currently disabled."));
         return;
       }
       const record = {
@@ -1740,7 +1812,7 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("등록 실패"); return; }
+      if(error){ alert(qnaText("saveFail", "Submit failed")); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
