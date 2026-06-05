@@ -1886,6 +1886,35 @@ a[href=""], a:not([href]).center-donation-disabled, button.center-donation-disab
 <style id="igdc-hide-lit-link-home-v1">
 .sidebar a[href*="literature_academic"]{display:none !important;}
 </style>
+
+<style id="igdc-qa-panel-position-final-v1">
+/* IGDC Q&A modal position final: keep button/function intact, lift the modal near the index nav bottom. */
+.igdc-qa-modal .igdc-qa-panel,
+.igdc-qa-panel{
+  top:18px !important;
+  bottom:auto !important;
+  max-height:calc(100dvh - 36px) !important;
+  overflow:hidden !important;
+}
+.igdc-qa-modal .igdc-qa-body,
+.igdc-qa-panel .igdc-qa-body{
+  max-height:calc(100dvh - 150px) !important;
+  overflow-y:auto !important;
+  -webkit-overflow-scrolling:touch !important;
+}
+@media (max-width:768px){
+  .igdc-qa-modal .igdc-qa-panel,
+  .igdc-qa-panel{
+    top:14px !important;
+    bottom:auto !important;
+    max-height:calc(100dvh - 28px) !important;
+  }
+  .igdc-qa-modal .igdc-qa-body,
+  .igdc-qa-panel .igdc-qa-body{
+    max-height:calc(100dvh - 132px) !important;
+  }
+}
+</style>
 </head>
 <body>
 <div class="container">
