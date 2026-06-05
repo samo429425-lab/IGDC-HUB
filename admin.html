@@ -3037,118 +3037,6 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 
 <script src="/assets/js/igdc-core.min.js"></script>
 <script src="/assets/js/igdc-pay.min.js"></script>
-
-<script id="igdc-admin-qna-central-inbox-v1-1">
-(function(){
-  if (window.__IGDC_ADMIN_QNA_CENTRAL_INBOX_V1_1__) return;
-  window.__IGDC_ADMIN_QNA_CENTRAL_INBOX_V1_1__ = true;
-
-  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
-
-  // Override the older localStorage-only Admin Q&A popup with a light central inbox.
-  // It loads only admin_required questions from qa-proxy, and falls back to localStorage.
-  window.openAdminPanel = function(){
-    var w = 760, h = 760;
-    var pop = window.open('', 'IGDC_ADMIN_QNA_PANEL', 'width='+w+',height='+h+',resizable=yes,scrollbars=yes');
-    if (!pop) return null;
-    var html = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
-<title>관리자용 Q&A</title>
-<style>
-body{font-family:Arial,'Noto Sans KR',sans-serif;margin:16px;color:#172b45;background:#fff}
-h3{margin:0 0 6px;color:#003b75}.sub{font-size:12px;color:#667;margin-bottom:12px;line-height:1.5}
-.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
-select,button,input{padding:8px 10px;border:1px solid #ccd8e6;border-radius:7px;background:#f8fbff;box-sizing:border-box}
-button{cursor:pointer;font-weight:700}button.primary{background:#2e6bff;color:#fff;border-color:#2e6bff}button.danger{background:#e74c3c;color:#fff;border-color:#e74c3c}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.panel{border:1px solid #e6eefc;border-radius:10px;padding:10px;margin-bottom:10px;background:#fff}
-textarea{width:100%;padding:8px;border:1px solid #ccd8e6;border-radius:7px;box-sizing:border-box;resize:vertical}#qBox{height:105px}#aBox{height:150px}
-table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #edf2f8;padding:7px;text-align:left;font-size:13px;vertical-align:top}tr:hover{background:#f5f9ff}
-.badge{display:inline-block;padding:2px 6px;border-radius:999px;font-size:11px;background:#eef5ff;color:#004080;margin-right:4px}.urgent{background:#ffe5e5;color:#a80000}.high{background:#fff3d5;color:#8a5b00}.done{background:#e7f7e9;color:#146b22}
-.meta{font-size:12px;color:#667;line-height:1.45}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.small{font-size:12px}.listwrap{max-height:330px;overflow:auto}
-@media(max-width:720px){.grid{grid-template-columns:1fr}}
-</style></head><body>
-<h3>관리자용 Q&A</h3>
-<div class="sub">Q&A에서 관리자 확인이 필요한 질문만 불러옵니다. 일반 질문은 AI 1차 답변으로 처리되고, 이 창은 회원등록·권한·결제·거래분쟁·오류 등 관리자 확인이 필요한 항목만 가볍게 50건 단위로 확인합니다.</div>
-<div class="toolbar">
-  <label>상태 <select id="statusFilter"><option value="all">전체</option><option value="pending">대기</option><option value="reviewing">검토중</option><option value="done">완료</option></select></label>
-  <label>우선순위 <select id="priorityFilter"><option value="all">전체</option><option value="urgent">긴급</option><option value="high">높음</option><option value="normal">보통</option><option value="low">낮음</option></select></label>
-  <button id="refresh" class="primary">새로고침</button>
-  <button id="export">백업(JSON)</button>
-  <span class="meta" id="countInfo"></span>
-</div>
-<div class="grid">
-  <div class="panel"><b>질문</b><textarea id="qBox" readonly></textarea><div class="meta" id="itemMeta">선택된 항목 없음</div></div>
-  <div class="panel"><b>AI 1차 답변 / 관리자 답변</b><textarea id="aBox"></textarea><div class="actions"><button id="markReview">검토중</button><button id="markDone">완료</button><button id="toggleImportant">중요 토글</button><button id="saveAnswer" class="primary">상태/답변 저장</button></div></div>
-</div>
-<div class="panel listwrap"><table><thead><tr><th>시간</th><th>질문</th><th>분류</th><th>상태</th></tr></thead><tbody id="listBody"></tbody></table></div>
-<script>
-(function(){
-  var KEY='igdc_qna_threads';
-  var rows=[], current=null;
-  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-  function fmt(ts){try{return new Date(ts||Date.now()).toLocaleString('ko-KR');}catch(e){return String(ts||'');}}
-  function one(s){return String(s||'').replace(/\s+/g,' ').trim().slice(0,110);}
-  function loadLocal(){try{return JSON.parse(localStorage.getItem(KEY)||'[]').map(function(x,i){return {id:x.id||x.ts||('local-'+i),table:'localStorage',ts:x.ts||Date.now()-i,created_at:x.created_at||x.ts,q:x.q||x.question||'',a:x.a||x.answer||'',category:x.category||x.tag||'local',priority:x.priority||(x.important?'high':'normal'),status:x.status||'pending',important:!!x.important,source:'localStorage'};}).filter(function(x){return x.q;});}catch(e){return [];}}
-  function saveLocalAll(arr){try{localStorage.setItem(KEY,JSON.stringify(arr));}catch(e){}}
-  function badgePriority(p){var c=p==='urgent'?'urgent':(p==='high'?'high':'');return '<span class="badge '+c+'">'+esc(p||'normal')+'</span>';}
-  function badgeStatus(s){var c=s==='done'?'done':'';return '<span class="badge '+c+'">'+esc(s||'pending')+'</span>';}
-  function render(){
-    var sf=document.getElementById('statusFilter').value, pf=document.getElementById('priorityFilter').value;
-    var list=rows.slice();
-    if(sf!=='all') list=list.filter(function(x){return (x.status||'pending')===sf;});
-    if(pf!=='all') list=list.filter(function(x){return (x.priority||'normal')===pf;});
-    var order={urgent:0,high:1,normal:2,low:3};
-    list.sort(function(a,b){return (order[a.priority]||9)-(order[b.priority]||9) || ((Number(b.ts)||0)-(Number(a.ts)||0));});
-    document.getElementById('countInfo').textContent='표시 '+list.length+'건 / 로드 '+rows.length+'건';
-    document.getElementById('listBody').innerHTML=list.map(function(x){return '<tr data-id="'+esc(x.id)+'" data-table="'+esc(x.table)+'"><td>'+fmt(x.created_at||x.ts)+'</td><td>'+esc(one(x.q))+'</td><td>'+badgePriority(x.priority)+esc(x.category||'')+'</td><td>'+badgeStatus(x.status)+'</td></tr>';}).join('');
-    Array.prototype.forEach.call(document.querySelectorAll('#listBody tr'),function(tr){tr.onclick=function(){selectItem(tr.getAttribute('data-id'),tr.getAttribute('data-table'));};});
-  }
-  function selectItem(id,table){
-    current=rows.find(function(x){return String(x.id)===String(id)&&String(x.table)===String(table);})||null;
-    if(!current)return;
-    document.getElementById('qBox').value=current.q||'';
-    document.getElementById('aBox').value=current.a||'';
-    document.getElementById('itemMeta').innerHTML='분류: '+esc(current.category||'')+' · 우선순위: '+esc(current.priority||'')+' · 상태: '+esc(current.status||'')+' · 출처: '+esc(current.source||current.table||'');
-  }
-  async function refresh(){
-    document.getElementById('countInfo').textContent='불러오는 중...';
-    var server=[];
-    try{
-      var r=await fetch('/.netlify/functions/qa-proxy?admin=1&limit=50',{cache:'no-store'});
-      var j=await r.json();
-      if(j&&Array.isArray(j.rows)) server=j.rows;
-    }catch(e){}
-    var local=loadLocal().filter(function(x){return x.admin_required!==false;});
-    var seen={}; rows=server.concat(local).filter(function(x){var k=(x.table||'')+':'+(x.id||'')+':'+one(x.q); if(seen[k])return false; seen[k]=true; return true;});
-    render();
-  }
-  async function saveState(extra){
-    if(!current){alert('먼저 항목을 선택하세요.');return;}
-    Object.assign(current, extra||{}); current.a=document.getElementById('aBox').value||current.a||'';
-    if(current.table==='localStorage'){
-      var arr=loadLocal(); var i=arr.findIndex(function(x){return String(x.id)===String(current.id);}); if(i>=0)arr[i]=current; saveLocalAll(arr);
-    }else{
-      try{await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'admin-update',id:current.id,table:current.table,status:current.status,important:current.important,admin_answer:current.a})});}catch(e){}
-    }
-    render(); selectItem(current.id,current.table);
-  }
-  document.getElementById('refresh').onclick=refresh;
-  document.getElementById('statusFilter').onchange=render; document.getElementById('priorityFilter').onchange=render;
-  document.getElementById('markReview').onclick=function(){saveState({status:'reviewing'});};
-  document.getElementById('markDone').onclick=function(){saveState({status:'done'});};
-  document.getElementById('toggleImportant').onclick=function(){if(!current){alert('먼저 항목을 선택하세요.');return;} saveState({important:!current.important,priority:current.important?'normal':'high'});};
-  document.getElementById('saveAnswer').onclick=function(){saveState({});};
-  document.getElementById('export').onclick=function(){var blob=new Blob([JSON.stringify(rows,null,2)],{type:'application/json'});var u=URL.createObjectURL(blob);var a=document.createElement('a');a.href=u;a.download='IGDC_ADMIN_QNA_INBOX_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(function(){URL.revokeObjectURL(u);},1500);};
-  refresh();
-})();
-<\/script></body></html>`;
-    pop.document.open();
-    pop.document.write(html);
-    pop.document.close();
-    return pop;
-  };
-})();
-</script>
-
 <script id="qna-launch-bind">
 (function(){
   if (window.__QNA_LAUNCH_BOUND__) return; window.__QNA_LAUNCH_BOUND__=true;
@@ -3608,6 +3496,156 @@ table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #edf2f8;
 
 <!-- 5. maru addon -->
 <script src="/assets/js/maru-site-control-addon.js"></script>
+
+
+
+<!-- IGDC admin right-panel audit link: current-domain safe launcher -->
+<style id="igdc-admin-audit-link-style">
+  .igdc-admin-audit-link-card {
+    border-color: #f3bfd0 !important;
+    background: #fff6fa !important;
+  }
+  .igdc-admin-audit-link-card:hover {
+    border-color: #e497b2 !important;
+    background: #fff0f6 !important;
+  }
+  .igdc-admin-audit-link-card .igdc-admin-audit-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #7a2947;
+  }
+  .igdc-admin-audit-link-card .igdc-admin-audit-desc {
+    font-size: 11px;
+    color: #754457;
+    line-height: 1.35;
+    margin: 3px 0 6px;
+  }
+  .igdc-admin-audit-link-card .igdc-admin-audit-btn {
+    width: 100%;
+    padding: 5px 7px;
+    font-size: 11px;
+    font-weight: 800;
+    border-radius: 5px;
+    border: 1px solid #e5a7bb;
+    background: linear-gradient(180deg, #fffafd 0%, #ffe6f0 100%);
+    color: #7a2947;
+    cursor: pointer;
+  }
+  .igdc-admin-audit-link-card .igdc-admin-audit-btn:hover {
+    background: #ffddec;
+  }
+  .igdc-admin-audit-link-card .igdc-admin-audit-mini {
+    margin-top: 4px;
+    font-size: 10px;
+    color: #9a6074;
+  }
+</style>
+<script id="igdc-admin-audit-link-script">
+(function(){
+  if (window.__IGDC_ADMIN_AUDIT_LINK_INSTALLED__) return;
+  window.__IGDC_ADMIN_AUDIT_LINK_INSTALLED__ = true;
+
+  function auditUrl(){
+    var u = new URL('/admin-deploy-check.html', window.location.origin);
+    u.searchParams.set('mode', 'pre-product');
+    u.searchParams.set('source', 'admin-right-panel');
+    u.searchParams.set('targetOrigin', window.location.origin);
+    u.searchParams.set('returnPath', window.location.pathname + window.location.search + window.location.hash);
+    return u.pathname + u.search;
+  }
+
+  function makeCard(){
+    var card = document.createElement('div');
+    card.id = 'igdc-admin-audit-link-card';
+    card.className = 'igdc-sc-card igdc-admin-audit-link-card';
+    card.setAttribute('data-igdc-admin-audit-link', '1');
+    card.innerHTML = '' +
+      '<div class="igdc-sc-card-header">' +
+        '<span class="igdc-admin-audit-title">🩺 시스템 점검 · 엔진 헬스체크</span>' +
+        '<span class="igdc-sc-card-status">↗</span>' +
+      '</div>' +
+      '<div class="igdc-admin-audit-desc">현재 접속 중인 도메인의 점검 페이지로 이동합니다.</div>' +
+      '<button class="igdc-admin-audit-btn" type="button">전체 점검 실행</button>' +
+      '<div class="igdc-admin-audit-mini">점검 후 브라우저 뒤로가기로 관리자 화면 복귀</div>';
+
+    var btn = card.querySelector('button');
+    if (btn) {
+      btn.addEventListener('click', function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        window.location.href = auditUrl();
+        return false;
+      });
+    }
+
+    card.addEventListener('click', function(ev){
+      if (ev.target && ev.target.tagName === 'BUTTON') return;
+      ev.preventDefault();
+      window.location.href = auditUrl();
+    });
+
+    return card;
+  }
+
+  function findCard(panel, re){
+    var cards = Array.prototype.slice.call(panel.querySelectorAll('.igdc-sc-card'));
+    for (var i = 0; i < cards.length; i++) {
+      var txt = (cards[i].textContent || '').replace(/\s+/g, ' ');
+      if (re.test(txt)) return cards[i];
+    }
+    return null;
+  }
+
+  function install(){
+    var panel = document.getElementById('igdc-site-control');
+    if (!panel) return false;
+
+    var existing = document.getElementById('igdc-admin-audit-link-card');
+    if (existing && panel.contains(existing)) return true;
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+    var card = makeCard();
+    var ux = findCard(panel, /기기\s*\/\s*브라우저|기기\s*·\s*브라우저|UX/i);
+    var insight = findCard(panel, /MARU\s*Global\s*Insight|마루\s*Global\s*Insight/i);
+
+    if (ux && ux.parentNode) {
+      ux.insertAdjacentElement('afterend', card);
+      return true;
+    }
+
+    if (insight && insight.parentNode) {
+      insight.parentNode.insertBefore(card, insight);
+      return true;
+    }
+
+    var grid = panel.querySelector('.igdc-sc-grid') || panel;
+    grid.appendChild(card);
+    return true;
+  }
+
+  function arm(){
+    var tries = 0;
+    var timer = setInterval(function(){
+      tries += 1;
+      if (install() || tries > 80) clearInterval(timer);
+    }, 250);
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', install);
+    } else {
+      install();
+    }
+
+    var panel = document.getElementById('igdc-site-control');
+    if (panel && window.MutationObserver) {
+      var obs = new MutationObserver(function(){ install(); });
+      obs.observe(panel, { childList: true, subtree: true });
+    }
+  }
+
+  arm();
+})();
+</script>
 
 <!-- 5-1. maru detached pane (FINAL) -->
 <script src="/assets/js/maru-detached-pane.js"></script>
