@@ -3283,13 +3283,50 @@ function normLang(l){
 })();
 </script>
 
-<script>
+<script id="igdc-qna-router-support-fallback-v2">
 (function(){
   var SEL=["#mobileQnaLink",'[data-igtc-qna="1"]'],F="mainFrame",W=3000,I=120;
   function fr(){return document.getElementById(F)}
+  function currentLangSafe(){
+    try{
+      var lang = (window.currentLang || localStorage.getItem('igdc_lang') || document.documentElement.getAttribute('lang') || 'ko').toLowerCase();
+      return lang || 'ko';
+    }catch(_){ return 'ko'; }
+  }
+  function homeQna(f){
+    try{
+      f = f || fr(); if(!f) return;
+      var lang = currentLangSafe();
+      var home = 'home.html';
+      try{
+        if(window.pageMap && window.pageMap[lang] && window.pageMap[lang][0]) home = window.pageMap[lang][0];
+        else if(window.pageMap && window.pageMap.ko && window.pageMap.ko[0]) home = window.pageMap.ko[0];
+      }catch(_){ }
+      var u = new URL(home, location.href);
+      u.searchParams.set('open','qna');
+      f.src = u.href;
+    }catch(e){}
+  }
   function direct(f){try{var w=f&&f.contentWindow,q=w&&w.IGDC_QA;if(q&&typeof q.open==="function"){q.open();return true}}catch(e){}return false}
+  function hasQnaBridge(f){
+    try{
+      var w=f&&f.contentWindow,d=f&&f.contentDocument;
+      if(w&&w.IGDC_QA&&typeof w.IGDC_QA.open==="function") return true;
+      if(d&&d.querySelector&&d.querySelector('.igdc-qa-modal,.igdc-qa-panel,[data-igdc-qna-modal],#igdcQaModal,#igdc-qa-modal')) return true;
+    }catch(e){}
+    return false;
+  }
   function pm(f){try{f&&f.contentWindow&&f.contentWindow.postMessage({type:"IGTC_OPEN_QNA"},"*");return true}catch(e){}return false}
-  function openQna(){var f=fr();if(!f)return;if(direct(f))return;pm(f);var t=Date.now(),h=setInterval(function(){if(direct(f)){clearInterval(h);return}if(Date.now()-t>W){clearInterval(h)}},I)}
+  function openQna(){
+    var f=fr(); if(!f) return;
+    if(direct(f)) return;
+    if(!hasQnaBridge(f)){ homeQna(f); return; }
+    pm(f);
+    var t=Date.now(),h=setInterval(function(){
+      if(direct(f)){clearInterval(h);return}
+      if(Date.now()-t>W){clearInterval(h); if(!hasQnaBridge(f)) homeQna(f);}
+    },I);
+  }
   function bind(btn){
     if(btn.__igtc_wired_no_touch) return;
     btn.__igtc_wired_no_touch = true;
