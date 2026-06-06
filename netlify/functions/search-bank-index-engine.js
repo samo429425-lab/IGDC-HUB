@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.6.1-front-reservoir-25k-auto-replacement";
+const VERSION = "search-bank-index-engine-v2.6.2-front-route-isolated-stable";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
@@ -238,15 +238,68 @@ function normalizeSourceValue(v){
 function normalizeBindValue(v){
   return (v && typeof v === "object") ? v : {};
 }
+function frontRouteKey(v){
+  let x = low(v);
+  if(!x) return "";
+  x = x.replace(/^https?:\/\/[^/]+/i, "");
+  x = x.replace(/[?#].*$/g, "");
+  x = x.replace(/\.html?$/i, "");
+  x = x.replace(/^\/+|\/+$/g, "");
+  x = x.replace(/\s+/g, "-");
+  x = x.replace(/_/g, "-");
+  return x;
+}
+function frontPageCanonical(v){
+  const k = frontRouteKey(v);
+  if(!k || k === "snapshot-object" || k === "snapshot-array" || k === "items" || k === "results") return "";
+  if(k === "index" || k === "main" || k === "front" || k === "web" || k === "home" || /^home(?:-|$)/.test(k)) return "home";
+  if(k === "networkhub" || k === "network-hub" || /^network(?:-|$)/.test(k) || /market|rightpanel|right-panel/.test(k)) return "networkhub";
+  if(k === "distributionhub" || k === "distribution-hub" || /^distribution(?:-|$)/.test(k) || /^dist[0-9]+$/.test(k) || /commerce|product|shopping|shop/.test(k)) return "distributionhub";
+  if(k === "socialnetwork" || k === "social-network" || /^social(?:-|$)/.test(k) || /sns|youtube|instagram|tiktok|facebook|wechat|weibo|pinterest|reddit|twitter|x-com/.test(k)) return "socialnetwork";
+  if(k === "mediahub" || k === "media-hub" || /^media(?:-|$)/.test(k) || /movie|drama|thriller|romance|variety|documentary|animation|music|shorts|video/.test(k)) return "mediahub";
+  if(k === "tour" || /^tour(?:-|$)/.test(k) || /travel|tourism|hotel|trip|local-tour/.test(k)) return "tour";
+  if(k === "donation" || /^donation(?:-|$)/.test(k) || /ngo|mission|service|relief|education|environment/.test(k)) return "donation";
+  if(k === "literature-academic" || k === "literature_academic" || /^academic(?:-|$)/.test(k) || /^literature(?:-|$)/.test(k) || /culture|arts|humanities|scholar|research|paper|book/.test(k)) return "literature_academic";
+  return k;
+}
+function frontPageHintFromSection(v){
+  const k = frontRouteKey(v);
+  if(!k) return "";
+  if(/^home(?:-|$)|^home-right/.test(k)) return "home";
+  if(/^network(?:-|$)|rightpanel|right-panel/.test(k)) return "networkhub";
+  if(/^distribution(?:-|$)|^dist[0-9]+$/.test(k)) return "distributionhub";
+  if(/^social(?:-|$)/.test(k)) return "socialnetwork";
+  if(/^media(?:-|$)|movie|drama|thriller|romance|variety|documentary|animation|music|shorts/.test(k)) return "mediahub";
+  if(/^tour(?:-|$)/.test(k)) return "tour";
+  if(/^donation(?:-|$)|ngo|mission|service|relief|education|environment/.test(k)) return "donation";
+  if(/^academic(?:-|$)|^literature(?:-|$)|arts|humanities/.test(k)) return "literature_academic";
+  return "";
+}
+function frontPageHintOfItem(item){
+  item = item || {};
+  const bind = normalizeBindValue(item.bind);
+  const candidates = [
+    item.page, bind.page, item.route, bind.route, item.path,
+    item.section, item.psom_key, bind.section, bind.key, bind.slot, item.category, item.type,
+    Array.isArray(item.tags) ? item.tags.join(" ") : ""
+  ];
+  for(const c of candidates){
+    const direct = frontPageCanonical(c);
+    if(direct) return direct;
+    const bySection = frontPageHintFromSection(c);
+    if(bySection) return bySection;
+  }
+  return "";
+}
 function routeValueOf(item){
   item = item || {};
   const bind = normalizeBindValue(item.bind);
-  return firstNonEmpty(item.route, item.path, item.page, bind.page, bind.route, item._sourceHint);
+  return firstNonEmpty(item.route, item.path, item.page, bind.page, bind.route, frontPageHintOfItem(item), item._sourceHint);
 }
 function pageValueOf(item){
   item = item || {};
   const bind = normalizeBindValue(item.bind);
-  return firstNonEmpty(item.page, bind.page, item.route, item.path, "");
+  return firstNonEmpty(item.page, bind.page, frontPageHintOfItem(item), item.route, item.path, "");
 }
 function sectionValueOf(item){
   item = item || {};
@@ -431,6 +484,134 @@ function normalizeFrontReplacementItem(item, seq){
   out.replacementPolicy = "fill-any-front-shortage-immediately-with-ranked-standby-real-content";
   return out;
 }
+function addFrontAlias(set, v){
+  const k = frontRouteKey(v);
+  if(!k) return;
+  set.add(k);
+  set.add(k.replace(/-/g, "_"));
+  set.add(k.replace(/_/g, "-"));
+}
+const SECTION_ALIAS_PAIRS = [
+  ["dist1", "distribution-recommend"], ["dist2", "distribution-sponsor"],
+  ["dist3", "distribution-trending"], ["dist4", "distribution-new"],
+  ["dist5", "distribution-special"], ["dist6", "distribution-others"], ["dist7", "distribution-right"],
+  ["rightpanel", "rightPanel"], ["right-panel", "rightPanel"],
+  ["maru-channel", "social-maru"], ["youtube", "social-youtube"], ["instagram", "social-instagram"],
+  ["tiktok", "social-tiktok"], ["facebook", "social-facebook"], ["wechat", "social-wechat"],
+  ["weibo", "social-weibo"], ["pinterest", "social-pinterest"], ["reddit", "social-reddit"],
+  ["twitter", "social-twitter"], ["x", "social-twitter"], ["movie", "media-movie"],
+  ["drama", "media-drama"], ["thriller", "media-thriller"], ["romance", "media-romance"],
+  ["variety", "media-variety"], ["documentary", "media-documentary"], ["animation", "media-animation"],
+  ["music", "media-music"], ["shorts", "media-shorts"]
+];
+function sectionAliasSet(v){
+  const set = new Set();
+  const raw = Array.isArray(v) ? v : [v];
+  for(const x of raw){
+    if(x == null) continue;
+    const parts = s(x).split(/[\s,|]+/).filter(Boolean);
+    for(const p of parts.length ? parts : [x]) addFrontAlias(set, p);
+  }
+  let changed = true;
+  while(changed){
+    changed = false;
+    for(const pair of SECTION_ALIAS_PAIRS){
+      const a = frontRouteKey(pair[0]);
+      const b = frontRouteKey(pair[1]);
+      if(set.has(a) && !set.has(b)){ addFrontAlias(set, b); changed = true; }
+      if(set.has(b) && !set.has(a)){ addFrontAlias(set, a); changed = true; }
+    }
+  }
+  return set;
+}
+function pageAliasSet(v){
+  const set = new Set();
+  const raw = Array.isArray(v) ? v : [v];
+  for(const x of raw){
+    if(x == null) continue;
+    const parts = s(x).split(/[\s,|]+/).filter(Boolean);
+    for(const p of parts.length ? parts : [x]){
+      const canonical = frontPageCanonical(p) || frontPageHintFromSection(p);
+      addFrontAlias(set, canonical || p);
+      if(canonical === "home") ["home.html", "index", "front", "web"].forEach(a => addFrontAlias(set, a));
+      if(canonical === "networkhub") ["network", "networkhub.html", "market", "network-right"].forEach(a => addFrontAlias(set, a));
+      if(canonical === "distributionhub") ["distribution", "distributionhub.html", "commerce", "product"].forEach(a => addFrontAlias(set, a));
+      if(canonical === "socialnetwork") ["social", "socialnetwork.html", "sns"].forEach(a => addFrontAlias(set, a));
+      if(canonical === "mediahub") ["media", "mediahub.html", "video"].forEach(a => addFrontAlias(set, a));
+      if(canonical === "literature_academic") ["literature", "academic", "literature_academic.html"].forEach(a => addFrontAlias(set, a));
+    }
+  }
+  return set;
+}
+function frontTokenLooksLikeRoute(v){
+  const k = frontRouteKey(v);
+  if(!k || k.length > 80) return false;
+  if(frontPageCanonical(k) || frontPageHintFromSection(k)) return true;
+  if(/^home-[0-9]+$|^dist[0-9]+$/.test(k)) return true;
+  return SECTION_ALIAS_PAIRS.some(pair => frontRouteKey(pair[0]) === k || frontRouteKey(pair[1]) === k);
+}
+function requestedFrontTarget(params){
+  params = params || {};
+  let section = firstNonEmpty(params.section, params.psom_key, params.psomKey, params.slot, params.slotKey, params.targetSection, params.targetSlot, params.key);
+  let page = firstNonEmpty(params.page, params.targetPage, params.route, params.hub, params.channel, params.frontPage, params.pageKey);
+  const q = firstNonEmpty(params.q, params.query);
+  if(!section && !page && frontTokenLooksLikeRoute(q)){
+    const fromQPage = frontPageCanonical(q);
+    const fromQSectionPage = frontPageHintFromSection(q);
+    if(fromQPage && fromQPage === frontRouteKey(q)) page = q;
+    else if(fromQSectionPage) section = q;
+    else page = q;
+  }
+  const sectionAliases = sectionAliasSet(section);
+  const pageAliases = pageAliasSet(page);
+  for(const sec of Array.from(sectionAliases)){
+    const inferred = frontPageHintFromSection(sec);
+    if(inferred) addFrontAlias(pageAliases, inferred);
+  }
+  return { page, section, pageAliases, sectionAliases, hasPage:pageAliases.size>0, hasSection:sectionAliases.size>0, hasTarget:pageAliases.size>0 || sectionAliases.size>0 };
+}
+function frontItemRouteSets(item){
+  item = item || {};
+  const bind = normalizeBindValue(item.bind);
+  const lp = (item.layerPointer && typeof item.layerPointer === "object") ? item.layerPointer : {};
+  const tags = Array.isArray(item.tags) ? item.tags : [];
+  const sectionValues = [lp.section, lp.slotKey, item.section, item.psom_key, item.slotKey, item.slot, bind.section, bind.key, bind.slot, bind.slotKey, item.category].concat(tags);
+  const pageValues = [lp.page, lp.route, item.page, item.route, item.path, bind.page, bind.route, frontPageHintOfItem(item)].concat(tags, sectionValues.map(frontPageHintFromSection));
+  return { pageAliases:pageAliasSet(pageValues), sectionAliases:sectionAliasSet(sectionValues) };
+}
+function setIntersects(a, b){
+  if(!a || !b || !a.size || !b.size) return false;
+  for(const x of a){ if(b.has(x)) return true; }
+  return false;
+}
+function frontTargetBucket(item, target){
+  if(!target || !target.hasTarget) return "global";
+  const routes = frontItemRouteSets(item);
+  const sectionMatch = target.hasSection && setIntersects(routes.sectionAliases, target.sectionAliases);
+  const pageMatch = target.hasPage && setIntersects(routes.pageAliases, target.pageAliases);
+  if(target.hasSection){
+    if(sectionMatch) return "exact";
+    if(pageMatch) return "page-fallback";
+    return "global-fallback";
+  }
+  if(target.hasPage){
+    if(pageMatch) return "exact";
+    return "global-fallback";
+  }
+  return "global";
+}
+function frontRouteRank(item, target){
+  const bucket = frontTargetBucket(item, target);
+  if(bucket === "exact") return 300000;
+  if(bucket === "page-fallback") return 200000;
+  if(bucket === "global" || bucket === "global-fallback") return 100000;
+  return 0;
+}
+function isSearchProviderHintItem(item){
+  item = item || {};
+  const text = low([item.title, item.name, item.label, item.summary, item.description, item.type, item.category, item.source, item.provider, item.engine, item.generatedBy, item.url, item.link, item.href].filter(Boolean).join(" "));
+  return /provider\s*hint|route\s*hint|search\s*route|검색\s*통로|google_public_search|naver_public_search|bing_public_search|search\.naver\.com|google\.com\/search|bing\.com\/search/.test(text);
+}
 function buildFrontReplacementPool(allRaw, seen){
   const pool = (Array.isArray(allRaw) ? allRaw : [])
     .filter(item => item && isRealIndexItem(item))
@@ -452,41 +633,69 @@ function buildFrontSupplyPool(params){
   const wantsReservoir = actionText === "reservoir" || truthy(params.reservoir) || truthy(params.includeReservoir) || truthy(params.slotSupply) || truthy(params.frontSupply) || !requestedTarget;
   const defaultTarget = wantsReservoir ? FRONT_RESERVOIR_TARGET : FRONT_REAL_ITEM_FLOOR;
   const target = clampInt(requestedTarget, defaultTarget, 1, FRONT_RESERVOIR_HARD_LIMIT);
+  const targetRoute = requestedFrontTarget(params);
+  const allowGlobalFallback = !targetRoute.hasTarget || !truthy(params.strictSectionOnly || params.exactOnly || params.noFallback);
+  const allowPageFallback = !targetRoute.hasTarget || !truthy(params.strictSectionOnly || params.exactOnly);
   const idx = loadIndex(false);
   ensureRuntime(idx);
   const base = Array.isArray(idx && idx.items) ? idx.items : [];
   const promoted = loadPromoted().map((x,i) => indexItem(Object.assign({}, x, { _promoted:true }), i, "sanmaru-promoted")).filter(Boolean);
   const ingested = loadIngested().map((x,i) => indexItem(Object.assign({}, x, { _ingested:true }), i, "front-data-ingested")).filter(Boolean);
   const allRaw = promoted.concat(ingested).concat(base);
-  const all = allRaw.filter(item => isFrontSupplyIndexItem(item));
+  const all = allRaw.filter(item => isFrontSupplyIndexItem(item)).filter(item => !isSearchProviderHintItem(item));
+  const exactPool = [];
+  const pageFallbackPool = [];
+  const globalPool = [];
+  for(let i=0; i<all.length; i++){
+    const item = all[i];
+    const bucket = frontTargetBucket(item, targetRoute);
+    const role = isRealIndexItem(item) ? "active-real-content" : "replaceable-front-slot";
+    const scored = Object.assign({}, item, { frontSupplyScore:frontReservoirQualityScore(item) + frontRouteRank(item, targetRoute), _frontSeq:i, _frontRole:role, _frontRouteBucket:bucket });
+    if(bucket === "exact" || !targetRoute.hasTarget) exactPool.push(scored);
+    else if(bucket === "page-fallback") pageFallbackPool.push(scored);
+    else globalPool.push(scored);
+  }
+  const sortFront = (a,b) => {
+    const ar = a._frontRole === "active-real-content" ? 1 : 0;
+    const br = b._frontRole === "active-real-content" ? 1 : 0;
+    return br - ar || (b.frontSupplyScore || 0) - (a.frontSupplyScore || 0) || (a._frontSeq || 0) - (b._frontSeq || 0);
+  };
+  exactPool.sort(sortFront);
+  pageFallbackPool.sort(sortFront);
+  globalPool.sort(sortFront);
+
   const activePool = all
     .filter(item => isRealIndexItem(item))
-    .map((item, idx) => Object.assign({}, item, { frontSupplyScore:frontSupplyQualityScore(item), _frontSeq:idx, _frontRole:"active-real-content" }))
-    .sort((a,b) => (b.frontSupplyScore || 0) - (a.frontSupplyScore || 0) || (a._frontSeq || 0) - (b._frontSeq || 0));
-  const reservoirPool = all
-    .map((item, idx) => Object.assign({}, item, { frontSupplyScore:frontReservoirQualityScore(item), _frontSeq:idx, _frontRole:isRealIndexItem(item) ? "active-real-content" : "replaceable-front-slot" }))
-    .sort((a,b) => {
-      const ar = a._frontRole === "active-real-content" ? 1 : 0;
-      const br = b._frontRole === "active-real-content" ? 1 : 0;
-      return br - ar || (b.frontSupplyScore || 0) - (a.frontSupplyScore || 0) || (a._frontSeq || 0) - (b._frontSeq || 0);
-    });
+    .map((item, idx) => Object.assign({}, item, { frontSupplyScore:frontSupplyQualityScore(item) + frontRouteRank(item, targetRoute), _frontSeq:idx, _frontRole:"active-real-content", _frontRouteBucket:frontTargetBucket(item, targetRoute) }))
+    .sort(sortFront);
+  const reservoirPool = exactPool.concat(allowPageFallback ? pageFallbackPool : []).concat(allowGlobalFallback ? globalPool : []);
   const seen = new Set();
   const items = [];
+  const returnedBuckets = { exact:0, pageFallback:0, globalFallback:0, global:0 };
   const addItem = item => {
     if(!item || items.length >= target) return;
     const sig = slotDedupeSignature(item);
     if(!sig || seen.has(sig)) return;
     seen.add(sig);
     const out = normalizeFrontSupplyItem(item, item._frontRole);
+    out.frontRouteBucket = item._frontRouteBucket || "global";
+    if(targetRoute.hasTarget){
+      out.frontRequestedPage = targetRoute.page || null;
+      out.frontRequestedSection = targetRoute.section || null;
+    }
     delete out._frontSeq;
     delete out._frontRole;
+    delete out._frontRouteBucket;
+    const bucketKey = out.frontRouteBucket === "page-fallback" ? "pageFallback" : (out.frontRouteBucket === "global-fallback" ? "globalFallback" : out.frontRouteBucket);
+    if(returnedBuckets[bucketKey] != null) returnedBuckets[bucketKey]++;
     items.push(out);
   };
-  for(const item of activePool) addItem(item);
   for(const item of reservoirPool) addItem(item);
 
   const beforeReplacementCount = items.length;
-  const replacementPool = buildFrontReplacementPool(allRaw, seen);
+  const replacementPool = buildFrontReplacementPool(allRaw, seen)
+    .map((item, idx) => Object.assign({}, item, { _frontRouteBucket:"standby-replacement", _replacementSeq:idx }))
+    .filter(item => !targetRoute.hasTarget || allowGlobalFallback);
   let replacementReturnedCount = 0;
   const addReplacement = item => {
     if(!item || items.length >= target) return;
@@ -494,6 +703,11 @@ function buildFrontSupplyPool(params){
     if(!sig || seen.has(sig)) return;
     seen.add(sig);
     const out = normalizeFrontReplacementItem(item, replacementReturnedCount);
+    out.frontRouteBucket = "standby-replacement";
+    if(targetRoute.hasTarget){
+      out.frontRequestedPage = targetRoute.page || null;
+      out.frontRequestedSection = targetRoute.section || null;
+    }
     delete out._replacementSeq;
     items.push(out);
     replacementReturnedCount++;
@@ -505,6 +719,9 @@ function buildFrontSupplyPool(params){
 
   const realActiveCount = activePool.length;
   const reservoirCandidateCount = reservoirPool.length;
+  const exactCandidateCount = exactPool.length;
+  const pageFallbackCandidateCount = pageFallbackPool.length;
+  const globalFallbackCandidateCount = globalPool.length;
   const replaceableSlotCount = Math.max(0, items.filter(x => x && x.replaceableSlot).length);
   const activeReturnedCount = items.filter(x => x && x.realContent).length;
   const layerPointerReturnedCount = items.filter(x => x && x.isLayerPointer).length;
@@ -512,55 +729,33 @@ function buildFrontSupplyPool(params){
   const sectionCoverage = Object.create(null);
   for(const item of items){
     const lp = item.layerPointer || {};
-    const pg = firstNonEmpty(lp.page, item.page, item.route, "unknown");
+    const pg = firstNonEmpty(frontPageCanonical(lp.page), frontPageCanonical(item.page), frontPageHintOfItem(item), lp.page, item.page, item.route, "unknown");
     const sec = firstNonEmpty(lp.section, item.section, item.psom_key, "unknown");
     pageCoverage[pg] = (pageCoverage[pg] || 0) + 1;
     sectionCoverage[sec] = (sectionCoverage[sec] || 0) + 1;
   }
   return {
-    status:"ok",
-    engine:ENGINE_NAME,
-    version:VERSION,
-    action:"front-supply",
-    source:items.length ? "search-bank-index-front-reservoir" : null,
-    items,
-    results:items,
+    status:"ok", engine:ENGINE_NAME, version:VERSION, action:"front-supply", source:items.length ? "search-bank-index-front-reservoir" : null, items, results:items,
     meta:{
-      count:items.length,
-      target,
-      floor:FRONT_REAL_ITEM_FLOOR,
-      softTarget:FRONT_REAL_ITEM_SOFT_TARGET,
-      reservoirTarget:FRONT_RESERVOIR_TARGET,
-      hardLimit:FRONT_RESERVOIR_HARD_LIMIT,
-      futureExpansionTarget:FRONT_FUTURE_EXPANSION_TARGET,
-      shortage:Math.max(0, target - items.length),
-      shortageBeforeReplacement:Math.max(0, target - beforeReplacementCount),
-      autoReplacementEnabled:true,
-      autoReplacementPolicy:"if-front-slot-is-short-even-by-one-item-fill-from-ranked-standby-real-content-before-return",
-      replacementCandidateCount:replacementPool.length,
-      replacementReturnedCount,
-      shortageFilledByReplacement:replacementReturnedCount,
-      realActiveCount,
-      activeReturnedCount,
-      activeFloorShortage:Math.max(0, FRONT_REAL_ITEM_FLOOR - realActiveCount),
-      activeSoftShortage:Math.max(0, FRONT_REAL_ITEM_SOFT_TARGET - realActiveCount),
-      reservoirCandidateCount,
-      reservoirReturnedCount:items.length,
-      reservoirShortage:Math.max(0, FRONT_RESERVOIR_TARGET - reservoirCandidateCount),
-      replaceableSlotCount,
-      layerPointerReturnedCount,
-      standbyReplacementReady:replacementPool.length > 0,
-      finalSupplyComplete:items.length >= target,
-      frontRealFloorReady:realActiveCount >= FRONT_REAL_ITEM_FLOOR,
-      frontReservoirReady:reservoirCandidateCount >= FRONT_RESERVOIR_TARGET,
-      frontImmediateSupplyReady:items.length >= FRONT_REAL_ITEM_FLOOR,
-      pageCoverage,
-      sectionCoverage,
-      frontSupplyOnly:true,
-      placeholderIsolation:true,
-      searchUiSafe:true,
-      externalCall:false,
-      latency:nowMs() - started,
+      count:items.length, target, requestedPage:targetRoute.page || null, requestedSection:targetRoute.section || null,
+      targetRouteStrict:targetRoute.hasTarget, allowPageFallback, allowGlobalFallback,
+      exactCandidateCount, pageFallbackCandidateCount, globalFallbackCandidateCount,
+      exactReturnedCount:returnedBuckets.exact || 0,
+      pageFallbackReturnedCount:returnedBuckets.pageFallback || 0,
+      globalFallbackReturnedCount:returnedBuckets.globalFallback || returnedBuckets.global || 0,
+      floor:FRONT_REAL_ITEM_FLOOR, softTarget:FRONT_REAL_ITEM_SOFT_TARGET, reservoirTarget:FRONT_RESERVOIR_TARGET,
+      hardLimit:FRONT_RESERVOIR_HARD_LIMIT, futureExpansionTarget:FRONT_FUTURE_EXPANSION_TARGET,
+      shortage:Math.max(0, target - items.length), shortageBeforeReplacement:Math.max(0, target - beforeReplacementCount),
+      autoReplacementEnabled:true, autoReplacementPolicy:"exact-section-first-page-fallback-second-global-fallback-only-on-shortage",
+      replacementCandidateCount:replacementPool.length, replacementReturnedCount, shortageFilledByReplacement:replacementReturnedCount,
+      realActiveCount, activeReturnedCount, activeFloorShortage:Math.max(0, FRONT_REAL_ITEM_FLOOR - realActiveCount),
+      activeSoftShortage:Math.max(0, FRONT_REAL_ITEM_SOFT_TARGET - realActiveCount), reservoirCandidateCount,
+      reservoirReturnedCount:items.length, reservoirShortage:Math.max(0, FRONT_RESERVOIR_TARGET - reservoirCandidateCount),
+      replaceableSlotCount, layerPointerReturnedCount, standbyReplacementReady:replacementPool.length > 0,
+      finalSupplyComplete:items.length >= target, frontRealFloorReady:realActiveCount >= FRONT_REAL_ITEM_FLOOR,
+      frontReservoirReady:reservoirCandidateCount >= FRONT_RESERVOIR_TARGET, frontImmediateSupplyReady:items.length >= FRONT_REAL_ITEM_FLOOR,
+      pageCoverage, sectionCoverage, frontSupplyOnly:true, placeholderIsolation:true, sectionIsolation:true, pageIsolation:true,
+      searchUiSafe:true, externalCall:false, latency:nowMs() - started,
       storagePolicy:"front-reservoir-real-content-plus-replaceable-slot-pointers"
     }
   };
