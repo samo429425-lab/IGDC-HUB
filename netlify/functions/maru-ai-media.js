@@ -1,395 +1,655 @@
-'use strict';
-
 /**
- * MARU AI Media Netlify Function
- * Path: netlify/functions/maru-ai-media.js
+ * netlify/functions/maru-ai-media.js
+ * MARU AI Media Server Relay v90
  *
- * Client: MARU Media Player v88/v89 server relay UI
- * Required environment variable: OPENAI_API_KEY
- * Optional environment variables:
- * - MARU_OPENAI_API_KEY
- * - OPENAI_TRANSCRIBE_MODEL (default: whisper-1)
- * - OPENAI_TRANSLATE_MODEL  (default: gpt-4o-mini)
- * - OPENAI_TTS_MODEL        (default: gpt-4o-mini-tts, fallback: tts-1)
+ * Required Netlify environment variable:
+ *   OPENAI_API_KEY
+ *
+ * Player endpoint:
+ *   https://igdcglobal.com/.netlify/functions/maru-ai-media
+ *
+ * Supported actions:
+ *   GET  ?action=status / health / test
+ *   POST JSON       { action:"status" }
+ *   POST multipart  action=generate-subtitle, file=<audio chunk>
+ *   POST JSON       { action:"generate-dubbing", scriptText:"...", voice:"alloy" }
+ *
+ * This function never returns the raw OpenAI API key.
  */
 
-const VERSION = 'maru-ai-media-netlify-v89.2';
-const OPENAI_BASE = 'https://api.openai.com/v1';
+const JSON_HEADERS = {
+  "Content-Type": "application/json; charset=utf-8",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-MARU-Client, X-MARU-Client-Version",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS"
+};
 
-function envKey() {
-  return String(process.env.OPENAI_API_KEY || process.env.MARU_OPENAI_API_KEY || '').trim();
+const OPENAI_BASE = "https://api.openai.com/v1";
+const DEFAULT_TRANSCRIBE_MODEL = process.env.MARU_OPENAI_TRANSCRIBE_MODEL || "whisper-1";
+const DEFAULT_TRANSLATE_MODEL = process.env.MARU_OPENAI_TRANSLATE_MODEL || "gpt-4o-mini";
+const DEFAULT_TTS_MODEL = process.env.MARU_OPENAI_TTS_MODEL || "tts-1";
+const MAX_MULTIPART_BYTES = Number(process.env.MARU_AI_MAX_UPLOAD_BYTES || 26 * 1024 * 1024);
+const MAX_TTS_SCRIPT_CHARS = Number(process.env.MARU_AI_MAX_TTS_SCRIPT_CHARS || 12000);
+
+function json(statusCode, body) {
+  return { statusCode, headers: JSON_HEADERS, body: JSON.stringify(body, null, 2) };
 }
 
-function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-MARU-Client, X-MARU-Client-Version',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Cache-Control': 'no-store',
-    'Content-Type': 'application/json; charset=utf-8'
-  };
-}
-
-function json(statusCode, data) {
+function binary(statusCode, buffer, contentType) {
   return {
     statusCode,
-    headers: corsHeaders(),
-    body: JSON.stringify(data || {})
+    headers: {
+      "Content-Type": contentType || "application/octet-stream",
+      "Access-Control-Allow-Origin": "*"
+    },
+    isBase64Encoded: true,
+    body: Buffer.from(buffer || Buffer.alloc(0)).toString("base64")
   };
 }
 
-function clean(v) {
-  return String(v == null ? '' : v).trim();
+function s(v) { return String(v == null ? "" : v); }
+
+function getOpenAiKey() {
+  return s(process.env.OPENAI_API_KEY).trim();
 }
 
-function normalizeLanguage(value) {
-  const raw = clean(value).toLowerCase().replace('_', '-');
-  if (!raw || raw === 'auto') return 'auto';
-  if (['zht', 'zh-tw', 'zh-hant', 'zh-hk'].includes(raw)) return 'zh-TW';
-  if (raw.startsWith('zh')) return 'zh';
-  if (raw.startsWith('ko') || raw === 'kr' || raw === 'kor' || raw === 'korean') return 'ko';
-  if (raw.startsWith('en') || raw === 'eng' || raw === 'english') return 'en';
-  if (raw.startsWith('ja') || raw === 'jp' || raw === 'jpn' || raw === 'japanese') return 'ja';
-  if (raw.startsWith('es')) return 'es';
-  if (raw.startsWith('fr')) return 'fr';
-  if (raw.startsWith('de')) return 'de';
-  if (raw.startsWith('vi')) return 'vi';
-  if (raw.startsWith('th')) return 'th';
-  return raw.split('-')[0] || 'auto';
+function maskKey(key) {
+  const raw = s(key).trim();
+  if (!raw) return "";
+  if (raw.length <= 14) return raw.slice(0, 3) + "..." + raw.slice(-2);
+  return raw.slice(0, 7) + "..." + raw.slice(-6);
 }
 
-function languageName(code) {
-  const map = {
-    auto: 'the original language', ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese', 'zh-TW': 'Traditional Chinese',
-    es: 'Spanish', fr: 'French', de: 'German', vi: 'Vietnamese', th: 'Thai', id: 'Indonesian', ru: 'Russian',
-    ar: 'Arabic', pt: 'Portuguese', it: 'Italian', nl: 'Dutch', tr: 'Turkish'
+function keyShape(rawValue) {
+  const original = s(rawValue);
+  const trimmed = original.trim();
+  return {
+    present: !!trimmed,
+    length: trimmed.length,
+    startsWithSk: trimmed.startsWith("sk-"),
+    startsWithProject: trimmed.startsWith("sk-proj-"),
+    hasLeadingOrTrailingWhitespace: original !== trimmed,
+    masked: maskKey(trimmed)
   };
-  return map[code] || code || 'the selected language';
 }
 
-function bufferFromEvent(event) {
-  if (!event || !event.body) return Buffer.alloc(0);
-  return event.isBase64Encoded ? Buffer.from(event.body, 'base64') : Buffer.from(event.body, 'utf8');
-}
+function safeOpenAiError(status, payload, fallback) {
+  const err = payload && payload.error ? payload.error : {};
+  const code = s(err.code);
+  const type = s(err.type);
+  const message = s(err.message || fallback || "OpenAI request failed.").slice(0, 800);
 
-function splitBuffer(buf, sep) {
-  const out = [];
-  let start = 0;
-  let idx;
-  while ((idx = buf.indexOf(sep, start)) !== -1) {
-    out.push(buf.slice(start, idx));
-    start = idx + sep.length;
+  let diagnosis = "openai_request_failed";
+  let userMessage = "OpenAI 요청 처리 중 오류가 발생했습니다.";
+  let retryable = false;
+
+  if (status === 401 || code === "invalid_api_key" || /incorrect api key|invalid api key/i.test(message)) {
+    diagnosis = "invalid_openai_api_key";
+    userMessage = "MARU AI 서버의 OpenAI 키가 유효하지 않습니다.";
+  } else if (status === 429 || /quota|billing|rate limit|too many requests/i.test(message + " " + code)) {
+    diagnosis = "quota_billing_or_rate_limit";
+    userMessage = "OpenAI API 사용량, 결제 크레딧, 또는 속도 제한에 걸렸습니다.";
+    retryable = true;
+  } else if (status === 403) {
+    diagnosis = "permission_or_project_block";
+    userMessage = "OpenAI 프로젝트 권한 또는 모델 접근 권한이 막혀 있습니다.";
+  } else if (status >= 500) {
+    diagnosis = "openai_server_error";
+    userMessage = "OpenAI 서버 응답 오류입니다. 잠시 후 다시 시도해 주세요.";
+    retryable = true;
+  } else if (status === 400) {
+    diagnosis = "bad_openai_request";
+    userMessage = "OpenAI 요청 형식이 맞지 않습니다.";
   }
-  out.push(buf.slice(start));
-  return out;
+
+  return {
+    ok: false,
+    diagnosis,
+    message: userMessage,
+    retryable,
+    openaiStatus: status,
+    openaiErrorType: type || null,
+    openaiErrorCode: code || null,
+    openaiErrorMessage: message || null
+  };
 }
 
-function parseContentDisposition(value) {
-  const result = {};
-  String(value || '').split(';').forEach((part) => {
-    const m = part.trim().match(/^([^=]+)=(?:"([^"]*)"|([^;]*))$/);
-    if (m) result[m[1].trim().toLowerCase()] = m[2] || m[3] || '';
-  });
-  return result;
+async function fetchJson(url, options) {
+  const res = await fetch(url, options);
+  const text = await res.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { raw: text.slice(0, 1000) }; }
+  if (!res.ok) {
+    const safe = safeOpenAiError(res.status, data, text);
+    const error = new Error(safe.message);
+    error.safe = safe;
+    error.statusCode = res.status;
+    throw error;
+  }
+  return data;
+}
+
+async function fetchBinary(url, options) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { raw: text.slice(0, 1000) }; }
+    const safe = safeOpenAiError(res.status, data, text);
+    const error = new Error(safe.message);
+    error.safe = safe;
+    error.statusCode = res.status;
+    throw error;
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
+async function checkOpenAIKey() {
+  const startedAt = Date.now();
+  const raw = process.env.OPENAI_API_KEY || "";
+  const key = getOpenAiKey();
+  const shape = keyShape(raw);
+
+  if (!shape.present) {
+    return {
+      ok: false,
+      alive: false,
+      diagnosis: "missing_netlify_env",
+      message: "Netlify Function cannot read OPENAI_API_KEY.",
+      key: shape,
+      latencyMs: Date.now() - startedAt
+    };
+  }
+
+  if (!shape.startsWithSk) {
+    return {
+      ok: false,
+      alive: false,
+      diagnosis: "bad_key_format",
+      message: "OPENAI_API_KEY exists, but it does not look like an OpenAI API key.",
+      key: shape,
+      latencyMs: Date.now() - startedAt
+    };
+  }
+
+  try {
+    const res = await fetch(`${OPENAI_BASE}/models`, {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${key}` }
+    });
+    const text = await res.text();
+    let payload = {};
+    try { payload = text ? JSON.parse(text) : {}; } catch (_) { payload = { raw: text.slice(0, 500) }; }
+
+    if (res.ok) {
+      return {
+        ok: true,
+        alive: true,
+        diagnosis: "openai_key_alive",
+        message: "Netlify can read OPENAI_API_KEY and OpenAI accepts it.",
+        openaiStatus: res.status,
+        checkedEndpoint: "GET /v1/models",
+        key: shape,
+        latencyMs: Date.now() - startedAt
+      };
+    }
+
+    const safe = safeOpenAiError(res.status, payload, text);
+    return {
+      ...safe,
+      alive: false,
+      key: shape,
+      checkedEndpoint: "GET /v1/models",
+      latencyMs: Date.now() - startedAt
+    };
+  } catch (err) {
+    if (err && err.safe) {
+      return { ...err.safe, alive: false, key: shape, latencyMs: Date.now() - startedAt };
+    }
+    return {
+      ok: false,
+      alive: false,
+      diagnosis: "netlify_to_openai_network_error",
+      message: "Netlify Function could not reach OpenAI API.",
+      error: s(err && err.message || err).slice(0, 500),
+      key: shape,
+      latencyMs: Date.now() - startedAt
+    };
+  }
+}
+
+function decodeBody(event) {
+  if (!event || !event.body) return Buffer.alloc(0);
+  return event.isBase64Encoded ? Buffer.from(event.body, "base64") : Buffer.from(event.body, "utf8");
+}
+
+function parseContentTypeHeader(value) {
+  const raw = s(value);
+  const parts = raw.split(";").map(x => x.trim()).filter(Boolean);
+  const type = (parts.shift() || "").toLowerCase();
+  const params = {};
+  for (const p of parts) {
+    const idx = p.indexOf("=");
+    if (idx < 0) continue;
+    const k = p.slice(0, idx).trim().toLowerCase();
+    let v = p.slice(idx + 1).trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+    params[k] = v;
+  }
+  return { type, params };
 }
 
 function parseMultipart(event) {
   const headers = event.headers || {};
-  const contentType = headers['content-type'] || headers['Content-Type'] || '';
-  const match = String(contentType).match(/boundary=(?:"([^"]+)"|([^;]+))/i);
-  if (!match) throw new Error('multipart boundary is missing');
-  const boundary = Buffer.from('--' + (match[1] || match[2]));
-  const body = bufferFromEvent(event);
+  const contentType = headers["content-type"] || headers["Content-Type"] || "";
+  const { type, params } = parseContentTypeHeader(contentType);
+  const boundary = params.boundary || "";
+  if (!type.includes("multipart/form-data") || !boundary) throw new Error("Invalid multipart request: boundary is missing.");
+
+  const body = decodeBody(event);
+  if (body.length > MAX_MULTIPART_BYTES) {
+    const err = new Error(`Uploaded audio chunk is too large. Limit is ${Math.round(MAX_MULTIPART_BYTES / 1024 / 1024)}MB.`);
+    err.statusCode = 413;
+    err.code = "upload_too_large";
+    throw err;
+  }
+
+  const delimiter = Buffer.from(`--${boundary}`);
   const fields = {};
   const files = {};
-  for (let part of splitBuffer(body, boundary)) {
-    if (!part.length) continue;
-    if (part.slice(0, 2).toString() === '--') continue;
-    if (part.slice(0, 2).toString() === '\r\n') part = part.slice(2);
-    if (part.slice(-2).toString() === '\r\n') part = part.slice(0, -2);
-    const headerEnd = part.indexOf(Buffer.from('\r\n\r\n'));
-    if (headerEnd < 0) continue;
-    const headerText = part.slice(0, headerEnd).toString('utf8');
-    let content = part.slice(headerEnd + 4);
-    if (content.slice(-2).toString() === '\r\n') content = content.slice(0, -2);
-    const headerLines = headerText.split(/\r\n/);
-    const headerMap = {};
-    for (const line of headerLines) {
-      const p = line.indexOf(':');
-      if (p > -1) headerMap[line.slice(0, p).trim().toLowerCase()] = line.slice(p + 1).trim();
+
+  let pos = 0;
+  while (pos < body.length) {
+    let start = body.indexOf(delimiter, pos);
+    if (start < 0) break;
+    start += delimiter.length;
+    if (body.slice(start, start + 2).toString() === "--") break;
+    if (body.slice(start, start + 2).toString() === "\r\n") start += 2;
+
+    const headerEnd = body.indexOf(Buffer.from("\r\n\r\n"), start);
+    if (headerEnd < 0) break;
+    const headerText = body.slice(start, headerEnd).toString("utf8");
+    let dataStart = headerEnd + 4;
+    let next = body.indexOf(delimiter, dataStart);
+    if (next < 0) next = body.length;
+    let dataEnd = next;
+    if (body.slice(dataEnd - 2, dataEnd).toString() === "\r\n") dataEnd -= 2;
+
+    const headersPart = {};
+    for (const line of headerText.split(/\r\n/)) {
+      const idx = line.indexOf(":");
+      if (idx > -1) headersPart[line.slice(0, idx).trim().toLowerCase()] = line.slice(idx + 1).trim();
     }
-    const disp = parseContentDisposition(headerMap['content-disposition']);
-    const name = disp.name;
-    if (!name) continue;
-    if (disp.filename) {
-      files[name] = {
-        name,
-        filename: disp.filename,
-        contentType: headerMap['content-type'] || 'application/octet-stream',
-        buffer: content
-      };
-    } else {
-      fields[name] = content.toString('utf8');
+
+    const disp = headersPart["content-disposition"] || "";
+    const nameMatch = disp.match(/name="([^"]+)"/i);
+    const filenameMatch = disp.match(/filename="([^"]*)"/i);
+    const name = nameMatch ? nameMatch[1] : "";
+    const valueBuffer = body.slice(dataStart, dataEnd);
+
+    if (name) {
+      if (filenameMatch) {
+        files[name] = {
+          fieldName: name,
+          filename: filenameMatch[1] || "audio.m4a",
+          contentType: headersPart["content-type"] || "application/octet-stream",
+          buffer: valueBuffer
+        };
+      } else {
+        fields[name] = valueBuffer.toString("utf8");
+      }
     }
+
+    pos = next;
   }
+
   return { fields, files };
 }
 
-function parseJsonBody(event) {
-  if (!event || !event.body) return {};
-  const text = bufferFromEvent(event).toString('utf8');
-  if (!text.trim()) return {};
-  return JSON.parse(text);
-}
-
-function guessMime(filename, contentType) {
-  const lower = String(filename || '').toLowerCase();
-  if (contentType && contentType !== 'application/octet-stream') return contentType;
-  if (lower.endsWith('.mp3')) return 'audio/mpeg';
-  if (lower.endsWith('.wav')) return 'audio/wav';
-  if (lower.endsWith('.m4a') || lower.endsWith('.mp4')) return 'audio/mp4';
-  if (lower.endsWith('.webm')) return 'audio/webm';
-  if (lower.endsWith('.ogg')) return 'audio/ogg';
-  return 'audio/mp4';
-}
-
-async function openaiFetch(path, options) {
-  const key = envKey();
-  if (!key) {
-    const err = new Error('Netlify environment variable OPENAI_API_KEY is not configured.');
-    err.statusCode = 500;
+async function readJsonBody(event) {
+  const raw = decodeBody(event).toString("utf8").trim();
+  if (!raw) return {};
+  try { return JSON.parse(raw); }
+  catch (_) {
+    const err = new Error("Invalid JSON request body.");
+    err.statusCode = 400;
+    err.code = "bad_json";
     throw err;
   }
-  const res = await fetch(`${OPENAI_BASE}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${key}`,
-      ...(options && options.headers ? options.headers : {})
+}
+
+function normalizeLang(value) {
+  const raw = s(value || "auto").trim().toLowerCase().replace("_", "-");
+  if (!raw || raw === "auto") return "auto";
+  if (["zh-hant", "zh-tw", "zh-hk", "zht"].includes(raw)) return "zh";
+  return raw.split("-")[0] || "auto";
+}
+
+function normalizeSubtitleSegments(segments) {
+  const rows = [];
+  for (const item of Array.isArray(segments) ? segments : []) {
+    const start = Math.max(0, Number(item.start || item.startSeconds || 0));
+    let end = Number(item.end || item.endSeconds || start + 3);
+    if (!Number.isFinite(end) || end <= start) end = start + 3;
+    const text = s(item.text || item.transcript || item.caption).replace(/\s+/g, " ").trim();
+    if (text) rows.push({ start, end, text });
+  }
+  return rows;
+}
+
+function fallbackSegmentsFromText(text, offsetSeconds) {
+  const clean = s(text).replace(/\s+/g, " ").trim();
+  if (!clean) return [];
+  const pieces = clean
+    .split(/(?<=[.!?。！？])\s+|(?<=[가-힣])\.\s+|\n+/)
+    .map(x => x.trim())
+    .filter(Boolean);
+  const rows = [];
+  let cursor = Number(offsetSeconds || 0);
+  for (const piece of (pieces.length ? pieces : [clean])) {
+    const dur = Math.max(2.5, Math.min(7.5, piece.length / 10));
+    rows.push({ start: cursor, end: cursor + dur, text: piece });
+    cursor += dur;
+  }
+  return rows;
+}
+
+async function translateSegments(segments, targetLanguage) {
+  const target = normalizeLang(targetLanguage);
+  if (!target || target === "auto" || !segments.length) return segments;
+  const key = getOpenAiKey();
+
+  const chunkSize = 40;
+  const out = [];
+  for (let i = 0; i < segments.length; i += chunkSize) {
+    const chunk = segments.slice(i, i + chunkSize).map((seg, j) => ({ id: i + j, text: seg.text }));
+    const payload = {
+      model: DEFAULT_TRANSLATE_MODEL,
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: "You translate subtitle captions. Preserve names, numbers, punctuation, and approximate line lengths. Return JSON only in the form {\"items\":[{\"id\":0,\"text\":\"...\"}]}."
+        },
+        {
+          role: "user",
+          content: JSON.stringify({ targetLanguage: target, items: chunk })
+        }
+      ]
+    };
+
+    const data = await fetchJson(`${OPENAI_BASE}/chat/completions`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    let items = [];
+    try {
+      const content = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : "";
+      const parsed = JSON.parse(content || "{}");
+      items = Array.isArray(parsed.items) ? parsed.items : [];
+    } catch (_) {
+      items = [];
     }
-  });
-  const contentType = res.headers.get('content-type') || '';
-  const isJson = contentType.includes('application/json');
-  const body = isJson ? await res.json().catch(() => null) : await res.arrayBuffer();
-  if (!res.ok) {
-    const msg = isJson ? (body && (body.error && (body.error.message || body.error.code) || body.message)) : Buffer.from(body || '').toString('utf8').slice(0, 500);
-    const err = new Error(msg || `OpenAI request failed with ${res.status}`);
-    err.statusCode = res.status;
-    err.openAiBody = body;
-    throw err;
+
+    const map = new Map(items.map(x => [Number(x.id), s(x.text).trim()]));
+    for (let j = 0; j < chunk.length; j++) {
+      const source = segments[i + j];
+      out.push({ ...source, text: map.get(i + j) || source.text });
+    }
   }
-  return body;
+
+  return normalizeSubtitleSegments(out);
 }
 
-function normalizeSegmentsFromOpenAi(data) {
-  const source = Array.isArray(data && data.segments) ? data.segments : [];
-  if (source.length) {
-    return source.map((seg, index) => ({
-      index: index + 1,
-      start: Number(seg.start || 0),
-      end: Number(seg.end || seg.start || 0),
-      text: clean(seg.text)
-    })).filter((seg) => seg.text);
-  }
-  const text = clean(data && (data.text || data.transcript));
-  return text ? [{ index: 1, start: 0, end: 5, text }] : [];
-}
+async function transcribeAudioBuffer(file, fields) {
+  const key = getOpenAiKey();
+  if (!key) return { error: { statusCode: 500, body: { ok:false, diagnosis:"missing_netlify_env", message:"OPENAI_API_KEY is missing on Netlify." } } };
 
-async function transcribeAudio(file, fields) {
-  const form = new FormData();
-  const model = clean(process.env.OPENAI_TRANSCRIBE_MODEL) || 'whisper-1';
-  const sourceLanguage = normalizeLanguage(fields.sourceLanguage || fields.language || 'auto');
-  form.append('model', model);
-  form.append('file', new Blob([file.buffer], { type: guessMime(file.filename, file.contentType) }), file.filename || 'maru-audio.m4a');
-  form.append('response_format', 'verbose_json');
-  form.append('timestamp_granularities[]', 'segment');
-  if (sourceLanguage !== 'auto') form.append('language', sourceLanguage);
-  const data = await openaiFetch('/audio/transcriptions', { method: 'POST', body: form });
-  return normalizeSegmentsFromOpenAi(data);
-}
-
-async function translateSegmentsIfNeeded(segments, fields) {
-  const targetLanguage = normalizeLanguage(fields.targetLanguage || fields.language || 'auto');
-  if (!targetLanguage || targetLanguage === 'auto') return segments;
-  const joined = JSON.stringify(segments.map((s) => ({ index: s.index, text: s.text })));
-  const model = clean(process.env.OPENAI_TRANSLATE_MODEL) || 'gpt-4o-mini';
-  const payload = {
-    model,
-    temperature: 0.1,
-    messages: [
-      { role: 'system', content: `Translate subtitle text into ${languageName(targetLanguage)}. Preserve names, numbers, tone, and one output item per input item. Return JSON only: [{"index":1,"text":"..."}]` },
-      { role: 'user', content: joined }
-    ]
-  };
-  const data = await openaiFetch('/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const content = clean(data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content);
-  let parsed = null;
-  try { parsed = JSON.parse(content.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim()); } catch {}
-  if (!Array.isArray(parsed)) return segments;
-  const map = new Map(parsed.map((x) => [Number(x.index), clean(x.text)]));
-  return segments.map((seg) => ({ ...seg, text: map.get(Number(seg.index)) || seg.text }));
-}
-
-function offsetSegments(segments, fields) {
+  const sourceLanguage = normalizeLang(fields.sourceLanguage || fields.language || "auto");
+  const targetLanguage = normalizeLang(fields.targetLanguage || "auto");
   const offset = Number(fields.chunkOffset || fields.offset || 0) || 0;
-  if (!offset) return segments;
-  return segments.map((seg) => ({ ...seg, start: Number(seg.start || 0) + offset, end: Number(seg.end || 0) + offset }));
-}
+  const model = s(fields.model || DEFAULT_TRANSCRIBE_MODEL).trim() || "whisper-1";
 
-async function handleGenerateSubtitle(fields, files) {
-  const file = files.file || files.audio || files.media;
-  if (!file || !file.buffer || !file.buffer.length) throw new Error('Audio file is missing.');
-  let segments = await transcribeAudio(file, fields || {});
-  segments = offsetSegments(segments, fields || {});
-  segments = await translateSegmentsIfNeeded(segments, fields || {});
+  const form = new FormData();
+  const blob = new Blob([file.buffer], { type: file.contentType || "audio/mp4" });
+  form.append("file", blob, file.filename || "audio.m4a");
+  form.append("model", model);
+  form.append("response_format", "verbose_json");
+  form.append("temperature", "0");
+  if (sourceLanguage && sourceLanguage !== "auto") form.append("language", sourceLanguage);
+
+  const res = await fetch(`${OPENAI_BASE}/audio/transcriptions`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${key}` },
+    body: form
+  });
+
+  const text = await res.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { raw: text.slice(0, 1000) }; }
+
+  if (!res.ok) {
+    const safe = safeOpenAiError(res.status, data, text);
+    return { error: { statusCode: res.status, body: safe } };
+  }
+
+  let segments = normalizeSubtitleSegments(data.segments || []);
+  if (!segments.length && data.text) segments = fallbackSegmentsFromText(data.text, 0);
+
+  if (offset && segments.length) {
+    segments = segments.map(x => ({ ...x, start: x.start + offset, end: x.end + offset }));
+  }
+
+  if (targetLanguage && targetLanguage !== "auto") {
+    segments = await translateSegments(segments, targetLanguage);
+  }
+
   return {
     ok: true,
-    action: 'generate-subtitle',
-    provider: 'openai-server-relay',
-    model: clean(process.env.OPENAI_TRANSCRIBE_MODEL) || 'whisper-1',
-    targetLanguage: normalizeLanguage(fields.targetLanguage || fields.language || 'auto'),
+    action: "generate-subtitle",
+    provider: "openai",
+    model,
+    targetLanguage,
+    sourceLanguage,
+    chunkOffset: offset,
+    text: segments.map(x => x.text).join("\n"),
     segments,
-    items: segments,
     count: segments.length
   };
 }
 
-function splitText(text, maxLen) {
-  const raw = clean(text);
-  if (!raw) return [];
-  const parts = [];
-  let buf = '';
-  for (const sentence of raw.split(/(?<=[.!?。！？])\s+|\n+/)) {
-    const next = sentence.trim();
-    if (!next) continue;
-    if ((buf + ' ' + next).trim().length > maxLen && buf.trim()) {
-      parts.push(buf.trim());
-      buf = next;
+function splitTtsScript(scriptText, maxLen) {
+  const clean = s(scriptText)
+    .replace(/\r/g, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/^\s*\d+\s*$/gm, " ")
+    .replace(/\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/g, " ")
+    .replace(/WEBVTT|SYNC Start=\d+|&nbsp;/gi, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+
+  if (!clean) return [];
+  const chunks = [];
+  let buf = "";
+  const sentences = clean.split(/(?<=[.!?。！？])\s+|\n+/).map(x => x.trim()).filter(Boolean);
+  for (const sentence of sentences.length ? sentences : [clean]) {
+    if ((buf + " " + sentence).trim().length > maxLen && buf.trim()) {
+      chunks.push(buf.trim());
+      buf = sentence;
     } else {
-      buf = (buf + ' ' + next).trim();
+      buf = (buf + " " + sentence).trim();
     }
   }
-  if (buf.trim()) parts.push(buf.trim());
-  return parts.length ? parts : [raw.slice(0, maxLen)];
+  if (buf.trim()) chunks.push(buf.trim());
+  return chunks;
 }
 
-async function translateScriptIfNeeded(text, fields) {
-  const targetLanguage = normalizeLanguage(fields.targetLanguage || fields.language || 'auto');
-  if (!targetLanguage || targetLanguage === 'auto') return text;
-  const model = clean(process.env.OPENAI_TRANSLATE_MODEL) || 'gpt-4o-mini';
-  const payload = {
-    model,
-    temperature: 0.2,
-    messages: [
-      { role: 'system', content: `Translate this dubbing script into ${languageName(targetLanguage)}. Keep it natural for spoken audio. Return only the translated script.` },
-      { role: 'user', content: text }
-    ]
-  };
-  const data = await openaiFetch('/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  return clean(data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || text;
-}
+async function generateDubbing(body) {
+  const key = getOpenAiKey();
+  if (!key) return { error: { statusCode: 500, body: { ok:false, diagnosis:"missing_netlify_env", message:"OPENAI_API_KEY is missing on Netlify." } } };
 
-async function speechBuffer(input, voice, model) {
-  const payload = {
-    model,
-    voice: clean(voice) || 'alloy',
-    input,
-    response_format: 'mp3'
-  };
-  const arrayBuffer = await openaiFetch('/audio/speech', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  return Buffer.from(arrayBuffer);
-}
+  const scriptText = s(body.scriptText || body.text || body.subtitleText).trim();
+  if (!scriptText) {
+    return { error: { statusCode: 400, body: { ok:false, diagnosis:"missing_script", message:"AI 더빙용 대본 또는 자막 텍스트가 없습니다." } } };
+  }
 
-async function handleGenerateDubbing(fields) {
-  let scriptText = clean(fields.scriptText || fields.text || fields.subtitleText || fields.content);
-  if (!scriptText) throw new Error('Dubbing script text is missing.');
-  scriptText = await translateScriptIfNeeded(scriptText, fields || {});
-  const voice = clean(fields.voice) || 'alloy';
-  const primaryModel = clean(process.env.OPENAI_TTS_MODEL) || 'gpt-4o-mini-tts';
-  const chunks = splitText(scriptText, 3800).slice(0, 12);
-  const buffers = [];
-  for (const chunk of chunks) {
-    try {
-      buffers.push(await speechBuffer(chunk, voice, primaryModel));
-    } catch (err) {
-      if (primaryModel !== 'tts-1' && /model|not found|does not exist|unsupported/i.test(err.message || '')) {
-        buffers.push(await speechBuffer(chunk, voice, 'tts-1'));
-      } else {
-        throw err;
+  if (scriptText.length > MAX_TTS_SCRIPT_CHARS) {
+    return {
+      error: {
+        statusCode: 413,
+        body: {
+          ok: false,
+          diagnosis: "script_too_large",
+          message: `더빙 대본이 너무 깁니다. 현재 제한은 ${MAX_TTS_SCRIPT_CHARS}자입니다.`,
+          scriptLength: scriptText.length
+        }
       }
-    }
+    };
   }
+
+  const voice = s(body.voice || "alloy").trim() || "alloy";
+  const model = s(body.model || DEFAULT_TTS_MODEL).trim() || "tts-1";
+  const responseFormat = s(body.responseFormat || "mp3").trim().toLowerCase() || "mp3";
+  const chunks = splitTtsScript(scriptText, 3600);
+  if (!chunks.length) {
+    return { error: { statusCode: 400, body: { ok:false, diagnosis:"empty_script", message:"더빙용 텍스트가 비어 있습니다." } } };
+  }
+
+  const buffers = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const payload = {
+      model,
+      voice,
+      input: chunks[i],
+      response_format: responseFormat
+    };
+
+    const audio = await fetchBinary(`${OPENAI_BASE}/audio/speech`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    buffers.push(audio);
+  }
+
   const audio = Buffer.concat(buffers);
   return {
     ok: true,
-    action: 'generate-dubbing',
-    provider: 'openai-server-relay',
-    responseFormat: 'mp3',
-    mimeType: 'audio/mpeg',
-    audioBase64: audio.toString('base64'),
-    size: audio.length,
-    chunks: buffers.length
+    action: "generate-dubbing",
+    provider: "openai",
+    model,
+    voice,
+    responseFormat,
+    chunkCount: chunks.length,
+    audioBase64: audio.toString("base64"),
+    bytes: audio.length
   };
 }
 
-async function handleJsonAction(payload) {
-  const action = clean(payload.action || payload.mode || 'status').toLowerCase();
-  if (action === 'status' || action === 'health' || action === 'ping') {
-    return {
-      ok: true,
-      status: 'MARU AI media server is ready.',
-      version: VERSION,
-      openAiReady: !!envKey(),
-      hasOpenAiKey: !!envKey(),
-      actions: ['status', 'generate-subtitle', 'generate-dubbing']
-    };
+async function handleStatus() {
+  const health = await checkOpenAIKey();
+  return json(health.ok ? 200 : (health.openaiStatus || 500), {
+    service: "maru-ai-media",
+    version: "v90-full-media-relay",
+    time: new Date().toISOString(),
+    ...health,
+    actions: ["status", "generate-subtitle", "generate-dubbing"]
+  });
+}
+
+async function handlePost(event) {
+  const headers = event.headers || {};
+  const contentType = headers["content-type"] || headers["Content-Type"] || "";
+  const query = event.queryStringParameters || {};
+  const parsedType = parseContentTypeHeader(contentType).type;
+
+  if (parsedType.includes("multipart/form-data")) {
+    const { fields, files } = parseMultipart(event);
+    const action = s(query.action || fields.action || "generate-subtitle").trim();
+    if (action === "status" || action === "health" || action === "test") return await handleStatus();
+    if (action !== "generate-subtitle") {
+      return json(400, { ok:false, diagnosis:"unsupported_multipart_action", message:"지원하지 않는 multipart AI 작업입니다.", action });
+    }
+    const file = files.file || files.audio || files.media;
+    if (!file || !file.buffer || !file.buffer.length) {
+      return json(400, { ok:false, diagnosis:"missing_audio_file", message:"자막 생성을 위한 오디오 파일이 전달되지 않았습니다." });
+    }
+    const result = await transcribeAudioBuffer(file, fields);
+    if (result.error) return json(result.error.statusCode || 500, result.error.body);
+    return json(200, {
+      service: "maru-ai-media",
+      version: "v90-full-media-relay",
+      time: new Date().toISOString(),
+      ...result
+    });
   }
-  if (action === 'generate-dubbing' || action === 'dubbing' || action === 'tts') {
-    return handleGenerateDubbing(payload || {});
+
+  const body = await readJsonBody(event);
+  const action = s(query.action || body.action || "status").trim();
+
+  if (action === "status" || action === "health" || action === "test") return await handleStatus();
+
+  if (action === "generate-dubbing") {
+    const result = await generateDubbing(body);
+    if (result.error) return json(result.error.statusCode || 500, result.error.body);
+    return json(200, {
+      service: "maru-ai-media",
+      version: "v90-full-media-relay",
+      time: new Date().toISOString(),
+      ...result
+    });
   }
-  throw new Error(`Unsupported JSON action: ${action}`);
+
+  if (action === "generate-subtitle") {
+    return json(400, {
+      ok: false,
+      diagnosis: "missing_multipart_file",
+      message: "자막 생성은 multipart/form-data 방식으로 오디오 파일이 함께 전송되어야 합니다."
+    });
+  }
+
+  return json(400, {
+    ok: false,
+    diagnosis: "unsupported_action",
+    message: "지원하지 않는 MARU AI 작업입니다.",
+    action
+  });
 }
 
 exports.handler = async function handler(event) {
   try {
-    if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: corsHeaders(), body: '' };
-    if (event.httpMethod === 'GET') return json(200, await handleJsonAction({ action: 'status' }));
-    if (event.httpMethod !== 'POST') return json(405, { ok: false, error: 'Method not allowed' });
+    if (event && event.httpMethod === "OPTIONS") return { statusCode: 204, headers: JSON_HEADERS, body: "" };
 
-    const headers = event.headers || {};
-    const contentType = headers['content-type'] || headers['Content-Type'] || '';
-    if (/multipart\/form-data/i.test(contentType)) {
-      const { fields, files } = parseMultipart(event);
-      const action = clean(fields.action || 'generate-subtitle').toLowerCase();
-      if (action === 'generate-subtitle' || action === 'subtitle' || action === 'transcribe') {
-        return json(200, await handleGenerateSubtitle(fields, files));
-      }
-      return json(400, { ok: false, error: `Unsupported multipart action: ${action}` });
+    const method = s(event && event.httpMethod || "GET").toUpperCase();
+    const query = event && event.queryStringParameters || {};
+    const action = s(query.action || query.fn || query.mode || "").trim();
+
+    if (method === "GET") return await handleStatus();
+    if (method === "POST") return await handlePost(event);
+
+    return json(405, { ok:false, diagnosis:"method_not_allowed", message:"지원하지 않는 HTTP 메서드입니다.", method });
+  } catch (err) {
+    const statusCode = Number(err && err.statusCode) || Number(err && err.safe && err.safe.openaiStatus) || 500;
+    if (err && err.safe) {
+      return json(statusCode, {
+        service: "maru-ai-media",
+        version: "v90-full-media-relay",
+        time: new Date().toISOString(),
+        ...err.safe
+      });
     }
-
-    const payload = parseJsonBody(event);
-    return json(200, await handleJsonAction(payload));
-  } catch (error) {
-    const statusCode = Number(error.statusCode || error.status || 500);
-    const safeStatus = statusCode >= 400 && statusCode < 600 ? statusCode : 500;
-    const message = error && error.message ? error.message : String(error);
-    return json(safeStatus, {
+    return json(statusCode, {
       ok: false,
-      error: message,
-      code: error && error.openAiBody && error.openAiBody.error && error.openAiBody.error.code || undefined,
-      type: error && error.openAiBody && error.openAiBody.error && error.openAiBody.error.type || undefined,
-      version: VERSION
+      diagnosis: err && err.code ? err.code : "maru_ai_media_internal_error",
+      message: s(err && err.message || err || "MARU AI media function internal error.").slice(0, 1000),
+      service: "maru-ai-media",
+      version: "v90-full-media-relay",
+      time: new Date().toISOString()
     });
   }
 };
