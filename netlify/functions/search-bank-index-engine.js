@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.6.2-front-route-isolated-stable";
+const VERSION = "search-bank-index-engine-v2.6.3-front-route-isolated-operational-stable";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
@@ -71,6 +71,97 @@ function truthy(v){
   if(v === false || v == null) return false;
   const x = low(v);
   return !!x && !["0","false","no","off","disabled","disable","null","undefined"].includes(x);
+}
+
+function wantsOperationalFastProbe(params){
+  params = params || {};
+  const action = low(firstNonEmpty(params.action, params.mode, params.fn));
+  return action === "ping" || action === "probe" || action === "fast-health" ||
+    (action === "health" && !truthy(params.full) && !truthy(params.deep)) ||
+    truthy(params.audit) || truthy(params.probe) || truthy(params.light) || truthy(params.fast);
+}
+function operationalFastProbe(params){
+  const started = nowMs();
+  const stat = snapshotStat();
+  return {
+    status:"ok",
+    engine:ENGINE_NAME,
+    version:VERSION,
+    action:"fast-probe",
+    role:"front-snapshot-reservoir-index-and-sanmaru-fast-memory-gateway",
+    ok:true,
+    probeReady:true,
+    deep:false,
+    noHeavyIndexBuild:true,
+    externalCall:false,
+    snapshot:{
+      exists:!!stat,
+      ok:!!stat,
+      path:(stat && stat.path) || snapshotPath(),
+      size:(stat && stat.size) || 0,
+      mtimeMs:(stat && stat.mtimeMs) || null,
+      hash:null,
+      count:null
+    },
+    capabilities:{
+      frontSupply:true,
+      sectionIsolation:true,
+      pageIsolation:true,
+      compactOutput:true,
+      jsonDownload:true,
+      fullHealth:"action=health&full=1"
+    },
+    meta:{
+      latency:nowMs() - started,
+      note:"Fast operational probe only. Use action=health&full=1 for deeper reservoir counts."
+    },
+    generatedAt:nowIso()
+  };
+}
+function compactItemForOps(item){
+  item = item || {};
+  const lp = item.layerPointer || {};
+  return {
+    id:firstNonEmpty(item.id, item.indexId, item.originalId),
+    title:firstNonEmpty(item.title, item.name, item.label),
+    page:firstNonEmpty(item.page, lp.page, item.route),
+    section:firstNonEmpty(item.section, lp.section, item.psom_key, item.slotKey),
+    slotKey:firstNonEmpty(item.slotKey, item.psom_key, lp.slotKey),
+    url:firstNonEmpty(item.url, item.link, item.href),
+    thumbnail:firstNonEmpty(item.thumbnail, item.thumb, item.image),
+    provider:firstNonEmpty(item.provider, item.source),
+    realContent:!!item.realContent,
+    replaceableSlot:!!item.replaceableSlot,
+    routeBucket:item.frontRouteBucket || null,
+    requestedPage:item.frontRequestedPage || null,
+    requestedSection:item.frontRequestedSection || null
+  };
+}
+function maybeCompactResponse(body, params){
+  params = params || {};
+  if(!truthy(params.compact) && !truthy(params.summaryOnly)) return body;
+  body = body || {};
+  const src = Array.isArray(body.items) ? body.items : (Array.isArray(body.results) ? body.results : []);
+  const compactItems = src.map(compactItemForOps);
+  return Object.assign({}, body, {
+    compact:true,
+    items:compactItems,
+    results:compactItems,
+    rawItemFieldsOmitted:true,
+    meta:Object.assign({}, body.meta || {}, { compact:true, rawItemFieldsOmitted:true })
+  });
+}
+function safeFilenamePart(v){
+  return s(v || "").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "result";
+}
+function responseFilename(params, body){
+  params = params || {}; body = body || {};
+  const action = safeFilenamePart(firstNonEmpty(params.filename, params.name, body.action, params.action, "search-bank-index"));
+  const page = safeFilenamePart(firstNonEmpty(params.page, params.route, body.meta && body.meta.requestedPage));
+  const section = safeFilenamePart(firstNonEmpty(params.section, params.slot, params.psom_key, body.meta && body.meta.requestedSection));
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const middle = [action, page, section].filter(Boolean).join("_");
+  return (middle || "search-bank-index") + "_" + stamp + ".json";
 }
 function unique(arr){ return Array.from(new Set((Array.isArray(arr) ? arr : []).filter(Boolean))); }
 function stripHtml(v){ return s(v).replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]*>/g, " "); }
@@ -1389,14 +1480,20 @@ function health(){
     generatedAt:nowIso()
   };
 }
-function ok(body){
-  return { statusCode:200, headers:{
+function ok(body, params){
+  params = params || {};
+  const headers = {
     "Content-Type":"application/json; charset=utf-8",
     "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
     "Access-Control-Allow-Origin":"*",
     "Access-Control-Allow-Headers":"content-type, authorization",
     "Access-Control-Allow-Methods":"GET,POST,OPTIONS"
-  }, body:JSON.stringify(body) };
+  };
+  if(truthy(params.download) || truthy(params.attachment)){
+    headers["Content-Disposition"] = 'attachment; filename="' + responseFilename(params, body) + '"';
+    headers["X-Content-Type-Options"] = "nosniff";
+  }
+  return { statusCode:200, headers, body:JSON.stringify(body, null, truthy(params.pretty) ? 2 : 0) };
 }
 function parseBody(event){
   try{
@@ -1420,6 +1517,7 @@ async function runEngine(event, params){
   const action = low(firstNonEmpty(merged.action, merged.mode, merged.fn, "query"));
   const security = guardIndexRequest(event || {}, merged, action);
   if(!security.allowed) return { status:"blocked", engine:ENGINE_NAME, version:VERSION, action, items:[], results:[], meta:{ count:0, security } };
+  if(wantsOperationalFastProbe(merged)) return Object.assign(operationalFastProbe(merged), { security:{ allowed:true, admin:security.admin } });
   if(action === "health") return Object.assign(health(), { security:{ allowed:true, admin:security.admin } });
   if(action === "build" || action === "rebuild"){
     state.index = buildIndexFromSnapshot();
@@ -1441,13 +1539,15 @@ async function runEngine(event, params){
   return queryIndex(merged);
 }
 async function handler(event){
-  if(event && event.httpMethod === "OPTIONS") return ok({ status:"ok" });
+  if(event && event.httpMethod === "OPTIONS") return ok({ status:"ok" }, {});
   const body = parseBody(event || {});
-  const res = await runEngine(event || {}, body);
-  return ok(res);
+  const qs = (event && event.queryStringParameters) || {};
+  const responseParams = Object.assign({}, qs, body || {});
+  const res = maybeCompactResponse(await runEngine(event || {}, body), responseParams);
+  return ok(res, responseParams);
 }
 
-module.exports = { version:VERSION, runEngine, handler, query:queryIndex, promote, ingest, health, buildIndexFromSnapshot, loadIndex, buildFrontSupplyPool };
+module.exports = { version:VERSION, runEngine, handler, query:queryIndex, promote, ingest, health, buildIndexFromSnapshot, loadIndex, buildFrontSupplyPool, operationalFastProbe };
 exports.version = VERSION;
 exports.runEngine = runEngine;
 exports.handler = handler;
@@ -1457,3 +1557,5 @@ exports.ingest = ingest;
 exports.health = health;
 
 exports.buildFrontSupplyPool = buildFrontSupplyPool;
+
+exports.operationalFastProbe = operationalFastProbe;
