@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.8.1-instant-supply-os-search-ui-window";
+const VERSION = "sanmaru-engine-v2.8.2-osai-front-gateway-stable";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 3000;
@@ -2806,6 +2806,223 @@ function parseBody(event){
 }
 
 
+// Sanmaru OSAI front-gateway helpers -------------------------------------------------
+// These helpers keep Sanmaru's broad global information OS role intact while making
+// front-slot supply deterministic: IndexEngine exact section first, same page second,
+// global/resident fallback only when explicitly needed by shortage.
+function sanmaruFrontRouteKey(v){
+  let x = low(v);
+  if(!x) return "";
+  x = x.replace(/^https?:\/\/[^/]+/i, "");
+  x = x.replace(/[?#].*$/g, "");
+  x = x.replace(/\.html?$/i, "");
+  x = x.replace(/^\/+|\/+$/g, "");
+  x = x.replace(/\s+/g, "-");
+  x = x.replace(/_/g, "-");
+  return x;
+}
+function sanmaruAddAlias(set, v){
+  const k = sanmaruFrontRouteKey(v);
+  if(!k) return;
+  set.add(k);
+  set.add(k.replace(/-/g, "_"));
+  set.add(k.replace(/_/g, "-"));
+}
+function sanmaruFrontPageCanonical(v){
+  const k = sanmaruFrontRouteKey(v);
+  if(!k || k === "snapshot-object" || k === "snapshot-array" || k === "items" || k === "results") return "";
+  if(k === "index" || k === "main" || k === "front" || k === "web" || k === "home" || /^home(?:-|$)/.test(k)) return "home";
+  if(k === "networkhub" || k === "network-hub" || /^network(?:-|$)/.test(k) || /market|rightpanel|right-panel/.test(k)) return "networkhub";
+  if(k === "distributionhub" || k === "distribution-hub" || /^distribution(?:-|$)/.test(k) || /^dist[0-9]+$/.test(k) || /commerce|product|shopping|shop/.test(k)) return "distributionhub";
+  if(k === "socialnetwork" || k === "social-network" || /^social(?:-|$)/.test(k) || /sns|youtube|instagram|tiktok|facebook|wechat|weibo|pinterest|reddit|twitter|x-com/.test(k)) return "socialnetwork";
+  if(k === "mediahub" || k === "media-hub" || /^media(?:-|$)/.test(k) || /movie|drama|thriller|romance|variety|documentary|animation|music|shorts|video/.test(k)) return "mediahub";
+  if(k === "tour" || /^tour(?:-|$)/.test(k) || /travel|tourism|hotel|trip|local-tour/.test(k)) return "tour";
+  if(k === "donation" || /^donation(?:-|$)/.test(k) || /ngo|mission|service|relief|education|environment/.test(k)) return "donation";
+  if(k === "literature-academic" || k === "literature_academic" || /^academic(?:-|$)/.test(k) || /^literature(?:-|$)/.test(k) || /culture|arts|humanities|scholar|research|paper|book/.test(k)) return "literature_academic";
+  return k;
+}
+function sanmaruFrontPageHintFromSection(v){
+  const k = sanmaruFrontRouteKey(v);
+  if(!k) return "";
+  if(/^home(?:-|$)|^home-right/.test(k)) return "home";
+  if(/^network(?:-|$)|rightpanel|right-panel/.test(k)) return "networkhub";
+  if(/^distribution(?:-|$)|^dist[0-9]+$/.test(k)) return "distributionhub";
+  if(/^social(?:-|$)/.test(k)) return "socialnetwork";
+  if(/^media(?:-|$)|movie|drama|thriller|romance|variety|documentary|animation|music|shorts/.test(k)) return "mediahub";
+  if(/^tour(?:-|$)/.test(k)) return "tour";
+  if(/^donation(?:-|$)|ngo|mission|service|relief|education|environment/.test(k)) return "donation";
+  if(/^academic(?:-|$)|^literature(?:-|$)|arts|humanities/.test(k)) return "literature_academic";
+  return "";
+}
+const SANMARU_FRONT_SECTION_ALIAS_PAIRS = [
+  ["dist1", "distribution-recommend"], ["dist2", "distribution-sponsor"],
+  ["dist3", "distribution-trending"], ["dist4", "distribution-new"],
+  ["dist5", "distribution-special"], ["dist6", "distribution-others"], ["dist7", "distribution-right"],
+  ["rightpanel", "rightPanel"], ["right-panel", "rightPanel"],
+  ["maru-channel", "social-maru"], ["youtube", "social-youtube"], ["instagram", "social-instagram"],
+  ["tiktok", "social-tiktok"], ["facebook", "social-facebook"], ["wechat", "social-wechat"],
+  ["weibo", "social-weibo"], ["pinterest", "social-pinterest"], ["reddit", "social-reddit"],
+  ["twitter", "social-twitter"], ["x", "social-twitter"], ["movie", "media-movie"],
+  ["drama", "media-drama"], ["thriller", "media-thriller"], ["romance", "media-romance"],
+  ["variety", "media-variety"], ["documentary", "media-documentary"], ["animation", "media-animation"],
+  ["music", "media-music"], ["shorts", "media-shorts"]
+];
+function sanmaruSectionAliasSet(v){
+  const set = new Set();
+  const raw = Array.isArray(v) ? v : [v];
+  for(const x of raw){
+    if(x == null) continue;
+    const parts = s(x).split(/[\s,|]+/).filter(Boolean);
+    for(const p of parts.length ? parts : [x]) sanmaruAddAlias(set, p);
+  }
+  let changed = true;
+  while(changed){
+    changed = false;
+    for(const pair of SANMARU_FRONT_SECTION_ALIAS_PAIRS){
+      const a = sanmaruFrontRouteKey(pair[0]);
+      const b = sanmaruFrontRouteKey(pair[1]);
+      if(set.has(a) && !set.has(b)){ sanmaruAddAlias(set, b); changed = true; }
+      if(set.has(b) && !set.has(a)){ sanmaruAddAlias(set, a); changed = true; }
+    }
+  }
+  return set;
+}
+function sanmaruPageAliasSet(v){
+  const set = new Set();
+  const raw = Array.isArray(v) ? v : [v];
+  for(const x of raw){
+    if(x == null) continue;
+    const parts = s(x).split(/[\s,|]+/).filter(Boolean);
+    for(const p of parts.length ? parts : [x]){
+      const canonical = sanmaruFrontPageCanonical(p) || sanmaruFrontPageHintFromSection(p);
+      sanmaruAddAlias(set, canonical || p);
+      if(canonical === "home") ["home.html", "index", "front", "web"].forEach(a => sanmaruAddAlias(set, a));
+      if(canonical === "networkhub") ["network", "networkhub.html", "market", "network-right"].forEach(a => sanmaruAddAlias(set, a));
+      if(canonical === "distributionhub") ["distribution", "distributionhub.html", "commerce", "product"].forEach(a => sanmaruAddAlias(set, a));
+      if(canonical === "socialnetwork") ["social", "socialnetwork.html", "sns"].forEach(a => sanmaruAddAlias(set, a));
+      if(canonical === "mediahub") ["media", "mediahub.html", "video"].forEach(a => sanmaruAddAlias(set, a));
+      if(canonical === "literature_academic") ["literature", "academic", "literature_academic.html"].forEach(a => sanmaruAddAlias(set, a));
+    }
+  }
+  return set;
+}
+function sanmaruSetIntersects(a, b){
+  if(!a || !b || !a.size || !b.size) return false;
+  for(const x of a){ if(b.has(x)) return true; }
+  return false;
+}
+function sanmaruFrontTarget(opts){
+  opts = opts || {};
+  const section = firstNonEmpty(opts.section, opts.psom_key, opts.psomKey, opts.slot, opts.slotKey, opts.targetSection, opts.targetSlot, opts.key, opts.category);
+  const page = firstNonEmpty(opts.page, opts.targetPage, opts.route, opts.hub, opts.channel, opts.frontPage, opts.pageKey);
+  const sectionAliases = sanmaruSectionAliasSet(section);
+  const pageAliases = sanmaruPageAliasSet(page);
+  for(const sec of Array.from(sectionAliases)){
+    const inferred = sanmaruFrontPageHintFromSection(sec);
+    if(inferred) sanmaruAddAlias(pageAliases, inferred);
+  }
+  return { page, section, pageAliases, sectionAliases, hasPage:pageAliases.size>0, hasSection:sectionAliases.size>0, hasTarget:pageAliases.size>0 || sectionAliases.size>0 };
+}
+function sanmaruFrontItemRouteSets(item){
+  item = item || {};
+  const bind = item.bind && typeof item.bind === "object" ? item.bind : {};
+  const lp = item.layerPointer && typeof item.layerPointer === "object" ? item.layerPointer : {};
+  const tags = Array.isArray(item.tags) ? item.tags : [];
+  const sectionValues = [lp.section, lp.slotKey, item.section, item.psom_key, item.slotKey, item.slot, bind.section, bind.key, bind.slot, bind.slotKey, item.category].concat(tags);
+  const pageValues = [lp.page, lp.route, item.page, item.route, item.path, bind.page, bind.route].concat(tags, sectionValues.map(sanmaruFrontPageHintFromSection));
+  return { pageAliases:sanmaruPageAliasSet(pageValues), sectionAliases:sanmaruSectionAliasSet(sectionValues) };
+}
+function sanmaruFrontTargetBucket(item, target){
+  if(!target || !target.hasTarget) return "global";
+  const routes = sanmaruFrontItemRouteSets(item);
+  const sectionMatch = target.hasSection && sanmaruSetIntersects(routes.sectionAliases, target.sectionAliases);
+  const pageMatch = target.hasPage && sanmaruSetIntersects(routes.pageAliases, target.pageAliases);
+  if(target.hasSection){
+    if(sectionMatch) return "exact";
+    if(pageMatch) return "page-fallback";
+    return "global-fallback";
+  }
+  if(target.hasPage){
+    if(pageMatch) return "exact";
+    return "global-fallback";
+  }
+  return "global";
+}
+function sanmaruNormalizeIndexFrontItems(res, q, target){
+  return normalizeItemsFromResponse(res).map(x => {
+    const item = canonicalItem(x, q, firstNonEmpty(x && x.source, x && x.provider, "search-bank-index"));
+    item.frontRouteBucket = firstNonEmpty(item.frontRouteBucket, sanmaruFrontTargetBucket(item, target));
+    item.sanmaruFrontGateway = true;
+    item.sanmaruOsaiRouted = true;
+    return item;
+  });
+}
+function sanmaruFrontFallbackPartition(items, target){
+  const exact = [], pageFallback = [], globalFallback = [];
+  for(const item of (Array.isArray(items) ? items : [])){
+    const bucket = sanmaruFrontTargetBucket(item, target);
+    const copy = Object.assign({}, item, { frontRouteBucket: firstNonEmpty(item && item.frontRouteBucket, bucket), sanmaruFrontGatewayFallback:true });
+    if(bucket === "exact" || !target || !target.hasTarget) exact.push(copy);
+    else if(bucket === "page-fallback") pageFallback.push(copy);
+    else globalFallback.push(copy);
+  }
+  return { exact, pageFallback, globalFallback };
+}
+function sanmaruCallIndexFrontSupply(q, opts, target, requestedLimit){
+  const started = nowMs();
+  try{
+    let IndexEngine = null;
+    try { IndexEngine = require("./search-bank-index-engine"); } catch(e) { IndexEngine = null; }
+    if(!IndexEngine) return { status:"unavailable", items:[], meta:{ latency:nowMs()-started } };
+    const params = {
+      action:"front-supply",
+      q:q,
+      query:q,
+      page:firstNonEmpty(opts.page, opts.targetPage, opts.route, opts.hub, opts.channel, target && target.page),
+      section:firstNonEmpty(opts.section, opts.slot, opts.psom_key, opts.psomKey, opts.slotKey, opts.targetSection, target && target.section),
+      psom_key:firstNonEmpty(opts.psom_key, opts.psomKey, opts.section, opts.slot, opts.slotKey),
+      slot:firstNonEmpty(opts.slot, opts.slotKey, opts.section, opts.psom_key),
+      limit:requestedLimit,
+      frontSupply:"1",
+      slotSupply:"1",
+      includeFrontSupply:"1",
+      from:"sanmaru",
+      noExternal:"1",
+      skipSanmaru:"1"
+    };
+    let res = null;
+    if(typeof IndexEngine.buildFrontSupplyPool === "function") res = IndexEngine.buildFrontSupplyPool(params);
+    else if(typeof IndexEngine.query === "function") res = IndexEngine.query(Object.assign({}, params, { q:firstNonEmpty(params.section, params.page, q) }));
+    else return { status:"no-compatible-export", items:[], meta:{ latency:nowMs()-started } };
+    const items = sanmaruNormalizeIndexFrontItems(res, q, target);
+    return { status:items.length ? "ok" : "empty", items, raw:res, meta:Object.assign({ latency:nowMs()-started }, res && res.meta || {}) };
+  }catch(e){
+    return { status:responseErrorCode(e), items:[], meta:{ latency:nowMs()-started, error:responseErrorCode(e) } };
+  }
+}
+function sanmaruFrontDirectAccessProfile(opts){
+  opts = opts || {};
+  return {
+    role:"top-integrated-information-osai-front-gateway",
+    osaiRole:"global-web-db-public-data-producer-supply-network-direct-access-os",
+    preservesGlobalOsMode:true,
+    frontSupplyModeSeparated:true,
+    directAccessReady:true,
+    externalCall:false,
+    providerWait:false,
+    futureProviderClasses:["official-web","public-data","government","institution","producer-channel","cooperative","agriculture","fishery","forestry","industrial-goods","food","ai-gpu-analysis"],
+    discernmentPolicy:{
+      officialSource:true,
+      producerVerificationReady:true,
+      intermediaryRiskClassificationReady:true,
+      trustFilterReady:true,
+      regionIpCountryRoutingReady:true,
+      searchBankRoutingReady:true
+    }
+  };
+}
+
+
 
 
 function sanmaruKoreaLocalAuthorityCards(query, country){
@@ -2999,10 +3216,8 @@ function buildSanmaruInstantOsPackage(q, opts){
     page: firstNonEmpty(opts.page, opts.p, opts.start, 1),
     perPage: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
     visibleNeed: firstNonEmpty(opts.perPage, opts.pageSize, opts.visibleCardsPerPage, opts.visibleLimit, DEFAULT_VISIBLE_PER_PAGE),
-    allowRouteCards: !(truthy(opts.noRouteCards || opts.publicSearch || opts.openPipe || opts.noProviderLane)),
-    noRouteCards: truthy(opts.noRouteCards || opts.publicSearch || opts.openPipe || opts.noProviderLane),
-    allowOpeningCards: !(truthy(opts.noOpeningCards || opts.publicSearch || opts.openPipe || opts.noProviderLane)),
-    noOpeningCards: truthy(opts.noOpeningCards || opts.publicSearch || opts.openPipe || opts.noProviderLane),
+    allowRouteCards: true,
+    allowOpeningCards: true,
     frontSupply: truthy(opts.frontSupply || opts.slotSupply || opts.contentSupply || opts.snapshotSupply || opts.searchbankSupply || opts.includeFrontSupply || opts.includeFrontSlots),
     country: effectiveCountry
   });
@@ -3060,7 +3275,7 @@ function buildSanmaruInstantOsPackage(q, opts){
   // search.js will render page 1 first and cache the rest.
   const requestedFirstWindow = clampInt(
     firstNonEmpty(opts.firstPaintLimit, opts.initialRenderTarget, opts.initialPreloadTarget, opts.limit),
-    Math.max(perPage * 12, 1800),
+    Math.max(perPage * 12, 300),
     perPage,
     MAX_LIMIT
   );
@@ -3154,25 +3369,113 @@ function buildSanmaruInstantOsPackage(q, opts){
 }
 
 function buildSanmaruFrontSupplyPackage(q, opts){
+  const started = nowMs();
   opts = opts || {};
-  const pack = buildSanmaruInstantOsPackage(q || firstNonEmpty(opts.q, opts.query, opts.section, opts.page, "front"), Object.assign({}, opts, {
-    reason: opts.reason || "front-slot-supply",
-    frontSupply: true,
-    slotSupply: true,
-    includeFrontSupply: true,
-    candidatePoolTarget: firstNonEmpty(opts.candidatePool, opts.candidatePoolTarget, opts.frontSupplyTarget, SEARCH_BANK_FRONT_REAL_FLOOR),
-    limit: firstNonEmpty(opts.limit, opts.frontSupplyTarget, SEARCH_BANK_FRONT_REAL_FLOOR)
-  }));
-  pack.action = "front-supply";
-  pack.source = pack.items && pack.items.length ? "sanmaru-front-slot-resident-supply" : "sanmaru-front-slot-route-supply";
-  pack.meta = Object.assign({}, pack.meta || {}, {
-    frontSupply: true,
-    slotSupply: true,
-    page: firstNonEmpty(opts.page, opts.targetPage, opts.hub, ""),
-    section: firstNonEmpty(opts.section, opts.slot, opts.psom_key, opts.category, ""),
-    policy: "front-slot-resident-first-no-provider-wait"
-  });
-  return pack;
+  const target = sanmaruFrontTarget(opts);
+  const query = firstNonEmpty(q, opts.q, opts.query, target.section, target.page, "front");
+  const requestedLimit = clampInt(firstNonEmpty(opts.limit, opts.frontSupplyTarget, opts.candidatePool, opts.candidatePoolTarget), SEARCH_BANK_FRONT_REAL_FLOOR, 1, MAX_LIMIT);
+  const targetCount = Math.min(requestedLimit, MAX_LIMIT);
+
+  // Front-slot supply must be deterministic. Sanmaru's global resident/provider OS
+  // remains available for normal search, but front-slot data uses SearchBank Index
+  // exact section/page routing first so resident/global candidates cannot pollute a
+  // requested slot.
+  const indexPack = sanmaruCallIndexFrontSupply(query, opts, target, targetCount);
+  let selected = Array.isArray(indexPack.items) ? indexPack.items.slice(0, targetCount) : [];
+  let fallbackPack = null;
+  let residentFallbackReturnedCount = 0;
+  let fallbackPartition = { exact:[], pageFallback:[], globalFallback:[] };
+
+  if(selected.length < targetCount){
+    fallbackPack = buildSanmaruInstantOsPackage(query, Object.assign({}, opts, {
+      reason: opts.reason || "front-slot-supply-resident-fallback",
+      frontSupply: true,
+      slotSupply: true,
+      includeFrontSupply: true,
+      candidatePoolTarget: targetCount,
+      limit: targetCount,
+      allowRouteCards: false,
+      allowOpeningCards: false,
+      noRouteCards: true,
+      noOpeningCards: true
+    }));
+    fallbackPartition = sanmaruFrontFallbackPartition(fallbackPack && fallbackPack.items, target);
+    const fallbackOrdered = fallbackPartition.exact.concat(fallbackPartition.pageFallback, fallbackPartition.globalFallback);
+    const merged = dedupeItems(selected.concat(fallbackOrdered));
+    selected = merged.slice(0, targetCount);
+    residentFallbackReturnedCount = Math.max(0, selected.length - (indexPack.items ? indexPack.items.length : 0));
+  }
+
+  const exactReturned = selected.filter(item => sanmaruFrontTargetBucket(item, target) === "exact" || !target.hasTarget).length;
+  const pageFallbackReturned = selected.filter(item => sanmaruFrontTargetBucket(item, target) === "page-fallback").length;
+  const globalFallbackReturned = selected.filter(item => sanmaruFrontTargetBucket(item, target) === "global-fallback").length;
+  const providerHints = fallbackPack && Array.isArray(fallbackPack.providerHints) ? fallbackPack.providerHints : [];
+  const geoRoute = buildGeoRouteContext(query, { lang:firstNonEmpty(opts.lang, opts.uiLang, opts.locale), country:firstNonEmpty(opts.country, opts.region, opts.geo) });
+  const routePlan = buildRoutePlanForQuery(query, { searchType:firstNonEmpty(opts.type, opts.category, opts.tab, opts.vertical), lang:firstNonEmpty(opts.lang, opts.uiLang, opts.locale), country:firstNonEmpty(opts.country, opts.region, opts.geo) });
+
+  return {
+    status:"ok",
+    engine:ENGINE_NAME,
+    version:VERSION,
+    action:"front-supply",
+    query,
+    source:selected.length ? "sanmaru-front-slot-index-gateway" : "sanmaru-front-slot-empty",
+    items:selected,
+    results:selected,
+    providerHints,
+    geoRoute,
+    routePlan,
+    meta:{
+      count:selected.length,
+      target:targetCount,
+      requestedLimit,
+      requestedPage:target.page || null,
+      requestedSection:target.section || null,
+      frontSupply:true,
+      slotSupply:true,
+      frontSupplyMode:true,
+      policy:"front-slot-index-first-section-isolated-osai-preserved",
+      supplyOrder:"searchbank-index-exact-first-page-fallback-second-resident-only-on-shortage",
+      searchBankIndex:{
+        status:indexPack.status,
+        version:indexPack.raw && indexPack.raw.version,
+        count:indexPack.items ? indexPack.items.length : 0,
+        exactCandidateCount:indexPack.meta && indexPack.meta.exactCandidateCount,
+        pageFallbackCandidateCount:indexPack.meta && indexPack.meta.pageFallbackCandidateCount,
+        globalFallbackCandidateCount:indexPack.meta && indexPack.meta.globalFallbackCandidateCount,
+        exactReturnedCount:indexPack.meta && indexPack.meta.exactReturnedCount,
+        pageFallbackReturnedCount:indexPack.meta && indexPack.meta.pageFallbackReturnedCount,
+        globalFallbackReturnedCount:indexPack.meta && indexPack.meta.globalFallbackReturnedCount,
+        latency:indexPack.meta && indexPack.meta.latency
+      },
+      indexGatewayUsed:indexPack.status === "ok",
+      indexReturnedCount:indexPack.items ? indexPack.items.length : 0,
+      exactReturnedCount:exactReturned,
+      pageFallbackReturnedCount:pageFallbackReturned,
+      globalFallbackReturnedCount:globalFallbackReturned,
+      residentFallbackUsed:!!fallbackPack,
+      residentFallbackReturnedCount,
+      residentFallbackCandidateCount:fallbackPack && fallbackPack.meta ? fallbackPack.meta.totalCandidates || fallbackPack.meta.fullCandidateCount || 0 : 0,
+      sectionIsolation: target.hasSection ? pageFallbackReturned === 0 && globalFallbackReturned === 0 : true,
+      pageIsolation: target.hasPage ? globalFallbackReturned === 0 : true,
+      providerHintsExcludedFromItems:true,
+      noProviderCardsInFrontItems:true,
+      doesNotCallExternal:true,
+      directExternalAdaptersEnabled:false,
+      osaiDirectAccess:sanmaruFrontDirectAccessProfile(opts),
+      resident: residentBootSnapshot(),
+      providerHealth: providerHealthSnapshot(),
+      sourceRegistryReady:true,
+      categoryBrainReady:true,
+      routePlan,
+      elapsedMs:nowMs() - started,
+      trace:[
+        { name:"searchbank-index-front-gateway", status:indexPack.status, count:indexPack.items ? indexPack.items.length : 0, latency:indexPack.meta && indexPack.meta.latency },
+        { name:"sanmaru-resident-front-fallback", status:fallbackPack ? "shortage-fallback-used" : "not-needed", count:residentFallbackReturnedCount }
+      ],
+      note:"Sanmaru remains the top global information OS/OSAI. This front-supply path is deliberately isolated so SearchBank Index section/page routing is honored before any resident/global fallback."
+    }
+  };
 }
 
 
@@ -3238,6 +3541,11 @@ async function handler(event){
 }
 
 async function runEngine(event, params){
+  const action = low(firstNonEmpty(params && (params.action || params.mode || params.fn), event && event.queryStringParameters && (event.queryStringParameters.action || event.queryStringParameters.mode || event.queryStringParameters.fn)));
+  if(action === "front-supply" || action === "slot-supply" || action === "content-supply" || action === "snapshot-supply" || action === "searchbank-supply"){
+    const merged = Object.assign({}, event && event.queryStringParameters || {}, params || {});
+    return buildSanmaruFrontSupplyPackage(firstNonEmpty(merged.q, merged.query, merged.section, merged.slot, merged.page, merged.targetPage, action), merged);
+  }
   return await runSanmaru({ event: event || {}, raw: params || {}, q: firstNonEmpty(params && params.q, params && params.query), limit: params && params.limit, type: params && (params.type || params.category || params.tab || params.vertical), lang: params && (params.lang || params.uiLang || params.locale), deep: params && params.deep, external: params && params.external, noExternal: params && params.noExternal, disableExternal: params && params.disableExternal, noMedia: params && params.noMedia, disableMedia: params && params.disableMedia, candidatePool: params && (params.candidatePool || params.candidatePoolTarget), expansion: params && (params.expansion || params.searchExpansion), directExternal: params && params.directExternal });
 }
 
