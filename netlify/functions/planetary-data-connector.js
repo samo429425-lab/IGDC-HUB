@@ -27,7 +27,7 @@ let Resilience = null;
 try { Core = require("./core"); } catch(e){}
 try { Resilience = require("./maru-resilience-engine"); } catch(e){}
 
-const VERSION = "planetary-data-hub-v100";
+const VERSION = "planetary-data-hub-v100.1-safe-health-handler-stable";
 
 /* ------------------------------------------------------------
 BASE CONFIG
@@ -91,6 +91,13 @@ function low(x){
   return s(x).trim().toLowerCase();
 }
 
+function truthy(x){
+  if(x === true) return true;
+  if(x === false || x == null) return false;
+  const v = low(x);
+  return !!v && !["0","false","no","off","disable","disabled","null","undefined"].includes(v);
+}
+
 function stableArray(arr){
   return Array.isArray(arr) ? arr : [];
 }
@@ -110,6 +117,83 @@ function logTelemetry(entry){
   if(TELEMETRY.length > TELEMETRY_MAX){
     TELEMETRY.shift();
   }
+}
+
+function jsonResponse(statusCode, payload){
+  return {
+    statusCode,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store, no-cache, must-revalidate",
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "GET,POST,OPTIONS",
+      "access-control-allow-headers": "content-type, authorization, x-sanmaru-admin-token"
+    },
+    body: JSON.stringify(payload || {})
+  };
+}
+
+function mergedRequestParams(event, params){
+  const qp = event?.queryStringParameters || {};
+  return { ...qp, ...(params || {}) };
+}
+
+function fastProbeRequested(params = {}){
+  const action = low(params.action || params.fn || params.cmd || "");
+  const mode = low(params.mode || params.probe || params.health || "");
+  return ["health","probe","ping","status","fast-probe","fast_probe"].includes(action)
+    || ["health","probe","ping","status","fast","light","readonly","read-only"].includes(mode)
+    || truthy(params.fastHealth || params.fastProbe || params.noHeavy || params.noExternal);
+}
+
+function buildFastHealthPayload(event, params = {}){
+  const normalized = normalizeParams(event, { ...params, q: params.q || params.query || "planetary-health" });
+  const selectedSources = selectSources(normalized);
+  return {
+    ok: true,
+    status: "ok",
+    engine: "planetary-data-connector",
+    version: VERSION,
+    mode: "fast-health",
+    role: "external-federation-connector-and-safe-planetary-gateway",
+    noExternalCall: true,
+    maruSearchFallback: false,
+    adapters: {
+      registered: WHITELIST.size,
+      selected: selectedSources.length,
+      names: selectedSources
+    },
+    federation: {
+      nodes: Object.keys(FEDERATION_NODES).length
+    },
+    telemetry: {
+      size: TELEMETRY.length
+    },
+    stats: safeClone(SOURCE_STATS) || {},
+    reputation: safeClone(SOURCE_REPUTATION) || {},
+    generatedAt: nowIso()
+  };
+}
+
+function buildSafeEmptyPayload(reason, event, params = {}){
+  const normalized = normalizeParams(event, params);
+  return {
+    status: "ok",
+    engine: "planetary-data-connector",
+    version: VERSION,
+    query: normalized.q,
+    sources: WHITELIST.size,
+    results: [],
+    items: [],
+    meta: {
+      safeEmpty: true,
+      reason: reason || "no_available_planetary_sources",
+      limit: normalized.limit,
+      selected_sources: [],
+      federation_nodes: Object.keys(FEDERATION_NODES).length,
+      generated_at: nowIso()
+    }
+  };
 }
 
 /* ------------------------------------------------------------
@@ -589,6 +673,12 @@ CONNECT SOURCES
 ------------------------------------------------------------ */
 
 async function connect(event, params = {}){
+  params = mergedRequestParams(event, params);
+
+  if(fastProbeRequested(params)){
+    return buildFastHealthPayload(event, params);
+  }
+
   if(params && params.usePlanetary === false){
   return {
     status: "skipped",
@@ -610,8 +700,11 @@ async function connect(event, params = {}){
 let maruBase = null;
 
 try{
-  const suppressMaruBase = [normalized.raw && normalized.raw.noMaruSearch, normalized.raw && normalized.raw.skipMaruSearch, normalized.raw && normalized.raw.noSanmaru, normalized.raw && normalized.raw.skipSanmaru].some(v => ["1","true","yes","on"].includes(String(v == null ? "" : v).toLowerCase())) || String((normalized.raw && (normalized.raw.from || normalized.raw.source)) || "").toLowerCase() === "sanmaru";
-  if(suppressMaruBase){ throw new Error("maru_search_suppressed_by_sanmaru_guard"); }
+  const suppressMaruBase = !normalized.q
+    || fastProbeRequested(normalized.raw || {})
+    || [normalized.raw && normalized.raw.noMaruSearch, normalized.raw && normalized.raw.skipMaruSearch, normalized.raw && normalized.raw.noSanmaru, normalized.raw && normalized.raw.skipSanmaru].some(v => ["1","true","yes","on"].includes(String(v == null ? "" : v).toLowerCase()))
+    || String((normalized.raw && (normalized.raw.from || normalized.raw.source)) || "").toLowerCase() === "sanmaru";
+  if(suppressMaruBase){ throw new Error("maru_search_suppressed_by_guard"); }
 
   const MaruSearch = require("./maru-search");
 
@@ -686,12 +779,38 @@ for(const r of executed){
   };
 }
 
+async function handler(event = {}){
+  if(event && event.httpMethod === "OPTIONS"){
+    return jsonResponse(204, {});
+  }
+
+  const params = mergedRequestParams(event, {});
+
+  try{
+    if(fastProbeRequested(params)){
+      return jsonResponse(200, buildFastHealthPayload(event, params));
+    }
+
+    const result = await connect(event, params);
+    return jsonResponse(200, result || buildSafeEmptyPayload("empty_planetary_result", event, params));
+  }catch(e){
+    const code = s(e && e.message ? e.message : e) || "planetary_handler_error";
+    logTelemetry({ source:"planetary-handler", status:"safe-empty", error:code });
+    const payload = buildSafeEmptyPayload(code, event, params);
+    payload.status = "warn";
+    payload.ok = false;
+    payload.error = code;
+    return jsonResponse(200, payload);
+  }
+}
+
 /* ------------------------------------------------------------
 EXPORT
 ------------------------------------------------------------ */
 
 module.exports = {
   connect,
+  handler,
   registerSourceAdapter,
   registerSource,
 
