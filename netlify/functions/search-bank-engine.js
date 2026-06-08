@@ -70,7 +70,7 @@ try { CentralCollector = require("./collector"); } catch (e) { CentralCollector 
 let MaruSearch = null;
 try { MaruSearch = require("./maru-search"); } catch (e) { MaruSearch = null; }
 
-const SEARCH_BANK_ENGINE_VERSION = "search-bank-engine-v10.7.0-osai-unified-contract-stable";
+const SEARCH_BANK_ENGINE_VERSION = "search-bank-engine-v10.7.1-front-section-strict-production";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 
 // ---------- small utils ----------
@@ -822,12 +822,80 @@ function channelMatches(itemChannel, filterChannel){
 function itemSlotValues(item){
   item = item || {};
   const bind = item.bind && typeof item.bind === "object" ? item.bind : {};
+  const layerPointer = item.layerPointer && typeof item.layerPointer === "object" ? item.layerPointer : {};
   return {
     channel: low(item.channel || ""),
-    page: [item.page, bind.page].map(low).filter(Boolean),
-    route: [item.route, bind.route].map(low).filter(Boolean),
-    section: [item.section, item.psom_key, item.slotKey, bind.section, bind.psom_key, bind.slot, bind.slotKey, bind.key].map(low).filter(Boolean)
+    page: [item.page, bind.page, layerPointer.page].map(low).filter(Boolean),
+    route: [item.route, bind.route, layerPointer.route].map(low).filter(Boolean),
+    section: [item.section, item.psom_key, item.slotKey, bind.section, bind.psom_key, bind.slot, bind.slotKey, bind.key, layerPointer.section, layerPointer.psom_key, layerPointer.slotKey].map(low).filter(Boolean),
+    tags: Array.isArray(item.tags) ? item.tags.map(low).filter(Boolean) : []
   };
+}
+
+const FRONT_SECTION_ALIAS_MAP = Object.freeze({
+  main1:"home_1", main2:"home_2", main3:"home_3", main4:"home_4", main5:"home_5",
+  home1:"home_1", home2:"home_2", home3:"home_3", home4:"home_4", home5:"home_5",
+  "home-1":"home_1", "home-2":"home_2", "home-3":"home_3", "home-4":"home_4", "home-5":"home_5",
+  "right-top":"home_right_top", right_top:"home_right_top", "home-right-top":"home_right_top",
+  "right-middle":"home_right_middle", right_middle:"home_right_middle", right_mid:"home_right_middle", "home-right-middle":"home_right_middle",
+  "right-bottom":"home_right_bottom", right_bottom:"home_right_bottom", "home-right-bottom":"home_right_bottom",
+  dist1:"distribution-recommend", dist_1:"distribution-recommend", "dist-1":"distribution-recommend", distribution1:"distribution-recommend", distribution_1:"distribution-recommend", "distribution-1":"distribution-recommend",
+  dist2:"distribution-new", dist_2:"distribution-new", "dist-2":"distribution-new", distribution2:"distribution-new", distribution_2:"distribution-new", "distribution-2":"distribution-new",
+  dist3:"distribution-trending", dist_3:"distribution-trending", "dist-3":"distribution-trending", distribution3:"distribution-trending", distribution_3:"distribution-trending", "distribution-3":"distribution-trending",
+  dist4:"distribution-special", dist_4:"distribution-special", "dist-4":"distribution-special", distribution4:"distribution-special", distribution_4:"distribution-special", "distribution-4":"distribution-special",
+  dist5:"distribution-sponsor", dist_5:"distribution-sponsor", "dist-5":"distribution-sponsor", distribution5:"distribution-sponsor", distribution_5:"distribution-sponsor", "distribution-5":"distribution-sponsor",
+  dist6:"distribution-others", dist_6:"distribution-others", "dist-6":"distribution-others", distribution6:"distribution-others", distribution_6:"distribution-others", "distribution-6":"distribution-others",
+  dist7:"distribution-right", dist_7:"distribution-right", "dist-7":"distribution-right", distribution7:"distribution-right", distribution_7:"distribution-right", "distribution-7":"distribution-right",
+  youtube:"social-youtube", instagram:"social-instagram", tiktok:"social-tiktok", facebook:"social-facebook", wechat:"social-wechat", weibo:"social-weibo", pinterest:"social-pinterest", reddit:"social-reddit", twitter:"social-twitter", x:"social-twitter",
+  movie:"media-movie", movies:"media-movie", drama:"media-drama", thriller:"media-thriller", romance:"media-romance", variety:"media-variety", documentary:"media-documentary", animation:"media-animation", music:"media-music", shorts:"media-shorts"
+});
+
+function canonicalFrontSectionKey(v){
+  const raw = low(v).replace(/\s+/g, "-");
+  if(!raw) return "";
+  const normalized = raw.replace(/_/g, "-");
+  return FRONT_SECTION_ALIAS_MAP[raw] || FRONT_SECTION_ALIAS_MAP[normalized] || raw;
+}
+
+function requestedFrontSections(f){
+  const out = new Set();
+  for(const v of [f && f.section, f && f.psom_key, f && f.slotKey]){
+    const key = canonicalFrontSectionKey(v);
+    if(key) out.add(key);
+  }
+  return out;
+}
+
+function itemMatchesFrontSection(item, requestedSet){
+  if(!requestedSet || !requestedSet.size) return true;
+  const vals = itemSlotValues(item);
+  const candidates = vals.section.concat(vals.tags || []);
+  for(const v of candidates){
+    const key = canonicalFrontSectionKey(v);
+    if(key && requestedSet.has(key)) return true;
+  }
+  return false;
+}
+
+function primaryRequestedFrontSection(f){
+  const set = requestedFrontSections(f || {});
+  return set.size ? Array.from(set)[0] : "";
+}
+
+function enforceFrontSectionContract(item, f){
+  if(!item || typeof item !== "object" || !f || !f.strictFrontSection) return item;
+  const key = primaryRequestedFrontSection(f);
+  if(!key) return item;
+  item.section = key;
+  if(!item.psom_key || canonicalFrontSectionKey(item.psom_key) !== key) item.psom_key = key;
+  if(!item.slotKey || canonicalFrontSectionKey(item.slotKey) !== key) item.slotKey = key;
+  const bind = item.bind && typeof item.bind === "object" ? cloneJsonish(item.bind) : {};
+  bind.section = key;
+  bind.psom_key = key;
+  if(!bind.slotKey) bind.slotKey = key;
+  item.bind = bind;
+  if(item.searchBankContract && typeof item.searchBankContract === "object") item.searchBankContract.section = key;
+  return item;
 }
 function itemMatchesFrontChannel(item, filterChannel){
   const allowed = channelAliases(filterChannel);
@@ -1849,6 +1917,7 @@ function applyFilters(items, f){
 
     if(f.type && f.type !== "any" && low(it.type) !== f.type) return false;
     if(f.channel && !itemMatchesFrontChannel(it, f.channel)) return false;
+    if(f.strictFrontSection && !itemMatchesFrontSection(it, f.requestedSections)) return false;
     if(f.lang && low(it.lang||"") !== f.lang) return false;
 
     // geo filters (optional)
@@ -2178,6 +2247,10 @@ if(writeAllowed && (persistCandidates.length || truthy(params.forceSnapshotWrite
   const filters = {
     qLower: low(q),
     type, channel: channel || low(slotContext.channel || ""), lang,
+    section: low(slotContext.section || params.section || params.psom_key || params.slotKey || params.slot || ""),
+    psom_key: low(slotContext.psom_key || params.psom_key || params.section || ""),
+    slotKey: low(params.slotKey || params.slot || slotContext.psom_key || ""),
+    strictFrontSection: !!(slotContext.autoFill && (slotContext.section || slotContext.psom_key || params.section || params.psom_key || params.slotKey || params.slot)),
     // IP geo is intentionally not a hard result filter. It drives policy/ranking via audienceCountry/operationalScore.
     // Hard geo filtering is applied only when country/region/city is explicit in params or query.
     region: explicitGeo.region,
@@ -2190,6 +2263,8 @@ if(writeAllowed && (persistCandidates.length || truthy(params.forceSnapshotWrite
     entity: low(params.entity || params.entity_type || queryIntent.entityHint?.type || ""),
     relaxedQuery: !!(slotContext.autoFill || queryIntent.regionHint || queryIntent.countryHint || queryIntent.sectorHint || queryIntent.entityHint)
   };
+
+  filters.requestedSections = requestedFrontSections(filters);
 
   const searchCorpus = snapshotCorpus.concat(normalized.length ? normalized : []);
   const contractCorpus = (searchCorpus.length ? searchCorpus : (bank.items || [])).map(it => applyUnifiedSupplyContract(cloneJsonish(it), adapterCtx));
@@ -2216,10 +2291,11 @@ if(writeAllowed && (persistCandidates.length || truthy(params.forceSnapshotWrite
     enriched.compositeScore = item.compositeScore;
     enriched.operationalScore = item.operationalScore;
     enriched.supplyScore = item.supplyScore;
+    if(filters.strictFrontSection) enforceFrontSectionContract(enriched, filters);
     return applyOperationalPolicy(enriched, adapterCtx);
   });
 
-  const commercePage = applyCommerceEngineToItems(page, adapterCtx).map(it => applyUnifiedSupplyContract(it, adapterCtx));
+  const commercePage = applyCommerceEngineToItems(page, adapterCtx).map(it => applyUnifiedSupplyContract(enforceFrontSectionContract(it, filters), adapterCtx));
   const contractSummary = summarizeSearchBankContracts(commercePage, adapterCtx);
 
 	
@@ -2252,6 +2328,9 @@ return {
   filters: {
     type: (type!=="any")?type:undefined,
     channel: channel||undefined,
+    section: filters.section||undefined,
+    psom_key: filters.psom_key||undefined,
+    strictFrontSection: filters.strictFrontSection || undefined,
     lang: lang||undefined,
     country: filters.country||undefined,
     state: filters.state||undefined,
@@ -2320,6 +2399,9 @@ exports.computeSupplyScore = computeSupplyScore;
 exports.writeModeEnabled = writeModeEnabled;
 exports.searchBankSyncEnabled = searchBankSyncEnabled;
 exports.itemMatchesFrontChannel = itemMatchesFrontChannel;
+exports.canonicalFrontSectionKey = canonicalFrontSectionKey;
+exports.itemMatchesFrontSection = itemMatchesFrontSection;
+exports.enforceFrontSectionContract = enforceFrontSectionContract;
 exports.searchBankMaxLimit = searchBankMaxLimit;
 exports.resolveSearchBankLimit = resolveSearchBankLimit;
 exports.normalizeSourceValue = normalizeSourceValue;
