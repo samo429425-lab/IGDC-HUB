@@ -70,6 +70,9 @@ try { CentralCollector = require("./collector"); } catch (e) { CentralCollector 
 let MaruSearch = null;
 try { MaruSearch = require("./maru-search"); } catch (e) { MaruSearch = null; }
 
+const SEARCH_BANK_ENGINE_VERSION = "search-bank-engine-v10.7.0-osai-unified-contract-stable";
+const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
+
 // ---------- small utils ----------
 function nowIso(){ return (Core && Core.nowIso) ? Core.nowIso() : new Date().toISOString(); }
 function requestId(){ return (Core && Core.requestId) ? Core.requestId() : crypto.randomBytes(12).toString("hex"); }
@@ -99,6 +102,134 @@ function normalizeSourceValue(v){
     return firstNonEmpty(v.name, v.provider, v.engine, v.platform, v.type, v.id, v.key, v.label, v.url, v.href, v.source);
   }
   return s(v).trim();
+}
+function searchBankContractSource(item){
+  item = item || {};
+  const d = (item.osaiDiscernment && typeof item.osaiDiscernment === "object") ? item.osaiDiscernment : {};
+  return (item.sanmaruSearchBankContract && typeof item.sanmaruSearchBankContract === "object") ? item.sanmaruSearchBankContract
+    : (item.searchBankContract && typeof item.searchBankContract === "object") ? item.searchBankContract
+    : (item.searchBankUnifiedContract && typeof item.searchBankUnifiedContract === "object") ? item.searchBankUnifiedContract
+    : (d.searchBankContract && typeof d.searchBankContract === "object") ? d.searchBankContract
+    : {};
+}
+function nestedBool(obj, path, fallback){
+  let cur = obj || {};
+  for(const key of path){
+    if(cur == null || typeof cur !== "object" || !(key in cur)) return fallback;
+    cur = cur[key];
+  }
+  if(cur === true || cur === false) return cur;
+  if(cur == null || cur === "") return fallback;
+  return truthy(cur);
+}
+function firstDefined(){
+  for(const v of arguments){ if(v !== undefined) return v; }
+  return undefined;
+}
+function explicitFalse(v){ return v === false || low(v) === "false" || low(v) === "0" || low(v) === "no"; }
+function searchBankPgState(ctx){
+  const p = (ctx && ctx.params) || {};
+  const live = truthy(p.paymentLive || p.pgLive || p.pgExecution || p.pgApproved || process.env.IGDC_PAYMENT_LIVE || process.env.IGDC_PG_LIVE || process.env.PAYMENT_LIVE || process.env.PG_EXECUTION || process.env.PG_APPROVED);
+  return { pgExecution:!!live, paymentLive:!!live, status:live ? "pg-live" : "pending-pg-approval", policy:"pay-config-is-structural-readiness-only-until-pg-approval" };
+}
+function buildSearchBankContract(item, ctx){
+  item = item || {};
+  const d = (item.osaiDiscernment && typeof item.osaiDiscernment === "object") ? item.osaiDiscernment : {};
+  const c = searchBankContractSource(item);
+  const source = (d.source && typeof d.source === "object") ? d.source : {};
+  const supply = (d.supply && typeof d.supply === "object") ? d.supply : (item.supplyChain && typeof item.supplyChain === "object" ? item.supplyChain : {});
+  const payment = (d.payment && typeof d.payment === "object") ? d.payment : {};
+  const eligibility = (d.eligibility && typeof d.eligibility === "object") ? d.eligibility : {};
+  const safety = (d.safety && typeof d.safety === "object") ? d.safety : {};
+  const pg = searchBankPgState(ctx);
+  const trustTier = firstNonEmpty(item.trustTier, c.trustTier, d.trustTier, item.sanmaruTrust && item.sanmaruTrust.tier, "C");
+  const riskLevel = firstNonEmpty(item.riskLevel, c.riskLevel, d.riskLevel, item.sanmaruTrust && item.sanmaruTrust.riskLevel, "low");
+  const blockedReason = firstNonEmpty(item.blockedReason, c.blockedReason, d.blockedReason, item.sanmaruTrust && item.sanmaruTrust.blockedReason, "");
+  const blocked = !!(item.blocked === true || c.blocked === true || d.blocked === true || (item.sanmaruTrust && item.sanmaruTrust.blocked === true) || blockedReason);
+  const supplyCategory = Array.isArray(item.supplyCategory) ? item.supplyCategory : (Array.isArray(c.supplyCategory) ? c.supplyCategory : (Array.isArray(supply.supplyCategory) ? supply.supplyCategory : []));
+  const paymentReady = !!firstDefined(item.paymentReady, c.paymentReady, payment.paymentReady, supply.paymentReady, false);
+  const orderReady = !!firstDefined(item.orderReady, c.orderReady, payment.orderReady, supply.orderReady, false);
+  const frontSupplyAllowed = blocked ? false : !explicitFalse(firstDefined(item.frontSupplyAllowed, c.frontSupplyAllowed, eligibility.frontSupplyAllowed, true));
+  const searchBankEligible = blocked ? false : !explicitFalse(firstDefined(item.searchBankEligible, c.searchBankEligible, eligibility.searchBankEligible, true));
+  const snapshotEligible = blocked ? false : !explicitFalse(firstDefined(item.snapshotEligible, c.snapshotEligible, eligibility.snapshotEligible, searchBankEligible));
+  const indexEligible = blocked ? false : !explicitFalse(firstDefined(item.indexEligible, c.indexEligible, eligibility.indexEligible, searchBankEligible));
+  return {
+    contractVersion:firstNonEmpty(c.contractVersion, SEARCH_BANK_CONTRACT_VERSION),
+    receivingEngine:"search-bank",
+    receivingVersion:SEARCH_BANK_ENGINE_VERSION,
+    sourceEngine:firstNonEmpty(c.sourceEngine, d.sourceEngine, item.sourceEngine, item.engine, null),
+    sourceVersion:firstNonEmpty(c.sourceVersion, d.sourceVersion, item.sourceVersion, null),
+    candidateId:firstNonEmpty(c.candidateId, item.id, item.indexId, item.originalId, stableHash([item.title, item.url, item.section].join("|"))),
+    page:firstNonEmpty(c.page, item.page, item.route, item.layerPointer && item.layerPointer.page, item.bind && item.bind.page),
+    section:firstNonEmpty(c.section, item.section, item.psom_key, item.slotKey, item.layerPointer && item.layerPointer.section, item.bind && item.bind.section),
+    supplyCategory,
+    sourceTrustScore:Number(firstDefined(c.sourceTrustScore, d.trustScore, item.sourceTrustScore, item.sourceTrust, 0)) || 0,
+    trustTier,
+    riskLevel,
+    blocked,
+    blockedReason:blockedReason || null,
+    officialSource:!!firstDefined(item.officialSource, c.officialSource, source.officialSource, supply.officialSource, false),
+    institutionVerified:!!firstDefined(item.institutionVerified, c.institutionVerified, source.institutionVerified, supply.institutionVerified, false),
+    producerVerified:!!firstDefined(item.producerVerified, c.producerVerified, supply.producerVerified, false),
+    producerType:firstNonEmpty(item.producerType, c.producerType, supply.producerType, "general_source"),
+    directProducerChannel:!!firstDefined(item.directProducerChannel, c.directProducerChannel, supply.directProducerChannel, false),
+    intermediaryRisk:firstNonEmpty(item.intermediaryRisk, c.intermediaryRisk, supply.intermediaryRisk, "low"),
+    paymentReady,
+    orderReady,
+    paymentReadinessScore:Number(firstDefined(item.paymentReadinessScore, c.paymentReadinessScore, payment.readinessScore, 0)) || 0,
+    paymentStructureReady:paymentReady,
+    paymentLive:pg.paymentLive,
+    pgExecution:pg.pgExecution,
+    pgStatus:pg.status,
+    supplyChainReady:!!firstDefined(item.supplyChainReady, c.supplyChainReady, supply.supplyChainReady, false),
+    harmfulContentRisk:firstNonEmpty(item.harmfulContentRisk, c.harmfulContentRisk, safety.harmfulContentRisk, "low"),
+    illegalSiteRisk:firstNonEmpty(item.illegalSiteRisk, c.illegalSiteRisk, safety.illegalSiteRisk, "low"),
+    unsafeProductRisk:firstNonEmpty(item.unsafeProductRisk, c.unsafeProductRisk, safety.unsafeProductRisk, "low"),
+    frontSupplyAllowed,
+    searchBankEligible,
+    snapshotEligible,
+    indexEligible,
+    contractAction: blocked ? "block" : (snapshotEligible ? "accept-for-snapshot" : (searchBankEligible ? "hold-for-searchbank-review" : "hold-for-review")),
+    storagePolicy: blocked ? "do-not-route-dangerous-source" : "route-safe-candidate-with-evidence-meta",
+    pgPolicy:pg.policy
+  };
+}
+function applyUnifiedSupplyContract(item, ctx){
+  if(!item || typeof item !== "object") return item;
+  const c = buildSearchBankContract(item, ctx);
+  item.searchBankContract = c;
+  item.searchBankEligible = c.searchBankEligible;
+  item.snapshotEligible = c.snapshotEligible;
+  item.indexEligible = c.indexEligible;
+  item.frontSupplyAllowed = c.frontSupplyAllowed;
+  item.trustTier = c.trustTier;
+  item.riskLevel = c.riskLevel;
+  item.blockedReason = c.blockedReason || undefined;
+  item.paymentLive = c.paymentLive;
+  item.pgExecution = c.pgExecution;
+  item.pgStatus = c.pgStatus;
+  item.paymentStructureReady = c.paymentStructureReady;
+  item.searchBankPipeline = Object.assign({}, item.searchBankPipeline || {}, {
+    unifiedContract:true,
+    contractVersion:c.contractVersion,
+    action:c.contractAction,
+    accepted:!c.blocked && c.searchBankEligible,
+    snapshotEligible:c.snapshotEligible,
+    indexEligible:c.indexEligible,
+    frontSupplyAllowed:c.frontSupplyAllowed,
+    pgStatus:c.pgStatus
+  });
+  return item;
+}
+function searchBankEligibilityIssues(item, ctx){
+  if(!item || typeof item !== "object") return [];
+  const c = item.searchBankContract || buildSearchBankContract(item, ctx);
+  const issues = [];
+  if(c.blocked) issues.push("osai_blocked" + (c.blockedReason ? ":" + c.blockedReason : ""));
+  if(c.searchBankEligible === false) issues.push("searchbank_not_eligible");
+  if(ctx && ctx.slotContext && ctx.slotContext.autoFill && c.frontSupplyAllowed === false) issues.push("front_supply_not_allowed");
+  if((ctx && ctx.params && truthy(ctx.params.snapshotWrite || ctx.params.writeSnapshot || ctx.params.syncSearchBank)) && c.snapshotEligible === false) issues.push("snapshot_not_eligible");
+  return issues;
 }
 function adminTokenExpected(){
   return firstNonEmpty(process.env.SANMARU_ADMIN_TOKEN, process.env.MARU_ADMIN_TOKEN, process.env.ADMIN_TOKEN);
@@ -475,12 +606,18 @@ function resolveSlotPolicy(params={}, queryIntent={}){
     else if(joined.includes("network")) channel = "network";
     else if(joined.includes("home")) channel = "home";
   }
-  if(channel === "tourism") channel = "tour";
-  if(channel === "commerce") channel = "distribution";
+  if(channel === "tourism" || channel === "tourhub" || channel === "tour-hub") channel = "tour";
+  if(channel === "commerce" || channel === "distributionhub" || channel === "distribution-hub") channel = "distribution";
+  if(channel === "networkhub" || channel === "network-hub") channel = "network";
+  if(channel === "mediahub" || channel === "media-hub") channel = "media";
+  if(channel === "socialnetwork" || channel === "social-network" || channel === "socialhub" || channel === "social-hub") channel = "social";
+  if(channel === "literature_academic" || channel === "literature-academic") channel = "academic";
   const policy = FRONT_SLOT_POLICIES[channel] || null;
   const isGlobalNews = channel === "donation" && /global.*news|news.*global|global-news|글로벌.*뉴스|뉴스/.test(joined);
-  const autoFill = truthy(params.autoFill || params.autofill || params.slotFill || params.frontFill || params.pageFill || params.snapshotFill) || !!policy;
-  return { channel:channel||null, page:params.page||params.channel||null, section:params.section||params.bind_section||params.psom_key||null, psom_key:params.psom_key||params.section||null, route:params.route||null, policy, isGlobalNews, autoFill, minItems:safeInt(params.minItems||params.slot_min||policy?.minItems, policy?.minItems||10, 1, 200) };
+  const action = low(params.action || params.mode || params.fn || "");
+  const frontSupplyAction = ["front-supply","front_supply","slot-supply","slot_supply","front","slot"].includes(action);
+  const autoFill = truthy(params.autoFill || params.autofill || params.slotFill || params.frontFill || params.pageFill || params.snapshotFill || params.frontSupply || params.slotSupply) || frontSupplyAction || !!policy;
+  return { channel:channel||null, page:params.page||params.channel||null, section:params.section||params.bind_section||params.psom_key||params.slotKey||params.slot||null, psom_key:params.psom_key||params.section||params.slotKey||params.slot||null, route:params.route||null, policy, isGlobalNews, autoFill, minItems:safeInt(params.minItems||params.slot_min||policy?.minItems, policy?.minItems||10, 1, 200), action:frontSupplyAction ? action : undefined };
 }
 
 function slotExternalEnabled(ctx, adapterName){
@@ -739,6 +876,7 @@ function policyIssuesForItem(item, ctx){
   }
   if(channel === "donation" && policy?.blockedChannels?.includes("donation")) issues.push("donation_blocked_for_country");
   issues.push(...riskDomainIssues(item));
+  issues.push(...searchBankEligibilityIssues(item, ctx));
   issues.push(...agingIssues(item));
   return issues;
 }
@@ -847,6 +985,12 @@ function computeSupplyScore(ctx, item){
   if(ch==="media" && (ent==="video" || item?.type==="video" || item?.media)) score+=0.25;
   if(ch==="donation" && (item?.org || item?.donation || ["organization","institution","campaign"].includes(ent))) score+=0.25;
   if(item?.producer?.name || item?.producer?.id) score+=0.1;
+  const contract = item && (item.searchBankContract || searchBankContractSource(item));
+  if(contract && contract.producerVerified) score+=0.1;
+  if(contract && contract.directProducerChannel) score+=0.08;
+  if(contract && contract.supplyChainReady) score+=0.08;
+  if(contract && contract.snapshotEligible) score+=0.05;
+  if(contract && contract.blocked) score-=0.9;
   if(item?.market?.exportable) score+=0.1;
   if(agingIssues(item).includes("dead_link_flag")) score-=0.5;
   if(agingIssues(item).includes("stale_item")) score-=0.15;
@@ -1274,12 +1418,14 @@ function normalizeItem(raw, ctx={}){
 
   applySlotContract(normalized, ctx);
   preserveBankContract(normalized, src);
+  applyUnifiedSupplyContract(normalized, ctx);
   return normalized;
 }
 
 
 const CONTRACT_FIELDS = [
-  "channel","section","page","psom_key","category","semantic_category","bind","bank_ref","rank","verify","link","org","donation","media","thumbnail","thumb","image","tags","route"
+  "channel","section","page","psom_key","category","semantic_category","bind","bank_ref","rank","verify","link","org","donation","media","thumbnail","thumb","image","tags","route",
+  "osaiDiscernment","sanmaruTrust","supplyChain","sanmaruSearchBankContract","searchBankContract","searchBankUnifiedContract","searchBankPipeline","supplyCategory","producerType","officialSource","institutionVerified","producerVerified","directProducerChannel","intermediaryRisk","paymentReady","orderReady","paymentStructureReady","paymentLive","pgExecution","pgStatus","supplyChainReady","frontSupplyAllowed","searchBankEligible","snapshotEligible","indexEligible","trustTier","riskLevel","blockedReason","harmfulContentRisk","illegalSiteRisk","unsafeProductRisk","sanmaruEvidence","acceptedReason","warningReason","trustEvidence","paymentEvidence","producerEvidence","officialEvidence","safetyEvidence"
 ];
 
 function preserveBankContract(item, original){
@@ -1312,6 +1458,7 @@ function validateBankItem(item){
   }
   if(item?.channel === "donation" && !item.donation) issues.push("missing_donation_payload");
   if(item?.channel === "media" && !item.media) issues.push("missing_media_payload");
+  issues.push(...searchBankEligibilityIssues(item, {}));
 
   return { ok: issues.length === 0, issues };
 }
@@ -1366,6 +1513,13 @@ function computeTrustScore(item){
   if(/\.(gov|go|edu|ac)\b/.test(text) || /government|official|ministry|university/.test(text)) score += 0.25;
   if(/wikipedia|reuters|apnews|bbc|nytimes|wsj|ft/.test(text)) score += 0.15;
   if(item.verify?.status === "verified" || item.org?.verified === true) score += 0.2;
+  const contract = item && (item.searchBankContract || searchBankContractSource(item));
+  if(contract && contract.officialSource) score += 0.12;
+  if(contract && contract.institutionVerified) score += 0.1;
+  if(contract && contract.producerVerified) score += 0.08;
+  if(contract && contract.trustTier === "A+") score += 0.1;
+  if(contract && contract.trustTier === "A") score += 0.07;
+  if(contract && contract.blocked) score = 0;
   if(item.quality?.trust != null) score = Math.max(score, Math.min(1, Number(item.quality.trust)));
   return Math.max(0, Math.min(1, score));
 }
@@ -1422,17 +1576,26 @@ class SearchBankIndexAdapter extends BaseSourceAdapter {
     try{
       const q = ctx.queryIntent?.raw || ctx.q || ctx.slotContext?.section || ctx.slotContext?.channel || ctx.params?.section || ctx.params?.page || "front";
       const params = {
+        action: ctx.slotContext?.autoFill ? "front-supply" : undefined,
         q,
         query: q,
         type: ctx.params?.type || ctx.slotContext?.channel || "all",
+        channel: ctx.slotContext?.channel || ctx.params?.channel || ctx.params?.page || undefined,
+        page: ctx.slotContext?.page || ctx.params?.page || ctx.params?.channel || undefined,
+        section: ctx.slotContext?.section || ctx.params?.section || ctx.params?.psom_key || ctx.params?.slotKey || ctx.params?.slot || undefined,
+        psom_key: ctx.slotContext?.psom_key || ctx.params?.psom_key || ctx.params?.section || undefined,
+        slotKey: ctx.params?.slotKey || ctx.params?.slot || ctx.slotContext?.psom_key || undefined,
         limit: Math.min(ctx.limit || 1000, searchBankMaxLimit()),
         includePlaceholders: !!ctx.slotContext?.autoFill,
         frontSupply: !!ctx.slotContext?.autoFill,
+        slotSupply: !!ctx.slotContext?.autoFill,
         layerMode: !!ctx.slotContext?.autoFill,
+        compact: false,
         facets: false
       };
       let res = null;
-      if(typeof SearchBankIndex.query === "function") res = SearchBankIndex.query(params);
+      if(ctx.slotContext?.autoFill && typeof SearchBankIndex.runEngine === "function") res = await SearchBankIndex.runEngine({ __sanmaruInternal:true }, params);
+      else if(typeof SearchBankIndex.query === "function") res = SearchBankIndex.query(params);
       else if(typeof SearchBankIndex.runEngine === "function") res = await SearchBankIndex.runEngine({ __sanmaruInternal:true }, params);
       else if(typeof SearchBankIndex.handler === "function"){
         const out = await SearchBankIndex.handler({ httpMethod:"GET", queryStringParameters:params, __sanmaruInternal:true });
@@ -1832,6 +1995,45 @@ function mergeBankItems(existingItems, incomingItems){
   return Array.from(byId.values());
 }
 
+function summarizeSearchBankContracts(items, ctx){
+  const arr = Array.isArray(items) ? items : [];
+  const out = {
+    contractVersion:SEARCH_BANK_CONTRACT_VERSION,
+    engineVersion:SEARCH_BANK_ENGINE_VERSION,
+    total:arr.length,
+    blocked:0,
+    frontSupplyAllowed:0,
+    searchBankEligible:0,
+    snapshotEligible:0,
+    indexEligible:0,
+    paymentStructureReady:0,
+    paymentLive:0,
+    pgExecution:0,
+    supplyChainReady:0,
+    trustTiers:{},
+    riskLevels:{},
+    policy:"accept-safe-abundant-candidates-but-do-not-mark-pg-live-until-approved"
+  };
+  for(const item of arr){
+    const c = item && (item.searchBankContract || buildSearchBankContract(item, ctx));
+    if(!c) continue;
+    if(c.blocked) out.blocked++;
+    if(c.frontSupplyAllowed) out.frontSupplyAllowed++;
+    if(c.searchBankEligible) out.searchBankEligible++;
+    if(c.snapshotEligible) out.snapshotEligible++;
+    if(c.indexEligible) out.indexEligible++;
+    if(c.paymentStructureReady) out.paymentStructureReady++;
+    if(c.paymentLive) out.paymentLive++;
+    if(c.pgExecution) out.pgExecution++;
+    if(c.supplyChainReady) out.supplyChainReady++;
+    const tier = c.trustTier || "unknown";
+    const risk = c.riskLevel || "unknown";
+    out.trustTiers[tier] = (out.trustTiers[tier] || 0) + 1;
+    out.riskLevels[risk] = (out.riskLevels[risk] || 0) + 1;
+  }
+  return out;
+}
+
 async function runEngine(event, params={}){
   const ip =
   event?.headers?.["x-forwarded-for"] ||
@@ -1900,6 +2102,7 @@ const offset = safeInt(params.offset, 0, 0, 100000);
     if(adapterName === "snapshot" || adapterName === "index"){
       const rawSnapshot = { ...r };
       delete rawSnapshot.__adapter;
+      applyUnifiedSupplyContract(rawSnapshot, adapterCtx);
       snapshotCorpus.push(rawSnapshot);
       continue;
     }
@@ -1989,7 +2192,8 @@ if(writeAllowed && (persistCandidates.length || truthy(params.forceSnapshotWrite
   };
 
   const searchCorpus = snapshotCorpus.concat(normalized.length ? normalized : []);
-  let filtered = dedup(applyFilters(searchCorpus.length ? searchCorpus : (bank.items || []), filters)).filter(it => policyAcceptsItem(it, adapterCtx));
+  const contractCorpus = (searchCorpus.length ? searchCorpus : (bank.items || [])).map(it => applyUnifiedSupplyContract(cloneJsonish(it), adapterCtx));
+  let filtered = dedup(applyFilters(contractCorpus, filters)).filter(it => policyAcceptsItem(it, adapterCtx));
 
   const qForScore = q || "";
   const scored = filtered.map(it=> ({...it, qualityScore: computeQualityScore(qForScore, it), compositeScore: computeCompositeScore(adapterCtx, it), operationalScore: computeOperationalScore(adapterCtx, it), supplyScore: computeSupplyScore(adapterCtx, it)}));
@@ -2015,7 +2219,8 @@ if(writeAllowed && (persistCandidates.length || truthy(params.forceSnapshotWrite
     return applyOperationalPolicy(enriched, adapterCtx);
   });
 
-  const commercePage = applyCommerceEngineToItems(page, adapterCtx);
+  const commercePage = applyCommerceEngineToItems(page, adapterCtx).map(it => applyUnifiedSupplyContract(it, adapterCtx));
+  const contractSummary = summarizeSearchBankContracts(commercePage, adapterCtx);
 
 	
 /* ===== SNAPSHOT AUTO PIPELINE ===== */
@@ -2071,6 +2276,9 @@ return {
     operational_policy: operationalPolicy,
     slot_deficiency: slotDeficiency,
     source_health: served.source_health || undefined,
+    search_bank_engine_version: SEARCH_BANK_ENGINE_VERSION,
+    unified_supply_contract: contractSummary,
+    pg_policy: searchBankPgState(adapterCtx),
     sector_context: queryIntent.sectorHint || undefined,
     entity_context: queryIntent.entityHint || undefined,
     adapters: served.adapters || undefined,
@@ -2115,6 +2323,11 @@ exports.itemMatchesFrontChannel = itemMatchesFrontChannel;
 exports.searchBankMaxLimit = searchBankMaxLimit;
 exports.resolveSearchBankLimit = resolveSearchBankLimit;
 exports.normalizeSourceValue = normalizeSourceValue;
+exports.SEARCH_BANK_ENGINE_VERSION = SEARCH_BANK_ENGINE_VERSION;
+exports.SEARCH_BANK_CONTRACT_VERSION = SEARCH_BANK_CONTRACT_VERSION;
+exports.buildSearchBankContract = buildSearchBankContract;
+exports.applyUnifiedSupplyContract = applyUnifiedSupplyContract;
+exports.summarizeSearchBankContracts = summarizeSearchBankContracts;
 
 exports.handler = async function(event){
   try{
