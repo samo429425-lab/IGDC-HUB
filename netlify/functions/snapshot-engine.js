@@ -32,9 +32,10 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.1-searchbank-contract-production-stable";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.2-section-cap-seed-preserve-production-stable";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
+const SECTION_SLOT_LIMIT = 100;
 
 function uniq(arr) {
   const out = [];
@@ -220,11 +221,11 @@ function sanitizeSectionCollection(sections, pageName) {
   if (!sections || typeof sections !== "object") return sections;
   for (const [sectionKey, sectionValue] of Object.entries(sections)) {
     if (Array.isArray(sectionValue)) {
-      sections[sectionKey] = sanitizeSnapshotArray(sectionValue, pageName, sectionKey);
+      sections[sectionKey] = capSnapshotList(sanitizeSnapshotArray(sectionValue, pageName, sectionKey), pageName, sectionKey);
       continue;
     }
     if (sectionValue && typeof sectionValue === "object" && Array.isArray(sectionValue.slots)) {
-      sectionValue.slots = sanitizeSnapshotArray(sectionValue.slots, pageName, sectionKey);
+      sectionValue.slots = capSnapshotList(sanitizeSnapshotArray(sectionValue.slots, pageName, sectionKey), pageName, sectionKey);
     }
   }
   return sections;
@@ -232,6 +233,100 @@ function sanitizeSectionCollection(sections, pageName) {
 
 function internalPlaceholderImage() {
   return "/assets/img/placeholder.png";
+}
+
+function sectionSlotLimit(_pageName, _sectionKey, fallback) {
+  const n = Number(fallback || SECTION_SLOT_LIMIT);
+  return Number.isFinite(n) && n > 0 ? Math.min(SECTION_SLOT_LIMIT, Math.max(1, Math.trunc(n))) : SECTION_SLOT_LIMIT;
+}
+
+function urlOfSnapshotItem(item) {
+  if (!item || typeof item !== "object") return "";
+  return String(item.url || item.link || item.href || item.video || item.videoUrl || "").trim();
+}
+
+function imageOfSnapshotItem(item) {
+  if (!item || typeof item !== "object") return "";
+  return String(item.thumbnail || item.thumb || item.image || item.poster || "").trim();
+}
+
+function isPlaceholderUrlValue(url) {
+  const u = String(url || "").trim().toLowerCase();
+  if (!u || u === "#" || u === "about:blank") return true;
+  if (u.startsWith("javascript:")) return true;
+  try {
+    const h = new URL(u).hostname.replace(/^www\./, "");
+    return h === "example.com" || h === "example.edu" || h.endsWith(".example.com") || h.endsWith(".example.edu");
+  } catch (_e) {
+    return false;
+  }
+}
+
+function isSampleAssetValue(src) {
+  const s = String(src || "").trim().toLowerCase();
+  return !s || s.includes("/assets/sample/") || s.includes("/assets/img/placeholder") || s.includes("placeholder.png");
+}
+
+function isSeedLikeSnapshotSlot(item) {
+  if (!item || typeof item !== "object") return true;
+  if (item.sample === true || item.isSample === true || item.placeholder === true || item.replaceableSlot === true) return true;
+  const title = String(item.title || item.name || "").trim();
+  if (/^(network|home|distribution|media|social|tour|donation)\s+item\s+\d+$/i.test(title)) return true;
+  if (isPlaceholderUrlValue(urlOfSnapshotItem(item))) return true;
+  if (isSampleAssetValue(imageOfSnapshotItem(item))) return true;
+  return false;
+}
+
+function isRealIncomingCandidate(raw) {
+  if (!raw || typeof raw !== "object") return false;
+  if (raw.realContent === true || raw.verified === true || raw.producerVerified === true || raw.officialSource === true) return true;
+  const url = urlOfSnapshotItem(raw);
+  const img = imageOfSnapshotItem(raw);
+  const title = String(raw.title || raw.name || "").trim();
+  if (isPlaceholderUrlValue(url)) return false;
+  if (isSampleAssetValue(img) && !/youtu|vimeo|tiktok/i.test(url)) return false;
+  if (/^(network|home|distribution|media|social|tour|donation)\s+item\s+\d+$/i.test(title)) return false;
+  return /^https?:\/\//i.test(url);
+}
+
+function snapshotIdOf(item, fields) {
+  for (const f of Array.isArray(fields) ? fields : ["id"]) {
+    const v = item && item[f];
+    if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+  }
+  return item ? stableId(JSON.stringify(item)) : "";
+}
+
+function pushOrReplaceSnapshotSlot(list, card, raw, opts) {
+  if (!Array.isArray(list) || !card || typeof card !== "object") return false;
+  opts = opts || {};
+  const limit = sectionSlotLimit(opts.pageName, opts.sectionKey, opts.limit || SECTION_SLOT_LIMIT);
+  const idFields = opts.idFields || ["id"];
+  const incomingId = snapshotIdOf(card, idFields);
+
+  if (list.some(existing => snapshotIdOf(existing, idFields) === incomingId)) return false;
+
+  if (list.length < limit) {
+    list.push(card);
+    return true;
+  }
+
+  if (!isRealIncomingCandidate(raw)) return false;
+
+  const replaceIndex = list.findIndex(isSeedLikeSnapshotSlot);
+  if (replaceIndex < 0) return false;
+
+  const previous = list[replaceIndex] || {};
+  if (previous.slotId !== undefined && card.slotId === undefined) card.slotId = previous.slotId;
+  if (previous.slotId !== undefined && card.slotId !== previous.slotId) card.slotId = previous.slotId;
+  list[replaceIndex] = card;
+  return true;
+}
+
+function capSnapshotList(list, pageName, sectionKey) {
+  if (!Array.isArray(list)) return [];
+  const limit = sectionSlotLimit(pageName, sectionKey);
+  return list.length > limit ? list.slice(0, limit) : list;
 }
 
 function getSnapshotSections(snapshot, pageName) {
@@ -388,42 +483,34 @@ function enforceSnapshotFileLimit(pageName, bankItems) {
   if (!sections) return;
   sanitizeSectionCollection(sections, pageName);
 
-  const limit = LIMIT_MAP[pageName] || LIMIT_MAP.default;
-
-  let currentCount = 0;
   const usedIds = new Set();
-
-  Object.values(sections).forEach(arr => {
-    if (!Array.isArray(arr)) return;
-    currentCount += arr.length;
-    arr.forEach(item => {
+  for (const sectionValue of Object.values(sections)) {
+    const arr = Array.isArray(sectionValue) ? sectionValue : (sectionValue && Array.isArray(sectionValue.slots) ? sectionValue.slots : []);
+    for (const item of arr) {
       if (item && item.id) usedIds.add(item.id);
-    });
-  });
-
-  if (currentCount >= limit) return;
-
-  const need = limit - currentCount;
-  let filled = 0;
-
-  const preferredSections = Object.keys(sections);
-  if (!preferredSections.length) return;
+      if (item && item.contentId) usedIds.add(item.contentId);
+    }
+  }
 
   for (const raw of (Array.isArray(bankItems) ? bankItems : [])) {
-    if (filled >= need) break;
-
     const id = raw?.id || stableId(JSON.stringify(raw));
     if (usedIds.has(id)) continue;
 
     const sectionKey = resolveLimitSectionKey(pageName, raw, sections);
-    if (!snapshotCandidateAllowed(raw, { pageName, sectionKey })) continue;
     if (!sectionKey || !sections[sectionKey]) continue;
+    if (!snapshotCandidateAllowed(raw, { pageName, sectionKey })) continue;
 
-    sections[sectionKey].push(normalizeLimitCard(raw, { pageName, sectionKey }));
-    usedIds.add(id);
-    filled++;
+    const target = sections[sectionKey];
+    const card = normalizeLimitCard(raw, { pageName, sectionKey });
+    const changed = Array.isArray(target)
+      ? pushOrReplaceSnapshotSlot(target, card, raw, { pageName, sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] })
+      : (target && Array.isArray(target.slots)
+          ? pushOrReplaceSnapshotSlot(target.slots, card, raw, { pageName, sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] })
+          : false);
+    if (changed) usedIds.add(id);
   }
 
+  sanitizeSectionCollection(sections, pageName);
   setSnapshotSections(snapshot, pageName, sections);
   writeSnapshotJson(fileName, snapshot);
 }
@@ -776,11 +863,9 @@ const sectionKey = HOME_SECTION_ALIAS[rawSectionKey] || rawSectionKey;
     const existing = homeSections[sectionKey];
     const id = item.id || stableId(JSON.stringify(item));
 
-if (existing.find(i => i.id === id)) continue;
+if (existing.find(i => i.id === id || i.contentId === id)) continue;
 
-if (existing.length >= 5) continue;
-
-existing.push(enrichSnapshotCard({
+const card = enrichSnapshotCard({
   id,
   title: item.title || item.name || "Untitled",
   summary: item.summary || "",
@@ -795,7 +880,9 @@ existing.push(enrichSnapshotCard({
     pageName: "home",
     sectionKey
   })
-}, item));
+}, item);
+
+pushOrReplaceSnapshotSlot(existing, card, item, { pageName: "home", sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] });
   }
 
   return frontSnap;
@@ -850,12 +937,11 @@ function handleNetworkSnapshot(bank) {
 
     if (rawKey !== "network-right") continue;
     if (!snapshotCandidateAllowed(item, { pageName: "network", sectionKey: "network-right" })) continue;
-    if (count >= NETWORK_LIMIT) break;
 
     const id = item.id || stableId(JSON.stringify(item));
     if (existingIds.has(id)) continue;
 
-    snapshot.items.push(enrichSnapshotCard({
+    const card = enrichSnapshotCard({
       id,
       title: item.title || item.name || "Untitled",
       summary: item.summary || "",
@@ -866,7 +952,7 @@ function handleNetworkSnapshot(bank) {
         item.image ||
         "/assets/img/placeholder.png",
       psom_key: "network-right",
-      route: item.route || "distribution",
+      route: item.route || "networkhub",
       type: item.type || "product",
       priority: item.priority || 0,
       ...buildTrackingMeta(item, {
@@ -875,12 +961,15 @@ function handleNetworkSnapshot(bank) {
         sectionKey: "network-right",
         revenueLine: item.revenueLine || item.revenue_line || "product_affiliate"
       })
-    }, item));
+    }, item);
 
-    existingIds.add(id);
-    count++;
+    if (pushOrReplaceSnapshotSlot(snapshot.items, card, item, { pageName: "network", sectionKey: "network-right", limit: NETWORK_LIMIT, idFields: ["id", "contentId"] })) {
+      existingIds.add(id);
+      count = Math.min(NETWORK_LIMIT, snapshot.items.length);
+    }
   }
 
+  snapshot.items = capSnapshotList(snapshot.items, "network", "network-right");
   writeSnapshotJson(fileName, snapshot);
 }
 
@@ -900,8 +989,8 @@ function handleDistributionSnapshot(bank) {
   if (!snapshot.pages.distribution) snapshot.pages.distribution = { sections: {} };
   if (!snapshot.pages.distribution.sections) snapshot.pages.distribution.sections = {};
 
-snapshot.pages.distribution.sections = {};
-const sections = snapshot.pages.distribution.sections;
+const sections = sanitizeSectionCollection(snapshot.pages.distribution.sections, "distribution");
+snapshot.pages.distribution.sections = sections;
 
 const REQUIRED_SECTION_KEYS = [
   "distribution-recommend",
@@ -914,7 +1003,8 @@ const REQUIRED_SECTION_KEYS = [
 ];
 
 REQUIRED_SECTION_KEYS.forEach(key => {
-  sections[key] = [];
+  if (!Array.isArray(sections[key])) sections[key] = [];
+  sections[key] = capSnapshotList(sections[key], "distribution", key);
 });
 
   function normalize(item) {
@@ -967,10 +1057,10 @@ REQUIRED_SECTION_KEYS.forEach(key => {
       if (!item) continue;
       if (existingIds.has(item.id)) continue;
 
-      existing.push(item);
-      existingIds.add(item.id);
+      const changed = pushOrReplaceSnapshotSlot(existing, item, raw, { pageName: "distribution", sectionKey, limit: limit || SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] });
+      if (changed) existingIds.add(item.id);
 
-      if (typeof limit === "number" && existing.length >= limit) break;
+      if (typeof limit === "number" && existing.length >= limit && !isRealIncomingCandidate(raw)) break;
     }
   }
 
@@ -993,7 +1083,36 @@ REQUIRED_SECTION_KEYS.forEach(key => {
     );
   }
 
-  const commercePool = bankItems.filter(isCommerceLike);
+  function distributionSectionOf(raw) {
+    const rawSectionKey =
+      raw?.psom_key ||
+      raw?.bind?.psom_key ||
+      raw?.bind?.section ||
+      raw?.section ||
+      raw?.category ||
+      null;
+    const MAP = {
+      "dist_1": "distribution-recommend", "dist1": "distribution-recommend", "distribution_1": "distribution-recommend", "distribution1": "distribution-recommend", "distribution-recommend": "distribution-recommend",
+      "dist_2": "distribution-new", "dist2": "distribution-new", "distribution_2": "distribution-new", "distribution2": "distribution-new", "distribution-new": "distribution-new",
+      "dist_3": "distribution-trending", "dist3": "distribution-trending", "distribution_3": "distribution-trending", "distribution3": "distribution-trending", "distribution-trending": "distribution-trending",
+      "dist_4": "distribution-special", "dist4": "distribution-special", "distribution_4": "distribution-special", "distribution4": "distribution-special", "distribution-special": "distribution-special",
+      "dist_5": "distribution-sponsor", "dist5": "distribution-sponsor", "distribution_5": "distribution-sponsor", "distribution5": "distribution-sponsor", "distribution-sponsor": "distribution-sponsor",
+      "dist_6": "distribution-others", "dist6": "distribution-others", "distribution_6": "distribution-others", "distribution6": "distribution-others", "distribution-others": "distribution-others",
+      "dist_7": "distribution-right", "dist7": "distribution-right", "distribution_7": "distribution-right", "distribution7": "distribution-right", "distribution-right": "distribution-right"
+    };
+    return MAP[rawSectionKey] || rawSectionKey;
+  }
+
+  function belongsToDistribution(raw) {
+    const pageLike = String(raw?.page || raw?.channel || raw?.route || raw?.bind?.page || "").toLowerCase();
+    if (["distribution", "distributionhub", "distribution-hub", "commerce"].includes(pageLike)) return true;
+    const mapped = distributionSectionOf(raw);
+    if (mapped && sections[mapped]) return true;
+    const nonDistribution = /^(network|network-right|social|media|tour|donation|home)/i.test(String(mapped || ""));
+    return !nonDistribution && isCommerceLike(raw);
+  }
+
+  const commercePool = bankItems.filter(raw => belongsToDistribution(raw));
 
   for (const raw of commercePool) {
     const item = normalize(raw);
@@ -1165,7 +1284,7 @@ function handleSocialSnapshot(bank) {
       const id = item.id || stableId(JSON.stringify(item));
       if (existingIds.has(id)) continue;
 
-      existing.push(enrichSnapshotCard({
+      const card = enrichSnapshotCard({
         id,
         title: item.title || item.name || "Untitled",
         summary: item.summary || "",
@@ -1181,12 +1300,14 @@ function handleSocialSnapshot(bank) {
           pageName: "social",
           sectionKey
         })
-      }, item));
+      }, item);
 
-      existingIds.add(id);
+      if (pushOrReplaceSnapshotSlot(existing, card, item, { pageName: "social", sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] })) {
+        existingIds.add(id);
+      }
     }
 
-    sections[sectionKey] = existing;
+    sections[sectionKey] = capSnapshotList(existing, "social", sectionKey);
   }
 
   snapshot.pages.social.sections = sections;
@@ -1408,9 +1529,10 @@ function isVideoLike(item) {
 
     if (!Array.isArray(sectionObj.slots)) sectionObj.slots = [];
 
+    sectionObj.slots = capSnapshotList(sectionObj.slots, "media", sectionKey);
     const slots = sectionObj.slots;
     const existingIds = new Set(
-      slots.map(s => s?.contentId).filter(Boolean)
+      slots.map(s => s?.contentId || s?.id).filter(Boolean)
     );
 
     const contentId = raw.id || stableId(JSON.stringify(raw));
@@ -1421,7 +1543,7 @@ function isVideoLike(item) {
         ? Math.max(...slots.map(s => Number(s?.slotId) || 0)) + 1
         : 1;
 
-    slots.push(buildSlot(raw, nextSlotId));
+    pushOrReplaceSnapshotSlot(slots, buildSlot(raw, nextSlotId), raw, { pageName: "media", sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["contentId", "id"] });
   }
 
   snapshot.sections = sections;
@@ -1488,7 +1610,7 @@ function handleTourSnapshot(bank) {
     const id = item.id || stableId(JSON.stringify(item));
     if (existingIds.has(id)) continue;
 
-    items.push(enrichSnapshotCard({
+    const card = enrichSnapshotCard({
       id,
       title: item.title || item.name || "",
       thumb: buildTourThumbnail(item),
@@ -1502,9 +1624,11 @@ function handleTourSnapshot(bank) {
         sectionKey: item.psom_key || item.section || item.category || "tour",
         revenueLine: item.revenueLine || item.revenue_line || "tour_commission"
       })
-    }, item));
+    }, item);
 
-    existingIds.add(id);
+    if (pushOrReplaceSnapshotSlot(items, card, item, { pageName: "tour", sectionKey: "tour", limit: TOUR_LIMIT, idFields: ["id", "contentId"] })) {
+      existingIds.add(id);
+    }
   }
 
   /* ===== 정렬 (최신 + 우선순위) ===== */
