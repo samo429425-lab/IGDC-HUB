@@ -32,6 +32,208 @@ const LIMIT_MAP = {
   default: 300
 };
 
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.1-searchbank-contract-production-stable";
+const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
+const PG_STATUS_PENDING = "pending_pg_approval";
+
+function uniq(arr) {
+  const out = [];
+  const seen = new Set();
+  for (const v of Array.isArray(arr) ? arr : []) {
+    const x = String(v || "");
+    if (!x || seen.has(x)) continue;
+    seen.add(x);
+    out.push(x);
+  }
+  return out;
+}
+
+function truthy(v) {
+  if (v === true) return true;
+  if (v === false || v == null) return false;
+  const x = String(v).trim().toLowerCase();
+  return !!x && !["0", "false", "no", "off", "disabled", "disable", "null", "undefined"].includes(x);
+}
+
+function explicitFalse(v) {
+  if (v === false) return true;
+  const x = String(v == null ? "" : v).trim().toLowerCase();
+  return ["0", "false", "no", "off", "disabled", "disable"].includes(x);
+}
+
+function snapshotPathCandidates(fileName) {
+  return uniq([
+    path.join(ROOT, fileName),
+    path.join(ROOT, "data", fileName),
+    path.join(ROOT, "netlify", "functions", "data", fileName),
+    path.join(ROOT, "netlify", "functions", fileName),
+    path.join(__dirname, "data", fileName),
+    path.join(__dirname, fileName),
+    path.join(__dirname, "..", "..", "data", fileName),
+    path.join("/tmp", fileName)
+  ]);
+}
+
+function firstExistingPath(fileName) {
+  for (const p of snapshotPathCandidates(fileName)) {
+    try { if (fs.existsSync(p) && fs.statSync(p).isFile()) return p; } catch (_e) {}
+  }
+  return "";
+}
+
+function existingSnapshotPaths(fileName) {
+  return snapshotPathCandidates(fileName).filter(p => {
+    try { return fs.existsSync(p) && fs.statSync(p).isFile(); } catch (_e) { return false; }
+  });
+}
+
+function readSnapshotJson(fileName) {
+  const p = firstExistingPath(fileName);
+  if (!p) return { path: "", data: null };
+  return { path: p, data: readJson(p) };
+}
+
+function writeSnapshotJson(fileName, data) {
+  const targets = existingSnapshotPaths(fileName);
+  const writeTargets = targets.length ? targets : [snapshotPathCandidates(fileName)[0]];
+  for (const target of writeTargets) {
+    try {
+      const dir = path.dirname(target);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      writeJson(target, data);
+    } catch (e) {
+      console.error("Snapshot write failed:", target, e && e.message);
+    }
+  }
+  return writeTargets;
+}
+
+function contractOf(raw) {
+  raw = raw || {};
+  const d = raw.osaiDiscernment && typeof raw.osaiDiscernment === "object" ? raw.osaiDiscernment : {};
+  return (raw.searchBankContract && typeof raw.searchBankContract === "object") ? raw.searchBankContract
+    : (raw.sanmaruSearchBankContract && typeof raw.sanmaruSearchBankContract === "object") ? raw.sanmaruSearchBankContract
+    : (raw.searchBankUnifiedContract && typeof raw.searchBankUnifiedContract === "object") ? raw.searchBankUnifiedContract
+    : (d.searchBankContract && typeof d.searchBankContract === "object") ? d.searchBankContract
+    : {};
+}
+
+function nestedValue(obj, pathList) {
+  let cur = obj || {};
+  for (const key of pathList) {
+    if (!cur || typeof cur !== "object" || !(key in cur)) return undefined;
+    cur = cur[key];
+  }
+  return cur;
+}
+
+function firstDefined() {
+  for (const v of arguments) if (v !== undefined) return v;
+  return undefined;
+}
+
+function snapshotPaymentState(raw) {
+  raw = raw || {};
+  const c = contractOf(raw);
+  const envLive = truthy(process.env.IGDC_PAYMENT_LIVE || process.env.IGDC_PG_LIVE || process.env.PAYMENT_LIVE || process.env.PG_EXECUTION || process.env.PG_APPROVED);
+  const rawPaymentReady = firstDefined(raw.paymentStructureReady, raw.paymentReady, c.paymentStructureReady, c.paymentReady, nestedValue(raw, ["osaiDiscernment", "payment", "paymentReady"]), false);
+  return {
+    paymentStructureReady: !!rawPaymentReady,
+    paymentLive: !!envLive,
+    pgExecution: !!envLive,
+    pgStatus: envLive ? "pg_live" : PG_STATUS_PENDING,
+    policy: "pg-execution-disabled-until-approval"
+  };
+}
+
+function snapshotCandidateAllowed(raw, context) {
+  raw = raw || {};
+  const c = contractOf(raw);
+  const d = raw.osaiDiscernment && typeof raw.osaiDiscernment === "object" ? raw.osaiDiscernment : {};
+  const blockedReason = val(raw.blockedReason, c.blockedReason, d.blockedReason, raw?.sanmaruTrust?.blockedReason, "");
+  const blocked = raw.blocked === true || c.blocked === true || d.blocked === true || raw?.sanmaruTrust?.blocked === true || !!blockedReason;
+  if (blocked) return false;
+
+  if (explicitFalse(firstDefined(raw.snapshotEligible, c.snapshotEligible, nestedValue(d, ["eligibility", "snapshotEligible"])))) return false;
+  if (explicitFalse(firstDefined(raw.frontSupplyAllowed, c.frontSupplyAllowed, nestedValue(d, ["eligibility", "frontSupplyAllowed"])))) return false;
+  if (explicitFalse(firstDefined(raw.searchBankEligible, c.searchBankEligible, nestedValue(d, ["eligibility", "searchBankEligible"])))) return false;
+
+  const riskLevel = String(val(raw.riskLevel, c.riskLevel, d.riskLevel, raw?.sanmaruTrust?.riskLevel, "low")).toLowerCase();
+  if (["critical", "blocked", "illegal", "unsafe"].includes(riskLevel)) return false;
+
+  const unsafe = String(val(raw.unsafeProductRisk, c.unsafeProductRisk, nestedValue(d, ["safety", "unsafeProductRisk"]), "low")).toLowerCase();
+  const illegal = String(val(raw.illegalSiteRisk, c.illegalSiteRisk, nestedValue(d, ["safety", "illegalSiteRisk"]), "low")).toLowerCase();
+  const harmful = String(val(raw.harmfulContentRisk, c.harmfulContentRisk, nestedValue(d, ["safety", "harmfulContentRisk"]), "low")).toLowerCase();
+  if ([unsafe, illegal, harmful].some(v => ["critical", "blocked", "illegal", "unsafe"].includes(v))) return false;
+
+  return true;
+}
+
+function enrichSnapshotCard(card, raw) {
+  const c = contractOf(raw || {});
+  const pay = snapshotPaymentState(raw || {});
+  if (!card || typeof card !== "object") return card;
+  card.snapshotEngineVersion = SNAPSHOT_ENGINE_VERSION;
+  card.searchBankContractVersion = val(c.contractVersion, SEARCH_BANK_CONTRACT_VERSION);
+  card.snapshotEligible = !explicitFalse(firstDefined(card.snapshotEligible, raw && raw.snapshotEligible, c.snapshotEligible, true));
+  card.frontSupplyAllowed = !explicitFalse(firstDefined(card.frontSupplyAllowed, raw && raw.frontSupplyAllowed, c.frontSupplyAllowed, true));
+  card.searchBankEligible = !explicitFalse(firstDefined(card.searchBankEligible, raw && raw.searchBankEligible, c.searchBankEligible, true));
+  card.riskLevel = val(card.riskLevel, raw && raw.riskLevel, c.riskLevel, "low");
+  card.blockedReason = val(card.blockedReason, raw && raw.blockedReason, c.blockedReason, "");
+  card.paymentStructureReady = pay.paymentStructureReady;
+  card.paymentLive = pay.paymentLive;
+  card.pgExecution = pay.pgExecution;
+  card.pgStatus = pay.pgStatus;
+  if (card.payment && typeof card.payment === "object") {
+    const structureReady = !!(card.payment.structureReady || card.payment.enabled || card.payment.price || pay.paymentStructureReady);
+    card.payment = Object.assign({}, card.payment, {
+      enabled: !!(pay.paymentLive && card.payment.enabled === true),
+      structureReady,
+      paymentStructureReady: structureReady,
+      paymentLive: pay.paymentLive,
+      pgExecution: pay.pgExecution,
+      pgStatus: pay.pgStatus,
+      pg: pay.paymentLive ? (card.payment.pg || null) : null
+    });
+  }
+  if (card.revenue && typeof card.revenue === "object" && card.revenue.directSale === true && !(raw && raw.directSale && raw.directSale.enabled === true)) {
+    card.revenue = Object.assign({}, card.revenue, { directSale: false });
+  }
+  return card;
+}
+
+function sanitizeSnapshotArray(items, pageName, sectionKey) {
+  const out = [];
+  const seen = new Set();
+  for (const item of Array.isArray(items) ? items : []) {
+    if (!item || typeof item !== "object") continue;
+    if (!snapshotCandidateAllowed(item, { pageName, sectionKey })) continue;
+    const id = val(item.id, item.contentId, item.slotId, stableId(JSON.stringify(item)));
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(enrichSnapshotCard(item, item));
+  }
+  return out;
+}
+
+function sanitizeSectionCollection(sections, pageName) {
+  if (!sections || typeof sections !== "object") return sections;
+  for (const [sectionKey, sectionValue] of Object.entries(sections)) {
+    if (Array.isArray(sectionValue)) {
+      sections[sectionKey] = sanitizeSnapshotArray(sectionValue, pageName, sectionKey);
+      continue;
+    }
+    if (sectionValue && typeof sectionValue === "object" && Array.isArray(sectionValue.slots)) {
+      sectionValue.slots = sanitizeSnapshotArray(sectionValue.slots, pageName, sectionKey);
+    }
+  }
+  return sections;
+}
+
+function internalPlaceholderImage() {
+  return "/assets/img/placeholder.png";
+}
+
 function getSnapshotSections(snapshot, pageName) {
   if (snapshot?.pages?.[pageName]?.sections && typeof snapshot.pages[pageName].sections === "object") {
     return snapshot.pages[pageName].sections;
@@ -178,12 +380,13 @@ function enforceSnapshotFileLimit(pageName, bankItems) {
 
   if (pageName === "network" || pageName === "media") return;
 
-  const filePath = path.join(ROOT, fileName);
-  if (!fs.existsSync(filePath)) return;
+  const found = readSnapshotJson(fileName);
+  if (!found.data) return;
 
-  const snapshot = readJson(filePath) || {};
+  const snapshot = found.data || {};
   const sections = getSnapshotSections(snapshot, pageName);
   if (!sections) return;
+  sanitizeSectionCollection(sections, pageName);
 
   const limit = LIMIT_MAP[pageName] || LIMIT_MAP.default;
 
@@ -213,6 +416,7 @@ function enforceSnapshotFileLimit(pageName, bankItems) {
     if (usedIds.has(id)) continue;
 
     const sectionKey = resolveLimitSectionKey(pageName, raw, sections);
+    if (!snapshotCandidateAllowed(raw, { pageName, sectionKey })) continue;
     if (!sectionKey || !sections[sectionKey]) continue;
 
     sections[sectionKey].push(normalizeLimitCard(raw, { pageName, sectionKey }));
@@ -221,7 +425,7 @@ function enforceSnapshotFileLimit(pageName, bankItems) {
   }
 
   setSnapshotSections(snapshot, pageName, sections);
-  writeJson(filePath, snapshot);
+  writeSnapshotJson(fileName, snapshot);
 }
 
 function readJson(p) {
@@ -398,6 +602,21 @@ function buildTrackingMeta(raw, context) {
     sourceType: "snapshot_seed"
   };
 
+  const contract = contractOf(raw);
+  const pg = snapshotPaymentState(raw);
+  meta.snapshotEngineVersion = SNAPSHOT_ENGINE_VERSION;
+  meta.searchBankContractVersion = val(contract.contractVersion, SEARCH_BANK_CONTRACT_VERSION);
+  meta.snapshotEligible = !explicitFalse(firstDefined(raw.snapshotEligible, contract.snapshotEligible, true));
+  meta.frontSupplyAllowed = !explicitFalse(firstDefined(raw.frontSupplyAllowed, contract.frontSupplyAllowed, true));
+  meta.searchBankEligible = !explicitFalse(firstDefined(raw.searchBankEligible, contract.searchBankEligible, true));
+  meta.riskLevel = val(raw.riskLevel, contract.riskLevel, "low");
+  meta.blockedReason = val(raw.blockedReason, contract.blockedReason, "");
+  meta.paymentStructureReady = pg.paymentStructureReady;
+  meta.paymentLive = pg.paymentLive;
+  meta.pgExecution = pg.pgExecution;
+  meta.pgStatus = pg.pgStatus;
+  meta.pgPolicy = pg.policy;
+
   if (safeObj(raw.monetization)) meta.monetization = raw.monetization;
   if (safeObj(raw.linkRevenue)) meta.linkRevenue = raw.linkRevenue;
   if (safeObj(raw.directSale)) meta.directSale = raw.directSale;
@@ -409,27 +628,26 @@ function buildTrackingMeta(raw, context) {
   if (safeObj(raw.donation)) meta.donation = raw.donation;
   if (safeObj(raw.commerce)) meta.commerce = raw.commerce;
   if (safeObj(raw.mediaRevenue)) meta.mediaRevenue = raw.mediaRevenue;
+  if (safeObj(raw.searchBankContract)) meta.searchBankContract = raw.searchBankContract;
+  if (safeObj(raw.osaiDiscernment)) meta.osaiDiscernment = raw.osaiDiscernment;
+  if (safeObj(raw.supplyChain)) meta.supplyChain = raw.supplyChain;
+  if (safeObj(raw.sanmaruTrust)) meta.sanmaruTrust = raw.sanmaruTrust;
 
   return meta;
 }
 
 
 function loadSearchBank() {
-  const bankPath = path.join(ROOT, "search-bank.snapshot.json");
-  if (!fs.existsSync(bankPath)) {
-    throw new Error("search-bank.snapshot.json not found in root.");
-  }
-  return readJson(bankPath);
+  const found = readSnapshotJson("search-bank.snapshot.json");
+  if (found.data && Array.isArray(found.data.items)) return found.data;
+  return { meta: { source: "search-bank.snapshot.json", missing: true, generatedAt: new Date().toISOString() }, items: [] };
 }
 
 function loadSnapshot(page) {
   const file = SNAPSHOT_FILES[page];
   if (!file) return null;
-
-  const p = path.join(ROOT, file);
-  if (!fs.existsSync(p)) return null;
-
-  return readJson(p);
+  const found = readSnapshotJson(file);
+  return found.data || null;
 }
 
 function getDefaultSection(bank, page) {
@@ -467,10 +685,11 @@ function mergeItems(snapshot, sectionKey, items, slotLimit) {
   for (const item of items) {
     if (count >= slotLimit) break;
 
+    if (!snapshotCandidateAllowed(item, { sectionKey })) continue;
     const id = item.id || stableId(JSON.stringify(item));
     if (existingIds.has(id)) continue;
 
-    const converted = {
+    const converted = enrichSnapshotCard({
       id,
       title: item.title || item.name || "Untitled",
       summary: item.summary || "",
@@ -486,7 +705,7 @@ function mergeItems(snapshot, sectionKey, items, slotLimit) {
         pageName: item.page || item.channel || "snapshot",
         sectionKey
       })
-    };
+    }, item);
 
     existing.push(converted);
     existingIds.add(id);
@@ -499,15 +718,9 @@ function mergeItems(snapshot, sectionKey, items, slotLimit) {
 
 function run(payload) {
 
-  const bankPath = path.join(ROOT,"search-bank.snapshot.json");
+  let bank = loadSearchBank();
 
-  let bank = { items:[] };
-
-  if(fs.existsSync(bankPath)){
-    bank = readJson(bankPath);
-  }
-
-  bank.items = bank.items || [];
+  bank.items = (Array.isArray(bank.items) ? bank.items : []).filter(item => snapshotCandidateAllowed(item, { pageName: "snapshot" }));
   
 function mergeFrontFromSearchBank(frontSnap, searchbankSnap) {
 
@@ -515,7 +728,7 @@ function mergeFrontFromSearchBank(frontSnap, searchbankSnap) {
   if (!frontSnap.pages.home) frontSnap.pages.home = { sections: {} };
   if (!frontSnap.pages.home.sections) frontSnap.pages.home.sections = {};
 
-  const homeSections = frontSnap.pages.home.sections;
+  const homeSections = sanitizeSectionCollection(frontSnap.pages.home.sections, "home");
   const items = Array.isArray(searchbankSnap?.items) ? searchbankSnap.items : [];
 
   for (const item of items) {
@@ -558,6 +771,7 @@ const sectionKey = HOME_SECTION_ALIAS[rawSectionKey] || rawSectionKey;
 
     if (!sectionKey) continue;
     if (!homeSections[sectionKey]) continue;
+    if (!snapshotCandidateAllowed(item, { pageName: "home", sectionKey })) continue;
 
     const existing = homeSections[sectionKey];
     const id = item.id || stableId(JSON.stringify(item));
@@ -566,7 +780,7 @@ if (existing.find(i => i.id === id)) continue;
 
 if (existing.length >= 5) continue;
 
-existing.push({
+existing.push(enrichSnapshotCard({
   id,
   title: item.title || item.name || "Untitled",
   summary: item.summary || "",
@@ -581,7 +795,7 @@ existing.push({
     pageName: "home",
     sectionKey
   })
-});
+}, item));
   }
 
   return frontSnap;
@@ -589,13 +803,13 @@ existing.push({
 
 function handleHomeSnapshot(bank) {
 
-  const frontPath = path.join(ROOT, "front.snapshot.json");
-  if (!fs.existsSync(frontPath)) return;
+  const found = readSnapshotJson("front.snapshot.json");
+  if (!found.data) return;
 
-  const frontSnap = readJson(frontPath) || {};
+  const frontSnap = found.data || {};
   const merged = mergeFrontFromSearchBank(frontSnap, bank);
 
-  writeJson(frontPath, merged);
+  writeSnapshotJson("front.snapshot.json", merged);
 }
 
 /* ===== NETWORK SNAPSHOT MERGE (FIXED: ITEMS BASED) ===== */
@@ -603,14 +817,15 @@ function handleHomeSnapshot(bank) {
 function handleNetworkSnapshot(bank) {
 
   const fileName = "networkhub-snapshot.json";
-  const filePath = path.join(ROOT, fileName);
+  const found = readSnapshotJson(fileName);
 
-  if (!fs.existsSync(filePath)) return;
+  if (!found.data) return;
 
-  const snapshot = readJson(filePath) || {};
+  const snapshot = found.data || {};
   const bankItems = Array.isArray(bank?.items) ? bank.items : [];
 
   if (!Array.isArray(snapshot.items)) snapshot.items = [];
+  snapshot.items = sanitizeSnapshotArray(snapshot.items, "network", "network-right");
 
   const NETWORK_LIMIT = 100;
 
@@ -634,12 +849,13 @@ function handleNetworkSnapshot(bank) {
       "";
 
     if (rawKey !== "network-right") continue;
+    if (!snapshotCandidateAllowed(item, { pageName: "network", sectionKey: "network-right" })) continue;
     if (count >= NETWORK_LIMIT) break;
 
     const id = item.id || stableId(JSON.stringify(item));
     if (existingIds.has(id)) continue;
 
-    snapshot.items.push({
+    snapshot.items.push(enrichSnapshotCard({
       id,
       title: item.title || item.name || "Untitled",
       summary: item.summary || "",
@@ -659,24 +875,24 @@ function handleNetworkSnapshot(bank) {
         sectionKey: "network-right",
         revenueLine: item.revenueLine || item.revenue_line || "product_affiliate"
       })
-    });
+    }, item));
 
     existingIds.add(id);
     count++;
   }
 
-  writeJson(filePath, snapshot);
+  writeSnapshotJson(fileName, snapshot);
 }
 
 /* ===== DISTRIBUTION SNAPSHOT ENGINE (PSOM FULL + FALLBACK) ===== */
 function handleDistributionSnapshot(bank) {
 
   const fileName = "distribution.snapshot.json";
-  const filePath = path.join(ROOT, fileName);
+  const found = readSnapshotJson(fileName);
 
-  if (!fs.existsSync(filePath)) return;
+  if (!found.data) return;
 
-  const snapshot = readJson(filePath) || {};
+  const snapshot = found.data || {};
   const bankItems = Array.isArray(bank?.items) ? bank.items : [];
   const now = Date.now();
 
@@ -704,7 +920,10 @@ REQUIRED_SECTION_KEYS.forEach(key => {
   function normalize(item) {
     if (!item || typeof item !== "object") return null;
 
-    return {
+    const sectionKeyForContract = item.psom_key || item?.bind?.section || item?.section || item?.category || "distribution";
+    if (!snapshotCandidateAllowed(item, { pageName: "distribution", sectionKey: sectionKeyForContract })) return null;
+
+    return enrichSnapshotCard({
       id: item.id || stableId(JSON.stringify(item)),
       title: item.title || item.name || "Untitled",
       summary: item.summary || "",
@@ -734,7 +953,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
           item?.category ||
           "distribution"
       })
-    };
+    }, item);
   }
 
   function pushUnique(sectionKey, items, limit) {
@@ -904,7 +1123,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
   pushUnique("distribution-right", rightPool, 100);
 
 snapshot.pages.distribution.sections = sections;
-writeJson(filePath, snapshot);
+writeSnapshotJson(fileName, snapshot);
 }
 
 /* ===== SOCIAL SNAPSHOT MERGE ===== */
@@ -912,18 +1131,18 @@ writeJson(filePath, snapshot);
 function handleSocialSnapshot(bank) {
 
   const fileName = "social.snapshot.json";
-  const filePath = path.join(ROOT, fileName);
+  const found = readSnapshotJson(fileName);
 
-  if (!fs.existsSync(filePath)) return;
+  if (!found.data) return;
 
-  const snapshot = readJson(filePath) || {};
+  const snapshot = found.data || {};
 
   // 🔥 pages 구조 강제
   if (!snapshot.pages) snapshot.pages = {};
   if (!snapshot.pages.social) snapshot.pages.social = { sections: {} };
   if (!snapshot.pages.social.sections) snapshot.pages.social.sections = {};
 
-  const sections = snapshot.pages.social.sections;
+  const sections = sanitizeSectionCollection(snapshot.pages.social.sections, "social");
   const bankItems = bank.items || [];
 
   const sectionKeys = Object.keys(sections);
@@ -938,7 +1157,7 @@ function handleSocialSnapshot(bank) {
         item?.bind?.section ||
         item?.psom_key ||
         item?.category;
-      return sec === sectionKey;
+      return sec === sectionKey && snapshotCandidateAllowed(item, { pageName: "social", sectionKey });
     });
 
     for (const item of supply) {
@@ -946,7 +1165,7 @@ function handleSocialSnapshot(bank) {
       const id = item.id || stableId(JSON.stringify(item));
       if (existingIds.has(id)) continue;
 
-      existing.push({
+      existing.push(enrichSnapshotCard({
         id,
         title: item.title || item.name || "Untitled",
         summary: item.summary || "",
@@ -962,7 +1181,7 @@ function handleSocialSnapshot(bank) {
           pageName: "social",
           sectionKey
         })
-      });
+      }, item));
 
       existingIds.add(id);
     }
@@ -972,7 +1191,7 @@ function handleSocialSnapshot(bank) {
 
   snapshot.pages.social.sections = sections;
 
-  writeJson(filePath, snapshot);
+  writeSnapshotJson(fileName, snapshot);
 }
 
 /* ===== MEDIA SNAPSHOT MERGE ===== */
@@ -980,16 +1199,16 @@ function handleSocialSnapshot(bank) {
 function handleMediaSnapshot(bank) {
 
   const fileName = "media.snapshot.json";
-  const filePath = path.join(ROOT, fileName);
+  const found = readSnapshotJson(fileName);
 
-  if (!fs.existsSync(filePath)) return;
+  if (!found.data) return;
 
-  const snapshot = readJson(filePath) || {};
+  const snapshot = found.data || {};
   const bankItems = Array.isArray(bank?.items) ? bank.items : [];
 
   if (!snapshot.sections || typeof snapshot.sections !== "object") return;
 
-  const sections = snapshot.sections;
+  const sections = sanitizeSectionCollection(snapshot.sections, "media");
 
   const MEDIA_ALIAS = {
     "trending_now": "media-trending",
@@ -1120,7 +1339,7 @@ function isVideoLike(item) {
     ? `https://img.youtube.com/vi/${extractYouTubeId(videoUrl)}/hqdefault.jpg`
     : "/assets/img/placeholder.png");
 	
-    return {
+    return enrichSnapshotCard({
       slotId: fallbackSlotId,
       contentId: raw.id || stableId(JSON.stringify(raw)),
       title: raw.title || raw.name || "Untitled",
@@ -1139,19 +1358,20 @@ function isVideoLike(item) {
         enabled: true,
         track: true
       },
-      payment: {
-        enabled: true,
-        type: "rent|buy|sub",
+      payment: Object.assign({
+        enabled: false,
+        structureReady: !!(raw.price || raw.productId || raw.paymentReady || raw.paymentStructureReady),
+        type: raw.paymentType || "media_access",
         price: raw.price || null,
         currency: raw.currency || "KRW",
-        pg: "default",
+        pg: null,
         productId: raw.productId || null
-      },
+      }, snapshotPaymentState(raw)),
       revenue: {
         ads: true,
         affiliate: true,
         provider: true,
-        directSale: true
+        directSale: !!(raw.directSale && raw.directSale.enabled)
       },
       ...buildTrackingMeta(raw, {
         id: raw.id || stableId(JSON.stringify(raw)),
@@ -1164,7 +1384,7 @@ function isVideoLike(item) {
           "media",
         revenueLine: raw.revenueLine || raw.revenue_line || "media_engagement"
       })
-    };
+    }, raw);
   }
 
   for (const raw of bankItems) {
@@ -1179,6 +1399,7 @@ function isVideoLike(item) {
     const sectionKey = resolveMediaKey(rawKey);
 
     if (!sectionKey) continue;
+    if (!snapshotCandidateAllowed(raw, { pageName: "media", sectionKey })) continue;
 
     if (sectionKey === "media-trending") continue;
 
@@ -1204,7 +1425,7 @@ function isVideoLike(item) {
   }
 
   snapshot.sections = sections;
-  writeJson(filePath, snapshot);
+  writeSnapshotJson(fileName, snapshot);
 }
 
 /* ===== 유튜브 ID 추출 ===== */
@@ -1220,14 +1441,14 @@ function extractYouTubeId(url) {
 function handleTourSnapshot(bank) {
 
   const fileName = "tour-snapshot.json";
-  const filePath = path.join(ROOT, fileName);
+  const found = readSnapshotJson(fileName);
 
-  if (!fs.existsSync(filePath)) return;
+  if (!found.data) return;
 
-  const snapshot = readJson(filePath) || {};
+  const snapshot = found.data || {};
   const bankItems = Array.isArray(bank?.items) ? bank.items : [];
 
-  let items = Array.isArray(snapshot.items) ? snapshot.items : [];
+  let items = sanitizeSnapshotArray(Array.isArray(snapshot.items) ? snapshot.items : [], "tour", "tour");
 
   const TOUR_LIMIT = 100;
 
@@ -1249,13 +1470,7 @@ function handleTourSnapshot(bank) {
       return item.image || item.thumb || item.thumbnail;
     }
 
-    const title = encodeURIComponent(item.title || "TOUR");
-
-    if (item.location || item.region) {
-      return `https://dummyimage.com/600x400/0a3d62/ffffff&text=${title}`;
-    }
-
-    return `https://dummyimage.com/600x400/1e3799/ffffff&text=TOUR`;
+    return internalPlaceholderImage();
   }
 
   /* ===== 기존 ID 추출 ===== */
@@ -1268,11 +1483,12 @@ function handleTourSnapshot(bank) {
 
     if (!item) continue;
     if (!isTour(item)) continue;
+    if (!snapshotCandidateAllowed(item, { pageName: "tour", sectionKey: item.psom_key || item.section || item.category || "tour" })) continue;
 
     const id = item.id || stableId(JSON.stringify(item));
     if (existingIds.has(id)) continue;
 
-    items.push({
+    items.push(enrichSnapshotCard({
       id,
       title: item.title || item.name || "",
       thumb: buildTourThumbnail(item),
@@ -1286,7 +1502,7 @@ function handleTourSnapshot(bank) {
         sectionKey: item.psom_key || item.section || item.category || "tour",
         revenueLine: item.revenueLine || item.revenue_line || "tour_commission"
       })
-    });
+    }, item));
 
     existingIds.add(id);
   }
@@ -1303,7 +1519,7 @@ function handleTourSnapshot(bank) {
   }
 
   snapshot.items = items;
-  writeJson(filePath, snapshot);
+  writeSnapshotJson(fileName, snapshot);
 }
   
   /* ===== SNAPSHOT ENGINE FULL EXECUTION ===== */
