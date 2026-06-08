@@ -1,4 +1,5 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
+// PATCH: intent-aware category tabs + empty-tab suppression + related-search handoff
 // PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
 // PATCH: search-owned proxy viewer + continuous 4,500 intake + 30-language search UI labels
 // - collector first
@@ -310,8 +311,8 @@ function inferMaruSearchIntentProfile(q, items){
   const issueSignal = /(이슈|논란|사건|사고|속보|현안|정책|선거|후보|토론|전쟁|분쟁|시위|집회|파업|재판|수사|폭우|태풍|지진|화재|감염|위기|갈등|issue|breaking|controversy|election|policy|war|conflict|protest|strike|trial|investigation|crisis|disaster)/i.test(query);
 
   const personEvidence = /(프로필|인물|나이|키|학력|출생|소속사|배우|가수|연예인|아이돌|감독|작가|소설가|시인|교수|연구자|정치인|대통령|의원|후보|선수|축구선수|야구선수|출연|필모그래피|앨범|곡|작품|업적|수상|biography|profile|actor|actress|singer|celebrity|artist|filmography|discography|career|awards)/i.test(hay);
-  const compactKoreanNameSignal = /^[가-힣]{2,4}$/.test(compact) && !citySignal && !countrySignal && !companySignal;
-  const personSignal = (personEvidence || compactKoreanNameSignal) && !companySignal && !(citySignal || countrySignal || localSignal);
+  const compactKoreanNameSignal = /^[가-힣]{2,4}$/.test(compact) && !citySignal && !countrySignal && !strongCompanyQuerySignal;
+  const personSignal = (personEvidence || compactKoreanNameSignal) && !strongCompanyQuerySignal && !(citySignal || countrySignal || localSignal);
 
   const productSignal = /(상품|제품|가격|구매|쇼핑|브랜드|후기|리뷰|인삼|홍삼|화장품|폰|자동차|노트북|가전|의류|신발|product|price|buy|shopping|brand|review|spec|model)/i.test(query) && !companySignal;
   const academicSignal = /(논문|연구|학술|저널|대학|도서관|인용|학회|paper|research|scholar|academic|journal|university|library|citation)/i.test(query);
@@ -369,6 +370,24 @@ function maruTabLeadForIntent(intent){
   return table[intent] || table.general;
 }
 
+function intentPrimaryTabLimit(intent){
+  const map = {
+    person: 8, place: 8, country: 8, company: 8, issue: 7, product: 8,
+    academic: 7, book: 7, finance: 6, sports: 7, webtoon: 7,
+    media: 7, image: 6, public: 7, general: 7
+  };
+  return map[intent] || 7;
+}
+
+function intentMaxVisibleTabs(intent){
+  const map = {
+    person: 11, place: 12, country: 12, company: 12, issue: 10, product: 11,
+    academic: 10, book: 10, finance: 9, sports: 10, webtoon: 10,
+    media: 10, image: 9, public: 10, general: 10
+  };
+  return map[intent] || 10;
+}
+
 function inferSearchTabsForQuery(q, active){
   const intent = inferMaruSearchIntentProfile(q, allItems);
   const activeTypeForKeep = normalizeSearchType(active || activeType || 'all');
@@ -385,7 +404,13 @@ function inferSearchTabsForQuery(q, active){
     if(tab && SEARCH_TAB_KEYS.includes(tab)) countByTab[tab] = (countByTab[tab] || 0) + evidence.counts[g];
   });
 
+  const receivedCount = Array.isArray(allItems) ? allItems.length : 0;
+  const hasReceivedPool = receivedCount > 0;
   const lead = maruTabLeadForIntent(intent).slice();
+  const primaryLimit = intentPrimaryTabLimit(intent);
+  const primaryTabs = new Set(lead.slice(0, primaryLimit));
+  const maxTabs = intentMaxVisibleTabs(intent);
+
   if(activeTypeForKeep && activeTypeForKeep !== 'all' && !lead.includes(activeTypeForKeep)) lead.splice(1, 0, activeTypeForKeep);
 
   const out = [];
@@ -393,20 +418,34 @@ function inferSearchTabsForQuery(q, active){
   function push(type){
     const t = normalizeSearchType(type);
     if(!t || seen.has(t)) return;
+    if(!SEARCH_TAB_KEYS.includes(t)) return;
     seen.add(t);
     out.push(t);
   }
-  lead.forEach(push);
 
-  // After the intent lead, categories that are actually present in the returned
-  // pool move up, but low-relevance categories remain available later.
+  push('all');
+  if(activeTypeForKeep && activeTypeForKeep !== 'all') push(activeTypeForKeep);
+
+  // Before results arrive, show only the query-intent lead tabs.
+  // After results arrive, keep primary intent tabs and tabs that actually contain items.
+  lead.forEach(type => {
+    const t = normalizeSearchType(type);
+    if(!hasReceivedPool || primaryTabs.has(t) || (countByTab[t] || 0) > 0) push(t);
+  });
+
   SEARCH_TAB_KEYS
     .filter(k => !seen.has(k) && (countByTab[k] || 0) > 0)
     .sort((a,b) => (countByTab[b] || 0) - (countByTab[a] || 0))
     .forEach(push);
 
-  SEARCH_TAB_KEYS.forEach(push);
-  return uniqueSearchTabs(out);
+  // Keep the UI useful but do not expose every empty vertical.
+  // This is the key difference from the old behavior that made person/place/country
+  // searches show almost the same empty category line.
+  if(out.length < 5){
+    lead.forEach(type => { if(out.length < 5) push(type); });
+  }
+
+  return uniqueSearchTabs(out.slice(0, Math.max(5, maxTabs)));
 }
 
 function searchTabsProfileKey(q, active){
