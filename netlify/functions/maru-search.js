@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.48-rich-search-pipeline-restore';
+const VERSION = 'A1.5.46-596-probe-stable-fastpath';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -1829,14 +1829,6 @@ function triggerSanmaruResidentRefresh(q, raw, ctx){
   return { accepted:false, reason:'unavailable' };
 }
 
-
-function attachSearchDisplayPolicyToMeta(meta, displayPolicy){
-  const out = Object.assign({}, meta || {});
-  if(displayPolicy !== undefined) out.displayPolicy = displayPolicy || null;
-  if(!out.displayEngineStatus) out.displayEngineStatus = displayPolicy ? 'ok' : 'unavailable';
-  return out;
-}
-
 function buildImmediateResidentResponse(q, raw, residentPack, baseMeta){
   const candidateTarget = Math.min(MAX_LIMIT, Math.max(clampInt(raw && (raw.candidatePool || raw.candidatePoolTarget || raw.limit), DEFAULT_LIMIT, 1, MAX_LIMIT), MIN_RESULT_TARGET));
   const visibleNeed = clampInt(firstNonEmpty(raw && (raw.perPage || raw.pageSize || raw.visibleCardsPerPage || raw.visibleLimit), 25), 25, 1, 100);
@@ -1950,56 +1942,6 @@ function sanmaruFastLayerEnough(residentPack, requestedLimit, raw){
   return cachedQueryHit && realCachedCount >= minBroadCache;
 }
 
-
-
-function isSanmaruFirstPaintSearchRequest(raw){
-  raw = raw || {};
-  const action = safeString(raw.action || raw.fn || '').trim().toLowerCase();
-  const mode = safeString(raw.mode || '').trim().toLowerCase();
-
-  if(action && !['search','query','maru-search','public-search'].includes(action)) return false;
-  if(['health','probe','ping','status','audit','diagnostic','fast-probe','fast_probe'].includes(action)) return false;
-  if(['health','probe','ping','status','audit','diagnostic','fast','light','readonly','read-only'].includes(mode)) return false;
-  if(!isPublicSearchRequest(raw)) return false;
-
-  // Production safety:
-  // A normal search.js request must keep the rich Maru Search pipeline alive
-  // so SearchBank snapshot/media/display/provider lanes can be returned together.
-  // Sanmaru-only immediate return is therefore explicit opt-in only.
-  const explicitFirstPaint = truthy(raw.sanmaruFirstPaint)
-    || truthy(raw.immediateSanmaruFirstPaint)
-    || truthy(raw.residentFirstPaint)
-    || truthy(raw.onlyResidentFirstPaint);
-  if(!explicitFirstPaint) return false;
-
-  if(truthy(raw.noSanmaruFirst) || truthy(raw.disableSanmaruFirst) || truthy(raw.skipSanmaruFirst)) return false;
-  if(truthy(raw.noResident) || truthy(raw.skipResident) || truthy(raw.disableResident)) return false;
-  if(truthy(raw.waitProviders) || truthy(raw.waitExternal) || truthy(raw.forceWide) || truthy(raw.forceProvider) || truthy(raw.forceProviderRefresh)) return false;
-  if(explicitExternalRequested(raw)) return false;
-
-  return true;
-}
-
-function sanmaruResidentFirstPaintReady(residentPack, raw){
-  raw = raw || {};
-  const items = Array.isArray(residentPack && residentPack.items) ? residentPack.items : [];
-  const meta = (residentPack && residentPack.meta) || {};
-  const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
-  const perPage = clampInt(firstNonEmpty(raw.perPage, raw.pageSize, raw.visibleCardsPerPage, raw.visibleLimit, raw.cardsPerPage), 25, 1, 100);
-  const firstPaintNeed = Math.max(1, Math.min(perPage, page > 1 ? Math.max(8, Math.ceil(perPage * 0.5)) : perPage));
-  const metaCandidateCount = Math.max(
-    Number(meta.totalCandidates || 0) || 0,
-    Number(meta.fullCandidateCount || 0) || 0,
-    Number(meta.totalItems || 0) || 0,
-    Number(meta.queryCacheCount || meta.cachedQueryCount || 0) || 0
-  );
-  const queryGuardOk = safeString(meta.status).toLowerCase() !== 'filtered-empty';
-
-  if(items.length >= firstPaintNeed) return true;
-  if(items.length > 0 && metaCandidateCount >= firstPaintNeed && queryGuardOk) return true;
-  if(items.length >= Math.min(8, firstPaintNeed) && queryGuardOk) return true;
-  return false;
-}
 
 
 function buildKoreaLocalAuthorityCardsForSearch(q, region){
@@ -2695,46 +2637,6 @@ const Containers = {
   web_image: { async fetch(q, limit, start){ return googleImageSearch(q, limit, start); } },
   snapshot: { async fetch(q, limit){ const local = loadSnapshotLocal(q, limit); return local ? { source: 'snapshot-local', results: local } : null; } }
 };
-
-function searchSnapshotBridgeWanted(q, raw, searchType){
-  const st = normalizeSearchType(searchType || raw && (raw.type || raw.tab || raw.category || raw.vertical) || 'all');
-  const text = [q, st, raw && raw.section, raw && raw.category, raw && raw.tab, raw && raw.vertical].join(' ').toLowerCase();
-  if(['all','video','image','media','sns','shopping','tour'].includes(st)) return true;
-  return /media|video|movie|drama|shorts|image|photo|사진|이미지|영상|동영상|미디어|영화|드라마|쇼츠|상품|product|shop|tour|여행|관광|sns|social|유튜브|youtube|틱톡|tiktok|인스타|instagram/.test(text);
-}
-
-function snapshotBridgeItemAllowedForSearch(it, q, raw, searchType){
-  if(!it || typeof it !== 'object') return false;
-  if(it.blocked === true || it.frontSupplyAllowed === false || it.searchBankEligible === false || it.snapshotEligible === false) return false;
-  const st = normalizeSearchType(searchType || raw && (raw.type || raw.tab || raw.category || raw.vertical) || 'all');
-  const h = [it.title, it.name, it.summary, it.description, it.url, it.link, it.channel, it.section, it.page, it.psom_key, it.route, it.category, it.type, it.mediaType, Array.isArray(it.tags) ? it.tags.join(' ') : ''].join(' ').toLowerCase();
-  if(['video','media'].includes(st)) return isSnapshotVideoSignal(it) || /media-|media_|youtube|video|movie|drama|shorts/.test(h);
-  if(st === 'image') return hasSnapshotThumbSignal(it);
-  if(st === 'shopping') return /distribution|product|shop|commerce|상품|구매|판매/.test(h);
-  if(st === 'tour') return /tour|travel|hotel|관광|여행|숙박/.test(h);
-  if(st === 'sns') return /social|sns|youtube|instagram|tiktok|facebook|weibo|reddit|twitter|x\.com/.test(h);
-  return hasSnapshotThumbSignal(it) || isSnapshotVideoSignal(it) || /distribution|product|tour|social|media/.test(h);
-}
-
-async function pullSnapshotBridgeForPublicSearch(q, raw, searchType, maxCount){
-  if(!searchSnapshotBridgeWanted(q, raw || {}, searchType)) return { source:'snapshot-bridge', results:[], meta:{ status:'not-requested' } };
-  const cap = Math.max(40, Math.min(240, Number(maxCount || 120) || 120));
-  const snap = await Containers.snapshot.fetch(q, Math.max(500, cap * 6)).catch(() => null);
-  let rows = Array.isArray(snap && snap.results) ? snap.results : [];
-  rows = rows.filter(it => snapshotBridgeItemAllowedForSearch(it, q, raw || {}, searchType));
-  if(!rows.length){
-    const broadRows = loadSnapshotLocal('', Math.max(5000, cap * 20)) || [];
-    rows = broadRows.filter(it => snapshotBridgeItemAllowedForSearch(it, q, raw || {}, searchType));
-  }
-  const converted = rows.slice(0, cap).map((it, idx) => canonicalizeItem(Object.assign({}, it, {
-    source: firstNonEmpty(it && it.source, it && it.provider, 'search-bank-snapshot-bridge'),
-    provider: firstNonEmpty(it && it.provider, it && it.source, 'search-bank-snapshot-bridge'),
-    snapshotSearchBridge: true,
-    searchSurface: 'maru-search',
-    bridgeRank: idx
-  }), q, 'search-bank-snapshot-bridge'));
-  return { source:'snapshot-bridge', results:converted, meta:{ status:converted.length ? 'ok' : 'empty', scanned:rows.length, cap } };
-}
 
 
 function uniqueCompactStrings(arr, maxCount){
@@ -3522,12 +3424,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     const internalCount = publicSearchSurface ? 0 : await pullFromSearchBank();
     if(publicSearchSurface){
       record('search-bank', 'skipped-public-search-boundary', 0, {
-        reason:'Search Bank Engine raw front-slot supply is not used as the sole public-search answer'
-      });
-      const snapshotBridge = await pullSnapshotBridgeForPublicSearch(q, (event && event.queryStringParameters) || {}, viewType, 120);
-      const n = addBundle(snapshotBridge, 'snapshot-bridge', collected, sourceState);
-      record('snapshot-bridge', n ? 'ok' : (snapshotBridge && snapshotBridge.meta && snapshotBridge.meta.status || 'empty'), n, {
-        role:'safe SearchBank snapshot/media/product/tour bridge for search.js without replacing the rich provider pipeline'
+        reason:'Search Bank Engine / snapshot raw are front-page slot supply only'
       });
     }
     // PRESERVE + EXPAND: Search Bank/Index must never stop the broad Maru Search gateway.
@@ -5175,11 +5072,9 @@ exports.handler = async function(event){
     // performs Sanmaru-planned gateway expansion and absorbs the results back
     // into Sanmaru. items/results are never capped to the viewport; only
     // visiblePagePack.pageItems is page-sized.
-    const sanmaruFirstPaintPreferred = isSanmaruFirstPaintSearchRequest(raw || {}) && !forceProviderRefresh;
     const fastDisplayFirstWindow = isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceResident || raw.waitResident || raw.waitProviders || raw.waitExternal));
-    const skipHeavySanmaruRouteForFirstPaint = sanmaruFirstPaintPreferred || fastDisplayFirstWindow;
-    const sanmaruRouteContext = skipHeavySanmaruRouteForFirstPaint
-      ? { available:true, routePlan:null, providerHealth:[], meta:{ status: sanmaruFirstPaintPreferred ? 'sanmaru-first-paint-route-deferred' : 'fast-display-first-window', nonBlockingSanmaru:true, reason:'skip-heavy-sanmaru-route-context-for-first-paint' } }
+    const sanmaruRouteContext = fastDisplayFirstWindow
+      ? { available:true, routePlan:null, providerHealth:[], meta:{ status:'fast-display-first-window', nonBlockingSanmaru:true, reason:'skip-heavy-sanmaru-require-for-first-paint' } }
       : getSanmaruRouteContextForMaru(q, raw || {}, { searchType, lang, limit, reason:'maru-top-route-owner-context' });
     let residentSeedPack = null;
     let residentRefreshSignal = null;
@@ -5192,33 +5087,6 @@ exports.handler = async function(event){
       // refreshes resident layers asynchronously.
       residentSeedPack = { items: [], meta:{ status:'fast-display-first-window-no-blocking-resident-read' } };
       residentRefreshSignal = { status:'queued-by-first-window', nonBlocking:true };
-    }
-
-    if(sanmaruFirstPaintPreferred && residentSeedPack && sanmaruResidentFirstPaintReady(residentSeedPack, raw || {})){
-      const immediate = buildImmediateResidentResponse(q, Object.assign({}, raw || {}, { limit }), residentSeedPack, {
-        firstPaintPolicy:'sanmaru-resident-first-for-search-js',
-        searchJsRequest:true,
-        sanmaruFirstPaintPreferred:true,
-        routeContextDeferred:true,
-        backgroundResidentRefresh:residentRefreshSignal || null,
-        analyticsSuppressed:true,
-        revenueSuppressed:true,
-        security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' },
-        searchContract:{
-          owner:'sanmaru-global-web-information-cpu',
-          maruRole:'immediate-search-js-first-paint-gateway',
-          itemResults:'sanmaru-resident-first-candidate-pool',
-          providerRescanPolicy:'deferred-unless-explicit-refresh-or-external-request'
-        }
-      });
-      immediate.meta = Object.assign({}, immediate.meta || {}, {
-        preservationPatch:'A1.5.48-rich-search-pipeline-restore',
-        sanmaruImmediateFirstPaint:true,
-        doesNotCallExternal:true,
-        doesNotBlockOnWideGateway:true,
-        nextRefreshPolicy:'search.js may request deep/provider refresh separately; first response is Sanmaru resident data'
-      });
-      return ok(immediate);
     }
 
     let base = null;
@@ -5404,7 +5272,7 @@ exports.handler = async function(event){
       visiblePagePack,
       sectionPack: sectionPackWithViewport,
       displayPolicy: base.displayPolicy || null,
-      meta: Object.assign({}, base.meta || {}, { count: responseItems.length, fullCandidateCount, totalCandidates: fullCandidateCount, responseWindowCount: responseItems.length, initialResponseWindow: firstResponseWindow, pagedCandidatePool: true, maxPagerPages: MARU_SEARCH_MAX_PAGER_PAGES, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, fullCandidateCount, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'skip-only-when-sanmaru-holds-broad-query-cache; otherwise preserve-google-naver-sns-wide-gateway' }, preservationPatch: 'A1.5.48-rich-search-pipeline-restore' })
+      meta: Object.assign({}, base.meta || {}, { count: responseItems.length, fullCandidateCount, totalCandidates: fullCandidateCount, responseWindowCount: responseItems.length, initialResponseWindow: firstResponseWindow, pagedCandidatePool: true, maxPagerPages: MARU_SEARCH_MAX_PAGER_PAGES, limit, viewport: { page: visiblePagePack.page, perPage: visiblePagePack.perPage, totalPages: visiblePagePack.totalPages, visibleCount: visiblePagePack.visibleCount, totalVisibleItems: visiblePagePack.totalVisibleItems, fullCandidateCount, collapsedExcludedCount: visiblePagePack.collapsedExcludedCount, collapsedItemsExcludedFromCount: true, bodyPreserved: true, backfill:true }, region: base.region || null, route: base.route || null, sourceRoute: base.sourceRoute || base.route || null, sections: { enabled: true, mode: viewportSections.mode, totalSections: viewportSections.totalSections, fullSectionCount: fullSectionPack.totalSections, counts: fullSectionPack.counts, order: fullSectionPack.order }, groupedSectionsEnabled: true, expandableSectionsEnabled: true, analyticsSuppressed: analyticsOff, revenueSuppressed: revenueOff, settlementMode: 'weekly_batch', settlementCronUTC: '30 12 * * 1', security:{ allowed:true, admin:security.admin, mode:'read-search-open-admin-actions-protected' }, sanmaruTopResident: Object.assign({}, sanmaruRouteContext && sanmaruRouteContext.meta || {}, { routePlan: sanmaruRouteContext && sanmaruRouteContext.routePlan, providerHealth: sanmaruRouteContext && sanmaruRouteContext.providerHealth }), searchContract:{ owner:'sanmaru-global-web-information-cpu', maruRole:'mounted-gateway-ui-body', itemResults:'full-candidate-pool-not-viewport-limited', viewport:'page-sized-current-render-window', perPage:visiblePagePack.perPage, providerRescanPolicy:'skip-only-when-sanmaru-holds-broad-query-cache; otherwise preserve-google-naver-sns-wide-gateway' }, preservationPatch: 'A1.5.46-595-direct-page25-sns-google-category-fix' })
     });
   }catch(e){
     return fail('Search failed', String((e && e.message) || e));
