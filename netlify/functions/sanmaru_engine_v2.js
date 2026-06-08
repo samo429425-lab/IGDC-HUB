@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.8.3-osai-supply-discernment-stable";
+const VERSION = "sanmaru-engine-v2.8.4-osai-unified-supply-contract-stable";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 3000;
@@ -829,7 +829,7 @@ function readJsonSafe(file){
 // the existing function-data trust/payment/profile files, applies a consistent
 // Sanmaru-level verdict, and keeps safe abundance: block known-dangerous inputs,
 // but keep safe/placeholder front slots available for replacement/hydration.
-const SANMARU_OSAI_DISCERNMENT_VERSION = "osai-supply-chain-discernment-v2.1";
+const SANMARU_OSAI_DISCERNMENT_VERSION = "osai-supply-chain-discernment-v2.2-unified-contract";
 const SANMARU_SAFE_SUPPLY_EXPANSION_ORDER = Object.freeze([
   "local-city", "local-province", "same-country", "neighbor-region", "global-official", "global-trusted"
 ]);
@@ -931,28 +931,147 @@ function sanmaruPaymentOrderReadiness(item, resources){
   const directSale = item.directSale && typeof item.directSale === "object" ? item.directSale : {};
   const ext = item.extension && typeof item.extension === "object" ? item.extension : {};
   const extPayment = ext.payment && typeof ext.payment === "object" ? ext.payment : {};
+  const extStock = ext.stock && typeof ext.stock === "object" ? ext.stock : {};
   const commerce = item.commerce && typeof item.commerce === "object" ? item.commerce : {};
+  const shipping = item.shipping && typeof item.shipping === "object" ? item.shipping : {};
+  const detail = item.detail && typeof item.detail === "object" ? item.detail : {};
   const pay = resources && resources.payConfig || {};
   const features = pay.features || {};
-  const platformPaymentRailReady = !!(pay.enabled !== false && !pay.maintenance && features.commerce !== false);
-  const rawPrice = firstNonEmpty(item.price, directSale.price);
-  const hasPrice = rawPrice !== "" && Number(rawPrice || 0) !== 0;
-  const hasCurrency = !!firstNonEmpty(item.currency, directSale.currency, pay.policy && pay.policy.defaultCurrency);
-  const checkoutUrl = firstNonEmpty(extPayment.checkout_url, extPayment.checkoutUrl, item.checkoutUrl, directSale.checkoutUrl, item.paymentUrl);
-  const orderApi = firstNonEmpty(extPayment.order_api, extPayment.orderApi, item.orderApi, directSale.orderApi);
-  const pgProvider = firstNonEmpty(directSale.pgProvider, item.pgProvider, extPayment.provider);
-  const orderable = directSale.orderable === true || item.orderable === true || !!orderApi || commerce.orderable === true;
+  const policy = pay.policy || {};
+  const platformPaymentRailReady = !!(pay.enabled !== false && !pay.maintenance && features.commerce !== false && features.pgExecution !== false);
+  const rawPrice = firstNonEmpty(item.price, directSale.price, commerce.price, ext.price);
+  const priceNumber = Number(String(rawPrice).replace(/[^0-9.\-]/g, ""));
+  const hasPrice = rawPrice !== "" && Number.isFinite(priceNumber) && priceNumber > 0;
+  const hasCurrency = !!firstNonEmpty(item.currency, directSale.currency, commerce.currency, ext.currency, policy.defaultCurrency);
+  const checkoutUrl = firstNonEmpty(extPayment.checkout_url, extPayment.checkoutUrl, item.checkoutUrl, directSale.checkoutUrl, item.paymentUrl, commerce.checkoutUrl);
+  const orderApi = firstNonEmpty(extPayment.order_api, extPayment.orderApi, item.orderApi, directSale.orderApi, commerce.orderApi);
+  const pgProvider = firstNonEmpty(directSale.pgProvider, item.pgProvider, extPayment.provider, extPayment.pgProvider, policy.pgProvider);
+  const inventoryValue = firstNonEmpty(directSale.inventory, directSale.stock, item.inventory, item.stock, extStock.qty, extStock.quantity, commerce.inventory);
+  const hasInventorySignal = inventoryValue !== "" || extStock.mode === "unknown" || directSale.inventory != null || item.inventory != null || commerce.unitsSold != null;
+  const inventoryReady = !!(inventoryValue === "unknown" || extStock.mode === "unknown" || Number(inventoryValue) > 0 || directSale.inventory === null || item.inventory === null);
+  const deliveryReady = !!(shipping.country || shipping.address1 || shipping.changeable || item.deliveryReady || commerce.deliveryReady || /배송|delivery|shipping|pickup|수령/.test(normalizeText(sanmaruOsaiTextOf(item))));
+  const policyReady = !!(detail.tracking || item.termsUrl || item.privacyUrl || item.refundPolicy || item.returnPolicy || /환불|반품|약관|개인정보|refund|return|terms|privacy/.test(normalizeText(sanmaruOsaiTextOf(item))));
+  const orderable = directSale.orderable === true || item.orderable === true || !!orderApi || commerce.orderable === true || directSale.enabled === true;
   const paymentReady = !!(checkoutUrl || pgProvider || (directSale.enabled === true && platformPaymentRailReady));
+  const productLike = !!(hasPrice || directSale.enabled === true || orderable || /product|commerce|shopping|order|checkout|상품|구매|주문|결제/.test(normalizeText(sanmaruOsaiTextOf(item))));
+  let readinessScore = 0;
+  if(platformPaymentRailReady) readinessScore += 10;
+  if(hasPrice) readinessScore += 16;
+  if(hasCurrency) readinessScore += 10;
+  if(checkoutUrl) readinessScore += 18;
+  if(orderApi) readinessScore += 18;
+  if(pgProvider) readinessScore += 14;
+  if(orderable) readinessScore += 12;
+  if(inventoryReady || hasInventorySignal) readinessScore += 8;
+  if(deliveryReady) readinessScore += 8;
+  if(policyReady) readinessScore += 6;
+  readinessScore = Math.max(0, Math.min(100, readinessScore));
+  const paymentReadyStrict = !!(paymentReady && (checkoutUrl || pgProvider || platformPaymentRailReady));
+  const orderReady = !!(orderable && (paymentReadyStrict || orderApi) && (!productLike || (hasPrice && hasCurrency)));
   return {
     platformPaymentRailReady,
-    paymentReady,
-    orderReady: !!(orderable || paymentReady && hasPrice && hasCurrency),
+    paymentReady: paymentReadyStrict,
+    paymentReadyLoose: paymentReady,
+    orderReady,
+    orderReadyLoose: !!(orderable || paymentReady && hasPrice && hasCurrency),
     hasPrice,
     hasCurrency,
     checkoutUrlPresent: !!checkoutUrl,
     orderApiPresent: !!orderApi,
     pgProvider: pgProvider || null,
+    inventoryReady,
+    hasInventorySignal,
+    deliveryReady,
+    policyReady,
+    productLike,
+    readinessScore,
+    readinessTier: readinessScore >= 80 ? "A" : readinessScore >= 60 ? "B" : readinessScore >= 40 ? "C" : "D",
+    evidence:{
+      hasPrice, hasCurrency, checkoutUrlPresent:!!checkoutUrl, orderApiPresent:!!orderApi, pgProvider:pgProvider || null,
+      inventoryReady, deliveryReady, policyReady, platformPaymentRailReady
+    },
     payConfigSource: "netlify/functions/data/pay-config.js"
+  };
+}
+
+function sanmaruSupplyIntentOf(item){
+  const text = normalizeText(sanmaruOsaiTextOf(item));
+  const cats = sanmaruClassifySupplyCategory(item);
+  return !!(cats.some(c => ["agriculture","fishery","forestry","industrial_goods","food","cooperative","company","commerce"].includes(c)) || /상품|구매|주문|결제|생산자|공급|직거래|product|commerce|shopping|order|checkout|producer|supplier|manufacturer/.test(text));
+}
+function sanmaruProducerTypeOf(item, categories){
+  const text = normalizeText(sanmaruOsaiTextOf(item));
+  categories = categories || sanmaruClassifySupplyCategory(item);
+  if(categories.includes("government") || /정부|공공|지자체|부처|government|ministry|public/.test(text)) return "public_institution";
+  if(categories.includes("cooperative") || /농협|수협|축협|협동조합|cooperative|co-op|coop/.test(text)) return "cooperative";
+  if(categories.includes("agriculture") || /농가|농장|farm|farmer|producer/.test(text)) return "agricultural_producer";
+  if(categories.includes("fishery") || /어민|수산|fishery|fisheries|seafood/.test(text)) return "fishery_producer";
+  if(categories.includes("forestry") || /임업|산림|forest|timber/.test(text)) return "forestry_producer";
+  if(categories.includes("industrial_goods") || /제조|공장|manufacturer|factory/.test(text)) return "manufacturer";
+  if(categories.includes("company") || /회사|기업|corp|company/.test(text)) return "verified_company_candidate";
+  if(categories.includes("institution")) return "institution";
+  return "general_source";
+}
+function sanmaruBuildSupplyExpansionPlan(item, opts){
+  opts = opts || {};
+  item = item || {};
+  const geo = item.geo && typeof item.geo === "object" ? item.geo : {};
+  const country = firstNonEmpty(opts.country, geo.country, item.country, "GLOBAL");
+  const region = firstNonEmpty(opts.region, geo.region, geo.state, item.region, "");
+  const city = firstNonEmpty(opts.city, geo.city, item.city, "");
+  const categories = sanmaruClassifySupplyCategory(item);
+  return {
+    mode:"safe-abundance-ladder",
+    principle:"filter-danger-expand-safe-supply",
+    start:{ country, region:region || null, city:city || null },
+    categoryHints:categories,
+    ladder:[
+      { level:"local-city", country, region:region || null, city:city || null, priority:1 },
+      { level:"local-province", country, region:region || null, city:null, priority:2 },
+      { level:"same-country", country, region:null, city:null, priority:3 },
+      { level:"neighbor-region", country, region:null, city:null, priority:4 },
+      { level:"global-official", country:"GLOBAL", officialOnly:true, priority:5 },
+      { level:"global-trusted", country:"GLOBAL", trustedOnly:true, priority:6 }
+    ],
+    targetPolicy:"keep-supply-abundant-after-risk-filtering",
+    shortageFallback:"expand-radius-before-using-unknown-risk-source"
+  };
+}
+function sanmaruBuildSearchBankUnifiedContract(item, d){
+  item = item || {}; d = d || {};
+  const source = d.source || {}; const supply = d.supply || {}; const payment = d.payment || {}; const eligibility = d.eligibility || {}; const safety = d.safety || {};
+  return {
+    contractVersion:"sanmaru-searchbank-supply-contract-v1.1",
+    sourceEngine:ENGINE_NAME,
+    sourceVersion:VERSION,
+    candidateId:firstNonEmpty(item.id, item.indexId, item.originalId, stableHash([item.title, source.url, source.host].join("|"))),
+    page:firstNonEmpty(item.page, item.route, item.layerPointer && item.layerPointer.page),
+    section:firstNonEmpty(item.section, item.psom_key, item.slotKey, item.layerPointer && item.layerPointer.section),
+    supplyCategory:supply.supplyCategory || [],
+    sourceTrustScore:d.trustScore || 0,
+    trustTier:d.trustTier || "C",
+    riskLevel:d.riskLevel || "low",
+    blocked:!!d.blocked,
+    blockedReason:d.blockedReason || null,
+    officialSource:!!(source.officialSource),
+    institutionVerified:!!(source.institutionVerified),
+    producerVerified:!!(supply.producerVerified),
+    producerType:supply.producerType || "general_source",
+    directProducerChannel:!!(supply.directProducerChannel),
+    intermediaryRisk:supply.intermediaryRisk || "low",
+    paymentReady:!!payment.paymentReady,
+    orderReady:!!payment.orderReady,
+    paymentReadinessScore:payment.readinessScore || 0,
+    supplyChainReady:!!supply.supplyChainReady,
+    harmfulContentRisk:safety.harmfulContentRisk || "low",
+    illegalSiteRisk:safety.illegalSiteRisk || "low",
+    unsafeProductRisk:safety.unsafeProductRisk || "low",
+    frontSupplyAllowed:!!eligibility.frontSupplyAllowed,
+    searchBankEligible:!!eligibility.searchBankEligible,
+    snapshotEligible:!!eligibility.snapshotEligible,
+    indexEligible:!!eligibility.indexEligible,
+    contractAction: d.blocked ? "block" : (eligibility.snapshotEligible ? "accept-for-snapshot" : (eligibility.searchBankEligible ? "hold-for-searchbank-review" : "hold-for-review")),
+    storagePolicy:d.blocked ? "do-not-route-dangerous-source" : "route-safe-candidate-with-evidence-meta"
   };
 }
 function sanmaruEvaluateOsaiSupplyDiscernment(item, opts){
@@ -970,52 +1089,110 @@ function sanmaruEvaluateOsaiSupplyDiscernment(item, opts){
   const allow = resources.allowlist || {};
   const hardBlockReasons = [];
   const warningReasons = [];
-  if(host && sanmaruOsaiDomainMatch(host, block.domains)) hardBlockReasons.push("BLOCKLIST_DOMAIN");
-  if(tld && sanmaruOsaiArray(block.tlds).map(low).includes(tld)) hardBlockReasons.push("BLOCKLIST_TLD");
+  const trustEvidence = [];
+  const safetyEvidence = [];
+  const paymentEvidence = [];
+  const producerEvidence = [];
+  const officialEvidence = [];
+  const supplyCategory = sanmaruClassifySupplyCategory(item);
+  const supplyIntent = sanmaruSupplyIntentOf(item);
+
+  if(host && sanmaruOsaiDomainMatch(host, block.domains)){ hardBlockReasons.push("BLOCKLIST_DOMAIN"); safetyEvidence.push("domain-in-blocklist"); }
+  if(tld && sanmaruOsaiArray(block.tlds).map(low).includes(tld)){ hardBlockReasons.push("BLOCKLIST_TLD"); safetyEvidence.push("tld-in-blocklist"); }
   const patternHits = sanmaruOsaiPatternHits(text, block.patterns).concat(sanmaruOsaiPatternHits(text, block.keywords));
-  if(patternHits.length) hardBlockReasons.push("BLOCKLIST_PATTERN");
-  if(item.fake === true) hardBlockReasons.push("ITEM_FAKE");
-  if(item.scam === true) hardBlockReasons.push("ITEM_SCAM");
-  if(host && /^xn--/.test(host)) hardBlockReasons.push("DOMAIN_PUNYCODE_BLOCK");
+  if(patternHits.length){ hardBlockReasons.push("BLOCKLIST_PATTERN"); safetyEvidence.push("blocklist-pattern-hit"); }
+  if(item.fake === true){ hardBlockReasons.push("ITEM_FAKE"); safetyEvidence.push("item-fake-flag"); }
+  if(item.scam === true){ hardBlockReasons.push("ITEM_SCAM"); safetyEvidence.push("item-scam-flag"); }
+  if(host && /^xn--/.test(host)){ hardBlockReasons.push("DOMAIN_PUNYCODE_BLOCK"); safetyEvidence.push("punycode-domain"); }
+
+  let coreScore = null;
   if(isHttp && resources.trustCore && typeof resources.trustCore.evaluateTrust === "function"){
     try{
       const core = resources.trustCore.evaluateTrust(Object.assign({ title:firstNonEmpty(item.title, item.name, host || "candidate") }, item, { url }), { country:opts.country, strictCountry:false });
+      if(core && Number.isFinite(Number(core.score))) coreScore = Number(core.score);
       if(core && core.ok === false){
         const fatal = sanmaruOsaiArray(core.reasons).filter(r => /BLOCKLIST|ITEM_FAKE|ITEM_SCAM|URL_INVALID|CURRENCY_INVALID/.test(s(r)));
         hardBlockReasons.push(...fatal);
+        if(fatal.length) safetyEvidence.push("trust-core-fatal:" + fatal.slice(0, 3).join(","));
         if(!fatal.length) warningReasons.push(...sanmaruOsaiArray(core.reasons));
-      }else if(core && core.trusted){ warningReasons.push("TRUST_CORE_ALLOWLISTED"); }
+      }else if(core && core.trusted){ warningReasons.push("TRUST_CORE_ALLOWLISTED"); trustEvidence.push("trust-core-allowlisted"); }
     }catch(e){ warningReasons.push("TRUST_CORE_UNAVAILABLE"); }
   }
+
+  let commerceScore = null;
   if(isHttp && resources.commerceTrust && typeof resources.commerceTrust.evaluateCandidate === "function"){
     try{
       const commerce = resources.commerceTrust.evaluateCandidate({ url, title:item.title, image:firstNonEmpty(item.image, item.thumbnail, item.thumb), price:item.price, currency:item.currency }, { allowlist:allow, blocklist:block, minScore:35 });
-      if(commerce && sanmaruOsaiArray(commerce.reasons).some(r => /BLOCKLIST|PUNYCODE/.test(s(r)))) hardBlockReasons.push(...commerce.reasons.filter(r => /BLOCKLIST|PUNYCODE/.test(s(r))));
-      else if(commerce && commerce.ok === false) warningReasons.push("COMMERCE_READINESS_LOW");
+      if(commerce && Number.isFinite(Number(commerce.score))) commerceScore = Number(commerce.score);
+      if(commerce && sanmaruOsaiArray(commerce.reasons).some(r => /BLOCKLIST|PUNYCODE/.test(s(r)))){
+        const fatal = commerce.reasons.filter(r => /BLOCKLIST|PUNYCODE/.test(s(r)));
+        hardBlockReasons.push(...fatal);
+        safetyEvidence.push("commerce-trust-fatal:" + fatal.slice(0, 3).join(","));
+      }else if(commerce && commerce.ok === false) warningReasons.push("COMMERCE_READINESS_LOW");
+      if(commerce && commerce.ok === true) trustEvidence.push("commerce-trust-ok");
     }catch(e){ warningReasons.push("COMMERCE_TRUST_UNAVAILABLE"); }
   }
+
   const allowedDomain = !!(host && sanmaruOsaiDomainMatch(host, allow.domains));
-  const supplyCategory = sanmaruClassifySupplyCategory(item);
-  const officialSource = !!(allowedDomain || /\.gov$|\.gov\.|\.go\.kr$|\.or\.kr$|\.ac\.kr$|\.edu$|\.edu\.|korea\.kr$/i.test(host) || /공식|정부|공공|기관|official|government|ministry|public data|open data|authority/.test(textNorm));
-  const institutionVerified = !!(officialSource || /기관|협회|재단|연맹|대학|연구소|institute|institution|association|foundation|university|college/.test(textNorm));
-  const producerVerified = !!(item.producer && (item.producer.id || item.producer.name || item.producer.home) || /생산자|직거래|산지|농협|수협|축협|협동조합|제조사|manufacturer|producer|farm|fishery|factory|cooperative|direct producer/.test(textNorm));
+  if(allowedDomain) trustEvidence.push("allowlist-domain");
+  const officialHostSignal = /\.gov$|\.gov\.|\.go\.kr$|\.go\.jp$|\.go\.vn$|\.gob\.|\.or\.kr$|\.ac\.kr$|\.edu$|\.edu\.|korea\.kr$/i.test(host);
+  const officialTextSignal = /공식|정부|공공|기관|공공데이터|official|government|ministry|public data|open data|authority|municipality/.test(textNorm);
+  const officialSource = !!(allowedDomain || officialHostSignal || officialTextSignal);
+  if(officialSource) officialEvidence.push(allowedDomain ? "allowlist-official" : (officialHostSignal ? "official-host" : "official-text"));
+  const institutionVerified = !!(officialSource || /기관|협회|재단|연맹|대학|연구소|institute|institution|association|foundation|university|college|cooperative federation/.test(textNorm));
+  if(institutionVerified) officialEvidence.push("institution-signal");
+  const producerVerified = !!(item.producer && (item.producer.id || item.producer.name || item.producer.home) || /생산자|직거래|산지|농협|수협|축협|협동조합|제조사|제조업체|manufacturer|producer|farm|fishery|factory|cooperative|direct producer|supplier/.test(textNorm));
+  if(producerVerified) producerEvidence.push(item.producer ? "producer-object" : "producer-text-signal");
+  const producerType = sanmaruProducerTypeOf(item, supplyCategory);
   const marketplaceHost = sanmaruIsMarketplaceHost(host);
-  const intermediaryRisk = marketplaceHost || /중개|마켓플레이스|오픈마켓|affiliate|제휴|distributor|reseller|marketplace|platform seller/.test(textNorm) ? (producerVerified ? "medium" : "high") : "low";
+  const marketplaceText = /중개|마켓플레이스|오픈마켓|affiliate|제휴|distributor|reseller|marketplace|platform seller/.test(textNorm);
+  const intermediaryRisk = marketplaceHost || marketplaceText ? (producerVerified || officialSource ? "medium" : "high") : "low";
+  if(intermediaryRisk !== "low") producerEvidence.push("intermediary-risk:" + intermediaryRisk);
   const directProducerChannel = !!(producerVerified && intermediaryRisk !== "high");
+  if(directProducerChannel) producerEvidence.push("direct-producer-channel");
   const payment = sanmaruPaymentOrderReadiness(item, resources);
-  const unsafeProductRisk = patternHits.length ? "blocked" : (/도박|성인|마약|무기|위조|불법|gambling|casino|drug|weapon|counterfeit|adult/.test(textNorm) ? "high" : "low");
+  if(payment.paymentReady) paymentEvidence.push("payment-ready");
+  if(payment.orderReady) paymentEvidence.push("order-ready");
+  if(payment.deliveryReady) paymentEvidence.push("delivery-ready");
+  if(payment.policyReady) paymentEvidence.push("commerce-policy-ready");
+
+  const unsafeProductKeyword = /도박|성인|마약|무기|위조|불법|불법약물|사행|gambling|casino|drug|weapon|counterfeit|adult|porn|steroid|explosive/.test(textNorm);
+  if(unsafeProductKeyword && (supplyIntent || opts.mode === "front-supply" || opts.frontSupply || opts.slotSupply)){
+    hardBlockReasons.push("UNSAFE_PRODUCT_SIGNAL");
+    safetyEvidence.push("unsafe-product-keyword");
+  }
+  const unsafeProductRisk = hardBlockReasons.includes("UNSAFE_PRODUCT_SIGNAL") || patternHits.length ? "blocked" : (unsafeProductKeyword ? "high" : "low");
   const illegalSiteRisk = hardBlockReasons.some(r => /BLOCKLIST|PUNYCODE/.test(r)) ? "blocked" : "low";
-  const harmfulContentRisk = hardBlockReasons.length ? "blocked" : (/폭력|테러|성인|도박|피싱|scam|phishing|malware|terror|adult|casino/.test(textNorm) ? "medium" : "low");
-  const riskLevel = hardBlockReasons.length ? "blocked" : (unsafeProductRisk === "high" || intermediaryRisk === "high" && !officialSource ? "medium" : (warningReasons.length ? "low" : "low"));
+  const harmfulContentSignal = /폭력|테러|성인|도박|피싱|scam|phishing|malware|terror|adult|casino/.test(textNorm);
+  const harmfulContentRisk = hardBlockReasons.length ? "blocked" : (harmfulContentSignal ? "medium" : "low");
+  if(harmfulContentSignal) safetyEvidence.push("harmful-content-signal");
+
+  const supplyExpansionPlan = sanmaruBuildSupplyExpansionPlan(item, opts);
+  const baseTrust = 45;
   const trustScore = Math.max(0, Math.min(100,
-    45 + (allowedDomain ? 18 : 0) + (officialSource ? 18 : 0) + (institutionVerified ? 8 : 0) + (producerVerified ? 10 : 0) + (directProducerChannel ? 8 : 0) + (payment.paymentReady ? 5 : 0) + (payment.orderReady ? 5 : 0) - (intermediaryRisk === "high" ? 15 : intermediaryRisk === "medium" ? 6 : 0) - (hardBlockReasons.length ? 100 : 0)
+    baseTrust + (allowedDomain ? 18 : 0) + (officialSource ? 18 : 0) + (institutionVerified ? 8 : 0) +
+    (producerVerified ? 10 : 0) + (directProducerChannel ? 8 : 0) + (payment.paymentReady ? 5 : 0) +
+    (payment.orderReady ? 8 : 0) + (payment.deliveryReady ? 3 : 0) + (payment.policyReady ? 3 : 0) +
+    (coreScore != null ? Math.max(-10, Math.min(12, Math.round(coreScore / 10))) : 0) +
+    (commerceScore != null ? Math.max(-8, Math.min(10, Math.round(commerceScore / 12))) : 0) -
+    (intermediaryRisk === "high" ? 15 : intermediaryRisk === "medium" ? 6 : 0) - (hardBlockReasons.length ? 100 : 0)
   ));
-  const trustTier = hardBlockReasons.length ? "blocked" : (trustScore >= 85 ? "A+" : trustScore >= 72 ? "A" : trustScore >= 58 ? "B" : "C");
-  const supplyChainReady = !!(!hardBlockReasons.length && (officialSource || institutionVerified || producerVerified || directProducerChannel || payment.orderReady || supplyCategory.some(x => x !== "general_information")));
+  const trustTier = hardBlockReasons.length ? "blocked" : (trustScore >= 88 ? "A+" : trustScore >= 76 ? "A" : trustScore >= 62 ? "B" : trustScore >= 48 ? "C" : "D");
+  const supplyChainReady = !!(!hardBlockReasons.length && (officialSource || institutionVerified || producerVerified || directProducerChannel || payment.orderReady || supplyCategory.some(x => !["general_information"].includes(x))));
+  const riskLevel = hardBlockReasons.length ? "blocked" : (unsafeProductRisk === "high" || harmfulContentRisk === "medium" || intermediaryRisk === "high" && !officialSource ? "medium" : (warningReasons.length ? "low" : "low"));
   const frontSupplyAllowed = !hardBlockReasons.length;
   const searchBankEligible = !hardBlockReasons.length && (placeholderLike || trustScore >= 45 || supplyChainReady);
-  const snapshotEligible = !hardBlockReasons.length && (placeholderLike || trustScore >= 45 || officialSource || supplyChainReady);
-  return {
+  const snapshotEligible = !hardBlockReasons.length && (placeholderLike || trustScore >= 48 || officialSource || supplyChainReady);
+  const indexEligible = !hardBlockReasons.length && (placeholderLike || trustScore >= 40 || supplyChainReady);
+  const evidence = {
+    trust:Array.from(new Set(trustEvidence)).slice(0, 12),
+    safety:Array.from(new Set(safetyEvidence)).slice(0, 12),
+    payment:Array.from(new Set(paymentEvidence)).slice(0, 12),
+    producer:Array.from(new Set(producerEvidence)).slice(0, 12),
+    official:Array.from(new Set(officialEvidence)).slice(0, 12),
+    warnings:Array.from(new Set(warningReasons)).slice(0, 12)
+  };
+  const provisional = {
     version:SANMARU_OSAI_DISCERNMENT_VERSION,
     ok:!hardBlockReasons.length,
     blocked:!!hardBlockReasons.length,
@@ -1023,13 +1200,16 @@ function sanmaruEvaluateOsaiSupplyDiscernment(item, opts){
     riskLevel,
     trustTier,
     trustScore,
-    source:{ url:url || null, host:host || null, allowedDomain, officialSource, institutionVerified },
-    supply:{ supplyCategory, producerVerified, directProducerChannel, intermediaryRisk, supplyChainReady, localFirstExpansion:true, expansionOrder:SANMARU_SAFE_SUPPLY_EXPANSION_ORDER },
+    source:{ url:url || null, host:host || null, allowedDomain, officialSource, institutionVerified, officialEvidence:evidence.official },
+    supply:{ supplyCategory, producerVerified, producerType, directProducerChannel, intermediaryRisk, supplyChainReady, localFirstExpansion:true, expansionOrder:SANMARU_SAFE_SUPPLY_EXPANSION_ORDER, expansionPlan:supplyExpansionPlan },
     payment,
-    safety:{ illegalSiteRisk, harmfulContentRisk, unsafeProductRisk, patternHits:patternHits.slice(0, 10), warningReasons:Array.from(new Set(warningReasons)).slice(0, 12) },
-    eligibility:{ frontSupplyAllowed, searchBankEligible, snapshotEligible, placeholderLike, abundancePreserved:true },
+    safety:{ illegalSiteRisk, harmfulContentRisk, unsafeProductRisk, patternHits:patternHits.slice(0, 10), warningReasons:evidence.warnings, safetyEvidence:evidence.safety },
+    eligibility:{ frontSupplyAllowed, searchBankEligible, snapshotEligible, indexEligible, placeholderLike, abundancePreserved:true },
+    evidence,
     policySources:resources.sources
   };
+  provisional.searchBankContract = sanmaruBuildSearchBankUnifiedContract(item, provisional);
+  return provisional;
 }
 function sanmaruAttachDiscernment(item, opts){
   const d = sanmaruEvaluateOsaiSupplyDiscernment(item, opts || {});
@@ -1051,6 +1231,13 @@ function sanmaruAttachDiscernment(item, opts){
   out.frontSupplyAllowed = d.eligibility.frontSupplyAllowed;
   out.searchBankEligible = d.eligibility.searchBankEligible;
   out.snapshotEligible = d.eligibility.snapshotEligible;
+  out.indexEligible = d.eligibility.indexEligible;
+  out.sanmaruEvidence = d.evidence;
+  out.sanmaruSearchBankContract = d.searchBankContract;
+  out.producerType = d.supply.producerType;
+  out.paymentReadinessScore = d.payment.readinessScore;
+  out.paymentReadinessTier = d.payment.readinessTier;
+  out.safeSupplyExpansion = d.supply.expansionPlan;
   if(d.blocked) out.sanmaruBlocked = true;
   return out;
 }
@@ -1084,10 +1271,18 @@ function sanmaruScreenSupplyItems(items, opts){
       blockedCount:blocked.length,
       blockedPreview:blocked.slice(0, 8),
       riskCounts, trustTierCounts:tierCounts, supplyCategoryCounts:categoryCounts,
+      searchBankEligibleCount:out.filter(x => x && x.searchBankEligible).length,
+      snapshotEligibleCount:out.filter(x => x && x.snapshotEligible).length,
+      indexEligibleCount:out.filter(x => x && x.indexEligible).length,
+      paymentReadyCount:out.filter(x => x && x.paymentReady).length,
+      orderReadyCount:out.filter(x => x && x.orderReady).length,
+      directProducerChannelCount:out.filter(x => x && x.directProducerChannel).length,
+      contractVersion:"sanmaru-searchbank-supply-contract-v1.1",
+      evidenceEnabled:true,
       preservesAbundance:true,
       riskGateBeforeExpansion:true,
       expansionOrder:SANMARU_SAFE_SUPPLY_EXPANSION_ORDER,
-      policy:"block-known-dangerous-preserve-safe-abundance-unify-sanmaru-searchbank-trust-contract",
+      policy:"block-known-dangerous-expand-safe-supply-unify-sanmaru-searchbank-trust-contract",
       elapsedMs:nowMs() - started
     }
   };
@@ -3746,7 +3941,7 @@ function buildSanmaruFrontSupplyPackage(q, opts){
       directExternalAdaptersEnabled:false,
       osaiSupplyDiscernment:osaiDiscernmentPack.meta,
       safeSupplyExpansion:{ localFirst:true, expansionOrder:SANMARU_SAFE_SUPPLY_EXPANSION_ORDER, abundanceTarget:targetCount, filterDoesNotShrinkSafeSupply:true },
-      unifiedTrustContract:{ preservesSearchBankChecks:true, preservesTrustFilterChecks:true, preservesPaymentPermissionChecks:true, removesDuplicateLogic:false, contractFields:["trustTier","riskLevel","blockedReason","officialSource","institutionVerified","producerVerified","directProducerChannel","intermediaryRisk","paymentReady","orderReady","supplyChainReady","frontSupplyAllowed","searchBankEligible","snapshotEligible"] },
+      unifiedTrustContract:{ preservesSearchBankChecks:true, preservesTrustFilterChecks:true, preservesPaymentPermissionChecks:true, removesDuplicateLogic:false, contractVersion:"sanmaru-searchbank-supply-contract-v1.1", evidenceEnabled:true, contractFields:["trustTier","riskLevel","blockedReason","officialSource","institutionVerified","producerVerified","producerType","directProducerChannel","intermediaryRisk","paymentReady","orderReady","paymentReadinessScore","deliveryReady","policyReady","supplyChainReady","frontSupplyAllowed","searchBankEligible","snapshotEligible","indexEligible","searchBankContract","sanmaruEvidence"] },
       osaiDirectAccess:sanmaruFrontDirectAccessProfile(opts),
       resident: residentBootSnapshot(),
       providerHealth: providerHealthSnapshot(),
@@ -3783,7 +3978,7 @@ async function handler(event){
   if(action === "provider-health") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"provider-health", providerHealth:providerHealthSnapshot(), resident:residentBootSnapshot() });
   if(action === "source-registry") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"source-registry", sources:sourceRegistrySnapshot(), openingSignals:openingSignalsSnapshot(), resident:residentBootSnapshot() });
   if(action === "category-map" || action === "category-brain") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"category-map", categories:categoryMapSnapshot(), aliases:PROVIDER_CATEGORY_ALIASES, capabilities:PROVIDER_CAPABILITY_MAP, logosGuard:logosEvaluate([{ type:"category_brain", intent:"stewardship", truthConfidence:0.95 }], "category-map"), resident:residentBootSnapshot() });
-  if(action === "osai-policy" || action === "supply-discernment-policy") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"osai-policy", discernmentVersion:SANMARU_OSAI_DISCERNMENT_VERSION, resources:sanmaruOsaiPolicyResources().sources, expansionOrder:SANMARU_SAFE_SUPPLY_EXPANSION_ORDER, contractFields:["trustTier","riskLevel","blockedReason","officialSource","institutionVerified","producerVerified","directProducerChannel","intermediaryRisk","paymentReady","orderReady","supplyChainReady","frontSupplyAllowed","searchBankEligible","snapshotEligible"], policy:"preserve-existing-searchbank-trust-payment-checks-and-add-sanmaru-osai-discernment-meta" });
+  if(action === "osai-policy" || action === "supply-discernment-policy") return ok({ status:"ok", engine:ENGINE_NAME, version:VERSION, action:"osai-policy", discernmentVersion:SANMARU_OSAI_DISCERNMENT_VERSION, resources:sanmaruOsaiPolicyResources().sources, expansionOrder:SANMARU_SAFE_SUPPLY_EXPANSION_ORDER, contractFields:["trustTier","riskLevel","blockedReason","officialSource","institutionVerified","producerVerified","producerType","directProducerChannel","intermediaryRisk","paymentReady","orderReady","paymentReadinessScore","deliveryReady","policyReady","supplyChainReady","frontSupplyAllowed","searchBankEligible","snapshotEligible","indexEligible","sanmaruEvidence","sanmaruSearchBankContract"], contractVersion:"sanmaru-searchbank-supply-contract-v1.1", policy:"preserve-existing-searchbank-trust-payment-checks-and-add-sanmaru-osai-discernment-meta" });
   if(action === "instant-supply" || action === "instant-search" || action === "instant-os" || action === "first-supply" || action === "authority-top" || action === "provider-layer") {
     const qx = firstNonEmpty(merged.q, merged.query);
     const country = firstNonEmpty(merged.country, merged.region, merged.geo, detectRuntimeRegion(event || {}, firstNonEmpty(merged.lang, merged.uiLang, merged.locale), qx));
@@ -3861,7 +4056,9 @@ module.exports = {
   absorbResidentItems,
   buildSanmaruInstantOsPackage,
   buildSanmaruFrontSupplyPackage,
-  sanmaruEvaluateOsaiSupplyDiscernment
+  sanmaruEvaluateOsaiSupplyDiscernment,
+  sanmaruBuildSearchBankUnifiedContract,
+  sanmaruBuildSupplyExpansionPlan
 };
 
 exports.version = VERSION;
