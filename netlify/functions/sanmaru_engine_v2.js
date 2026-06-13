@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.8.4-osai-unified-supply-contract-stable";
+const VERSION = "sanmaru-engine-v2.8.5-front-verified-gate-stable";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 3000;
@@ -829,7 +829,7 @@ function readJsonSafe(file){
 // the existing function-data trust/payment/profile files, applies a consistent
 // Sanmaru-level verdict, and keeps safe abundance: block known-dangerous inputs,
 // but keep safe/placeholder front slots available for replacement/hydration.
-const SANMARU_OSAI_DISCERNMENT_VERSION = "osai-supply-chain-discernment-v2.2-unified-contract";
+const SANMARU_OSAI_DISCERNMENT_VERSION = "osai-supply-chain-discernment-v2.3-front-verified-gate";
 const SANMARU_SAFE_SUPPLY_EXPANSION_ORDER = Object.freeze([
   "local-city", "local-province", "same-country", "neighbor-region", "global-official", "global-trusted"
 ]);
@@ -1037,6 +1037,34 @@ function sanmaruBuildSupplyExpansionPlan(item, opts){
     shortageFallback:"expand-radius-before-using-unknown-risk-source"
   };
 }
+
+function sanmaruFrontVerifiedGate(meta){
+  meta = meta || {};
+  const evidence = [];
+  if(meta.placeholderLike) evidence.push("placeholder-front-slot-preserved");
+  if(meta.allowedDomain) evidence.push("allowlist-domain");
+  if(meta.officialSource) evidence.push("official-source");
+  if(meta.institutionVerified) evidence.push("institution-verified");
+  if(meta.producerVerified) evidence.push("producer-verified");
+  if(meta.directProducerChannel) evidence.push("direct-producer-channel");
+  if(meta.trustTier === "A" || meta.trustTier === "A+") evidence.push("high-trust-tier");
+  if(Number(meta.trustScore || 0) >= 76) evidence.push("high-trust-score");
+  if(meta.orderReady && (meta.officialSource || meta.producerVerified || meta.directProducerChannel)) evidence.push("order-ready-with-trusted-source");
+  if(meta.deliveryReady && (meta.officialSource || meta.producerVerified || meta.directProducerChannel)) evidence.push("delivery-ready-with-trusted-source");
+
+  const riskBad = [meta.riskLevel, meta.unsafeProductRisk, meta.illegalSiteRisk, meta.harmfulContentRisk]
+    .map(x => s(x).toLowerCase())
+    .some(x => ["blocked", "critical", "illegal", "unsafe", "high"].includes(x));
+  const intermediaryHigh = s(meta.intermediaryRisk).toLowerCase() === "high" && !(meta.officialSource || meta.directProducerChannel);
+  const verified = !!(meta.placeholderLike || meta.allowedDomain || meta.officialSource || meta.institutionVerified || meta.producerVerified || meta.directProducerChannel || meta.trustTier === "A" || meta.trustTier === "A+" || Number(meta.trustScore || 0) >= 76 || (meta.orderReady && (meta.officialSource || meta.producerVerified || meta.directProducerChannel)));
+  const allowed = !!(!meta.blocked && !riskBad && !intermediaryHigh && verified);
+  return {
+    allowed,
+    verified,
+    evidence:Array.from(new Set(evidence)).slice(0, 12),
+    reason:allowed ? "verified-front-supply" : (meta.blocked ? "blocked" : (riskBad ? "risk-not-front-safe" : (intermediaryHigh ? "intermediary-risk-high" : "verification-required-for-front-exposure")))
+  };
+}
 function sanmaruBuildSearchBankUnifiedContract(item, d){
   item = item || {}; d = d || {};
   const source = d.source || {}; const supply = d.supply || {}; const payment = d.payment || {}; const eligibility = d.eligibility || {}; const safety = d.safety || {};
@@ -1180,9 +1208,14 @@ function sanmaruEvaluateOsaiSupplyDiscernment(item, opts){
   const trustTier = hardBlockReasons.length ? "blocked" : (trustScore >= 88 ? "A+" : trustScore >= 76 ? "A" : trustScore >= 62 ? "B" : trustScore >= 48 ? "C" : "D");
   const supplyChainReady = !!(!hardBlockReasons.length && (officialSource || institutionVerified || producerVerified || directProducerChannel || payment.orderReady || supplyCategory.some(x => !["general_information"].includes(x))));
   const riskLevel = hardBlockReasons.length ? "blocked" : (unsafeProductRisk === "high" || harmfulContentRisk === "medium" || intermediaryRisk === "high" && !officialSource ? "medium" : (warningReasons.length ? "low" : "low"));
-  const frontSupplyAllowed = !hardBlockReasons.length;
+  const frontGate = sanmaruFrontVerifiedGate({
+    blocked:!!hardBlockReasons.length, placeholderLike, allowedDomain, officialSource, institutionVerified, producerVerified, directProducerChannel,
+    trustTier, trustScore, riskLevel, unsafeProductRisk, illegalSiteRisk, harmfulContentRisk, intermediaryRisk,
+    orderReady:payment.orderReady, deliveryReady:payment.deliveryReady, policyReady:payment.policyReady
+  });
+  const frontSupplyAllowed = frontGate.allowed;
   const searchBankEligible = !hardBlockReasons.length && (placeholderLike || trustScore >= 45 || supplyChainReady);
-  const snapshotEligible = !hardBlockReasons.length && (placeholderLike || trustScore >= 48 || officialSource || supplyChainReady);
+  const snapshotEligible = !hardBlockReasons.length && (placeholderLike || frontGate.allowed || trustScore >= 76 || officialSource || directProducerChannel);
   const indexEligible = !hardBlockReasons.length && (placeholderLike || trustScore >= 40 || supplyChainReady);
   const evidence = {
     trust:Array.from(new Set(trustEvidence)).slice(0, 12),
@@ -1205,7 +1238,8 @@ function sanmaruEvaluateOsaiSupplyDiscernment(item, opts){
     payment,
     safety:{ illegalSiteRisk, harmfulContentRisk, unsafeProductRisk, patternHits:patternHits.slice(0, 10), warningReasons:evidence.warnings, safetyEvidence:evidence.safety },
     eligibility:{ frontSupplyAllowed, searchBankEligible, snapshotEligible, indexEligible, placeholderLike, abundancePreserved:true },
-    evidence,
+    frontVerifiedGate:{ allowed:frontGate.allowed, verified:frontGate.verified, reason:frontGate.reason, evidence:frontGate.evidence },
+    evidence:Object.assign({}, evidence, { front:frontGate.evidence }),
     policySources:resources.sources
   };
   provisional.searchBankContract = sanmaruBuildSearchBankUnifiedContract(item, provisional);
@@ -1229,6 +1263,8 @@ function sanmaruAttachDiscernment(item, opts){
   out.orderReady = d.payment.orderReady;
   out.supplyChainReady = d.supply.supplyChainReady;
   out.frontSupplyAllowed = d.eligibility.frontSupplyAllowed;
+  out.frontVerifiedGate = d.frontVerifiedGate || undefined;
+  out.frontVerificationStatus = d.eligibility.frontSupplyAllowed ? "verified-front-supply" : "hold-for-front-verification";
   out.searchBankEligible = d.eligibility.searchBankEligible;
   out.snapshotEligible = d.eligibility.snapshotEligible;
   out.indexEligible = d.eligibility.indexEligible;

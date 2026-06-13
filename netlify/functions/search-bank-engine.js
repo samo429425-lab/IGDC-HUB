@@ -70,7 +70,7 @@ try { CentralCollector = require("./collector"); } catch (e) { CentralCollector 
 let MaruSearch = null;
 try { MaruSearch = require("./maru-search"); } catch (e) { MaruSearch = null; }
 
-const SEARCH_BANK_ENGINE_VERSION = "search-bank-engine-v10.7.1-front-section-strict-production";
+const SEARCH_BANK_ENGINE_VERSION = "search-bank-engine-v10.7.2-front-verified-gate-production";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 
 // ---------- small utils ----------
@@ -132,6 +132,41 @@ function searchBankPgState(ctx){
   const live = truthy(p.paymentLive || p.pgLive || p.pgExecution || p.pgApproved || process.env.IGDC_PAYMENT_LIVE || process.env.IGDC_PG_LIVE || process.env.PAYMENT_LIVE || process.env.PG_EXECUTION || process.env.PG_APPROVED);
   return { pgExecution:!!live, paymentLive:!!live, status:live ? "pg-live" : "pending-pg-approval", policy:"pay-config-is-structural-readiness-only-until-pg-approval" };
 }
+
+function searchBankFrontVerifiedGate(c, item, ctx){
+  c = c || {}; item = item || {};
+  const text = low([item.title, item.name, item.summary, item.description, item.source, item.provider, item.url, item.link, item.href, item.section, item.category].filter(Boolean).join(" "));
+  const host = domainOf(firstNonEmpty(item.url, item.link && item.link.url, item.link && item.link.href, item.href));
+  const placeholderLike = !!(item.placeholder || item.isPlaceholder || item.replaceableSlot || item.isLayerPointer || /^#?$/.test(firstNonEmpty(item.url, item.link, item.href, "")) || /placeholder|replaceable-front-slot|seed slot|front-slot/i.test(text));
+  const officialHost = !!host && /\.gov$|\.gov\.|\.go\.kr$|\.go\.jp$|\.go\.vn$|\.or\.kr$|\.ac\.kr$|\.edu$|\.edu\.|korea\.kr$/i.test(host);
+  const cooperativeSignal = /농협|수협|축협|산림조합|협동조합|생산자조합|영농조합|어업회사법인|agricultural cooperative|fishery cooperative|fisheries cooperative|cooperative|producer group|farmers union/.test(text);
+  const explicitVerified = !!(item.verified === true || item.verify && item.verify.status === "verified" || item.org && item.org.verified === true || item.source && item.source.verified === true);
+  const trustStrong = ["a", "a+"].includes(low(c.trustTier)) || Number(c.sourceTrustScore || 0) >= 76 || Number(item.sourceTrust || 0) >= 0.76 || Number(item.trustScore || 0) >= 76;
+  const evidence = [];
+  if(placeholderLike) evidence.push("placeholder-front-slot-preserved");
+  if(explicitVerified) evidence.push("explicit-verified");
+  if(c.officialSource || officialHost) evidence.push("official-source");
+  if(c.institutionVerified) evidence.push("institution-verified");
+  if(c.producerVerified || cooperativeSignal) evidence.push("producer-or-cooperative-verified");
+  if(c.directProducerChannel) evidence.push("direct-producer-channel");
+  if(trustStrong) evidence.push("strong-trust-score");
+  if(c.orderReady && (c.officialSource || c.producerVerified || c.directProducerChannel || cooperativeSignal)) evidence.push("order-ready-with-trusted-source");
+  const riskBad = [c.riskLevel, c.unsafeProductRisk, c.illegalSiteRisk, c.harmfulContentRisk]
+    .map(low)
+    .some(x => ["blocked", "critical", "illegal", "unsafe", "high"].includes(x));
+  const intermediaryHigh = low(c.intermediaryRisk) === "high" && !(c.officialSource || c.directProducerChannel || cooperativeSignal);
+  const verified = !!(placeholderLike || explicitVerified || c.officialSource || officialHost || c.institutionVerified || c.producerVerified || cooperativeSignal || c.directProducerChannel || trustStrong || (c.orderReady && (c.officialSource || c.producerVerified || c.directProducerChannel || cooperativeSignal)));
+  const allowed = !!(c.frontSupplyAllowed !== false && !c.blocked && !riskBad && !intermediaryHigh && verified);
+  const out = Object.assign({}, c, {
+    frontSupplyAllowed:allowed,
+    snapshotEligible:!!(c.snapshotEligible && (allowed || placeholderLike || c.officialSource || c.directProducerChannel || trustStrong)),
+    frontVerifiedGate:{ allowed, verified, reason:allowed ? "verified-front-supply" : (c.blocked ? "blocked" : (riskBad ? "risk-not-front-safe" : (intermediaryHigh ? "intermediary-risk-high" : "verification-required-for-front-exposure"))), evidence:Array.from(new Set(evidence)).slice(0, 12) },
+    frontVerificationStatus:allowed ? "verified-front-supply" : "hold-for-front-verification"
+  });
+  out.contractAction = out.blocked ? "block" : (out.snapshotEligible ? "accept-for-snapshot" : (out.searchBankEligible ? "hold-for-searchbank-review" : "hold-for-review"));
+  out.storagePolicy = out.blocked ? "do-not-route-dangerous-source" : (out.frontSupplyAllowed ? "route-verified-front-candidate-with-evidence-meta" : "hold-unverified-candidate-outside-front-exposure");
+  return out;
+}
 function buildSearchBankContract(item, ctx){
   item = item || {};
   const d = (item.osaiDiscernment && typeof item.osaiDiscernment === "object") ? item.osaiDiscernment : {};
@@ -153,7 +188,7 @@ function buildSearchBankContract(item, ctx){
   const searchBankEligible = blocked ? false : !explicitFalse(firstDefined(item.searchBankEligible, c.searchBankEligible, eligibility.searchBankEligible, true));
   const snapshotEligible = blocked ? false : !explicitFalse(firstDefined(item.snapshotEligible, c.snapshotEligible, eligibility.snapshotEligible, searchBankEligible));
   const indexEligible = blocked ? false : !explicitFalse(firstDefined(item.indexEligible, c.indexEligible, eligibility.indexEligible, searchBankEligible));
-  return {
+  return searchBankFrontVerifiedGate({
     contractVersion:firstNonEmpty(c.contractVersion, SEARCH_BANK_CONTRACT_VERSION),
     receivingEngine:"search-bank",
     receivingVersion:SEARCH_BANK_ENGINE_VERSION,
@@ -192,7 +227,7 @@ function buildSearchBankContract(item, ctx){
     contractAction: blocked ? "block" : (snapshotEligible ? "accept-for-snapshot" : (searchBankEligible ? "hold-for-searchbank-review" : "hold-for-review")),
     storagePolicy: blocked ? "do-not-route-dangerous-source" : "route-safe-candidate-with-evidence-meta",
     pgPolicy:pg.policy
-  };
+  }, item, ctx);
 }
 function applyUnifiedSupplyContract(item, ctx){
   if(!item || typeof item !== "object") return item;
@@ -202,6 +237,8 @@ function applyUnifiedSupplyContract(item, ctx){
   item.snapshotEligible = c.snapshotEligible;
   item.indexEligible = c.indexEligible;
   item.frontSupplyAllowed = c.frontSupplyAllowed;
+  item.frontVerifiedGate = c.frontVerifiedGate || undefined;
+  item.frontVerificationStatus = c.frontVerificationStatus || (c.frontSupplyAllowed ? "verified-front-supply" : "hold-for-front-verification");
   item.trustTier = c.trustTier;
   item.riskLevel = c.riskLevel;
   item.blockedReason = c.blockedReason || undefined;
@@ -217,6 +254,7 @@ function applyUnifiedSupplyContract(item, ctx){
     snapshotEligible:c.snapshotEligible,
     indexEligible:c.indexEligible,
     frontSupplyAllowed:c.frontSupplyAllowed,
+    frontVerificationStatus:c.frontVerificationStatus,
     pgStatus:c.pgStatus
   });
   return item;

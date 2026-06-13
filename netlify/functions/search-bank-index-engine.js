@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "search-bank-index-engine-v2.6.3-front-route-isolated-operational-stable";
+const VERSION = "search-bank-index-engine-v2.6.4-front-verified-reservoir-stable";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
@@ -469,6 +469,45 @@ function isRealIndexItem(item){
   const hasTitle = !!firstNonEmpty(item.title, item.name, item.label);
   return !!(hasTitle && (hasUrl || hasRenderableText(item) || hasRenderableMedia(item)));
 }
+
+function frontVerifiedIndexExposure(item){
+  item = item || {};
+  const c = (item.searchBankContract && typeof item.searchBankContract === "object") ? item.searchBankContract
+    : (item.sanmaruSearchBankContract && typeof item.sanmaruSearchBankContract === "object") ? item.sanmaruSearchBankContract
+    : (item.searchBankUnifiedContract && typeof item.searchBankUnifiedContract === "object") ? item.searchBankUnifiedContract
+    : {};
+  const d = item.osaiDiscernment && typeof item.osaiDiscernment === "object" ? item.osaiDiscernment : {};
+  const source = d.source && typeof d.source === "object" ? d.source : {};
+  const supply = d.supply && typeof d.supply === "object" ? d.supply : (item.supplyChain && typeof item.supplyChain === "object" ? item.supplyChain : {});
+  const safety = d.safety && typeof d.safety === "object" ? d.safety : {};
+  const text = low([item.title, item.name, item.summary, item.description, item.source, item.provider, item.url, item.link, item.href, item.section, item.category].filter(Boolean).join(" "));
+  const url = firstNonEmpty(item.url, item.link, item.href);
+  const host = (() => { try{ return new URL(url).hostname.replace(/^www\./, ""); }catch(e){ return ""; } })();
+  const placeholderLike = !!(item.placeholder || item.isPlaceholder || item.replaceableSlot || item.isLayerPointer || isPlaceholder(item));
+  const blocked = !!(item.blocked === true || c.blocked === true || d.blocked === true || item.blockedReason || c.blockedReason || d.blockedReason);
+  const riskBad = [item.riskLevel, c.riskLevel, d.riskLevel, item.unsafeProductRisk, c.unsafeProductRisk, safety.unsafeProductRisk, item.illegalSiteRisk, c.illegalSiteRisk, safety.illegalSiteRisk, item.harmfulContentRisk, c.harmfulContentRisk, safety.harmfulContentRisk]
+    .map(low).some(x => ["blocked", "critical", "illegal", "unsafe", "high"].includes(x));
+  const officialHost = !!host && /\.gov$|\.gov\.|\.go\.kr$|\.go\.jp$|\.go\.vn$|\.or\.kr$|\.ac\.kr$|\.edu$|\.edu\.|korea\.kr$/i.test(host);
+  const cooperativeSignal = /농협|수협|축협|산림조합|협동조합|생산자조합|영농조합|어업회사법인|agricultural cooperative|fishery cooperative|fisheries cooperative|cooperative|producer group|farmers union/.test(text);
+  const official = !!(item.officialSource || c.officialSource || source.officialSource || officialHost);
+  const institution = !!(item.institutionVerified || c.institutionVerified || source.institutionVerified);
+  const producer = !!(item.producerVerified || c.producerVerified || supply.producerVerified || cooperativeSignal);
+  const direct = !!(item.directProducerChannel || c.directProducerChannel || supply.directProducerChannel);
+  const explicitVerified = !!(item.verified === true || item.verify && item.verify.status === "verified" || item.org && item.org.verified === true);
+  const trustStrong = ["a", "a+"].includes(low(item.trustTier || c.trustTier || d.trustTier)) || Number(item.sourceTrustScore || c.sourceTrustScore || d.trustScore || item.trustScore || 0) >= 76 || Number(item.sourceTrust || 0) >= 0.76;
+  const intermediaryHigh = low(item.intermediaryRisk || c.intermediaryRisk || supply.intermediaryRisk) === "high" && !(official || direct || cooperativeSignal);
+  const verified = !!(placeholderLike || explicitVerified || official || institution || producer || direct || trustStrong || (c.frontSupplyAllowed === true && (official || producer || direct || trustStrong)));
+  const evidence = [];
+  if(placeholderLike) evidence.push("placeholder-front-slot-preserved");
+  if(explicitVerified) evidence.push("explicit-verified");
+  if(official) evidence.push("official-source");
+  if(institution) evidence.push("institution-verified");
+  if(producer) evidence.push("producer-or-cooperative-verified");
+  if(direct) evidence.push("direct-producer-channel");
+  if(trustStrong) evidence.push("strong-trust-score");
+  const allowed = !!(!blocked && !riskBad && !intermediaryHigh && verified);
+  return { allowed, verified, reason:allowed ? "verified-front-reservoir" : (blocked ? "blocked" : (riskBad ? "risk-not-front-safe" : (intermediaryHigh ? "intermediary-risk-high" : "verification-required-for-front-exposure"))), evidence:Array.from(new Set(evidence)).slice(0, 12) };
+}
 function frontSupplyQualityScore(item){
   item = item || {};
   let score = 0;
@@ -484,6 +523,9 @@ function frontSupplyQualityScore(item){
   score += Math.max(0, Math.min(20, Number(item.sourceTrust || 0) * 20));
   if(item._promoted) score += 14;
   if(item._ingested) score += 10;
+  const frontGate = frontVerifiedIndexExposure(item);
+  if(frontGate.allowed) score += 36;
+  else if(isRealIndexItem(item)) score -= 80;
   return score;
 }
 function frontReservoirQualityScore(item){
@@ -707,6 +749,7 @@ function buildFrontReplacementPool(allRaw, seen){
   const pool = (Array.isArray(allRaw) ? allRaw : [])
     .filter(item => item && isRealIndexItem(item))
     .filter(item => !isPlaceholder(item))
+    .filter(item => frontVerifiedIndexExposure(item).allowed)
     .filter(item => !/provider\s*hint|route\s*hint|검색\s*통로|search\s*route/i.test([item.type, item.category, item.title, item.summary, item.description, item.source, item.provider].filter(Boolean).join(" ")))
     .map((item, idx) => Object.assign({}, item, { frontReplacementScore:frontReplacementQualityScore(item), _replacementSeq:idx }))
     .filter(item => {
@@ -739,9 +782,11 @@ function buildFrontSupplyPool(params){
   const globalPool = [];
   for(let i=0; i<all.length; i++){
     const item = all[i];
+    const frontGate = frontVerifiedIndexExposure(item);
+    if(isRealIndexItem(item) && !frontGate.allowed) continue;
     const bucket = frontTargetBucket(item, targetRoute);
     const role = isRealIndexItem(item) ? "active-real-content" : "replaceable-front-slot";
-    const scored = Object.assign({}, item, { frontSupplyScore:frontReservoirQualityScore(item) + frontRouteRank(item, targetRoute), _frontSeq:i, _frontRole:role, _frontRouteBucket:bucket });
+    const scored = Object.assign({}, item, { frontVerifiedGate:frontGate, frontVerificationStatus:frontGate.allowed ? "verified-front-supply" : "hold-for-front-verification", frontSupplyScore:frontReservoirQualityScore(item) + frontRouteRank(item, targetRoute), _frontSeq:i, _frontRole:role, _frontRouteBucket:bucket });
     if(bucket === "exact" || !targetRoute.hasTarget) exactPool.push(scored);
     else if(bucket === "page-fallback") pageFallbackPool.push(scored);
     else globalPool.push(scored);
@@ -757,7 +802,8 @@ function buildFrontSupplyPool(params){
 
   const activePool = all
     .filter(item => isRealIndexItem(item))
-    .map((item, idx) => Object.assign({}, item, { frontSupplyScore:frontSupplyQualityScore(item) + frontRouteRank(item, targetRoute), _frontSeq:idx, _frontRole:"active-real-content", _frontRouteBucket:frontTargetBucket(item, targetRoute) }))
+    .filter(item => frontVerifiedIndexExposure(item).allowed)
+    .map((item, idx) => { const frontGate = frontVerifiedIndexExposure(item); return Object.assign({}, item, { frontVerifiedGate:frontGate, frontVerificationStatus:"verified-front-supply", frontSupplyScore:frontSupplyQualityScore(item) + frontRouteRank(item, targetRoute), _frontSeq:idx, _frontRole:"active-real-content", _frontRouteBucket:frontTargetBucket(item, targetRoute) }); })
     .sort(sortFront);
   const reservoirPool = exactPool.concat(allowPageFallback ? pageFallbackPool : []).concat(allowGlobalFallback ? globalPool : []);
   const seen = new Set();
