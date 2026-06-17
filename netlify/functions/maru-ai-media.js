@@ -12,7 +12,13 @@ const DEFAULT_TRANSCRIBE_MODEL = process.env.OPENAI_TRANSCRIBE_MODEL || process.
 const DEFAULT_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
 const DEFAULT_TTS_VOICE = process.env.OPENAI_TTS_VOICE || process.env.MARU_AI_DUBBING_VOICE || 'alloy';
 const DEFAULT_TTS_FORMAT = process.env.OPENAI_TTS_FORMAT || 'mp3';
-const TTS_CHUNK_CHARS = Math.max(500, Math.min(3500, Number(process.env.MARU_TTS_CHUNK_CHARS || 2600) || 2600));
+const TTS_CHUNK_CHARS = Math.max(350, Math.min(900, Number(process.env.MARU_TTS_CHUNK_CHARS || 650) || 650));
+// Netlify Functions can fail after the handler succeeds when the JSON response is too large.
+// Keep JSON safely below the platform response limit because audioBase64 grows by about 33%.
+const MARU_NETLIFY_SAFE_JSON_BYTES = Math.max(3000000, Math.min(5200000, Number(process.env.MARU_NETLIFY_SAFE_JSON_BYTES || 4800000) || 4800000));
+const DEFAULT_TTS_SPEED = Math.max(0.8, Math.min(1.35, Number(process.env.MARU_TTS_SPEED || 1.08) || 1.08));
+const MARU_TTS_REQUEST_TIMEOUT_MS = Math.max(15000, Math.min(52000, Number(process.env.MARU_TTS_REQUEST_TIMEOUT_MS || 45000) || 45000));
+const MARU_TTS_REQUIRE_CLIENT_CHUNKING = String(process.env.MARU_TTS_REQUIRE_CLIENT_CHUNKING || 'true').toLowerCase() !== 'false';
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
 
 const CORS_HEADERS = {
@@ -66,6 +72,12 @@ function normalizeAudioFormat(format) {
   return 'mp3';
 }
 
+function normalizeTtsSpeed(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_TTS_SPEED;
+  return Math.max(0.8, Math.min(1.6, n));
+}
+
 function mimeForAudioFormat(format) {
   const f = normalizeAudioFormat(format);
   if (f === 'wav') return 'audio/wav';
@@ -107,30 +119,77 @@ function cleanTextForSpeech(text) {
 function splitTextForTts(text, maxLen = TTS_CHUNK_CHARS) {
   const clean = cleanTextForSpeech(text);
   if (!clean) return [];
+  const limit = Math.max(250, Math.min(1200, Number(maxLen || TTS_CHUNK_CHARS) || TTS_CHUNK_CHARS));
   const parts = [];
   let buf = '';
-  const pieces = clean.split(/(?<=[.!?。！？…]|[다요죠까네음임함됨됨요]\.?)\s+|\n+/u);
+
+  const flush = () => {
+    const item = buf.trim();
+    if (item) parts.push(item);
+    buf = '';
+  };
+
+  const pushLong = (piece) => {
+    let rest = String(piece || '').trim();
+    while (rest.length > limit) {
+      let cut = Math.max(
+        rest.lastIndexOf('. ', limit),
+        rest.lastIndexOf('? ', limit),
+        rest.lastIndexOf('! ', limit),
+        rest.lastIndexOf('。', limit),
+        rest.lastIndexOf('?', limit),
+        rest.lastIndexOf('!', limit),
+        rest.lastIndexOf(',', limit),
+        rest.lastIndexOf(' ', limit)
+      );
+      if (cut < Math.floor(limit * 0.45)) cut = limit;
+      const head = rest.slice(0, cut + 1).trim();
+      if (head) parts.push(head);
+      rest = rest.slice(cut + 1).trim();
+    }
+    if (rest) {
+      if ((buf ? `${buf} ${rest}` : rest).length > limit) flush();
+      buf = (buf ? `${buf} ${rest}` : rest).trim();
+    }
+  };
+
+  const pieces = clean.split(/(?<=[.!?。！？…])\s+|\n+/u);
   for (const raw of pieces) {
     const piece = raw.trim();
     if (!piece) continue;
-    if (piece.length > maxLen) {
-      if (buf.trim()) {
-        parts.push(buf.trim());
-        buf = '';
-      }
-      for (let i = 0; i < piece.length; i += maxLen) parts.push(piece.slice(i, i + maxLen).trim());
+    if (piece.length > limit) {
+      flush();
+      pushLong(piece);
       continue;
     }
     const next = (buf ? `${buf} ${piece}` : piece).trim();
-    if (next.length > maxLen && buf.trim()) {
-      parts.push(buf.trim());
+    if (next.length > limit && buf.trim()) {
+      flush();
       buf = piece;
     } else {
       buf = next;
     }
   }
-  if (buf.trim()) parts.push(buf.trim());
+  flush();
   return parts;
+}
+
+function makeDubbingPlan(scriptText, maxLen = TTS_CHUNK_CHARS) {
+  const parts = splitTextForTts(scriptText, maxLen);
+  return parts.map((text, index) => ({
+    partIndex: index + 1,
+    partTotal: parts.length,
+    chars: text.length,
+    text
+  }));
+}
+
+function shouldReturnChunkPlan(body, scriptText, parts) {
+  if (!MARU_TTS_REQUIRE_CLIENT_CHUNKING) return false;
+  const explicitPart = body.partIndex || body.partTotal || body.chunkIndex || body.chunkTotal || body.maruDubbingPart === true;
+  if (explicitPart && String(body.partTotal || '1') !== '1') return false;
+  if (body.forceSingle === true || body.allowServerSequentialDubbing === true) return false;
+  return parts.length > 1 || scriptText.length > TTS_CHUNK_CHARS;
 }
 
 function parseJsonBody(event) {
@@ -266,14 +325,29 @@ async function openAiBinary(path, payload) {
     err.statusCode = 500;
     throw err;
   }
-  const res = await fetch(`${OPENAI_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload || {})
-  });
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), MARU_TTS_REQUEST_TIMEOUT_MS) : null;
+  let res;
+  try {
+    res = await fetch(`${OPENAI_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload || {}),
+      ...(controller ? { signal: controller.signal } : {})
+    });
+  } catch (error) {
+    if (String(error?.name || '').toLowerCase() === 'aborterror') {
+      const err = new Error(`OpenAI TTS request exceeded ${MARU_TTS_REQUEST_TIMEOUT_MS} ms. Use smaller dubbing chunks.`);
+      err.statusCode = 504;
+      throw err;
+    }
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   const arrayBuffer = await res.arrayBuffer();
   const buf = Buffer.from(arrayBuffer);
   if (!res.ok) {
@@ -327,6 +401,8 @@ async function handleStatus(id) {
     openAiReady: Boolean(OPENAI_API_KEY),
     subtitleActions: ['generate-subtitle'],
     dubbingActions: ['generate-dubbing', 'generate-speech', 'text-to-speech', 'tts', 'dubbing', 'ai-dubbing'],
+    dubbingProtocol: 'client-chunked-audio-part-v2',
+    recommendedClientChunkChars: TTS_CHUNK_CHARS,
     requestId: id
   });
 }
@@ -406,7 +482,8 @@ async function ttsOnce(text, body, model) {
     model,
     voice: normalizeVoice(body.voice),
     input: text,
-    response_format: format
+    response_format: format,
+    speed: normalizeTtsSpeed(body.speed || body.ttsSpeed || body.speechSpeed)
   };
   const instructions = buildDubbingInstructions(body);
   // Newer OpenAI TTS models accept instructions. Older tts-1 may ignore/reject it, so only add for newer model names.
@@ -437,39 +514,80 @@ async function handleGenerateDubbing(id, action, body) {
     return json(400, { ok: false, action, error: 'No scriptText/subtitleText/text was supplied for dubbing.', requestId: id });
   }
 
-  const parts = splitTextForTts(scriptText, TTS_CHUNK_CHARS);
+  const parts = makeDubbingPlan(scriptText, TTS_CHUNK_CHARS);
   if (!parts.length) return json(400, { ok: false, action, error: 'No readable text remained after cleaning subtitle text.', requestId: id });
 
-  const buffers = [];
-  let modelUsed = '';
-  for (let i = 0; i < parts.length; i += 1) {
-    log(id, `dubbing part ${i + 1}/${parts.length} chars=${parts[i].length}`);
-    const result = await ttsWithFallback(parts[i], body);
-    buffers.push(result.buffer);
-    modelUsed = result.model;
+  // Stable production contract: long dubbing must be client-chunked.
+  // Netlify Functions have both response-size and runtime limits, so the server must not create
+  // one huge MP3 and return it as base64 in a single response.
+  if (shouldReturnChunkPlan(body, scriptText, parts)) {
+    log(id, 'dubbing chunk plan required', 'parts=', parts.length, 'chars=', scriptText.length, 'chunkChars=', TTS_CHUNK_CHARS);
+    return json(200, {
+      ok: false,
+      action: 'generate-dubbing',
+      code: 'client_chunking_required',
+      mode: 'chunk-plan',
+      error: 'Dubbing text is too long for a single Netlify response. Process the returned parts one by one and save/merge locally.',
+      recommendedClientChunkChars: TTS_CHUNK_CHARS,
+      partTotal: parts.length,
+      parts,
+      responseFormat: normalizeAudioFormat(body.responseFormat || body.outputFormat || body.format || DEFAULT_TTS_FORMAT),
+      requestId: id
+    });
   }
+
+  const textForThisRequest = parts[0].text;
+  log(id, `dubbing part ${body.partIndex || 1}/${body.partTotal || 1} chars=${textForThisRequest.length}`);
+  const result = await ttsWithFallback(textForThisRequest, body);
 
   const format = normalizeAudioFormat(body.responseFormat || body.outputFormat || body.format || DEFAULT_TTS_FORMAT);
   const mimeType = mimeForAudioFormat(format);
-  const audio = Buffer.concat(buffers);
+  const audio = result.buffer;
   const stem = fileStem(body.fileName || body.originalFileName || body.mediaFileName || 'maru-ai-dubbing');
   const lang = normalizeLanguage(body.targetLanguage || body.language || 'auto') || 'auto';
-  const audioFileName = sanitizeFileName(body.audioFileName || `${stem}.ai-dub-${lang}.${format}`);
+  const partIndex = Math.max(1, Number(body.partIndex || body.chunkIndex || 1) || 1);
+  const partTotal = Math.max(partIndex, Number(body.partTotal || body.chunkTotal || 1) || 1);
+  const suffix = partTotal > 1 ? `.part-${String(partIndex).padStart(3, '0')}-of-${String(partTotal).padStart(3, '0')}` : '';
+  const audioFileName = sanitizeFileName(body.audioFileName || `${stem}.ai-dub-${lang}${suffix}.${format}`);
 
-  return json(200, {
+  const audioBase64 = audio.toString('base64');
+  const responseBody = {
     ok: true,
     action: 'generate-dubbing',
     sourceAction: action,
-    model: modelUsed,
+    mode: 'audio-part',
+    model: result.model,
     voice: normalizeVoice(body.voice),
+    speed: normalizeTtsSpeed(body.speed || body.ttsSpeed || body.speechSpeed),
     format,
     mimeType,
     audioFileName,
-    audioBase64: audio.toString('base64'),
+    audioBase64,
     size: audio.length,
-    partTotal: parts.length,
+    partIndex,
+    partTotal,
     requestId: id
-  });
+  };
+  const responseBytes = Buffer.byteLength(JSON.stringify(responseBody), 'utf8');
+  if (responseBytes > MARU_NETLIFY_SAFE_JSON_BYTES) {
+    log(id, 'single dubbing part response too large', 'audioBytes=', audio.length, 'jsonBytes=', responseBytes, 'safeBytes=', MARU_NETLIFY_SAFE_JSON_BYTES);
+    return json(200, {
+      ok: false,
+      action: 'generate-dubbing',
+      code: 'dubbing_part_too_large',
+      mode: 'part-too-large',
+      error: 'This single dubbing part is still too large. Retry with a smaller client chunk size.',
+      audioBytes: audio.length,
+      responseBytes,
+      safeBytes: MARU_NETLIFY_SAFE_JSON_BYTES,
+      recommendedClientChunkChars: Math.max(250, Math.floor(TTS_CHUNK_CHARS * 0.55)),
+      partIndex,
+      partTotal,
+      requestId: id
+    });
+  }
+
+  return json(200, responseBody);
 }
 
 function classifyOpenAiError(error) {
