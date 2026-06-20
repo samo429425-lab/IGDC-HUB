@@ -1,215 +1,174 @@
-// trustFilter.v1.js
-// 목적: "실결제"라도 사기/낚시/가짜/미검증 결제라인을 최대한 차단하기 위한 공통 필터
-// 사용처: 모든 snapshot 생성기 / feed 컴파일러(선택) / 수집 파이프라인 공통
-//
-// 입력: candidate = { url, title?, image?, price?, currency?, country? }
-// 출력: { ok, score, reasons[], signals{} }
+/**
+ * trustFilter.v1.js
+ * ------------------------------------------------------------------
+ * MARU commerce and payment-facing trust evaluation.
+ * It preserves broad candidate discovery while exposing a stricter front
+ * eligibility verdict for products, ordering, inquiry, and payment paths.
+ * ------------------------------------------------------------------
+ */
+"use strict";
 
-const { URL } = require("url");
 const crypto = require("crypto");
+const { URL } = require("url");
+let Core = null;
+try { Core = require("./trustFilter.core.v1"); } catch (_e) { Core = null; }
 
-// ---- Config (조정 가능) ----
-const DEFAULTS = {
-  minScore: 70,
-  // 리다이렉트 과다/이상 패턴 차단
+const VERSION = "trust-filter-commerce-v2.0-tiered-front-contract";
+const DEFAULTS = Object.freeze({
+  minScore: 35,
+  frontMinScore: 70,
   maxRedirects: 3,
-  // 의심 키워드 (다국어 확장 가능)
+  suspiciousTlds: ["zip", "mov", "click", "top", "xyz", "work", "gq", "tk", "ml", "cf"],
   scamKeywords: [
-    "limited time", "act now", "only today", "urgent", "congratulations",
-    "you won", "free gift", "claim", "verify account", "risk free",
-    "100% guaranteed", "miracle", "lose weight", "get rich",
-    "총판", "최저가", "당첨", "무료", "사은품", "인증", "긴급", "지금만", "대박"
+    "limited time", "act now", "only today", "urgent", "congratulations", "you won", "free gift", "claim", "verify account",
+    "risk free", "100% guaranteed", "get rich", "당첨", "무료 사은품", "긴급 결제", "계정 인증", "보이스피싱", "피싱사이트"
   ],
-  // 결제/상거래 신호
-  commerceSignals: {
-    // 결제/장바구니/구매 버튼 흔적
-    buyTokens: ["add to cart", "checkout", "buy now", "place order", "장바구니", "결제", "구매", "주문"],
-    // 가격/통화 흔적
-    currencyTokens: ["USD","KRW","JPY","EUR","GBP","THB","VND","IDR","GHS","NGN","ZAR","₹","₩","¥","€","£","฿","₫","₵"],
-    // 환불/배송/약관 흔적
-    policyTokens: ["refund", "returns", "shipping", "terms", "privacy", "환불", "반품", "배송", "이용약관", "개인정보"]
-  },
-  // 알려진 결제 제공자/SDK 흔적(핵심 신뢰 점수)
+  buyTokens: ["add to cart", "checkout", "buy now", "place order", "장바구니", "결제", "구매", "주문", "문의", "견적"],
+  currencyTokens: ["USD", "KRW", "JPY", "EUR", "GBP", "THB", "VND", "IDR", "GHS", "NGN", "ZAR", "₹", "₩", "¥", "€", "£", "฿", "₫", "₵"],
+  policyTokens: ["refund", "returns", "shipping", "delivery", "terms", "privacy", "contact", "customer service", "환불", "반품", "배송", "이용약관", "개인정보", "고객센터", "문의"],
   paymentProviders: [
     { name: "Stripe", tokens: ["stripe.com", "stripe-js", "checkout.stripe.com"] },
-    { name: "PayPal", tokens: ["paypal.com", "www.paypal.com", "paypalobjects.com"] },
+    { name: "PayPal", tokens: ["paypal.com", "paypalobjects.com"] },
     { name: "Adyen", tokens: ["adyen.com", "checkoutshopper"] },
     { name: "Braintree", tokens: ["braintreegateway.com"] },
     { name: "Checkout.com", tokens: ["checkout.com"] },
-    { name: "KCP", tokens: ["kcp", "pay.kcp.co.kr"] },
+    { name: "KCP", tokens: ["pay.kcp.co.kr", "kcp"] },
     { name: "KG Inicis", tokens: ["inicis", "inipay"] },
-    { name: "TossPayments", tokens: ["toss", "toss.im", "tossPayments"] },
-    { name: "KakaoPay", tokens: ["kakaopay", "kakaopay.com"] },
+    { name: "TossPayments", tokens: ["toss.im", "tosspayments"] },
+    { name: "KakaoPay", tokens: ["kakaopay"] },
     { name: "NaverPay", tokens: ["naverpay", "pay.naver.com"] },
-    { name: "Paystack", tokens: ["paystack"] },
-    { name: "Flutterwave", tokens: ["flutterwave", "ravepay"] },
-    { name: "Mollie", tokens: ["mollie"] },
-    { name: "Shopify", tokens: ["myshopify.com", "cdn.shopify.com", "shopify-pay", "shopify"] },
+    { name: "Shopify", tokens: ["myshopify.com", "cdn.shopify.com", "shopify-pay"] },
     { name: "WooCommerce", tokens: ["woocommerce", "wc-ajax"] }
-  ],
-  // URL/도메인 위험 패턴
-  domainRisk: {
-    suspiciousTlds: ["zip","mov","click","top","xyz","work","gq","tk"],
-    // punycode(동형이의) 위험
-    blockPunycode: true
-  }
-};
+  ]
+});
 
-// ---- Helpers ----
-function safeUrl(u) {
-  try { return new URL(u); } catch { return null; }
+function str(value) { return String(value == null ? "" : value); }
+function low(value) { return str(value).trim().toLowerCase(); }
+function truthy(value) { return value === true || (value !== false && value != null && !["", "0", "false", "no", "off", "disabled"].includes(low(value))); }
+function safeUrl(value) { try { return new URL(str(value)); } catch (_e) { return null; } }
+function hostOf(value) { const url = safeUrl(value); return url ? low(url.hostname).replace(/^www\./, "") : ""; }
+function sha1(value) { return crypto.createHash("sha1").update(str(value), "utf8").digest("hex"); }
+function hasAnyToken(text, tokens) { const haystack = low(text); return (Array.isArray(tokens) ? tokens : []).some(token => haystack.includes(low(token))); }
+function firstNonEmpty() { for (const value of arguments) { const out = str(value).trim(); if (out) return out; } return ""; }
+function contextFront(options) {
+  options = options || {};
+  return ["frontSupply", "frontExposure", "paymentFacing", "commerce", "slotSupply", "snapshot", "requireTrusted", "strictFront"].some(key => truthy(options[key])) || /front|payment|commerce|snapshot|slot/.test(low(options.mode));
 }
-function lc(s){ return String(s||"").toLowerCase(); }
-function hasAnyToken(hay, tokens){
-  const H = lc(hay);
-  return tokens.some(t => H.includes(lc(t)));
+function listOf(options, name) {
+  const local = options && options[name];
+  if (local && typeof local === "object") return local;
+  if (Core && Core[name === "allowlist" ? "ALLOW_LIST" : "BLOCK_LIST"]) return Core[name === "allowlist" ? "ALLOW_LIST" : "BLOCK_LIST"];
+  return {};
 }
-function sha1(s){
-  return crypto.createHash("sha1").update(String(s||""), "utf8").digest("hex");
+function domainMatch(host, domains) {
+  return !!host && (Array.isArray(domains) ? domains : []).some(domain => {
+    const value = low(domain).replace(/^www\./, "");
+    return value && (host === value || host.endsWith("." + value));
+  });
 }
-
-// ---- Core Checks ----
-function checkUrlBasics(u, cfg){
-  const reasons = [];
-  let score = 0;
-
-  if (!u) return { score: 0, reasons: ["URL_INVALID"] };
-
-  // HTTPS 강제 (실결제 기반)
-  if (u.protocol !== "https:") {
-    reasons.push("URL_NOT_HTTPS");
-    score -= 40;
-  } else score += 10;
-
-  // punycode 차단(동형이의 도메인)
-  if (cfg.domainRisk.blockPunycode && u.hostname.startsWith("xn--")) {
-    reasons.push("DOMAIN_PUNYCODE_BLOCK");
-    score -= 60;
-  }
-
-  // 의심 TLD
-  const tld = u.hostname.split(".").pop() || "";
-  if (cfg.domainRisk.suspiciousTlds.includes(lc(tld))) {
-    reasons.push("DOMAIN_SUSPICIOUS_TLD");
-    score -= 25;
-  }
-
-  // URL 과다 쿼리/추적 파라미터(피싱 패턴)
-  const sp = u.searchParams;
-  const paramCount = Array.from(sp.keys()).length;
-  if (paramCount >= 12) { reasons.push("URL_TOO_MANY_PARAMS"); score -= 15; }
-
-  // 흔한 피싱 파라미터
-  const phishingParams = ["token","verify","claim","gift","winner","reset","login","auth","session"];
-  if (Array.from(sp.keys()).some(k => phishingParams.includes(lc(k)))) {
-    reasons.push("URL_PHISHING_PARAMS");
-    score -= 15;
-  }
-
-  return { score, reasons };
+function patternMatch(text, patterns) {
+  const body = str(text);
+  return (Array.isArray(patterns) ? patterns : []).some(pattern => {
+    try { return new RegExp(str(pattern), "i").test(body); }
+    catch (_e) { return low(body).includes(low(pattern)); }
+  });
 }
-
-// HTML/응답 기반 검사(선택): fetch 결과 텍스트를 넣으면 더 강해짐
-function checkHtmlSignals(html, cfg){
-  const reasons = [];
-  let score = 0;
-  const H = lc(html || "");
-
-  // 결제 제공자 흔적
+function metadataText(candidate) {
+  candidate = candidate || {};
+  return [candidate.title, candidate.name, candidate.summary, candidate.description, candidate.category, candidate.type, candidate.source, candidate.provider, candidate.url, candidate.country, Array.isArray(candidate.tags) ? candidate.tags.join(" ") : ""].filter(Boolean).join(" ");
+}
+function htmlSignals(htmlText, cfg) {
+  const text = low(htmlText || "");
   const providers = [];
-  for (const p of cfg.paymentProviders) {
-    if (hasAnyToken(H, p.tokens)) providers.push(p.name);
-  }
-  if (providers.length) { score += 25; reasons.push("PAYMENT_PROVIDER_OK"); }
-
-  // 구매/장바구니 신호
-  if (hasAnyToken(H, cfg.commerceSignals.buyTokens)) { score += 15; reasons.push("BUY_SIGNAL_OK"); }
-  // 통화/가격 신호(기본)
-  if (hasAnyToken(H, cfg.commerceSignals.currencyTokens)) { score += 10; reasons.push("CURRENCY_SIGNAL_OK"); }
-  // 배송/환불/약관 신호
-  if (hasAnyToken(H, cfg.commerceSignals.policyTokens)) { score += 10; reasons.push("POLICY_SIGNAL_OK"); }
-
-  // 사기성 문구 과다
-  if (hasAnyToken(H, cfg.scamKeywords)) { score -= 20; reasons.push("SCAM_KEYWORDS_FOUND"); }
-
-  // schema.org Product/Offer (실상품 신호)
-  if (H.includes("schema.org/product") || H.includes("\"@type\":\"product\"") || H.includes("\"@type\": \"product\"")) {
-    score += 15; reasons.push("SCHEMA_PRODUCT_OK");
-  }
-  if (H.includes("schema.org/offer") || H.includes("\"@type\":\"offer\"") || H.includes("\"@type\": \"offer\"")) {
-    score += 10; reasons.push("SCHEMA_OFFER_OK");
-  }
-
-  // iframe 결제 유도/외부 결제창 과다(피싱 패턴)
-  const iframeCount = (H.match(/<iframe\b/g) || []).length;
-  if (iframeCount >= 6) { score -= 15; reasons.push("IFRAME_EXCESS"); }
-
-  return { score, reasons, providers };
+  for (const provider of cfg.paymentProviders) if (hasAnyToken(text, provider.tokens)) providers.push(provider.name);
+  const out = { score: 0, reasons: [], providers };
+  if (providers.length) { out.score += 14; out.reasons.push("PAYMENT_PROVIDER_INFRASTRUCTURE"); }
+  if (hasAnyToken(text, cfg.buyTokens)) { out.score += 10; out.reasons.push("BUY_OR_INQUIRY_SIGNAL"); }
+  if (hasAnyToken(text, cfg.currencyTokens)) { out.score += 5; out.reasons.push("CURRENCY_SIGNAL"); }
+  if (hasAnyToken(text, cfg.policyTokens)) { out.score += 10; out.reasons.push("POLICY_OR_CONTACT_SIGNAL"); }
+  if (text.includes("schema.org/product") || /"@type"\s*:\s*"product"/.test(text)) { out.score += 10; out.reasons.push("SCHEMA_PRODUCT_SIGNAL"); }
+  if (text.includes("schema.org/offer") || /"@type"\s*:\s*"offer"/.test(text)) { out.score += 6; out.reasons.push("SCHEMA_OFFER_SIGNAL"); }
+  if (hasAnyToken(text, cfg.scamKeywords)) { out.score -= 25; out.reasons.push("SCAM_KEYWORDS_FOUND"); }
+  const iframeCount = (text.match(/<iframe\b/g) || []).length;
+  if (iframeCount >= 6) { out.score -= 15; out.reasons.push("IFRAME_EXCESS"); }
+  return out;
 }
-
-// 도메인 allow/block 적용(운영자가 계속 보강)
-function applyLists(u, allowlist, blocklist){
-  const reasons = [];
-  let score = 0;
-
-  const host = lc(u.hostname || "");
-  const hitBlock = (blocklist.domains || []).some(d => host === lc(d) || host.endsWith("." + lc(d)));
-  if (hitBlock) { reasons.push("BLOCKLIST_DOMAIN"); score -= 100; }
-
-  const hitAllow = (allowlist.domains || []).some(d => host === lc(d) || host.endsWith("." + lc(d)));
-  if (hitAllow) { reasons.push("ALLOWLIST_DOMAIN"); score += 20; }
-
-  return { score, reasons };
-}
-
-// 후보 단위 최종 평가 (htmlText는 선택: 있으면 강력)
-function evaluateCandidate(candidate, opts = {}){
-  const cfg = Object.assign({}, DEFAULTS, opts || {});
-  const u = safeUrl(candidate && candidate.url);
+function evaluateCandidate(candidate, options = {}) {
+  const cfg = Object.assign({}, DEFAULTS, options || {});
+  candidate = candidate || {};
+  const frontMode = contextFront(options);
+  const allowlist = listOf(options, "allowlist");
+  const blocklist = listOf(options, "blocklist");
+  const url = safeUrl(firstNonEmpty(candidate.url, candidate.link, candidate.href));
   const reasons = [];
   const signals = {};
   let score = 0;
+  if (!url) return { ok: false, frontEligible: false, score: 0, reasons: ["URL_INVALID"], signals, version: VERSION };
+  const host = hostOf(url.toString());
+  const tld = host.split(".").pop() || "";
+  const text = metadataText(candidate);
 
-  // 1) URL 기본 방어
-  const a = checkUrlBasics(u, cfg);
-  score += a.score; reasons.push(...a.reasons);
+  if (url.protocol === "https:") score += 10; else { score -= 15; reasons.push("URL_NOT_HTTPS"); }
+  if (/^xn--/.test(host)) { score -= 60; reasons.push("DOMAIN_PUNYCODE_BLOCK"); }
+  const hardBlock = domainMatch(host, blocklist.domains) || patternMatch(text, blocklist.patterns) || (Array.isArray(blocklist.keywords) && blocklist.keywords.some(keyword => low(text).includes(low(keyword))));
+  if (hardBlock) { score -= 100; reasons.push("BLOCKLIST_HARD_REJECT"); }
+  const frontDenied = domainMatch(host, blocklist.frontDeniedDomains) || (Array.isArray(blocklist.frontDeniedTlds) && blocklist.frontDeniedTlds.map(low).includes(tld)) || patternMatch(text, blocklist.frontDeniedPatterns);
+  if (frontDenied) { score -= 22; reasons.push("FRONT_RISK_SIGNAL"); }
+  const frontDomain = domainMatch(host, allowlist.frontEligibleDomains || allowlist.domains);
+  const marketplaceDomain = domainMatch(host, allowlist.verifiedMarketplaceDomains);
+  const paymentProviderDomain = domainMatch(host, allowlist.paymentProviderDomains);
+  const technologyPlatformDomain = domainMatch(host, allowlist.technologyPlatformDomains);
+  if (frontDomain) { score += 20; reasons.push("FRONT_TRUSTED_DOMAIN"); }
+  else if (marketplaceDomain) { score += 4; reasons.push("MARKETPLACE_PLATFORM_KNOWN"); }
+  else if (paymentProviderDomain || technologyPlatformDomain) { score += 1; reasons.push("PLATFORM_INFRASTRUCTURE_KNOWN"); }
 
-  // 2) allow/block
-  const allowlist = opts.allowlist || { domains: [] };
-  const blocklist = opts.blocklist || { domains: [] };
-  const b = applyLists(u || { hostname:"" }, allowlist, blocklist);
-  score += b.score; reasons.push(...b.reasons);
-
-  // 3) HTML 신호(있으면 적용)
-  if (opts.htmlText) {
-    const c = checkHtmlSignals(opts.htmlText, cfg);
-    score += c.score; reasons.push(...c.reasons);
-    signals.providers = c.providers;
-  } else {
-    // html이 없을 경우, “결제 제공자 확인 못함” 패널티
-    reasons.push("HTML_NOT_CHECKED");
-    score -= 5;
+  const core = Core && typeof Core.evaluateTrust === "function" ? Core.evaluateTrust(candidate, Object.assign({}, options, { frontSupply: frontMode })) : null;
+  if (core) {
+    score += Math.max(-20, Math.min(26, Math.round(Number(core.score || 0) / 4)));
+    if (core.frontEligible) reasons.push("CORE_FRONT_VERIFIED");
+    if (core.trusted) reasons.push("CORE_SOURCE_TRUSTED");
+    if (core.ok === false && core.reasons && core.reasons.some(reason => /BLOCKLIST|PUNYCODE|ITEM_FAKE|ITEM_SCAM|URL_INVALID/.test(str(reason)))) reasons.push("CORE_HARD_REJECT");
   }
 
-  // 4) 최소 상거래 요건(메타 기준)
-  // (수집기에서 title/image/price/currency 확보하면 점수 가산)
-  if (candidate && candidate.title) score += 3;
-  if (candidate && candidate.image) score += 3;
-  if (candidate && candidate.price) score += 3;
-  if (candidate && candidate.currency) score += 2;
+  if (options.htmlText) {
+    const html = htmlSignals(options.htmlText, cfg);
+    score += html.score;
+    reasons.push(...html.reasons);
+    signals.providers = html.providers;
+  } else reasons.push("HTML_NOT_CHECKED");
+  if (candidate.title || candidate.name) score += 3;
+  if (candidate.image || candidate.thumbnail || candidate.thumb) score += 3;
+  if (candidate.price != null && candidate.price !== "") score += 3;
+  if (candidate.currency) score += 2;
+  if (truthy(candidate.orderReady) || truthy(candidate.contactReady) || truthy(candidate.inquiryReady)) score += 7;
+  if (truthy(candidate.deliveryReady) || truthy(candidate.policyReady)) score += 5;
 
-  // 5) 안정화: 점수 상한/하한
+  const sellerVerified = !!(candidate.sellerVerified || candidate.marketplaceSellerVerified || (candidate.seller && candidate.seller.verified));
+  const marketplaceOnly = marketplaceDomain && !(sellerVerified || (core && core.frontEligible));
+  if (marketplaceOnly) { score -= 10; reasons.push("MARKETPLACE_SELLER_VERIFICATION_REQUIRED"); }
+  const platformOnly = (paymentProviderDomain || technologyPlatformDomain) && !(core && core.frontEligible);
+  if (platformOnly) { score -= 10; reasons.push("PLATFORM_NOT_SELLER_EVIDENCE"); }
   score = Math.max(-100, Math.min(100, score));
 
-  // 6) 결과
-  const ok = score >= cfg.minScore && !reasons.includes("BLOCKLIST_DOMAIN") && !reasons.includes("DOMAIN_PUNYCODE_BLOCK");
-  signals.host = u ? u.hostname : "";
-  signals.urlHash = sha1(candidate && candidate.url);
-
-  return { ok, score, reasons, signals };
+  const hardRejected = reasons.some(reason => /HARD_REJECT|PUNYCODE|BLOCKLIST/.test(reason));
+  const frontEligible = !!(!hardRejected && !frontDenied && !marketplaceOnly && !platformOnly && core && core.frontEligible && score >= cfg.frontMinScore);
+  const discoveryOk = !hardRejected && score >= cfg.minScore;
+  const ok = frontMode ? frontEligible : discoveryOk;
+  signals.host = host;
+  signals.frontMode = frontMode;
+  signals.frontDomain = frontDomain;
+  signals.marketplaceDomain = marketplaceDomain;
+  signals.paymentProviderDomain = paymentProviderDomain;
+  signals.technologyPlatformDomain = technologyPlatformDomain;
+  signals.urlHash = sha1(url.toString());
+  return {
+    ok, frontEligible, score, reasons: Array.from(new Set(reasons)), signals, version: VERSION,
+    trustTier: score >= 86 ? "A+" : score >= 70 ? "A" : score >= 52 ? "B" : score >= 35 ? "C" : "D",
+    frontVerificationStatus: frontEligible ? "verified-front-commerce" : "hold-for-front-verification",
+    sourceEvidence: core ? core.evidence || [] : [],
+    classification: frontEligible ? "verified-commerce-front" : (marketplaceOnly ? "marketplace-seller-verification-required" : (platformOnly ? "platform-not-seller" : "discovery-or-review"))
+  };
 }
+function evaluateFrontCommerce(candidate, options = {}) { return evaluateCandidate(candidate, Object.assign({}, options, { frontSupply: true, commerce: true })); }
 
-module.exports = {
-  evaluateCandidate,
-  DEFAULTS
-};
+module.exports = { version: VERSION, evaluateCandidate, evaluateFrontCommerce, DEFAULTS };
