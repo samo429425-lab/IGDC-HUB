@@ -2781,35 +2781,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 }
 </style>
 
-
-<style id="igdc-qa-panel-position-final-v1">
-/* IGDC Q&A modal position final: keep button/function intact, lift the modal near the index nav bottom. */
-.igdc-qa-modal .igdc-qa-panel,
-.igdc-qa-panel{
-  top:18px !important;
-  bottom:auto !important;
-  max-height:calc(100dvh - 36px) !important;
-  overflow:hidden !important;
-}
-.igdc-qa-modal .igdc-qa-body,
-.igdc-qa-panel .igdc-qa-body{
-  max-height:calc(100dvh - 150px) !important;
-  overflow-y:auto !important;
-  -webkit-overflow-scrolling:touch !important;
-}
-@media (max-width:768px){
-  .igdc-qa-modal .igdc-qa-panel,
-  .igdc-qa-panel{
-    top:14px !important;
-    bottom:auto !important;
-    max-height:calc(100dvh - 28px) !important;
-  }
-  .igdc-qa-modal .igdc-qa-body,
-  .igdc-qa-panel .igdc-qa-body{
-    max-height:calc(100dvh - 132px) !important;
-  }
-}
-</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -3619,8 +3590,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   modal && modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
 
   document.addEventListener('click', function(e){
-    const del = e.target.closest('.delete-post');
-    if(del) return;
+    const control = e.target.closest('.delete-post, .btn-edit');
+    if(control) return;
 
     const item = e.target.closest('.right .topic-panel .list .item');
     if(!item) return;
@@ -6162,6 +6133,137 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   setTimeout(function(){ install(); renderAll(); },5000);
   window.igdcDonationBoardV11Render=renderAll;
   window.igdcDonationBoardV11Save=saveFinal;
+})();
+</script>
+
+<!-- Donation editor modal final guard: prevents preview double-open and closes on Save/Cancel only. -->
+<script id="igdc-donation-editor-modal-final-v1">
+(function(){
+  'use strict';
+  if (window.__IGDC_DONATION_EDITOR_MODAL_FINAL_V1__) return;
+  window.__IGDC_DONATION_EDITOR_MODAL_FINAL_V1__ = true;
+
+  function asElement(node){
+    if (!node) return null;
+    return node.nodeType === 1 ? node : node.parentElement;
+  }
+  function getEditor(){
+    return document.getElementById('editNewsModal');
+  }
+  function getItem(node){
+    return node && node.closest
+      ? node.closest('.right .topic-panel .list .item, .mobile-news-clone .topic-panel .list .item')
+      : null;
+  }
+  function getTitle(item){
+    var el = item && item.querySelector('.h-title, .title');
+    return (el && el.textContent || '').trim();
+  }
+  function getBody(item){
+    var el = item && item.querySelector('.preview, .body, .content');
+    return (el && el.textContent || '').trim();
+  }
+  function getMeta(item){
+    var el = item && item.querySelector('.h-time, .meta');
+    return (el && el.textContent || '').trim();
+  }
+  function hidePreview(){
+    var preview = document.getElementById('newsPreviewModal') || document.getElementById('previewModal');
+    if (preview) preview.style.display = 'none';
+  }
+  function getEditorFields(modal){
+    return {
+      title: modal && modal.querySelector('input[type="text"]'),
+      body: modal && modal.querySelector('textarea'),
+      info: modal && (modal.querySelector('#enInfo') || modal.querySelector('[data-edit-info]'))
+    };
+  }
+  function openEditor(item){
+    var modal = getEditor();
+    if (!modal || !item) return;
+    var fields = getEditorFields(modal);
+    window.__currentEditingItem = item;
+    if (fields.title) fields.title.value = getTitle(item);
+    if (fields.body) fields.body.value = getBody(item);
+    if (fields.info) fields.info.textContent = getMeta(item);
+    hidePreview();
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    setTimeout(function(){
+      if (fields.title) fields.title.focus();
+    }, 0);
+  }
+  function closeEditor(clearFields){
+    var modal = getEditor();
+    if (!modal) return;
+    if (clearFields) {
+      var fields = getEditorFields(modal);
+      if (fields.title) fields.title.value = '';
+      if (fields.body) fields.body.value = '';
+    }
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    hidePreview();
+    window.__currentEditingItem = null;
+  }
+  function applyEdit(item, title, body){
+    if (!item) return;
+    item.querySelectorAll('.h-title, .title').forEach(function(el){
+      el.textContent = title;
+    });
+    item.querySelectorAll('.preview, .body, .content').forEach(function(el){
+      el.textContent = body;
+    });
+  }
+  function actionButtons(modal){
+    var buttons = Array.prototype.slice.call(modal.querySelectorAll('button'));
+    return {
+      cancel: buttons.find(function(btn){ return btn.classList.contains('outline'); }) || buttons[0] || null,
+      save: buttons.length ? buttons[buttons.length - 1] : null
+    };
+  }
+
+  /* Runs in capture phase after the legacy preview handler. The legacy handler is patched to skip .btn-edit. */
+  document.addEventListener('click', function(event){
+    var target = asElement(event.target);
+    if (!target) return;
+
+    var editButton = target.closest && target.closest('.btn-edit');
+    if (editButton) {
+      var item = getItem(editButton);
+      if (item) {
+        event.preventDefault();
+        openEditor(item);
+      }
+      return;
+    }
+
+    var modal = getEditor();
+    if (!modal || !modal.contains(target)) return;
+    var action = target.closest && target.closest('button');
+    if (!action) return;
+
+    var buttons = actionButtons(modal);
+    if (action === buttons.cancel) {
+      event.preventDefault();
+      closeEditor(true);
+      return;
+    }
+    if (action === buttons.save) {
+      event.preventDefault();
+      var fields = getEditorFields(modal);
+      var editedItem = window.__currentEditingItem;
+      if (editedItem) {
+        applyEdit(
+          editedItem,
+          (fields.title && fields.title.value || '').trim(),
+          (fields.body && fields.body.value || '').trim()
+        );
+      }
+      /* Let any existing per-language save hook finish first; then always close this editor. */
+      setTimeout(function(){ closeEditor(false); }, 0);
+    }
+  }, true);
 })();
 </script>
 </body>
