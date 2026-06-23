@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.8.5-front-verified-gate-stable";
+const VERSION = "sanmaru-engine-v2.8.4-osai-unified-supply-contract-stable";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 3000;
@@ -829,7 +829,7 @@ function readJsonSafe(file){
 // the existing function-data trust/payment/profile files, applies a consistent
 // Sanmaru-level verdict, and keeps safe abundance: block known-dangerous inputs,
 // but keep safe/placeholder front slots available for replacement/hydration.
-const SANMARU_OSAI_DISCERNMENT_VERSION = "osai-supply-chain-discernment-v2.3-front-verified-gate";
+const SANMARU_OSAI_DISCERNMENT_VERSION = "osai-supply-chain-discernment-v2.3-country-policy-evidence";
 const SANMARU_SAFE_SUPPLY_EXPANSION_ORDER = Object.freeze([
   "local-city", "local-province", "same-country", "neighbor-region", "global-official", "global-trusted"
 ]);
@@ -857,7 +857,10 @@ function sanmaruOsaiPolicyResources(){
     payConfig,
     trustCore,
     commerceTrust,
+    countrySupplyCore: sanmaruRequireOptional("./lib/country-supply-policy.core.v1"),
     sources:[
+      "netlify/functions/data/country-policy.json",
+      "netlify/functions/lib/country-supply-policy.core.v1.js",
       "netlify/functions/data/trust.allowlist.json",
       "netlify/functions/data/trust.blocklist.json",
       "netlify/functions/lib/trustFilter.core.v1.js",
@@ -1016,53 +1019,54 @@ function sanmaruBuildSupplyExpansionPlan(item, opts){
   opts = opts || {};
   item = item || {};
   const geo = item.geo && typeof item.geo === "object" ? item.geo : {};
-  const country = firstNonEmpty(opts.country, geo.country, item.country, "GLOBAL");
+  const countryCore = sanmaruRequireOptional("./lib/country-supply-policy.core.v1");
+  const requestedCountry = firstNonEmpty(opts.targetMarket, opts.targetCountry, opts.audienceCountry, opts.country, geo.country, item.country, "GLOBAL");
   const region = firstNonEmpty(opts.region, geo.region, geo.state, item.region, "");
   const city = firstNonEmpty(opts.city, geo.city, item.city, "");
   const categories = sanmaruClassifySupplyCategory(item);
+  let policyPlan = null;
+  if(countryCore && typeof countryCore.resolveSupplyPlan === "function"){
+    try{
+      policyPlan = countryCore.resolveSupplyPlan({
+        targetMarket:requestedCountry,
+        hub:firstNonEmpty(opts.hub, opts.channel, opts.page, item.channel, item.page, item.route),
+        localCandidateCount:opts.localCandidateCount
+      });
+    }catch(_e){ policyPlan = null; }
+  }
+  const normalizedCountry = policyPlan && policyPlan.targetMarket || requestedCountry;
+  const ladder = [
+    { level:"local-city", country:normalizedCountry, region:region || null, city:city || null, priority:1 },
+    { level:"local-province", country:normalizedCountry, region:region || null, city:null, priority:2 },
+    { level:"same-country", country:normalizedCountry, region:null, city:null, priority:3 }
+  ];
+  const fallbackTiers = policyPlan && Array.isArray(policyPlan.fallbackTiers) ? policyPlan.fallbackTiers : [];
+  for(let i=0;i<fallbackTiers.length;i++){
+    const tier = fallbackTiers[i] || {};
+    if(!Array.isArray(tier.countries) || !tier.countries.length) continue;
+    ladder.push({ level:"neighbor-region", countries:tier.countries.slice(), country:normalizedCountry, region:null, city:null, priority:4 + i, policyReason:tier.reason || "approved-neighbor-market" });
+  }
+  if(!policyPlan || policyPlan.globalFallbackNeeded){
+    ladder.push({ level:"global-official", country:"GLOBAL", officialOnly:true, priority:4 + fallbackTiers.length });
+    ladder.push({ level:"global-trusted", country:"GLOBAL", trustedOnly:true, priority:5 + fallbackTiers.length });
+  }
   return {
     mode:"safe-abundance-ladder",
     principle:"filter-danger-expand-safe-supply",
-    start:{ country, region:region || null, city:city || null },
+    start:{ country:normalizedCountry, region:region || null, city:city || null },
+    targetMarket:normalizedCountry,
     categoryHints:categories,
-    ladder:[
-      { level:"local-city", country, region:region || null, city:city || null, priority:1 },
-      { level:"local-province", country, region:region || null, city:null, priority:2 },
-      { level:"same-country", country, region:null, city:null, priority:3 },
-      { level:"neighbor-region", country, region:null, city:null, priority:4 },
-      { level:"global-official", country:"GLOBAL", officialOnly:true, priority:5 },
-      { level:"global-trusted", country:"GLOBAL", trustedOnly:true, priority:6 }
-    ],
+    ladder,
+    countryPolicy:policyPlan ? {
+      version:policyPlan.policyVersion,
+      enforcement:policyPlan.enforcement,
+      localSources:policyPlan.localSources,
+      fallbackTiers:policyPlan.fallbackTiers,
+      localShortage:policyPlan.localShortage,
+      minimumLocalCandidates:policyPlan.minimumLocalCandidates
+    } : { version:null, enforcement:"audit", localSources:[normalizedCountry], fallbackTiers:[] },
     targetPolicy:"keep-supply-abundant-after-risk-filtering",
-    shortageFallback:"expand-radius-before-using-unknown-risk-source"
-  };
-}
-
-function sanmaruFrontVerifiedGate(meta){
-  meta = meta || {};
-  const evidence = [];
-  if(meta.placeholderLike) evidence.push("placeholder-front-slot-preserved");
-  if(meta.allowedDomain) evidence.push("allowlist-domain");
-  if(meta.officialSource) evidence.push("official-source");
-  if(meta.institutionVerified) evidence.push("institution-verified");
-  if(meta.producerVerified) evidence.push("producer-verified");
-  if(meta.directProducerChannel) evidence.push("direct-producer-channel");
-  if(meta.trustTier === "A" || meta.trustTier === "A+") evidence.push("high-trust-tier");
-  if(Number(meta.trustScore || 0) >= 76) evidence.push("high-trust-score");
-  if(meta.orderReady && (meta.officialSource || meta.producerVerified || meta.directProducerChannel)) evidence.push("order-ready-with-trusted-source");
-  if(meta.deliveryReady && (meta.officialSource || meta.producerVerified || meta.directProducerChannel)) evidence.push("delivery-ready-with-trusted-source");
-
-  const riskBad = [meta.riskLevel, meta.unsafeProductRisk, meta.illegalSiteRisk, meta.harmfulContentRisk]
-    .map(x => s(x).toLowerCase())
-    .some(x => ["blocked", "critical", "illegal", "unsafe", "high"].includes(x));
-  const intermediaryHigh = s(meta.intermediaryRisk).toLowerCase() === "high" && !(meta.officialSource || meta.directProducerChannel);
-  const verified = !!(meta.placeholderLike || meta.allowedDomain || meta.officialSource || meta.institutionVerified || meta.producerVerified || meta.directProducerChannel || meta.trustTier === "A" || meta.trustTier === "A+" || Number(meta.trustScore || 0) >= 76 || (meta.orderReady && (meta.officialSource || meta.producerVerified || meta.directProducerChannel)));
-  const allowed = !!(!meta.blocked && !riskBad && !intermediaryHigh && verified);
-  return {
-    allowed,
-    verified,
-    evidence:Array.from(new Set(evidence)).slice(0, 12),
-    reason:allowed ? "verified-front-supply" : (meta.blocked ? "blocked" : (riskBad ? "risk-not-front-safe" : (intermediaryHigh ? "intermediary-risk-high" : "verification-required-for-front-exposure")))
+    shortageFallback:"expand-only-to-policy-approved-neighbor-markets-before-global-official"
   };
 }
 function sanmaruBuildSearchBankUnifiedContract(item, d){
@@ -1076,6 +1080,12 @@ function sanmaruBuildSearchBankUnifiedContract(item, d){
     page:firstNonEmpty(item.page, item.route, item.layerPointer && item.layerPointer.page),
     section:firstNonEmpty(item.section, item.psom_key, item.slotKey, item.layerPointer && item.layerPointer.section),
     supplyCategory:supply.supplyCategory || [],
+    countrySupply:supply.countrySupply || null,
+    sourceCountry:supply.countrySupply && supply.countrySupply.sourceCountryVerified && supply.countrySupply.sourceCountry || firstNonEmpty(item.sourceCountry, item.source_country, item.sourceGeo && item.sourceGeo.country, item.geo && item.geo.country, item.country) || null,
+    targetMarket:supply.countrySupply && supply.countrySupply.targetMarket || firstNonEmpty(item.targetMarket, item.targetCountry, item.marketCountry) || null,
+    availabilityCountries:supply.countrySupply && supply.countrySupply.availabilityCountries || item.availabilityCountries || item.allowedCountries || null,
+    supplyTier:supply.countrySupply && supply.countrySupply.supplyTier || item.supplyTier || null,
+    countryPolicyVersion:supply.countrySupply && supply.countrySupply.policyVersion || item.countryPolicyVersion || null,
     sourceTrustScore:d.trustScore || 0,
     trustTier:d.trustTier || "C",
     riskLevel:d.riskLevel || "low",
@@ -1196,6 +1206,16 @@ function sanmaruEvaluateOsaiSupplyDiscernment(item, opts){
   if(harmfulContentSignal) safetyEvidence.push("harmful-content-signal");
 
   const supplyExpansionPlan = sanmaruBuildSupplyExpansionPlan(item, opts);
+  let countrySupply = null;
+  if(resources.countrySupplyCore && typeof resources.countrySupplyCore.evaluateCandidateForTarget === "function"){
+    try{
+      countrySupply = resources.countrySupplyCore.evaluateCandidateForTarget(item, {
+        targetMarket:supplyExpansionPlan.targetMarket,
+        hub:firstNonEmpty(opts.hub, opts.channel, opts.page, item.channel, item.page, item.route),
+        localCandidateCount:opts.localCandidateCount
+      });
+    }catch(_e){ countrySupply = null; }
+  }
   const baseTrust = 45;
   const trustScore = Math.max(0, Math.min(100,
     baseTrust + (allowedDomain ? 18 : 0) + (officialSource ? 18 : 0) + (institutionVerified ? 8 : 0) +
@@ -1208,14 +1228,9 @@ function sanmaruEvaluateOsaiSupplyDiscernment(item, opts){
   const trustTier = hardBlockReasons.length ? "blocked" : (trustScore >= 88 ? "A+" : trustScore >= 76 ? "A" : trustScore >= 62 ? "B" : trustScore >= 48 ? "C" : "D");
   const supplyChainReady = !!(!hardBlockReasons.length && (officialSource || institutionVerified || producerVerified || directProducerChannel || payment.orderReady || supplyCategory.some(x => !["general_information"].includes(x))));
   const riskLevel = hardBlockReasons.length ? "blocked" : (unsafeProductRisk === "high" || harmfulContentRisk === "medium" || intermediaryRisk === "high" && !officialSource ? "medium" : (warningReasons.length ? "low" : "low"));
-  const frontGate = sanmaruFrontVerifiedGate({
-    blocked:!!hardBlockReasons.length, placeholderLike, allowedDomain, officialSource, institutionVerified, producerVerified, directProducerChannel,
-    trustTier, trustScore, riskLevel, unsafeProductRisk, illegalSiteRisk, harmfulContentRisk, intermediaryRisk,
-    orderReady:payment.orderReady, deliveryReady:payment.deliveryReady, policyReady:payment.policyReady
-  });
-  const frontSupplyAllowed = frontGate.allowed;
+  const frontSupplyAllowed = !hardBlockReasons.length;
   const searchBankEligible = !hardBlockReasons.length && (placeholderLike || trustScore >= 45 || supplyChainReady);
-  const snapshotEligible = !hardBlockReasons.length && (placeholderLike || frontGate.allowed || trustScore >= 76 || officialSource || directProducerChannel);
+  const snapshotEligible = !hardBlockReasons.length && (placeholderLike || trustScore >= 48 || officialSource || supplyChainReady);
   const indexEligible = !hardBlockReasons.length && (placeholderLike || trustScore >= 40 || supplyChainReady);
   const evidence = {
     trust:Array.from(new Set(trustEvidence)).slice(0, 12),
@@ -1234,12 +1249,11 @@ function sanmaruEvaluateOsaiSupplyDiscernment(item, opts){
     trustTier,
     trustScore,
     source:{ url:url || null, host:host || null, allowedDomain, officialSource, institutionVerified, officialEvidence:evidence.official },
-    supply:{ supplyCategory, producerVerified, producerType, directProducerChannel, intermediaryRisk, supplyChainReady, localFirstExpansion:true, expansionOrder:SANMARU_SAFE_SUPPLY_EXPANSION_ORDER, expansionPlan:supplyExpansionPlan },
+    supply:{ supplyCategory, producerVerified, producerType, directProducerChannel, intermediaryRisk, supplyChainReady, localFirstExpansion:true, expansionOrder:SANMARU_SAFE_SUPPLY_EXPANSION_ORDER, expansionPlan:supplyExpansionPlan, countrySupply },
     payment,
     safety:{ illegalSiteRisk, harmfulContentRisk, unsafeProductRisk, patternHits:patternHits.slice(0, 10), warningReasons:evidence.warnings, safetyEvidence:evidence.safety },
     eligibility:{ frontSupplyAllowed, searchBankEligible, snapshotEligible, indexEligible, placeholderLike, abundancePreserved:true },
-    frontVerifiedGate:{ allowed:frontGate.allowed, verified:frontGate.verified, reason:frontGate.reason, evidence:frontGate.evidence },
-    evidence:Object.assign({}, evidence, { front:frontGate.evidence }),
+    evidence,
     policySources:resources.sources
   };
   provisional.searchBankContract = sanmaruBuildSearchBankUnifiedContract(item, provisional);
@@ -1251,6 +1265,15 @@ function sanmaruAttachDiscernment(item, opts){
   out.osaiDiscernment = d;
   out.sanmaruTrust = { tier:d.trustTier, score:d.trustScore, riskLevel:d.riskLevel, blocked:d.blocked, blockedReason:d.blockedReason };
   out.supplyChain = Object.assign({}, out.supplyChain || {}, d.supply, { paymentReady:d.payment.paymentReady, orderReady:d.payment.orderReady, officialSource:d.source.officialSource, institutionVerified:d.source.institutionVerified });
+  if(d.supply && d.supply.countrySupply){
+    out.countrySupply = d.supply.countrySupply;
+    if(d.supply.countrySupply.sourceCountryVerified) out.sourceCountry = out.sourceCountry || d.supply.countrySupply.sourceCountry || undefined;
+    // countrySupply.targetMarket is request-contextual and must not overwrite a
+    // candidate's intrinsic market metadata in the shared SearchBank pool.
+    out.availabilityCountries = out.availabilityCountries || d.supply.countrySupply.availabilityCountries || undefined;
+    out.supplyTier = d.supply.countrySupply.supplyTier || out.supplyTier;
+    out.countryPolicyVersion = d.supply.countrySupply.policyVersion || out.countryPolicyVersion;
+  }
   out.trustTier = d.trustTier;
   out.riskLevel = d.riskLevel;
   out.blockedReason = d.blockedReason;
@@ -1263,8 +1286,6 @@ function sanmaruAttachDiscernment(item, opts){
   out.orderReady = d.payment.orderReady;
   out.supplyChainReady = d.supply.supplyChainReady;
   out.frontSupplyAllowed = d.eligibility.frontSupplyAllowed;
-  out.frontVerifiedGate = d.frontVerifiedGate || undefined;
-  out.frontVerificationStatus = d.eligibility.frontSupplyAllowed ? "verified-front-supply" : "hold-for-front-verification";
   out.searchBankEligible = d.eligibility.searchBankEligible;
   out.snapshotEligible = d.eligibility.snapshotEligible;
   out.indexEligible = d.eligibility.indexEligible;

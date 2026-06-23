@@ -70,7 +70,10 @@ try { CentralCollector = require("./collector"); } catch (e) { CentralCollector 
 let MaruSearch = null;
 try { MaruSearch = require("./maru-search"); } catch (e) { MaruSearch = null; }
 
-const SEARCH_BANK_ENGINE_VERSION = "search-bank-engine-v10.7.2-front-verified-gate-production";
+let CountrySupplyPolicy = null;
+try { CountrySupplyPolicy = require("./lib/country-supply-policy.core.v1"); } catch (e) { CountrySupplyPolicy = null; }
+
+const SEARCH_BANK_ENGINE_VERSION = "search-bank-engine-v10.8.0-country-supply-intake";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 
 // ---------- small utils ----------
@@ -127,45 +130,40 @@ function firstDefined(){
   return undefined;
 }
 function explicitFalse(v){ return v === false || low(v) === "false" || low(v) === "0" || low(v) === "no"; }
+
+function resolveCountrySupplyRecord(item, ctx){
+  if(!item || typeof item !== "object" || !CountrySupplyPolicy || typeof CountrySupplyPolicy.evaluateCandidateForTarget !== "function") return null;
+  const policy = ctx && ctx.operationalPolicy && ctx.operationalPolicy.countrySupplyPlan;
+  const targetMarket = (policy && policy.targetMarket) || (ctx && ctx.params && (ctx.params.targetMarket || ctx.params.target_country)) || (ctx && ctx.geoContext && ctx.geoContext.country) || "";
+  if(!targetMarket) return item.countrySupply && typeof item.countrySupply === "object" ? item.countrySupply : null;
+  try{
+    const current = item.countrySupply && typeof item.countrySupply === "object" ? item.countrySupply : null;
+    if(current && current.targetMarket === String(targetMarket).toUpperCase() && current.policyVersion) return current;
+    return CountrySupplyPolicy.evaluateCandidateForTarget(item, {
+      targetMarket,
+      hub:(ctx && (ctx.channel || ctx.slotContext && ctx.slotContext.channel)) || item.channel || item.page || "default",
+      localCandidateCount: policy && policy.localCandidateCount,
+      plan:policy || undefined
+    });
+  }catch(_e){ return item.countrySupply && typeof item.countrySupply === "object" ? item.countrySupply : null; }
+}
+function attachCountrySupplyPolicy(item, ctx){
+  if(!item || typeof item !== "object") return item;
+  const record = resolveCountrySupplyRecord(item, ctx);
+  if(!record) return item;
+  item.countrySupply = Object.assign({}, item.countrySupply || {}, record);
+  if(record.sourceCountryVerified) item.sourceCountry = item.sourceCountry || record.sourceCountry || undefined;
+  // The requested market belongs to countrySupply; do not permanently stamp a
+  // shared SearchBank record with the country of one request.
+  if(!Array.isArray(item.availabilityCountries) && Array.isArray(record.availabilityCountries) && record.availabilityCountries.length) item.availabilityCountries = record.availabilityCountries.slice();
+  item.supplyTier = record.supplyTier || item.supplyTier;
+  item.countryPolicyVersion = record.policyVersion || item.countryPolicyVersion;
+  return item;
+}
 function searchBankPgState(ctx){
   const p = (ctx && ctx.params) || {};
   const live = truthy(p.paymentLive || p.pgLive || p.pgExecution || p.pgApproved || process.env.IGDC_PAYMENT_LIVE || process.env.IGDC_PG_LIVE || process.env.PAYMENT_LIVE || process.env.PG_EXECUTION || process.env.PG_APPROVED);
   return { pgExecution:!!live, paymentLive:!!live, status:live ? "pg-live" : "pending-pg-approval", policy:"pay-config-is-structural-readiness-only-until-pg-approval" };
-}
-
-function searchBankFrontVerifiedGate(c, item, ctx){
-  c = c || {}; item = item || {};
-  const text = low([item.title, item.name, item.summary, item.description, item.source, item.provider, item.url, item.link, item.href, item.section, item.category].filter(Boolean).join(" "));
-  const host = domainOf(firstNonEmpty(item.url, item.link && item.link.url, item.link && item.link.href, item.href));
-  const placeholderLike = !!(item.placeholder || item.isPlaceholder || item.replaceableSlot || item.isLayerPointer || /^#?$/.test(firstNonEmpty(item.url, item.link, item.href, "")) || /placeholder|replaceable-front-slot|seed slot|front-slot/i.test(text));
-  const officialHost = !!host && /\.gov$|\.gov\.|\.go\.kr$|\.go\.jp$|\.go\.vn$|\.or\.kr$|\.ac\.kr$|\.edu$|\.edu\.|korea\.kr$/i.test(host);
-  const cooperativeSignal = /농협|수협|축협|산림조합|협동조합|생산자조합|영농조합|어업회사법인|agricultural cooperative|fishery cooperative|fisheries cooperative|cooperative|producer group|farmers union/.test(text);
-  const explicitVerified = !!(item.verified === true || item.verify && item.verify.status === "verified" || item.org && item.org.verified === true || item.source && item.source.verified === true);
-  const trustStrong = ["a", "a+"].includes(low(c.trustTier)) || Number(c.sourceTrustScore || 0) >= 76 || Number(item.sourceTrust || 0) >= 0.76 || Number(item.trustScore || 0) >= 76;
-  const evidence = [];
-  if(placeholderLike) evidence.push("placeholder-front-slot-preserved");
-  if(explicitVerified) evidence.push("explicit-verified");
-  if(c.officialSource || officialHost) evidence.push("official-source");
-  if(c.institutionVerified) evidence.push("institution-verified");
-  if(c.producerVerified || cooperativeSignal) evidence.push("producer-or-cooperative-verified");
-  if(c.directProducerChannel) evidence.push("direct-producer-channel");
-  if(trustStrong) evidence.push("strong-trust-score");
-  if(c.orderReady && (c.officialSource || c.producerVerified || c.directProducerChannel || cooperativeSignal)) evidence.push("order-ready-with-trusted-source");
-  const riskBad = [c.riskLevel, c.unsafeProductRisk, c.illegalSiteRisk, c.harmfulContentRisk]
-    .map(low)
-    .some(x => ["blocked", "critical", "illegal", "unsafe", "high"].includes(x));
-  const intermediaryHigh = low(c.intermediaryRisk) === "high" && !(c.officialSource || c.directProducerChannel || cooperativeSignal);
-  const verified = !!(placeholderLike || explicitVerified || c.officialSource || officialHost || c.institutionVerified || c.producerVerified || cooperativeSignal || c.directProducerChannel || trustStrong || (c.orderReady && (c.officialSource || c.producerVerified || c.directProducerChannel || cooperativeSignal)));
-  const allowed = !!(c.frontSupplyAllowed !== false && !c.blocked && !riskBad && !intermediaryHigh && verified);
-  const out = Object.assign({}, c, {
-    frontSupplyAllowed:allowed,
-    snapshotEligible:!!(c.snapshotEligible && (allowed || placeholderLike || c.officialSource || c.directProducerChannel || trustStrong)),
-    frontVerifiedGate:{ allowed, verified, reason:allowed ? "verified-front-supply" : (c.blocked ? "blocked" : (riskBad ? "risk-not-front-safe" : (intermediaryHigh ? "intermediary-risk-high" : "verification-required-for-front-exposure"))), evidence:Array.from(new Set(evidence)).slice(0, 12) },
-    frontVerificationStatus:allowed ? "verified-front-supply" : "hold-for-front-verification"
-  });
-  out.contractAction = out.blocked ? "block" : (out.snapshotEligible ? "accept-for-snapshot" : (out.searchBankEligible ? "hold-for-searchbank-review" : "hold-for-review"));
-  out.storagePolicy = out.blocked ? "do-not-route-dangerous-source" : (out.frontSupplyAllowed ? "route-verified-front-candidate-with-evidence-meta" : "hold-unverified-candidate-outside-front-exposure");
-  return out;
 }
 function buildSearchBankContract(item, ctx){
   item = item || {};
@@ -188,7 +186,7 @@ function buildSearchBankContract(item, ctx){
   const searchBankEligible = blocked ? false : !explicitFalse(firstDefined(item.searchBankEligible, c.searchBankEligible, eligibility.searchBankEligible, true));
   const snapshotEligible = blocked ? false : !explicitFalse(firstDefined(item.snapshotEligible, c.snapshotEligible, eligibility.snapshotEligible, searchBankEligible));
   const indexEligible = blocked ? false : !explicitFalse(firstDefined(item.indexEligible, c.indexEligible, eligibility.indexEligible, searchBankEligible));
-  return searchBankFrontVerifiedGate({
+  return {
     contractVersion:firstNonEmpty(c.contractVersion, SEARCH_BANK_CONTRACT_VERSION),
     receivingEngine:"search-bank",
     receivingVersion:SEARCH_BANK_ENGINE_VERSION,
@@ -198,6 +196,12 @@ function buildSearchBankContract(item, ctx){
     page:firstNonEmpty(c.page, item.page, item.route, item.layerPointer && item.layerPointer.page, item.bind && item.bind.page),
     section:firstNonEmpty(c.section, item.section, item.psom_key, item.slotKey, item.layerPointer && item.layerPointer.section, item.bind && item.bind.section),
     supplyCategory,
+    countrySupply:(item.countrySupply && typeof item.countrySupply === "object") ? cloneJsonish(item.countrySupply) : (c.countrySupply && typeof c.countrySupply === "object" ? cloneJsonish(c.countrySupply) : null),
+    sourceCountry:firstNonEmpty(item.sourceCountry, item.source_country, item.sourceGeo && item.sourceGeo.country, c.countrySupply && c.countrySupply.sourceCountryVerified ? c.sourceCountry : "", item.geo && item.geo.country, item.country) || null,
+    targetMarket:firstNonEmpty(item.countrySupply && item.countrySupply.targetMarket, item.targetMarket, c.targetMarket, item.targetCountry, item.marketCountry) || null,
+    availabilityCountries:Array.isArray(item.availabilityCountries) ? item.availabilityCountries.slice() : (Array.isArray(item.countrySupply && item.countrySupply.availabilityCountries) ? item.countrySupply.availabilityCountries.slice() : (Array.isArray(c.availabilityCountries) ? c.availabilityCountries.slice() : [])),
+    supplyTier:firstNonEmpty(item.countrySupply && item.countrySupply.supplyTier, item.supplyTier, c.supplyTier) || null,
+    countryPolicyVersion:firstNonEmpty(item.countrySupply && item.countrySupply.policyVersion, item.countryPolicyVersion, c.countryPolicyVersion) || null,
     sourceTrustScore:Number(firstDefined(c.sourceTrustScore, d.trustScore, item.sourceTrustScore, item.sourceTrust, 0)) || 0,
     trustTier,
     riskLevel,
@@ -227,7 +231,7 @@ function buildSearchBankContract(item, ctx){
     contractAction: blocked ? "block" : (snapshotEligible ? "accept-for-snapshot" : (searchBankEligible ? "hold-for-searchbank-review" : "hold-for-review")),
     storagePolicy: blocked ? "do-not-route-dangerous-source" : "route-safe-candidate-with-evidence-meta",
     pgPolicy:pg.policy
-  }, item, ctx);
+  };
 }
 function applyUnifiedSupplyContract(item, ctx){
   if(!item || typeof item !== "object") return item;
@@ -237,8 +241,6 @@ function applyUnifiedSupplyContract(item, ctx){
   item.snapshotEligible = c.snapshotEligible;
   item.indexEligible = c.indexEligible;
   item.frontSupplyAllowed = c.frontSupplyAllowed;
-  item.frontVerifiedGate = c.frontVerifiedGate || undefined;
-  item.frontVerificationStatus = c.frontVerificationStatus || (c.frontSupplyAllowed ? "verified-front-supply" : "hold-for-front-verification");
   item.trustTier = c.trustTier;
   item.riskLevel = c.riskLevel;
   item.blockedReason = c.blockedReason || undefined;
@@ -254,7 +256,6 @@ function applyUnifiedSupplyContract(item, ctx){
     snapshotEligible:c.snapshotEligible,
     indexEligible:c.indexEligible,
     frontSupplyAllowed:c.frontSupplyAllowed,
-    frontVerificationStatus:c.frontVerificationStatus,
     pgStatus:c.pgStatus
   });
   return item;
@@ -802,6 +803,21 @@ function summarizeRegionCoverage(items=[]){
   for(const item of Array.isArray(items)?items:[]){ const r=canonicalRegionName(item?.geo?.region || item?.region || countryToRegion(item?.geo?.country || item?.country || "") || ""); if(!r) continue; counts[r]=(counts[r]||0)+1; total++; }
   return {total, counts};
 }
+function countLocalSupplyCandidates(items, targetCountry, hub){
+  const target = countryCodeOf(targetCountry);
+  const channel = low(hub || "");
+  if(!target) return 0;
+  let count = 0;
+  for(const item of Array.isArray(items) ? items : []){
+    if(!item || typeof item !== "object") continue;
+    if(item.blocked === true || item.searchBankEligible === false || item.frontSupplyAllowed === false) continue;
+    if(itemCountryCode(item) !== target) continue;
+    if(channel && !channelMatches(item.channel || item.page || "", channel)) continue;
+    count++;
+  }
+  return count;
+}
+
 function resolveOperationalPolicy(ctx={}, existingItems=[]){
   const params=ctx.params || {};
   const targetCountry=effectiveTargetCountryCode(ctx);
@@ -817,6 +833,18 @@ function resolveOperationalPolicy(ctx={}, existingItems=[]){
   }
   const blockedChannels=resolveBlockedChannels(params, audienceCountry);
   const allowedChannels=resolveAllowedChannels(params, audienceCountry);
+  let countrySupplyPlan = null;
+  if(CountrySupplyPolicy && typeof CountrySupplyPolicy.resolveSupplyPlan === "function"){
+    try{
+      const countrySupplyHub = low(ctx.slotContext?.channel || params.channel || params.page || "") || "default";
+      const countrySupplyTarget = targetCountry || audienceCountry || undefined;
+      countrySupplyPlan = CountrySupplyPolicy.resolveSupplyPlan({
+        targetMarket:countrySupplyTarget,
+        hub:countrySupplyHub,
+        localCandidateCount:countLocalSupplyCandidates(existingItems, countrySupplyTarget, countrySupplyHub)
+      });
+    }catch(_e){ countrySupplyPlan = null; }
+  }
   const priorityRegions=[];
   if(region) priorityRegions.push(region);
   for(const r of parseCsvList(params.priorityRegions || process.env.MARU_BANK_PRIORITY_REGIONS || "")){
@@ -837,6 +865,9 @@ function resolveOperationalPolicy(ctx={}, existingItems=[]){
     underfilledRegions: underfilled,
     regionQuota: quota,
     coverage,
+    countrySupplyPlan,
+    countrySupplyLocalCandidateCount: countrySupplyPlan ? countrySupplyPlan.localCandidateCount : null,
+    countrySupplyEnforcement: countrySupplyPlan ? countrySupplyPlan.enforcement : "audit",
     autoExternalReason: ctx.slotContext?.autoFill ? "slot" : (underfilled.length ? "underfilled_region" : null),
     generated_at: nowIso(),
     commerce_bridge: CommerceEngine ? "active" : "not_loaded"
@@ -981,14 +1012,51 @@ function policyIssuesForItem(item, ctx){
     if(policy.region && itemRegion && itemRegion !== policy.region) issues.push("geo_country_region_mismatch");
   }
   if(channel === "donation" && policy?.blockedChannels?.includes("donation")) issues.push("donation_blocked_for_country");
+  const countrySupply = resolveCountrySupplyRecord(item, ctx);
+  const countrySupplyEnforced = !!(policy && policy.countrySupplyPlan && policy.countrySupplyPlan.enforcement === "enforce" && (ctx?.slotContext?.autoFill || truthy(ctx?.params?.countrySupplyEnforce)));
+  if(countrySupplyEnforced && countrySupply && countrySupply.frontSupplyAllowed === false){
+    issues.push("country_supply_not_eligible:" + (Array.isArray(countrySupply.reasons) ? countrySupply.reasons.join(",") : "policy"));
+  }
   issues.push(...riskDomainIssues(item));
   issues.push(...searchBankEligibilityIssues(item, ctx));
   issues.push(...agingIssues(item));
   return issues;
 }
 function policyAcceptsItem(item, ctx){ return policyIssuesForItem(item, ctx).filter(x => !["high_risk_tld","stale_item"].includes(x)).length === 0; }
-function applyOperationalPolicy(item, ctx){ if(!item || typeof item !== "object") return item; const policy=ctx?.operationalPolicy || null; if(!policy) return item; const issues=policyIssuesForItem(item, ctx); if(issues.length){ item.policy={...(item.policy||{}), issues, ok:!issues.some(x=>x.startsWith("channel_blocked") || x==="donation_blocked_for_country" || x==="geo_country_region_mismatch")}; } if(policy.region || policy.country){ item.routing={...(item.routing||{}), priority_region:policy.region||undefined, priority_country:policy.country||undefined, source_policy:"region_ip_slot_v9"}; } return item; }
-function computeOperationalScore(ctx, item){ const policy=ctx?.operationalPolicy || {}; let score=0.5; const ir=canonicalRegionName(item?.geo?.region || item?.region || countryToRegion(item?.geo?.country || "") || ""); const ic=itemCountryCode(item); if(policy.country && ic && ic===policy.country) score+=0.25; if(policy.region && ir && ir===policy.region) score+=0.20; if(policy.priorityRegions?.includes(ir)) score+=0.12; if(policy.underfilledRegions?.includes(ir)) score+=0.08; if(policyIssuesForItem(item, ctx).some(x => !["stale_item","high_risk_tld"].includes(x))) score-=0.25; score = (score * 0.7) + (computeSupplyScore(ctx, item) * 0.3); return Math.max(0, Math.min(1, score)); }
+function applyOperationalPolicy(item, ctx){
+  if(!item || typeof item !== "object") return item;
+  const policy=ctx?.operationalPolicy || null;
+  if(!policy) return item;
+  attachCountrySupplyPolicy(item, ctx);
+  const issues=policyIssuesForItem(item, ctx);
+  if(issues.length){
+    item.policy={...(item.policy||{}), issues, ok:!issues.some(x=>x.startsWith("channel_blocked") || x==="donation_blocked_for_country" || x==="geo_country_region_mismatch" || x.startsWith("country_supply_not_eligible"))};
+  }
+  if(policy.region || policy.country){
+    item.routing={...(item.routing||{}), priority_region:policy.region||undefined, priority_country:policy.country||undefined, source_policy:"region_ip_slot_v10-country-supply"};
+  }
+  return item;
+}
+function computeOperationalScore(ctx, item){
+  const policy=ctx?.operationalPolicy || {};
+  let score=0.5;
+  const ir=canonicalRegionName(item?.geo?.region || item?.region || countryToRegion(item?.geo?.country || "") || "");
+  const ic=itemCountryCode(item);
+  if(policy.country && ic && ic===policy.country) score+=0.25;
+  if(policy.region && ir && ir===policy.region) score+=0.20;
+  if(policy.priorityRegions?.includes(ir)) score+=0.12;
+  if(policy.underfilledRegions?.includes(ir)) score+=0.08;
+  const countrySupply = resolveCountrySupplyRecord(item, ctx);
+  if(countrySupply){
+    if(countrySupply.supplyTier === "same-country") score += 0.22;
+    else if(/^neighbor-tier-/.test(countrySupply.supplyTier || "") && countrySupply.wouldAllowFrontSupply) score += 0.08;
+    else if(countrySupply.supplyTier === "global" && countrySupply.wouldAllowFrontSupply) score += 0.03;
+    if(countrySupply.wouldAllowFrontSupply === false) score -= 0.10;
+  }
+  if(policyIssuesForItem(item, ctx).some(x => !["stale_item","high_risk_tld"].includes(x))) score-=0.25;
+  score = (score * 0.7) + (computeSupplyScore(ctx, item) * 0.3);
+  return Math.max(0, Math.min(1, score));
+}
 function needsExternalForCoverage(ctx){ const p=ctx?.params || {}; if(externalSuppressed(ctx)) return false; const explicitlyAuto = truthy(p.autoExternal || p.autoFillRegion || p.allowExternalOnDeficiency || process.env.MARU_BANK_AUTO_EXTERNAL); if(!explicitlyAuto) return false; if(ctx?.slotDeficiency?.deficient) return true; return !!(ctx?.operationalPolicy?.underfilledRegions?.length && (ctx?.geoContext?.region || ctx?.geoContext?.country)); }
 
 // ---------- v10 source power / slot fill / locale query / aging ----------
@@ -1430,7 +1498,8 @@ function normalizeItem(raw, ctx={}){
   }
 
   const tags = Array.isArray(src.tags) ? src.tags.slice(0,50).map(String) : [];
-  const geo = mergeGeo(pickGeo(src), geoContext);
+  const sourceGeo = pickGeo(src);
+  const geo = mergeGeo(sourceGeo, geoContext);
   const producer = pickProducer(src);
   const sector = resolveSectorContext({ ...src, geo }, queryIntent);
   const entity = resolveEntityContext({ ...src, geo, sector }, queryIntent);
@@ -1513,6 +1582,7 @@ function normalizeItem(raw, ctx={}){
     published_at: src.published_at || src.publishedAt || src.date || undefined,
     ingested_at: src.ingested_at || src.ingestedAt || undefined,
     geo: geo || undefined,
+    sourceGeo: sourceGeo || undefined,
     sector: (sector && (sector.major || sector.minor || sector.product_type)) ? sector : undefined,
     entity: (entity && (entity.type || entity.subtype || entity.name)) ? entity : undefined,
     market,
@@ -1524,6 +1594,7 @@ function normalizeItem(raw, ctx={}){
 
   applySlotContract(normalized, ctx);
   preserveBankContract(normalized, src);
+  attachCountrySupplyPolicy(normalized, ctx);
   applyUnifiedSupplyContract(normalized, ctx);
   return normalized;
 }
@@ -1531,7 +1602,7 @@ function normalizeItem(raw, ctx={}){
 
 const CONTRACT_FIELDS = [
   "channel","section","page","psom_key","category","semantic_category","bind","bank_ref","rank","verify","link","org","donation","media","thumbnail","thumb","image","tags","route",
-  "osaiDiscernment","sanmaruTrust","supplyChain","sanmaruSearchBankContract","searchBankContract","searchBankUnifiedContract","searchBankPipeline","supplyCategory","producerType","officialSource","institutionVerified","producerVerified","directProducerChannel","intermediaryRisk","paymentReady","orderReady","paymentStructureReady","paymentLive","pgExecution","pgStatus","supplyChainReady","frontSupplyAllowed","searchBankEligible","snapshotEligible","indexEligible","trustTier","riskLevel","blockedReason","harmfulContentRisk","illegalSiteRisk","unsafeProductRisk","sanmaruEvidence","acceptedReason","warningReason","trustEvidence","paymentEvidence","producerEvidence","officialEvidence","safetyEvidence"
+  "osaiDiscernment","sanmaruTrust","supplyChain","sanmaruSearchBankContract","searchBankContract","searchBankUnifiedContract","searchBankPipeline","countrySupply","sourceCountry","sourceGeo","targetMarket","availabilityCountries","supplyTier","countryPolicyVersion","supplyCategory","producerType","officialSource","institutionVerified","producerVerified","directProducerChannel","intermediaryRisk","paymentReady","orderReady","paymentStructureReady","paymentLive","pgExecution","pgStatus","supplyChainReady","frontSupplyAllowed","searchBankEligible","snapshotEligible","indexEligible","trustTier","riskLevel","blockedReason","harmfulContentRisk","illegalSiteRisk","unsafeProductRisk","sanmaruEvidence","acceptedReason","warningReason","trustEvidence","paymentEvidence","producerEvidence","officialEvidence","safetyEvidence"
 ];
 
 function preserveBankContract(item, original){
@@ -1697,7 +1768,10 @@ class SearchBankIndexAdapter extends BaseSourceAdapter {
         slotSupply: !!ctx.slotContext?.autoFill,
         layerMode: !!ctx.slotContext?.autoFill,
         compact: false,
-        facets: false
+        facets: false,
+        targetMarket:ctx.operationalPolicy?.countrySupplyPlan?.targetMarket || undefined,
+        targetCountry:ctx.operationalPolicy?.countrySupplyPlan?.targetMarket || undefined,
+        audienceCountry:ctx.operationalPolicy?.audienceCountry || undefined
       };
       let res = null;
       if(ctx.slotContext?.autoFill && typeof SearchBankIndex.runEngine === "function") res = await SearchBankIndex.runEngine({ __sanmaruInternal:true }, params);
@@ -1769,6 +1843,11 @@ class MaruSearchSourceAdapter extends BaseSourceAdapter {
       limit: Math.min(ctx.limit || 50, 200),
       lang: ctx.params.lang || ctx.queryIntent?.languageHint || undefined,
       mode: ctx.params.mode || "search",
+      targetMarket:ctx.operationalPolicy?.countrySupplyPlan?.targetMarket || undefined,
+      targetCountry:ctx.operationalPolicy?.countrySupplyPlan?.targetMarket || undefined,
+      country:ctx.slotContext?.autoFill ? (ctx.operationalPolicy?.countrySupplyPlan?.targetMarket || undefined) : undefined,
+      researchCountries:ctx.operationalPolicy?.countrySupplyPlan?.researchOrder || undefined,
+      countrySupplyPolicyVersion:ctx.operationalPolicy?.countrySupplyPlan?.policyVersion || undefined,
       from: "search-bank",
       skipSearchBank: true
     });
@@ -2209,6 +2288,7 @@ const offset = safeInt(params.offset, 0, 0, 100000);
     if(adapterName === "snapshot" || adapterName === "index"){
       const rawSnapshot = { ...r };
       delete rawSnapshot.__adapter;
+      attachCountrySupplyPolicy(rawSnapshot, adapterCtx);
       applyUnifiedSupplyContract(rawSnapshot, adapterCtx);
       snapshotCorpus.push(rawSnapshot);
       continue;
@@ -2305,7 +2385,11 @@ if(writeAllowed && (persistCandidates.length || truthy(params.forceSnapshotWrite
   filters.requestedSections = requestedFrontSections(filters);
 
   const searchCorpus = snapshotCorpus.concat(normalized.length ? normalized : []);
-  const contractCorpus = (searchCorpus.length ? searchCorpus : (bank.items || [])).map(it => applyUnifiedSupplyContract(cloneJsonish(it), adapterCtx));
+  const contractCorpus = (searchCorpus.length ? searchCorpus : (bank.items || [])).map(it => {
+    const copy = cloneJsonish(it);
+    attachCountrySupplyPolicy(copy, adapterCtx);
+    return applyUnifiedSupplyContract(copy, adapterCtx);
+  });
   let filtered = dedup(applyFilters(contractCorpus, filters)).filter(it => policyAcceptsItem(it, adapterCtx));
 
   const qForScore = q || "";
@@ -2391,6 +2475,7 @@ return {
     geo_context: geoContext,
     slot_context: slotContext,
     operational_policy: operationalPolicy,
+    country_supply_policy: operationalPolicy.countrySupplyPlan || undefined,
     slot_deficiency: slotDeficiency,
     source_health: served.source_health || undefined,
     search_bank_engine_version: SEARCH_BANK_ENGINE_VERSION,
@@ -2430,6 +2515,7 @@ exports.resolveOperationalPolicy = resolveOperationalPolicy;
 exports.policyAcceptsItem = policyAcceptsItem;
 exports.computeOperationalScore = computeOperationalScore;
 exports.resolveCountryPolicyTable = resolveCountryPolicyTable;
+exports.countLocalSupplyCandidates = countLocalSupplyCandidates;
 exports.resolveSlotDeficiency = resolveSlotDeficiency;
 exports.expandQueryForLocale = expandQueryForLocale;
 exports.getSourceHealth = getSourceHealth;
@@ -2447,6 +2533,8 @@ exports.SEARCH_BANK_ENGINE_VERSION = SEARCH_BANK_ENGINE_VERSION;
 exports.SEARCH_BANK_CONTRACT_VERSION = SEARCH_BANK_CONTRACT_VERSION;
 exports.buildSearchBankContract = buildSearchBankContract;
 exports.applyUnifiedSupplyContract = applyUnifiedSupplyContract;
+exports.resolveCountrySupplyRecord = resolveCountrySupplyRecord;
+exports.attachCountrySupplyPolicy = attachCountrySupplyPolicy;
 exports.summarizeSearchBankContracts = summarizeSearchBankContracts;
 
 exports.handler = async function(event){
