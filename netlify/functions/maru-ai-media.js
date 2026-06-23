@@ -12,6 +12,7 @@ const DEFAULT_TRANSCRIBE_MODEL = process.env.OPENAI_TRANSCRIBE_MODEL || process.
 const DEFAULT_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
 const DEFAULT_TTS_VOICE = process.env.OPENAI_TTS_VOICE || process.env.MARU_AI_DUBBING_VOICE || 'alloy';
 const DEFAULT_TTS_FORMAT = process.env.OPENAI_TTS_FORMAT || 'mp3';
+const DEFAULT_SUBTITLE_TRANSLATE_MODEL = process.env.OPENAI_SUBTITLE_MODEL || 'gpt-4o-mini';
 const TTS_CHUNK_CHARS = Math.max(500, Math.min(3500, Number(process.env.MARU_TTS_CHUNK_CHARS || 2600) || 2600));
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
 
@@ -179,7 +180,7 @@ function normalizeSegment(item, offsetSeconds = 0) {
   let end = numberOr(item.end ?? item.endSeconds ?? item.to ?? item.finish, start + 2);
   const text = safeString(item.text ?? item.caption ?? item.content ?? item.subtitle ?? '').trim();
   if (!text) return null;
-  if (offsetSeconds && start < 5 * 60) {
+  if (offsetSeconds) {
     start += offsetSeconds;
     end += offsetSeconds;
   }
@@ -189,10 +190,15 @@ function normalizeSegment(item, offsetSeconds = 0) {
 
 function normalizeSegments(items, offsetSeconds = 0) {
   const source = Array.isArray(items) ? items : [];
-  // Preserve recognizer timestamps exactly.  Forcing later starts past earlier ends
-  // shifted visible subtitles away from actual speech at dense dialogue and chunk edges.
-  return source.map((item) => normalizeSegment(item, offsetSeconds)).filter(Boolean)
-    .sort((a, b) => a.start - b.start || a.end - b.end);
+  const rows = source.map((item) => normalizeSegment(item, offsetSeconds)).filter(Boolean);
+  rows.sort((a, b) => a.start - b.start || a.end - b.end);
+  for (let i = 0; i < rows.length; i += 1) {
+    if (i > 0 && rows[i].start < rows[i - 1].end) {
+      rows[i].start = Math.max(rows[i].start, Math.max(0, rows[i - 1].end + 0.02));
+      if (rows[i].end <= rows[i].start) rows[i].end = rows[i].start + 1.2;
+    }
+  }
+  return rows;
 }
 
 function secondsToSrtTime(sec) {
@@ -314,13 +320,215 @@ async function openAiMultipart(path, fields, fileField) {
   try { return text ? JSON.parse(text) : {}; } catch { return { text }; }
 }
 
+
+/*
+ * SAFE56 selected-language translation action.
+ * There is intentionally NO total subtitle-character rejection here.
+ * The Windows app owns a resumable, time-windowed queue and narrows only an
+ * actually failing window. This keeps ordinary long lectures, movies and
+ * documentaries unrestricted while still avoiding a single serverless call
+ * holding an entire multi-hour job.
+ */
+const TRANSLATION_LANGUAGE_NAMES = Object.freeze({
+  ko: 'Korean', en: 'English', zh: 'Simplified Chinese', zht: 'Traditional Chinese', ja: 'Japanese',
+  es: 'Spanish', fr: 'French', de: 'German', ru: 'Russian', pt: 'Portuguese', it: 'Italian',
+  ar: 'Arabic', vi: 'Vietnamese', th: 'Thai', id: 'Indonesian', hi: 'Hindi', tr: 'Turkish',
+  ta: 'Tamil', sw: 'Swahili', ur: 'Urdu', bn: 'Bengali', fa: 'Persian', hu: 'Hungarian',
+  ms: 'Malay', nl: 'Dutch', pl: 'Polish', sv: 'Swedish', tl: 'Filipino', uk: 'Ukrainian', uz: 'Uzbek'
+});
+
+function normalizeTranslationLanguage(value) {
+  const raw = safeString(value || '').trim().toLowerCase().replace(/_/g, '-');
+  if (['zh-hant', 'zh-tw', 'zh-hk', 'zht'].includes(raw)) return 'zht';
+  if (raw.startsWith('zh')) return 'zh';
+  if (raw === 'fil') return 'tl';
+  const short = raw.split('-')[0];
+  return Object.prototype.hasOwnProperty.call(TRANSLATION_LANGUAGE_NAMES, short) ? short : '';
+}
+
+function parseTimedSrtCues(source) {
+  const blocks = safeString(source || '').replace(/\r/g, '').trim().split(/\n{2,}/);
+  const cues = [];
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    if (lines.length < 3) continue;
+    const number = lines.shift().trim();
+    const timing = lines.shift().trim();
+    if (!/^\d+$/.test(number) || !/^\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*-->\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}/.test(timing)) continue;
+    const text = lines.join('\n').trim();
+    if (!text) continue;
+    cues.push({ id: cues.length, number, timing, text });
+  }
+  return cues;
+}
+
+function parseTranslationRows(value) {
+  const raw = safeString(value || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  const firstObject = raw.indexOf('{');
+  const firstArray = raw.indexOf('[');
+  const start = firstArray >= 0 && (firstObject < 0 || firstArray < firstObject) ? firstArray : firstObject;
+  const end = start === firstArray ? raw.lastIndexOf(']') : raw.lastIndexOf('}');
+  const jsonText = start >= 0 && end >= start ? raw.slice(start, end + 1) : raw;
+  const parsed = JSON.parse(jsonText);
+  const rows = Array.isArray(parsed) ? parsed : parsed?.cues;
+  if (!Array.isArray(rows)) throw new Error('translation_invalid_json');
+  return rows;
+}
+
+async function requestTranslationJson(payload) {
+  try {
+    return await openAiJson('/chat/completions', { ...payload, response_format: { type: 'json_object' } });
+  } catch (error) {
+    // Preserve compatibility if an operator configures an older chat model.
+    const message = String(error?.message || '').toLowerCase();
+    if (!/response_format|json_object|unsupported.*format|unknown parameter/.test(message)) throw error;
+    return openAiJson('/chat/completions', payload);
+  }
+}
+
+async function handleTranslateSubtitle(id, body) {
+  const subtitle = safeString(body.subtitle || body.subtitleText || body.content || '');
+  const targetLang = normalizeTranslationLanguage(body.targetLang || body.targetLanguage || body.language || '');
+  if (!subtitle.trim()) return json(400, { ok: false, action: 'translate-subtitle', code: 'empty_subtitle', error: 'No timed subtitle text was supplied.', requestId: id });
+  if (!targetLang) return json(400, { ok: false, action: 'translate-subtitle', code: 'unsupported_target_language', error: 'Unsupported target language.', requestId: id });
+
+  const cues = parseTimedSrtCues(subtitle);
+  if (!cues.length) return json(422, { ok: false, action: 'translate-subtitle', code: 'timed_subtitle_required', error: 'Timed SRT subtitle cues are required.', requestId: id });
+
+  // No character-cap rejection. A normal multi-hour video is completed by the
+  // desktop queue; each request can contain the whole current time window.
+  log(id, 'translate-subtitle', 'cues=', cues.length, 'chars=', subtitle.length, 'target=', targetLang);
+  const payload = {
+    model: DEFAULT_SUBTITLE_TRANSLATE_MODEL,
+    temperature: 0,
+    max_tokens: 16384,
+    messages: [
+      { role: 'system', content: [
+        'You are a professional subtitle translation engine.',
+        'Translate only cue dialogue into the authoritative requested target language.',
+        'Return JSON only as an object with one key, "cues", whose value is an array of objects exactly shaped as {"id": number, "text": string}.',
+        'Return exactly one object for every input id, in the same order.',
+        'Do not include timestamps, cue numbers, markdown, notes, explanations, or extra keys.',
+        'Keep text concise, natural, faithful, and suitable for timed subtitles.',
+        'Preserve names, numbers, units, scientific and technical terms accurately.',
+        'Keep lecture and documentary narration stylistically consistent.'
+      ].join(' ') },
+      { role: 'user', content: JSON.stringify({
+        targetLanguage: TRANSLATION_LANGUAGE_NAMES[targetLang],
+        targetLanguageCode: targetLang,
+        cues: cues.map((cue) => ({ id: cue.id, text: cue.text }))
+      }) }
+    ]
+  };
+
+  const result = await requestTranslationJson(payload);
+  const content = safeString(result?.choices?.[0]?.message?.content || '');
+  let rows;
+  try { rows = parseTranslationRows(content); }
+  catch (error) {
+    const err = new Error('Translation service returned invalid structured output.');
+    err.statusCode = 502;
+    throw err;
+  }
+  const byId = new Map();
+  for (const row of rows) {
+    const index = Number(row?.id);
+    const text = safeString(row?.text || '').replace(/\r/g, '').trim();
+    if (Number.isInteger(index) && index >= 0 && index < cues.length && text) byId.set(index, text);
+  }
+  if (byId.size !== cues.length) {
+    const err = new Error('Translation service did not return every subtitle cue.');
+    err.statusCode = 502;
+    throw err;
+  }
+  const translatedSubtitle = cues.map((cue) => `${cue.number}\n${cue.timing}\n${byId.get(cue.id)}\n`).join('\n');
+  return json(200, {
+    ok: true,
+    action: 'translate-subtitle',
+    targetLang,
+    targetLanguage: targetLang,
+    targetLanguageVerified: targetLang,
+    targetName: TRANSLATION_LANGUAGE_NAMES[targetLang],
+    translatedSubtitle,
+    cueTotal: cues.length,
+    requestId: id
+  });
+}
+
+
+async function handleReviewSubtitle(id, body) {
+  const subtitle = safeString(body.subtitle || body.subtitleText || body.content || '');
+  const language = normalizeTranslationLanguage(body.language || body.sourceLanguage || body.targetLanguage || '');
+  if (!subtitle.trim()) return json(400, { ok: false, action: 'review-subtitle', code: 'empty_subtitle', error: 'No timed subtitle text was supplied.', requestId: id });
+  if (!language) return json(400, { ok: false, action: 'review-subtitle', code: 'unsupported_language', error: 'Unsupported subtitle language.', requestId: id });
+  const cues = parseTimedSrtCues(subtitle);
+  if (!cues.length) return json(422, { ok: false, action: 'review-subtitle', code: 'timed_subtitle_required', error: 'Timed SRT subtitle cues are required.', requestId: id });
+
+  log(id, 'review-subtitle', 'cues=', cues.length, 'language=', language);
+  const payload = {
+    model: DEFAULT_SUBTITLE_TRANSLATE_MODEL,
+    temperature: 0,
+    max_tokens: 16384,
+    messages: [
+      { role: 'system', content: [
+        'You are a conservative final subtitle quality reviewer.',
+        'Do NOT translate. Keep every cue in its existing language.',
+        'Return JSON only as an object with one key, "cues", whose value is an array of objects exactly shaped as {"id": number, "text": string}.',
+        'Return exactly one object for every input id, in the same order.',
+        'Preserve the spoken meaning. Do not add, omit, summarize, or invent content.',
+        'Only correct clear transcription mistakes, punctuation, spacing, sentence boundaries, and obviously inconsistent spellings.',
+        'Preserve person names, place names, organizations, titles, brands, scientific terms, numbers, units, and established spellings. If uncertain whether a term is a name, retain the original spelling.',
+        'Maintain one consistent narration style and dialogue honorific level from local context.',
+        'Do not output timestamps, cue numbers, markdown, notes, explanations, or extra keys.'
+      ].join(' ') },
+      { role: 'user', content: JSON.stringify({
+        language: TRANSLATION_LANGUAGE_NAMES[language],
+        languageCode: language,
+        cues: cues.map((cue) => ({ id: cue.id, text: cue.text }))
+      }) }
+    ]
+  };
+  const result = await requestTranslationJson(payload);
+  const content = safeString(result?.choices?.[0]?.message?.content || '');
+  let rows;
+  try { rows = parseTranslationRows(content); }
+  catch {
+    const err = new Error('Subtitle review service returned invalid structured output.');
+    err.statusCode = 502;
+    throw err;
+  }
+  const byId = new Map();
+  for (const row of rows) {
+    const index = Number(row?.id);
+    const text = safeString(row?.text || '').replace(/\r/g, '').trim();
+    if (Number.isInteger(index) && index >= 0 && index < cues.length && text) byId.set(index, text);
+  }
+  if (byId.size !== cues.length) {
+    const err = new Error('Subtitle review service did not return every subtitle cue.');
+    err.statusCode = 502;
+    throw err;
+  }
+  const reviewedSubtitle = cues.map((cue) => `${cue.number}\n${cue.timing}\n${byId.get(cue.id)}\n`).join('\n');
+  return json(200, {
+    ok: true,
+    action: 'review-subtitle',
+    language,
+    languageVerified: language,
+    reviewedSubtitle,
+    cueTotal: cues.length,
+    requestId: id
+  });
+}
+
 async function handleStatus(id) {
   return json(200, {
     ok: true,
     status: 'MARU AI media server ready',
     service: 'maru-ai-media',
     openAiReady: Boolean(OPENAI_API_KEY),
-    subtitleActions: ['generate-subtitle', 'review-subtitle'],
+    subtitleActions: ['generate-subtitle', 'review-subtitle', 'translate-subtitle'],
+    reviewActions: ['review-subtitle'],
+    translationActions: ['translate-subtitle'],
     dubbingActions: ['generate-dubbing', 'generate-speech', 'text-to-speech', 'tts', 'dubbing', 'ai-dubbing'],
     requestId: id
   });
@@ -368,95 +576,13 @@ async function handleGenerateSubtitle(id, body) {
   return json(200, {
     ok: true,
     action: 'generate-subtitle',
-    // The server applied the exact chunkOffset, so desktop code must not add it again.
-    timeline: 'absolute',
     fileName,
     model: DEFAULT_TRANSCRIBE_MODEL,
     segments,
+    timeline: 'absolute',
+    timestampBasis: 'absolute',
     subtitleText: segmentsToSrt(segments),
     text: result.text || segments.map((s) => s.text).join('\n'),
-    requestId: id
-  });
-}
-
-
-
-function normalizeReviewInputSegments(value) {
-  const source = Array.isArray(value) ? value : [];
-  const out = [];
-  for (const item of source) {
-    const id = Number(item?.id);
-    const text = safeString(item?.text ?? item?.caption ?? item?.content ?? '').trim();
-    if (!Number.isInteger(id) || id < 0 || !text) continue;
-    out.push({ id, text });
-  }
-  out.sort((a, b) => a.id - b.id);
-  return out;
-}
-
-function safeReviewContext(value) {
-  return (Array.isArray(value) ? value : []).map((item) => safeString(item || '').trim()).filter(Boolean);
-}
-
-function parseReviewResult(value) {
-  const raw = safeString(value || '').trim();
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch {}
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced) {
-    try { return JSON.parse(fenced[1].trim()); } catch {}
-  }
-  const first = raw.indexOf('{');
-  const last = raw.lastIndexOf('}');
-  if (first >= 0 && last > first) {
-    try { return JSON.parse(raw.slice(first, last + 1)); } catch {}
-  }
-  return null;
-}
-
-async function handleReviewSubtitle(id, body) {
-  const segments = normalizeReviewInputSegments(body.segments);
-  if (!segments.length) return json(400, { ok: false, action: 'review-subtitle', error: 'Timed subtitle text is required for final context review.', requestId: id });
-  const language = normalizeLanguage(body.language || body.targetLanguage || body.sourceLanguage || 'auto') || 'auto';
-  const contextBefore = safeReviewContext(body.contextBefore);
-  const contextAfter = safeReviewContext(body.contextAfter);
-  const system = [
-    'You are the final conservative quality-review stage for timed subtitles.',
-    'Do not translate. Keep every cue in the same selected language and script it was supplied in.',
-    'Return JSON only as {"segments":[{"id":0,"text":"..."}]}. Return exactly one item for every supplied id, each once.',
-    'Correct only clear speech-recognition errors, punctuation, spacing, obvious sentence-boundary defects, and consistency errors that are strongly supported by the supplied context.',
-    'Do not rewrite valid dialogue for style, do not add omitted speech, and do not guess facts that are not in the supplied text.',
-    'Treat person names, place names, institutions, works, brands, ranks, code names, technical terms, numbers, units, and species names as protected proper nouns. Keep their original spelling/script unless the supplied context clearly establishes a different repeated form.',
-    'When a word can be either a person name or an ordinary word, preserve it rather than translating or replacing it when uncertain.',
-    'Do not output timestamps, numbering, explanations, markdown, or any field other than id and text.'
-  ].join(' ');
-  const user = JSON.stringify({
-    selectedLanguage: language,
-    previousContext: contextBefore,
-    reviewSegments: segments,
-    followingContext: contextAfter
-  });
-  const model = safeString(body.model || body.reviewModel || process.env.OPENAI_SUBTITLE_REVIEW_MODEL || 'gpt-4o-mini').trim() || 'gpt-4o-mini';
-  const result = await openAiJson('/chat/completions', {
-    model,
-    temperature: 0,
-    response_format: { type: 'json_object' },
-    messages: [{ role: 'system', content: system }, { role: 'user', content: user }]
-  });
-  const parsed = parseReviewResult(result?.choices?.[0]?.message?.content || '');
-  const reviewed = normalizeReviewInputSegments(parsed?.segments);
-  const expectedIds = new Set(segments.map((item) => item.id));
-  if (reviewed.length !== segments.length || reviewed.some((item) => !expectedIds.has(item.id)) || new Set(reviewed.map((item) => item.id)).size !== segments.length) {
-    const err = new Error('Final context review returned an invalid cue structure.');
-    err.statusCode = 422;
-    throw err;
-  }
-  return json(200, {
-    ok: true,
-    action: 'review-subtitle',
-    language,
-    targetLanguage: language,
-    segments: reviewed,
     requestId: id
   });
 }
@@ -581,13 +707,14 @@ exports.handler = async (event) => {
 
     if (['status', 'health', 'ping', 'connect', 'test', 'connection-test'].includes(action)) return handleStatus(id);
     if (action === 'generate-subtitle' || action === 'subtitle' || action === 'transcribe') return await handleGenerateSubtitle(id, body);
-    if (action === 'review-subtitle' || action === 'subtitle-review' || action === 'final-context-review') return await handleReviewSubtitle(id, body);
+    if (['review-subtitle', 'subtitle-review', 'review'].includes(action)) return await handleReviewSubtitle(id, body);
+    if (['translate-subtitle', 'subtitle-translate', 'translate'].includes(action)) return await handleTranslateSubtitle(id, body);
     if (isDubbingAction(action)) return await handleGenerateDubbing(id, action, body);
 
     return json(400, {
       ok: false,
       error: `Unsupported action: ${action}`,
-      supportedActions: ['status', 'generate-subtitle', 'review-subtitle', 'generate-dubbing', 'generate-speech', 'text-to-speech', 'tts'],
+      supportedActions: ['status', 'generate-subtitle', 'review-subtitle', 'translate-subtitle', 'generate-dubbing', 'generate-speech', 'text-to-speech', 'tts'],
       requestId: id
     });
   } catch (error) {
