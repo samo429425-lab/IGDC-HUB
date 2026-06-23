@@ -1,245 +1,56 @@
-// distribution-products-automap.v3.js (PRODUCTION SAFE VERSION)
-// Fixed: double render, mobile overwrite, Z-Flip refresh issue
-// Stable single-pass rendering (no placeholder override)
-
-(function () {
+// distribution-products-automap.v3.js
+// IGDC/MARU Distribution Hub: regional brokerage snapshot first, static snapshot safe fallback.
+(function(){
   'use strict';
+  if(window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V3__) return;
+  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V3__=true;
 
-  if (window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V3__) return;
-  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V3__ = true;
-
-  const SNAPSHOT_URL = '/data/distribution.snapshot.json';
-
-  const LIMIT_MAIN = 100;
-  const LIMIT_RIGHT = 100;
-
-  const SECTION_MAP = [
-    { key: 'distribution-recommend', selector: '[data-psom-key="distribution-recommend"]', limit: LIMIT_MAIN },
-    { key: 'distribution-new', selector: '[data-psom-key="distribution-new"]', limit: LIMIT_MAIN },
-    { key: 'distribution-trending', selector: '[data-psom-key="distribution-trending"]', limit: LIMIT_MAIN },
-    { key: 'distribution-special', selector: '[data-psom-key="distribution-special"]', limit: LIMIT_MAIN },
-    { key: 'distribution-sponsor', selector: '[data-psom-key="distribution-sponsor"]', limit: LIMIT_MAIN },
-    { key: 'distribution-others', selector: '[data-psom-key="distribution-others"]', limit: LIMIT_MAIN },
-    { key: 'distribution-right', selector: '[data-psom-key="distribution-right"]', limit: LIMIT_RIGHT }
+  const STATIC_SNAPSHOT_URL='/data/distribution.snapshot.json';
+  const REGIONAL_SNAPSHOT_URL='/.netlify/functions/regional-brokerage-snapshot?hub=distribution';
+  const LIMIT_MAIN=100, LIMIT_RIGHT=100;
+  const SECTION_MAP=[
+    {key:'distribution-recommend',selector:'[data-psom-key="distribution-recommend"]',limit:LIMIT_MAIN},
+    {key:'distribution-new',selector:'[data-psom-key="distribution-new"]',limit:LIMIT_MAIN},
+    {key:'distribution-trending',selector:'[data-psom-key="distribution-trending"]',limit:LIMIT_MAIN},
+    {key:'distribution-special',selector:'[data-psom-key="distribution-special"]',limit:LIMIT_MAIN},
+    {key:'distribution-sponsor',selector:'[data-psom-key="distribution-sponsor"]',limit:LIMIT_MAIN},
+    {key:'distribution-others',selector:'[data-psom-key="distribution-others"]',limit:LIMIT_MAIN},
+    {key:'distribution-right',selector:'[data-psom-key="distribution-right"]',limit:LIMIT_RIGHT}
   ];
-
-  const PLACEHOLDER_IMG = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
-
-  let HAS_RENDERED = false;
-
-  function clear(el) {
-    if (!el || HAS_RENDERED) return;
-    while (el.firstChild) el.removeChild(el.firstChild);
-  }
-
-  function escUrl(u) {
-    try { return String(u || '').replace(/'/g, '%27'); } catch { return ''; }
-  }
-
-  function pickImage(item) {
-    return (item && (item.thumb || item.image || item.thumbnail || item.imageUrl || item.thumbnailUrl || '')) || '';
-  }
-
-  function pickTitle(item) {
-    return (item && (item.title || item.name || item.text || '')) || '';
-  }
-
-  function pickMeta(item) {
-    return (item && (item.meta || item.subtitle || item.summary || '')) || '';
-  }
-
-  function pickUrl(item) {
-    return (item && (item.url || item.href || item.link || '#')) || '#';
-  }
-
-  function makeDummy(cfg, idx) {
-    const n = idx + 1;
-    return {
-      title: (cfg.key || 'distribution') + ' Product ' + n,
-      meta: '',
-      thumb: PLACEHOLDER_IMG,
-      url: '#'
-    };
-  }
-
-  function createCard(item) {
-    const card = document.createElement('div');
-    card.className = 'thumb-card';
-
-    const img = document.createElement('div');
-    img.className = 'thumb-img';
-    const src = pickImage(item);
-    const useSrc = src || PLACEHOLDER_IMG;
-
-    img.style.backgroundImage = "url('" + escUrl(useSrc) + "')";
-    img.style.backgroundSize = 'cover';
-    img.style.backgroundPosition = 'center';
-
-    const title = document.createElement('div');
-    title.className = 'thumb-title';
-    title.textContent = pickTitle(item) || 'Product';
-
-    const meta = document.createElement('div');
-    meta.className = 'thumb-meta';
-    meta.textContent = pickMeta(item);
-
-    card.appendChild(img);
-    card.appendChild(title);
-    card.appendChild(meta);
-
-    const href = pickUrl(item);
-    if (href && href !== '#') {
-      card.addEventListener('click', function(){ location.href = href; });
-      card.style.cursor = 'pointer';
+  const ALIAS={'distribution-recommend':'distribution_1','distribution-new':'distribution_2','distribution-trending':'distribution_3','distribution-special':'distribution_4','distribution-sponsor':'distribution_5','distribution-others':'distribution_6','distribution-right':'distribution_7'};
+  let rendered=false;
+  function escUrl(v){try{return String(v||'').replace(/'/g,'%27');}catch(_e){return '';}}
+  function text(v){return v==null?'':String(v);}
+  function pick(item,names){for(const name of names){const value=item&&item[name];if(value)return value;}return '';}
+  function sectionsOf(snapshot){return snapshot&&(snapshot.pages&&snapshot.pages.distribution&&snapshot.pages.distribution.sections||snapshot.sections)||null;}
+  function revenue(item,kind){try{if(window.MaruRevenueTracker&&typeof window.MaruRevenueTracker[kind]==='function'){window.MaruRevenueTracker[kind](item,{service:'distributionhub-regional-brokerage',pageType:'distribution',page:'distribution',section:item.section||item.psom_key||null,revenueLine:'product_affiliate'});}}catch(_e){}}
+  function card(item){
+    const root=document.createElement('div');root.className='thumb-card';
+    const img=document.createElement('div');img.className='thumb-img';
+    const image=pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']);if(image){img.style.backgroundImage="url('"+escUrl(image)+"')";img.style.backgroundSize='cover';img.style.backgroundPosition='center';}
+    const title=document.createElement('div');title.className='thumb-title';title.textContent=text(pick(item,['title','name','text'])||'Product');
+    const meta=document.createElement('div');meta.className='thumb-meta';meta.textContent=text(pick(item,['meta','subtitle','summary','description']));
+    root.appendChild(img);root.appendChild(title);root.appendChild(meta);
+    const href=pick(item,['url','href','link']);if(href&&href!=='#'){
+      root.style.cursor='pointer';root.setAttribute('role','link');root.tabIndex=0;
+      const open=function(){revenue(item,'trackClick');window.location.assign(href);};
+      root.addEventListener('click',open);root.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
     }
-
-    return card;
+    revenue(item,'trackImpression');return root;
   }
-
-  async function loadSnapshot() {
-    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Snapshot load failed: ' + res.status);
-    return res.json();
+  async function fetchJson(url,timeout){
+    const controller=typeof AbortController!=='undefined'?new AbortController():null;
+    const timer=controller?setTimeout(function(){controller.abort();},timeout):null;
+    try{const r=await fetch(url,{cache:'no-store',credentials:'same-origin',signal:controller&&controller.signal});if(r.status===204)throw new Error('empty');if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}finally{if(timer)clearTimeout(timer);}
   }
-
-  function getSections(snapshot) {
-    return (snapshot && (snapshot.pages && snapshot.pages.distribution && snapshot.pages.distribution.sections)) ||
-           (snapshot && snapshot.sections) ||
-           null;
+  async function loadSnapshot(){
+    try{const regional=await fetchJson(REGIONAL_SNAPSHOT_URL,8500);if(regional&&regional.meta&&regional.meta.regionalBrokerage===true&&sectionsOf(regional))return regional;}catch(_e){}
+    return fetchJson(STATIC_SNAPSHOT_URL,5000);
   }
-
-  function renderSlotFirst(sections) {
-    if (HAS_RENDERED) return;
-
-    SECTION_MAP.forEach(cfg => {
-      const box = document.querySelector(cfg.selector);
-      if (!box) return;
-
-      const KEY_ALIAS = {
-  "distribution-recommend": "distribution_1",
-  "distribution-new": "distribution_2",
-  "distribution-trending": "distribution_3",
-  "distribution-special": "distribution_4",
-  "distribution-sponsor": "distribution_5",
-  "distribution-others": "distribution_6",
-  "distribution-right": "distribution_7"
-};
-
-      const raw =
-        (sections && sections[cfg.key]) ||
-        (sections && sections[KEY_ALIAS[cfg.key]]);
-      const arr = Array.isArray(raw) ? raw : [];
-      const limit = cfg.limit || LIMIT_MAIN;
-
-      const list = arr.slice(0, limit);
-
-      while (list.length < limit) list.push(makeDummy(cfg, list.length));
-
-      clear(box);
-      list.forEach(item => box.appendChild(createCard(item)));
-    });
-
-    HAS_RENDERED = true;
+  function render(sections,dynamic){
+    if(rendered||!sections)return;
+    SECTION_MAP.forEach(function(cfg){const box=document.querySelector(cfg.selector);if(!box)return;const raw=sections[cfg.key]||sections[ALIAS[cfg.key]];const list=Array.isArray(raw)?raw:(raw&&Array.isArray(raw.slots)?raw.slots:[]);while(box.firstChild)box.removeChild(box.firstChild);list.slice(0,cfg.limit).forEach(function(item){box.appendChild(card(item));});if(!dynamic&&list.length===0){/* preserve existing empty-state layout without fabricating product cards */}});
+    rendered=true;
   }
-
-  (async function run(){
-    try {
-      const snapshot = await loadSnapshot();
-      const sections = getSections(snapshot);
-
-      if (!sections) return;
-
-      renderSlotFirst(sections);
-
-      console.log('[AUTOMAP] Production slot-first mapping loaded');
-
-    } catch (e) {
-      console.error('[AUTOMAP] Error:', e);
-    }
-  })();
-
-})();
-
-
-/* ------------------------------------------------------------------
- * MARU Revenue AutoHook Loader
- * Added by revenue tracking patch.
- *
- * Purpose:
- * - Load /assets/js/maru-revenue-tracker.js
- * - Then load /assets/js/maru-revenue-autohook.js
- * - Do not change this automap's original rendering pipeline.
- * ------------------------------------------------------------------ */
-(function loadMaruRevenueAutoHookForAutomap(){
-  "use strict";
-
-  if (typeof window === "undefined" || typeof document === "undefined") return;
-
-  function installIfReady(){
-    try {
-      if (
-        window.MaruRevenueAutoHook &&
-        typeof window.MaruRevenueAutoHook.install === "function"
-      ) {
-        window.MaruRevenueAutoHook.install({
-          service: "front-automap"
-        });
-      }
-    } catch (e) {
-      console.warn("[MARU Revenue] autohook install skipped:", e);
-    }
-  }
-
-  function loadScriptOnce(src, id, globalName, done){
-    var existing = document.getElementById(id);
-
-    if (window[globalName]) {
-      if (typeof done === "function") done();
-      return;
-    }
-
-    if (existing) {
-      existing.addEventListener("load", function(){
-        if (typeof done === "function") done();
-      }, { once:true });
-      existing.addEventListener("error", function(){
-        console.warn("[MARU Revenue] failed to load:", src);
-      }, { once:true });
-      return;
-    }
-
-    var script = document.createElement("script");
-    script.id = id;
-    script.src = src;
-    script.async = false;
-    script.onload = function(){
-      if (typeof done === "function") done();
-    };
-    script.onerror = function(){
-      console.warn("[MARU Revenue] failed to load:", src);
-    };
-
-    (document.head || document.documentElement).appendChild(script);
-  }
-
-  if (window.__MARU_REVENUE_AUTOMAP_LOADER_DONE__) {
-    installIfReady();
-    return;
-  }
-
-  window.__MARU_REVENUE_AUTOMAP_LOADER_DONE__ = true;
-
-  loadScriptOnce(
-    "/assets/js/maru-revenue-tracker.js",
-    "maruRevenueTrackerScript",
-    "MaruRevenueTracker",
-    function(){
-      loadScriptOnce(
-        "/assets/js/maru-revenue-autohook.js",
-        "maruRevenueAutoHookScript",
-        "MaruRevenueAutoHook",
-        installIfReady
-      );
-    }
-  );
+  (async function(){try{const snapshot=await loadSnapshot();render(sectionsOf(snapshot),!!(snapshot&&snapshot.meta&&snapshot.meta.regionalBrokerage));}catch(e){console.error('[Distribution AutoMap] snapshot unavailable',e);}})();
 })();

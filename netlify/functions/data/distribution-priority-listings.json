@@ -1,5 +1,5 @@
 {
   "version": "distribution-priority-listings-v1",
-  "description": "Approved country/region manager listings only. Listings remain external-seller referral cards and must independently pass the regional brokerage safety, responsibility and availability gate.",
-  "listings": []
+  "policy": "Approved external-seller referral listings only. Seller checkout, delivery, returns and support remain external.",
+  "items": []
 }
