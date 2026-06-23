@@ -1,9 +1,9 @@
 // home-products-automap.v2.js
-// HOME AUTOMAP — FULL RESTORE + FEED FIRST + SNAPSHOT FALLBACK
+// HOME AUTOMAP — FULL RESTORE + SNAPSHOT FIRST + FEED FALLBACK
 // Goals:
 // 1) Keep existing DOM behavior for MAIN and RIGHT panel.
-// 2) Keep current feed contract working as-is.
-// 3) Add direct front.snapshot.json fallback so the home page does not collapse when feed is missing.
+// 2) Read the public front.snapshot.json first as the normal operating source.
+// 3) Keep the current feed contract only as a fallback when the Snapshot is unavailable.
 // 4) Preserve empty-state i18n, priority sorting, incremental rendering, and right-panel safety.
 
 (function () {
@@ -529,15 +529,15 @@ function bindIncremental(target, items) {
 
   async function loadSections() {
     try {
-      return await loadFromFeed();
-    } catch (feedErr) {
+      return await loadFromSnapshot();
+    } catch (snapshotErr) {
       try {
-        return await loadFromSnapshot();
-      } catch (snapshotErr) {
+        return await loadFromFeed();
+      } catch (feedErr) {
         throw new Error(
           'HOME_AUTOMAP_LOAD_FAILED :: ' +
-          String((feedErr && feedErr.message) || feedErr) + ' :: ' +
-          String((snapshotErr && snapshotErr.message) || snapshotErr)
+          String((snapshotErr && snapshotErr.message) || snapshotErr) + ' :: ' +
+          String((feedErr && feedErr.message) || feedErr)
         );
       }
     }

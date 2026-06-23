@@ -3,7 +3,7 @@
  * ------------------------------------------------------------
  * 목적:
  *  - MediaHub 메인 10섹션(data-psom-key="media-*")에 "미디어 콘텐츠"를 슬롯-우선(slot-first)으로 꽂는다.
- *  - 우선순위: /.netlify/functions/feed-media?key=... -> /data/media.snapshot*.json fallback
+ *  - 우선순위: /data/media.snapshot*.json -> /.netlify/functions/feed-media?key=... fallback
  *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
  *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
  *  - 우측 패널 없음(처리하지 않음)
@@ -249,9 +249,9 @@
     const keys = Array.isArray(heroRotateKeys) ? heroRotateKeys.map(canonKey) : [];
     if(keys.length === 0) return;
 
-    // try feed first (fast best-effort)
+    // snapshot first
     for(const k of keys){
-      const items = await loadFeedItems(k);
+      const items = extractItems(sectionMap[k]);
       const first = items && items[0];
       const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
       if(thumb){
@@ -260,9 +260,9 @@
       }
     }
 
-    // fallback snapshot
+    // fallback feed (best-effort)
     for(const k of keys){
-      const items = extractItems(sectionMap[k]);
+      const items = await loadFeedItems(k);
       const first = items && items[0];
       const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
       if(thumb){
@@ -400,9 +400,9 @@
       const key = canonKey(line.getAttribute('data-psom-key') || '');
       if(!key || key.indexOf('media-') !== 0) continue;
 
-      let items = await loadFeedItems(key);
+      let items = extractItems(sectionMap[key]);
       if(!items || items.length === 0){
-        items = extractItems(sectionMap[key]);
+        items = await loadFeedItems(key);
       }
       applyLine(line, items);
     }
