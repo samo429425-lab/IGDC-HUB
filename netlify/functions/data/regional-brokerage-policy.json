@@ -1,0 +1,39 @@
+{
+  "version": "regional-brokerage-policy-v1.1",
+  "description": "IGDC/MARU Distribution Hub is an external-seller advertising, brokerage and referral surface. It promotes verified regional responsible sellers first, then national service-ready sellers. Seller checkout, inventory, delivery, returns and support remain with the seller. Broad Search.js, ordinary SearchBank query and MARU Global Insight remain outside this policy.",
+  "defaults": {
+    "enforcement": "enforce",
+    "snapshotPublishing": true,
+    "autoDiscoverLocalMarkets": true,
+    "autoDiscoverRegionalMarkets": true,
+    "localMarketAutomaticSupply": true,
+    "regionalPriority": true,
+    "localMarketOnly": true,
+    "allowCrossBorderFallback": false,
+    "allowGlobalOfficialFallback": false,
+    "requireDistributionMarketForFront": true,
+    "requireVerifiedDistributionMarketForFront": true,
+    "requireAvailabilityEvidenceForLocal": true,
+    "requireLocalResponsibilityEvidenceForFront": true,
+    "requireAvailabilityEvidenceForForeign": true,
+    "requireExternalSellerLinkForDistribution": true,
+    "excludeLargeMarketplacesFromDistribution": true,
+    "allowUnscopedCountryFallback": true,
+    "requireExplicitNeighborApproval": true,
+    "minimumLocalCandidates": { "default": 1, "distribution": 1 },
+    "minimumPublishCandidates": { "default": 1, "distribution": 1 },
+    "minimumRegionalCandidates": { "default": 1, "distribution": 1 }
+  },
+  "hubProfiles": {
+    "distribution": {
+      "externalBrokerage": true,
+      "regionalPriority": true,
+      "excludeLargeMarketplaces": true,
+      "requireExternalSellerLink": true,
+      "managedPriorityOverlay": true
+    },
+    "media": { "directPlatformMedia": true, "regionalPriority": false, "externalBrokerage": false },
+    "donation": { "dedicatedDonationFlow": true, "regionalPriority": false }
+  },
+  "markets": {}
+}

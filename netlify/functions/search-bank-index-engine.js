@@ -17,10 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-let CountrySupplyPolicy = null;
-try { CountrySupplyPolicy = require("./lib/country-supply-policy.core.v1"); } catch (_e) { CountrySupplyPolicy = null; }
-
-const VERSION = "search-bank-index-engine-v2.7.0-country-supply-aware";
+const VERSION = "search-bank-index-engine-v2.6.3.1-front-route-isolated-regional-brokerage-hook";
 const ENGINE_NAME = "search-bank-index";
 
 const DEFAULT_LIMIT = 1000;
@@ -74,47 +71,6 @@ function truthy(v){
   if(v === false || v == null) return false;
   const x = low(v);
   return !!x && !["0","false","no","off","disabled","disable","null","undefined"].includes(x);
-}
-
-function indexCountryCode(item){
-  const value = item && (item.sourceCountry || item.source_country || item.countrySupply && item.countrySupply.sourceCountry || item.geo && item.geo.country || item.country);
-  if(!value) return "";
-  if(CountrySupplyPolicy && typeof CountrySupplyPolicy.normalizeCountry === "function") return CountrySupplyPolicy.normalizeCountry(value);
-  return /^[A-Za-z]{2}$/.test(String(value).trim()) ? String(value).trim().toUpperCase() : "";
-}
-function resolveIndexCountryPlan(params, items, hub){
-  if(!CountrySupplyPolicy || typeof CountrySupplyPolicy.resolveSupplyPlan !== "function") return null;
-  try{
-    const targetMarket = firstNonEmpty(params && params.targetMarket, params && params.targetCountry, params && params.audienceCountry, params && params.viewerCountry, params && params.country);
-    if(!targetMarket) return null;
-    const normalized = CountrySupplyPolicy.normalizeCountry ? CountrySupplyPolicy.normalizeCountry(targetMarket) : String(targetMarket).toUpperCase();
-    const localCandidateCount = (Array.isArray(items) ? items : []).filter(item => indexCountryCode(item) === normalized && item && item.frontSupplyAllowed !== false && item.searchBankEligible !== false).length;
-    return CountrySupplyPolicy.resolveSupplyPlan({ targetMarket:normalized, hub:hub || "default", localCandidateCount });
-  }catch(_e){ return null; }
-}
-function attachIndexCountrySupply(item, plan, hub){
-  if(!item || !plan || !CountrySupplyPolicy || typeof CountrySupplyPolicy.evaluateCandidateForTarget !== "function") return item;
-  try{
-    const current = item.countrySupply && typeof item.countrySupply === "object" ? item.countrySupply : null;
-    const record = current && current.targetMarket === plan.targetMarket && current.policyVersion === plan.policyVersion
-      ? current
-      : CountrySupplyPolicy.evaluateCandidateForTarget(item, { plan, targetMarket:plan.targetMarket, hub:hub || "default", localCandidateCount:plan.localCandidateCount });
-    return Object.assign({}, item, {
-      countrySupply:record,
-      sourceCountry:item.sourceCountry || (record.sourceCountryVerified ? record.sourceCountry : undefined),
-      availabilityCountries:Array.isArray(item.availabilityCountries) ? item.availabilityCountries : record.availabilityCountries,
-      supplyTier:record.supplyTier || item.supplyTier,
-      countryPolicyVersion:record.policyVersion || item.countryPolicyVersion
-    });
-  }catch(_e){ return item; }
-}
-function countrySupplyScore(item){
-  const record = item && item.countrySupply;
-  if(!record) return 0;
-  if(record.supplyTier === "same-country") return 34;
-  if(/^neighbor-tier-/.test(record.supplyTier || "") && record.wouldAllowFrontSupply) return 12;
-  if(record.supplyTier === "global" && record.wouldAllowFrontSupply) return 4;
-  return record.wouldAllowFrontSupply === false ? -28 : 0;
 }
 
 function wantsOperationalFastProbe(params){
@@ -760,6 +716,22 @@ function buildFrontReplacementPool(allRaw, seen){
     .sort((a,b) => (b.frontReplacementScore || 0) - (a.frontReplacementScore || 0) || (a._replacementSeq || 0) - (b._replacementSeq || 0));
   return pool;
 }
+function applyRegionalBrokerageFrontSelection(items, params, targetRoute){
+  params = params || {};
+  if(!truthy(params.regionalBrokerageSupply)) return null;
+  const page = firstNonEmpty(params.page, params.targetPage, params.hub, params.channel, targetRoute && targetRoute.page);
+  const section = firstNonEmpty(params.section, params.psom_key, params.slot, params.slotKey, targetRoute && targetRoute.section);
+  if(!/distribution|commerce|product|shop|market/i.test([page, section].filter(Boolean).join(" "))) return null;
+  try{
+    const adapter = require("./lib/regional-brokerage-supply.adapter.v1");
+    const selected = adapter && typeof adapter.selection === "function"
+      ? adapter.selection(items, Object.assign({}, params, { page:page || "distribution", section }))
+      : null;
+    // An explicit regional brokerage request must fail closed; it may never
+    // silently fall back to the broad general Index pool.
+    return selected || { items:[], meta:{ active:true, failedClosed:true, reason:"REGIONAL_BROKERAGE_ADAPTER_UNAVAILABLE" } };
+  }catch(_e){ return { items:[], meta:{ active:true, failedClosed:true, reason:"REGIONAL_BROKERAGE_ADAPTER_ERROR" } }; }
+}
 function buildFrontSupplyPool(params){
   const started = nowMs();
   params = params || {};
@@ -777,18 +749,7 @@ function buildFrontSupplyPool(params){
   const promoted = loadPromoted().map((x,i) => indexItem(Object.assign({}, x, { _promoted:true }), i, "sanmaru-promoted")).filter(Boolean);
   const ingested = loadIngested().map((x,i) => indexItem(Object.assign({}, x, { _ingested:true }), i, "front-data-ingested")).filter(Boolean);
   const allRaw = promoted.concat(ingested).concat(base);
-  const countrySupplyPlan = resolveIndexCountryPlan(params, allRaw, targetRoute.page || targetRoute.section || params.channel || "default");
-  const countrySupplyEnforced = !!(countrySupplyPlan && countrySupplyPlan.enforcement === "enforce");
-  let countryPolicyHeldCount = 0;
-  const all = allRaw
-    .filter(item => isFrontSupplyIndexItem(item))
-    .filter(item => !isSearchProviderHintItem(item))
-    .map(item => attachIndexCountrySupply(item, countrySupplyPlan, targetRoute.page || targetRoute.section || params.channel || "default"))
-    .filter(item => {
-      const held = countrySupplyEnforced && item && item.countrySupply && item.countrySupply.frontSupplyAllowed === false;
-      if(held) countryPolicyHeldCount++;
-      return !held;
-    });
+  const all = allRaw.filter(item => isFrontSupplyIndexItem(item)).filter(item => !isSearchProviderHintItem(item));
   const exactPool = [];
   const pageFallbackPool = [];
   const globalPool = [];
@@ -796,7 +757,7 @@ function buildFrontSupplyPool(params){
     const item = all[i];
     const bucket = frontTargetBucket(item, targetRoute);
     const role = isRealIndexItem(item) ? "active-real-content" : "replaceable-front-slot";
-    const scored = Object.assign({}, item, { frontSupplyScore:frontReservoirQualityScore(item) + frontRouteRank(item, targetRoute) + countrySupplyScore(item), _frontSeq:i, _frontRole:role, _frontRouteBucket:bucket });
+    const scored = Object.assign({}, item, { frontSupplyScore:frontReservoirQualityScore(item) + frontRouteRank(item, targetRoute), _frontSeq:i, _frontRole:role, _frontRouteBucket:bucket });
     if(bucket === "exact" || !targetRoute.hasTarget) exactPool.push(scored);
     else if(bucket === "page-fallback") pageFallbackPool.push(scored);
     else globalPool.push(scored);
@@ -812,7 +773,7 @@ function buildFrontSupplyPool(params){
 
   const activePool = all
     .filter(item => isRealIndexItem(item))
-    .map((item, idx) => Object.assign({}, item, { frontSupplyScore:frontSupplyQualityScore(item) + frontRouteRank(item, targetRoute) + countrySupplyScore(item), _frontSeq:idx, _frontRole:"active-real-content", _frontRouteBucket:frontTargetBucket(item, targetRoute) }))
+    .map((item, idx) => Object.assign({}, item, { frontSupplyScore:frontSupplyQualityScore(item) + frontRouteRank(item, targetRoute), _frontSeq:idx, _frontRole:"active-real-content", _frontRouteBucket:frontTargetBucket(item, targetRoute) }))
     .sort(sortFront);
   const reservoirPool = exactPool.concat(allowPageFallback ? pageFallbackPool : []).concat(allowGlobalFallback ? globalPool : []);
   const seen = new Set();
@@ -839,7 +800,7 @@ function buildFrontSupplyPool(params){
   for(const item of reservoirPool) addItem(item);
 
   const beforeReplacementCount = items.length;
-  const replacementPool = buildFrontReplacementPool(all, seen)
+  const replacementPool = buildFrontReplacementPool(allRaw, seen)
     .map((item, idx) => Object.assign({}, item, { _frontRouteBucket:"standby-replacement", _replacementSeq:idx }))
     .filter(item => !targetRoute.hasTarget || allowGlobalFallback);
   let replacementReturnedCount = 0;
@@ -861,6 +822,14 @@ function buildFrontSupplyPool(params){
   for(const item of replacementPool){
     if(items.length >= target) break;
     addReplacement(item);
+  }
+
+  // Pinpoint contract: active only for explicit Distribution Hub brokerage
+  // requests. It never participates in ordinary Index query paths.
+  const regionalBrokerage = applyRegionalBrokerageFrontSelection(reservoirPool, params, targetRoute);
+  if(regionalBrokerage && Array.isArray(regionalBrokerage.items)){
+    items.length = 0;
+    for(const item of regionalBrokerage.items.slice(0, target)) items.push(item);
   }
 
   const realActiveCount = activePool.length;
@@ -885,8 +854,6 @@ function buildFrontSupplyPool(params){
     meta:{
       count:items.length, target, requestedPage:targetRoute.page || null, requestedSection:targetRoute.section || null,
       targetRouteStrict:targetRoute.hasTarget, allowPageFallback, allowGlobalFallback,
-      countrySupplyPolicy: countrySupplyPlan ? { targetMarket:countrySupplyPlan.targetMarket, policyVersion:countrySupplyPlan.policyVersion, enforcement:countrySupplyPlan.enforcement, localCandidateCount:countrySupplyPlan.localCandidateCount, localShortage:countrySupplyPlan.localShortage } : null,
-      countrySupplyEnforced, countryPolicyHeldCount,
       exactCandidateCount, pageFallbackCandidateCount, globalFallbackCandidateCount,
       exactReturnedCount:returnedBuckets.exact || 0,
       pageFallbackReturnedCount:returnedBuckets.pageFallback || 0,
@@ -903,6 +870,7 @@ function buildFrontSupplyPool(params){
       finalSupplyComplete:items.length >= target, frontRealFloorReady:realActiveCount >= FRONT_REAL_ITEM_FLOOR,
       frontReservoirReady:reservoirCandidateCount >= FRONT_RESERVOIR_TARGET, frontImmediateSupplyReady:items.length >= FRONT_REAL_ITEM_FLOOR,
       pageCoverage, sectionCoverage, frontSupplyOnly:true, placeholderIsolation:true, sectionIsolation:true, pageIsolation:true,
+      regionalBrokerage: regionalBrokerage ? regionalBrokerage.meta : null,
       searchUiSafe:true, externalCall:false, latency:nowMs() - started,
       storagePolicy:"front-reservoir-real-content-plus-replaceable-slot-pointers"
     }

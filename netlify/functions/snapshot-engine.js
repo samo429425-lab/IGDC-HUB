@@ -32,7 +32,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3-front-verified-gate-production-stable";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.2-section-cap-seed-preserve-production-stable";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -147,45 +147,6 @@ function snapshotPaymentState(raw) {
   };
 }
 
-function snapshotFrontVerifiedGate(raw, context) {
-  raw = raw || {};
-  const c = contractOf(raw);
-  const d = raw.osaiDiscernment && typeof raw.osaiDiscernment === "object" ? raw.osaiDiscernment : {};
-  const source = d.source && typeof d.source === "object" ? d.source : {};
-  const supply = d.supply && typeof d.supply === "object" ? d.supply : (raw.supplyChain && typeof raw.supplyChain === "object" ? raw.supplyChain : {});
-  const safety = d.safety && typeof d.safety === "object" ? d.safety : {};
-  const url = urlOfSnapshotItem(raw);
-  let host = "";
-  try { host = new URL(url).hostname.replace(/^www\./, ""); } catch (_e) {}
-  const text = String([raw.title, raw.name, raw.summary, raw.description, raw.source, raw.provider, raw.section, raw.category, raw.psom_key, url].filter(Boolean).join(" ")).toLowerCase();
-  const placeholderLike = isSeedLikeSnapshotSlot(raw) || raw.placeholder === true || raw.isPlaceholder === true || raw.replaceableSlot === true || raw.isLayerPointer === true;
-  const blockedReason = val(raw.blockedReason, c.blockedReason, d.blockedReason, raw?.sanmaruTrust?.blockedReason, "");
-  const blocked = raw.blocked === true || c.blocked === true || d.blocked === true || raw?.sanmaruTrust?.blocked === true || !!blockedReason;
-  const riskBad = [raw.riskLevel, c.riskLevel, d.riskLevel, raw?.sanmaruTrust?.riskLevel, raw.unsafeProductRisk, c.unsafeProductRisk, safety.unsafeProductRisk, raw.illegalSiteRisk, c.illegalSiteRisk, safety.illegalSiteRisk, raw.harmfulContentRisk, c.harmfulContentRisk, safety.harmfulContentRisk]
-    .map(v => String(v == null ? "" : v).toLowerCase())
-    .some(v => ["blocked", "critical", "illegal", "unsafe", "high"].includes(v));
-  const officialHost = !!host && /\.gov$|\.gov\.|\.go\.kr$|\.go\.jp$|\.go\.vn$|\.or\.kr$|\.ac\.kr$|\.edu$|\.edu\.|korea\.kr$/i.test(host);
-  const cooperativeSignal = /농협|수협|축협|산림조합|협동조합|생산자조합|영농조합|어업회사법인|agricultural cooperative|fishery cooperative|fisheries cooperative|cooperative|producer group|farmers union/.test(text);
-  const explicitVerified = !!(raw.verified === true || raw.verify?.status === "verified" || raw.org?.verified === true);
-  const official = !!(raw.officialSource || c.officialSource || source.officialSource || officialHost);
-  const institution = !!(raw.institutionVerified || c.institutionVerified || source.institutionVerified);
-  const producer = !!(raw.producerVerified || c.producerVerified || supply.producerVerified || cooperativeSignal);
-  const direct = !!(raw.directProducerChannel || c.directProducerChannel || supply.directProducerChannel);
-  const trustStrong = ["a", "a+"].includes(String(val(raw.trustTier, c.trustTier, d.trustTier, "")).toLowerCase()) || Number(val(raw.sourceTrustScore, c.sourceTrustScore, d.trustScore, raw.trustScore, 0)) >= 76 || Number(raw.sourceTrust || 0) >= 0.76;
-  const intermediaryHigh = String(val(raw.intermediaryRisk, c.intermediaryRisk, supply.intermediaryRisk, "low")).toLowerCase() === "high" && !(official || direct || cooperativeSignal);
-  const evidence = [];
-  if(placeholderLike) evidence.push("placeholder-front-slot-preserved");
-  if(explicitVerified) evidence.push("explicit-verified");
-  if(official) evidence.push("official-source");
-  if(institution) evidence.push("institution-verified");
-  if(producer) evidence.push("producer-or-cooperative-verified");
-  if(direct) evidence.push("direct-producer-channel");
-  if(trustStrong) evidence.push("strong-trust-score");
-  const verified = !!(placeholderLike || explicitVerified || official || institution || producer || direct || trustStrong || (c.frontSupplyAllowed === true && (official || producer || direct || trustStrong)));
-  const allowed = !!(!blocked && !riskBad && !intermediaryHigh && verified);
-  return { allowed, verified, reason:allowed ? "verified-front-snapshot" : (blocked ? "blocked" : (riskBad ? "risk-not-front-safe" : (intermediaryHigh ? "intermediary-risk-high" : "verification-required-for-front-exposure"))), evidence:Array.from(new Set(evidence)).slice(0, 12) };
-}
-
 function snapshotCandidateAllowed(raw, context) {
   raw = raw || {};
   const c = contractOf(raw);
@@ -204,10 +165,9 @@ function snapshotCandidateAllowed(raw, context) {
   const unsafe = String(val(raw.unsafeProductRisk, c.unsafeProductRisk, nestedValue(d, ["safety", "unsafeProductRisk"]), "low")).toLowerCase();
   const illegal = String(val(raw.illegalSiteRisk, c.illegalSiteRisk, nestedValue(d, ["safety", "illegalSiteRisk"]), "low")).toLowerCase();
   const harmful = String(val(raw.harmfulContentRisk, c.harmfulContentRisk, nestedValue(d, ["safety", "harmfulContentRisk"]), "low")).toLowerCase();
-  if ([unsafe, illegal, harmful].some(v => ["critical", "blocked", "illegal", "unsafe", "high"].includes(v))) return false;
+  if ([unsafe, illegal, harmful].some(v => ["critical", "blocked", "illegal", "unsafe"].includes(v))) return false;
 
-  const frontGate = snapshotFrontVerifiedGate(raw, context);
-  return frontGate.allowed;
+  return true;
 }
 
 function enrichSnapshotCard(card, raw) {
@@ -216,11 +176,8 @@ function enrichSnapshotCard(card, raw) {
   if (!card || typeof card !== "object") return card;
   card.snapshotEngineVersion = SNAPSHOT_ENGINE_VERSION;
   card.searchBankContractVersion = val(c.contractVersion, SEARCH_BANK_CONTRACT_VERSION);
-  const frontGate = snapshotFrontVerifiedGate(raw || card, {});
-  card.snapshotEligible = !explicitFalse(firstDefined(card.snapshotEligible, raw && raw.snapshotEligible, c.snapshotEligible, true)) && frontGate.allowed;
-  card.frontSupplyAllowed = !explicitFalse(firstDefined(card.frontSupplyAllowed, raw && raw.frontSupplyAllowed, c.frontSupplyAllowed, true)) && frontGate.allowed;
-  card.frontVerifiedGate = frontGate;
-  card.frontVerificationStatus = frontGate.allowed ? "verified-front-supply" : "hold-for-front-verification";
+  card.snapshotEligible = !explicitFalse(firstDefined(card.snapshotEligible, raw && raw.snapshotEligible, c.snapshotEligible, true));
+  card.frontSupplyAllowed = !explicitFalse(firstDefined(card.frontSupplyAllowed, raw && raw.frontSupplyAllowed, c.frontSupplyAllowed, true));
   card.searchBankEligible = !explicitFalse(firstDefined(card.searchBankEligible, raw && raw.searchBankEligible, c.searchBankEligible, true));
   card.riskLevel = val(card.riskLevel, raw && raw.riskLevel, c.riskLevel, "low");
   card.blockedReason = val(card.blockedReason, raw && raw.blockedReason, c.blockedReason, "");
@@ -736,11 +693,8 @@ function buildTrackingMeta(raw, context) {
   const pg = snapshotPaymentState(raw);
   meta.snapshotEngineVersion = SNAPSHOT_ENGINE_VERSION;
   meta.searchBankContractVersion = val(contract.contractVersion, SEARCH_BANK_CONTRACT_VERSION);
-  const frontGate = snapshotFrontVerifiedGate(raw, context);
-  meta.snapshotEligible = !explicitFalse(firstDefined(raw.snapshotEligible, contract.snapshotEligible, true)) && frontGate.allowed;
-  meta.frontSupplyAllowed = !explicitFalse(firstDefined(raw.frontSupplyAllowed, contract.frontSupplyAllowed, true)) && frontGate.allowed;
-  meta.frontVerifiedGate = frontGate;
-  meta.frontVerificationStatus = frontGate.allowed ? "verified-front-supply" : "hold-for-front-verification";
+  meta.snapshotEligible = !explicitFalse(firstDefined(raw.snapshotEligible, contract.snapshotEligible, true));
+  meta.frontSupplyAllowed = !explicitFalse(firstDefined(raw.frontSupplyAllowed, contract.frontSupplyAllowed, true));
   meta.searchBankEligible = !explicitFalse(firstDefined(raw.searchBankEligible, contract.searchBankEligible, true));
   meta.riskLevel = val(raw.riskLevel, contract.riskLevel, "low");
   meta.blockedReason = val(raw.blockedReason, contract.blockedReason, "");

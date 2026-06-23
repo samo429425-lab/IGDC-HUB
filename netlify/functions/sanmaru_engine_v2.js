@@ -27,7 +27,7 @@ const path = require("path");
 let LogosEngineClass = null;
 try { LogosEngineClass = require("./maru-logos-engine").LogosEngine; } catch(e) { LogosEngineClass = null; }
 
-const VERSION = "sanmaru-engine-v2.8.4-osai-unified-supply-contract-stable";
+const VERSION = "sanmaru-engine-v2.8.4.1-osai-unified-supply-contract-regional-brokerage-hook";
 const ENGINE_NAME = "sanmaru";
 
 const DEFAULT_LIMIT = 3000;
@@ -829,7 +829,7 @@ function readJsonSafe(file){
 // the existing function-data trust/payment/profile files, applies a consistent
 // Sanmaru-level verdict, and keeps safe abundance: block known-dangerous inputs,
 // but keep safe/placeholder front slots available for replacement/hydration.
-const SANMARU_OSAI_DISCERNMENT_VERSION = "osai-supply-chain-discernment-v2.3-country-policy-evidence";
+const SANMARU_OSAI_DISCERNMENT_VERSION = "osai-supply-chain-discernment-v2.2-unified-contract";
 const SANMARU_SAFE_SUPPLY_EXPANSION_ORDER = Object.freeze([
   "local-city", "local-province", "same-country", "neighbor-region", "global-official", "global-trusted"
 ]);
@@ -857,10 +857,7 @@ function sanmaruOsaiPolicyResources(){
     payConfig,
     trustCore,
     commerceTrust,
-    countrySupplyCore: sanmaruRequireOptional("./lib/country-supply-policy.core.v1"),
     sources:[
-      "netlify/functions/data/country-policy.json",
-      "netlify/functions/lib/country-supply-policy.core.v1.js",
       "netlify/functions/data/trust.allowlist.json",
       "netlify/functions/data/trust.blocklist.json",
       "netlify/functions/lib/trustFilter.core.v1.js",
@@ -1019,54 +1016,25 @@ function sanmaruBuildSupplyExpansionPlan(item, opts){
   opts = opts || {};
   item = item || {};
   const geo = item.geo && typeof item.geo === "object" ? item.geo : {};
-  const countryCore = sanmaruRequireOptional("./lib/country-supply-policy.core.v1");
-  const requestedCountry = firstNonEmpty(opts.targetMarket, opts.targetCountry, opts.audienceCountry, opts.country, geo.country, item.country, "GLOBAL");
+  const country = firstNonEmpty(opts.country, geo.country, item.country, "GLOBAL");
   const region = firstNonEmpty(opts.region, geo.region, geo.state, item.region, "");
   const city = firstNonEmpty(opts.city, geo.city, item.city, "");
   const categories = sanmaruClassifySupplyCategory(item);
-  let policyPlan = null;
-  if(countryCore && typeof countryCore.resolveSupplyPlan === "function"){
-    try{
-      policyPlan = countryCore.resolveSupplyPlan({
-        targetMarket:requestedCountry,
-        hub:firstNonEmpty(opts.hub, opts.channel, opts.page, item.channel, item.page, item.route),
-        localCandidateCount:opts.localCandidateCount
-      });
-    }catch(_e){ policyPlan = null; }
-  }
-  const normalizedCountry = policyPlan && policyPlan.targetMarket || requestedCountry;
-  const ladder = [
-    { level:"local-city", country:normalizedCountry, region:region || null, city:city || null, priority:1 },
-    { level:"local-province", country:normalizedCountry, region:region || null, city:null, priority:2 },
-    { level:"same-country", country:normalizedCountry, region:null, city:null, priority:3 }
-  ];
-  const fallbackTiers = policyPlan && Array.isArray(policyPlan.fallbackTiers) ? policyPlan.fallbackTiers : [];
-  for(let i=0;i<fallbackTiers.length;i++){
-    const tier = fallbackTiers[i] || {};
-    if(!Array.isArray(tier.countries) || !tier.countries.length) continue;
-    ladder.push({ level:"neighbor-region", countries:tier.countries.slice(), country:normalizedCountry, region:null, city:null, priority:4 + i, policyReason:tier.reason || "approved-neighbor-market" });
-  }
-  if(!policyPlan || policyPlan.globalFallbackNeeded){
-    ladder.push({ level:"global-official", country:"GLOBAL", officialOnly:true, priority:4 + fallbackTiers.length });
-    ladder.push({ level:"global-trusted", country:"GLOBAL", trustedOnly:true, priority:5 + fallbackTiers.length });
-  }
   return {
     mode:"safe-abundance-ladder",
     principle:"filter-danger-expand-safe-supply",
-    start:{ country:normalizedCountry, region:region || null, city:city || null },
-    targetMarket:normalizedCountry,
+    start:{ country, region:region || null, city:city || null },
     categoryHints:categories,
-    ladder,
-    countryPolicy:policyPlan ? {
-      version:policyPlan.policyVersion,
-      enforcement:policyPlan.enforcement,
-      localSources:policyPlan.localSources,
-      fallbackTiers:policyPlan.fallbackTiers,
-      localShortage:policyPlan.localShortage,
-      minimumLocalCandidates:policyPlan.minimumLocalCandidates
-    } : { version:null, enforcement:"audit", localSources:[normalizedCountry], fallbackTiers:[] },
+    ladder:[
+      { level:"local-city", country, region:region || null, city:city || null, priority:1 },
+      { level:"local-province", country, region:region || null, city:null, priority:2 },
+      { level:"same-country", country, region:null, city:null, priority:3 },
+      { level:"neighbor-region", country, region:null, city:null, priority:4 },
+      { level:"global-official", country:"GLOBAL", officialOnly:true, priority:5 },
+      { level:"global-trusted", country:"GLOBAL", trustedOnly:true, priority:6 }
+    ],
     targetPolicy:"keep-supply-abundant-after-risk-filtering",
-    shortageFallback:"expand-only-to-policy-approved-neighbor-markets-before-global-official"
+    shortageFallback:"expand-radius-before-using-unknown-risk-source"
   };
 }
 function sanmaruBuildSearchBankUnifiedContract(item, d){
@@ -1080,12 +1048,6 @@ function sanmaruBuildSearchBankUnifiedContract(item, d){
     page:firstNonEmpty(item.page, item.route, item.layerPointer && item.layerPointer.page),
     section:firstNonEmpty(item.section, item.psom_key, item.slotKey, item.layerPointer && item.layerPointer.section),
     supplyCategory:supply.supplyCategory || [],
-    countrySupply:supply.countrySupply || null,
-    sourceCountry:supply.countrySupply && supply.countrySupply.sourceCountryVerified && supply.countrySupply.sourceCountry || firstNonEmpty(item.sourceCountry, item.source_country, item.sourceGeo && item.sourceGeo.country, item.geo && item.geo.country, item.country) || null,
-    targetMarket:supply.countrySupply && supply.countrySupply.targetMarket || firstNonEmpty(item.targetMarket, item.targetCountry, item.marketCountry) || null,
-    availabilityCountries:supply.countrySupply && supply.countrySupply.availabilityCountries || item.availabilityCountries || item.allowedCountries || null,
-    supplyTier:supply.countrySupply && supply.countrySupply.supplyTier || item.supplyTier || null,
-    countryPolicyVersion:supply.countrySupply && supply.countrySupply.policyVersion || item.countryPolicyVersion || null,
     sourceTrustScore:d.trustScore || 0,
     trustTier:d.trustTier || "C",
     riskLevel:d.riskLevel || "low",
@@ -1206,16 +1168,6 @@ function sanmaruEvaluateOsaiSupplyDiscernment(item, opts){
   if(harmfulContentSignal) safetyEvidence.push("harmful-content-signal");
 
   const supplyExpansionPlan = sanmaruBuildSupplyExpansionPlan(item, opts);
-  let countrySupply = null;
-  if(resources.countrySupplyCore && typeof resources.countrySupplyCore.evaluateCandidateForTarget === "function"){
-    try{
-      countrySupply = resources.countrySupplyCore.evaluateCandidateForTarget(item, {
-        targetMarket:supplyExpansionPlan.targetMarket,
-        hub:firstNonEmpty(opts.hub, opts.channel, opts.page, item.channel, item.page, item.route),
-        localCandidateCount:opts.localCandidateCount
-      });
-    }catch(_e){ countrySupply = null; }
-  }
   const baseTrust = 45;
   const trustScore = Math.max(0, Math.min(100,
     baseTrust + (allowedDomain ? 18 : 0) + (officialSource ? 18 : 0) + (institutionVerified ? 8 : 0) +
@@ -1249,7 +1201,7 @@ function sanmaruEvaluateOsaiSupplyDiscernment(item, opts){
     trustTier,
     trustScore,
     source:{ url:url || null, host:host || null, allowedDomain, officialSource, institutionVerified, officialEvidence:evidence.official },
-    supply:{ supplyCategory, producerVerified, producerType, directProducerChannel, intermediaryRisk, supplyChainReady, localFirstExpansion:true, expansionOrder:SANMARU_SAFE_SUPPLY_EXPANSION_ORDER, expansionPlan:supplyExpansionPlan, countrySupply },
+    supply:{ supplyCategory, producerVerified, producerType, directProducerChannel, intermediaryRisk, supplyChainReady, localFirstExpansion:true, expansionOrder:SANMARU_SAFE_SUPPLY_EXPANSION_ORDER, expansionPlan:supplyExpansionPlan },
     payment,
     safety:{ illegalSiteRisk, harmfulContentRisk, unsafeProductRisk, patternHits:patternHits.slice(0, 10), warningReasons:evidence.warnings, safetyEvidence:evidence.safety },
     eligibility:{ frontSupplyAllowed, searchBankEligible, snapshotEligible, indexEligible, placeholderLike, abundancePreserved:true },
@@ -1265,15 +1217,6 @@ function sanmaruAttachDiscernment(item, opts){
   out.osaiDiscernment = d;
   out.sanmaruTrust = { tier:d.trustTier, score:d.trustScore, riskLevel:d.riskLevel, blocked:d.blocked, blockedReason:d.blockedReason };
   out.supplyChain = Object.assign({}, out.supplyChain || {}, d.supply, { paymentReady:d.payment.paymentReady, orderReady:d.payment.orderReady, officialSource:d.source.officialSource, institutionVerified:d.source.institutionVerified });
-  if(d.supply && d.supply.countrySupply){
-    out.countrySupply = d.supply.countrySupply;
-    if(d.supply.countrySupply.sourceCountryVerified) out.sourceCountry = out.sourceCountry || d.supply.countrySupply.sourceCountry || undefined;
-    // countrySupply.targetMarket is request-contextual and must not overwrite a
-    // candidate's intrinsic market metadata in the shared SearchBank pool.
-    out.availabilityCountries = out.availabilityCountries || d.supply.countrySupply.availabilityCountries || undefined;
-    out.supplyTier = d.supply.countrySupply.supplyTier || out.supplyTier;
-    out.countryPolicyVersion = d.supply.countrySupply.policyVersion || out.countryPolicyVersion;
-  }
   out.trustTier = d.trustTier;
   out.riskLevel = d.riskLevel;
   out.blockedReason = d.blockedReason;
@@ -3511,7 +3454,12 @@ function sanmaruCallIndexFrontSupply(q, opts, target, requestedLimit){
       includeFrontSupply:"1",
       from:"sanmaru",
       noExternal:"1",
-      skipSanmaru:"1"
+      skipSanmaru:"1",
+      // Explicit Distribution Hub brokerage context only. Ordinary Search.js /
+      // Global Insight calls do not set this and keep the existing broad path.
+      regionalBrokerageSupply: opts.regionalBrokerageSupply,
+      targetMarket: firstNonEmpty(opts.targetMarket, opts.targetCountry, opts.country, opts.audienceCountry),
+      targetRegion: firstNonEmpty(opts.targetRegion, opts.state, opts.province, opts.region)
     };
     let res = null;
     if(typeof IndexEngine.buildFrontSupplyPool === "function") res = IndexEngine.buildFrontSupplyPool(params);
@@ -3916,8 +3864,12 @@ function buildSanmaruFrontSupplyPackage(q, opts){
   let fallbackPack = null;
   let residentFallbackReturnedCount = 0;
   let fallbackPartition = { exact:[], pageFallback:[], globalFallback:[] };
+  // Explicit regional brokerage must not backfill a local Distribution Hub
+  // request with unrelated resident/global candidates. Shortage remains visible
+  // so the snapshot router can safely fall back to the country/global view.
+  const regionalBrokerageRequested = opts.regionalBrokerageSupply === true || String(opts.regionalBrokerageSupply || "").toLowerCase() === "true";
 
-  if(selected.length < targetCount){
+  if(selected.length < targetCount && !regionalBrokerageRequested){
     fallbackPack = buildSanmaruInstantOsPackage(query, Object.assign({}, opts, {
       reason: opts.reason || "front-slot-supply-resident-fallback",
       frontSupply: true,
@@ -3969,7 +3921,7 @@ function buildSanmaruFrontSupplyPackage(q, opts){
       slotSupply:true,
       frontSupplyMode:true,
       policy:"front-slot-index-first-section-isolated-osai-preserved",
-      supplyOrder:"searchbank-index-exact-first-page-fallback-second-resident-only-on-shortage",
+      supplyOrder: regionalBrokerageRequested ? "regional-brokerage-index-only-no-global-backfill" : "searchbank-index-exact-first-page-fallback-second-resident-only-on-shortage",
       searchBankIndex:{
         status:indexPack.status,
         version:indexPack.raw && indexPack.raw.version,
@@ -3984,6 +3936,7 @@ function buildSanmaruFrontSupplyPackage(q, opts){
       },
       indexGatewayUsed:indexPack.status === "ok",
       indexReturnedCount:indexPack.items ? indexPack.items.length : 0,
+      regionalBrokerageRequested,
       exactReturnedCount:exactReturned,
       pageFallbackReturnedCount:pageFallbackReturned,
       globalFallbackReturnedCount:globalFallbackReturned,
