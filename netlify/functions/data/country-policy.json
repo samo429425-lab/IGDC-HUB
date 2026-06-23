@@ -1,0 +1,24 @@
+{
+  "version": "country-supply-policy-v1",
+  "description": "Country-aware automated supply policy. Global collection remains broad; only front/snapshot supply is constrained by approved market availability.",
+  "defaults": {
+    "enforcement": "audit",
+    "minimumLocalCandidates": {
+      "default": 20,
+      "distribution": 40,
+      "media": 20,
+      "tour": 20,
+      "network": 20,
+      "social": 20,
+      "donation": 20,
+      "home": 20
+    },
+    "allowGlobalOfficialFallback": true,
+    "requireAvailabilityEvidenceForForeign": true,
+    "requireSourceCountryForFront": true,
+    "requireVerifiedSourceCountryForFront": true,
+    "allowUnknownSourceCountryInSearchBank": true,
+    "requireExplicitNeighborApproval": true
+  },
+  "markets": {}
+}
