@@ -6139,5 +6139,310 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   }, true);
 })();
 </script>
+
+<!-- Unified all-language save/attachment guard. -->
+<script id="igdc-donation-composer-save-attachment-restore-v2">
+(function(){
+  'use strict';
+  /* The translated files already have the stable V11 board. Do not layer a second writer on top of it. */
+  if (window.__IGDC_DONATION_BOARD_V11__) return;
+  if (window.__IGDC_DONATION_COMPOSER_SAVE_ATTACHMENT_RESTORE_V2__) return;
+  window.__IGDC_DONATION_COMPOSER_SAVE_ATTACHMENT_RESTORE_V2__ = true;
+
+  var STORE_KEY = 'igdc_donation_posts_v9';
+  var draft = null;
+  var persistTimer = null;
+
+  function $(sel, root){ return (root || document).querySelector(sel); }
+  function $$(sel, root){ return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function text(v){ return String(v == null ? '' : v); }
+  function nowText(){ try { return new Date().toLocaleString(); } catch(e){ return ''; } }
+  function uid(){ return 'don_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,10); }
+  function normalizedCat(v){
+    var allowed = ['iesf','ngo','mission','service','relief','edu','env','etc'];
+    return allowed.indexOf(v) !== -1 ? v : 'etc';
+  }
+  function escName(v){ return text(v).replace(/[\\/:*?"<>|]/g, '_').slice(0, 180) || 'attachment'; }
+
+  function readPosts(){
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch(e){ return []; }
+  }
+  function writePosts(posts){
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(posts)); return true; }
+    catch(e){ return false; }
+  }
+  function showStatus(message){
+    var host = $('#titlePreview') || $('#btnSubmitPost') || $('#btnOpenComposer');
+    if (!host) return;
+    var el = $('#igdcDonationComposeStatusV1');
+    if (!el) {
+      el = document.createElement('span');
+      el.id = 'igdcDonationComposeStatusV1';
+      el.style.cssText = 'margin-left:6px;font-size:.82rem;color:#0f766e;white-space:nowrap;';
+      host.parentNode && host.parentNode.appendChild(el);
+    }
+    el.textContent = message || '';
+    if (message) {
+      setTimeout(function(){ if (el.textContent === message) el.textContent = ''; }, 2600);
+    }
+  }
+  function updateTitlePreview(value){
+    var t = text(value).trim();
+    var node = $('#titlePreview .tp-text');
+    if (node) node.textContent = t || '제목 미입력';
+  }
+  function setComposerOpen(open){
+    var modal = $('#composerModal');
+    if (!modal) return;
+    modal.classList.toggle('hidden', !open);
+    modal.setAttribute('aria-hidden', open ? 'false' : 'true');
+    if (open) {
+      setTimeout(function(){ var title = $('#composeTitle'); if (title) title.focus(); }, 0);
+    }
+  }
+  function selectedFiles(){
+    var input = $('#postAttach');
+    if (input && input.files && input.files.length) return Array.prototype.slice.call(input.files);
+    var legacy = $('#postFile');
+    if (legacy && legacy.files && legacy.files.length) return Array.prototype.slice.call(legacy.files);
+    return [];
+  }
+  function clearSelectedFiles(){
+    ['#postAttach','#postFile'].forEach(function(sel){
+      var input = $(sel);
+      if (input) { try { input.value = ''; } catch(e){} }
+    });
+    var preview = $('#attachPreview'); if (preview) preview.innerHTML = '';
+    var clear = $('#btnAttachClear'); if (clear) clear.style.display = 'none';
+    var name = $('#attachName'); if (name) name.textContent = '';
+  }
+  function clearComposer(){
+    var title = $('#composeTitle'); if (title) title.value = '';
+    var body = $('#composeBody'); if (body) body.value = '';
+    clearSelectedFiles();
+    updateTitlePreview('');
+  }
+  function captureDraft(){
+    var title = $('#composeTitle');
+    var body = $('#composeBody');
+    var cat = $('#postCategory');
+    draft = {
+      title: text(title && title.value).trim(),
+      body: text(body && body.value).trim(),
+      cat: normalizedCat(cat && cat.value),
+      files: selectedFiles(),
+      savedAt: Date.now()
+    };
+    updateTitlePreview(draft.title);
+    return draft;
+  }
+  function currentDraft(){
+    var title = $('#composeTitle');
+    var body = $('#composeBody');
+    var hasLive = !!(text(title && title.value).trim() || text(body && body.value).trim() || selectedFiles().length);
+    if (hasLive) return captureDraft();
+    return draft;
+  }
+  function fileToAttachment(file){
+    return new Promise(function(resolve){
+      if (!file) return resolve(null);
+      var attachment = {
+        name: escName(file.name || 'attachment'),
+        size: Number(file.size || 0),
+        type: text(file.type || ''),
+        data: '',
+        blobUrl: ''
+      };
+      try { attachment.blobUrl = URL.createObjectURL(file); } catch(e){}
+      var reader = new FileReader();
+      reader.onload = function(){ attachment.data = text(reader.result || ''); resolve(attachment); };
+      reader.onerror = function(){ resolve(attachment); };
+      try { reader.readAsDataURL(file); } catch(e){ resolve(attachment); }
+    });
+  }
+  function attachmentHref(att){ return text(att && (att.data || att.blobUrl)); }
+  function attachmentNode(att){
+    var li = document.createElement('li');
+    var href = attachmentHref(att);
+    if (href) {
+      var a = document.createElement('a');
+      a.href = href;
+      a.download = escName(att.name || 'attachment');
+      a.textContent = '📎 ' + text(att.name || 'attachment');
+      a.style.color = '#1d4ed8';
+      a.style.textDecoration = 'underline';
+      li.appendChild(a);
+    } else {
+      li.textContent = '📎 ' + text(att && att.name || 'attachment');
+    }
+    return li;
+  }
+  function getList(cat){
+    return document.querySelector('.right .topic-panel .list[data-cat="' + normalizedCat(cat) + '"]') ||
+           document.querySelector('.mobile-news-clone .topic-panel .list[data-cat="' + normalizedCat(cat) + '"]');
+  }
+  function removePlaceholders(list){
+    if (!list) return;
+    $$('.item.placeholder, .igdc-v10-empty', list).forEach(function(node){ node.remove(); });
+  }
+  function createCard(post){
+    var item = document.createElement('div');
+    item.className = 'item';
+    item.dataset.igdcComposeId = post.id;
+    item.dataset.author = 'local-user';
+
+    var header = document.createElement('div');
+    header.className = 'item-header';
+    var dot = document.createElement('span'); dot.className = 'dot';
+    var title = document.createElement('div'); title.className = 'h-title title'; title.textContent = post.title || '(제목 없음)';
+    var time = document.createElement('div'); time.className = 'h-time meta'; time.textContent = post.meta || nowText();
+    header.appendChild(dot); header.appendChild(title); header.appendChild(time);
+
+    var preview = document.createElement('div');
+    preview.className = 'preview';
+    preview.textContent = post.body || '(내용 없음)';
+    item.appendChild(header); item.appendChild(preview);
+
+    if (Array.isArray(post.attachments) && post.attachments.length) {
+      var list = document.createElement('ul');
+      list.className = 'attach-list';
+      post.attachments.forEach(function(att){ list.appendChild(attachmentNode(att)); });
+      item.appendChild(list);
+    }
+
+    var footer = document.createElement('div'); footer.className = 'item-footer';
+    var stats = document.createElement('div'); stats.className = 'stats';
+    stats.innerHTML = '<span class="stat stat-views"><span class="icon">👁</span><span>0</span></span>' +
+      '<span class="stat stat-reco"><span class="icon">👍</span><span>0</span></span>' +
+      '<span class="stat stat-like"><span class="icon">❤️</span><span>0</span></span>';
+    var controls = document.createElement('div'); controls.className = 'edit-del';
+    var edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn-edit'; edit.textContent = 'Edit';
+    var del = document.createElement('button'); del.type = 'button'; del.className = 'delete-post'; del.dataset.igdcComposeId = post.id; del.textContent = 'Del';
+    controls.appendChild(edit); controls.appendChild(del);
+    footer.appendChild(stats); footer.appendChild(controls);
+    item.appendChild(footer);
+    return item;
+  }
+  function renderPost(post, prepend){
+    var list = getList(post.cat);
+    if (!list) return null;
+    var existing = list.querySelector('.item[data-igdc-compose-id="' + post.id + '"]');
+    if (existing) existing.remove();
+    removePlaceholders(list);
+    var card = createCard(post);
+    if (prepend) list.insertBefore(card, list.firstChild); else list.appendChild(card);
+    return card;
+  }
+  function renderStored(){
+    readPosts().slice().sort(function(a,b){ return (b.ts || 0) - (a.ts || 0); }).forEach(function(post){ renderPost(post, false); });
+  }
+  function persistCard(card){
+    if (!card) return;
+    var id = card.dataset.igdcComposeId;
+    if (!id) return;
+    var posts = readPosts();
+    var post = posts.find(function(p){ return p.id === id; });
+    if (!post) return;
+    var title = $('.h-title, .title', card); var body = $('.preview, .body, .content', card);
+    post.title = text(title && title.textContent).trim() || '(제목 없음)';
+    post.body = text(body && body.textContent).trim() || '(내용 없음)';
+    post.meta = nowText(); post.ts = Date.now();
+    writePosts(posts);
+  }
+  function queuePersist(card){
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(function(){ persistCard(card); }, 30);
+  }
+  function deletePost(id){
+    var posts = readPosts().filter(function(p){ return p.id !== id; });
+    writePosts(posts);
+    $$('[data-igdc-compose-id="' + id + '"]').forEach(function(node){ node.remove(); });
+    showStatus('삭제됨');
+  }
+  async function savePost(){
+    var value = currentDraft();
+    if (!value) { showStatus('작성할 글이 없습니다.'); return; }
+    var title = text(value.title).trim();
+    var body = text(value.body).trim();
+    if (!title && !body) { showStatus('제목 또는 내용을 입력하세요.'); setComposerOpen(true); return; }
+    if (!title) title = body.split(/\n/)[0].slice(0, 60).trim() || '(제목 없음)';
+
+    var attachments = await Promise.all((value.files || []).map(fileToAttachment));
+    attachments = attachments.filter(Boolean);
+    var post = { id: uid(), cat: normalizedCat(value.cat), title: title, body: body || '(내용 없음)', meta: nowText(), ts: Date.now(), attachments: attachments };
+    var posts = readPosts(); posts.unshift(post);
+
+    if (!writePosts(posts)) {
+      /* Browser storage quota fallback: preserve current-tab download links and names without failing the post itself. */
+      post.attachments = post.attachments.map(function(att){ return { name:att.name, size:att.size, type:att.type, blobUrl:att.blobUrl || '' }; });
+      posts[0] = post;
+      writePosts(posts);
+      showStatus('저장됨 · 첨부 파일은 현재 화면에서 다운로드할 수 있습니다.');
+    } else {
+      showStatus('저장됨');
+    }
+    renderPost(post, true);
+    draft = null;
+    clearComposer();
+    setComposerOpen(false);
+  }
+  function cancelComposer(){ draft = null; clearComposer(); setComposerOpen(false); }
+
+  /* Final capture gate: blocks only the conflicting legacy composer handlers. It never touches the fixed right-panel editor. */
+  document.addEventListener('click', function(event){
+    var target = event.target && event.target.closest ? event.target.closest('button, a') : null;
+    if (!target) return;
+    if (target.closest('#btnDraftSave')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      captureDraft(); setComposerOpen(false); showStatus('임시저장됨');
+      return;
+    }
+    if (target.closest('#btnCancel') && target.closest('#composerModal')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      cancelComposer();
+      return;
+    }
+    if (target.closest('#btnSubmitPost')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      savePost();
+      return;
+    }
+    var del = target.closest('.delete-post[data-igdc-compose-id]');
+    if (del) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      var id = del.dataset.igdcComposeId;
+      if (id && window.confirm('이 글을 삭제하시겠습니까?')) deletePost(id);
+    }
+  }, true);
+
+  /* Keep the current visible attachment picker; only mirror its selection for the final writer. */
+  var attachmentInput = $('#postAttach');
+  if (attachmentInput) {
+    attachmentInput.addEventListener('change', function(){
+      if (draft) draft.files = selectedFiles();
+    }, true);
+  }
+
+  /* Edits are still handled by the already-fixed right-panel editor; persist only cards created by this writer. */
+  var observer = new MutationObserver(function(records){
+    records.forEach(function(record){
+      var card = record.target && record.target.closest ? record.target.closest('.item[data-igdc-compose-id]') : null;
+      if (card) queuePersist(card);
+    });
+  });
+  function observeLists(){
+    $$('.right .topic-panel .list, .mobile-news-clone .topic-panel .list').forEach(function(list){
+      try { observer.observe(list, { childList:true, subtree:true, characterData:true }); } catch(e){}
+    });
+  }
+  function init(){ observeLists(); renderStored(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true});
+  else setTimeout(init, 0);
+})();
+</script>
 </body>
 </html>
