@@ -2365,6 +2365,62 @@ body > div.container,
 }
 </style>
 
+\n<style id="igdc-donation-rtl-text-only-v1">
+/* RTL languages: keep the physical page order fixed (left sidebar → content → right panel).
+   Only text entry/reading direction changes. */
+html[lang="ar"] body > .container,
+html[lang="fa"] body > .container,
+html[lang="ur"] body > .container{
+  direction:ltr !important;
+  flex-direction:row !important;
+}
+html[lang="ar"] .sidebar a,
+html[lang="fa"] .sidebar a,
+html[lang="ur"] .sidebar a,
+html[lang="ar"] .main h1,
+html[lang="ar"] .main h2,
+html[lang="ar"] .main h3,
+html[lang="fa"] .main h1,
+html[lang="fa"] .main h2,
+html[lang="fa"] .main h3,
+html[lang="ur"] .main h1,
+html[lang="ur"] .main h2,
+html[lang="ur"] .main h3,
+html[lang="ar"] .main p,
+html[lang="fa"] .main p,
+html[lang="ur"] .main p,
+html[lang="ar"] .right .topic-panel h3,
+html[lang="fa"] .right .topic-panel h3,
+html[lang="ur"] .right .topic-panel h3,
+html[lang="ar"] .right .topic-panel .igdc-v10-title,
+html[lang="fa"] .right .topic-panel .igdc-v10-title,
+html[lang="ur"] .right .topic-panel .igdc-v10-title,
+html[lang="ar"] #igdcV10Title,
+html[lang="fa"] #igdcV10Title,
+html[lang="ur"] #igdcV10Title,
+html[lang="ar"] #igdcV10Body,
+html[lang="fa"] #igdcV10Body,
+html[lang="ur"] #igdcV10Body,
+html[lang="ar"] #igdcV10FileNames,
+html[lang="fa"] #igdcV10FileNames,
+html[lang="ur"] #igdcV10FileNames,
+html[lang="ar"] #igdcDonationViewerV10 .igdc-v10-modal-title,
+html[lang="fa"] #igdcDonationViewerV10 .igdc-v10-modal-title,
+html[lang="ur"] #igdcDonationViewerV10 .igdc-v10-modal-title,
+html[lang="ar"] #igdcDonationViewerV10 .meta,
+html[lang="fa"] #igdcDonationViewerV10 .meta,
+html[lang="ur"] #igdcDonationViewerV10 .meta,
+html[lang="ar"] #igdcDonationViewerV10 .body,
+html[lang="fa"] #igdcDonationViewerV10 .body,
+html[lang="ur"] #igdcDonationViewerV10 .body,
+html[lang="ar"] #igdcDonationViewerV10 .attachments,
+html[lang="fa"] #igdcDonationViewerV10 .attachments,
+html[lang="ur"] #igdcDonationViewerV10 .attachments{
+  direction:rtl;
+  text-align:right;
+}
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -5781,21 +5837,17 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   function clearDraft(){ try{localStorage.removeItem(DRAFT_KEY);}catch(e){} }
   function setPreview(t){ var p=$('#composePreviewTitle')||$('#titlePreview .tp-text'); if(p) p.textContent=t||tr('noTitleInput'); }
   function status(t){ var s=$('#igdcDonationStatusV10'); if(!s){ s=document.createElement('span'); s.id='igdcDonationStatusV10'; s.className='igdc-donation-save-status'; var b=$('#btnSubmitPost')||$('#btnOpenComposer'); if(b&&b.parentNode) b.parentNode.appendChild(s); } s.textContent=t||''; if(t) setTimeout(function(){ if(s.textContent===t) s.textContent=''; },2200); }
+  /* Locale-independent section contract: the data-cat value is the only source of truth.
+     Do not infer categories from translated headings; headings differ in every language. */
   function panelCat(panel){
-    var txt=((panel.querySelector('h3')||{}).textContent||'').toLowerCase();
-    if(/ngo/.test(txt)) return 'ngo';
-    if(/mission|church|선교|교회/.test(txt)) return 'mission';
-    if(/service|volunteer|봉사/.test(txt)) return 'service';
-    if(/relief|aid|구호/.test(txt)) return 'relief';
-    if(/edu|교육/.test(txt)) return 'edu';
-    if(/env|환경/.test(txt)) return 'env';
-    if(/etc|기타/.test(txt)) return 'etc';
-    return 'iesf';
+    var list=panel && panel.querySelector('.list[data-cat]');
+    return normalizeCat(list && list.getAttribute('data-cat'));
   }
   function listNodes(cat){
-    cat=normalizeCat(cat); var out=[];
-    $$('.topic-panel').forEach(function(p){ var list=p.querySelector('.list'); if(list && panelCat(p)===cat) out.push(list); });
-    return out;
+    cat=normalizeCat(cat);
+    return $$('.right .topic-panel .list[data-cat]').filter(function(list){
+      return normalizeCat(list.getAttribute('data-cat'))===cat;
+    });
   }
   function currentFiles(){
     var f=$('#igdcV10File'); var a=[];
