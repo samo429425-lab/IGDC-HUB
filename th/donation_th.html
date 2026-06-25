@@ -6,7 +6,7 @@
 <script>
 /**
  * 안전한 Supabase 연결 플러그
- * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Netlify สิ่งแวดล้อม변수에서 자동 불러오기
+ * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Automatically load from Netlify environment variables
  */
 
 (async () => {
@@ -19,16 +19,16 @@
         url: envData.env.SUPABASE_URL,
         anonKey: envData.env.SUPABASE_ANON_KEY
       });
-      console.log("✅ โหลดคีย์ Supabase สำเร็จ");
+      console.log("✅ Supabase 키 정상 로드됨.");
     } else {
-      console.warn("⚠️ ไม่มีคีย์ Supabase — โปรดตรวจสอบ secureEnvBridge.js หรือ environment variables ของ Netlify");
+      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify environment variables Confirm 필요.");
       window.SUPER_VARSAR = Object.freeze({
         url: null,
         anonKey: null
       });
     }
   } catch (err) {
-    console.error("❌ โหลด environment variables ของ Supabase ไม่สำเร็จ:", err);
+    console.error("❌ Supabase environment variable load failed:", err);
     window.SUPER_VARSAR = Object.freeze({
       url: null,
       anonKey: null
@@ -233,22 +233,22 @@
 
 /* === Local gutter for better left spacing (without altering global layout) === */
 .hero{ margin-left:16px !important; margin-right:16px !important; }
-#topเขียนPanel{ margin-left:16px !important; margin-right:16px !important; }
+#topWritePanel{ margin-left:16px !important; margin-right:16px !important; }
 .people-news{ margin-left:16px !important; margin-right:16px !important; }
 
 /* === Balanced right gutter to match left (16px) === */
 .main{ padding-right:16px !important; }
 .hero{ margin-right:16px !important; }
-#topเขียนPanel{ margin-right:16px !important; }
+#topWritePanel{ margin-right:16px !important; }
 .people-news{ margin-right:16px !important; }
 .feed-wrapper{ margin-right:16px !important; }
 
 /* === Ensure right gutter spacing matches left (16px) for main content boxes === */
 .main{ padding-right:16px !important; }
-.hero, #topเขียนPanel, .people-news, .feed-wrapper{ margin-right:16px !important; }
+.hero, #topWritePanel, .people-news, .feed-wrapper{ margin-right:16px !important; }
 
 /* === Uniform content widths for top 3 boxes === */
-.hero, #topเขียนPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   width:100% !important;
   max-width:none !important;
   margin-left:auto !important;
@@ -257,13 +257,13 @@
 
 /* === Restore left gutter and center content === */
 .main{ padding-left:16px !important; padding-right:16px !important; }
-.hero, #topเขียนPanel, .people-news{ margin-left:auto !important; margin-right:auto !important; }
+.hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; }
 /* Feed wrapper also centered with same gutter */
 .feed-wrapper{ margin-left:auto !important; margin-right:auto !important; }
 
 
 /* === Slightly increase main content box width to reduce right gap === */
-.hero, #topเขียนPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   max-width:1210px !important;
 }
 
@@ -272,7 +272,7 @@
 /* Keep container gap as the sole inter-column spacing */
 .container{ gap:16px !important; }
 /* Center the three top boxes so leftover space splits evenly */
-.hero, #topเขียนPanel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
+.hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
 @media (orientation: portrait){
 .main{
   width:100% !important;
@@ -282,7 +282,7 @@
 }
 }
 
-.hero, #topเขียนPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   max-width:100% !important;
   margin-left:0 !important;
   margin-right:0 !important;
@@ -311,7 +311,7 @@
 
 
 /* The three top boxes + feed wrapper all use the same centered width */
-.hero, #topเขียนPanel, .people-news, .feed-wrapper{
+.hero, #topWritePanel, .people-news, .feed-wrapper{
   width:min(100%, var(--content-width)) !important;
   margin:0 !important;               /* no side margins; centering handled by .main */
 }
@@ -321,7 +321,7 @@
 /* The right panel keeps its own inner padding; outer gap is handled by grid gap */
 .right{ margin:0 !important; }
 
-/* Soft pastel background for ทั่วโลก 나눔허브 title box */
+/* Soft pastel background for 글로벌 나눔허브 title box */
 .global-title-box{
   background-color: #f0faff !important;
 }
@@ -363,7 +363,7 @@
 /* Custom file pick buttons */
 .file-btn{ background:#f6f3ff; border-color:#cfc6ff; }
 .filename{ margin-left:6px; font-size:.85rem; color:#555; }
-/* Ensure ยืนยัน is horizontal */
+/* Ensure Confirm is horizontal */
 .button.tiny{ writing-mode:horizontal-tb; }
 
 /* --- Compose top-row button alignment (scoped, minimal) --- */
@@ -373,26 +373,26 @@
 }
 .compose-wrap .row-top .button{ margin:0; }
 .compose-wrap .row-top #btnOpenComposer{ order:1; }
-.compose-wrap .row-top #btnส่งPost{ order:2; }
-/* Keep 'ยืนยัน' labels strictly horizontal (already set for .button.tiny) */
+.compose-wrap .row-top #btnSubmitPost{ order:2; }
+/* Keep 'Confirm' labels strictly horizontal (already set for .button.tiny) */
 
-/* Reinforce: 'ยืนยัน' 버튼은 가로(수평) 표기 유지 */
+/* Reinforce: 'Confirm' 버튼은 가로(수평) 표기 유지 */
 .compose-wrap .row-bottom .button.tiny{ writing-mode:horizontal-tb; }
 
-/* === Scoped UI polish for 'หมวดหมู่ + NGO', 파일/เลือกรูปภาพ 라인 === */
+/* === Scoped UI polish for 'Category + NGO', 파일/Choose Image 라인 === */
 .field-category{
   display:flex; align-items:center; gap:10px;
   border:1px solid #d0d7de; border-radius:10px;
   padding:8px 10px; background:#f8fafc;
 }
-.field-category select#postหมวดหมู่{ min-width:180px; }
+.field-category select#postCategory{ min-width:180px; }
 
 .label-strong{ font-weight:700; }
 .label-accent{ color:#1c7c54; } /* 차분한 녹색 톤 */
 
 .field .file-btn{ margin-right:8px; }
 
-/* 파일/เลือกรูปภาพ 결과명을 긴 입력막대처럼 보이게 */
+/* 파일/Choose Image 결과명을 긴 입력막대처럼 보이게 */
 .field .filename, #imgChosen, #fileChosen{
   display:inline-block; min-width:360px; max-width:100%;
   padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;
@@ -404,7 +404,7 @@
 .row-bottom .button.tiny{ line-height:1.1; font-weight:600; }
 
 /* === User-specified refinements (scoped) === */
-.field-category select#postหมวดหมู่{
+.field-category select#postCategory{
   width:auto; max-width:140px; min-width:110px;
 }
 .field-category{ flex-wrap:nowrap; }
@@ -414,36 +414,36 @@
 
 /* File & Image pickers: one-line, confirm after filename bar, bar = 50% width */
 .field-file, .field-image{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.field-file #btnPickFile{ order:1; color:#111; }   /* 'เลือกไฟล์' in black */
+.field-file #btnPickFile{ order:1; color:#111; }   /* 'Choose File' in black */
 .field-file .filename{ order:2; width:50%; min-width:0; }
-.field-file #btnFileยืนยัน{ order:3; }
+.field-file #btnFileConfirm{ order:3; }
 
-.field-image #btnPickImage{ order:1; color:#111; } /* 'เลือกรูปภาพ' in black (for consistency) */
+.field-image #btnPickImage{ order:1; color:#111; } /* 'Choose Image' in black (for consistency) */
 .field-image .filename{ order:2; width:50%; min-width:0; }
-.field-image #btnImageยืนยัน{ order:3; }
+.field-image #btnImageConfirm{ order:3; }
 
 /* Ensure buttons remain compact and don't force wrap */
 .field-file .button.tiny, .field-image .button.tiny{ white-space:nowrap; }
 
 /* === Tweaks per latest instructions === */
 /* NGO dropdown: about 1/3 of previous long width; keep compact */
-.field-category select#postหมวดหมู่{
+.field-category select#postCategory{
   width: 90px; min-width: 80px; max-width: 110px;
 }
 
-/* หมวดหมู่ label as a button, horizontal text ensured */
-#labelหมวดหมู่{ font-weight:600; }
+/* Category label as a button, horizontal text ensured */
+#labelCategory{ font-weight:600; }
 
 /* File/Image bars: reduce to 25% width */
 .field-file .filename, .field-image .filename{ width:25%; min-width:0; }
 
-/* Ensure 'เลือกไฟล์' / 'เลือกรูปภาพ' label color is black and stays readable */
+/* Ensure 'Choose File' / 'Choose Image' label color is black and stays readable */
 #btnPickFile, #btnPickImage{ color:#111 !important; }
 
 /* === Final polish per screenshot feedback === */
 
-/* 'หมวดหมู่' must be horizontal like a button */
-#labelหมวดหมู่{
+/* 'Category' must be horizontal like a button */
+#labelCategory{
   writing-mode: horizontal-tb !important;
   transform: none !important;
   display: inline-flex;
@@ -452,7 +452,7 @@
 }
 
 /* NGO dropdown: cut to about half of prior setting */
-.field-category select#postหมวดหมู่{
+.field-category select#postCategory{
   width: 56px; min-width: 50px; max-width: 70px;
 }
 
@@ -509,19 +509,19 @@
 /* === Group spacing & ordering fix (compose area only) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* File group: [เลือกไฟล์] [막대] [ยืนยัน] */
+/* File group: [Choose File] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:4px !important; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:4px; }
-.compose-wrap .row-bottom .field-file #btnFileยืนยัน{ order:3; position:relative; z-index:1; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; position:relative; z-index:1; }
 
-/* Image group: [เลือกรูปภาพ] [막대] [ยืนยัน] */
+/* Image group: [Choose Image] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:4px !important; }
-/* Ensure a sufficiently large gap from file-confirm (>= 'หมวดหมู่' 버튼 폭 가늠치) */
+/* Ensure a sufficiently large gap from file-confirm (>= 'Category' 버튼 폭 가늠치) */
 .compose-wrap .row-bottom .field-image{ margin-left:72px !important; }
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; margin-left:4px; }
-.compose-wrap .row-bottom .field-image #btnImageยืนยัน{ order:3; position:relative; z-index:1; }
+.compose-wrap .row-bottom .field-image #btnImageConfirm{ order:3; position:relative; z-index:1; }
 
 /* Keep bars at half width and non-overlapping */
 .compose-wrap .row-bottom #fileChosen,
@@ -554,15 +554,15 @@
 /* === Compose row: strict grouping & anti-overlay (scoped) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* FILE group -> [เลือกไฟล์][막대][ยืนยัน] 붙어서 배치 */
+/* FILE group -> [Choose File][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:6px; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:6px; }
-.compose-wrap .row-bottom .field-file #btnFileยืนยัน{ order:3; margin-left:8px; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; margin-left:8px; }
 
-/* IMAGE group -> [เลือกรูปภาพ][막대][ยืนยัน] 붙어서 배치 */
+/* IMAGE group -> [Choose Image][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:6px; }
-/* 파일 그룹의 ยืนยัน 버튼 뒤로 충분히 띄우기(겹침 방지) */
+/* 파일 그룹의 Confirm 버튼 뒤로 충분히 띄우기(겹침 방지) */
 .compose-wrap .row-bottom .field-image{ margin-left:96px; } /* 필요 시 수치 조정 */
 
 .compose-wrap .row-bottom #fileChosen,
@@ -592,14 +592,14 @@
   margin-left:0 !important;   /* remove previous manual offsets */
 }
 
-/* Inside each group: [Pick][Bar][ยืนยัน] */
+/* Inside each group: [Pick][Bar][Confirm] */
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; }
-.compose-wrap .row-bottom .field-file #btnFileยืนยัน{ order:3; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; }
 
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; }
-.compose-wrap .row-bottom .field-image #btnImageยืนยัน{ order:3; }
+.compose-wrap .row-bottom .field-image #btnImageConfirm{ order:3; }
 
 /* Bars expand within their half; cancel any global min-width */
 .compose-wrap .row-bottom #fileChosen,
@@ -610,8 +610,8 @@
 }
 
 /* Keep confirm buttons compact and visible */
-.compose-wrap .row-bottom #btnFileยืนยัน,
-.compose-wrap .row-bottom #btnImageยืนยัน{
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm{
   flex:0 0 auto; position:relative; z-index:1;
 }
 
@@ -632,8 +632,8 @@
   margin-left:0 !important;    /* 버튼과 막대가 딱 붙도록 */
 }
 
-.compose-wrap .row-bottom #btnFileยืนยัน,
-.compose-wrap .row-bottom #btnImageยืนยัน{
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm{
   margin-left:4px !important;  /* 막대 바로 뒤에 가깝게 */
 }
 
@@ -641,23 +641,23 @@
 <style>
 /* ===== Compose-only adjustments (safe & minimal) ===== */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top .field-category{ order:1; }     /* หมวดหมู่(드롭다운) */
-.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* เขียน */
-.compose-wrap .row-top #btnAttach{ order:3; }          /* ไฟล์แนบ(신규 버튼) */
-.compose-wrap .row-top #btnส่งPost{ order:4; }      /* 글올리기 */
+.compose-wrap .row-top .field-category{ order:1; }     /* Category(드롭다운) */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }          /* Attachment(신규 버튼) */
+.compose-wrap .row-top #btnSubmitPost{ order:4; }      /* 글올리기 */
 
 /* Hide legacy file/image pickers (compose only) */
 .compose-wrap .row-bottom .field-file,
 .compose-wrap .row-bottom .field-image,
-.compose-wrap .row-bottom #btnFileยืนยัน,
-.compose-wrap .row-bottom #btnImageยืนยัน { display:none !important; }
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm { display:none !important; }
 
 /* Attach filename (display only), uses existing button styles */
 .compose-wrap #attachName{
   display:inline-block; margin-left:6px;
   max-width:42vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-.compose-wrap #btnAttachล้าง{ margin-left:4px; }
+.compose-wrap #btnAttachClear{ margin-left:4px; }
 </style>
 <style>
 .attach-preview{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; max-width:44vw; padding:4px 0; margin-left:6px; }
@@ -666,11 +666,11 @@
 .attach-chip .remove:hover{ color:#c0392b; }
 .compose-wrap .row-top{ flex-wrap:wrap; }
 </style><style></style><style>
-/* === Compose row: place 'attachPreview' BETWEEN [ไฟล์แนบ] and [บันทึก] === */
+/* === Compose row: place 'attachPreview' BETWEEN [Attachment] and [Save] === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* เขียน */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* ไฟล์แนบ */
-.compose-wrap .row-top #attachPreview{                /* ตัวอย่าง 막대창(상시 존재) */
+.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
+.compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
   min-height:34px; padding:6px 8px;
@@ -678,7 +678,7 @@
   min-width:260px; max-width:50vw; flex:0 0 auto;     /* 막대 형태, 한 줄 유지 */
   overflow:hidden;
 }
-.compose-wrap .row-top #btnส่งPost{ order:6; }     /* บันทึก(최종) */
+.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* Save(최종) */
 
 /* 칩 스타일(막대 내부) */
 .attach-preview .attach-chip{
@@ -695,14 +695,14 @@
 /* 유령 중복 표시 방지: legacy 파일명 표시는 숨김(칩이 대체) */
 .compose-wrap #attachName{ display:none !important; }
 </style><style>
-/* === Compose row order override (requested): หมวดหมู่ -> เขียน -> ไฟล์แนบ -> ตัวอย่าง막대 -> บันทึก === */
+/* === Compose row order override (requested): Category -> Write -> Attachment -> 미리보기막대 -> Save === */
 .compose-wrap .row-top .field.field-category{ order:1; }
-.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* เขียน */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* ไฟล์แนบ */
-.compose-wrap .row-top #attachPreview{ order:4; }     /* ตัวอย่าง 막대 */
-.compose-wrap .row-top #btnส่งPost{ order:5; }     /* บันทึก */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
+.compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
+.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* Save */
 </style><style>
-/* === Title Preview Bar (between เขียน and ไฟล์แนบ) === */
+/* === Title Preview Bar (between Write and Attachment) === */
 .compose-wrap .row-top #titlePreview{
   order:3;
   display:flex; align-items:center; gap:6px;
@@ -713,17 +713,17 @@
 }
 .compose-wrap .row-top #btnAttach{ order:4; }
 .compose-wrap .row-top #attachPreview{ order:5; }
-.compose-wrap .row-top #btnส่งPost{ order:6; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
 
 .title-preview .tp-text{ font-size:.92rem; color:#111; }
 
 /* Keep row single-line as much as possible */
 .compose-wrap .row-top{ flex-wrap:nowrap; gap:8px; }
 </style><style>
-/* === Compose row: place 'ล้าง' right after 최종 'บันทึก' === */
+/* === Compose row: place 'Clear' right after 최종 'Save' === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow:hidden; }
-.compose-wrap .row-top #btnส่งPost{ order:6; }
-.compose-wrap .row-top #btnAttachล้าง{ order:7; margin-left:6px; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
+.compose-wrap .row-top #btnAttachClear{ order:7; margin-left:6px; }
 .compose-wrap .row-top #attachName{ display:none !important; } /* 칩 UI 사용 */
 
 /* Shrink bars to avoid line overflow (title < attach) */
@@ -742,13 +742,13 @@
 .compose-wrap .row-top #attachPreview{ order:5; }
 </style><style>
 /* === ORDER HOTFIX (override) === */
-/* หมวดหมู่ */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
-/* เขียน */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
+/* Category */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
+/* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
-/* ไฟล์แนบ 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 ตัวอย่าง 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
-/* บันทึก */               .compose-wrap .row-top #btnส่งPost{ order:6 !important; }
-/* ล้าง */             .compose-wrap .row-top #btnAttachล้าง{ order:7 !important; }
+/* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
+/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
+/* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
 /* Smooth scroll in right-side topic lists */
 .right .topic-panel .list{ scroll-behavior: smooth; }
@@ -770,7 +770,7 @@
 .right .topic-panel .item .attach-list{ margin:4px 0 0 0; padding-left:18px; }
 .right .topic-panel .item .attach-list li{ font-size:.82rem; color:#374151; }
 
-/* ลบ button aligned to the right */
+/* Delete button aligned to the right */
 
 /* Smooth scroll + auto-grow already added in last build; keep consistent here if missing */
 .right .topic-panel .list{ scroll-behavior:smooth; }
@@ -813,7 +813,7 @@
   overflow:hidden;
 }
 
-/* ไฟล์แนบ line: one compact line after preview */
+/* Attachment line: one compact line after preview */
 .right .topic-panel .item .attach,
 .right .topic-panel .item .attach-list{
   margin-top:2px; font-size:.8rem; color:#374151;
@@ -821,7 +821,7 @@
 }
 .right .topic-panel .item .attach-list{ padding-left:16px; }
 
-/* ลบ button stays aligned right, compact */
+/* Delete button stays aligned right, compact */
 
 /* Make the whole card clickable for popup */
 .right .topic-panel .item{ cursor:pointer; }
@@ -845,7 +845,7 @@
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like,
 
-/* 색상: Edit=파랑, แนะนำ=초록, Like=핑크, ลบ=빨강 */
+/* 색상: Edit=파랑, Recommend=초록, Like=핑크, Delete=빨강 */
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 .right .topic-panel .item .btn-reco{ background:#e6f7ec; color:#059669; border-color:#bbf7d0; }
 .right .topic-panel .item .btn-like{ background:#ffe6ef; color:#db2777; border-color:#fecdd3; }
@@ -915,13 +915,13 @@
 .right .topic-panel .item .item-footer .action-reco.active .icon{ color:#065f46; }
 .right .topic-panel .item .item-footer .action-like.active .icon{ color:#9d174d; }
 
-/* Keep only Edit/ลบ text buttons horizontally */
+/* Keep only Edit/Delete text buttons horizontally */
 .right .topic-panel .item .btn-edit,
 
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 @media (orientation: portrait){
 </style><style>
-/* Hard-hide any legacy text buttons labeled แนะนำ/Like */
+/* Hard-hide any legacy text buttons labeled Recommend/Like */
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like{ display:none !important; }
 }
@@ -933,7 +933,7 @@
 }
 
 </style><style>
-/* --- Footer row normalization for Edit/ลบ buttons --- */
+/* --- Footer row normalization for Edit/Delete buttons --- */
 .right .topic-panel .item .item-footer{
   display:flex; align-items:center; gap:10px; justify-content:flex-end;
   min-height:34px; /* consistent row height */
@@ -1003,7 +1003,7 @@
 
 /* Ensure the three top boxes and feed align to the reduced gutter */
 .main{ padding-left: 0 !important; padding-right: 0 !important; }
-.hero, #topเขียนPanel, .people-news, .feed-wrapper{ margin-left: 0 !important; margin-right: 0 !important; }
+.hero, #topWritePanel, .people-news, .feed-wrapper{ margin-left: 0 !important; margin-right: 0 !important; }
 
 /* Keep main content centered within its column without extra left padding */
 .main{ align-items: stretch !important; }  /* allow full-width of the main column */
@@ -1040,7 +1040,7 @@
 /* Keep the track flush against the label */
 .feed-row .row-track{ padding-left: 0 !important; margin-left: 0 !important; }
 </style><style>
-/* === Vertical labels: bigger than 'ฟีด' and start at 2nd-char position === */
+/* === Vertical labels: bigger than 'Feed' and start at 2nd-char position === */
 .feed-row{
   grid-template-columns: minmax(26px, 34px) 1fr !important; /* widen a touch for larger font */
   column-gap: 8px !important;
@@ -1048,7 +1048,7 @@
 .feed-row .row-label{
   color: var(--brand);
   font-weight: 700;
-  font-size: 1.22rem;     /* a bit larger than 'ฟีด' */
+  font-size: 1.22rem;     /* a bit larger than 'Feed' */
   writing-mode: vertical-rl;
   text-orientation: upright;
   line-height: 1;
@@ -1084,7 +1084,7 @@
   margin-bottom:6px;  /* small gap before the first card row */
   color: var(--brand);
   font-weight: 800;
-  font-size: 1.22rem; /* slightly larger than 'ฟีด' */
+  font-size: 1.22rem; /* slightly larger than 'Feed' */
   line-height: 1.1;
   pointer-events:none;
   user-select:none;
@@ -1103,7 +1103,7 @@ body > .container > .main{
 
 /* 내부 요소들이 별도 좌/우 마진·패딩을 추가하지 않도록 정리 */
 body > .container > .main .hero,
-body > .container > .main #topเขียนPanel,
+body > .container > .main #topWritePanel,
 body > .container > .main .people-news,
 body > .container > .main .feed-wrapper{
   width:100% !important; max-width:none !important;
@@ -1188,7 +1188,7 @@ body > .container > .main{
 @media (orientation: portrait){
 }
 body > .container > .main .hero,
-body > .container > .main #topเขียนPanel,
+body > .container > .main #topWritePanel,
 body > .container > .main .people-news,
 body > .container > .main .feed-wrapper{
   width: 100% !important;
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "ยังไม่มีรายการ Q&A ที่ลงทะเบียนไว้";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "ยังไม่มีรายการ Q&A ที่ลงทะเบียนไว้";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1683,7 +1683,7 @@ main, .main, #main, .main-content, .content, .content-area{
     }
 }
 
-    .hero, #topเขียนPanel, .people-news, .feed-wrapper{
+    .hero, #topWritePanel, .people-news, .feed-wrapper{
       width:100% !important; max-width:100% !important;
       margin-left:0 !important; margin-right:0 !important;
       padding-left:0 !important; padding-right:0 !important;
@@ -1834,7 +1834,7 @@ body .right{ display:none !important; }
 
 
   /* Hero / top sections: full width with gentle gutters */
-  body .hero, body #topเขียนPanel, body .people-news, body .feed-wrapper{
+  body .hero, body #topWritePanel, body .people-news, body .feed-wrapper{
     width:100% !important; max-width:none !important; margin:0 !important;
   }
 
@@ -1875,7 +1875,7 @@ body .right{ display:none !important; }
 
 /* NOTE:
  - This block is intentionally minimal and non-destructive. It complements existing @media (min-width:1025px) rules in the file.
- - ถัดไป steps: hook a mobile "drawer" for .right if you want ads/tools accessible on phones without occupying layout.
+ - Next steps: hook a mobile "drawer" for .right if you want ads/tools accessible on phones without occupying layout.
 */
 </style>
 
@@ -1974,7 +1974,7 @@ body .right{ display:none !important; }
     line-height:1.5;
   }
 
-  /* 하단 Footer: 읽음/แนะนำ/ถูกใจ/아이콘 + Edit/ลบ 전부 우측 정렬 */
+  /* 하단 Footer: 읽음/Recommend/Like/아이콘 + Edit/Delete 전부 우측 정렬 */
  .mobile-news-clone .topic-panel .item .item-footer {
     margin-top: auto;              /* 위 Content 밀어 올리고, footer를 맨 아래로 */
     display: flex;
@@ -2023,7 +2023,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
-  <!-- Supabase สิ่งแวดล้อม 설정 (เขียน/도네이션/Q&A 공용) -->
+  <!-- Supabase Environment 설정 (Write/도네이션/Q&A 공용) -->
   <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
@@ -2036,7 +2036,7 @@ body .right{ display:none !important; }
     window.CURRENT_USER_NAME = window.CURRENT_USER_NAME || "";
   </script>
 
-  <!-- Supabase JS (สิ่งแวดล้อม만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
+  <!-- Supabase JS (Environment만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
 
 
@@ -2106,18 +2106,18 @@ body .right{ display:none !important; }
 </script>
 
 <style>
-  /* IGTC DONATION - hero & topเขียนPanel spacing normalize */
+  /* IGTC DONATION - hero & topWritePanel spacing normalize */
   .hero {
     margin-bottom: 16px;
   }
-  #topเขียนPanel {
+  #topWritePanel {
     margin-top: 0;
   }
   @media (max-width:1024px) {
     .hero {
       margin-bottom: 8px !important;
     }
-    #topเขียนPanel {
+    #topWritePanel {
       margin-top: 4px !important;
       margin-bottom: 14px !important;
     }
@@ -2343,7 +2343,7 @@ body > div.container,
 
   /* main 안쪽 박스가 max-width로 메인 폭을 "착시"로 좁혀 보이게 하지 않도록: 메인 칸을 가득 채움 */
   body > .container > .main .hero,
-  body > .container > .main #topเขียนPanel,
+  body > .container > .main #topWritePanel,
   body > .container > .main .people-news,
   body > .container > .main .feed-wrapper{
     width:100% !important;
@@ -2365,12 +2365,6 @@ body > div.container,
 }
 </style>
 
-
-  <style id="sidebar-spacing-unify-v2">
-    .sidebar{padding-top:30px !important;}
-    .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
-  </style>
-
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2378,12 +2372,12 @@ body > div.container,
 <div class="container">
 <!-- Left Sidebar (불변) -->
 <nav class="sidebar">
-<a href="home_th.html">🏠 หน้าแรก</a>
-<a href="networkhub_th.html">🛒 ศูนย์กลางตลาด</a>
-<a href="distributionhub_th.html">🏭 ศูนย์กระจายสินค้า</a>
-<a href="socialnetwork_th.html">📢 โซเชียลเน็ตเวิร์ก</a>
-<a href="mediahub_th.html">🎬 ศูนย์กลางสื่อ</a>
-<a href="tour_th.html">🧳 การเดินทาง · การท่องเที่ยว · ที่พัก</a>
+<a href="home_en.html">🏠 หน้าแรก</a>
+<a href="networkhub_en.html">🛒 ศูนย์กลางตลาด</a>
+<a href="distributionhub_en.html">🏭 ศูนย์กระจายสินค้า</a>
+<a href="socialnetwork_en.html">📢 โซเชียลเน็ตเวิร์ก</a>
+<a href="mediahub_en.html">🎬 ศูนย์กลางสื่อ</a>
+<a href="tour_en.html">🧳 การเดินทาง · การท่องเที่ยว · ที่พัก</a>
 <a href="literature/academic.html" style="display:none !important;">📚 การแลกเปลี่ยนวรรณกรรมและวิชาการ</a>
 <a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 ถาม-ตอบ</a></nav>
 <!-- Main (불변 구조) -->
@@ -2398,12 +2392,12 @@ body > div.container,
 <h2>💝 ศูนย์บริจาคระดับโลก 💝</h2>
 <p>The support system for IESF and the WAM Foundation begins here.</p>
 </section>
-<section class="panel" id="topเขียนPanel" style="margin-bottom:20px;">
+<section class="panel" id="topWritePanel" style="margin-bottom:20px;">
 <textarea id="topPostBody" placeholder="ป้อนข้อความหลัก..." rows="4" style="padding-top:22px; padding-bottom:12px; font-weight:600;">นี่คือพื้นที่ที่ได้รับการสนับสนุนโดยกลุ่ม IGDC Global Platform เพื่อแบ่งปันพันธกิจและข่าวสารของ WAM Foundation (World Aviation Mission Foundation) ประกาศและแบ่งปันข่าวของ IESF และร่วมแบ่งปันข่าวจาก NGO และองค์กรอาสาสมัครต่าง ๆ</textarea>
 <!-- Inline controls row replacing box UI -->
 <!-- Inline controls, two-row layout -->
 <div class="compose-wrap" id="composeControls">
-<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelหมวดหมู่" style="writing-mode:horizontal-tb;">หมวดหมู่</span>
+<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelCategory" style="writing-mode:horizontal-tb;">หมวดหมู่</span>
 <select id="postCategory"><option value="iesf">IESF</option>
 <option value="ngo">NGO</option>
 <option value="mission">พันธกิจ</option>
@@ -2417,7 +2411,7 @@ body > div.container,
 <button class="button small" id="btnOpenComposer">เขียน</button><div aria-label="ตัวอย่างชื่อเรื่อง" class="title-preview" id="titlePreview"><span class="tp-text">ไม่มีชื่อเรื่อง</span></div>
 <button class="button small accent" id="btnSubmitPost">บันทึก</button>
 <span id="attachName"></span>
-<button aria-label="ลบไฟล์แนบ " class="button tiny" id="btnAttachล้าง" style="display:none;" type="button">ล้าง</button>
+<button aria-label="Remove attachment" class="button tiny" id="btnAttachClear" style="display:none;" type="button">ล้าง</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2425,14 +2419,14 @@ body > div.container,
 <label class="field field-file">
 <input accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip" id="postFile" style="display:none;" type="file"/>
 <button class="button tiny file-btn" id="btnPickFile" type="button">เลือกไฟล์</button>
-<button class="button tiny" id="btnFileยืนยัน" type="button">ยืนยัน</button>
+<button class="button tiny" id="btnFileConfirm" type="button">ยืนยัน</button>
 <span class="filename" id="fileChosen"></span>
 </label>
 <!-- Image second -->
 <label class="field field-image">
 <input accept="image/*" id="postImage" style="display:none;" type="file"/>
 <button class="button tiny file-btn" id="btnPickImage" type="button">เลือกรูปภาพ</button>
-<button class="button tiny" id="btnImageยืนยัน" type="button">ยืนยัน</button>
+<button class="button tiny" id="btnImageConfirm" type="button">ยืนยัน</button>
 <span class="filename" id="imgChosen"></span>
 </label>
 </div>
@@ -2503,7 +2497,7 @@ body > div.container,
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('ระบบบริจาคจะเชื่อมต่อเร็ว ๆ นี้')" style="margin-bottom:8px; padding:5px 14px;">การบริจาค</button>
+<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">การบริจาค</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - General: NongHyup 301-0078-3333-51<br/>
         - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -2570,16 +2564,16 @@ body > div.container,
 
   const modal = $("#composerModal");
   const btnOpen = $("#btnOpenComposer");
-  const btnส่ง = $("#btnส่งPost");
-  const btnบันทึก = $("#btnบันทึก");
+  const btnSubmit = $("#btnSubmitPost");
+  const btnSave = $("#btnSave");
   const btnCancel = $("#btnCancel");
   const titleI = $("#composeTitle");
   const bodyI = $("#composeBody");
-  const catSel = $("#postหมวดหมู่");
+  const catSel = $("#postCategory");
   const fileI = $("#postImage");
   const fileAttach = $("#postFile");
-  const btnImgOk = $("#btnImageยืนยัน");
-  const btnFileOk = $("#btnFileยืนยัน");
+  const btnImgOk = $("#btnImageConfirm");
+  const btnFileOk = $("#btnFileConfirm");
   const btnPickImg = $("#btnPickImage");
   const btnPickFile = $("#btnPickFile");
   const fileChosen = $("#fileChosen");
@@ -2596,11 +2590,11 @@ body > div.container,
   btnPickImage && btnPickImage.addEventListener("click", ()=> fileI && fileI.click());
   fileAttach && fileAttach.addEventListener("change", ()=>{ if(fileChosen){ fileChosen.textContent = fileAttach.files[0]?.name || ""; } });
   fileI && fileI.addEventListener("change", ()=>{ if(imgChosen){ imgChosen.textContent = fileI.files[0]?.name || ""; } });
-  btnส่ง && btnส่ง.addEventListener("click", ()=>{ if(btnบันทึก){ btnบันทึก.click(); } });
+  btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
-  btnบันทึก && btnบันทึก.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(ไม่มีชื่อเรื่อง)";
-    const b = bodyI?.value?.trim() || "(ไม่มีเนื้อหา)";
+  btnSave && btnSave.addEventListener("click", ()=>{
+    const t = titleI?.value?.trim() || "(No Title)";
+    const b = bodyI?.value?.trim() || "(No Content)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2618,7 +2612,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">ลิงก์ไฟล์แนบ</a>` : `ไฟล์แนบ: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Attachment link</a>` : `Attachment: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2629,7 +2623,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "ไฟล์แนบ: " + fileAttach.files[0].name;
+        att.textContent = "Attachment: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2646,15 +2640,15 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("หากมีลิงก์ภายนอกของรูปภาพ (URL) โปรดวางที่นี่ หากไม่มีให้กดยืนยัน");
+    const link = prompt("Paste an external image URL if you have one. Otherwise, click Confirm.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
         alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
-        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 ตัวอย่าง만
-        imageLink = ""; // 실제 บันทึก은 링크만 사용
+        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
+        imageLink = ""; // 실제 Save은 링크만 사용
       }
     }else{
       imageLink = ""; imagePreviewObjectUrl = "";
@@ -2663,7 +2657,7 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("หากมีลิงก์ภายนอกของไฟล์ (URL) โปรดวางที่นี่ หากไม่มีให้กดยืนยัน");
+    const link = prompt("Paste an external file URL if you have one. Otherwise, click Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
@@ -2687,12 +2681,12 @@ body > div.container,
   var btnAttach = document.getElementById('btnAttach');
   var input = document.getElementById('postAttach');
   var nameEl = document.getElementById('attachName');
-  var clearBtn = document.getElementById('btnAttachล้าง');
+  var clearBtn = document.getElementById('btnAttachClear');
 
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' ไฟล์');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' files');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2737,9 +2731,9 @@ body > div.container,
   const rowTop = $('.compose-wrap .row-top');
   const attachInput = $('#postAttach');
   const attachPreview = $('#attachPreview');
-  const clearBtn = $('#btnAttachล้าง');
+  const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
-  const btnส่ง = $('#btnส่งPost');
+  const btnSubmit = $('#btnSubmitPost');
 
   let selectedFiles = [];
   function syncInputs(){
@@ -2763,7 +2757,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','ลบไฟล์แนบ'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove attachment'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2791,18 +2785,18 @@ body > div.container,
     });
   }
 
-  const catSel = $('#postหมวดหมู่');
+  const catSel = $('#postCategory');
   const titleI = $('#composeTitle');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
-  function handleUnifiedบันทึก(){
-    const t = (titleI && titleI.value.trim()) || '(ไม่มีชื่อเรื่อง)';
-    const b = (bodyI && bodyI.value.trim()) || '(ไม่มีเนื้อหา)';
+  function handleUnifiedSave(){
+    const t = (titleI && titleI.value.trim()) || '(No Title)';
+    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('ไม่พบพื้นที่ข่าว'); return; }
+    if(!holder){ alert('The news area could not be found.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2819,20 +2813,20 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = 'ไฟล์แนบ: ' + f.name;
+        li.textContent = 'Attachment: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='ลบ';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
-    const canลบ = (USER_ROLE==='admin' || USER_ROLE==='writer');
-    if(canลบ) del.style.display='inline-block';
+    const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
+    if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('ต้องการลบข่าวนี้หรือไม่?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
 
@@ -2848,10 +2842,10 @@ body > div.container,
     closeModal();
   }
 
-  if(btnส่ง){
-    btnส่ง.addEventListener('click', (e)=>{
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', (e)=>{
       e.preventDefault();
-      handleUnifiedบันทึก();
+      handleUnifiedSave();
     });
   }
 
@@ -2862,7 +2856,7 @@ body > div.container,
   const $ = (s,r=document)=>r.querySelector(s);
   const attachInput = $('#postAttach');
   const attachPreview = $('#attachPreview');
-  const clearBtn = $('#btnAttachล้าง');
+  const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
   const nameEl = $('#attachName');
 
@@ -2899,13 +2893,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' ไฟล์');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' files');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','ลบไฟล์แนบทั้งหมด'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove all attachments'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2923,7 +2917,7 @@ body > div.container,
     });
   }
 
-  // "ล้าง" 버튼도 전체 초기화
+  // "Clear" 버튼도 전체 초기화
   if(clearBtn){
     clearBtn.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2946,9 +2940,9 @@ body > div.container,
   const titleI = $('#composeTitle');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
-  const btnDraft = $('#btnDraftบันทึก');
+  const btnDraft = $('#btnDraftSave');
   const btnCancel = $('#btnCancel');
-  const btnส่ง = $('#btnส่งPost');
+  const btnSubmit = $('#btnSubmitPost');
   const titlePreview = $('#titlePreview');
   const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
@@ -2957,7 +2951,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'ไม่มีชื่อเรื่อง';
+    tpText.textContent = t || 'No title';
   }
 
   // live typing updates preview
@@ -2965,7 +2959,7 @@ body > div.container,
     titleI.addEventListener('input', ()=> updateTitlePreview());
   }
 
-  // บันทึก Draft: keep in-memory draft; do NOT post to right panel
+  // Save Draft: keep in-memory draft; do NOT post to right panel
   if(btnDraft){
     btnDraft.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2989,8 +2983,8 @@ body > div.container,
 
   // Before final save, if a draft exists (and modal may be closed/empty),
   // write draft back into inputs so existing save handler picks it up.
-  if(btnส่ง){
-    btnส่ง.addEventListener('click', ()=>{
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', ()=>{
       if((draft.title && draft.title.trim()) || (draft.body && draft.body.trim())){
         if(titleI) titleI.value = draft.title || '';
         if(bodyI)  bodyI.value  = draft.body  || '';
@@ -3011,7 +3005,7 @@ body > div.container,
   const $ = (s,r=document)=>r.querySelector(s);
   const titleI = $('#composeTitle');
   const modal = $('#composerModal');
-  const btnDraft = $('#btnDraftบันทึก');
+  const btnDraft = $('#btnDraftSave');
   const titlePreview = $('#titlePreview');
   const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
@@ -3020,7 +3014,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'ยังไม่ได้กรอกชื่อเรื่อง';
+    tpText.textContent = t || 'Title Not entered';
   }
 
   if(btnDraft){
@@ -3039,7 +3033,7 @@ body > div.container,
   const USER_ID = (window.USER_ID || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canShowลบFor(item){
+  function canShowDeleteFor(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3048,23 +3042,23 @@ body > div.container,
     return false;
   }
 
-  function ensureลบ(item){
+  function ensureDelete(item){
     if(!item || item.querySelector('.delete-post')) return;
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='ลบ';
+    btn.textContent='Delete';
     btn.style.cssText='margin-top:6px; display:none;';
-    if(canShowลบFor(item)) btn.style.display='inline-block';
+    if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('ต้องการลบข่าวนี้หรือไม่?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
     item.appendChild(btn);
   }
 
   // Initial pass
-  $$('.right .topic-panel .list .item').forEach(ensureลบ);
+  $$('.right .topic-panel .list .item').forEach(ensureDelete);
 
   // Observe future additions for all lists
   $$('.right .topic-panel .list').forEach(list=>{
@@ -3072,9 +3066,9 @@ body > div.container,
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(node=>{
           if(node && node.nodeType===1){
-            if(node.classList.contains('item')) ensureลบ(node);
+            if(node.classList.contains('item')) ensureDelete(node);
             // Nested case: if a wrapper was added, scan inside
-            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureลบ);
+            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureDelete);
           }
         });
       });
@@ -3200,7 +3194,7 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">ไฟล์แนบ</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml) : '';
 
     openModal();
   }, true);
@@ -3218,7 +3212,7 @@ body > div.container,
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
 <button class="button outline" id="enCancel" type="button">ยกเลิก</button>
-<button class="button" id="enบันทึก" type="button">บันทึก</button>
+<button class="button" id="enSave" type="button">บันทึก</button>
 </div>
 </div></div><script>
 (function(){
@@ -3226,7 +3220,7 @@ body > div.container,
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEditลบ(item){
+  function canEditDelete(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3258,14 +3252,14 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `แก้ไขแล้ว · ${tsStr}`;
+    badge.textContent = `Edited · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
   $$('.right .topic-panel .list .item').forEach(item=>{
     const id = itemId(item);
     const meta = loadEdit(id);
-    if(meta && canEditลบ(item)){
+    if(meta && canEditDelete(item)){
       showEditedBadge(item, meta.editedAt);
     }
   });
@@ -3276,16 +3270,16 @@ body > div.container,
     const btn = e.target.closest('.btn-edit');
     if(!btn) return;
     const item = e.target.closest('.right .topic-panel .list .item');
-    if(item && canEditลบ(item)) window.__currentEditingItem = item;
+    if(item && canEditDelete(item)) window.__currentEditingItem = item;
   }, true);
 
-  // When edit modal "บันทึก" is pressed, persist edited meta and show badge
-  (function attachบันทึกHook(){
-    const saveBtn = document.getElementById('enบันทึก');
+  // When edit modal "Save" is pressed, persist edited meta and show badge
+  (function attachSaveHook(){
+    const saveBtn = document.getElementById('enSave');
     if(!saveBtn) return;
     saveBtn.addEventListener('click', ()=>{
       const item = window.__currentEditingItem;
-      if(!item || !canEditลบ(item)) return;
+      if(!item || !canEditDelete(item)) return;
       const ts = new Date().toLocaleString();
       const id = itemId(item);
       saveEdit(id, ts);
@@ -3346,7 +3340,7 @@ body > div.container,
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEditลบ(item){
+  function canEditDelete(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3388,20 +3382,20 @@ body > div.container,
     const m  = loadMetrics(id);
     const t  = loadToggles(id);
 
-    // ล้าง and rebuild stats area
+    // Clear and rebuild stats area
     stats.innerHTML = `
       <span class="stat stat-views"><i class="icon">👁</i><span class="n">${m.views}</span></span>
       <span class="stat action-reco ${t.reco?'active':''}"><i class="icon">👍</i><span class="n">${m.reco}</span></span>
       <span class="stat action-like ${t.like?'active':''}"><i class="icon">❤️</i><span class="n">${m.like}</span></span>
     `;
 
-    // Role-based Edit/ลบ remain as-is (buttons may already exist from prior code)
+    // Role-based Edit/Delete remain as-is (buttons may already exist from prior code)
     // If no edit button present, create and apply permissions
     let btnEdit = footer.querySelector('.btn-edit');
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='แก้ไข';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3418,16 +3412,16 @@ body > div.container,
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='ลบ';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('ต้องการลบข่าวนี้หรือไม่?')) return;
+        if(!confirm('Do you want to delete this post?')) return;
         item.remove();
       });
     }
     // Apply visibility
-    if(canEditลบ(item)){
+    if(canEditDelete(item)){
       btnEdit.style.display='inline-block';
       btnDel.style.display='inline-block';
     }else{
@@ -3506,7 +3500,7 @@ body > div.container,
 </script><script>
 (function(){
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
-  function normalizeลบ(item){
+  function normalizeDelete(item){
     if(!item) return;
     // Ensure footer exists
     let footer = item.querySelector('.item-footer');
@@ -3546,14 +3540,14 @@ body > div.container,
   }
 
   // Run on existing items
-  $$('.right .topic-panel .list .item').forEach(normalizeลบ);
+  $$('.right .topic-panel .list .item').forEach(normalizeDelete);
 
   // Observe for new items
   $$('.right .topic-panel .list').forEach(list=>{
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalizeลบ(n);
+          if(n.nodeType===1 && n.classList.contains('item')) normalizeDelete(n);
         });
       });
     });
@@ -3596,13 +3590,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'ชื่อเรื่อง';
+    if(t) t.textContent = 'Title';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'เนื้อหา';
+    if(p) p.textContent = 'Content';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3700,7 +3694,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"รอดำเนินการ")); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"Pending")); }
       else { alert("Blockchain processing failed"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
@@ -3747,7 +3741,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'สินค้า';
+            t.textContent = item.title || item.name || 'Product';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3770,7 +3764,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'สินค้า';
+              t.textContent = item.title || 'Product';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3841,7 +3835,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","จำนวนเงินบริจาคแบบกำหนดไว้");
+  btnGroup.setAttribute("aria-label","Fixed donation amount");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3871,12 +3865,12 @@ body > div.container,
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>General: 농협 301-0078-3333-51</div>
+    <div>General: NongHyup 301-0078-3333-51</div>
     <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>General: 신한 100-026-331592</div>
+    <div>General: Shinhan 100-026-331592</div>
     <div>Foreign Currency: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
@@ -3890,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`จำนวนเงินที่เลือก: ₩${Number(amt).toLocaleString()}\n\nโปรดโอนเข้าบัญชีด้านล่าง`);
+      alert(`Selected amount: ₩${Number(amt).toLocaleString()}\n\nPlease transfer it to the account below.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4106,7 +4100,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if ((!hasAny || (!hasReal && !hasExternalInfo)) && !hasOurPlaceholder) {
         const item = document.createElement('div');
         item.className = 'item placeholder';
-        item.innerHTML = '<div class="title">ยังไม่มีโพสต์</div>';
+        item.innerHTML = '<div class="title">No posts yet</div>';
         list.appendChild(item);
       }
 
@@ -4176,7 +4170,7 @@ document.addEventListener('DOMContentLoaded', function(){
       aiEndpoint: null
     };
 
-    // Supabase สิ่งแวดล้อม을 SUPER_VARSAR에 적용하는 함수
+    // Supabase Environment을 SUPER_VARSAR에 적용하는 함수
     function applyConfig(env) {
       const url =
         (env && env.SUPABASE_URL) ||
@@ -4208,7 +4202,7 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
 
-    // 3) 없으면 Netlify Functions에서 สิ่งแวดล้อม변수 읽어오기
+    // 3) 없으면 Netlify Functions에서 Environment변수 읽어오기
     //    (secureEnvBridge는 Netlify env에서 SUPABASE_URL, SUPABASE_ANON_KEY를 꺼내서 JSON으로 돌려주는 함수)
     var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
 
@@ -4260,7 +4254,7 @@ document.addEventListener('DOMContentLoaded', function(){
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|operation|ops|settings?|config|deploy|deployment|error|bug|loading|api|integration|server|database|db|permission|policy|login|token|key|payment|security|cors|network|timeout|response\s*code|status\s*code|build|compile|broken|doesn'?t\s*work|not\s*work|stuck|page|link|malfunction|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -4270,7 +4264,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] ยังไม่ได้ตั้งค่าข้อมูลรับรอง/ไลบรารี Supabase: UI จะแสดง แต่การบันทึกถูกปิดใช้งาน");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4296,23 +4290,23 @@ document.addEventListener('DOMContentLoaded', function(){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "ถาม-ตอบ";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","ปิด");
+    const title = el("div","igdc-qa-title"); title.textContent = "Questions & Answers";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="คำถาม";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="กรุณากรอกคำถามของคุณ...";
-    const lA = el("label"); lA.textContent="คำตอบ";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="กรุณารอสักครู่ ระบบจะให้คำตอบในไม่ช้า";
+    const lQ = el("label"); lQ.textContent="Question";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Please enter your question...";
+    const lA = el("label"); lA.textContent="Answer";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Please wait a moment. An answer will be provided shortly.";
     const actions = el("div","igdc-qa-actions");
-    const btnส่ง = el("button","igdc-qa-btn primary"); btnส่ง.textContent="ส่ง";
-    const btnล้าง = el("button","igdc-qa-btn muted"); btnล้าง.textContent="ล้าง";
-    const note = el("div","igdc-qa-note"); note.textContent="※ คำถามง่าย ๆ จะได้รับคำตอบทันทีโดย AI ส่วนปัญหาด้านเทคนิค ข้อผิดพลาด หรือการใช้งาน จะถูกส่งต่อไปยัง Q&A ของผู้ดูแลโดยอัตโนมัติ";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical, error, or operation-related issues are automatically forwarded to the admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-    actions.append(btnส่ง, btnล้าง);
+    actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
     document.body.append(modal);
@@ -4360,9 +4354,9 @@ document.addEventListener('DOMContentLoaded', function(){
     backdrop.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
 
-    btnล้าง.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnส่ง.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnส่ง.click(); }});
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
 
     async function fetchThreads(){
       const sb = await ensureSupabase(); if(!sb) return;
@@ -4378,19 +4372,19 @@ document.addEventListener('DOMContentLoaded', function(){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="คำถาม: "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("คำตอบ: "+row.answer):"คำตอบ: (รอดำเนินการ)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
         const actions = el("div","igdc-qa-thread-actions");
-        const canลบ = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
-        if(canลบ){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="ลบ";
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("ลบ failed (permission/policy)"); return; }
+            if(error){ alert("Delete failed (permission/policy)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4401,7 +4395,7 @@ document.addEventListener('DOMContentLoaded', function(){
       });
     }
 
-    async function autoคำตอบIfNeeded(text){
+    async function autoAnswerIfNeeded(text){
       const technical = classifyTech(text);
       let answer = null;
       if(!technical){
@@ -4413,9 +4407,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="คำถามเกี่ยวกับการดำเนินงานจะได้รับคำตอบหลังจากผู้ดูแลตรวจสอบแล้ว";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
-          else answer="ขอบคุณสำหรับคำถาม เราจะตรวจสอบและช่วยเหลือโดยเร็ว";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
+          else if(/price|cost|fee|pricing|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else answer="Thank you for your inquiry. We will review it promptly and assist you.";
         }
       }
       return { technical, answer };
@@ -4425,11 +4419,11 @@ document.addEventListener('DOMContentLoaded', function(){
       const q = (tQ.value||"").trim();
       let a = (tA.value||"").trim();
       if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await autoคำตอบIfNeeded(q);
+      const { technical, answer } = await autoAnswerIfNeeded(q);
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("ยังไม่ได้เชื่อมต่อการตั้งค่าการบันทึก (Supabase url/key) การบันทึกบนเซิร์ฟเวอร์จึงถูกปิดใช้งาน เมื่อนำขึ้นเว็บ ให้ตั้งค่า SUPER_VARSAR.url/anonKey แล้วระบบจะเชื่อมต่ออัตโนมัติ");
+        alert("The storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed to the web, the connection will be enabled automatically once SUPER_VARSAR.url/anonKey is set.");
         return;
       }
       const record = {
@@ -4443,7 +4437,7 @@ document.addEventListener('DOMContentLoaded', function(){
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
-    btnส่ง.addEventListener("click", submit);
+    btnSubmit.addEventListener("click", submit);
 
     // realtime refresh
     (async()=>{ try{
@@ -4590,7 +4584,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "ปิด";
+    content: "Close";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4731,8 +4725,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>คิวอาร์ชำระเงิน</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">ปิด</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4777,14 +4771,14 @@ window.addEventListener("message",function(ev){
     var t = normalize(text);
     if(!t) return null;
 
-    if(t.includes("global") || t.includes("ทั่วโลก") || t.includes("wam") || t.includes("iesf")) return "iesf";
+    if(t.includes("global") || t.includes("글로벌") || t.includes("wam") || t.includes("iesf")) return "iesf";
     if(t.includes("ngo")) return "ngo";
-    if(t.includes("พันธกิจ") || t.includes("mission")) return "mission";
-    if(t.includes("บริการ") || t.includes("volunteer") || t.includes("service")) return "service";
-    if(t.includes("บรรเทาทุกข์") || t.includes("การบรรเทาทุกข์") || t.includes("ภัยพิบัติ") || t.includes("relief")) return "relief";
-    if(t.includes("การศึกษา") || t.includes("education") || t.includes("edu")) return "edu";
-    if(t.includes("สิ่งแวดล้อม") || t.includes("สภาพภูมิอากาศ") || t.includes("environment") || t.includes("env")) return "env";
-    if(t.includes("อื่น ๆ") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
+    if(t.includes("Mission") || t.includes("mission")) return "mission";
+    if(t.includes("Service") || t.includes("volunteer") || t.includes("service")) return "service";
+    if(t.includes("Relief") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
+    if(t.includes("Education") || t.includes("education") || t.includes("edu")) return "edu";
+    if(t.includes("Environment") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
+    if(t.includes("Others") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
 
     return null;
   }
@@ -5065,12 +5059,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'ไม่มีชื่อเรื่อง';
+    npTitle.textContent = title || 'No title';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(ยังไม่มีเนื้อหาที่ลงทะเบียน)';
+    npBody.textContent = body || '(No content has been registered.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">ไฟล์แนบ</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml
         : '';
     }
 
@@ -5122,19 +5116,19 @@ window.addEventListener("message",function(ev){
 
       const { error } = await sb.from('igdc_donation_posts').insert(payload);
       if(error){
-        console.warn('[donation] บันทึก Supabase ไม่สำเร็จ:', error.message);
+        console.warn('[donation] Supabase Save 실패:', error.message);
       }
     }catch(err){
-      console.warn('[donation] ข้อยกเว้นการซิงค์ Supabase:', err);
+      console.warn('[donation] Supabase sync 예외:', err);
     }
   }
 
-  // 완전 บันทึก 버튼 클릭 후 Supabase 동기화 시도
+  // 완전 Save 버튼 클릭 후 Supabase 동기화 시도
   document.addEventListener('click', function(e){
-    const btn = e.target.closest('#btnส่งPost');
+    const btn = e.target.closest('#btnSubmitPost');
     if(!btn) return;
     setTimeout(function(){
-      const catSel = document.getElementById('postหมวดหมู่');
+      const catSel = document.getElementById('postCategory');
       const cat = catSel ? (catSel.value || 'etc') : 'etc';
       syncLatestToSupabase(cat);
     }, 250);
@@ -5191,7 +5185,7 @@ window.addEventListener("message",function(ev){
 
 <script id="hero-linebreak-fix">
 (function(){
-  function nobreak(s){ return s.replace(/NGO\uC640\s*\uACF5\uC720\uD558\uBA70/g, "แชร์กับ NGO"); }
+  function nobreak(s){ return s.replace(/NGO와\s*공유하며/g, "NGO와\u00A0공유하며"); }
   var el = document.getElementById("topPostBody");
   if(el){
     if(el.value !== undefined){ el.value = nobreak(el.value); }
@@ -5270,14 +5264,14 @@ window.addEventListener("message",function(ev){
 
 
 <script>
-// 모바일: WAM NAVER Cafe + การบริจาค 패널 이동 (복사 아님, 이동)
+// 모바일: WAM NAVER Cafe + Donations 패널 이동 (복사 아님, 이동)
 (function(){
   var mq = window.matchMedia("(max-width:1023px)");
   var main = document.querySelector("main.main");
-  var topเขียน = document.getElementById("topเขียนPanel");
+  var topWrite = document.getElementById("topWritePanel");
   var feedSection = main ? main.querySelector("section.feed-wrapper") : null;
   var right = document.querySelector("aside.right");
-  if (!main || !topเขียน || !feedSection || !right) return;
+  if (!main || !topWrite || !feedSection || !right) return;
 
   var cafePanel = right.querySelector(".panel.cafe-link");
   var accountPanel = right.querySelector(".panel.account-section");
@@ -5408,9 +5402,9 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">กำลังโหลด...</div>
+        <div class="card-title">Loading...</div>
         <div class="card-meta">-</div>
-        <div class="card-preview">กำลังเตรียม</div>
+        <div class="card-preview">Preparing</div>
       </div>
     `;
 
@@ -5744,7 +5738,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   var installTimer=null;
   var $=function(s,r){ return (r||document).querySelector(s); };
   var $$=function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
-  var IGDC_I18N={"category":"หมวดหมู่","writePost":"เขียนโพสต์","title":"ชื่อเรื่อง","titlePlaceholder":"ใส่ชื่อเรื่อง","content":"เนื้อหา","contentPlaceholder":"ใส่เนื้อหา","attachmentOptional":"แนบไฟล์","noAttachment":"ไม่มีไฟล์แนบ","attachHelp":"Selected file names and download data are saved with the post. Large files may be limited by browser storage.","draft":"บันทึกร่าง","cancel":"ยกเลิก","save":"บันทึก","close":"ปิด","edit":"Edit","del":"Del","untitled":"ไม่มีชื่อ","emptyBody":"(ไม่มีเนื้อหา)","noTitleInput":"ไม่มีชื่อ","attachments":"ไฟล์แนบ","attachment":"Attachment","download":"ดาวน์โหลด","fileNameOnly":"File name","emptyList":"ยังไม่มีโพสต์","view":"Views","recommend":"Recommend","like":"Like","modify":"Edit","delete":"Delete","saved":"บันทึกแล้ว","updated":"อัปเดตแล้ว","canceled":"ยกเลิกแล้ว","draftSaved":"บันทึกร่างแล้ว","deleted":"ลบแล้ว","applied":"Applied","undone":"Canceled","largeFile":"File is large; only file names were saved."};
+  var IGDC_I18N={"category":"หมวดหมู่","writePost":"เขียนโพสต์","title":"ชื่อเรื่อง","titlePlaceholder":"ใส่ชื่อเรื่อง","content":"เนื้อหา","contentPlaceholder":"ใส่เนื้อหา","attachmentOptional":"แนบไฟล์","noAttachment":"ไม่มีไฟล์แนบ","attachHelp":"ชื่อไฟล์ที่เลือกและข้อมูลการดาวน์โหลดจะถูกบันทึกพร้อมโพสต์ ไฟล์ขนาดใหญ่อาจถูกจำกัดด้วยพื้นที่จัดเก็บของเบราว์เซอร์","draft":"บันทึกร่าง","cancel":"ยกเลิก","save":"บันทึก","close":"ปิด","edit":"แก้ไข","del":"ลบ","untitled":"ไม่มีชื่อ","emptyBody":"(ไม่มีเนื้อหา)","noTitleInput":"ไม่มีชื่อ","attachments":"ไฟล์แนบ","attachment":"ไฟล์แนบ","download":"ดาวน์โหลด","fileNameOnly":"ชื่อไฟล์","emptyList":"ยังไม่มีโพสต์","view":"การดู","recommend":"แนะนำ","like":"ถูกใจ","modify":"แก้ไข","delete":"ลบ","saved":"บันทึกแล้ว","updated":"อัปเดตแล้ว","canceled":"ยกเลิกแล้ว","draftSaved":"บันทึกร่างแล้ว","deleted":"ลบแล้ว","applied":"นำไปใช้แล้ว","undone":"ยกเลิกแล้ว","largeFile":"ไฟล์มีขนาดใหญ่ จึงบันทึกเฉพาะชื่อไฟล์"};
   function tr(k){ return IGDC_I18N[k] || (k||''); }
   function esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
   function makeId(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }

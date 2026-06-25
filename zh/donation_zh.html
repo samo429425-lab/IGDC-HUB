@@ -6,7 +6,7 @@
 <script>
 /**
  * 안전한 Supabase 연결 플러그
- * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Netlify 环境변수에서 자동 불러오기
+ * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Automatically load from Netlify environment variables
  */
 
 (async () => {
@@ -21,14 +21,14 @@
       });
       console.log("✅ Supabase 키 정상 로드됨.");
     } else {
-      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify 环境변수 确认 필요.");
+      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify environment variables Confirm 필요.");
       window.SUPER_VARSAR = Object.freeze({
         url: null,
         anonKey: null
       });
     }
   } catch (err) {
-    console.error("❌ Supabase 环境변수 로드 실패:", err);
+    console.error("❌ Supabase environment variable load failed:", err);
     window.SUPER_VARSAR = Object.freeze({
       url: null,
       anonKey: null
@@ -233,22 +233,22 @@
 
 /* === Local gutter for better left spacing (without altering global layout) === */
 .hero{ margin-left:16px !important; margin-right:16px !important; }
-#top撰写Panel{ margin-left:16px !important; margin-right:16px !important; }
+#topWritePanel{ margin-left:16px !important; margin-right:16px !important; }
 .people-news{ margin-left:16px !important; margin-right:16px !important; }
 
 /* === Balanced right gutter to match left (16px) === */
 .main{ padding-right:16px !important; }
 .hero{ margin-right:16px !important; }
-#top撰写Panel{ margin-right:16px !important; }
+#topWritePanel{ margin-right:16px !important; }
 .people-news{ margin-right:16px !important; }
 .feed-wrapper{ margin-right:16px !important; }
 
 /* === Ensure right gutter spacing matches left (16px) for main content boxes === */
 .main{ padding-right:16px !important; }
-.hero, #top撰写Panel, .people-news, .feed-wrapper{ margin-right:16px !important; }
+.hero, #topWritePanel, .people-news, .feed-wrapper{ margin-right:16px !important; }
 
 /* === Uniform content widths for top 3 boxes === */
-.hero, #top撰写Panel, .people-news{
+.hero, #topWritePanel, .people-news{
   width:100% !important;
   max-width:none !important;
   margin-left:auto !important;
@@ -257,13 +257,13 @@
 
 /* === Restore left gutter and center content === */
 .main{ padding-left:16px !important; padding-right:16px !important; }
-.hero, #top撰写Panel, .people-news{ margin-left:auto !important; margin-right:auto !important; }
+.hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; }
 /* Feed wrapper also centered with same gutter */
 .feed-wrapper{ margin-left:auto !important; margin-right:auto !important; }
 
 
 /* === Slightly increase main content box width to reduce right gap === */
-.hero, #top撰写Panel, .people-news{
+.hero, #topWritePanel, .people-news{
   max-width:1210px !important;
 }
 
@@ -272,7 +272,7 @@
 /* Keep container gap as the sole inter-column spacing */
 .container{ gap:16px !important; }
 /* Center the three top boxes so leftover space splits evenly */
-.hero, #top撰写Panel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
+.hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
 @media (orientation: portrait){
 .main{
   width:100% !important;
@@ -282,7 +282,7 @@
 }
 }
 
-.hero, #top撰写Panel, .people-news{
+.hero, #topWritePanel, .people-news{
   max-width:100% !important;
   margin-left:0 !important;
   margin-right:0 !important;
@@ -311,7 +311,7 @@
 
 
 /* The three top boxes + feed wrapper all use the same centered width */
-.hero, #top撰写Panel, .people-news, .feed-wrapper{
+.hero, #topWritePanel, .people-news, .feed-wrapper{
   width:min(100%, var(--content-width)) !important;
   margin:0 !important;               /* no side margins; centering handled by .main */
 }
@@ -363,7 +363,7 @@
 /* Custom file pick buttons */
 .file-btn{ background:#f6f3ff; border-color:#cfc6ff; }
 .filename{ margin-left:6px; font-size:.85rem; color:#555; }
-/* Ensure 确认 is horizontal */
+/* Ensure Confirm is horizontal */
 .button.tiny{ writing-mode:horizontal-tb; }
 
 /* --- Compose top-row button alignment (scoped, minimal) --- */
@@ -373,26 +373,26 @@
 }
 .compose-wrap .row-top .button{ margin:0; }
 .compose-wrap .row-top #btnOpenComposer{ order:1; }
-.compose-wrap .row-top #btn提交Post{ order:2; }
-/* Keep '确认' labels strictly horizontal (already set for .button.tiny) */
+.compose-wrap .row-top #btnSubmitPost{ order:2; }
+/* Keep 'Confirm' labels strictly horizontal (already set for .button.tiny) */
 
-/* Reinforce: '确认' 버튼은 가로(수평) 표기 유지 */
+/* Reinforce: 'Confirm' 버튼은 가로(수평) 표기 유지 */
 .compose-wrap .row-bottom .button.tiny{ writing-mode:horizontal-tb; }
 
-/* === Scoped UI polish for '分类 + NGO', 파일/选择图片 라인 === */
+/* === Scoped UI polish for 'Category + NGO', 파일/Choose Image 라인 === */
 .field-category{
   display:flex; align-items:center; gap:10px;
   border:1px solid #d0d7de; border-radius:10px;
   padding:8px 10px; background:#f8fafc;
 }
-.field-category select#post分类{ min-width:180px; }
+.field-category select#postCategory{ min-width:180px; }
 
 .label-strong{ font-weight:700; }
 .label-accent{ color:#1c7c54; } /* 차분한 녹색 톤 */
 
 .field .file-btn{ margin-right:8px; }
 
-/* 파일/选择图片 결과명을 긴 입력막대처럼 보이게 */
+/* 파일/Choose Image 결과명을 긴 입력막대처럼 보이게 */
 .field .filename, #imgChosen, #fileChosen{
   display:inline-block; min-width:360px; max-width:100%;
   padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;
@@ -404,7 +404,7 @@
 .row-bottom .button.tiny{ line-height:1.1; font-weight:600; }
 
 /* === User-specified refinements (scoped) === */
-.field-category select#post分类{
+.field-category select#postCategory{
   width:auto; max-width:140px; min-width:110px;
 }
 .field-category{ flex-wrap:nowrap; }
@@ -414,36 +414,36 @@
 
 /* File & Image pickers: one-line, confirm after filename bar, bar = 50% width */
 .field-file, .field-image{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.field-file #btnPickFile{ order:1; color:#111; }   /* '选择文件' in black */
+.field-file #btnPickFile{ order:1; color:#111; }   /* 'Choose File' in black */
 .field-file .filename{ order:2; width:50%; min-width:0; }
-.field-file #btnFile确认{ order:3; }
+.field-file #btnFileConfirm{ order:3; }
 
-.field-image #btnPickImage{ order:1; color:#111; } /* '选择图片' in black (for consistency) */
+.field-image #btnPickImage{ order:1; color:#111; } /* 'Choose Image' in black (for consistency) */
 .field-image .filename{ order:2; width:50%; min-width:0; }
-.field-image #btnImage确认{ order:3; }
+.field-image #btnImageConfirm{ order:3; }
 
 /* Ensure buttons remain compact and don't force wrap */
 .field-file .button.tiny, .field-image .button.tiny{ white-space:nowrap; }
 
 /* === Tweaks per latest instructions === */
 /* NGO dropdown: about 1/3 of previous long width; keep compact */
-.field-category select#post分类{
+.field-category select#postCategory{
   width: 90px; min-width: 80px; max-width: 110px;
 }
 
-/* 分类 label as a button, horizontal text ensured */
-#label分类{ font-weight:600; }
+/* Category label as a button, horizontal text ensured */
+#labelCategory{ font-weight:600; }
 
 /* File/Image bars: reduce to 25% width */
 .field-file .filename, .field-image .filename{ width:25%; min-width:0; }
 
-/* Ensure '选择文件' / '选择图片' label color is black and stays readable */
+/* Ensure 'Choose File' / 'Choose Image' label color is black and stays readable */
 #btnPickFile, #btnPickImage{ color:#111 !important; }
 
 /* === Final polish per screenshot feedback === */
 
-/* '分类' must be horizontal like a button */
-#label分类{
+/* 'Category' must be horizontal like a button */
+#labelCategory{
   writing-mode: horizontal-tb !important;
   transform: none !important;
   display: inline-flex;
@@ -452,7 +452,7 @@
 }
 
 /* NGO dropdown: cut to about half of prior setting */
-.field-category select#post分类{
+.field-category select#postCategory{
   width: 56px; min-width: 50px; max-width: 70px;
 }
 
@@ -509,19 +509,19 @@
 /* === Group spacing & ordering fix (compose area only) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* File group: [选择文件] [막대] [确认] */
+/* File group: [Choose File] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:4px !important; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:4px; }
-.compose-wrap .row-bottom .field-file #btnFile确认{ order:3; position:relative; z-index:1; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; position:relative; z-index:1; }
 
-/* Image group: [选择图片] [막대] [确认] */
+/* Image group: [Choose Image] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:4px !important; }
-/* Ensure a sufficiently large gap from file-confirm (>= '分类' 버튼 폭 가늠치) */
+/* Ensure a sufficiently large gap from file-confirm (>= 'Category' 버튼 폭 가늠치) */
 .compose-wrap .row-bottom .field-image{ margin-left:72px !important; }
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; margin-left:4px; }
-.compose-wrap .row-bottom .field-image #btnImage确认{ order:3; position:relative; z-index:1; }
+.compose-wrap .row-bottom .field-image #btnImageConfirm{ order:3; position:relative; z-index:1; }
 
 /* Keep bars at half width and non-overlapping */
 .compose-wrap .row-bottom #fileChosen,
@@ -554,15 +554,15 @@
 /* === Compose row: strict grouping & anti-overlay (scoped) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* FILE group -> [选择文件][막대][确认] 붙어서 배치 */
+/* FILE group -> [Choose File][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:6px; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:6px; }
-.compose-wrap .row-bottom .field-file #btnFile确认{ order:3; margin-left:8px; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; margin-left:8px; }
 
-/* IMAGE group -> [选择图片][막대][确认] 붙어서 배치 */
+/* IMAGE group -> [Choose Image][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:6px; }
-/* 파일 그룹의 确认 버튼 뒤로 충분히 띄우기(겹침 방지) */
+/* 파일 그룹의 Confirm 버튼 뒤로 충분히 띄우기(겹침 방지) */
 .compose-wrap .row-bottom .field-image{ margin-left:96px; } /* 필요 시 수치 조정 */
 
 .compose-wrap .row-bottom #fileChosen,
@@ -592,14 +592,14 @@
   margin-left:0 !important;   /* remove previous manual offsets */
 }
 
-/* Inside each group: [Pick][Bar][确认] */
+/* Inside each group: [Pick][Bar][Confirm] */
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; }
-.compose-wrap .row-bottom .field-file #btnFile确认{ order:3; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; }
 
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; }
-.compose-wrap .row-bottom .field-image #btnImage确认{ order:3; }
+.compose-wrap .row-bottom .field-image #btnImageConfirm{ order:3; }
 
 /* Bars expand within their half; cancel any global min-width */
 .compose-wrap .row-bottom #fileChosen,
@@ -610,8 +610,8 @@
 }
 
 /* Keep confirm buttons compact and visible */
-.compose-wrap .row-bottom #btnFile确认,
-.compose-wrap .row-bottom #btnImage确认{
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm{
   flex:0 0 auto; position:relative; z-index:1;
 }
 
@@ -632,8 +632,8 @@
   margin-left:0 !important;    /* 버튼과 막대가 딱 붙도록 */
 }
 
-.compose-wrap .row-bottom #btnFile确认,
-.compose-wrap .row-bottom #btnImage确认{
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm{
   margin-left:4px !important;  /* 막대 바로 뒤에 가깝게 */
 }
 
@@ -641,23 +641,23 @@
 <style>
 /* ===== Compose-only adjustments (safe & minimal) ===== */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top .field-category{ order:1; }     /* 分类(드롭다운) */
-.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* 撰写 */
-.compose-wrap .row-top #btnAttach{ order:3; }          /* 附件(신규 버튼) */
-.compose-wrap .row-top #btn提交Post{ order:4; }      /* 글올리기 */
+.compose-wrap .row-top .field-category{ order:1; }     /* Category(드롭다운) */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }          /* Attachment(신규 버튼) */
+.compose-wrap .row-top #btnSubmitPost{ order:4; }      /* 글올리기 */
 
 /* Hide legacy file/image pickers (compose only) */
 .compose-wrap .row-bottom .field-file,
 .compose-wrap .row-bottom .field-image,
-.compose-wrap .row-bottom #btnFile确认,
-.compose-wrap .row-bottom #btnImage确认 { display:none !important; }
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm { display:none !important; }
 
 /* Attach filename (display only), uses existing button styles */
 .compose-wrap #attachName{
   display:inline-block; margin-left:6px;
   max-width:42vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-.compose-wrap #btnAttach清除{ margin-left:4px; }
+.compose-wrap #btnAttachClear{ margin-left:4px; }
 </style>
 <style>
 .attach-preview{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; max-width:44vw; padding:4px 0; margin-left:6px; }
@@ -666,11 +666,11 @@
 .attach-chip .remove:hover{ color:#c0392b; }
 .compose-wrap .row-top{ flex-wrap:wrap; }
 </style><style></style><style>
-/* === Compose row: place 'attach预览' BETWEEN [附件] and [保存] === */
+/* === Compose row: place 'attachPreview' BETWEEN [Attachment] and [Save] === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* 撰写 */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* 附件 */
-.compose-wrap .row-top #attach预览{                /* 미리보기 막대창(상시 존재) */
+.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
+.compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
   min-height:34px; padding:6px 8px;
@@ -678,7 +678,7 @@
   min-width:260px; max-width:50vw; flex:0 0 auto;     /* 막대 형태, 한 줄 유지 */
   overflow:hidden;
 }
-.compose-wrap .row-top #btn提交Post{ order:6; }     /* 保存(최종) */
+.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* Save(최종) */
 
 /* 칩 스타일(막대 내부) */
 .attach-preview .attach-chip{
@@ -695,15 +695,15 @@
 /* 유령 중복 표시 방지: legacy 파일명 표시는 숨김(칩이 대체) */
 .compose-wrap #attachName{ display:none !important; }
 </style><style>
-/* === Compose row order override (requested): 分类 -> 撰写 -> 附件 -> 미리보기막대 -> 保存 === */
+/* === Compose row order override (requested): Category -> Write -> Attachment -> 미리보기막대 -> Save === */
 .compose-wrap .row-top .field.field-category{ order:1; }
-.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* 撰写 */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* 附件 */
-.compose-wrap .row-top #attach预览{ order:4; }     /* 미리보기 막대 */
-.compose-wrap .row-top #btn提交Post{ order:5; }     /* 保存 */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
+.compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
+.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* Save */
 </style><style>
-/* === 标题 预览 Bar (between 撰写 and 附件) === */
-.compose-wrap .row-top #title预览{
+/* === Title Preview Bar (between Write and Attachment) === */
+.compose-wrap .row-top #titlePreview{
   order:3;
   display:flex; align-items:center; gap:6px;
   min-height:34px; padding:6px 10px;
@@ -712,25 +712,25 @@
   overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
 }
 .compose-wrap .row-top #btnAttach{ order:4; }
-.compose-wrap .row-top #attach预览{ order:5; }
-.compose-wrap .row-top #btn提交Post{ order:6; }
+.compose-wrap .row-top #attachPreview{ order:5; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
 
 .title-preview .tp-text{ font-size:.92rem; color:#111; }
 
 /* Keep row single-line as much as possible */
 .compose-wrap .row-top{ flex-wrap:nowrap; gap:8px; }
 </style><style>
-/* === Compose row: place '清除' right after 최종 '保存' === */
+/* === Compose row: place 'Clear' right after 최종 'Save' === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow:hidden; }
-.compose-wrap .row-top #btn提交Post{ order:6; }
-.compose-wrap .row-top #btnAttach清除{ order:7; margin-left:6px; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
+.compose-wrap .row-top #btnAttachClear{ order:7; margin-left:6px; }
 .compose-wrap .row-top #attachName{ display:none !important; } /* 칩 UI 사용 */
 
 /* Shrink bars to avoid line overflow (title < attach) */
-.compose-wrap .row-top #title预览{
+.compose-wrap .row-top #titlePreview{
   flex:0 1 14vw; max-width:14vw; min-width:120px;
 }
-.compose-wrap .row-top #attach预览{
+.compose-wrap .row-top #attachPreview{
   flex:0 1 20vw; max-width:20vw; min-width:140px;
 }
 
@@ -738,17 +738,17 @@
 .compose-wrap .row-top .field.field-category{ order:1; }
 .compose-wrap .row-top #btnOpenComposer{ order:2; }
 .compose-wrap .row-top #btnAttach{ order:3; }
-.compose-wrap .row-top #title预览{ order:4; }
-.compose-wrap .row-top #attach预览{ order:5; }
+.compose-wrap .row-top #titlePreview{ order:4; }
+.compose-wrap .row-top #attachPreview{ order:5; }
 </style><style>
 /* === ORDER HOTFIX (override) === */
-/* 分类 */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
-/* 撰写 */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
-/* 标题 막대 */          .compose-wrap .row-top #title预览{ order:3 !important; }
-/* 附件 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 附件 미리보기 막대 */ .compose-wrap .row-top #attach预览{ order:5 !important; }
-/* 保存 */               .compose-wrap .row-top #btn提交Post{ order:6 !important; }
-/* 清除 */             .compose-wrap .row-top #btnAttach清除{ order:7 !important; }
+/* Category */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
+/* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
+/* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
+/* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
+/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
+/* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
 /* Smooth scroll in right-side topic lists */
 .right .topic-panel .list{ scroll-behavior: smooth; }
@@ -770,7 +770,7 @@
 .right .topic-panel .item .attach-list{ margin:4px 0 0 0; padding-left:18px; }
 .right .topic-panel .item .attach-list li{ font-size:.82rem; color:#374151; }
 
-/* 删除 button aligned to the right */
+/* Delete button aligned to the right */
 
 /* Smooth scroll + auto-grow already added in last build; keep consistent here if missing */
 .right .topic-panel .list{ scroll-behavior:smooth; }
@@ -806,14 +806,14 @@
 .right .topic-panel .item .title,
 .right .topic-panel .item .meta{ display:none !important; }
 
-/* 预览 text: show ~3 lines and then flow away */
+/* Preview text: show ~3 lines and then flow away */
 .right .topic-panel .item .preview{
   font-size:.84rem; color:#374151; margin-top:0;
   display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;
   overflow:hidden;
 }
 
-/* 附件 line: one compact line after preview */
+/* Attachment line: one compact line after preview */
 .right .topic-panel .item .attach,
 .right .topic-panel .item .attach-list{
   margin-top:2px; font-size:.8rem; color:#374151;
@@ -821,7 +821,7 @@
 }
 .right .topic-panel .item .attach-list{ padding-left:16px; }
 
-/* 删除 button stays aligned right, compact */
+/* Delete button stays aligned right, compact */
 
 /* Make the whole card clickable for popup */
 .right .topic-panel .item{ cursor:pointer; }
@@ -845,7 +845,7 @@
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like,
 
-/* 색상: Edit=파랑, 推荐=초록, Like=핑크, 删除=빨강 */
+/* 색상: Edit=파랑, Recommend=초록, Like=핑크, Delete=빨강 */
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 .right .topic-panel .item .btn-reco{ background:#e6f7ec; color:#059669; border-color:#bbf7d0; }
 .right .topic-panel .item .btn-like{ background:#ffe6ef; color:#db2777; border-color:#fecdd3; }
@@ -915,13 +915,13 @@
 .right .topic-panel .item .item-footer .action-reco.active .icon{ color:#065f46; }
 .right .topic-panel .item .item-footer .action-like.active .icon{ color:#9d174d; }
 
-/* Keep only Edit/删除 text buttons horizontally */
+/* Keep only Edit/Delete text buttons horizontally */
 .right .topic-panel .item .btn-edit,
 
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 @media (orientation: portrait){
 </style><style>
-/* Hard-hide any legacy text buttons labeled 推荐/Like */
+/* Hard-hide any legacy text buttons labeled Recommend/Like */
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like{ display:none !important; }
 }
@@ -933,7 +933,7 @@
 }
 
 </style><style>
-/* --- Footer row normalization for Edit/删除 buttons --- */
+/* --- Footer row normalization for Edit/Delete buttons --- */
 .right .topic-panel .item .item-footer{
   display:flex; align-items:center; gap:10px; justify-content:flex-end;
   min-height:34px; /* consistent row height */
@@ -1003,7 +1003,7 @@
 
 /* Ensure the three top boxes and feed align to the reduced gutter */
 .main{ padding-left: 0 !important; padding-right: 0 !important; }
-.hero, #top撰写Panel, .people-news, .feed-wrapper{ margin-left: 0 !important; margin-right: 0 !important; }
+.hero, #topWritePanel, .people-news, .feed-wrapper{ margin-left: 0 !important; margin-right: 0 !important; }
 
 /* Keep main content centered within its column without extra left padding */
 .main{ align-items: stretch !important; }  /* allow full-width of the main column */
@@ -1103,7 +1103,7 @@ body > .container > .main{
 
 /* 내부 요소들이 별도 좌/우 마진·패딩을 추가하지 않도록 정리 */
 body > .container > .main .hero,
-body > .container > .main #top撰写Panel,
+body > .container > .main #topWritePanel,
 body > .container > .main .people-news,
 body > .container > .main .feed-wrapper{
   width:100% !important; max-width:none !important;
@@ -1188,7 +1188,7 @@ body > .container > .main{
 @media (orientation: portrait){
 }
 body > .container > .main .hero,
-body > .container > .main #top撰写Panel,
+body > .container > .main #topWritePanel,
 body > .container > .main .people-news,
 body > .container > .main .feed-wrapper{
   width: 100% !important;
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "尚未登记任何问答内容";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "尚未登记任何问答内容";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1683,7 +1683,7 @@ main, .main, #main, .main-content, .content, .content-area{
     }
 }
 
-    .hero, #top撰写Panel, .people-news, .feed-wrapper{
+    .hero, #topWritePanel, .people-news, .feed-wrapper{
       width:100% !important; max-width:100% !important;
       margin-left:0 !important; margin-right:0 !important;
       padding-left:0 !important; padding-right:0 !important;
@@ -1834,7 +1834,7 @@ body .right{ display:none !important; }
 
 
   /* Hero / top sections: full width with gentle gutters */
-  body .hero, body #top撰写Panel, body .people-news, body .feed-wrapper{
+  body .hero, body #topWritePanel, body .people-news, body .feed-wrapper{
     width:100% !important; max-width:none !important; margin:0 !important;
   }
 
@@ -1974,7 +1974,7 @@ body .right{ display:none !important; }
     line-height:1.5;
   }
 
-  /* 하단 Footer: 읽음/推荐/喜欢/아이콘 + Edit/删除 전부 우측 정렬 */
+  /* 하단 Footer: 읽음/Recommend/Like/아이콘 + Edit/Delete 전부 우측 정렬 */
  .mobile-news-clone .topic-panel .item .item-footer {
     margin-top: auto;              /* 위 Content 밀어 올리고, footer를 맨 아래로 */
     display: flex;
@@ -2023,7 +2023,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
-  <!-- Supabase 环境 설정 (撰写/도네이션/Q&A 공용) -->
+  <!-- Supabase Environment 설정 (Write/도네이션/Q&A 공용) -->
   <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
@@ -2036,7 +2036,7 @@ body .right{ display:none !important; }
     window.CURRENT_USER_NAME = window.CURRENT_USER_NAME || "";
   </script>
 
-  <!-- Supabase JS (环境만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
+  <!-- Supabase JS (Environment만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
 
 
@@ -2106,18 +2106,18 @@ body .right{ display:none !important; }
 </script>
 
 <style>
-  /* IGTC DONATION - hero & top撰写Panel spacing normalize */
+  /* IGTC DONATION - hero & topWritePanel spacing normalize */
   .hero {
     margin-bottom: 16px;
   }
-  #top撰写Panel {
+  #topWritePanel {
     margin-top: 0;
   }
   @media (max-width:1024px) {
     .hero {
       margin-bottom: 8px !important;
     }
-    #top撰写Panel {
+    #topWritePanel {
       margin-top: 4px !important;
       margin-bottom: 14px !important;
     }
@@ -2343,7 +2343,7 @@ body > div.container,
 
   /* main 안쪽 박스가 max-width로 메인 폭을 "착시"로 좁혀 보이게 하지 않도록: 메인 칸을 가득 채움 */
   body > .container > .main .hero,
-  body > .container > .main #top撰写Panel,
+  body > .container > .main #topWritePanel,
   body > .container > .main .people-news,
   body > .container > .main .feed-wrapper{
     width:100% !important;
@@ -2365,12 +2365,6 @@ body > div.container,
 }
 </style>
 
-
-  <style id="sidebar-spacing-unify-v2">
-    .sidebar{padding-top:30px !important;}
-    .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
-  </style>
-
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2378,12 +2372,12 @@ body > div.container,
 <div class="container">
 <!-- Left Sidebar (불변) -->
 <nav class="sidebar">
-<a href="home_zh.html">🏠 首页</a>
-<a href="networkhub_zh.html">🛒 市场中心</a>
-<a href="distributionhub_zh.html">🏭 流通中心</a>
-<a href="socialnetwork_zh.html">📢 社交网络</a>
-<a href="mediahub_zh.html">🎬 媒体中心</a>
-<a href="tour_zh.html">🧳 旅行 · 旅游 · 住宿</a>
+<a href="home_en.html">🏠 首页</a>
+<a href="networkhub_en.html">🛒 市场中心</a>
+<a href="distributionhub_en.html">🏭 流通中心</a>
+<a href="socialnetwork_en.html">📢 社交网络</a>
+<a href="mediahub_en.html">🎬 媒体中心</a>
+<a href="tour_en.html">🧳 旅行 · 旅游 · 住宿</a>
 <a href="literature/academic.html" style="display:none !important;">📚 文学与学术交流</a>
 <a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 问答咨询</a></nav>
 <!-- Main (불변 구조) -->
@@ -2398,12 +2392,12 @@ body > div.container,
 <h2>💝 全球捐助中心 💝</h2>
 <p>IESF 与 WAM Foundation 的支持系统从这里开始。</p>
 </section>
-<section class="panel" id="top撰写Panel" style="margin-bottom:20px;">
+<section class="panel" id="topWritePanel" style="margin-bottom:20px;">
 <textarea id="topPostBody" placeholder="请输入主要内容。.." rows="4" style="padding-top:22px; padding-bottom:12px; font-weight:600;">这里是由 IGDC Global Platform Group 支持的空间，用于分享珍贵的 WAM World Aviation Mission Foundation 的事工与消息，发布并分享 IESF 的消息，也共同分享各类 NGO 与志愿组织的资讯。</textarea>
 <!-- Inline controls row replacing box UI -->
 <!-- Inline controls, two-row layout -->
 <div class="compose-wrap" id="composeControls">
-<div class="row row-top"><label class="field field-category"><span class="button tiny" id="label分类" style="writing-mode:horizontal-tb;">分类</span>
+<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelCategory" style="writing-mode:horizontal-tb;">分类</span>
 <select id="postCategory"><option value="iesf">IESF</option>
 <option value="ngo">NGO</option>
 <option value="mission">宣教</option>
@@ -2413,11 +2407,11 @@ body > div.container,
 <option value="env">环境</option>
 <option value="etc">其他</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">附件</button><div aria-label="附件预览" class="attach-preview" id="attach预览"></div>
-<button class="button small" id="btnOpenComposer">撰写</button><div aria-label="标题预览" class="title-preview" id="title预览"><span class="tp-text">无标题</span></div>
+</label><button class="button small" id="btnAttach" type="button">附件</button><div aria-label="Attachment preview" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">撰写</button><div aria-label="Title preview" class="title-preview" id="titlePreview"><span class="tp-text">无标题</span></div>
 <button class="button small accent" id="btnSubmitPost">保存</button>
 <span id="attachName"></span>
-<button aria-label="移除附件" class="button tiny" id="btnAttach清除" style="display:none;" type="button">清除</button>
+<button aria-label="Remove attachment" class="button tiny" id="btnAttachClear" style="display:none;" type="button">清除</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2425,14 +2419,14 @@ body > div.container,
 <label class="field field-file">
 <input accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip" id="postFile" style="display:none;" type="file"/>
 <button class="button tiny file-btn" id="btnPickFile" type="button">选择文件</button>
-<button class="button tiny" id="btnFile确认" type="button">确认</button>
+<button class="button tiny" id="btnFileConfirm" type="button">确认</button>
 <span class="filename" id="fileChosen"></span>
 </label>
 <!-- Image second -->
 <label class="field field-image">
 <input accept="image/*" id="postImage" style="display:none;" type="file"/>
 <button class="button tiny file-btn" id="btnPickImage" type="button">选择图片</button>
-<button class="button tiny" id="btnImage确认" type="button">确认</button>
+<button class="button tiny" id="btnImageConfirm" type="button">确认</button>
 <span class="filename" id="imgChosen"></span>
 </label>
 </div>
@@ -2501,7 +2495,7 @@ body > div.container,
 </main>
 <!-- Right (불변) -->
 <aside class="right">
-<div class="panel cafe-link"><a aria-label="前往 WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
+<div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
 <button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Donations</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
@@ -2570,43 +2564,43 @@ body > div.container,
 
   const modal = $("#composerModal");
   const btnOpen = $("#btnOpenComposer");
-  const btn提交 = $("#btn提交Post");
-  const btn保存 = $("#btn保存");
-  const btn取消 = $("#btn取消");
-  const titleI = $("#compose标题");
+  const btnSubmit = $("#btnSubmitPost");
+  const btnSave = $("#btnSave");
+  const btnCancel = $("#btnCancel");
+  const titleI = $("#composeTitle");
   const bodyI = $("#composeBody");
-  const catSel = $("#post分类");
+  const catSel = $("#postCategory");
   const fileI = $("#postImage");
   const fileAttach = $("#postFile");
-  const btnImgOk = $("#btnImage确认");
-  const btnFileOk = $("#btnFile确认");
+  const btnImgOk = $("#btnImageConfirm");
+  const btnFileOk = $("#btnFileConfirm");
   const btnPickImg = $("#btnPickImage");
   const btnPickFile = $("#btnPickFile");
   const fileChosen = $("#fileChosen");
   const imgChosen = $("#imgChosen");
-  let imageLink = ""; let attachLink = ""; let image预览ObjectUrl = "";
+  let imageLink = ""; let attachLink = ""; let imagePreviewObjectUrl = "";
 
   function openModal(){ modal.classList.remove("hidden"); titleI && titleI.focus(); }
   function closeModal(){ modal.classList.add("hidden"); }
 
   btnOpen && btnOpen.addEventListener("click", openModal);
-  btn取消 && btn取消.addEventListener("click", closeModal);
+  btnCancel && btnCancel.addEventListener("click", closeModal);
   // trigger hidden inputs and show names
   btnPickFile && btnPickFile.addEventListener("click", ()=> fileAttach && fileAttach.click());
   btnPickImage && btnPickImage.addEventListener("click", ()=> fileI && fileI.click());
   fileAttach && fileAttach.addEventListener("change", ()=>{ if(fileChosen){ fileChosen.textContent = fileAttach.files[0]?.name || ""; } });
   fileI && fileI.addEventListener("change", ()=>{ if(imgChosen){ imgChosen.textContent = fileI.files[0]?.name || ""; } });
-  btn提交 && btn提交.addEventListener("click", ()=>{ if(btn保存){ btn保存.click(); } });
+  btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
-  btn保存 && btn保存.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "（无标题）";
-    const b = bodyI?.value?.trim() || "（无内容）";
+  btnSave && btnSave.addEventListener("click", ()=>{
+    const t = titleI?.value?.trim() || "(No Title)";
+    const b = bodyI?.value?.trim() || "(No Content)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
       const item = document.createElement('div');
       item.className = 'item';
-      const imgSrc = imageLink || image预览ObjectUrl || null;
+      const imgSrc = imageLink || imagePreviewObjectUrl || null;
       item.innerHTML = `
         ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
         <div class="title">${t}</div>
@@ -2618,7 +2612,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">附件链接</a>` : `附件：${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Attachment link</a>` : `Attachment: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2629,7 +2623,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "附件：" + fileAttach.files[0].name;
+        att.textContent = "Attachment: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2646,28 +2640,28 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("如果有图片外部链接（URL），请粘贴在这里。（没有的话请按确认）");
-    if(link){ imageLink = link; image预览ObjectUrl = ""; return; }
+    const link = prompt("Paste an external image URL if you have one. Otherwise, click Confirm.");
+    if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("最多 2MB 的图片可直接预览。较大的文件请上传到外部存储后输入链接。");
-        imageLink = ""; image预览ObjectUrl = "";
+        alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
+        imageLink = ""; imagePreviewObjectUrl = "";
       }else{
-        image预览ObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
-        imageLink = ""; // 실제 保存은 링크만 사용
+        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
+        imageLink = ""; // 실제 Save은 링크만 사용
       }
     }else{
-      imageLink = ""; image预览ObjectUrl = "";
+      imageLink = ""; imagePreviewObjectUrl = "";
     }
   });
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("如果有文件外部链接（URL），请粘贴在这里。（没有的话请按确认）");
+    const link = prompt("Paste an external file URL if you have one. Otherwise, click Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("最多 5MB 的文件可直接显示文件名。较大的文件请仅使用外部存储链接。");
+        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -2687,12 +2681,12 @@ body > div.container,
   var btnAttach = document.getElementById('btnAttach');
   var input = document.getElementById('postAttach');
   var nameEl = document.getElementById('attachName');
-  var clearBtn = document.getElementById('btnAttach清除');
+  var clearBtn = document.getElementById('btnAttachClear');
 
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '个文件');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' files');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2736,10 +2730,10 @@ body > div.container,
 
   const rowTop = $('.compose-wrap .row-top');
   const attachInput = $('#postAttach');
-  const attach预览 = $('#attach预览');
-  const clearBtn = $('#btnAttach清除');
+  const attachPreview = $('#attachPreview');
+  const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
-  const btn提交 = $('#btn提交Post');
+  const btnSubmit = $('#btnSubmitPost');
 
   let selectedFiles = [];
   function syncInputs(){
@@ -2751,8 +2745,8 @@ body > div.container,
     }catch(e){}
   }
   function renderChips(){
-    if(!attach预览) return;
-    attach预览.innerHTML = '';
+    if(!attachPreview) return;
+    attachPreview.innerHTML = '';
     if(!selectedFiles.length){
       if(clearBtn) clearBtn.style.display = 'none';
       return;
@@ -2763,14 +2757,14 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','移除附件'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove attachment'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
         renderChips();
       });
       chip.appendChild(x);
-      attach预览.appendChild(chip);
+      attachPreview.appendChild(chip);
     });
   }
   if(attachInput){
@@ -2791,18 +2785,18 @@ body > div.container,
     });
   }
 
-  const catSel = $('#post分类');
-  const titleI = $('#compose标题');
+  const catSel = $('#postCategory');
+  const titleI = $('#composeTitle');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
-  function handleUnified保存(){
-    const t = (titleI && titleI.value.trim()) || '（无标题）';
-    const b = (bodyI && bodyI.value.trim()) || '（无内容）';
+  function handleUnifiedSave(){
+    const t = (titleI && titleI.value.trim()) || '(No Title)';
+    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('找不到消息区域。'); return; }
+    if(!holder){ alert('The news area could not be found.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2819,20 +2813,20 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '附件：' + f.name;
+        li.textContent = 'Attachment: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='删除';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
-    const can删除 = (USER_ROLE==='admin' || USER_ROLE==='writer');
-    if(can删除) del.style.display='inline-block';
+    const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
+    if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('确定要删除这条消息吗？')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
 
@@ -2848,10 +2842,10 @@ body > div.container,
     closeModal();
   }
 
-  if(btn提交){
-    btn提交.addEventListener('click', (e)=>{
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', (e)=>{
       e.preventDefault();
-      handleUnified保存();
+      handleUnifiedSave();
     });
   }
 
@@ -2861,8 +2855,8 @@ body > div.container,
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
   const attachInput = $('#postAttach');
-  const attach预览 = $('#attach预览');
-  const clearBtn = $('#btnAttach清除');
+  const attachPreview = $('#attachPreview');
+  const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
   const nameEl = $('#attachName');
 
@@ -2883,14 +2877,14 @@ body > div.container,
     if(attachInput) try{ attachInput.value=''; }catch(e){}
     if(legacyFile) try{ legacyFile.value=''; }catch(e){}
     syncInputs();
-    if(attach预览) attach预览.innerHTML = '';
+    if(attachPreview) attachPreview.innerHTML = '';
     if(clearBtn) clearBtn.style.display = 'none';
     if(nameEl){ nameEl.textContent=''; } // 강제 초기화 (유령 표시 방지)
   }
 
   function renderChips(){
-    if(!attach预览) return;
-    attach预览.innerHTML = '';
+    if(!attachPreview) return;
+    attachPreview.innerHTML = '';
     if(!selectedFiles.length){
       if(clearBtn) clearBtn.style.display = 'none';
       if(nameEl){ nameEl.textContent=''; }
@@ -2899,16 +2893,16 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '个文件');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' files');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','移除所有附件'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove all attachments'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
-    attach预览.appendChild(chip);
+    attachPreview.appendChild(chip);
 
     // 레거시 이름 표시 동기화 차단 (항상 칩이 우선)
     if(nameEl){ nameEl.textContent=''; }
@@ -2923,7 +2917,7 @@ body > div.container,
     });
   }
 
-  // "清除" 버튼도 전체 초기화
+  // "Clear" 버튼도 전체 초기화
   if(clearBtn){
     clearBtn.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2943,54 +2937,54 @@ body > div.container,
 </script><script>
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
-  const titleI = $('#compose标题');
+  const titleI = $('#composeTitle');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
-  const btnDraft = $('#btnDraft保存');
-  const btn取消 = $('#btn取消');
-  const btn提交 = $('#btn提交Post');
-  const title预览 = $('#title预览');
-  const tpText = title预览 ? title预览.querySelector('.tp-text') : null;
+  const btnDraft = $('#btnDraftSave');
+  const btnCancel = $('#btnCancel');
+  const btnSubmit = $('#btnSubmitPost');
+  const titlePreview = $('#titlePreview');
+  const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function update标题预览(src){
+  function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || '无标题';
+    tpText.textContent = t || 'No title';
   }
 
   // live typing updates preview
   if(titleI){
-    titleI.addEventListener('input', ()=> update标题预览());
+    titleI.addEventListener('input', ()=> updateTitlePreview());
   }
 
-  // 保存草稿: keep in-memory draft; do NOT post to right panel
+  // Save Draft: keep in-memory draft; do NOT post to right panel
   if(btnDraft){
     btnDraft.addEventListener('click', (e)=>{
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = (bodyI && bodyI.value)||'';
-      update标题预览(draft.title);
+      updateTitlePreview(draft.title);
       // keep modal open; optional small feedback
       // console.log('Draft saved');
     });
   }
 
-  // 取消: clear draft and input fields, and clear preview
-  if(btn取消){
-    btn取消.addEventListener('click', ()=>{
+  // Cancel: clear draft and input fields, and clear preview
+  if(btnCancel){
+    btnCancel.addEventListener('click', ()=>{
       draft.title=''; draft.body='';
       if(titleI) titleI.value='';
       if(bodyI) bodyI.value='';
-      update标题预览('');
+      updateTitlePreview('');
     });
   }
 
   // Before final save, if a draft exists (and modal may be closed/empty),
   // write draft back into inputs so existing save handler picks it up.
-  if(btn提交){
-    btn提交.addEventListener('click', ()=>{
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', ()=>{
       if((draft.title && draft.title.trim()) || (draft.body && draft.body.trim())){
         if(titleI) titleI.value = draft.title || '';
         if(bodyI)  bodyI.value  = draft.body  || '';
@@ -2998,29 +2992,29 @@ body > div.container,
       // clear draft & preview shortly after click so the original handler can read values
       setTimeout(()=>{
         draft.title=''; draft.body='';
-        update标题预览('');
+        updateTitlePreview('');
       }, 0);
     }, true); // capture phase to run before other handlers
   }
 
   // initialize preview on load
-  update标题预览('');
+  updateTitlePreview('');
 })();
 </script><script>
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
-  const titleI = $('#compose标题');
+  const titleI = $('#composeTitle');
   const modal = $('#composerModal');
-  const btnDraft = $('#btnDraft保存');
-  const title预览 = $('#title预览');
-  const tpText = title预览 ? title预览.querySelector('.tp-text') : null;
+  const btnDraft = $('#btnDraftSave');
+  const titlePreview = $('#titlePreview');
+  const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function update标题预览(src){
+  function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || '标题 Not entered';
+    tpText.textContent = t || 'Title Not entered';
   }
 
   if(btnDraft){
@@ -3028,7 +3022,7 @@ body > div.container,
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = ($('#composeBody') && $('#composeBody').value)||'';
-      update标题预览(draft.title);
+      updateTitlePreview(draft.title);
       if(modal) modal.classList.add('hidden'); // auto-close
     });
   }
@@ -3039,7 +3033,7 @@ body > div.container,
   const USER_ID = (window.USER_ID || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canShow删除For(item){
+  function canShowDeleteFor(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3048,23 +3042,23 @@ body > div.container,
     return false;
   }
 
-  function ensure删除(item){
+  function ensureDelete(item){
     if(!item || item.querySelector('.delete-post')) return;
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='删除';
+    btn.textContent='Delete';
     btn.style.cssText='margin-top:6px; display:none;';
-    if(canShow删除For(item)) btn.style.display='inline-block';
+    if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('确定要删除这条消息吗？')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
     item.appendChild(btn);
   }
 
   // Initial pass
-  $$('.right .topic-panel .list .item').forEach(ensure删除);
+  $$('.right .topic-panel .list .item').forEach(ensureDelete);
 
   // Observe future additions for all lists
   $$('.right .topic-panel .list').forEach(list=>{
@@ -3072,9 +3066,9 @@ body > div.container,
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(node=>{
           if(node && node.nodeType===1){
-            if(node.classList.contains('item')) ensure删除(node);
+            if(node.classList.contains('item')) ensureDelete(node);
             // Nested case: if a wrapper was added, scan inside
-            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensure删除);
+            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureDelete);
           }
         });
       });
@@ -3122,22 +3116,22 @@ body > div.container,
     mo.observe(list, {childList:true});
   });
 })();
-</script><div id="news预览Modal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
+</script><div id="newsPreviewModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 id="np标题" style="margin:0; font-size:1.05rem;"></h3>
+<h3 id="npTitle" style="margin:0; font-size:1.05rem;"></h3>
 <div id="npTime" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div id="npBody" style="margin-top:8px; font-size:.95rem; color:#222; white-space:pre-wrap;"></div>
 <div id="npAttach" style="margin-top:8px; font-size:.9rem; color:#374151;"></div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="np关闭" type="button">关闭</button>
+<button class="button outline" id="npClose" type="button">关闭</button>
 </div>
 </div></div><script>
 (function(){
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
   const $ = (s,r=document)=>r.querySelector(s);
 
-  function normalize项目(item){
+  function normalizeItem(item){
     if(!item || item.querySelector('.item-header')) return;
     const tEl = item.querySelector('.title');
     const mEl = item.querySelector('.meta');
@@ -3151,7 +3145,7 @@ body > div.container,
   }
 
   function normalizeList(list){
-    list && list.querySelectorAll('.item').forEach(normalize项目);
+    list && list.querySelectorAll('.item').forEach(normalizeItem);
   }
 
   $$('.right .topic-panel .list').forEach(normalizeList);
@@ -3160,22 +3154,22 @@ body > div.container,
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalize项目(n);
+          if(n.nodeType===1 && n.classList.contains('item')) normalizeItem(n);
         });
       });
     });
     mo.observe(list, {childList:true});
   });
 
-  const modal = document.getElementById('news预览Modal');
-  const np标题 = document.getElementById('np标题');
+  const modal = document.getElementById('newsPreviewModal');
+  const npTitle = document.getElementById('npTitle');
   const npTime = document.getElementById('npTime');
   const npBody = document.getElementById('npBody');
   const npAttach = document.getElementById('npAttach');
-  const np关闭 = document.getElementById('np关闭');
+  const npClose = document.getElementById('npClose');
   function openModal(){ modal.style.display='flex'; }
   function closeModal(){ modal.style.display='none'; }
-  np关闭 && np关闭.addEventListener('click', closeModal);
+  npClose && npClose.addEventListener('click', closeModal);
   document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
   modal && modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
 
@@ -3197,10 +3191,10 @@ body > div.container,
       attachHtml = Array.from(attachList).map(li=>li.textContent).join('<br/>');
     }
 
-    np标题.textContent = t;
+    npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">附件</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml) : '';
 
     openModal();
   }, true);
@@ -3212,13 +3206,13 @@ body > div.container,
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
 <label style="font-size:.85rem;">标题</label>
-<input id="en标题" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
+<input id="enTitle" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;" type="text"/>
 <label style="font-size:.85rem;">内容</label>
 <textarea id="enBody" rows="8" style="padding:8px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-<button class="button outline" id="en取消" type="button">取消</button>
-<button class="button" id="en保存" type="button">保存</button>
+<button class="button outline" id="enCancel" type="button">取消</button>
+<button class="button" id="enSave" type="button">保存</button>
 </div>
 </div></div><script>
 (function(){
@@ -3226,7 +3220,7 @@ body > div.container,
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEdit删除(item){
+  function canEditDelete(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3265,32 +3259,32 @@ body > div.container,
   $$('.right .topic-panel .list .item').forEach(item=>{
     const id = itemId(item);
     const meta = loadEdit(id);
-    if(meta && canEdit删除(item)){
+    if(meta && canEditDelete(item)){
       showEditedBadge(item, meta.editedAt);
     }
   });
 
   // Capture which item is being edited via delegated click
-  window.__currentEditing项目 = null;
+  window.__currentEditingItem = null;
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('.btn-edit');
     if(!btn) return;
     const item = e.target.closest('.right .topic-panel .list .item');
-    if(item && canEdit删除(item)) window.__currentEditing项目 = item;
+    if(item && canEditDelete(item)) window.__currentEditingItem = item;
   }, true);
 
-  // When edit modal "保存" is pressed, persist edited meta and show badge
-  (function attach保存Hook(){
-    const saveBtn = document.getElementById('en保存');
+  // When edit modal "Save" is pressed, persist edited meta and show badge
+  (function attachSaveHook(){
+    const saveBtn = document.getElementById('enSave');
     if(!saveBtn) return;
     saveBtn.addEventListener('click', ()=>{
-      const item = window.__currentEditing项目;
-      if(!item || !canEdit删除(item)) return;
+      const item = window.__currentEditingItem;
+      if(!item || !canEditDelete(item)) return;
       const ts = new Date().toLocaleString();
       const id = itemId(item);
       saveEdit(id, ts);
       showEditedBadge(item, ts);
-      window.__currentEditing项目 = null;
+      window.__currentEditingItem = null;
     });
   })();
 
@@ -3346,7 +3340,7 @@ body > div.container,
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEdit删除(item){
+  function canEditDelete(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3388,14 +3382,14 @@ body > div.container,
     const m  = loadMetrics(id);
     const t  = loadToggles(id);
 
-    // 清除 and rebuild stats area
+    // Clear and rebuild stats area
     stats.innerHTML = `
       <span class="stat stat-views"><i class="icon">👁</i><span class="n">${m.views}</span></span>
       <span class="stat action-reco ${t.reco?'active':''}"><i class="icon">👍</i><span class="n">${m.reco}</span></span>
       <span class="stat action-like ${t.like?'active':''}"><i class="icon">❤️</i><span class="n">${m.like}</span></span>
     `;
 
-    // Role-based Edit/删除 remain as-is (buttons may already exist from prior code)
+    // Role-based Edit/Delete remain as-is (buttons may already exist from prior code)
     // If no edit button present, create and apply permissions
     let btnEdit = footer.querySelector('.btn-edit');
     let btnDel  = footer.querySelector('.delete-post');
@@ -3406,11 +3400,11 @@ body > div.container,
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
         const emodal = document.getElementById('editNewsModal');
-        const en标题 = document.getElementById('en标题');
+        const enTitle = document.getElementById('enTitle');
         const enBody  = document.getElementById('enBody');
         const enInfo  = document.getElementById('enInfo');
-        if(!emodal || !en标题 || !enBody) return;
-        en标题.value = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
+        if(!emodal || !enTitle || !enBody) return;
+        enTitle.value = (item.querySelector('.h-title')?.textContent || item.querySelector('.title')?.textContent || '').trim();
         enBody.value  = (item.querySelector('.preview')?.textContent || '').trim();
         enInfo.textContent = (item.querySelector('.h-time')?.textContent || item.querySelector('.meta')?.textContent || '').trim();
         emodal.style.display='flex';
@@ -3418,16 +3412,16 @@ body > div.container,
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='删除';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('确定要删除这条消息吗？')) return;
+        if(!confirm('Do you want to delete this post?')) return;
         item.remove();
       });
     }
     // Apply visibility
-    if(canEdit删除(item)){
+    if(canEditDelete(item)){
       btnEdit.style.display='inline-block';
       btnDel.style.display='inline-block';
     }else{
@@ -3506,7 +3500,7 @@ body > div.container,
 </script><script>
 (function(){
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
-  function normalize删除(item){
+  function normalizeDelete(item){
     if(!item) return;
     // Ensure footer exists
     let footer = item.querySelector('.item-footer');
@@ -3537,7 +3531,7 @@ body > div.container,
     keep.classList.add('migrated');
     // Ensure compact shape
     keep.style.display = 'inline-flex';
-    keep.style.align项目s = 'center';
+    keep.style.alignItems = 'center';
     keep.style.justifyContent = 'center';
     keep.style.height = '28px';
     keep.style.lineHeight = '28px';
@@ -3546,14 +3540,14 @@ body > div.container,
   }
 
   // Run on existing items
-  $$('.right .topic-panel .list .item').forEach(normalize删除);
+  $$('.right .topic-panel .list .item').forEach(normalizeDelete);
 
   // Observe for new items
   $$('.right .topic-panel .list').forEach(list=>{
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalize删除(n);
+          if(n.nodeType===1 && n.classList.contains('item')) normalizeDelete(n);
         });
       });
     });
@@ -3596,7 +3590,7 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = '标题';
+    if(t) t.textContent = 'Title';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
@@ -3677,12 +3671,12 @@ body > div.container,
   }
 
   // 구매
-  window.order项目 = async function(itemId, qty){
+  window.orderItem = async function(itemId, qty){
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("已收到购买请求。"); } else { alert("购买请求失败"); }
-    }catch(e){ console.warn(e); alert("网络错误"); }
+      if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // 정산
@@ -3690,8 +3684,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("已收到结算请求。"); } else { alert("结算请求失败"); }
-    }catch(e){ console.warn(e); alert("网络错误"); }
+      if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -3700,9 +3694,9 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("区块链处理请求已完成： " + (j.txHash||"待处理")); }
-      else { alert("区块链处理失败"); }
-    }catch(e){ console.warn(e); alert("网络错误"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"Pending")); }
+      else { alert("Blockchain processing failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 })();
 </script>
@@ -3747,7 +3741,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || '产品';
+            t.textContent = item.title || item.name || 'Product';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3770,7 +3764,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || '产品';
+              t.textContent = item.title || 'Product';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3841,7 +3835,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","固定捐赠金额");
+  btnGroup.setAttribute("aria-label","Fixed donation amount");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3856,7 +3850,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "访客捐助仅限 5–50 美元区间。更大金额请使用下方账户转账信息。";
+  note.textContent = "Guest donations are available only in the $5–$50 range. For larger amounts, please use the account transfer information below.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3867,17 +3861,17 @@ body > div.container,
   // === Account 안내 박스 ===
   const accountBox = document.createElement("div");
   accountBox.className = "account-box";
-  accountBox.setAttribute("aria-label","账户转账信息");
+  accountBox.setAttribute("aria-label","Account Transfer Information");
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>一般账户: NongHyup 301-0078-3333-51</div>
-    <div>外币账户: NongHyup 452-0022-8173-81</div>
+    <div>General: NongHyup 301-0078-3333-51</div>
+    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>一般账户: Shinhan 100-026-331592</div>
-    <div>外币账户: Shinhan 180-005-931110</div>
+    <div>General: Shinhan 100-026-331592</div>
+    <div>Foreign Currency: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3890,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`所选金额：₩${Number(amt).toLocaleString()}\n\n请转入以下账户。`);
+      alert(`Selected amount: ₩${Number(amt).toLocaleString()}\n\nPlease transfer it to the account below.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3918,8 +3912,8 @@ body > div.container,
 </script>
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
-<div aria-labelledby="donateModal标题" aria-modal="true" class="donate-modal" role="dialog">
-<h3 id="donateModal标题">请选择捐助机构</h3>
+<div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
+<h3 id="donateModalTitle">请选择捐助机构</h3>
 <div class="donate-actions">
 <button data-org="IESF" type="button">向 IESF 捐助</button>
 <button data-org="WAM" type="button">向 WAM 捐助</button>
@@ -3951,11 +3945,11 @@ body > div.container,
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('支付 API 尚未连接。请选择右侧面板中的账户。'); }
+          else { alert('The payment API is not connected. Please select an account from the right panel.'); }
         }
       }catch(err){
         console.error(err);
-        alert('请求支付时发生问题。');
+        alert('A problem occurred while requesting payment.');
       } finally {
         closeDonateModal();
       }
@@ -4106,7 +4100,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if ((!hasAny || (!hasReal && !hasExternalInfo)) && !hasOurPlaceholder) {
         const item = document.createElement('div');
         item.className = 'item placeholder';
-        item.innerHTML = '<div class="title">尚无帖子</div>';
+        item.innerHTML = '<div class="title">No posts yet</div>';
         list.appendChild(item);
       }
 
@@ -4176,7 +4170,7 @@ document.addEventListener('DOMContentLoaded', function(){
       aiEndpoint: null
     };
 
-    // Supabase 环境을 SUPER_VARSAR에 적용하는 함수
+    // Supabase Environment을 SUPER_VARSAR에 적용하는 함수
     function applyConfig(env) {
       const url =
         (env && env.SUPABASE_URL) ||
@@ -4208,7 +4202,7 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
 
-    // 3) 없으면 Netlify Functions에서 环境변수 읽어오기
+    // 3) 없으면 Netlify Functions에서 Environment변수 읽어오기
     //    (secureEnvBridge는 Netlify env에서 SUPABASE_URL, SUPABASE_ANON_KEY를 꺼내서 JSON으로 돌려주는 함수)
     var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
 
@@ -4260,7 +4254,7 @@ document.addEventListener('DOMContentLoaded', function(){
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|operation|ops|settings?|config|deploy|deployment|error|bug|loading|api|integration|server|database|db|permission|policy|login|token|key|payment|security|cors|network|timeout|response\s*code|status\s*code|build|compile|broken|doesn'?t\s*work|not\s*work|stuck|page|link|malfunction|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -4270,7 +4264,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 保存은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4296,23 +4290,23 @@ document.addEventListener('DOMContentLoaded', function(){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "问答";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","关闭");
+    const title = el("div","igdc-qa-title"); title.textContent = "Questions & Answers";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="问题";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="请输入您的问题...";
-    const lA = el("label"); lA.textContent="回答";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="请稍候，答案将很快提供。";
+    const lQ = el("label"); lQ.textContent="Question";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Please enter your question...";
+    const lA = el("label"); lA.textContent="Answer";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Please wait a moment. An answer will be provided shortly.";
     const actions = el("div","igdc-qa-actions");
-    const btn提交 = el("button","igdc-qa-btn primary"); btn提交.textContent="提交";
-    const btn清除 = el("button","igdc-qa-btn muted"); btn清除.textContent="清除";
-    const note = el("div","igdc-qa-note"); note.textContent="※ 简单问题将由 AI 立即回答。技术、错误或运营相关问题会自动转交至管理员问答。";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical, error, or operation-related issues are automatically forwarded to the admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-    actions.append(btn提交, btn清除);
+    actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
     document.body.append(modal);
@@ -4360,9 +4354,9 @@ document.addEventListener('DOMContentLoaded', function(){
     backdrop.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
 
-    btn清除.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btn提交.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btn提交.click(); }});
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
 
     async function fetchThreads(){
       const sb = await ensureSupabase(); if(!sb) return;
@@ -4379,18 +4373,18 @@ document.addEventListener('DOMContentLoaded', function(){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A.（待处理）";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "管理员请求":"一般";
+        const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
         const actions = el("div","igdc-qa-thread-actions");
-        const can删除 = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
-        if(can删除){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="删除";
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("删除失败（权限/策略）"); return; }
+            if(error){ alert("Delete failed (permission/policy)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4401,7 +4395,7 @@ document.addEventListener('DOMContentLoaded', function(){
       });
     }
 
-    async function auto回答IfNeeded(text){
+    async function autoAnswerIfNeeded(text){
       const technical = classifyTech(text);
       let answer = null;
       if(!technical){
@@ -4413,9 +4407,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="运营相关咨询将在管理员确认后回复。";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="有关价格/费用信息，请参考本页面说明并留下其他咨询。";
-          else answer="感谢您的咨询。我们会尽快确认并协助您。";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
+          else if(/price|cost|fee|pricing|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else answer="Thank you for your inquiry. We will review it promptly and assist you.";
         }
       }
       return { technical, answer };
@@ -4425,11 +4419,11 @@ document.addEventListener('DOMContentLoaded', function(){
       const q = (tQ.value||"").trim();
       let a = (tA.value||"").trim();
       if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await auto回答IfNeeded(q);
+      const { technical, answer } = await autoAnswerIfNeeded(q);
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("保存设置（Supabase url/key）尚未连接，因此服务器保存目前处于停用状态。部署到网页时设置 SUPER_VARSAR.url/anonKey 后会自动连接。");
+        alert("The storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed to the web, the connection will be enabled automatically once SUPER_VARSAR.url/anonKey is set.");
         return;
       }
       const record = {
@@ -4439,11 +4433,11 @@ document.addEventListener('DOMContentLoaded', function(){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("注册失败"); return; }
+      if(error){ alert("Registration failed"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
-    btn提交.addEventListener("click", submit);
+    btnSubmit.addEventListener("click", submit);
 
     // realtime refresh
     (async()=>{ try{
@@ -4590,7 +4584,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "关闭";
+    content: "Close";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4731,8 +4725,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>支付二维码</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">关闭</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4779,12 +4773,12 @@ window.addEventListener("message",function(ev){
 
     if(t.includes("global") || t.includes("글로벌") || t.includes("wam") || t.includes("iesf")) return "iesf";
     if(t.includes("ngo")) return "ngo";
-    if(t.includes("宣教") || t.includes("mission")) return "mission";
-    if(t.includes("服务") || t.includes("volunteer") || t.includes("service")) return "service";
-    if(t.includes("救援") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
-    if(t.includes("教育") || t.includes("education") || t.includes("edu")) return "edu";
-    if(t.includes("环境") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
-    if(t.includes("其他") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
+    if(t.includes("Mission") || t.includes("mission")) return "mission";
+    if(t.includes("Service") || t.includes("volunteer") || t.includes("service")) return "service";
+    if(t.includes("Relief") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
+    if(t.includes("Education") || t.includes("education") || t.includes("edu")) return "edu";
+    if(t.includes("Environment") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
+    if(t.includes("Others") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
 
     return null;
   }
@@ -4865,7 +4859,7 @@ window.addEventListener("message",function(ev){
     return keyFromLabel(labelText);
   }
 
-  function normalize项目Footer(root){
+  function normalizeItemFooter(root){
     if(!root) root = document;
     if(!root.querySelectorAll) return;
 
@@ -4956,7 +4950,7 @@ window.addEventListener("message",function(ev){
       wrap.className = "mobile-news-clone";
       wrap.innerHTML = src.outerHTML;
 
-      normalize项目Footer(wrap);
+      normalizeItemFooter(wrap);
 
       row.parentNode.insertBefore(wrap, row.nextSibling);
     });
@@ -4980,12 +4974,12 @@ window.addEventListener("message",function(ev){
   const $  = (s,r=document)=>r.querySelector(s);
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  // 预览 targets (reuse existing modal if present)
-  const modal   = $('#news预览Modal') || $('#previewModal');
-  const np标题 = $('#np标题') || $('#news预览标题');
-  const npTime  = $('#npTime') || $('#news预览Time');
-  const npBody  = $('#npBody') || $('#news预览Body');
-  const npAttach= $('#npAttach') || $('#news预览Attach');
+  // Preview targets (reuse existing modal if present)
+  const modal   = $('#newsPreviewModal') || $('#previewModal');
+  const npTitle = $('#npTitle') || $('#newsPreviewTitle');
+  const npTime  = $('#npTime') || $('#newsPreviewTime');
+  const npBody  = $('#npBody') || $('#newsPreviewBody');
+  const npAttach= $('#npAttach') || $('#newsPreviewAttach');
 
   function openModal(){
     if(!modal) return;
@@ -4996,7 +4990,7 @@ window.addEventListener("message",function(ev){
     modal.style.display = 'none';
   }
 
-  const closeBtn = modal ? (modal.querySelector('.close') || modal.querySelector('#np关闭')) : null;
+  const closeBtn = modal ? (modal.querySelector('.close') || modal.querySelector('#npClose')) : null;
   if(closeBtn){
     closeBtn.addEventListener('click', closeModal);
   }
@@ -5015,7 +5009,7 @@ window.addEventListener("message",function(ev){
       });
   }
   markHasAttach(document);
-  normalize项目Footer(document);
+  normalizeItemFooter(document);
 
   // Watch dynamic additions
   $$('.right .topic-panel .list, .mobile-news-clone .topic-panel .list').forEach(function(list){
@@ -5025,12 +5019,12 @@ window.addEventListener("message",function(ev){
           if(n.nodeType !== 1) return;
           if(n.classList.contains('item')){
             markHasAttach(n);
-            normalize项目Footer(n);
+            normalizeItemFooter(n);
           }else if(n.querySelectorAll){
             n.querySelectorAll('.item').forEach(function(it){
               markHasAttach(it);
             });
-            normalize项目Footer(n);
+            normalizeItemFooter(n);
           }});
       });
     });
@@ -5044,7 +5038,7 @@ window.addEventListener("message",function(ev){
 
     const item = e.target.closest('.right .topic-panel .list .item, .mobile-news-clone .topic-panel .list .item');
     if(!item) return;
-    if(!np标题 || !npBody){ return; }
+    if(!npTitle || !npBody){ return; }
 
     const title = (item.querySelector('.h-title')?.textContent
                 || item.querySelector('.title')?.textContent || '').trim();
@@ -5065,12 +5059,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    np标题.textContent = title || '无标题';
+    npTitle.textContent = title || 'No title';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(暂无已发布的正文。)';
+    npBody.textContent = body || '(No content has been registered.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">附件</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml
         : '';
     }
 
@@ -5122,19 +5116,19 @@ window.addEventListener("message",function(ev){
 
       const { error } = await sb.from('igdc_donation_posts').insert(payload);
       if(error){
-        console.warn('[donation] Supabase 保存 실패:', error.message);
+        console.warn('[donation] Supabase Save 실패:', error.message);
       }
     }catch(err){
       console.warn('[donation] Supabase sync 예외:', err);
     }
   }
 
-  // 완전 保存 버튼 클릭 후 Supabase 동기화 시도
+  // 완전 Save 버튼 클릭 후 Supabase 동기화 시도
   document.addEventListener('click', function(e){
-    const btn = e.target.closest('#btn提交Post');
+    const btn = e.target.closest('#btnSubmitPost');
     if(!btn) return;
     setTimeout(function(){
-      const catSel = document.getElementById('post分类');
+      const catSel = document.getElementById('postCategory');
       const cat = catSel ? (catSel.value || 'etc') : 'etc';
       syncLatestToSupabase(cat);
     }, 250);
@@ -5155,7 +5149,7 @@ window.addEventListener("message",function(ev){
   display: none !important;
 }
 
-/* 附件 여부 아이콘 */
+/* 첨부 여부 아이콘 */
 .right .topic-panel .list .item.has-attach .title::after,
 .mobile-news-clone .topic-panel .list .item.has-attach .title::after {
   content: "📎";
@@ -5164,7 +5158,7 @@ window.addEventListener("message",function(ev){
   vertical-align: middle;
 }
 
-/* 标题/메타 스타일 유지 */
+/* Title/메타 스타일 유지 */
 .right .topic-panel .list .item .title,
 .mobile-news-clone .topic-panel .list .item .title {
   font-weight: 700;
@@ -5274,10 +5268,10 @@ window.addEventListener("message",function(ev){
 (function(){
   var mq = window.matchMedia("(max-width:1023px)");
   var main = document.querySelector("main.main");
-  var top撰写 = document.getElementById("top撰写Panel");
+  var topWrite = document.getElementById("topWritePanel");
   var feedSection = main ? main.querySelector("section.feed-wrapper") : null;
   var right = document.querySelector("aside.right");
-  if (!main || !top撰写 || !feedSection || !right) return;
+  if (!main || !topWrite || !feedSection || !right) return;
 
   var cafePanel = right.querySelector(".panel.cafe-link");
   var accountPanel = right.querySelector(".panel.account-section");
@@ -5408,9 +5402,9 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">加载中...</div>
+        <div class="card-title">Loading...</div>
         <div class="card-meta">-</div>
-        <div class="card-preview">准备中</div>
+        <div class="card-preview">Preparing</div>
       </div>
     `;
 
@@ -5744,7 +5738,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   var installTimer=null;
   var $=function(s,r){ return (r||document).querySelector(s); };
   var $$=function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
-  var IGDC_I18N={"category":"项目","writePost":"写文章","title":"标题","titlePlaceholder":"请输入标题","content":"正文","contentPlaceholder":"请输入正文","attachmentOptional":"附件","noAttachment":"无附件","attachHelp":"所选文件名和下载数据会随文章一起保存。大文件可能受浏览器存储限制。","draft":"临时保存","cancel":"取消","save":"保存","close":"关闭","edit":"Edit","del":"Del","untitled":"无标题","emptyBody":"（无正文）","noTitleInput":"未输入标题","attachments":"附件","attachment":"附件","download":"下载","fileNameOnly":"文件名","emptyList":"暂无文章。","view":"浏览","recommend":"推荐","like":"喜欢","modify":"编辑","delete":"删除","saved":"已保存","updated":"已更新","canceled":"已取消","draftSaved":"草稿已保存","deleted":"已删除","applied":"已反映","undone":"已取消","largeFile":"文件较大，仅保存了文件名。"};
+  var IGDC_I18N={"category":"项目","writePost":"写文章","title":"标题","titlePlaceholder":"请输入标题","content":"正文","contentPlaceholder":"请输入正文","attachmentOptional":"附件","noAttachment":"无附件","attachHelp":"所选文件名和下载数据会随文章一起保存。大文件可能受浏览器存储限制。","draft":"临时保存","cancel":"取消","save":"保存","close":"关闭","edit":"编辑","del":"删除","untitled":"无标题","emptyBody":"（无正文）","noTitleInput":"未输入标题","attachments":"附件","attachment":"附件","download":"下载","fileNameOnly":"文件名","emptyList":"暂无文章。","view":"浏览","recommend":"推荐","like":"喜欢","modify":"编辑","delete":"删除","saved":"已保存","updated":"已更新","canceled":"已取消","draftSaved":"草稿已保存","deleted":"已删除","applied":"已反映","undone":"已取消","largeFile":"文件较大，仅保存了文件名。"};
   function tr(k){ return IGDC_I18N[k] || (k||''); }
   function esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
   function makeId(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }

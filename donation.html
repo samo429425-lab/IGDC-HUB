@@ -6,7 +6,7 @@
 <script>
 /**
  * 안전한 Supabase 연결 플러그
- * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Netlify 환경변수에서 자동 불러오기
+ * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Automatically load from Netlify environment variables
  */
 
 (async () => {
@@ -21,14 +21,14 @@
       });
       console.log("✅ Supabase 키 정상 로드됨.");
     } else {
-      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify 환경변수 확인 필요.");
+      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify environment variables Confirm 필요.");
       window.SUPER_VARSAR = Object.freeze({
         url: null,
         anonKey: null
       });
     }
   } catch (err) {
-    console.error("❌ Supabase 환경변수 로드 실패:", err);
+    console.error("❌ Supabase environment variable load failed:", err);
     window.SUPER_VARSAR = Object.freeze({
       url: null,
       anonKey: null
@@ -42,7 +42,7 @@
 
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
-<title>Global Donation Hub - IGTC Global</title>
+<title>글로벌 나눔허브 - IGTC Global</title>
 <style>
   :root{
     --brand:#004080;
@@ -363,7 +363,7 @@
 /* Custom file pick buttons */
 .file-btn{ background:#f6f3ff; border-color:#cfc6ff; }
 .filename{ margin-left:6px; font-size:.85rem; color:#555; }
-/* Ensure 확인 is horizontal */
+/* Ensure Confirm is horizontal */
 .button.tiny{ writing-mode:horizontal-tb; }
 
 /* --- Compose top-row button alignment (scoped, minimal) --- */
@@ -374,12 +374,12 @@
 .compose-wrap .row-top .button{ margin:0; }
 .compose-wrap .row-top #btnOpenComposer{ order:1; }
 .compose-wrap .row-top #btnSubmitPost{ order:2; }
-/* Keep '확인' labels strictly horizontal (already set for .button.tiny) */
+/* Keep 'Confirm' labels strictly horizontal (already set for .button.tiny) */
 
-/* Reinforce: '확인' 버튼은 가로(수평) 표기 유지 */
+/* Reinforce: 'Confirm' 버튼은 가로(수평) 표기 유지 */
 .compose-wrap .row-bottom .button.tiny{ writing-mode:horizontal-tb; }
 
-/* === Scoped UI polish for '항목 + NGO', 파일/이미지 선택 라인 === */
+/* === Scoped UI polish for 'Category + NGO', 파일/Choose Image 라인 === */
 .field-category{
   display:flex; align-items:center; gap:10px;
   border:1px solid #d0d7de; border-radius:10px;
@@ -392,7 +392,7 @@
 
 .field .file-btn{ margin-right:8px; }
 
-/* 파일/이미지 선택 결과명을 긴 입력막대처럼 보이게 */
+/* 파일/Choose Image 결과명을 긴 입력막대처럼 보이게 */
 .field .filename, #imgChosen, #fileChosen{
   display:inline-block; min-width:360px; max-width:100%;
   padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;
@@ -414,11 +414,11 @@
 
 /* File & Image pickers: one-line, confirm after filename bar, bar = 50% width */
 .field-file, .field-image{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.field-file #btnPickFile{ order:1; color:#111; }   /* '파일 선택' in black */
+.field-file #btnPickFile{ order:1; color:#111; }   /* 'Choose File' in black */
 .field-file .filename{ order:2; width:50%; min-width:0; }
 .field-file #btnFileConfirm{ order:3; }
 
-.field-image #btnPickImage{ order:1; color:#111; } /* '이미지 선택' in black (for consistency) */
+.field-image #btnPickImage{ order:1; color:#111; } /* 'Choose Image' in black (for consistency) */
 .field-image .filename{ order:2; width:50%; min-width:0; }
 .field-image #btnImageConfirm{ order:3; }
 
@@ -437,12 +437,12 @@
 /* File/Image bars: reduce to 25% width */
 .field-file .filename, .field-image .filename{ width:25%; min-width:0; }
 
-/* Ensure '파일 선택' / '이미지 선택' label color is black and stays readable */
+/* Ensure 'Choose File' / 'Choose Image' label color is black and stays readable */
 #btnPickFile, #btnPickImage{ color:#111 !important; }
 
 /* === Final polish per screenshot feedback === */
 
-/* '항목' must be horizontal like a button */
+/* 'Category' must be horizontal like a button */
 #labelCategory{
   writing-mode: horizontal-tb !important;
   transform: none !important;
@@ -509,15 +509,15 @@
 /* === Group spacing & ordering fix (compose area only) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* File group: [파일 선택] [막대] [확인] */
+/* File group: [Choose File] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:4px !important; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:4px; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; position:relative; z-index:1; }
 
-/* Image group: [이미지 선택] [막대] [확인] */
+/* Image group: [Choose Image] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:4px !important; }
-/* Ensure a sufficiently large gap from file-confirm (>= '항목' 버튼 폭 가늠치) */
+/* Ensure a sufficiently large gap from file-confirm (>= 'Category' 버튼 폭 가늠치) */
 .compose-wrap .row-bottom .field-image{ margin-left:72px !important; }
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; margin-left:4px; }
@@ -554,15 +554,15 @@
 /* === Compose row: strict grouping & anti-overlay (scoped) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* FILE group -> [파일 선택][막대][확인] 붙어서 배치 */
+/* FILE group -> [Choose File][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:6px; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:6px; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; margin-left:8px; }
 
-/* IMAGE group -> [이미지 선택][막대][확인] 붙어서 배치 */
+/* IMAGE group -> [Choose Image][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:6px; }
-/* 파일 그룹의 확인 버튼 뒤로 충분히 띄우기(겹침 방지) */
+/* 파일 그룹의 Confirm 버튼 뒤로 충분히 띄우기(겹침 방지) */
 .compose-wrap .row-bottom .field-image{ margin-left:96px; } /* 필요 시 수치 조정 */
 
 .compose-wrap .row-bottom #fileChosen,
@@ -641,9 +641,9 @@
 <style>
 /* ===== Compose-only adjustments (safe & minimal) ===== */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top .field-category{ order:1; }     /* 항목(드롭다운) */
+.compose-wrap .row-top .field-category{ order:1; }     /* Category(드롭다운) */
 .compose-wrap .row-top #btnOpenComposer{ order:2; }    /* Write */
-.compose-wrap .row-top #btnAttach{ order:3; }          /* 첨부파일(신규 버튼) */
+.compose-wrap .row-top #btnAttach{ order:3; }          /* Attachment(신규 버튼) */
 .compose-wrap .row-top #btnSubmitPost{ order:4; }      /* 글올리기 */
 
 /* Hide legacy file/image pickers (compose only) */
@@ -666,10 +666,10 @@
 .attach-chip .remove:hover{ color:#c0392b; }
 .compose-wrap .row-top{ flex-wrap:wrap; }
 </style><style></style><style>
-/* === Compose row: place 'attachPreview' BETWEEN [첨부파일] and [Save] === */
+/* === Compose row: place 'attachPreview' BETWEEN [Attachment] and [Save] === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
 .compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Write */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* 첨부파일 */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
 .compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
@@ -695,14 +695,14 @@
 /* 유령 중복 표시 방지: legacy 파일명 표시는 숨김(칩이 대체) */
 .compose-wrap #attachName{ display:none !important; }
 </style><style>
-/* === Compose row order override (requested): 항목 -> Write -> 첨부파일 -> 미리보기막대 -> Save === */
+/* === Compose row order override (requested): Category -> Write -> Attachment -> 미리보기막대 -> Save === */
 .compose-wrap .row-top .field.field-category{ order:1; }
 .compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Write */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* 첨부파일 */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
 .compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
 .compose-wrap .row-top #btnSubmitPost{ order:5; }     /* Save */
 </style><style>
-/* === Title Preview Bar (between Write and 첨부파일) === */
+/* === Title Preview Bar (between Write and Attachment) === */
 .compose-wrap .row-top #titlePreview{
   order:3;
   display:flex; align-items:center; gap:6px;
@@ -742,10 +742,10 @@
 .compose-wrap .row-top #attachPreview{ order:5; }
 </style><style>
 /* === ORDER HOTFIX (override) === */
-/* 항목 */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
+/* Category */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
 /* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
-/* 첨부파일 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
+/* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
 /* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
 /* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
 /* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
@@ -845,7 +845,7 @@
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like,
 
-/* 색상: Edit=파랑, 추천=초록, Like=핑크, Delete=빨강 */
+/* 색상: Edit=파랑, Recommend=초록, Like=핑크, Delete=빨강 */
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 .right .topic-panel .item .btn-reco{ background:#e6f7ec; color:#059669; border-color:#bbf7d0; }
 .right .topic-panel .item .btn-like{ background:#ffe6ef; color:#db2777; border-color:#fecdd3; }
@@ -921,7 +921,7 @@
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 @media (orientation: portrait){
 </style><style>
-/* Hard-hide any legacy text buttons labeled 추천/Like */
+/* Hard-hide any legacy text buttons labeled Recommend/Like */
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like{ display:none !important; }
 }
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "아직 등록된 QnA가 없습니다";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "아직 등록된 QnA가 없습니다";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1974,9 +1974,9 @@ body .right{ display:none !important; }
     line-height:1.5;
   }
 
-  /* 하단 Footer: 읽음/추천/좋아요/아이콘 + Edit/Delete 전부 우측 정렬 */
+  /* 하단 Footer: 읽음/Recommend/Like/아이콘 + Edit/Delete 전부 우측 정렬 */
  .mobile-news-clone .topic-panel .item .item-footer {
-    margin-top: auto;              /* 위 내용 밀어 올리고, footer를 맨 아래로 */
+    margin-top: auto;              /* 위 Content 밀어 올리고, footer를 맨 아래로 */
     display: flex;
     justify-content: flex-end;     /* 오른쪽 정렬 */
     align-items: center;
@@ -2023,7 +2023,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
-  <!-- Supabase 환경 설정 (글쓰기/도네이션/Q&A 공용) -->
+  <!-- Supabase Environment 설정 (Write/도네이션/Q&A 공용) -->
   <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
@@ -2036,7 +2036,7 @@ body .right{ display:none !important; }
     window.CURRENT_USER_NAME = window.CURRENT_USER_NAME || "";
   </script>
 
-  <!-- Supabase JS (환경만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
+  <!-- Supabase JS (Environment만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
 
 
@@ -2358,19 +2358,13 @@ body > div.container,
 <style id='layout-gap-fix'>
 .container{gap:15px !important; column-gap:15px !important;}
 </style>
-<style id="ko-sidebar-spacing-unified">
-/* KO sidebar spacing: unify only button-to-button vertical spacing */
-.sidebar{
-  padding-top: 20px !important;
-}
-.sidebar a,
-.sidebar a#qnaOpenBtn,
-#qnaOpenBtn,
-.sidebar a[id*="qna"],
-a[id*="qna"]{
-  margin: 10px 12px !important;
+
+<style id="hide-literature-sidebar-btn-final">
+.sidebar a[href="literature/academic.html"]{
+  display:none !important;
 }
 </style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2378,13 +2372,13 @@ a[id*="qna"]{
 <div class="container">
 <!-- Left Sidebar (불변) -->
 <nav class="sidebar">
-<a href="home.html">🏠 홈</a>
-<a href="networkhub.html">🛒 마켓 허브</a>
-<a href="distributionhub.html">🏭 유통허브</a>
-<a href="socialnetwork.html">📢 쇼셜 네트워크</a>
-<a href="mediahub.html">🎬 미디어 허브</a>
-<a href="tour.html">🧳 여행·관광·숙박</a>
-<a href="literature/academic.html">📚 문학 학술교류</a>
+<a href="home_en.html">🏠 홈</a>
+<a href="networkhub_en.html">🛒 네트워크 허브</a>
+<a href="distributionhub_en.html">🏭 유통 허브</a>
+<a href="socialnetwork_en.html">📢 소셜 네트워크</a>
+<a href="mediahub_en.html">🎬 미디어 허브</a>
+<a href="tour_en.html">🧳 여행 · 관광 · 숙박</a>
+<a href="literature/academic.html" style="display:none !important;">📚 문학·학술 교류</a>
 <a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Q&amp;A 문의</a></nav>
 <!-- Main (불변 구조) -->
 <main class="main">
@@ -2392,17 +2386,17 @@ a[id*="qna"]{
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Donate</button>
+<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">후원</button>
 </section>
 <section class="hero">
 <h2>💝 글로벌 나눔허브 💝</h2>
 <p>IESF 및 WAM 파운데이션을 위한 후원 시스템이 이곳에서 시작됩니다.</p>
 </section>
 <section class="panel" id="topWritePanel" style="margin-bottom:20px;">
-<textarea id="topPostBody" placeholder="본문을 입력하세요..." rows="4" style="padding-top:22px; padding-bottom:12px; font-weight:600;">이곳은 IGDC Global Platform 그룹이 후원하는
+<textarea id="topPostBody" placeholder="본문을 입력하세요." rows="4" style="padding-top:22px; padding-bottom:12px; font-weight:600;">이곳은 IGDC Global Platform 그룹이 후원하는
 귀한 WAM세계항공선교재단의 사역과 소식을 공유하며
-또한 국제 교류봉사단(IESF)의 소식들을 알리고 공유하며 
-다양한 NGO&nbsp;및 봉사단체들의 소식들을 공유하고 함께나누는 장입니다.</textarea>
+또한 국제 교류봉사단(IESF)의 소식들을 알리고 공유하며
+다양한 NGO 및 봉사단체들의 소식들을 공유하고 함께 나누는 장입니다.</textarea>
 <!-- Inline controls row replacing box UI -->
 <!-- Inline controls, two-row layout -->
 <div class="compose-wrap" id="composeControls">
@@ -2420,7 +2414,7 @@ a[id*="qna"]{
 <button class="button small" id="btnOpenComposer">글쓰기</button><div aria-label="제목 미리보기" class="title-preview" id="titlePreview"><span class="tp-text">제목 미입력</span></div>
 <button class="button small accent" id="btnSubmitPost">저장</button>
 <span id="attachName"></span>
-<button aria-label="첨부 제거 " class="button tiny" id="btnAttachClear" style="display:none;" type="button">지우기</button>
+<button aria-label="첨부파일 삭제" class="button tiny" id="btnAttachClear" style="display:none;" type="button">비우기</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2451,7 +2445,7 @@ a[id*="qna"]{
 <div id="donationRows">
 
   <div class="feed-row" data-count="100">
-    <div class="row-label">Global News</div>
+    <div class="row-label">글로벌 뉴스</div>
     <div class="row-track thumb-grid thumb-scroller"
          data-psom-key="donation-global"></div>
   </div>
@@ -2504,9 +2498,9 @@ a[id*="qna"]{
 </main>
 <!-- Right (불변) -->
 <aside class="right">
-<div class="panel cafe-link"><a aria-label="WAM NAVER 카페 바로가기" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER 카페</span></a></div>
+<div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER 카페</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Donations</button>
+<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">후원</button>
 <p><b>IESF (국제교류봉사단)</b><br/>
         - 일반: 농협 301-0078-3333-51<br/>
         - 외화: 농협 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -2525,11 +2519,11 @@ a[id*="qna"]{
 <div class="list" data-cat="mission"></div>
 </div>
 <div class="panel topic-panel" id="topic_service">
-<h3>자원봉사 소식</h3>
+<h3>봉사 소식</h3>
 <div class="list" data-cat="service"></div>
 </div>
 <div class="panel topic-panel" id="topic_relief">
-<h3>구호활동</h3>
+<h3>구호 활동</h3>
 <div class="list" data-cat="relief"></div>
 </div>
 <div class="panel topic-panel" id="topic_edu">
@@ -2556,10 +2550,10 @@ a[id*="qna"]{
 <div class="hidden" id="composerModal" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999;">
 <div class="panel" style="width:min(92vw, 720px); max-height:80vh; overflow:auto;">
 <h3 style="margin-top:0;">글쓰기</h3>
-<input id="composeTitle" placeholder="Title" style="width:100%;"/>
-<textarea id="composeBody" placeholder="Enter content..." rows="8" style="width:100%; resize:vertical;"></textarea>
+<input id="composeTitle" placeholder="제목" style="width:100%;"/>
+<textarea id="composeBody" placeholder="내용을 입력하세요." rows="8" style="width:100%; resize:vertical;"></textarea>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
-<button class="button outline" id="btnDraftSave" type="button">저장 임시저장</button><button class="button outline" id="btnCancel">취소</button>
+<button class="button outline" id="btnDraftSave" type="button">임시저장</button><button class="button outline" id="btnCancel">취소</button>
 <button class="button" disabled="disabled" id="btnSave" style=";display:none !important;">저장</button>
 </div>
 </div>
@@ -2602,8 +2596,8 @@ a[id*="qna"]{
   btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
   btnSave && btnSave.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(Title 없음)";
-    const b = bodyI?.value?.trim() || "(Content 없음)";
+    const t = titleI?.value?.trim() || "(No Title)";
+    const b = bodyI?.value?.trim() || "(No Content)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2621,7 +2615,7 @@ a[id*="qna"]{
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Attachment link</a>` : `Attachment: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2632,7 +2626,7 @@ a[id*="qna"]{
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Attachment: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2649,11 +2643,11 @@ a[id*="qna"]{
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 확인을 누르세요)");
+    const link = prompt("Paste an external image URL if you have one. Otherwise, click Confirm.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("이미지는 2MB 이하만 직접 미리보기 가능합니다. 큰 파일은 외부 Save소에 올리고 링크를 입력해주세요.");
+        alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
         imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
@@ -2666,11 +2660,11 @@ a[id*="qna"]{
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 확인을 누르세요)");
+    const link = prompt("Paste an external file URL if you have one. Otherwise, click Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("파일은 5MB 이하만 파일명 표시가 됩니다. 큰 파일은 외부 Save소 링크만 사용해주세요.");
+        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -2695,7 +2689,7 @@ a[id*="qna"]{
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' files');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2766,7 +2760,7 @@ a[id*="qna"]{
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove attachment'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2801,11 +2795,11 @@ a[id*="qna"]{
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSave(){
-    const t = (titleI && titleI.value.trim()) || '(Title 없음)';
-    const b = (bodyI && bodyI.value.trim()) || '(Content 없음)';
+    const t = (titleI && titleI.value.trim()) || '(No Title)';
+    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('The news area could not be found.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2822,7 +2816,7 @@ a[id*="qna"]{
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Attachment: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
@@ -2835,7 +2829,7 @@ a[id*="qna"]{
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
 
@@ -2902,13 +2896,13 @@ a[id*="qna"]{
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' files');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove all attachments'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2960,7 +2954,7 @@ a[id*="qna"]{
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || '제목 미입력';
+    tpText.textContent = t || 'No title';
   }
 
   // live typing updates preview
@@ -2968,7 +2962,7 @@ a[id*="qna"]{
     titleI.addEventListener('input', ()=> updateTitlePreview());
   }
 
-  // 임시Save: keep in-memory draft; do NOT post to right panel
+  // Save Draft: keep in-memory draft; do NOT post to right panel
   if(btnDraft){
     btnDraft.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2980,7 +2974,7 @@ a[id*="qna"]{
     });
   }
 
-  // 취소: clear draft and input fields, and clear preview
+  // Cancel: clear draft and input fields, and clear preview
   if(btnCancel){
     btnCancel.addEventListener('click', ()=>{
       draft.title=''; draft.body='';
@@ -3060,7 +3054,7 @@ a[id*="qna"]{
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3203,14 +3197,14 @@ a[id*="qna"]{
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml) : '';
 
     openModal();
   }, true);
 })();
 </script><div id="editNewsModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 680px); max-height:78vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-<h3 style="margin:0; font-size:1.05rem;">글쓰기 편집</h3>
+<h3 style="margin:0; font-size:1.05rem;">게시글 수정</h3>
 <div id="enInfo" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
@@ -3425,7 +3419,7 @@ a[id*="qna"]{
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+        if(!confirm('Do you want to delete this post?')) return;
         item.remove();
       });
     }
@@ -3684,8 +3678,8 @@ a[id*="qna"]{
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("구매 요청이 접수되었습니다."); } else { alert("구매 요청 실패"); }
-    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+      if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // 정산
@@ -3693,8 +3687,8 @@ a[id*="qna"]{
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("정산 요청이 접수되었습니다."); } else { alert("정산 요청 실패"); }
-    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+      if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -3703,9 +3697,9 @@ a[id*="qna"]{
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("블록체인 처리 요청 완료: " + (j.txHash||"대기")); }
-      else { alert("블록체인 처리 실패"); }
-    }catch(e){ console.warn(e); alert("네트워크 오류"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"Pending")); }
+      else { alert("Blockchain processing failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 })();
 </script>
@@ -3750,7 +3744,7 @@ a[id*="qna"]{
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || '상품';
+            t.textContent = item.title || item.name || 'Product';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3773,7 +3767,7 @@ a[id*="qna"]{
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || '상품';
+              t.textContent = item.title || 'Product';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3828,8 +3822,8 @@ a[id*="qna"]{
 <!-- IGDC minimal Donate UI (non-invasive) -->
 
 <div class="donation-inline">
-<input aria-label="Donation amount (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
-<button class="bc-tile orange" id="btnDonate">Donate</button>
+<input aria-label="후원 금액(USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
+<button class="bc-tile orange" id="btnDonate">후원</button>
 </div>
 <script>
 (function(){
@@ -3844,7 +3838,7 @@ a[id*="qna"]{
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Fixed donation amount");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3859,7 +3853,7 @@ a[id*="qna"]{
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "게스트 기부는 $5–$50 범위에서만 가능합니다. 더 큰 금액은 아래 Account이체를 이용해 주세요.";
+  note.textContent = "Guest donations are available only in the $5–$50 range. For larger amounts, please use the account transfer information below.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3870,17 +3864,17 @@ a[id*="qna"]{
   // === Account 안내 박스 ===
   const accountBox = document.createElement("div");
   accountBox.className = "account-box";
-  accountBox.setAttribute("aria-label","Account 이체 정보");
+  accountBox.setAttribute("aria-label","Account Transfer Information");
 
   accountBox.innerHTML = `
-    <div><b>IESF (국제Exchange Volunteer Group)</b></div>
-    <div>General: 농협 301-0078-3333-51</div>
-    <div>외화: 농협 452-0022-8173-81</div>
+    <div><b>IESF (International Exchange Service Foundation)</b></div>
+    <div>General: NongHyup 301-0078-3333-51</div>
+    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
-    <div><b>WAM 파운데이션 (세계항공Mission Foundation)</b></div>
-    <div>General: 신한 100-026-331592</div>
-    <div>외화: 신한 180-005-931110</div>
+    <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
+    <div>General: Shinhan 100-026-331592</div>
+    <div>Foreign Currency: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3893,7 +3887,7 @@ a[id*="qna"]{
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Selected amount: ₩${Number(amt).toLocaleString()}\n\nPlease transfer it to the account below.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3924,8 +3918,8 @@ a[id*="qna"]{
 <div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
 <h3 id="donateModalTitle">후원 단체 선택</h3>
 <div class="donate-actions">
-<button data-org="IESF" type="button">IESF로 기부</button>
-<button data-org="WAM" type="button">WAM으로 기부</button>
+<button data-org="IESF" type="button">IESF에 후원</button>
+<button data-org="WAM" type="button">WAM에 후원</button>
 </div>
 <button class="donate-close" type="button">닫기</button>
 </div>
@@ -3954,11 +3948,11 @@ a[id*="qna"]{
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('결제 API가 연결되지 않았습니다. 우측 패널에서 Account를 선택해 주세요.'); }
+          else { alert('The payment API is not connected. Please select an account from the right panel.'); }
         }
       }catch(err){
         console.error(err);
-        alert('결제 요청 중 문제가 발생했습니다.');
+        alert('A problem occurred while requesting payment.');
       } finally {
         closeDonateModal();
       }
@@ -4109,7 +4103,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if ((!hasAny || (!hasReal && !hasExternalInfo)) && !hasOurPlaceholder) {
         const item = document.createElement('div');
         item.className = 'item placeholder';
-        item.innerHTML = '<div class="title">아직 올린글이 없음</div>';
+        item.innerHTML = '<div class="title">No posts yet</div>';
         list.appendChild(item);
       }
 
@@ -4179,7 +4173,7 @@ document.addEventListener('DOMContentLoaded', function(){
       aiEndpoint: null
     };
 
-    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    // Supabase Environment을 SUPER_VARSAR에 적용하는 함수
     function applyConfig(env) {
       const url =
         (env && env.SUPABASE_URL) ||
@@ -4211,7 +4205,7 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
 
-    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    // 3) 없으면 Netlify Functions에서 Environment변수 읽어오기
     //    (secureEnvBridge는 Netlify env에서 SUPABASE_URL, SUPABASE_ANON_KEY를 꺼내서 JSON으로 돌려주는 함수)
     var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
 
@@ -4263,7 +4257,7 @@ document.addEventListener('DOMContentLoaded', function(){
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|operation|ops|settings?|config|deploy|deployment|error|bug|loading|api|integration|server|database|db|permission|policy|login|token|key|payment|security|cors|network|timeout|response\s*code|status\s*code|build|compile|broken|doesn'?t\s*work|not\s*work|stuck|page|link|malfunction|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -4273,7 +4267,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4299,19 +4293,19 @@ document.addEventListener('DOMContentLoaded', function(){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    const title = el("div","igdc-qa-title"); title.textContent = "Questions & Answers";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="질문";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="질문을 입력하세요...";
-    const lA = el("label"); lA.textContent="답변";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="조금만 기다리시면 금방 답변을 드리겠습니다.";
+    const lQ = el("label"); lQ.textContent="Question";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Please enter your question...";
+    const lA = el("label"); lA.textContent="Answer";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Please wait a moment. An answer will be provided shortly.";
     const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="등록하기";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="지우기";
-    const note = el("div","igdc-qa-note"); note.textContent="※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical, error, or operation-related issues are automatically forwarded to the admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4382,18 +4376,18 @@ document.addEventListener('DOMContentLoaded', function(){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "관리요청":"일반";
+        const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("삭제 실패(권한/정책)"); return; }
+            if(error){ alert("Delete failed (permission/policy)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4416,9 +4410,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
-          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
-          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
+          else if(/price|cost|fee|pricing|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else answer="Thank you for your inquiry. We will review it promptly and assist you.";
         }
       }
       return { technical, answer };
@@ -4432,7 +4426,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("The storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed to the web, the connection will be enabled automatically once SUPER_VARSAR.url/anonKey is set.");
         return;
       }
       const record = {
@@ -4442,7 +4436,7 @@ document.addEventListener('DOMContentLoaded', function(){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("등록 실패"); return; }
+      if(error){ alert("Registration failed"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -4465,7 +4459,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4593,7 +4587,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "닫기";
+    content: "Close";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4734,8 +4728,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4782,12 +4776,12 @@ window.addEventListener("message",function(ev){
 
     if(t.includes("global") || t.includes("글로벌") || t.includes("wam") || t.includes("iesf")) return "iesf";
     if(t.includes("ngo")) return "ngo";
-    if(t.includes("선교") || t.includes("mission")) return "mission";
-    if(t.includes("봉사") || t.includes("volunteer") || t.includes("service")) return "service";
-    if(t.includes("구호") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
-    if(t.includes("교육") || t.includes("education") || t.includes("edu")) return "edu";
-    if(t.includes("환경") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
-    if(t.includes("기타") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
+    if(t.includes("Mission") || t.includes("mission")) return "mission";
+    if(t.includes("Service") || t.includes("volunteer") || t.includes("service")) return "service";
+    if(t.includes("Relief") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
+    if(t.includes("Education") || t.includes("education") || t.includes("edu")) return "edu";
+    if(t.includes("Environment") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
+    if(t.includes("Others") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
 
     return null;
   }
@@ -4982,8 +4976,6 @@ window.addEventListener("message",function(ev){
 (function(){
   const $  = (s,r=document)=>r.querySelector(s);
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
-  // The original footer normalizer lives in a different closure. Keep preview/save processing independent of it.
-  function normalizeItemFooter(){ }
 
   // Preview targets (reuse existing modal if present)
   const modal   = $('#newsPreviewModal') || $('#previewModal');
@@ -5020,7 +5012,7 @@ window.addEventListener("message",function(ev){
       });
   }
   markHasAttach(document);
-  if (typeof window.normalizeItemFooter === 'function') window.normalizeItemFooter(document);
+  normalizeItemFooter(document);
 
   // Watch dynamic additions
   $$('.right .topic-panel .list, .mobile-news-clone .topic-panel .list').forEach(function(list){
@@ -5070,12 +5062,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || '제목 없음';
+    npTitle.textContent = title || 'No title';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(No content has been registered.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml
         : '';
     }
 
@@ -5127,14 +5119,14 @@ window.addEventListener("message",function(ev){
 
       const { error } = await sb.from('igdc_donation_posts').insert(payload);
       if(error){
-        console.warn('[donation] Supabase 저장 실패:', error.message);
+        console.warn('[donation] Supabase Save 실패:', error.message);
       }
     }catch(err){
       console.warn('[donation] Supabase sync 예외:', err);
     }
   }
 
-  // 완전 저장 버튼 클릭 후 Supabase 동기화 시도
+  // 완전 Save 버튼 클릭 후 Supabase 동기화 시도
   document.addEventListener('click', function(e){
     const btn = e.target.closest('#btnSubmitPost');
     if(!btn) return;
@@ -5169,7 +5161,7 @@ window.addEventListener("message",function(ev){
   vertical-align: middle;
 }
 
-/* 제목/메타 스타일 유지 */
+/* Title/메타 스타일 유지 */
 .right .topic-panel .list .item .title,
 .mobile-news-clone .topic-panel .list .item .title {
   font-weight: 700;
@@ -5275,7 +5267,7 @@ window.addEventListener("message",function(ev){
 
 
 <script>
-// 모바일: WAM NAVER 카페 + Donations 패널 이동 (복사 아님, 이동)
+// 모바일: WAM NAVER Cafe + Donations 패널 이동 (복사 아님, 이동)
 (function(){
   var mq = window.matchMedia("(max-width:1023px)");
   var main = document.querySelector("main.main");
@@ -5491,6 +5483,529 @@ document.addEventListener("DOMContentLoaded",function(){
 <script src="/assets/js/maru-searchbank-sync.js"></script>
 
 
+
+
+
+
+
+<style id="igdc-donation-board-v11-style">
+/* IGDC Donation V11: attachment download, top legacy attach/save hidden, vote toggle, board height -15% */
+@media (min-width:1025px){
+  :root{ --igdc-donation-right-col:333px !important; --right-col:333px !important; --right-max:333px !important; }
+  html,body{ overflow-x:hidden !important; }
+  body > .container,
+  body > div.container,
+  .container{
+    width:100vw !important;
+    max-width:none !important;
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    align-items:stretch !important;
+    gap:12px !important;
+    column-gap:12px !important;
+    padding-right:10px !important;
+    box-sizing:border-box !important;
+  }
+  body > .container > .sidebar{ flex:0 0 168px !important; min-width:168px !important; max-width:168px !important; }
+  body > .container > .right,
+  body > div.container > .right,
+  aside.right{
+    flex:0 0 var(--igdc-donation-right-col) !important;
+    width:var(--igdc-donation-right-col) !important;
+    min-width:var(--igdc-donation-right-col) !important;
+    max-width:var(--igdc-donation-right-col) !important;
+    margin-right:10px !important;
+    padding:8px !important;
+    box-sizing:border-box !important;
+  }
+  body > .container > .main,
+  body > div.container > .main,
+  main.main{ flex:1 1 auto !important; min-width:0 !important; width:auto !important; max-width:none !important; box-sizing:border-box !important; }
+  body > .container > .main .hero,
+  body > .container > .main #topWritePanel,
+  body > .container > .main .people-news,
+  body > .container > .main .feed-wrapper{ width:100% !important; max-width:none !important; }
+}
+
+/* old composer/file row disabled: V11 owns writing + attachments in one stable modal */
+#composerModal{ display:none !important; pointer-events:none !important; }
+.compose-wrap .row-bottom,
+.compose-wrap .field-file,
+.compose-wrap .field-image{ display:none !important; }
+/* top hero legacy attach/save controls are removed because the composer has its own attachment + save */
+#btnAttach,
+#attachPreview,
+#btnSubmitPost,
+#postAttach{ display:none !important; }
+
+.right .topic-panel{
+  height:282px !important;
+  max-height:282px !important;
+  min-height:282px !important;
+  overflow:hidden !important;
+  display:flex !important;
+  flex-direction:column !important;
+  padding:8px !important;
+  box-sizing:border-box !important;
+}
+.right .topic-panel h3{ flex:0 0 auto !important; margin:0 0 6px 0 !important; font-size:.96rem !important; line-height:1.18 !important; }
+.right .topic-panel .list,
+.mobile-news-clone .topic-panel .list{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  display:block !important;
+  padding:0 2px 0 0 !important;
+  scroll-behavior:smooth !important;
+}
+.right .topic-panel .list::-webkit-scrollbar,
+.mobile-news-clone .topic-panel .list::-webkit-scrollbar{ width:7px; }
+.right .topic-panel .list::-webkit-scrollbar-thumb,
+.mobile-news-clone .topic-panel .list::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:999px; }
+.right .topic-panel .list > *:not(.igdc-v10-row):not(.igdc-v10-empty),
+.mobile-news-clone .topic-panel .list > *:not(.igdc-v10-row):not(.igdc-v10-empty){ display:none !important; }
+
+.igdc-v10-row{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto !important;
+  align-items:center !important;
+  column-gap:4px !important;
+  width:100% !important;
+  box-sizing:border-box !important;
+  border:1px solid rgba(226,232,240,.96) !important;
+  background:#fff !important;
+  border-radius:7px !important;
+  padding:4px 4px 4px 6px !important;
+  margin:0 0 4px 0 !important;
+  min-height:27px !important;
+  max-height:33px !important;
+  box-shadow:none !important;
+  writing-mode:horizontal-tb !important;
+}
+.igdc-v10-title{
+  min-width:0 !important;
+  display:block !important;
+  border:0 !important;
+  background:transparent !important;
+  color:#0b4a77 !important;
+  font-weight:700 !important;
+  font-size:12.5px !important;
+  line-height:1.2 !important;
+  padding:1px 2px !important;
+  margin:0 !important;
+  text-align:left !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  cursor:pointer !important;
+  writing-mode:horizontal-tb !important;
+}
+.igdc-v10-title:hover{ text-decoration:underline !important; }
+.igdc-v10-tools{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:flex-end !important;
+  gap:1px !important;
+  white-space:nowrap !important;
+  writing-mode:horizontal-tb !important;
+}
+.igdc-v10-tool,
+.igdc-v10-act{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  height:17px !important;
+  min-width:16px !important;
+  max-width:none !important;
+  line-height:15px !important;
+  padding:0 2px !important;
+  margin:0 !important;
+  border-radius:4px !important;
+  font-size:8.5px !important;
+  font-weight:700 !important;
+  white-space:nowrap !important;
+  writing-mode:horizontal-tb !important;
+  vertical-align:middle !important;
+  box-sizing:border-box !important;
+}
+.igdc-v10-tool{ border:0 !important; background:transparent !important; color:#475569 !important; }
+button.igdc-v10-tool{ cursor:pointer !important; }
+.igdc-v10-tool.voted{ color:#db2777 !important; background:#fdf2f8 !important; }
+.igdc-v10-act{ border:1px solid #dbe3ee !important; background:#f8fafc !important; color:#334155 !important; cursor:pointer !important; }
+.igdc-v10-act.edit{ min-width:22px !important; background:#eef6ff !important; color:#2563eb !important; border-color:#bfdbfe !important; }
+.igdc-v10-act.del{ min-width:18px !important; background:#fff1f2 !important; color:#dc2626 !important; border-color:#fecdd3 !important; }
+.igdc-v10-empty{ color:#94a3b8 !important; font-size:12px !important; padding:7px 2px !important; }
+
+#igdcDonationComposerV10,
+#igdcDonationViewerV10{
+  position:fixed !important;
+  inset:0 !important;
+  display:none;
+  align-items:center !important;
+  justify-content:center !important;
+  background:rgba(15,23,42,.46) !important;
+  z-index:30000 !important;
+  padding:18px !important;
+  box-sizing:border-box !important;
+  pointer-events:auto !important;
+}
+.igdc-v10-modal-box{
+  width:min(92vw,720px) !important;
+  max-height:86vh !important;
+  overflow:auto !important;
+  background:#fff !important;
+  border-radius:14px !important;
+  border:1px solid #dbe3ee !important;
+  box-shadow:0 18px 44px rgba(0,0,0,.25) !important;
+  padding:16px !important;
+  box-sizing:border-box !important;
+}
+.igdc-v10-modal-title{ margin:0 0 10px 0 !important; color:#0b4a77 !important; font-size:1.05rem !important; }
+.igdc-v10-form-row{ margin:0 0 10px 0 !important; }
+.igdc-v10-form-row label{ display:block !important; font-size:12px !important; font-weight:700 !important; color:#475569 !important; margin:0 0 4px 0 !important; }
+#igdcV10Title{ width:100% !important; height:42px !important; min-height:42px !important; padding:10px 12px !important; box-sizing:border-box !important; border:1px solid #cbd5e1 !important; border-radius:9px !important; font-size:15px !important; line-height:1.35 !important; background:#fff !important; color:#111827 !important; pointer-events:auto !important; }
+#igdcV10Body{ width:100% !important; min-height:220px !important; padding:12px !important; box-sizing:border-box !important; border:1px solid #cbd5e1 !important; border-radius:9px !important; font-size:15px !important; line-height:1.45 !important; background:#fff !important; color:#111827 !important; pointer-events:auto !important; resize:vertical !important; }
+.igdc-v10-attach-row{ display:flex !important; align-items:center !important; gap:8px !important; flex-wrap:nowrap !important; }
+#igdcV10File{ flex:0 0 auto !important; width:126px !important; max-width:126px !important; font-size:13.2px !important; line-height:1.2 !important; }
+#igdcV10File::file-selector-button{ font-size:13.2px !important; padding:5px 9px !important; border-radius:7px !important; border:1px solid #94a3b8 !important; background:#f8fafc !important; color:#0f172a !important; cursor:pointer !important; }
+#igdcV10FileNames{ flex:1 1 auto !important; min-width:0 !important; min-height:30px !important; display:flex !important; align-items:center !important; border:1px solid #cbd5e1 !important; border-radius:8px !important; background:#fff !important; color:#334155 !important; padding:5px 8px !important; font-size:12px !important; line-height:1.25 !important; overflow:hidden !important; white-space:nowrap !important; text-overflow:ellipsis !important; }
+.igdc-v10-attach-help{ font-size:11px !important; color:#64748b !important; margin-top:4px !important; }
+.igdc-v10-modal-actions{ display:flex !important; justify-content:flex-end !important; align-items:center !important; gap:7px !important; margin-top:11px !important; }
+.igdc-v10-modal-actions button{ border:1px solid #cbd5e1 !important; border-radius:8px !important; background:#fff !important; padding:7px 11px !important; cursor:pointer !important; font-size:13px !important; line-height:1.2 !important; }
+.igdc-v10-modal-actions .primary{ background:#ec4899 !important; border-color:#db2777 !important; color:#fff !important; }
+.igdc-v10-modal-actions .danger{ background:#fff1f2 !important; border-color:#fecdd3 !important; color:#dc2626 !important; }
+#igdcDonationViewerV10 .body{ white-space:pre-wrap !important; line-height:1.55 !important; color:#111827 !important; font-size:.96rem !important; }
+#igdcDonationViewerV10 .meta{ color:#64748b !important; font-size:.82rem !important; margin:0 0 12px 0 !important; }
+#igdcDonationViewerV10 .attachments{ margin-top:12px !important; padding:8px 10px !important; border:1px solid #e2e8f0 !important; border-radius:9px !important; background:#f8fafc !important; color:#334155 !important; font-size:12px !important; line-height:1.35 !important; }
+#igdcDonationViewerV10 .igdc-v11-attach-item{ display:flex !important; align-items:center !important; justify-content:space-between !important; gap:8px !important; padding:5px 0 !important; border-bottom:1px dashed #e2e8f0 !important; }
+#igdcDonationViewerV10 .igdc-v11-attach-item:last-child{ border-bottom:0 !important; }
+#igdcDonationViewerV10 .igdc-v11-attach-name{ min-width:0 !important; overflow:hidden !important; text-overflow:ellipsis !important; white-space:nowrap !important; }
+#igdcDonationViewerV10 .igdc-v11-download{ flex:0 0 auto !important; border:1px solid #bfdbfe !important; background:#eff6ff !important; color:#1d4ed8 !important; border-radius:7px !important; padding:3px 7px !important; font-size:11px !important; font-weight:700 !important; text-decoration:none !important; }
+.igdc-donation-save-status{ font-size:.78rem; color:#0f766e; margin-left:6px; white-space:nowrap; }
+@media (max-width:1024px){
+  .right .topic-panel{ height:260px !important; max-height:260px !important; min-height:260px !important; }
+  .igdc-v10-row{ min-height:28px !important; }
+  .igdc-v10-tools{ gap:1px !important; }
+  .igdc-v10-tool,.igdc-v10-act{ font-size:8.2px !important; padding:0 2px !important; height:18px !important; }
+  #igdcV10File{ width:120px !important; max-width:120px !important; }
+}
+</style>
+<style>
+/* IGDC Donation V13: translated custom file picker; hide browser-native file label */
+#igdcDonationComposerV10 #igdcV10File.igdc-v13-file-native{
+  position:absolute !important;
+  left:-9999px !important;
+  width:1px !important;
+  height:1px !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+}
+#igdcDonationComposerV10 .igdc-v13-file-btn{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  min-height:30px !important;
+  padding:6px 11px !important;
+  border:1px solid #cbd5e1 !important;
+  border-radius:8px !important;
+  background:#f8fafc !important;
+  color:#0f172a !important;
+  font-size:12.5px !important;
+  font-weight:700 !important;
+  line-height:1 !important;
+  cursor:pointer !important;
+  white-space:nowrap !important;
+}
+#igdcDonationComposerV10 .igdc-v13-file-btn:hover{ background:#eef6ff !important; border-color:#93c5fd !important; }
+#igdcDonationComposerV10 #igdcV10FileNames{
+  flex:1 1 auto !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+}
+</style>
+<script id="igdc-donation-board-v11">
+(function(){
+  if(window.__IGDC_DONATION_BOARD_V11__) return;
+  window.__IGDC_DONATION_BOARD_V11__ = true;
+
+  var STORE_KEY='igdc_donation_posts_v9';
+  var LEGACY_KEYS=['igdc_donation_posts_v8','igdc_donation_posts_v7','igdc_donation_posts_v6','igdc_donation_posts_v5','igdc_donation_posts'];
+  var DRAFT_KEY='igdc_donation_draft_v10';
+  var CLIENT_KEY='igdc_donation_client_id_v10';
+  var editingId=null;
+  var editingOldAttachments=[];
+  var renderBusy=false;
+  var installTimer=null;
+  var $=function(s,r){ return (r||document).querySelector(s); };
+  var $$=function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+  var IGDC_I18N={"category":"항목","writePost":"글쓰기","title":"제목","titlePlaceholder":"제목을 입력하세요","content":"내용","contentPlaceholder":"내용을 입력하세요","attachmentOptional":"첨부파일","noAttachment":"첨부파일 없음","attachHelp":"선택한 파일 이름과 다운로드 정보가 게시글과 함께 저장됩니다. 큰 파일은 브라우저 저장 공간 제한을 받을 수 있습니다.","draft":"임시저장","cancel":"취소","save":"저장","close":"닫기","edit":"수정","del":"삭제","untitled":"제목 없음","emptyBody":"(내용 없음)","noTitleInput":"제목 미입력","attachments":"첨부파일","attachment":"첨부파일","download":"다운로드","fileNameOnly":"파일명","emptyList":"게시글이 없습니다.","view":"조회","recommend":"추천","like":"좋아요","modify":"수정","delete":"삭제","saved":"저장됨","updated":"수정됨","canceled":"취소됨","draftSaved":"임시저장됨","deleted":"삭제됨","applied":"적용됨","undone":"취소됨","largeFile":"파일이 커서 파일명만 저장되었습니다."};
+  function tr(k){ return IGDC_I18N[k] || (k||''); }
+  function esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
+  function makeId(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }
+  function nowText(){ try{return new Date().toLocaleString();}catch(e){return '';} }
+  function clientId(){
+    var v='';
+    try{ v=localStorage.getItem(CLIENT_KEY)||''; }catch(e){}
+    if(!v){ v='client_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10); try{localStorage.setItem(CLIENT_KEY,v);}catch(e){} }
+    return v;
+  }
+  function normalizeCat(c){
+    c=String(c||'etc').toLowerCase().trim();
+    var map={global:'iesf', wam:'iesf', iesf:'iesf', ngo:'ngo', mission:'mission', church:'mission', service:'service', volunteer:'service', relief:'relief', aid:'relief', edu:'edu', education:'edu', env:'env', environment:'env', etc:'etc', other:'etc', others:'etc'};
+    return map[c] || c || 'etc';
+  }
+  function activeCat(){ var s=$('#postCategory'); return normalizeCat(s&&s.value); }
+  function readJSON(k, fallback){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):fallback; }catch(e){ return fallback; } }
+  function writeJSON(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
+  function posts(){
+    var arr=readJSON(STORE_KEY,null);
+    if(!Array.isArray(arr)){
+      arr=[];
+      for(var i=0;i<LEGACY_KEYS.length;i++){ var old=readJSON(LEGACY_KEYS[i],null); if(Array.isArray(old)&&old.length){ arr=old; break; } }
+      savePosts(arr);
+    }
+    return arr.map(normalizePost);
+  }
+  function normalizePost(p){
+    p=p||{}; p.id=p.id||makeId(); p.cat=normalizeCat(p.cat||p.category); p.title=p.title||tr('untitled'); p.body=p.body||''; p.meta=p.meta||p.date||nowText(); p.ts=p.ts||Date.now();
+    p.views=Number(p.views||0); p.recommends=Number(p.recommends||0); p.likes=Number(p.likes||0);
+    if(!Array.isArray(p.attachments)) p.attachments=[];
+    if(!p.votes) p.votes={};
+    if(!Array.isArray(p.votes.recommends)) p.votes.recommends=[];
+    if(!Array.isArray(p.votes.likes)) p.votes.likes=[];
+    return p;
+  }
+  function savePosts(arr){ return writeJSON(STORE_KEY,(arr||[]).map(normalizePost)); }
+  function draft(){ return readJSON(DRAFT_KEY,{}); }
+  function saveDraft(d){ writeJSON(DRAFT_KEY,d||{}); }
+  function clearDraft(){ try{localStorage.removeItem(DRAFT_KEY);}catch(e){} }
+  function setPreview(t){ var p=$('#composePreviewTitle')||$('#titlePreview .tp-text'); if(p) p.textContent=t||tr('noTitleInput'); }
+  function status(t){ var s=$('#igdcDonationStatusV10'); if(!s){ s=document.createElement('span'); s.id='igdcDonationStatusV10'; s.className='igdc-donation-save-status'; var b=$('#btnSubmitPost')||$('#btnOpenComposer'); if(b&&b.parentNode) b.parentNode.appendChild(s); } s.textContent=t||''; if(t) setTimeout(function(){ if(s.textContent===t) s.textContent=''; },2200); }
+  function panelCat(panel){
+    var txt=((panel.querySelector('h3')||{}).textContent||'').toLowerCase();
+    if(/ngo/.test(txt)) return 'ngo';
+    if(/mission|church|선교|교회/.test(txt)) return 'mission';
+    if(/service|volunteer|봉사/.test(txt)) return 'service';
+    if(/relief|aid|구호/.test(txt)) return 'relief';
+    if(/edu|교육/.test(txt)) return 'edu';
+    if(/env|환경/.test(txt)) return 'env';
+    if(/etc|기타/.test(txt)) return 'etc';
+    return 'iesf';
+  }
+  function listNodes(cat){
+    cat=normalizeCat(cat); var out=[];
+    $$('.topic-panel').forEach(function(p){ var list=p.querySelector('.list'); if(list && panelCat(p)===cat) out.push(list); });
+    return out;
+  }
+  function currentFiles(){
+    var f=$('#igdcV10File'); var a=[];
+    if(f && f.files && f.files.length){
+      for(var i=0;i<f.files.length;i++){ var file=f.files[i]; a.push({name:file.name||('file'+(i+1)), size:file.size||0, type:file.type||''}); }
+    }
+    return a;
+  }
+  function readFileAsAttachment(file){
+    return new Promise(function(resolve){
+      if(!file){ resolve(null); return; }
+      var reader=new FileReader();
+      reader.onload=function(){ resolve({name:file.name||'attachment', size:file.size||0, type:file.type||'', dataUrl:String(reader.result||'')}); };
+      reader.onerror=function(){ resolve({name:file.name||'attachment', size:file.size||0, type:file.type||'', dataUrl:''}); };
+      try{ reader.readAsDataURL(file); }catch(e){ resolve({name:file.name||'attachment', size:file.size||0, type:file.type||'', dataUrl:''}); }
+    });
+  }
+  function readCurrentFileData(){
+    var f=$('#igdcV10File'); var jobs=[];
+    if(f && f.files && f.files.length){ for(var i=0;i<f.files.length;i++){ jobs.push(readFileAsAttachment(f.files[i])); } }
+    return Promise.all(jobs).then(function(arr){ return arr.filter(Boolean); });
+  }
+  function attachmentLabel(arr){
+    arr=Array.isArray(arr)?arr:[];
+    if(!arr.length) return tr('noAttachment');
+    return arr.map(function(x){ return (x&&x.name)?x.name:String(x||''); }).join(', ');
+  }
+  function updateFileNames(arr){ var s=$('#igdcV10FileNames'); if(s){ s.textContent=attachmentLabel(arr||currentFiles()); s.title=s.textContent; } }
+  function renderAttachments(el, arr){
+    if(!el) return;
+    arr=Array.isArray(arr)?arr:[];
+    el.innerHTML='';
+    if(!arr.length){ el.textContent=tr('noAttachment'); return; }
+    var head=document.createElement('div'); head.style.fontWeight='700'; head.style.marginBottom='4px'; head.textContent=tr('attachments'); el.appendChild(head);
+    arr.forEach(function(x,idx){
+      x=x||{};
+      var item=document.createElement('div'); item.className='igdc-v11-attach-item';
+      var name=document.createElement('span'); name.className='igdc-v11-attach-name'; name.textContent=x.name||(tr('attachment')+' '+(idx+1)); name.title=name.textContent;
+      item.appendChild(name);
+      if(x.dataUrl && /^data:/i.test(x.dataUrl)){
+        var a=document.createElement('a'); a.className='igdc-v11-download'; a.href=x.dataUrl; a.download=x.name||('attachment-'+(idx+1)); a.textContent=tr('download'); item.appendChild(a);
+      }else{
+        var s=document.createElement('span'); s.className='igdc-v11-download'; s.style.opacity='.55'; s.textContent=tr('fileNameOnly'); item.appendChild(s);
+      }
+      el.appendChild(item);
+    });
+  }
+
+  function makeComposer(){
+    var m=$('#igdcDonationComposerV10'); if(m) return m;
+    m=document.createElement('div'); m.id='igdcDonationComposerV10';
+    m.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true">'+'<h3 class="igdc-v10-modal-title">'+esc(tr('writePost'))+'</h3>'+'<div class="igdc-v10-form-row"><label for="igdcV10Title">'+esc(tr('title'))+'</label><input id="igdcV10Title" type="text" autocomplete="off" placeholder="'+esc(tr('titlePlaceholder'))+'"></div>'+'<div class="igdc-v10-form-row"><label for="igdcV10Body">'+esc(tr('content'))+'</label><textarea id="igdcV10Body" placeholder="'+esc(tr('contentPlaceholder'))+'"></textarea></div>'+'<div class="igdc-v10-form-row"><label for="igdcV10File">'+esc(tr('attachmentOptional'))+'</label><div class="igdc-v10-attach-row"><input id="igdcV10File" class="igdc-v13-file-native" type="file" multiple aria-label="'+esc(tr('attachmentOptional'))+'"><button type="button" id="igdcV13PickFile" class="igdc-v13-file-btn">'+esc(tr('attachmentOptional'))+'</button><span id="igdcV10FileNames">'+esc(tr('noAttachment'))+'</span></div><div class="igdc-v10-attach-help">'+esc(tr('attachHelp'))+'</div></div>'+'<div class="igdc-v10-modal-actions"><button type="button" id="igdcV10Draft">'+esc(tr('draft'))+'</button><button type="button" id="igdcV10Cancel">'+esc(tr('cancel'))+'</button><button type="button" class="primary" id="igdcV10Save">'+esc(tr('save'))+'</button></div></div>';
+    document.body.appendChild(m);
+    m.addEventListener('click',function(e){ if(e.target===m){ e.preventDefault(); e.stopPropagation(); } },true);
+    $('#igdcV10Draft',m).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); draftFromComposer(true); },true);
+    $('#igdcV10Cancel',m).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); clearComposer(); closeComposer(); status(tr('canceled')); },true);
+    $('#igdcV10Save',m).addEventListener('click',function(e){ saveFinal(e); },true);
+    $('#igdcV10Title',m).addEventListener('input',function(){ setPreview(this.value); draftFromComposer(false); },true);
+    $('#igdcV10Body',m).addEventListener('input',function(){ draftFromComposer(false); },true);
+    var fp=$('#igdcV13PickFile',m); if(fp){ fp.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); var fi=$('#igdcV10File',m); if(fi) fi.click(); },true); }
+    $('#igdcV10File',m).addEventListener('change',function(){ updateFileNames(currentFiles()); draftFromComposer(false); },true);
+    return m;
+  }
+  function composerVisible(){ var m=$('#igdcDonationComposerV10'); return !!(m && m.style.display==='flex'); }
+  function openComposer(post){
+    var m=makeComposer(); editingId=post ? post.id : null; editingOldAttachments=post && Array.isArray(post.attachments) ? post.attachments.slice() : [];
+    var d=draft();
+    $('#igdcV10Title',m).value=post ? (post.title||'') : (d.title||'');
+    $('#igdcV10Body',m).value=post ? (post.body||'') : (d.body||'');
+    var f=$('#igdcV10File',m); if(f) f.value='';
+    updateFileNames(post ? editingOldAttachments : (Array.isArray(d.attachments)?d.attachments:[]));
+    setPreview($('#igdcV10Title',m).value);
+    m.style.display='flex';
+    setTimeout(function(){ var ti=$('#igdcV10Title',m); if(ti) ti.focus(); },30);
+  }
+  function closeComposer(){ var m=$('#igdcDonationComposerV10'); if(m) m.style.display='none'; }
+  function clearComposer(){ editingId=null; editingOldAttachments=[]; var m=makeComposer(); $('#igdcV10Title',m).value=''; $('#igdcV10Body',m).value=''; var f=$('#igdcV10File',m); if(f) f.value=''; updateFileNames([]); setPreview(''); clearDraft(); }
+  function draftFromComposer(showStatus){
+    var m=makeComposer();
+    var files=currentFiles(); if(!files.length && editingOldAttachments.length) files=editingOldAttachments.slice();
+    var d={ title:($('#igdcV10Title',m).value||'').trim(), body:($('#igdcV10Body',m).value||'').trim(), cat:activeCat(), ts:Date.now(), attachments:files };
+    saveDraft(d); if(showStatus) status(tr('draftSaved')); return d;
+  }
+  function valuesAsync(){
+    var m=makeComposer(); var ti=$('#igdcV10Title',m), bi=$('#igdcV10Body',m);
+    var d=draft(); var title='', body='';
+    if(composerVisible()){ title=(ti.value||'').trim(); body=(bi.value||'').trim(); }
+    if(!title) title=(d.title||'').trim();
+    if(!body) body=(d.body||'').trim();
+    if(!body){ var top=$('#topPostBody'); if(top){ var tv=(top.value||'').trim(); if(tv && !/^이곳은 IGDC Global Platform/.test(tv)) body=tv; } }
+    if(!title && body) title=body.split(/\n/)[0].slice(0,42).trim();
+    if(!title) title=tr('untitled');
+    if(!body) body=tr('emptyBody');
+    return readCurrentFileData().then(function(files){
+      if(!files.length && editingId && editingOldAttachments.length) files=editingOldAttachments.slice();
+      if(!files.length && Array.isArray(d.attachments)) files=d.attachments;
+      return {title:title, body:body, cat:activeCat(), attachments:files};
+    });
+  }
+
+  function makeViewer(){
+    var v=$('#igdcDonationViewerV10'); if(v) return v;
+    v=document.createElement('div'); v.id='igdcDonationViewerV10';
+    v.innerHTML='<div class="igdc-v10-modal-box" role="dialog" aria-modal="true"><h3 class="igdc-v10-modal-title"></h3><div class="meta"></div><div class="body"></div><div class="attachments"></div><div class="igdc-v10-modal-actions"><button type="button" class="edit">'+esc(tr('edit'))+'</button><button type="button" class="danger del">'+esc(tr('del'))+'</button><button type="button" class="close">'+esc(tr('close'))+'</button></div></div>';
+    document.body.appendChild(v);
+    v.addEventListener('click',function(e){ if(e.target===v || (e.target.classList && e.target.classList.contains('close'))){ e.preventDefault(); e.stopPropagation(); hideViewer(); } },true);
+    $('.edit',v).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); var p=findPost(v.dataset.postId); hideViewer(); if(p) openComposer(p); },true);
+    $('.del',v).addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); var pid=v.dataset.postId; hideViewer(); removePost(pid); },true);
+    return v;
+  }
+  function hideViewer(){ var v=$('#igdcDonationViewerV10'); if(v) v.style.display='none'; }
+  function findPost(pid){ return posts().filter(function(p){return p.id===pid;})[0] || null; }
+  function viewPost(pid){ var arr=posts(), p=null; arr.forEach(function(x){ if(x.id===pid){ x.views=(x.views||0)+1; p=x; } }); if(!p) return; savePosts(arr); renderAll(); var v=makeViewer(); v.dataset.postId=pid; $('.igdc-v10-modal-title',v).textContent=p.title||tr('untitled'); $('.meta',v).textContent=(p.meta||'')+' · 👁 '+(p.views||0)+' · 👍 '+(p.recommends||0)+' · ❤️ '+(p.likes||0); $('.body',v).textContent=p.body||tr('emptyBody'); renderAttachments($('.attachments',v), p.attachments); v.style.display='flex'; }
+  function editPost(pid){ var p=findPost(pid); if(p) openComposer(p); }
+  function removePost(pid){ savePosts(posts().filter(function(p){return p.id!==pid;})); renderAll(); status(tr('deleted')); }
+  function toggleVote(pid,key){
+    var cid=clientId(); var changed=false; var added=false; var arr=posts();
+    arr.forEach(function(p){
+      if(p.id!==pid) return;
+      p.votes=p.votes||{};
+      var arrKey=key==='recommends'?'recommends':'likes';
+      if(!Array.isArray(p.votes[arrKey])) p.votes[arrKey]=[];
+      var idx=p.votes[arrKey].indexOf(cid);
+      if(idx!==-1){ p.votes[arrKey].splice(idx,1); p[key]=Math.max(0,(p[key]||0)-1); added=false; }
+      else{ p.votes[arrKey].push(cid); p[key]=(p[key]||0)+1; added=true; }
+      changed=true;
+    });
+    if(changed){ savePosts(arr); renderAll(); status(added?tr('applied'):tr('undone')); }
+  }
+
+  function makeRow(p){
+    var cid=clientId();
+    var row=document.createElement('div'); row.className='igdc-v10-row'; row.dataset.postId=p.id; row.dataset.cat=p.cat;
+    var title=document.createElement('button'); title.type='button'; title.className='igdc-v10-title'; title.dataset.action='view'; title.textContent=p.title||'제목 없음'; title.title=p.title||'제목 없음';
+    var votedReco=p.votes&&Array.isArray(p.votes.recommends)&&p.votes.recommends.indexOf(cid)!==-1;
+    var votedLike=p.votes&&Array.isArray(p.votes.likes)&&p.votes.likes.indexOf(cid)!==-1;
+    var tools=document.createElement('div'); tools.className='igdc-v10-tools';
+    tools.innerHTML='<span class="igdc-v10-tool" title="'+esc(tr('view'))+'">👁 '+(p.views||0)+'</span><button type="button" class="igdc-v10-tool '+(votedReco?'voted':'')+'" data-action="reco" title="'+esc(tr('recommend'))+'">👍 '+(p.recommends||0)+'</button><button type="button" class="igdc-v10-tool '+(votedLike?'voted':'')+'" data-action="like" title="'+esc(tr('like'))+'">❤️ '+(p.likes||0)+'</button><button type="button" class="igdc-v10-act edit" data-action="edit" title="'+esc(tr('modify'))+'">'+esc(tr('edit'))+'</button><button type="button" class="igdc-v10-act del" data-action="del" title="'+esc(tr('delete'))+'">'+esc(tr('del'))+'</button>';
+    row.appendChild(title); row.appendChild(tools); return row;
+  }
+  function renderAll(){
+    if(renderBusy) return; renderBusy=true;
+    try{
+      var lists=$$('.topic-panel .list');
+      lists.forEach(function(list){ list.dataset.igdcV10='1'; list.innerHTML=''; });
+      var arr=posts().slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+      arr.forEach(function(p){ p.cat=normalizeCat(p.cat); listNodes(p.cat).forEach(function(list){ list.appendChild(makeRow(p)); }); });
+      lists.forEach(function(list){ if(!list.querySelector('.igdc-v10-row')){ var e=document.createElement('div'); e.className='igdc-v10-empty'; e.textContent=tr('emptyList'); list.appendChild(e); } });
+    }finally{ renderBusy=false; }
+  }
+  function saveFinal(ev){
+    if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
+    return valuesAsync().then(function(v){
+      var arr=posts(); var now=Date.now(); var wasEditing=!!editingId;
+      if(editingId){
+        var done=false;
+        arr=arr.map(function(p){ if(p.id===editingId){ done=true; p.cat=normalizeCat(v.cat); p.title=v.title; p.body=v.body; p.meta=nowText(); p.ts=now; p.attachments=v.attachments; } return p; });
+        if(!done){ editingId=null; wasEditing=false; }
+      }
+      if(!editingId){ arr.unshift({id:makeId(),cat:normalizeCat(v.cat),title:v.title,body:v.body,meta:nowText(),ts:now,views:0,recommends:0,likes:0,attachments:v.attachments,votes:{recommends:[],likes:[]}}); }
+      if(!savePosts(arr)){
+        arr=arr.map(function(p){ p.attachments=(p.attachments||[]).map(function(a){ return {name:a.name||'attachment',size:a.size||0,type:a.type||''}; }); return p; });
+        savePosts(arr); status(tr('largeFile'));
+      }else{
+        status(wasEditing?tr('updated'):tr('saved'));
+      }
+      renderAll(); clearComposer(); closeComposer(); return false;
+    });
+  }
+
+  function normalizeTopButtons(){
+    ['btnOpenComposer','btnSubmitPost'].forEach(function(idv){
+      var b=document.getElementById(idv); if(!b) return;
+      b.setAttribute('type','button');
+      if(idv==='btnSubmitPost') b.textContent=tr('save');
+      if(idv==='btnOpenComposer') b.textContent=tr('writePost');
+    });
+    var lc=document.getElementById('labelCategory'); if(lc) lc.textContent=tr('category');
+    var tp=document.querySelector('#titlePreview .tp-text'); if(tp && (!tp.textContent || /제목 미입력|No title/i.test(tp.textContent))) tp.textContent=tr('noTitleInput');
+  }
+  function install(){ normalizeTopButtons(); makeComposer(); makeViewer(); renderAll(); }
+  function schedule(){ clearTimeout(installTimer); installTimer=setTimeout(install,60); }
+
+  document.addEventListener('click',function(e){
+    var t=e.target; if(!t || !t.closest) return;
+    var open=t.closest('#btnOpenComposer');
+    if(open){ e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation)e.stopImmediatePropagation(); openComposer(null); return false; }
+    var submit=t.closest('#btnSubmitPost');
+    if(submit){ return saveFinal(e); }
+    var row=t.closest('.igdc-v10-row');
+    if(row){
+      var pid=row.dataset.postId; var a=t.closest('[data-action]'); var act=a && a.dataset ? a.dataset.action : '';
+      e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+      if(act==='view') viewPost(pid); else if(act==='edit') editPost(pid); else if(act==='del') removePost(pid); else if(act==='reco') toggleVote(pid,'recommends'); else if(act==='like') toggleVote(pid,'likes'); else viewPost(pid);
+      return false;
+    }
+  },true);
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ hideViewer(); closeComposer(); } },true);
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',install); else install();
+  window.addEventListener('load',function(){ setTimeout(install,80); setTimeout(renderAll,500); });
+  setTimeout(install,250); setTimeout(renderAll,700); setTimeout(renderAll,1500); setTimeout(renderAll,3000);
+  setTimeout(function(){ install(); renderAll(); },5000);
+  window.igdcDonationBoardV11Render=renderAll;
+  window.igdcDonationBoardV11Save=saveFinal;
+})();
+</script>
+
 <!-- Donation editor modal final guard: prevents preview double-open and closes on Save/Cancel only. -->
 <script id="igdc-donation-editor-modal-final-v1">
 (function(){
@@ -5621,464 +6136,309 @@ document.addEventListener("DOMContentLoaded",function(){
   }, true);
 })();
 </script>
-<!-- Donation section save controller: restores one deterministic write path without changing page layout. -->
-<style id="igdc-donation-section-save-modal-visibility-v1">
-#composerModal.hidden{display:none !important;pointer-events:none !important;}
-#composerModal:not(.hidden){display:flex !important;pointer-events:auto !important;}
-</style>
-<script id="igdc-donation-section-save-controller-v1">
+
+<!-- Unified all-language save/attachment guard. -->
+<script id="igdc-donation-composer-save-attachment-restore-v2">
 (function(){
   'use strict';
-  if (window.__IGDC_DONATION_SECTION_SAVE_CONTROLLER_V1__) return;
-  window.__IGDC_DONATION_SECTION_SAVE_CONTROLLER_V1__ = true;
+  /* The translated files already have the stable V11 board. Do not layer a second writer on top of it. */
+  if (window.__IGDC_DONATION_BOARD_V11__) return;
+  if (window.__IGDC_DONATION_COMPOSER_SAVE_ATTACHMENT_RESTORE_V2__) return;
+  window.__IGDC_DONATION_COMPOSER_SAVE_ATTACHMENT_RESTORE_V2__ = true;
 
-  var POSTS_KEY = 'igdc.donation.posts.v1';
-  var DRAFT_KEY = 'igdc.donation.draft.v1';
-  var DB_NAME = 'igdcDonationAttachmentStore';
-  var DB_VERSION = 1;
-  var DB_STORE = 'files';
-  var state = { draft: null, files: [] };
+  var STORE_KEY = 'igdc_donation_posts_v9';
+  var draft = null;
+  var persistTimer = null;
 
-  function q(sel, root){ return (root || document).querySelector(sel); }
-  function qa(sel, root){ return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
-  function cleanText(value){ return String(value == null ? '' : value).trim(); }
-  function safeJson(value, fallback){
-    try { var parsed = JSON.parse(value); return parsed == null ? fallback : parsed; }
-    catch (_) { return fallback; }
+  function $(sel, root){ return (root || document).querySelector(sel); }
+  function $$(sel, root){ return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function text(v){ return String(v == null ? '' : v); }
+  function nowText(){ try { return new Date().toLocaleString(); } catch(e){ return ''; } }
+  function uid(){ return 'don_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,10); }
+  function normalizedCat(v){
+    var allowed = ['iesf','ngo','mission','service','relief','edu','env','etc'];
+    return allowed.indexOf(v) !== -1 ? v : 'etc';
   }
-  function uid(prefix){
-    if (window.crypto && typeof window.crypto.randomUUID === 'function') return prefix + window.crypto.randomUUID();
-    return prefix + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
-  }
-  function replaceControl(id){
-    var oldNode = document.getElementById(id);
-    if (!oldNode || !oldNode.parentNode) return oldNode;
-    var fresh = oldNode.cloneNode(true);
-    oldNode.parentNode.replaceChild(fresh, oldNode);
-    return fresh;
-  }
-  function memoryStore(){
-    window.__IGDC_DONATION_MEMORY_STORE__ = window.__IGDC_DONATION_MEMORY_STORE__ || {};
-    return window.__IGDC_DONATION_MEMORY_STORE__;
-  }
-  function readStore(storeName, key){
+  function escName(v){ return text(v).replace(/[\\/:*?"<>|]/g, '_').slice(0, 180) || 'attachment'; }
+
+  function readPosts(){
     try {
-      var store = window[storeName];
-      return store ? store.getItem(key) : null;
-    } catch (_) { return Object.prototype.hasOwnProperty.call(memoryStore(), key) ? memoryStore()[key] : null; }
+      var raw = localStorage.getItem(STORE_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch(e){ return []; }
   }
-  function writeStore(storeName, key, value){
-    try {
-      var store = window[storeName];
-      if (!store) throw new Error('Storage unavailable');
-      if (value == null) store.removeItem(key);
-      else store.setItem(key, value);
-    } catch (_) {
-      if (value == null) delete memoryStore()[key];
-      else memoryStore()[key] = value;
+  function writePosts(posts){
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(posts)); return true; }
+    catch(e){ return false; }
+  }
+  function showStatus(message){
+    var host = $('#titlePreview') || $('#btnSubmitPost') || $('#btnOpenComposer');
+    if (!host) return;
+    var el = $('#igdcDonationComposeStatusV1');
+    if (!el) {
+      el = document.createElement('span');
+      el.id = 'igdcDonationComposeStatusV1';
+      el.style.cssText = 'margin-left:6px;font-size:.82rem;color:#0f766e;white-space:nowrap;';
+      host.parentNode && host.parentNode.appendChild(el);
+    }
+    el.textContent = message || '';
+    if (message) {
+      setTimeout(function(){ if (el.textContent === message) el.textContent = ''; }, 2600);
     }
   }
-  function getPosts(){
-    var posts = safeJson(readStore('localStorage', POSTS_KEY), []);
-    return Array.isArray(posts) ? posts : [];
+  function updateTitlePreview(value){
+    var t = text(value).trim();
+    var node = $('#titlePreview .tp-text');
+    if (node) node.textContent = t || '제목 미입력';
   }
-  function setPosts(posts){ writeStore('localStorage', POSTS_KEY, JSON.stringify(posts)); }
-  function getDraft(){
-    var draft = safeJson(readStore('sessionStorage', DRAFT_KEY), null);
-    return draft && typeof draft === 'object' ? draft : null;
+  function setComposerOpen(open){
+    var modal = $('#composerModal');
+    if (!modal) return;
+    modal.classList.toggle('hidden', !open);
+    modal.setAttribute('aria-hidden', open ? 'false' : 'true');
+    if (open) {
+      setTimeout(function(){ var title = $('#composeTitle'); if (title) title.focus(); }, 0);
+    }
   }
-  function setDraft(draft){
-    state.draft = draft || null;
-    writeStore('sessionStorage', DRAFT_KEY, draft ? JSON.stringify(draft) : null);
+  function selectedFiles(){
+    var input = $('#postAttach');
+    if (input && input.files && input.files.length) return Array.prototype.slice.call(input.files);
+    var legacy = $('#postFile');
+    if (legacy && legacy.files && legacy.files.length) return Array.prototype.slice.call(legacy.files);
+    return [];
   }
-  function getDb(){
-    return new Promise(function(resolve, reject){
-      if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
-      var request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = function(){
-        var db = request.result;
-        if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE, { keyPath: 'id' });
+  function clearSelectedFiles(){
+    ['#postAttach','#postFile'].forEach(function(sel){
+      var input = $(sel);
+      if (input) { try { input.value = ''; } catch(e){} }
+    });
+    var preview = $('#attachPreview'); if (preview) preview.innerHTML = '';
+    var clear = $('#btnAttachClear'); if (clear) clear.style.display = 'none';
+    var name = $('#attachName'); if (name) name.textContent = '';
+  }
+  function clearComposer(){
+    var title = $('#composeTitle'); if (title) title.value = '';
+    var body = $('#composeBody'); if (body) body.value = '';
+    clearSelectedFiles();
+    updateTitlePreview('');
+  }
+  function captureDraft(){
+    var title = $('#composeTitle');
+    var body = $('#composeBody');
+    var cat = $('#postCategory');
+    draft = {
+      title: text(title && title.value).trim(),
+      body: text(body && body.value).trim(),
+      cat: normalizedCat(cat && cat.value),
+      files: selectedFiles(),
+      savedAt: Date.now()
+    };
+    updateTitlePreview(draft.title);
+    return draft;
+  }
+  function currentDraft(){
+    var title = $('#composeTitle');
+    var body = $('#composeBody');
+    var hasLive = !!(text(title && title.value).trim() || text(body && body.value).trim() || selectedFiles().length);
+    if (hasLive) return captureDraft();
+    return draft;
+  }
+  function fileToAttachment(file){
+    return new Promise(function(resolve){
+      if (!file) return resolve(null);
+      var attachment = {
+        name: escName(file.name || 'attachment'),
+        size: Number(file.size || 0),
+        type: text(file.type || ''),
+        data: '',
+        blobUrl: ''
       };
-      request.onsuccess = function(){ resolve(request.result); };
-      request.onerror = function(){ reject(request.error || new Error('IndexedDB open failed')); };
+      try { attachment.blobUrl = URL.createObjectURL(file); } catch(e){}
+      var reader = new FileReader();
+      reader.onload = function(){ attachment.data = text(reader.result || ''); resolve(attachment); };
+      reader.onerror = function(){ resolve(attachment); };
+      try { reader.readAsDataURL(file); } catch(e){ resolve(attachment); }
     });
   }
-  function memoryFiles(){
-    window.__IGDC_DONATION_MEMORY_FILES__ = window.__IGDC_DONATION_MEMORY_FILES__ || {};
-    return window.__IGDC_DONATION_MEMORY_FILES__;
+  function attachmentHref(att){ return text(att && (att.data || att.blobUrl)); }
+  function attachmentNode(att){
+    var li = document.createElement('li');
+    var href = attachmentHref(att);
+    if (href) {
+      var a = document.createElement('a');
+      a.href = href;
+      a.download = escName(att.name || 'attachment');
+      a.textContent = '📎 ' + text(att.name || 'attachment');
+      a.style.color = '#1d4ed8';
+      a.style.textDecoration = 'underline';
+      li.appendChild(a);
+    } else {
+      li.textContent = '📎 ' + text(att && att.name || 'attachment');
+    }
+    return li;
   }
-  function putAttachment(id, file){
-    function storeInMemory(){ memoryFiles()[id] = { id:id, name:file.name, type:file.type || 'application/octet-stream', blob:file, savedAt:Date.now() }; }
-    return getDb().then(function(db){
-      return new Promise(function(resolve, reject){
-        var tx = db.transaction(DB_STORE, 'readwrite');
-        tx.objectStore(DB_STORE).put({ id:id, name:file.name, type:file.type || 'application/octet-stream', blob:file, savedAt:Date.now() });
-        tx.oncomplete = function(){ db.close(); resolve(); };
-        tx.onerror = function(){ var err = tx.error; db.close(); reject(err || new Error('Attachment write failed')); };
-        tx.onabort = function(){ var err = tx.error; db.close(); reject(err || new Error('Attachment write aborted')); };
-      });
-    }).catch(function(){ storeInMemory(); });
+  function getList(cat){
+    return document.querySelector('.right .topic-panel .list[data-cat="' + normalizedCat(cat) + '"]') ||
+           document.querySelector('.mobile-news-clone .topic-panel .list[data-cat="' + normalizedCat(cat) + '"]');
   }
-  function getAttachment(id){
-    return getDb().then(function(db){
-      return new Promise(function(resolve, reject){
-        var tx = db.transaction(DB_STORE, 'readonly');
-        var req = tx.objectStore(DB_STORE).get(id);
-        req.onsuccess = function(){ var record = req.result || null; db.close(); resolve(record); };
-        req.onerror = function(){ var err = req.error; db.close(); reject(err || new Error('Attachment read failed')); };
-      });
-    }).catch(function(){ return memoryFiles()[id] || null; });
+  function removePlaceholders(list){
+    if (!list) return;
+    $$('.item.placeholder, .igdc-v10-empty', list).forEach(function(node){ node.remove(); });
   }
-  function deleteAttachment(id){
-    delete memoryFiles()[id];
-    return getDb().then(function(db){
-      return new Promise(function(resolve){
-        var tx = db.transaction(DB_STORE, 'readwrite');
-        tx.objectStore(DB_STORE).delete(id);
-        tx.oncomplete = function(){ db.close(); resolve(); };
-        tx.onerror = function(){ db.close(); resolve(); };
-        tx.onabort = function(){ db.close(); resolve(); };
-      });
-    }).catch(function(){});
-  }
-  function escCss(value){
-    if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(value);
-    return String(value).replace(/[^a-zA-Z0-9_-]/g, '\$&');
-  }
-  function listForCategory(category){
-    return q('.right .topic-panel .list[data-cat="' + escCss(category) + '"]');
-  }
-  function formatTime(iso){
-    try { return new Date(iso).toLocaleString(); }
-    catch (_) { return iso || ''; }
-  }
-  function renderAttachmentList(post){
-    if (!post.attachments || !post.attachments.length) return null;
-    var list = document.createElement('ul');
-    list.className = 'attach-list';
-    list.style.cssText = 'margin:6px 0 0;padding-left:18px;font-size:.82rem;color:#333;';
-    post.attachments.forEach(function(att){
-      var li = document.createElement('li');
-      var link = document.createElement('a');
-      link.href = '#';
-      link.textContent = att.name || '첨부 파일';
-      link.dataset.igdcDonationAttachment = att.id || '';
-      link.dataset.igdcDonationAttachmentName = att.name || 'attachment';
-      link.addEventListener('click', function(event){
-        event.preventDefault();
-        event.stopPropagation();
-        if (!att.id) return;
-        getAttachment(att.id).then(function(record){
-          if (!record || !record.blob) return;
-          var url = URL.createObjectURL(record.blob);
-          var anchor = document.createElement('a');
-          anchor.href = url;
-          anchor.download = att.name || record.name || 'attachment';
-          document.body.appendChild(anchor);
-          anchor.click();
-          anchor.remove();
-          setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
-        }).catch(function(){});
-      });
-      li.appendChild(link);
-      list.appendChild(li);
-    });
-    return list;
-  }
-  function makePostItem(post){
+  function createCard(post){
     var item = document.createElement('div');
     item.className = 'item';
-    item.dataset.igdcDonationPostId = post.id;
+    item.dataset.igdcComposeId = post.id;
     item.dataset.author = 'local-user';
 
-    var title = document.createElement('div');
-    title.className = 'title';
-    title.textContent = post.title;
-    var meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = formatTime(post.createdAt);
+    var header = document.createElement('div');
+    header.className = 'item-header';
+    var dot = document.createElement('span'); dot.className = 'dot';
+    var title = document.createElement('div'); title.className = 'h-title title'; title.textContent = post.title || '(제목 없음)';
+    var time = document.createElement('div'); time.className = 'h-time meta'; time.textContent = post.meta || nowText();
+    header.appendChild(dot); header.appendChild(title); header.appendChild(time);
+
     var preview = document.createElement('div');
     preview.className = 'preview';
-    preview.style.cssText = 'font-size:.85rem;color:#444;margin-top:4px;';
-    preview.textContent = post.body;
-    item.appendChild(title);
-    item.appendChild(meta);
-    item.appendChild(preview);
-    var attachments = renderAttachmentList(post);
-    if (attachments) {
-      item.classList.add('has-attach');
-      item.appendChild(attachments);
+    preview.textContent = post.body || '(내용 없음)';
+    item.appendChild(header); item.appendChild(preview);
+
+    if (Array.isArray(post.attachments) && post.attachments.length) {
+      var list = document.createElement('ul');
+      list.className = 'attach-list';
+      post.attachments.forEach(function(att){ list.appendChild(attachmentNode(att)); });
+      item.appendChild(list);
     }
 
-    var footer = document.createElement('div');
-    footer.className = 'item-footer';
-    var actions = document.createElement('div');
-    actions.className = 'edit-del';
-    var edit = document.createElement('button');
-    edit.type = 'button';
-    edit.className = 'btn-edit notranslate';
-    edit.setAttribute('translate', 'no');
-    edit.textContent = 'Edit';
-    var remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'delete-post migrated notranslate';
-    remove.setAttribute('translate', 'no');
-    remove.dataset.igdcDonationDeleteId = post.id;
-    remove.textContent = 'Delete';
-    actions.appendChild(edit);
-    actions.appendChild(remove);
-    footer.appendChild(actions);
+    var footer = document.createElement('div'); footer.className = 'item-footer';
+    var stats = document.createElement('div'); stats.className = 'stats';
+    stats.innerHTML = '<span class="stat stat-views"><span class="icon">👁</span><span>0</span></span>' +
+      '<span class="stat stat-reco"><span class="icon">👍</span><span>0</span></span>' +
+      '<span class="stat stat-like"><span class="icon">❤️</span><span>0</span></span>';
+    var controls = document.createElement('div'); controls.className = 'edit-del';
+    var edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn-edit'; edit.textContent = 'Edit';
+    var del = document.createElement('button'); del.type = 'button'; del.className = 'delete-post'; del.dataset.igdcComposeId = post.id; del.textContent = 'Del';
+    controls.appendChild(edit); controls.appendChild(del);
+    footer.appendChild(stats); footer.appendChild(controls);
     item.appendChild(footer);
     return item;
   }
   function renderPost(post, prepend){
-    var list = listForCategory(post.category);
+    var list = getList(post.cat);
     if (!list) return null;
-    var old = list.querySelector('[data-igdc-donation-post-id="' + escCss(post.id) + '"]');
-    if (old) old.remove();
-    var item = makePostItem(post);
-    if (prepend) list.prepend(item); else list.appendChild(item);
-    return item;
+    var existing = list.querySelector('.item[data-igdc-compose-id="' + post.id + '"]');
+    if (existing) existing.remove();
+    removePlaceholders(list);
+    var card = createCard(post);
+    if (prepend) list.insertBefore(card, list.firstChild); else list.appendChild(card);
+    return card;
   }
-  function renderAllStoredPosts(){
-    getPosts().forEach(function(post){
-      if (post && post.id && post.category) renderPost(post, false);
-    });
+  function renderStored(){
+    readPosts().slice().sort(function(a,b){ return (b.ts || 0) - (a.ts || 0); }).forEach(function(post){ renderPost(post, false); });
   }
-  function setPreviewText(text){
-    var preview = q('#titlePreview .tp-text');
-    if (preview) preview.textContent = text || preview.dataset.defaultText || '제목 미입력';
+  function persistCard(card){
+    if (!card) return;
+    var id = card.dataset.igdcComposeId;
+    if (!id) return;
+    var posts = readPosts();
+    var post = posts.find(function(p){ return p.id === id; });
+    if (!post) return;
+    var title = $('.h-title, .title', card); var body = $('.preview, .body, .content', card);
+    post.title = text(title && title.textContent).trim() || '(제목 없음)';
+    post.body = text(body && body.textContent).trim() || '(내용 없음)';
+    post.meta = nowText(); post.ts = Date.now();
+    writePosts(posts);
   }
-  function resetAttachmentUi(){
-    state.files = [];
-    var input = q('#postAttach');
-    if (input) input.value = '';
-    var preview = q('#attachPreview');
-    if (preview) preview.innerHTML = '';
-    var clear = q('#btnAttachClear');
-    if (clear) clear.style.display = 'none';
+  function queuePersist(card){
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(function(){ persistCard(card); }, 30);
   }
-  function renderAttachmentUi(){
-    var preview = q('#attachPreview');
-    var clear = q('#btnAttachClear');
-    if (!preview) return;
-    preview.innerHTML = '';
-    if (!state.files.length) {
-      if (clear) clear.style.display = 'none';
+  function deletePost(id){
+    var posts = readPosts().filter(function(p){ return p.id !== id; });
+    writePosts(posts);
+    $$('[data-igdc-compose-id="' + id + '"]').forEach(function(node){ node.remove(); });
+    showStatus('삭제됨');
+  }
+  async function savePost(){
+    var value = currentDraft();
+    if (!value) { showStatus('작성할 글이 없습니다.'); return; }
+    var title = text(value.title).trim();
+    var body = text(value.body).trim();
+    if (!title && !body) { showStatus('제목 또는 내용을 입력하세요.'); setComposerOpen(true); return; }
+    if (!title) title = body.split(/\n/)[0].slice(0, 60).trim() || '(제목 없음)';
+
+    var attachments = await Promise.all((value.files || []).map(fileToAttachment));
+    attachments = attachments.filter(Boolean);
+    var post = { id: uid(), cat: normalizedCat(value.cat), title: title, body: body || '(내용 없음)', meta: nowText(), ts: Date.now(), attachments: attachments };
+    var posts = readPosts(); posts.unshift(post);
+
+    if (!writePosts(posts)) {
+      /* Browser storage quota fallback: preserve current-tab download links and names without failing the post itself. */
+      post.attachments = post.attachments.map(function(att){ return { name:att.name, size:att.size, type:att.type, blobUrl:att.blobUrl || '' }; });
+      posts[0] = post;
+      writePosts(posts);
+      showStatus('저장됨 · 첨부 파일은 현재 화면에서 다운로드할 수 있습니다.');
+    } else {
+      showStatus('저장됨');
+    }
+    renderPost(post, true);
+    draft = null;
+    clearComposer();
+    setComposerOpen(false);
+  }
+  function cancelComposer(){ draft = null; clearComposer(); setComposerOpen(false); }
+
+  /* Final capture gate: blocks only the conflicting legacy composer handlers. It never touches the fixed right-panel editor. */
+  document.addEventListener('click', function(event){
+    var target = event.target && event.target.closest ? event.target.closest('button, a') : null;
+    if (!target) return;
+    if (target.closest('#btnDraftSave')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      captureDraft(); setComposerOpen(false); showStatus('임시저장됨');
       return;
     }
-    state.files.forEach(function(file, index){
-      var chip = document.createElement('span');
-      chip.className = 'attach-chip';
-      var name = document.createElement('span');
-      name.className = 'name';
-      name.title = file.name;
-      name.textContent = file.name;
-      var x = document.createElement('button');
-      x.type = 'button';
-      x.className = 'remove';
-      x.textContent = '×';
-      x.setAttribute('aria-label', '첨부 제거');
-      x.addEventListener('click', function(event){
-        event.preventDefault();
-        event.stopPropagation();
-        state.files.splice(index, 1);
-        renderAttachmentUi();
-      });
-      chip.appendChild(name);
-      chip.appendChild(x);
-      preview.appendChild(chip);
-    });
-    if (clear) clear.style.display = 'inline-block';
-  }
-  function openComposer(){
-    var modal = q('#composerModal');
-    if (!modal) return;
-    var draft = state.draft || getDraft();
-    var title = q('#composeTitle');
-    var body = q('#composeBody');
-    var category = q('#postCategory');
-    if (draft) {
-      if (title && !cleanText(title.value)) title.value = draft.title || '';
-      if (body && !cleanText(body.value)) body.value = draft.body || '';
-      if (category && draft.category) category.value = draft.category;
+    if (target.closest('#btnCancel') && target.closest('#composerModal')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      cancelComposer();
+      return;
     }
-    modal.classList.remove('hidden');
-    if (title) title.focus();
-  }
-  function closeComposer(){
-    var modal = q('#composerModal');
-    if (modal) modal.classList.add('hidden');
-  }
-  function clearComposer(){
-    var title = q('#composeTitle');
-    var body = q('#composeBody');
-    if (title) title.value = '';
-    if (body) body.value = '';
-    setPreviewText('');
-    resetAttachmentUi();
-    setDraft(null);
-  }
-  function currentDraftFromInputs(){
-    var title = q('#composeTitle');
-    var body = q('#composeBody');
-    var category = q('#postCategory');
-    return {
-      title: cleanText(title && title.value),
-      body: cleanText(body && body.value),
-      category: cleanText(category && category.value) || 'etc',
-      savedAt: new Date().toISOString()
-    };
-  }
-  function onDraftSave(event){
-    event.preventDefault();
-    event.stopPropagation();
-    var draft = currentDraftFromInputs();
-    if (!draft.title && !draft.body) return;
-    setDraft(draft);
-    setPreviewText(draft.title);
-    closeComposer();
-  }
-  function onCancel(event){
-    event.preventDefault();
-    event.stopPropagation();
-    clearComposer();
-    closeComposer();
-  }
-  function onAttachChange(event){
-    state.files = Array.prototype.slice.call((event.target && event.target.files) || []);
-    renderAttachmentUi();
-  }
-  function onAttachOpen(event){
-    event.preventDefault();
-    event.stopPropagation();
-    var input = q('#postAttach');
-    if (input) input.click();
-  }
-  function onAttachClear(event){
-    event.preventDefault();
-    event.stopPropagation();
-    resetAttachmentUi();
-  }
-  async function onFinalSave(event){
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    var draft = state.draft || getDraft() || currentDraftFromInputs();
-    var title = cleanText(draft.title);
-    var body = cleanText(draft.body);
-    if (!title && !body) return;
-    var category = cleanText(draft.category) || cleanText(q('#postCategory') && q('#postCategory').value) || 'etc';
-    if (!listForCategory(category)) return;
+    if (target.closest('#btnSubmitPost')) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      savePost();
+      return;
+    }
+    var del = target.closest('.delete-post[data-igdc-compose-id]');
+    if (del) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      var id = del.dataset.igdcComposeId;
+      if (id && window.confirm('이 글을 삭제하시겠습니까?')) deletePost(id);
+    }
+  }, true);
 
-    var button = q('#btnSubmitPost');
-    if (button) button.disabled = true;
-    try {
-      var postId = uid('donation-post-');
-      var attachments = [];
-      for (var i = 0; i < state.files.length; i += 1) {
-        var file = state.files[i];
-        var attachmentId = uid('donation-file-');
-        await putAttachment(attachmentId, file);
-        attachments.push({ id: attachmentId, name: file.name, type: file.type || '', size: file.size || 0 });
-      }
-      var post = {
-        id: postId,
-        category: category,
-        title: title,
-        body: body,
-        attachments: attachments,
-        createdAt: new Date().toISOString()
-      };
-      var posts = getPosts();
-      posts.unshift(post);
-      setPosts(posts);
-      renderPost(post, true);
-      clearComposer();
-      closeComposer();
-    } catch (error) {
-      console.error('[donation] section save failed', error);
-      window.alert('글 저장 중 오류가 발생했습니다. 첨부 파일을 다시 선택한 뒤 저장해 주세요.');
-    } finally {
-      if (button) button.disabled = false;
-    }
-  }
-  function persistEditedPost(item){
-    if (!item || !item.dataset) return;
-    var id = item.dataset.igdcDonationPostId;
-    if (!id) return;
-    var title = cleanText((q('.h-title, .title', item) || {}).textContent);
-    var body = cleanText((q('.preview, .body, .content', item) || {}).textContent);
-    var posts = getPosts();
-    var changed = false;
-    posts.forEach(function(post){
-      if (post.id === id) { post.title = title; post.body = body; post.updatedAt = new Date().toISOString(); changed = true; }
-    });
-    if (changed) setPosts(posts);
-  }
-  function removeStoredPost(id){
-    var posts = getPosts();
-    var target = null;
-    var kept = posts.filter(function(post){ if (post.id === id) { target = post; return false; } return true; });
-    if (!target) return;
-    setPosts(kept);
-    (target.attachments || []).forEach(function(att){ if (att && att.id) deleteAttachment(att.id); });
-    qa('[data-igdc-donation-post-id="' + escCss(id) + '"]').forEach(function(node){ node.remove(); });
-  }
-  function bindPersistedItemActions(){
-    document.addEventListener('click', function(event){
-      var target = event.target && event.target.nodeType === 1 ? event.target : event.target && event.target.parentElement;
-      if (!target) return;
-      var remove = target.closest && target.closest('[data-igdc-donation-delete-id]');
-      if (remove) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        var id = remove.dataset.igdcDonationDeleteId;
-        if (id) removeStoredPost(id);
-        return;
-      }
-      var editor = q('#editNewsModal');
-      if (!editor || !editor.contains(target)) return;
-      var buttons = qa('button', editor);
-      var save = buttons.length ? buttons[buttons.length - 1] : null;
-      if (target.closest && target.closest('button') === save) {
-        var editing = window.__currentEditingItem;
-        setTimeout(function(){ persistEditedPost(editing); }, 0);
-      }
+  /* Keep the current visible attachment picker; only mirror its selection for the final writer. */
+  var attachmentInput = $('#postAttach');
+  if (attachmentInput) {
+    attachmentInput.addEventListener('change', function(){
+      if (draft) draft.files = selectedFiles();
     }, true);
   }
-  function init(){
-    if (window.__IGDC_DONATION_SECTION_SAVE_CONTROLLER_READY__) return;
-    window.__IGDC_DONATION_SECTION_SAVE_CONTROLLER_READY__ = true;
 
-    var open = replaceControl('btnOpenComposer');
-    var draft = replaceControl('btnDraftSave');
-    var cancel = replaceControl('btnCancel');
-    var submit = replaceControl('btnSubmitPost');
-    var attach = replaceControl('btnAttach');
-    var clear = replaceControl('btnAttachClear');
-    var attachInput = replaceControl('postAttach');
-
-    state.draft = getDraft();
-    var preview = q('#titlePreview .tp-text');
-    if (preview && !preview.dataset.defaultText) preview.dataset.defaultText = preview.textContent || '제목 미입력';
-    if (state.draft) setPreviewText(state.draft.title || '');
-
-    if (open) { open.type = 'button'; open.addEventListener('click', openComposer); }
-    if (draft) { draft.type = 'button'; draft.addEventListener('click', onDraftSave, true); }
-    if (cancel) { cancel.type = 'button'; cancel.addEventListener('click', onCancel, true); }
-    if (submit) { submit.type = 'button'; submit.disabled = false; submit.addEventListener('click', onFinalSave, true); }
-    if (attach) { attach.type = 'button'; attach.addEventListener('click', onAttachOpen, true); }
-    if (clear) { clear.type = 'button'; clear.addEventListener('click', onAttachClear, true); }
-    if (attachInput) attachInput.addEventListener('change', onAttachChange, true);
-
-    renderAttachmentUi();
-    renderAllStoredPosts();
-    bindPersistedItemActions();
+  /* Edits are still handled by the already-fixed right-panel editor; persist only cards created by this writer. */
+  var observer = new MutationObserver(function(records){
+    records.forEach(function(record){
+      var card = record.target && record.target.closest ? record.target.closest('.item[data-igdc-compose-id]') : null;
+      if (card) queuePersist(card);
+    });
+  });
+  function observeLists(){
+    $$('.right .topic-panel .list, .mobile-news-clone .topic-panel .list').forEach(function(list){
+      try { observer.observe(list, { childList:true, subtree:true, characterData:true }); } catch(e){}
+    });
   }
-  function scheduleInit(){ setTimeout(init, 0); }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scheduleInit, { once:true });
-  else scheduleInit();
-  window.addEventListener('pageshow', scheduleInit);
+  function init(){ observeLists(); renderStored(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true});
+  else setTimeout(init, 0);
 })();
 </script>
 </body>

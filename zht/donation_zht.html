@@ -379,7 +379,7 @@
 /* Reinforce: 'Confirm' 버튼은 가로(수평) 표기 유지 */
 .compose-wrap .row-bottom .button.tiny{ writing-mode:horizontal-tb; }
 
-/* === Scoped UI polish for 'Category + NGO', 파일/選擇圖片 라인 === */
+/* === Scoped UI polish for 'Category + NGO', 파일/Choose Image 라인 === */
 .field-category{
   display:flex; align-items:center; gap:10px;
   border:1px solid #d0d7de; border-radius:10px;
@@ -392,7 +392,7 @@
 
 .field .file-btn{ margin-right:8px; }
 
-/* 파일/選擇圖片 결과명을 긴 입력막대처럼 보이게 */
+/* 파일/Choose Image 결과명을 긴 입력막대처럼 보이게 */
 .field .filename, #imgChosen, #fileChosen{
   display:inline-block; min-width:360px; max-width:100%;
   padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;
@@ -414,11 +414,11 @@
 
 /* File & Image pickers: one-line, confirm after filename bar, bar = 50% width */
 .field-file, .field-image{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.field-file #btnPickFile{ order:1; color:#111; }   /* '選擇檔案' in black */
+.field-file #btnPickFile{ order:1; color:#111; }   /* 'Choose File' in black */
 .field-file .filename{ order:2; width:50%; min-width:0; }
 .field-file #btnFileConfirm{ order:3; }
 
-.field-image #btnPickImage{ order:1; color:#111; } /* '選擇圖片' in black (for consistency) */
+.field-image #btnPickImage{ order:1; color:#111; } /* 'Choose Image' in black (for consistency) */
 .field-image .filename{ order:2; width:50%; min-width:0; }
 .field-image #btnImageConfirm{ order:3; }
 
@@ -437,7 +437,7 @@
 /* File/Image bars: reduce to 25% width */
 .field-file .filename, .field-image .filename{ width:25%; min-width:0; }
 
-/* Ensure '選擇檔案' / '選擇圖片' label color is black and stays readable */
+/* Ensure 'Choose File' / 'Choose Image' label color is black and stays readable */
 #btnPickFile, #btnPickImage{ color:#111 !important; }
 
 /* === Final polish per screenshot feedback === */
@@ -509,13 +509,13 @@
 /* === Group spacing & ordering fix (compose area only) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* File group: [選擇檔案] [막대] [Confirm] */
+/* File group: [Choose File] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:4px !important; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:4px; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; position:relative; z-index:1; }
 
-/* Image group: [選擇圖片] [막대] [Confirm] */
+/* Image group: [Choose Image] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:4px !important; }
 /* Ensure a sufficiently large gap from file-confirm (>= 'Category' 버튼 폭 가늠치) */
 .compose-wrap .row-bottom .field-image{ margin-left:72px !important; }
@@ -554,13 +554,13 @@
 /* === Compose row: strict grouping & anti-overlay (scoped) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* FILE group -> [選擇檔案][막대][Confirm] 붙어서 배치 */
+/* FILE group -> [Choose File][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:6px; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:6px; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; margin-left:8px; }
 
-/* IMAGE group -> [選擇圖片][막대][Confirm] 붙어서 배치 */
+/* IMAGE group -> [Choose Image][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:6px; }
 /* 파일 그룹의 Confirm 버튼 뒤로 충분히 띄우기(겹침 방지) */
 .compose-wrap .row-bottom .field-image{ margin-left:96px; } /* 필요 시 수치 조정 */
@@ -642,7 +642,7 @@
 /* ===== Compose-only adjustments (safe & minimal) ===== */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
 .compose-wrap .row-top .field-category{ order:1; }     /* Category(드롭다운) */
-.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* 發文 */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* Write */
 .compose-wrap .row-top #btnAttach{ order:3; }          /* Attachment(신규 버튼) */
 .compose-wrap .row-top #btnSubmitPost{ order:4; }      /* 글올리기 */
 
@@ -666,11 +666,11 @@
 .attach-chip .remove:hover{ color:#c0392b; }
 .compose-wrap .row-top{ flex-wrap:wrap; }
 </style><style></style><style>
-/* === Compose row: place 'attach預覽' BETWEEN [Attachment] and [儲存] === */
+/* === Compose row: place 'attachPreview' BETWEEN [Attachment] and [Save] === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* 發文 */
+.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Write */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
-.compose-wrap .row-top #attach預覽{                /* 미리보기 막대창(상시 존재) */
+.compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
   min-height:34px; padding:6px 8px;
@@ -678,7 +678,7 @@
   min-width:260px; max-width:50vw; flex:0 0 auto;     /* 막대 형태, 한 줄 유지 */
   overflow:hidden;
 }
-.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* 儲存(최종) */
+.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* Save(최종) */
 
 /* 칩 스타일(막대 내부) */
 .attach-preview .attach-chip{
@@ -695,15 +695,15 @@
 /* 유령 중복 표시 방지: legacy 파일명 표시는 숨김(칩이 대체) */
 .compose-wrap #attachName{ display:none !important; }
 </style><style>
-/* === Compose row order override (requested): Category -> 發文 -> Attachment -> 미리보기막대 -> 儲存 === */
+/* === Compose row order override (requested): Category -> Write -> Attachment -> 미리보기막대 -> Save === */
 .compose-wrap .row-top .field.field-category{ order:1; }
-.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* 發文 */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Write */
 .compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
-.compose-wrap .row-top #attach預覽{ order:4; }     /* 미리보기 막대 */
-.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* 儲存 */
+.compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
+.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* Save */
 </style><style>
-/* === 標題 預覽 Bar (between 發文 and Attachment) === */
-.compose-wrap .row-top #title預覽{
+/* === Title Preview Bar (between Write and Attachment) === */
+.compose-wrap .row-top #titlePreview{
   order:3;
   display:flex; align-items:center; gap:6px;
   min-height:34px; padding:6px 10px;
@@ -712,7 +712,7 @@
   overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
 }
 .compose-wrap .row-top #btnAttach{ order:4; }
-.compose-wrap .row-top #attach預覽{ order:5; }
+.compose-wrap .row-top #attachPreview{ order:5; }
 .compose-wrap .row-top #btnSubmitPost{ order:6; }
 
 .title-preview .tp-text{ font-size:.92rem; color:#111; }
@@ -720,17 +720,17 @@
 /* Keep row single-line as much as possible */
 .compose-wrap .row-top{ flex-wrap:nowrap; gap:8px; }
 </style><style>
-/* === Compose row: place '清除' right after 최종 '儲存' === */
+/* === Compose row: place 'Clear' right after 최종 'Save' === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow:hidden; }
 .compose-wrap .row-top #btnSubmitPost{ order:6; }
 .compose-wrap .row-top #btnAttachClear{ order:7; margin-left:6px; }
 .compose-wrap .row-top #attachName{ display:none !important; } /* 칩 UI 사용 */
 
 /* Shrink bars to avoid line overflow (title < attach) */
-.compose-wrap .row-top #title預覽{
+.compose-wrap .row-top #titlePreview{
   flex:0 1 14vw; max-width:14vw; min-width:120px;
 }
-.compose-wrap .row-top #attach預覽{
+.compose-wrap .row-top #attachPreview{
   flex:0 1 20vw; max-width:20vw; min-width:140px;
 }
 
@@ -738,17 +738,17 @@
 .compose-wrap .row-top .field.field-category{ order:1; }
 .compose-wrap .row-top #btnOpenComposer{ order:2; }
 .compose-wrap .row-top #btnAttach{ order:3; }
-.compose-wrap .row-top #title預覽{ order:4; }
-.compose-wrap .row-top #attach預覽{ order:5; }
+.compose-wrap .row-top #titlePreview{ order:4; }
+.compose-wrap .row-top #attachPreview{ order:5; }
 </style><style>
 /* === ORDER HOTFIX (override) === */
 /* Category */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
-/* 發文 */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
-/* 標題 막대 */          .compose-wrap .row-top #title預覽{ order:3 !important; }
+/* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
+/* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attach預覽{ order:5 !important; }
-/* 儲存 */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
-/* 清除 */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
+/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
+/* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
 /* Smooth scroll in right-side topic lists */
 .right .topic-panel .list{ scroll-behavior: smooth; }
@@ -806,7 +806,7 @@
 .right .topic-panel .item .title,
 .right .topic-panel .item .meta{ display:none !important; }
 
-/* 預覽 text: show ~3 lines and then flow away */
+/* Preview text: show ~3 lines and then flow away */
 .right .topic-panel .item .preview{
   font-size:.84rem; color:#374151; margin-top:0;
   display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "目前尚未發布任何問答內容";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "目前尚未發布任何問答內容";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1799,7 +1799,7 @@ main, .main, #main, .main-content, .content, .content-area{
 
 
 <style id="donate-lr-plus-10">
-/* === 捐款 button: mobile portrait horizontal +10% (spacing minimal) === */
+/* === Donate button: mobile portrait horizontal +10% (spacing minimal) === */
 @media (max-width: 480px){
   .hero .bc-tile.orange {
     padding-left: 9px !important;   /* base 8px -> 9px (~+12.5%) */
@@ -2023,7 +2023,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
-  <!-- Supabase Environment 설정 (發文/도네이션/Q&A 공용) -->
+  <!-- Supabase Environment 설정 (Write/도네이션/Q&A 공용) -->
   <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
@@ -2372,12 +2372,12 @@ body > div.container,
 <div class="container">
 <!-- Left Sidebar (불변) -->
 <nav class="sidebar">
-<a href="home_zht.html">🏠 首頁</a>
-<a href="networkhub_zht.html">🛒 市場中心</a>
-<a href="distributionhub_zht.html">🏭 分銷中心</a>
-<a href="socialnetwork_zht.html">📢 社交網絡</a>
-<a href="mediahub_zht.html">🎬 媒體中心</a>
-<a href="tour_zht.html">🧳 旅行 · 旅遊 · 住宿</a>
+<a href="home_en.html">🏠 首頁</a>
+<a href="networkhub_en.html">🛒 市場中心</a>
+<a href="distributionhub_en.html">🏭 分銷中心</a>
+<a href="socialnetwork_en.html">📢 社交網絡</a>
+<a href="mediahub_en.html">🎬 媒體中心</a>
+<a href="tour_en.html">🧳 旅行 · 旅遊 · 住宿</a>
 <a href="literature/academic.html" style="display:none !important;">📚 文學與學術交流</a>
 <a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 問答諮詢</a></nav>
 <!-- Main (불변 구조) -->
@@ -2407,8 +2407,8 @@ body > div.container,
 <option value="env">環境</option>
 <option value="etc">其他</option>
 </select>
-</label><button class="button small" id="btnAttach" type="button">附件</button><div aria-label="附件預覽" class="attach-preview" id="attach預覽"></div>
-<button class="button small" id="btnOpenComposer">發文</button><div aria-label="標題預覽" class="title-preview" id="title預覽"><span class="tp-text">無標題</span></div>
+</label><button class="button small" id="btnAttach" type="button">附件</button><div aria-label="Attachment preview" class="attach-preview" id="attachPreview"></div>
+<button class="button small" id="btnOpenComposer">發文</button><div aria-label="Title preview" class="title-preview" id="titlePreview"><span class="tp-text">無標題</span></div>
 <button class="button small accent" id="btnSubmitPost">儲存</button>
 <span id="attachName"></span>
 <button aria-label="移除附件" class="button tiny" id="btnAttachClear" style="display:none;" type="button">清除</button>
@@ -2495,7 +2495,7 @@ body > div.container,
 </main>
 <!-- Right (불변) -->
 <aside class="right">
-<div class="panel cafe-link"><a aria-label="前往 WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
+<div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
 <button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">捐款</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
@@ -2578,7 +2578,7 @@ body > div.container,
   const btnPickFile = $("#btnPickFile");
   const fileChosen = $("#fileChosen");
   const imgChosen = $("#imgChosen");
-  let imageLink = ""; let attachLink = ""; let image預覽ObjectUrl = "";
+  let imageLink = ""; let attachLink = ""; let imagePreviewObjectUrl = "";
 
   function openModal(){ modal.classList.remove("hidden"); titleI && titleI.focus(); }
   function closeModal(){ modal.classList.add("hidden"); }
@@ -2593,14 +2593,14 @@ body > div.container,
   btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
   btnSave && btnSave.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(No 標題)";
-    const b = bodyI?.value?.trim() || "(無內容)";
+    const t = titleI?.value?.trim() || "(No Title)";
+    const b = bodyI?.value?.trim() || "(No Content)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
       const item = document.createElement('div');
       item.className = 'item';
-      const imgSrc = imageLink || image預覽ObjectUrl || null;
+      const imgSrc = imageLink || imagePreviewObjectUrl || null;
       item.innerHTML = `
         ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
         <div class="title">${t}</div>
@@ -2612,7 +2612,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">附件連結</a>` : `附件：${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Attachment link</a>` : `Attachment: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2623,7 +2623,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "附件：" + fileAttach.files[0].name;
+        att.textContent = "Attachment: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2640,24 +2640,24 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("如果有圖片外部連結（URL），請貼上。若沒有，請按確認。");
-    if(link){ imageLink = link; image預覽ObjectUrl = ""; return; }
+    const link = prompt("Paste an external image URL if you have one. Otherwise, click Confirm.");
+    if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
         alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
-        imageLink = ""; image預覽ObjectUrl = "";
+        imageLink = ""; imagePreviewObjectUrl = "";
       }else{
-        image預覽ObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
-        imageLink = ""; // 실제 儲存은 링크만 사용
+        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
+        imageLink = ""; // 실제 Save은 링크만 사용
       }
     }else{
-      imageLink = ""; image預覽ObjectUrl = "";
+      imageLink = ""; imagePreviewObjectUrl = "";
     }
   });
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("如果有檔案外部連結（URL），請貼上。若沒有，請按確認。");
+    const link = prompt("Paste an external file URL if you have one. Otherwise, click Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
@@ -2686,7 +2686,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' files');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2730,7 +2730,7 @@ body > div.container,
 
   const rowTop = $('.compose-wrap .row-top');
   const attachInput = $('#postAttach');
-  const attach預覽 = $('#attach預覽');
+  const attachPreview = $('#attachPreview');
   const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
   const btnSubmit = $('#btnSubmitPost');
@@ -2745,8 +2745,8 @@ body > div.container,
     }catch(e){}
   }
   function renderChips(){
-    if(!attach預覽) return;
-    attach預覽.innerHTML = '';
+    if(!attachPreview) return;
+    attachPreview.innerHTML = '';
     if(!selectedFiles.length){
       if(clearBtn) clearBtn.style.display = 'none';
       return;
@@ -2757,14 +2757,14 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','移除附件'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove attachment'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
         renderChips();
       });
       chip.appendChild(x);
-      attach預覽.appendChild(chip);
+      attachPreview.appendChild(chip);
     });
   }
   if(attachInput){
@@ -2792,11 +2792,11 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSave(){
-    const t = (titleI && titleI.value.trim()) || '(No 標題)';
-    const b = (bodyI && bodyI.value.trim()) || '(無內容)';
+    const t = (titleI && titleI.value.trim()) || '(No Title)';
+    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('The news area could not be found.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2813,20 +2813,20 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '附件：' + f.name;
+        li.textContent = 'Attachment: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='刪除';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('要刪除此消息嗎？')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
 
@@ -2855,7 +2855,7 @@ body > div.container,
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
   const attachInput = $('#postAttach');
-  const attach預覽 = $('#attach預覽');
+  const attachPreview = $('#attachPreview');
   const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
   const nameEl = $('#attachName');
@@ -2877,14 +2877,14 @@ body > div.container,
     if(attachInput) try{ attachInput.value=''; }catch(e){}
     if(legacyFile) try{ legacyFile.value=''; }catch(e){}
     syncInputs();
-    if(attach預覽) attach預覽.innerHTML = '';
+    if(attachPreview) attachPreview.innerHTML = '';
     if(clearBtn) clearBtn.style.display = 'none';
     if(nameEl){ nameEl.textContent=''; } // 강제 초기화 (유령 표시 방지)
   }
 
   function renderChips(){
-    if(!attach預覽) return;
-    attach預覽.innerHTML = '';
+    if(!attachPreview) return;
+    attachPreview.innerHTML = '';
     if(!selectedFiles.length){
       if(clearBtn) clearBtn.style.display = 'none';
       if(nameEl){ nameEl.textContent=''; }
@@ -2893,16 +2893,16 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' files');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','移除所有附件'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove all attachments'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
-    attach預覽.appendChild(chip);
+    attachPreview.appendChild(chip);
 
     // 레거시 이름 표시 동기화 차단 (항상 칩이 우선)
     if(nameEl){ nameEl.textContent=''; }
@@ -2917,7 +2917,7 @@ body > div.container,
     });
   }
 
-  // "清除" 버튼도 전체 초기화
+  // "Clear" 버튼도 전체 초기화
   if(clearBtn){
     clearBtn.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2943,41 +2943,41 @@ body > div.container,
   const btnDraft = $('#btnDraftSave');
   const btnCancel = $('#btnCancel');
   const btnSubmit = $('#btnSubmitPost');
-  const title預覽 = $('#title預覽');
-  const tpText = title預覽 ? title預覽.querySelector('.tp-text') : null;
+  const titlePreview = $('#titlePreview');
+  const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function updateTitle預覽(src){
+  function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || '無標題';
+    tpText.textContent = t || 'No title';
   }
 
   // live typing updates preview
   if(titleI){
-    titleI.addEventListener('input', ()=> updateTitle預覽());
+    titleI.addEventListener('input', ()=> updateTitlePreview());
   }
 
-  // 儲存草稿: keep in-memory draft; do NOT post to right panel
+  // Save Draft: keep in-memory draft; do NOT post to right panel
   if(btnDraft){
     btnDraft.addEventListener('click', (e)=>{
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = (bodyI && bodyI.value)||'';
-      updateTitle預覽(draft.title);
+      updateTitlePreview(draft.title);
       // keep modal open; optional small feedback
       // console.log('Draft saved');
     });
   }
 
-  // 取消: clear draft and input fields, and clear preview
+  // Cancel: clear draft and input fields, and clear preview
   if(btnCancel){
     btnCancel.addEventListener('click', ()=>{
       draft.title=''; draft.body='';
       if(titleI) titleI.value='';
       if(bodyI) bodyI.value='';
-      updateTitle預覽('');
+      updateTitlePreview('');
     });
   }
 
@@ -2992,13 +2992,13 @@ body > div.container,
       // clear draft & preview shortly after click so the original handler can read values
       setTimeout(()=>{
         draft.title=''; draft.body='';
-        updateTitle預覽('');
+        updateTitlePreview('');
       }, 0);
     }, true); // capture phase to run before other handlers
   }
 
   // initialize preview on load
-  updateTitle預覽('');
+  updateTitlePreview('');
 })();
 </script><script>
 (function(){
@@ -3006,15 +3006,15 @@ body > div.container,
   const titleI = $('#composeTitle');
   const modal = $('#composerModal');
   const btnDraft = $('#btnDraftSave');
-  const title預覽 = $('#title預覽');
-  const tpText = title預覽 ? title預覽.querySelector('.tp-text') : null;
+  const titlePreview = $('#titlePreview');
+  const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
   let draft = { title:'', body:'' };
 
-  function updateTitle預覽(src){
+  function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || '標題 Not entered';
+    tpText.textContent = t || 'Title Not entered';
   }
 
   if(btnDraft){
@@ -3022,7 +3022,7 @@ body > div.container,
       e.preventDefault();
       draft.title = (titleI && titleI.value)||'';
       draft.body  = ($('#composeBody') && $('#composeBody').value)||'';
-      updateTitle預覽(draft.title);
+      updateTitlePreview(draft.title);
       if(modal) modal.classList.add('hidden'); // auto-close
     });
   }
@@ -3047,11 +3047,11 @@ body > div.container,
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='刪除';
+    btn.textContent='Delete';
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('要刪除此消息嗎？')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3116,7 +3116,7 @@ body > div.container,
     mo.observe(list, {childList:true});
   });
 })();
-</script><div id="news預覽Modal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
+</script><div id="newsPreviewModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:99999;"><div class="panel" style="width:min(92vw, 800px); max-height:80vh; overflow:auto;">
 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
 <h3 id="npTitle" style="margin:0; font-size:1.05rem;"></h3>
 <div id="npTime" style="font-size:.85rem; color:#6b7280;"></div>
@@ -3131,7 +3131,7 @@ body > div.container,
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
   const $ = (s,r=document)=>r.querySelector(s);
 
-  function normalize項目(item){
+  function normalizeItem(item){
     if(!item || item.querySelector('.item-header')) return;
     const tEl = item.querySelector('.title');
     const mEl = item.querySelector('.meta');
@@ -3145,7 +3145,7 @@ body > div.container,
   }
 
   function normalizeList(list){
-    list && list.querySelectorAll('.item').forEach(normalize項目);
+    list && list.querySelectorAll('.item').forEach(normalizeItem);
   }
 
   $$('.right .topic-panel .list').forEach(normalizeList);
@@ -3154,14 +3154,14 @@ body > div.container,
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalize項目(n);
+          if(n.nodeType===1 && n.classList.contains('item')) normalizeItem(n);
         });
       });
     });
     mo.observe(list, {childList:true});
   });
 
-  const modal = document.getElementById('news預覽Modal');
+  const modal = document.getElementById('newsPreviewModal');
   const npTitle = document.getElementById('npTitle');
   const npTime = document.getElementById('npTime');
   const npBody = document.getElementById('npBody');
@@ -3194,7 +3194,7 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">附件</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml) : '';
 
     openModal();
   }, true);
@@ -3252,7 +3252,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `已編輯 · ${tsStr}`;
+    badge.textContent = `Edited · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3273,7 +3273,7 @@ body > div.container,
     if(item && canEditDelete(item)) window.__currentEditingItem = item;
   }, true);
 
-  // When edit modal "儲存" is pressed, persist edited meta and show badge
+  // When edit modal "Save" is pressed, persist edited meta and show badge
   (function attachSaveHook(){
     const saveBtn = document.getElementById('enSave');
     if(!saveBtn) return;
@@ -3382,7 +3382,7 @@ body > div.container,
     const m  = loadMetrics(id);
     const t  = loadToggles(id);
 
-    // 清除 and rebuild stats area
+    // Clear and rebuild stats area
     stats.innerHTML = `
       <span class="stat stat-views"><i class="icon">👁</i><span class="n">${m.views}</span></span>
       <span class="stat action-reco ${t.reco?'active':''}"><i class="icon">👍</i><span class="n">${m.reco}</span></span>
@@ -3395,7 +3395,7 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='編輯';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3412,11 +3412,11 @@ body > div.container,
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='刪除';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('要刪除此消息嗎？')) return;
+        if(!confirm('Do you want to delete this post?')) return;
         item.remove();
       });
     }
@@ -3531,7 +3531,7 @@ body > div.container,
     keep.classList.add('migrated');
     // Ensure compact shape
     keep.style.display = 'inline-flex';
-    keep.style.align項目s = 'center';
+    keep.style.alignItems = 'center';
     keep.style.justifyContent = 'center';
     keep.style.height = '28px';
     keep.style.lineHeight = '28px';
@@ -3590,7 +3590,7 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = '標題';
+    if(t) t.textContent = 'Title';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
@@ -3671,11 +3671,11 @@ body > div.container,
   }
 
   // 구매
-  window.order項目 = async function(itemId, qty){
+  window.orderItem = async function(itemId, qty){
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("已收到購買請求。"); } else { alert("Purchase request failed"); }
+      if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
 
@@ -3684,7 +3684,7 @@ body > div.container,
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("已收到結算請求。"); } else { alert("Settlement request failed"); }
+      if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
 
@@ -3694,8 +3694,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("區塊鏈處理請求已完成： " + (j.txHash||"待處理")); }
-      else { alert("區塊鏈處理失敗"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"Pending")); }
+      else { alert("Blockchain processing failed"); }
     }catch(e){ console.warn(e); alert("Network error"); }
   };
 })();
@@ -3816,7 +3816,7 @@ body > div.container,
 })();
 </script>
 
-<!-- IGDC minimal 捐款 UI (non-invasive) -->
+<!-- IGDC minimal Donate UI (non-invasive) -->
 
 <div class="donation-inline">
 <input aria-label="捐款金額（USD）" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
@@ -3835,7 +3835,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","固定捐款金額");
+  btnGroup.setAttribute("aria-label","Fixed donation amount");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3850,7 +3850,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。";
+  note.textContent = "Guest donations are available only in the $5–$50 range. For larger amounts, please use the account transfer information below.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3865,12 +3865,12 @@ body > div.container,
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>General: 농협 301-0078-3333-51</div>
+    <div>General: NongHyup 301-0078-3333-51</div>
     <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>General: 신한 100-026-331592</div>
+    <div>General: Shinhan 100-026-331592</div>
     <div>Foreign Currency: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
@@ -3884,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`선택한 금액: ₩${Number(amt).toLocaleString()}\n\n아래 Account로 이체해 주세요.`);
+      alert(`Selected amount: ₩${Number(amt).toLocaleString()}\n\nPlease transfer it to the account below.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3945,7 +3945,7 @@ body > div.container,
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('付款 API 尚未連接。請從右側面板選擇一個帳戶。'); }
+          else { alert('The payment API is not connected. Please select an account from the right panel.'); }
         }
       }catch(err){
         console.error(err);
@@ -3959,7 +3959,7 @@ body > div.container,
   // Optional: Esc to close
   document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDonateModal(); });
 
-  // Expose a safe helper to rebind existing 捐款 button(s)
+  // Expose a safe helper to rebind existing Donate button(s)
   window.__bindDonateButtons = function(){
     document.querySelectorAll('.donate-btn, .btn-donate, [data-action="donate"]')
       .forEach(function(btn){
@@ -4100,7 +4100,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if ((!hasAny || (!hasReal && !hasExternalInfo)) && !hasOurPlaceholder) {
         const item = document.createElement('div');
         item.className = 'item placeholder';
-        item.innerHTML = '<div class="title">尚無貼文</div>';
+        item.innerHTML = '<div class="title">No posts yet</div>';
         list.appendChild(item);
       }
 
@@ -4254,7 +4254,7 @@ document.addEventListener('DOMContentLoaded', function(){
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|operation|ops|settings?|config|deploy|deployment|error|bug|loading|api|integration|server|database|db|permission|policy|login|token|key|payment|security|cors|network|timeout|response\s*code|status\s*code|build|compile|broken|doesn'?t\s*work|not\s*work|stuck|page|link|malfunction|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -4264,7 +4264,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 儲存은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4290,19 +4290,19 @@ document.addEventListener('DOMContentLoaded', function(){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "問答諮詢";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","關閉");
+    const title = el("div","igdc-qa-title"); title.textContent = "Questions & Answers";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="問題";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="請輸入您的問題...";
-    const lA = el("label"); lA.textContent="回答";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="請稍候，我們將盡快回覆。";
+    const lQ = el("label"); lQ.textContent="Question";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Please enter your question...";
+    const lA = el("label"); lA.textContent="Answer";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Please wait a moment. An answer will be provided shortly.";
     const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="提交";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="清除";
-    const note = el("div","igdc-qa-note"); note.textContent="※ 簡單問題將由 AI 立即回答。技術、錯誤或營運相關問題會自動轉交給管理員問答。";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical, error, or operation-related issues are automatically forwarded to the admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4373,18 +4373,18 @@ document.addEventListener('DOMContentLoaded', function(){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A.（待處理）";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "管理員請求" : "一般";
+        const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="刪除";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("刪除失敗（權限/政策）"); return; }
+            if(error){ alert("Delete failed (permission/policy)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4407,9 +4407,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="營運相關諮詢將在管理員審核後回覆。";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
-          else answer="感謝您的諮詢。我們會盡快審核並協助您。";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
+          else if(/price|cost|fee|pricing|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else answer="Thank you for your inquiry. We will review it promptly and assist you.";
         }
       }
       return { technical, answer };
@@ -4423,7 +4423,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("儲存 설정(Supabase url/key)이 아직 연결되지 않아 서버 儲存은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("The storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed to the web, the connection will be enabled automatically once SUPER_VARSAR.url/anonKey is set.");
         return;
       }
       const record = {
@@ -4584,7 +4584,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "關閉";
+    content: "Close";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4725,8 +4725,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>付款 QR 碼</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">關閉</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4859,7 +4859,7 @@ window.addEventListener("message",function(ev){
     return keyFromLabel(labelText);
   }
 
-  function normalize項目Footer(root){
+  function normalizeItemFooter(root){
     if(!root) root = document;
     if(!root.querySelectorAll) return;
 
@@ -4950,7 +4950,7 @@ window.addEventListener("message",function(ev){
       wrap.className = "mobile-news-clone";
       wrap.innerHTML = src.outerHTML;
 
-      normalize項目Footer(wrap);
+      normalizeItemFooter(wrap);
 
       row.parentNode.insertBefore(wrap, row.nextSibling);
     });
@@ -4974,12 +4974,12 @@ window.addEventListener("message",function(ev){
   const $  = (s,r=document)=>r.querySelector(s);
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  // 預覽 targets (reuse existing modal if present)
-  const modal   = $('#news預覽Modal') || $('#previewModal');
-  const npTitle = $('#npTitle') || $('#news預覽Title');
-  const npTime  = $('#npTime') || $('#news預覽Time');
-  const npBody  = $('#npBody') || $('#news預覽Body');
-  const npAttach= $('#npAttach') || $('#news預覽Attach');
+  // Preview targets (reuse existing modal if present)
+  const modal   = $('#newsPreviewModal') || $('#previewModal');
+  const npTitle = $('#npTitle') || $('#newsPreviewTitle');
+  const npTime  = $('#npTime') || $('#newsPreviewTime');
+  const npBody  = $('#npBody') || $('#newsPreviewBody');
+  const npAttach= $('#npAttach') || $('#newsPreviewAttach');
 
   function openModal(){
     if(!modal) return;
@@ -5009,7 +5009,7 @@ window.addEventListener("message",function(ev){
       });
   }
   markHasAttach(document);
-  normalize項目Footer(document);
+  normalizeItemFooter(document);
 
   // Watch dynamic additions
   $$('.right .topic-panel .list, .mobile-news-clone .topic-panel .list').forEach(function(list){
@@ -5019,12 +5019,12 @@ window.addEventListener("message",function(ev){
           if(n.nodeType !== 1) return;
           if(n.classList.contains('item')){
             markHasAttach(n);
-            normalize項目Footer(n);
+            normalizeItemFooter(n);
           }else if(n.querySelectorAll){
             n.querySelectorAll('.item').forEach(function(it){
               markHasAttach(it);
             });
-            normalize項目Footer(n);
+            normalizeItemFooter(n);
           }});
       });
     });
@@ -5059,12 +5059,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || '標題 없음';
+    npTitle.textContent = title || 'No title';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(尚無已發布的正文。)';
+    npBody.textContent = body || '(No content has been registered.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">附件</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml
         : '';
     }
 
@@ -5116,14 +5116,14 @@ window.addEventListener("message",function(ev){
 
       const { error } = await sb.from('igdc_donation_posts').insert(payload);
       if(error){
-        console.warn('[donation] Supabase 儲存 실패:', error.message);
+        console.warn('[donation] Supabase Save 실패:', error.message);
       }
     }catch(err){
       console.warn('[donation] Supabase sync 예외:', err);
     }
   }
 
-  // 완전 儲存 버튼 클릭 후 Supabase 동기화 시도
+  // 완전 Save 버튼 클릭 후 Supabase 동기화 시도
   document.addEventListener('click', function(e){
     const btn = e.target.closest('#btnSubmitPost');
     if(!btn) return;
@@ -5158,7 +5158,7 @@ window.addEventListener("message",function(ev){
   vertical-align: middle;
 }
 
-/* 標題/메타 스타일 유지 */
+/* Title/메타 스타일 유지 */
 .right .topic-panel .list .item .title,
 .mobile-news-clone .topic-panel .list .item .title {
   font-weight: 700;
@@ -5264,7 +5264,7 @@ window.addEventListener("message",function(ev){
 
 
 <script>
-// 모바일: WAM NAVER Cafe + 捐款 패널 이동 (복사 아님, 이동)
+// 모바일: WAM NAVER Cafe + Donations 패널 이동 (복사 아님, 이동)
 (function(){
   var mq = window.matchMedia("(max-width:1023px)");
   var main = document.querySelector("main.main");
@@ -5402,7 +5402,7 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">載入中...</div>
+        <div class="card-title">Loading...</div>
         <div class="card-meta">-</div>
         <div class="card-preview">Preparing</div>
       </div>
@@ -5738,7 +5738,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   var installTimer=null;
   var $=function(s,r){ return (r||document).querySelector(s); };
   var $$=function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
-  var IGDC_I18N={"category":"項目","writePost":"寫文章","title":"標題","titlePlaceholder":"請輸入標題","content":"正文","contentPlaceholder":"請輸入正文","attachmentOptional":"附件","noAttachment":"無附件","attachHelp":"所選檔名和下載資料會隨文章一起保存。大型檔案可能受瀏覽器儲存限制。","draft":"暫存","cancel":"取消","save":"保存","close":"關閉","edit":"Edit","del":"Del","untitled":"無標題","emptyBody":"（無正文）","noTitleInput":"未輸入標題","attachments":"附件","attachment":"附件","download":"下載","fileNameOnly":"檔名","emptyList":"暫無文章。","view":"瀏覽","recommend":"推薦","like":"喜歡","modify":"編輯","delete":"刪除","saved":"已保存","updated":"已更新","canceled":"已取消","draftSaved":"草稿已保存","deleted":"已刪除","applied":"已反映","undone":"已取消","largeFile":"檔案較大，僅保存檔名。"};
+  var IGDC_I18N={"category":"項目","writePost":"寫文章","title":"標題","titlePlaceholder":"請輸入標題","content":"正文","contentPlaceholder":"請輸入正文","attachmentOptional":"附件","noAttachment":"無附件","attachHelp":"所選檔名和下載資料會隨文章一起保存。大型檔案可能受瀏覽器儲存限制。","draft":"暫存","cancel":"取消","save":"保存","close":"關閉","edit":"編輯","del":"刪除","untitled":"無標題","emptyBody":"（無正文）","noTitleInput":"未輸入標題","attachments":"附件","attachment":"附件","download":"下載","fileNameOnly":"檔名","emptyList":"暫無文章。","view":"瀏覽","recommend":"推薦","like":"喜歡","modify":"編輯","delete":"刪除","saved":"已保存","updated":"已更新","canceled":"已取消","draftSaved":"草稿已保存","deleted":"已刪除","applied":"已反映","undone":"已取消","largeFile":"檔案較大，僅保存檔名。"};
   function tr(k){ return IGDC_I18N[k] || (k||''); }
   function esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
   function makeId(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }

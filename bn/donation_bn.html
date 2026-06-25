@@ -6,7 +6,7 @@
 <script>
 /**
  * 안전한 Supabase 연결 플러그
- * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Netlify পরিবেশ변수에서 자동 불러오기
+ * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Automatically load from Netlify environment variables
  */
 
 (async () => {
@@ -21,14 +21,14 @@
       });
       console.log("✅ Supabase 키 정상 로드됨.");
     } else {
-      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify পরিবেশ변수 নিশ্চিত করুন 필요.");
+      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify environment variables Confirm 필요.");
       window.SUPER_VARSAR = Object.freeze({
         url: null,
         anonKey: null
       });
     }
   } catch (err) {
-    console.error("❌ Supabase পরিবেশ변수 로드 실패:", err);
+    console.error("❌ Supabase environment variable load failed:", err);
     window.SUPER_VARSAR = Object.freeze({
       url: null,
       anonKey: null
@@ -62,7 +62,7 @@
   .sidebar{ width:210px; background-color:#e0e0e0; display:flex; flex-direction:column; padding-top:30px; }
   .sidebar a{
     display:block; background-color:#fff4e0; color:#804000; text-decoration:none;
-    padding:10px 12px; font-weight:bold; font-size:1rem; border:1px solid #f3d9b0;
+    padding:12px 18px; font-weight:bold; font-size:1rem; border:1px solid #f3d9b0;
     border-radius:8px; margin:10px 12px; transition:background-color .3s, text-decoration .3s;
   }
   .sidebar a:hover{ background-color:#ffe5b4; text-decoration:underline; }
@@ -79,7 +79,7 @@
   .hero h2{ margin:0 0 12px; color:var(--brand); }
   .hero p{ margin:0 0 16px; color:#333; }
 
-  .button{ background:var(--brand); border:0; color:#fff; padding:10px 16px; border-radius:8px; cursor:pointer; font-weight:600; }
+  .button{ background:var(--brand); border:0; color:#fff; padding:10px 16px; border-radius:6px; cursor:pointer; font-weight:600; }
   .button.outline{ background:#fff; color:var(--brand); border:1px solid var(--brand); }
   .button.danger{ background:var(--danger); }
   .button.small{ padding:6px 10px; font-size:.85rem; }
@@ -334,27 +334,27 @@
 
 /* --- Compose row cosmetics --- */
 .compose-row .button.small{ padding:6px 10px; }
-.compose-row input[type="file"]{ border:1px dashed #bbb; padding:4px; border-radius:8px; background:#fff; }
+.compose-row input[type="file"]{ border:1px dashed #bbb; padding:4px; border-radius:6px; background:#fff; }
 
 /* --- Right panel category boxes --- */
 .right .topic-panel{ display:flex; flex-direction:column; height:260px; }
 .right .topic-panel .list{ flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
 .right .topic-panel .item{ border:1px solid #ddd; border-radius:8px; padding:8px; background:#fff; }
-.right .topic-panel .item .title{ font-weight:700; font-size:1rem; margin-bottom:4px; }
+.right .topic-panel .item .title{ font-weight:700; font-size:.9rem; margin-bottom:4px; }
 .right .topic-panel .item .meta{ font-size:.75rem; color:#777; }
 
 /* Compose row aligned fields */
 .compose-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .compose-row .field{ display:inline-flex; align-items:center; gap:6px; }
-.compose-row .field input[type="file"]{ border:1px dashed #bbb; padding:4px; border-radius:8px; background:#fff; }
-.compose-row .after-text{ font-size:1rem; color:#444; }
+.compose-row .field input[type="file"]{ border:1px dashed #bbb; padding:4px; border-radius:6px; background:#fff; }
+.compose-row .after-text{ font-size:.9rem; color:#444; }
 
 /* === Compose two-row layout === */
 .compose-wrap{ display:flex; flex-direction:column; gap:6px; margin:8px 0 2px 0; }
 .compose-wrap .row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .compose-wrap .row-top .button.small{ padding:6px 10px; }
 .compose-wrap .row-bottom .field{ display:inline-flex; align-items:center; gap:6px; }
-.compose-wrap .row-bottom input[type="file"]{ border:1px dashed #bbb; padding:4px; border-radius:8px; background:#fff; }
+.compose-wrap .row-bottom input[type="file"]{ border:1px dashed #bbb; padding:4px; border-radius:6px; background:#fff; }
 .button.tiny{ padding:4px 8px; font-size:.85rem; }
 
 /* Accent color for '글 올리기' */
@@ -363,7 +363,7 @@
 /* Custom file pick buttons */
 .file-btn{ background:#f6f3ff; border-color:#cfc6ff; }
 .filename{ margin-left:6px; font-size:.85rem; color:#555; }
-/* Ensure নিশ্চিত করুন is horizontal */
+/* Ensure Confirm is horizontal */
 .button.tiny{ writing-mode:horizontal-tb; }
 
 /* --- Compose top-row button alignment (scoped, minimal) --- */
@@ -374,12 +374,12 @@
 .compose-wrap .row-top .button{ margin:0; }
 .compose-wrap .row-top #btnOpenComposer{ order:1; }
 .compose-wrap .row-top #btnSubmitPost{ order:2; }
-/* Keep 'নিশ্চিত করুন' labels strictly horizontal (already set for .button.tiny) */
+/* Keep 'Confirm' labels strictly horizontal (already set for .button.tiny) */
 
-/* Reinforce: 'নিশ্চিত করুন' 버튼은 가로(수평) 표기 유지 */
+/* Reinforce: 'Confirm' 버튼은 가로(수평) 표기 유지 */
 .compose-wrap .row-bottom .button.tiny{ writing-mode:horizontal-tb; }
 
-/* === Scoped UI polish for 'বিভাগ + NGO', 파일/ছবি নির্বাচন 라인 === */
+/* === Scoped UI polish for 'Category + NGO', 파일/Choose Image 라인 === */
 .field-category{
   display:flex; align-items:center; gap:10px;
   border:1px solid #d0d7de; border-radius:10px;
@@ -392,7 +392,7 @@
 
 .field .file-btn{ margin-right:8px; }
 
-/* 파일/ছবি নির্বাচন 결과명을 긴 입력막대처럼 보이게 */
+/* 파일/Choose Image 결과명을 긴 입력막대처럼 보이게 */
 .field .filename, #imgChosen, #fileChosen{
   display:inline-block; min-width:360px; max-width:100%;
   padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;
@@ -414,11 +414,11 @@
 
 /* File & Image pickers: one-line, confirm after filename bar, bar = 50% width */
 .field-file, .field-image{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.field-file #btnPickFile{ order:1; color:#111; }   /* 'ফাইল নির্বাচন' in black */
+.field-file #btnPickFile{ order:1; color:#111; }   /* 'Choose File' in black */
 .field-file .filename{ order:2; width:50%; min-width:0; }
 .field-file #btnFileConfirm{ order:3; }
 
-.field-image #btnPickImage{ order:1; color:#111; } /* 'ছবি নির্বাচন' in black (for consistency) */
+.field-image #btnPickImage{ order:1; color:#111; } /* 'Choose Image' in black (for consistency) */
 .field-image .filename{ order:2; width:50%; min-width:0; }
 .field-image #btnImageConfirm{ order:3; }
 
@@ -431,18 +431,18 @@
   width: 90px; min-width: 80px; max-width: 110px;
 }
 
-/* বিভাগ label as a button, horizontal text ensured */
+/* Category label as a button, horizontal text ensured */
 #labelCategory{ font-weight:600; }
 
 /* File/Image bars: reduce to 25% width */
 .field-file .filename, .field-image .filename{ width:25%; min-width:0; }
 
-/* Ensure 'ফাইল নির্বাচন' / 'ছবি নির্বাচন' label color is black and stays readable */
+/* Ensure 'Choose File' / 'Choose Image' label color is black and stays readable */
 #btnPickFile, #btnPickImage{ color:#111 !important; }
 
 /* === Final polish per screenshot feedback === */
 
-/* 'বিভাগ' must be horizontal like a button */
+/* 'Category' must be horizontal like a button */
 #labelCategory{
   writing-mode: horizontal-tb !important;
   transform: none !important;
@@ -509,15 +509,15 @@
 /* === Group spacing & ordering fix (compose area only) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* File group: [ফাইল নির্বাচন] [막대] [নিশ্চিত করুন] */
+/* File group: [Choose File] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:4px !important; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:4px; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; position:relative; z-index:1; }
 
-/* Image group: [ছবি নির্বাচন] [막대] [নিশ্চিত করুন] */
+/* Image group: [Choose Image] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:4px !important; }
-/* Ensure a sufficiently large gap from file-confirm (>= 'বিভাগ' 버튼 폭 가늠치) */
+/* Ensure a sufficiently large gap from file-confirm (>= 'Category' 버튼 폭 가늠치) */
 .compose-wrap .row-bottom .field-image{ margin-left:72px !important; }
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; margin-left:4px; }
@@ -554,15 +554,15 @@
 /* === Compose row: strict grouping & anti-overlay (scoped) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* FILE group -> [ফাইল নির্বাচন][막대][নিশ্চিত করুন] 붙어서 배치 */
+/* FILE group -> [Choose File][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:6px; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:6px; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; margin-left:8px; }
 
-/* IMAGE group -> [ছবি নির্বাচন][막대][নিশ্চিত করুন] 붙어서 배치 */
+/* IMAGE group -> [Choose Image][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:6px; }
-/* 파일 그룹의 নিশ্চিত করুন 버튼 뒤로 충분히 띄우기(겹침 방지) */
+/* 파일 그룹의 Confirm 버튼 뒤로 충분히 띄우기(겹침 방지) */
 .compose-wrap .row-bottom .field-image{ margin-left:96px; } /* 필요 시 수치 조정 */
 
 .compose-wrap .row-bottom #fileChosen,
@@ -592,7 +592,7 @@
   margin-left:0 !important;   /* remove previous manual offsets */
 }
 
-/* Inside each group: [Pick][Bar][নিশ্চিত করুন] */
+/* Inside each group: [Pick][Bar][Confirm] */
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; }
@@ -641,9 +641,9 @@
 <style>
 /* ===== Compose-only adjustments (safe & minimal) ===== */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top .field-category{ order:1; }     /* বিভাগ(드롭다운) */
-.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* লিখুন */
-.compose-wrap .row-top #btnAttach{ order:3; }          /* সংযুক্তি(신규 버튼) */
+.compose-wrap .row-top .field-category{ order:1; }     /* Category(드롭다운) */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }          /* Attachment(신규 버튼) */
 .compose-wrap .row-top #btnSubmitPost{ order:4; }      /* 글올리기 */
 
 /* Hide legacy file/image pickers (compose only) */
@@ -666,10 +666,10 @@
 .attach-chip .remove:hover{ color:#c0392b; }
 .compose-wrap .row-top{ flex-wrap:wrap; }
 </style><style></style><style>
-/* === Compose row: place 'attachPreview' BETWEEN [সংযুক্তি] and [সংরক্ষণ] === */
+/* === Compose row: place 'attachPreview' BETWEEN [Attachment] and [Save] === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* লিখুন */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* সংযুক্তি */
+.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
 .compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
@@ -678,7 +678,7 @@
   min-width:260px; max-width:50vw; flex:0 0 auto;     /* 막대 형태, 한 줄 유지 */
   overflow:hidden;
 }
-.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* সংরক্ষণ(최종) */
+.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* Save(최종) */
 
 /* 칩 스타일(막대 내부) */
 .attach-preview .attach-chip{
@@ -695,14 +695,14 @@
 /* 유령 중복 표시 방지: legacy 파일명 표시는 숨김(칩이 대체) */
 .compose-wrap #attachName{ display:none !important; }
 </style><style>
-/* === Compose row order override (requested): বিভাগ -> লিখুন -> সংযুক্তি -> 미리보기막대 -> সংরক্ষণ === */
+/* === Compose row order override (requested): Category -> Write -> Attachment -> 미리보기막대 -> Save === */
 .compose-wrap .row-top .field.field-category{ order:1; }
-.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* লিখুন */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* সংযুক্তি */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
 .compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
-.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* সংরক্ষণ */
+.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* Save */
 </style><style>
-/* === শিরোনাম Preview Bar (between লিখুন and সংযুক্তি) === */
+/* === Title Preview Bar (between Write and Attachment) === */
 .compose-wrap .row-top #titlePreview{
   order:3;
   display:flex; align-items:center; gap:6px;
@@ -720,7 +720,7 @@
 /* Keep row single-line as much as possible */
 .compose-wrap .row-top{ flex-wrap:nowrap; gap:8px; }
 </style><style>
-/* === Compose row: place 'মুছুন' right after 최종 'সংরক্ষণ' === */
+/* === Compose row: place 'Clear' right after 최종 'Save' === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow:hidden; }
 .compose-wrap .row-top #btnSubmitPost{ order:6; }
 .compose-wrap .row-top #btnAttachClear{ order:7; margin-left:6px; }
@@ -742,13 +742,13 @@
 .compose-wrap .row-top #attachPreview{ order:5; }
 </style><style>
 /* === ORDER HOTFIX (override) === */
-/* বিভাগ */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
-/* লিখুন */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
-/* শিরোনাম 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
-/* সংযুক্তি 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
+/* Category */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
+/* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
+/* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
+/* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
 /* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
-/* সংরক্ষণ */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
-/* মুছুন */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
+/* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
+/* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
 /* Smooth scroll in right-side topic lists */
 .right .topic-panel .list{ scroll-behavior: smooth; }
@@ -770,7 +770,7 @@
 .right .topic-panel .item .attach-list{ margin:4px 0 0 0; padding-left:18px; }
 .right .topic-panel .item .attach-list li{ font-size:.82rem; color:#374151; }
 
-/* মুছুন button aligned to the right */
+/* Delete button aligned to the right */
 
 /* Smooth scroll + auto-grow already added in last build; keep consistent here if missing */
 .right .topic-panel .list{ scroll-behavior:smooth; }
@@ -813,7 +813,7 @@
   overflow:hidden;
 }
 
-/* সংযুক্তি line: one compact line after preview */
+/* Attachment line: one compact line after preview */
 .right .topic-panel .item .attach,
 .right .topic-panel .item .attach-list{
   margin-top:2px; font-size:.8rem; color:#374151;
@@ -821,7 +821,7 @@
 }
 .right .topic-panel .item .attach-list{ padding-left:16px; }
 
-/* মুছুন button stays aligned right, compact */
+/* Delete button stays aligned right, compact */
 
 /* Make the whole card clickable for popup */
 .right .topic-panel .item{ cursor:pointer; }
@@ -845,7 +845,7 @@
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like,
 
-/* 색상: Edit=파랑, 추천=초록, Like=핑크, মুছুন=빨강 */
+/* 색상: Edit=파랑, Recommend=초록, Like=핑크, Delete=빨강 */
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 .right .topic-panel .item .btn-reco{ background:#e6f7ec; color:#059669; border-color:#bbf7d0; }
 .right .topic-panel .item .btn-like{ background:#ffe6ef; color:#db2777; border-color:#fecdd3; }
@@ -915,13 +915,13 @@
 .right .topic-panel .item .item-footer .action-reco.active .icon{ color:#065f46; }
 .right .topic-panel .item .item-footer .action-like.active .icon{ color:#9d174d; }
 
-/* Keep only Edit/মুছুন text buttons horizontally */
+/* Keep only Edit/Delete text buttons horizontally */
 .right .topic-panel .item .btn-edit,
 
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 @media (orientation: portrait){
 </style><style>
-/* Hard-hide any legacy text buttons labeled 추천/Like */
+/* Hard-hide any legacy text buttons labeled Recommend/Like */
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like{ display:none !important; }
 }
@@ -933,7 +933,7 @@
 }
 
 </style><style>
-/* --- Footer row normalization for Edit/মুছুন buttons --- */
+/* --- Footer row normalization for Edit/Delete buttons --- */
 .right .topic-panel .item .item-footer{
   display:flex; align-items:center; gap:10px; justify-content:flex-end;
   min-height:34px; /* consistent row height */
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "এখনও কোনো প্রশ্নোত্তর এন্ট্রি নিবন্ধিত হয়নি";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "এখনও কোনো প্রশ্নোত্তর এন্ট্রি নিবন্ধিত হয়নি";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1963,7 +1963,7 @@ body .right{ display:none !important; }
 
   .mobile-news-clone .topic-panel .item .title{
     font-weight:700;
-    font-size:1rem;
+    font-size:.9rem;
     margin:0;
   }
 
@@ -1974,7 +1974,7 @@ body .right{ display:none !important; }
     line-height:1.5;
   }
 
-  /* 하단 Footer: 읽음/추천/좋아요/아이콘 + Edit/মুছুন 전부 우측 정렬 */
+  /* 하단 Footer: 읽음/Recommend/Like/아이콘 + Edit/Delete 전부 우측 정렬 */
  .mobile-news-clone .topic-panel .item .item-footer {
     margin-top: auto;              /* 위 Content 밀어 올리고, footer를 맨 아래로 */
     display: flex;
@@ -2023,7 +2023,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
-  <!-- Supabase পরিবেশ 설정 (লিখুন/도네이션/Q&A 공용) -->
+  <!-- Supabase Environment 설정 (Write/도네이션/Q&A 공용) -->
   <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
@@ -2036,7 +2036,7 @@ body .right{ display:none !important; }
     window.CURRENT_USER_NAME = window.CURRENT_USER_NAME || "";
   </script>
 
-  <!-- Supabase JS (পরিবেশ만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
+  <!-- Supabase JS (Environment만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
 
 
@@ -2372,12 +2372,12 @@ body > div.container,
 <div class="container">
 <!-- Left Sidebar (불변) -->
 <nav class="sidebar">
-<a href="home_bn.html">🏠 হোম</a>
-<a href="networkhub_bn.html">🛒 মার্কেট হাব</a>
-<a href="distributionhub_bn.html">🏭 ডিস্ট্রিবিউশন হাব</a>
-<a href="socialnetwork_bn.html">📢 সোশ্যাল নেটওয়ার্ক</a>
-<a href="mediahub_bn.html">🎬 মিডিয়া হাব</a>
-<a href="tour_bn.html">🧳 ভ্রমণ · পর্যটন · আবাসন</a>
+<a href="home_en.html">🏠 হোম</a>
+<a href="networkhub_en.html">🛒 মার্কেট হাব</a>
+<a href="distributionhub_en.html">🏭 ডিস্ট্রিবিউশন হাব</a>
+<a href="socialnetwork_en.html">📢 সোশ্যাল নেটওয়ার্ক</a>
+<a href="mediahub_en.html">🎬 মিডিয়া হাব</a>
+<a href="tour_en.html">🧳 ভ্রমণ · পর্যটন · আবাসন</a>
 <a href="literature/academic.html" style="display:none !important;">📚 সাহিত্য ও একাডেমিক বিনিময়</a>
 <a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 প্রশ্নোত্তর</a></nav>
 <!-- Main (불변 구조) -->
@@ -2495,9 +2495,9 @@ body > div.container,
 </main>
 <!-- Right (불변) -->
 <aside class="right">
-<div class="panel cafe-link"><a aria-label="WAM NAVER Cafe-এ যান" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
+<div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('অনুদান ব্যবস্থা শীঘ্রই সংযুক্ত হবে!')" style="margin-bottom:8px; padding:5px 14px;">অনুদান</button>
+<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">অনুদান</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - সাধারণ: NongHyup 301-0078-3333-51<br/>
         - বৈদেশিক মুদ্রা: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -2593,8 +2593,8 @@ body > div.container,
   btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
   btnSave && btnSave.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(কোনো শিরোনাম নেই)";
-    const b = bodyI?.value?.trim() || "(কোনো বিষয়বস্তু নেই)";
+    const t = titleI?.value?.trim() || "(No Title)";
+    const b = bodyI?.value?.trim() || "(No Content)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2602,7 +2602,7 @@ body > div.container,
       item.className = 'item';
       const imgSrc = imageLink || imagePreviewObjectUrl || null;
       item.innerHTML = `
-        ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:8px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
+        ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
         <div class="title">${t}</div>
         <div class="meta">${new Date().toLocaleString()}</div>
         <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
@@ -2612,7 +2612,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">সংযুক্তির লিংক</a>` : `সংযুক্তি: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Attachment link</a>` : `Attachment: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2623,7 +2623,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "সংযুক্তি: " + fileAttach.files[0].name;
+        att.textContent = "Attachment: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2640,15 +2640,15 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 নিশ্চিত করুন을 누르세요)");
+    const link = prompt("Paste an external image URL if you have one. Otherwise, click Confirm.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("শুধুমাত্র ২MB পর্যন্ত ছবির প্রিভিউ সরাসরি দেখা যাবে। বড় ফাইলের ক্ষেত্রে বাহ্যিক স্টোরেজে আপলোড করে লিংক দিন।");
+        alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
         imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
-        imageLink = ""; // 실제 সংরক্ষণ은 링크만 사용
+        imageLink = ""; // 실제 Save은 링크만 사용
       }
     }else{
       imageLink = ""; imagePreviewObjectUrl = "";
@@ -2657,11 +2657,11 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 নিশ্চিত করুন을 누르세요)");
+    const link = prompt("Paste an external file URL if you have one. Otherwise, click Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("শুধুমাত্র ৫ এমবি পর্যন্ত ফাইলের নাম সরাসরি দেখানো যাবে। বড় ফাইলের ক্ষেত্রে অনুগ্রহ করে কেবল বাইরের স্টোরেজের লিংক ব্যবহার করুন।");
+        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -2686,7 +2686,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + 'টি ফাইল');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' files');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2757,7 +2757,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove attachment'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2792,11 +2792,11 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSave(){
-    const t = (titleI && titleI.value.trim()) || '(কোনো শিরোনাম নেই)';
-    const b = (bodyI && bodyI.value.trim()) || '(কোনো বিষয়বস্তু নেই)';
+    const t = (titleI && titleI.value.trim()) || '(No Title)';
+    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('সংবাদের অংশটি খুঁজে পাওয়া যায়নি।'); return; }
+    if(!holder){ alert('The news area could not be found.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2813,20 +2813,20 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = 'সংযুক্তি: ' + f.name;
+        li.textContent = 'Attachment: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='মুছুন';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('আপনি কি এই পোস্টটি মুছে ফেলতে চান?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
 
@@ -2893,13 +2893,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + 'টি ফাইল');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' files');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','সব সংযুক্তি সরান'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove all attachments'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2917,7 +2917,7 @@ body > div.container,
     });
   }
 
-  // "মুছুন" 버튼도 전체 초기화
+  // "Clear" 버튼도 전체 초기화
   if(clearBtn){
     clearBtn.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2951,7 +2951,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'শিরোনাম নেই';
+    tpText.textContent = t || 'No title';
   }
 
   // live typing updates preview
@@ -2959,7 +2959,7 @@ body > div.container,
     titleI.addEventListener('input', ()=> updateTitlePreview());
   }
 
-  // খসড়া সংরক্ষণ: keep in-memory draft; do NOT post to right panel
+  // Save Draft: keep in-memory draft; do NOT post to right panel
   if(btnDraft){
     btnDraft.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2971,7 +2971,7 @@ body > div.container,
     });
   }
 
-  // বাতিল: clear draft and input fields, and clear preview
+  // Cancel: clear draft and input fields, and clear preview
   if(btnCancel){
     btnCancel.addEventListener('click', ()=>{
       draft.title=''; draft.body='';
@@ -3014,7 +3014,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'শিরোনাম দেওয়া হয়নি';
+    tpText.textContent = t || 'Title Not entered';
   }
 
   if(btnDraft){
@@ -3047,11 +3047,11 @@ body > div.container,
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='মুছুন';
+    btn.textContent='Delete';
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('আপনি কি এই পোস্টটি মুছে ফেলতে চান?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3122,7 +3122,7 @@ body > div.container,
 <div id="npTime" style="font-size:.85rem; color:#6b7280;"></div>
 </div>
 <div id="npBody" style="margin-top:8px; font-size:.95rem; color:#222; white-space:pre-wrap;"></div>
-<div id="npAttach" style="margin-top:8px; font-size:1rem; color:#374151;"></div>
+<div id="npAttach" style="margin-top:8px; font-size:.9rem; color:#374151;"></div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
 <button class="button outline" id="npClose" type="button">বন্ধ করুন</button>
 </div>
@@ -3194,7 +3194,7 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml) : '';
 
     openModal();
   }, true);
@@ -3252,7 +3252,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `সম্পাদিত · ${tsStr}`;
+    badge.textContent = `Edited · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3273,7 +3273,7 @@ body > div.container,
     if(item && canEditDelete(item)) window.__currentEditingItem = item;
   }, true);
 
-  // When edit modal "সংরক্ষণ" is pressed, persist edited meta and show badge
+  // When edit modal "Save" is pressed, persist edited meta and show badge
   (function attachSaveHook(){
     const saveBtn = document.getElementById('enSave');
     if(!saveBtn) return;
@@ -3382,20 +3382,20 @@ body > div.container,
     const m  = loadMetrics(id);
     const t  = loadToggles(id);
 
-    // মুছুন and rebuild stats area
+    // Clear and rebuild stats area
     stats.innerHTML = `
       <span class="stat stat-views"><i class="icon">👁</i><span class="n">${m.views}</span></span>
       <span class="stat action-reco ${t.reco?'active':''}"><i class="icon">👍</i><span class="n">${m.reco}</span></span>
       <span class="stat action-like ${t.like?'active':''}"><i class="icon">❤️</i><span class="n">${m.like}</span></span>
     `;
 
-    // Role-based Edit/মুছুন remain as-is (buttons may already exist from prior code)
+    // Role-based Edit/Delete remain as-is (buttons may already exist from prior code)
     // If no edit button present, create and apply permissions
     let btnEdit = footer.querySelector('.btn-edit');
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='সম্পাদনা';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3412,11 +3412,11 @@ body > div.container,
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='মুছুন';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('আপনি কি এই পোস্টটি মুছে ফেলতে চান?')) return;
+        if(!confirm('Do you want to delete this post?')) return;
         item.remove();
       });
     }
@@ -3590,13 +3590,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'শিরোনাম';
+    if(t) t.textContent = 'Title';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'বিষয়বস্তু';
+    if(p) p.textContent = 'Content';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3675,8 +3675,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("ক্রয় অনুরোধ গ্রহণ করা হয়েছে।"); } else { alert("ক্রয় অনুরোধ ব্যর্থ"); }
-    }catch(e){ console.warn(e); alert("নেটওয়ার্ক ত্রুটি"); }
+      if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // 정산
@@ -3684,8 +3684,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("সেটেলমেন্ট অনুরোধ গ্রহণ করা হয়েছে।"); } else { alert("সেটেলমেন্ট অনুরোধ ব্যর্থ"); }
-    }catch(e){ console.warn(e); alert("নেটওয়ার্ক ত্রুটি"); }
+      if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -3694,9 +3694,9 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("ব্লকচেইন প্রক্রিয়াকরণ অনুরোধ সম্পন্ন হয়েছে: " + (j.txHash||"অপেক্ষমাণ")); }
-      else { alert("ব্লকচেইন প্রক্রিয়াকরণ ব্যর্থ"); }
-    }catch(e){ console.warn(e); alert("নেটওয়ার্ক ত্রুটি"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"Pending")); }
+      else { alert("Blockchain processing failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 })();
 </script>
@@ -3741,7 +3741,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'পণ্য';
+            t.textContent = item.title || item.name || 'Product';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3764,7 +3764,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'পণ্য';
+              t.textContent = item.title || 'Product';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3835,7 +3835,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Fixed donation amount");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3850,7 +3850,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "অতিথি অনুদান শুধুমাত্র $5–$50 সীমার মধ্যে উপলব্ধ। এর বেশি পরিমাণের জন্য নিচের অ্যাকাউন্ট ট্রান্সফার তথ্য ব্যবহার করুন।";
+  note.textContent = "Guest donations are available only in the $5–$50 range. For larger amounts, please use the account transfer information below.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3861,17 +3861,17 @@ body > div.container,
   // === Account 안내 박스 ===
   const accountBox = document.createElement("div");
   accountBox.className = "account-box";
-  accountBox.setAttribute("aria-label","অ্যাকাউন্ট ট্রান্সফার তথ্য");
+  accountBox.setAttribute("aria-label","Account Transfer Information");
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>সাধারণ: 농협 301-0078-3333-51</div>
-    <div>বৈদেশিক মুদ্রা: NongHyup 452-0022-8173-81</div>
+    <div>General: NongHyup 301-0078-3333-51</div>
+    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>সাধারণ: 신한 100-026-331592</div>
-    <div>বৈদেশিক মুদ্রা: Shinhan 180-005-931110</div>
+    <div>General: Shinhan 100-026-331592</div>
+    <div>Foreign Currency: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -3884,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`নির্বাচিত পরিমাণ: ₩${Number(amt).toLocaleString()}\n\nনিচের অ্যাকাউন্টে স্থানান্তর করুন।`);
+      alert(`Selected amount: ₩${Number(amt).toLocaleString()}\n\nPlease transfer it to the account below.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3945,11 +3945,11 @@ body > div.container,
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('পেমেন্ট API সংযুক্ত নয়। অনুগ্রহ করে ডানদিকের প্যানেল থেকে একটি অ্যাকাউন্ট নির্বাচন করুন।'); }
+          else { alert('The payment API is not connected. Please select an account from the right panel.'); }
         }
       }catch(err){
         console.error(err);
-        alert('পেমেন্ট অনুরোধের সময় একটি সমস্যা ঘটেছে।');
+        alert('A problem occurred while requesting payment.');
       } finally {
         closeDonateModal();
       }
@@ -4100,7 +4100,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if ((!hasAny || (!hasReal && !hasExternalInfo)) && !hasOurPlaceholder) {
         const item = document.createElement('div');
         item.className = 'item placeholder';
-        item.innerHTML = '<div class="title">এখনও কোনো পোস্ট নেই</div>';
+        item.innerHTML = '<div class="title">No posts yet</div>';
         list.appendChild(item);
       }
 
@@ -4170,7 +4170,7 @@ document.addEventListener('DOMContentLoaded', function(){
       aiEndpoint: null
     };
 
-    // Supabase পরিবেশ을 SUPER_VARSAR에 적용하는 함수
+    // Supabase Environment을 SUPER_VARSAR에 적용하는 함수
     function applyConfig(env) {
       const url =
         (env && env.SUPABASE_URL) ||
@@ -4202,7 +4202,7 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
 
-    // 3) 없으면 Netlify Functions에서 পরিবেশ변수 읽어오기
+    // 3) 없으면 Netlify Functions에서 Environment변수 읽어오기
     //    (secureEnvBridge는 Netlify env에서 SUPABASE_URL, SUPABASE_ANON_KEY를 꺼내서 JSON으로 돌려주는 함수)
     var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
 
@@ -4254,7 +4254,7 @@ document.addEventListener('DOMContentLoaded', function(){
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|operation|ops|settings?|config|deploy|deployment|error|bug|loading|api|integration|server|database|db|permission|policy|login|token|key|payment|security|cors|network|timeout|response\s*code|status\s*code|build|compile|broken|doesn'?t\s*work|not\s*work|stuck|page|link|malfunction|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -4264,7 +4264,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 সংরক্ষণ은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4290,19 +4290,19 @@ document.addEventListener('DOMContentLoaded', function(){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "প্রশ্ন ও উত্তর";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","বন্ধ করুন");
+    const title = el("div","igdc-qa-title"); title.textContent = "Questions & Answers";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="প্রশ্ন";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="আপনার প্রশ্ন লিখুন...";
-    const lA = el("label"); lA.textContent="উত্তর";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="অনুগ্রহ করে একটু অপেক্ষা করুন। শীঘ্রই উত্তর দেওয়া হবে।";
+    const lQ = el("label"); lQ.textContent="Question";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Please enter your question...";
+    const lA = el("label"); lA.textContent="Answer";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Please wait a moment. An answer will be provided shortly.";
     const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="জমা দিন";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="মুছুন";
-    const note = el("div","igdc-qa-note"); note.textContent="※ সহজ প্রশ্নের উত্তর AI সঙ্গে সঙ্গে দেয়। প্রযুক্তিগত, ত্রুটি বা পরিচালনাসংক্রান্ত বিষয়গুলো স্বয়ংক্রিয়ভাবে অ্যাডমিন Q&A-তে পাঠানো হয়।";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical, error, or operation-related issues are automatically forwarded to the admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4373,18 +4373,18 @@ document.addEventListener('DOMContentLoaded', function(){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("উ. "+row.answer):"উ. (অপেক্ষমাণ)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "অ্যাডমিন অনুরোধ":"সাধারণ";
+        const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="মুছুন";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("মুছতে ব্যর্থ (অনুমতি/নীতি)"); return; }
+            if(error){ alert("Delete failed (permission/policy)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4407,9 +4407,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 নিশ্চিত করুন 후 회신됩니다.";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="মূল্য/ফি সংক্রান্ত তথ্যের জন্য এই পৃষ্ঠার নির্দেশনা দেখুন এবং অতিরিক্ত প্রশ্ন রেখে যান।";
-          else answer="문의 감사합니다. 빠르게 নিশ্চিত করুন하여 도와드리겠습니다.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
+          else if(/price|cost|fee|pricing|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else answer="Thank you for your inquiry. We will review it promptly and assist you.";
         }
       }
       return { technical, answer };
@@ -4423,7 +4423,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("সংরক্ষণ 설정(Supabase url/key)이 아직 연결되지 않아 서버 সংরক্ষণ은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("The storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed to the web, the connection will be enabled automatically once SUPER_VARSAR.url/anonKey is set.");
         return;
       }
       const record = {
@@ -4433,7 +4433,7 @@ document.addEventListener('DOMContentLoaded', function(){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("নিবন্ধন ব্যর্থ"); return; }
+      if(error){ alert("Registration failed"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -4584,7 +4584,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "বন্ধ করুন";
+    content: "Close";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4669,7 +4669,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 
-<!-- 사이드바 'সাহিত্যএকাডেমিক' 계열 링크 감추기 -->
+<!-- 사이드바 '문학학술' 계열 링크 감추기 -->
 <script>
 (function () {
   var side = document.querySelector('.sidebar');
@@ -4677,8 +4677,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   side.querySelectorAll('a').forEach(function(a){
     var t = (a.textContent || '').replace(/\s+/g, '');
-    // 'সাহিত্যএকাডেমিক', 'সাহিত্য/একাডেমিক', 'সাহিত্য-একাডেমিক', 'সাহিত্য-একাডেমিক বিনিময়' 등 변형 대응
-    if (/(সাহিত্য.?একাডেমিক|সাহিত্য-একাডেমিক বিনিময়)/.test(t)) {
+    // '문학학술', '문학/학술', '문학 학술', '문학학술교류' 등 변형 대응
+    if (/(문학.?학술|문학학술교류)/.test(t)) {
       a.classList.add('hidden');        // 페이지에 이미 정의된 .hidden 활용
       a.setAttribute('aria-hidden','true');
       a.setAttribute('tabindex','-1');  // 키보드 포커스에서도 제외(접근성)
@@ -4725,8 +4725,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>পেমেন্ট QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">বন্ধ করুন</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4773,12 +4773,12 @@ window.addEventListener("message",function(ev){
 
     if(t.includes("global") || t.includes("글로벌") || t.includes("wam") || t.includes("iesf")) return "iesf";
     if(t.includes("ngo")) return "ngo";
-    if(t.includes("মিশন") || t.includes("mission")) return "mission";
-    if(t.includes("সেবা") || t.includes("volunteer") || t.includes("service")) return "service";
-    if(t.includes("ত্রাণ") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
-    if(t.includes("শিক্ষা") || t.includes("education") || t.includes("edu")) return "edu";
-    if(t.includes("পরিবেশ") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
-    if(t.includes("অন্যান্য") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
+    if(t.includes("Mission") || t.includes("mission")) return "mission";
+    if(t.includes("Service") || t.includes("volunteer") || t.includes("service")) return "service";
+    if(t.includes("Relief") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
+    if(t.includes("Education") || t.includes("education") || t.includes("edu")) return "edu";
+    if(t.includes("Environment") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
+    if(t.includes("Others") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
 
     return null;
   }
@@ -5059,12 +5059,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'শিরোনাম নেই';
+    npTitle.textContent = title || 'No title';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(No content has been registered.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml
         : '';
     }
 
@@ -5116,14 +5116,14 @@ window.addEventListener("message",function(ev){
 
       const { error } = await sb.from('igdc_donation_posts').insert(payload);
       if(error){
-        console.warn('[donation] Supabase সংরক্ষণ 실패:', error.message);
+        console.warn('[donation] Supabase Save 실패:', error.message);
       }
     }catch(err){
       console.warn('[donation] Supabase sync 예외:', err);
     }
   }
 
-  // 완전 সংরক্ষণ 버튼 클릭 후 Supabase 동기화 시도
+  // 완전 Save 버튼 클릭 후 Supabase 동기화 시도
   document.addEventListener('click', function(e){
     const btn = e.target.closest('#btnSubmitPost');
     if(!btn) return;
@@ -5158,7 +5158,7 @@ window.addEventListener("message",function(ev){
   vertical-align: middle;
 }
 
-/* শিরোনাম/메타 스타일 유지 */
+/* Title/메타 스타일 유지 */
 .right .topic-panel .list .item .title,
 .mobile-news-clone .topic-panel .list .item .title {
   font-weight: 700;
@@ -5271,7 +5271,7 @@ window.addEventListener("message",function(ev){
   var topWrite = document.getElementById("topWritePanel");
   var feedSection = main ? main.querySelector("section.feed-wrapper") : null;
   var right = document.querySelector("aside.right");
-  if (!main || !topলিখুন || !feedSection || !right) return;
+  if (!main || !topWrite || !feedSection || !right) return;
 
   var cafePanel = right.querySelector(".panel.cafe-link");
   var accountPanel = right.querySelector(".panel.account-section");
@@ -5402,9 +5402,9 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">লোড হচ্ছে...</div>
+        <div class="card-title">Loading...</div>
         <div class="card-meta">-</div>
-        <div class="card-preview">প্রস্তুত হচ্ছে</div>
+        <div class="card-preview">Preparing</div>
       </div>
     `;
 
@@ -5478,66 +5478,6 @@ document.addEventListener("DOMContentLoaded",function(){
 
 <script src="/assets/js/maru-search.js"></script>
 <script src="/assets/js/maru-searchbank-sync.js"></script>
-
-
-<script id="qna-open-fallback-fix">
-(function(){
-  function mountFallback(){
-    var btn = document.getElementById('qnaOpenBtn');
-    if(!btn) return;
-    function ensureFallbackModal(){
-      var modal = document.getElementById('qnaFallbackModal');
-      if(modal) return modal;
-      modal = document.createElement('div');
-      modal.id = 'qnaFallbackModal';
-      modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2147483646;align-items:center;justify-content:center;';
-      modal.innerHTML = `
-        <div style="width:min(92vw,560px);max-height:82vh;overflow:auto;background:#fff;border-radius:14px;border:1px solid #f3d9b0;box-shadow:0 10px 30px rgba(0,0,0,.18);">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#fff4e0;border-bottom:1px solid #f3d9b0;">
-            <strong style="color:#804000;">প্রশ্ন ও উত্তর</strong>
-            <button type="button" data-close style="border:none;background:transparent;font-size:20px;cursor:pointer;">×</button>
-          </div>
-          <div style="padding:12px;display:flex;flex-direction:column;gap:10px;">
-            <label>প্রশ্ন</label>
-            <textarea placeholder="আপনার প্রশ্ন লিখুন..." style="width:100%;min-height:96px;border:1px solid #f3d9b0;border-radius:10px;padding:10px 12px;"></textarea>
-            <label>উত্তর</label>
-            <textarea placeholder="অনুগ্রহ করে একটু অপেক্ষা করুন। শীঘ্রই উত্তর দেওয়া হবে।" style="width:100%;min-height:128px;border:1px solid #f3d9b0;border-radius:10px;padding:10px 12px;"></textarea>
-            <div style="display:flex;gap:8px;">
-              <button type="button" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;">জমা দিন</button>
-              <button type="button" data-close style="background:#9ca3af;color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;">মুছুন</button>
-            </div>
-            <div style="font-size:12px;color:#666;">※ সহজ প্রশ্নের উত্তর AI সঙ্গে সঙ্গে দেয়। প্রযুক্তিগত, ত্রুটি বা পরিচালনাসংক্রান্ত বিষয়গুলো স্বয়ংক্রিয়ভাবে অ্যাডমিন Q&A-তে পাঠানো হয়।</div>
-            <p style="font-size:12px;color:#666;color:#666;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;">এখনও কোনো প্রশ্নোত্তর এন্ট্রি নিবন্ধিত হয়নি</div>
-          </div>
-        </div>`;
-      document.body.appendChild(modal);
-      modal.addEventListener('click', function(e){
-        if(e.target === modal || (e.target && e.target.hasAttribute('data-close'))){
-          modal.style.display='none';
-          document.body.style.overflow='';
-        }
-      });
-      return modal;
-    }
-    btn.addEventListener('click', function(e){
-      var existing = document.querySelector('.igdc-qa-modal');
-      if(existing){
-        e.preventDefault();
-        existing.classList.add('open');
-        existing.style.display = 'block';
-        document.body.style.overflow='hidden';
-        return;
-      }
-      e.preventDefault();
-      var modal = ensureFallbackModal();
-      modal.style.display='flex';
-      document.body.style.overflow='hidden';
-    }, true);
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', mountFallback);
-  else mountFallback();
-})();
-</script>
 
 
 
@@ -5798,7 +5738,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   var installTimer=null;
   var $=function(s,r){ return (r||document).querySelector(s); };
   var $$=function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
-  var IGDC_I18N={"category":"বিভাগ","writePost":"পোস্ট লিখুন","title":"শিরোনাম","titlePlaceholder":"শিরোনাম লিখুন","content":"বিষয়বস্তু","contentPlaceholder":"বিষয়বস্তু লিখুন","attachmentOptional":"ফাইল সংযুক্ত করুন","noAttachment":"সংযুক্তি নেই","attachHelp":"Selected file names and download data are saved with the post. Large files may be limited by browser storage.","draft":"খসড়া সংরক্ষণ","cancel":"বাতিল","save":"সংরক্ষণ","close":"বন্ধ","edit":"Edit","del":"Del","untitled":"শিরোনামহীন","emptyBody":"(কোনো বিষয়বস্তু নেই)","noTitleInput":"শিরোনাম নেই","attachments":"সংযুক্তি","attachment":"Attachment","download":"ডাউনলোড","fileNameOnly":"File name","emptyList":"কোনো পোস্ট নেই।","view":"Views","recommend":"Recommend","like":"Like","modify":"Edit","delete":"Delete","saved":"সংরক্ষিত","updated":"আপডেট হয়েছে","canceled":"বাতিল হয়েছে","draftSaved":"খসড়া সংরক্ষিত","deleted":"মুছে ফেলা হয়েছে","applied":"Applied","undone":"Canceled","largeFile":"File is large; only file names were saved."};
+  var IGDC_I18N={"category":"বিভাগ","writePost":"পোস্ট লিখুন","title":"শিরোনাম","titlePlaceholder":"শিরোনাম লিখুন","content":"বিষয়বস্তু","contentPlaceholder":"বিষয়বস্তু লিখুন","attachmentOptional":"ফাইল সংযুক্ত করুন","noAttachment":"সংযুক্তি নেই","attachHelp":"নির্বাচিত ফাইলের নাম ও ডাউনলোডের তথ্য পোস্টের সঙ্গে সংরক্ষিত হয়। বড় ফাইল ব্রাউজারের সংরক্ষণ সীমার কারণে সীমিত হতে পারে।","draft":"খসড়া সংরক্ষণ","cancel":"বাতিল","save":"সংরক্ষণ","close":"বন্ধ","edit":"সম্পাদনা","del":"মুছুন","untitled":"শিরোনামহীন","emptyBody":"(কোনো বিষয়বস্তু নেই)","noTitleInput":"শিরোনাম নেই","attachments":"সংযুক্তি","attachment":"সংযুক্তি","download":"ডাউনলোড","fileNameOnly":"ফাইলের নাম","emptyList":"কোনো পোস্ট নেই।","view":"দেখা হয়েছে","recommend":"সুপারিশ","like":"পছন্দ","modify":"সম্পাদনা","delete":"মুছুন","saved":"সংরক্ষিত","updated":"আপডেট হয়েছে","canceled":"বাতিল হয়েছে","draftSaved":"খসড়া সংরক্ষিত","deleted":"মুছে ফেলা হয়েছে","applied":"প্রয়োগ করা হয়েছে","undone":"বাতিল করা হয়েছে","largeFile":"ফাইলটি বড়; শুধু ফাইলের নাম সংরক্ষণ করা হয়েছে。"};
   function tr(k){ return IGDC_I18N[k] || (k||''); }
   function esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
   function makeId(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }

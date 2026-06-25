@@ -36,7 +36,10 @@
   }
 })();
 </script>
+
+
 <!-- /Supabase inline injection -->
+
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
 <title>Hab Sumbangan Global - IGTC Global</title>
@@ -743,7 +746,7 @@
 /* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
 /* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* Lampiran 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
 /* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
 /* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
@@ -1229,6 +1232,7 @@ body > .container > .main > *{
 
 
 </style>
+
 <style>
 /* === Right panel: allow deeper fold, leave ~20% (with a small px floor) === */
 :root{
@@ -1325,6 +1329,7 @@ body > .container > .main > *{
   border-color: rgba(0,0,0,0.25);
 }
 </style>
+
 <style id="donate-modal-css">
 .donate-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:9999;}
 .donate-modal{background:#fff;border:1px solid #ddd;padding:20px;border-radius:12px;max-width:420px;width:92%;color:#222;box-shadow:0 8px 28px rgba(0,0,0,.3);}
@@ -1440,13 +1445,14 @@ body > .container > .main > *{
 /* Ensure scroll area remains usable */
 .igdc-qa-body{ overflow:auto; }
 </style>
+
 <style id="qa-empty-state-style">
 .igdc-qa-threads:empty::before,
 .qna-threads:empty::before,
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Belum ada entri soal jawab yang disiarkan";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1464,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Belum ada entri soal jawab yang disiarkan";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1641,6 +1647,8 @@ body > .container > .main > *{
   html, body{ overflow-x:hidden !important; }
 }
 </style>
+
+
 <style id="donation-truefix-css">
   @media (max-width:none) and (min-width:1101px){
     .container{ gap:0 !important; }
@@ -1685,6 +1693,8 @@ main, .main, #main, .main-content, .content, .content-area{
     html, body{ overflow-x:hidden !important; }
   }
 </style>
+
+
 <!-- LEFT-ONLY onefix: remove shrinking; hide instantly at breakpoint -->
 <style id="left-only-onefix">
   /* Never animate shrinking on left/sidebar */
@@ -1714,6 +1724,10 @@ main, .main, #main, .main-content, .content, .content-area{
     }
   }
 </style>
+
+
+
+
 <style id="donation-sync-breakpoint">
 @media (min-width:1025px){
   .sidebar,.left{flex:0 0 210px!important;width:210px!important;min-width:210px!important;max-width:210px!important;flex-shrink:0!important}
@@ -1763,6 +1777,7 @@ main, .main, #main, .main-content, .content, .content-area{
   try{new MutationObserver(function(){if(small())apply()}).observe(document.documentElement,{childList:true,subtree:true})}catch(_){}
 })();
 </script>
+
 <style id="bc-mobile-tighten-15">
 /* === Blockchain buttons: mobile portrait ≥15% shrink (Donation page) === */
 @media (max-width: 480px){
@@ -1781,6 +1796,8 @@ main, .main, #main, .main-content, .content, .content-area{
   }
 }
 </style>
+
+
 <style id="donate-lr-plus-10">
 /* === Donate button: mobile portrait horizontal +10% (spacing minimal) === */
 @media (max-width: 480px){
@@ -1791,6 +1808,8 @@ main, .main, #main, .main-content, .content, .content-area{
   }
 }
 </style>
+
+
 <style id="donation-responsive-breakpoints">
 /* --------------------
    IGTC Donation page: canonical breakpoints
@@ -1859,6 +1878,7 @@ body .right{ display:none !important; }
  - Next steps: hook a mobile "drawer" for .right if you want ads/tools accessible on phones without occupying layout.
 */
 </style>
+
 <style id="donation-landscape-assert-v2">
 @media (max-width:1024px) and (orientation:landscape){
   body > div.container{ display:flex !important; flex-wrap:nowrap !important; gap:12px !important; }
@@ -1867,6 +1887,7 @@ body .right{ display:none !important; }
   body > div.container > aside.right{ display:block !important; flex:0 0 33.333% !important; min-width:0 !important; visibility:visible !important; opacity:1 !important; }
 }
 </style>
+
 <style id="mobile-right-gap">
 /* Mobile-only vertical gaps between right-panel blocks (3~5px target → 4px) */
 @media (max-width:1024px){
@@ -2002,8 +2023,8 @@ body .right{ display:none !important; }
     }
   }
 </style>
-<!-- Supabase Environment 설정 (Write/도네이션/Q&A 공용) -->
-<script>
+  <!-- Supabase Environment 설정 (Write/도네이션/Q&A 공용) -->
+  <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
       anonKey: window.SUPABASE_ANON_KEY || "",
@@ -2014,8 +2035,11 @@ body .right{ display:none !important; }
     window.CURRENT_USER_ROLE = (window.CURRENT_USER_ROLE || "guest").toLowerCase();
     window.CURRENT_USER_NAME = window.CURRENT_USER_NAME || "";
   </script>
-<!-- Supabase JS (Environment만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
-<script defer="" src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+  <!-- Supabase JS (Environment만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
+
+
 <style>
   /* [IGTC DONATION] Hero & Blockchain responsive tuning
      - 1100px 이하 (모바일 세로/가로 포함)에서 타이틀/안내문/블록체인 버튼 축소 및 정리 */
@@ -2060,6 +2084,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
+
 <script>
   // [IGTC DONATION] Hero description <br> normalization (MOBILE ONLY, width <= 1100px)
   document.addEventListener("DOMContentLoaded", function () {
@@ -2079,6 +2104,7 @@ body .right{ display:none !important; }
     });
   });
 </script>
+
 <style>
   /* IGTC DONATION - hero & topWritePanel spacing normalize */
   .hero {
@@ -2114,6 +2140,9 @@ body .right{ display:none !important; }
     }
   }
 </style>
+
+
+
 <style id="hero-mobile-type-fix">
 @media (max-width: 1100px){
   #topPostBody{
@@ -2128,6 +2157,7 @@ body .right{ display:none !important; }
   #topPostBody{ font-size: 0.86rem !important; }
 }
 </style>
+
 <style id="mobile-footer-guard">
   /* Base: ensure full-page flow */
   html, body { height: auto; min-height: 100% !important; }
@@ -2164,6 +2194,7 @@ body .right{ display:none !important; }
   /* Footer safety: home bar overlap */
   footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; position: static !important; }
 </style>
+
 <style id="donation-mobile-stack-right">
 /* Donation mobile layout: stack main and right, keep cards, remove right column gap */
 @media (max-width: 1024px){
@@ -2203,6 +2234,8 @@ body .right{ display:none !important; }
   }
 }
 </style>
+
+
 <style id="donation-mobile-onecard-portrait">
 /* Mobile portrait: keep section scroll, show one card full-width like Q-file */
 @media (max-width: 900px) and (orientation: portrait){
@@ -2222,6 +2255,8 @@ body .right{ display:none !important; }
   }
 }
 </style>
+
+
 <style id="donation-mobile-landscape-rightheight">
 /* 모바일 가로(<=1024px)에서만 소식 글창 높이 축소 – 세로/데스크탑은 그대로 */
 @media (max-width: 1024px) and (orientation: landscape){
@@ -2234,7 +2269,8 @@ body .right{ display:none !important; }
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/css/thumbs.standard.css">
+
 <style id="viewport-width-lock-final">
 /* === IGDC Donation: VIEWPORT WIDTH LOCK (FINAL OVERRIDE) ===
    목적: 브라우저 줌(예: 70~75%)에서도 컨테이너가 뷰포트(윈도우) 끝까지 꽉 차도록 강제.
@@ -2317,14 +2353,18 @@ body > div.container,
   }
 }
 </style>
-<style id="layout-gap-fix">
+
+
+<style id='layout-gap-fix'>
 .container{gap:15px !important; column-gap:15px !important;}
 </style>
+
 <style id="hide-literature-sidebar-btn-final">
 .sidebar a[href="literature/academic.html"]{
   display:none !important;
 }
 </style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2332,12 +2372,12 @@ body > div.container,
 <div class="container">
 <!-- Left Sidebar (불변) -->
 <nav class="sidebar">
-<a href="home_ms.html">🏠 Laman Utama</a>
-<a href="networkhub_ms.html">🛒 Hab Pasaran</a>
-<a href="distributionhub_ms.html">🏭 Hab Pengedaran</a>
-<a href="socialnetwork_ms.html">📢 Rangkaian Sosial</a>
-<a href="mediahub_ms.html">🎬 Hab Media</a>
-<a href="tour_ms.html">🧳 Perjalanan · Pelancongan · Penginapan</a>
+<a href="home_en.html">🏠 Laman Utama</a>
+<a href="networkhub_en.html">🛒 Hab Pasaran</a>
+<a href="distributionhub_en.html">🏭 Hab Pengedaran</a>
+<a href="socialnetwork_en.html">📢 Rangkaian Sosial</a>
+<a href="mediahub_en.html">🎬 Hab Media</a>
+<a href="tour_en.html">🧳 Perjalanan · Pelancongan · Penginapan</a>
 <a href="literature/academic.html" style="display:none !important;">📚 Pertukaran Sastera &amp; Akademik</a>
 <a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Soal Jawab</a></nav>
 <!-- Main (불변 구조) -->
@@ -2396,48 +2436,68 @@ body > div.container,
 <section class="feed-wrapper">
 <div class="feed-header"><h3 style="margin:0;">📺 Suapan</h3></div>
 <div id="feedRows">
+
 <!-- ===== Donation Feed Rows (Final Clean Version) ===== -->
+
 <div id="donationRows">
-<div class="feed-row" data-count="100">
-<div class="row-label">Berita Global</div>
-<div class="row-track thumb-grid thumb-scroller" data-psom-key="donation-global"></div>
+
+  <div class="feed-row" data-count="100">
+    <div class="row-label">Berita Global</div>
+    <div class="row-track thumb-grid thumb-scroller"
+         data-psom-key="donation-global"></div>
+  </div>
+
+  <div class="feed-row" data-count="80">
+    <div class="row-label">NGO</div>
+    <div class="row-track thumb-grid thumb-scroller"
+         data-psom-key="donation-ngo"></div>
+  </div>
+
+  <div class="feed-row" data-count="80">
+    <div class="row-label">Misi</div>
+    <div class="row-track thumb-grid thumb-scroller"
+         data-psom-key="donation-mission"></div>
+  </div>
+
+  <div class="feed-row" data-count="80">
+    <div class="row-label">Khidmat</div>
+    <div class="row-track thumb-grid thumb-scroller"
+         data-psom-key="donation-service"></div>
+  </div>
+
+  <div class="feed-row" data-count="80">
+    <div class="row-label">Bantuan</div>
+    <div class="row-track thumb-grid thumb-scroller"
+         data-psom-key="donation-relief"></div>
+  </div>
+
+  <div class="feed-row" data-count="80">
+    <div class="row-label">Pendidikan</div>
+    <div class="row-track thumb-grid thumb-scroller"
+         data-psom-key="donation-education"></div>
+  </div>
+
+  <div class="feed-row" data-count="80">
+    <div class="row-label">Alam Sekitar</div>
+    <div class="row-track thumb-grid thumb-scroller"
+         data-psom-key="donation-environment"></div>
+  </div>
+
+  <div class="feed-row" data-count="80">
+    <div class="row-label">Lain-lain</div>
+    <div class="row-track thumb-grid thumb-scroller"
+         data-psom-key="donation-others"></div>
+  </div>
+
 </div>
-<div class="feed-row" data-count="80">
-<div class="row-label">NGO</div>
-<div class="row-track thumb-grid thumb-scroller" data-psom-key="donation-ngo"></div>
+
 </div>
-<div class="feed-row" data-count="80">
-<div class="row-label">Misi</div>
-<div class="row-track thumb-grid thumb-scroller" data-psom-key="donation-mission"></div>
-</div>
-<div class="feed-row" data-count="80">
-<div class="row-label">Khidmat</div>
-<div class="row-track thumb-grid thumb-scroller" data-psom-key="donation-service"></div>
-</div>
-<div class="feed-row" data-count="80">
-<div class="row-label">Bantuan</div>
-<div class="row-track thumb-grid thumb-scroller" data-psom-key="donation-relief"></div>
-</div>
-<div class="feed-row" data-count="80">
-<div class="row-label">Pendidikan</div>
-<div class="row-track thumb-grid thumb-scroller" data-psom-key="donation-education"></div>
-</div>
-<div class="feed-row" data-count="80">
-<div class="row-label">Alam Sekitar</div>
-<div class="row-track thumb-grid thumb-scroller" data-psom-key="donation-environment"></div>
-</div>
-<div class="feed-row" data-count="80">
-<div class="row-label">Lain-lain</div>
-<div class="row-track thumb-grid thumb-scroller" data-psom-key="donation-others"></div>
-</div>
-</div>
-</div>
-</section></main>
+</main>
 <!-- Right (불변) -->
 <aside class="right">
-<div class="panel cafe-link"><a aria-label="Pergi ke WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
+<div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('Sistem derma akan disambungkan tidak lama lagi!')" style="margin-bottom:8px; padding:5px 14px;">Derma</button>
+<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Derma</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - General: NongHyup 301-0078-3333-51<br/>
         - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -2476,10 +2536,13 @@ body > div.container,
 <div class="list" data-cat="etc"></div>
 </div></aside>
 </div>
+
 <footer>
   IGTC Global Hub © 2025 | International General Distribution Company<br/>
   50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Korea <br/>
 </footer>
+
+
 <!-- Restored composer modal (from donation-Q) -->
 <div class="hidden" id="composerModal" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999;">
 <div class="panel" style="width:min(92vw, 720px); max-height:80vh; overflow:auto;">
@@ -2493,6 +2556,7 @@ body > div.container,
 </div>
 </div>
 <!-- /Restored composer modal -->
+
 <script>
 (function(){
   const $ = (sel, root=document)=>root.querySelector(sel);
@@ -2529,8 +2593,8 @@ body > div.container,
   btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
   btnSave && btnSave.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(Tiada tajuk)";
-    const b = bodyI?.value?.trim() || "(Tiada kandungan)";
+    const t = titleI?.value?.trim() || "(No Title)";
+    const b = bodyI?.value?.trim() || "(No Content)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2548,7 +2612,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Pautan lampiran</a>` : `Lampiran: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Attachment link</a>` : `Attachment: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2559,7 +2623,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "Lampiran: " + fileAttach.files[0].name;
+        att.textContent = "Attachment: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2576,11 +2640,11 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Paste an external image URL if you have one. Otherwise, click Confirm.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("Hanya imej sehingga 2MB boleh dipratonton secara terus. Untuk fail besar, muat naik ke storan luaran dan masukkan pautannya.");
+        alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
         imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
@@ -2593,11 +2657,11 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 Confirm을 누르세요)");
+    const link = prompt("Paste an external file URL if you have one. Otherwise, click Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("Hanya fail sehingga 5MB boleh memaparkan nama fail secara terus. Untuk fail besar, sila gunakan pautan storan luaran sahaja.");
+        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -2622,7 +2686,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' fail');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' files');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2693,7 +2757,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Buang lampiran'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove attachment'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2728,11 +2792,11 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSave(){
-    const t = (titleI && titleI.value.trim()) || '(Tiada tajuk)';
-    const b = (bodyI && bodyI.value.trim()) || '(Tiada kandungan)';
+    const t = (titleI && titleI.value.trim()) || '(No Title)';
+    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('소식 영역을 찾을 수 없습니다.'); return; }
+    if(!holder){ alert('The news area could not be found.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2749,20 +2813,20 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = 'Lampiran: ' + f.name;
+        li.textContent = 'Attachment: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Padam';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
 
@@ -2829,13 +2893,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' fail');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' files');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Buang semua lampiran'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove all attachments'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2887,7 +2951,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || "Tiada tajuk";
+    tpText.textContent = t || 'No title';
   }
 
   // live typing updates preview
@@ -2950,7 +3014,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Tiada tajuk';
+    tpText.textContent = t || 'Title Not entered';
   }
 
   if(btnDraft){
@@ -2983,11 +3047,11 @@ body > div.container,
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='Padam';
+    btn.textContent='Delete';
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3130,7 +3194,7 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Lampiran</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml) : '';
 
     openModal();
   }, true);
@@ -3188,7 +3252,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `Disunting · ${tsStr}`;
+    badge.textContent = `Edited · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3331,7 +3395,7 @@ body > div.container,
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Sunting';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3348,11 +3412,11 @@ body > div.container,
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Padam';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('이 소식을 Delete하시겠습니까?')) return;
+        if(!confirm('Do you want to delete this post?')) return;
         item.remove();
       });
     }
@@ -3526,13 +3590,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Tajuk';
+    if(t) t.textContent = 'Title';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Kandungan';
+    if(p) p.textContent = 'Content';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3589,6 +3653,7 @@ body > div.container,
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <!-- IGDC: order/settlement + optional web3 hooks (same-origin) -->
 <script>
 (function(){
@@ -3610,8 +3675,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("Permintaan pembelian telah diterima."); } else { alert("Permintaan pembelian gagal"); }
-    }catch(e){ console.warn(e); alert("Ralat rangkaian"); }
+      if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // 정산
@@ -3619,8 +3684,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("Permintaan penyelesaian telah diterima."); } else { alert("Permintaan penyelesaian gagal"); }
-    }catch(e){ console.warn(e); alert("Ralat rangkaian"); }
+      if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -3629,9 +3694,9 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Permintaan pemprosesan blockchain selesai: " + (j.txHash||"Menunggu")); }
-      else { alert("Pemprosesan blockchain gagal"); }
-    }catch(e){ console.warn(e); alert("Ralat rangkaian"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"Pending")); }
+      else { alert("Blockchain processing failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 })();
 </script>
@@ -3676,7 +3741,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'Produk';
+            t.textContent = item.title || item.name || 'Product';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3699,7 +3764,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Produk';
+              t.textContent = item.title || 'Product';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3750,7 +3815,9 @@ body > div.container,
   if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", run, {once:true}); } else { run(); }
 })();
 </script>
+
 <!-- IGDC minimal Donate UI (non-invasive) -->
+
 <div class="donation-inline">
 <input aria-label="Jumlah derma (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
 <button class="bc-tile orange" id="btnDonate">Derma</button>
@@ -3768,7 +3835,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Fixed donation amount");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3783,7 +3850,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "Derma tetamu hanya tersedia dalam julat $5–$50. Untuk jumlah yang lebih besar, sila gunakan maklumat pemindahan akaun di bawah.";
+  note.textContent = "Guest donations are available only in the $5–$50 range. For larger amounts, please use the account transfer information below.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3798,12 +3865,12 @@ body > div.container,
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>General: 농협 301-0078-3333-51</div>
+    <div>General: NongHyup 301-0078-3333-51</div>
     <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>General: 신한 100-026-331592</div>
+    <div>General: Shinhan 100-026-331592</div>
     <div>Foreign Currency: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
@@ -3817,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`Jumlah dipilih: ₩${Number(amt).toLocaleString()}\n\nSila pindahkan ke akaun di bawah.`);
+      alert(`Selected amount: ₩${Number(amt).toLocaleString()}\n\nPlease transfer it to the account below.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3878,11 +3945,11 @@ body > div.container,
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('API pembayaran tidak disambungkan. Sila pilih akaun dari panel kanan.'); }
+          else { alert('The payment API is not connected. Please select an account from the right panel.'); }
         }
       }catch(err){
         console.error(err);
-        alert('Masalah berlaku semasa meminta pembayaran.');
+        alert('A problem occurred while requesting payment.');
       } finally {
         closeDonateModal();
       }
@@ -3989,6 +4056,7 @@ footer{
   mo.observe(document.body, {childList:true, subtree:true});
 })();
 </script>
+
 <style id="igtc-adpanel-visualize">
 /* keep panel flexible and show the intended 10px spacing */
 .right .topic-panel{ height:auto !important; }
@@ -4091,6 +4159,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <style id="sidebar-active-style">.sidebar a.active { background:#ffdfcc; color:#804000; border:1px solid #f3d9b0; border-radius:8px; }</style>
 <script id="sidebar-active-script">(function(){function norm(n){return (n||"").toLowerCase().replace(/_en\.html$/,".html").replace(/_zh\.html$/,".html");}document.addEventListener("DOMContentLoaded",function(){var f=norm((location.pathname.split("/").pop()||"index.html"));document.querySelectorAll(".sidebar a").forEach(function(a){var href=norm((a.getAttribute("href")||"").split("/").pop());if(href && href===f){a.classList.add("active");a.setAttribute("aria-current","page");}else{a.classList.remove("active");a.removeAttribute("aria-current");}});});})();</script>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.donation.json" data-interval="30000" src="/assets/js/hero.rotator.js"></script>
+
 <script id="igdc-qa-config">
   (function () {
     // 1) 민감정보 없는 기본 설정
@@ -4159,6 +4228,8 @@ document.addEventListener('DOMContentLoaded', function(){
       });
   })();
 </script>
+
+
 <script>
 (function(){
   if(window.__PSOM_AUTOLABEL__) return; window.__PSOM_AUTOLABEL__=1;
@@ -4170,6 +4241,7 @@ document.addEventListener('DOMContentLoaded', function(){
     .forEach(function(el){ if(!el.dataset.psomKey) el.dataset.psomKey = slug+'.right'+(j++); });
 })();
 </script>
+
 <!-- QnA Modal (injected) -->
 <div aria-hidden="true" id="qnaBackdrop"></div>
 <script id="igdc-qa-script">
@@ -4182,7 +4254,7 @@ document.addEventListener('DOMContentLoaded', function(){
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|operation|ops|settings?|config|deploy|deployment|error|bug|loading|api|integration|server|database|db|permission|policy|login|token|key|payment|security|cors|network|timeout|response\s*code|status\s*code|build|compile|broken|doesn'?t\s*work|not\s*work|stuck|page|link|malfunction|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -4192,7 +4264,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Soal Jawab] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4218,19 +4290,19 @@ document.addEventListener('DOMContentLoaded', function(){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Soalan & Jawapan";
+    const title = el("div","igdc-qa-title"); title.textContent = "Questions & Answers";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="Soalan";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Sila masukkan soalan anda...";
-    const lA = el("label"); lA.textContent="Jawapan";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Sila tunggu sebentar. Jawapan akan diberikan sebentar lagi.";
+    const lQ = el("label"); lQ.textContent="Question";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Please enter your question...";
+    const lA = el("label"); lA.textContent="Answer";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Please wait a moment. An answer will be provided shortly.";
     const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Hantar";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent='Kosongkan';
-    const note = el("div","igdc-qa-note"); note.textContent="※ Soalan mudah dijawab serta-merta oleh AI. Isu teknikal, ralat atau operasi akan dihantar secara automatik ke admin Soal Jawab.";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical, error, or operation-related issues are automatically forwarded to the admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4300,19 +4372,19 @@ document.addEventListener('DOMContentLoaded', function(){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent='S. '+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?('J. '+row.answer):"J. (Menunggu)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "Permintaan Admin":"Umum";
+        const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="Padam";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Pemadaman gagal (kebenaran/polisi)"); return; }
+            if(error){ alert("Delete failed (permission/policy)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4336,8 +4408,8 @@ document.addEventListener('DOMContentLoaded', function(){
         }
         if(!answer){
           if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
-          else answer="문의 감사합니다. 빠르게 Confirm하여 도와드리겠습니다.";
+          else if(/price|cost|fee|pricing|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else answer="Thank you for your inquiry. We will review it promptly and assist you.";
         }
       }
       return { technical, answer };
@@ -4351,7 +4423,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Save 설정(Supabase url/key)이 아직 연결되지 않아 서버 Save은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        alert("The storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed to the web, the connection will be enabled automatically once SUPER_VARSAR.url/anonKey is set.");
         return;
       }
       const record = {
@@ -4361,7 +4433,7 @@ document.addEventListener('DOMContentLoaded', function(){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Pendaftaran gagal"); return; }
+      if(error){ alert("Registration failed"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -4384,7 +4456,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Soal Jawab] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4456,6 +4528,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   .left, [data-role="left-panel"], #leftPanel{ display:none !important; }
 }
 </style>
+
 <script id="strict-right-swipe">
 (function(){
   var rp = document.querySelector(".right, [data-role='right-panel'], #rightPanel");
@@ -4595,6 +4668,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
 })();
 </script>
+
 <!-- 사이드바 '문학학술' 계열 링크 감추기 -->
 <script>
 (function () {
@@ -4652,7 +4726,7 @@ window.addEventListener("message",function(ev){
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
                   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Tutup</button></div>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4679,6 +4753,7 @@ window.addEventListener("message",function(ev){
   window.__IGTC_CHECKOUT_READY__ = true;
 })();
 </script>
+
 <!-- /PATCH end v19 -->
 <script id="donation-qq-mobile-news-mapping">
 (function(){
@@ -4892,6 +4967,8 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", schedule);
 })();
 </script>
+
+
 <script>
 (function(){
   const $  = (s,r=document)=>r.querySelector(s);
@@ -4982,12 +5059,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Tiada tajuk';
+    npTitle.textContent = title || 'No title';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(' + 'Tiada kandungan yang didaftarkan.' + ')';
+    npBody.textContent = body || '(No content has been registered.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">Lampiran</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml
         : '';
     }
 
@@ -5058,6 +5135,9 @@ window.addEventListener("message",function(ev){
   });
 })();
 </script>
+
+
+
 <style>
 /* Donation page topic-panel:
    - Show: title, meta, item-footer(카운트/버튼)
@@ -5069,7 +5149,7 @@ window.addEventListener("message",function(ev){
   display: none !important;
 }
 
-/* Lampiran 여부 아이콘 */
+/* 첨부 여부 아이콘 */
 .right .topic-panel .list .item.has-attach .title::after,
 .mobile-news-clone .topic-panel .list .item.has-attach .title::after {
   content: "📎";
@@ -5102,6 +5182,7 @@ window.addEventListener("message",function(ev){
   margin-bottom: 4px;
 }
 </style>
+
 <script id="hero-linebreak-fix">
 (function(){
   function nobreak(s){ return s.replace(/NGO와\s*공유하며/g, "NGO와\u00A0공유하며"); }
@@ -5112,6 +5193,7 @@ window.addEventListener("message",function(ev){
   }
 })();
 </script>
+
 <script id="hero-mobile-nl-toggle">
 (function(){
   var el = document.getElementById('topPostBody');
@@ -5141,6 +5223,7 @@ window.addEventListener("message",function(ev){
   window.addEventListener('orientationchange', apply);
 })();
 </script>
+
 <script>
 // IGDC: report page height to parent index for iframe resizing
 (function(){
@@ -5178,6 +5261,8 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
+
+
 <script>
 // 모바일: WAM NAVER Cafe + Donations 패널 이동 (복사 아님, 이동)
 (function(){
@@ -5263,6 +5348,8 @@ window.addEventListener("message",function(ev){
   }
 }
 </style>
+
+
 <style id="donation-mobile-force-panels-off">
 /* Mobile ≤1024px: hide left/right side panels, expand main area */
 @media (max-width: 1024px) {
@@ -5302,6 +5389,7 @@ window.addEventListener("message",function(ev){
   }
 }
 </style>
+
 <script>
 /* === Auto Slot Generator (Donation Feed) === */
 
@@ -5314,7 +5402,7 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">Memuatkan...</div>
+        <div class="card-title">Loading...</div>
         <div class="card-meta">-</div>
         <div class="card-preview">Preparing</div>
       </div>
@@ -5354,14 +5442,20 @@ if(track.querySelectorAll('.card').length > 0) return;
 
 })();
 </script>
-<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
-<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
+
+<script defer src="/assets/js/auto-embed.instagram.js"></script>
+<script defer src="/assets/js/placeholder-sweeper.js"></script>
+
 <!-- Donation Fix -->
-<script defer="" src="/assets/js/donation-fix.v1.5.relaxed.js"></script>
+<script defer src="/assets/js/donation-fix.v1.5.relaxed.js"></script>
+
 <!-- Donation Automap -->
-<script defer="" src="/assets/js/donation-automap.js"></script>
+<script defer src="/assets/js/donation-automap.js"></script>
+
 <!-- Donation Popup -->
-<script defer="" src="/assets/js/donation-popup.js"></script>
+<script defer src="/assets/js/donation-popup.js"></script>
+
+
 <script>
 function openQAModal(){
   const m=document.getElementById('qa-modal');
@@ -5381,8 +5475,10 @@ document.addEventListener("DOMContentLoaded",function(){
   }
 });
 </script>
+
 <script src="/assets/js/maru-search.js"></script>
 <script src="/assets/js/maru-searchbank-sync.js"></script>
+
 
 
 
@@ -5642,7 +5738,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   var installTimer=null;
   var $=function(s,r){ return (r||document).querySelector(s); };
   var $$=function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
-  var IGDC_I18N={"category":"Kategori","writePost":"Tulis siaran","title":"Tajuk","titlePlaceholder":"Masukkan tajuk","content":"Kandungan","contentPlaceholder":"Masukkan kandungan","attachmentOptional":"Lampirkan fail","noAttachment":"Tiada lampiran","attachHelp":"Selected file names and download data are saved with the post. Large files may be limited by browser storage.","draft":"Simpan draf","cancel":"Batal","save":"Simpan","close":"Tutup","edit":"Edit","del":"Del","untitled":"Tiada tajuk","emptyBody":"(Tiada kandungan)","noTitleInput":"Tiada tajuk","attachments":"Lampiran","attachment":"Attachment","download":"Muat turun","fileNameOnly":"File name","emptyList":"Tiada siaran.","view":"Views","recommend":"Recommend","like":"Like","modify":"Edit","delete":"Delete","saved":"Disimpan","updated":"Dikemas kini","canceled":"Dibatalkan","draftSaved":"Draf disimpan","deleted":"Dipadam","applied":"Applied","undone":"Canceled","largeFile":"File is large; only file names were saved."};
+  var IGDC_I18N={"category":"Kategori","writePost":"Tulis siaran","title":"Tajuk","titlePlaceholder":"Masukkan tajuk","content":"Kandungan","contentPlaceholder":"Masukkan kandungan","attachmentOptional":"Lampirkan fail","noAttachment":"Tiada lampiran","attachHelp":"Nama fail yang dipilih dan data muat turun disimpan bersama siaran. Fail besar mungkin dihadkan oleh storan pelayar.","draft":"Simpan draf","cancel":"Batal","save":"Simpan","close":"Tutup","edit":"Sunting","del":"Padam","untitled":"Tiada tajuk","emptyBody":"(Tiada kandungan)","noTitleInput":"Tiada tajuk","attachments":"Lampiran","attachment":"Lampiran","download":"Muat turun","fileNameOnly":"Nama fail","emptyList":"Tiada siaran.","view":"Paparan","recommend":"Syorkan","like":"Suka","modify":"Sunting","delete":"Padam","saved":"Disimpan","updated":"Dikemas kini","canceled":"Dibatalkan","draftSaved":"Draf disimpan","deleted":"Dipadam","applied":"Digunakan","undone":"Dibatalkan","largeFile":"Fail besar; hanya nama fail disimpan."};
   function tr(k){ return IGDC_I18N[k] || (k||''); }
   function esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
   function makeId(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }

@@ -6,7 +6,7 @@
 <script>
 /**
  * 안전한 Supabase 연결 플러그
- * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Netlify Meio Ambiente변수에서 자동 불러오기
+ * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Automatically load from Netlify environment variables
  */
 
 (async () => {
@@ -21,14 +21,14 @@
       });
       console.log("✅ Supabase 키 정상 로드됨.");
     } else {
-      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify Meio Ambiente변수 Confirmar 필요.");
+      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify environment variables Confirm 필요.");
       window.SUPER_VARSAR = Object.freeze({
         url: null,
         anonKey: null
       });
     }
   } catch (err) {
-    console.error("❌ Supabase Meio Ambiente변수 로드 실패:", err);
+    console.error("❌ Supabase environment variable load failed:", err);
     window.SUPER_VARSAR = Object.freeze({
       url: null,
       anonKey: null
@@ -233,22 +233,22 @@
 
 /* === Local gutter for better left spacing (without altering global layout) === */
 .hero{ margin-left:16px !important; margin-right:16px !important; }
-#topEscreverPanel{ margin-left:16px !important; margin-right:16px !important; }
+#topWritePanel{ margin-left:16px !important; margin-right:16px !important; }
 .people-news{ margin-left:16px !important; margin-right:16px !important; }
 
 /* === Balanced right gutter to match left (16px) === */
 .main{ padding-right:16px !important; }
 .hero{ margin-right:16px !important; }
-#topEscreverPanel{ margin-right:16px !important; }
+#topWritePanel{ margin-right:16px !important; }
 .people-news{ margin-right:16px !important; }
 .feed-wrapper{ margin-right:16px !important; }
 
 /* === Ensure right gutter spacing matches left (16px) for main content boxes === */
 .main{ padding-right:16px !important; }
-.hero, #topEscreverPanel, .people-news, .feed-wrapper{ margin-right:16px !important; }
+.hero, #topWritePanel, .people-news, .feed-wrapper{ margin-right:16px !important; }
 
 /* === Uniform content widths for top 3 boxes === */
-.hero, #topEscreverPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   width:100% !important;
   max-width:none !important;
   margin-left:auto !important;
@@ -257,13 +257,13 @@
 
 /* === Restore left gutter and center content === */
 .main{ padding-left:16px !important; padding-right:16px !important; }
-.hero, #topEscreverPanel, .people-news{ margin-left:auto !important; margin-right:auto !important; }
+.hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; }
 /* Feed wrapper also centered with same gutter */
 .feed-wrapper{ margin-left:auto !important; margin-right:auto !important; }
 
 
 /* === Slightly increase main content box width to reduce right gap === */
-.hero, #topEscreverPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   max-width:1210px !important;
 }
 
@@ -272,7 +272,7 @@
 /* Keep container gap as the sole inter-column spacing */
 .container{ gap:16px !important; }
 /* Center the three top boxes so leftover space splits evenly */
-.hero, #topEscreverPanel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
+.hero, #topWritePanel, .people-news{ margin-left:auto !important; margin-right:auto !important; max-width:1210px !important; }
 @media (orientation: portrait){
 .main{
   width:100% !important;
@@ -282,7 +282,7 @@
 }
 }
 
-.hero, #topEscreverPanel, .people-news{
+.hero, #topWritePanel, .people-news{
   max-width:100% !important;
   margin-left:0 !important;
   margin-right:0 !important;
@@ -311,7 +311,7 @@
 
 
 /* The three top boxes + feed wrapper all use the same centered width */
-.hero, #topEscreverPanel, .people-news, .feed-wrapper{
+.hero, #topWritePanel, .people-news, .feed-wrapper{
   width:min(100%, var(--content-width)) !important;
   margin:0 !important;               /* no side margins; centering handled by .main */
 }
@@ -363,7 +363,7 @@
 /* Custom file pick buttons */
 .file-btn{ background:#f6f3ff; border-color:#cfc6ff; }
 .filename{ margin-left:6px; font-size:.85rem; color:#555; }
-/* Ensure Confirmar is horizontal */
+/* Ensure Confirm is horizontal */
 .button.tiny{ writing-mode:horizontal-tb; }
 
 /* --- Compose top-row button alignment (scoped, minimal) --- */
@@ -373,26 +373,26 @@
 }
 .compose-wrap .row-top .button{ margin:0; }
 .compose-wrap .row-top #btnOpenComposer{ order:1; }
-.compose-wrap .row-top #btnEnviarPost{ order:2; }
-/* Keep 'Confirmar' labels strictly horizontal (already set for .button.tiny) */
+.compose-wrap .row-top #btnSubmitPost{ order:2; }
+/* Keep 'Confirm' labels strictly horizontal (already set for .button.tiny) */
 
-/* Reinforce: 'Confirmar' 버튼은 가로(수평) 표기 유지 */
+/* Reinforce: 'Confirm' 버튼은 가로(수평) 표기 유지 */
 .compose-wrap .row-bottom .button.tiny{ writing-mode:horizontal-tb; }
 
-/* === Scoped UI polish for 'Categoria + ONG', 파일/Escolher imagem 라인 === */
+/* === Scoped UI polish for 'Category + NGO', 파일/Choose Image 라인 === */
 .field-category{
   display:flex; align-items:center; gap:10px;
   border:1px solid #d0d7de; border-radius:10px;
   padding:8px 10px; background:#f8fafc;
 }
-.field-category select#postCategoria{ min-width:180px; }
+.field-category select#postCategory{ min-width:180px; }
 
 .label-strong{ font-weight:700; }
 .label-accent{ color:#1c7c54; } /* 차분한 녹색 톤 */
 
 .field .file-btn{ margin-right:8px; }
 
-/* 파일/Escolher imagem 결과명을 긴 입력막대처럼 보이게 */
+/* 파일/Choose Image 결과명을 긴 입력막대처럼 보이게 */
 .field .filename, #imgChosen, #fileChosen{
   display:inline-block; min-width:360px; max-width:100%;
   padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;
@@ -404,7 +404,7 @@
 .row-bottom .button.tiny{ line-height:1.1; font-weight:600; }
 
 /* === User-specified refinements (scoped) === */
-.field-category select#postCategoria{
+.field-category select#postCategory{
   width:auto; max-width:140px; min-width:110px;
 }
 .field-category{ flex-wrap:nowrap; }
@@ -414,36 +414,36 @@
 
 /* File & Image pickers: one-line, confirm after filename bar, bar = 50% width */
 .field-file, .field-image{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.field-file #btnPickFile{ order:1; color:#111; }   /* 'Escolher arquivo' in black */
+.field-file #btnPickFile{ order:1; color:#111; }   /* 'Choose File' in black */
 .field-file .filename{ order:2; width:50%; min-width:0; }
-.field-file #btnFileConfirmar{ order:3; }
+.field-file #btnFileConfirm{ order:3; }
 
-.field-image #btnPickImage{ order:1; color:#111; } /* 'Escolher imagem' in black (for consistency) */
+.field-image #btnPickImage{ order:1; color:#111; } /* 'Choose Image' in black (for consistency) */
 .field-image .filename{ order:2; width:50%; min-width:0; }
-.field-image #btnImageConfirmar{ order:3; }
+.field-image #btnImageConfirm{ order:3; }
 
 /* Ensure buttons remain compact and don't force wrap */
 .field-file .button.tiny, .field-image .button.tiny{ white-space:nowrap; }
 
 /* === Tweaks per latest instructions === */
-/* ONG dropdown: about 1/3 of previous long width; keep compact */
-.field-category select#postCategoria{
+/* NGO dropdown: about 1/3 of previous long width; keep compact */
+.field-category select#postCategory{
   width: 90px; min-width: 80px; max-width: 110px;
 }
 
-/* Categoria label as a button, horizontal text ensured */
-#labelCategoria{ font-weight:600; }
+/* Category label as a button, horizontal text ensured */
+#labelCategory{ font-weight:600; }
 
 /* File/Image bars: reduce to 25% width */
 .field-file .filename, .field-image .filename{ width:25%; min-width:0; }
 
-/* Ensure 'Escolher arquivo' / 'Escolher imagem' label color is black and stays readable */
+/* Ensure 'Choose File' / 'Choose Image' label color is black and stays readable */
 #btnPickFile, #btnPickImage{ color:#111 !important; }
 
 /* === Final polish per screenshot feedback === */
 
-/* 'Categoria' must be horizontal like a button */
-#labelCategoria{
+/* 'Category' must be horizontal like a button */
+#labelCategory{
   writing-mode: horizontal-tb !important;
   transform: none !important;
   display: inline-flex;
@@ -451,8 +451,8 @@
   white-space: nowrap;
 }
 
-/* ONG dropdown: cut to about half of prior setting */
-.field-category select#postCategoria{
+/* NGO dropdown: cut to about half of prior setting */
+.field-category select#postCategory{
   width: 56px; min-width: 50px; max-width: 70px;
 }
 
@@ -509,19 +509,19 @@
 /* === Group spacing & ordering fix (compose area only) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* File group: [Escolher arquivo] [막대] [Confirmar] */
+/* File group: [Choose File] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:4px !important; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:4px; }
-.compose-wrap .row-bottom .field-file #btnFileConfirmar{ order:3; position:relative; z-index:1; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; position:relative; z-index:1; }
 
-/* Image group: [Escolher imagem] [막대] [Confirmar] */
+/* Image group: [Choose Image] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:4px !important; }
-/* Ensure a sufficiently large gap from file-confirm (>= 'Categoria' 버튼 폭 가늠치) */
+/* Ensure a sufficiently large gap from file-confirm (>= 'Category' 버튼 폭 가늠치) */
 .compose-wrap .row-bottom .field-image{ margin-left:72px !important; }
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; margin-left:4px; }
-.compose-wrap .row-bottom .field-image #btnImageConfirmar{ order:3; position:relative; z-index:1; }
+.compose-wrap .row-bottom .field-image #btnImageConfirm{ order:3; position:relative; z-index:1; }
 
 /* Keep bars at half width and non-overlapping */
 .compose-wrap .row-bottom #fileChosen,
@@ -554,15 +554,15 @@
 /* === Compose row: strict grouping & anti-overlay (scoped) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* FILE group -> [Escolher arquivo][막대][Confirmar] 붙어서 배치 */
+/* FILE group -> [Choose File][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:6px; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:6px; }
-.compose-wrap .row-bottom .field-file #btnFileConfirmar{ order:3; margin-left:8px; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; margin-left:8px; }
 
-/* IMAGE group -> [Escolher imagem][막대][Confirmar] 붙어서 배치 */
+/* IMAGE group -> [Choose Image][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:6px; }
-/* 파일 그룹의 Confirmar 버튼 뒤로 충분히 띄우기(겹침 방지) */
+/* 파일 그룹의 Confirm 버튼 뒤로 충분히 띄우기(겹침 방지) */
 .compose-wrap .row-bottom .field-image{ margin-left:96px; } /* 필요 시 수치 조정 */
 
 .compose-wrap .row-bottom #fileChosen,
@@ -592,14 +592,14 @@
   margin-left:0 !important;   /* remove previous manual offsets */
 }
 
-/* Inside each group: [Pick][Bar][Confirmar] */
+/* Inside each group: [Pick][Bar][Confirm] */
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; }
-.compose-wrap .row-bottom .field-file #btnFileConfirmar{ order:3; }
+.compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; }
 
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; }
-.compose-wrap .row-bottom .field-image #btnImageConfirmar{ order:3; }
+.compose-wrap .row-bottom .field-image #btnImageConfirm{ order:3; }
 
 /* Bars expand within their half; cancel any global min-width */
 .compose-wrap .row-bottom #fileChosen,
@@ -610,8 +610,8 @@
 }
 
 /* Keep confirm buttons compact and visible */
-.compose-wrap .row-bottom #btnFileConfirmar,
-.compose-wrap .row-bottom #btnImageConfirmar{
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm{
   flex:0 0 auto; position:relative; z-index:1;
 }
 
@@ -632,8 +632,8 @@
   margin-left:0 !important;    /* 버튼과 막대가 딱 붙도록 */
 }
 
-.compose-wrap .row-bottom #btnFileConfirmar,
-.compose-wrap .row-bottom #btnImageConfirmar{
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm{
   margin-left:4px !important;  /* 막대 바로 뒤에 가깝게 */
 }
 
@@ -641,23 +641,23 @@
 <style>
 /* ===== Compose-only adjustments (safe & minimal) ===== */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top .field-category{ order:1; }     /* Categoria(드롭다운) */
-.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* Escrever */
-.compose-wrap .row-top #btnAttach{ order:3; }          /* Anexo(신규 버튼) */
-.compose-wrap .row-top #btnEnviarPost{ order:4; }      /* 글올리기 */
+.compose-wrap .row-top .field-category{ order:1; }     /* Category(드롭다운) */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }          /* Attachment(신규 버튼) */
+.compose-wrap .row-top #btnSubmitPost{ order:4; }      /* 글올리기 */
 
 /* Hide legacy file/image pickers (compose only) */
 .compose-wrap .row-bottom .field-file,
 .compose-wrap .row-bottom .field-image,
-.compose-wrap .row-bottom #btnFileConfirmar,
-.compose-wrap .row-bottom #btnImageConfirmar { display:none !important; }
+.compose-wrap .row-bottom #btnFileConfirm,
+.compose-wrap .row-bottom #btnImageConfirm { display:none !important; }
 
 /* Attach filename (display only), uses existing button styles */
 .compose-wrap #attachName{
   display:inline-block; margin-left:6px;
   max-width:42vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-.compose-wrap #btnAttachLimpar{ margin-left:4px; }
+.compose-wrap #btnAttachClear{ margin-left:4px; }
 </style>
 <style>
 .attach-preview{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; max-width:44vw; padding:4px 0; margin-left:6px; }
@@ -666,10 +666,10 @@
 .attach-chip .remove:hover{ color:#c0392b; }
 .compose-wrap .row-top{ flex-wrap:wrap; }
 </style><style></style><style>
-/* === Compose row: place 'attachPreview' BETWEEN [Anexo] and [Salvar] === */
+/* === Compose row: place 'attachPreview' BETWEEN [Attachment] and [Save] === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Escrever */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* Anexo */
+.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
 .compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
@@ -678,7 +678,7 @@
   min-width:260px; max-width:50vw; flex:0 0 auto;     /* 막대 형태, 한 줄 유지 */
   overflow:hidden;
 }
-.compose-wrap .row-top #btnEnviarPost{ order:6; }     /* Salvar(최종) */
+.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* Save(최종) */
 
 /* 칩 스타일(막대 내부) */
 .attach-preview .attach-chip{
@@ -695,14 +695,14 @@
 /* 유령 중복 표시 방지: legacy 파일명 표시는 숨김(칩이 대체) */
 .compose-wrap #attachName{ display:none !important; }
 </style><style>
-/* === Compose row order override (requested): Categoria -> Escrever -> Anexo -> 미리보기막대 -> Salvar === */
+/* === Compose row order override (requested): Category -> Write -> Attachment -> 미리보기막대 -> Save === */
 .compose-wrap .row-top .field.field-category{ order:1; }
-.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Escrever */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* Anexo */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
 .compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
-.compose-wrap .row-top #btnEnviarPost{ order:5; }     /* Salvar */
+.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* Save */
 </style><style>
-/* === Title Preview Bar (between Escrever and Anexo) === */
+/* === Title Preview Bar (between Write and Attachment) === */
 .compose-wrap .row-top #titlePreview{
   order:3;
   display:flex; align-items:center; gap:6px;
@@ -713,17 +713,17 @@
 }
 .compose-wrap .row-top #btnAttach{ order:4; }
 .compose-wrap .row-top #attachPreview{ order:5; }
-.compose-wrap .row-top #btnEnviarPost{ order:6; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
 
 .title-preview .tp-text{ font-size:.92rem; color:#111; }
 
 /* Keep row single-line as much as possible */
 .compose-wrap .row-top{ flex-wrap:nowrap; gap:8px; }
 </style><style>
-/* === Compose row: place 'Limpar' right after 최종 'Salvar' === */
+/* === Compose row: place 'Clear' right after 최종 'Save' === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow:hidden; }
-.compose-wrap .row-top #btnEnviarPost{ order:6; }
-.compose-wrap .row-top #btnAttachLimpar{ order:7; margin-left:6px; }
+.compose-wrap .row-top #btnSubmitPost{ order:6; }
+.compose-wrap .row-top #btnAttachClear{ order:7; margin-left:6px; }
 .compose-wrap .row-top #attachName{ display:none !important; } /* 칩 UI 사용 */
 
 /* Shrink bars to avoid line overflow (title < attach) */
@@ -742,13 +742,13 @@
 .compose-wrap .row-top #attachPreview{ order:5; }
 </style><style>
 /* === ORDER HOTFIX (override) === */
-/* Categoria */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
-/* Escrever */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
+/* Category */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
+/* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
 /* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
-/* Anexo 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* Anexo 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
-/* Salvar */               .compose-wrap .row-top #btnEnviarPost{ order:6 !important; }
-/* Limpar */             .compose-wrap .row-top #btnAttachLimpar{ order:7 !important; }
+/* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
+/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
+/* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
 /* Smooth scroll in right-side topic lists */
 .right .topic-panel .list{ scroll-behavior: smooth; }
@@ -770,7 +770,7 @@
 .right .topic-panel .item .attach-list{ margin:4px 0 0 0; padding-left:18px; }
 .right .topic-panel .item .attach-list li{ font-size:.82rem; color:#374151; }
 
-/* Excluir button aligned to the right */
+/* Delete button aligned to the right */
 
 /* Smooth scroll + auto-grow already added in last build; keep consistent here if missing */
 .right .topic-panel .list{ scroll-behavior:smooth; }
@@ -813,7 +813,7 @@
   overflow:hidden;
 }
 
-/* Anexo line: one compact line after preview */
+/* Attachment line: one compact line after preview */
 .right .topic-panel .item .attach,
 .right .topic-panel .item .attach-list{
   margin-top:2px; font-size:.8rem; color:#374151;
@@ -821,7 +821,7 @@
 }
 .right .topic-panel .item .attach-list{ padding-left:16px; }
 
-/* Excluir button stays aligned right, compact */
+/* Delete button stays aligned right, compact */
 
 /* Make the whole card clickable for popup */
 .right .topic-panel .item{ cursor:pointer; }
@@ -845,7 +845,7 @@
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like,
 
-/* 색상: Edit=파랑, 추천=초록, Like=핑크, Excluir=빨강 */
+/* 색상: Edit=파랑, Recommend=초록, Like=핑크, Delete=빨강 */
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 .right .topic-panel .item .btn-reco{ background:#e6f7ec; color:#059669; border-color:#bbf7d0; }
 .right .topic-panel .item .btn-like{ background:#ffe6ef; color:#db2777; border-color:#fecdd3; }
@@ -915,13 +915,13 @@
 .right .topic-panel .item .item-footer .action-reco.active .icon{ color:#065f46; }
 .right .topic-panel .item .item-footer .action-like.active .icon{ color:#9d174d; }
 
-/* Keep only Edit/Excluir text buttons horizontally */
+/* Keep only Edit/Delete text buttons horizontally */
 .right .topic-panel .item .btn-edit,
 
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 @media (orientation: portrait){
 </style><style>
-/* Hard-hide any legacy text buttons labeled 추천/Like */
+/* Hard-hide any legacy text buttons labeled Recommend/Like */
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like{ display:none !important; }
 }
@@ -933,7 +933,7 @@
 }
 
 </style><style>
-/* --- Footer row normalization for Edit/Excluir buttons --- */
+/* --- Footer row normalization for Edit/Delete buttons --- */
 .right .topic-panel .item .item-footer{
   display:flex; align-items:center; gap:10px; justify-content:flex-end;
   min-height:34px; /* consistent row height */
@@ -1003,7 +1003,7 @@
 
 /* Ensure the three top boxes and feed align to the reduced gutter */
 .main{ padding-left: 0 !important; padding-right: 0 !important; }
-.hero, #topEscreverPanel, .people-news, .feed-wrapper{ margin-left: 0 !important; margin-right: 0 !important; }
+.hero, #topWritePanel, .people-news, .feed-wrapper{ margin-left: 0 !important; margin-right: 0 !important; }
 
 /* Keep main content centered within its column without extra left padding */
 .main{ align-items: stretch !important; }  /* allow full-width of the main column */
@@ -1103,7 +1103,7 @@ body > .container > .main{
 
 /* 내부 요소들이 별도 좌/우 마진·패딩을 추가하지 않도록 정리 */
 body > .container > .main .hero,
-body > .container > .main #topEscreverPanel,
+body > .container > .main #topWritePanel,
 body > .container > .main .people-news,
 body > .container > .main .feed-wrapper{
   width:100% !important; max-width:none !important;
@@ -1188,7 +1188,7 @@ body > .container > .main{
 @media (orientation: portrait){
 }
 body > .container > .main .hero,
-body > .container > .main #topEscreverPanel,
+body > .container > .main #topWritePanel,
 body > .container > .main .people-news,
 body > .container > .main .feed-wrapper{
   width: 100% !important;
@@ -1243,7 +1243,7 @@ body > .container > .main > *{
 /* Narrower: trim preferred vw a bit more while keeping floor */
 </style>
 <style id="qna-brand-only">
-/* === Perguntas e respostas sidebar link color only (no other changes) === */
+/* === Q&A sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -1353,7 +1353,7 @@ body > .container > .main > *{
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Perguntas e respostas link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Ainda não há entradas de Perguntas e respostas registradas";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Ainda não há entradas de Perguntas e respostas registradas";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1683,7 +1683,7 @@ main, .main, #main, .main-content, .content, .content-area{
     }
 }
 
-    .hero, #topEscreverPanel, .people-news, .feed-wrapper{
+    .hero, #topWritePanel, .people-news, .feed-wrapper{
       width:100% !important; max-width:100% !important;
       margin-left:0 !important; margin-right:0 !important;
       padding-left:0 !important; padding-right:0 !important;
@@ -1834,7 +1834,7 @@ body .right{ display:none !important; }
 
 
   /* Hero / top sections: full width with gentle gutters */
-  body .hero, body #topEscreverPanel, body .people-news, body .feed-wrapper{
+  body .hero, body #topWritePanel, body .people-news, body .feed-wrapper{
     width:100% !important; max-width:none !important; margin:0 !important;
   }
 
@@ -1974,7 +1974,7 @@ body .right{ display:none !important; }
     line-height:1.5;
   }
 
-  /* 하단 Footer: 읽음/추천/좋아요/아이콘 + Edit/Excluir 전부 우측 정렬 */
+  /* 하단 Footer: 읽음/Recommend/Like/아이콘 + Edit/Delete 전부 우측 정렬 */
  .mobile-news-clone .topic-panel .item .item-footer {
     margin-top: auto;              /* 위 Content 밀어 올리고, footer를 맨 아래로 */
     display: flex;
@@ -2023,7 +2023,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
-  <!-- Supabase Meio Ambiente 설정 (Escrever/도네이션/Perguntas e respostas 공용) -->
+  <!-- Supabase Environment 설정 (Write/도네이션/Q&A 공용) -->
   <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
@@ -2036,7 +2036,7 @@ body .right{ display:none !important; }
     window.CURRENT_USER_NAME = window.CURRENT_USER_NAME || "";
   </script>
 
-  <!-- Supabase JS (Meio Ambiente만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
+  <!-- Supabase JS (Environment만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
 
 
@@ -2106,18 +2106,18 @@ body .right{ display:none !important; }
 </script>
 
 <style>
-  /* IGTC DONATION - hero & topEscreverPanel spacing normalize */
+  /* IGTC DONATION - hero & topWritePanel spacing normalize */
   .hero {
     margin-bottom: 16px;
   }
-  #topEscreverPanel {
+  #topWritePanel {
     margin-top: 0;
   }
   @media (max-width:1024px) {
     .hero {
       margin-bottom: 8px !important;
     }
-    #topEscreverPanel {
+    #topWritePanel {
       margin-top: 4px !important;
       margin-bottom: 14px !important;
     }
@@ -2343,7 +2343,7 @@ body > div.container,
 
   /* main 안쪽 박스가 max-width로 메인 폭을 "착시"로 좁혀 보이게 하지 않도록: 메인 칸을 가득 채움 */
   body > .container > .main .hero,
-  body > .container > .main #topEscreverPanel,
+  body > .container > .main #topWritePanel,
   body > .container > .main .people-news,
   body > .container > .main .feed-wrapper{
     width:100% !important;
@@ -2365,11 +2365,6 @@ body > div.container,
 }
 </style>
 
-
-<style id="igdc-sidebar-spacing-unify-v1">
-.sidebar{padding-top:30px !important;}
-.sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
-</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2377,12 +2372,12 @@ body > div.container,
 <div class="container">
 <!-- Left Sidebar (불변) -->
 <nav class="sidebar">
-<a href="home_pt.html">🏠 Início</a>
-<a href="networkhub_pt.html">🛒 Hub de Mercado</a>
-<a href="distributionhub_pt.html">🏭 Hub de Distribuição</a>
-<a href="socialnetwork_pt.html">📢 Rede Social</a>
-<a href="mediahub_pt.html">🎬 Hub de Mídia</a>
-<a href="tour_pt.html">🧳 Viagem · Turismo · Hospedagem</a>
+<a href="home_en.html">🏠 Início</a>
+<a href="networkhub_en.html">🛒 Hub de Mercado</a>
+<a href="distributionhub_en.html">🏭 Hub de Distribuição</a>
+<a href="socialnetwork_en.html">📢 Rede Social</a>
+<a href="mediahub_en.html">🎬 Hub de Mídia</a>
+<a href="tour_en.html">🧳 Viagem · Turismo · Hospedagem</a>
 <a href="literature/academic.html" style="display:none !important;">📚 Intercâmbio Literário e Acadêmico</a>
 <a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 Perguntas e respostas</a></nav>
 <!-- Main (불변 구조) -->
@@ -2397,12 +2392,12 @@ body > div.container,
 <h2>💝 Centro Global de Doações 💝</h2>
 <p>O sistema de apoio para a IESF e a WAM Foundation começa aqui.</p>
 </section>
-<section class="panel" id="topEscreverPanel" style="margin-bottom:20px;">
+<section class="panel" id="topWritePanel" style="margin-bottom:20px;">
 <textarea id="topPostBody" placeholder="Digite o texto principal..." rows="4" style="padding-top:22px; padding-bottom:12px; font-weight:600;">Este é um espaço patrocinado pelo grupo IGDC Global Platform para compartilhar o ministério e as notícias da preciosa WAM Foundation (World Aviation Mission Foundation), anunciar e compartilhar as notícias da IESF, bem como compartilhar as notícias de várias ONGs e organizações voluntárias.</textarea>
 <!-- Inline controls row replacing box UI -->
 <!-- Inline controls, two-row layout -->
 <div class="compose-wrap" id="composeControls">
-<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelCategoria" style="writing-mode:horizontal-tb;">Categoria</span>
+<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelCategory" style="writing-mode:horizontal-tb;">Categoria</span>
 <select id="postCategory"><option value="iesf">IESF</option>
 <option value="ngo">ONG</option>
 <option value="mission">Missão</option>
@@ -2416,7 +2411,7 @@ body > div.container,
 <button class="button small" id="btnOpenComposer">Escrever</button><div aria-label="Prévia do título" class="title-preview" id="titlePreview"><span class="tp-text">Sem título</span></div>
 <button class="button small accent" id="btnSubmitPost">Salvar</button>
 <span id="attachName"></span>
-<button aria-label="Remover anexo" class="button tiny" id="btnAttachLimpar" style="display:none;" type="button">Limpar</button>
+<button aria-label="Remove attachment" class="button tiny" id="btnAttachClear" style="display:none;" type="button">Limpar</button>
 <input id="postAttach" style="display:none;" type="file"/>
 </div>
 <div class="row row-bottom">
@@ -2424,14 +2419,14 @@ body > div.container,
 <label class="field field-file">
 <input accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip" id="postFile" style="display:none;" type="file"/>
 <button class="button tiny file-btn" id="btnPickFile" type="button">Escolher arquivo</button>
-<button class="button tiny" id="btnFileConfirmar" type="button">Confirmar</button>
+<button class="button tiny" id="btnFileConfirm" type="button">Confirmar</button>
 <span class="filename" id="fileChosen"></span>
 </label>
 <!-- Image second -->
 <label class="field field-image">
 <input accept="image/*" id="postImage" style="display:none;" type="file"/>
 <button class="button tiny file-btn" id="btnPickImage" type="button">Escolher imagem</button>
-<button class="button tiny" id="btnImageConfirmar" type="button">Confirmar</button>
+<button class="button tiny" id="btnImageConfirm" type="button">Confirmar</button>
 <span class="filename" id="imgChosen"></span>
 </label>
 </div>
@@ -2569,16 +2564,16 @@ body > div.container,
 
   const modal = $("#composerModal");
   const btnOpen = $("#btnOpenComposer");
-  const btnEnviar = $("#btnEnviarPost");
-  const btnSalvar = $("#btnSalvar");
+  const btnSubmit = $("#btnSubmitPost");
+  const btnSave = $("#btnSave");
   const btnCancel = $("#btnCancel");
   const titleI = $("#composeTitle");
   const bodyI = $("#composeBody");
-  const catSel = $("#postCategoria");
+  const catSel = $("#postCategory");
   const fileI = $("#postImage");
   const fileAttach = $("#postFile");
-  const btnImgOk = $("#btnImageConfirmar");
-  const btnFileOk = $("#btnFileConfirmar");
+  const btnImgOk = $("#btnImageConfirm");
+  const btnFileOk = $("#btnFileConfirm");
   const btnPickImg = $("#btnPickImage");
   const btnPickFile = $("#btnPickFile");
   const fileChosen = $("#fileChosen");
@@ -2595,11 +2590,11 @@ body > div.container,
   btnPickImage && btnPickImage.addEventListener("click", ()=> fileI && fileI.click());
   fileAttach && fileAttach.addEventListener("change", ()=>{ if(fileChosen){ fileChosen.textContent = fileAttach.files[0]?.name || ""; } });
   fileI && fileI.addEventListener("change", ()=>{ if(imgChosen){ imgChosen.textContent = fileI.files[0]?.name || ""; } });
-  btnEnviar && btnEnviar.addEventListener("click", ()=>{ if(btnSalvar){ btnSalvar.click(); } });
+  btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
-  btnSalvar && btnSalvar.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(Sem título)";
-    const b = bodyI?.value?.trim() || "(Sem conteúdo)";
+  btnSave && btnSave.addEventListener("click", ()=>{
+    const t = titleI?.value?.trim() || "(No Title)";
+    const b = bodyI?.value?.trim() || "(No Content)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2617,7 +2612,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Link do anexo</a>` : `Anexo: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Attachment link</a>` : `Attachment: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2628,7 +2623,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "Anexo: " + fileAttach.files[0].name;
+        att.textContent = "Attachment: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2645,7 +2640,7 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("Cole o link externo da imagem (URL), se houver. Se não houver, pressione OK.");
+    const link = prompt("Paste an external image URL if you have one. Otherwise, click Confirm.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
@@ -2653,7 +2648,7 @@ body > div.container,
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
         imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
-        imageLink = ""; // 실제 Salvar은 링크만 사용
+        imageLink = ""; // 실제 Save은 링크만 사용
       }
     }else{
       imageLink = ""; imagePreviewObjectUrl = "";
@@ -2662,7 +2657,7 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("Cole o link externo do arquivo (URL), se houver. Se não houver, pressione OK.");
+    const link = prompt("Paste an external file URL if you have one. Otherwise, click Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
@@ -2686,12 +2681,12 @@ body > div.container,
   var btnAttach = document.getElementById('btnAttach');
   var input = document.getElementById('postAttach');
   var nameEl = document.getElementById('attachName');
-  var clearBtn = document.getElementById('btnAttachLimpar');
+  var clearBtn = document.getElementById('btnAttachClear');
 
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' arquivos');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' files');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2736,9 +2731,9 @@ body > div.container,
   const rowTop = $('.compose-wrap .row-top');
   const attachInput = $('#postAttach');
   const attachPreview = $('#attachPreview');
-  const clearBtn = $('#btnAttachLimpar');
+  const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
-  const btnEnviar = $('#btnEnviarPost');
+  const btnSubmit = $('#btnSubmitPost');
 
   let selectedFiles = [];
   function syncInputs(){
@@ -2762,7 +2757,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remover anexo'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove attachment'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2790,18 +2785,18 @@ body > div.container,
     });
   }
 
-  const catSel = $('#postCategoria');
+  const catSel = $('#postCategory');
   const titleI = $('#composeTitle');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
-  function handleUnifiedSalvar(){
-    const t = (titleI && titleI.value.trim()) || '(Sem título)';
-    const b = (bodyI && bodyI.value.trim()) || '(Sem conteúdo)';
+  function handleUnifiedSave(){
+    const t = (titleI && titleI.value.trim()) || '(No Title)';
+    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('Área de publicações não encontrada.'); return; }
+    if(!holder){ alert('The news area could not be found.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2818,20 +2813,20 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = 'Anexo: ' + f.name;
+        li.textContent = 'Attachment: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Excluir';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
-    const canExcluir = (USER_ROLE==='admin' || USER_ROLE==='writer');
-    if(canExcluir) del.style.display='inline-block';
+    const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
+    if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('Excluir esta publicação?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
 
@@ -2847,10 +2842,10 @@ body > div.container,
     closeModal();
   }
 
-  if(btnEnviar){
-    btnEnviar.addEventListener('click', (e)=>{
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', (e)=>{
       e.preventDefault();
-      handleUnifiedSalvar();
+      handleUnifiedSave();
     });
   }
 
@@ -2861,7 +2856,7 @@ body > div.container,
   const $ = (s,r=document)=>r.querySelector(s);
   const attachInput = $('#postAttach');
   const attachPreview = $('#attachPreview');
-  const clearBtn = $('#btnAttachLimpar');
+  const clearBtn = $('#btnAttachClear');
   const legacyFile = $('#postFile');
   const nameEl = $('#attachName');
 
@@ -2898,13 +2893,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' arquivos');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' files');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remover todos os anexos'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove all attachments'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2922,7 +2917,7 @@ body > div.container,
     });
   }
 
-  // "Limpar" 버튼도 전체 초기화
+  // "Clear" 버튼도 전체 초기화
   if(clearBtn){
     clearBtn.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2945,9 +2940,9 @@ body > div.container,
   const titleI = $('#composeTitle');
   const bodyI  = $('#composeBody');
   const modal  = $('#composerModal');
-  const btnDraft = $('#btnDraftSalvar');
+  const btnDraft = $('#btnDraftSave');
   const btnCancel = $('#btnCancel');
-  const btnEnviar = $('#btnEnviarPost');
+  const btnSubmit = $('#btnSubmitPost');
   const titlePreview = $('#titlePreview');
   const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
@@ -2956,7 +2951,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Sem título';
+    tpText.textContent = t || 'No title';
   }
 
   // live typing updates preview
@@ -2964,7 +2959,7 @@ body > div.container,
     titleI.addEventListener('input', ()=> updateTitlePreview());
   }
 
-  // Salvar Draft: keep in-memory draft; do NOT post to right panel
+  // Save Draft: keep in-memory draft; do NOT post to right panel
   if(btnDraft){
     btnDraft.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2988,8 +2983,8 @@ body > div.container,
 
   // Before final save, if a draft exists (and modal may be closed/empty),
   // write draft back into inputs so existing save handler picks it up.
-  if(btnEnviar){
-    btnEnviar.addEventListener('click', ()=>{
+  if(btnSubmit){
+    btnSubmit.addEventListener('click', ()=>{
       if((draft.title && draft.title.trim()) || (draft.body && draft.body.trim())){
         if(titleI) titleI.value = draft.title || '';
         if(bodyI)  bodyI.value  = draft.body  || '';
@@ -3010,7 +3005,7 @@ body > div.container,
   const $ = (s,r=document)=>r.querySelector(s);
   const titleI = $('#composeTitle');
   const modal = $('#composerModal');
-  const btnDraft = $('#btnDraftSalvar');
+  const btnDraft = $('#btnDraftSave');
   const titlePreview = $('#titlePreview');
   const tpText = titlePreview ? titlePreview.querySelector('.tp-text') : null;
 
@@ -3019,7 +3014,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'Sem título';
+    tpText.textContent = t || 'Title Not entered';
   }
 
   if(btnDraft){
@@ -3038,7 +3033,7 @@ body > div.container,
   const USER_ID = (window.USER_ID || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canShowExcluirFor(item){
+  function canShowDeleteFor(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3047,23 +3042,23 @@ body > div.container,
     return false;
   }
 
-  function ensureExcluir(item){
+  function ensureDelete(item){
     if(!item || item.querySelector('.delete-post')) return;
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='Excluir';
+    btn.textContent='Delete';
     btn.style.cssText='margin-top:6px; display:none;';
-    if(canShowExcluirFor(item)) btn.style.display='inline-block';
+    if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('Excluir esta publicação?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
     item.appendChild(btn);
   }
 
   // Initial pass
-  $$('.right .topic-panel .list .item').forEach(ensureExcluir);
+  $$('.right .topic-panel .list .item').forEach(ensureDelete);
 
   // Observe future additions for all lists
   $$('.right .topic-panel .list').forEach(list=>{
@@ -3071,9 +3066,9 @@ body > div.container,
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(node=>{
           if(node && node.nodeType===1){
-            if(node.classList.contains('item')) ensureExcluir(node);
+            if(node.classList.contains('item')) ensureDelete(node);
             // Nested case: if a wrapper was added, scan inside
-            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureExcluir);
+            node.querySelectorAll && node.querySelectorAll('.item').forEach(ensureDelete);
           }
         });
       });
@@ -3199,7 +3194,7 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Anexo</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml) : '';
 
     openModal();
   }, true);
@@ -3217,7 +3212,7 @@ body > div.container,
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
 <button class="button outline" id="enCancel" type="button">Cancelar</button>
-<button class="button" id="enSalvar" type="button">Salvar</button>
+<button class="button" id="enSave" type="button">Salvar</button>
 </div>
 </div></div><script>
 (function(){
@@ -3225,7 +3220,7 @@ body > div.container,
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEditExcluir(item){
+  function canEditDelete(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3264,7 +3259,7 @@ body > div.container,
   $$('.right .topic-panel .list .item').forEach(item=>{
     const id = itemId(item);
     const meta = loadEdit(id);
-    if(meta && canEditExcluir(item)){
+    if(meta && canEditDelete(item)){
       showEditedBadge(item, meta.editedAt);
     }
   });
@@ -3275,16 +3270,16 @@ body > div.container,
     const btn = e.target.closest('.btn-edit');
     if(!btn) return;
     const item = e.target.closest('.right .topic-panel .list .item');
-    if(item && canEditExcluir(item)) window.__currentEditingItem = item;
+    if(item && canEditDelete(item)) window.__currentEditingItem = item;
   }, true);
 
-  // When edit modal "Salvar" is pressed, persist edited meta and show badge
-  (function attachSalvarHook(){
-    const saveBtn = document.getElementById('enSalvar');
+  // When edit modal "Save" is pressed, persist edited meta and show badge
+  (function attachSaveHook(){
+    const saveBtn = document.getElementById('enSave');
     if(!saveBtn) return;
     saveBtn.addEventListener('click', ()=>{
       const item = window.__currentEditingItem;
-      if(!item || !canEditExcluir(item)) return;
+      if(!item || !canEditDelete(item)) return;
       const ts = new Date().toLocaleString();
       const id = itemId(item);
       saveEdit(id, ts);
@@ -3345,7 +3340,7 @@ body > div.container,
   const USER_ID   = (window.USER_ID   || 'local-user');
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
 
-  function canEditExcluir(item){
+  function canEditDelete(item){
     if(USER_ROLE==='admin') return true;
     if(USER_ROLE==='writer'){
       const author = item && item.dataset ? item.dataset.author : null;
@@ -3387,14 +3382,14 @@ body > div.container,
     const m  = loadMetrics(id);
     const t  = loadToggles(id);
 
-    // Limpar and rebuild stats area
+    // Clear and rebuild stats area
     stats.innerHTML = `
       <span class="stat stat-views"><i class="icon">👁</i><span class="n">${m.views}</span></span>
       <span class="stat action-reco ${t.reco?'active':''}"><i class="icon">👍</i><span class="n">${m.reco}</span></span>
       <span class="stat action-like ${t.like?'active':''}"><i class="icon">❤️</i><span class="n">${m.like}</span></span>
     `;
 
-    // Role-based Edit/Excluir remain as-is (buttons may already exist from prior code)
+    // Role-based Edit/Delete remain as-is (buttons may already exist from prior code)
     // If no edit button present, create and apply permissions
     let btnEdit = footer.querySelector('.btn-edit');
     let btnDel  = footer.querySelector('.delete-post');
@@ -3417,16 +3412,16 @@ body > div.container,
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Excluir';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('Excluir esta publicação?')) return;
+        if(!confirm('Do you want to delete this post?')) return;
         item.remove();
       });
     }
     // Apply visibility
-    if(canEditExcluir(item)){
+    if(canEditDelete(item)){
       btnEdit.style.display='inline-block';
       btnDel.style.display='inline-block';
     }else{
@@ -3505,7 +3500,7 @@ body > div.container,
 </script><script>
 (function(){
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
-  function normalizeExcluir(item){
+  function normalizeDelete(item){
     if(!item) return;
     // Ensure footer exists
     let footer = item.querySelector('.item-footer');
@@ -3545,14 +3540,14 @@ body > div.container,
   }
 
   // Run on existing items
-  $$('.right .topic-panel .list .item').forEach(normalizeExcluir);
+  $$('.right .topic-panel .list .item').forEach(normalizeDelete);
 
   // Observe for new items
   $$('.right .topic-panel .list').forEach(list=>{
     const mo = new MutationObserver(muts=>{
       muts.forEach(m=>{
         m.addedNodes && Array.from(m.addedNodes).forEach(n=>{
-          if(n.nodeType===1 && n.classList.contains('item')) normalizeExcluir(n);
+          if(n.nodeType===1 && n.classList.contains('item')) normalizeDelete(n);
         });
       });
     });
@@ -3595,13 +3590,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'Título';
+    if(t) t.textContent = 'Title';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'Conteúdo';
+    if(p) p.textContent = 'Content';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3680,8 +3675,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("Solicitação de compra recebida."); } else { alert("Falha na solicitação de compra"); }
-    }catch(e){ console.warn(e); alert("Erro de rede"); }
+      if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // 정산
@@ -3689,8 +3684,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("Solicitação de liquidação recebida."); } else { alert("Falha na solicitação de liquidação"); }
-    }catch(e){ console.warn(e); alert("Erro de rede"); }
+      if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -3699,9 +3694,9 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Solicitação de processamento blockchain concluída: " + (j.txHash||"Pendente")); }
-      else { alert("Falha no processamento blockchain"); }
-    }catch(e){ console.warn(e); alert("Erro de rede"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"Pending")); }
+      else { alert("Blockchain processing failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 })();
 </script>
@@ -3746,7 +3741,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'Produto';
+            t.textContent = item.title || item.name || 'Product';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3769,7 +3764,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Produto';
+              t.textContent = item.title || 'Product';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3840,7 +3835,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","Valor da doação (USD)");
+  btnGroup.setAttribute("aria-label","Fixed donation amount");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3855,7 +3850,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "※ Perguntas simples são respondidas imediatamente pela IA. Questões técnicas, erros ou assuntos operacionais são encaminhados automaticamente para o Perguntas e respostas do administrador.";
+  note.textContent = "Guest donations are available only in the $5–$50 range. For larger amounts, please use the account transfer information below.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3870,12 +3865,12 @@ body > div.container,
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>General: 농협 301-0078-3333-51</div>
+    <div>General: NongHyup 301-0078-3333-51</div>
     <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>General: 신한 100-026-331592</div>
+    <div>General: Shinhan 100-026-331592</div>
     <div>Foreign Currency: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
@@ -3889,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`Valor selecionado: ₩${Number(amt).toLocaleString()}\n\nTransfira para a conta abaixo.`);
+      alert(`Selected amount: ₩${Number(amt).toLocaleString()}\n\nPlease transfer it to the account below.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3950,11 +3945,11 @@ body > div.container,
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('A API de pagamento não está conectada. Selecione uma conta no painel direito.'); }
+          else { alert('The payment API is not connected. Please select an account from the right panel.'); }
         }
       }catch(err){
         console.error(err);
-        alert('Ocorreu um problema ao solicitar o pagamento.');
+        alert('A problem occurred while requesting payment.');
       } finally {
         closeDonateModal();
       }
@@ -4175,7 +4170,7 @@ document.addEventListener('DOMContentLoaded', function(){
       aiEndpoint: null
     };
 
-    // Supabase Meio Ambiente을 SUPER_VARSAR에 적용하는 함수
+    // Supabase Environment을 SUPER_VARSAR에 적용하는 함수
     function applyConfig(env) {
       const url =
         (env && env.SUPABASE_URL) ||
@@ -4207,7 +4202,7 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
 
-    // 3) 없으면 Netlify Functions에서 Meio Ambiente변수 읽어오기
+    // 3) 없으면 Netlify Functions에서 Environment변수 읽어오기
     //    (secureEnvBridge는 Netlify env에서 SUPABASE_URL, SUPABASE_ANON_KEY를 꺼내서 JSON으로 돌려주는 함수)
     var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
 
@@ -4259,7 +4254,7 @@ document.addEventListener('DOMContentLoaded', function(){
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|operation|ops|settings?|config|deploy|deployment|error|bug|loading|api|integration|server|database|db|permission|policy|login|token|key|payment|security|cors|network|timeout|response\s*code|status\s*code|build|compile|broken|doesn'?t\s*work|not\s*work|stuck|page|link|malfunction|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -4269,7 +4264,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Perguntas e respostas] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Salvar은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4295,23 +4290,23 @@ document.addEventListener('DOMContentLoaded', function(){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Perguntas & Respostas";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Fechar");
+    const title = el("div","igdc-qa-title"); title.textContent = "Questions & Answers";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="Pergunta";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Digite sua pergunta...";
-    const lA = el("label"); lA.textContent="Resposta";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Aguarde um momento. Uma resposta será fornecida em breve.";
+    const lQ = el("label"); lQ.textContent="Question";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Please enter your question...";
+    const lA = el("label"); lA.textContent="Answer";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Please wait a moment. An answer will be provided shortly.";
     const actions = el("div","igdc-qa-actions");
-    const btnEnviar = el("button","igdc-qa-btn primary"); btnEnviar.textContent="Enviar";
-    const btnLimpar = el("button","igdc-qa-btn muted"); btnLimpar.textContent="Limpar";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Perguntas simples são respondidas imediatamente pela IA. Questões técnicas, erros ou assuntos operacionais são encaminhados automaticamente para o Perguntas e respostas do administrador.";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical, error, or operation-related issues are automatically forwarded to the admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-    actions.append(btnEnviar, btnLimpar);
+    actions.append(btnSubmit, btnClear);
     panel.append(header, body);
     modal.append(backdrop, panel);
     document.body.append(modal);
@@ -4359,9 +4354,9 @@ document.addEventListener('DOMContentLoaded', function(){
     backdrop.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
 
-    btnLimpar.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnEnviar.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnEnviar.click(); }});
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
 
     async function fetchThreads(){
       const sb = await ensureSupabase(); if(!sb) return;
@@ -4378,18 +4373,18 @@ document.addEventListener('DOMContentLoaded', function(){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pendente)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
         const actions = el("div","igdc-qa-thread-actions");
-        const canExcluir = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
-        if(canExcluir){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="Excluir";
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Excluir failed (permission/policy)"); return; }
+            if(error){ alert("Delete failed (permission/policy)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4400,7 +4395,7 @@ document.addEventListener('DOMContentLoaded', function(){
       });
     }
 
-    async function autoRespostaIfNeeded(text){
+    async function autoAnswerIfNeeded(text){
       const technical = classifyTech(text);
       let answer = null;
       if(!technical){
@@ -4412,9 +4407,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="As consultas operacionais serão verificadas pelo administrador e respondidas.";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="Para informações de preço/taxa, consulte as orientações nesta página e deixe perguntas adicionais.";
-          else answer="Obrigado pela sua pergunta. Vamos verificar rapidamente e ajudar.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
+          else if(/price|cost|fee|pricing|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else answer="Thank you for your inquiry. We will review it promptly and assist you.";
         }
       }
       return { technical, answer };
@@ -4424,11 +4419,11 @@ document.addEventListener('DOMContentLoaded', function(){
       const q = (tQ.value||"").trim();
       let a = (tA.value||"").trim();
       if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await autoRespostaIfNeeded(q);
+      const { technical, answer } = await autoAnswerIfNeeded(q);
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("As configurações de salvamento (Supabase url/key) ainda não estão conectadas, portanto o salvamento no servidor está desativado. Ao publicar na web, configure SUPER_VARSAR.url/anonKey para conectar automaticamente.");
+        alert("The storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed to the web, the connection will be enabled automatically once SUPER_VARSAR.url/anonKey is set.");
         return;
       }
       const record = {
@@ -4442,7 +4437,7 @@ document.addEventListener('DOMContentLoaded', function(){
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
-    btnEnviar.addEventListener("click", submit);
+    btnSubmit.addEventListener("click", submit);
 
     // realtime refresh
     (async()=>{ try{
@@ -4461,7 +4456,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Perguntas e respostas] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4589,7 +4584,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "Fechar";
+    content: "Close";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4730,8 +4725,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>QR de Pagamento</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Fechar</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4778,12 +4773,12 @@ window.addEventListener("message",function(ev){
 
     if(t.includes("global") || t.includes("글로벌") || t.includes("wam") || t.includes("iesf")) return "iesf";
     if(t.includes("ngo")) return "ngo";
-    if(t.includes("Missão") || t.includes("mission")) return "mission";
-    if(t.includes("Serviço") || t.includes("volunteer") || t.includes("service")) return "service";
-    if(t.includes("Socorro") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
-    if(t.includes("Educação") || t.includes("education") || t.includes("edu")) return "edu";
-    if(t.includes("Meio Ambiente") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
-    if(t.includes("Outros") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
+    if(t.includes("Mission") || t.includes("mission")) return "mission";
+    if(t.includes("Service") || t.includes("volunteer") || t.includes("service")) return "service";
+    if(t.includes("Relief") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
+    if(t.includes("Education") || t.includes("education") || t.includes("edu")) return "edu";
+    if(t.includes("Environment") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
+    if(t.includes("Others") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
 
     return null;
   }
@@ -5064,19 +5059,19 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'Sem título';
+    npTitle.textContent = title || 'No title';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(Não há conteúdo registrado.)';
+    npBody.textContent = body || '(No content has been registered.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">Anexo</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml
         : '';
     }
 
     openModal();
   }, true);
 
-  // Supabase sync (uses same anonKey/url as Perguntas e respostas: SUPER_VARSAR + ensureSupabase)
+  // Supabase sync (uses same anonKey/url as Q&A: SUPER_VARSAR + ensureSupabase)
   async function syncLatestToSupabase(cat){
     try{
       if(typeof window.ensureSupabase !== 'function') return;
@@ -5121,19 +5116,19 @@ window.addEventListener("message",function(ev){
 
       const { error } = await sb.from('igdc_donation_posts').insert(payload);
       if(error){
-        console.warn('[donation] Supabase Salvar 실패:', error.message);
+        console.warn('[donation] Supabase Save 실패:', error.message);
       }
     }catch(err){
       console.warn('[donation] Supabase sync 예외:', err);
     }
   }
 
-  // 완전 Salvar 버튼 클릭 후 Supabase 동기화 시도
+  // 완전 Save 버튼 클릭 후 Supabase 동기화 시도
   document.addEventListener('click', function(e){
-    const btn = e.target.closest('#btnEnviarPost');
+    const btn = e.target.closest('#btnSubmitPost');
     if(!btn) return;
     setTimeout(function(){
-      const catSel = document.getElementById('postCategoria');
+      const catSel = document.getElementById('postCategory');
       const cat = catSel ? (catSel.value || 'etc') : 'etc';
       syncLatestToSupabase(cat);
     }, 250);
@@ -5154,7 +5149,7 @@ window.addEventListener("message",function(ev){
   display: none !important;
 }
 
-/* Anexo 여부 아이콘 */
+/* 첨부 여부 아이콘 */
 .right .topic-panel .list .item.has-attach .title::after,
 .mobile-news-clone .topic-panel .list .item.has-attach .title::after {
   content: "📎";
@@ -5190,7 +5185,7 @@ window.addEventListener("message",function(ev){
 
 <script id="hero-linebreak-fix">
 (function(){
-  function nobreak(s){ return s.replace(/ONGs\s+e organizações voluntárias/g, "ONGs\u00A0e organizações voluntárias"); }
+  function nobreak(s){ return s.replace(/NGO와\s*공유하며/g, "NGO와\u00A0공유하며"); }
   var el = document.getElementById("topPostBody");
   if(el){
     if(el.value !== undefined){ el.value = nobreak(el.value); }
@@ -5273,10 +5268,10 @@ window.addEventListener("message",function(ev){
 (function(){
   var mq = window.matchMedia("(max-width:1023px)");
   var main = document.querySelector("main.main");
-  var topEscrever = document.getElementById("topEscreverPanel");
+  var topWrite = document.getElementById("topWritePanel");
   var feedSection = main ? main.querySelector("section.feed-wrapper") : null;
   var right = document.querySelector("aside.right");
-  if (!main || !topEscrever || !feedSection || !right) return;
+  if (!main || !topWrite || !feedSection || !right) return;
 
   var cafePanel = right.querySelector(".panel.cafe-link");
   var accountPanel = right.querySelector(".panel.account-section");
@@ -5407,9 +5402,9 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">Carregando...</div>
+        <div class="card-title">Loading...</div>
         <div class="card-meta">-</div>
-        <div class="card-preview">Preparando</div>
+        <div class="card-preview">Preparing</div>
       </div>
     `;
 
@@ -5743,7 +5738,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   var installTimer=null;
   var $=function(s,r){ return (r||document).querySelector(s); };
   var $$=function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
-  var IGDC_I18N={"category":"Categoria","writePost":"Escrever publicação","title":"Título","titlePlaceholder":"Digite um título","content":"Conteúdo","contentPlaceholder":"Digite o conteúdo","attachmentOptional":"Anexar arquivos","noAttachment":"Nenhum anexo","attachHelp":"Os nomes dos arquivos selecionados e dados de download são salvos com a publicação. Arquivos grandes podem ser limitados pelo armazenamento do navegador.","draft":"Salvar rascunho","cancel":"Cancelar","save":"Salvar","close":"Fechar","edit":"Edit","del":"Del","untitled":"Sem título","emptyBody":"(Sem conteúdo)","noTitleInput":"Sem título","attachments":"Anexos","attachment":"Anexo","download":"Baixar","fileNameOnly":"Nome do arquivo","emptyList":"Ainda não há publicações.","view":"Visualizações","recommend":"Recomendar","like":"Curtir","modify":"Editar","delete":"Excluir","saved":"Salvo","updated":"Atualizado","canceled":"Cancelado","draftSaved":"Rascunho salvo","deleted":"Excluído","applied":"Aplicado","undone":"Cancelado","largeFile":"Arquivo grande; apenas os nomes foram salvos."};
+  var IGDC_I18N={"category":"Categoria","writePost":"Escrever publicação","title":"Título","titlePlaceholder":"Digite um título","content":"Conteúdo","contentPlaceholder":"Digite o conteúdo","attachmentOptional":"Anexar arquivos","noAttachment":"Nenhum anexo","attachHelp":"Os nomes dos arquivos selecionados e dados de download são salvos com a publicação. Arquivos grandes podem ser limitados pelo armazenamento do navegador.","draft":"Salvar rascunho","cancel":"Cancelar","save":"Salvar","close":"Fechar","edit":"Editar","del":"Excluir","untitled":"Sem título","emptyBody":"(Sem conteúdo)","noTitleInput":"Sem título","attachments":"Anexos","attachment":"Anexo","download":"Baixar","fileNameOnly":"Nome do arquivo","emptyList":"Ainda não há publicações.","view":"Visualizações","recommend":"Recomendar","like":"Curtir","modify":"Editar","delete":"Excluir","saved":"Salvo","updated":"Atualizado","canceled":"Cancelado","draftSaved":"Rascunho salvo","deleted":"Excluído","applied":"Aplicado","undone":"Cancelado","largeFile":"Arquivo grande; apenas os nomes foram salvos."};
   function tr(k){ return IGDC_I18N[k] || (k||''); }
   function esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
   function makeId(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }

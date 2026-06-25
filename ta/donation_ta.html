@@ -6,7 +6,7 @@
 <script>
 /**
  * 안전한 Supabase 연결 플러그
- * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Netlify சூழல்변수에서 자동 불러오기
+ * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Automatically load from Netlify environment variables
  */
 
 (async () => {
@@ -19,16 +19,16 @@
         url: envData.env.SUPABASE_URL,
         anonKey: envData.env.SUPABASE_ANON_KEY
       });
-      console.log("✅ Supabase key ஏற்றப்பட்டது.");
+      console.log("✅ Supabase 키 정상 로드됨.");
     } else {
-      console.warn("⚠️ Supabase key இல்லை — secureEnvBridge.js அல்லது Netlify சூழல் மாறிகளைச் சரிபார்க்கவும்.");
+      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify environment variables Confirm 필요.");
       window.SUPER_VARSAR = Object.freeze({
         url: null,
         anonKey: null
       });
     }
   } catch (err) {
-    console.error("❌ Supabase சூழல் மாறிகளை ஏற்ற முடியவில்லை:", err);
+    console.error("❌ Supabase environment variable load failed:", err);
     window.SUPER_VARSAR = Object.freeze({
       url: null,
       anonKey: null
@@ -321,7 +321,7 @@
 /* The right panel keeps its own inner padding; outer gap is handled by grid gap */
 .right{ margin:0 !important; }
 
-/* Soft pastel background for உலகளாவிய 나눔허브 title box */
+/* Soft pastel background for 글로벌 나눔허브 title box */
 .global-title-box{
   background-color: #f0faff !important;
 }
@@ -363,7 +363,7 @@
 /* Custom file pick buttons */
 .file-btn{ background:#f6f3ff; border-color:#cfc6ff; }
 .filename{ margin-left:6px; font-size:.85rem; color:#555; }
-/* Ensure உறுதி செய் is horizontal */
+/* Ensure Confirm is horizontal */
 .button.tiny{ writing-mode:horizontal-tb; }
 
 /* --- Compose top-row button alignment (scoped, minimal) --- */
@@ -374,12 +374,12 @@
 .compose-wrap .row-top .button{ margin:0; }
 .compose-wrap .row-top #btnOpenComposer{ order:1; }
 .compose-wrap .row-top #btnSubmitPost{ order:2; }
-/* Keep 'உறுதி செய்' labels strictly horizontal (already set for .button.tiny) */
+/* Keep 'Confirm' labels strictly horizontal (already set for .button.tiny) */
 
-/* Reinforce: 'உறுதி செய்' 버튼은 가로(수평) 표기 유지 */
+/* Reinforce: 'Confirm' 버튼은 가로(수평) 표기 유지 */
 .compose-wrap .row-bottom .button.tiny{ writing-mode:horizontal-tb; }
 
-/* === Scoped UI polish for 'வகை + NGO', 파일/படம் தேர்வு 라인 === */
+/* === Scoped UI polish for 'Category + NGO', 파일/Choose Image 라인 === */
 .field-category{
   display:flex; align-items:center; gap:10px;
   border:1px solid #d0d7de; border-radius:10px;
@@ -392,7 +392,7 @@
 
 .field .file-btn{ margin-right:8px; }
 
-/* 파일/படம் தேர்வு 결과명을 긴 입력막대처럼 보이게 */
+/* 파일/Choose Image 결과명을 긴 입력막대처럼 보이게 */
 .field .filename, #imgChosen, #fileChosen{
   display:inline-block; min-width:360px; max-width:100%;
   padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;
@@ -414,11 +414,11 @@
 
 /* File & Image pickers: one-line, confirm after filename bar, bar = 50% width */
 .field-file, .field-image{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.field-file #btnPickFile{ order:1; color:#111; }   /* 'கோப்பு தேர்வு' in black */
+.field-file #btnPickFile{ order:1; color:#111; }   /* 'Choose File' in black */
 .field-file .filename{ order:2; width:50%; min-width:0; }
 .field-file #btnFileConfirm{ order:3; }
 
-.field-image #btnPickImage{ order:1; color:#111; } /* 'படம் தேர்வு' in black (for consistency) */
+.field-image #btnPickImage{ order:1; color:#111; } /* 'Choose Image' in black (for consistency) */
 .field-image .filename{ order:2; width:50%; min-width:0; }
 .field-image #btnImageConfirm{ order:3; }
 
@@ -431,19 +431,19 @@
   width: 90px; min-width: 80px; max-width: 110px;
 }
 
-/* வகை label as a button, horizontal text ensured */
-#labelவகை{ font-weight:600; }
+/* Category label as a button, horizontal text ensured */
+#labelCategory{ font-weight:600; }
 
 /* File/Image bars: reduce to 25% width */
 .field-file .filename, .field-image .filename{ width:25%; min-width:0; }
 
-/* Ensure 'கோப்பு தேர்வு' / 'படம் தேர்வு' label color is black and stays readable */
+/* Ensure 'Choose File' / 'Choose Image' label color is black and stays readable */
 #btnPickFile, #btnPickImage{ color:#111 !important; }
 
 /* === Final polish per screenshot feedback === */
 
-/* 'வகை' must be horizontal like a button */
-#labelவகை{
+/* 'Category' must be horizontal like a button */
+#labelCategory{
   writing-mode: horizontal-tb !important;
   transform: none !important;
   display: inline-flex;
@@ -509,15 +509,15 @@
 /* === Group spacing & ordering fix (compose area only) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* File group: [கோப்பு தேர்வு] [막대] [உறுதி செய்] */
+/* File group: [Choose File] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:4px !important; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:4px; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; position:relative; z-index:1; }
 
-/* Image group: [படம் தேர்வு] [막대] [உறுதி செய்] */
+/* Image group: [Choose Image] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:4px !important; }
-/* Ensure a sufficiently large gap from file-confirm (>= 'வகை' 버튼 폭 가늠치) */
+/* Ensure a sufficiently large gap from file-confirm (>= 'Category' 버튼 폭 가늠치) */
 .compose-wrap .row-bottom .field-image{ margin-left:72px !important; }
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; margin-left:4px; }
@@ -554,15 +554,15 @@
 /* === Compose row: strict grouping & anti-overlay (scoped) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* FILE group -> [கோப்பு தேர்வு][막대][உறுதி செய்] 붙어서 배치 */
+/* FILE group -> [Choose File][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:6px; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:6px; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; margin-left:8px; }
 
-/* IMAGE group -> [படம் தேர்வு][막대][உறுதி செய்] 붙어서 배치 */
+/* IMAGE group -> [Choose Image][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:6px; }
-/* 파일 그룹의 உறுதி செய் 버튼 뒤로 충분히 띄우기(겹침 방지) */
+/* 파일 그룹의 Confirm 버튼 뒤로 충분히 띄우기(겹침 방지) */
 .compose-wrap .row-bottom .field-image{ margin-left:96px; } /* 필요 시 수치 조정 */
 
 .compose-wrap .row-bottom #fileChosen,
@@ -592,7 +592,7 @@
   margin-left:0 !important;   /* remove previous manual offsets */
 }
 
-/* Inside each group: [Pick][Bar][உறுதி செய்] */
+/* Inside each group: [Pick][Bar][Confirm] */
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; }
@@ -641,9 +641,9 @@
 <style>
 /* ===== Compose-only adjustments (safe & minimal) ===== */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top .field-category{ order:1; }     /* வகை(드롭다운) */
-.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* எழுது */
-.compose-wrap .row-top #btnAttach{ order:3; }          /* இணைப்பு(신규 버튼) */
+.compose-wrap .row-top .field-category{ order:1; }     /* Category(드롭다운) */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }          /* Attachment(신규 버튼) */
 .compose-wrap .row-top #btnSubmitPost{ order:4; }      /* 글올리기 */
 
 /* Hide legacy file/image pickers (compose only) */
@@ -666,11 +666,11 @@
 .attach-chip .remove:hover{ color:#c0392b; }
 .compose-wrap .row-top{ flex-wrap:wrap; }
 </style><style></style><style>
-/* === Compose row: place 'attachPreview' BETWEEN [இணைப்பு] and [சேமி] === */
+/* === Compose row: place 'attachPreview' BETWEEN [Attachment] and [Save] === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* எழுது */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* இணைப்பு */
-.compose-wrap .row-top #attachPreview{                /* முன்னோட்டம் 막대창(상시 존재) */
+.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
+.compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
   min-height:34px; padding:6px 8px;
@@ -678,7 +678,7 @@
   min-width:260px; max-width:50vw; flex:0 0 auto;     /* 막대 형태, 한 줄 유지 */
   overflow:hidden;
 }
-.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* சேமி(최종) */
+.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* Save(최종) */
 
 /* 칩 스타일(막대 내부) */
 .attach-preview .attach-chip{
@@ -695,14 +695,14 @@
 /* 유령 중복 표시 방지: legacy 파일명 표시는 숨김(칩이 대체) */
 .compose-wrap #attachName{ display:none !important; }
 </style><style>
-/* === Compose row order override (requested): வகை -> எழுது -> இணைப்பு -> முன்னோட்டம்막대 -> சேமி === */
+/* === Compose row order override (requested): Category -> Write -> Attachment -> 미리보기막대 -> Save === */
 .compose-wrap .row-top .field.field-category{ order:1; }
-.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* எழுது */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* இணைப்பு */
-.compose-wrap .row-top #attachPreview{ order:4; }     /* முன்னோட்டம் 막대 */
-.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* சேமி */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
+.compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
+.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* Save */
 </style><style>
-/* === தலைப்பு Preview Bar (between எழுது and இணைப்பு) === */
+/* === Title Preview Bar (between Write and Attachment) === */
 .compose-wrap .row-top #titlePreview{
   order:3;
   display:flex; align-items:center; gap:6px;
@@ -720,7 +720,7 @@
 /* Keep row single-line as much as possible */
 .compose-wrap .row-top{ flex-wrap:nowrap; gap:8px; }
 </style><style>
-/* === Compose row: place 'அழி' right after 최종 'சேமி' === */
+/* === Compose row: place 'Clear' right after 최종 'Save' === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow:hidden; }
 .compose-wrap .row-top #btnSubmitPost{ order:6; }
 .compose-wrap .row-top #btnAttachClear{ order:7; margin-left:6px; }
@@ -742,13 +742,13 @@
 .compose-wrap .row-top #attachPreview{ order:5; }
 </style><style>
 /* === ORDER HOTFIX (override) === */
-/* வகை */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
-/* எழுது */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
-/* தலைப்பு 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
-/* இணைப்பு 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
-/* 첨부 முன்னோட்டம் 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
-/* சேமி */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
-/* அழி */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
+/* Category */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
+/* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
+/* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
+/* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
+/* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
+/* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
+/* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
 /* Smooth scroll in right-side topic lists */
 .right .topic-panel .list{ scroll-behavior: smooth; }
@@ -770,7 +770,7 @@
 .right .topic-panel .item .attach-list{ margin:4px 0 0 0; padding-left:18px; }
 .right .topic-panel .item .attach-list li{ font-size:.82rem; color:#374151; }
 
-/* அழி button aligned to the right */
+/* Delete button aligned to the right */
 
 /* Smooth scroll + auto-grow already added in last build; keep consistent here if missing */
 .right .topic-panel .list{ scroll-behavior:smooth; }
@@ -813,7 +813,7 @@
   overflow:hidden;
 }
 
-/* இணைப்பு line: one compact line after preview */
+/* Attachment line: one compact line after preview */
 .right .topic-panel .item .attach,
 .right .topic-panel .item .attach-list{
   margin-top:2px; font-size:.8rem; color:#374151;
@@ -821,7 +821,7 @@
 }
 .right .topic-panel .item .attach-list{ padding-left:16px; }
 
-/* அழி button stays aligned right, compact */
+/* Delete button stays aligned right, compact */
 
 /* Make the whole card clickable for popup */
 .right .topic-panel .item{ cursor:pointer; }
@@ -845,7 +845,7 @@
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like,
 
-/* 색상: Edit=파랑, பரிந்துரை=초록, Like=핑크, அழி=빨강 */
+/* 색상: Edit=파랑, Recommend=초록, Like=핑크, Delete=빨강 */
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 .right .topic-panel .item .btn-reco{ background:#e6f7ec; color:#059669; border-color:#bbf7d0; }
 .right .topic-panel .item .btn-like{ background:#ffe6ef; color:#db2777; border-color:#fecdd3; }
@@ -915,13 +915,13 @@
 .right .topic-panel .item .item-footer .action-reco.active .icon{ color:#065f46; }
 .right .topic-panel .item .item-footer .action-like.active .icon{ color:#9d174d; }
 
-/* Keep only Edit/அழி text buttons horizontally */
+/* Keep only Edit/Delete text buttons horizontally */
 .right .topic-panel .item .btn-edit,
 
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 @media (orientation: portrait){
 </style><style>
-/* Hard-hide any legacy text buttons labeled பரிந்துரை/Like */
+/* Hard-hide any legacy text buttons labeled Recommend/Like */
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like{ display:none !important; }
 }
@@ -933,7 +933,7 @@
 }
 
 </style><style>
-/* --- Footer row normalization for Edit/அழி buttons --- */
+/* --- Footer row normalization for Edit/Delete buttons --- */
 .right .topic-panel .item .item-footer{
   display:flex; align-items:center; gap:10px; justify-content:flex-end;
   min-height:34px; /* consistent row height */
@@ -1040,7 +1040,7 @@
 /* Keep the track flush against the label */
 .feed-row .row-track{ padding-left: 0 !important; margin-left: 0 !important; }
 </style><style>
-/* === Vertical labels: bigger than 'பதிவுகள்' and start at 2nd-char position === */
+/* === Vertical labels: bigger than 'Feed' and start at 2nd-char position === */
 .feed-row{
   grid-template-columns: minmax(26px, 34px) 1fr !important; /* widen a touch for larger font */
   column-gap: 8px !important;
@@ -1048,7 +1048,7 @@
 .feed-row .row-label{
   color: var(--brand);
   font-weight: 700;
-  font-size: 1.22rem;     /* a bit larger than 'பதிவுகள்' */
+  font-size: 1.22rem;     /* a bit larger than 'Feed' */
   writing-mode: vertical-rl;
   text-orientation: upright;
   line-height: 1;
@@ -1084,7 +1084,7 @@
   margin-bottom:6px;  /* small gap before the first card row */
   color: var(--brand);
   font-weight: 800;
-  font-size: 1.22rem; /* slightly larger than 'பதிவுகள்' */
+  font-size: 1.22rem; /* slightly larger than 'Feed' */
   line-height: 1.1;
   pointer-events:none;
   user-select:none;
@@ -1452,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "இன்னும் எந்த Q&A பதிவும் செய்யப்படவில்லை";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1470,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "இன்னும் எந்த Q&A பதிவும் செய்யப்படவில்லை";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1875,7 +1875,7 @@ body .right{ display:none !important; }
 
 /* NOTE:
  - This block is intentionally minimal and non-destructive. It complements existing @media (min-width:1025px) rules in the file.
- - அடுத்தது steps: hook a mobile "drawer" for .right if you want ads/tools accessible on phones without occupying layout.
+ - Next steps: hook a mobile "drawer" for .right if you want ads/tools accessible on phones without occupying layout.
 */
 </style>
 
@@ -1974,7 +1974,7 @@ body .right{ display:none !important; }
     line-height:1.5;
   }
 
-  /* 하단 Footer: 읽음/பரிந்துரை/விருப்பம்/아이콘 + Edit/அழி 전부 우측 정렬 */
+  /* 하단 Footer: 읽음/Recommend/Like/아이콘 + Edit/Delete 전부 우측 정렬 */
  .mobile-news-clone .topic-panel .item .item-footer {
     margin-top: auto;              /* 위 Content 밀어 올리고, footer를 맨 아래로 */
     display: flex;
@@ -2023,7 +2023,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
-  <!-- Supabase சூழல் 설정 (எழுது/도네이션/Q&A 공용) -->
+  <!-- Supabase Environment 설정 (Write/도네이션/Q&A 공용) -->
   <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
@@ -2036,7 +2036,7 @@ body .right{ display:none !important; }
     window.CURRENT_USER_NAME = window.CURRENT_USER_NAME || "";
   </script>
 
-  <!-- Supabase JS (சூழல்만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
+  <!-- Supabase JS (Environment만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
 
 
@@ -2365,12 +2365,6 @@ body > div.container,
 }
 </style>
 
-
-  <style id="sidebar-spacing-unify-v2">
-    .sidebar{padding-top:30px !important;}
-    .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
-  </style>
-
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2378,12 +2372,12 @@ body > div.container,
 <div class="container">
 <!-- Left Sidebar (불변) -->
 <nav class="sidebar">
-<a href="home_ta.html">🏠 முகப்பு</a>
-<a href="networkhub_ta.html">🛒 சந்தை மையம்</a>
-<a href="distributionhub_ta.html">🏭 விநியோக மையம்</a>
-<a href="socialnetwork_ta.html">📢 சமூக வலைப்பின்னல்</a>
-<a href="mediahub_ta.html">🎬 ஊடக மையம்</a>
-<a href="tour_ta.html">🧳 பயணம் · சுற்றுலா · தங்குமிடம்</a>
+<a href="home_en.html">🏠 முகப்பு</a>
+<a href="networkhub_en.html">🛒 சந்தை மையம்</a>
+<a href="distributionhub_en.html">🏭 விநியோக மையம்</a>
+<a href="socialnetwork_en.html">📢 சமூக வலைப்பின்னல்</a>
+<a href="mediahub_en.html">🎬 ஊடக மையம்</a>
+<a href="tour_en.html">🧳 பயணம் · சுற்றுலா · தங்குமிடம்</a>
 <a href="literature/academic.html" style="display:none !important;">📚 இலக்கியம் மற்றும் கல்வி பரிமாற்றம்</a>
 <a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 கேள்வி-பதில் தொடர்பு</a></nav>
 <!-- Main (불변 구조) -->
@@ -2403,7 +2397,7 @@ body > div.container,
 <!-- Inline controls row replacing box UI -->
 <!-- Inline controls, two-row layout -->
 <div class="compose-wrap" id="composeControls">
-<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelவகை" style="writing-mode:horizontal-tb;">வகை</span>
+<div class="row row-top"><label class="field field-category"><span class="button tiny" id="labelCategory" style="writing-mode:horizontal-tb;">வகை</span>
 <select id="postCategory"><option value="iesf">IESF</option>
 <option value="ngo">NGO</option>
 <option value="mission">பணி</option>
@@ -2501,9 +2495,9 @@ body > div.container,
 </main>
 <!-- Right (불변) -->
 <aside class="right">
-<div class="panel cafe-link"><a aria-label="WAM NAVER Cafe க்கு செல்லவும்" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
+<div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('நன்கொடை அமைப்பு விரைவில் இணைக்கப்படும்.')" style="margin-bottom:8px; padding:5px 14px;">நன்கொடைகள்</button>
+<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">நன்கொடைகள்</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - பொது: NongHyup 301-0078-3333-51<br/>
         - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -2599,8 +2593,8 @@ body > div.container,
   btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
   btnSave && btnSave.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(தலைப்பு இல்லை)";
-    const b = bodyI?.value?.trim() || "(உள்ளடக்கம் இல்லை)";
+    const t = titleI?.value?.trim() || "(No Title)";
+    const b = bodyI?.value?.trim() || "(No Content)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -2618,7 +2612,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">இணைப்பு இணைப்பு</a>` : `இணைப்பு: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Attachment link</a>` : `Attachment: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -2629,7 +2623,7 @@ body > div.container,
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "இணைப்பு: " + fileAttach.files[0].name;
+        att.textContent = "Attachment: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -2646,15 +2640,15 @@ body > div.container,
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("படத்தின் வெளிப்புற இணைப்பு (URL) இருந்தால் ஒட்டவும். இல்லையெனில் உறுதி செய் அழுத்தவும்.");
+    const link = prompt("Paste an external image URL if you have one. Otherwise, click Confirm.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
         alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
-        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 முன்னோட்டம்만
-        imageLink = ""; // 실제 சேமி은 링크만 사용
+        imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
+        imageLink = ""; // 실제 Save은 링크만 사용
       }
     }else{
       imageLink = ""; imagePreviewObjectUrl = "";
@@ -2663,7 +2657,7 @@ body > div.container,
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("கோப்பின் வெளிப்புற இணைப்பு (URL) இருந்தால் ஒட்டவும். இல்லையெனில் உறுதி செய் அழுத்தவும்.");
+    const link = prompt("Paste an external file URL if you have one. Otherwise, click Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
@@ -2692,7 +2686,7 @@ body > div.container,
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' கோப்புகள்');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' files');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -2763,7 +2757,7 @@ body > div.container,
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','இணைப்பை அகற்று'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove attachment'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -2798,11 +2792,11 @@ body > div.container,
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSave(){
-    const t = (titleI && titleI.value.trim()) || '(தலைப்பு இல்லை)';
-    const b = (bodyI && bodyI.value.trim()) || '(உள்ளடக்கம் இல்லை)';
+    const t = (titleI && titleI.value.trim()) || '(No Title)';
+    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('செய்தி பகுதியைக் கண்டறிய முடியவில்லை.'); return; }
+    if(!holder){ alert('The news area could not be found.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -2819,20 +2813,20 @@ body > div.container,
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = 'இணைப்பு: ' + f.name;
+        li.textContent = 'Attachment: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='அழி';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('இந்த செய்தியை நீக்கவா?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
 
@@ -2899,13 +2893,13 @@ body > div.container,
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' கோப்புகள்');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' files');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','அனைத்து இணைப்புகளையும் அகற்று'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove all attachments'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -2923,7 +2917,7 @@ body > div.container,
     });
   }
 
-  // "அழி" 버튼도 전체 초기화
+  // "Clear" 버튼도 전체 초기화
   if(clearBtn){
     clearBtn.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2957,7 +2951,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'தலைப்பு இல்லை';
+    tpText.textContent = t || 'No title';
   }
 
   // live typing updates preview
@@ -2965,7 +2959,7 @@ body > div.container,
     titleI.addEventListener('input', ()=> updateTitlePreview());
   }
 
-  // வரைவை சேமி: keep in-memory draft; do NOT post to right panel
+  // Save Draft: keep in-memory draft; do NOT post to right panel
   if(btnDraft){
     btnDraft.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -2977,7 +2971,7 @@ body > div.container,
     });
   }
 
-  // ரத்து செய்: clear draft and input fields, and clear preview
+  // Cancel: clear draft and input fields, and clear preview
   if(btnCancel){
     btnCancel.addEventListener('click', ()=>{
       draft.title=''; draft.body='';
@@ -3020,7 +3014,7 @@ body > div.container,
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'தலைப்பு உள்ளிடப்படவில்லை';
+    tpText.textContent = t || 'Title Not entered';
   }
 
   if(btnDraft){
@@ -3053,11 +3047,11 @@ body > div.container,
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='அழி';
+    btn.textContent='Delete';
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('இந்த செய்தியை நீக்கவா?')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3200,7 +3194,7 @@ body > div.container,
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">இணைப்பு</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml) : '';
 
     openModal();
   }, true);
@@ -3218,7 +3212,7 @@ body > div.container,
 </div>
 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
 <button class="button outline" id="enCancel" type="button">ரத்து செய்</button>
-<button class="button" id="enசேமி" type="button">சேமி</button>
+<button class="button" id="enSave" type="button">சேமி</button>
 </div>
 </div></div><script>
 (function(){
@@ -3258,7 +3252,7 @@ body > div.container,
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `திருத்தப்பட்டது · ${tsStr}`;
+    badge.textContent = `Edited · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3279,9 +3273,9 @@ body > div.container,
     if(item && canEditDelete(item)) window.__currentEditingItem = item;
   }, true);
 
-  // When edit modal "சேமி" is pressed, persist edited meta and show badge
+  // When edit modal "Save" is pressed, persist edited meta and show badge
   (function attachSaveHook(){
-    const saveBtn = document.getElementById('enசேமி');
+    const saveBtn = document.getElementById('enSave');
     if(!saveBtn) return;
     saveBtn.addEventListener('click', ()=>{
       const item = window.__currentEditingItem;
@@ -3388,20 +3382,20 @@ body > div.container,
     const m  = loadMetrics(id);
     const t  = loadToggles(id);
 
-    // அழி and rebuild stats area
+    // Clear and rebuild stats area
     stats.innerHTML = `
       <span class="stat stat-views"><i class="icon">👁</i><span class="n">${m.views}</span></span>
       <span class="stat action-reco ${t.reco?'active':''}"><i class="icon">👍</i><span class="n">${m.reco}</span></span>
       <span class="stat action-like ${t.like?'active':''}"><i class="icon">❤️</i><span class="n">${m.like}</span></span>
     `;
 
-    // Role-based Edit/அழி remain as-is (buttons may already exist from prior code)
+    // Role-based Edit/Delete remain as-is (buttons may already exist from prior code)
     // If no edit button present, create and apply permissions
     let btnEdit = footer.querySelector('.btn-edit');
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='திருத்து';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3418,11 +3412,11 @@ body > div.container,
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='அழி';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('இந்த செய்தியை நீக்கவா?')) return;
+        if(!confirm('Do you want to delete this post?')) return;
         item.remove();
       });
     }
@@ -3596,13 +3590,13 @@ body > div.container,
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'தலைப்பு';
+    if(t) t.textContent = 'Title';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'உள்ளடக்கம்';
+    if(p) p.textContent = 'Content';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -3681,8 +3675,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("கொள்முதல் கோரிக்கை பெறப்பட்டது."); } else { alert("கொள்முதல் கோரிக்கை தோல்வியுற்றது"); }
-    }catch(e){ console.warn(e); alert("நெட்வொர்க் பிழை"); }
+      if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // 정산
@@ -3690,8 +3684,8 @@ body > div.container,
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("செட்டில்மென்ட் கோரிக்கை பெறப்பட்டது."); } else { alert("செட்டில்மென்ட் கோரிக்கை தோல்வியுற்றது"); }
-    }catch(e){ console.warn(e); alert("நெட்வொர்க் பிழை"); }
+      if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -3700,9 +3694,9 @@ body > div.container,
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("ப்ளாக்செயின் செயலாக்க கோரிக்கை முடிந்தது: " + (j.txHash||"நிலுவையில்")); }
-      else { alert("ப்ளாக்செயின் செயலாக்கம் தோல்வியுற்றது"); }
-    }catch(e){ console.warn(e); alert("நெட்வொர்க் பிழை"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"Pending")); }
+      else { alert("Blockchain processing failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 })();
 </script>
@@ -3747,7 +3741,7 @@ body > div.container,
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'தயாரிப்பு';
+            t.textContent = item.title || item.name || 'Product';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3770,7 +3764,7 @@ body > div.container,
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'தயாரிப்பு';
+              t.textContent = item.title || 'Product';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3841,7 +3835,7 @@ body > div.container,
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","நிலையான நன்கொடை தொகை");
+  btnGroup.setAttribute("aria-label","Fixed donation amount");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -3856,7 +3850,7 @@ body > div.container,
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "விருந்தினர் நன்கொடைகள் $5–$50 வரம்பில் மட்டுமே கிடைக்கும். அதிக தொகைக்கு கீழே உள்ள கணக்கு பரிமாற்ற தகவலை பயன்படுத்தவும்.";
+  note.textContent = "Guest donations are available only in the $5–$50 range. For larger amounts, please use the account transfer information below.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -3867,16 +3861,16 @@ body > div.container,
   // === Account 안내 박스 ===
   const accountBox = document.createElement("div");
   accountBox.className = "account-box";
-  accountBox.setAttribute("aria-label","கணக்கு பரிமாற்ற தகவல்");
+  accountBox.setAttribute("aria-label","Account Transfer Information");
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>பொது: 농협 301-0078-3333-51</div>
+    <div>General: NongHyup 301-0078-3333-51</div>
     <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>பொது: 신한 100-026-331592</div>
+    <div>General: Shinhan 100-026-331592</div>
     <div>Foreign Currency: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
@@ -3890,7 +3884,7 @@ body > div.container,
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`தேர்ந்தெடுத்த தொகை: ₩${Number(amt).toLocaleString()}\n\nகீழே உள்ள Account-க்கு மாற்றவும்.`);
+      alert(`Selected amount: ₩${Number(amt).toLocaleString()}\n\nPlease transfer it to the account below.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -3918,8 +3912,8 @@ body > div.container,
 </script>
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
-<div aria-labelledby="donateModalதலைப்பு" aria-modal="true" class="donate-modal" role="dialog">
-<h3 id="donateModalதலைப்பு">நன்கொடை அமைப்பைத் தேர்வு செய்க</h3>
+<div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
+<h3 id="donateModalTitle">நன்கொடை அமைப்பைத் தேர்வு செய்க</h3>
 <div class="donate-actions">
 <button data-org="IESF" type="button">IESF க்கு நன்கொடை அளிக்கவும்</button>
 <button data-org="WAM" type="button">WAM க்கு நன்கொடை அளிக்கவும்</button>
@@ -3951,11 +3945,11 @@ body > div.container,
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('பணம் செலுத்தும் API இணைக்கப்படவில்லை. தயவுசெய்து வலது பலகையிலிருந்து ஒரு கணக்கைத் தேர்வு செய்யவும்.'); }
+          else { alert('The payment API is not connected. Please select an account from the right panel.'); }
         }
       }catch(err){
         console.error(err);
-        alert('பணம் கோரும் போது ஒரு சிக்கல் ஏற்பட்டது.');
+        alert('A problem occurred while requesting payment.');
       } finally {
         closeDonateModal();
       }
@@ -4106,7 +4100,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if ((!hasAny || (!hasReal && !hasExternalInfo)) && !hasOurPlaceholder) {
         const item = document.createElement('div');
         item.className = 'item placeholder';
-        item.innerHTML = '<div class="title">இன்னும் எந்த பதிவும் இல்லை</div>';
+        item.innerHTML = '<div class="title">No posts yet</div>';
         list.appendChild(item);
       }
 
@@ -4176,7 +4170,7 @@ document.addEventListener('DOMContentLoaded', function(){
       aiEndpoint: null
     };
 
-    // Supabase சூழல்을 SUPER_VARSAR에 적용하는 함수
+    // Supabase Environment을 SUPER_VARSAR에 적용하는 함수
     function applyConfig(env) {
       const url =
         (env && env.SUPABASE_URL) ||
@@ -4208,7 +4202,7 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
 
-    // 3) 없으면 Netlify Functions에서 சூழல்변수 읽어오기
+    // 3) 없으면 Netlify Functions에서 Environment변수 읽어오기
     //    (secureEnvBridge는 Netlify env에서 SUPABASE_URL, SUPABASE_ANON_KEY를 꺼내서 JSON으로 돌려주는 함수)
     var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
 
@@ -4260,7 +4254,7 @@ document.addEventListener('DOMContentLoaded', function(){
   const fmtDate = (s)=> new Date(s).toLocaleString();
   const nowISO = ()=> new Date().toISOString();
   const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+  const classifyTech = (t)=> /admin|administrator|operation|ops|settings?|config|deploy|deployment|error|bug|loading|api|integration|server|database|db|permission|policy|login|token|key|payment|security|cors|network|timeout|response\s*code|status\s*code|build|compile|broken|doesn'?t\s*work|not\s*work|stuck|page|link|malfunction|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
 
   function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
   function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
@@ -4270,7 +4264,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase சான்றுகள்/நூலகம் அமைக்கப்படவில்லை: UI காட்டப்படும், ஆனால் சேமிப்பு முடக்கப்பட்டுள்ளது.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -4296,19 +4290,19 @@ document.addEventListener('DOMContentLoaded', function(){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "கேள்விகள் மற்றும் பதில்கள்";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","மூடு");
+    const title = el("div","igdc-qa-title"); title.textContent = "Questions & Answers";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="கேள்வி";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="உங்கள் கேள்வியை உள்ளிடுங்கள்...";
-    const lA = el("label"); lA.textContent="பதில்";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="சற்று காத்திருக்கவும். பதில் விரைவில் வழங்கப்படும்.";
+    const lQ = el("label"); lQ.textContent="Question";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Please enter your question...";
+    const lA = el("label"); lA.textContent="Answer";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Please wait a moment. An answer will be provided shortly.";
     const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="சமர்ப்பி";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="அழி";
-    const note = el("div","igdc-qa-note"); note.textContent="※ எளிய கேள்விகளுக்கு AI உடனடியாக பதில் அளிக்கும். தொழில்நுட்ப, பிழை அல்லது செயல்பாடு தொடர்பான பிரச்சினைகள் தானாகவே நிர்வாகி Q&A க்கு அனுப்பப்படும்.";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical, error, or operation-related issues are automatically forwarded to the admin Q&A.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -4378,19 +4372,19 @@ document.addEventListener('DOMContentLoaded', function(){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="கே. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("ப. "+row.answer):"ப. (நிலுவையில்)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "நிர்வாக கோரிக்கை":"பொது";
+        const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="அழி";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("அழித்தல் தோல்வியுற்றது (அனுமதி/கொள்கை)"); return; }
+            if(error){ alert("Delete failed (permission/policy)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -4413,9 +4407,9 @@ document.addEventListener('DOMContentLoaded', function(){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="செயல்பாட்டு தொடர்பான கேள்விகள் நிர்வாகி சரிபார்த்த பிறகு பதிலளிக்கப்படும்.";
-          else if(/price|cost|fee|가격|비용|요금/i.test(text)) answer="விலை/கட்டணம் தொடர்பான தகவல்களுக்கு இந்தப் பக்கத்தின் வழிகாட்டுதலைப் பார்க்கவும்; கூடுதல் கேள்விகள் இருப்பின் பதிவு செய்யவும்.";
-          else answer="கேள்விக்கு நன்றி. விரைவில் சரிபார்த்து உதவுகிறோம்.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
+          else if(/price|cost|fee|pricing|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else answer="Thank you for your inquiry. We will review it promptly and assist you.";
         }
       }
       return { technical, answer };
@@ -4429,7 +4423,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("சேமிப்பு அமைப்புகள் (Supabase url/key) இன்னும் இணைக்கப்படவில்லை; சர்வர் சேமிப்பு முடக்கப்பட்டுள்ளது. வலைக்கு வெளியிடும்போது SUPER_VARSAR.url/anonKey அமைத்தால் தானாக இணைக்கும்.");
+        alert("The storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed to the web, the connection will be enabled automatically once SUPER_VARSAR.url/anonKey is set.");
         return;
       }
       const record = {
@@ -4439,7 +4433,7 @@ document.addEventListener('DOMContentLoaded', function(){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("பதிவு தோல்வியுற்றது"); return; }
+      if(error){ alert("Registration failed"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -4590,7 +4584,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "மூடு";
+    content: "Close";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4731,8 +4725,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>கட்டணம் QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">மூடு</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4777,14 +4771,14 @@ window.addEventListener("message",function(ev){
     var t = normalize(text);
     if(!t) return null;
 
-    if(t.includes("global") || t.includes("உலகளாவிய") || t.includes("wam") || t.includes("iesf")) return "iesf";
+    if(t.includes("global") || t.includes("글로벌") || t.includes("wam") || t.includes("iesf")) return "iesf";
     if(t.includes("ngo")) return "ngo";
-    if(t.includes("பணி") || t.includes("mission")) return "mission";
-    if(t.includes("சேவை") || t.includes("volunteer") || t.includes("service")) return "service";
-    if(t.includes("உதவி") || t.includes("நிவாரணம்") || t.includes("பேரிடர்") || t.includes("relief")) return "relief";
-    if(t.includes("கல்வி") || t.includes("education") || t.includes("edu")) return "edu";
-    if(t.includes("சூழல்") || t.includes("காலநிலை") || t.includes("environment") || t.includes("env")) return "env";
-    if(t.includes("மற்றவை") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
+    if(t.includes("Mission") || t.includes("mission")) return "mission";
+    if(t.includes("Service") || t.includes("volunteer") || t.includes("service")) return "service";
+    if(t.includes("Relief") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
+    if(t.includes("Education") || t.includes("education") || t.includes("edu")) return "edu";
+    if(t.includes("Environment") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
+    if(t.includes("Others") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
 
     return null;
   }
@@ -4982,7 +4976,7 @@ window.addEventListener("message",function(ev){
 
   // Preview targets (reuse existing modal if present)
   const modal   = $('#newsPreviewModal') || $('#previewModal');
-  const npTitle = $('#npTitle') || $('#newsPreviewதலைப்பு');
+  const npTitle = $('#npTitle') || $('#newsPreviewTitle');
   const npTime  = $('#npTime') || $('#newsPreviewTime');
   const npBody  = $('#npBody') || $('#newsPreviewBody');
   const npAttach= $('#npAttach') || $('#newsPreviewAttach');
@@ -5065,12 +5059,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'தலைப்பு இல்லை';
+    npTitle.textContent = title || 'No title';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(பதிவு செய்யப்பட்ட உள்ளடக்கம் இல்லை.)';
+    npBody.textContent = body || '(No content has been registered.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">இணைப்பு</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml
         : '';
     }
 
@@ -5122,14 +5116,14 @@ window.addEventListener("message",function(ev){
 
       const { error } = await sb.from('igdc_donation_posts').insert(payload);
       if(error){
-        console.warn('[donation] Supabase சேமிப்பு தோல்வி:', error.message);
+        console.warn('[donation] Supabase Save 실패:', error.message);
       }
     }catch(err){
-      console.warn('[donation] Supabase sync விதிவிலக்கு:', err);
+      console.warn('[donation] Supabase sync 예외:', err);
     }
   }
 
-  // 완전 சேமி 버튼 클릭 후 Supabase 동기화 시도
+  // 완전 Save 버튼 클릭 후 Supabase 동기화 시도
   document.addEventListener('click', function(e){
     const btn = e.target.closest('#btnSubmitPost');
     if(!btn) return;
@@ -5164,7 +5158,7 @@ window.addEventListener("message",function(ev){
   vertical-align: middle;
 }
 
-/* தலைப்பு/메타 스타일 유지 */
+/* Title/메타 스타일 유지 */
 .right .topic-panel .list .item .title,
 .mobile-news-clone .topic-panel .list .item .title {
   font-weight: 700;
@@ -5191,7 +5185,7 @@ window.addEventListener("message",function(ev){
 
 <script id="hero-linebreak-fix">
 (function(){
-  function nobreak(s){ return s.replace(/NGO\uC640\s*\uACF5\uC720\uD558\uBA70/g, "NGO உடன் பகிர்ந்து"); }
+  function nobreak(s){ return s.replace(/NGO와\s*공유하며/g, "NGO와\u00A0공유하며"); }
   var el = document.getElementById("topPostBody");
   if(el){
     if(el.value !== undefined){ el.value = nobreak(el.value); }
@@ -5270,7 +5264,7 @@ window.addEventListener("message",function(ev){
 
 
 <script>
-// 모바일: WAM NAVER Cafe + நன்கொடைகள் 패널 이동 (복사 아님, 이동)
+// 모바일: WAM NAVER Cafe + Donations 패널 이동 (복사 아님, 이동)
 (function(){
   var mq = window.matchMedia("(max-width:1023px)");
   var main = document.querySelector("main.main");
@@ -5408,9 +5402,9 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">ஏற்றப்படுகிறது...</div>
+        <div class="card-title">Loading...</div>
         <div class="card-meta">-</div>
-        <div class="card-preview">தயாராகிறது</div>
+        <div class="card-preview">Preparing</div>
       </div>
     `;
 
@@ -5744,7 +5738,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   var installTimer=null;
   var $=function(s,r){ return (r||document).querySelector(s); };
   var $$=function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
-  var IGDC_I18N={"category":"வகை","writePost":"பதிவு எழுதுக","title":"தலைப்பு","titlePlaceholder":"தலைப்பை உள்ளிடவும்","content":"உள்ளடக்கம்","contentPlaceholder":"உள்ளடக்கத்தை உள்ளிடவும்","attachmentOptional":"கோப்புகளை இணைக்கவும்","noAttachment":"இணைப்பு இல்லை","attachHelp":"Selected file names and download data are saved with the post. Large files may be limited by browser storage.","draft":"வரைவை சேமி","cancel":"ரத்து","save":"சேமி","close":"மூடு","edit":"Edit","del":"Del","untitled":"தலைப்பு இல்லை","emptyBody":"(உள்ளடக்கம் இல்லை)","noTitleInput":"தலைப்பு இல்லை","attachments":"இணைப்புகள்","attachment":"Attachment","download":"பதிவிறக்கு","fileNameOnly":"File name","emptyList":"பதிவுகள் இல்லை.","view":"Views","recommend":"Recommend","like":"Like","modify":"Edit","delete":"Delete","saved":"சேமிக்கப்பட்டது","updated":"புதுப்பிக்கப்பட்டது","canceled":"ரத்து செய்யப்பட்டது","draftSaved":"வரைவு சேமிக்கப்பட்டது","deleted":"நீக்கப்பட்டது","applied":"Applied","undone":"Canceled","largeFile":"File is large; only file names were saved."};
+  var IGDC_I18N={"category":"வகை","writePost":"பதிவு எழுதுக","title":"தலைப்பு","titlePlaceholder":"தலைப்பை உள்ளிடவும்","content":"உள்ளடக்கம்","contentPlaceholder":"உள்ளடக்கத்தை உள்ளிடவும்","attachmentOptional":"கோப்புகளை இணைக்கவும்","noAttachment":"இணைப்பு இல்லை","attachHelp":"தேர்ந்தெடுக்கப்பட்ட கோப்பு பெயர்களும் பதிவிறக்கத் தரவும் பதிவுடன் சேமிக்கப்படும். பெரிய கோப்புகள் உலாவி சேமிப்பக வரம்புகளால் கட்டுப்படுத்தப்படலாம்.","draft":"வரைவை சேமி","cancel":"ரத்து","save":"சேமி","close":"மூடு","edit":"திருத்து","del":"நீக்கு","untitled":"தலைப்பு இல்லை","emptyBody":"(உள்ளடக்கம் இல்லை)","noTitleInput":"தலைப்பு இல்லை","attachments":"இணைப்புகள்","attachment":"இணைப்பு","download":"பதிவிறக்கு","fileNameOnly":"கோப்பு பெயர்","emptyList":"பதிவுகள் இல்லை.","view":"பார்வைகள்","recommend":"பரிந்துரை","like":"விருப்பு","modify":"திருத்து","delete":"நீக்கு","saved":"சேமிக்கப்பட்டது","updated":"புதுப்பிக்கப்பட்டது","canceled":"ரத்து செய்யப்பட்டது","draftSaved":"வரைவு சேமிக்கப்பட்டது","deleted":"நீக்கப்பட்டது","applied":"பயன்படுத்தப்பட்டது","undone":"ரத்து செய்யப்பட்டது","largeFile":"கோப்பு பெரியது; கோப்பு பெயர்கள் மட்டும் சேமிக்கப்பட்டன."};
   function tr(k){ return IGDC_I18N[k] || (k||''); }
   function esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
   function makeId(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }

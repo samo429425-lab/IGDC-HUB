@@ -6,7 +6,7 @@
 <script>
 /**
  * 안전한 Supabase 연결 플러그
- * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Netlify محیط زیست변수에서 자동 불러오기
+ * 기존 하드코딩된 anonKey 제거, secureEnvBridge.js 또는 Automatically load from Netlify environment variables
  */
 
 (async () => {
@@ -21,14 +21,14 @@
       });
       console.log("✅ Supabase 키 정상 로드됨.");
     } else {
-      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify محیط زیست변수 تایید 필요.");
+      console.warn("⚠️ Supabase 키 누락 — secureEnvBridge.js 또는 Netlify environment variables Confirm 필요.");
       window.SUPER_VARSAR = Object.freeze({
         url: null,
         anonKey: null
       });
     }
   } catch (err) {
-    console.error("❌ Supabase محیط زیست변수 로드 실패:", err);
+    console.error("❌ Supabase environment variable load failed:", err);
     window.SUPER_VARSAR = Object.freeze({
       url: null,
       anonKey: null
@@ -363,7 +363,7 @@
 /* Custom file pick buttons */
 .file-btn{ background:#f6f3ff; border-color:#cfc6ff; }
 .filename{ margin-left:6px; font-size:.85rem; color:#555; }
-/* Ensure تایید is horizontal */
+/* Ensure Confirm is horizontal */
 .button.tiny{ writing-mode:horizontal-tb; }
 
 /* --- Compose top-row button alignment (scoped, minimal) --- */
@@ -374,12 +374,12 @@
 .compose-wrap .row-top .button{ margin:0; }
 .compose-wrap .row-top #btnOpenComposer{ order:1; }
 .compose-wrap .row-top #btnSubmitPost{ order:2; }
-/* Keep 'تایید' labels strictly horizontal (already set for .button.tiny) */
+/* Keep 'Confirm' labels strictly horizontal (already set for .button.tiny) */
 
-/* Reinforce: 'تایید' 버튼은 가로(수평) 표기 유지 */
+/* Reinforce: 'Confirm' 버튼은 가로(수평) 표기 유지 */
 .compose-wrap .row-bottom .button.tiny{ writing-mode:horizontal-tb; }
 
-/* === Scoped UI polish for 'بخش + سازمان غیردولتی', 파일/انتخاب تصویر 라인 === */
+/* === Scoped UI polish for 'Category + NGO', 파일/Choose Image 라인 === */
 .field-category{
   display:flex; align-items:center; gap:10px;
   border:1px solid #d0d7de; border-radius:10px;
@@ -392,7 +392,7 @@
 
 .field .file-btn{ margin-right:8px; }
 
-/* 파일/انتخاب تصویر 결과명을 긴 입력막대처럼 보이게 */
+/* 파일/Choose Image 결과명을 긴 입력막대처럼 보이게 */
 .field .filename, #imgChosen, #fileChosen{
   display:inline-block; min-width:360px; max-width:100%;
   padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;
@@ -414,11 +414,11 @@
 
 /* File & Image pickers: one-line, confirm after filename bar, bar = 50% width */
 .field-file, .field-image{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.field-file #btnPickFile{ order:1; color:#111; }   /* 'انتخاب فایل' in black */
+.field-file #btnPickFile{ order:1; color:#111; }   /* 'Choose File' in black */
 .field-file .filename{ order:2; width:50%; min-width:0; }
 .field-file #btnFileConfirm{ order:3; }
 
-.field-image #btnPickImage{ order:1; color:#111; } /* 'انتخاب تصویر' in black (for consistency) */
+.field-image #btnPickImage{ order:1; color:#111; } /* 'Choose Image' in black (for consistency) */
 .field-image .filename{ order:2; width:50%; min-width:0; }
 .field-image #btnImageConfirm{ order:3; }
 
@@ -426,23 +426,23 @@
 .field-file .button.tiny, .field-image .button.tiny{ white-space:nowrap; }
 
 /* === Tweaks per latest instructions === */
-/* سازمان غیردولتی dropdown: about 1/3 of previous long width; keep compact */
+/* NGO dropdown: about 1/3 of previous long width; keep compact */
 .field-category select#postCategory{
   width: 90px; min-width: 80px; max-width: 110px;
 }
 
-/* بخش label as a button, horizontal text ensured */
+/* Category label as a button, horizontal text ensured */
 #labelCategory{ font-weight:600; }
 
 /* File/Image bars: reduce to 25% width */
 .field-file .filename, .field-image .filename{ width:25%; min-width:0; }
 
-/* Ensure 'انتخاب فایل' / 'انتخاب تصویر' label color is black and stays readable */
+/* Ensure 'Choose File' / 'Choose Image' label color is black and stays readable */
 #btnPickFile, #btnPickImage{ color:#111 !important; }
 
 /* === Final polish per screenshot feedback === */
 
-/* 'بخش' must be horizontal like a button */
+/* 'Category' must be horizontal like a button */
 #labelCategory{
   writing-mode: horizontal-tb !important;
   transform: none !important;
@@ -451,7 +451,7 @@
   white-space: nowrap;
 }
 
-/* سازمان غیردولتی dropdown: cut to about half of prior setting */
+/* NGO dropdown: cut to about half of prior setting */
 .field-category select#postCategory{
   width: 56px; min-width: 50px; max-width: 70px;
 }
@@ -509,15 +509,15 @@
 /* === Group spacing & ordering fix (compose area only) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* File group: [انتخاب فایل] [막대] [تایید] */
+/* File group: [Choose File] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:4px !important; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:4px; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; position:relative; z-index:1; }
 
-/* Image group: [انتخاب تصویر] [막대] [تایید] */
+/* Image group: [Choose Image] [막대] [Confirm] */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:4px !important; }
-/* Ensure a sufficiently large gap from file-confirm (>= 'بخش' 버튼 폭 가늠치) */
+/* Ensure a sufficiently large gap from file-confirm (>= 'Category' 버튼 폭 가늠치) */
 .compose-wrap .row-bottom .field-image{ margin-left:72px !important; }
 .compose-wrap .row-bottom .field-image #btnPickImage{ order:1; position:relative; z-index:1; }
 .compose-wrap .row-bottom .field-image #imgChosen{ order:2; margin-left:4px; }
@@ -554,15 +554,15 @@
 /* === Compose row: strict grouping & anti-overlay (scoped) === */
 .compose-wrap .row-bottom{ display:flex; align-items:center; flex-wrap:nowrap; }
 
-/* FILE group -> [انتخاب فایل][막대][تایید] 붙어서 배치 */
+/* FILE group -> [Choose File][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-file{ display:inline-flex; align-items:center; gap:6px; }
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; margin-left:6px; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; margin-left:8px; }
 
-/* IMAGE group -> [انتخاب تصویر][막대][تایید] 붙어서 배치 */
+/* IMAGE group -> [Choose Image][막대][Confirm] 붙어서 배치 */
 .compose-wrap .row-bottom .field-image{ display:inline-flex; align-items:center; gap:6px; }
-/* 파일 그룹의 تایید 버튼 뒤로 충분히 띄우기(겹침 방지) */
+/* 파일 그룹의 Confirm 버튼 뒤로 충분히 띄우기(겹침 방지) */
 .compose-wrap .row-bottom .field-image{ margin-left:96px; } /* 필요 시 수치 조정 */
 
 .compose-wrap .row-bottom #fileChosen,
@@ -592,7 +592,7 @@
   margin-left:0 !important;   /* remove previous manual offsets */
 }
 
-/* Inside each group: [Pick][Bar][تایید] */
+/* Inside each group: [Pick][Bar][Confirm] */
 .compose-wrap .row-bottom .field-file #btnPickFile{ order:1; }
 .compose-wrap .row-bottom .field-file #fileChosen{ order:2; }
 .compose-wrap .row-bottom .field-file #btnFileConfirm{ order:3; }
@@ -641,9 +641,9 @@
 <style>
 /* ===== Compose-only adjustments (safe & minimal) ===== */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top .field-category{ order:1; }     /* بخش(드롭다운) */
-.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* نوشتن */
-.compose-wrap .row-top #btnAttach{ order:3; }          /* پیوست(신규 버튼) */
+.compose-wrap .row-top .field-category{ order:1; }     /* Category(드롭다운) */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }    /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }          /* Attachment(신규 버튼) */
 .compose-wrap .row-top #btnSubmitPost{ order:4; }      /* 글올리기 */
 
 /* Hide legacy file/image pickers (compose only) */
@@ -666,10 +666,10 @@
 .attach-chip .remove:hover{ color:#c0392b; }
 .compose-wrap .row-top{ flex-wrap:wrap; }
 </style><style></style><style>
-/* === Compose row: place 'attachPreview' BETWEEN [پیوست] and [ذخیره] === */
+/* === Compose row: place 'attachPreview' BETWEEN [Attachment] and [Save] === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
-.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* نوشتن */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* پیوست */
+.compose-wrap .row-top #btnOpenComposer{ order:5; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
 .compose-wrap .row-top #attachPreview{                /* 미리보기 막대창(상시 존재) */
   order:4;
   display:flex; align-items:center; gap:6px; flex-wrap:nowrap;
@@ -678,7 +678,7 @@
   min-width:260px; max-width:50vw; flex:0 0 auto;     /* 막대 형태, 한 줄 유지 */
   overflow:hidden;
 }
-.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* ذخیره(최종) */
+.compose-wrap .row-top #btnSubmitPost{ order:6; }     /* Save(최종) */
 
 /* 칩 스타일(막대 내부) */
 .attach-preview .attach-chip{
@@ -695,14 +695,14 @@
 /* 유령 중복 표시 방지: legacy 파일명 표시는 숨김(칩이 대체) */
 .compose-wrap #attachName{ display:none !important; }
 </style><style>
-/* === Compose row order override (requested): بخش -> نوشتن -> پیوست -> 미리보기막대 -> ذخیره === */
+/* === Compose row order override (requested): Category -> Write -> Attachment -> 미리보기막대 -> Save === */
 .compose-wrap .row-top .field.field-category{ order:1; }
-.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* نوشتن */
-.compose-wrap .row-top #btnAttach{ order:3; }         /* پیوست */
+.compose-wrap .row-top #btnOpenComposer{ order:2; }   /* Write */
+.compose-wrap .row-top #btnAttach{ order:3; }         /* Attachment */
 .compose-wrap .row-top #attachPreview{ order:4; }     /* 미리보기 막대 */
-.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* ذخیره */
+.compose-wrap .row-top #btnSubmitPost{ order:5; }     /* Save */
 </style><style>
-/* === Title Preview Bar (between نوشتن and پیوست) === */
+/* === Title Preview Bar (between Write and Attachment) === */
 .compose-wrap .row-top #titlePreview{
   order:3;
   display:flex; align-items:center; gap:6px;
@@ -720,7 +720,7 @@
 /* Keep row single-line as much as possible */
 .compose-wrap .row-top{ flex-wrap:nowrap; gap:8px; }
 </style><style>
-/* === Compose row: place 'پاک کردن' right after 최종 'ذخیره' === */
+/* === Compose row: place 'Clear' right after 최종 'Save' === */
 .compose-wrap .row-top{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow:hidden; }
 .compose-wrap .row-top #btnSubmitPost{ order:6; }
 .compose-wrap .row-top #btnAttachClear{ order:7; margin-left:6px; }
@@ -742,13 +742,13 @@
 .compose-wrap .row-top #attachPreview{ order:5; }
 </style><style>
 /* === ORDER HOTFIX (override) === */
-/* بخش */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
-/* نوشتن */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
-/* عنوان 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
-/* پیوست 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
+/* Category */               .compose-wrap .row-top .field.field-category{ order:1 !important; }
+/* Write */             .compose-wrap .row-top #btnOpenComposer{ order:2 !important; }
+/* Title 막대 */          .compose-wrap .row-top #titlePreview{ order:3 !important; }
+/* Attachment 버튼 */      .compose-wrap .row-top #btnAttach{ order:4 !important; }
 /* 첨부 미리보기 막대 */ .compose-wrap .row-top #attachPreview{ order:5 !important; }
-/* ذخیره */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
-/* پاک کردن */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
+/* Save */               .compose-wrap .row-top #btnSubmitPost{ order:6 !important; }
+/* Clear */             .compose-wrap .row-top #btnAttachClear{ order:7 !important; }
 </style><style>
 /* Smooth scroll in right-side topic lists */
 .right .topic-panel .list{ scroll-behavior: smooth; }
@@ -770,7 +770,7 @@
 .right .topic-panel .item .attach-list{ margin:4px 0 0 0; padding-left:18px; }
 .right .topic-panel .item .attach-list li{ font-size:.82rem; color:#374151; }
 
-/* حذف button aligned to the right */
+/* Delete button aligned to the right */
 
 /* Smooth scroll + auto-grow already added in last build; keep consistent here if missing */
 .right .topic-panel .list{ scroll-behavior:smooth; }
@@ -813,7 +813,7 @@
   overflow:hidden;
 }
 
-/* پیوست line: one compact line after preview */
+/* Attachment line: one compact line after preview */
 .right .topic-panel .item .attach,
 .right .topic-panel .item .attach-list{
   margin-top:2px; font-size:.8rem; color:#374151;
@@ -821,7 +821,7 @@
 }
 .right .topic-panel .item .attach-list{ padding-left:16px; }
 
-/* حذف button stays aligned right, compact */
+/* Delete button stays aligned right, compact */
 
 /* Make the whole card clickable for popup */
 .right .topic-panel .item{ cursor:pointer; }
@@ -845,7 +845,7 @@
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like,
 
-/* 색상: Edit=파랑, توصیه=초록, پسندیدن=핑크, حذف=빨강 */
+/* 색상: Edit=파랑, Recommend=초록, Like=핑크, Delete=빨강 */
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 .right .topic-panel .item .btn-reco{ background:#e6f7ec; color:#059669; border-color:#bbf7d0; }
 .right .topic-panel .item .btn-like{ background:#ffe6ef; color:#db2777; border-color:#fecdd3; }
@@ -892,7 +892,7 @@
 .right .topic-panel .item .item-footer .stat-like{ display:none !important; }
 
 </style><style>
-/* === Icon buttons for توصیه/پسندیدن inside stats === */
+/* === Icon buttons for Recommend/Like inside stats === */
 .right .topic-panel .item .item-footer{
   display:flex; align-items:center; gap:8px; justify-content:flex-end; margin-top:6px;
 }
@@ -915,13 +915,13 @@
 .right .topic-panel .item .item-footer .action-reco.active .icon{ color:#065f46; }
 .right .topic-panel .item .item-footer .action-like.active .icon{ color:#9d174d; }
 
-/* Keep only Edit/حذف text buttons horizontally */
+/* Keep only Edit/Delete text buttons horizontally */
 .right .topic-panel .item .btn-edit,
 
 .right .topic-panel .item .btn-edit{ background:#e6f0ff; color:#1d4ed8; border-color:#bfdbfe; }
 @media (orientation: portrait){
 </style><style>
-/* Hard-hide any legacy text buttons labeled توصیه/پسندیدن */
+/* Hard-hide any legacy text buttons labeled Recommend/Like */
 .right .topic-panel .item .btn-reco,
 .right .topic-panel .item .btn-like{ display:none !important; }
 }
@@ -933,7 +933,7 @@
 }
 
 </style><style>
-/* --- Footer row normalization for Edit/حذف buttons --- */
+/* --- Footer row normalization for Edit/Delete buttons --- */
 .right .topic-panel .item .item-footer{
   display:flex; align-items:center; gap:10px; justify-content:flex-end;
   min-height:34px; /* consistent row height */
@@ -1242,7 +1242,18 @@ body > .container > .main > *{
 
 /* Narrower: trim preferred vw a bit more while keeping floor */
 </style>
-
+<style id="qna-brand-only">
+/* === Q&A sidebar link color only (no other changes) === */
+:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
+.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
+  display:block;
+  background: var(--qa-brand);
+  color:#fff !important;
+  border:1px solid var(--qa-brand-border);
+  border-radius:10px;
+}
+.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
+</style>
 <style id="prelayout-guard">.prelayout *{transition:none !important;}</style>
 <script>window.IGDC_PAGE = window.IGDC_PAGE || { project:"IGDC", pageId:"front-"+(document.title||"") };</script>
 <style id="adpanel-final-override">
@@ -1334,7 +1345,59 @@ body > .container > .main > *{
 <!-- Mobile Optimization Patch v1 -->
 <!-- Mobile Ad Drawer v3 (push layout: stage shifts left while right drawer appears) -->
 <!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
-
+<style id="igdc-qa-style">
+:root{
+  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
+  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
+  --qa-left:260px;
+  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
+  --blue:#2563eb; --muted:#9ca3af;
+}
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+#qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
+/* Modal near the left sidebar, with smooth transitions */
+.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
+.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
+.igdc-qa-panel{
+  position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
+  max-height:min(82vh,900px); display:flex; flex-direction:column;
+  background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
+  overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
+  transition:opacity .18s ease, transform .18s ease;
+  border:1px solid var(--old-border);
+}
+.igdc-qa-modal.open{pointer-events:auto}
+.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
+.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
+/* Old-style header tint */
+.igdc-qa-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid var(--old-border);
+  background:var(--old-bg);
+}
+.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
+.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
+.igdc-qa-body{display:flex; flex-direction:column; gap:10px; padding:12px; overflow:auto}
+.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
+.igdc-qa-text{
+  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
+  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
+  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
+}
+.igdc-qa-text.q{ min-height: 96px; }
+.igdc-qa-text.a{ min-height: 128px; }
+.igdc-qa-actions{display:flex; gap:8px; align-items:center}
+.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
+.igdc-qa-btn.primary{background:var(--blue); color:#fff}
+.igdc-qa-btn.muted{background:var(--muted); color:#fff}
+.igdc-qa-threads{display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px}
+.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
+.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
+.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
+.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
+.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
+.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
+</style>
 <style id="igdc-qa-modal-fix-v3">
 /* Default: backdrop hidden/inactive */
 .igdc-qa-backdrop{
@@ -1389,7 +1452,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "هنوز هیچ مورد پرسش و پاسخی ثبت نشده است";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1407,7 +1470,7 @@ body > .container > .main > *{
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "هنوز هیچ مورد پرسش و پاسخی ثبت نشده است";
+  content: "No Q&A entries have been registered yet";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1736,7 +1799,7 @@ main, .main, #main, .main-content, .content, .content-area{
 
 
 <style id="donate-lr-plus-10">
-/* === تبرع button: mobile portrait horizontal +10% (spacing minimal) === */
+/* === Donate button: mobile portrait horizontal +10% (spacing minimal) === */
 @media (max-width: 480px){
   .hero .bc-tile.orange {
     padding-left: 9px !important;   /* base 8px -> 9px (~+12.5%) */
@@ -1911,7 +1974,7 @@ body .right{ display:none !important; }
     line-height:1.5;
   }
 
-  /* 하단 Footer: 읽음/توصیه/پسندیدن/아이콘 + Edit/حذف 전부 우측 정렬 */
+  /* 하단 Footer: 읽음/Recommend/Like/아이콘 + Edit/Delete 전부 우측 정렬 */
  .mobile-news-clone .topic-panel .item .item-footer {
     margin-top: auto;              /* 위 Content 밀어 올리고, footer를 맨 아래로 */
     display: flex;
@@ -1960,7 +2023,7 @@ body .right{ display:none !important; }
     }
   }
 </style>
-  <!-- Supabase محیط زیست 설정 (نوشتن/도네이션/Q&A 공용) -->
+  <!-- Supabase Environment 설정 (Write/도네이션/Q&A 공용) -->
   <script>
     window.SUPER_VARSAR = window.SUPER_VARSAR || {
       url: window.SUPABASE_URL || "",
@@ -1973,7 +2036,7 @@ body .right{ display:none !important; }
     window.CURRENT_USER_NAME = window.CURRENT_USER_NAME || "";
   </script>
 
-  <!-- Supabase JS (محیط زیست만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
+  <!-- Supabase JS (Environment만 로드, 실제 사용 로직은 body 쪽에서 처리 예정) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
 
 
@@ -2302,485 +2365,6 @@ body > div.container,
 }
 </style>
 
-<style id="ar-text-rtl-only-standard-safe">
-html[lang="fa"]{ direction: rtl !important; }
-body{ direction: rtl !important; }
-.sidebar, .main-content, main, .main, .content-area, .hero, .intro,
-.region-card, .panel, .card-body, .meta, footer,
-.igdc-qa-panel, .igdc-qa-body, .igdc-qa-thread, .igdc-qa-header,
-.igdc-qa-field, .igdc-qa-note, .igdc-qa-title {
-  direction: rtl !important;
-  text-align: right !important;
-}
-.container, .layout, .right-rail, .right, .ad-panel, .brand-rail {
-  direction: ltr !important;
-}
-</style>
-<style id="ar-sidebar-spacing-unified">
-/* AR sidebar spacing: unify only button-to-button vertical spacing */
-.sidebar{
-  padding-top: 20px !important;
-}
-.sidebar a,
-.sidebar a#qnaOpenBtn,
-#qnaOpenBtn{
-  margin: 10px 12px !important;
-}
-</style>
-
-<style id="ar-scroll-general-mode-fix">
-/* General scroll mode: keep button positions, remove mirrored RTL scroll behavior */
-.feed-row .row-track,
-.row-track,
-#rpMobileScroller,
-#rpMobileGrid{
-  direction:ltr !important;
-}
-</style>
-
-<style id="igdc-qa-style">
-:root{
-  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
-  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
-  --qa-left:260px;
-  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
-  --blue:#2563eb; --muted:#9ca3af;
-}
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
-#qnaOpenBtn{ display:block; text-decoration:none; }
-/* Modal near the left sidebar, with smooth transitions */
-.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
-.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
-.igdc-qa-panel{
-position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
-max-height:min(82vh,900px); display:flex; flex-direction:column;
-background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
-overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
-transition:opacity .18s ease, transform .18s ease;
-border:1px solid var(--old-border);
-}
-.igdc-qa-modal.open{pointer-events:auto}
-.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
-.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
-/* Old-style header tint */
-.igdc-qa-header{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px 14px; border-bottom:1px solid var(--old-border);
-  background:var(--old-bg);
-}
-.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
-.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
-.igdc-qa-body{
-display:flex; flex-direction:column; gap:10px; padding:12px; overflow:auto
-}
-.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
-.igdc-qa-text{
-  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
-  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
-  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
-}
-.igdc-qa-text.q{ min-height: 96px; }
-.igdc-qa-text.a{ min-height: 128px; }
-.igdc-qa-actions{display:flex; gap:8px; align-items:center}
-.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
-.igdc-qa-btn.primary{background:var(--blue); color:#fff}
-.igdc-qa-btn.muted{background:var(--muted); color:#fff}
-.igdc-qa-threads{
-display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px
-}
-.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
-.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
-.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
-.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
-.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
-.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
-@media (max-width:900px){
-  .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
-}
-.igdc-qa-threads{
-  display:flex; flex-direction:column; gap:10px; overflow:auto;
-  border-top:1px solid var(--old-border);
-  padding-top:10px;
-  padding-bottom:4px; }
-a[href^="mailto:"] {
-  color: #007bff;           /* 밝은 파란색 (Bootstrap 기본 블루톤) */
-  text-decoration: underline;
-}
-a[href^="mailto:"]:hover {
-  color: #0056b3;           /* hover 시 조금 더 짙은 파랑 */
-  text-decoration: underline;
-}
-
-.igdc-qa-threads:empty::before{
-  content:"هنوز هیچ مورد پرسش و پاسخی ثبت نشده است";
-  display:block; padding:10px 12px; color:#666;
-  background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px;
-  margin-top:4px; font-size:.95rem;
-}
-.contact-email{
-  margin-top: 6px;
-  margin-bottom: 0;}
-</style>
-<style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
-:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
-.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
-  display:block;
-  background: var(--qa-brand);
-  color:#fff !important;
-  border:1px solid var(--qa-brand-border);
-  border-radius:10px;
-}
-.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
-</style>
-<script id="igdc-qa-config">
-  (function () {
-    // 1) 민감정보 없는 기본 설정
-    const baseConfig = {
-      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
-      project: "IGDC",
-      pageId: null,
-      aiEndpoint: null
-    };
-
-    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
-    function applyConfig(env) {
-      const url =
-        (env && env.SUPABASE_URL) ||
-        baseConfig.url;
-
-      const anonKey =
-        (env && env.SUPABASE_ANON_KEY) ||
-        "";
-
-      if (!anonKey) {
-        console.warn("[IGDC] Supabase anonKey is not configured.");
-      }
-
-      window.SUPER_VARSAR = Object.assign(
-        window.SUPER_VARSAR || {},
-        baseConfig,
-        {
-          url: url,
-          anonKey: anonKey
-        }
-      );
-    }
-
-    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
-    if (window.IGDC_ENV &&
-        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
-      applyConfig(window.IGDC_ENV);
-      return;
-    }
-
-    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
-    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
-
-    fetch(endpoint, { cache: "no-store" })
-      .then(function (res) {
-        if (!res.ok) {
-          throw new Error("http " + res.status);
-        }
-        return res.json();
-      })
-      .then(function (data) {
-        var env = data && (data.env || data);
-        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
-        applyConfig(window.IGDC_ENV);
-        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
-      })
-      .catch(function (err) {
-        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
-        applyConfig(null);
-      });
-  })();
-</script>
-<script id="igdc-qa-script">
-(function(){
-  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
-  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
-  let isOpen=false, isAnimating=false;
-
-  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
-  const fmtDate = (s)=> new Date(s).toLocaleString();
-  const nowISO = ()=> new Date().toISOString();
-  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
-
-  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
-  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
-
-  async function ensureSupabase(){
-    if(STATE.sb) return STATE.sb;
-    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
-    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
-    if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
-      return null;
-    }
-    STATE.sb = window.supabase.createClient(url, key);
-    return STATE.sb;
-  }
-  async function ensureAuth(){
-    const sb = await ensureSupabase(); if(!sb) return;
-    let { data: { session } } = await sb.auth.getSession();
-    if(!session){
-      try{ await sb.auth.signInناشناسly(); }catch(e){}
-      ({ data: { session } } = await sb.auth.getSession());
-    }
-    if(session){
-      const uid = session.user.id;
-      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
-      STATE.user = session.user;
-      STATE.isAdmin = Array.isArray(data) && data.length>0;
-    }
-  }
-
-  function mountUI(){
-    const modal = el("div","igdc-qa-modal");
-    const backdrop = el("div","igdc-qa-backdrop");
-    const panel = el("div","igdc-qa-panel");
-    const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "پرسش و پاسخ";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","بستن");
-    header.append(title, close);
-
-    const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="سؤال";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="لطفاً سؤال خود را وارد کنید...";
-    const lA = el("label"); lA.textContent="پاسخ";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="يرجى الانتظار قليلاً. سنرد عليك قريبًا.";
-    const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="ارسال";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="پاک کردن";
-    const note = el("div","igdc-qa-note"); note.textContent="※ به پرسش‌های ساده، هوش مصنوعی فوراً پاسخ می‌دهد. موضوعات فنی، خطاها یا مسائل عملیاتی به‌صورت خودکار به بخش پرسش و پاسخ مدیر ارسال می‌شوند.";
-    const list = el("div","igdc-qa-threads");
-
-    body.append(lQ,tQ,lA,tA,actions,note,list);
-    actions.append(btnSubmit, btnClear);
-    panel.append(header, body);
-    modal.append(backdrop, panel);
-    document.body.append(modal);
-
-    // position near sidebar
-    function positionNearSidebar(){
-      try{
-        const sb = document.querySelector('.sidebar');
-        if(sb){
-          const rect = sb.getBoundingClientRect();
-          const left = Math.round(rect.right + 12);
-          panel.style.left = left + "px";
-        }
-      }catch(e){}
-    }
-    positionNearSidebar();
-    window.addEventListener('resize', positionNearSidebar);
-    window.addEventListener('scroll', positionNearSidebar, { passive:true });
-
-    function openModal(){
-      if(isAnimating || isOpen) return;
-      isAnimating = true;
-      modal.style.display = "block";
-      requestAnimationFrame(()=>{
-        modal.classList.add('open');
-        isOpen = true;
-        setTimeout(()=>{ isAnimating = false; }, 220);
-      });
-    }
-    function closeModal(){
-      if(isAnimating || !isOpen) return;
-      isAnimating = true;
-      modal.classList.remove('open');
-      setTimeout(()=>{
-        modal.style.display = "none";
-        isOpen = false;
-        isAnimating = false;
-      }, 220);
-    }
-
-    // Sidebar trigger
-    const sideBtn = document.querySelector('#qnaOpenBtn');
-    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
-    close.addEventListener("click", closeModal);
-    backdrop.addEventListener("click", closeModal);
-    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
-
-    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
-
-    async function fetchThreads(){
-      const sb = await ensureSupabase(); if(!sb) return;
-      const { data, error } = await sb.from("igdc_qna_threads")
-        .select("*")
-        .eq("project", STATE.project)
-        .eq("page_id", STATE.pageId)
-        .order("created_at", { ascending:false }).limit(100);
-      if(error){ console.error(error); return; }
-      renderList(data||[]);
-    }
-    function renderList(rows){
-      list.innerHTML="";
-      rows.forEach(row=>{
-        const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"پاسخ در انتظار";
-        const meta = el("div","igdc-qa-thread-meta");
-        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "درخواست مدیریتی":"عمومی";
-        const actions = el("div","igdc-qa-thread-actions");
-        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
-        if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="حذف";
-          del.addEventListener("click", async ()=>{
-            const sb = await ensureSupabase(); if(!sb) return;
-            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("حذف ناموفق بود (مجوز/سیاست)."); return; }
-            await fetchThreads();
-          });
-          actions.append(del);
-        }
-        meta.append(time, tag, actions);
-        box.append(q,a,meta);
-        list.append(box);
-      });
-    }
-
-    async function autoAnswerIfNeeded(text){
-      const technical = classifyTech(text);
-      let answer = null;
-      if(!technical){
-        const ep = getAIEndpoint();
-        if(ep){
-          try{
-            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
-            const j = await res.json(); answer = j && (j.answer||j.text||null);
-          }catch(e){}
-        }
-        if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="پرسش‌های مربوط به بهره‌برداری توسط مدیر بررسی شده و بعداً پاسخ داده می‌شود.";
-          else if(/가격|비용|요금/.test(text)) answer="برای قیمت‌ها و هزینه‌ها لطفاً به اطلاعات همین صفحه مراجعه کنید. در صورت نیاز می‌توانید پرسش دیگری ثبت کنید.";
-          else answer="از پرسش شما سپاسگزاریم. آن را سریع بررسی می‌کنیم و کمک خواهیم کرد.";
-        }
-      }
-      return { technical, answer };
-    }
-
-    async function submit(){
-      const q = (tQ.value||"").trim();
-      let a = (tA.value||"").trim();
-      if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await autoAnswerIfNeeded(q);
-      if(!a && answer) a = answer;
-      const sb = await ensureSupabase();
-      if(!sb){
-        alert("ذخیره‌سازی سمت سرور غیرفعال است، زیرا تنظیمات ذخیره‌سازی (Supabase url/key) هنوز متصل نشده‌اند. هنگام استقرار روی وب، اگر SUPER_VARSAR.url/anonKey تنظیم شده باشد، به‌طور خودکار متصل می‌شود.");
-        return;
-      }
-      const record = {
-        project: STATE.project, page_id: STATE.pageId,
-        user_id: (STATE.user && STATE.user.id) || null,
-        question: q, answer: a || null, is_admin: technical,
-        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
-      };
-      const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("ارسال ناموفق بود"); return; }
-      tQ.value=""; tA.value = a || "";
-      await fetchThreads();
-    }
-    btnSubmit.addEventListener("click", submit);
-
-    // realtime refresh
-    (async()=>{ try{
-      const sb = await ensureSupabase(); if(!sb) return;
-      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
-    }catch(e){} })();
-
-    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
-    fetchThreads();
-  }
-
-  async function boot(){
-  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
-  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
-  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
-  // 1) Always mount UI so the popup can open
-  mountUI();
-  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
-}
-if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
-})();
-</script>
-<script id="igdc-qa-safety-bootstrap">
-// Ensures the Q&A popup opens when clicking the sidebar link,
-// even if Supabase URL/Key are not configured yet.
-(function(){
-  if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
-
-  function ensureButton(){
-    var btn = document.getElementById('qnaOpenBtn');
-    if(!btn) return;
-
-    btn.addEventListener('click', function(){
-      if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
-        window.IGDC_QA.open();
-        return;
-      }
-
-      var modal = document.querySelector('.igdc-qa-modal');
-      if(!modal){
-        var m = document.createElement('div'); m.className='igdc-qa-modal';
-        var b = document.createElement('div'); b.className='igdc-qa-backdrop';
-        var p = document.createElement('div'); p.className='igdc-qa-panel';
-        var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='پرسش‌وپاسخ';
-        var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-        h.appendChild(t); h.appendChild(x);
-
-        var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after the save settings (Supabase url/key) are connected.</div>';
-
-
-        p.appendChild(h); p.appendChild(body);
-        m.appendChild(b); m.appendChild(p);
-        document.body.appendChild(m);
-
-        function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-        function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
-        x.addEventListener('click', close);
-        b.addEventListener('click', close);
-
-        window.IGDC_QA = window.IGDC_QA || {};
-        window.IGDC_QA.open = open;
-      }
-
-      if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
-    }, { passive:false });
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', ensureButton, { once:true });
-  } else {
-    ensureButton();
-  }
-})();
-</script>
-
-<style id="donation-fa-hero-and-qna-text-fix-v6">
-.hero,
-.hero h1,
-.hero h2,
-.hero h3,
-.hero p,
-#topPostBody,
-#topPostBody::placeholder{
-  direction: rtl !important;
-  text-align: right !important;
-}
-</style>
-
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -2788,12 +2372,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <div class="container">
 <!-- Left Sidebar (불변) -->
 <nav class="sidebar">
-<a href="home_fa.html">🏠 خانه</a>
-<a href="networkhub_fa.html">🛒 مرکز بازار</a>
-<a href="distributionhub_fa.html">🏭 مرکز توزیع</a>
-<a href="socialnetwork_fa.html">📢 شبکه اجتماعی</a>
-<a href="mediahub_fa.html">🎬 مرکز رسانه</a>
-<a href="tour_fa.html">🧳 سفر · گردشگری · اقامت</a>
+<a href="home_en.html">🏠 خانه</a>
+<a href="networkhub_en.html">🛒 مرکز بازار</a>
+<a href="distributionhub_en.html">🏭 مرکز توزیع</a>
+<a href="socialnetwork_en.html">📢 شبکه اجتماعی</a>
+<a href="mediahub_en.html">🎬 مرکز رسانه</a>
+<a href="tour_en.html">🧳 سفر · گردشگری · اقامت</a>
 <a href="literature/academic.html" style="display:none !important;">📚 تبادل ادبی و علمی</a>
 <a data-bs-target="#qnaModal" data-bs-toggle="modal" href="javascript:void(0)" id="qnaOpenBtn">💬 پرسش و پاسخ</a></nav>
 <!-- Main (불변 구조) -->
@@ -2911,9 +2495,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </main>
 <!-- Right (불변) -->
 <aside class="right">
-<div class="panel cafe-link"><a aria-label="اذهب إلى WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
+<div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('سامانه کمک‌های مالی به‌زودی متصل می‌شود!')" style="margin-bottom:8px; padding:5px 14px;">کمک‌های مالی</button>
+<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">کمک‌های مالی</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - عمومی: NongHyup 301-0078-3333-51<br/>
         - ارز خارجی: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -3009,8 +2593,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   btnSubmit && btnSubmit.addEventListener("click", ()=>{ if(btnSave){ btnSave.click(); } });
 
   btnSave && btnSave.addEventListener("click", ()=>{
-    const t = titleI?.value?.trim() || "(بدون عنوان)";
-    const b = bodyI?.value?.trim() || "(بدون محتوا)";
+    const t = titleI?.value?.trim() || "(No Title)";
+    const b = bodyI?.value?.trim() || "(No Content)";
     const cat = catSel?.value || "etc";
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
     if(holder){
@@ -3021,14 +2605,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         ${imgSrc ? `<div class="thumb" style="aspect-ratio:16/9; overflow:hidden; border-radius:6px; margin-bottom:6px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"/></div>` : ""}
         <div class="title">${t}</div>
         <div class="meta">${new Date().toLocaleString()}</div>
-        <div class="پیش‌نمایش" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+        <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
       `;
       holder.prepend(item);
       if(attachLink){
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">첨부 링크</a>` : `첨부: ${attachLink}`);
+        att.innerHTML = (attachLink.startsWith("http")? `<a href="${attachLink}" target="_blank" rel="noopener">Attachment link</a>` : `Attachment: ${attachLink}`);
         item.appendChild(att);
       }
     }
@@ -3039,7 +2623,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
         const att = document.createElement("div");
         att.className = "attach";
         att.style = "font-size:.8rem; color:#555; margin-top:4px;";
-        att.textContent = "첨부: " + fileAttach.files[0].name;
+        att.textContent = "Attachment: " + fileAttach.files[0].name;
         last.appendChild(att);
       }
     }
@@ -3056,15 +2640,15 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   btnImgOk && btnImgOk.addEventListener('click', ()=>{
     const f = fileI && fileI.files && fileI.files[0] ? fileI.files[0] : null;
-    const link = prompt("이미지 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 تایید을 누르세요)");
+    const link = prompt("Paste an external image URL if you have one. Otherwise, click Confirm.");
     if(link){ imageLink = link; imagePreviewObjectUrl = ""; return; }
     if(f){
       if(f.size > IMG_MAX){
-        alert("فقط تصاویر تا ۲ مگابایت می‌توانند مستقیماً در پیش‌نمایش نمایش داده شوند. برای فایل‌های بزرگ، آن‌ها را در فضای ذخیره‌سازی خارجی بارگذاری کرده و پیوند را وارد کنید.");
+        alert("Only images up to 2MB can be previewed directly. For large files, upload them to external storage and enter the link.");
         imageLink = ""; imagePreviewObjectUrl = "";
       }else{
         imagePreviewObjectUrl = URL.createObjectURL(f); // 로컬 미리보기만
-        imageLink = ""; // 실제 ذخیره은 링크만 사용
+        imageLink = ""; // 실제 Save은 링크만 사용
       }
     }else{
       imageLink = ""; imagePreviewObjectUrl = "";
@@ -3073,11 +2657,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   btnFileOk && btnFileOk.addEventListener('click', ()=>{
     const f = fileAttach && fileAttach.files && fileAttach.files[0] ? fileAttach.files[0] : null;
-    const link = prompt("파일 외부 링크(URL)가 있으면 붙여넣기 해주세요. (없으면 تایید을 누르세요)");
+    const link = prompt("Paste an external file URL if you have one. Otherwise, click Confirm.");
     if(link){ attachLink = link; return; }
     if(f){
       if(f.size > FILE_MAX){
-        alert("فقط فایل‌های تا ۵ مگابایت می‌توانند نام فایل خود را مستقیماً نمایش دهند. برای فایل‌های بزرگ، لطفاً فقط از پیوند فضای ذخیره‌سازی خارجی استفاده کنید.");
+        alert("Only files up to 5MB can display their file name directly. For large files, please use only an external storage link.");
         attachLink = "";
       }else{
         attachLink = f.name; // 파일명만 기록
@@ -3102,7 +2686,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   function updateName(files){
     if(!nameEl) return;
     if(files && files.length){
-      nameEl.textContent = files.length===1 ? files[0].name : (files.length + '개 파일');
+      nameEl.textContent = files.length===1 ? files[0].name : (files.length + ' files');
       if(clearBtn) clearBtn.style.display = 'inline-block';
     }else{
       nameEl.textContent = '';
@@ -3173,7 +2757,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       chip.className = 'attach-chip';
       chip.innerHTML = `<span class="name" title="${file.name}">${file.name}</span>`;
       const x = document.createElement('button');
-      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 제거'); x.textContent='×';
+      x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove attachment'); x.textContent='×';
       x.addEventListener('click', ()=>{
         selectedFiles.splice(idx,1);
         syncInputs();
@@ -3208,11 +2792,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   function closeModal(){ modal && modal.classList.add('hidden'); }
 
   function handleUnifiedSave(){
-    const t = (titleI && titleI.value.trim()) || '(بدون عنوان)';
-    const b = (bodyI && bodyI.value.trim()) || '(بدون محتوا)';
+    const t = (titleI && titleI.value.trim()) || '(No Title)';
+    const b = (bodyI && bodyI.value.trim()) || '(No Content)';
     const cat = (catSel && catSel.value) || 'etc';
     const holder = document.querySelector('.right .topic-panel .list[data-cat="'+cat+'"]');
-    if(!holder){ alert('بخش اخبار پیدا نشد.'); return; }
+    if(!holder){ alert('The news area could not be found.'); return; }
 
     const item = document.createElement('div');
     item.className = 'item';
@@ -3220,7 +2804,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     item.innerHTML = `
       <div class="title">${t}</div>
       <div class="meta">${new Date().toLocaleString()}</div>
-      <div class="پیش‌نمایش" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
+      <div class="preview" style="font-size:.85rem; color:#444; margin-top:4px;">${b}</div>
     `;
 
     if(selectedFiles.length){
@@ -3229,20 +2813,20 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       list.style = 'margin:6px 0 0; padding-left:18px; font-size:.82rem; color:#333;';
       selectedFiles.forEach(f=>{
         const li = document.createElement('li');
-        li.textContent = '첨부: ' + f.name;
+        li.textContent = 'Attachment: ' + f.name;
         list.appendChild(li);
       });
       item.appendChild(list);
     }
 
     const del = document.createElement('button');
-    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='حذف';
+    del.type='button'; del.className='button tiny danger delete-post'; del.textContent='Delete';
     del.style.cssText='margin-top:6px; display:none;';
     item.appendChild(del);
     const canDelete = (USER_ROLE==='admin' || USER_ROLE==='writer');
     if(canDelete) del.style.display='inline-block';
     del.addEventListener('click', ()=>{
-      if(!confirm('آیا می‌خواهید این خبر را حذف کنید؟')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
 
@@ -3309,13 +2893,13 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     if(clearBtn) clearBtn.style.display = 'inline-block';
 
     // 단일 칩(여러 개 선택이 되더라도, 막대가 복잡해지지 않게 요약) 
-    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + '개 파일');
+    const label = selectedFiles.length===1 ? selectedFiles[0].name : (selectedFiles.length + ' files');
     const chip = document.createElement('span');
     chip.className = 'attach-chip';
     chip.innerHTML = `<span class="name" title="${label}">${label}</span>`;
 
     const x = document.createElement('button');
-    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','첨부 모두 제거'); x.textContent='×';
+    x.className = 'remove'; x.type='button'; x.setAttribute('aria-label','Remove all attachments'); x.textContent='×';
     x.addEventListener('click', ()=>{ clearAll(); });
     chip.appendChild(x);
     attachPreview.appendChild(chip);
@@ -3333,7 +2917,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     });
   }
 
-  // "پاک کردن" 버튼도 전체 초기화
+  // "Clear" 버튼도 전체 초기화
   if(clearBtn){
     clearBtn.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -3367,7 +2951,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'بدون عنوان';
+    tpText.textContent = t || 'No title';
   }
 
   // live typing updates preview
@@ -3375,7 +2959,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     titleI.addEventListener('input', ()=> updateTitlePreview());
   }
 
-  // ذخیره پیش‌نویس: keep in-memory draft; do NOT post to right panel
+  // Save Draft: keep in-memory draft; do NOT post to right panel
   if(btnDraft){
     btnDraft.addEventListener('click', (e)=>{
       e.preventDefault();
@@ -3387,7 +2971,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     });
   }
 
-  // لغو: clear draft and input fields, and clear preview
+  // Cancel: clear draft and input fields, and clear preview
   if(btnCancel){
     btnCancel.addEventListener('click', ()=>{
       draft.title=''; draft.body='';
@@ -3430,7 +3014,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   function updateTitlePreview(src){
     if(!tpText) return;
     const t = (src || (titleI && titleI.value) || '').trim();
-    tpText.textContent = t || 'عنوان وارد نشده';
+    tpText.textContent = t || 'Title Not entered';
   }
 
   if(btnDraft){
@@ -3463,11 +3047,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     const btn = document.createElement('button');
     btn.type='button';
     btn.className='button tiny danger delete-post';
-    btn.textContent='حذف';
+    btn.textContent='Delete';
     btn.style.cssText='margin-top:6px; display:none;';
     if(canShowDeleteFor(item)) btn.style.display='inline-block';
     btn.addEventListener('click', ()=>{
-      if(!confirm('آیا می‌خواهید این خبر را حذف کنید؟')) return;
+      if(!confirm('Do you want to delete this post?')) return;
       item.remove();
     });
     item.appendChild(btn);
@@ -3610,7 +3194,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     npTitle.textContent = t;
     npTime.textContent = tm;
     npBody.textContent = body;
-    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml) : '';
+    npAttach.innerHTML = attachHtml ? ('<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml) : '';
 
     openModal();
   }, true);
@@ -3668,7 +3252,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       badge.setAttribute('translate','no');
       header.appendChild(badge);
     }
-    badge.textContent = `ویرایش‌شده · ${tsStr}`;
+    badge.textContent = `Edited · ${tsStr}`;
   }
 
   // On load, restore edited badge for admin/author only
@@ -3689,7 +3273,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     if(item && canEditDelete(item)) window.__currentEditingItem = item;
   }, true);
 
-  // When edit modal "ذخیره" is pressed, persist edited meta and show badge
+  // When edit modal "Save" is pressed, persist edited meta and show badge
   (function attachSaveHook(){
     const saveBtn = document.getElementById('enSave');
     if(!saveBtn) return;
@@ -3798,20 +3382,20 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     const m  = loadMetrics(id);
     const t  = loadToggles(id);
 
-    // پاک کردن and rebuild stats area
+    // Clear and rebuild stats area
     stats.innerHTML = `
       <span class="stat stat-views"><i class="icon">👁</i><span class="n">${m.views}</span></span>
       <span class="stat action-reco ${t.reco?'active':''}"><i class="icon">👍</i><span class="n">${m.reco}</span></span>
       <span class="stat action-like ${t.like?'active':''}"><i class="icon">❤️</i><span class="n">${m.like}</span></span>
     `;
 
-    // Role-based Edit/حذف remain as-is (buttons may already exist from prior code)
+    // Role-based Edit/Delete remain as-is (buttons may already exist from prior code)
     // If no edit button present, create and apply permissions
     let btnEdit = footer.querySelector('.btn-edit');
     let btnDel  = footer.querySelector('.delete-post');
     if(!btnEdit){
       btnEdit = document.createElement('button');
-      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='ویرایش';
+      btnEdit.type='button'; btnEdit.className='btn-edit notranslate'; btnEdit.setAttribute('translate','no'); btnEdit.textContent='Edit';
       footer.appendChild(btnEdit);
       btnEdit.addEventListener('click', (e)=>{
         e.stopPropagation();
@@ -3828,11 +3412,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }
     if(!btnDel){
       btnDel = document.createElement('button');
-      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='حذف';
+      btnDel.type='button'; btnDel.className='delete-post notranslate'; btnDel.setAttribute('translate','no'); btnDel.textContent='Delete';
       footer.appendChild(btnDel);
       btnDel.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!confirm('آیا می‌خواهید این خبر را حذف کنید؟')) return;
+        if(!confirm('Do you want to delete this post?')) return;
         item.remove();
       });
     }
@@ -4006,13 +3590,13 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     (tpl.querySelector('.thumb')||tpl).innerHTML = '';
 
     const t = tpl.querySelector('.card-title');
-    if(t) t.textContent = 'عنوان';
+    if(t) t.textContent = 'Title';
 
     const m = tpl.querySelector('.card-meta');
     if(m) m.textContent = '-';
 
     const p = tpl.querySelector('.card-preview');
-    if(p) p.textContent = 'محتوا';
+    if(p) p.textContent = 'Content';
 
     const key = grid.dataset.psomKey;
     const limit = SLOT_MAP[key] || 100;
@@ -4091,8 +3675,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("تم استلام طلب الشراء."); } else { alert("درخواست خرید ناموفق بود"); }
-    }catch(e){ console.warn(e); alert("خطای شبکه"); }
+      if (res.ok){ alert("The purchase request has been received."); } else { alert("Purchase request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // 정산
@@ -4100,8 +3684,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("تم استلام طلب التسوية."); } else { alert("درخواست تسویه ناموفق بود"); }
-    }catch(e){ console.warn(e); alert("خطای شبکه"); }
+      if (res.ok){ alert("The settlement request has been received."); } else { alert("Settlement request failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 
   // (옵션) Web3/블록체인 액션 – 서버 프록시 전용
@@ -4110,9 +3694,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     try{
       const res = await postJSON("/api/action/web3", { action, payload: payload||{} });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"web3_action", action, ok: res.ok });
-      if (res.ok){ const j = await res.json().catch(()=>({})); alert("درخواست پردازش بلاک‌چین تکمیل شد: " + (j.txHash||"در انتظار")); }
-      else { alert("پردازش بلاک‌چین ناموفق بود"); }
-    }catch(e){ console.warn(e); alert("خطای شبکه"); }
+      if (res.ok){ const j = await res.json().catch(()=>({})); alert("Blockchain processing request completed: " + (j.txHash||"Pending")); }
+      else { alert("Blockchain processing failed"); }
+    }catch(e){ console.warn(e); alert("Network error"); }
   };
 })();
 </script>
@@ -4157,7 +3741,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'المنتج';
+            t.textContent = item.title || item.name || 'Product';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -4180,7 +3764,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'المنتج';
+              t.textContent = item.title || 'Product';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -4232,7 +3816,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 
-<!-- IGDC minimal تبرع UI (non-invasive) -->
+<!-- IGDC minimal Donate UI (non-invasive) -->
 
 <div class="donation-inline">
 <input aria-label="مبلغ کمک مالی (USD)" id="donAmount" max="50" min="5" step="1" type="number" value="20"/>
@@ -4251,7 +3835,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   const btnGroup = document.createElement("div");
   btnGroup.className = "donation-buttons";
   btnGroup.setAttribute("role","group");
-  btnGroup.setAttribute("aria-label","정액 기부 금액");
+  btnGroup.setAttribute("aria-label","Fixed donation amount");
 
   const amounts = [5000, 10000, 20000, 50000];
   amounts.forEach(amt=>{
@@ -4266,7 +3850,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   // === 안내 문구 ===
   const note = document.createElement("div");
   note.className = "donation-note";
-  note.textContent = "کمک‌های مهمان فقط در بازه ۵ تا ۵۰ دلار امکان‌پذیر است. برای مبالغ بزرگ‌تر، لطفاً از اطلاعات انتقال بانکی زیر استفاده کنید.";
+  note.textContent = "Guest donations are available only in the $5–$50 range. For larger amounts, please use the account transfer information below.";
   donationDiv.appendChild(note);
 
   // === 구분선 ===
@@ -4277,17 +3861,17 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   // === Account 안내 박스 ===
   const accountBox = document.createElement("div");
   accountBox.className = "account-box";
-  accountBox.setAttribute("aria-label","معلومات التحويل البنكي");
+  accountBox.setAttribute("aria-label","Account Transfer Information");
 
   accountBox.innerHTML = `
     <div><b>IESF (International Exchange Service Foundation)</b></div>
-    <div>عمومی: 농협 301-0078-3333-51</div>
-    <div>ارز خارجی: NongHyup 452-0022-8173-81</div>
+    <div>General: NongHyup 301-0078-3333-51</div>
+    <div>Foreign Currency: NongHyup 452-0022-8173-81</div>
     <div>SWIFT: NACFKRSE</div>
     <hr class="donation-hr"/>
     <div><b>WAM Foundation (World Aviation Mission Foundation)</b></div>
-    <div>عمومی: 신한 100-026-331592</div>
-    <div>ارز خارجی: Shinhan 180-005-931110</div>
+    <div>General: Shinhan 100-026-331592</div>
+    <div>Foreign Currency: Shinhan 180-005-931110</div>
     <div>SWIFT: SHBKKRSE</div>
   `;
   donationDiv.appendChild(accountBox);
@@ -4300,7 +3884,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   buttons.forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const amt = btn.dataset.amt;
-      alert(`مبلغ انتخاب‌شده: ₩${Number(amt).toLocaleString()}\n\nلطفاً به حساب زیر واریز کنید.`);
+      alert(`Selected amount: ₩${Number(amt).toLocaleString()}\n\nPlease transfer it to the account below.`);
       accountBox.scrollIntoView({behavior:"smooth"});
     });
   });
@@ -4361,11 +3945,11 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           // Fallback: scroll to right panel account options
           const anchor = document.querySelector('#rightDonationOptions') || document.querySelector('.account-section');
           if(anchor){ anchor.scrollIntoView({behavior:'smooth'}); }
-          else { alert('رابط برنامه‌نویسی پرداخت متصل نیست. لطفاً از پنل سمت راست یک حساب انتخاب کنید.'); }
+          else { alert('The payment API is not connected. Please select an account from the right panel.'); }
         }
       }catch(err){
         console.error(err);
-        alert('هنگام درخواست پرداخت مشکلی رخ داد.');
+        alert('A problem occurred while requesting payment.');
       } finally {
         closeDonateModal();
       }
@@ -4375,7 +3959,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   // Optional: Esc to close
   document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDonateModal(); });
 
-  // Expose a safe helper to rebind existing تبرع button(s)
+  // Expose a safe helper to rebind existing Donate button(s)
   window.__bindDonateButtons = function(){
     document.querySelectorAll('.donate-btn, .btn-donate, [data-action="donate"]')
       .forEach(function(btn){
@@ -4516,7 +4100,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if ((!hasAny || (!hasReal && !hasExternalInfo)) && !hasOurPlaceholder) {
         const item = document.createElement('div');
         item.className = 'item placeholder';
-        item.innerHTML = '<div class="title">لا توجد منشورات بعد</div>';
+        item.innerHTML = '<div class="title">No posts yet</div>';
         list.appendChild(item);
       }
 
@@ -4576,7 +4160,74 @@ document.addEventListener('DOMContentLoaded', function(){
 <script id="sidebar-active-script">(function(){function norm(n){return (n||"").toLowerCase().replace(/_en\.html$/,".html").replace(/_zh\.html$/,".html");}document.addEventListener("DOMContentLoaded",function(){var f=norm((location.pathname.split("/").pop()||"index.html"));document.querySelectorAll(".sidebar a").forEach(function(a){var href=norm((a.getAttribute("href")||"").split("/").pop());if(href && href===f){a.classList.add("active");a.setAttribute("aria-current","page");}else{a.classList.remove("active");a.removeAttribute("aria-current");}});});})();</script>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.donation.json" data-interval="30000" src="/assets/js/hero.rotator.js"></script>
 
+<script id="igdc-qa-config">
+  (function () {
+    // 1) 민감정보 없는 기본 설정
+    const baseConfig = {
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
 
+    // Supabase Environment을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
+
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
+
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
+      }
+
+      window.SUPER_VARSAR = Object.assign(
+	  {}, 
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
+
+    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 Environment변수 읽어오기
+    //    (secureEnvBridge는 Netlify env에서 SUPABASE_URL, SUPABASE_ANON_KEY를 꺼내서 JSON으로 돌려주는 함수)
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        // 구조: { env: { SUPABASE_URL: "...", SUPABASE_ANON_KEY: "..." } } 또는 그냥 {SUPABASE_URL:...}
+        var env = data && (data.env || data);
+        // 한 번 받아온 값은 전역에도 보관(다른 스크립트에서 재사용 가능)
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        // 실패해도 페이지는 깨지지 않도록 기본값만 적용
+        applyConfig(null);
+      });
+  })();
+</script>
 
 
 <script>
@@ -4593,7 +4244,223 @@ document.addEventListener('DOMContentLoaded', function(){
 
 <!-- QnA Modal (injected) -->
 <div aria-hidden="true" id="qnaBackdrop"></div>
+<script id="igdc-qa-script">
+(function(){
+  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
+  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
+  let isOpen=false, isAnimating=false;
 
+  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+  const fmtDate = (s)=> new Date(s).toLocaleString();
+  const nowISO = ()=> new Date().toISOString();
+  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
+  const classifyTech = (t)=> /admin|administrator|operation|ops|settings?|config|deploy|deployment|error|bug|loading|api|integration|server|database|db|permission|policy|login|token|key|payment|security|cors|network|timeout|response\s*code|status\s*code|build|compile|broken|doesn'?t\s*work|not\s*work|stuck|page|link|malfunction|관리자|운영|설정|배포|에러|오류|버그|로딩|연동|서버|데이터베이스|권한|정책|로그인|토큰|키|결제|보안|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|오작동/i.test(t||'');
+
+  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
+  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
+
+  async function ensureSupabase(){
+    if(STATE.sb) return STATE.sb;
+    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
+    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+    if(!url || !key || !window.supabase || !window.supabase.createClient){
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 Save은 비활성화됩니다.");
+      return null;
+    }
+    STATE.sb = window.supabase.createClient(url, key);
+    return STATE.sb;
+  }
+  async function ensureAuth(){
+    const sb = await ensureSupabase(); if(!sb) return;
+    let { data: { session } } = await sb.auth.getSession();
+    if(!session){
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      ({ data: { session } } = await sb.auth.getSession());
+    }
+    if(session){
+      const uid = session.user.id;
+      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
+      STATE.user = session.user;
+      STATE.isAdmin = Array.isArray(data) && data.length>0;
+    }
+  }
+
+  function mountUI(){
+    const modal = el("div","igdc-qa-modal");
+    const backdrop = el("div","igdc-qa-backdrop");
+    const panel = el("div","igdc-qa-panel");
+    const header = el("div","igdc-qa-header");
+    const title = el("div","igdc-qa-title"); title.textContent = "Questions & Answers";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Close");
+    header.append(title, close);
+
+    const body = el("div","igdc-qa-body");
+    const lQ = el("label"); lQ.textContent="Question";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Please enter your question...";
+    const lA = el("label"); lA.textContent="Answer";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Please wait a moment. An answer will be provided shortly.";
+    const actions = el("div","igdc-qa-actions");
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Submit";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Clear";
+    const note = el("div","igdc-qa-note"); note.textContent="※ Simple questions are answered immediately by AI. Technical, error, or operation-related issues are automatically forwarded to the admin Q&A.";
+    const list = el("div","igdc-qa-threads");
+
+    body.append(lQ,tQ,lA,tA,actions,note,list);
+    actions.append(btnSubmit, btnClear);
+    panel.append(header, body);
+    modal.append(backdrop, panel);
+    document.body.append(modal);
+
+    // position near sidebar
+    function positionNearSidebar(){
+      try{
+        const sb = document.querySelector('.sidebar');
+        if(sb){
+          const rect = sb.getBoundingClientRect();
+          const left = Math.round(rect.right + 12);
+          panel.style.left = left + "px";
+        }
+      }catch(e){}
+    }
+    positionNearSidebar();
+    window.addEventListener('resize', positionNearSidebar);
+    window.addEventListener('scroll', positionNearSidebar, { passive:true });
+
+    function openModal(){
+      if(isAnimating || isOpen) return;
+      isAnimating = true;
+      modal.style.display = "block";
+      requestAnimationFrame(()=>{
+        modal.classList.add('open');
+        isOpen = true;
+        setTimeout(()=>{ isAnimating = false; }, 220);
+      });
+    }
+    function closeModal(){
+      if(isAnimating || !isOpen) return;
+      isAnimating = true;
+      modal.classList.remove('open');
+      setTimeout(()=>{
+        modal.style.display = "none";
+        isOpen = false;
+        isAnimating = false;
+      }, 220);
+    }
+
+    // Sidebar trigger
+    const sideBtn = document.querySelector('#qnaOpenBtn');
+    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
+    close.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
+
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+
+    async function fetchThreads(){
+      const sb = await ensureSupabase(); if(!sb) return;
+      const { data, error } = await sb.from("igdc_qna_threads")
+        .select("*")
+        .eq("project", STATE.project)
+        .eq("page_id", STATE.pageId)
+        .order("created_at", { ascending:false }).limit(100);
+      if(error){ console.error(error); return; }
+      renderList(data||[]);
+    }
+    function renderList(rows){
+      list.innerHTML="";
+      rows.forEach(row=>{
+        const box = el("div","igdc-qa-thread");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Pending)";
+        const meta = el("div","igdc-qa-thread-meta");
+        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
+        const tag = el("span"); tag.textContent = row.is_admin? "Admin Request":"General";
+        const actions = el("div","igdc-qa-thread-actions");
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="Delete";
+          del.addEventListener("click", async ()=>{
+            const sb = await ensureSupabase(); if(!sb) return;
+            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
+            if(error){ alert("Delete failed (permission/policy)"); return; }
+            await fetchThreads();
+          });
+          actions.append(del);
+        }
+        meta.append(time, tag, actions);
+        box.append(q,a,meta);
+        list.append(box);
+      });
+    }
+
+    async function autoAnswerIfNeeded(text){
+      const technical = classifyTech(text);
+      let answer = null;
+      if(!technical){
+        const ep = getAIEndpoint();
+        if(ep){
+          try{
+            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
+            const j = await res.json(); answer = j && (j.answer||j.text||null);
+          }catch(e){}
+        }
+        if(!answer){
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 Confirm 후 회신됩니다.";
+          else if(/price|cost|fee|pricing|가격|비용|요금/i.test(text)) answer="For price/fee information, please refer to the guidance on this page and leave any additional inquiries.";
+          else answer="Thank you for your inquiry. We will review it promptly and assist you.";
+        }
+      }
+      return { technical, answer };
+    }
+
+    async function submit(){
+      const q = (tQ.value||"").trim();
+      let a = (tA.value||"").trim();
+      if(!q){ tQ.focus(); return; }
+      const { technical, answer } = await autoAnswerIfNeeded(q);
+      if(!a && answer) a = answer;
+      const sb = await ensureSupabase();
+      if(!sb){
+        alert("The storage settings (Supabase url/key) are not connected yet, so server-side saving is disabled. When deployed to the web, the connection will be enabled automatically once SUPER_VARSAR.url/anonKey is set.");
+        return;
+      }
+      const record = {
+        project: STATE.project, page_id: STATE.pageId,
+        user_id: (STATE.user && STATE.user.id) || null,
+        question: q, answer: a || null, is_admin: technical,
+        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
+      };
+      const { error } = await sb.from("igdc_qna_threads").insert(record);
+      if(error){ alert("Registration failed"); return; }
+      tQ.value=""; tA.value = a || "";
+      await fetchThreads();
+    }
+    btnSubmit.addEventListener("click", submit);
+
+    // realtime refresh
+    (async()=>{ try{
+      const sb = await ensureSupabase(); if(!sb) return;
+      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
+    }catch(e){} })();
+
+    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
+    fetchThreads();
+  }
+
+  async function boot(){
+  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
+  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
+  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
+  // 1) Always mount UI so the popup can open
+  mountUI();
+  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+}
+if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
+})();
+</script>
 <script>
 (function(){
   // Fallback: If Bootstrap's modal is unavailable, toggle display manually.
@@ -4717,7 +4584,7 @@ document.addEventListener('DOMContentLoaded', function(){
   }
   /* Optional close affordance */
   .card.expanded::after, .thumb.expanded::after{
-    content: "بستن";
+    content: "Close";
     position: absolute; top: 8px; right: 12px;
     padding: 6px 10px; border-radius: 14px;
     background: rgba(0,0,0,.5); color:#fff; font-size: 12px;
@@ -4858,8 +4725,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>کد QR پرداخت</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">بستن</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4906,12 +4773,12 @@ window.addEventListener("message",function(ev){
 
     if(t.includes("global") || t.includes("글로벌") || t.includes("wam") || t.includes("iesf")) return "iesf";
     if(t.includes("ngo")) return "ngo";
-    if(t.includes("ماموریت") || t.includes("mission")) return "mission";
-    if(t.includes("خدمت") || t.includes("volunteer") || t.includes("service")) return "service";
-    if(t.includes("امداد") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
-    if(t.includes("آموزش") || t.includes("education") || t.includes("edu")) return "edu";
-    if(t.includes("محیط زیست") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
-    if(t.includes("سایر") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
+    if(t.includes("Mission") || t.includes("mission")) return "mission";
+    if(t.includes("Service") || t.includes("volunteer") || t.includes("service")) return "service";
+    if(t.includes("Relief") || t.includes("구제") || t.includes("재난") || t.includes("relief")) return "relief";
+    if(t.includes("Education") || t.includes("education") || t.includes("edu")) return "edu";
+    if(t.includes("Environment") || t.includes("기후") || t.includes("environment") || t.includes("env")) return "env";
+    if(t.includes("Others") || t.includes("others") || t.includes("etc") || t.includes("misc")) return "etc";
 
     return null;
   }
@@ -5192,12 +5059,12 @@ window.addEventListener("message",function(ev){
       attachHtml = Array.from(attachList).map(li => li.innerHTML || li.textContent).join('<br/>');
     }
 
-    npTitle.textContent = title || 'عنوانی ثبت نشده است';
+    npTitle.textContent = title || 'No title';
     if(npTime)  npTime.textContent  = meta || '';
-    npBody.textContent = body || '(등록된 본문이 없습니다.)';
+    npBody.textContent = body || '(No content has been registered.)';
     if(npAttach){
       npAttach.innerHTML = attachHtml
-        ? '<div style="font-weight:600; margin-bottom:4px;">첨부</div>' + attachHtml
+        ? '<div style="font-weight:600; margin-bottom:4px;">Attachment</div>' + attachHtml
         : '';
     }
 
@@ -5249,14 +5116,14 @@ window.addEventListener("message",function(ev){
 
       const { error } = await sb.from('igdc_donation_posts').insert(payload);
       if(error){
-        console.warn('[donation] Supabase ذخیره 실패:', error.message);
+        console.warn('[donation] Supabase Save 실패:', error.message);
       }
     }catch(err){
       console.warn('[donation] Supabase sync 예외:', err);
     }
   }
 
-  // 완전 ذخیره 버튼 클릭 후 Supabase 동기화 시도
+  // 완전 Save 버튼 클릭 후 Supabase 동기화 시도
   document.addEventListener('click', function(e){
     const btn = e.target.closest('#btnSubmitPost');
     if(!btn) return;
@@ -5291,7 +5158,7 @@ window.addEventListener("message",function(ev){
   vertical-align: middle;
 }
 
-/* عنوان/메타 스타일 유지 */
+/* Title/메타 스타일 유지 */
 .right .topic-panel .list .item .title,
 .mobile-news-clone .topic-panel .list .item .title {
   font-weight: 700;
@@ -5318,7 +5185,7 @@ window.addEventListener("message",function(ev){
 
 <script id="hero-linebreak-fix">
 (function(){
-  function nobreak(s){ return s.replace(/سازمان غیردولتی와\s*공유하며/g, "سازمان غیردولتی와\u00A0공유하며"); }
+  function nobreak(s){ return s.replace(/NGO와\s*공유하며/g, "NGO와\u00A0공유하며"); }
   var el = document.getElementById("topPostBody");
   if(el){
     if(el.value !== undefined){ el.value = nobreak(el.value); }
@@ -5535,9 +5402,9 @@ window.addEventListener("message",function(ev){
     card.innerHTML = `
       <div class="thumb"></div>
       <div class="card-body">
-        <div class="card-title">در حال بارگذاری...</div>
+        <div class="card-title">Loading...</div>
         <div class="card-meta">-</div>
-        <div class="card-preview">در حال آماده‌سازی</div>
+        <div class="card-preview">Preparing</div>
       </div>
     `;
 
@@ -5871,7 +5738,7 @@ button.igdc-v10-tool{ cursor:pointer !important; }
   var installTimer=null;
   var $=function(s,r){ return (r||document).querySelector(s); };
   var $$=function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
-  var IGDC_I18N={"category":"دسته","writePost":"نوشتن مطلب","title":"عنوان","titlePlaceholder":"عنوان را وارد کنید","content":"متن","contentPlaceholder":"متن را وارد کنید","attachmentOptional":"پیوست فایل","noAttachment":"بدون پیوست","attachHelp":"Selected file names and download data are saved with the post. Large files may be limited by browser storage.","draft":"ذخیره پیش‌نویس","cancel":"لغو","save":"ذخیره","close":"بستن","edit":"Edit","del":"Del","untitled":"بدون عنوان","emptyBody":"(بدون متن)","noTitleInput":"بدون عنوان","attachments":"پیوست‌ها","attachment":"Attachment","download":"دانلود","fileNameOnly":"File name","emptyList":"مطلبی وجود ندارد.","view":"Views","recommend":"Recommend","like":"Like","modify":"Edit","delete":"Delete","saved":"ذخیره شد","updated":"به‌روزرسانی شد","canceled":"لغو شد","draftSaved":"پیش‌نویس ذخیره شد","deleted":"حذف شد","applied":"Applied","undone":"Canceled","largeFile":"File is large; only file names were saved."};
+  var IGDC_I18N={"category":"دسته","writePost":"نوشتن مطلب","title":"عنوان","titlePlaceholder":"عنوان را وارد کنید","content":"متن","contentPlaceholder":"متن را وارد کنید","attachmentOptional":"پیوست فایل","noAttachment":"بدون پیوست","attachHelp":"نام فایل‌های انتخاب‌شده و داده‌های دانلود همراه با مطلب ذخیره می‌شوند. فایل‌های بزرگ ممکن است به‌دلیل محدودیت ذخیره‌سازی مرورگر محدود شوند.","draft":"ذخیره پیش‌نویس","cancel":"لغو","save":"ذخیره","close":"بستن","edit":"ویرایش","del":"حذف","untitled":"بدون عنوان","emptyBody":"(بدون متن)","noTitleInput":"بدون عنوان","attachments":"پیوست‌ها","attachment":"پیوست","download":"دانلود","fileNameOnly":"نام فایل","emptyList":"مطلبی وجود ندارد.","view":"بازدید","recommend":"توصیه","like":"پسندیدن","modify":"ویرایش","delete":"حذف","saved":"ذخیره شد","updated":"به‌روزرسانی شد","canceled":"لغو شد","draftSaved":"پیش‌نویس ذخیره شد","deleted":"حذف شد","applied":"اعمال شد","undone":"لغو شد","largeFile":"فایل بزرگ است؛ فقط نام فایل‌ها ذخیره شد."};
   function tr(k){ return IGDC_I18N[k] || (k||''); }
   function esc(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
   function makeId(){ return 'post_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }
