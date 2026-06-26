@@ -12,7 +12,7 @@
 
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const VERSION="regional-brokerage-autoselector-v1.0.0";
-const CACHE_TTL=15*60*1000;
+const CACHE_TTL=5*60*1000;
 const RESPONSE_TIMEOUT=8200;
 const DISCOVERY_TIMEOUT=6200;
 const MAX_LIVE_QUERIES=3;
@@ -25,7 +25,7 @@ function first(){for(const v of arguments){const t=text(v);if(t)return t;}return
 function withTimeout(promise,ms){return new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Object.assign(new Error("timeout"),{code:"TIMEOUT"})),ms);Promise.resolve(promise).then(v=>{clearTimeout(t);resolve(v);},e=>{clearTimeout(t);reject(e);});});}
 function cacheKey(geo){return [geo.country,geo.region||"-"].join(":");}
 function getCache(key){const row=CACHE.get(key);if(!row||Date.now()-row.at>(row.ttl||CACHE_TTL)){CACHE.delete(key);return null;}return row.value;}
-function setCache(key,value){CACHE.set(key,{at:Date.now(),ttl:value&&value.snapshot?CACHE_TTL:60000,value});if(CACHE.size>120){const firstKey=CACHE.keys().next().value;CACHE.delete(firstKey);}return value;}
+function setCache(key,value){CACHE.set(key,{at:Date.now(),ttl:value&&value.snapshot?CACHE_TTL:90000,value});if(CACHE.size>120){const firstKey=CACHE.keys().next().value;CACHE.delete(firstKey);}return value;}
 function extractItems(result){if(!result)return[];if(Array.isArray(result))return result;if(Array.isArray(result.items))return result.items;if(Array.isArray(result.results))return result.results;if(result.data&&Array.isArray(result.data.items))return result.data.items;return[];}
 
 function discoveryQueries(geo){

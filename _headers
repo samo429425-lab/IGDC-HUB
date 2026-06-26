@@ -4,3 +4,5 @@
   Cache-Control: no-store, no-cache, must-revalidate, max-age=0
 /sw-nuke.html
   X-Robots-Tag: noindex, nofollow, noarchive
+/assets/js/distribution-products-automap.v3.js
+  Cache-Control: no-cache, must-revalidate
