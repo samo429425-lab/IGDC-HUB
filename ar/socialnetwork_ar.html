@@ -405,35 +405,6 @@ body{ direction: rtl !important; }
 @media (max-width:900px){ .igdc-qa-panel{left:12px;width:min(92vw,560px)} }
 </style>
 
-
-<style id="igdc-qa-panel-position-final-v1">
-/* IGDC Q&A modal position final: keep button/function intact, lift the modal near the index nav bottom. */
-.igdc-qa-modal .igdc-qa-panel,
-.igdc-qa-panel{
-  top:18px !important;
-  bottom:auto !important;
-  max-height:calc(100dvh - 36px) !important;
-  overflow:hidden !important;
-}
-.igdc-qa-modal .igdc-qa-body,
-.igdc-qa-panel .igdc-qa-body{
-  max-height:calc(100dvh - 150px) !important;
-  overflow-y:auto !important;
-  -webkit-overflow-scrolling:touch !important;
-}
-@media (max-width:768px){
-  .igdc-qa-modal .igdc-qa-panel,
-  .igdc-qa-panel{
-    top:14px !important;
-    bottom:auto !important;
-    max-height:calc(100dvh - 28px) !important;
-  }
-  .igdc-qa-modal .igdc-qa-body,
-  .igdc-qa-panel .igdc-qa-body{
-    max-height:calc(100dvh - 132px) !important;
-  }
-}
-</style>
 </head>
 <body>
   <div id="hero"><div class="hero-title"></div></div>
@@ -1520,6 +1491,7 @@ window.addEventListener('resize', function(){
 })();
 </script>
  
+<script src="frontbus.child.js"></script>
 <script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
   
   <script id="igtc-checkout-trigger-v1">
@@ -1607,7 +1579,7 @@ window.addEventListener('resize', function(){
   window.__IGTC_CHECKOUT_READY__ = true;
 })();
 </script>
-<script src="frontbus.child.js"></script>
+
 <script>
 (function(){
   try{
