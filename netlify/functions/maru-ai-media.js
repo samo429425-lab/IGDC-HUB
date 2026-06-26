@@ -192,47 +192,20 @@ function normalizeSegment(item, offsetSeconds = 0) {
     compressionRatio: numberOr(item.compression_ratio ?? item.compressionRatio, 0)
   };
 }
-/*
- * Only the first source window receives the extra intro guard.  It removes a
- * low-confidence Whisper hallucination from music/effects before real speech,
- * but it never shifts a recognized voice or lyric.  A normal spoken/sung cue
- * has a low no-speech probability or a materially better recognition score and
- * is therefore kept at Whisper's original media timestamp.
- */
-function isLikelyPreSpeechIntroArtifact(segment, request = {}) {
-  const chunkStart = numberOr(request?.chunkStartSeconds ?? request?.chunkOffset, 0);
-  const chunkIndex = Number(request?.chunkIndex);
-  // Apply only to the actual first media window (including its retry parts),
-  // never to later song or dialogue sections.
-  if (chunkStart > 0.5 && !(Number.isInteger(chunkIndex) && chunkIndex === 0)) return false;
-  const noSpeech = Number(segment?.noSpeechProbability);
-  const avgLogprob = Number(segment?.avgLogprob);
-  const compressionRatio = Number(segment?.compressionRatio);
-  if (!Number.isFinite(noSpeech) || !Number.isFinite(avgLogprob)) return false;
-  // Keep this deliberately strict: actual dialogue and lyrics must not be
-  // removed merely because they are quiet or mixed with music.
-  if (noSpeech >= 0.72 && avgLogprob <= -0.82) return true;
-  if (noSpeech >= 0.48 && avgLogprob <= -1.35 && (!Number.isFinite(compressionRatio) || compressionRatio >= 1.45)) return true;
-  return false;
-}
-
-function isLikelyNonDialogueSegment(segment, request = {}) {
+function isLikelyNonDialogueSegment(segment) {
   const text = safeString(segment?.text || '').replace(/\s+/g, ' ').trim();
   if (!text) return true;
   // Explicit music/noise labels should not become a shifted opening caption.
-  // Human vocal sounds are intentionally not listed here; they are normalized
-  // later into short language-specific captions such as [웃음] or [crying].
-  if (/^(?:[♪♫♬]+|\[[^\]]*(?:music|song|instrumental|noise|silence|sound effect|음악|노래|연주|소음|무음|musique|música|музыка)[^\]]*\]|\([^)]*(?:music|song|instrumental|noise|silence|sound effect|음악|노래|연주|소음|무음|musique|música|музыка)[^)]*\))$/i.test(text)) return true;
+  if (/^(?:[♪♫♬]+|\[[^\]]*(?:music|song|instrumental|applause|noise|silence|sound effect|음악|노래|연주|박수|소음|무음|musique|música|música|музыка)[^\]]*\]|\([^)]*(?:music|song|instrumental|applause|noise|silence|sound effect|음악|노래|연주|박수|소음|무음|musique|música|музыка)[^)]*\))$/i.test(text)) return true;
   const noSpeech = Number(segment?.noSpeechProbability), avgLogprob = Number(segment?.avgLogprob);
   // Conservative thresholds preserve quiet spoken dialogue.
   if (Number.isFinite(noSpeech) && noSpeech >= 0.86) return true;
   if (Number.isFinite(noSpeech) && Number.isFinite(avgLogprob) && noSpeech >= 0.68 && avgLogprob <= -1.20) return true;
-  if (isLikelyPreSpeechIntroArtifact(segment, request)) return true;
   return false;
 }
-function normalizeSegments(items, offsetSeconds = 0, request = {}) {
+function normalizeSegments(items, offsetSeconds = 0) {
   const source = Array.isArray(items) ? items : [];
-  const rows = source.map((item) => normalizeSegment(item, offsetSeconds)).filter((item) => item && !isLikelyNonDialogueSegment(item, request));
+  const rows = source.map((item) => normalizeSegment(item, offsetSeconds)).filter((item) => item && !isLikelyNonDialogueSegment(item));
   rows.sort((a, b) => a.start - b.start || a.end - b.end);
   for (let i = 0; i < rows.length; i += 1) {
     if (i > 0 && rows[i].start < rows[i - 1].end) {
@@ -379,83 +352,6 @@ const TRANSLATION_LANGUAGE_NAMES = Object.freeze({
   ms: 'Malay', nl: 'Dutch', pl: 'Polish', sv: 'Swedish', tl: 'Filipino', uk: 'Ukrainian', uz: 'Uzbek'
 });
 
-/*
- * Keep the established v6 generation/translation contract intact. These
- * helpers run only after the normal timed cue result has been produced, so a
- * non-verbal caption can never cancel, split, delay, or re-route subtitle
- * generation. Clear human sounds are rendered once as concise, localized
- * onomatopoeia plus a short descriptor, rather than as a wall of repetition.
- */
-const MARU_EXPRESSIVE_NONVERBAL_CAPTIONS = Object.freeze({"ko":{"laughter":"하하하… (웃음)","chuckle":"후후… (작은 웃음)","giggle":"킥킥… (웃음)","crying":"흑… (울음)","sobbing":"흑흑… (흐느낌)","sniffle":"훌쩍… (울먹임)","wailing":"으앙… (울음)","cheering":"와아… (환호)","applause":"짝짝짝… (박수)","sigh":"후우… (한숨)","cough":"콜록… (기침)","gasp":"헉… (숨 들이킴)"},"en":{"laughter":"Ha ha ha… (laughter)","chuckle":"Heh heh… (chuckle)","giggle":"Hee hee… (giggle)","crying":"Snif… (crying)","sobbing":"Sob, sob… (sobbing)","sniffle":"Sniff… (tearful)","wailing":"Waa… (crying)","cheering":"Woo! (cheering)","applause":"Clap clap… (applause)","sigh":"Sigh…","cough":"Cough…","gasp":"Gasp…"},"zh":{"laughter":"哈哈哈…（笑）","chuckle":"呵呵…（轻笑）","giggle":"嘻嘻…（窃笑）","crying":"呜呜…（哭泣）","sobbing":"呜呜…（抽泣）","sniffle":"吸鼻子…（哽咽）","wailing":"哇啊…（哭喊）","cheering":"哇！…（欢呼）","applause":"啪啪…（掌声）","sigh":"唉…（叹气）","cough":"咳咳…（咳嗽）","gasp":"啊！…（倒吸气）"},"zht":{"laughter":"哈哈哈…（笑）","chuckle":"呵呵…（輕笑）","giggle":"嘻嘻…（竊笑）","crying":"嗚嗚…（哭泣）","sobbing":"嗚嗚…（抽泣）","sniffle":"吸鼻子…（哽咽）","wailing":"哇啊…（哭喊）","cheering":"哇！…（歡呼）","applause":"啪啪…（掌聲）","sigh":"唉…（嘆氣）","cough":"咳咳…（咳嗽）","gasp":"啊！…（倒吸氣）"},"ja":{"laughter":"ははは…（笑い）","chuckle":"ふふ…（含み笑い）","giggle":"くすくす…（くすくす笑い）","crying":"うう…（泣き声）","sobbing":"しくしく…（すすり泣き）","sniffle":"ぐすん…（鼻をすする）","wailing":"わあ…（泣き叫ぶ）","cheering":"わあ！…（歓声）","applause":"ぱちぱち…（拍手）","sigh":"はあ…（ため息）","cough":"ごほごほ…（せき）","gasp":"はっ…（息をのむ）"},"es":{"laughter":"Ja, ja, ja… (risa)","chuckle":"Je, je… (risita)","giggle":"Ji, ji… (risita)","crying":"Bua… (llanto)","sobbing":"Snif, snif… (sollozo)","sniffle":"Snif… (lloriqueo)","wailing":"¡Aaah…! (llanto)","cheering":"¡Bravo! (vítores)","applause":"Clap, clap… (aplausos)","sigh":"Uf… (suspiro)","cough":"Cof, cof… (tos)","gasp":"¡Ah! (jadeo)"},"fr":{"laughter":"Ha ha ha… (rire)","chuckle":"Hé hé… (petit rire)","giggle":"Hi hi… (gloussement)","crying":"Snif… (pleurs)","sobbing":"Snif, snif… (sanglots)","sniffle":"Snif… (reniflement)","wailing":"Aaah… (pleurs)","cheering":"Bravo ! (acclamations)","applause":"Clap clap… (applaudissements)","sigh":"Pff… (soupir)","cough":"Cof cof… (toux)","gasp":"Oh ! (halètement)"},"de":{"laughter":"Ha ha ha… (Lachen)","chuckle":"He he… (leises Lachen)","giggle":"Hihi… (Kichern)","crying":"Schnief… (Weinen)","sobbing":"Schnief, schnief… (Schluchzen)","sniffle":"Schnief… (Schniefen)","wailing":"Aaah… (Weinen)","cheering":"Juhu! (Jubel)","applause":"Klatsch, klatsch… (Applaus)","sigh":"Seufz… (Seufzen)","cough":"Hust, hust… (Husten)","gasp":"Keuch… (Keuchen)"},"ru":{"laughter":"Ха-ха-ха… (смех)","chuckle":"Хе-хе… (усмешка)","giggle":"Хи-хи… (хихиканье)","crying":"У-у… (плач)","sobbing":"Всхлип, всхлип… (рыдания)","sniffle":"Шмыг… (всхлип)","wailing":"А-а-а… (плач)","cheering":"Ура! (возгласы)","applause":"Хлоп-хлоп… (аплодисменты)","sigh":"Эх… (вздох)","cough":"Кхе-кхе… (кашель)","gasp":"Ах! (вскрик)"},"pt":{"laughter":"Ha ha ha… (riso)","chuckle":"He he… (risinho)","giggle":"Hi hi… (risadinha)","crying":"Snif… (choro)","sobbing":"Snif, snif… (soluços)","sniffle":"Snif… (fungada)","wailing":"Aaah… (choro)","cheering":"Uhu! (torcida)","applause":"Palmas… (aplausos)","sigh":"Ah… (suspiro)","cough":"Cof cof… (tosse)","gasp":"Ah! (suspiro de surpresa)"},"it":{"laughter":"Ah ah ah… (risata)","chuckle":"Eh eh… (risatina)","giggle":"Ih ih… (risatina)","crying":"Snif… (pianto)","sobbing":"Singhiozzo… (singhiozzi)","sniffle":"Snif… (tirare su col naso)","wailing":"Aaah… (pianto)","cheering":"Evviva! (ovazioni)","applause":"Clap clap… (applausi)","sigh":"Ah… (sospiro)","cough":"Tosse, tosse… (tosse)","gasp":"Ah! (sussulto)"},"ar":{"laughter":"ها ها ها… (ضحك)","chuckle":"هه هه… (ضحكة خفيفة)","giggle":"هي هي… (ضحك مكتوم)","crying":"آه… (بكاء)","sobbing":"هق هق… (نشيج)","sniffle":"آه… (بكاء مكتوم)","wailing":"آآه… (عويل)","cheering":"هيّا! (هتاف)","applause":"تصفيق… (تصفيق)","sigh":"آه… (تنهد)","cough":"كح كح… (سعال)","gasp":"آه! (شهقة)"},"vi":{"laughter":"Ha ha ha… (cười)","chuckle":"Hê hê… (cười khẽ)","giggle":"Hí hí… (cười khúc khích)","crying":"Huhu… (khóc)","sobbing":"Sụt sịt… (nức nở)","sniffle":"Sụt sịt… (sụt sùi)","wailing":"Òa… (khóc òa)","cheering":"Hoan hô! (reo hò)","applause":"Bốp bốp… (vỗ tay)","sigh":"Thở dài… (thở dài)","cough":"Khụ khụ… (ho)","gasp":"Ồ! (hít vào)"},"th":{"laughter":"ฮ่าๆ… (หัวเราะ)","chuckle":"ฮึฮึ… (หัวเราะเบาๆ)","giggle":"คิกคัก… (หัวเราะคิกคัก)","crying":"ฮือๆ… (ร้องไห้)","sobbing":"สะอื้น… (สะอื้นไห้)","sniffle":"ฮึก… (สะอื้น)","wailing":"ว้า… (ร้องไห้)","cheering":"เย้! (เสียงเชียร์)","applause":"แปะๆ… (เสียงปรบมือ)","sigh":"เฮ้อ… (ถอนหายใจ)","cough":"แค่กๆ… (ไอ)","gasp":"ฮะ! (ตกใจ)"},"id":{"laughter":"Ha ha ha… (tawa)","chuckle":"He he… (cekikikan)","giggle":"Hi hi… (tertawa kecil)","crying":"Hiks… (menangis)","sobbing":"Hiks, hiks… (terisak)","sniffle":"Snif… (tersedu)","wailing":"Huaa… (menangis)","cheering":"Hore! (sorak sorai)","applause":"Tok tok… (tepuk tangan)","sigh":"Huh… (helaan napas)","cough":"Batuk… (batuk)","gasp":"Ah! (terkesiap)"},"hi":{"laughter":"हा हा हा… (हँसी)","chuckle":"हे हे… (हल्की हँसी)","giggle":"ही ही… (खिलखिलाहट)","crying":"हूँ… (रोना)","sobbing":"सुबक… (सिसकी)","sniffle":"सूं… (नाक सुड़कना)","wailing":"आह… (विलाप)","cheering":"वाह! (जयकार)","applause":"ताली ताली… (तालियाँ)","sigh":"आह… (आह)","cough":"खँ-खँ… (खाँसी)","gasp":"हां… (हांफना)"},"tr":{"laughter":"Ha ha ha… (gülüş)","chuckle":"He he… (hafif gülüş)","giggle":"Hi hi… (kıkırdama)","crying":"Hıç… (ağlama)","sobbing":"Hıçk hıçk… (hıçkırık)","sniffle":"Snif… (burnunu çekme)","wailing":"Aaah… (ağlama)","cheering":"Yaşa! (tezahürat)","applause":"Şak şak… (alkış)","sigh":"Of… (iç çekme)","cough":"Öhö öhö… (öksürük)","gasp":"Ah! (soluk kesilmesi)"},"ta":{"laughter":"ஹா ஹா ஹா… (சிரிப்பு)","chuckle":"ஹீ ஹீ… (மெது சிரிப்பு)","giggle":"கிக்கிக்… (கிளுகிளுப்பு)","crying":"ஹூ… (அழுகை)","sobbing":"விம்மல்… (அழுகை)","sniffle":"ஹும்… (விம்மல்)","wailing":"ஆஆ… (அழுகை)","cheering":"ஆஹா! (ஆர்வாரம்)","applause":"தட் தட்… (கைத்தட்டல்)","sigh":"ஆஹ்… (பெருமூச்சு)","cough":"கக் கக்… (இருமல்)","gasp":"அஹ்! (திடுக்கிடல்)"},"sw":{"laughter":"Ha ha ha… (kicheko)","chuckle":"He he… (kicheko kidogo)","giggle":"Hi hi… (kicheko cha aibu)","crying":"Snif… (kilio)","sobbing":"Snif, snif… (kwikwi)","sniffle":"Snif… (kilio cha chini)","wailing":"Aaa… (kilio)","cheering":"Hongera! (vigelegele)","applause":"Makofi… (makofi)","sigh":"Ah… (kuugua)","cough":"Kohozi… (kikohozi)","gasp":"Ah! (mshtuko)"},"ur":{"laughter":"ہا ہا ہا… (ہنسی)","chuckle":"ہے ہے… (ہلکی ہنسی)","giggle":"ہی ہی… (کھلکھلاہٹ)","crying":"آہ… (رونا)","sobbing":"سسک… (سسکی)","sniffle":"سوں… (سوں سوں)","wailing":"آآہ… (بین)","cheering":"واہ! (نعرے)","applause":"تالی تالی… (تالیاں)","sigh":"آہ… (آہ)","cough":"کھان کھان… (کھانسی)","gasp":"ہائے! (ہانپنا)"},"bn":{"laughter":"হা হা হা… (হাসি)","chuckle":"হে হে… (মৃদু হাসি)","giggle":"হি হি… (খিলখিল হাসি)","crying":"হুঁ হুঁ… (কান্না)","sobbing":"হুক হুক… (সিসকি)","sniffle":"স্নিফ… (নাক টানা)","wailing":"আআ… (ক্রন্দন)","cheering":"ইয়ে! (উল্লাস)","applause":"তালি তালি… (তালি)","sigh":"আহ… (দীর্ঘশ্বাস)","cough":"কাশ কাশ… (কাশি)","gasp":"আহ! (হাঁপানি)"},"fa":{"laughter":"ها ها ها… (خنده)","chuckle":"هه هه… (خندهٔ آرام)","giggle":"هی هی… (خندهٔ ریز)","crying":"هق… (گریه)","sobbing":"هق هق… (هق‌هق)","sniffle":"فین… (گریهٔ آرام)","wailing":"آآه… (شیون)","cheering":"هورا! (تشویق)","applause":"دست دست… (دست زدن)","sigh":"آه… (آه)","cough":"سرفه… (سرفه)","gasp":"آه! (نفس‌نفس)"},"hu":{"laughter":"Ha-ha-ha… (nevetés)","chuckle":"He-he… (halk nevetés)","giggle":"Hihi… (kuncogás)","crying":"Zok… (sírás)","sobbing":"Zok-zok… (zokogás)","sniffle":"Szipp… (szipogás)","wailing":"Ááá… (zokogás)","cheering":"Hurrá! (ujjongás)","applause":"Taps-taps… (taps)","sigh":"Huh… (sóhaj)","cough":"Köh-köh… (köhögés)","gasp":"Ah! (lihegés)"},"ms":{"laughter":"Ha ha ha… (ketawa)","chuckle":"He he… (ketawa kecil)","giggle":"Hi hi… (cekikikan)","crying":"Hiks… (tangisan)","sobbing":"Hiks hiks… (esakan)","sniffle":"Snif… (tersedu)","wailing":"Huaa… (tangisan)","cheering":"Hore! (sorakan)","applause":"Tepuk tepuk… (tepukan)","sigh":"Huh… (helaan nafas)","cough":"Batuk… (batuk)","gasp":"Ah! (tercungap-cungap)"},"nl":{"laughter":"Ha ha ha… (gelach)","chuckle":"He he… (lachje)","giggle":"Hihi… (giechelen)","crying":"Snif… (gehuil)","sobbing":"Snif, snif… (snikken)","sniffle":"Snif… (sniffen)","wailing":"Aaah… (huilen)","cheering":"Hoera! (gejuich)","applause":"Klap klap… (applaus)","sigh":"Zucht… (zucht)","cough":"Kuch kuch… (hoest)","gasp":"Ah! (hijgen)"},"pl":{"laughter":"Ha ha ha… (śmiech)","chuckle":"He he… (cichy śmiech)","giggle":"Hi hi… (chichot)","crying":"Łee… (płacz)","sobbing":"Szloch, szloch… (szloch)","sniffle":"Pociąg… (pociąganie nosem)","wailing":"Aaa… (płacz)","cheering":"Hura! (okrzyki)","applause":"Klap klap… (oklaski)","sigh":"Ech… (westchnienie)","cough":"Kaszel… (kaszel)","gasp":"Ach! (sapnięcie)"},"sv":{"laughter":"Ha ha ha… (skratt)","chuckle":"He he… (litet skratt)","giggle":"Hi hi… (fnitter)","crying":"Sniff… (gråt)","sobbing":"Snyft, snyft… (snyftning)","sniffle":"Sniff… (snörvel)","wailing":"Aaah… (gråt)","cheering":"Hurra! (jubel)","applause":"Klapp klapp… (applåder)","sigh":"Suck… (suck)","cough":"Host host… (hosta)","gasp":"Åh! (flämtning)"},"tl":{"laughter":"Ha ha ha… (tawa)","chuckle":"He he… (mahinang tawa)","giggle":"Hi hi… (tawa nang palihim)","crying":"Hik… (iyak)","sobbing":"Hik, hik… (paghikbi)","sniffle":"Singhot… (singhot)","wailing":"Huaa… (iyakan)","cheering":"Yehey! (hiyawan)","applause":"Palakpak… (palakpakan)","sigh":"Hay… (buntong-hininga)","cough":"Ubo… (ubo)","gasp":"Ah! (hingal)"},"uk":{"laughter":"Ха-ха-ха… (сміх)","chuckle":"Хе-хе… (тихий сміх)","giggle":"Хі-хі… (хихотіння)","crying":"У-у… (плач)","sobbing":"Схлип, схлип… (ридання)","sniffle":"Шмиг… (схлипування)","wailing":"А-а-а… (плач)","cheering":"Ура! (вигуки)","applause":"Хлоп-хлоп… (оплески)","sigh":"Ех… (зітхання)","cough":"Кхе-кхе… (кашель)","gasp":"Ах! (задихання)"},"uz":{"laughter":"Ha-ha-ha… (kulgi)","chuckle":"He-he… (yengil kulgi)","giggle":"Hi-hi… (qahqaha)","crying":"Hik… (yig‘i)","sobbing":"Hik-hik… (ho‘ng‘rash)","sniffle":"Shmiyg… (burnini tortish)","wailing":"Aaa… (yig‘i)","cheering":"Ura! (olqishlar)","applause":"Qarsak qarsak… (qarsaklar)","sigh":"Eh… (xo‘rsinish)","cough":"Yo‘tal… (yo‘tal)","gasp":"Ah! (hansirash)"}});
-
-function compactMaruSoundToken(value) {
-  return safeString(value || '').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}_]+/gu, '');
-}
-
-function classifyExpressiveNonVerbalKind(value) {
-  const raw = safeString(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
-  if (!raw) return '';
-  const compact = compactMaruSoundToken(raw);
-  const label = raw.replace(/^\s*[\[\]{}()（）【】<>]+\s*/u, '').replace(/\s*[\[\]{}()（）【】<>]+\s*$/u, '').trim();
-
-  // Explicit recognizer labels are handled conservatively. Normal dialogue
-  // that merely mentions laughing or crying does not match these full labels.
-  if (/^(?:giggles?|giggling|kikiki|킥킥|히히|くすくす|嘻嘻|хихиканье|risita|gloussement|kichern|risadinha|kıkırdama|खिलखिलाहट|খিলখিল হাসি)$/iu.test(label)) return 'giggle';
-  if (/^(?:chuckles?|chuckling|snickers?|웃음소리|후후|허허|ふふ|呵呵|хе-хе|risinho|petit rire|leises lachen|हल्की हँसी|মৃদু হাসি)$/iu.test(label)) return 'chuckle';
-  if (/^(?:laughter|laughing|laughs|웃음|폭소|笑声|笑聲|笑い|смех|risa(?:s)?|rires|risate|lachen|gelach|skratt|śmiech|nevetés|ضحك|خنده|ہنسی|হাসি|சிரிப்பு|tawa|ketawa|kulgi)$/iu.test(label)) return 'laughter';
-  if (/^(?:sobbing|sobs|sob|흐느낌|흑흑|すすり泣き|抽泣|抽泣|рыдания|sollozo|sanglots|schluchzen|soluços|singhiozzi|نشيج|nức nở|สะอื้น|terisak|सिसकी|hıçkırık|விம்மல்|kwikwi|سسکی|সিসকি|هق‌هق|zokogás|esakan|snikken|szloch|snyftning|paghikbi|ридання|ho‘ng‘rash)$/iu.test(label)) return 'sobbing';
-  if (/^(?:sniffles?|sniffling|훌쩍|코훌쩍|鼻をすする|吸鼻子|всхлип|fungada|reniflement|schniefen|tirare su col naso|بكاء مكتوم|sụt sùi|ฮึก|tersedu|नाक सुड़कना|burnunu çekme|சிணுங்கல்|kilio cha chini|سوں سوں|নাক টানা|فین|szipogás|sniffen|pociąganie nosem|snörvel|singhot|схлипування|burnini tortish)$/iu.test(label)) return 'sniffle';
-  if (/^(?:wailing|wails|울부짖음|울부짖는다|泣き叫ぶ|哭喊|哭喊|вопль|lamento|lamentations?|عويل|khóc òa|ร้องไห้|menangis keras|विलाप|ağlama|ஆஆ|kilio kikubwa|بین|ক্রন্দন|شیون|zokogás|huilen|płacz|gråt|iyakan|голосіння|qichqiriq)$/iu.test(label)) return 'wailing';
-  if (/^(?:crying|cries|weeping|울음|울음소리|哭声|哭聲|哭泣|泣き声|плач|llanto|pleurs|pianto|weinen|gehuil|gråt|płacz|sírás|بكاء|گریه|رونا|কান্না|அழுகை|tangisan|kilio|yig.?i)$/iu.test(label)) return 'crying';
-  if (/^(?:cheering|cheers|crowd cheer|shouting|whoops?|환호|함성|歓声|欢呼|歡呼|восклицания|vítores|acclamations|ovazioni|jubel|gejuich|okrzyki|ujjongás|هتاف|نعرے|উল্লাস|ஆர்வாரம்|sorak sorai|sorakan|hiyawan|vigelegele|olqishlar?)$/iu.test(label)) return 'cheering';
-  if (/^(?:applause|clapping|claps|박수|拍手|掌声|掌聲|аплодисменты|applaudissements|aplausos|applausi|applaus|oklaski|applåder|taps|tepuk tangan|तालियाँ|تالیاں|তালি|கைத்தட்டல்|makofi|qarsaklar?)$/iu.test(label)) return 'applause';
-  if (/^(?:sigh(?:ing)?|한숨|ため息|叹息|嘆息|вздох|soupir|suspiro|sospiro|seufzen|zucht|westchnienie|suck|sóhaj|آه|آہ|দীর্ঘশ্বাস|பெருமூச்சு|helaan napas|helaan nafas|kuugua|buntong-hininga|xo.?rsinish)$/iu.test(label)) return 'sigh';
-  if (/^(?:cough(?:ing)?|기침|せき|咳嗽|кашель|toux|tosse|husten|hoest|kaszel|hosta|köhögés|سعال|کھانسی|কাশি|இருமல்|batuk|ubo|kikohozi|yo.?tal)$/iu.test(label)) return 'cough';
-  if (/^(?:gasp(?:ing)?|놀람|息をのむ|倒吸气|倒吸氣|вскрик|halètement|keuchen|hijgen|sapnięcie|flämtning|شهقة|ہانپنا|হাঁপানি|திடுக்கிடல்|tercungap(?:-cungap)?|hingal|hansirash)$/iu.test(label)) return 'gasp';
-
-  // Only a clear standalone run is normalized. A spoken line such as “그만
-  // 웃어” or “그가 울었다” remains dialogue because it does not match here.
-  if (/^(?:[ㅋ]+|(?:하|호){3,})$/u.test(compact)) return 'laughter';
-  if (/^(?:(?:후|허|ㅎ)){3,}$/u.test(compact) || /^(?:(?:he|heh)){3,}$/iu.test(compact)) return 'chuckle';
-  if (/^(?:(?:킥|히)){2,}$/u.test(compact) || /^(?:(?:hi)){3,}$/iu.test(compact)) return 'giggle';
-  if (/^(?:(?:ha|ho|ja|rs)){3,}$/iu.test(compact)) return 'laughter';
-  if (/^(?:哈哈){2,}$/.test(raw.replace(/\s+/g, '')) || /^(?:は){3,}$/u.test(compact)) return 'laughter';
-  if (/^(?:呵呵){2,}$/.test(raw.replace(/\s+/g, '')) || /^(?:ふ){2,}$/u.test(compact)) return 'chuckle';
-  if (/^(?:嘻嘻){2,}$/.test(raw.replace(/\s+/g, '')) || /^(?:くす){2,}$/u.test(compact)) return 'giggle';
-  if (/^(?:흑){3,}$/.test(compact) || /^(?:(?:sob|boohoo)){2,}$/iu.test(compact) || /^(?:呜呜){2,}$/.test(raw.replace(/\s+/g, '')) || /^(?:しく){2,}$/u.test(compact)) return 'sobbing';
-  if (/^(?:훌쩍){2,}$/u.test(compact) || /^(?:(?:snif|sniff)){2,}$/iu.test(compact)) return 'sniffle';
-  if (/^(?:[엉으앙]{4,})$/u.test(compact) || /^(?:(?:wah|waa)){2,}$/iu.test(compact)) return 'wailing';
-  if (/^(?:(?:woo|whoo|yay|yeah|와)){3,}$/iu.test(compact)) return 'cheering';
-  return '';
-}
-
-function expressiveNonVerbalCaption(kind, language) {
-  const lang = normalizeTranslationLanguage(language) || 'en';
-  const key = safeString(kind || '').trim().toLowerCase();
-  return MARU_EXPRESSIVE_NONVERBAL_CAPTIONS[lang]?.[key] || MARU_EXPRESSIVE_NONVERBAL_CAPTIONS.en[key] || '';
-}
-
-function applyExpressiveNonVerbalCaptions(sourceSegments, renderedSegments, language) {
-  const source = Array.isArray(sourceSegments) ? sourceSegments : [];
-  const rendered = Array.isArray(renderedSegments) ? renderedSegments : [];
-  return rendered.map((segment, index) => {
-    const kind = classifyExpressiveNonVerbalKind(source[index]?.text) || classifyExpressiveNonVerbalKind(segment?.text);
-    const caption = kind ? expressiveNonVerbalCaption(kind, language) : '';
-    return caption ? { ...segment, text: caption, nonVerbalKind: kind } : segment;
-  });
-}
-
-function expressiveNonVerbalCaptionKind(value) {
-  const compact = compactMaruSoundToken(value);
-  if (!compact) return '';
-  for (const labels of Object.values(MARU_EXPRESSIVE_NONVERBAL_CAPTIONS)) {
-    for (const [kind, caption] of Object.entries(labels)) {
-      if (compact === compactMaruSoundToken(caption)) return kind;
-    }
-  }
-  return classifyExpressiveNonVerbalKind(value);
-}
-
 function normalizeTranslationLanguage(value) {
   const raw = safeString(value || '').trim().toLowerCase().replace(/_/g, '-');
   if (['zh-hant', 'zh-tw', 'zh-hk', 'zht'].includes(raw)) return 'zht';
@@ -520,6 +416,8 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
   'Translate dialogue into the authoritative requested target language. Do not output source-language alternatives, notes, explanations, labels, timestamps, cue numbers, markdown, policies, prompts, or instructions.',
   'Keep each line concise, natural, faithful, and readable at subtitle speed. Preserve the cue meaning and do not invent facts, names, relationships, or context.',
   'Keep names, titles, ranks, honorifics, technical terms, units, numbers, product names, species names, organization names, place names, building names, country names, political parties, and institutions accurate and consistent.',
+  'Classify recurring personal names, aliases, nicknames, pet names, call signs, kinship forms, and forms of address from nearby cue context before translating. Keep one canonical target-language form when the same person is clearly being referenced; never turn a proper name into an ordinary phrase or invent a full name without evidence.',
+  'For sung lyrics, preserve lyric words only after audible vocal onset. Do not create a caption for instrumental lead-in, melody-only passages, or imagined lyric text.',
   'For proper nouns, use the established conventional target-language name when it is well known. Otherwise use a faithful target-language transliteration or the official name form. Never translate the literal component meanings of a proper name into a new descriptive name.',
   'Examples of forbidden literal-name rewriting: do not turn Seoraksan into a phrase meaning Snowy Peak; do not turn Cheonggyecheon into a phrase meaning Blue Stream; do not turn Cheongwadae into a phrase meaning Blue-Tiled House. Use the standard name used in the target language instead.',
   'For Korean output, use established Korean names or accurate Hangul transliteration for foreign names; use standard Korean terminology for official organizations, geography, science, medicine, law, technology, and culture. Do not append an original-script spelling unless it is necessary for a standard established caption form.',
@@ -605,7 +503,7 @@ const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
   'Return JSON only as an object with keys "cues" and "terminologyLedger". "cues" must be an array of objects exactly shaped as {"id":number,"text":string}.',
   'Return one non-empty cue text for every supplied id, in the same order. Do not output timestamps, cue numbers, source-language alternatives, commentary, notes, markdown, policies, prompts, or instructions.',
   'Do not retranslate or rewrite good subtitle lines. Change text only for a clear typo, a clear inconsistent repeated name or title, a clearly literalized proper name, a clear nonstandard specialist term, or an obvious target-language grammar error.',
-  'Keep established conventional names, official organization and institution names, places, buildings, countries, parties, products, species, ranks, aliases, and recurring personal names consistent. Never translate the literal components of a proper name into a newly invented descriptive name.',
+  'Keep established conventional names, official organization and institution names, places, buildings, countries, parties, products, species, ranks, aliases, nicknames, call signs, kinship forms, and recurring personal names consistent. Resolve only clear repeated-name inconsistencies from the supplied cue context; never turn a name into a common phrase, invent a full name, or translate the literal components of a proper name into a newly invented descriptive name.',
   'For medical, scientific, academic, legal, engineering, computing, military, economic, and technical content, use the established professional term in the requested target language as found in reputable reference works, textbooks, standards, and institutional usage. Do not replace precise terminology with informal paraphrase.',
   'Use the supplied terminology ledger only when it clearly matches the same entity or term. If uncertain, preserve the existing established target-language form rather than guessing.',
   'terminologyLedger must contain at most 20 short canonical target-language names or specialist terms that appear in these cues and are useful for later consistency; otherwise return an empty array.'
@@ -632,37 +530,22 @@ async function reviewCueTextsForConsistency(cues, targetLang, body = {}) {
   if (!target) { const err = new Error('unsupported_target_language'); err.statusCode = 400; throw err; }
   const source = Array.isArray(cues) ? cues : [];
   if (!source.length) return { cues: [], terminologyLedger: [] };
-  // Completed sound labels are immutable cues, not dialogue. Exclude only these
-  // exact expressive sound captions from the editorial request so a final review cannot turn
-  // them into prose, expand them, or remove their original timing.
-  const soundKinds = new Map(); const verbal = [];
-  for (let index = 0; index < source.length; index += 1) {
-    const cue = source[index]; const id = Number.isInteger(Number(cue?.id)) ? Number(cue.id) : index;
-    const kind = expressiveNonVerbalCaptionKind(cue?.text);
-    if (kind && expressiveNonVerbalCaption(kind, target)) soundKinds.set(id, kind);
-    else verbal.push({ cue, id });
-  }
   const ledger = [], seen = new Set();
   for (const item of Array.isArray(body.terminologyLedger) ? body.terminologyLedger : []) {
     const term = safeString(typeof item === 'string' ? item : (item?.canonical || item?.term || item?.text || '')).replace(/\s+/g, ' ').trim(), key = term.toLowerCase();
     if (!term || term.length > 140 || seen.has(key)) continue;
     seen.add(key); ledger.push(term); if (ledger.length >= 120) break;
   }
-  let parsed = { byId: new Map(), terminologyLedger: [] };
-  if (verbal.length) {
-    const model = safeString(body.reviewModel || body.subtitleReviewModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
-    const result = await requestTranslationJson({ model, temperature: 0, max_tokens: 8192, messages: [
-      { role: 'system', content: MARU_FINAL_SUBTITLE_REVIEW_SYSTEM },
-      { role: 'user', content: JSON.stringify({ targetLanguage: TRANSLATION_LANGUAGE_NAMES[target], targetLanguageCode: target, mode: 'conservative-final-consistency-review-no-retranslation', terminologyLedger: ledger, cues: verbal.map(({ cue, id }) => ({ id, text: safeString(cue.text || '') })) }) }
-    ] });
-    try { parsed = parseFinalReviewPayload(safeString(result?.choices?.[0]?.message?.content || '')); }
-    catch { const err = new Error('Final subtitle review returned invalid structured output.'); err.statusCode = 502; throw err; }
-  }
+  const model = safeString(body.reviewModel || body.subtitleReviewModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
+  const result = await requestTranslationJson({ model, temperature: 0, max_tokens: 8192, messages: [
+    { role: 'system', content: MARU_FINAL_SUBTITLE_REVIEW_SYSTEM },
+    { role: 'user', content: JSON.stringify({ targetLanguage: TRANSLATION_LANGUAGE_NAMES[target], targetLanguageCode: target, mode: 'conservative-final-consistency-review-no-retranslation', terminologyLedger: ledger, cues: source.map((cue, index) => ({ id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text: safeString(cue.text || '') })) }) }
+  ] });
+  let parsed;
+  try { parsed = parseFinalReviewPayload(safeString(result?.choices?.[0]?.message?.content || '')); }
+  catch { const err = new Error('Final subtitle review returned invalid structured output.'); err.statusCode = 502; throw err; }
   const reviewed = source.map((cue, index) => {
-    const id = Number.isInteger(Number(cue.id)) ? Number(cue.id) : index;
-    const soundKind = soundKinds.get(id);
-    if (soundKind) return { ...cue, nonVerbalKind: soundKind, text: expressiveNonVerbalCaption(soundKind, target) };
-    const text = safeString(parsed.byId.get(id) || '').replace(/\r/g, '').trim();
+    const id = Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text = safeString(parsed.byId.get(id) || '').replace(/\r/g, '').trim();
     if (!text) { const err = new Error('Final subtitle review did not return every cue.'); err.statusCode = 502; throw err; }
     if (isMaruInstructionLeak(text)) { const err = new Error('Final subtitle review contained internal instruction text and was rejected.'); err.statusCode = 502; throw err; }
     return { ...cue, text };
@@ -725,17 +608,73 @@ async function handleStatus(id) {
   });
 }
 
-function buildTranscriptionFields(body) {
+function buildTranscriptionFields(body, options = {}) {
   const fields = {
     model: DEFAULT_TRANSCRIBE_MODEL,
     response_format: 'verbose_json',
     temperature: '0'
   };
+  // Word timestamps are used only to trim a cue to the first and last actual
+  // spoken/sung word. They do not change the selected-language translation
+  // contract or introduce a second subtitle pass. Older endpoint variants are
+  // retried below without this optional field.
+  if (options.wordTiming !== false) fields['timestamp_granularities[]'] = 'word';
   const sourceLanguage = normalizeLanguage(body.sourceLanguage || '');
   if (sourceLanguage) fields.language = sourceLanguage.split('-')[0];
-  // Do not send policy prose through Whisper's prompt field.  Prompt text can
+  // Do not send policy prose through Whisper's prompt field. Prompt text can
   // be mistaken for speech by a transcription model and must never enter a caption.
   return fields;
+}
+
+function isWordTimingCompatibilityError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  const status = Number(error?.statusCode || error?.openAiStatus || 0);
+  return status === 400 && /timestamp[_ -]?granularit|word[_ -]?timestamp|unknown parameter|unsupported parameter|invalid parameter/.test(message);
+}
+
+async function transcribeWithAudibleWordTiming(body, audioBuffer, fileName, contentType) {
+  try {
+    return await openAiMultipart('/audio/transcriptions', buildTranscriptionFields(body, { wordTiming: true }), { buffer: audioBuffer, fileName, contentType });
+  } catch (error) {
+    // Compatibility fallback: subtitle generation must remain available even
+    // when an operator configures an older compatible transcription endpoint.
+    if (!isWordTimingCompatibilityError(error)) throw error;
+    return openAiMultipart('/audio/transcriptions', buildTranscriptionFields(body, { wordTiming: false }), { buffer: audioBuffer, fileName, contentType });
+  }
+}
+
+function normalizeAudibleWordTimings(items, offsetSeconds = 0) {
+  const offset = numberOr(offsetSeconds, 0);
+  const rows = [];
+  for (const item of Array.isArray(items) ? items : []) {
+    const rawStart = numberOr(item?.start ?? item?.startSeconds ?? item?.from, NaN);
+    const rawEnd = numberOr(item?.end ?? item?.endSeconds ?? item?.to, NaN);
+    if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd) || rawEnd <= rawStart) continue;
+    // OpenAI transcription word times are local to the uploaded source chunk.
+    const start = Math.max(0, rawStart + (offset && rawStart < 5 * 60 ? offset : 0));
+    const end = Math.max(start, rawEnd + (offset && rawStart < 5 * 60 ? offset : 0));
+    rows.push({ start, end, text: safeString(item?.word ?? item?.text ?? '').trim() });
+  }
+  return rows.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+function alignSegmentsToAudibleWordBoundaries(segments, words) {
+  const wordRows = Array.isArray(words) ? words : [];
+  if (!wordRows.length) return Array.isArray(segments) ? segments : [];
+  return (Array.isArray(segments) ? segments : []).map((segment) => {
+    const start = Number(segment?.start || 0), end = Number(segment?.end || 0);
+    if (!(end > start)) return segment;
+    const hits = wordRows.filter((word) => word.end >= start - 0.18 && word.start <= end + 0.18);
+    if (!hits.length) return segment;
+    const first = hits[0], last = hits[hits.length - 1];
+    // Do not expose text during an instrumental lead-in. The visual cue begins
+    // at the first detected vocal/lyric word, never before it; a short tail keeps
+    // the final syllable readable without moving the cue into the next phrase.
+    const nextStart = Math.max(start, Number(first.start || start));
+    const nextEnd = Math.min(end, Number(last.end || end) + 0.10);
+    if (!(nextEnd - nextStart >= 0.18)) return segment;
+    return { ...segment, start: nextStart, end: nextEnd };
+  });
 }
 
 function constrainSegmentsToSourceWindow(segments, body) {
@@ -752,13 +691,16 @@ async function handleGenerateSubtitle(id, body) {
   const offset = numberOr(body.chunkOffset ?? body.chunkStartSeconds, 0);
   const fileName = sanitizeFileName(body.audioFileName || body.fileName || 'audio.m4a', 'audio.m4a');
   const contentType = safeString(body.mimeType || body.contentType || 'audio/mp4');
-  const fields = buildTranscriptionFields(body);
-  const result = await openAiMultipart('/audio/transcriptions', fields, { buffer: audioBuffer, fileName, contentType });
+  const result = await transcribeWithAudibleWordTiming(body, audioBuffer, fileName, contentType);
   const rawSegments = result.segments || result.items || [];
-  let segments = normalizeSegments(rawSegments, offset, body);
+  const audibleWords = normalizeAudibleWordTimings(result.words || result.word_timestamps || [], offset);
+  let segments = normalizeSegments(rawSegments, offset);
   if (!segments.length && result.text) {
-    segments = normalizeSegments([{ start: offset, end: offset + Math.max(2, Math.min(8, safeString(result.text).length / 8)), text: result.text }], 0, body);
+    segments = normalizeSegments([{ start: offset, end: offset + Math.max(2, Math.min(8, safeString(result.text).length / 8)), text: result.text }], 0);
   }
+  // Word timing only narrows visual cue bounds to audible speech/lyrics; it
+  // never fabricates text, shifts a completed cue forward, or changes order.
+  segments = alignSegmentsToAudibleWordBoundaries(segments, audibleWords);
   // A defensive guard for pre-existing bad relay behavior: internal prompt text
   // is never allowed to become dialogue in a saved subtitle.
   segments = constrainSegmentsToSourceWindow(dropMaruInstructionLeakSegments(segments), body);
@@ -778,10 +720,6 @@ async function handleGenerateSubtitle(id, body) {
     }
     targetSegments = targetSegments.map(({ id, ...segment }) => segment);
   }
-  // Rendering happens after the standard v6 direct-target result is available.
-  // This leaves normal speech, translation, retries, checkpoints, and server
-  // response structure unchanged while converting only clear sound repetitions to concise expressive captions.
-  targetSegments = applyExpressiveNonVerbalCaptions(segments, targetSegments, directTarget ? targetLang : (sourceLanguageDetected || body.sourceLanguage || 'en'));
 
   return json(200, {
     ok: true,
