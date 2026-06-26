@@ -192,20 +192,92 @@ function normalizeSegment(item, offsetSeconds = 0) {
     compressionRatio: numberOr(item.compression_ratio ?? item.compressionRatio, 0)
   };
 }
-function isLikelyNonDialogueSegment(segment) {
+function compactNonDialogueToken(value) {
+  return safeString(value || '').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}_]+/gu, '');
+}
+
+/*
+ * A dense run such as "하하하하하…" or "ㅋㅋㅋㅋ…" is usually a
+ * transcription expansion of one human sound, not dialogue.  It must not be
+ * shown as dozens of characters or removed entirely.  We keep its timing and
+ * classify it so that the final subtitle can use a short target-language
+ * caption such as [웃음], [울음], or [applause].
+ */
+function repeatedUnit(value, candidates, minRepeats = 3) {
+  const compact = compactNonDialogueToken(value);
+  if (!compact) return false;
+  return candidates.some((unit) => {
+    const normalized = compactNonDialogueToken(unit);
+    return normalized && compact.length >= normalized.length * minRepeats && compact.length % normalized.length === 0 && compact === normalized.repeat(compact.length / normalized.length);
+  });
+}
+
+function classifyNonVerbalVocalization(value) {
+  const raw = safeString(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+  const compact = compactNonDialogueToken(raw);
+  if (!compact) return '';
+  const label = raw.replace(/^\s*[\[\]{}()（）【】<>]+\s*/u, '').replace(/\s*[\[\]{}()（）【】<>]+\s*$/u, '').trim();
+
+  // Explicit standalone labels produced by recognizers or carried through an
+  // SRT.  These are anchored intentionally: a spoken line such as "don't
+  // laugh" must remain dialogue, not be converted into a sound label.
+  if (/^(?:laughter|laughing|laughs|giggles?|chuckles?|웃음(?:소리)?|웃는다|폭소|笑声|笑聲|笑い|смех|risa(?:s)?|rires|risate|lachen|gelach|skratt|śmiech|nevetés|خنده|ہنسی|হাসি|சிரிப்பு|tawa|ketawa|kulgi)$/iu.test(label)) return 'laughter';
+  if (/^(?:crying|cries|sob(?:bing)?|weeping|wail(?:ing)?|울음(?:소리)?|운다|흐느낌|哭声|哭聲|哭泣|泣き声|плач|llanto|pleurs|pianto|weinen|gehuil|gråt|płacz|sírás|گریه|رونا|কান্না|அழுகை|tangisan|yig.?i|kilio)$/iu.test(label)) return 'crying';
+  if (/^(?:cheering|cheers|crowd cheer|shouting|whoops?|환호|함성|歓声|歡呼|欢呼|ликующие возгласы|восклицания|vítores|acclamations|ovazioni|jubel|gejuich|okrzyki|ujjongás|هتاف|نعرے|উল্লাস|ஆர்வாரம்|sorak sorai|sorakan|hiyawan|vigelegele|olqishlar?)$/iu.test(label)) return 'cheering';
+  if (/^(?:applause|clapping|claps|박수|拍手|掌声|掌聲|аплодисменты|applaudissements|aplausos|applausi|applaus|oklaski|applåder|taps|tepuk tangan|tepukan|तालियाँ|تالیاں|তালি|கைத்தட்டல்|makofi|qarsaklar?)$/iu.test(label)) return 'applause';
+  if (/^(?:sigh(?:ing)?|한숨|ため息|叹息|嘆息|вздох|soupir|suspiro|sospiro|seufzen|zucht|westchnienie|suck|sóhaj|آه|آہ|দীর্ঘশ্বাস|பெருமூச்சு|helaan napas|helaan nafas|kuugua|buntong-hininga|xo.?rsinish)$/iu.test(label)) return 'sigh';
+  if (/^(?:cough(?:ing)?|기침|せき|咳嗽|кашель|toux|tosse|husten|hoest|kaszel|hosta|köhögés|سعال|کھانسی|কাশি|இருமல்|batuk|ubo|kikohozi|yo.?tal)$/iu.test(label)) return 'cough';
+  if (/^(?:gasp(?:ing)?|놀람|息をのむ|倒吸气|倒吸氣|вскрик|halètement|keuchen|hijgen|sapnięcie|flämtning|شهقة|ہانپنا|হাঁপানি|திடுக்கிடல்|tercungap(?:-cungap)?|hingal|hansirash)$/iu.test(label)) return 'gasp';
+
+  // Repetition variants, including Korean, English, Spanish, French, and
+  // common romanized laughter/crying forms.  They remain conservative so a
+  // normal short word or an actual dialogue cue is not reclassified.
+  if (/^[ㅋㅎᄏᄒ하헤히호]+$/u.test(compact) && compact.length >= 5) return 'laughter';
+  if (/^(?:ha|he|hi|ho|ja|je|ji|jo|rs){3,}$/iu.test(compact)) return 'laughter';
+  if (repeatedUnit(compact, ['ha', 'he', 'hi', 'ho', 'ja', 'heh', 'lol'], 3)) return 'laughter';
+  if (/^[흑엉으앙]+$/u.test(compact) && compact.length >= 4) return 'crying';
+  if (/^(?:sob|boohoo|wah){3,}$/iu.test(compact) || repeatedUnit(compact, ['sob', 'boo', 'wah'], 3)) return 'crying';
+  if (/^(?:woo|whoo|yay|yeah|와){3,}$/iu.test(compact) || repeatedUnit(compact, ['woo', 'yay', 'yeah', '와'], 3)) return 'cheering';
+  return '';
+}
+
+function isPathologicalRepeatedVocalization(value) {
+  return Boolean(classifyNonVerbalVocalization(value));
+}
+
+// This guard applies only to the early intro window.  It rejects a low-confidence
+// Whisper hallucination from music/effects before any real dialogue appears, but
+// keeps a normal spoken opening whose recognition confidence is sound.
+function isLikelyPreSpeechIntroArtifact(segment, request = {}) {
+  const chunkStart = numberOr(request?.chunkStartSeconds ?? request?.chunkOffset, 0);
+  const guardUntil = Math.max(0, Math.min(120, numberOr(request?.speechStartGuardUntilSeconds, 90) || 90));
+  if (chunkStart >= guardUntil) return false;
+  const noSpeech = Number(segment?.noSpeechProbability);
+  const avgLogprob = Number(segment?.avgLogprob);
+  const compressionRatio = Number(segment?.compressionRatio);
+  if (!Number.isFinite(noSpeech) || !Number.isFinite(avgLogprob)) return false;
+  if (noSpeech >= 0.58 && avgLogprob <= -0.55) return true;
+  if (noSpeech >= 0.40 && avgLogprob <= -1.05 && (!Number.isFinite(compressionRatio) || compressionRatio >= 1.45)) return true;
+  return false;
+}
+
+function isLikelyNonDialogueSegment(segment, request = {}) {
   const text = safeString(segment?.text || '').replace(/\s+/g, ' ').trim();
   if (!text) return true;
-  // Explicit music/noise labels should not become a shifted opening caption.
-  if (/^(?:[♪♫♬]+|\[[^\]]*(?:music|song|instrumental|applause|noise|silence|sound effect|음악|노래|연주|박수|소음|무음|musique|música|música|музыка)[^\]]*\]|\([^)]*(?:music|song|instrumental|applause|noise|silence|sound effect|음악|노래|연주|박수|소음|무음|musique|música|музыка)[^)]*\))$/i.test(text)) return true;
+  // Laughter, crying, applause, and similar human sounds are retained as short
+  // captions later; music, silence, and generic noise are not dialogue cues.
+  if (classifyNonVerbalVocalization(text)) return false;
+  if (/^(?:[♪♫♬]+|\[[^\]]*(?:music|song|instrumental|noise|silence|sound effect|음악|노래|연주|소음|무음|musique|música|мyзыка|музыка)[^\]]*\]|\([^)]*(?:music|song|instrumental|noise|silence|sound effect|음악|노래|연주|소음|무음|musique|música|мyзыка|музыка)[^)]*\))$/i.test(text)) return true;
   const noSpeech = Number(segment?.noSpeechProbability), avgLogprob = Number(segment?.avgLogprob);
   // Conservative thresholds preserve quiet spoken dialogue.
   if (Number.isFinite(noSpeech) && noSpeech >= 0.86) return true;
   if (Number.isFinite(noSpeech) && Number.isFinite(avgLogprob) && noSpeech >= 0.68 && avgLogprob <= -1.20) return true;
+  if (isLikelyPreSpeechIntroArtifact(segment, request)) return true;
   return false;
 }
-function normalizeSegments(items, offsetSeconds = 0) {
+function normalizeSegments(items, offsetSeconds = 0, request = {}) {
   const source = Array.isArray(items) ? items : [];
-  const rows = source.map((item) => normalizeSegment(item, offsetSeconds)).filter((item) => item && !isLikelyNonDialogueSegment(item));
+  const rows = source.map((item) => normalizeSegment(item, offsetSeconds)).filter((item) => item && !isLikelyNonDialogueSegment(item, request)).map((item) => ({ ...item, nonVerbalKind: classifyNonVerbalVocalization(item.text) || '' }));
   rows.sort((a, b) => a.start - b.start || a.end - b.end);
   for (let i = 0; i < rows.length; i += 1) {
     if (i > 0 && rows[i].start < rows[i - 1].end) {
@@ -352,6 +424,69 @@ const TRANSLATION_LANGUAGE_NAMES = Object.freeze({
   ms: 'Malay', nl: 'Dutch', pl: 'Polish', sv: 'Swedish', tl: 'Filipino', uk: 'Ukrainian', uz: 'Uzbek'
 });
 
+
+/*
+ * Stable, short captions for non-verbal human sound events.  These are not
+ * dialogue and are deliberately rendered as bracket labels rather than long
+ * repeated syllables.  The selected subtitle language determines the label.
+ */
+const MARU_NONVERBAL_CAPTIONS = Object.freeze({
+  ko: { laughter: '[웃음]', crying: '[울음]', cheering: '[환호]', applause: '[박수]', sigh: '[한숨]', cough: '[기침]', gasp: '[놀람]' },
+  en: { laughter: '[laughter]', crying: '[crying]', cheering: '[cheering]', applause: '[applause]', sigh: '[sigh]', cough: '[cough]', gasp: '[gasp]' },
+  zh: { laughter: '[笑声]', crying: '[哭声]', cheering: '[欢呼]', applause: '[掌声]', sigh: '[叹息]', cough: '[咳嗽]', gasp: '[倒吸气]' },
+  zht: { laughter: '[笑聲]', crying: '[哭聲]', cheering: '[歡呼]', applause: '[掌聲]', sigh: '[嘆息]', cough: '[咳嗽]', gasp: '[倒吸氣]' },
+  ja: { laughter: '[笑い]', crying: '[泣き声]', cheering: '[歓声]', applause: '[拍手]', sigh: '[ため息]', cough: '[せき]', gasp: '[息をのむ]' },
+  es: { laughter: '[risas]', crying: '[llanto]', cheering: '[vítores]', applause: '[aplausos]', sigh: '[suspiro]', cough: '[tos]', gasp: '[jadeo]' },
+  fr: { laughter: '[rires]', crying: '[pleurs]', cheering: '[acclamations]', applause: '[applaudissements]', sigh: '[soupir]', cough: '[toux]', gasp: '[halètement]' },
+  de: { laughter: '[Lachen]', crying: '[Weinen]', cheering: '[Jubel]', applause: '[Applaus]', sigh: '[Seufzen]', cough: '[Husten]', gasp: '[Keuchen]' },
+  ru: { laughter: '[смех]', crying: '[плач]', cheering: '[ликующие возгласы]', applause: '[аплодисменты]', sigh: '[вздох]', cough: '[кашель]', gasp: '[вскрик]' },
+  pt: { laughter: '[risos]', crying: '[choro]', cheering: '[ovação]', applause: '[aplausos]', sigh: '[suspiro]', cough: '[tosse]', gasp: '[suspiro de surpresa]' },
+  it: { laughter: '[risate]', crying: '[pianto]', cheering: '[ovazioni]', applause: '[applausi]', sigh: '[sospiro]', cough: '[tosse]', gasp: '[sussulto]' },
+  ar: { laughter: '[ضحك]', crying: '[بكاء]', cheering: '[هتاف]', applause: '[تصفيق]', sigh: '[تنهد]', cough: '[سعال]', gasp: '[شهقة]' },
+  vi: { laughter: '[tiếng cười]', crying: '[tiếng khóc]', cheering: '[tiếng reo hò]', applause: '[tiếng vỗ tay]', sigh: '[tiếng thở dài]', cough: '[tiếng ho]', gasp: '[tiếng hít vào]' },
+  th: { laughter: '[เสียงหัวเราะ]', crying: '[เสียงร้องไห้]', cheering: '[เสียงเชียร์]', applause: '[เสียงปรบมือ]', sigh: '[เสียงถอนหายใจ]', cough: '[เสียงไอ]', gasp: '[เสียงอุทาน]' },
+  id: { laughter: '[tawa]', crying: '[tangisan]', cheering: '[sorak sorai]', applause: '[tepuk tangan]', sigh: '[helaan napas]', cough: '[batuk]', gasp: '[terkesiap]' },
+  hi: { laughter: '[हँसी]', crying: '[रोना]', cheering: '[जयकार]', applause: '[तालियाँ]', sigh: '[आह]', cough: '[खाँसी]', gasp: '[हांफना]' },
+  tr: { laughter: '[gülüş]', crying: '[ağlama]', cheering: '[tezahürat]', applause: '[alkış]', sigh: '[iç çekme]', cough: '[öksürük]', gasp: '[soluk kesilmesi]' },
+  ta: { laughter: '[சிரிப்பு]', crying: '[அழுகை]', cheering: '[ஆர்வாரம்]', applause: '[கைத்தட்டல்]', sigh: '[பெருமூச்சு]', cough: '[இருமல்]', gasp: '[திடுக்கிடல்]' },
+  sw: { laughter: '[kicheko]', crying: '[kilio]', cheering: '[vigelegele]', applause: '[makofi]', sigh: '[kuugua]', cough: '[kikohozi]', gasp: '[mshtuko]' },
+  ur: { laughter: '[ہنسی]', crying: '[رونا]', cheering: '[نعرے]', applause: '[تالیاں]', sigh: '[آہ]', cough: '[کھانسی]', gasp: '[ہانپنا]' },
+  bn: { laughter: '[হাসি]', crying: '[কান্না]', cheering: '[উল্লাস]', applause: '[তালি]', sigh: '[দীর্ঘশ্বাস]', cough: '[কাশি]', gasp: '[হাঁপানি]' },
+  fa: { laughter: '[خنده]', crying: '[گریه]', cheering: '[تشویق]', applause: '[دست زدن]', sigh: '[آه]', cough: '[سرفه]', gasp: '[نفس‌نفس]' },
+  hu: { laughter: '[nevetés]', crying: '[sírás]', cheering: '[ujjongás]', applause: '[taps]', sigh: '[sóhaj]', cough: '[köhögés]', gasp: '[lihegés]' },
+  ms: { laughter: '[ketawa]', crying: '[tangisan]', cheering: '[sorakan]', applause: '[tepukan]', sigh: '[helaan nafas]', cough: '[batuk]', gasp: '[tercungap-cungap]' },
+  nl: { laughter: '[gelach]', crying: '[gehuil]', cheering: '[gejuich]', applause: '[applaus]', sigh: '[zucht]', cough: '[hoest]', gasp: '[hijgen]' },
+  pl: { laughter: '[śmiech]', crying: '[płacz]', cheering: '[okrzyki]', applause: '[oklaski]', sigh: '[westchnienie]', cough: '[kaszel]', gasp: '[sapnięcie]' },
+  sv: { laughter: '[skratt]', crying: '[gråt]', cheering: '[jubel]', applause: '[applåder]', sigh: '[suck]', cough: '[hosta]', gasp: '[flämtning]' },
+  tl: { laughter: '[tawa]', crying: '[iyak]', cheering: '[hiyawan]', applause: '[palakpakan]', sigh: '[buntong-hininga]', cough: '[ubo]', gasp: '[hingal]' },
+  uk: { laughter: '[сміх]', crying: '[плач]', cheering: '[вигуки]', applause: '[оплески]', sigh: '[зітхання]', cough: '[кашель]', gasp: '[задихання]' },
+  uz: { laughter: '[kulgi]', crying: '[yig‘i]', cheering: '[olqishlar]', applause: '[qarsaklar]', sigh: '[xo‘rsinish]', cough: '[yo‘tal]', gasp: '[hansirash]' }
+});
+
+function nonVerbalCaption(kind, language) {
+  const lang = normalizeTranslationLanguage(language) || 'en';
+  const safeKind = safeString(kind || '').trim().toLowerCase();
+  return MARU_NONVERBAL_CAPTIONS[lang]?.[safeKind] || MARU_NONVERBAL_CAPTIONS.en[safeKind] || '';
+}
+
+function captionNonVerbalKind(value) {
+  const compact = compactNonDialogueToken(value);
+  if (!compact) return '';
+  for (const labels of Object.values(MARU_NONVERBAL_CAPTIONS)) {
+    for (const [kind, label] of Object.entries(labels)) {
+      if (compact === compactNonDialogueToken(label)) return kind;
+    }
+  }
+  return classifyNonVerbalVocalization(value);
+}
+
+function materializeNonVerbalCaptions(segments, language) {
+  return (Array.isArray(segments) ? segments : []).map((segment) => {
+    const kind = safeString(segment?.nonVerbalKind || captionNonVerbalKind(segment?.text) || '').trim().toLowerCase();
+    return kind ? { ...segment, nonVerbalKind: kind, text: nonVerbalCaption(kind, language) || safeString(segment?.text || '') } : segment;
+  });
+}
+
 function normalizeTranslationLanguage(value) {
   const raw = safeString(value || '').trim().toLowerCase().replace(/_/g, '-');
   if (['zh-hant', 'zh-tw', 'zh-hk', 'zht'].includes(raw)) return 'zht';
@@ -416,6 +551,7 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
   'Translate dialogue into the authoritative requested target language. Do not output source-language alternatives, notes, explanations, labels, timestamps, cue numbers, markdown, policies, prompts, or instructions.',
   'Keep each line concise, natural, faithful, and readable at subtitle speed. Preserve the cue meaning and do not invent facts, names, relationships, or context.',
   'Keep names, titles, ranks, honorifics, technical terms, units, numbers, product names, species names, organization names, place names, building names, country names, political parties, and institutions accurate and consistent.',
+  'Recognize recurring personal names, nicknames, pet names, epithets, call signs, kinship forms, titles, and shortened forms across nearby cues. Preserve the scene-appropriate form of address; never silently turn a nickname into a different person or invent a full name that the dialogue does not support.',
   'For proper nouns, use the established conventional target-language name when it is well known. Otherwise use a faithful target-language transliteration or the official name form. Never translate the literal component meanings of a proper name into a new descriptive name.',
   'Examples of forbidden literal-name rewriting: do not turn Seoraksan into a phrase meaning Snowy Peak; do not turn Cheonggyecheon into a phrase meaning Blue Stream; do not turn Cheongwadae into a phrase meaning Blue-Tiled House. Use the standard name used in the target language instead.',
   'For Korean output, use established Korean names or accurate Hangul transliteration for foreign names; use standard Korean terminology for official organizations, geography, science, medicine, law, technology, and culture. Do not append an original-script spelling unless it is necessary for a standard established caption form.',
@@ -455,32 +591,51 @@ async function translateCueTextsToTarget(cues, targetLang, body = {}) {
   }
   const source = Array.isArray(cues) ? cues : [];
   if (!source.length) return [];
-  const model = safeString(body.translateModel || body.subtitleTranslateModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
-  const result = await requestTranslationJson({
-    model,
-    temperature: 0,
-    max_tokens: 4096,
-    messages: [
-      { role: 'system', content: MARU_DIRECT_SUBTITLE_SYSTEM },
-      { role: 'user', content: JSON.stringify({
-        targetLanguage: TRANSLATION_LANGUAGE_NAMES[target],
-        targetLanguageCode: target,
-        output: 'final-target-language-subtitle-cue-text-only',
-        cues: source.map((cue, index) => ({ id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text: safeString(cue.text || '') }))
-      }) }
-    ]
-  });
-  const content = safeString(result?.choices?.[0]?.message?.content || '');
-  let byId;
-  try { byId = parsedCueRows(content); }
-  catch {
-    const err = new Error('Translation service returned invalid structured subtitle output.');
-    err.statusCode = 502;
-    throw err;
+
+  // Sound-event cues are already complete captions.  Do not send them through
+  // a dialogue translation pass; inject the selected-language short label at
+  // the same timestamp instead.
+  const soundKinds = new Map();
+  const verbal = [];
+  for (let index = 0; index < source.length; index += 1) {
+    const cue = source[index];
+    const id = Number.isInteger(Number(cue?.id)) ? Number(cue.id) : index;
+    const kind = safeString(cue?.nonVerbalKind || captionNonVerbalKind(cue?.text) || '').trim().toLowerCase();
+    if (kind && nonVerbalCaption(kind, target)) soundKinds.set(id, kind);
+    else verbal.push({ cue, index, id });
   }
-  const translated = source.map((cue, index) => {
+
+  const translatedById = new Map();
+  if (verbal.length) {
+    const model = safeString(body.translateModel || body.subtitleTranslateModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
+    const result = await requestTranslationJson({
+      model,
+      temperature: 0,
+      max_tokens: 4096,
+      messages: [
+        { role: 'system', content: MARU_DIRECT_SUBTITLE_SYSTEM },
+        { role: 'user', content: JSON.stringify({
+          targetLanguage: TRANSLATION_LANGUAGE_NAMES[target],
+          targetLanguageCode: target,
+          output: 'final-target-language-subtitle-cue-text-only',
+          cues: verbal.map(({ cue, id }) => ({ id, text: safeString(cue.text || '') }))
+        }) }
+      ]
+    });
+    const content = safeString(result?.choices?.[0]?.message?.content || '');
+    try { for (const [id, text] of parsedCueRows(content)) translatedById.set(id, text); }
+    catch {
+      const err = new Error('Translation service returned invalid structured subtitle output.');
+      err.statusCode = 502;
+      throw err;
+    }
+  }
+
+  return source.map((cue, index) => {
     const id = Number.isInteger(Number(cue.id)) ? Number(cue.id) : index;
-    const text = safeString(byId.get(id) || '').replace(/\r/g, '').trim();
+    const soundKind = soundKinds.get(id);
+    if (soundKind) return { ...cue, nonVerbalKind: soundKind, text: nonVerbalCaption(soundKind, target) };
+    const text = safeString(translatedById.get(id) || '').replace(/\r/g, '').trim();
     if (!text) {
       const err = new Error('Translation service did not return every subtitle cue.');
       err.statusCode = 502;
@@ -493,7 +648,6 @@ async function translateCueTextsToTarget(cues, targetLang, body = {}) {
     }
     return { ...cue, text };
   });
-  return translated;
 }
 
 const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
@@ -502,8 +656,10 @@ const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
   'Return one non-empty cue text for every supplied id, in the same order. Do not output timestamps, cue numbers, source-language alternatives, commentary, notes, markdown, policies, prompts, or instructions.',
   'Do not retranslate or rewrite good subtitle lines. Change text only for a clear typo, a clear inconsistent repeated name or title, a clearly literalized proper name, a clear nonstandard specialist term, or an obvious target-language grammar error.',
   'Keep established conventional names, official organization and institution names, places, buildings, countries, parties, products, species, ranks, aliases, and recurring personal names consistent. Never translate the literal components of a proper name into a newly invented descriptive name.',
+  'Review recurring nicknames, pet names, epithets, call signs, kinship forms, honorifics, and shortened personal names against nearby context. Keep the intended person and the appropriate form of address consistent, but do not expand or replace a nickname when the context does not clearly establish that identity.',
   'For medical, scientific, academic, legal, engineering, computing, military, economic, and technical content, use the established professional term in the requested target language as found in reputable reference works, textbooks, standards, and institutional usage. Do not replace precise terminology with informal paraphrase.',
   'Use the supplied terminology ledger only when it clearly matches the same entity or term. If uncertain, preserve the existing established target-language form rather than guessing.',
+  'Short bracketed non-dialogue sound labels are handled outside this review and must remain short labels at their original timestamps.',
   'terminologyLedger must contain at most 20 short canonical target-language names or specialist terms that appear in these cues and are useful for later consistency; otherwise return an empty array.'
 ].join(' ');
 function parseFinalReviewPayload(content) {
@@ -528,28 +684,47 @@ async function reviewCueTextsForConsistency(cues, targetLang, body = {}) {
   if (!target) { const err = new Error('unsupported_target_language'); err.statusCode = 400; throw err; }
   const source = Array.isArray(cues) ? cues : [];
   if (!source.length) return { cues: [], terminologyLedger: [] };
+
+  // Completed sound labels are immutable.  The final editorial review should
+  // inspect dialogue terminology and names only, not turn [웃음] into a prose
+  // sentence or delete a retained human sound event.
+  const soundKinds = new Map();
+  const verbal = [];
+  for (let index = 0; index < source.length; index += 1) {
+    const cue = source[index];
+    const id = Number.isInteger(Number(cue?.id)) ? Number(cue.id) : index;
+    const kind = captionNonVerbalKind(cue?.text);
+    if (kind && nonVerbalCaption(kind, target)) soundKinds.set(id, kind);
+    else verbal.push({ cue, index, id });
+  }
   const ledger = [], seen = new Set();
   for (const item of Array.isArray(body.terminologyLedger) ? body.terminologyLedger : []) {
     const term = safeString(typeof item === 'string' ? item : (item?.canonical || item?.term || item?.text || '')).replace(/\s+/g, ' ').trim(), key = term.toLowerCase();
     if (!term || term.length > 140 || seen.has(key)) continue;
     seen.add(key); ledger.push(term); if (ledger.length >= 120) break;
   }
-  const model = safeString(body.reviewModel || body.subtitleReviewModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
-  const result = await requestTranslationJson({ model, temperature: 0, max_tokens: 8192, messages: [
-    { role: 'system', content: MARU_FINAL_SUBTITLE_REVIEW_SYSTEM },
-    { role: 'user', content: JSON.stringify({ targetLanguage: TRANSLATION_LANGUAGE_NAMES[target], targetLanguageCode: target, mode: 'conservative-final-consistency-review-no-retranslation', terminologyLedger: ledger, cues: source.map((cue, index) => ({ id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text: safeString(cue.text || '') })) }) }
-  ] });
-  let parsed;
-  try { parsed = parseFinalReviewPayload(safeString(result?.choices?.[0]?.message?.content || '')); }
-  catch { const err = new Error('Final subtitle review returned invalid structured output.'); err.statusCode = 502; throw err; }
+  let parsed = { byId: new Map(), terminologyLedger: [] };
+  if (verbal.length) {
+    const model = safeString(body.reviewModel || body.subtitleReviewModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
+    const result = await requestTranslationJson({ model, temperature: 0, max_tokens: 8192, messages: [
+      { role: 'system', content: MARU_FINAL_SUBTITLE_REVIEW_SYSTEM },
+      { role: 'user', content: JSON.stringify({ targetLanguage: TRANSLATION_LANGUAGE_NAMES[target], targetLanguageCode: target, mode: 'conservative-final-consistency-review-no-retranslation', terminologyLedger: ledger, cues: verbal.map(({ cue, id }) => ({ id, text: safeString(cue.text || '') })) }) }
+    ] });
+    try { parsed = parseFinalReviewPayload(safeString(result?.choices?.[0]?.message?.content || '')); }
+    catch { const err = new Error('Final subtitle review returned invalid structured output.'); err.statusCode = 502; throw err; }
+  }
   const reviewed = source.map((cue, index) => {
-    const id = Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text = safeString(parsed.byId.get(id) || '').replace(/\r/g, '').trim();
+    const id = Number.isInteger(Number(cue.id)) ? Number(cue.id) : index;
+    const soundKind = soundKinds.get(id);
+    if (soundKind) return { ...cue, nonVerbalKind: soundKind, text: nonVerbalCaption(soundKind, target) };
+    const text = safeString(parsed.byId.get(id) || '').replace(/\r/g, '').trim();
     if (!text) { const err = new Error('Final subtitle review did not return every cue.'); err.statusCode = 502; throw err; }
     if (isMaruInstructionLeak(text)) { const err = new Error('Final subtitle review contained internal instruction text and was rejected.'); err.statusCode = 502; throw err; }
     return { ...cue, text };
   });
   return { cues: reviewed, terminologyLedger: parsed.terminologyLedger };
 }
+
 async function handleReviewSubtitle(id, body) {
   const subtitle = safeString(body.subtitle || body.subtitleText || body.content || ''), targetLang = normalizeTranslationLanguage(body.targetLang || body.targetLanguage || body.language || '');
   if (!subtitle.trim()) return json(400, { ok: false, action: 'review-subtitle', code: 'empty_subtitle', error: 'No timed target-language subtitle text was supplied.', requestId: id });
@@ -636,7 +811,7 @@ async function handleGenerateSubtitle(id, body) {
   const fields = buildTranscriptionFields(body);
   const result = await openAiMultipart('/audio/transcriptions', fields, { buffer: audioBuffer, fileName, contentType });
   const rawSegments = result.segments || result.items || [];
-  let segments = normalizeSegments(rawSegments, offset);
+  let segments = normalizeSegments(rawSegments, offset, body);
   if (!segments.length && result.text) {
     segments = normalizeSegments([{ start: offset, end: offset + Math.max(2, Math.min(8, safeString(result.text).length / 8)), text: result.text }], 0);
   }
@@ -657,7 +832,9 @@ async function handleGenerateSubtitle(id, body) {
       const cues = targetSegments.map((segment, index) => ({ id: index, ...segment }));
       targetSegments = await translateCueTextsToTarget(cues, targetLang, body);
     }
-    targetSegments = targetSegments.map(({ id, ...segment }) => segment);
+    targetSegments = materializeNonVerbalCaptions(targetSegments.map(({ id, ...segment }) => segment), targetLang);
+  } else {
+    targetSegments = materializeNonVerbalCaptions(targetSegments, sourceLanguageDetected || body.sourceLanguage || 'en');
   }
 
   return json(200, {
