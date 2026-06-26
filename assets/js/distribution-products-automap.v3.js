@@ -1,5 +1,5 @@
 // distribution-products-automap.v3.js
-// IGDC/MARU Distribution Hub: instant first paint + verified snapshot refresh.
+// IGDC/MARU Distribution Hub: immediate local first paint + verified snapshot refresh.
 //
 // Display contract:
 // - Never leave the visitor with a blank hub while data is loading.
@@ -10,8 +10,8 @@
 // - Only this renderer owns Distribution Hub PSOM slots.
 (function(){
   'use strict';
-  if(window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V5__) return;
-  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V5__=true;
+  if(window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V6__) return;
+  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V6__=true;
 
   const STATIC_SNAPSHOT_URL='/data/distribution.snapshot.json';
   const REGIONAL_SNAPSHOT_URL='/.netlify/functions/regional-brokerage-snapshot?hub=distribution';
@@ -24,8 +24,8 @@
   const REGIONAL_SUCCESS_RECHECK_TTL=2*60*1000;
   const REGIONAL_EMPTY_RECHECK_TTL=90*1000;
   const REGIONAL_FAILURE_RECHECK_TTL=45*1000;
-  const STATIC_REFRESH_DELAY=250;
   const REGIONAL_REFRESH_DELAY=1400;
+  const INITIAL_SEED_PER_SECTION=8;
   const STATIC_TIMEOUT=12000;
   const REGIONAL_TIMEOUT=8500;
   const CACHE_PREFIX='igdc:distribution:instant-render:v5:';
@@ -54,6 +54,7 @@
   let regionalRefreshInFlight=false;
   let regionalFollowUpScheduled=false;
   let regionalRetryCount=0;
+  let renderGeneration=0;
 
   function text(v){return v==null?'':String(v);}
   function pick(item,names){for(const name of names){const value=item&&item[name];if(value!==undefined&&value!==null&&value!=='')return value;}return '';}
@@ -127,10 +128,10 @@
       compact:true
     }};
   }
-  // Initial HTML sample cards remain visible until a verified snapshot is ready.
+  // Local seed cards are used only when the server HTML has no visible cards.
 
 
-  function makeCard(item){
+  function makeCard(item,track){
     const root=document.createElement('div'); root.className='thumb-card';
     const img=document.createElement('div'); img.className='thumb-img';
     const image=pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']);
@@ -151,7 +152,7 @@
       root.addEventListener('click',open);
       root.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
     }
-    revenue(item,'trackImpression');
+    if(track!==false) revenue(item,'trackImpression');
     return root;
   }
   function addHash(hash,value){
@@ -196,13 +197,42 @@
         // thumbnail-loader.compat.min.js honours this flag on Distribution Hub.
         // It must not append a late network feed after this renderer owns the slots.
         box.dataset.mounted='1';
-        box.dataset.distributionAutomap='v5';
+        box.dataset.distributionAutomap='v6';
       }
+    });
+  }
+  function makeSeedCard(cfg,index){
+    const item={
+      id:'distribution-seed-'+cfg.key+'-'+(index+1),
+      title:cfg.label+' '+(index+1),
+      meta:'',
+      section:cfg.key,
+      url:'#'
+    };
+    const card=makeCard(item,false);
+    card.classList.add('thumb-card--seed');
+    card.setAttribute('aria-busy','true');
+    return card;
+  }
+  function seedInitialView(){
+    // The HTML starts with empty hosts. Build only the immediately useful cards
+    // locally so slow networks never leave the hub blank while the full snapshot
+    // is downloading. Verified data always replaces these cards later.
+    SECTION_MAP.forEach(function(cfg){
+      const box=document.querySelector(cfg.selector);
+      if(!box||box.children.length) return;
+      const fragment=document.createDocumentFragment();
+      for(let i=0;i<INITIAL_SEED_PER_SECTION;i++) fragment.appendChild(makeSeedCard(cfg,i));
+      box.appendChild(fragment);
     });
   }
   function replaceChildren(box,fragment){
     if(typeof box.replaceChildren==='function'){box.replaceChildren(fragment);return;}
     while(box.firstChild)box.removeChild(box.firstChild); box.appendChild(fragment);
+  }
+  function nextFrame(task){
+    if(typeof window.requestAnimationFrame==='function') window.requestAnimationFrame(task);
+    else setTimeout(task,16);
   }
   function shouldRender(snapshot,priority,kind){
     const key=fingerprint(snapshot,kind);
@@ -213,21 +243,39 @@
     return true;
   }
   function render(snapshot,priority,kind){
-    const sections=sectionsOf(snapshot); if(!sections||!shouldRender(snapshot,priority,kind)) return false;
-    controlHosts();
-    SECTION_MAP.forEach(function(cfg){
-      const box=document.querySelector(cfg.selector); if(!box) return;
-      const raw=sections[cfg.key]||sections[ALIAS[cfg.key]];
-      const list=normalizeList(raw).slice(0,cfg.limit);
-      // A partial/empty response must not erase the last valid visible section.
-      if(!list.length) return;
-      const fragment=document.createDocumentFragment();
-      list.forEach(function(item){fragment.appendChild(makeCard(item));});
-      replaceChildren(box,fragment);
-    });
+    const sections=sectionsOf(snapshot);
+    if(!sections||!shouldRender(snapshot,priority,kind)) return false;
+
+    // Rendering 700 cards in one task can delay the first usable screen on
+    // slower devices. Commit a completed section per frame and keep the last
+    // valid cards in every other section until its replacement is ready.
+    const generation=++renderGeneration;
+    const nextFingerprint=fingerprint(snapshot,kind);
     activePriority=priority;
-    activeFingerprint=fingerprint(snapshot,kind);
+    activeFingerprint=nextFingerprint;
     activeStamp=snapshotStamp(snapshot);
+    controlHosts();
+
+    let cursor=0;
+    const commitNext=function(){
+      if(generation!==renderGeneration) return;
+      while(cursor<SECTION_MAP.length){
+        const cfg=SECTION_MAP[cursor++];
+        const box=document.querySelector(cfg.selector);
+        if(!box) continue;
+        const raw=sections[cfg.key]||sections[ALIAS[cfg.key]];
+        const list=normalizeList(raw).slice(0,cfg.limit);
+        // A partial/empty response must never erase the last valid visible section.
+        if(!list.length) continue;
+        const fragment=document.createDocumentFragment();
+        list.forEach(function(item){fragment.appendChild(makeCard(item));});
+        if(generation!==renderGeneration) return;
+        replaceChildren(box,fragment);
+        nextFrame(commitNext);
+        return;
+      }
+    };
+    commitNext();
     return true;
   }
   async function fetchJson(url,timeout,cacheMode){
@@ -320,17 +368,17 @@
     const statik=getCached('static',STATIC_CACHE_TTL);
     if(regional&&regional.value) render(regional.value,3,'regional-cache');
     else if(statik&&statik.value) render(statik.value,2,'static-cache');
-    // With no session cache, keep the page's existing server-rendered samples.
-    // They are replaced only after a verified snapshot has been received.
+    else seedInitialView();
 
-    // Both refreshes are non-blocking. Static starts immediately after first paint;
-    // regional starts shortly after it, never after a long visitor-visible wait.
-    idle(refreshStatic,STATIC_REFRESH_DELAY);
+    // Start the public snapshot request on the next paint, not during an idle
+    // window. The request remains non-blocking, while the local seed keeps the
+    // page immediately usable on a slow connection.
+    nextFrame(function(){refreshStatic();});
     idle(refreshRegional,REGIONAL_REFRESH_DELAY);
 
     document.addEventListener('visibilitychange',function(){
       if(document.hidden===false){
-        idle(refreshStatic,STATIC_REFRESH_DELAY);
+        nextFrame(function(){refreshStatic();});
         if(canRefreshRegional()) idle(refreshRegional,REGIONAL_REFRESH_DELAY);
       }
     });
