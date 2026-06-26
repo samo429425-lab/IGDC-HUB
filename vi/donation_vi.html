@@ -1445,7 +1445,18 @@ body > .container > .main > *{
 /* Ensure scroll area remains usable */
 .igdc-qa-body{ overflow:auto; }
 </style>
-
+<style id="igdc-donation-qa-position-fix-v1">
+/*
+ * The index parent resizes mainFrame to the donation document height.
+ * Bottom anchoring therefore drifts this fixed Q&A panel below the visible
+ * front-page viewport. Keep the panel at the same top offset as the other
+ * front pages; the parent header/nav naturally determine the iframe start.
+ */
+.igdc-qa-panel{
+  top:16px !important;
+  bottom:auto !important;
+}
+</style>
 <style id="qa-empty-state-style">
 .igdc-qa-threads:empty::before,
 .qna-threads:empty::before,
