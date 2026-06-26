@@ -1,35 +1,24 @@
 // distribution-products-automap.v3.js
-// IGDC/MARU Distribution Hub: immediate local first paint + verified snapshot refresh.
-//
-// Display contract:
-// - Never leave the visitor with a blank hub while data is loading.
-// - Reuse the most recent same-session view immediately, then revalidate safely.
-// - Prefer a verified regional snapshot, but never replace a visible valid view
-//   with an error, an empty response, or an older snapshot.
-// - Recheck a no-result or transient failure soon; do not impose a long cooldown.
-// - Only this renderer owns Distribution Hub PSOM slots.
+// IGDC/MARU Distribution Hub: staged local paint + verified regional supply merge.
 (function(){
   'use strict';
-  if(window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V6__) return;
-  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V6__=true;
+  if(window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V7__) return;
+  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V7__=true;
 
   const STATIC_SNAPSHOT_URL='/data/distribution.snapshot.json';
   const REGIONAL_SNAPSHOT_URL='/.netlify/functions/regional-brokerage-snapshot?hub=distribution';
   const LIMIT_MAIN=100, LIMIT_RIGHT=100;
-
-  // Cached content is only the instant first view. Every return visit revalidates
-  // the public snapshot without delaying the visible page.
-  const STATIC_CACHE_TTL=10*60*1000;
-  const REGIONAL_CACHE_TTL=5*60*1000;
-  const REGIONAL_SUCCESS_RECHECK_TTL=2*60*1000;
-  const REGIONAL_EMPTY_RECHECK_TTL=90*1000;
-  const REGIONAL_FAILURE_RECHECK_TTL=45*1000;
-  const REGIONAL_REFRESH_DELAY=1400;
   const INITIAL_SEED_PER_SECTION=8;
-  const STATIC_TIMEOUT=12000;
-  const REGIONAL_TIMEOUT=8500;
-  const CACHE_PREFIX='igdc:distribution:instant-render:v5:';
-
+  const STATIC_TTL=30*60*1000;
+  const REGIONAL_TTL=15*60*1000;
+  const NO_RESULT_TTL=30*60*1000;
+  const TRANSIENT_ERROR_TTL=3*60*1000;
+  const STATIC_REVALIDATE_TTL=5*60*1000;
+  const STATIC_DELAY=600;
+  const REGIONAL_DELAY=8000;
+  const STATIC_TIMEOUT=18000;
+  const REGIONAL_TIMEOUT=14000;
+  const CACHE_PREFIX='igdc:distribution:controlled-supply:v7:';
   const SECTION_MAP=[
     {key:'distribution-recommend',selector:'[data-psom-key="distribution-recommend"]',limit:LIMIT_MAIN,label:'Recommend Item'},
     {key:'distribution-new',selector:'[data-psom-key="distribution-new"]',limit:LIMIT_MAIN,label:'New Item'},
@@ -48,47 +37,42 @@
     'distribution-others':'distribution_6',
     'distribution-right':'distribution_7'
   };
-  let activePriority=-1;
+  const PLACEHOLDER_IMG='/assets/img/placeholder.png';
+  let baseSnapshot=null;
+  let regionalSnapshot=null;
   let activeFingerprint='';
-  let activeStamp=0;
-  let regionalRefreshInFlight=false;
-  let regionalFollowUpScheduled=false;
-  let regionalRetryCount=0;
   let renderGeneration=0;
+  let regionalRefreshInFlight=false;
+  let staticRefreshInFlight=false;
+  let lastStaticRefreshAt=0;
 
   function text(v){return v==null?'':String(v);}
-  function pick(item,names){for(const name of names){const value=item&&item[name];if(value!==undefined&&value!==null&&value!=='')return value;}return '';}
-  function escUrl(v){try{return String(v||'').replace(/'/g,'%27');}catch(_e){return '';}}
-  function revenue(item,kind){
-    try{
-      if(window.MaruRevenueTracker&&typeof window.MaruRevenueTracker[kind]==='function'){
-        window.MaruRevenueTracker[kind](item,{
-          service:'distributionhub-regional-brokerage',pageType:'distribution',page:'distribution',
-          section:item.section||item.psom_key||null,revenueLine:'product_affiliate'
-        });
-      }
-    }catch(_e){}
+  function pick(item,names){
+    for(const name of names){
+      const value=item&&item[name];
+      if(value!==undefined&&value!==null&&value!=='') return value;
+    }
+    return '';
   }
+  function escUrl(v){try{return String(v||'').replace(/'/g,'%27');}catch(_e){return '';}}
   function cacheKey(kind){
     const lang=(document.documentElement&&document.documentElement.lang||'default').toLowerCase();
     return CACHE_PREFIX+kind+':'+lang;
   }
   function getCached(kind,ttl){
     try{
-      const raw=sessionStorage.getItem(cacheKey(kind)); if(!raw) return null;
+      const raw=sessionStorage.getItem(cacheKey(kind));
+      if(!raw) return null;
       const row=JSON.parse(raw);
       if(!row||!row.at||Date.now()-row.at>ttl){sessionStorage.removeItem(cacheKey(kind));return null;}
-      return row;
+      return row.value;
     }catch(_e){return null;}
   }
-  function setCached(kind,value){
-    try{sessionStorage.setItem(cacheKey(kind),JSON.stringify({at:Date.now(),value:value}));}catch(_e){}
-  }
+  function setCached(kind,value){try{sessionStorage.setItem(cacheKey(kind),JSON.stringify({at:Date.now(),value:value}));}catch(_e){}}
   function clearCached(kind){try{sessionStorage.removeItem(cacheKey(kind));}catch(_e){}}
-  function sectionsOf(snapshot){
-    return snapshot&&((snapshot.pages&&snapshot.pages.distribution&&snapshot.pages.distribution.sections)||snapshot.sections)||null;
-  }
+  function sectionsOf(snapshot){return snapshot&&((snapshot.pages&&snapshot.pages.distribution&&snapshot.pages.distribution.sections)||snapshot.sections)||null;}
   function normalizeList(raw){return Array.isArray(raw)?raw:(raw&&Array.isArray(raw.slots)?raw.slots:[]);}
+  function clone(value){try{return JSON.parse(JSON.stringify(value));}catch(_e){return value;}}
   function compactItem(item){
     item=item&&typeof item==='object'?item:{};
     return {
@@ -103,159 +87,155 @@
       url:pick(item,['url','href','link']),
       href:pick(item,['href','url','link']),
       link:pick(item,['link','url','href']),
-      section:pick(item,['section','psom_key'])
+      section:pick(item,['section','psom_key']),
+      listingHealth:item.listingHealth||null
     };
   }
-  function compactSnapshot(snapshot,networkMeta){
-    const source=sectionsOf(snapshot); if(!source) return null;
+  function compactSnapshot(snapshot){
+    const source=sectionsOf(snapshot);
+    if(!source) return null;
     const sections={};
     SECTION_MAP.forEach(function(cfg){
       const raw=source[cfg.key]||source[ALIAS[cfg.key]];
       sections[cfg.key]=normalizeList(raw).slice(0,cfg.limit).map(function(item){
-        const compact=compactItem(item);
-        if(!compact.section) compact.section=cfg.key;
-        return compact;
+        const card=compactItem(item);
+        if(!card.section) card.section=cfg.key;
+        return card;
       });
     });
-    const rawMeta=snapshot&&snapshot.meta||{};
-    return {pages:{distribution:{sections:sections}},meta:{
-      regionalBrokerage:rawMeta.regionalBrokerage===true,
-      generatedAt:rawMeta.generatedAt||'',
-      targetMarket:rawMeta.targetMarket||'',
-      targetRegion:rawMeta.targetRegion||'',
-      snapshotRevision:rawMeta.snapshotRevision||rawMeta.revision||rawMeta.version||rawMeta.contentHash||'',
-      etag:networkMeta&&networkMeta.etag||'',
-      compact:true
-    }};
+    return {pages:{distribution:{sections:sections}},meta:Object.assign({},snapshot&&snapshot.meta||{},{
+      compact:true,
+      regionalBrokerage:!!(snapshot&&snapshot.meta&&snapshot.meta.regionalBrokerage)
+    })};
   }
-  // Local seed cards are used only when the server HTML has no visible cards.
+  function seedSnapshot(){
+    const sections={};
+    SECTION_MAP.forEach(function(cfg){
+      const list=[];
+      for(let i=0;i<INITIAL_SEED_PER_SECTION;i++){
+        list.push({
+          id:'distribution-seed-'+cfg.key+'-'+(i+1),
+          title:cfg.label+' '+(i+1),
+          meta:'',
+          thumb:PLACEHOLDER_IMG,
+          image:PLACEHOLDER_IMG,
+          url:'#',
+          section:cfg.key,
+          localSeed:true
+        });
+      }
+      sections[cfg.key]=list;
+    });
+    return {pages:{distribution:{sections:sections}},meta:{localSeed:true,generatedAt:'local-seed-v7'}};
+  }
+  const LOCAL_SEED=seedSnapshot();
 
-
-  function makeCard(item,track){
-    const root=document.createElement('div'); root.className='thumb-card';
-    const img=document.createElement('div'); img.className='thumb-img';
-    const image=pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']);
-    if(image){
-      img.style.backgroundImage="url('"+escUrl(image)+"')";
-      img.style.backgroundSize='cover'; img.style.backgroundPosition='center';
-    }
-    const title=document.createElement('div'); title.className='thumb-title'; title.textContent=text(pick(item,['title','name','text'])||'Product');
-    const meta=document.createElement('div'); meta.className='thumb-meta'; meta.textContent=text(pick(item,['meta','subtitle','summary','description']));
-    root.appendChild(img); root.appendChild(title); root.appendChild(meta);
+  function track(item,kind){
+    try{
+      if(window.MaruRevenueTracker&&typeof window.MaruRevenueTracker[kind]==='function'){
+        window.MaruRevenueTracker[kind](item,{service:'distributionhub',pageType:'distribution',page:'distribution',section:item.section||item.psom_key||null,revenueLine:'product_affiliate'});
+      }
+    }catch(_e){}
+  }
+  function makeCard(item){
+    const root=document.createElement('div');
+    root.className='thumb-card';
+    if(item&&item.localSeed){root.classList.add('thumb-card--seed');root.setAttribute('aria-busy','true');}
+    const img=document.createElement('div');
+    img.className='thumb-img';
+    const image=pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl'])||PLACEHOLDER_IMG;
+    img.style.backgroundImage="url('"+escUrl(image)+"')";
+    img.style.backgroundSize='cover';
+    img.style.backgroundPosition='center';
+    const title=document.createElement('div');
+    title.className='thumb-title';
+    title.textContent=text(pick(item,['title','name','text'])||'Product');
+    const meta=document.createElement('div');
+    meta.className='thumb-meta';
+    meta.textContent=text(pick(item,['meta','subtitle','summary','description']));
+    root.appendChild(img);
+    root.appendChild(title);
+    root.appendChild(meta);
     const href=pick(item,['url','href','link']);
     if(href&&href!=='#'){
-      root.style.cursor='pointer'; root.setAttribute('role','link'); root.tabIndex=0;
-      const open=function(){
-        revenue(item,'trackClick');
-        window.location.assign(href);
-      };
+      root.style.cursor='pointer';
+      root.setAttribute('role','link');
+      root.tabIndex=0;
+      const open=function(){track(item,'trackClick');window.location.assign(href);};
       root.addEventListener('click',open);
-      root.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
+      root.addEventListener('keydown',function(event){
+        if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}
+      });
+      track(item,'trackImpression');
     }
-    if(track!==false) revenue(item,'trackImpression');
     return root;
   }
   function addHash(hash,value){
     const input=text(value);
-    for(let i=0;i<input.length;i++){
-      hash^=input.charCodeAt(i);
-      hash=Math.imul(hash,16777619);
-    }
+    for(let i=0;i<input.length;i++){hash^=input.charCodeAt(i);hash=Math.imul(hash,16777619);}
     return hash;
   }
-  function fingerprint(snapshot,kind){
+  function fingerprint(snapshot){
     try{
-      const meta=snapshot&&snapshot.meta||{};
       const sections=sectionsOf(snapshot)||{};
       let hash=2166136261;
-      hash=addHash(hash,kind||'');
-      hash=addHash(hash,meta.snapshotRevision||meta.revision||meta.version||'');
-      hash=addHash(hash,meta.generatedAt||'');
-      hash=addHash(hash,meta.targetMarket||'');
-      hash=addHash(hash,meta.targetRegion||'');
+      const meta=snapshot&&snapshot.meta||{};
+      hash=addHash(hash,meta.generatedAt||meta.snapshotRevision||meta.version||'');
       SECTION_MAP.forEach(function(cfg){
-        const list=normalizeList(sections[cfg.key]||sections[ALIAS[cfg.key]]);
-        hash=addHash(hash,cfg.key+':'+list.length+'|');
-        list.forEach(function(item){
+        hash=addHash(hash,cfg.key);
+        normalizeList(sections[cfg.key]||sections[ALIAS[cfg.key]]).forEach(function(item){
           hash=addHash(hash,[pick(item,['id','uid','productId','contentId']),pick(item,['title','name','text']),pick(item,['meta','subtitle','summary','description']),pick(item,['thumb','thumbnail','image','imageUrl']),pick(item,['url','href','link'])].join('\u001f'));
         });
       });
       return (hash>>>0).toString(16);
     }catch(_e){return '';}
   }
-  function snapshotStamp(snapshot){
-    try{
-      const raw=snapshot&&snapshot.meta&&snapshot.meta.generatedAt;
-      const stamp=raw?Date.parse(raw):0;
-      return Number.isFinite(stamp)&&stamp>0?stamp:0;
-    }catch(_e){return 0;}
-  }
   function controlHosts(){
     SECTION_MAP.forEach(function(cfg){
       const box=document.querySelector(cfg.selector);
       if(box){
-        // thumbnail-loader.compat.min.js honours this flag on Distribution Hub.
-        // It must not append a late network feed after this renderer owns the slots.
+        // thumbnail-loader.compat.min.js honours the controlled owner flag.
         box.dataset.mounted='1';
-        box.dataset.distributionAutomap='v6';
+        box.dataset.distributionAutomap='v7';
       }
-    });
-  }
-  function makeSeedCard(cfg,index){
-    const item={
-      id:'distribution-seed-'+cfg.key+'-'+(index+1),
-      title:cfg.label+' '+(index+1),
-      meta:'',
-      section:cfg.key,
-      url:'#'
-    };
-    const card=makeCard(item,false);
-    card.classList.add('thumb-card--seed');
-    card.setAttribute('aria-busy','true');
-    return card;
-  }
-  function seedInitialView(){
-    // The HTML starts with empty hosts. Build only the immediately useful cards
-    // locally so slow networks never leave the hub blank while the full snapshot
-    // is downloading. Verified data always replaces these cards later.
-    SECTION_MAP.forEach(function(cfg){
-      const box=document.querySelector(cfg.selector);
-      if(!box||box.children.length) return;
-      const fragment=document.createDocumentFragment();
-      for(let i=0;i<INITIAL_SEED_PER_SECTION;i++) fragment.appendChild(makeSeedCard(cfg,i));
-      box.appendChild(fragment);
     });
   }
   function replaceChildren(box,fragment){
     if(typeof box.replaceChildren==='function'){box.replaceChildren(fragment);return;}
-    while(box.firstChild)box.removeChild(box.firstChild); box.appendChild(fragment);
+    while(box.firstChild) box.removeChild(box.firstChild);
+    box.appendChild(fragment);
+  }
+  function mergedSnapshot(){
+    const base=compactSnapshot(baseSnapshot)||LOCAL_SEED;
+    const regional=compactSnapshot(regionalSnapshot);
+    if(!regional||!(regional.meta&&regional.meta.regionalBrokerage)) return base;
+    const merged=clone(base);
+    const target=sectionsOf(merged);
+    const incoming=sectionsOf(regional);
+    if(!target||!incoming) return base;
+    SECTION_MAP.forEach(function(cfg){
+      const list=normalizeList(incoming[cfg.key]||incoming[ALIAS[cfg.key]]);
+      // Empty regional sections never erase the last verified public snapshot.
+      if(list.length) target[cfg.key]=list.slice(0,cfg.limit);
+    });
+    merged.meta=Object.assign({},base.meta||{},regional.meta||{},{regionalBrokerage:true,mergedFallback:true});
+    return merged;
   }
   function nextFrame(task){
     if(typeof window.requestAnimationFrame==='function') window.requestAnimationFrame(task);
     else setTimeout(task,16);
   }
-  function shouldRender(snapshot,priority,kind){
-    const key=fingerprint(snapshot,kind);
-    if(key&&key===activeFingerprint) return false;
-    // A verified regional result is more specific than a generic static snapshot.
-    // Static data may fill an empty page, but may never displace a visible regional view.
-    if(priority<activePriority) return false;
-    return true;
-  }
-  function render(snapshot,priority,kind){
+  function render(){
+    const snapshot=mergedSnapshot();
     const sections=sectionsOf(snapshot);
-    if(!sections||!shouldRender(snapshot,priority,kind)) return false;
-
-    // Rendering 700 cards in one task can delay the first usable screen on
-    // slower devices. Commit a completed section per frame and keep the last
-    // valid cards in every other section until its replacement is ready.
-    const generation=++renderGeneration;
-    const nextFingerprint=fingerprint(snapshot,kind);
-    activePriority=priority;
-    activeFingerprint=nextFingerprint;
-    activeStamp=snapshotStamp(snapshot);
+    if(!sections) return false;
+    const key=fingerprint(snapshot);
+    if(key&&key===activeFingerprint) return false;
+    activeFingerprint=key;
     controlHosts();
 
+    // Commit one completed section per frame so a large snapshot never freezes the hub.
+    const generation=++renderGeneration;
     let cursor=0;
     const commitNext=function(){
       if(generation!==renderGeneration) return;
@@ -263,9 +243,8 @@
         const cfg=SECTION_MAP[cursor++];
         const box=document.querySelector(cfg.selector);
         if(!box) continue;
-        const raw=sections[cfg.key]||sections[ALIAS[cfg.key]];
-        const list=normalizeList(raw).slice(0,cfg.limit);
-        // A partial/empty response must never erase the last valid visible section.
+        const list=normalizeList(sections[cfg.key]||sections[ALIAS[cfg.key]]).slice(0,cfg.limit);
+        // Preserve the last visible section if an incoming payload is partial.
         if(!list.length) continue;
         const fragment=document.createDocumentFragment();
         list.forEach(function(item){fragment.appendChild(makeCard(item));});
@@ -283,11 +262,10 @@
     const timer=controller?setTimeout(function(){controller.abort();},timeout):null;
     try{
       const response=await fetch(url,{cache:cacheMode||'default',credentials:'same-origin',signal:controller&&controller.signal});
-      const etag=response.headers&&typeof response.headers.get==='function'?response.headers.get('etag')||'':'';
-      if(response.status===204) return {empty:true,status:204,etag:etag,payload:null};
+      if(response.status===204) return null;
       if(!response.ok) throw new Error('HTTP '+response.status);
-      return {empty:false,status:response.status,etag:etag,payload:await response.json()};
-    }finally{if(timer)clearTimeout(timer);}
+      return await response.json();
+    }finally{if(timer) clearTimeout(timer);}
   }
   function idle(task,delay){
     const run=function(){
@@ -296,90 +274,57 @@
     };
     setTimeout(run,Math.max(0,delay||0));
   }
-  function getRegionalStatus(){
-    const row=getCached('regional-status',REGIONAL_CACHE_TTL);
-    if(!row||!row.value||typeof row.value!=='object') return null;
-    const value=row.value;
-    if(!value.retryAt||Date.now()>=value.retryAt){clearCached('regional-status');return null;}
-    return value;
-  }
-  function setRegionalStatus(state,waitMs){
-    setCached('regional-status',{state:state,retryAt:Date.now()+waitMs});
-  }
-  function canRefreshRegional(){return !regionalRefreshInFlight&&!getRegionalStatus();}
-  function nextRegionalRetryDelay(state){
-    regionalRetryCount=Math.min(regionalRetryCount+1,4);
-    const base=state==='failure'?REGIONAL_FAILURE_RECHECK_TTL:REGIONAL_EMPTY_RECHECK_TTL;
-    return Math.min(5*60*1000,base*Math.pow(2,regionalRetryCount-1));
-  }
-  function scheduleSingleRegionalFollowUp(waitMs){
-    if(regionalFollowUpScheduled) return;
-    regionalFollowUpScheduled=true;
-    setTimeout(function(){
-      regionalFollowUpScheduled=false;
-      if(document.hidden===true) return;
-      if(canRefreshRegional()) refreshRegional();
-    },waitMs+150);
-  }
-  function refreshStatic(){
-    return fetchJson(STATIC_SNAPSHOT_URL,STATIC_TIMEOUT,'no-cache').then(function(result){
-      if(result.empty||!result.payload) return;
-      const compact=compactSnapshot(result.payload,{etag:result.etag}); if(!compact) return;
+  function refreshStatic(force){
+    if(staticRefreshInFlight) return Promise.resolve();
+    if(!force&&lastStaticRefreshAt&&Date.now()-lastStaticRefreshAt<STATIC_REVALIDATE_TTL) return Promise.resolve();
+    staticRefreshInFlight=true;
+    lastStaticRefreshAt=Date.now();
+    return fetchJson(STATIC_SNAPSHOT_URL,STATIC_TIMEOUT,'no-cache').then(function(snapshot){
+      const compact=compactSnapshot(snapshot);
+      if(!compact) return;
+      baseSnapshot=compact;
       setCached('static',compact);
-      render(compact,2,'static');
-    }).catch(function(){/* Existing visible cards or same-session cache stay visible. */});
+      render();
+    }).catch(function(){/* Existing seed, cache, or verified regional cards stay visible. */}).finally(function(){staticRefreshInFlight=false;});
   }
   function refreshRegional(){
-    if(!canRefreshRegional()) return Promise.resolve(false);
+    if(regionalRefreshInFlight) return Promise.resolve();
+    if(getCached('regional-no-result',NO_RESULT_TTL)||getCached('regional-error',TRANSIENT_ERROR_TTL)) return Promise.resolve();
     regionalRefreshInFlight=true;
-    return fetchJson(REGIONAL_SNAPSHOT_URL,REGIONAL_TIMEOUT,'no-store').then(function(result){
-      if(result.empty||!result.payload){
-        const waitMs=nextRegionalRetryDelay('empty');
-        setRegionalStatus('empty',waitMs);
-        scheduleSingleRegionalFollowUp(waitMs);
-        return false;
+    return fetchJson(REGIONAL_SNAPSHOT_URL,REGIONAL_TIMEOUT,'no-store').then(function(snapshot){
+      const compact=compactSnapshot(snapshot);
+      if(compact&&compact.meta&&compact.meta.regionalBrokerage===true){
+        regionalSnapshot=compact;
+        setCached('regional',compact);
+        clearCached('regional-no-result');
+        clearCached('regional-error');
+        render();
+      }else{
+        // A true no-result is cooled down; it never clears visible verified cards.
+        setCached('regional-no-result',{at:Date.now()});
       }
-      const raw=result.payload;
-      if(raw&&raw.meta&&raw.meta.regionalBrokerage===true){
-        const compact=compactSnapshot(raw,{etag:result.etag});
-        if(compact){
-          setCached('regional',compact);
-          regionalRetryCount=0;
-          setRegionalStatus('success',REGIONAL_SUCCESS_RECHECK_TTL);
-          render(compact,3,'regional');
-          scheduleSingleRegionalFollowUp(REGIONAL_SUCCESS_RECHECK_TTL);
-          return true;
-        }
-      }
-      const waitMs=nextRegionalRetryDelay('empty');
-      setRegionalStatus('empty',waitMs);
-      scheduleSingleRegionalFollowUp(waitMs);
-      return false;
     }).catch(function(){
-      const waitMs=nextRegionalRetryDelay('failure');
-      setRegionalStatus('failure',waitMs);
-      scheduleSingleRegionalFollowUp(waitMs);
-      return false;
+      // Temporary Netlify/Sanmaru errors are retried sooner than a confirmed no-result.
+      setCached('regional-error',{at:Date.now()});
     }).finally(function(){regionalRefreshInFlight=false;});
   }
   function boot(){
     controlHosts();
-    const regional=getCached('regional',REGIONAL_CACHE_TTL);
-    const statik=getCached('static',STATIC_CACHE_TTL);
-    if(regional&&regional.value) render(regional.value,3,'regional-cache');
-    else if(statik&&statik.value) render(statik.value,2,'static-cache');
-    else seedInitialView();
+    const cachedStatic=getCached('static',STATIC_TTL);
+    const cachedRegional=getCached('regional',REGIONAL_TTL);
+    baseSnapshot=cachedStatic||LOCAL_SEED;
+    regionalSnapshot=cachedRegional||null;
+    render();
 
-    // Start the public snapshot request on the next paint, not during an idle
-    // window. The request remains non-blocking, while the local seed keeps the
-    // page immediately usable on a slow connection.
-    nextFrame(function(){refreshStatic();});
-    idle(refreshRegional,REGIONAL_REFRESH_DELAY);
+    // No network wait is allowed before a visible first paint.
+    idle(function(){refreshStatic(false);},STATIC_DELAY);
+    // Sanmaru-backed discovery runs only after the hub has settled.
+    if(!cachedRegional) idle(refreshRegional,REGIONAL_DELAY);
 
     document.addEventListener('visibilitychange',function(){
       if(document.hidden===false){
-        nextFrame(function(){refreshStatic();});
-        if(canRefreshRegional()) idle(refreshRegional,REGIONAL_REFRESH_DELAY);
+        idle(function(){refreshStatic(false);},STATIC_DELAY);
+        if(!getCached('regional',REGIONAL_TTL)) idle(refreshRegional,REGIONAL_DELAY);
       }
     });
   }
@@ -388,31 +333,14 @@
 })();
 
 /* Revenue support remains non-blocking and does not control slot rendering. */
-(function loadMaruRevenueAutoHookForAutomap(){
+(function loadMaruRevenueTracker(){
   'use strict';
-  if(typeof window==='undefined'||typeof document==='undefined')return;
-  function installIfReady(){
-    try{
-      if(window.MaruRevenueAutoHook&&typeof window.MaruRevenueAutoHook.install==='function'){
-        window.MaruRevenueAutoHook.install({service:'front-automap'});
-      }
-    }catch(_e){}
-  }
-  function loadScriptOnce(src,id,globalName,done){
-    const existing=document.getElementById(id);
-    if(window[globalName]){if(typeof done==='function')done();return;}
-    if(existing){
-      existing.addEventListener('load',function(){if(typeof done==='function')done();},{once:true});
-      return;
-    }
-    const script=document.createElement('script');
-    script.id=id;script.src=src;script.async=false;
-    script.onload=function(){if(typeof done==='function')done();};
-    (document.head||document.documentElement).appendChild(script);
-  }
-  if(window.__MARU_REVENUE_AUTOMAP_LOADER_DONE__){installIfReady();return;}
-  window.__MARU_REVENUE_AUTOMAP_LOADER_DONE__=true;
-  loadScriptOnce('/assets/js/maru-revenue-tracker.js','maruRevenueTrackerScript','MaruRevenueTracker',function(){
-    loadScriptOnce('/assets/js/maru-revenue-autohook.js','maruRevenueAutoHookScript','MaruRevenueAutoHook',installIfReady);
-  });
+  if(typeof window==='undefined'||typeof document==='undefined') return;
+  const id='maruRevenueTrackerScript';
+  if(window.MaruRevenueTracker||document.getElementById(id)) return;
+  const script=document.createElement('script');
+  script.id=id;
+  script.src='/assets/js/maru-revenue-tracker.js';
+  script.async=true;
+  (document.head||document.documentElement).appendChild(script);
 })();
