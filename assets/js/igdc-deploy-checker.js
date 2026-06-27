@@ -282,13 +282,15 @@
   }
 
 
+  // Runtime probes must mirror the real front routes. They never write data and do not
+  // force generic full-search expansion merely to prove that a function is loaded.
   var ENGINE_PROBE_TARGETS = [
-    { key:'maru-search', label:'MaruSearch CPU', endpoint:'/.netlify/functions/maru-search', role:'CPU / search dispatcher', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', limit:'5', page:'home', section:'home_1' }, supplyParams:{ q:'igdc audit', query:'igdc audit', limit:'25', page:'home', section:'home_1', action:'front-supply' } },
-    { key:'sanmaru', label:'Sanmaru OSAI', endpoint:'/.netlify/functions/sanmaru_engine_v2', role:'global information integrator', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', action:'front-supply', page:'home', section:'home_1', limit:'5' }, supplyParams:{ q:'igdc audit', query:'igdc audit', action:'front-supply', page:'home', section:'home_1', limit:'25' } },
-    { key:'search-bank-index', label:'SearchBank Index', endpoint:'/.netlify/functions/search-bank-index-engine', role:'front reservoir/index supplier', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'5' }, supplyParams:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'50' } },
-    { key:'search-bank-engine', label:'SearchBank Engine', endpoint:'/.netlify/functions/search-bank-engine', role:'snapshot request/router', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'5' }, supplyParams:{ q:'igdc audit', query:'igdc audit', page:'home', section:'home_1', limit:'25' } },
+    { key:'maru-search', label:'MaruSearch CPU', endpoint:'/.netlify/functions/maru-search', role:'CPU / search dispatcher', critical:true, expectItems:true, params:{ q:'igdc audit', query:'igdc audit', limit:'5', page:'home', section:'home_1', pageWindowOnly:'1', residentFirst:'1', sanmaruFirst:'1', routeOwner:'sanmaru', naturalFlow:'1', smoothIntake:'1', noBlockingWide:'1', noWaitProviders:'1' }, supplyParams:{ q:'igdc audit', query:'igdc audit', limit:'25', page:'home', section:'home_1', action:'front-supply' } },
+    { key:'sanmaru', label:'Sanmaru OSAI', endpoint:'/.netlify/functions/sanmaru_engine_v2', role:'global information integrator', critical:true, expectItems:true, pingTimeoutMs:4500, params:{ q:'igdc audit', query:'igdc audit', action:'front-supply', page:'home', section:'home_1', limit:'5' }, supplyParams:{ q:'igdc audit', query:'igdc audit', action:'front-supply', page:'home', section:'home_1', limit:'25' } },
+    { key:'search-bank-index', label:'SearchBank Index', endpoint:'/.netlify/functions/search-bank-index-engine', role:'front reservoir/index supplier', critical:true, expectItems:false, params:{ action:'front-supply', page:'home', section:'home_1', limit:'5' }, supplyParams:{ action:'front-supply', page:'home', section:'home_1', limit:'50' } },
+    { key:'search-bank-engine', label:'SearchBank Engine', endpoint:'/.netlify/functions/search-bank-engine', role:'snapshot request/router', critical:true, expectItems:true, params:{ list:'1', page:'home', section:'home_1', limit:'5' }, supplyParams:{ list:'1', action:'front-supply', page:'home', section:'home_1', limit:'25' } },
     { key:'maru-search-display', label:'Search Display', endpoint:'/.netlify/functions/maru-search-display-engine', role:'search display bridge', critical:false, expectItems:false, params:{ q:'igdc audit', query:'igdc audit', limit:'5' } },
-    { key:'global-insight', label:'Global Insight', endpoint:'/.netlify/functions/maru-global-insight-engine', role:'global insight/right panel', critical:false, expectItems:false, params:{ q:'igdc audit', query:'igdc audit', region:'global', limit:'5' } },
+    { key:'global-insight', label:'Global Insight', endpoint:'/.netlify/functions/maru-global-insight-engine', role:'global insight/right panel', critical:false, expectItems:false, params:{ mode:'global-insight', region:'global', limit:'5' } },
     { key:'collector', label:'Collector', endpoint:'/.netlify/functions/collector', role:'auxiliary data feeder', critical:false, expectItems:false, params:{ audit:'1', probe:'1', dryRun:'1', limit:'1' } },
     { key:'planetary', label:'Planetary', endpoint:'/.netlify/functions/planetary-data-connector', role:'planetary connector', critical:false, expectItems:false, params:{ audit:'1', probe:'1', dryRun:'1', q:'igdc audit', limit:'1' } }
   ];
@@ -344,6 +346,7 @@
         rec.version = json.version || val(json,'meta.version',null) || val(json,'engine.version',null) || null;
         rec.reportedOk = json.ok == null ? null : !!json.ok;
         rec.engineMode = json.mode || val(json,'meta.mode',null) || null;
+        rec.probeReady = json.probeReady === true || json.action === 'fast-probe' || val(json,'meta.probeReady',false) === true;
       }
       rec.ok = res.ok && (json ? (json.ok !== false) : true);
       if(!res.ok) { rec.level = res.status >= 500 ? 'fail' : 'warn'; rec.bottleneck = 'HTTP ' + res.status; }
@@ -367,7 +370,7 @@
     if(light.error === 'timeout' || light.bottleneck === 'light-timeout') hints.push('split light query path from full search path and cap internal fan-out for audit/light requests');
     if(supply.error === 'timeout' || supply.bottleneck === 'supply-timeout') hints.push('add front-supply reservoir fallback and page/section prefiltered supply path');
     if((light.status || 0) >= 500 || (supply.status || 0) >= 500) hints.push('inspect server error stack for this engine; add guarded fallback and structured error body');
-    if(target.expectItems && light.ok && row.lightItems <= 0) hints.push('verify item extraction contract: return items/data/results array for search-bank/front-supply requests');
+    if(target.expectItems && light.ok && !light.probeReady && row.lightItems <= 0) hints.push('verify item extraction contract: return items/data/results array for search-bank/front-supply requests');
     if(row.level === 'ok' && !hints.length) hints.push('runtime path is healthy for current probe level');
     if(target.key === 'maru-search') hints.push('MaruSearch CPU should route fast path: query validation → SearchBank/Index first → Sanmaru/global expansion only after first batch');
     if(target.key === 'sanmaru') hints.push('Sanmaru OSAI should keep global web expansion async/non-blocking and return front-supply seed quickly');
@@ -385,7 +388,7 @@
     var pingTimeout = ping.error === 'timeout' || ping.bottleneck === 'ping-timeout';
     var lightTimeout = light.error === 'timeout' || light.bottleneck === 'light-timeout';
     var supplyTimeout = supply && (supply.error === 'timeout' || supply.bottleneck === 'supply-timeout');
-    var noItems = target.expectItems && light.ok && (light.itemCount || 0) <= 0;
+    var noItems = target.expectItems && light.ok && !light.probeReady && (light.itemCount || 0) <= 0;
     if(httpFail){ row.level = critical ? 'fail' : 'warn'; row.bottleneck = 'server-error'; row.diagnosis = 'HTTP 5xx or fetch failure on runtime probe'; }
     else if(pingTimeout){ row.level = 'warn'; row.bottleneck = 'no-fast-ping-or-cold-start'; row.diagnosis = 'ping/health request did not return quickly; engine may be entering heavy path even for audit probe'; }
     else if(lightTimeout){ row.level = critical ? 'warn' : 'warn'; row.bottleneck = 'light-query-timeout'; row.diagnosis = 'light query path is too heavy or waiting on downstream dependency'; }
@@ -399,12 +402,12 @@
   }
   async function probeOneEngineV4(target){
     var phases = {};
-    phases.ping = await probePhase(target, 'ping', {}, 2500);
+    phases.ping = await probePhase(target, 'ping', {}, target.pingTimeoutMs || 2500);
     var pingUsable = phases.ping.ok || phases.ping.status > 0 || phases.ping.error !== 'timeout';
     if(pingUsable){
-      phases.light = await probePhase(target, 'light', target.params || {}, 5000);
+      phases.light = await probePhase(target, 'light', target.params || {}, target.lightTimeoutMs || 5000);
       if(target.critical && phases.light.ok && phases.light.ms < 4500){
-        phases.supply = await probePhase(target, 'supply', target.supplyParams || target.params || {}, 7000);
+        phases.supply = await probePhase(target, 'supply', target.supplyParams || target.params || {}, target.supplyTimeoutMs || 7000);
       }
     } else {
       phases.light = { phase:'light', skipped:true, ok:false, level:'info', bottleneck:'skipped-after-ping-timeout', itemCount:0, ms:null };
