@@ -418,6 +418,7 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
   'Keep names, titles, ranks, honorifics, technical terms, units, numbers, product names, species names, organization names, place names, building names, country names, political parties, and institutions accurate and consistent.',
   'Classify recurring personal names, aliases, nicknames, pet names, call signs, kinship forms, and forms of address from nearby cue context before translating. Keep one canonical target-language form when the same person is clearly being referenced; never turn a proper name into an ordinary phrase or invent a full name without evidence.',
   'For sung lyrics, preserve lyric words only after audible vocal onset. Do not create a caption for instrumental lead-in, melody-only passages, or imagined lyric text.',
+  'For a standalone human laugh, cry, sharp cry, gasp, pain reaction, surprise or admiration interjection, keep only the compact vocal beat. Do not stretch repeated letters or merge it with neighbouring dialogue.',
   'For proper nouns, use the established conventional target-language name when it is well known. Otherwise use a faithful target-language transliteration or the official name form. Never translate the literal component meanings of a proper name into a new descriptive name.',
   'Examples of forbidden literal-name rewriting: do not turn Seoraksan into a phrase meaning Snowy Peak; do not turn Cheonggyecheon into a phrase meaning Blue Stream; do not turn Cheongwadae into a phrase meaning Blue-Tiled House. Use the standard name used in the target language instead.',
   'For Korean output, use established Korean names or accurate Hangul transliteration for foreign names; use standard Korean terminology for official organizations, geography, science, medicine, law, technology, and culture. Do not append an original-script spelling unless it is necessary for a standard established caption form.',
@@ -560,7 +561,11 @@ async function handleReviewSubtitle(id, body) {
   if (!cues.length) return json(422, { ok: false, action: 'review-subtitle', code: 'timed_subtitle_required', error: 'Timed SRT subtitle cues are required.', requestId: id });
   log(id, 'review-subtitle', 'cues=', cues.length, 'target=', targetLang);
   const reviewed = await reviewCueTextsForConsistency(cues, targetLang, body);
-  return json(200, { ok: true, action: 'review-subtitle', targetLang, targetLanguage: targetLang, targetLanguageVerified: targetLang, targetName: TRANSLATION_LANGUAGE_NAMES[targetLang], reviewedSubtitle: reviewed.cues.map((cue) => `${cue.number}\n${cue.timing}\n${cue.text}\n`).join('\n'), cueTotal: reviewed.cues.length, terminologyLedger: reviewed.terminologyLedger, outputPolicy: 'target-language-cues-only-no-retranslation', requestId: id });
+  // A later final review must not expand a compact laugh/cry/scream caption
+  // into a long repeated character sequence. Normalize standalone cues again
+  // at this boundary; spoken dialogue remains untouched.
+  const normalizedReviewedCues = renderCompactNonverbalSubtitleCues(reviewed.cues, targetLang);
+  return json(200, { ok: true, action: 'review-subtitle', targetLang, targetLanguage: targetLang, targetLanguageVerified: targetLang, targetName: TRANSLATION_LANGUAGE_NAMES[targetLang], reviewedSubtitle: normalizedReviewedCues.map((cue) => `${cue.number}\n${cue.timing}\n${cue.text}\n`).join('\n'), cueTotal: normalizedReviewedCues.length, terminologyLedger: reviewed.terminologyLedger, outputPolicy: 'target-language-cues-only-no-retranslation', requestId: id });
 }
 
 function isSameLanguage(sourceLanguage, targetLanguage) {
@@ -875,6 +880,226 @@ function splitSegmentsIntoSubtitleCues(segments, wordRows) {
   return normalizeSegments(shaped, 0);
 }
 
+
+/*
+ * Compact human non-verbal captions
+ * ----------------------------------
+ * Human laughter, crying, screams and pain reactions are subtitle beats, not
+ * dialogue paragraphs.  Keep them to one short, readable line in the target
+ * language.  The classifier accepts only standalone sounds / explicit sound
+ * labels, so normal dialogue such as “하하, 그 말은…” is never rewritten.
+ *
+ * We preserve a small internal marker through direct translation, then render
+ * the final localized caption after the target-language text comes back. This
+ * avoids asking the model to invent long repeated characters and keeps all
+ * original media timestamps intact.
+ */
+const MARU_NONVERBAL_CAPTION_LABELS = Object.freeze({
+  ko: { laughter: '웃음', softLaughter: '작은 웃음', crying: '울음', sobbing: '흐느낌', scream: '비명', pain: '고통 소리', gasp: '숨 들이킴', cough: '기침', sigh: '한숨' },
+  en: { laughter: 'laughter', softLaughter: 'soft laugh', crying: 'crying', sobbing: 'sobbing', scream: 'scream', pain: 'pain', gasp: 'gasp', cough: 'cough', sigh: 'sigh' },
+  zh: { laughter: '笑', softLaughter: '轻笑', crying: '哭泣', sobbing: '抽泣', scream: '尖叫', pain: '疼痛声', gasp: '倒吸气', cough: '咳嗽', sigh: '叹气' },
+  zht: { laughter: '笑', softLaughter: '輕笑', crying: '哭泣', sobbing: '抽泣', scream: '尖叫', pain: '痛呼', gasp: '倒吸氣', cough: '咳嗽', sigh: '嘆氣' },
+  ja: { laughter: '笑い', softLaughter: '小さな笑い', crying: '泣き声', sobbing: 'すすり泣き', scream: '悲鳴', pain: '苦痛の声', gasp: '息をのむ', cough: 'せき', sigh: 'ため息' },
+  es: { laughter: 'risa', softLaughter: 'risita', crying: 'llanto', sobbing: 'sollozo', scream: 'grito', pain: 'dolor', gasp: 'jadeo', cough: 'tos', sigh: 'suspiro' },
+  fr: { laughter: 'rire', softLaughter: 'petit rire', crying: 'pleurs', sobbing: 'sanglot', scream: 'cri', pain: 'douleur', gasp: 'halètement', cough: 'toux', sigh: 'soupir' },
+  de: { laughter: 'Lachen', softLaughter: 'leises Lachen', crying: 'Weinen', sobbing: 'Schluchzen', scream: 'Schrei', pain: 'Schmerz', gasp: 'Keuchen', cough: 'Husten', sigh: 'Seufzen' },
+  ru: { laughter: 'смех', softLaughter: 'тихий смех', crying: 'плач', sobbing: 'рыдание', scream: 'крик', pain: 'боль', gasp: 'вздох', cough: 'кашель', sigh: 'вздох' },
+  pt: { laughter: 'risada', softLaughter: 'risinho', crying: 'choro', sobbing: 'soluço', scream: 'grito', pain: 'dor', gasp: 'suspiro ofegante', cough: 'tosse', sigh: 'suspiro' },
+  it: { laughter: 'risata', softLaughter: 'risatina', crying: 'pianto', sobbing: 'singhiozzo', scream: 'urlo', pain: 'dolore', gasp: 'ansito', cough: 'tosse', sigh: 'sospiro' },
+  ar: { laughter: 'ضحك', softLaughter: 'ضحكة خفيفة', crying: 'بكاء', sobbing: 'نشيج', scream: 'صرخة', pain: 'ألم', gasp: 'شهقة', cough: 'سعال', sigh: 'تنهد' },
+  vi: { laughter: 'cười', softLaughter: 'cười khẽ', crying: 'khóc', sobbing: 'thổn thức', scream: 'thét', pain: 'đau đớn', gasp: 'hít mạnh', cough: 'ho', sigh: 'thở dài' },
+  th: { laughter: 'หัวเราะ', softLaughter: 'หัวเราะเบาๆ', crying: 'ร้องไห้', sobbing: 'สะอื้น', scream: 'กรีดร้อง', pain: 'เจ็บปวด', gasp: 'อ้าปากหายใจ', cough: 'ไอ', sigh: 'ถอนหายใจ' },
+  id: { laughter: 'tawa', softLaughter: 'tawa kecil', crying: 'tangis', sobbing: 'isak tangis', scream: 'teriakan', pain: 'kesakitan', gasp: 'terengah', cough: 'batuk', sigh: 'hela napas' },
+  hi: { laughter: 'हँसी', softLaughter: 'हल्की हँसी', crying: 'रोना', sobbing: 'सिसकी', scream: 'चीख', pain: 'दर्द', gasp: 'हांफना', cough: 'खाँसी', sigh: 'आह' },
+  tr: { laughter: 'gülme', softLaughter: 'hafif gülüş', crying: 'ağlama', sobbing: 'hıçkırık', scream: 'çığlık', pain: 'acı', gasp: 'soluk alma', cough: 'öksürük', sigh: 'iç çekiş' },
+  ta: { laughter: 'சிரிப்பு', softLaughter: 'மெல்லிய சிரிப்பு', crying: 'அழுகை', sobbing: 'விம்மல்', scream: 'அலறல்', pain: 'வலி', gasp: 'மூச்சுத் திணறல்', cough: 'இருமல்', sigh: 'பெருமூச்சு' },
+  sw: { laughter: 'kicheko', softLaughter: 'kicheko kidogo', crying: 'kilio', sobbing: 'kwikwi', scream: 'kilio cha hofu', pain: 'maumivu', gasp: 'mshituko wa pumzi', cough: 'kikohozi', sigh: 'mguno' },
+  ur: { laughter: 'ہنسی', softLaughter: 'ہلکی ہنسی', crying: 'رونا', sobbing: 'سسکی', scream: 'چیخ', pain: 'درد', gasp: 'ہانپنا', cough: 'کھانسی', sigh: 'آہ' },
+  bn: { laughter: 'হাসি', softLaughter: 'হালকা হাসি', crying: 'কান্না', sobbing: 'হেঁচকি কান্না', scream: 'চিৎকার', pain: 'ব্যথা', gasp: 'হাঁফ', cough: 'কাশি', sigh: 'দীর্ঘশ্বাস' },
+  fa: { laughter: 'خنده', softLaughter: 'خنده آرام', crying: 'گریه', sobbing: 'هق‌هق', scream: 'فریاد', pain: 'درد', gasp: 'نفس‌گیری', cough: 'سرفه', sigh: 'آه' },
+  hu: { laughter: 'nevetés', softLaughter: 'halk nevetés', crying: 'sírás', sobbing: 'zokogás', scream: 'sikoly', pain: 'fájdalom', gasp: 'zihálás', cough: 'köhögés', sigh: 'sóhaj' },
+  ms: { laughter: 'ketawa', softLaughter: 'ketawa kecil', crying: 'tangisan', sobbing: 'esakan', scream: 'jeritan', pain: 'kesakitan', gasp: 'tercungap', cough: 'batuk', sigh: 'keluhan' },
+  nl: { laughter: 'gelach', softLaughter: 'zachte lach', crying: 'huilen', sobbing: 'snikken', scream: 'gil', pain: 'pijn', gasp: 'hijgen', cough: 'hoest', sigh: 'zucht' },
+  pl: { laughter: 'śmiech', softLaughter: 'cichy śmiech', crying: 'płacz', sobbing: 'szloch', scream: 'krzyk', pain: 'ból', gasp: 'gwałtowny wdech', cough: 'kaszel', sigh: 'westchnienie' },
+  sv: { laughter: 'skratt', softLaughter: 'litet skratt', crying: 'gråt', sobbing: 'snyftning', scream: 'skrik', pain: 'smärta', gasp: 'flämtning', cough: 'hosta', sigh: 'suck' },
+  tl: { laughter: 'tawa', softLaughter: 'mahinang tawa', crying: 'iyak', sobbing: 'hikbi', scream: 'sigaw', pain: 'kirot', gasp: 'hingal', cough: 'ubo', sigh: 'buntong-hininga' },
+  uk: { laughter: 'сміх', softLaughter: 'тихий сміх', crying: 'плач', sobbing: 'ридання', scream: 'крик', pain: 'біль', gasp: 'задихання', cough: 'кашель', sigh: 'зітхання' },
+  uz: { laughter: 'kulgi', softLaughter: 'yengil kulgi', crying: 'yig‘i', sobbing: 'hichqiriq', scream: 'qichqiriq', pain: 'og‘riq', gasp: 'hansirash', cough: 'yo‘tal', sigh: 'xo‘rsinish' }
+});
+
+const MARU_NONVERBAL_CAPTION_SOUNDS = Object.freeze({
+  ko: { laughter: '하하…', softLaughter: '후후…', crying: '흑흑…', sobbing: '훌쩍…', scream: '아! 아! 아!', pain: '으윽…', gasp: '헉!', cough: '콜록…', sigh: '하아…' },
+  en: { laughter: 'Ha ha…', softLaughter: 'Heh heh…', crying: 'Sob… sob…', sobbing: 'Sniff…', scream: 'Ah! Ah! Ah!', pain: 'Ugh…', gasp: 'Gasp!', cough: 'Cough, cough', sigh: 'Sigh…' },
+  zh: { laughter: '哈哈…', softLaughter: '呵呵…', crying: '呜呜…', sobbing: '抽噎…', scream: '啊！啊！啊！', pain: '呃啊…', gasp: '哈！', cough: '咳咳…', sigh: '唉…' },
+  zht: { laughter: '哈哈…', softLaughter: '呵呵…', crying: '嗚嗚…', sobbing: '抽噎…', scream: '啊！啊！啊！', pain: '呃啊…', gasp: '哈！', cough: '咳咳…', sigh: '唉…' },
+  ja: { laughter: 'はは…', softLaughter: 'ふふ…', crying: 'しくしく…', sobbing: 'ぐすっ…', scream: 'あ！ あ！ あ！', pain: 'うっ…', gasp: 'はっ！', cough: 'ごほっ…', sigh: 'はあ…' }
+});
+
+
+/*
+ * Short emotive interjections are distinct from ordinary dialogue.  They are
+ * used only when the entire cue is a standalone vocal beat or carries an
+ * explicit source label.  A plain “헉” is a gasp; “단말마 / dying gasp” is
+ * reserved for explicit evidence so the subtitle never over-interprets a
+ * speaker’s condition.
+ */
+const MARU_EMOTIVE_CAPTION_LABELS = Object.freeze({
+  ko: { surprise: '놀람', awe: '감탄', sharpScream: '짧은 비명', agonyScream: '고통의 비명', lastGasp: '단말마' },
+  en: { surprise: 'surprise', awe: 'amazement', sharpScream: 'sharp cry', agonyScream: 'agonized scream', lastGasp: 'last gasp' },
+  zh: { surprise: '惊呼', awe: '惊叹', sharpScream: '短促尖叫', agonyScream: '痛苦的尖叫', lastGasp: '临终喘息' },
+  zht: { surprise: '驚呼', awe: '驚嘆', sharpScream: '短促尖叫', agonyScream: '痛苦的尖叫', lastGasp: '臨終喘息' },
+  ja: { surprise: '驚き', awe: '感嘆', sharpScream: '短い悲鳴', agonyScream: '苦痛の悲鳴', lastGasp: '最期のあえぎ' },
+  es: { surprise: 'sorpresa', awe: 'asombro', sharpScream: 'grito breve', agonyScream: 'grito de dolor', lastGasp: 'último aliento' },
+  fr: { surprise: 'surprise', awe: 'émerveillement', sharpScream: 'cri bref', agonyScream: 'cri de douleur', lastGasp: 'dernier souffle' },
+  de: { surprise: 'Schreck', awe: 'Staunen', sharpScream: 'Aufschrei', agonyScream: 'Schmerzensschrei', lastGasp: 'letzter Atemzug' },
+  ru: { surprise: 'испуг', awe: 'восхищение', sharpScream: 'вскрик', agonyScream: 'крик боли', lastGasp: 'последний вздох' },
+  pt: { surprise: 'surpresa', awe: 'admiração', sharpScream: 'grito breve', agonyScream: 'grito de dor', lastGasp: 'último suspiro' },
+  it: { surprise: 'sorpresa', awe: 'meraviglia', sharpScream: 'grido breve', agonyScream: 'grido di dolore', lastGasp: 'ultimo respiro' },
+  ar: { surprise: 'دهشة', awe: 'إعجاب', sharpScream: 'صرخة قصيرة', agonyScream: 'صرخة ألم', lastGasp: 'النَّفَس الأخير' },
+  vi: { surprise: 'ngạc nhiên', awe: 'thán phục', sharpScream: 'tiếng kêu ngắn', agonyScream: 'tiếng thét đau đớn', lastGasp: 'hơi thở cuối' },
+  th: { surprise: 'ตกใจ', awe: 'อุทาน', sharpScream: 'เสียงร้องสั้น', agonyScream: 'เสียงร้องด้วยความเจ็บปวด', lastGasp: 'ลมหายใจสุดท้าย' },
+  id: { surprise: 'terkejut', awe: 'kagum', sharpScream: 'teriakan singkat', agonyScream: 'teriakan kesakitan', lastGasp: 'napas terakhir' },
+  hi: { surprise: 'आश्चर्य', awe: 'विस्मय', sharpScream: 'छोटी चीख', agonyScream: 'दर्द की चीख', lastGasp: 'अंतिम सांस' },
+  tr: { surprise: 'şaşkınlık', awe: 'hayranlık', sharpScream: 'kısa çığlık', agonyScream: 'acı çığlığı', lastGasp: 'son nefes' },
+  ta: { surprise: 'அதிர்ச்சி', awe: 'வியப்பு', sharpScream: 'குறுகிய அலறல்', agonyScream: 'வலியின் அலறல்', lastGasp: 'கடைசி மூச்சு' },
+  sw: { surprise: 'mshangao', awe: 'kustaajabu', sharpScream: 'kilio kifupi', agonyScream: 'kilio cha maumivu', lastGasp: 'pumzi ya mwisho' },
+  ur: { surprise: 'حیرت', awe: 'تعجب', sharpScream: 'مختصر چیخ', agonyScream: 'درد کی چیخ', lastGasp: 'آخری سانس' },
+  bn: { surprise: 'বিস্ময়', awe: 'মুগ্ধতা', sharpScream: 'ছোট চিৎকার', agonyScream: 'ব্যথার চিৎকার', lastGasp: 'শেষ নিঃশ্বাস' },
+  fa: { surprise: 'شگفتی', awe: 'تحسین', sharpScream: 'فریاد کوتاه', agonyScream: 'فریاد درد', lastGasp: 'آخرین نفس' },
+  hu: { surprise: 'meglepetés', awe: 'csodálat', sharpScream: 'rövid sikoly', agonyScream: 'fájdalmas sikoly', lastGasp: 'utolsó lehelet' },
+  ms: { surprise: 'terkejut', awe: 'kagum', sharpScream: 'jeritan pendek', agonyScream: 'jeritan kesakitan', lastGasp: 'nafas terakhir' },
+  nl: { surprise: 'verrassing', awe: 'verwondering', sharpScream: 'korte kreet', agonyScream: 'pijnkreet', lastGasp: 'laatste adem' },
+  pl: { surprise: 'zaskoczenie', awe: 'zachwyt', sharpScream: 'krótki krzyk', agonyScream: 'krzyk bólu', lastGasp: 'ostatnie tchnienie' },
+  sv: { surprise: 'förvåning', awe: 'beundran', sharpScream: 'kort skrik', agonyScream: 'smärtskri', lastGasp: 'sista andetag' },
+  tl: { surprise: 'gulat', awe: 'paghanga', sharpScream: 'maikling sigaw', agonyScream: 'sigaw sa sakit', lastGasp: 'huling hininga' },
+  uk: { surprise: 'здивування', awe: 'захоплення', sharpScream: 'короткий крик', agonyScream: 'крик болю', lastGasp: 'останній подих' },
+  uz: { surprise: 'hayrat', awe: 'qoyil qolish', sharpScream: 'qisqa qichqiriq', agonyScream: 'og‘riq qichqirig‘i', lastGasp: 'so‘nggi nafas' }
+});
+
+const MARU_EMOTIVE_CAPTION_SOUNDS = Object.freeze({
+  ko: { surprise: '어?', awe: '우와!', sharpScream: '악!', agonyScream: '으아악!', lastGasp: '헉…' },
+  en: { surprise: 'Oh!', awe: 'Wow!', sharpScream: 'Ah!', agonyScream: 'Aah!', lastGasp: 'Gasp…' },
+  zh: { surprise: '啊？', awe: '哇！', sharpScream: '啊！', agonyScream: '啊啊！', lastGasp: '哈…' },
+  zht: { surprise: '啊？', awe: '哇！', sharpScream: '啊！', agonyScream: '啊啊！', lastGasp: '哈…' },
+  ja: { surprise: 'えっ！', awe: 'わあ！', sharpScream: 'あっ！', agonyScream: 'ああっ！', lastGasp: 'はっ…' }
+});
+
+function compactEmotiveLabel(kind, lang, baseLabels) {
+  return MARU_EMOTIVE_CAPTION_LABELS[lang]?.[kind]
+    || (kind === 'sharpScream' ? baseLabels.scream : '')
+    || (kind === 'agonyScream' ? baseLabels.pain : '')
+    || (kind === 'lastGasp' ? baseLabels.gasp : '')
+    || (kind === 'surprise' ? baseLabels.gasp : '')
+    || (kind === 'awe' ? 'amazement' : '');
+}
+
+function compactEmotiveSound(kind, lang) {
+  return MARU_EMOTIVE_CAPTION_SOUNDS[lang]?.[kind]
+    || (kind === 'sharpScream' ? 'Ah!' : '')
+    || (kind === 'agonyScream' ? 'Aah!' : '')
+    || (kind === 'lastGasp' ? 'Gasp…' : '')
+    || (kind === 'surprise' ? 'Oh!' : '')
+    || (kind === 'awe' ? 'Wow!' : '');
+}
+
+function classifyDecoratedCompactNonverbal(original) {
+  const match = safeString(original || '').match(/[（(]\s*([^()（）]{1,48})\s*[)）]\s*$/u);
+  if (!match) return null;
+  const label = normalizeStandaloneNonverbalText(match[1]);
+  if (!label) return null;
+  for (const labels of Object.values(MARU_EMOTIVE_CAPTION_LABELS)) {
+    for (const [kind, localized] of Object.entries(labels)) {
+      if (label === normalizeStandaloneNonverbalText(localized)) return { kind };
+    }
+  }
+  return null;
+}
+
+function normalizeStandaloneNonverbalText(value) {
+  return safeString(value || '')
+    .replace(/[\[\(（{][^\]\)）}]{0,80}[\]\)）}]/gu, (part) => ` ${part.slice(1, -1)} `)
+    .replace(/[“”"'`*_~]/gu, ' ')
+    .replace(/[\s\-–—_.,;:!?…，。！？、；：/\\]+/gu, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function classifyStandaloneHumanNonverbal(value) {
+  const original = safeString(value || '').replace(/\s+/gu, ' ').trim();
+  if (!original || original.length > 96) return null;
+  const text = normalizeStandaloneNonverbalText(original);
+  if (!text || text.length > 64) return null;
+  const decorated = classifyDecoratedCompactNonverbal(original);
+  if (decorated) return decorated;
+  // Explicit labels, in common source/target caption languages.
+  if (/^(?:laugh(?:s|ing|ter)?|giggle(?:s|ing)?|chuckle(?:s|ing)?|웃음|웃는다|웃고|笑(?:い|声|聲)?|笑う|笑了|risa|rire|risata|risos|risada|lachen|gelach|nevetés|śmiech|skratt|смех|сміх|ضحك|خنده|हँसी|হাসি|சிரிப்பு|gülme|ketawa|tawa|cười|หัวเราะ|kulgi)$/iu.test(text)) return { kind: 'laughter', variant: /(?:giggle|chuckle|후후|헤헤|hehe|heh|軽笑|輕笑|小さな|soft|quiet|petit|leises|тихий|halka|हल्की|mahinang|yengil)/iu.test(original) ? 'softLaughter' : 'laughter' };
+  if (/^(?:cry(?:ing)?|sob(?:s|bing)?|weep(?:ing)?|whimper(?:ing)?|울음|울다|흐느낌|훌쩍|泣(?:き|く|き声)?|哭(?:泣)?|抽泣|哭泣|llanto|sollozo|pleurs?|sanglot|weinen|schluchzen|плач|рыдани[ея]|بكاء|نشيج|گریه|هق‌?هق|रोना|सिसकी|কান্না|হেঁচকি|அழுகை|விம்மல்|ağlama|hıçkırık|tangis|isak|iyak|hikbi|гір|ридання|yig[‘']i)$/iu.test(text)) return { kind: /(?:sob|sobbing|흐느낌|훌쩍|抽泣|sollozo|sanglot|schluchzen|рыдан|نشيج|هق|सिसकी|হেঁচকি|விம்மல்|hıçkırık|isak|hikbi|ридан|hichq)/iu.test(original) ? 'sobbing' : 'crying' };
+  if (/^(?:agonized scream|scream of pain|pain scream|dying scream|고통(?:의)? 비명|고통의 절규|비명(?: 소리)?|절규|苦痛(?:の)?悲鳴|痛苦(?:的)?尖叫|grito de dolor|cri de douleur|schmerzensschrei|крик боли|صرخة ألم|دर्द की चीख|ব্যথার চিৎকার|acı çığlığı)$/iu.test(text)) return { kind: 'agonyScream' };
+  if (/^(?:last gasp|dying gasp|death rattle|final breath|단말마|임종(?:의)? 숨|마지막 숨|最期のあえぎ|临终喘息|臨終喘息|último aliento|dernier souffle|letzter atemzug|последний вздох|آخرین نفس|अंतिम सांस|শেষ নিঃশ্বাস|so‘nggi nafas)$/iu.test(text)) return { kind: 'lastGasp' };
+  if (/^(?:scream(?:s|ing)?|shriek(?:s|ing)?|yell(?:s|ing)?|비명|짧은 비명|악|아악|悲鳴|叫び|尖叫|尖叫聲|grito|cri|schrei|sikoly|крик|صرخة|فریاد|चीख|চিৎকার|அலறல்|çığlık|teriakan|jeritan|sigaw|qichqiriq)$/iu.test(text)) return { kind: 'sharpScream' };
+  if (/^(?:exclamation|interjection|surprise|startle|astonishment|감탄|감탄사|놀람|놀라움|驚き|驚呼|惊呼|surpresa|surprise|schreck|испуг|دهشة|ngạc nhiên|ตกใจ|terkejut|आश्चर्य|şaşkınlık|বিস্ময়|شگفتی|verrassing|zaskoczenie|förvåning|gulat|здивування|hayrat)$/iu.test(text)) return { kind: 'surprise' };
+  if (/^(?:wow|whoa|woah|ooh|ahh|우와|와|오오|와아|감탄|감탄사|驚嘆|惊叹|感嘆|asombro|émerveillement|staunen|восхищение|admiração|meraviglia|إعجاب|thán phục|อุทาน|kagum|विस्मय|hayranlık|வியப்பு|تعجب|মুগ্ধতা|تحسین|csodálat|verwondering|zachwyt|beundran|paghanga|захоплення|qoyil qolish)$/iu.test(text)) return { kind: 'awe' };
+  if (/^(?:pain|groan(?:s|ing)?|moan(?:s|ing)?|ouch|ow|고통(?: 소리)?|신음|아야|괴로움|苦痛(?:の声)?|痛呼|疼痛声|dolor|douleur|schmerz|dolore|боль|ألم|درد|दर्द|ব্যথা|வலி|acı|kesakitan|kirot|біль|og[‘']riq)$/iu.test(text)) return { kind: 'pain' };
+  if (/^(?:gasp(?:s|ing)?|헉|헉헉|息をのむ|倒吸[气氣]|jadeo|halètement|keuchen|вздох|شهقة|ہانپنا|হাঁফ|மூச்சுத் திணறல்|soluk alma|terengah|hingal|задихання|hansirash)$/iu.test(text)) return { kind: 'gasp' };
+  if (/^(?:cough(?:s|ing)?|기침|콜록|せき|咳嗽|tos|toux|husten|кашель|سعال|کھانسی|खाँसी|কাশি|இருமல்|öksürük|batuk|ubo|кашель|yo[‘']tal)$/iu.test(text)) return { kind: 'cough' };
+  if (/^(?:sigh(?:s|ing)?|한숨|ため息|叹气|嘆氣|suspiro|soupir|seufzen|вздох|تنهد|آہ|आह|দীর্ঘশ্বাস|பெருமூச்சு|iç çekiş|hela napas|buntong-hininga|зітхання|xo[‘']rsinish)$/iu.test(text)) return { kind: 'sigh' };
+
+  // Pure repeated human vocalizations. Require the whole cue to be a sound so
+  // an ordinary spoken sentence can never be mistaken for a sound effect.
+  const compact = text.replace(/\s+/gu, '');
+  if (/^(?:(?:ha){2,}|(?:he){2,}|(?:heh){2,}|(?:ho){2,}|(?:하){2,}|(?:후){2,}|(?:헤){2,}|(?:呵){2,}|(?:哈){2,}|(?:は){2,}|(?:ㅋㅋ)+|(?:ㅎㅎ)+)$/iu.test(compact)) {
+    const soft = /^(?:(?:he){2,}|(?:heh){2,}|(?:ho){2,}|(?:후){2,}|(?:헤){2,}|(?:呵){2,}|(?:ㅎㅎ)+)$/iu.test(compact);
+    return { kind: 'laughter', variant: soft ? 'softLaughter' : 'laughter' };
+  }
+  if (/^(?:(?:sob){2,}|(?:boo){2,}|(?:wah){2,}|(?:waah)+|(?:흑){2,}|(?:훌쩍)+|(?:으앙)+|(?:呜){2,}|(?:嗚){2,}|(?:しく){2,}|(?:えん){2,})$/iu.test(compact)) return { kind: 'crying' };
+  // Distinguish a sharp alarm cry from an extended agony cry without
+  // inventing emotion from a normal spoken sentence.  These patterns only
+  // accept a cue made entirely of the vocalization.
+  if (/^(?:(?:으아악)+|(?:아아악)+|(?:아아아)+|(?:aaah)+|(?:aah)+|(?:ぎゃあ)+|(?:啊啊啊)+)$/iu.test(compact)) return { kind: 'agonyScream' };
+  if (/^(?:(?:악)+|(?:아악)+|(?:a){2,}h*|(?:ah){2,}|(?:으악)+|(?:ぎゃ)+|(?:啊呀)+)$/iu.test(compact)) return { kind: 'sharpScream' };
+  if (/^(?:우와|와아|와|오오|wow|whoa|woah|ooh|わあ|すごい|哇|wow)+$/iu.test(compact)) return { kind: 'awe' };
+  if (/^(?:어|아|오|헉|어머|oh|oops|huh|eh|え|あ|哎|啊)+$/iu.test(compact)) return { kind: 'surprise' };
+  if (/^(?:(?:ow)+|(?:ouch)+|(?:ugh)+|(?:으+윽)+|(?:으윽)+|(?:아야)+|(?:うっ)+|(?:いた)+|(?:哎呀)+|(?:痛)+)$/iu.test(compact)) return { kind: 'pain' };
+  return null;
+}
+
+function nonverbalCaptionLanguage(value) {
+  const lang = normalizeTranslationLanguage(value || '');
+  return Object.prototype.hasOwnProperty.call(MARU_NONVERBAL_CAPTION_LABELS, lang) ? lang : 'en';
+}
+
+function formatCompactNonverbalCaption(signal, language) {
+  const lang = nonverbalCaptionLanguage(language);
+  const kind = safeString(signal?.variant || signal?.kind || '').trim();
+  const labels = MARU_NONVERBAL_CAPTION_LABELS[lang] || MARU_NONVERBAL_CAPTION_LABELS.en;
+  const sounds = MARU_NONVERBAL_CAPTION_SOUNDS[lang] || MARU_NONVERBAL_CAPTION_SOUNDS.en;
+  const label = labels[kind] || labels[signal?.kind] || compactEmotiveLabel(kind, lang, labels) || labels.laughter;
+  const sound = sounds[kind] || sounds[signal?.kind] || compactEmotiveSound(kind, lang) || sounds.laughter;
+  return `${sound} (${label})`;
+}
+
+function annotateStandaloneNonverbalSubtitleCues(segments) {
+  return (Array.isArray(segments) ? segments : []).map((segment) => {
+    const signal = classifyStandaloneHumanNonverbal(segment?.text || '');
+    return signal ? { ...segment, __maruNonverbal: signal } : segment;
+  });
+}
+
+function renderCompactNonverbalSubtitleCues(segments, language) {
+  return (Array.isArray(segments) ? segments : []).map((segment) => {
+    const signal = segment?.__maruNonverbal || classifyStandaloneHumanNonverbal(segment?.text || '');
+    if (!signal) {
+      if (segment && Object.prototype.hasOwnProperty.call(segment, '__maruNonverbal')) {
+        const { __maruNonverbal, ...clean } = segment;
+        return clean;
+      }
+      return segment;
+    }
+    const { __maruNonverbal, ...clean } = segment;
+    return { ...clean, text: formatCompactNonverbalCaption(signal, language) };
+  });
+}
+
 function splitOverlongRenderedSubtitleCues(segments) {
   const shaped = [];
   for (const segment of Array.isArray(segments) ? segments : []) {
@@ -1087,6 +1312,10 @@ async function handleGenerateSubtitle(id, body) {
   // length splitting before target-language translation.
   segments = await refineDialogueTurnsWithAi(id, segments, audibleWords, body);
   segments = splitSegmentsIntoSubtitleCues(segments, audibleWords);
+  // Record only standalone human non-verbal cues. The marker survives the
+  // direct target-language translation and is rendered as a concise caption
+  // after translation without changing this cue’s timeline.
+  segments = annotateStandaloneNonverbalSubtitleCues(segments);
 
   const targetLang = normalizeTranslationLanguage(body.requestedTargetLanguage || body.targetLanguage || body.targetLang || body.language || '');
   const directTarget = body.directTargetLanguage === true || safeString(body.generationMode || '').toLowerCase() === 'selected-target-language-subtitle';
@@ -1103,6 +1332,13 @@ async function handleGenerateSubtitle(id, body) {
     }
     targetSegments = targetSegments.map(({ id, ...segment }) => segment);
   }
+  // Replace standalone human sounds with short comic/webtoon-style captions
+  // only after target-language translation. This prevents repeated-character
+  // overflow while preserving the exact cue timing and all spoken dialogue.
+  targetSegments = renderCompactNonverbalSubtitleCues(
+    targetSegments,
+    directTarget ? targetLang : (sourceLanguageDetected || targetLang || 'en')
+  );
   // The translation model must keep cue ids separate. This last display-only
   // guard still prevents an unusually long target-language line from becoming
   // a single paragraph in the player without changing its timeline order.
