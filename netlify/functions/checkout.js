@@ -1,55 +1,126 @@
 /**
- * checkout.js (Netlify Function)
- * IGDC Unified Checkout Gateway - v2 (production-grade skeleton)
+ * checkout.js
+ * IGDC unified checkout gateway.
  *
- * Deploy path: netlify/functions/checkout.js
- *
- * Supports purposes:
- * - commerce  : internal payment (PG now or later). If PG not enabled -> safe mock.
- * - donation  : donation routing (foundation/mission group). Returns instructions or redirectUrl.
- * - affiliate : external redirect with tracking payload
- * - tracking  : server-side click/view tracking stub
- *
- * Notes:
- * - No secrets in response.
- * - Keys are env-only (Netlify env vars).
- * - Admin toggles can be stored in ./data/pay-config.json (non-secret).
+ * PG safety contract:
+ * - pay-config.js may describe product/donation features, but never enables live PG by itself.
+ * - Live PG requires explicit approval + execution flags + provider bridge configuration.
+ * - Affiliate/tracking remain non-PG routes.
+ * - Donation information may be returned before PG, but no payment session is created.
  */
+"use strict";
+
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-function readJsonIfExists(p) {
+function readJsonIfExists(filePath) {
   try {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
+    if (fs.existsSync(filePath)) return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch (_) {}
   return null;
 }
 
-function getConfig() {
-  const candidates = [
+function loadConfig() {
+  const jsCandidates = [
+    path.join(__dirname, "data", "pay-config.js"),
+    path.join(process.cwd(), "netlify", "functions", "data", "pay-config.js"),
+    path.join(process.cwd(), "functions", "data", "pay-config.js")
+  ];
+
+  for (const filePath of jsCandidates) {
+    try {
+      if (!fs.existsSync(filePath)) continue;
+      delete require.cache[require.resolve(filePath)];
+      const config = require(filePath);
+      if (config && typeof config === "object") return config;
+    } catch (_) {}
+  }
+
+  const jsonCandidates = [
     path.join(__dirname, "data", "pay-config.json"),
     path.join(process.cwd(), "netlify", "functions", "data", "pay-config.json"),
-    path.join(process.cwd(), "functions", "data", "pay-config.json"),
+    path.join(process.cwd(), "functions", "data", "pay-config.json")
   ];
-  for (const p of candidates) {
-    const j = readJsonIfExists(p);
-    if (j) return { configPath: p, config: j };
+
+  for (const filePath of jsonCandidates) {
+    const config = readJsonIfExists(filePath);
+    if (config && typeof config === "object") return config;
   }
-  return { configPath: null, config: {} };
+
+  return {};
 }
 
-function boolEnv(name) {
-  const v = process.env[name];
-  if (!v) return false;
-  return String(v).toLowerCase() === "true" || v === "1" || v === "yes" || v === "on";
+function envBool(name) {
+  const raw = process.env[name];
+  if (raw === undefined) return undefined;
+  return ["1", "true", "yes", "on"].includes(String(raw).trim().toLowerCase());
+}
+
+function textEnv(...names) {
+  for (const name of names) {
+    const value = String(process.env[name] || "").trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+function isHttpsUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:";
+  } catch (_) {
+    return false;
+  }
+}
+
+function resolvePg(config) {
+  const maintenance = envBool("IGDC_MAINTENANCE") ?? (config.maintenance === true);
+  const approved = envBool("IGDC_PG_APPROVED") === true;
+  const executionRequested =
+    (envBool("IGDC_PG_EXECUTION_ENABLED") === true) &&
+    (envBool("PAYMENT_LIVE") === true);
+
+  const rawProvider = textEnv("IGDC_PG_PROVIDER", "PG_PROVIDER");
+  const provider = ["", "auto", "none", "pending"].includes(rawProvider.toLowerCase()) ? "" : rawProvider;
+  const bridgeUrl = textEnv("IGDC_PG_CHECKOUT_BRIDGE_URL");
+  const bridgeToken = textEnv("IGDC_PG_BRIDGE_TOKEN");
+  const bridgeConfigured = isHttpsUrl(bridgeUrl) && Boolean(bridgeToken);
+
+  const executionEnabled =
+    !maintenance &&
+    approved &&
+    executionRequested &&
+    Boolean(provider) &&
+    bridgeConfigured;
+
+  let status = "pending_pg_approval";
+  if (maintenance) status = "maintenance";
+  else if (!approved) status = "pending_pg_approval";
+  else if (!provider) status = "provider_unconfigured";
+  else if (!executionRequested) status = "execution_not_enabled";
+  else if (!bridgeConfigured) status = "provider_adapter_unconfigured";
+  else status = "ready";
+
+  return {
+    status,
+    maintenance,
+    approved,
+    provider: provider || null,
+    bridgeUrl: bridgeConfigured ? bridgeUrl : "",
+    bridgeToken: bridgeConfigured ? bridgeToken : "",
+    executionEnabled
+  };
 }
 
 function corsHeaders(origin) {
-  const allow = (process.env.IGDC_CORS_ALLOW || "").split(",").map(s => s.trim()).filter(Boolean);
-  const ok = !allow.length || (origin && allow.includes(origin));
+  const allow = String(process.env.IGDC_CORS_ALLOW || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const allowedOrigin = !allow.length || (origin && allow.includes(origin)) ? (origin || "*") : "null";
   return {
-    "Access-Control-Allow-Origin": ok ? (origin || "*") : "null",
+    "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers": "Content-Type, X-Idempotency-Key, X-IGDC-Client",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
@@ -59,67 +130,127 @@ function corsHeaders(origin) {
   };
 }
 
-function json(statusCode, obj, headers) {
-  return { statusCode, headers, body: JSON.stringify(obj) };
+function json(statusCode, body, headers) {
+  return { statusCode, headers, body: JSON.stringify(body) };
 }
 
 function safeParse(body) {
-  try { return JSON.parse(body || "{}"); } catch (_) { return {}; }
+  try {
+    const value = JSON.parse(body || "{}");
+    return value && typeof value === "object" ? value : {};
+  } catch (_) {
+    return {};
+  }
 }
 
-function isUrl(u) {
-  try { new URL(u); return true; } catch (_) { return false; }
+function isUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch (_) {
+    return false;
+  }
 }
 
-function clamp(n, min, max) {
-  n = Number(n);
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
+function clamp(value, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return min;
+  return Math.min(max, Math.max(min, numeric));
 }
 
-function id() {
+function createId() {
   return crypto.randomBytes(12).toString("hex");
 }
 
-function sha256(input) {
-  return crypto.createHash("sha256").update(String(input)).digest("hex");
+function sha256(value) {
+  return crypto.createHash("sha256").update(String(value)).digest("hex");
 }
 
-// in-memory soft rate limiter (per function instance)
-const RL = { bucket: new Map() };
-function rateLimit(key, limitPerMin) {
+const RATE_LIMIT = new Map();
+function rateLimit(key, limitPerMinute) {
   const now = Date.now();
   const windowMs = 60 * 1000;
-  const limit = limitPerMin || 60;
-  const ent = RL.bucket.get(key) || { t: now, c: 0 };
-  if (now - ent.t > windowMs) { ent.t = now; ent.c = 0; }
-  ent.c += 1;
-  RL.bucket.set(key, ent);
-  return ent.c <= limit;
+  const limit = Number.isFinite(limitPerMinute) ? limitPerMinute : 120;
+  const entry = RATE_LIMIT.get(key) || { startedAt: now, count: 0 };
+  if (now - entry.startedAt > windowMs) {
+    entry.startedAt = now;
+    entry.count = 0;
+  }
+  entry.count += 1;
+  RATE_LIMIT.set(key, entry);
+  return entry.count <= limit;
 }
 
-function paymentEnabled(config) {
-  const enabled = boolEnv("IGDC_PAY_ENABLED") || config.enabled === true;
-  const maintenance = boolEnv("IGDC_MAINTENANCE") || config.maintenance === true;
-  return { enabled: enabled && !maintenance, maintenance };
-}
-
-function resolveAccounts(config) {
-  // non-sensitive display accounts (actual settlement handled elsewhere)
-  const commerce = config.commerceAccount || { label: "IGDC 종합상사", note: "운영 계좌(관리자 설정)" };
-  const donation = config.donationAccounts || {
-    mission: { label: "선교재단", note: "도네이션(선교)" },
-    doctrine: { label: "교리봉사단", note: "도네이션(봉사)" }
+function getDonationTarget(config, requestedTarget) {
+  const donation = config.donation || {};
+  const targets = donation.targets || {};
+  const fallback = donation.defaultTarget || "mission";
+  const target = String(requestedTarget || fallback).trim().toLowerCase();
+  return {
+    target: targets[target] ? target : fallback,
+    account: targets[target] || targets[fallback] || { label: "도네이션", note: "대상 미지정" }
   };
-  return { commerce, donation };
 }
 
-/** Provider stub: add Stripe/Toss/etc when ready */
-async function createPaymentSession(provider, payload) {
-  // IMPORTANT: do not import heavy SDKs unless actually used
-  // Return shape:
-  // { redirectUrl } OR { html } OR { ok:true, mode:"mock" }
-  return { ok: true, mode: "mock", message: "PG 미연동(모의 처리)", echo: payload };
+function applyAffiliateDefaults(config, rawUrl, affiliate) {
+  const url = new URL(rawUrl);
+  const defaults = config.affiliate?.utmDefaults || config.utmDefaults || {};
+  if (defaults.utm_source && !url.searchParams.get("utm_source")) url.searchParams.set("utm_source", defaults.utm_source);
+  if (defaults.utm_medium && !url.searchParams.get("utm_medium")) url.searchParams.set("utm_medium", defaults.utm_medium);
+  if (defaults.utm_campaign && !url.searchParams.get("utm_campaign")) url.searchParams.set("utm_campaign", defaults.utm_campaign);
+  const tagParam = config.affiliate?.tagParam || "tag";
+  if (affiliate?.tag && !url.searchParams.get(tagParam)) url.searchParams.set(tagParam, String(affiliate.tag));
+  return url.toString();
+}
+
+async function createPaymentSession(pg, payload) {
+  // The bridge is the only provider-specific integration point. It must be a trusted,
+  // HTTPS-only server endpoint managed with the approved PG contract.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(pg.bridgeUrl, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${pg.bridgeToken}`,
+        "X-IGDC-Payment-Source": "checkout"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result?.ok === false) {
+      return {
+        ok: false,
+        error: "provider_session_failed",
+        providerStatus: response.status
+      };
+    }
+
+    if (result.redirectUrl && !isHttpsUrl(result.redirectUrl)) {
+      return { ok: false, error: "provider_response_invalid" };
+    }
+
+    if (!result.redirectUrl && !result.html) {
+      return { ok: false, error: "provider_response_invalid" };
+    }
+
+    return {
+      ok: true,
+      mode: result.html ? "modal" : "redirect",
+      redirectUrl: result.redirectUrl || undefined,
+      html: result.html || undefined,
+      provider: pg.provider
+    };
+  } catch (error) {
+    const code = error?.name === "AbortError" ? "provider_timeout" : "provider_unavailable";
+    return { ok: false, error: code };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 exports.handler = async (event) => {
@@ -129,141 +260,159 @@ exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers, body: "" };
   if (event.httpMethod !== "POST") return json(405, { ok: false, error: "method_not_allowed" }, headers);
 
-  const ip = event.headers["x-nf-client-connection-ip"] || event.headers["x-forwarded-for"] || "unknown";
-  if (!rateLimit(ip, Number(process.env.IGDC_RPM || 120))) {
+  const ip =
+    event.headers?.["x-nf-client-connection-ip"] ||
+    event.headers?.["x-forwarded-for"] ||
+    "unknown";
+
+  if (!rateLimit(String(ip).split(",")[0].trim(), Number(process.env.IGDC_RPM || 120))) {
     return json(429, { ok: false, error: "rate_limited" }, headers);
   }
 
-  const { config } = getConfig();
-  const { enabled, maintenance } = paymentEnabled(config);
-  if (!enabled) {
-    return json(503, { ok: false, error: "payment_disabled", maintenance }, headers);
+  const config = loadConfig();
+  const features = config.features || {};
+  const pg = resolvePg(config);
+  const req = safeParse(event.body);
+
+  const method = String(req.method || "card").toLowerCase();
+  const purpose = String(req.purpose || "commerce").toLowerCase();
+  const allowedPurposes = Array.isArray(config.policy?.purposes)
+    ? config.policy.purposes
+    : ["commerce", "donation", "affiliate", "tracking"];
+
+  if (!allowedPurposes.includes(purpose)) {
+    return json(400, { ok: false, error: "purpose_not_allowed" }, headers);
   }
 
-  const req = safeParse(event.body);
-  const method = String(req.method || "card").toLowerCase();
-  const purpose = String(req.purpose || "commerce").toLowerCase(); // commerce|donation|affiliate|tracking
-  const currency = String(req.currency || "KRW").toUpperCase();
-  const amount = clamp(req.amount || 0, 0, 1_000_000_000);
+  const currency = String(req.currency || config.policy?.defaultCurrency || "KRW").toUpperCase();
+  const maxAmount = Number(config.policy?.maxAmount || 1_000_000_000);
+  const amount = clamp(req.amount || 0, 0, maxAmount);
   const title = String(req.title || "").slice(0, 120);
   const source = String(req.source || "").slice(0, 200);
-  const meta = (req.meta && typeof req.meta === "object") ? req.meta : {};
-  const affiliate = (req.affiliate && typeof req.affiliate === "object") ? req.affiliate : null;
+  const meta = req.meta && typeof req.meta === "object" ? req.meta : {};
+  const affiliate = req.affiliate && typeof req.affiliate === "object" ? req.affiliate : null;
 
-  // idempotency: client can pass X-Idempotency-Key; we hash it with payload signature
-  const idem = event.headers["x-idempotency-key"] || event.headers["X-Idempotency-Key"] || "";
-  const sig = sha256(JSON.stringify({ method, purpose, currency, amount, title, source, meta, affiliate }));
-  const requestId = id();
-  const orderId = "IGDC-" + new Date().toISOString().slice(0,10).replace(/-/g,"") + "-" + requestId.slice(0,8);
+  const requestId = createId();
+  const orderId = `IGDC-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${requestId.slice(0, 8)}`;
+  const idem = event.headers?.["x-idempotency-key"] || event.headers?.["X-Idempotency-Key"] || "";
+  const payloadHash = sha256(JSON.stringify({ method, purpose, currency, amount, title, source, meta, affiliate }));
 
-  // Light audit log (no secrets)
   console.log("[IGDC:CHECKOUT]", JSON.stringify({
-    requestId, orderId, purpose, method, amount, currency, title, source,
+    requestId,
+    orderId,
+    purpose,
+    method,
+    amount,
+    currency,
+    source,
     ip: String(ip).split(",")[0].trim(),
-    idem: idem ? sha256(idem) : null
+    payloadHash,
+    idempotencyKeyHash: idem ? sha256(idem) : null,
+    pgStatus: pg.status
   }));
 
-  // --- 목적별 분기 ---
   if (purpose === "affiliate") {
-    const url = affiliate?.url || req.url || req.href || "";
-    if (!url || !isUrl(url)) {
-      return json(400, { ok: false, error: "affiliate_url_missing" }, headers);
+    if (features.affiliate !== true) {
+      return json(503, { ok: false, error: "affiliate_disabled" }, headers);
     }
 
-    // optional: attach utm defaults (server-side)
-    let redirectUrl = url;
-    try {
-      const u = new URL(url);
-      const utm = config.utmDefaults || {};
-      if (utm.source && !u.searchParams.get("utm_source")) u.searchParams.set("utm_source", utm.source);
-      if (utm.medium && !u.searchParams.get("utm_medium")) u.searchParams.set("utm_medium", utm.medium);
-      if (utm.campaign && !u.searchParams.get("utm_campaign")) u.searchParams.set("utm_campaign", utm.campaign);
-      if (affiliate?.tag && !u.searchParams.get("tag")) u.searchParams.set("tag", affiliate.tag);
-      redirectUrl = u.toString();
-    } catch (_) {}
+    const rawUrl = affiliate?.url || req.url || req.href || "";
+    if (!rawUrl || !isUrl(rawUrl)) {
+      return json(400, { ok: false, error: "affiliate_url_missing" }, headers);
+    }
 
     return json(200, {
       ok: true,
       mode: "redirect",
+      purpose,
       orderId,
       requestId,
-      redirectUrl
+      redirectUrl: applyAffiliateDefaults(config, rawUrl, affiliate)
     }, headers);
   }
 
   if (purpose === "tracking") {
-    // Server-side tracking stub (expand later to DB/log pipeline)
+    if (features.tracking !== true) {
+      return json(503, { ok: false, error: "tracking_disabled" }, headers);
+    }
+
     console.log("[IGDC:TRACK]", JSON.stringify({ requestId, orderId, title, source, meta }));
-    return json(200, { ok: true, mode: "tracked", orderId, requestId }, headers);
+    return json(200, { ok: true, mode: "tracked", purpose, orderId, requestId }, headers);
   }
 
   if (purpose === "donation") {
-    const { donation } = resolveAccounts(config);
-
-    // choose target: mission or doctrine (default mission)
-    const target = String(meta.donationTarget || meta.target || "mission").toLowerCase();
-    const account = donation[target] || donation.mission || { label: "도네이션", note: "대상 미지정" };
-
-    // If admin provided a donationRedirectUrl, use it (e.g., hosted donation page)
-    if (config.donationRedirectUrl && isUrl(config.donationRedirectUrl)) {
-      return json(200, {
-        ok: true,
-        mode: "redirect",
-        purpose: "donation",
-        orderId,
-        requestId,
-        redirectUrl: config.donationRedirectUrl
-      }, headers);
+    if (features.donation !== true) {
+      return json(503, { ok: false, error: "donation_disabled" }, headers);
     }
 
-    // Otherwise return instructions (non-sensitive display data)
-    return json(200, {
-      ok: true,
-      mode: "donation",
-      purpose: "donation",
-      orderId,
-      requestId,
-      donation: {
-        target,
-        account,
-        amount,
-        currency,
-        title: title || "도네이션"
-      },
-      message: "도네이션 안내(표시용). 실제 입금/정산은 운영 정책에 따라 처리됩니다."
+    if (!pg.executionEnabled) {
+      const donation = getDonationTarget(config, meta.donationTarget || meta.target);
+      return json(200, {
+        ok: true,
+        mode: "donation_information",
+        purpose,
+        orderId,
+        requestId,
+        pg: { status: pg.status, executionEnabled: false },
+        donation: {
+          target: donation.target,
+          account: donation.account,
+          amount,
+          currency,
+          title: title || "도네이션"
+        },
+        message: "PG 승인 전에는 도네이션 결제 세션을 만들지 않습니다."
+      }, headers);
+    }
+  }
+
+  if (purpose === "commerce" && features.commerce !== true) {
+    return json(503, { ok: false, error: "commerce_disabled" }, headers);
+  }
+
+  if (!pg.executionEnabled) {
+    return json(503, {
+      ok: false,
+      error: "pg_pending_approval",
+      pg: {
+        status: pg.status,
+        approvalRequired: !pg.approved,
+        provider: pg.provider
+      }
     }, headers);
   }
 
-  // default: commerce
-  // Capability gates (env/config)
-  const cardEnabled = (boolEnv("IGDC_CARD_ENABLED") || config.card === true) && !!(process.env.STRIPE_SECRET_KEY || process.env.TOSS_SECRET_KEY || process.env.INICIS_KEY);
-
-  if (!cardEnabled) {
-    // Safe mock mode until PG is connected
-    return json(200, {
-      ok: true,
-      mode: "mock",
-      purpose: "commerce",
-      orderId,
-      requestId,
-      message: "PG 미연동(모의 처리). 연동 후 자동으로 실결제 흐름으로 전환됩니다.",
-      echo: { method, amount, currency, title, source }
-    }, headers);
-  }
-
-  // Provider selection
-  const provider = String(process.env.PG_PROVIDER || "auto").toLowerCase();
-
-  const session = await createPaymentSession(provider, {
-    orderId, requestId, method, amount, currency, title, source, meta
+  const session = await createPaymentSession(pg, {
+    orderId,
+    requestId,
+    purpose,
+    method,
+    amount,
+    currency,
+    title,
+    source,
+    meta,
+    idempotencyKeyHash: idem ? sha256(idem) : null
   });
 
-  // Normalize responses to what igdc-pay understands
-  if (session && session.redirectUrl) {
-    return json(200, { ok: true, mode: "redirect", orderId, requestId, redirectUrl: session.redirectUrl }, headers);
+  if (!session.ok) {
+    return json(502, {
+      ok: false,
+      error: session.error || "provider_session_failed",
+      orderId,
+      requestId,
+      provider: pg.provider
+    }, headers);
   }
-  if (session && session.html) {
-    return json(200, { ok: true, mode: "modal", orderId, requestId, html: session.html }, headers);
-  }
-  return json(200, Object.assign({ orderId, requestId }, session || { ok:false, error:"provider_error" }), headers);
+
+  return json(200, {
+    ok: true,
+    mode: session.mode,
+    purpose,
+    orderId,
+    requestId,
+    provider: session.provider,
+    redirectUrl: session.redirectUrl,
+    html: session.html
+  }, headers);
 };

@@ -1,75 +1,45 @@
 // netlify/functions/update-pay-config.js
-// Admin-only config updater (toggle controller)
+// PG approval-preparation safety gate.
+//
+// Netlify function files are deployed read-only. This endpoint intentionally does not
+// claim to persist runtime payment settings. PG state is controlled only by protected
+// environment variables and the approved provider bridge.
 
-const fs = require("fs");
-const path = require("path");
+"use strict";
+
+function response(statusCode, body) {
+  return {
+    statusCode,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
+    },
+    body: JSON.stringify(body)
+  };
+}
 
 exports.handler = async function (event) {
-  try {
-    if (event.httpMethod !== "POST") {
-      return {
-        statusCode: 405,
-        body: JSON.stringify({ error: "Method Not Allowed" })
-      };
-    }
-
-    let body;
-    try {
-      body = JSON.parse(event.body || "{}");
-    } catch (e) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "Invalid JSON" })
-      };
-    }
-
-    // Allow only expected fields
-    const incoming = {
-      enabled: !!body.enabled,
-      features: {
-        commerce: !!body.features?.commerce,
-        donation: !!body.features?.donation,
-        affiliate: !!body.features?.affiliate
-      }
-    };
-
-    const configPath = path.join(__dirname, "data", "pay-config.js");
-
-    let current = {};
-    try {
-      delete require.cache[require.resolve("./data/pay-config.js")];
-      current = require("./data/pay-config.js");
-    } catch (e) {
-      current = {};
-    }
-
-    const updated = {
-      ...current,
-      ...incoming,
-      features: {
-        ...(current.features || {}),
-        ...(incoming.features || {})
-      }
-    };
-
-    const fileContent = `module.exports = ${JSON.stringify(updated, null, 2)};
-`;
-
-    fs.writeFileSync(configPath, fileContent, "utf8");
-
+  if (event.httpMethod === "OPTIONS") {
     return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ok: true, updated })
-    };
-
-  } catch (err) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({
-        error: "update-failed",
-        message: err.message
-      })
+      statusCode: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Cache-Control": "no-store"
+      },
+      body: ""
     };
   }
+
+  if (event.httpMethod !== "POST") {
+    return response(405, { ok: false, error: "method_not_allowed" });
+  }
+
+  return response(409, {
+    ok: false,
+    error: "runtime_payment_config_immutable",
+    pgStatus: "pending_configuration",
+    message: "결제 설정은 배포 환경변수와 승인된 PG 연결 경로에서만 변경됩니다."
+  });
 };
