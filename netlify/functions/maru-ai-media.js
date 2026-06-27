@@ -757,6 +757,123 @@ function wordRowsForSegment(segment, wordRows) {
   });
 }
 
+
+/*
+ * Sentence-first timing recovery
+ * ------------------------------
+ * Whisper may return one acoustic segment containing several complete
+ * sentences or fast alternating replies.  A subtitle must not keep those
+ * sentences in one on-screen cue merely because the acoustic pause is short.
+ * We copy sentence-ending punctuation from the segment transcript onto the
+ * corresponding timed word boundary, then the deterministic splitter creates
+ * one cue per spoken sentence.  This uses only existing words and their
+ * timestamps; it never invents timing or text.
+ */
+function countNonSpaceUnits(value) {
+  return Array.from(safeString(value || '').replace(/\s+/gu, '')).length;
+}
+
+function terminalUnitTargetsFromTranscript(value) {
+  const source = safeString(value || '').replace(/\r/g, '').trim();
+  if (!source) return [];
+  const targets = [];
+  let units = 0;
+  const chars = Array.from(source);
+  for (let index = 0; index < chars.length; index += 1) {
+    const ch = chars[index];
+    if (!/\s/u.test(ch)) units += 1;
+    if (/[.!?…。！？]/u.test(ch)) {
+      // Consume a run such as "?!" / "..." as one sentence end.
+      while (index + 1 < chars.length && /[.!?…。！？]/u.test(chars[index + 1])) {
+        index += 1;
+        if (!/\s/u.test(chars[index])) units += 1;
+      }
+      targets.push(units);
+    }
+  }
+  return targets.filter((target, index, list) => target > 0 && (index === 0 || target > list[index - 1]));
+}
+
+function subtitleComparableToken(value) {
+  return safeString(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, '');
+}
+
+function directSentenceEndWordIndexes(segmentText, words) {
+  const tokens = safeString(segmentText || '').trim().match(/\S+/gu) || [];
+  const indexes = [];
+  let cursor = 0;
+  for (const token of tokens) {
+    const terminal = isSubtitleTerminal(token);
+    const wanted = subtitleComparableToken(token);
+    if (!wanted) continue;
+    let found = -1;
+    for (let index = cursor; index < Math.min(words.length, cursor + 6); index += 1) {
+      const actual = subtitleComparableToken(words[index]?.text || '');
+      if (actual && (actual === wanted || actual.endsWith(wanted) || wanted.endsWith(actual))) { found = index; break; }
+    }
+    if (found < 0) continue;
+    if (terminal) indexes.push(found);
+    cursor = found + 1;
+  }
+  return Array.from(new Set(indexes)).sort((a, b) => a - b);
+}
+
+function applyTranscriptSentenceEndsToTimedWords(segment, timedWords) {
+  const sourceWords = Array.isArray(timedWords) ? timedWords : [];
+  const targets = terminalUnitTargetsFromTranscript(segment?.text || '');
+  if (!sourceWords.length || !targets.length) return sourceWords;
+  const words = sourceWords.map((word) => ({ ...word, text: safeString(word?.text || '').trim() }));
+  const directIndexes = directSentenceEndWordIndexes(segment?.text || '', words);
+  const applied = new Set();
+  for (const index of directIndexes) {
+    if (index >= 0 && index < words.length && words[index].text && !isSubtitleTerminal(words[index].text)) {
+      words[index].text = `${words[index].text}.`;
+      applied.add(index);
+    }
+  }
+  // For transcripts whose word timestamps omit or tokenize words differently
+  // (notably unspaced scripts), fall back to proportional matching only for
+  // sentence endings that could not be directly aligned by lexical token.
+  if (directIndexes.length >= targets.length) return words;
+  const totalTranscriptUnits = Math.max(1, countNonSpaceUnits(segment?.text || ''));
+  const totalTimedUnits = Math.max(1, words.reduce((sum, word) => sum + Math.max(1, countNonSpaceUnits(word?.text || '')), 0));
+  let cumulative = 0;
+  let cursor = 0;
+  for (const target of targets) {
+    const targetTimedUnits = Math.max(1, Math.round((target / totalTranscriptUnits) * totalTimedUnits));
+    while (cursor < words.length - 1 && cumulative + Math.max(1, countNonSpaceUnits(words[cursor].text)) < targetTimedUnits) {
+      cumulative += Math.max(1, countNonSpaceUnits(words[cursor].text));
+      cursor += 1;
+    }
+    const text = words[cursor].text;
+    if (text && !isSubtitleTerminal(text) && !applied.has(cursor)) words[cursor].text = `${text}.`;
+  }
+  return words;
+}
+
+function splitTextIntoTerminalSubtitleSentences(value) {
+  const source = safeString(value || '').replace(/\s+/gu, ' ').trim();
+  if (!source) return [];
+  const parts = [];
+  let buffer = '';
+  const chars = Array.from(source);
+  for (let index = 0; index < chars.length; index += 1) {
+    const ch = chars[index];
+    buffer += ch;
+    if (!/[.!?…。！？]/u.test(ch)) continue;
+    while (index + 1 < chars.length && /[.!?…。！？]/u.test(chars[index + 1])) buffer += chars[++index];
+    while (index + 1 < chars.length && /["'”’）\]\}]/u.test(chars[index + 1])) buffer += chars[++index];
+    const part = buffer.trim();
+    if (part) parts.push(part);
+    buffer = '';
+  }
+  if (buffer.trim()) parts.push(buffer.trim());
+  return parts;
+}
+
 function cueFromTimedWordRange(segment, words, fromIndex, toIndex) {
   const first = words[fromIndex], last = words[toIndex];
   if (!first || !last) return null;
@@ -770,7 +887,8 @@ function cueFromTimedWordRange(segment, words, fromIndex, toIndex) {
 }
 
 function splitTimedSegmentIntoSubtitleCues(segment, wordRows) {
-  const words = wordRowsForSegment(segment, wordRows);
+  const rawWords = wordRowsForSegment(segment, wordRows);
+  const words = applyTranscriptSentenceEndsToTimedWords(segment, rawWords);
   if (words.length < 2) return [];
 
   const originalUnits = subtitleTextUnits(segment?.text);
@@ -799,7 +917,11 @@ function splitTimedSegmentIntoSubtitleCues(segment, wordRows) {
     const hardLimit = duration >= MARU_SUBTITLE_CUE_RULES.hardMaxSeconds
       || units >= MARU_SUBTITLE_CUE_RULES.hardMaxUnits;
 
-    const shouldBreak = Boolean(next) && (clearSpeakerTurn || (enoughForNaturalBreak && naturalBoundary) || preferredLimit || hardLimit);
+    // A complete spoken sentence/question is always its own subtitle beat.
+    // Do not require a long pause: rapid question → answer exchanges often
+    // have none, yet must never be merged into one on-screen sentence.
+    const terminalBoundary = isSubtitleTerminal(current.text);
+    const shouldBreak = Boolean(next) && (terminalBoundary || clearSpeakerTurn || (enoughForNaturalBreak && naturalBoundary) || preferredLimit || hardLimit);
     if (shouldBreak) {
       const cue = cueFromTimedWordRange(segment, words, from, index);
       if (cue) cues.push(cue);
@@ -850,7 +972,12 @@ function splitUntimedSegmentIntoSubtitleCues(segment) {
   if (!text || duration <= 0.18) return [];
   const byDuration = Math.max(1, Math.ceil(duration / MARU_SUBTITLE_CUE_RULES.preferredMaxSeconds));
   const desiredMaxUnits = Math.max(24, Math.min(MARU_SUBTITLE_CUE_RULES.hardMaxUnits, Math.ceil(subtitleTextUnits(text) / byDuration)));
-  const parts = splitTextAtSafeSubtitleBoundaries(text, desiredMaxUnits);
+  // Even without word timestamps, preserve each complete sentence/question
+  // as an independent subtitle before applying ordinary length wrapping.
+  const sentenceParts = splitTextIntoTerminalSubtitleSentences(text);
+  const parts = sentenceParts.length > 1
+    ? sentenceParts.flatMap((part) => splitTextAtSafeSubtitleBoundaries(part, desiredMaxUnits))
+    : splitTextAtSafeSubtitleBoundaries(text, desiredMaxUnits);
   if (parts.length <= 1) return [];
   const totalUnits = Math.max(1, parts.reduce((sum, part) => sum + subtitleTextUnits(part), 0));
   let cursor = Number(segment.start || 0);
@@ -1146,6 +1273,7 @@ const MARU_AI_TURN_SEGMENTATION_SYSTEM = [
   'For every supplied candidate, choose zero or more zero-based word indexes after which a new subtitle cue must start.',
   'Use only the supplied word boundaries. Never change, paraphrase, translate, delete, reorder, join, or add any word. Never add speaker names or labels.',
   'A question followed by an answer, a short acknowledgement followed by a reply, an interruption, or a clear change of speaking turn must be separate subtitle cues even when the acoustic pause is brief.',
+  'Every complete sentence or question in the supplied transcript must be its own cue when a matching word boundary exists. A sequence such as "How is the weather? Good? It may rain tomorrow. Bring an umbrella. See you later." requires five separate cues, not one paragraph.',
   'Keep a continuous sentence from the same speaker together when it remains a readable subtitle beat. Do not split every word or create fragments without a meaningful utterance boundary.',
   'Use punctuation, discourse flow, response markers, and the timing of the supplied words. Preserve chronological order. Prefer short readable cues, normally no more than two display lines.',
   'When uncertain, return fewer breaks rather than inventing a speaker change. Do not include commentary, explanations, markdown, timestamps, or any keys other than segments, id, and breakAfter.'
@@ -1186,10 +1314,15 @@ function isAiTurnSegmentationCandidate(segment, wordRows) {
   const responseSignals = dialogueResponseSignalCount(text);
   const provisional = splitTimedSegmentIntoSubtitleCues(segment, wordRows);
   const provisionalCount = provisional.length || 1;
+  // Run the AI reviewer for any multi-sentence segment, not only when the
+  // local splitter has visibly failed. This catches rapid alternating replies
+  // whose punctuation/word timing arrives unevenly from the recognizer.
+  const multiSentenceDialogue = terminalMarks >= 2 && words.length >= 4;
   const likelyUnsplitDialogue = terminalMarks >= 2 && provisionalCount < Math.min(terminalMarks, 4);
   const compactQuestionAnswer = terminalMarks >= 1 && responseSignals >= 2 && provisionalCount < 2;
+  const responseChainWithoutPunctuation = responseSignals >= 2 && words.length >= 6 && provisionalCount < 3;
   const longUnbrokenBeat = duration >= MARU_AI_TURN_RULES.longSingleBeatSeconds && provisionalCount < 2 && words.length >= 8;
-  if (!likelyUnsplitDialogue && !compactQuestionAnswer && !longUnbrokenBeat) return null;
+  if (!multiSentenceDialogue && !likelyUnsplitDialogue && !compactQuestionAnswer && !responseChainWithoutPunctuation && !longUnbrokenBeat) return null;
   return { segment, words, text, duration, terminalMarks };
 }
 
