@@ -49,6 +49,7 @@
 /api/igdc/core/inflow        /.netlify/functions/igdc-core-inflow        200
 /api/igdc/donations/recent   /.netlify/functions/igdc-donations-recent   200
 /api/feed                    /.netlify/functions/feed                    200
+/api/igdc/income/summary      /.netlify/functions/igdc-income-summary       200
 /api/*                       /.netlify/functions/:splat                  200
 
 
