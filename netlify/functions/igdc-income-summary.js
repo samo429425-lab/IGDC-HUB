@@ -1,102 +1,139 @@
 /**
- * IGDC income summary (read-only)
+ * IGDC confirmed non-PG income summary (read-only)
  *
  * Public contract: /api/igdc/income/summary
  *
- * This function intentionally does not initiate payment, settlement, payout,
- * order creation, or ledger writes. Before operational revenue sources are
- * connected, it returns a stable zero-valued summary rather than estimated
- * snapshot revenue. That prevents the admin dashboard from presenting sample
- * or projected figures as realized income.
+ * This function reports only durable rows already recorded in inflow_ledger by
+ * a signed affiliate conversion callback or protected settlement statement
+ * import. It does not read snapshot estimates, create an order, execute PG,
+ * settle a payout, or write to the ledger.
  */
 "use strict";
 
-const RevenueEngine = require("./revenue-engine");
+const DASHBOARD_KEYS = ["social","video","platform","distribution","donation","tour","ads","misc"];
+const TABLE = process.env.LEDGER_TABLE || process.env.LEGER_TABLE || "inflow_ledger";
+const KRW_PER_USD = Number(process.env.IGDC_FX_KRW_PER_USD || 1300);
+const WINDOW_DAYS = Math.max(31, Number(process.env.IGDC_INCOME_SUMMARY_WINDOW_DAYS || 366) || 366);
 
-const DASHBOARD_KEYS = [
-  "social",
-  "video",
-  "platform",
-  "distribution",
-  "donation",
-  "tour",
-  "ads",
-  "misc"
-];
-
-function json(statusCode, body) {
+function json(statusCode, body){
   return {
     statusCode,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store, max-age=0",
-      "x-content-type-options": "nosniff"
+    headers:{
+      "content-type":"application/json; charset=utf-8",
+      "cache-control":"no-store, max-age=0",
+      "x-content-type-options":"nosniff"
     },
-    body: JSON.stringify(body)
+    body:JSON.stringify(body)
   };
 }
-
-function zeroSummary() {
+function zeroSummary(){
   return DASHBOARD_KEYS.reduce((summary, key) => {
-    summary[key] = { day: 0, week: 0, month: 0, year: 0, total: 0 };
+    summary[key] = { day:0, week:0, month:0, year:0, total:0 };
     return summary;
   }, {});
 }
-
-function query(event) {
-  return (event && event.queryStringParameters) || {};
+function lower(value){ return String(value == null ? "" : value).trim().toLowerCase(); }
+function number(value){ const n=Number(value); return Number.isFinite(n) ? n : 0; }
+function toUsd(amount, currency){
+  const c=lower(currency || "usd");
+  if(c === "usd") return number(amount);
+  if(c === "krw") return number(amount) / KRW_PER_USD;
+  return null;
+}
+function bucketFor(row){
+  const text=[row && row.kind, row && row.source, row && row.channel, row && row.note].map(lower).join(" ");
+  if(/donation|donate|후원|기부/.test(text)) return "donation";
+  if(/affiliate|referral|commission|brokerage|seller/.test(text)) return "distribution";
+  if(/adsense|advert| ad |youtube|display_ad|ad_settlement/.test(" "+text+" ")) return "ads";
+  if(/tour|travel|hotel|flight|관광|여행/.test(text)) return "tour";
+  if(/media|movie|drama|video|watch/.test(text)) return "video";
+  if(/social|instagram|facebook|tiktok|youtube_channel|x\.com|twitter/.test(text)) return "social";
+  if(/platform|subscription|license|service/.test(text)) return "platform";
+  return "misc";
+}
+function periods(ts, now){
+  const time=Date.parse(ts || "");
+  if(!Number.isFinite(time)) return { day:false, week:false, month:false, year:false };
+  const delta=Math.max(0, now-time);
+  return {
+    day:delta <= 24*60*60*1000,
+    week:delta <= 7*24*60*60*1000,
+    month:delta <= 31*24*60*60*1000,
+    year:delta <= 366*24*60*60*1000
+  };
+}
+async function readLedger(){
+  const base=String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
+  const key=process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if(!base || !key) return { ok:false, unconfigured:true, rows:[] };
+  const from=new Date(Date.now()-WINDOW_DAYS*24*60*60*1000).toISOString();
+  const url=base + `/rest/v1/${encodeURIComponent(TABLE)}?` + [
+    "select=ts,source,kind,amount,ccy,channel,note",
+    `ts=gte.${encodeURIComponent(from)}`,
+    "order=ts.desc",
+    "limit=5000"
+  ].join("&");
+  const res=await fetch(url,{ method:"GET", headers:{apikey:key,Authorization:`Bearer ${key}`,"content-type":"application/json"} });
+  if(!res.ok) return { ok:false, unconfigured:false, error:`Supabase HTTP ${res.status}`, rows:[] };
+  const data=await res.json();
+  return { ok:true, rows:Array.isArray(data) ? data : [] };
 }
 
-exports.handler = async function handler(event) {
-  const method = String((event && event.httpMethod) || "GET").toUpperCase();
-  if (method !== "GET" && method !== "HEAD") {
-    return json(405, {
-      ok: false,
-      error: "method_not_allowed",
-      message: "Income summary is read-only."
-    });
+exports.handler=async(event)=>{
+  const method=String(event && event.httpMethod || "GET").toUpperCase();
+  if(method !== "GET" && method !== "HEAD") return json(405,{ok:false,error:"method_not_allowed",message:"Income summary is read-only."});
+
+  let source;
+  try { source=await readLedger(); }
+  catch(error){ source={ok:false,unconfigured:false,error:String(error && error.message || error),rows:[]}; }
+
+  const summary=zeroSummary();
+  const now=Date.now();
+  let totalUsd=0;
+  let unconvertedRows=0;
+  let confirmedRows=0;
+
+  for(const row of source.rows || []){
+    const usd=toUsd(row.amount,row.ccy);
+    if(usd === null){ unconvertedRows++; continue; }
+    const bucket=bucketFor(row);
+    const target=summary[bucket] || summary.misc;
+    const active=periods(row.ts,now);
+    if(active.day) target.day += usd;
+    if(active.week) target.week += usd;
+    if(active.month) target.month += usd;
+    if(active.year) target.year += usd;
+    target.total += usd;
+    totalUsd += usd;
+    confirmedRows++;
   }
 
-  const params = query(event);
-  let health = null;
-  try {
-    // Reuse the existing health contract only. No report scan, ledger write,
-    // settlement execution, payout execution, or PG action occurs here.
-    health = await RevenueEngine.runEngine({ action: "health", probe: params.probe === "1" });
-  } catch (error) {
-    health = {
-      ok: false,
-      error: String((error && error.message) || error || "health_unavailable")
-    };
-  }
+  Object.values(summary).forEach(row => {
+    ["day","week","month","year","total"].forEach(key => { row[key]=Number(row[key].toFixed(6)); });
+  });
+  const totalKrw=Math.round(totalUsd*KRW_PER_USD);
+  const dataState=source.unconfigured ? "confirmed_ledger_unconfigured" : (source.ok ? (confirmedRows ? "confirmed_external_income" : "confirmed_ledger_empty") : "confirmed_ledger_unavailable");
 
-  const features = (health && health.features) || {};
-  const pgExecution = features.pgExecution === true;
-  const pgStatus = features.pgStatus || (pgExecution ? "active" : "pending_pg_approval");
-
-  return json(200, {
-    ok: true,
-    status: "ok",
-    endpoint: "/api/igdc/income/summary",
-    generatedAt: new Date().toISOString(),
-    readOnly: true,
-    dryRun: true,
-    settlementExecution: false,
-    payoutExecution: false,
-    pgExecution,
-    pgStatus,
-    currency: "USD",
-    // Only realized, persisted income belongs in this dashboard. Snapshot
-    // estimates and sample cards are intentionally excluded.
-    dataState: "no_realized_income_source_connected",
-    summary: zeroSummary(),
-    totalRevenue: 0,
-    totalRevenueUsd: 0,
-    totalRevenueKrw: 0,
-    source: {
-      engine: (health && health.engine) || "revenue-engine",
-      version: (health && health.version) || null,
-      healthOk: health && health.ok === true
-    }
+  return json(200,{
+    ok:source.ok || source.unconfigured,
+    status:source.ok || source.unconfigured ? "ok" : "source_unavailable",
+    endpoint:"/api/igdc/income/summary",
+    generatedAt:new Date().toISOString(),
+    readOnly:true,
+    // Read-only query: no settlement or payout action is executed here.
+    dryRun:true,
+    settlementExecution:false,
+    payoutExecution:false,
+    pgExecution:false,
+    pgStatus:"pending_pg_approval",
+    currency:"USD",
+    dataState,
+    summary,
+    totalRevenue:totalKrw,
+    totalRevenueUsd:Number(totalUsd.toFixed(6)),
+    totalRevenueKrw:totalKrw,
+    confirmedRows,
+    unconvertedRows,
+    source:{ ledgerTable:TABLE, mode:source.unconfigured ? "unconfigured" : (source.ok ? "supabase" : "supabase_error"), error:source.error || null }
   });
 };

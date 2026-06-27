@@ -1496,7 +1496,10 @@ const CONTRACT_FIELDS = [
   "osaiDiscernment","sanmaruTrust","supplyChain","sanmaruSearchBankContract","searchBankContract","searchBankUnifiedContract","searchBankPipeline","supplyCategory","producerType","officialSource","institutionVerified","producerVerified","directProducerChannel","intermediaryRisk","paymentReady","orderReady","paymentStructureReady","paymentLive","pgExecution","pgStatus","supplyChainReady","frontSupplyAllowed","searchBankEligible","snapshotEligible","indexEligible","trustTier","riskLevel","blockedReason","harmfulContentRisk","illegalSiteRisk","unsafeProductRisk","sanmaruEvidence","acceptedReason","warningReason","trustEvidence","paymentEvidence","producerEvidence","officialEvidence","safetyEvidence",
   // Regional brokerage evidence is retained as source metadata. It is evaluated
   // only by the explicit Distribution Hub front-supply adapter.
-  "distributionMarketCountry","distributionMarketRegion","sellerMarketCountry","sellerRegion","availabilityCountries","availabilityRegions","nationalAvailability","localResponsibilityEvidence","localDistributionEvidence","externalProductUrl","officialProductUrl","externalSellerUrl","marketplaceType","marketplaceClass","largeMarketplace","saleMode","revenueLine","sellerVerified","businessVerified","externalSellerVerified","platformVerified"
+  "distributionMarketCountry","distributionMarketRegion","sellerMarketCountry","sellerRegion","availabilityCountries","availabilityRegions","nationalAvailability","localResponsibilityEvidence","localDistributionEvidence","externalProductUrl","officialProductUrl","externalSellerUrl","marketplaceType","marketplaceClass","largeMarketplace","saleMode","revenueLine","sellerVerified","businessVerified","externalSellerVerified","platformVerified",
+  // Thin non-PG referral contract hook. These fields only preserve explicit
+  // provider-approved affiliate terms from source candidates; no defaults are added.
+  "affiliate","affiliateTrackingUrl","affiliate_tracking_url","affiliateUrl","affiliate_url","affiliateProviderId","affiliateProvider","affiliatePartnerId","affiliatePartner","affiliateProgramId","affiliateProgram","affiliateApproved","affiliateStatus","affiliateClickIdParam","affiliateExpectedConversionRate","affiliateConversionMode"
 ];
 
 function preserveBankContract(item, original){

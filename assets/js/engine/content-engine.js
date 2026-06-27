@@ -193,7 +193,11 @@
     const price = pick(item, ['price','salePrice','amount']);
     const currency = pick(item, ['currency']) || '';
     const cta = pick(item, ['cta','buttonText']) || '자세히 보기';
-    const externalUrl = usableUrl(
+    // A provider-approved affiliate route wins only when snapshot generation
+    // has already verified the explicit non-PG contract. Ordinary seller URLs
+    // keep their original visit behavior and are never converted by default.
+    const affiliateOutboundUrl = usableUrl(pick(item, ['affiliateOutboundUrl','affiliate_outbound_url']));
+    const externalUrl = affiliateOutboundUrl || usableUrl(
       pick(item, ['checkoutUrl','paymentUrl','productUrl','purchaseUrl','orderUrl','detailUrl','contentUrl','pageUrl','url','href','link']) ||
       (item && item.detail && pick(item.detail, ['detailUrl','url'])) ||
       ''
@@ -210,6 +214,8 @@
       currency,
       cta,
       externalUrl,
+      affiliateOutbound: !!affiliateOutboundUrl,
+      affiliateProviderId: item && item.affiliate && item.affiliate.providerId ? String(item.affiliate.providerId) : '',
       page: (ctx && ctx.page) || pick(item, ['page','hub']) || '',
       section: (ctx && ctx.section) || pick(item, ['section','key']) || '',
       raw: item || {}
@@ -273,7 +279,7 @@
     const media = video || img || `<div class="igdc-content-placeholder">이미지 준비 중</div>`;
     const price = data.price ? `<div class="igdc-price">${esc(data.price)} ${esc(data.currency)}</div>` : '';
     const visit = data.externalUrl
-      ? `<a class="igdc-btn" href="${esc(data.externalUrl)}" target="_top" rel="noopener" data-igdc-external="top">${esc(data.cta || '자세히 보기')}</a>`
+      ? `<a class="igdc-btn" href="${esc(data.externalUrl)}" target="_top" rel="noopener" data-igdc-external="top" data-maru-revenue="1" data-item-id="${esc(data.id)}" data-revenue-line="${data.affiliateOutbound ? 'product_affiliate' : 'content_visit'}"${data.affiliateOutbound ? ' data-affiliate-outbound="1"' : ''}${data.affiliateProviderId ? ' data-affiliate-provider="' + esc(data.affiliateProviderId) + '"' : ''}>${esc(data.cta || '자세히 보기')}</a>`
       : `<span class="igdc-btn secondary" aria-disabled="true">연결 준비 중</span>`;
 
     root.innerHTML = `

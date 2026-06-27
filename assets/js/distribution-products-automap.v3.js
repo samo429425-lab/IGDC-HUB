@@ -67,9 +67,13 @@
   function revenue(item,kind){
     try{
       if(window.MaruRevenueTracker&&typeof window.MaruRevenueTracker[kind]==='function'){
+        const affiliateReady=!!(item&&item.affiliateOutboundUrl)||!!(item&&item.affiliate&&item.affiliate.eligible===true);
         window.MaruRevenueTracker[kind](item,{
           service:'distributionhub-regional-brokerage',pageType:'distribution',page:'distribution',
-          section:item.section||item.psom_key||null,revenueLine:'product_affiliate'
+          section:item.section||item.psom_key||null,
+          // Only an explicitly approved provider route is an affiliate signal.
+          // Seller visits without a provider contract remain non-cash traffic signals.
+          revenueLine:affiliateReady?'product_affiliate':'external_seller_visit'
         });
       }
     }catch(_e){}
@@ -105,9 +109,15 @@
       description:pick(item,['description','summary']),
       thumb:pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']),
       image:pick(item,['image','thumbnail','thumb','imageUrl']),
-      url:pick(item,['url','href','link']),
-      href:pick(item,['href','url','link']),
-      link:pick(item,['link','url','href']),
+      url:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','url','href','link']),
+      href:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','href','url','link']),
+      link:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','link','url','href']),
+      affiliateOutboundUrl:pick(item,['affiliateOutboundUrl','affiliate_outbound_url']),
+      affiliate:item&&item.affiliate&&typeof item.affiliate==='object'?item.affiliate:null,
+      trackId:pick(item,['trackId','track_id']) || pick(item,['id','uid','productId','contentId']),
+      revenueLine:pick(item,['revenueLine','revenue_line']),
+      price:pick(item,['price','salePrice','amount']),
+      currency:pick(item,['currency','ccy']),
       section:pick(item,['section','psom_key'])
     };
   }
@@ -138,6 +148,13 @@
 
   function makeCard(item,track){
     const root=document.createElement('div'); root.className='thumb-card';
+    // This renderer already emits its own exact tracker calls. Keep the global
+    // autohook from duplicating the same signals on Distribution Hub cards.
+    root.setAttribute('data-igdc-revenue-manual','1');
+    if(item&&item.id) root.setAttribute('data-item-id',text(item.id));
+    if(item&&item.trackId) root.setAttribute('data-track-id',text(item.trackId));
+    if(item&&item.section) root.setAttribute('data-section',text(item.section));
+    if(item&&item.affiliateOutboundUrl) root.setAttribute('data-affiliate-outbound','1');
     const img=document.createElement('div'); img.className='thumb-img';
     const image=pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']);
     if(image){

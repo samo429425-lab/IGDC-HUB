@@ -8,6 +8,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const NonPgRevenue = require("./lib/nonpg-revenue-contract.core.v1");
 const crypto = require("crypto");
 
 const ROOT = process.cwd();
@@ -706,6 +707,15 @@ function buildTrackingMeta(raw, context) {
 
   if (safeObj(raw.monetization)) meta.monetization = raw.monetization;
   if (safeObj(raw.linkRevenue)) meta.linkRevenue = raw.linkRevenue;
+  // Keep only the public, explicit affiliate contract. A generic external URL
+  // is never promoted into an affiliate margin route.
+  const affiliate = NonPgRevenue.publicAffiliate(raw);
+  if (affiliate) {
+    meta.affiliate = affiliate;
+    if (affiliate.eligible === true && affiliate.providerId && id) {
+      meta.affiliateOutboundUrl = "/.netlify/functions/affiliate-outbound?id=" + encodeURIComponent(id);
+    }
+  }
   if (safeObj(raw.directSale)) meta.directSale = raw.directSale;
   if (safeObj(raw.payment)) meta.payment = raw.payment;
   if (safeObj(raw.revenue)) meta.revenue = raw.revenue;

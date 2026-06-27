@@ -16,8 +16,9 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const NonPgRevenue = require("./lib/nonpg-revenue-contract.core.v1");
 
-const VERSION = "revenue-engine-v1.1.0-nonpg-final";
+const VERSION = "revenue-engine-v1.1.1-nonpg-receipt-contract";
 
 function s(v){ return v == null ? "" : String(v); }
 function low(v){ return s(v).trim().toLowerCase(); }
@@ -192,7 +193,7 @@ function makeLedgerRecord(item, component, estimate){
     amountUsd: component.amountUsd,
     amountKrw: component.amountKrw,
     currency: "USD",
-    status: "estimated_non_pg",
+    status: estimate && estimate.status || "forecast_non_pg",
     provider: item.provider || item.seller || (item.commerce && item.commerce.provider) || "unknown",
     url: item.url || item.link || "#"
   };
@@ -284,8 +285,53 @@ function metricsOf(item){
     watchTimeSec: n(item.watchTimeSec ?? item.watch_time_sec ?? item.watchTime ?? m.watchTimeSec ?? m.watch_time_sec ?? m.watchTime),
     adImpression: n(item.adImpressions ?? item.impressions ?? m.adImpressions ?? m.adImpression ?? m.impressions),
     adClick: n(item.adClicks ?? m.adClicks ?? m.adClick),
-    searchClick: n(item.searchClicks ?? item.searchClick ?? m.searchClicks ?? m.searchClick)
+    searchClick: n(item.searchClicks ?? item.searchClick ?? m.searchClicks ?? m.searchClick),
+    purchases: n(item.purchases ?? item.unitsSold ?? (item.commerce && (item.commerce.purchases ?? item.commerce.unitsSold)) ?? m.purchases ?? m.unitsSold),
+    confirmed: bool(item.confirmed ?? item.revenueConfirmed ?? (item.transaction && item.transaction.confirmed) ?? m.confirmed ?? m.conversion)
   };
+}
+
+function firstDefined(){
+  for(const value of arguments){
+    if(value !== undefined && value !== null && value !== "") return value;
+  }
+  return 0;
+}
+
+function confirmedGross(item, metrics, priceUsd){
+  const raw = item || {};
+  const tx = raw.transaction && typeof raw.transaction === "object" ? raw.transaction : {};
+  const settlement = raw.settlement && typeof raw.settlement === "object" ? raw.settlement : {};
+  const explicit = n(firstDefined(
+    raw.confirmedGrossAmount,
+    raw.confirmedAmount,
+    raw.actualRevenue,
+    tx.confirmedGrossAmount,
+    tx.gross_amount,
+    settlement.confirmedAmount
+  ), 0);
+  if(metrics && metrics.confirmed && explicit > 0) return toUsd(explicit, raw.currency || tx.currency || "USD");
+  if(metrics && metrics.confirmed && metrics.purchases > 0 && priceUsd > 0) return priceUsd * metrics.purchases;
+  return 0;
+}
+
+function confirmedAdRevenue(item){
+  const raw = item || {};
+  const metrics = raw.metrics && typeof raw.metrics === "object" ? raw.metrics : {};
+  const amount = n(firstDefined(
+    raw.confirmedAdRevenue,
+    raw.adRevenueConfirmedAmount,
+    metrics.confirmedAdRevenue,
+    metrics.adRevenueConfirmedAmount
+  ), 0);
+  const confirmed = bool(firstDefined(
+    raw.adRevenueConfirmedFlag,
+    raw.adRevenueConfirmed === true ? true : null,
+    metrics.adRevenueConfirmedFlag,
+    metrics.adRevenueConfirmed === true ? true : null
+  ));
+  if(!confirmed || amount <= 0) return 0;
+  return toUsd(amount, raw.currency || metrics.currency || "USD");
 }
 function inferKind(item){
   const commerce = item.commerce || {};
@@ -355,8 +401,14 @@ function lineHealth(item){
   if(item.monetization && item.monetization.searchClick && item.monetization.searchClick.enabled){
     add("search/click", !!item.monetization.searchClick.trackId, isPlaceholder, "trackId");
   }
-  if(item.linkRevenue && item.linkRevenue.enabled){
-    add("affiliate/link", !!item.linkRevenue.trackId, isPlaceholder || !validUrl(item.url), "trackId/url");
+  const affiliate = NonPgRevenue.affiliateForItem(item);
+  if((item.linkRevenue && item.linkRevenue.enabled) || affiliate.present){
+    add(
+      "affiliate/link",
+      affiliate.eligible === true,
+      isPlaceholder || affiliate.eligible !== true,
+      affiliate.eligible ? "approved provider/tracking URL" : "explicit approved provider/tracking URL required"
+    );
   }
   if(item.directSale && item.directSale.enabled){
     add("directSale", !!(item.directSale.productSku && item.directSale.pgProvider), isPlaceholder, "sku/pgProvider");
@@ -403,74 +455,56 @@ function revenueComponents(item, options = {}){
   function push(type, usd, detail){
     const amountUsd = Math.max(0, n(usd));
     if(amountUsd <= 0) return;
+    const flags = Object.assign({}, detail || {});
+    if(flags.confirmed !== true) flags.confirmed = false;
+    if(flags.projected === undefined) flags.projected = !flags.confirmed;
     components.push(Object.assign({
       type,
       amountUsd,
       amountKrw: fromUsd(amountUsd, "KRW")
-    }, detail || {}));
+    }, flags));
   }
 
+  // Revenue reports must not treat product prices, page views, likes, or generic
+  // clicks as money. They are retained as tracker signals, while cash entries
+  // are recorded only after a confirmed provider conversion/payout.
   const saleRate = kind === "tour" ? tourRate(item, pol) : rateForMarketplace(item, pol);
-  if((kind === "product" || kind === "tour") && priceUsd > 0){
-    push("marketplace_fee", priceUsd * saleRate, { grossUsd: priceUsd, rate: saleRate });
+  const confirmedSaleUsd = confirmedGross(item, metrics, priceUsd);
+  if((kind === "product" || kind === "tour") && confirmedSaleUsd > 0){
+    push("marketplace_fee", confirmedSaleUsd * saleRate, { grossUsd: confirmedSaleUsd, rate: saleRate, confirmed:true });
   }
 
-  if(item.directSale && item.directSale.enabled && priceUsd > 0){
+  if(item.directSale && item.directSale.enabled && confirmedSaleUsd > 0){
     const directRate = saleRate || pol.marketplace.general;
-    push("direct_sale_fee", priceUsd * directRate, { grossUsd: priceUsd, rate: directRate });
+    push("direct_sale_fee", confirmedSaleUsd * directRate, { grossUsd: confirmedSaleUsd, rate: directRate, confirmed:true });
   }
 
-  if(kind === "donation"){
-    const gross = priceUsd || toUsd(n(item.amount || (item.donation && item.donation.amount)), currency);
-    if(gross > 0) push("donation_inflow", gross, { grossUsd: gross, platformFeeRate: 0 });
+  if(kind === "donation" && metrics.confirmed){
+    const gross = confirmedSaleUsd || toUsd(n(item.amount || (item.donation && item.donation.amount)), currency);
+    if(gross > 0) push("donation_inflow", gross, { grossUsd:gross, platformFeeRate:0, confirmed:true });
   }
 
-  const impressions = metrics.adImpression || metrics.view;
-  if(impressions > 0){
-    const cpm = kind === "media" ? pol.advertising.video_cpm_usd : pol.advertising.banner_cpm_usd;
-    push("ad_impression", (impressions / 1000) * cpm, { impressions, cpm });
-  }
+  const confirmedAdUsd = confirmedAdRevenue(item);
+  if(confirmedAdUsd > 0) push("ad_settlement", confirmedAdUsd, { confirmed:true });
 
-  if(metrics.adClick > 0){
-    push("ad_click", metrics.adClick * pol.advertising.cpc_usd, { clicks: metrics.adClick, cpc: pol.advertising.cpc_usd });
-  }
-
-  if(metrics.searchClick > 0 || kind === "search"){
-    const clicks = metrics.searchClick || metrics.click;
-    if(clicks > 0) push("search_click", clicks * pol.click_search.search_cpc_usd, { clicks, cpc: pol.click_search.search_cpc_usd });
-  }
-
-  if(metrics.click > 0){
-    push("general_click", metrics.click * pol.click_search.general_click_usd, { clicks: metrics.click, cpc: pol.click_search.general_click_usd });
-  }
-
-  if(item.linkRevenue && item.linkRevenue.enabled){
-    const rate = n(item.linkRevenue.commission, affiliateRate(item, pol));
-    const conversion = n(item.linkRevenue.conversionRate, pol.click_search.recommend_conversion_rate || 0.05);
-    const clickBase = metrics.click || metrics.searchClick || 1;
-    const baseGross = priceUsd > 0 ? priceUsd : 20;
-    push("affiliate_expected", clickBase * conversion * baseGross * rate, { clicks: clickBase, conversionRate: conversion, rate });
-  }
-
-  if(kind === "media"){
-    const watchUnits = Math.floor(metrics.watchTimeSec / 30);
-    if(watchUnits > 0){
-      const cpm = pol.advertising.video_cpm_usd || 5.0;
-      push("media_watch_time", (watchUnits / 1000) * cpm, { watchTimeSec: metrics.watchTimeSec, units30s: watchUnits, cpm });
-    }
-
-    if(metrics.like > 0){
-      push("media_like_signal", metrics.like * 0.005, { likes: metrics.like });
-    }
-
-    if(metrics.recommend > 0){
-      push("media_recommend_signal", metrics.recommend * 0.01, { recommends: metrics.recommend });
+  const affiliate = NonPgRevenue.affiliateForItem(item);
+  if(affiliate.eligible && affiliate.commissionRate != null && affiliate.expectedConversionRate != null && priceUsd > 0){
+    const clickBase = metrics.click || metrics.searchClick;
+    if(clickBase > 0){
+      push("affiliate_expected", clickBase * affiliate.expectedConversionRate * priceUsd * affiliate.commissionRate, {
+        clicks:clickBase,
+        conversionRate:affiliate.expectedConversionRate,
+        rate:affiliate.commissionRate,
+        providerId:affiliate.providerId,
+        status:"explicit_contract_estimate",
+        confirmed:false,
+        projected:true
+      });
     }
   }
 
-  if(kind === "academic" || low(item.category).includes("academic")){
-    push("academic_access", pol.academic_data.paper_access_usd || 2.0, {});
-  }
+  // Search, social, media watch-time, likes and recommendations remain non-cash
+  // engagement signals until an approved ad/affiliate provider confirms money.
 
   return components;
 }
@@ -521,23 +555,36 @@ function estimateItemRevenue(raw, options = {}){
   const item = normalizeCommerce(raw || {});
   const components = revenueComponents(item, options);
   const health = lineHealth(item);
-  const settlement = settlementSplit(item, components);
-  const totalUsd = components.reduce((a,c) => a + c.amountUsd, 0);
+  const confirmedComponents = components.filter(component => component.confirmed === true);
+  const projectedComponents = components.filter(component => component.confirmed !== true);
+  const settlement = settlementSplit(item, confirmedComponents);
+  const totalUsd = confirmedComponents.reduce((sum, component) => sum + component.amountUsd, 0);
+  const projectedUsd = projectedComponents.reduce((sum, component) => sum + component.amountUsd, 0);
 
   const generatedAt = nowIso();
-  const ledgerRows = components.map(c => makeLedgerRecord(item, c, { generatedAt }));
+  const forecastRows = projectedComponents.map(component => makeLedgerRecord(item, component, { generatedAt, status:"forecast_non_pg" }));
   return Object.assign({}, item, {
     revenueEngine: "revenue-engine",
     revenueVersion: VERSION,
     revenueEstimate: {
       generatedAt,
+      // Compatibility total: this is confirmed/provider-sourced cash only.
       totalUsd,
       totalKrw: fromUsd(totalUsd, "KRW"),
+      confirmedUsd: totalUsd,
+      confirmedKrw: fromUsd(totalUsd, "KRW"),
+      projectedUsd,
+      projectedKrw: fromUsd(projectedUsd, "KRW"),
       currency: "USD",
       components,
+      confirmedComponents,
+      projectedComponents,
       settlement,
       health,
-      ledgerRows,
+      // No local report row is treated as a settled ledger row. Actual rows are
+      // written by a signed provider callback or protected settlement import.
+      ledgerRows: [],
+      forecastRows,
       pgExecution: false,
       pgStatus: "pending_pg_approval"
     }
@@ -553,20 +600,26 @@ function buildSummary(items){
     count: items.length,
     totalUsd: 0,
     totalKrw: 0,
+    projectedUsd: 0,
+    projectedKrw: 0,
     ok: 0,
     warn: 0,
     error: 0,
     byPage: {},
     bySection: {},
     byType: {},
-    byComponent: {}
+    byComponent: {},
+    projectedByComponent: {}
   };
 
   items.forEach(item => {
     const est = item.revenueEstimate || {};
     const total = n(est.totalUsd);
+    const projected = n(est.projectedUsd);
     summary.totalUsd += total;
     summary.totalKrw += n(est.totalKrw);
+    summary.projectedUsd += projected;
+    summary.projectedKrw += n(est.projectedKrw);
 
     const health = est.health || {};
     if(health.status === "error") summary.error++;
@@ -581,18 +634,22 @@ function buildSummary(items){
     summary.bySection[section] = (summary.bySection[section] || 0) + total;
     summary.byType[type] = (summary.byType[type] || 0) + total;
 
-    safeArray(est.components).forEach(c => {
-      summary.byComponent[c.type] = (summary.byComponent[c.type] || 0) + n(c.amountUsd);
+    safeArray(est.components).forEach(component => {
+      const bucket = component.confirmed === true ? summary.byComponent : summary.projectedByComponent;
+      bucket[component.type] = (bucket[component.type] || 0) + n(component.amountUsd);
     });
   });
 
   summary.totalUsd = Number(summary.totalUsd.toFixed(6));
   summary.totalKrw = Math.round(summary.totalKrw);
+  summary.projectedUsd = Number(summary.projectedUsd.toFixed(6));
+  summary.projectedKrw = Math.round(summary.projectedKrw);
 
   Object.keys(summary.byPage).forEach(k => summary.byPage[k] = Number(summary.byPage[k].toFixed(6)));
   Object.keys(summary.bySection).forEach(k => summary.bySection[k] = Number(summary.bySection[k].toFixed(6)));
   Object.keys(summary.byType).forEach(k => summary.byType[k] = Number(summary.byType[k].toFixed(6)));
   Object.keys(summary.byComponent).forEach(k => summary.byComponent[k] = Number(summary.byComponent[k].toFixed(6)));
+  Object.keys(summary.projectedByComponent).forEach(k => summary.projectedByComponent[k] = Number(summary.projectedByComponent[k].toFixed(6)));
 
   return summary;
 }
@@ -661,7 +718,14 @@ function buildReport(inputItems, options = {}){
     totalRevenueUsd: summary.totalUsd,
     breakdown: Object.assign({}, summary.byComponent),
     breakdownKrw: Object.fromEntries(Object.entries(summary.byComponent || {}).map(([k,v]) => [k, fromUsd(v, "KRW")])),
+    // Actual ledger rows are read from the durable ledger endpoint. This report
+    // returns no fabricated settlement rows; optional forecasts are separate.
     ledgerRows: ledgerRows.slice(0, n(options.ledgerLimit, 500)),
+    forecast: {
+      totalUsd: summary.projectedUsd,
+      totalKrw: summary.projectedKrw,
+      breakdown: Object.assign({}, summary.projectedByComponent)
+    },
     income: {
       currency: "KRW",
       rows: incomeRows,
@@ -727,7 +791,7 @@ function trackEvent(payload){
       type: event.type,
       amountUsd: enriched.revenueEstimate.totalUsd,
       amountKrw: enriched.revenueEstimate.totalKrw,
-      status: "accepted_estimated"
+      status: enriched.revenueEstimate.totalUsd > 0 ? "accepted_provider_confirmed_signal" : "accepted_non_cash_signal"
     }
   };
 }
@@ -811,7 +875,8 @@ async function runEngine(payload = {}){
         donation: true,
         mediaWatchTime: true,
         engagementSignals: true,
-        ledgerRowsEstimated: true,
+        confirmedProviderSettlement: true,
+        forecastSeparatedFromLedger: true,
         trustAllowBlockCheck: true,
         weeklyBatchSettlement: true
       }

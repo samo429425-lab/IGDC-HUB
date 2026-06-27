@@ -14,6 +14,7 @@ const path = require("path");
 const crypto = require("crypto");
 const Policy = require("./regional-brokerage-policy.core.v1");
 const Gate = require("./regional-brokerage-front-supply-gate.core.v1");
+const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 
 const SNAPSHOT_FILE = "distribution.snapshot.json";
 const REGISTRY_FILE = "regional-brokerage-outbound.json";
@@ -184,6 +185,9 @@ function makeCard(item, decision, market, region, registry) {
   if (!destination) return null;
   const id = cardId(item, market, region, destination);
   const host = new URL(destination).host.toLowerCase();
+  // Preserve only an explicit, provider-approved affiliate contract.
+  // A generic seller URL or a policy percentage never becomes a claimed margin.
+  const affiliate = NonPgRevenue.publicAffiliate(item);
   registry[id] = {
     id,
     targetUrl: destination,
@@ -193,6 +197,7 @@ function makeCard(item, decision, market, region, registry) {
     revenueLine: "brokerage_referral_lead_ad",
     seller: sellerLabel(item),
     sourceItemId: first(item.id, item.contentId, item.productId),
+    affiliate,
     createdAt: new Date().toISOString()
   };
   return {
@@ -213,7 +218,18 @@ function makeCard(item, decision, market, region, registry) {
     saleMode: "external_brokerage",
     directSale: { enabled: false, policy: "seller_checkout_only" },
     commerce: { mode: "external_seller_referral", sellerCheckout: true, inventoryOwner: "external_seller", fulfilmentOwner: "external_seller", returnsOwner: "external_seller" },
-    monetization: { model: "brokerage_referral_lead_ad", revenueLine: "brokerage_referral_lead_ad", outboundTracking: true },
+    monetization: {
+      model: "brokerage_referral_lead_ad",
+      revenueLine: "brokerage_referral_lead_ad",
+      outboundTracking: true,
+      affiliate: affiliate ? {
+        eligible: affiliate.eligible === true,
+        providerId: affiliate.providerId || null,
+        programId: affiliate.programId || null,
+        commissionRate: affiliate.commissionRate == null ? null : affiliate.commissionRate
+      } : null
+    },
+    affiliate,
     revenueDestination: "external-seller-referral",
     seller: { name: sellerLabel(item), responsibility: "external_seller" },
     countrySupply: {
