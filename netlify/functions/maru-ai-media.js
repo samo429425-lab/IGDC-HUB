@@ -414,7 +414,7 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
   'Return JSON only: {"cues":[{"id":number,"text":string}]}.',
   'Return exactly one non-empty text value for every supplied cue id, in the same order.',
   'Translate dialogue into the authoritative requested target language. Do not output source-language alternatives, notes, explanations, labels, timestamps, cue numbers, markdown, policies, prompts, or instructions.',
-  'Keep each line concise, natural, faithful, and readable at subtitle speed. Preserve the cue meaning and do not invent facts, names, relationships, or context.',
+  'Each supplied cue is one timed subtitle beat. Keep every cue id separate: never merge consecutive cue ids into one paragraph or one long speech block, even when the dialogue is related. Translate each cue as a short, natural subtitle unit that follows its own audio timing. Aim for no more than two short display lines per cue; compact wording is allowed only when it preserves the original meaning, tone, names, and relationship context.',
   'Keep names, titles, ranks, honorifics, technical terms, units, numbers, product names, species names, organization names, place names, building names, country names, political parties, and institutions accurate and consistent.',
   'Classify recurring personal names, aliases, nicknames, pet names, call signs, kinship forms, and forms of address from nearby cue context before translating. Keep one canonical target-language form when the same person is clearly being referenced; never turn a proper name into an ordinary phrase or invent a full name without evidence.',
   'For sung lyrics, preserve lyric words only after audible vocal onset. Do not create a caption for instrumental lead-in, melody-only passages, or imagined lyric text.',
@@ -502,7 +502,7 @@ const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
   'You perform a conservative final editorial consistency review of already translated timed subtitle cues in one target language.',
   'Return JSON only as an object with keys "cues" and "terminologyLedger". "cues" must be an array of objects exactly shaped as {"id":number,"text":string}.',
   'Return one non-empty cue text for every supplied id, in the same order. Do not output timestamps, cue numbers, source-language alternatives, commentary, notes, markdown, policies, prompts, or instructions.',
-  'Do not retranslate or rewrite good subtitle lines. Change text only for a clear typo, a clear inconsistent repeated name or title, a clearly literalized proper name, a clear nonstandard specialist term, or an obvious target-language grammar error.',
+  'Do not retranslate or rewrite good subtitle lines. Change text only for a clear typo, a clear inconsistent repeated name or title, a clearly literalized proper name, a clear nonstandard specialist term, or an obvious target-language grammar error. Preserve every supplied cue as its own timed subtitle beat: never merge, delete, combine, or turn neighbouring cue ids into a paragraph.',
   'Keep established conventional names, official organization and institution names, places, buildings, countries, parties, products, species, ranks, aliases, nicknames, call signs, kinship forms, and recurring personal names consistent. Resolve only clear repeated-name inconsistencies from the supplied cue context; never turn a name into a common phrase, invent a full name, or translate the literal components of a proper name into a newly invented descriptive name.',
   'For medical, scientific, academic, legal, engineering, computing, military, economic, and technical content, use the established professional term in the requested target language as found in reputable reference works, textbooks, standards, and institutional usage. Do not replace precise terminology with informal paraphrase.',
   'Use the supplied terminology ledger only when it clearly matches the same entity or term. If uncertain, preserve the existing established target-language form rather than guessing.',
@@ -684,6 +684,224 @@ function constrainSegmentsToSourceWindow(segments, body) {
   return normalizeSegments(segments, 0).map((segment) => ({ ...segment, start: Math.max(start, Number(segment.start || 0)), end: Math.min(end, Number(segment.end || 0)) })).filter((segment) => segment.end - segment.start >= 0.18);
 }
 
+
+/*
+ * Subtitle cue shaping
+ * --------------------
+ * A transcription segment is not always a subtitle cue.  Some models group
+ * consecutive speakers or several sentences into one segment.  We keep the
+ * source timeline intact but split only inside an existing segment, using
+ * word timing, audible pauses, sentence endings and a conservative duration
+ * ceiling.  This never merges adjacent speakers and never changes the
+ * selected-language / final-review request contracts.
+ */
+const MARU_SUBTITLE_CUE_RULES = Object.freeze({
+  naturalPauseSeconds: 0.42,
+  speakerTurnPauseSeconds: 0.68,
+  preferredMaxSeconds: 4.8,
+  hardMaxSeconds: 6.2,
+  preferredMaxUnits: 52,
+  hardMaxUnits: 72,
+  preferredMaxWords: 12,
+  minimumCueSeconds: 0.36,
+  tailSeconds: 0.08
+});
+
+function subtitleTextUnits(value) {
+  return Array.from(safeString(value || '').replace(/\s+/g, '')).length;
+}
+
+function isSubtitleTerminal(value) {
+  return /[.!?…。！？]+["'”’）\]\}]*$/u.test(safeString(value || '').trim());
+}
+
+function isSubtitleSoftBoundary(value) {
+  return /[,;:，、；：]+["'”’）\]\}]*$/u.test(safeString(value || '').trim());
+}
+
+function hasJoinlessScript(value) {
+  // CJK Han / Japanese usually do not need injected spaces.  Hangul is not
+  // included here because Korean word timestamps need ordinary spaces.
+  return /[\u3400-\u9fff\u3040-\u30ff]/u.test(safeString(value || ''));
+}
+
+function joinSubtitleTimedWords(words) {
+  let text = '';
+  for (const item of Array.isArray(words) ? words : []) {
+    const word = safeString(item?.text || '').trim();
+    if (!word) continue;
+    if (!text) {
+      text = word;
+      continue;
+    }
+    const previous = text.slice(-1);
+    const joinWithoutSpace = /^[,.;:!?…，。！？、；：\]\)\}”’]/u.test(word)
+      || /[\[\(\{“‘]$/u.test(previous)
+      || (hasJoinlessScript(previous) && hasJoinlessScript(word));
+    text += joinWithoutSpace ? word : ` ${word}`;
+  }
+  return text.replace(/\s+([,.;:!?…，。！？、；：])/gu, '$1').replace(/\s+/g, ' ').trim();
+}
+
+function wordRowsForSegment(segment, wordRows) {
+  const start = Number(segment?.start || 0), end = Number(segment?.end || 0);
+  return (Array.isArray(wordRows) ? wordRows : []).filter((word) => {
+    const wordStart = Number(word?.start), wordEnd = Number(word?.end);
+    return Number.isFinite(wordStart) && Number.isFinite(wordEnd)
+      && wordEnd >= start - 0.12 && wordStart <= end + 0.12 && safeString(word?.text || '').trim();
+  });
+}
+
+function cueFromTimedWordRange(segment, words, fromIndex, toIndex) {
+  const first = words[fromIndex], last = words[toIndex];
+  if (!first || !last) return null;
+  const next = words[toIndex + 1];
+  const start = Math.max(Number(segment.start || 0), Number(first.start || segment.start || 0));
+  let end = Math.min(Number(segment.end || 0), Number(last.end || segment.end || 0) + MARU_SUBTITLE_CUE_RULES.tailSeconds);
+  if (next && Number(next.start) > start + 0.18) end = Math.min(end, Number(next.start) - 0.025);
+  if (!(end - start >= 0.18)) end = Math.min(Number(segment.end || 0), start + Math.max(0.18, Number(last.end || start) - start));
+  const text = joinSubtitleTimedWords(words.slice(fromIndex, toIndex + 1));
+  return text && end > start ? { start, end, text } : null;
+}
+
+function splitTimedSegmentIntoSubtitleCues(segment, wordRows) {
+  const words = wordRowsForSegment(segment, wordRows);
+  if (words.length < 2) return [];
+
+  const originalUnits = subtitleTextUnits(segment?.text);
+  const timedText = joinSubtitleTimedWords(words);
+  // Do not replace a reliable transcription segment with a very incomplete
+  // word-timestamp reconstruction.  The untimed splitter below will still
+  // keep it readable when timing data is insufficient.
+  if (!timedText || (originalUnits > 12 && subtitleTextUnits(timedText) < originalUnits * 0.52)) return [];
+
+  const cues = [];
+  let from = 0;
+  for (let index = 0; index < words.length; index += 1) {
+    const first = words[from], current = words[index], next = words[index + 1];
+    const duration = Math.max(0, Number(current.end || 0) - Number(first.start || 0));
+    const text = joinSubtitleTimedWords(words.slice(from, index + 1));
+    const units = subtitleTextUnits(text);
+    const wordCount = index - from + 1;
+    const gap = next ? Math.max(0, Number(next.start || 0) - Number(current.end || 0)) : 0;
+    const enoughForNaturalBreak = duration >= 0.70 || units >= 16 || wordCount >= 4;
+    const clearSpeakerTurn = gap >= MARU_SUBTITLE_CUE_RULES.speakerTurnPauseSeconds
+      && duration >= MARU_SUBTITLE_CUE_RULES.minimumCueSeconds;
+    const naturalBoundary = gap >= MARU_SUBTITLE_CUE_RULES.naturalPauseSeconds || isSubtitleTerminal(current.text) || isSubtitleSoftBoundary(current.text);
+    const preferredLimit = duration >= MARU_SUBTITLE_CUE_RULES.preferredMaxSeconds
+      || units >= MARU_SUBTITLE_CUE_RULES.preferredMaxUnits
+      || wordCount >= MARU_SUBTITLE_CUE_RULES.preferredMaxWords;
+    const hardLimit = duration >= MARU_SUBTITLE_CUE_RULES.hardMaxSeconds
+      || units >= MARU_SUBTITLE_CUE_RULES.hardMaxUnits;
+
+    const shouldBreak = Boolean(next) && (clearSpeakerTurn || (enoughForNaturalBreak && naturalBoundary) || preferredLimit || hardLimit);
+    if (shouldBreak) {
+      const cue = cueFromTimedWordRange(segment, words, from, index);
+      if (cue) cues.push(cue);
+      from = index + 1;
+    }
+  }
+  const tail = cueFromTimedWordRange(segment, words, from, words.length - 1);
+  if (tail) cues.push(tail);
+  return cues.length > 1 ? cues : [];
+}
+
+function splitTextAtSafeSubtitleBoundaries(text, maxUnits) {
+  const source = safeString(text || '').replace(/\s+/g, ' ').trim();
+  if (!source) return [];
+  const pieces = [];
+  let remaining = source;
+  const cap = Math.max(18, Number(maxUnits || MARU_SUBTITLE_CUE_RULES.preferredMaxUnits));
+  while (subtitleTextUnits(remaining) > cap) {
+    let cutAt = -1, unitCount = 0;
+    for (let index = 0; index < remaining.length; index += 1) {
+      const char = remaining[index];
+      if (!/\s/u.test(char)) unitCount += 1;
+      if (unitCount > cap) break;
+      if (/[.!?…。！？,;:，、；：\s]/u.test(char)) cutAt = index + 1;
+    }
+    if (cutAt < 1) {
+      // No word break is available (for example an unspaced transcript). Use
+      // a character boundary rather than leaving an unreadable mega-caption.
+      let seen = 0;
+      cutAt = remaining.length;
+      for (let index = 0; index < remaining.length; index += 1) {
+        if (!/\s/u.test(remaining[index])) seen += 1;
+        if (seen >= cap) { cutAt = index + 1; break; }
+      }
+    }
+    const part = remaining.slice(0, cutAt).trim();
+    if (!part) break;
+    pieces.push(part);
+    remaining = remaining.slice(cutAt).trim();
+  }
+  if (remaining) pieces.push(remaining);
+  return pieces;
+}
+
+function splitUntimedSegmentIntoSubtitleCues(segment) {
+  const duration = Math.max(0, Number(segment?.end || 0) - Number(segment?.start || 0));
+  const text = safeString(segment?.text || '').replace(/\s+/g, ' ').trim();
+  if (!text || duration <= 0.18) return [];
+  const byDuration = Math.max(1, Math.ceil(duration / MARU_SUBTITLE_CUE_RULES.preferredMaxSeconds));
+  const desiredMaxUnits = Math.max(24, Math.min(MARU_SUBTITLE_CUE_RULES.hardMaxUnits, Math.ceil(subtitleTextUnits(text) / byDuration)));
+  const parts = splitTextAtSafeSubtitleBoundaries(text, desiredMaxUnits);
+  if (parts.length <= 1) return [];
+  const totalUnits = Math.max(1, parts.reduce((sum, part) => sum + subtitleTextUnits(part), 0));
+  let cursor = Number(segment.start || 0);
+  return parts.map((part, index) => {
+    const remainingDuration = Math.max(0.18, Number(segment.end || 0) - cursor);
+    const remainingUnits = Math.max(1, totalUnits - parts.slice(0, index).reduce((sum, prior) => sum + subtitleTextUnits(prior), 0));
+    const isLast = index === parts.length - 1;
+    const span = isLast ? remainingDuration : Math.max(0.18, Math.min(remainingDuration - 0.18 * (parts.length - index - 1), duration * (subtitleTextUnits(part) / totalUnits)));
+    const cue = { start: cursor, end: Math.min(Number(segment.end || 0), cursor + span), text: part };
+    cursor = cue.end;
+    return cue;
+  }).filter((cue) => cue.end - cue.start >= 0.18);
+}
+
+function splitSegmentsIntoSubtitleCues(segments, wordRows) {
+  const shaped = [];
+  for (const segment of Array.isArray(segments) ? segments : []) {
+    const timed = splitTimedSegmentIntoSubtitleCues(segment, wordRows);
+    if (timed.length) {
+      shaped.push(...timed);
+      continue;
+    }
+    const fallback = splitUntimedSegmentIntoSubtitleCues(segment);
+    if (fallback.length) shaped.push(...fallback);
+    else shaped.push(segment);
+  }
+  return normalizeSegments(shaped, 0);
+}
+
+function splitOverlongRenderedSubtitleCues(segments) {
+  const shaped = [];
+  for (const segment of Array.isArray(segments) ? segments : []) {
+    const text = safeString(segment?.text || '').replace(/\s+/g, ' ').trim();
+    if (!text || subtitleTextUnits(text) <= MARU_SUBTITLE_CUE_RULES.hardMaxUnits) {
+      shaped.push(segment);
+      continue;
+    }
+    const parts = splitTextAtSafeSubtitleBoundaries(text, MARU_SUBTITLE_CUE_RULES.preferredMaxUnits);
+    if (parts.length <= 1) {
+      shaped.push(segment);
+      continue;
+    }
+    const start = Number(segment.start || 0), end = Number(segment.end || 0), duration = Math.max(0.18, end - start);
+    const totalUnits = Math.max(1, parts.reduce((sum, part) => sum + subtitleTextUnits(part), 0));
+    let cursor = start;
+    for (let index = 0; index < parts.length; index += 1) {
+      const isLast = index === parts.length - 1;
+      const span = isLast ? Math.max(0.18, end - cursor) : Math.max(0.18, duration * (subtitleTextUnits(parts[index]) / totalUnits));
+      const nextEnd = isLast ? end : Math.min(end - 0.18 * (parts.length - index - 1), cursor + span);
+      shaped.push({ ...segment, start: cursor, end: Math.max(cursor + 0.18, nextEnd), text: parts[index] });
+      cursor = Math.max(cursor + 0.18, nextEnd);
+    }
+  }
+  return normalizeSegments(shaped, 0);
+}
+
 async function handleGenerateSubtitle(id, body) {
   const audioBuffer = audioBufferFromPayload(body);
   if (!audioBuffer) return json(400, { ok: false, error: 'No audioBase64/fileBase64 was supplied for subtitle generation.', action: 'generate-subtitle', requestId: id });
@@ -704,6 +922,10 @@ async function handleGenerateSubtitle(id, body) {
   // A defensive guard for pre-existing bad relay behavior: internal prompt text
   // is never allowed to become dialogue in a saved subtitle.
   segments = constrainSegmentsToSourceWindow(dropMaruInstructionLeakSegments(segments), body);
+  // Whisper-style segments can contain several sentences or consecutive
+  // speakers. Turn them into short, independently timed subtitle cues before
+  // target-language translation so no dialogue is displayed as one paragraph.
+  segments = splitSegmentsIntoSubtitleCues(segments, audibleWords);
 
   const targetLang = normalizeTranslationLanguage(body.requestedTargetLanguage || body.targetLanguage || body.targetLang || body.language || '');
   const directTarget = body.directTargetLanguage === true || safeString(body.generationMode || '').toLowerCase() === 'selected-target-language-subtitle';
@@ -720,6 +942,10 @@ async function handleGenerateSubtitle(id, body) {
     }
     targetSegments = targetSegments.map(({ id, ...segment }) => segment);
   }
+  // The translation model must keep cue ids separate. This last display-only
+  // guard still prevents an unusually long target-language line from becoming
+  // a single paragraph in the player without changing its timeline order.
+  targetSegments = splitOverlongRenderedSubtitleCues(targetSegments);
 
   return json(200, {
     ok: true,
