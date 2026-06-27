@@ -5,6 +5,7 @@
  * - Keeps existing JSON subtitle generation contract used by MARU Media Player.
  * - Adds generate-dubbing / generate-speech / text-to-speech / tts action support.
  * - No external npm dependencies required. Node 18+ fetch/Buffer only.
+ * - Sentence timeline patch: local-only cue splitting after transcription; no extra AI request.
  */
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || '';
@@ -759,102 +760,16 @@ function wordRowsForSegment(segment, wordRows) {
 
 
 /*
- * Sentence-first timing recovery
- * ------------------------------
- * Whisper may return one acoustic segment containing several complete
- * sentences or fast alternating replies.  A subtitle must not keep those
- * sentences in one on-screen cue merely because the acoustic pause is short.
- * We copy sentence-ending punctuation from the segment transcript onto the
- * corresponding timed word boundary, then the deterministic splitter creates
- * one cue per spoken sentence.  This uses only existing words and their
- * timestamps; it never invents timing or text.
+ * Sentence timeline splitter (local-only)
+ * ---------------------------------------
+ * A transcript segment can contain several complete utterances.  This layer
+ * does not call an AI service, does not touch audio extraction, and does not
+ * change transcription or translation requests.  It only maps terminal
+ * sentence boundaries onto already returned word timings.  If timing cannot
+ * be matched reliably, it keeps the existing segment unchanged rather than
+ * risking a bad split.
  */
-function countNonSpaceUnits(value) {
-  return Array.from(safeString(value || '').replace(/\s+/gu, '')).length;
-}
-
-function terminalUnitTargetsFromTranscript(value) {
-  const source = safeString(value || '').replace(/\r/g, '').trim();
-  if (!source) return [];
-  const targets = [];
-  let units = 0;
-  const chars = Array.from(source);
-  for (let index = 0; index < chars.length; index += 1) {
-    const ch = chars[index];
-    if (!/\s/u.test(ch)) units += 1;
-    if (/[.!?…。！？]/u.test(ch)) {
-      // Consume a run such as "?!" / "..." as one sentence end.
-      while (index + 1 < chars.length && /[.!?…。！？]/u.test(chars[index + 1])) {
-        index += 1;
-        if (!/\s/u.test(chars[index])) units += 1;
-      }
-      targets.push(units);
-    }
-  }
-  return targets.filter((target, index, list) => target > 0 && (index === 0 || target > list[index - 1]));
-}
-
-function subtitleComparableToken(value) {
-  return safeString(value || '')
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\p{M}]+/gu, '');
-}
-
-function directSentenceEndWordIndexes(segmentText, words) {
-  const tokens = safeString(segmentText || '').trim().match(/\S+/gu) || [];
-  const indexes = [];
-  let cursor = 0;
-  for (const token of tokens) {
-    const terminal = isSubtitleTerminal(token);
-    const wanted = subtitleComparableToken(token);
-    if (!wanted) continue;
-    let found = -1;
-    for (let index = cursor; index < Math.min(words.length, cursor + 6); index += 1) {
-      const actual = subtitleComparableToken(words[index]?.text || '');
-      if (actual && (actual === wanted || actual.endsWith(wanted) || wanted.endsWith(actual))) { found = index; break; }
-    }
-    if (found < 0) continue;
-    if (terminal) indexes.push(found);
-    cursor = found + 1;
-  }
-  return Array.from(new Set(indexes)).sort((a, b) => a - b);
-}
-
-function applyTranscriptSentenceEndsToTimedWords(segment, timedWords) {
-  const sourceWords = Array.isArray(timedWords) ? timedWords : [];
-  const targets = terminalUnitTargetsFromTranscript(segment?.text || '');
-  if (!sourceWords.length || !targets.length) return sourceWords;
-  const words = sourceWords.map((word) => ({ ...word, text: safeString(word?.text || '').trim() }));
-  const directIndexes = directSentenceEndWordIndexes(segment?.text || '', words);
-  const applied = new Set();
-  for (const index of directIndexes) {
-    if (index >= 0 && index < words.length && words[index].text && !isSubtitleTerminal(words[index].text)) {
-      words[index].text = `${words[index].text}.`;
-      applied.add(index);
-    }
-  }
-  // For transcripts whose word timestamps omit or tokenize words differently
-  // (notably unspaced scripts), fall back to proportional matching only for
-  // sentence endings that could not be directly aligned by lexical token.
-  if (directIndexes.length >= targets.length) return words;
-  const totalTranscriptUnits = Math.max(1, countNonSpaceUnits(segment?.text || ''));
-  const totalTimedUnits = Math.max(1, words.reduce((sum, word) => sum + Math.max(1, countNonSpaceUnits(word?.text || '')), 0));
-  let cumulative = 0;
-  let cursor = 0;
-  for (const target of targets) {
-    const targetTimedUnits = Math.max(1, Math.round((target / totalTranscriptUnits) * totalTimedUnits));
-    while (cursor < words.length - 1 && cumulative + Math.max(1, countNonSpaceUnits(words[cursor].text)) < targetTimedUnits) {
-      cumulative += Math.max(1, countNonSpaceUnits(words[cursor].text));
-      cursor += 1;
-    }
-    const text = words[cursor].text;
-    if (text && !isSubtitleTerminal(text) && !applied.has(cursor)) words[cursor].text = `${text}.`;
-  }
-  return words;
-}
-
-function splitTextIntoTerminalSubtitleSentences(value) {
+function splitTranscriptTerminalSentences(value) {
   const source = safeString(value || '').replace(/\s+/gu, ' ').trim();
   if (!source) return [];
   const parts = [];
@@ -874,6 +789,82 @@ function splitTextIntoTerminalSubtitleSentences(value) {
   return parts;
 }
 
+function comparableTimelineToken(value) {
+  return safeString(value || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}\p{M}]+/gu, '');
+}
+
+function terminalBreakWordIndexes(segmentText, words) {
+  const tokens = safeString(segmentText || '').trim().match(/\S+/gu) || [];
+  const indexes = [];
+  let cursor = 0;
+  for (const token of tokens) {
+    const expected = comparableTimelineToken(token);
+    if (!expected) continue;
+    let found = -1;
+    // Word timestamps may have a slightly different token split. Search only
+    // near the current cursor, never across the segment.
+    for (let index = cursor; index < Math.min(words.length, cursor + 7); index += 1) {
+      const actual = comparableTimelineToken(words[index]?.text || '');
+      if (actual && (actual === expected || actual.endsWith(expected) || expected.endsWith(actual))) { found = index; break; }
+    }
+    if (found < 0) continue;
+    if (/[.!?…。！？]+["'”’）\]\}]*$/u.test(token)) indexes.push(found);
+    cursor = found + 1;
+  }
+  return Array.from(new Set(indexes)).sort((a, b) => a - b);
+}
+
+function splitSegmentAtSentenceTimeline(segment, wordRows) {
+  const parts = splitTranscriptTerminalSentences(segment?.text || '');
+  if (parts.length < 2) return [];
+  const words = wordRowsForSegment(segment, wordRows);
+  if (words.length < parts.length) return [];
+  const joined = joinSubtitleTimedWords(words);
+  const originalUnits = subtitleTextUnits(segment?.text || '');
+  const timedUnits = subtitleTextUnits(joined);
+  // Do not use word times when their text coverage is clearly incomplete.
+  if (!joined || (originalUnits > 12 && timedUnits < originalUnits * 0.58)) return [];
+  const directBreaks = terminalBreakWordIndexes(segment?.text || '', words);
+  const splitIndexes = [];
+  // Reliable direct token alignment is preferred.
+  if (directBreaks.length >= parts.length - 1) {
+    splitIndexes.push(...directBreaks.slice(0, parts.length - 1));
+  } else {
+    // Word timestamps often omit punctuation. Map text sentence lengths onto
+    // existing chronological words without inventing a new timeline.
+    const totalUnits = Math.max(1, parts.reduce((sum, part) => sum + subtitleTextUnits(part), 0));
+    const wordUnits = words.map((word) => Math.max(1, subtitleTextUnits(word?.text || '')));
+    let cumulativePart = 0;
+    let cursor = 0;
+    for (let partIndex = 0; partIndex < parts.length - 1; partIndex += 1) {
+      cumulativePart += subtitleTextUnits(parts[partIndex]);
+      const target = (cumulativePart / totalUnits) * wordUnits.reduce((sum, units) => sum + units, 0);
+      let sum = 0;
+      while (cursor < words.length - (parts.length - partIndex - 1) && sum + wordUnits[cursor] < target) {
+        sum += wordUnits[cursor];
+        cursor += 1;
+      }
+      splitIndexes.push(Math.max(0, Math.min(words.length - 2, cursor)));
+      cursor += 1;
+    }
+  }
+  if (splitIndexes.length !== parts.length - 1 || new Set(splitIndexes).size !== splitIndexes.length) return [];
+  const cues = [];
+  let from = 0;
+  for (let partIndex = 0; partIndex < parts.length; partIndex += 1) {
+    const to = partIndex < splitIndexes.length ? splitIndexes[partIndex] : words.length - 1;
+    if (to < from) return [];
+    const first = words[from], last = words[to], next = words[to + 1];
+    const start = Math.max(Number(segment.start || 0), Number(first.start || segment.start || 0));
+    let end = Math.min(Number(segment.end || 0), Number(last.end || segment.end || 0) + MARU_SUBTITLE_CUE_RULES.tailSeconds);
+    if (next && Number(next.start) > start + 0.12) end = Math.min(end, Number(next.start) - 0.02);
+    if (!(end - start >= 0.16)) return [];
+    cues.push({ start, end, text: parts[partIndex] });
+    from = to + 1;
+  }
+  return cues.length === parts.length ? cues : [];
+}
+
 function cueFromTimedWordRange(segment, words, fromIndex, toIndex) {
   const first = words[fromIndex], last = words[toIndex];
   if (!first || !last) return null;
@@ -887,8 +878,7 @@ function cueFromTimedWordRange(segment, words, fromIndex, toIndex) {
 }
 
 function splitTimedSegmentIntoSubtitleCues(segment, wordRows) {
-  const rawWords = wordRowsForSegment(segment, wordRows);
-  const words = applyTranscriptSentenceEndsToTimedWords(segment, rawWords);
+  const words = wordRowsForSegment(segment, wordRows);
   if (words.length < 2) return [];
 
   const originalUnits = subtitleTextUnits(segment?.text);
@@ -917,11 +907,7 @@ function splitTimedSegmentIntoSubtitleCues(segment, wordRows) {
     const hardLimit = duration >= MARU_SUBTITLE_CUE_RULES.hardMaxSeconds
       || units >= MARU_SUBTITLE_CUE_RULES.hardMaxUnits;
 
-    // A complete spoken sentence/question is always its own subtitle beat.
-    // Do not require a long pause: rapid question → answer exchanges often
-    // have none, yet must never be merged into one on-screen sentence.
-    const terminalBoundary = isSubtitleTerminal(current.text);
-    const shouldBreak = Boolean(next) && (terminalBoundary || clearSpeakerTurn || (enoughForNaturalBreak && naturalBoundary) || preferredLimit || hardLimit);
+    const shouldBreak = Boolean(next) && (clearSpeakerTurn || (enoughForNaturalBreak && naturalBoundary) || preferredLimit || hardLimit);
     if (shouldBreak) {
       const cue = cueFromTimedWordRange(segment, words, from, index);
       if (cue) cues.push(cue);
@@ -972,12 +958,7 @@ function splitUntimedSegmentIntoSubtitleCues(segment) {
   if (!text || duration <= 0.18) return [];
   const byDuration = Math.max(1, Math.ceil(duration / MARU_SUBTITLE_CUE_RULES.preferredMaxSeconds));
   const desiredMaxUnits = Math.max(24, Math.min(MARU_SUBTITLE_CUE_RULES.hardMaxUnits, Math.ceil(subtitleTextUnits(text) / byDuration)));
-  // Even without word timestamps, preserve each complete sentence/question
-  // as an independent subtitle before applying ordinary length wrapping.
-  const sentenceParts = splitTextIntoTerminalSubtitleSentences(text);
-  const parts = sentenceParts.length > 1
-    ? sentenceParts.flatMap((part) => splitTextAtSafeSubtitleBoundaries(part, desiredMaxUnits))
-    : splitTextAtSafeSubtitleBoundaries(text, desiredMaxUnits);
+  const parts = splitTextAtSafeSubtitleBoundaries(text, desiredMaxUnits);
   if (parts.length <= 1) return [];
   const totalUnits = Math.max(1, parts.reduce((sum, part) => sum + subtitleTextUnits(part), 0));
   let cursor = Number(segment.start || 0);
@@ -995,6 +976,11 @@ function splitUntimedSegmentIntoSubtitleCues(segment) {
 function splitSegmentsIntoSubtitleCues(segments, wordRows) {
   const shaped = [];
   for (const segment of Array.isArray(segments) ? segments : []) {
+    const sentenceTimed = splitSegmentAtSentenceTimeline(segment, wordRows);
+    if (sentenceTimed.length) {
+      shaped.push(...sentenceTimed);
+      continue;
+    }
     const timed = splitTimedSegmentIntoSubtitleCues(segment, wordRows);
     if (timed.length) {
       shaped.push(...timed);
@@ -1267,158 +1253,6 @@ function splitOverlongRenderedSubtitleCues(segments) {
  * changes any media timestamp; it merely chooses where independent timed
  * subtitle beats begin.
  */
-const MARU_AI_TURN_SEGMENTATION_SYSTEM = [
-  'You are a precise timed-subtitle dialogue-turn boundary reviewer.',
-  'Return JSON only in this exact form: {"segments":[{"id":number,"breakAfter":[number]}]}.',
-  'For every supplied candidate, choose zero or more zero-based word indexes after which a new subtitle cue must start.',
-  'Use only the supplied word boundaries. Never change, paraphrase, translate, delete, reorder, join, or add any word. Never add speaker names or labels.',
-  'A question followed by an answer, a short acknowledgement followed by a reply, an interruption, or a clear change of speaking turn must be separate subtitle cues even when the acoustic pause is brief.',
-  'Every complete sentence or question in the supplied transcript must be its own cue when a matching word boundary exists. A sequence such as "How is the weather? Good? It may rain tomorrow. Bring an umbrella. See you later." requires five separate cues, not one paragraph.',
-  'Keep a continuous sentence from the same speaker together when it remains a readable subtitle beat. Do not split every word or create fragments without a meaningful utterance boundary.',
-  'Use punctuation, discourse flow, response markers, and the timing of the supplied words. Preserve chronological order. Prefer short readable cues, normally no more than two display lines.',
-  'When uncertain, return fewer breaks rather than inventing a speaker change. Do not include commentary, explanations, markdown, timestamps, or any keys other than segments, id, and breakAfter.'
-].join(' ');
-
-const MARU_AI_TURN_RULES = Object.freeze({
-  maximumCandidatesPerChunk: 8,
-  maximumBreaksPerCandidate: 9,
-  minimumTimedWordCoverage: 0.62,
-  candidateMinimumWords: 4,
-  longSingleBeatSeconds: 5.2
-});
-
-function countSubtitleTerminalMarks(value) {
-  return (safeString(value || '').match(/[.!?…。！？]+/gu) || []).length;
-}
-
-function dialogueResponseSignalCount(value) {
-  const text = safeString(value || '').toLowerCase();
-  if (!text) return 0;
-  const hits = text.match(/(?:\b(?:yes|no|yeah|yep|nope|okay|ok|right|really|sure|well|why|what|how|wait|thanks|sorry)\b|그래|응|네|아니|어|왜|뭐|정말|알았|맞아|그럼|그러면|잠깐|고마워|미안)/giu) || [];
-  return hits.length;
-}
-
-function timedWordsCoverSegmentText(segment, words) {
-  const originalUnits = subtitleTextUnits(segment?.text);
-  const timedUnits = subtitleTextUnits(joinSubtitleTimedWords(words));
-  if (!originalUnits || !timedUnits) return false;
-  return originalUnits <= 12 || timedUnits >= originalUnits * MARU_AI_TURN_RULES.minimumTimedWordCoverage;
-}
-
-function isAiTurnSegmentationCandidate(segment, wordRows) {
-  const words = wordRowsForSegment(segment, wordRows);
-  if (words.length < MARU_AI_TURN_RULES.candidateMinimumWords || !timedWordsCoverSegmentText(segment, words)) return null;
-  const duration = Math.max(0, Number(segment?.end || 0) - Number(segment?.start || 0));
-  const text = safeString(segment?.text || '').replace(/\s+/g, ' ').trim();
-  const terminalMarks = countSubtitleTerminalMarks(text);
-  const responseSignals = dialogueResponseSignalCount(text);
-  const provisional = splitTimedSegmentIntoSubtitleCues(segment, wordRows);
-  const provisionalCount = provisional.length || 1;
-  // Run the AI reviewer for any multi-sentence segment, not only when the
-  // local splitter has visibly failed. This catches rapid alternating replies
-  // whose punctuation/word timing arrives unevenly from the recognizer.
-  const multiSentenceDialogue = terminalMarks >= 2 && words.length >= 4;
-  const likelyUnsplitDialogue = terminalMarks >= 2 && provisionalCount < Math.min(terminalMarks, 4);
-  const compactQuestionAnswer = terminalMarks >= 1 && responseSignals >= 2 && provisionalCount < 2;
-  const responseChainWithoutPunctuation = responseSignals >= 2 && words.length >= 6 && provisionalCount < 3;
-  const longUnbrokenBeat = duration >= MARU_AI_TURN_RULES.longSingleBeatSeconds && provisionalCount < 2 && words.length >= 8;
-  if (!multiSentenceDialogue && !likelyUnsplitDialogue && !compactQuestionAnswer && !responseChainWithoutPunctuation && !longUnbrokenBeat) return null;
-  return { segment, words, text, duration, terminalMarks };
-}
-
-function parseAiTurnSegmentation(content) {
-  const raw = safeString(content || '').trim().replace(/^```(?:json)?\s*/iu, '').replace(/\s*```$/u, '');
-  const first = raw.indexOf('{');
-  const last = raw.lastIndexOf('}');
-  const parsed = JSON.parse(first >= 0 && last >= first ? raw.slice(first, last + 1) : raw);
-  const map = new Map();
-  for (const row of Array.isArray(parsed?.segments) ? parsed.segments : []) {
-    const id = Number(row?.id);
-    if (!Number.isInteger(id)) continue;
-    const breaks = [];
-    for (const value of Array.isArray(row?.breakAfter) ? row.breakAfter : []) {
-      const index = Number(value);
-      if (Number.isInteger(index)) breaks.push(index);
-    }
-    map.set(id, breaks);
-  }
-  return map;
-}
-
-function buildAiTurnCues(candidate, requestedBreaks) {
-  const words = candidate?.words || [];
-  if (words.length < 2) return [];
-  const breakSet = new Set();
-  for (const value of Array.isArray(requestedBreaks) ? requestedBreaks : []) {
-    const index = Number(value);
-    if (Number.isInteger(index) && index >= 0 && index < words.length - 1) breakSet.add(index);
-  }
-  const breaks = Array.from(breakSet).sort((a, b) => a - b).slice(0, MARU_AI_TURN_RULES.maximumBreaksPerCandidate);
-  if (!breaks.length) return [];
-  const cues = [];
-  let from = 0;
-  for (const index of [...breaks, words.length - 1]) {
-    if (index < from) continue;
-    const cue = cueFromTimedWordRange(candidate.segment, words, from, index);
-    if (cue && cue.end - cue.start >= 0.18 && subtitleTextUnits(cue.text) > 0) cues.push(cue);
-    from = index + 1;
-  }
-  // A response with malformed/tiny cuts must not replace the reliable local
-  // splitter. Require at least two chronological cues before accepting it.
-  return cues.length > 1 ? cues : [];
-}
-
-async function refineDialogueTurnsWithAi(id, segments, wordRows, body = {}) {
-  const source = Array.isArray(segments) ? segments : [];
-  const candidates = [];
-  for (let index = 0; index < source.length && candidates.length < MARU_AI_TURN_RULES.maximumCandidatesPerChunk; index += 1) {
-    const candidate = isAiTurnSegmentationCandidate(source[index], wordRows);
-    if (candidate) candidates.push({ id: index, ...candidate });
-  }
-  if (!candidates.length) return source;
-  const model = safeString(body.turnSegmentationModel || body.subtitleTurnModel || body.subtitleTranslateModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
-  try {
-    const result = await requestTranslationJson({
-      model,
-      temperature: 0,
-      max_tokens: 1400,
-      messages: [
-        { role: 'system', content: MARU_AI_TURN_SEGMENTATION_SYSTEM },
-        { role: 'user', content: JSON.stringify({
-          task: 'select-existing-word-boundaries-for-independent-timed-subtitle-cues',
-          candidates: candidates.map((candidate) => ({
-            id: candidate.id,
-            rawText: candidate.text,
-            start: Number(candidate.segment.start || 0),
-            end: Number(candidate.segment.end || 0),
-            words: candidate.words.map((word, index) => ({ i: index, start: Number(word.start || 0), end: Number(word.end || 0), text: safeString(word.text || '') }))
-          }))
-        }) }
-      ]
-    });
-    const boundaryMap = parseAiTurnSegmentation(safeString(result?.choices?.[0]?.message?.content || ''));
-    const replacements = new Map();
-    for (const candidate of candidates) {
-      const cues = buildAiTurnCues(candidate, boundaryMap.get(candidate.id));
-      if (cues.length) replacements.set(candidate.id, cues);
-    }
-    if (!replacements.size) return source;
-    const refined = [];
-    source.forEach((segment, index) => {
-      const cues = replacements.get(index);
-      if (cues?.length) refined.push(...cues);
-      else refined.push(segment);
-    });
-    log(id, 'ai-turn-segmentation', 'candidates=', candidates.length, 'refined=', replacements.size);
-    return normalizeSegments(refined, 0);
-  } catch (error) {
-    // Segmentation is an enhancement only. Subtitle generation must continue
-    // with deterministic local timing when this optional review is unavailable.
-    log(id, 'ai-turn-segmentation-skip', String(error?.message || error || 'unknown').slice(0, 300));
-    return source;
-  }
-}
-
 async function handleGenerateSubtitle(id, body) {
   const audioBuffer = audioBufferFromPayload(body);
   if (!audioBuffer) return json(400, { ok: false, error: 'No audioBase64/fileBase64 was supplied for subtitle generation.', action: 'generate-subtitle', requestId: id });
@@ -1439,11 +1273,8 @@ async function handleGenerateSubtitle(id, body) {
   // A defensive guard for pre-existing bad relay behavior: internal prompt text
   // is never allowed to become dialogue in a saved subtitle.
   segments = constrainSegmentsToSourceWindow(dropMaruInstructionLeakSegments(segments), body);
-  // Whisper-style segments can contain several sentences or consecutive
-  // speakers. First let the AI choose only safe existing word boundaries for
-  // compact question/answer exchanges, then apply deterministic timing and
-  // length splitting before target-language translation.
-  segments = await refineDialogueTurnsWithAi(id, segments, audibleWords, body);
+  // Split only after transcription has completed. This is local, deterministic
+  // timeline shaping: it never adds a remote request or alters audio decoding.
   segments = splitSegmentsIntoSubtitleCues(segments, audibleWords);
   // Record only standalone human non-verbal cues. The marker survives the
   // direct target-language translation and is rendered as a concise caption
