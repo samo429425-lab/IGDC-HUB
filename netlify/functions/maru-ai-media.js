@@ -902,6 +902,165 @@ function splitOverlongRenderedSubtitleCues(segments) {
   return normalizeSegments(shaped, 0);
 }
 
+
+
+/*
+ * AI dialogue-turn boundary review
+ * --------------------------------
+ * Acoustic segments are sometimes longer than a subtitle beat.  Word timing
+ * gives us exact places to cut but cannot reliably identify a rapid
+ * question/answer exchange when the speakers leave only a short pause.  This
+ * optional, fail-open review asks the text model to select ONLY existing word
+ * boundaries. It never edits transcript text, fabricates speaker labels, or
+ * changes any media timestamp; it merely chooses where independent timed
+ * subtitle beats begin.
+ */
+const MARU_AI_TURN_SEGMENTATION_SYSTEM = [
+  'You are a precise timed-subtitle dialogue-turn boundary reviewer.',
+  'Return JSON only in this exact form: {"segments":[{"id":number,"breakAfter":[number]}]}.',
+  'For every supplied candidate, choose zero or more zero-based word indexes after which a new subtitle cue must start.',
+  'Use only the supplied word boundaries. Never change, paraphrase, translate, delete, reorder, join, or add any word. Never add speaker names or labels.',
+  'A question followed by an answer, a short acknowledgement followed by a reply, an interruption, or a clear change of speaking turn must be separate subtitle cues even when the acoustic pause is brief.',
+  'Keep a continuous sentence from the same speaker together when it remains a readable subtitle beat. Do not split every word or create fragments without a meaningful utterance boundary.',
+  'Use punctuation, discourse flow, response markers, and the timing of the supplied words. Preserve chronological order. Prefer short readable cues, normally no more than two display lines.',
+  'When uncertain, return fewer breaks rather than inventing a speaker change. Do not include commentary, explanations, markdown, timestamps, or any keys other than segments, id, and breakAfter.'
+].join(' ');
+
+const MARU_AI_TURN_RULES = Object.freeze({
+  maximumCandidatesPerChunk: 8,
+  maximumBreaksPerCandidate: 9,
+  minimumTimedWordCoverage: 0.62,
+  candidateMinimumWords: 4,
+  longSingleBeatSeconds: 5.2
+});
+
+function countSubtitleTerminalMarks(value) {
+  return (safeString(value || '').match(/[.!?…。！？]+/gu) || []).length;
+}
+
+function dialogueResponseSignalCount(value) {
+  const text = safeString(value || '').toLowerCase();
+  if (!text) return 0;
+  const hits = text.match(/(?:\b(?:yes|no|yeah|yep|nope|okay|ok|right|really|sure|well|why|what|how|wait|thanks|sorry)\b|그래|응|네|아니|어|왜|뭐|정말|알았|맞아|그럼|그러면|잠깐|고마워|미안)/giu) || [];
+  return hits.length;
+}
+
+function timedWordsCoverSegmentText(segment, words) {
+  const originalUnits = subtitleTextUnits(segment?.text);
+  const timedUnits = subtitleTextUnits(joinSubtitleTimedWords(words));
+  if (!originalUnits || !timedUnits) return false;
+  return originalUnits <= 12 || timedUnits >= originalUnits * MARU_AI_TURN_RULES.minimumTimedWordCoverage;
+}
+
+function isAiTurnSegmentationCandidate(segment, wordRows) {
+  const words = wordRowsForSegment(segment, wordRows);
+  if (words.length < MARU_AI_TURN_RULES.candidateMinimumWords || !timedWordsCoverSegmentText(segment, words)) return null;
+  const duration = Math.max(0, Number(segment?.end || 0) - Number(segment?.start || 0));
+  const text = safeString(segment?.text || '').replace(/\s+/g, ' ').trim();
+  const terminalMarks = countSubtitleTerminalMarks(text);
+  const responseSignals = dialogueResponseSignalCount(text);
+  const provisional = splitTimedSegmentIntoSubtitleCues(segment, wordRows);
+  const provisionalCount = provisional.length || 1;
+  const likelyUnsplitDialogue = terminalMarks >= 2 && provisionalCount < Math.min(terminalMarks, 4);
+  const compactQuestionAnswer = terminalMarks >= 1 && responseSignals >= 2 && provisionalCount < 2;
+  const longUnbrokenBeat = duration >= MARU_AI_TURN_RULES.longSingleBeatSeconds && provisionalCount < 2 && words.length >= 8;
+  if (!likelyUnsplitDialogue && !compactQuestionAnswer && !longUnbrokenBeat) return null;
+  return { segment, words, text, duration, terminalMarks };
+}
+
+function parseAiTurnSegmentation(content) {
+  const raw = safeString(content || '').trim().replace(/^```(?:json)?\s*/iu, '').replace(/\s*```$/u, '');
+  const first = raw.indexOf('{');
+  const last = raw.lastIndexOf('}');
+  const parsed = JSON.parse(first >= 0 && last >= first ? raw.slice(first, last + 1) : raw);
+  const map = new Map();
+  for (const row of Array.isArray(parsed?.segments) ? parsed.segments : []) {
+    const id = Number(row?.id);
+    if (!Number.isInteger(id)) continue;
+    const breaks = [];
+    for (const value of Array.isArray(row?.breakAfter) ? row.breakAfter : []) {
+      const index = Number(value);
+      if (Number.isInteger(index)) breaks.push(index);
+    }
+    map.set(id, breaks);
+  }
+  return map;
+}
+
+function buildAiTurnCues(candidate, requestedBreaks) {
+  const words = candidate?.words || [];
+  if (words.length < 2) return [];
+  const breakSet = new Set();
+  for (const value of Array.isArray(requestedBreaks) ? requestedBreaks : []) {
+    const index = Number(value);
+    if (Number.isInteger(index) && index >= 0 && index < words.length - 1) breakSet.add(index);
+  }
+  const breaks = Array.from(breakSet).sort((a, b) => a - b).slice(0, MARU_AI_TURN_RULES.maximumBreaksPerCandidate);
+  if (!breaks.length) return [];
+  const cues = [];
+  let from = 0;
+  for (const index of [...breaks, words.length - 1]) {
+    if (index < from) continue;
+    const cue = cueFromTimedWordRange(candidate.segment, words, from, index);
+    if (cue && cue.end - cue.start >= 0.18 && subtitleTextUnits(cue.text) > 0) cues.push(cue);
+    from = index + 1;
+  }
+  // A response with malformed/tiny cuts must not replace the reliable local
+  // splitter. Require at least two chronological cues before accepting it.
+  return cues.length > 1 ? cues : [];
+}
+
+async function refineDialogueTurnsWithAi(id, segments, wordRows, body = {}) {
+  const source = Array.isArray(segments) ? segments : [];
+  const candidates = [];
+  for (let index = 0; index < source.length && candidates.length < MARU_AI_TURN_RULES.maximumCandidatesPerChunk; index += 1) {
+    const candidate = isAiTurnSegmentationCandidate(source[index], wordRows);
+    if (candidate) candidates.push({ id: index, ...candidate });
+  }
+  if (!candidates.length) return source;
+  const model = safeString(body.turnSegmentationModel || body.subtitleTurnModel || body.subtitleTranslateModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
+  try {
+    const result = await requestTranslationJson({
+      model,
+      temperature: 0,
+      max_tokens: 1400,
+      messages: [
+        { role: 'system', content: MARU_AI_TURN_SEGMENTATION_SYSTEM },
+        { role: 'user', content: JSON.stringify({
+          task: 'select-existing-word-boundaries-for-independent-timed-subtitle-cues',
+          candidates: candidates.map((candidate) => ({
+            id: candidate.id,
+            rawText: candidate.text,
+            start: Number(candidate.segment.start || 0),
+            end: Number(candidate.segment.end || 0),
+            words: candidate.words.map((word, index) => ({ i: index, start: Number(word.start || 0), end: Number(word.end || 0), text: safeString(word.text || '') }))
+          }))
+        }) }
+      ]
+    });
+    const boundaryMap = parseAiTurnSegmentation(safeString(result?.choices?.[0]?.message?.content || ''));
+    const replacements = new Map();
+    for (const candidate of candidates) {
+      const cues = buildAiTurnCues(candidate, boundaryMap.get(candidate.id));
+      if (cues.length) replacements.set(candidate.id, cues);
+    }
+    if (!replacements.size) return source;
+    const refined = [];
+    source.forEach((segment, index) => {
+      const cues = replacements.get(index);
+      if (cues?.length) refined.push(...cues);
+      else refined.push(segment);
+    });
+    log(id, 'ai-turn-segmentation', 'candidates=', candidates.length, 'refined=', replacements.size);
+    return normalizeSegments(refined, 0);
+  } catch (error) {
+    // Segmentation is an enhancement only. Subtitle generation must continue
+    // with deterministic local timing when this optional review is unavailable.
+    log(id, 'ai-turn-segmentation-skip', String(error?.message || error || 'unknown').slice(0, 300));
+    return source;
+  }
+}
+
 async function handleGenerateSubtitle(id, body) {
   const audioBuffer = audioBufferFromPayload(body);
   if (!audioBuffer) return json(400, { ok: false, error: 'No audioBase64/fileBase64 was supplied for subtitle generation.', action: 'generate-subtitle', requestId: id });
@@ -923,8 +1082,10 @@ async function handleGenerateSubtitle(id, body) {
   // is never allowed to become dialogue in a saved subtitle.
   segments = constrainSegmentsToSourceWindow(dropMaruInstructionLeakSegments(segments), body);
   // Whisper-style segments can contain several sentences or consecutive
-  // speakers. Turn them into short, independently timed subtitle cues before
-  // target-language translation so no dialogue is displayed as one paragraph.
+  // speakers. First let the AI choose only safe existing word boundaries for
+  // compact question/answer exchanges, then apply deterministic timing and
+  // length splitting before target-language translation.
+  segments = await refineDialogueTurnsWithAi(id, segments, audibleWords, body);
   segments = splitSegmentsIntoSubtitleCues(segments, audibleWords);
 
   const targetLang = normalizeTranslationLanguage(body.requestedTargetLanguage || body.targetLanguage || body.targetLang || body.language || '');
