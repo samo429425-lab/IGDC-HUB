@@ -50,6 +50,13 @@ function normalizeAction(action) {
   return safeString(action || 'status').trim().toLowerCase().replace(/_/g, '-');
 }
 
+function normalizeRequestedOperation(value) {
+  const raw = safeString(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+  if (['subtitle', 'subtitles', 'subtitle-generation', 'generate-subtitle', 'transcribe'].includes(raw)) return 'subtitle';
+  if (['dubbing', 'dub', 'ai-dubbing', 'generate-dubbing', 'tts', 'text-to-speech', 'speech'].includes(raw)) return 'dubbing';
+  return raw;
+}
+
 const MARU_AI_OWNER_DEFAULTS = Object.freeze([
   'owner', 'admin', 'master', 'administrator', 'maruowner', 'maruadmin',
   'samo429425', 'samo429425@gmail.com', 'wam429425', 'wam429425@gmail.com', 'igdcplatform@gmail.com'
@@ -76,6 +83,20 @@ function rejectPublicAiUntilPgReady(id, action, body = {}) {
     requestId: id
   });
 }
+function actionOperationMismatch(id, action, body = {}, expectedOperation) {
+  const requested = normalizeRequestedOperation(body.requestedOperation || body.operation || body.jobOperation || '');
+  if (!requested || requested === expectedOperation) return null;
+  return json(400, {
+    ok: false,
+    action,
+    code: 'action_operation_mismatch',
+    error: `Requested operation (${requested}) does not match action (${action}).`,
+    expectedOperation,
+    receivedOperation: requested,
+    requestId: id
+  });
+}
+
 function normalizeLanguage(lang) {
   const raw = safeString(lang || '').trim();
   if (!raw || /^auto$/i.test(raw)) return '';
@@ -625,6 +646,8 @@ async function reviewCueTextsForConsistency(cues, targetLang, body = {}) {
 }
 
 async function handleReviewSubtitle(id, body) {
+  const mismatch = actionOperationMismatch(id, 'review-subtitle', body, 'subtitle');
+  if (mismatch) return mismatch;
   const subtitle = safeString(body.subtitle || body.subtitleText || body.content || ''), targetLang = normalizeTranslationLanguage(body.targetLang || body.targetLanguage || body.language || '');
   if (!subtitle.trim()) return json(400, { ok: false, action: 'review-subtitle', code: 'empty_subtitle', error: 'No timed target-language subtitle text was supplied.', requestId: id });
   if (!targetLang) return json(400, { ok: false, action: 'review-subtitle', code: 'unsupported_target_language', error: 'Unsupported target language.', requestId: id });
@@ -642,6 +665,8 @@ function isSameLanguage(sourceLanguage, targetLanguage) {
 }
 
 async function handleTranslateSubtitle(id, body) {
+  const mismatch = actionOperationMismatch(id, 'translate-subtitle', body, 'subtitle');
+  if (mismatch) return mismatch;
   const subtitle = safeString(body.subtitle || body.subtitleText || body.content || '');
   const targetLang = normalizeTranslationLanguage(body.targetLang || body.targetLanguage || body.language || '');
   if (!subtitle.trim()) return json(400, { ok: false, action: 'translate-subtitle', code: 'empty_subtitle', error: 'No timed subtitle text was supplied.', requestId: id });
@@ -1256,6 +1281,8 @@ function splitOverlongRenderedSubtitleCues(segments) {
  * recognition.
  */
 async function handleGenerateSubtitle(id, body) {
+  const mismatch = actionOperationMismatch(id, 'generate-subtitle', body, 'subtitle');
+  if (mismatch) return mismatch;
   const audioBuffer = audioBufferFromPayload(body);
   if (!audioBuffer) return json(400, { ok: false, error: 'No audioBase64/fileBase64 was supplied for subtitle generation.', action: 'generate-subtitle', requestId: id });
 
@@ -1376,6 +1403,8 @@ async function ttsWithFallback(text, body) {
 }
 
 async function handleGenerateDubbing(id, action, body) {
+  const mismatch = actionOperationMismatch(id, action || 'generate-dubbing', body, 'dubbing');
+  if (mismatch) return mismatch;
   const targetLanguage = normalizeTranslationLanguage(body.targetLanguage || body.language || '');
   if (!targetLanguage) return json(400, { ok: false, action, code: 'unsupported_target_language', error: 'A supported selected dubbing language is required.', requestId: id });
   const scriptText = cleanTextForSpeech(body.scriptText || body.subtitleText || body.text || body.input || body.prompt || '');
