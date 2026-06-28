@@ -17,38 +17,6 @@ const DEFAULT_SUBTITLE_TRANSLATE_MODEL = process.env.OPENAI_SUBTITLE_MODEL || 'g
 const TTS_CHUNK_CHARS = Math.max(500, Math.min(3500, Number(process.env.MARU_TTS_CHUNK_CHARS || 2600) || 2600));
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
 
-
-const MARU_AI_PREPARING_MESSAGE = 'AI 연동을 위한 유료버전은 준비 중입니다.';
-const MARU_AI_OWNER_DEFAULTS = ['owner', 'admin', 'master', 'administrator', 'samo429425', 'samo429425@gmail.com', 'wam429425', 'wam429425@gmail.com', 'igdcplatform@gmail.com', 'maruowner', 'maruadmin'];
-function splitEnvList(name) {
-  return safeString(process.env[name] || '').split(',').map((item) => item.trim()).filter(Boolean);
-}
-function normalizeIdentity(value) {
-  return safeString(value || '').trim().toLowerCase().replace(/\s+/g, '');
-}
-function maruAiOwnerSet() {
-  return new Set([...MARU_AI_OWNER_DEFAULTS, ...splitEnvList('MARU_AI_OWNER_IDENTITIES')].map(normalizeIdentity).filter(Boolean));
-}
-function isMaruAiOwnerRequest(body = {}) {
-  const candidates = [body.ownerIdentity, body.identity, body.userId, body.user_id, body.memberId, body.member_id, body.licenseKey, body.license_key];
-  const owners = maruAiOwnerSet();
-  return candidates.some((value) => {
-    const key = normalizeIdentity(value);
-    return !!key && owners.has(key);
-  });
-}
-function maruAiPreparingResponse(action, id) {
-  return json(403, {
-    ok: false,
-    action,
-    code: 'ai_public_service_preparing',
-    error: MARU_AI_PREPARING_MESSAGE,
-    message: MARU_AI_PREPARING_MESSAGE,
-    serviceMode: 'owner-admin-only-pre-pg',
-    requestId: id
-  });
-}
-
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-MARU-Client, X-MARU-Client-Version',
@@ -80,6 +48,53 @@ function safeString(value, fallback = '') {
 
 function normalizeAction(action) {
   return safeString(action || 'status').trim().toLowerCase().replace(/_/g, '-');
+}
+
+function normalizeRequestedOperation(value) {
+  const raw = safeString(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+  if (['subtitle', 'subtitles', 'subtitle-generation', 'generate-subtitle', 'transcribe'].includes(raw)) return 'subtitle';
+  if (['dubbing', 'dub', 'ai-dubbing', 'generate-dubbing', 'tts', 'text-to-speech', 'speech'].includes(raw)) return 'dubbing';
+  return raw;
+}
+
+const MARU_AI_OWNER_DEFAULTS = Object.freeze([
+  'owner', 'admin', 'master', 'administrator', 'maruowner', 'maruadmin',
+  'samo429425', 'samo429425@gmail.com', 'wam429425', 'wam429425@gmail.com', 'igdcplatform@gmail.com'
+]);
+function normalizedIdentity(value) { return safeString(value || '').trim().toLowerCase().replace(/\s+/g, ''); }
+function isMaruAiOwnerIdentity(value) {
+  const key = normalizedIdentity(value);
+  if (!key) return false;
+  const env = safeString(process.env.MARU_AI_OWNER_IDENTITIES || '').split(',').map(normalizedIdentity).filter(Boolean);
+  return MARU_AI_OWNER_DEFAULTS.includes(key) || env.includes(key)
+    || /^samo429425(?:@gmail\.com)?$/.test(key) || /^wam429425(?:@gmail\.com)?$/.test(key);
+}
+function maruAiRequestIdentity(body = {}) {
+  return safeString(body.ownerIdentity || body.identity || body.userId || body.memberId || body.licenseIdentity || '').trim();
+}
+function rejectPublicAiUntilPgReady(id, action, body = {}) {
+  if (isMaruAiOwnerIdentity(maruAiRequestIdentity(body))) return null;
+  return json(403, {
+    ok: false,
+    action,
+    code: 'ai_public_service_preparing',
+    error: 'AI 연동을 위한 유료버전은 준비 중입니다.',
+    publicServiceState: 'preparing',
+    requestId: id
+  });
+}
+function actionOperationMismatch(id, action, body = {}, expectedOperation) {
+  const requested = normalizeRequestedOperation(body.requestedOperation || body.operation || body.jobOperation || '');
+  if (!requested || requested === expectedOperation) return null;
+  return json(400, {
+    ok: false,
+    action,
+    code: 'action_operation_mismatch',
+    error: `Requested operation (${requested}) does not match action (${action}).`,
+    expectedOperation,
+    receivedOperation: requested,
+    requestId: id
+  });
 }
 
 function normalizeLanguage(lang) {
@@ -238,10 +253,10 @@ function isLikelyNonDialogueSegment(segment) {
 }
 function normalizeSegments(items, offsetSeconds = 0) {
   const source = Array.isArray(items) ? items : [];
-  // Preserve true simultaneous speech. A later cue must never be pushed past
-  // an earlier cue merely because their audible intervals overlap.
-  return source
-    .map((item) => normalizeSegment(item, offsetSeconds))
+  // Preserve the actual media times, including legitimate overlapping speech.
+  // Subtitle and dubbing renderers decide how simultaneous cues are displayed;
+  // this transport layer must never push one speaker behind another.
+  return source.map((item) => normalizeSegment(item, offsetSeconds))
     .filter((item) => item && !isLikelyNonDialogueSegment(item))
     .sort((a, b) => a.start - b.start || a.end - b.end)
     .map(({ noSpeechProbability, avgLogprob, compressionRatio, ...segment }) => segment);
@@ -445,7 +460,7 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
   'Return JSON only: {"cues":[{"id":number,"text":string}]}.',
   'Return exactly one non-empty text value for every supplied cue id, in the same order.',
   'Translate dialogue into the authoritative requested target language. Do not output source-language alternatives, notes, explanations, labels, timestamps, cue numbers, markdown, policies, prompts, or instructions.',
-  'Each supplied cue is one locked timed subtitle beat. Keep every cue id separate: never merge, split, delete, reorder, or turn neighbouring cue ids into a paragraph. Translate only the supplied cue text; do not use surrounding context to rewrite a cue into a smoother paragraph. Preserve its meaning, tone, names, and relationship context.',
+  'Each supplied cue is one timed subtitle beat. Keep every cue id separate: never merge consecutive cue ids into one paragraph or one long speech block, even when the dialogue is related. Translate each cue as a short, natural subtitle unit that follows its own audio timing. Aim for no more than two short display lines per cue; compact wording is allowed only when it preserves the original meaning, tone, names, and relationship context.',
   'Keep names, titles, ranks, honorifics, technical terms, units, numbers, product names, species names, organization names, place names, building names, country names, political parties, and institutions accurate and consistent.',
   'Classify recurring personal names, aliases, nicknames, pet names, call signs, kinship forms, and forms of address from nearby cue context before translating. Keep one canonical target-language form when the same person is clearly being referenced; never turn a proper name into an ordinary phrase or invent a full name without evidence.',
   'For sung lyrics, preserve lyric words only after audible vocal onset. Do not create a caption for instrumental lead-in, melody-only passages, or imagined lyric text.',
@@ -531,59 +546,31 @@ async function translateCueTextsToTarget(cues, targetLang, body = {}) {
 }
 
 const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
-  'You perform a narrow final proper-name and specialist-term consistency check on already translated timed subtitle cues.',
-  'Return JSON only as an object with keys "patches" and "terminologyLedger".',
-  'patches must be an array of objects exactly shaped as {"id":number,"find":string,"replace":string,"kind":string}. kind must be one of: proper_name, place, road, country, institution, organization, product, title, medical_term, legal_term, academic_term, technical_term, typo_in_name_or_term.',
-  'Emit a patch only for a clear correction of an in-cue name, place, road, country, institution, organization, product/title, or specialist term. The find string must occur verbatim inside that same supplied cue. Do not emit any patch for grammar, style, fluency, punctuation, dialogue tone, paragraph flow, or ordinary wording.',
-  'Never rewrite a whole cue, never merge/split/delete/reorder cues, never change timestamps, and never return replacement text that contains surrounding prose. Keep every cue as its own locked timed subtitle beat.',
-  'Protect proper nouns from literal-meaning translation. Keep official/conventional names or faithful transliterations. Do not turn a person, place, road, mountain, institution, country, or group name into a descriptive common phrase.',
-  'For medical, scientific, academic, legal, engineering, computing, military, economic, and other technical content, correct only a clearly wrong or inconsistent expert term to the established target-language term.',
-  'Compare the supplied ledger and cues only to catch the same entity or term written differently in earlier/middle/later cues. If uncertain, emit no patch and preserve the existing text.',
-  'terminologyLedger must contain at most 40 short canonical target-language names or specialist terms that occur in these cues and are useful for later consistency; otherwise return an empty array.'
+  'You perform a conservative final editorial consistency review of already translated timed subtitle cues in one target language.',
+  'Return JSON only as an object with keys "cues" and "terminologyLedger". "cues" must be an array of objects exactly shaped as {"id":number,"text":string}.',
+  'Return one non-empty cue text for every supplied id, in the same order. Do not output timestamps, cue numbers, source-language alternatives, commentary, notes, markdown, policies, prompts, or instructions.',
+  'Do not retranslate, rephrase, naturalize, reorder, or rewrite good subtitle lines. Change text only when a person name, place name, road name, country name, organization or institution name, product or work title, or a specialist term is clearly wrong, literalized, or inconsistent with the same entity or term elsewhere in the supplied cues. Do not make grammar or contextual-style edits beyond a correction that is strictly necessary for that name or term. Preserve every supplied cue as its own timed subtitle beat: never merge, delete, combine, or turn neighbouring cue ids into a paragraph.',
+  'Keep established conventional names, official organization and institution names, places, buildings, countries, parties, products, species, ranks, aliases, nicknames, call signs, kinship forms, and recurring personal names consistent. Resolve only clear repeated-name inconsistencies from the supplied cue context; never turn a name into a common phrase, invent a full name, or translate the literal components of a proper name into a newly invented descriptive name.',
+  'For medical, scientific, academic, legal, engineering, computing, military, economic, and technical content, use the established professional term in the requested target language as found in reputable reference works, textbooks, standards, and institutional usage. Do not replace precise terminology with informal paraphrase.',
+  'Use the supplied terminology ledger only when it clearly matches the same entity or term. If uncertain, preserve the existing established target-language form rather than guessing.',
+  'terminologyLedger must contain at most 20 short canonical target-language names or specialist terms that appear in these cues and are useful for later consistency; otherwise return an empty array.'
 ].join(' ');
 function parseFinalReviewPayload(content) {
   const raw = safeString(content || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
   const first = raw.indexOf('{'), last = raw.lastIndexOf('}');
   const parsed = JSON.parse(first >= 0 && last >= first ? raw.slice(first, last + 1) : raw);
-  const patches = [];
-  for (const row of Array.isArray(parsed?.patches) ? parsed.patches : []) {
-    const id = Number(row?.id);
-    const find = safeString(row?.find || '').replace(/\r/g, '').trim();
-    const replace = safeString(row?.replace || '').replace(/\r/g, '').trim();
-    const kind = safeString(row?.kind || '').trim();
-    if (!Number.isInteger(id) || !find || !replace || find === replace) continue;
-    if (!['proper_name','place','road','country','institution','organization','product','title','medical_term','legal_term','academic_term','technical_term','typo_in_name_or_term'].includes(kind)) continue;
-    // A whole ordinary dialogue sentence is not an allowed final-review patch.
-    if (find.length > 180 || replace.length > 180 || /[\n]/.test(find) || /[\n]/.test(replace)) continue;
-    patches.push({ id, find, replace, kind });
+  const byId = new Map();
+  for (const row of Array.isArray(parsed?.cues) ? parsed.cues : []) {
+    const id = Number(row?.id), text = safeString(row?.text || '').replace(/\r/g, '').trim();
+    if (Number.isInteger(id) && text) byId.set(id, text);
   }
   const terminologyLedger = [], seen = new Set();
   for (const item of Array.isArray(parsed?.terminologyLedger) ? parsed.terminologyLedger : []) {
-    const term = safeString(typeof item === 'string' ? item : (item?.canonical || item?.term || item?.text || '')).replace(/\s+/g, ' ').trim();
-    const key = term.toLowerCase();
+    const term = safeString(typeof item === 'string' ? item : (item?.canonical || item?.term || item?.text || '')).replace(/\s+/g, ' ').trim(), key = term.toLowerCase();
     if (!term || term.length > 140 || seen.has(key)) continue;
-    seen.add(key); terminologyLedger.push(term); if (terminologyLedger.length >= 40) break;
+    seen.add(key); terminologyLedger.push(term); if (terminologyLedger.length >= 20) break;
   }
-  return { patches, terminologyLedger };
-}
-function applyApprovedTermPatches(cues, patches) {
-  const byId = new Map();
-  for (const patch of patches || []) {
-    if (!byId.has(patch.id)) byId.set(patch.id, []);
-    byId.get(patch.id).push(patch);
-  }
-  return (Array.isArray(cues) ? cues : []).map((cue, index) => {
-    const id = Number.isInteger(Number(cue.id)) ? Number(cue.id) : index;
-    let text = safeString(cue.text || '');
-    for (const patch of byId.get(id) || []) {
-      if (!text.includes(patch.find)) continue;
-      // Prevent a model response from replacing all dialogue with a generic
-      // sentence. Final review is term-level only.
-      if (patch.find.length >= Math.max(24, Math.floor(text.length * 0.82)) && /[.!?…。！？]/u.test(patch.find)) continue;
-      text = text.split(patch.find).join(patch.replace);
-    }
-    return { ...cue, text };
-  });
+  return { byId, terminologyLedger };
 }
 async function reviewCueTextsForConsistency(cues, targetLang, body = {}) {
   const target = normalizeTranslationLanguage(targetLang);
@@ -592,37 +579,41 @@ async function reviewCueTextsForConsistency(cues, targetLang, body = {}) {
   if (!source.length) return { cues: [], terminologyLedger: [] };
   const ledger = [], seen = new Set();
   for (const item of Array.isArray(body.terminologyLedger) ? body.terminologyLedger : []) {
-    const term = safeString(typeof item === 'string' ? item : (item?.canonical || item?.term || item?.text || '')).replace(/\s+/g, ' ').trim();
-    const key = term.toLowerCase();
+    const term = safeString(typeof item === 'string' ? item : (item?.canonical || item?.term || item?.text || '')).replace(/\s+/g, ' ').trim(), key = term.toLowerCase();
     if (!term || term.length > 140 || seen.has(key)) continue;
-    seen.add(key); ledger.push(term); if (ledger.length >= 160) break;
+    seen.add(key); ledger.push(term); if (ledger.length >= 120) break;
   }
   const model = safeString(body.reviewModel || body.subtitleReviewModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
   const result = await requestTranslationJson({ model, temperature: 0, max_tokens: 8192, messages: [
     { role: 'system', content: MARU_FINAL_SUBTITLE_REVIEW_SYSTEM },
-    { role: 'user', content: JSON.stringify({ targetLanguage: TRANSLATION_LANGUAGE_NAMES[target], targetLanguageCode: target, mode: 'term-and-proper-name-consistency-patches-only', terminologyLedger: ledger, cues: source.map((cue, index) => ({ id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text: safeString(cue.text || '') })) }) }
+    { role: 'user', content: JSON.stringify({ targetLanguage: TRANSLATION_LANGUAGE_NAMES[target], targetLanguageCode: target, mode: 'conservative-final-consistency-review-no-retranslation', terminologyLedger: ledger, cues: source.map((cue, index) => ({ id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text: safeString(cue.text || '') })) }) }
   ] });
   let parsed;
   try { parsed = parseFinalReviewPayload(safeString(result?.choices?.[0]?.message?.content || '')); }
-  catch { const err = new Error('Final term/name review returned invalid structured output.'); err.statusCode = 502; throw err; }
-  const reviewed = applyApprovedTermPatches(source, parsed.patches);
-  for (const cue of reviewed) {
-    if (!safeString(cue.text || '').trim()) { const err = new Error('Final term/name review produced an empty cue.'); err.statusCode = 502; throw err; }
-    if (isMaruInstructionLeak(cue.text)) { const err = new Error('Final term/name review contained internal instruction text and was rejected.'); err.statusCode = 502; throw err; }
-  }
+  catch { const err = new Error('Final subtitle review returned invalid structured output.'); err.statusCode = 502; throw err; }
+  const reviewed = source.map((cue, index) => {
+    const id = Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text = safeString(parsed.byId.get(id) || '').replace(/\r/g, '').trim();
+    if (!text) { const err = new Error('Final subtitle review did not return every cue.'); err.statusCode = 502; throw err; }
+    if (isMaruInstructionLeak(text)) { const err = new Error('Final subtitle review contained internal instruction text and was rejected.'); err.statusCode = 502; throw err; }
+    return { ...cue, text };
+  });
   return { cues: reviewed, terminologyLedger: parsed.terminologyLedger };
 }
 async function handleReviewSubtitle(id, body) {
-  const subtitle = safeString(body.subtitle || body.subtitleText || body.content || '');
-  const targetLang = normalizeTranslationLanguage(body.targetLang || body.targetLanguage || body.language || '');
+  const mismatch = actionOperationMismatch(id, 'review-subtitle', body, 'subtitle');
+  if (mismatch) return mismatch;
+  const subtitle = safeString(body.subtitle || body.subtitleText || body.content || ''), targetLang = normalizeTranslationLanguage(body.targetLang || body.targetLanguage || body.language || '');
   if (!subtitle.trim()) return json(400, { ok: false, action: 'review-subtitle', code: 'empty_subtitle', error: 'No timed target-language subtitle text was supplied.', requestId: id });
   if (!targetLang) return json(400, { ok: false, action: 'review-subtitle', code: 'unsupported_target_language', error: 'Unsupported target language.', requestId: id });
   const cues = parseTimedSrtCues(subtitle);
   if (!cues.length) return json(422, { ok: false, action: 'review-subtitle', code: 'timed_subtitle_required', error: 'Timed SRT subtitle cues are required.', requestId: id });
   log(id, 'review-subtitle', 'cues=', cues.length, 'target=', targetLang);
   const reviewed = await reviewCueTextsForConsistency(cues, targetLang, body);
+  // A later final review must not expand a compact laugh/cry/scream caption
+  // into a long repeated character sequence. Normalize standalone cues again
+  // at this boundary; spoken dialogue remains untouched.
   const normalizedReviewedCues = renderCompactNonverbalSubtitleCues(reviewed.cues, targetLang);
-  return json(200, { ok: true, action: 'review-subtitle', targetLang, targetLanguage: targetLang, targetLanguageVerified: targetLang, targetName: TRANSLATION_LANGUAGE_NAMES[targetLang], reviewedSubtitle: normalizedReviewedCues.map((cue) => `${cue.number}\n${cue.timing}\n${cue.text}\n`).join('\n'), cueTotal: normalizedReviewedCues.length, terminologyLedger: reviewed.terminologyLedger, outputPolicy: 'locked-timed-cues-term-and-proper-name-patches-only', requestId: id });
+  return json(200, { ok: true, action: 'review-subtitle', operation: 'subtitle', requestedOperation: 'subtitle', targetLang, targetLanguage: targetLang, targetLanguageVerified: targetLang, targetName: TRANSLATION_LANGUAGE_NAMES[targetLang], reviewedSubtitle: normalizedReviewedCues.map((cue) => `${cue.number}\n${cue.timing}\n${cue.text}\n`).join('\n'), cueTotal: normalizedReviewedCues.length, terminologyLedger: reviewed.terminologyLedger, outputPolicy: 'target-language-cues-only-no-retranslation', requestId: id });
 }
 
 function isSameLanguage(sourceLanguage, targetLanguage) {
@@ -632,6 +623,8 @@ function isSameLanguage(sourceLanguage, targetLanguage) {
 }
 
 async function handleTranslateSubtitle(id, body) {
+  const mismatch = actionOperationMismatch(id, 'translate-subtitle', body, 'subtitle');
+  if (mismatch) return mismatch;
   const subtitle = safeString(body.subtitle || body.subtitleText || body.content || '');
   const targetLang = normalizeTranslationLanguage(body.targetLang || body.targetLanguage || body.language || '');
   if (!subtitle.trim()) return json(400, { ok: false, action: 'translate-subtitle', code: 'empty_subtitle', error: 'No timed subtitle text was supplied.', requestId: id });
@@ -644,6 +637,8 @@ async function handleTranslateSubtitle(id, body) {
   return json(200, {
     ok: true,
     action: 'translate-subtitle',
+    operation: 'subtitle',
+    requestedOperation: 'subtitle',
     targetLang,
     targetLanguage: targetLang,
     targetLanguageVerified: targetLang,
@@ -878,22 +873,29 @@ function splitSegmentAtSentenceTimeline(segment, wordRows) {
   const joined = joinSubtitleTimedWords(words);
   const originalUnits = subtitleTextUnits(segment?.text || '');
   const timedUnits = subtitleTextUnits(joined);
+  // Do not use word times when their text coverage is clearly incomplete.
   if (!joined || (originalUnits > 12 && timedUnits < originalUnits * 0.58)) return [];
   const directBreaks = terminalBreakWordIndexes(segment?.text || '', words);
-  // Never estimate a timing break from text/character proportions. A cue can
-  // split only when the terminal boundary maps to an actual timed word.
-  if (directBreaks.length < parts.length - 1) return [];
-  const splitIndexes = directBreaks.slice(0, parts.length - 1);
-  if (new Set(splitIndexes).size !== splitIndexes.length) return [];
+  const splitIndexes = [];
+  // Reliable direct token alignment is preferred.
+  if (directBreaks.length >= parts.length - 1) {
+    splitIndexes.push(...directBreaks.slice(0, parts.length - 1));
+  } else {
+    // Do not estimate timing from character count or transcript length. A
+    // sentence boundary is accepted only when it maps to an actual timed word.
+    return [];
+  }
+  if (splitIndexes.length !== parts.length - 1 || new Set(splitIndexes).size !== splitIndexes.length) return [];
   const cues = [];
   let from = 0;
   for (let partIndex = 0; partIndex < parts.length; partIndex += 1) {
     const to = partIndex < splitIndexes.length ? splitIndexes[partIndex] : words.length - 1;
     if (to < from) return [];
-    const first = words[from], last = words[to];
+    const first = words[from], last = words[to], next = words[to + 1];
     const start = Math.max(Number(segment.start || 0), Number(first.start || segment.start || 0));
-    const end = Math.min(Number(segment.end || 0), Number(last.end || segment.end || 0));
-    if (!(end - start >= 0.08)) return [];
+    let end = Math.min(Number(segment.end || 0), Number(last.end || segment.end || 0) + MARU_SUBTITLE_CUE_RULES.tailSeconds);
+    if (next && Number(next.start) > start + 0.12) end = Math.min(end, Number(next.start) - 0.02);
+    if (!(end - start >= 0.16)) return [];
     cues.push({ start, end, text: parts[partIndex] });
     from = to + 1;
   }
@@ -923,11 +925,11 @@ function splitTimedSegmentIntoSubtitleCues(segment, wordRows) {
   for (let index = 0; index < words.length - 1; index += 1) {
     const current = words[index], next = words[index + 1];
     const gap = Math.max(0, Number(next.start || 0) - Number(current.end || 0));
-    // Silence and explicit terminal tokens are evidence of a real boundary.
-    // Duration, character count and word count never create a cue boundary.
-    const shouldBreak = isSubtitleTerminal(current.text)
-      || gap >= MARU_SUBTITLE_CUE_RULES.speakerTurnPauseSeconds;
-    if (!shouldBreak) continue;
+    // Local cuts require a real pause or an explicit terminal word. Do not use
+    // line length, character count, or a display-time limit as a boundary.
+    const realPause = gap >= MARU_SUBTITLE_CUE_RULES.naturalPauseSeconds;
+    const terminal = isSubtitleTerminal(current.text);
+    if (!realPause && !terminal) continue;
     const cue = cueFromTimedWordRange(segment, words, from, index);
     if (cue) cues.push(cue);
     from = index + 1;
@@ -937,54 +939,82 @@ function splitTimedSegmentIntoSubtitleCues(segment, wordRows) {
   return cues.length > 1 ? cues : [];
 }
 
-function splitTextAtSafeSubtitleBoundaries(text, maxUnits) {
-  const source = safeString(text || '').replace(/\s+/g, ' ').trim();
-  if (!source) return [];
-  const pieces = [];
-  let remaining = source;
-  const cap = Math.max(18, Number(maxUnits || MARU_SUBTITLE_CUE_RULES.preferredMaxUnits));
-  while (subtitleTextUnits(remaining) > cap) {
-    let cutAt = -1, unitCount = 0;
-    for (let index = 0; index < remaining.length; index += 1) {
-      const char = remaining[index];
-      if (!/\s/u.test(char)) unitCount += 1;
-      if (unitCount > cap) break;
-      if (/[.!?…。！？,;:，、；：\s]/u.test(char)) cutAt = index + 1;
-    }
-    if (cutAt < 1) {
-      // No word break is available (for example an unspaced transcript). Use
-      // a character boundary rather than leaving an unreadable mega-caption.
-      let seen = 0;
-      cutAt = remaining.length;
-      for (let index = 0; index < remaining.length; index += 1) {
-        if (!/\s/u.test(remaining[index])) seen += 1;
-        if (seen >= cap) { cutAt = index + 1; break; }
-      }
-    }
-    const part = remaining.slice(0, cutAt).trim();
-    if (!part) break;
-    pieces.push(part);
-    remaining = remaining.slice(cutAt).trim();
+const MARU_TIMELINE_BOUNDARY_SYSTEM = [
+  'You select sentence/utterance boundaries for timed speech subtitles.',
+  'Return JSON only as {"breakAfterWordIndexes":[number]}.',
+  'You receive one spoken transcript segment and an ordered list of its existing timed words.',
+  'Select an index after every completed meaningful utterance: a full sentence, short answer, question, command, interjection, or response, even when the same speaker continues immediately and there is no silence.',
+  'For overlapping or interrupted speech, select only a boundary that belongs to the supplied word list. Do not infer a new speaker, word, time, or transcript.',
+  'Never use display length, character count, or readability as a reason to cut.',
+  'Never merge words, rewrite text, add punctuation, output text, or select the final word index.'
+].join(' ');
+
+async function selectSemanticTimedCueBoundaries(segment, wordRows, body = {}) {
+  const words = wordRowsForSegment(segment, wordRows);
+  if (words.length < 3) return [];
+  const joined = joinSubtitleTimedWords(words);
+  if (!joined) return [];
+  const model = safeString(body.boundaryModel || body.subtitleBoundaryModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
+  let content = '';
+  try {
+    const result = await requestTranslationJson({
+      model,
+      temperature: 0,
+      max_tokens: 1024,
+      messages: [
+        { role: 'system', content: MARU_TIMELINE_BOUNDARY_SYSTEM },
+        { role: 'user', content: JSON.stringify({
+          transcript: safeString(segment?.text || joined),
+          words: words.map((word, index) => ({ index, text: safeString(word.text || '') }))
+        }) }
+      ]
+    });
+    content = safeString(result?.choices?.[0]?.message?.content || '');
+  } catch (error) {
+    log('timeline-boundary', 'semantic boundary selection unavailable', error?.message || String(error));
+    return [];
   }
-  if (remaining) pieces.push(remaining);
-  return pieces;
+  try {
+    const raw = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+    const first = raw.indexOf('{'), last = raw.lastIndexOf('}');
+    const parsed = JSON.parse(first >= 0 && last >= first ? raw.slice(first, last + 1) : raw);
+    const indexes = Array.isArray(parsed?.breakAfterWordIndexes) ? parsed.breakAfterWordIndexes : [];
+    return Array.from(new Set(indexes.map(Number).filter((index) => Number.isInteger(index) && index >= 0 && index < words.length - 1))).sort((a, b) => a - b);
+  } catch {
+    return [];
+  }
 }
 
-function splitUntimedSegmentIntoSubtitleCues(segment) {
-  // Kept only as a compatibility symbol. Final subtitle generation must never
-  // create cue timing from character counts or duration proportions.
-  return [];
+async function splitSegmentAtSemanticTimeline(segment, wordRows, body = {}) {
+  const words = wordRowsForSegment(segment, wordRows);
+  const breaks = await selectSemanticTimedCueBoundaries(segment, wordRows, body);
+  if (!words.length || !breaks.length) return [];
+  const cues = [];
+  let from = 0;
+  for (const to of breaks) {
+    if (to < from) continue;
+    const cue = cueFromTimedWordRange(segment, words, from, to);
+    if (!cue) return [];
+    cues.push(cue);
+    from = to + 1;
+  }
+  const tail = cueFromTimedWordRange(segment, words, from, words.length - 1);
+  if (!tail) return [];
+  cues.push(tail);
+  return cues.length > 1 ? cues : [];
 }
 
-function splitSegmentsIntoSubtitleCues(segments, wordRows) {
+async function splitSegmentsIntoSubtitleCues(segments, wordRows, body = {}) {
   const shaped = [];
   for (const segment of Array.isArray(segments) ? segments : []) {
     const sentenceTimed = splitSegmentAtSentenceTimeline(segment, wordRows);
     if (sentenceTimed.length) { shaped.push(...sentenceTimed); continue; }
     const timed = splitTimedSegmentIntoSubtitleCues(segment, wordRows);
     if (timed.length) { shaped.push(...timed); continue; }
-    // No text-length or duration proportional fallback is allowed. Keeping an
-    // unresolved timed segment is safer than inventing a false timeline.
+    const semanticTimed = await splitSegmentAtSemanticTimeline(segment, wordRows, body);
+    if (semanticTimed.length) { shaped.push(...semanticTimed); continue; }
+    // Exact word timing is unavailable or the boundary is genuinely unclear.
+    // Keep the original timed segment; never fabricate a cue time from text length.
     shaped.push(segment);
   }
   return normalizeSegments(shaped, 0);
@@ -1211,9 +1241,30 @@ function renderCompactNonverbalSubtitleCues(segments, language) {
 }
 
 function splitOverlongRenderedSubtitleCues(segments) {
-  // Translation length must not create new timestamps. Long rendered text is
-  // retained inside its original audio-timed cue.
-  return Array.isArray(segments) ? segments : [];
+  const shaped = [];
+  for (const segment of Array.isArray(segments) ? segments : []) {
+    const text = safeString(segment?.text || '').replace(/\s+/g, ' ').trim();
+    if (!text || subtitleTextUnits(text) <= MARU_SUBTITLE_CUE_RULES.hardMaxUnits) {
+      shaped.push(segment);
+      continue;
+    }
+    const parts = splitTextAtSafeSubtitleBoundaries(text, MARU_SUBTITLE_CUE_RULES.preferredMaxUnits);
+    if (parts.length <= 1) {
+      shaped.push(segment);
+      continue;
+    }
+    const start = Number(segment.start || 0), end = Number(segment.end || 0), duration = Math.max(0.18, end - start);
+    const totalUnits = Math.max(1, parts.reduce((sum, part) => sum + subtitleTextUnits(part), 0));
+    let cursor = start;
+    for (let index = 0; index < parts.length; index += 1) {
+      const isLast = index === parts.length - 1;
+      const span = isLast ? Math.max(0.18, end - cursor) : Math.max(0.18, duration * (subtitleTextUnits(parts[index]) / totalUnits));
+      const nextEnd = isLast ? end : Math.min(end - 0.18 * (parts.length - index - 1), cursor + span);
+      shaped.push({ ...segment, start: cursor, end: Math.max(cursor + 0.18, nextEnd), text: parts[index] });
+      cursor = Math.max(cursor + 0.18, nextEnd);
+    }
+  }
+  return normalizeSegments(shaped, 0);
 }
 
 
@@ -1229,111 +1280,86 @@ function splitOverlongRenderedSubtitleCues(segments) {
  * changes any media timestamp; it merely chooses where independent timed
  * subtitle beats begin.
  */
-const MARU_SEMANTIC_BOUNDARY_SYSTEM = [
-  'You identify completed spoken-utterance boundaries in one timed transcription segment.',
-  'Return JSON only as {"breaks":[{"segmentId":number,"afterWordIndex":number}]}.',
-  'Choose only an existing afterWordIndex from the supplied zero-based timed word list. Do not output text, punctuation, timestamps, speaker labels, translations, commentary, or rewritten sentences.',
-  'Select a boundary whenever a short spoken thought, answer, question, interjection, or complete utterance ends, even when the same speaker continues immediately and there is little or no silence.',
-  'Do not select a boundary inside an unfinished phrase. Preserve standalone interjections and vocal beats as independent utterances when they are audibly complete.',
-  'This is a boundary-selection task only. Never combine dialogue or alter any word.'
-].join(' ');
-function parseSemanticBoundaryPayload(content) {
-  const raw = safeString(content || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  const first = raw.indexOf('{'), last = raw.lastIndexOf('}');
-  const parsed = JSON.parse(first >= 0 && last >= first ? raw.slice(first, last + 1) : raw);
-  const bySegment = new Map();
-  for (const row of Array.isArray(parsed?.breaks) ? parsed.breaks : []) {
-    const segmentId = Number(row?.segmentId), afterWordIndex = Number(row?.afterWordIndex);
-    if (!Number.isInteger(segmentId) || !Number.isInteger(afterWordIndex) || afterWordIndex < 0) continue;
-    if (!bySegment.has(segmentId)) bySegment.set(segmentId, []);
-    bySegment.get(segmentId).push(afterWordIndex);
-  }
-  for (const [id, values] of bySegment.entries()) bySegment.set(id, [...new Set(values)].sort((a, b) => a - b));
-  return bySegment;
-}
-async function splitSegmentsAtSemanticBoundaries(segments, wordRows, body = {}) {
-  const source = Array.isArray(segments) ? segments : [];
-  const candidates = source.map((segment, segmentId) => ({ segment, segmentId, words: wordRowsForSegment(segment, wordRows) }))
-    .filter((row) => row.words.length >= 2 && subtitleTextUnits(row.segment.text) >= 3);
-  if (!candidates.length) return source;
-  const model = safeString(body.boundaryModel || body.subtitleBoundaryModel || body.translateModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
-  let selected;
-  try {
-    const result = await requestTranslationJson({ model, temperature: 0, max_tokens: 4096, messages: [
-      { role: 'system', content: MARU_SEMANTIC_BOUNDARY_SYSTEM },
-      { role: 'user', content: JSON.stringify({ segments: candidates.map(({ segmentId, words }) => ({ segmentId, words: words.map((word, index) => ({ index, text: safeString(word.text || ''), start: Number(word.start || 0), end: Number(word.end || 0) })) })) }) }
-    ] });
-    selected = parseSemanticBoundaryPayload(safeString(result?.choices?.[0]?.message?.content || ''));
-  } catch (error) {
-    const err = new Error(`Timed utterance boundary review failed: ${safeString(error?.message || error)}`);
-    err.statusCode = Number(error?.statusCode || 502) || 502;
-    throw err;
-  }
-  const output = [];
-  for (let segmentId = 0; segmentId < source.length; segmentId += 1) {
-    const segment = source[segmentId];
-    const words = wordRowsForSegment(segment, wordRows);
-    const indexes = (selected.get(segmentId) || []).filter((index) => index >= 0 && index < words.length - 1);
-    if (!indexes.length || words.length < 2) { output.push(segment); continue; }
-    let from = 0;
-    for (const to of indexes) {
-      if (to < from) continue;
-      const cue = cueFromTimedWordRange(segment, words, from, to);
-      if (cue) output.push(cue);
-      from = to + 1;
-    }
-    const tail = cueFromTimedWordRange(segment, words, from, words.length - 1);
-    if (tail) output.push(tail);
-  }
-  return normalizeSegments(output, 0);
-}
-
 async function handleGenerateSubtitle(id, body) {
+  const mismatch = actionOperationMismatch(id, 'generate-subtitle', body, 'subtitle');
+  if (mismatch) return mismatch;
   const audioBuffer = audioBufferFromPayload(body);
   if (!audioBuffer) return json(400, { ok: false, error: 'No audioBase64/fileBase64 was supplied for subtitle generation.', action: 'generate-subtitle', requestId: id });
+
   const offset = numberOr(body.chunkOffset ?? body.chunkStartSeconds, 0);
   const fileName = sanitizeFileName(body.audioFileName || body.fileName || 'audio.m4a', 'audio.m4a');
   const contentType = safeString(body.mimeType || body.contentType || 'audio/mp4');
   const result = await transcribeWithAudibleWordTiming(body, audioBuffer, fileName, contentType);
   const rawSegments = result.segments || result.items || [];
   const audibleWords = normalizeAudibleWordTimings(result.words || result.word_timestamps || [], offset);
-  if (!audibleWords.length) {
-    return json(422, { ok: false, action: 'generate-subtitle', code: 'word_timing_required', error: 'Accurate timed subtitle generation requires word-level audio timestamps. The segment was not saved with estimated timing.', requestId: id });
-  }
   let segments = normalizeSegments(rawSegments, offset);
-  if (!segments.length) {
-    return json(422, { ok: false, action: 'generate-subtitle', code: 'timed_segments_required', error: 'No timed speech segments were returned. The segment was not saved with estimated timing.', requestId: id });
+  if (!segments.length && result.text) {
+    segments = normalizeSegments([{ start: offset, end: offset + Math.max(2, Math.min(8, safeString(result.text).length / 8)), text: result.text }], 0);
   }
+  // Word timing only narrows visual cue bounds to audible speech/lyrics; it
+  // never fabricates text, shifts a completed cue forward, or changes order.
   segments = alignSegmentsToAudibleWordBoundaries(segments, audibleWords);
+  // A defensive guard for pre-existing bad relay behavior: internal prompt text
+  // is never allowed to become dialogue in a saved subtitle.
   segments = constrainSegmentsToSourceWindow(dropMaruInstructionLeakSegments(segments), body);
-  if (!segments.length) return json(422, { ok: false, action: 'generate-subtitle', code: 'no_audible_speech', error: 'No audible timed speech remained for subtitle generation.', requestId: id });
-  // First use explicit terminal/pause evidence, then select only existing timed
-  // word boundaries for rapid uninterrupted dialogue. No character-ratio time
-  // allocation is permitted anywhere in this path.
-  segments = splitSegmentsIntoSubtitleCues(segments, audibleWords);
-  segments = await splitSegmentsAtSemanticBoundaries(segments, audibleWords, body);
+  // Split only after transcription has completed. This is local, deterministic
+  // timeline shaping: it never adds a remote request or alters audio decoding.
+  segments = await splitSegmentsIntoSubtitleCues(segments, audibleWords, body);
+  // Record only standalone human non-verbal cues. The marker survives the
+  // direct target-language translation and is rendered as a concise caption
+  // after translation without changing this cue’s timeline.
   segments = annotateStandaloneNonverbalSubtitleCues(segments);
 
   const targetLang = normalizeTranslationLanguage(body.requestedTargetLanguage || body.targetLanguage || body.targetLang || body.language || '');
   const directTarget = body.directTargetLanguage === true || safeString(body.generationMode || '').toLowerCase() === 'selected-target-language-subtitle';
   let targetSegments = segments;
-  const sourceLanguageDetected = normalizeTranslationLanguage(result.language || body.sourceLanguage || '');
+  let sourceLanguageDetected = normalizeTranslationLanguage(result.language || body.sourceLanguage || '');
   if (directTarget) {
     if (!targetLang) return json(400, { ok: false, action: 'generate-subtitle', code: 'unsupported_target_language', error: 'A supported selected subtitle language is required.', requestId: id });
+    // When the spoken language already equals the selected language, Whisper's
+    // timed text is already the requested output.  Otherwise translate inside
+    // this same server request so the desktop receives only final target text.
     if (!isSameLanguage(sourceLanguageDetected, targetLang) && targetSegments.length) {
       const cues = targetSegments.map((segment, index) => ({ id: index, ...segment }));
       targetSegments = await translateCueTextsToTarget(cues, targetLang, body);
     }
     targetSegments = targetSegments.map(({ id, ...segment }) => segment);
   }
-  targetSegments = renderCompactNonverbalSubtitleCues(targetSegments, directTarget ? targetLang : (sourceLanguageDetected || targetLang || 'en'));
+  // Replace standalone human sounds with short comic/webtoon-style captions
+  // only after target-language translation. This prevents repeated-character
+  // overflow while preserving the exact cue timing and all spoken dialogue.
+  targetSegments = renderCompactNonverbalSubtitleCues(
+    targetSegments,
+    directTarget ? targetLang : (sourceLanguageDetected || targetLang || 'en')
+  );
+  // The translation model must keep cue ids separate. This last display-only
+  // guard still prevents an unusually long target-language line from becoming
+  // a single paragraph in the player without changing its timeline order.
+  // Target-language display length must never create new estimated cue times.
 
   return json(200, {
-    ok: true, action: 'generate-subtitle', fileName, model: DEFAULT_TRANSCRIBE_MODEL,
-    segments: targetSegments, subtitleText: segmentsToSrt(targetSegments), text: targetSegments.map((s) => s.text).join('\n'),
-    timeline: 'absolute', timestampBasis: 'media', chunkStartSeconds: numberOr(body.chunkStartSeconds ?? body.chunkOffset, 0), chunkDurationSeconds: numberOr(body.chunkDurationSeconds, 0),
-    targetLang: directTarget ? targetLang : '', targetLanguage: directTarget ? targetLang : '', targetLanguageVerified: directTarget ? targetLang : '', targetName: directTarget ? TRANSLATION_LANGUAGE_NAMES[targetLang] : '',
-    sourceLanguageDetected, directTargetLanguage: !!directTarget, generationMode: directTarget ? 'selected-target-language-subtitle' : 'source-language-transcript', outputPolicy: directTarget ? 'locked-word-timed-target-language-cues-only' : 'locked-word-timed-source-language-transcript', requestId: id
+    ok: true,
+    action: 'generate-subtitle',
+    operation: 'subtitle',
+    requestedOperation: 'subtitle',
+    fileName,
+    model: DEFAULT_TRANSCRIBE_MODEL,
+    segments: targetSegments,
+    subtitleText: segmentsToSrt(targetSegments),
+    text: targetSegments.map((s) => s.text).join('\n'),
+    timeline: 'absolute',
+    timestampBasis: 'media',
+    chunkStartSeconds: numberOr(body.chunkStartSeconds ?? body.chunkOffset, 0),
+    chunkDurationSeconds: numberOr(body.chunkDurationSeconds, 0),
+    targetLang: directTarget ? targetLang : '',
+    targetLanguage: directTarget ? targetLang : '',
+    targetLanguageVerified: directTarget ? targetLang : '',
+    targetName: directTarget ? TRANSLATION_LANGUAGE_NAMES[targetLang] : '',
+    sourceLanguageDetected,
+    directTargetLanguage: !!directTarget,
+    generationMode: directTarget ? 'selected-target-language-subtitle' : 'source-language-transcript',
+    outputPolicy: directTarget ? 'target-language-subtitle-cues-only' : 'source-language-transcript',
+    requestId: id
   });
 }
 
@@ -1387,6 +1413,10 @@ async function ttsWithFallback(text, body) {
 }
 
 async function handleGenerateDubbing(id, action, body) {
+  const mismatch = actionOperationMismatch(id, action || 'generate-dubbing', body, 'dubbing');
+  if (mismatch) return mismatch;
+  const targetLanguage = normalizeTranslationLanguage(body.targetLanguage || body.language || '');
+  if (!targetLanguage) return json(400, { ok: false, action, code: 'unsupported_target_language', error: 'A supported selected dubbing language is required.', requestId: id });
   const scriptText = cleanTextForSpeech(body.scriptText || body.subtitleText || body.text || body.input || body.prompt || '');
   if (!scriptText) {
     return json(400, { ok: false, action, error: 'No scriptText/subtitleText/text was supplied for dubbing.', requestId: id });
@@ -1408,13 +1438,20 @@ async function handleGenerateDubbing(id, action, body) {
   const mimeType = mimeForAudioFormat(format);
   const audio = Buffer.concat(buffers);
   const stem = fileStem(body.fileName || body.originalFileName || body.mediaFileName || 'maru-ai-dubbing');
-  const lang = normalizeLanguage(body.targetLanguage || body.language || 'auto') || 'auto';
+  const lang = targetLanguage;
   const audioFileName = sanitizeFileName(body.audioFileName || `${stem}.ai-dub-${lang}.${format}`);
 
   return json(200, {
     ok: true,
     action: 'generate-dubbing',
+    operation: 'dubbing',
+    requestedOperation: 'dubbing',
     sourceAction: action,
+    targetLanguage: lang,
+    targetLanguageVerified: lang,
+    cueId: safeString(body.cueId || ''),
+    cueStartSeconds: numberOr(body.cueStartSeconds, 0),
+    cueEndSeconds: numberOr(body.cueEndSeconds, 0),
     model: modelUsed,
     voice: normalizeVoice(body.voice),
     format,
@@ -1456,7 +1493,13 @@ exports.handler = async (event) => {
     log(id, 'action=', action, 'file=', body.fileName || body.audioFileName || body.originalFileName || body.mediaFileName || 'none');
 
     if (['status', 'health', 'ping', 'connect', 'test', 'connection-test'].includes(action)) return handleStatus(id);
-    if (!isMaruAiOwnerRequest(body)) return maruAiPreparingResponse(action, id);
+    const aiAction = action === 'generate-subtitle' || action === 'subtitle' || action === 'transcribe'
+      || action === 'review-subtitle' || action === 'subtitle-review' || action === 'final-review'
+      || ['translate-subtitle', 'subtitle-translate', 'translate'].includes(action) || isDubbingAction(action);
+    if (aiAction) {
+      const accessDenied = rejectPublicAiUntilPgReady(id, action, body);
+      if (accessDenied) return accessDenied;
+    }
     if (action === 'generate-subtitle' || action === 'subtitle' || action === 'transcribe') return await handleGenerateSubtitle(id, body);
     if (action === 'review-subtitle' || action === 'subtitle-review' || action === 'final-review') return await handleReviewSubtitle(id, body);
     if (['translate-subtitle', 'subtitle-translate', 'translate'].includes(action)) return await handleTranslateSubtitle(id, body);
