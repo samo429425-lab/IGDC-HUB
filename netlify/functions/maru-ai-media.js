@@ -5,7 +5,7 @@
  * - Keeps existing JSON subtitle generation contract used by MARU Media Player.
  * - Adds generate-dubbing / generate-speech / text-to-speech / tts action support.
  * - No external npm dependencies required. Node 18+ fetch/Buffer only.
- * - Exact speech-timeline subtitle cues: no cue merging or timeline reconstruction after transcription.
+ * - Final exact sentence-cue timeline patch: local-only after transcription.
  */
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || '';
@@ -206,26 +206,12 @@ function isLikelyNonDialogueSegment(segment) {
 }
 function normalizeSegments(items, offsetSeconds = 0) {
   const source = Array.isArray(items) ? items : [];
-  const rows = source
-    .map((item) => normalizeSegment(item, offsetSeconds))
-    .filter((item) => item && !isLikelyNonDialogueSegment(item))
-    .sort((a, b) => a.start - b.start || a.end - b.end);
-
-  // The beginning of a cue is an observed speech timestamp. Never move a later
-  // cue forward merely to remove an overlap: that produces the visible backlog
-  // where dialogue is heard first and captions appear much later. When source
-  // timings overlap, trim only the earlier cue's tail and preserve every later
-  // cue's original start time.
-  for (let i = 0; i < rows.length - 1; i += 1) {
-    const current = rows[i];
-    const next = rows[i + 1];
-    if (!(Number(next.start) < Number(current.end))) continue;
-    const clipped = Math.max(Number(current.start) + 0.01, Number(next.start) - 0.01);
-    if (clipped > Number(current.start)) current.end = Math.min(Number(current.end), clipped);
-  }
-  return rows
-    .filter((item) => Number(item.end) > Number(item.start))
-    .map(({ noSpeechProbability, avgLogprob, compressionRatio, ...segment }) => segment);
+  const rows = source.map((item) => normalizeSegment(item, offsetSeconds)).filter((item) => item && !isLikelyNonDialogueSegment(item));
+  // A subtitle cue starts when its speech starts. Never push a later cue forward
+  // merely because a recognizer reported an overlapping prior cue. That was the
+  // direct cause of captions appearing after their dialogue.
+  rows.sort((a, b) => a.start - b.start || a.end - b.end);
+  return rows.map(({ noSpeechProbability, avgLogprob, compressionRatio, ...segment }) => segment);
 }
 
 function secondsToSrtTime(sec) {
@@ -245,9 +231,12 @@ function buildMultipartBody(fields, fileField) {
   const boundary = `----MARUAI${Date.now()}${Math.random().toString(16).slice(2)}`;
   const chunks = [];
   const push = (value) => chunks.push(Buffer.isBuffer(value) ? value : Buffer.from(String(value), 'utf8'));
-  for (const [name, value] of Object.entries(fields || {})) {
-    if (value == null || value === '') continue;
-    push(`--${boundary}\r\nContent-Disposition: form-data; name="${String(name).replace(/"/g, '')}"\r\n\r\n${String(value)}\r\n`);
+  for (const [name, rawValue] of Object.entries(fields || {})) {
+    const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+    for (const value of values) {
+      if (value == null || value === '') continue;
+      push(`--${boundary}\r\nContent-Disposition: form-data; name="${String(name).replace(/"/g, '')}"\r\n\r\n${String(value)}\r\n`);
+    }
   }
   if (fileField?.buffer) {
     const fileName = sanitizeFileName(fileField.fileName || 'audio.m4a');
@@ -426,12 +415,12 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
   'Return JSON only: {"cues":[{"id":number,"text":string}]}.',
   'Return exactly one non-empty text value for every supplied cue id, in the same order.',
   'Translate dialogue into the authoritative requested target language. Do not output source-language alternatives, notes, explanations, labels, timestamps, cue numbers, markdown, policies, prompts, or instructions.',
-  'Each supplied cue is one observed speech beat with its own fixed timeline. Translate only the words belonging to that cue. Never merge, delay, borrow from, complete with, or move content between consecutive cue ids, even when a sentence continues. A very short cue may remain a short spoken fragment; do not turn nearby cues into one paragraph. Keep each cue natural, faithful, and readable without changing its order, timing, names, or relationship context.',
+  'Each supplied cue is an immutable spoken-media time interval. Keep every cue id separate: never merge, summarize, reorder, transfer words between, or turn consecutive cue ids into a paragraph. Translate only the words in that cue, in its existing order, as the short natural subtitle that appears while that exact speech is audible. Do not create a continuation sentence by borrowing words from the next or previous cue.',
   'Keep names, titles, ranks, honorifics, technical terms, units, numbers, product names, species names, organization names, place names, building names, country names, political parties, and institutions accurate and consistent.',
   'Classify recurring personal names, aliases, nicknames, pet names, call signs, kinship forms, and forms of address from nearby cue context before translating. Keep one canonical target-language form when the same person is clearly being referenced; never turn a proper name into an ordinary phrase or invent a full name without evidence.',
   'For sung lyrics, preserve lyric words only after audible vocal onset. Do not create a caption for instrumental lead-in, melody-only passages, or imagined lyric text.',
   'For a standalone human laugh, cry, sharp cry, gasp, pain reaction, surprise or admiration interjection, keep only the compact vocal beat. Do not stretch repeated letters or merge it with neighbouring dialogue.',
-  'For proper nouns, identify whether a token is a person, place, institution, organization, association, school, clan, sect, faction, unit, title, rank, product, work, or specialist term from its cue and nearby cues. Use the established conventional official target-language form when known; otherwise preserve or faithfully transliterate the name. Never translate the literal components of a proper name into a newly invented descriptive name.',
+  'For proper nouns, use the established conventional target-language name when it is well known. Otherwise use a faithful target-language transliteration or the official name form. Never translate the literal component meanings of a proper name into a new descriptive name.',
   'Examples of forbidden literal-name rewriting: do not turn Seoraksan into a phrase meaning Snowy Peak; do not turn Cheonggyecheon into a phrase meaning Blue Stream; do not turn Cheongwadae into a phrase meaning Blue-Tiled House. Use the standard name used in the target language instead.',
   'For Korean output, use established Korean names or accurate Hangul transliteration for foreign names; use standard Korean terminology for official organizations, geography, science, medicine, law, technology, and culture. Do not append an original-script spelling unless it is necessary for a standard established caption form.',
   'For medical, scientific, academic, legal, engineering, computing, military, economic, and other specialist material, use the established expert term in the requested target language as used in reputable reference works, textbooks, professional standards, and institutional usage. Never replace a precise term with a vague everyday paraphrase or a literal calque.',
@@ -515,7 +504,7 @@ const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
   'You perform a conservative final editorial consistency review of already translated timed subtitle cues in one target language.',
   'Return JSON only as an object with keys "cues" and "terminologyLedger". "cues" must be an array of objects exactly shaped as {"id":number,"text":string}.',
   'Return one non-empty cue text for every supplied id, in the same order. Do not output timestamps, cue numbers, source-language alternatives, commentary, notes, markdown, policies, prompts, or instructions.',
-  'Do not retranslate, summarize, complete, or rewrite good subtitle lines. Change text only for a clear typo, a clear inconsistent repeated name or title, a clearly literalized proper name, a clear nonstandard specialist term, or an obvious target-language grammar error. Preserve every supplied cue as its own fixed timed speech beat: never merge, delete, combine, move words between, or turn neighbouring cue ids into a paragraph.',
+  'Do not retranslate, summarize, or rewrite good subtitle lines. Change text only for a clear typo, a clear inconsistent repeated name or title, a clearly literalized proper name, a clear nonstandard specialist term, or an obvious target-language grammar error. Preserve every supplied cue as an immutable timed speech beat: never merge, delete, combine, move words across, or turn neighbouring cue ids into a paragraph.',
   'Keep established conventional names, official organization and institution names, places, buildings, countries, parties, products, species, ranks, aliases, nicknames, call signs, kinship forms, and recurring personal names consistent. Resolve only clear repeated-name inconsistencies from the supplied cue context; never turn a name into a common phrase, invent a full name, or translate the literal components of a proper name into a newly invented descriptive name.',
   'For medical, scientific, academic, legal, engineering, computing, military, economic, and technical content, use the established professional term in the requested target language as found in reputable reference works, textbooks, standards, and institutional usage. Do not replace precise terminology with informal paraphrase.',
   'Use the supplied terminology ledger only when it clearly matches the same entity or term. If uncertain, preserve the existing established target-language form rather than guessing.',
@@ -631,15 +620,16 @@ function buildTranscriptionFields(body, options = {}) {
     response_format: 'verbose_json',
     temperature: '0'
   };
-  // Word timestamps are used only to trim a cue to the first and last actual
-  // spoken/sung word. They do not change the selected-language translation
-  // contract or introduce a second subtitle pass. Older endpoint variants are
-  // retried below without this optional field.
-  if (options.wordTiming !== false) fields['timestamp_granularities[]'] = 'word';
+  // Request both native segment boundaries and actual word timings. Segment
+  // boundaries preserve recognizer speech turns; word timings let the server
+  // place each short spoken beat on the real audio timeline without inventing
+  // proportional timestamps.
+  const granularities = [];
+  if (options.segmentTiming !== false) granularities.push('segment');
+  if (options.wordTiming !== false) granularities.push('word');
+  if (granularities.length) fields['timestamp_granularities[]'] = granularities;
   const sourceLanguage = normalizeLanguage(body.sourceLanguage || '');
   if (sourceLanguage) fields.language = sourceLanguage.split('-')[0];
-  // Do not send policy prose through Whisper's prompt field. Prompt text can
-  // be mistaken for speech by a transcription model and must never enter a caption.
   return fields;
 }
 
@@ -651,12 +641,12 @@ function isWordTimingCompatibilityError(error) {
 
 async function transcribeWithAudibleWordTiming(body, audioBuffer, fileName, contentType) {
   try {
-    return await openAiMultipart('/audio/transcriptions', buildTranscriptionFields(body, { wordTiming: true }), { buffer: audioBuffer, fileName, contentType });
+    return await openAiMultipart('/audio/transcriptions', buildTranscriptionFields(body, { segmentTiming: true, wordTiming: true }), { buffer: audioBuffer, fileName, contentType });
   } catch (error) {
-    // Compatibility fallback: subtitle generation must remain available even
-    // when an operator configures an older compatible transcription endpoint.
+    // Compatibility fallback for older relays: retain ordinary recognizer
+    // segments rather than fabricating a new sentence timeline.
     if (!isWordTimingCompatibilityError(error)) throw error;
-    return openAiMultipart('/audio/transcriptions', buildTranscriptionFields(body, { wordTiming: false }), { buffer: audioBuffer, fileName, contentType });
+    return openAiMultipart('/audio/transcriptions', buildTranscriptionFields(body, { segmentTiming: false, wordTiming: false }), { buffer: audioBuffer, fileName, contentType });
   }
 }
 
@@ -673,6 +663,71 @@ function normalizeAudibleWordTimings(items, offsetSeconds = 0) {
     rows.push({ start, end, text: safeString(item?.word ?? item?.text ?? '').trim() });
   }
   return rows.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+
+/*
+ * Exact spoken-word cue timeline
+ * ------------------------------
+ * This is intentionally not sentence reconstruction. It consumes the words
+ * and timestamps already returned by the recognizer and emits only contiguous
+ * real speech spans. A pause, terminal mark, or very short hard ceiling ends a
+ * cue; it never moves a start time, distributes text by character count, or
+ * combines separate speech turns into a paragraph.
+ */
+const MARU_EXACT_SPEECH_TIMELINE_RULES = Object.freeze({
+  pauseSeconds: 0.16,
+  hardCueSeconds: 1.85,
+  hardCueWords: 7,
+  hardCueUnits: 24,
+  minimumCueSeconds: 0.06
+});
+
+function cueFromExactAudibleWordRange(words, fromIndex, toIndex) {
+  const first = words[fromIndex], last = words[toIndex];
+  if (!first || !last) return null;
+  const start = Math.max(0, Number(first.start || 0));
+  const end = Math.max(start, Number(last.end || start));
+  const text = joinSubtitleTimedWords(words.slice(fromIndex, toIndex + 1));
+  if (!text || end - start < MARU_EXACT_SPEECH_TIMELINE_RULES.minimumCueSeconds) return null;
+  return { start, end, text };
+}
+
+function splitExactSpeechWordTimeline(wordRows) {
+  const words = (Array.isArray(wordRows) ? wordRows : [])
+    .filter((word) => Number.isFinite(Number(word?.start)) && Number.isFinite(Number(word?.end)) && Number(word.end) > Number(word.start) && safeString(word?.text || '').trim())
+    .sort((a, b) => Number(a.start) - Number(b.start) || Number(a.end) - Number(b.end));
+  if (!words.length) return [];
+  const cues = [];
+  let from = 0;
+  for (let index = 0; index < words.length - 1; index += 1) {
+    const first = words[from], current = words[index], next = words[index + 1];
+    const duration = Math.max(0, Number(current.end) - Number(first.start));
+    const gap = Math.max(0, Number(next.start) - Number(current.end));
+    const text = joinSubtitleTimedWords(words.slice(from, index + 1));
+    const wordCount = index - from + 1;
+    const terminal = isSubtitleTerminal(current.text);
+    const mustEnd = terminal
+      || gap >= MARU_EXACT_SPEECH_TIMELINE_RULES.pauseSeconds
+      || duration >= MARU_EXACT_SPEECH_TIMELINE_RULES.hardCueSeconds
+      || wordCount >= MARU_EXACT_SPEECH_TIMELINE_RULES.hardCueWords
+      || subtitleTextUnits(text) >= MARU_EXACT_SPEECH_TIMELINE_RULES.hardCueUnits;
+    if (!mustEnd) continue;
+    const cue = cueFromExactAudibleWordRange(words, from, index);
+    if (cue) cues.push(cue);
+    from = index + 1;
+  }
+  const tail = cueFromExactAudibleWordRange(words, from, words.length - 1);
+  if (tail) cues.push(tail);
+  return cues;
+}
+
+function rawSegmentsFromRecognizedWords(wordRows) {
+  const words = Array.isArray(wordRows) ? wordRows : [];
+  if (!words.length) return [];
+  const first = words[0], last = words[words.length - 1];
+  const text = joinSubtitleTimedWords(words);
+  return text ? [{ start: Number(first.start || 0), end: Number(last.end || first.start || 0), text }] : [];
 }
 
 function alignSegmentsToAudibleWordBoundaries(segments, words) {
@@ -1043,144 +1098,6 @@ function splitSegmentsIntoExactSentenceTimelineCues(segments, wordRows) {
     const sentenceCues = splitSegmentIntoExactSentenceTimelineCues(segment, wordRows);
     if (sentenceCues.length) shaped.push(...sentenceCues);
     else shaped.push(segment);
-  }
-  return normalizeSegments(shaped, 0);
-}
-
-
-/*
- * Exact spoken-timeline cue shaping
- * ---------------------------------
- * A cue must appear when its own voice is heard.  We therefore never invent
- * proportional sentence timing and never rebuild a later paragraph from prior
- * text.  Punctuation-bearing transcript sentences are mapped only to their
- * matching, already-timed words.  When punctuation is unavailable, short
- * chronological word beats are used so a recognizer transport segment cannot
- * become a multi-sentence on-screen paragraph.
- */
-const MARU_EXACT_SPEECH_CUE_RULES = Object.freeze({
-  maxUntypedBeatSeconds: 1.55,
-  maxUntypedBeatWords: 6,
-  pauseBreakSeconds: 0.22,
-  cueTailSeconds: 0.045,
-  minimumCueSeconds: 0.03
-});
-
-function exactSentenceBreakIndexesOnly(parts, words) {
-  if (!Array.isArray(parts) || parts.length < 2 || !Array.isArray(words) || words.length < parts.length) return [];
-  const breaks = [];
-  let cursor = 0;
-  for (let partIndex = 0; partIndex < parts.length - 1; partIndex += 1) {
-    const expected = normalizedSentenceMatch(parts[partIndex]);
-    if (!expected) return [];
-    let assembled = '';
-    let matched = -1;
-    for (let index = cursor; index < words.length; index += 1) {
-      const token = normalizedSentenceMatch(words[index]?.text || '');
-      if (!token) continue;
-      assembled += token;
-      if (assembled === expected) { matched = index; break; }
-      if (!expected.startsWith(assembled)) return [];
-    }
-    if (matched < cursor) return [];
-    breaks.push(matched);
-    cursor = matched + 1;
-  }
-  return breaks.length === parts.length - 1 ? breaks : [];
-}
-
-function exactCueFromWordRange(segment, words, fromIndex, toIndex, text) {
-  const first = words[fromIndex];
-  const last = words[toIndex];
-  if (!first || !last) return null;
-  const next = words[toIndex + 1];
-  const segmentStart = Number(segment?.start || 0);
-  const segmentEnd = Number(segment?.end || segmentStart);
-  const start = Math.max(segmentStart, Number(first.start || segmentStart));
-  let end = Math.min(segmentEnd, Number(last.end || start) + MARU_EXACT_SPEECH_CUE_RULES.cueTailSeconds);
-  if (next && Number(next.start) > start) end = Math.min(end, Number(next.start) - 0.008);
-  if (!(end > start)) end = Math.min(segmentEnd, Math.max(start + MARU_EXACT_SPEECH_CUE_RULES.minimumCueSeconds, Number(last.end || start)));
-  const cueText = safeString(text || '').replace(/\s+/gu, ' ').trim();
-  return cueText && end > start ? { start, end, text: cueText } : null;
-}
-
-function splitSegmentByVerifiedSentenceTiming(segment, wordRows) {
-  const original = safeString(segment?.text || '').replace(/\s+/gu, ' ').trim();
-  const parts = splitEveryTerminalSentence(original);
-  if (parts.length < 2) return [];
-  const words = wordRowsForSegment(segment, wordRows);
-  const breaks = exactSentenceBreakIndexesOnly(parts, words);
-  if (breaks.length !== parts.length - 1) return [];
-  const cues = [];
-  let from = 0;
-  for (let index = 0; index < parts.length; index += 1) {
-    const to = index < breaks.length ? breaks[index] : words.length - 1;
-    const cue = exactCueFromWordRange(segment, words, from, to, parts[index]);
-    if (!cue) return [];
-    cues.push(cue);
-    from = to + 1;
-  }
-  return cues.length === parts.length ? cues : [];
-}
-
-function splitUntypedTimedWordsIntoExactBeats(segment, wordRows) {
-  const words = wordRowsForSegment(segment, wordRows);
-  if (words.length < 2) return [];
-  const rawText = safeString(segment?.text || '').replace(/\s+/gu, ' ').trim();
-  const wordText = joinSubtitleTimedWords(words);
-  // Do not replace a recognizer's reliable sentence text with a thin/incomplete
-  // timestamp list. This fallback is only for unpunctuated or genuinely long
-  // transport segments where word timing provides the only exact chronology.
-  if (rawText && subtitleTextUnits(wordText) < subtitleTextUnits(rawText) * 0.70) return [];
-  const cues = [];
-  let from = 0;
-  for (let index = 0; index < words.length; index += 1) {
-    const first = words[from];
-    const current = words[index];
-    const next = words[index + 1];
-    const wordCount = index - from + 1;
-    const elapsed = Math.max(0, Number(current.end || 0) - Number(first.start || 0));
-    const gap = next ? Math.max(0, Number(next.start || 0) - Number(current.end || 0)) : 0;
-    const terminal = isSubtitleTerminal(current?.text || '');
-    const breakHere = Boolean(next) && (
-      terminal ||
-      gap >= MARU_EXACT_SPEECH_CUE_RULES.pauseBreakSeconds ||
-      elapsed >= MARU_EXACT_SPEECH_CUE_RULES.maxUntypedBeatSeconds ||
-      wordCount >= MARU_EXACT_SPEECH_CUE_RULES.maxUntypedBeatWords
-    );
-    if (!breakHere) continue;
-    const cue = exactCueFromWordRange(segment, words, from, index, joinSubtitleTimedWords(words.slice(from, index + 1)));
-    if (cue) cues.push(cue);
-    from = index + 1;
-  }
-  const tail = exactCueFromWordRange(segment, words, from, words.length - 1, joinSubtitleTimedWords(words.slice(from)));
-  if (tail) cues.push(tail);
-  return cues.length > 1 ? cues : [];
-}
-
-function splitSegmentsIntoExactSpeechTimelineCues(segments, wordRows) {
-  const shaped = [];
-  for (const segment of Array.isArray(segments) ? segments : []) {
-    const sentenceCues = splitSegmentByVerifiedSentenceTiming(segment, wordRows);
-    if (sentenceCues.length) {
-      shaped.push(...sentenceCues);
-      continue;
-    }
-    const duration = Math.max(0, Number(segment?.end || 0) - Number(segment?.start || 0));
-    // A failed text-to-word sentence match must not turn several spoken turns
-    // back into one delayed paragraph. When exact timed words are sufficiently
-    // complete, emit short direct word beats at their own observed times. This
-    // is not proportional reconstruction: every start/end comes from Whisper.
-    if (duration > MARU_EXACT_SPEECH_CUE_RULES.maxUntypedBeatSeconds) {
-      const wordBeats = splitUntypedTimedWordsIntoExactBeats(segment, wordRows);
-      if (wordBeats.length) {
-        shaped.push(...wordBeats);
-        continue;
-      }
-    }
-    // If timed words are unavailable or materially incomplete, preserve the
-    // recognizer's native cue rather than inventing a later time distribution.
-    shaped.push(segment);
   }
   return normalizeSegments(shaped, 0);
 }
@@ -1602,20 +1519,24 @@ async function handleGenerateSubtitle(id, body) {
   const rawSegments = result.segments || result.items || [];
   const audibleWords = normalizeAudibleWordTimings(result.words || result.word_timestamps || [], offset);
   let segments = normalizeSegments(rawSegments, offset);
-  if (!segments.length && result.text) {
-    segments = normalizeSegments([{ start: offset, end: offset + Math.max(2, Math.min(8, safeString(result.text).length / 8)), text: result.text }], 0);
+  // Prefer recognizer word timestamps whenever they are available. This is the
+  // only path that can attach a caption to the exact spoken moment. It does not
+  // use text-length shares, sentence reconstruction, or a dialogue AI pass.
+  const exactSpeechCues = splitExactSpeechWordTimeline(audibleWords);
+  if (exactSpeechCues.length) {
+    segments = exactSpeechCues;
+  } else if (!segments.length && audibleWords.length) {
+    segments = rawSegmentsFromRecognizedWords(audibleWords);
+  } else if (!segments.length && result.text) {
+    // Last compatibility path: retain the recognizer's supplied chunk window.
+    // Do not invent smaller text-proportional subtitle times.
+    const knownDuration = numberOr(body.chunkDurationSeconds, 0);
+    segments = normalizeSegments([{ start: offset, end: offset + (knownDuration > 0.18 ? knownDuration : Math.max(0.18, safeString(result.text).length / 8)), text: result.text }], 0);
   }
-  // Word timing only narrows visual cue bounds to audible speech/lyrics; it
-  // never fabricates text, shifts a completed cue forward, or changes order.
-  segments = alignSegmentsToAudibleWordBoundaries(segments, audibleWords);
-  // A defensive guard for pre-existing bad relay behavior: internal prompt text
-  // is never allowed to become dialogue in a saved subtitle.
   segments = constrainSegmentsToSourceWindow(dropMaruInstructionLeakSegments(segments), body);
-  // Preserve the recognizer's actual speech timing. Completed sentences become
-  // independent subtitle cues only when their existing timed words verify the
-  // boundary. Long unpunctuated transport segments fall back to short timed
-  // word beats; no proportional timing, cue merge, or second model request.
-  segments = splitSegmentsIntoExactSpeechTimelineCues(segments, audibleWords);
+  // With native word timings each cue is already an exact speech unit. Without
+  // them, preserve native recognizer segments unchanged rather than fabricating
+  // a rewritten timeline from character counts or translated text.
   // Record only standalone human non-verbal cues. The marker survives the
   // direct target-language translation and is rendered as a concise caption
   // after translation without changing this cue’s timeline.
@@ -1643,10 +1564,9 @@ async function handleGenerateSubtitle(id, body) {
     targetSegments,
     directTarget ? targetLang : (sourceLanguageDetected || targetLang || 'en')
   );
-  // Do not re-split or redistribute translated text after it has been mapped
-  // to an observed speech cue. A final display rewrite would fabricate timing
-  // and can delay a later spoken line; every translated cue keeps its exact
-  // original start/end boundary.
+  // Never split or redistribute a translated line after its source speech
+  // timing has been fixed. Translation may correct wording only; cue count and
+  // source start/end values remain immutable.
 
   return json(200, {
     ok: true,
