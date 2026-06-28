@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IGDC 실상품 공급 개방 점검</title>
+  <style>
+    :root{color-scheme:dark}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#0f172a;color:#e5e7eb}
+    main{max-width:1160px;margin:0 auto;padding:28px 18px 64px}
+    h1{font-size:25px;margin:0 0 8px}.lead{color:#cbd5e1;line-height:1.58;margin:0;max-width:900px}
+    .bar{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}.bar button,.bar select{border:0;border-radius:10px;padding:10px 13px;font-weight:750;cursor:pointer}
+    .bar button{background:#38bdf8;color:#082f49}.bar button.secondary{background:#e2e8f0;color:#0f172a}.bar button:disabled{opacity:.52;cursor:not-allowed}.bar select{background:#f8fafc;color:#0f172a}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}.card{background:#111827;border:1px solid #334155;border-radius:14px;padding:14px}.card h2{font-size:14px;margin:0 0 8px;color:#f8fafc}.num{font-size:26px;font-weight:800}.small{font-size:12px;color:#94a3b8;line-height:1.45}.status{font-weight:800}.ok{color:#4ade80}.warn{color:#fbbf24}.fail{color:#fb7185}.info{color:#93c5fd}
+    .panel{background:#111827;border:1px solid #334155;border-radius:14px;padding:14px;margin-top:14px}.panel h2{font-size:16px;margin:0 0 9px}.notice{border-left:4px solid #38bdf8;background:#0b223c;padding:10px 12px;border-radius:8px;color:#dbeafe;line-height:1.5}.warnbox{border-left-color:#f59e0b;background:#30230d;color:#fde68a}.okbox{border-left-color:#22c55e;background:#0d2b1a;color:#bbf7d0}
+    table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}th,td{border-bottom:1px solid #334155;padding:8px;text-align:left;vertical-align:top}th{color:#cbd5e1}td{color:#e2e8f0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}.hidden{display:none!important}
+    pre{white-space:pre-wrap;word-break:break-word;background:#020617;border:1px solid #1e293b;border-radius:14px;padding:14px;max-height:430px;overflow:auto;font-size:12px}.page-checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:10px}.page-row{border:1px solid #334155;border-radius:10px;padding:10px;background:#0b1220}
+  </style>
+</head>
+<body>
+<main>
+  <h1>IGDC 실상품 공급 개방 점검</h1>
+  <p class="lead">실상품 후보의 판매처 URL·신뢰·권역·배송·프론트 노출·제휴 계약·정산 수령 준비 상태를 읽기 전용으로 확인합니다. 이 점검은 스냅샷을 수정하지 않고, 외부 판매처 링크를 열거나 클릭하지 않으며, 결제·수익·후원·회원 데이터를 생성하지 않습니다.</p>
+  <div class="bar">
+    <label class="small" for="auditMode">점검 모드</label>
+    <select id="auditMode"><option value="pre-product">실상품 투입 전</option><option value="production">실상품 운영</option></select>
+    <button id="runAuditBtn" type="button">실상품 개방 점검 실행</button>
+    <button id="runPageObserveBtn" type="button" class="secondary">페이지 로드 관찰</button>
+    <button id="downloadJsonBtn" type="button" class="secondary" disabled>JSON 리포트 다운로드</button>
+    <button id="downloadHtmlBtn" type="button" class="secondary" disabled>HTML 요약 다운로드</button>
+    <button id="returnBtn" type="button" class="secondary">관리자 화면으로</button>
+  </div>
+  <div id="status" class="small">대기 중</div>
+  <div id="summary" class="grid"></div>
+  <section id="gatePanel" class="panel hidden"></section>
+  <section id="snapshotPanel" class="panel hidden"></section>
+  <section id="candidatePanel" class="panel hidden"></section>
+  <section id="runtimePanel" class="panel hidden"></section>
+  <section id="pagePanel" class="panel hidden"></section>
+  <section class="panel"><h2>원본 결과</h2><pre id="rawOutput">아직 실행되지 않았습니다.</pre></section>
+</main>
+<script src="/assets/js/admin-product-go-live-audit.js" defer></script>
+</body>
+</html>

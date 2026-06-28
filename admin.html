@@ -3655,5 +3655,124 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 <script src="/assets/js/diagnostics/igdc-diag-admin-bridge.js"></script>
 <script src="/assets/js/diagnostics/igdc-system-diagnostic-full.js"></script>
 
+<!-- IGDC real-product go-live audit launcher: inserted between engine audit and Global Insight -->
+<style id="igdc-admin-product-go-live-link-style">
+  .igdc-admin-product-go-live-card {
+    border-color: #93c5a9 !important;
+    background: #f3fbf5 !important;
+  }
+  .igdc-admin-product-go-live-card:hover {
+    border-color: #58a778 !important;
+    background: #eaf8ee !important;
+  }
+  .igdc-admin-product-go-live-card .igdc-admin-product-go-live-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #1e6139;
+  }
+  .igdc-admin-product-go-live-card .igdc-admin-product-go-live-desc {
+    font-size: 11px;
+    color: #356a4a;
+    line-height: 1.35;
+    margin: 3px 0 6px;
+  }
+  .igdc-admin-product-go-live-card .igdc-admin-product-go-live-btn {
+    width: 100%;
+    padding: 5px 7px;
+    font-size: 11px;
+    font-weight: 800;
+    border-radius: 5px;
+    border: 1px solid #86bd9a;
+    background: linear-gradient(180deg, #fbfffc 0%, #dff3e5 100%);
+    color: #1e6139;
+    cursor: pointer;
+  }
+  .igdc-admin-product-go-live-card .igdc-admin-product-go-live-btn:hover { background:#d3eedb; }
+  .igdc-admin-product-go-live-card .igdc-admin-product-go-live-mini {
+    margin-top: 4px;
+    font-size: 10px;
+    color: #5b876a;
+  }
+</style>
+<script id="igdc-admin-product-go-live-link-script">
+(function(){
+  if (window.__IGDC_ADMIN_PRODUCT_GO_LIVE_LINK_INSTALLED__) return;
+  window.__IGDC_ADMIN_PRODUCT_GO_LIVE_LINK_INSTALLED__ = true;
+
+  function auditUrl(){
+    var u = new URL('/product-go-live-audit.html', window.location.origin);
+    u.searchParams.set('mode', 'pre-product');
+    u.searchParams.set('source', 'admin-right-panel');
+    u.searchParams.set('returnPath', window.location.pathname + window.location.search + window.location.hash);
+    return u.pathname + u.search;
+  }
+  function findCard(panel, re){
+    var cards = Array.prototype.slice.call(panel.querySelectorAll('.igdc-sc-card'));
+    for (var i = 0; i < cards.length; i++) {
+      var txt = (cards[i].textContent || '').replace(/\s+/g, ' ');
+      if (re.test(txt)) return cards[i];
+    }
+    return null;
+  }
+  function makeCard(){
+    var card = document.createElement('div');
+    card.id = 'igdc-admin-product-go-live-link-card';
+    card.className = 'igdc-sc-card igdc-admin-product-go-live-card';
+    card.setAttribute('data-igdc-admin-product-go-live-link', '1');
+    card.innerHTML = '' +
+      '<div class="igdc-sc-card-header">' +
+        '<span class="igdc-admin-product-go-live-title">🧭 실상품 공급 개방 점검</span>' +
+        '<span class="igdc-sc-card-status">↗</span>' +
+      '</div>' +
+      '<div class="igdc-admin-product-go-live-desc">판매처·신뢰·권역·제휴·정산 준비를 읽기 전용으로 점검합니다.</div>' +
+      '<button class="igdc-admin-product-go-live-btn" type="button">실상품 점검 실행</button>' +
+      '<div class="igdc-admin-product-go-live-mini">외부 링크·결제·수익 기록은 실행하지 않습니다.</div>';
+    function open(ev){
+      if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+      window.location.href = auditUrl();
+      return false;
+    }
+    var btn = card.querySelector('button');
+    if (btn) btn.addEventListener('click', open);
+    card.addEventListener('click', function(ev){ if (ev.target && ev.target.tagName === 'BUTTON') return; open(ev); });
+    return card;
+  }
+  function install(){
+    var panel = document.getElementById('igdc-site-control');
+    if (!panel) return false;
+    var existing = document.getElementById('igdc-admin-product-go-live-link-card');
+    if (existing && panel.contains(existing)) return true;
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+    var card = makeCard();
+    var engineAudit = document.getElementById('igdc-admin-audit-link-card') || findCard(panel, /시스템\s*점검.*엔진\s*헬스|엔진\s*헬스체크/i);
+    var insight = findCard(panel, /MARU\s*Global\s*Insight|마루\s*Global\s*Insight/i);
+
+    if (engineAudit && engineAudit.parentNode) {
+      engineAudit.insertAdjacentElement('afterend', card);
+      return true;
+    }
+    if (insight && insight.parentNode) {
+      insight.parentNode.insertBefore(card, insight);
+      return true;
+    }
+    var grid = panel.querySelector('.igdc-sc-grid') || panel;
+    grid.appendChild(card);
+    return true;
+  }
+  function arm(){
+    var tries = 0;
+    var timer = setInterval(function(){ tries += 1; if (install() || tries > 80) clearInterval(timer); }, 250);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install); else install();
+    var panel = document.getElementById('igdc-site-control');
+    if (panel && window.MutationObserver) {
+      var observer = new MutationObserver(function(){ install(); });
+      observer.observe(panel, { childList:true, subtree:true });
+    }
+  }
+  arm();
+})();
+</script>
+
 </body>
 </html>
