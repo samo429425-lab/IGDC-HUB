@@ -3404,7 +3404,7 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
     mo.observe(list, {childList:true, subtree:true});
   });
 })();
-</script><script>
+</script><script src="/assets/js/igdc-engagement-storage-bridge.js?v=20260629eng1-final8"></script><script src="/assets/js/igdc-donation-engagement.js?v=20260629eng1-final8"></script><script>
 (function(){
   const USER_ROLE = (window.USER_ROLE || 'admin');
   const USER_ID   = (window.USER_ID   || 'local-user');
@@ -3423,16 +3423,20 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
     const tm = (item.querySelector('.h-time')?.textContent || item.querySelector('.meta')?.textContent || '').trim();
     const key = (t+'|'+tm).toLowerCase(); let h=0; for(let i=0;i<key.length;i++){ h=((h<<5)-h)+key.charCodeAt(i); h|=0; } return 'news:'+h;
   }
-  function loadMetrics(id){
-    try{ return JSON.parse(localStorage.getItem('newsMetrics:'+id) || '{"views":0,"reco":0,"like":0}'); }
-    catch(e){ return {views:0,reco:0,like:0}; }
+  // Reaction counters are server-backed by igdc-donation-engagement.js.
+  // This temporary render cache only preserves values during the current page
+  // paint; it deliberately does not write browser-persistent reaction data.
+  const __igdcDonationReactionRenderCache = Object.create(null);
+  function reactionRenderState(id){
+    if(!__igdcDonationReactionRenderCache[id]){
+      __igdcDonationReactionRenderCache[id] = { metrics:{views:0,reco:0,like:0}, toggles:{reco:false,like:false} };
+    }
+    return __igdcDonationReactionRenderCache[id];
   }
-  function saveMetrics(id, obj){ localStorage.setItem('newsMetrics:'+id, JSON.stringify(obj)); }
-  function loadToggles(id){
-    try{ return JSON.parse(localStorage.getItem('newsToggles:'+id) || '{"reco":false,"like":false}'); }
-    catch(e){ return {reco:false,like:false}; }
-  }
-  function saveToggles(id, obj){ localStorage.setItem('newsToggles:'+id, JSON.stringify(obj)); }
+  function loadMetrics(id){ return Object.assign({views:0,reco:0,like:0}, reactionRenderState(id).metrics); }
+  function saveMetrics(id, obj){ reactionRenderState(id).metrics = Object.assign({views:0,reco:0,like:0}, obj || {}); }
+  function loadToggles(id){ return Object.assign({reco:false,like:false}, reactionRenderState(id).toggles); }
+  function saveToggles(id, obj){ reactionRenderState(id).toggles = Object.assign({reco:false,like:false}, obj || {}); }
 
   function ensureFooterWithIcons(item){
     let footer = item.querySelector('.item-footer');

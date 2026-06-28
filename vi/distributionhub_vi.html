@@ -1013,35 +1013,6 @@
     .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
   </style>
 
-
-<style id="igdc-qa-panel-position-final-v1">
-/* IGDC Q&A modal position final: keep button/function intact, lift the modal near the index nav bottom. */
-.igdc-qa-modal .igdc-qa-panel,
-.igdc-qa-panel{
-  top:18px !important;
-  bottom:auto !important;
-  max-height:calc(100dvh - 36px) !important;
-  overflow:hidden !important;
-}
-.igdc-qa-modal .igdc-qa-body,
-.igdc-qa-panel .igdc-qa-body{
-  max-height:calc(100dvh - 150px) !important;
-  overflow-y:auto !important;
-  -webkit-overflow-scrolling:touch !important;
-}
-@media (max-width:768px){
-  .igdc-qa-modal .igdc-qa-panel,
-  .igdc-qa-panel{
-    top:14px !important;
-    bottom:auto !important;
-    max-height:calc(100dvh - 28px) !important;
-  }
-  .igdc-qa-modal .igdc-qa-body,
-  .igdc-qa-panel .igdc-qa-body{
-    max-height:calc(100dvh - 132px) !important;
-  }
-}
-</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -1504,11 +1475,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     // Feedback handlers (optional)
     el.btnLike.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); this.textContent='Đã thích'; this.disabled=true; }catch(_){}
+      try{ if(window.IGDCEngagement && window.IGDCEngagement.toggle){ await window.IGDCEngagement.toggle(id, 'like', true); } else { await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); } this.textContent='Đã thích'; this.disabled=true; }catch(_){}
     };
     el.btnRec.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); this.textContent='Đã đề xuất'; this.disabled=true; }catch(_){}
+      try{ if(window.IGDCEngagement && window.IGDCEngagement.toggle){ await window.IGDCEngagement.toggle(id, 'recommend', true); } else { await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); } this.textContent='Đã đề xuất'; this.disabled=true; }catch(_){}
     };
   }
 

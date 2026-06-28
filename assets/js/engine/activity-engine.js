@@ -31,6 +31,8 @@
       body:JSON.stringify({
         id:id,
         type:type,
+        state:'on',
+        viewer_id:(global.IGDCEngagement && typeof global.IGDCEngagement.viewerId === 'function') ? global.IGDCEngagement.viewerId() : '',
         page:(global.location && global.location.pathname) || '/',
         source:'activity-engine'
       })
