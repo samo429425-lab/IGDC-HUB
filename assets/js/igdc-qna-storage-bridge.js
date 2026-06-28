@@ -1,5 +1,5 @@
 /*
- * IGDC Q&A canonical storage bridge
+ * IGDC Q&A canonical storage bridge — final7 rebase
  * Keeps the existing Q&A modal UI intact while routing popup writes and list reads
  * through the server-side qa-proxy endpoint.
  */

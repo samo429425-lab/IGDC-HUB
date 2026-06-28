@@ -14,7 +14,7 @@
   if (document.getElementById(id)) return;
   var script = document.createElement('script');
   script.id = id;
-  script.src = '/assets/js/igdc-qna-storage-bridge.js?v=20260628qa2';
+  script.src = '/assets/js/igdc-qna-storage-bridge.js?v=20260628qa3-final7';
   script.async = false;
   (document.head || document.documentElement).appendChild(script);
 })();
