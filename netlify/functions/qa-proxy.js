@@ -18,7 +18,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const VERSION = "igdc-qa-proxy-v1.1.0-membership-commerce-ai30";
+const VERSION = "igdc-qa-proxy-v1.2.1-canonical-thread-store";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
@@ -261,60 +261,138 @@ async function sbFetch(restPath, init, service){
   return data;
 }
 
+function cleanText(v, max){
+  return s(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").trim().slice(0, max || 2000);
+}
+
+function normalizeScope(raw, fallback, max){
+  const value = cleanText(raw, max || 300);
+  return value || fallback;
+}
+
+function scopeFor(record){
+  const meta = record && record.meta || {};
+  return {
+    project: normalizeScope(record && (record.project || record.project_id) || meta.project, "IGDC", 120),
+    page_id: normalizeScope(record && (record.page_id || record.pageId) || meta.page_id || meta.pageId || meta.page, "", 360)
+  };
+}
+
+function isSavedThread(saved){
+  return !!(saved && Array.isArray(saved.threads) && saved.threads.length);
+}
+
+function publicThread(row){
+  const meta = row && row.meta || {};
+  return {
+    id: row && (row.id || row.uuid || row.ts) || null,
+    project: row && row.project || meta.project || "IGDC",
+    page_id: row && (row.page_id || row.pageId) || meta.page_id || meta.pageId || meta.page || "",
+    question: row && (row.question || row.q) || "",
+    answer: row && (row.answer || row.a) || "",
+    is_admin: !!(row && (row.is_admin || row.admin_required) || meta.admin_required),
+    status: row && row.status || meta.status || "answered",
+    created_at: row && (row.created_at || row.updated_at || row.ts) || null
+  };
+}
+
 async function saveQuestion(record){
-  const saved = { questions:null, threads:null, errors:[] };
+  const saved = { questions:null, threads:null, persisted:false, errors:[], warnings:[] };
   if (!SUPABASE_URL || (!SUPABASE_ANON_KEY && !SUPABASE_SERVICE_ROLE_KEY)) {
     saved.errors.push("Supabase env missing; answer generated without DB save.");
     return saved;
   }
 
+  const scope = scopeFor(record);
+  if (!scope.page_id) {
+    saved.errors.push("Missing page_id; Q&A thread was not saved.");
+    return saved;
+  }
+
   const meta = Object.assign({}, record.meta || {}, {
+    project: scope.project,
+    page_id: scope.page_id,
     qa_proxy_version: VERSION,
     category: record.category,
     priority: record.priority,
-    admin_required: record.admin_required,
+    admin_required: !!record.admin_required,
     status: record.status,
     ai_answered: record.ai_answered,
     answer_hash: hash(record.answer)
   });
 
+  // This is the canonical row read by the existing popup's registered-question list.
+  // Keep the first write restricted to the fields already used by the current popup schema.
+  const canonicalThread = [{
+    project: scope.project,
+    page_id: scope.page_id,
+    question: record.question,
+    answer: record.answer,
+    is_admin: !!record.admin_required,
+    created_at: record.created_at,
+    meta
+  }];
+  try{
+    saved.threads = await sbFetch("igdc_qna_threads", { method:"POST", body:JSON.stringify(canonicalThread) }, true);
+  }catch(e1){
+    // Some older deployments do not yet have a JSON meta column. Preserve saving with the core popup fields.
+    const compatThread = [{
+      project: scope.project,
+      page_id: scope.page_id,
+      question: record.question,
+      answer: record.answer,
+      is_admin: !!record.admin_required,
+      created_at: record.created_at
+    }];
+    try{ saved.threads = await sbFetch("igdc_qna_threads", { method:"POST", body:JSON.stringify(compatThread) }, true); }
+    catch(e2){ saved.errors.push(`igdc_qna_threads save failed: ${e2.message || e2}`); }
+  }
+  saved.persisted = isSavedThread(saved);
+  if (!saved.persisted) return saved;
+
+  // Preserve the legacy audit/mirror table when it exists, but do not let mirror failure pretend that the popup save failed.
   const richQuestion = [{
     question: record.question,
     answer: record.answer,
     category: record.category,
     priority: record.priority,
-    admin_required: record.admin_required,
+    admin_required: !!record.admin_required,
     status: record.status,
     meta,
     created_at: record.created_at
   }];
   const simpleQuestion = [{ question: record.question, meta }];
-
-  try{ saved.questions = await sbFetch("questions", { method:"POST", body:JSON.stringify(richQuestion) }, false); }
+  try{ saved.questions = await sbFetch("questions", { method:"POST", body:JSON.stringify(richQuestion) }, true); }
   catch(e1){
-    try{ saved.questions = await sbFetch("questions", { method:"POST", body:JSON.stringify(simpleQuestion) }, false); }
-    catch(e2){ saved.errors.push(`questions save failed: ${e2.message || e2}`); }
-  }
-
-  if (record.admin_required) {
-    const thread = [{
-      q: record.question,
-      a: record.answer,
-      question: record.question,
-      answer: record.answer,
-      category: record.category,
-      priority: record.priority,
-      status: record.status,
-      important: record.priority === "high" || record.priority === "urgent",
-      admin_required: true,
-      source: record.source || "qa-proxy",
-      meta,
-      created_at: record.created_at
-    }];
-    try{ saved.threads = await sbFetch("igdc_qna_threads", { method:"POST", body:JSON.stringify(thread) }, true); }
-    catch(e){ saved.errors.push(`igdc_qna_threads save failed: ${e.message || e}`); }
+    try{ saved.questions = await sbFetch("questions", { method:"POST", body:JSON.stringify(simpleQuestion) }, true); }
+    catch(e2){ saved.warnings.push(`questions mirror save skipped: ${e2.message || e2}`); }
   }
   return saved;
+}
+
+async function listPublicThreads(project, pageId, limit){
+  limit = Math.max(1, Math.min(100, safeNum(limit, 100)));
+  const result = { ok:true, version:VERSION, project, page_id:pageId, limit, rows:[], warnings:[] };
+  if (!SUPABASE_URL || (!SUPABASE_ANON_KEY && !SUPABASE_SERVICE_ROLE_KEY)) {
+    result.ok = false;
+    result.warnings.push("Supabase env missing");
+    return result;
+  }
+  if (!pageId) {
+    result.ok = false;
+    result.warnings.push("Missing page_id");
+    return result;
+  }
+  const p = encodeURIComponent(project);
+  const id = encodeURIComponent(pageId);
+  try{
+    const rows = await sbFetch(`igdc_qna_threads?select=*&project=eq.${p}&page_id=eq.${id}&order=created_at.desc&limit=${limit}`, { method:"GET", headers:{ Prefer:"" } }, true);
+    result.rows = (Array.isArray(rows) ? rows : []).map(publicThread).filter(x => x.question);
+  }catch(e){
+    result.ok = false;
+    result.warnings.push(String(e.message || e).slice(0,280));
+  }
+  return result;
 }
 
 function normalizeRows(rows, source){
@@ -332,7 +410,7 @@ function normalizeRows(rows, source){
       priority: x.priority || meta.priority || "normal",
       status: x.status || meta.status || "pending",
       important: !!(x.important || meta.important || ["high","urgent"].includes(x.priority || meta.priority)),
-      admin_required: x.admin_required !== false,
+      admin_required: !!(x.admin_required || x.is_admin || meta.admin_required),
       source: x.source || meta.source || source,
       meta
     };
@@ -349,13 +427,13 @@ async function listAdminQuestions(limit){
   }
 
   const paths = [
-    { table:"igdc_qna_threads", path:`igdc_qna_threads?select=*&admin_required=eq.true&order=created_at.desc&limit=${limit}` },
-    { table:"questions", path:`questions?select=*&admin_required=eq.true&order=created_at.desc&limit=${limit}` }
+    { table:"igdc_qna_threads", path:`igdc_qna_threads?select=*&order=created_at.desc&limit=${Math.min(limit * 4, 400)}` },
+    { table:"questions", path:`questions?select=*&order=created_at.desc&limit=${Math.min(limit * 4, 400)}` }
   ];
   for (const p of paths){
     try{
       const rows = await sbFetch(p.path, { method:"GET", headers:{ Prefer:"" } }, true);
-      const norm = normalizeRows(rows, p.table);
+      const norm = normalizeRows(rows, p.table).filter(x => !!(x.meta && x.meta.admin_required) || x.admin_required || x.important);
       result.sources.push({ table:p.table, ok:true, count:norm.length });
       result.rows.push(...norm);
     }catch(e){
@@ -398,11 +476,20 @@ exports.handler = async function(event){
     if (method === "OPTIONS") return { statusCode:204, headers:CORS, body:"" };
 
     const qs = event.queryStringParameters || {};
+    const action = low(qs.action || qs.mode || "");
     if (method === "GET") {
-      if (low(qs.admin || qs.mode || qs.action) === "1" || low(qs.admin || qs.mode || qs.action) === "admin" || low(qs.action) === "admin-list") {
-        return json(200, await listAdminQuestions(qs.limit));
+      if (action === "list" || action === "threads" || action === "thread-list") {
+        const project = normalizeScope(qs.project, "IGDC", 120);
+        const pageId = normalizeScope(qs.page_id || qs.pageId || qs.page, "", 360);
+        const listed = await listPublicThreads(project, pageId, qs.limit);
+        return json(listed.ok ? 200 : 503, listed);
       }
-      if (low(qs.mode || qs.action) === "health") {
+      // No deployed client currently uses the legacy admin endpoints. Keep their surface closed
+      // until the admin UI passes a verified server-side session token.
+      if (low(qs.admin || qs.mode || qs.action) === "1" || low(qs.admin || qs.mode || qs.action) === "admin" || action === "admin-list") {
+        return json(403, { ok:false, version:VERSION, error:"Admin Q&A access requires a verified server-side admin session." });
+      }
+      if (action === "health") {
         const k = readKnowledge();
         return json(200, { ok:true, version:VERSION, knowledge:{ version:k.version, hash:k._hash || null }, supabase:!!SUPABASE_URL });
       }
@@ -417,19 +504,31 @@ exports.handler = async function(event){
 
     if (method === "POST") {
       const body = parseBody(event);
-      if (low(body.action) === "admin-update") return json(200, await updateAdminQuestion(body));
+      if (low(body.action) === "admin-update") {
+        return json(403, { ok:false, version:VERSION, error:"Admin Q&A updates require a verified server-side admin session." });
+      }
 
-      const question = s(body.question || body.q || body.message).trim();
+      const question = cleanText(body.question || body.q || body.message, 4000);
       if (!question) return json(400, { ok:false, error:"Missing question" });
-      const meta = Object.assign({}, body.meta || {}, {
-        lang: body.lang || (body.meta && body.meta.lang) || "ko",
-        page: body.page || (body.meta && body.meta.page) || "",
-        source: body.source || (body.meta && body.meta.source) || "qa"
-      });
+      const incomingMeta = body.meta && typeof body.meta === "object" && !Array.isArray(body.meta) ? body.meta : {};
+      const project = normalizeScope(body.project || body.project_id || incomingMeta.project, "IGDC", 120);
+      const pageId = normalizeScope(body.page_id || body.pageId || body.page || incomingMeta.page_id || incomingMeta.pageId || incomingMeta.page, "", 360);
+      if (!pageId) return json(400, { ok:false, error:"Missing page_id" });
+      const meta = {
+        lang: normalizeLang(body.lang || incomingMeta.lang || "ko"),
+        project,
+        page_id: pageId,
+        page: pageId,
+        source: cleanText(body.source || incomingMeta.source || "qna-popup", 120),
+        ua: cleanText(incomingMeta.ua, 500),
+        channel: cleanText(incomingMeta.channel, 120)
+      };
       const k = readKnowledge();
       const route = classify(question, meta, k);
       const answer = await answerFor(question, meta, route, k);
       const record = Object.assign({
+        project,
+        page_id: pageId,
         question,
         answer,
         created_at: nowIso(),
@@ -437,8 +536,10 @@ exports.handler = async function(event){
         meta
       }, route);
       const saved = await saveQuestion(record);
-      return json(200, {
-        ok:true,
+      const stored = isSavedThread(saved);
+      const persistedRow = stored ? publicThread(saved.threads[0]) : null;
+      return json(stored ? 200 : 503, {
+        ok:stored,
         version:VERSION,
         answer,
         route,
@@ -447,7 +548,8 @@ exports.handler = async function(event){
         category: route.category,
         status: route.status,
         saved,
-        adminSummary: adminSummary(question, route)
+        record:persistedRow,
+        error: stored ? null : "Q&A answer was generated, but the question was not saved."
       });
     }
 
