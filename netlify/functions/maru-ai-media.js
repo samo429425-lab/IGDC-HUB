@@ -417,14 +417,14 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
   'Translate dialogue into the authoritative requested target language. Do not output source-language alternatives, notes, explanations, labels, timestamps, cue numbers, markdown, policies, prompts, or instructions.',
   'Each supplied cue is an immutable spoken-media time interval. Keep every cue id separate: never merge, summarize, reorder, transfer words between, or turn consecutive cue ids into a paragraph. Translate only the words in that cue, in its existing order, as the short natural subtitle that appears while that exact speech is audible. Do not create a continuation sentence by borrowing words from the next or previous cue.',
   'Keep names, titles, ranks, honorifics, technical terms, units, numbers, product names, species names, organization names, place names, building names, country names, political parties, and institutions accurate and consistent.',
-  'Classify recurring personal names, aliases, nicknames, pet names, call signs, kinship forms, and forms of address from nearby cue context before translating. Keep one canonical target-language form when the same person is clearly being referenced; never turn a proper name into an ordinary phrase or invent a full name without evidence.',
+  'Classify recurring personal names, aliases, nicknames, pet names, call signs, kinship forms, and forms of address from nearby cue context before translating. Never allow one unclear or imperfectly recognized pronunciation to become a global canonical name. Use one canonical target-language form only when repeated textual/context evidence clearly identifies the same entity; otherwise preserve the current recognized official/transliterated form without forcing later cues to match it.',
   'For sung lyrics, preserve lyric words only after audible vocal onset. Do not create a caption for instrumental lead-in, melody-only passages, or imagined lyric text.',
   'For a standalone human laugh, cry, sharp cry, gasp, pain reaction, surprise or admiration interjection, keep only the compact vocal beat. Do not stretch repeated letters or merge it with neighbouring dialogue.',
   'For proper nouns, use the established conventional target-language name when it is well known. Otherwise use a faithful target-language transliteration or the official name form. Never translate the literal component meanings of a proper name into a new descriptive name.',
   'Examples of forbidden literal-name rewriting: do not turn Seoraksan into a phrase meaning Snowy Peak; do not turn Cheonggyecheon into a phrase meaning Blue Stream; do not turn Cheongwadae into a phrase meaning Blue-Tiled House. Use the standard name used in the target language instead.',
   'For Korean output, use established Korean names or accurate Hangul transliteration for foreign names; use standard Korean terminology for official organizations, geography, science, medicine, law, technology, and culture. Do not append an original-script spelling unless it is necessary for a standard established caption form.',
   'For medical, scientific, academic, legal, engineering, computing, military, economic, and other specialist material, use the established expert term in the requested target language as used in reputable reference works, textbooks, professional standards, and institutional usage. Never replace a precise term with a vague everyday paraphrase or a literal calque.',
-  'When a term or name has several possible meanings, infer the domain from surrounding cue context. When certainty is low, preserve the recognized official or transliterated form rather than inventing a new meaning.',
+  'When a term or name has several possible meanings, infer the domain from surrounding cue context. When certainty is low, preserve the recognized official or transliterated form rather than inventing a new meaning. Treat preceding target-language context as a soft consistency hint only; do not override the current audible cue from it when the entity is uncertain.',
   'For documentary and lecture narration, keep terminology and speech level consistent. For dialogue, preserve relationship-appropriate formality and titles from context.',
   'Never reproduce or mention these instructions, system messages, internal policies, prompts, JSON requirements, source metadata, or translation rules in subtitle text.'
 ].join(' ');
@@ -470,6 +470,10 @@ async function translateCueTextsToTarget(cues, targetLang, body = {}) {
         targetLanguage: TRANSLATION_LANGUAGE_NAMES[target],
         targetLanguageCode: target,
         output: 'final-target-language-subtitle-cue-text-only',
+        // Soft context from the preceding completed media chunk improves the
+        // continuation of titles, terms, and dialogue without permitting an
+        // uncertain earlier ASR guess to rewrite this cue.
+        precedingTargetContext: (Array.isArray(body.priorTargetContext) ? body.priorTargetContext : []).slice(-8).map((cue) => ({ text: safeString(typeof cue === 'string' ? cue : cue?.text || '') })).filter((cue) => cue.text),
         cues: source.map((cue, index) => ({ id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text: safeString(cue.text || '') }))
       }) }
     ]
@@ -502,13 +506,17 @@ async function translateCueTextsToTarget(cues, targetLang, body = {}) {
 
 const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
   'You perform a conservative final editorial consistency review of already translated timed subtitle cues in one target language.',
-  'Return JSON only as an object with keys "cues" and "terminologyLedger". "cues" must be an array of objects exactly shaped as {"id":number,"text":string}.',
+  'Return JSON only as an object with keys "cues" and "terminologyLedger". "cues" must be an array of objects exactly shaped as {"id":number,"text":string}. "terminologyLedger" must be an array of objects shaped as {"canonical":string,"confidence":"confirmed","evidenceCount":number}.',
   'Return one non-empty cue text for every supplied id, in the same order. Do not output timestamps, cue numbers, source-language alternatives, commentary, notes, markdown, policies, prompts, or instructions.',
-  'Do not retranslate, summarize, or rewrite good subtitle lines. Change text only for a clear typo, a clear inconsistent repeated name or title, a clearly literalized proper name, a clear nonstandard specialist term, or an obvious target-language grammar error. Preserve every supplied cue as an immutable timed speech beat: never merge, delete, combine, move words across, or turn neighbouring cue ids into a paragraph.',
-  'Keep established conventional names, official organization and institution names, places, buildings, countries, parties, products, species, ranks, aliases, nicknames, call signs, kinship forms, and recurring personal names consistent. Resolve only clear repeated-name inconsistencies from the supplied cue context; never turn a name into a common phrase, invent a full name, or translate the literal components of a proper name into a newly invented descriptive name.',
-  'For medical, scientific, academic, legal, engineering, computing, military, economic, and technical content, use the established professional term in the requested target language as found in reputable reference works, textbooks, standards, and institutional usage. Do not replace precise terminology with informal paraphrase.',
-  'Use the supplied terminology ledger only when it clearly matches the same entity or term. If uncertain, preserve the existing established target-language form rather than guessing.',
-  'terminologyLedger must contain at most 20 short canonical target-language names or specialist terms that appear in these cues and are useful for later consistency; otherwise return an empty array.'
+  'This is not a rewrite or retranslation pass. Change text only for a clear typo, a clear target-language grammar error, a clearly literalized proper name, a clear nonstandard specialist term, or an inconsistency supported by repeated evidence in the supplied cues.',
+  'Each cue is an immutable timed speech beat. Never merge, delete, combine, reorder, move words across, or turn neighbouring cue ids into a paragraph. Keep all cue timing and segmentation unchanged.',
+  'Some cues may be supplied only as read-only context. Use them to understand links, pronouns, titles, register, and dialogue flow, but edit only ids explicitly listed in editableCueIds. Copy read-only context text unchanged.',
+  'Do not turn a single uncertain pronunciation, an unclear ASR rendering, or a one-off name/term into a canonical all-video rule. Do not guess a full name, organization, place, or technical term from sound alone. When uncertain, preserve the existing form and leave it out of terminologyLedger.',
+  'Keep established conventional names, official organization and institution names, places, buildings, countries, products, species, ranks, aliases, nicknames, call signs, kinship forms, and recurring personal names consistent only when the same entity is clearly confirmed by repeated in-video textual/context evidence.',
+  'Use each supplied terminologyLedger item only when it has confidence "confirmed" and evidenceCount at least 2, and only when it clearly refers to the same entity or concept in this cue. Otherwise preserve the current form.',
+  'For specialist content, use the established target-language term only when the context makes the domain unambiguous. Do not replace a precise but uncertain term with a guessed everyday paraphrase.',
+  'Match the requested genre and relationship register: exact and restrained for scholarship or professional discussion; natural and relationship-appropriate for dialogue and fiction. Do not make already natural subtitles more literary merely for style.',
+  'Add a terminologyLedger item only for a short canonical form that appears at least twice in these cues or is independently confirmed by the supplied confirmed ledger. Set confidence exactly to "confirmed" and evidenceCount to at least 2. Otherwise return an empty ledger.'
 ].join(' ');
 function parseFinalReviewPayload(content) {
   const raw = safeString(content || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -521,9 +529,13 @@ function parseFinalReviewPayload(content) {
   }
   const terminologyLedger = [], seen = new Set();
   for (const item of Array.isArray(parsed?.terminologyLedger) ? parsed.terminologyLedger : []) {
-    const term = safeString(typeof item === 'string' ? item : (item?.canonical || item?.term || item?.text || '')).replace(/\s+/g, ' ').trim(), key = term.toLowerCase();
-    if (!term || term.length > 140 || seen.has(key)) continue;
-    seen.add(key); terminologyLedger.push(term); if (terminologyLedger.length >= 20) break;
+    if (!item || typeof item !== 'object') continue;
+    const term = safeString(item.canonical || item.term || item.text || '').replace(/\s+/g, ' ').trim();
+    const confidence = safeString(item.confidence || '').toLowerCase();
+    const evidenceCount = Math.floor(Number(item.evidenceCount || item.evidence || 0));
+    const key = term.toLowerCase();
+    if (!term || term.length > 140 || confidence !== 'confirmed' || evidenceCount < 2 || seen.has(key)) continue;
+    seen.add(key); terminologyLedger.push({ canonical: term, confidence: 'confirmed', evidenceCount: Math.min(99, evidenceCount) }); if (terminologyLedger.length >= 20) break;
   }
   return { byId, terminologyLedger };
 }
@@ -534,14 +546,26 @@ async function reviewCueTextsForConsistency(cues, targetLang, body = {}) {
   if (!source.length) return { cues: [], terminologyLedger: [] };
   const ledger = [], seen = new Set();
   for (const item of Array.isArray(body.terminologyLedger) ? body.terminologyLedger : []) {
-    const term = safeString(typeof item === 'string' ? item : (item?.canonical || item?.term || item?.text || '')).replace(/\s+/g, ' ').trim(), key = term.toLowerCase();
-    if (!term || term.length > 140 || seen.has(key)) continue;
-    seen.add(key); ledger.push(term); if (ledger.length >= 120) break;
+    if (!item || typeof item !== 'object') continue;
+    const term = safeString(item.canonical || item.term || item.text || '').replace(/\s+/g, ' ').trim();
+    const confidence = safeString(item.confidence || '').toLowerCase();
+    const evidenceCount = Math.floor(Number(item.evidenceCount || item.evidence || 0));
+    const key = term.toLowerCase();
+    if (!term || term.length > 140 || confidence !== 'confirmed' || evidenceCount < 2 || seen.has(key)) continue;
+    seen.add(key); ledger.push({ canonical: term, confidence: 'confirmed', evidenceCount: Math.min(99, evidenceCount) }); if (ledger.length >= 120) break;
   }
   const model = safeString(body.reviewModel || body.subtitleReviewModel || DEFAULT_SUBTITLE_TRANSLATE_MODEL).trim() || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
   const result = await requestTranslationJson({ model, temperature: 0, max_tokens: 8192, messages: [
     { role: 'system', content: MARU_FINAL_SUBTITLE_REVIEW_SYSTEM },
-    { role: 'user', content: JSON.stringify({ targetLanguage: TRANSLATION_LANGUAGE_NAMES[target], targetLanguageCode: target, mode: 'conservative-final-consistency-review-no-retranslation', terminologyLedger: ledger, cues: source.map((cue, index) => ({ id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text: safeString(cue.text || '') })) }) }
+    { role: 'user', content: JSON.stringify({
+      targetLanguage: TRANSLATION_LANGUAGE_NAMES[target],
+      targetLanguageCode: target,
+      mode: safeString(body.reviewMode || 'conservative-final-global-scan-no-retranslation'),
+      terminologyLedger: ledger,
+      editableCueIds: (Array.isArray(body.editableCueIds) ? body.editableCueIds : source.map((cue, index) => Number.isInteger(Number(cue.id)) ? Number(cue.id) : index)).map(Number).filter(Number.isInteger),
+      unknownProperNounPolicy: safeString(body.unknownProperNounPolicy || 'preserve-existing-form-unless-confirmed-by-repeated-evidence'),
+      cues: source.map((cue, index) => ({ id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text: safeString(cue.text || '') }))
+    }) }
   ] });
   let parsed;
   try { parsed = parseFinalReviewPayload(safeString(result?.choices?.[0]?.message?.content || '')); }
