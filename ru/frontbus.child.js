@@ -30,3 +30,17 @@
   script.async = false;
   (document.head || document.documentElement).appendChild(script);
 })();
+/* Q&A header-anchor position bridge: geometry only; no modal/event/storage changes. */
+(function installIGDCQnaHeaderAnchor(){
+  'use strict';
+  if (window.__IGDC_QNA_HEADER_ANCHOR_CSS_V1__) return;
+  window.__IGDC_QNA_HEADER_ANCHOR_CSS_V1__ = true;
+  var id = 'igdc-qna-header-anchor-bridge-style';
+  if (document.getElementById(id)) return;
+  var style = document.createElement('style');
+  style.id = id;
+  style.textContent = ''
+    + '.igdc-qa-modal .igdc-qa-panel,.igdc-qa-panel{top:16px !important;bottom:auto !important;}'
+    + '@media (max-width:900px){.igdc-qa-modal .igdc-qa-panel,.igdc-qa-panel{top:12px !important;bottom:auto !important;left:12px !important;right:auto !important;width:min(92vw,560px) !important;}}';
+  (document.head || document.documentElement).appendChild(style);
+})();

@@ -64,6 +64,7 @@
   function text(v){return v==null?'':String(v);}
   function pick(item,names){for(const name of names){const value=item&&item[name];if(value!==undefined&&value!==null&&value!=='')return value;}return '';}
   function escUrl(v){try{return String(v||'').replace(/'/g,'%27');}catch(_e){return '';}}
+  function hasUsableDestination(value){const url=text(value).trim();return !!url&&url!=='#'&&!/^javascript:/i.test(url)&&!/\/pages\/coming-soon\.html/i.test(url)&&!/(?:^|\.)example\.com(?:[/:?#]|$)/i.test(url);}
   function revenue(item,kind){
     try{
       if(window.MaruRevenueTracker&&typeof window.MaruRevenueTracker[kind]==='function'){
@@ -165,7 +166,9 @@
     const meta=document.createElement('div'); meta.className='thumb-meta'; meta.textContent=text(pick(item,['meta','subtitle','summary','description']));
     root.appendChild(img); root.appendChild(title); root.appendChild(meta);
     const href=pick(item,['url','href','link']);
-    if(href&&href!=='#'){
+    if(hasUsableDestination(href)){
+      // Real product routes retain the renderer's original navigation path.
+      root.dataset.igtcHooked='1';
       root.style.cursor='pointer'; root.setAttribute('role','link'); root.tabIndex=0;
       const open=function(){
         revenue(item,'trackClick');
@@ -471,4 +474,87 @@
   loadScriptOnce('/assets/js/maru-revenue-tracker.js','maruRevenueTrackerScript','MaruRevenueTracker',function(){
     loadScriptOnce('/assets/js/maru-revenue-autohook.js','maruRevenueAutoHookScript','MaruRevenueAutoHook',installIfReady);
   });
+})();
+
+/* IGDC Distribution Hub: pending-product entry bridge.
+ * Scope: only [data-psom-key="distribution-*"] cards. Existing card layout,
+ * snapshots, real destinations, section ownership and panel structure remain untouched.
+ */
+(function(){
+  'use strict';
+  if(window.__IGDC_DISTRIBUTION_PENDING_ENTRY_V1__) return;
+  window.__IGDC_DISTRIBUTION_PENDING_ENTRY_V1__=true;
+
+  function t(v){return v==null?'':String(v);}
+  function lang(){var x=t(document.documentElement.lang||'en').toLowerCase().replace('_','-');if(x==='ko-kr')return'ko';if(x==='zh-cn')return'zh';if(x==='zh-tw'||x==='zh-hk')return'zht';return x.split('-')[0]||'en';}
+  var C={
+    ko:['상품 정보 준비 중','실제 상품 정보가 등록되면 이 자리에서 바로 상세 페이지로 연결됩니다.'],
+    en:['Product information is being prepared','When the actual product is registered, this same place will open its detail page.'],
+    ar:['يتم إعداد معلومات المنتج','عند تسجيل المنتج الفعلي، سيفتح هذا المكان صفحة التفاصيل مباشرة.'],
+    bn:['পণ্যের তথ্য প্রস্তুত করা হচ্ছে','প্রকৃত পণ্য নিবন্ধিত হলে এখান থেকেই বিস্তারিত পৃষ্ঠা খুলবে।'],
+    de:['Produktinformationen werden vorbereitet','Sobald das tatsächliche Produkt registriert ist, öffnet sich hier direkt die Detailseite.'],
+    es:['La información del producto se está preparando','Cuando se registre el producto real, este mismo lugar abrirá su página de detalles.'],
+    fa:['اطلاعات محصول در حال آماده‌سازی است','پس از ثبت محصول واقعی، صفحه جزئیات از همین‌جا باز می‌شود.'],
+    fr:['Les informations sur le produit sont en préparation','Lorsque le produit réel sera enregistré, cette même zone ouvrira sa page de détail.'],
+    hi:['उत्पाद जानकारी तैयार की जा रही है','वास्तविक उत्पाद दर्ज होने पर यहीं से उसका विवरण पृष्ठ खुलेगा।'],
+    hu:['A termékinformáció előkészítés alatt áll','Amikor a tényleges termék regisztrálva lesz, innen közvetlenül megnyílik a részletező oldala.'],
+    id:['Informasi produk sedang disiapkan','Saat produk sebenarnya terdaftar, halaman detailnya akan terbuka dari tempat yang sama.'],
+    it:['Le informazioni sul prodotto sono in preparazione','Quando il prodotto reale sarà registrato, da qui si aprirà direttamente la pagina dei dettagli.'],
+    ja:['商品情報を準備中です','実際の商品が登録されると、この場所から詳細ページが開きます。'],
+    ms:['Maklumat produk sedang disediakan','Apabila produk sebenar didaftarkan, halaman butirannya akan dibuka dari tempat yang sama.'],
+    nl:['Productinformatie wordt voorbereid','Wanneer het daadwerkelijke product is geregistreerd, opent hier de detailpagina.'],
+    pl:['Informacje o produkcie są przygotowywane','Gdy właściwy produkt zostanie zarejestrowany, w tym miejscu otworzy się jego strona szczegółów.'],
+    pt:['As informações do produto estão sendo preparadas','Quando o produto real for registrado, esta mesma área abrirá a página de detalhes.'],
+    ru:['Информация о товаре готовится','Когда фактический товар будет зарегистрирован, здесь откроется его страница с подробностями.'],
+    sv:['Produktinformationen förbereds','När den verkliga produkten är registrerad öppnas dess detaljsida här.'],
+    sw:['Maelezo ya bidhaa yanaandaliwa','Bidhaa halisi itakaposajiliwa, ukurasa wake wa maelezo utafunguka hapa.'],
+    ta:['தயாரிப்பு தகவல் தயாராகிக் கொண்டிருக்கிறது','உண்மையான தயாரிப்பு பதிவு செய்யப்பட்டவுடன், இதே இடத்தில் விவரப் பக்கம் திறக்கும்.'],
+    th:['กำลังเตรียมข้อมูลสินค้า','เมื่อมีการลงทะเบียนสินค้าจริง หน้านี้จะเปิดรายละเอียดสินค้าในตำแหน่งเดิม'],
+    tl:['Inihahanda ang impormasyon ng produkto','Kapag nairehistro ang aktuwal na produkto, bubuksan dito ang pahina ng detalye nito.'],
+    tr:['Ürün bilgileri hazırlanıyor','Gerçek ürün kaydedildiğinde ayrıntı sayfası aynı yerden açılır.'],
+    uk:['Інформація про товар готується','Коли фактичний товар буде зареєстровано, тут відкриється його сторінка з деталями.'],
+    ur:['مصنوعات کی معلومات تیار کی جا رہی ہیں','اصل مصنوعہ درج ہونے پر اسی جگہ سے تفصیلی صفحہ کھل جائے گا۔'],
+    uz:['Mahsulot ma’lumoti tayyorlanmoqda','Haqiqiy mahsulot ro‘yxatdan o‘tganda, shu joydan uning batafsil sahifasi ochiladi.'],
+    vi:['Thông tin sản phẩm đang được chuẩn bị','Khi sản phẩm thực được đăng ký, trang chi tiết sẽ mở ngay tại đây.'],
+    zh:['商品信息正在准备中','实际商品登记后，将从此处直接打开详情页。'],
+    zht:['商品資訊準備中','實際商品登錄後，將從這裡直接開啟詳細頁面。']
+  };
+  function isReal(v){v=t(v).trim();return !!v&&v!=='#'&&!/^javascript:/i.test(v)&&!/\/pages\/coming-soon\.html/i.test(v)&&!/(?:^|\.)example\.com(?:[/:?#]|$)/i.test(v);}
+  function actual(card){
+    if(card.getAttribute('role')==='link')return true;
+    var a=card.querySelector('a[href]'),v=a&&a.getAttribute('href');
+    if(isReal(v))return true;
+    return ['data-url','data-href','data-link','data-product-url','data-product-link','data-detail-url','data-content-url','data-affiliate-outbound-url'].some(function(n){return isReal(card.getAttribute(n));});
+  }
+  var state={open:false,pushed:false,last:null};
+  function ensure(){
+    var root=document.getElementById('igdcDistributionPendingEntry');if(root)return root;
+    var st=document.createElement('style');st.id='igdcDistributionPendingEntryStyle';st.textContent=''
+      +'#igdcDistributionPendingEntry{position:fixed;inset:0;z-index:2147483550;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.48)}'
+      +'#igdcDistributionPendingEntry.open{display:flex}'
+      +'#igdcDistributionPendingEntry .igdc-pending-sheet{width:min(680px,96vw);max-height:min(76vh,720px);overflow:auto;background:#0b0c0f;color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:16px;box-shadow:0 18px 46px rgba(0,0,0,.55)}'
+      +'#igdcDistributionPendingEntry header{padding:15px 17px;border-bottom:1px solid rgba(255,255,255,.12)}'
+      +'#igdcDistributionPendingEntry h3{margin:0;font-size:18px;line-height:1.35}'
+      +'#igdcDistributionPendingEntry .igdc-pending-body{padding:20px 17px;line-height:1.65}'
+      +'#igdcDistributionPendingEntry .igdc-pending-state{font-weight:800;font-size:1.05rem;margin-bottom:8px}'
+      +'@media(max-width:768px){#igdcDistributionPendingEntry{padding:10px}#igdcDistributionPendingEntry .igdc-pending-sheet{width:100%;max-height:82dvh}}';
+    (document.head||document.documentElement).appendChild(st);
+    root=document.createElement('div');root.id='igdcDistributionPendingEntry';root.setAttribute('aria-hidden','true');
+    root.innerHTML='<section class="igdc-pending-sheet" role="dialog" aria-modal="true" aria-labelledby="igdcDistributionPendingTitle"><header><h3 id="igdcDistributionPendingTitle"></h3></header><div class="igdc-pending-body"><div class="igdc-pending-state"></div><div class="igdc-pending-copy"></div></div></section>';
+    document.body.appendChild(root);return root;
+  }
+  function open(card){
+    var root=ensure(),copy=C[lang()]||C.en,title=t((card.querySelector('.thumb-title')||{}).textContent||card.getAttribute('aria-label')).trim()||copy[0];
+    root.querySelector('#igdcDistributionPendingTitle').textContent=title;root.querySelector('.igdc-pending-state').textContent=copy[0];root.querySelector('.igdc-pending-copy').textContent=copy[1];
+    state.last=document.activeElement;root.classList.add('open');root.setAttribute('aria-hidden','false');
+    if(!state.open){state.open=true;try{history.pushState({igdcPendingDistribution:Date.now()},'',location.href);state.pushed=true;}catch(_){state.pushed=false;}}
+  }
+  function close(){var root=document.getElementById('igdcDistributionPendingEntry');if(root){root.classList.remove('open');root.setAttribute('aria-hidden','true');}var focus=state.last;state.open=false;state.pushed=false;if(focus&&focus.focus){try{focus.focus({preventScroll:true});}catch(_){}}}
+  window.addEventListener('popstate',function(){if(state.open)close();});
+  document.addEventListener('click',function(e){
+    if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
+    var card=e.target&&e.target.closest&&e.target.closest('[data-psom-key^="distribution-"] .thumb-card');
+    if(!card||card.classList.contains('skeleton')||actual(card))return;
+    e.preventDefault();e.stopPropagation();open(card);
+  },true);
 })();
