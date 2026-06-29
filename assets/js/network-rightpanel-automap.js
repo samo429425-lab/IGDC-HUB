@@ -9,8 +9,6 @@
 
   if (window.__NETWORK_AUTOMAP_V6__) return;
   window.__NETWORK_AUTOMAP_V6__ = true;
-  window.__IGDC_SLOT_RENDERERS__ = window.__IGDC_SLOT_RENDERERS__ || {};
-  window.__IGDC_SLOT_RENDERERS__.network = { version:'v6', owner:true };
 
   const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
   const FEED_URL = '/.netlify/functions/feed-network?limit=100';
@@ -141,16 +139,6 @@
     return out;
   }
 
-  function mountPreparingState(){
-    const state = window.IGDCSlotState;
-    const mobile = $(MOBILE_ID);
-    const desktop = document.getElementById('rightAutoPanel');
-    if (state && typeof state.mountIfEmpty === 'function') {
-      if (mobile) state.mountIfEmpty(mobile, { className:'card' });
-      if (desktop) state.mountIfEmpty(desktop, { className:'ad-box' });
-    }
-  }
-
   function createCard(item, mobile){
     const card = document.createElement('div');
     card.className = mobile ? 'card' : 'ad-box';
@@ -218,10 +206,6 @@
         : [];
     }
 
-    if (!items.length) {
-      mountPreparingState();
-      return;
-    }
     renderMobile(items);
     renderDesktopDirect(items);
   }

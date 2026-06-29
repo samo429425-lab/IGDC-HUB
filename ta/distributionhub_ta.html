@@ -2092,12 +2092,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();</script>
 <script id="thumb-autofill-js">
   (function(){
-    function hasDedicatedOwner(){
-      return !!(window.__IGDC_SLOT_RENDERERS__ && window.__IGDC_SLOT_RENDERERS__.distribution && window.__IGDC_SLOT_RENDERERS__.distribution.owner);
-    }
-    function stateText(){
-      return (window.IGDCSlotState && typeof window.IGDCSlotState.text === 'function') ? window.IGDCSlotState.text() : 'Content is being prepared.';
-    }
     function createCard(item) {
       var card = document.createElement("div");
       card.className = "thumb-card";
@@ -2110,15 +2104,10 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       }
       var title = document.createElement("div");
       title.className = "thumb-title";
-      var preparing = !item;
-      title.textContent = (item && item.title) ? item.title : stateText();
+      title.textContent = (item && item.title) ? item.title : "பரிந்துரைக்கப்பட்டது";
       var meta = document.createElement("div");
       meta.className = "thumb-meta";
-      meta.textContent = (item && item.meta) ? item.meta : '';
-      if (preparing) {
-        card.setAttribute('data-igdc-slot-state', 'preparing');
-        card.setAttribute('aria-busy', 'true');
-      }
+      meta.textContent = (item && item.meta) ? item.meta : "தானாக நிரப்பப்பட்டது";
       card.appendChild(img);
       card.appendChild(title);
       card.appendChild(meta);
@@ -2130,7 +2119,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }
 
     async function backfillList(list){
-      if (hasDedicatedOwner()) return;
       var TARGET = 20;
       var cards = list.querySelectorAll(".thumb-card");
       if (cards.length >= TARGET) return;
@@ -2160,7 +2148,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }
 
     function run(){
-      if (hasDedicatedOwner()) return;
       document.querySelectorAll(".thumb-list.thumb-scroller").forEach(backfillList);
     }
 
