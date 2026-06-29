@@ -11,6 +11,8 @@
  // --- bootstrap guard ---
  if (window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ === true) return;
  window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
+ window.__IGDC_SLOT_RENDERERS__ = window.__IGDC_SLOT_RENDERERS__ || {};
+ window.__IGDC_SLOT_RENDERERS__.social = { version:'v3', owner:true };
 
  // --- config ---
  const SNAPSHOT_URL = "/data/social.snapshot.json";
@@ -22,6 +24,10 @@
   function qs(sel, root){ return (root || document).querySelector(sel); }
   function qsa(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
   function safeText(v){ return v == null ? '' : String(v); }
+  function stateText(){
+    return (window.IGDCSlotState && typeof window.IGDCSlotState.text === 'function')
+      ? window.IGDCSlotState.text() : 'Content is being prepared.';
+  }
 
   function pickTitle(it){
     return safeText(it && (it.title || it.name || it.text || it.label));
@@ -251,13 +257,14 @@ function getMainSlots(gridEl){
   card.target = '_self';
   card.rel = 'noopener';
   card.dataset.dummy = '1';
+  card.setAttribute('data-igdc-slot-state', 'preparing');
 
   const pic = qs('.pic', card);
   const metaTitle = qs('.title', card);
   const metaDesc = qs('.desc', card);
 
-  if(metaTitle) metaTitle.textContent = 'Loading';
-  if(metaDesc) metaDesc.textContent = 'Preparing';
+  if(metaTitle) metaTitle.textContent = stateText();
+  if(metaDesc) metaDesc.textContent = stateText();
 
   if(pic){
     pic.style.backgroundImage = '';
@@ -333,12 +340,12 @@ function getRightCards(panel){
       box.className = 'ad-box product-card';
       box.dataset.dummy = '1';
       box.dataset.productId = '';
-      box.dataset.productTitle = 'RIGHT SAMPLE';
+      box.dataset.productTitle = stateText();
       box.dataset.productLink = '';
       box.dataset.productUrl = '';
       box.dataset.detailUrl = '';
       box.dataset.href = '';
-      box.innerHTML = '<a href="javascript:void(0)" aria-disabled="true" data-product-id="" data-product-title="RIGHT SAMPLE" data-product-link="">RIGHT SAMPLE</a>';
+      box.innerHTML = '<a href="javascript:void(0)" aria-disabled="true" data-product-id="" data-product-title="Content is being prepared." data-product-link="">RIGHT SAMPLE</a>';
       frag.appendChild(box);
     }
 
@@ -406,8 +413,9 @@ function resetRightCardToDummy(box){
 
   box.className = 'ad-box product-card';
   box.dataset.dummy = '1';
+  box.setAttribute('data-igdc-slot-state', 'preparing');
   box.dataset.productId = '';
-  box.dataset.productTitle = 'RIGHT SAMPLE';
+  box.dataset.productTitle = stateText();
   box.dataset.productLink = '';
   box.dataset.productUrl = '';
   box.dataset.detailUrl = '';
@@ -424,7 +432,7 @@ function resetRightCardToDummy(box){
   a.href = 'javascript:void(0)';
   a.target = '_self';
   a.rel = 'noopener';
-  a.textContent = 'RIGHT SAMPLE';
+  a.textContent = stateText();
   a.dataset.productId = '';
   a.dataset.productTitle = 'RIGHT SAMPLE';
   a.dataset.productLink = '';

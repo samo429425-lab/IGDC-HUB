@@ -13,6 +13,9 @@
 (async function(){
   'use strict';
 
+  window.__IGDC_SLOT_RENDERERS__ = window.__IGDC_SLOT_RENDERERS__ || {};
+  window.__IGDC_SLOT_RENDERERS__.donation = { version:'v8', owner:true };
+
   const SNAPSHOT_PATHS = [
     // 1) direct builder (feed integrated)
     '/.netlify/functions/donation-snapshot-builder',
@@ -278,6 +281,12 @@ function groupBySection(items){
   }
 
   function renderCard(it){
+    const preparing = !!(it && it.__igdcPreparing);
+    const stateText = (window.IGDCSlotState && typeof window.IGDCSlotState.text === 'function')
+      ? window.IGDCSlotState.text() : 'Content is being prepared.';
+    if(preparing){
+      return `<div class="card donation-card igdc-slot-state-card" data-uid="${escAttr(it?.uid || it?.id || '')}" data-igdc-slot-state="preparing" role="status" aria-live="polite" aria-busy="true" tabindex="-1">${escHtml(stateText)}</div>`;
+    }
     const img = safeUrl(it?.media?.thumb) || '';
     const title = escHtml(it?.org?.name || it?.title || '');
     const meta = escHtml(
@@ -310,22 +319,7 @@ function mountSection(key, items, limit){
   const htmlCount = row ? Number(row.dataset.count || 0) : 0;
   const finalLimit = clampLimit(htmlCount || limit || 80);
 
-  function sampleLabel(sectionKey){
-    switch(sectionKey){
-      case 'donation-global': return 'Global News';
-      case 'donation-ngo': return 'NGO';
-      case 'donation-mission': return 'Mission';
-      case 'donation-service': return 'Service';
-      case 'donation-relief': return 'Relief';
-      case 'donation-education': return 'Education';
-      case 'donation-environment': return 'Environment';
-      case 'donation-others': return 'Others';
-      default: return 'Donation';
-    }
-  }
-
   function buildFallbackSamples(sectionKey, count){
-    const label = sampleLabel(sectionKey);
     const out = [];
 
     for(let i = 0; i < count; i++){
@@ -334,10 +328,11 @@ function mountSection(key, items, limit){
         id: `sample:${sectionKey}:${String(i+1).padStart(3,'0')}`,
         psom_key: sectionKey,
         category: sectionKey.replace(/^donation-/, '') || 'donation',
-        title: `${label} Partner ${i+1}`,
-        summary: 'Verified data will replace this sample automatically.',
+        __igdcPreparing: true,
+        title: '',
+        summary: '',
         org: {
-          name: `${label} Partner ${i+1}`,
+          name: '',
           country: '-',
           legal_name: ''
         },
@@ -348,7 +343,7 @@ function mountSection(key, items, limit){
           url: '#'
         },
         media: {
-          thumb: '/assets/img/placeholder.png'
+          thumb: ''
         },
         bank_ref: {
           record_id: null
@@ -402,6 +397,8 @@ function mountSection(key, items, limit){
     document.addEventListener('click', (e)=>{
       const card = e.target?.closest?.('.donation-card');
       if(!card) return;
+      if(card.getAttribute('data-igdc-slot-state') === 'preparing') return;
+      if(card.getAttribute('data-igdc-slot-state') === 'preparing') return;
       const url = card.getAttribute('data-url');
       if(url) window.open(url, '_blank', 'noopener');
     });

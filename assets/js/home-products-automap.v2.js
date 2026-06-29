@@ -11,6 +11,8 @@
 
   if (window.__HOME_PRODUCTS_AUTOMAP_V2__) return;
   window.__HOME_PRODUCTS_AUTOMAP_V2__ = true;
+  window.__IGDC_SLOT_RENDERERS__ = window.__IGDC_SLOT_RENDERERS__ || {};
+  window.__IGDC_SLOT_RENDERERS__.home = { version:'v2', owner:true };
 
   const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
   const SNAPSHOT_CANDIDATES = [
@@ -85,6 +87,9 @@
   }
 
   function emptyText() {
+    if (window.IGDCSlotState && typeof window.IGDCSlotState.text === 'function') {
+      return window.IGDCSlotState.text();
+    }
     return EMPTY_I18N[getLangCode()] || EMPTY_I18N.en;
   }
 

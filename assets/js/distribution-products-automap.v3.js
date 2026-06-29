@@ -13,6 +13,8 @@
   'use strict';
   if(window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V8__) return;
   window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V8__=true;
+  window.__IGDC_SLOT_RENDERERS__=window.__IGDC_SLOT_RENDERERS__||{};
+  window.__IGDC_SLOT_RENDERERS__.distribution={version:'v8',owner:true};
 
   const STATIC_SNAPSHOT_URL='/data/distribution.snapshot.json';
   const REGIONAL_SNAPSHOT_URL='/.netlify/functions/regional-brokerage-snapshot?hub=distribution';
@@ -256,15 +258,18 @@
     });
   }
   function makeSeedCard(cfg,index){
+    const stateText=(window.IGDCSlotState&&typeof window.IGDCSlotState.text==='function')
+      ?window.IGDCSlotState.text():'Content is being prepared.';
     const item={
       id:'distribution-seed-'+cfg.key+'-'+(index+1),
-      title:cfg.label+' '+(index+1),
+      title:stateText,
       meta:'',
       section:cfg.key,
       url:'#'
     };
     const card=makeCard(item,false);
     card.classList.add('thumb-card--seed');
+    card.setAttribute('data-igdc-slot-state','preparing');
     card.setAttribute('aria-busy','true');
     return card;
   }

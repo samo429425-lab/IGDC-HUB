@@ -4041,6 +4041,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <!-- IGDC: AI media thumbnail auto-fill -->
 <script>
 (function(){
+  function hasDedicatedOwner(){
+    return !!(window.__IGDC_SLOT_RENDERERS__ && window.__IGDC_SLOT_RENDERERS__.media && window.__IGDC_SLOT_RENDERERS__.media.owner);
+  }
   function detectContainers(){
     var containers = [];
     document.querySelectorAll('.thumb-line .scroll-content, .thumb-line').forEach(function(c){
@@ -4073,6 +4076,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     return a;
   }
   function fillContainer(container){
+    if (hasDedicatedOwner()) return;
     try{
       var cards = container.querySelectorAll('.card, .product-card, [data-product-id]');
       var need = (cards.length < 3);
@@ -4105,6 +4109,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }catch(e){}
   }
   document.addEventListener('DOMContentLoaded', function(){
+    if (hasDedicatedOwner()) return;
     detectContainers().forEach(fillContainer);
   });
 })();
@@ -5087,12 +5092,14 @@ window.addEventListener("message",function(ev){
     const a = document.createElement('a');
     a.className = 'card media-card';
     a.setAttribute('data-placeholder','true');
+    a.setAttribute('data-igdc-slot-state','preparing');
+    a.setAttribute('aria-busy','true');
     a.href = 'javascript:void(0)';
     const thumb = document.createElement('div');
     thumb.className = 'thumb ph';
     const meta = document.createElement('div');
     meta.className = 'meta';
-    meta.textContent = 'Prossimamente';
+    meta.textContent = (window.IGDCSlotState && typeof window.IGDCSlotState.text === 'function') ? window.IGDCSlotState.text() : 'Content is being prepared.';
     a.appendChild(thumb);
     a.appendChild(meta);
     return a;

@@ -9,6 +9,8 @@
 
   if (window.__TOUR_RIGHTPANEL_AUTOMAP_V6__) return;
   window.__TOUR_RIGHTPANEL_AUTOMAP_V6__ = true;
+  window.__IGDC_SLOT_RENDERERS__ = window.__IGDC_SLOT_RENDERERS__ || {};
+  window.__IGDC_SLOT_RENDERERS__.tour = { version:'v6', owner:true };
 
   const HUB = "tour";
   const SNAPSHOT_URL = "/data/tour-snapshot.json";
@@ -135,12 +137,14 @@
   }
 
   function makeDummy(idx) {
-    const n = idx + 1;
+    const label=(window.IGDCSlotState && typeof window.IGDCSlotState.text === 'function')
+      ?window.IGDCSlotState.text():'Content is being prepared.';
     return {
       id: "",
-      title: `Tour Brand ${n}`,
+      title: label,
       thumb: PLACEHOLDER_IMG,
-      link: "#"
+      link: "#",
+      preparing: true
     };
   }
 
@@ -169,6 +173,10 @@
   function createRightBox(item) {
     const box = document.createElement("div");
     box.className = "ad-box";
+    if (item && item.preparing) {
+      box.setAttribute('data-igdc-slot-state', 'preparing');
+      box.setAttribute('aria-busy', 'true');
+    }
 
     const a = document.createElement("a");
     applyAnchor(a, item);

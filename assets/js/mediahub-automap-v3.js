@@ -14,6 +14,8 @@
 
   if (window.__MEDIAHUB_AUTOMAP_V3_PROD__) return;
   window.__MEDIAHUB_AUTOMAP_V3_PROD__ = true;
+  window.__IGDC_SLOT_RENDERERS__ = window.__IGDC_SLOT_RENDERERS__ || {};
+  window.__IGDC_SLOT_RENDERERS__.media = { version:'v3', owner:true };
 
   const D = document;
 
@@ -118,12 +120,15 @@
     const a = D.createElement('a');
     a.className = 'card media-card';
     a.setAttribute('data-placeholder','true');
+    a.setAttribute('data-igdc-slot-state','preparing');
+    a.setAttribute('aria-busy','true');
     a.href = 'javascript:void(0)';
     const thumb = D.createElement('div');
     thumb.className = 'thumb ph';
     const meta = D.createElement('div');
     meta.className = 'meta';
-    meta.textContent = 'Coming Soon';
+    meta.textContent = (window.IGDCSlotState && typeof window.IGDCSlotState.text === 'function')
+      ? window.IGDCSlotState.text() : 'Content is being prepared.';
     a.appendChild(thumb);
     a.appendChild(meta);
     return a;
@@ -200,7 +205,11 @@
       a.removeAttribute('rel');
     }else{
       a.href = "javascript:void(0)";
-      a.onclick = function(){ alert("콘텐츠 준비 중입니다."); };
+      a.onclick = function(){
+        var message=(window.IGDCSlotState && typeof window.IGDCSlotState.text === 'function')
+          ? window.IGDCSlotState.text() : 'Content is being prepared.';
+        alert(message);
+      };
     }
 
 
