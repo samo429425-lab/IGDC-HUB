@@ -416,10 +416,11 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
   'Return exactly one non-empty text value for every supplied cue id, in the same order.',
   'Translate dialogue into the authoritative requested target language. Do not output source-language alternatives, notes, explanations, labels, timestamps, cue numbers, markdown, policies, prompts, or instructions.',
   'Each supplied cue is an immutable spoken-media time interval. Keep every cue id separate: never merge, summarize, reorder, transfer words between, or turn consecutive cue ids into a paragraph. Translate only the words in that cue, in its existing order, as the short natural subtitle that appears while that exact speech is audible. Do not create a continuation sentence by borrowing words from the next or previous cue.',
+  'Each cue includes durationSeconds and a nonbinding displayUnitGuide. Use them as a readability budget: keep the target line concise enough to read while that exact speech is audible. Do not solve a short duration by merging with a neighbour, moving words, deleting a cue, or changing the cue order.',
   'Keep names, titles, ranks, honorifics, technical terms, units, numbers, product names, species names, organization names, place names, building names, country names, political parties, and institutions accurate and consistent.',
   'Classify recurring personal names, aliases, nicknames, pet names, call signs, kinship forms, and forms of address from nearby cue context before translating. Never allow one unclear or imperfectly recognized pronunciation to become a global canonical name. Use one canonical target-language form only when repeated textual/context evidence clearly identifies the same entity; otherwise preserve the current recognized official/transliterated form without forcing later cues to match it.',
-  'For sung lyrics, preserve lyric words only after audible vocal onset. Do not create a caption for instrumental lead-in, melody-only passages, or imagined lyric text.',
-  'For a standalone human laugh, cry, sharp cry, gasp, pain reaction, surprise or admiration interjection, keep only the compact vocal beat. Do not stretch repeated letters or merge it with neighbouring dialogue.',
+  'For sung lyrics, preserve actual lyric words only after audible vocal onset. Keep every lyric phrase in its existing cue and time interval; never merge adjacent lyric phrases, extend a lyric through an instrumental gap, or move lyric words into a neighbouring cue. Do not replace real sung words with [music], [song], [laughter], or another generic sound label. Preserve an existing ♪ lyric marker when supplied. Do not create a caption for instrumental lead-in, melody-only passages, humming without discernible words, or imagined lyric text.',
+  'For a standalone human laugh, cry, sharp cry, gasp, pain reaction, surprise or admiration interjection, output one concise bracketed sound label in the target language, such as [웃음] or [laughter]. Do not stretch repeated letters, fill a cue with ㅎ/ㅋ/ha characters, or merge it with neighbouring dialogue.',
   'For proper nouns, use the established conventional target-language name when it is well known. Otherwise use a faithful target-language transliteration or the official name form. Never translate the literal component meanings of a proper name into a new descriptive name.',
   'Examples of forbidden literal-name rewriting: do not turn Seoraksan into a phrase meaning Snowy Peak; do not turn Cheonggyecheon into a phrase meaning Blue Stream; do not turn Cheongwadae into a phrase meaning Blue-Tiled House. Use the standard name used in the target language instead.',
   'For Korean output, use established Korean names or accurate Hangul transliteration for foreign names; use standard Korean terminology for official organizations, geography, science, medicine, law, technology, and culture. Do not append an original-script spelling unless it is necessary for a standard established caption form.',
@@ -474,7 +475,18 @@ async function translateCueTextsToTarget(cues, targetLang, body = {}) {
         // continuation of titles, terms, and dialogue without permitting an
         // uncertain earlier ASR guess to rewrite this cue.
         precedingTargetContext: (Array.isArray(body.priorTargetContext) ? body.priorTargetContext : []).slice(-8).map((cue) => ({ text: safeString(typeof cue === 'string' ? cue : cue?.text || '') })).filter((cue) => cue.text),
-        cues: source.map((cue, index) => ({ id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index, text: safeString(cue.text || '') }))
+        cues: source.map((cue, index) => {
+          const start = Number(cue?.start || 0);
+          const end = Number(cue?.end || 0);
+          const durationSeconds = Number.isFinite(end) && end > start ? Number((end - start).toFixed(3)) : 0;
+          return {
+            id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index,
+            text: safeString(cue.text || ''),
+            isSungLyric: cue?.__maruLyric === true || isLikelySungLyricCue(cue?.text || ''),
+            durationSeconds,
+            displayUnitGuide: durationSeconds > 0 ? Math.max(8, Math.round(durationSeconds * 14)) : 0
+          };
+        })
       }) }
     ]
   });
@@ -501,7 +513,7 @@ async function translateCueTextsToTarget(cues, targetLang, body = {}) {
     }
     return { ...cue, text };
   });
-  return translated;
+  return renderCompactNonverbalSubtitleCues(translated, target);
 }
 
 const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
@@ -516,6 +528,7 @@ const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
   'Use each supplied terminologyLedger item only when it has confidence "confirmed" and evidenceCount at least 2, and only when it clearly refers to the same entity or concept in this cue. Otherwise preserve the current form.',
   'For specialist content, use the established target-language term only when the context makes the domain unambiguous. Do not replace a precise but uncertain term with a guessed everyday paraphrase.',
   'Match the requested genre and relationship register: exact and restrained for scholarship or professional discussion; natural and relationship-appropriate for dialogue and fiction. Do not make already natural subtitles more literary merely for style.',
+  'For a cue made only of laughter, crying, a gasp, a scream, coughing, or a sigh, use one compact bracketed target-language sound label. Never expand it into repeated characters such as ㅎㅎㅎㅎ, ㅋㅋㅋㅋ, ha ha ha, or similar filler. This rule never applies to actual sung lyric words: retain clear lyric text, its existing ♪ marker when present, and its exact cue boundary; do not replace lyrics with [music], [song], [laughter], or any generic sound label.',
   'Add a terminologyLedger item only for a short canonical form that appears at least twice in these cues or is independently confirmed by the supplied confirmed ledger. Set confidence exactly to "confirmed" and evidenceCount to at least 2. Otherwise return an empty ledger.'
 ].join(' ');
 function parseFinalReviewPayload(content) {
@@ -607,7 +620,7 @@ async function handleTranslateSubtitle(id, body) {
   const cues = parseTimedSrtCues(subtitle);
   if (!cues.length) return json(422, { ok: false, action: 'translate-subtitle', code: 'timed_subtitle_required', error: 'Timed SRT subtitle cues are required.', requestId: id });
   log(id, 'translate-subtitle', 'cues=', cues.length, 'chars=', subtitle.length, 'target=', targetLang);
-  const translated = await translateCueTextsToTarget(cues, targetLang, body);
+  const translated = renderCompactNonverbalSubtitleCues(await translateCueTextsToTarget(cues, targetLang, body), targetLang);
   const translatedSubtitle = translated.map((cue) => `${cue.number}\n${cue.timing}\n${cue.text}\n`).join('\n');
   return json(200, {
     ok: true,
@@ -654,6 +667,15 @@ function buildTranscriptionFields(body, options = {}) {
   if (granularities.length) fields['timestamp_granularities[]'] = granularities;
   const sourceLanguage = normalizeLanguage(body.sourceLanguage || '');
   if (sourceLanguage) fields.language = sourceLanguage.split('-')[0];
+  // Keep lyric-bearing vocals on the same exact audio timeline as spoken dialogue.
+  // This is intentionally a transcription hint, not an instruction to invent lyrics.
+  const defaultPrompt = [
+    'Transcribe audible spoken dialogue and clearly sung lyric words with exact segment and word timing.',
+    'For sung lyrics, begin at the audible vocal onset, keep each lyric phrase separate at its real pause or native segment boundary, and include actual sung words only.',
+    'Do not create text for instrumental-only music, melody-only passages, humming without discernible words, or background score.',
+    'When lyrics are clearly sung, retain a leading musical-note marker already present or use one short leading ♪ marker so lyric text is never confused with laughter or a sound effect.'
+  ].join(' ');
+  fields.prompt = safeString(body.transcriptionPrompt || defaultPrompt).slice(0, 900);
   return fields;
 }
 
@@ -717,11 +739,50 @@ function cueFromExactAudibleWordRange(words, fromIndex, toIndex) {
   return { start, end, text };
 }
 
-function splitExactSpeechWordTimeline(wordRows) {
+function nativeSpeechBoundaryHints(items) {
+  const rows = normalizeSegments(items, 0).sort((a, b) => a.start - b.start || a.end - b.end);
+  const hints = [];
+  for (let index = 0; index < rows.length - 1; index += 1) {
+    const current = rows[index], next = rows[index + 1];
+    const boundary = Number(current?.end || 0);
+    // Only preserve a recognizer boundary when the following recognizer beat
+    // actually begins at that point. This prevents an overlapping transport
+    // segment from creating an invented subtitle break.
+    if (boundary > Number(current?.start || 0) + 0.10 && Number(next?.start || 0) >= boundary - 0.14) hints.push(boundary);
+  }
+  return hints;
+}
+
+function nativeSungLyricWindows(items) {
+  return normalizeSegments(items, 0)
+    .filter((segment) => isLikelySungLyricCue(segment?.text || ''))
+    .map((segment) => ({ start: Number(segment.start || 0), end: Number(segment.end || 0) }))
+    .filter((window) => window.end > window.start);
+}
+
+function markSungLyricCueWindows(cues, nativeSegments = []) {
+  const windows = nativeSungLyricWindows(nativeSegments);
+  if (!windows.length) return Array.isArray(cues) ? cues : [];
+  return (Array.isArray(cues) ? cues : []).map((cue) => {
+    const start = Number(cue?.start || 0), end = Number(cue?.end || 0);
+    const duration = Math.max(0.001, end - start);
+    const lyric = windows.some((window) => {
+      const overlap = Math.max(0, Math.min(end, window.end) - Math.max(start, window.start));
+      return overlap / duration >= 0.60 || (start >= window.start - 0.10 && end <= window.end + 0.10);
+    });
+    return lyric ? { ...cue, __maruLyric: true } : cue;
+  });
+}
+
+function splitExactSpeechWordTimeline(wordRows, nativeSegments = []) {
   const words = (Array.isArray(wordRows) ? wordRows : [])
     .filter((word) => Number.isFinite(Number(word?.start)) && Number.isFinite(Number(word?.end)) && Number(word.end) > Number(word.start) && safeString(word?.text || '').trim())
     .sort((a, b) => Number(a.start) - Number(b.start) || Number(a.end) - Number(b.end));
   if (!words.length) return [];
+  const nativeBoundaries = nativeSpeechBoundaryHints(nativeSegments);
+  const lyricWindows = nativeSungLyricWindows(nativeSegments);
+  const hasNativeBoundary = (currentEnd, nextStart) => nativeBoundaries.some((boundary) => boundary >= Number(currentEnd) - 0.12 && boundary <= Number(nextStart) + 0.12);
+  const continuesSameLyricPhrase = (currentEnd, nextStart) => lyricWindows.some((window) => Number(currentEnd) >= window.start - 0.10 && Number(nextStart) <= window.end + 0.10);
   const cues = [];
   let from = 0;
   for (let index = 0; index < words.length - 1; index += 1) {
@@ -731,8 +792,14 @@ function splitExactSpeechWordTimeline(wordRows) {
     const text = joinSubtitleTimedWords(words.slice(from, index + 1));
     const wordCount = index - from + 1;
     const terminal = isSubtitleTerminal(current.text);
+    const nativeBoundary = hasNativeBoundary(current.end, next.start) && duration >= 0.12;
+    // Inside one recognizer-confirmed lyric phrase, a short rhythmic gap is not
+    // a new subtitle turn. Keep the actual lyric words together, but never cross
+    // the native phrase boundary or a meaningful sung pause.
+    const lyricContinuation = continuesSameLyricPhrase(current.end, next.start) && gap < 0.70;
     const mustEnd = terminal
-      || gap >= MARU_EXACT_SPEECH_TIMELINE_RULES.pauseSeconds
+      || nativeBoundary
+      || (!lyricContinuation && gap >= MARU_EXACT_SPEECH_TIMELINE_RULES.pauseSeconds)
       || duration >= MARU_EXACT_SPEECH_TIMELINE_RULES.hardCueSeconds
       || wordCount >= MARU_EXACT_SPEECH_TIMELINE_RULES.hardCueWords
       || subtitleTextUnits(text) >= MARU_EXACT_SPEECH_TIMELINE_RULES.hardCueUnits;
@@ -1270,11 +1337,40 @@ function normalizeStandaloneNonverbalText(value) {
     .toLowerCase();
 }
 
+function isLikelySungLyricCue(value) {
+  const original = safeString(value || '').replace(/\s+/gu, ' ').trim();
+  if (!original) return false;
+  // An explicit musical marker is the strongest transcript-level signal. It
+  // protects actual lyric words from the compact laughter / non-verbal pass.
+  if (/[♪♫♬]/u.test(original) && /[\p{L}\p{N}]/u.test(original.replace(/[♪♫♬]/gu, ''))) return true;
+  // Explicit recognizer/editor lyric labels are also safe. A pure [music]
+  // marker remains non-dialogue and is handled earlier; this accepts only a
+  // marker that declares singing/lyrics and carries actual text after it.
+  if (/^\s*[\[(（]\s*(?:sing(?:ing)?|sung|lyrics?|vocal(?:s)?|노래|가사|노래함|노래하는|歌詞|歌う|歌唱|唱)\s*[:：\-–—]\s*.+[\])）]?\s*$/iu.test(original)) return true;
+  const compact = original
+    .toLowerCase()
+    .replace(/[♪♫♬\s.,!?…~～()（）\[\]{}<>\-–—_]/gu, '');
+  // Repeated lyric syllables are commonly transcribed without an explicit
+  // note marker. These forms are safer to preserve as lyrics than to turn
+  // into a generic human laugh. Bare ha/ㅎㅎ remains intentionally ambiguous
+  // unless a musical marker or lyric label accompanies it.
+  return /^(?:(?:la|na|oh|ooh|ah|yeah|hey|whoa|woah|doo|dum|da){2,}|(?:라|나|오|아|예|헤이|우|야){2,}|(?:啦|呐|哦|啊|耶){2,}|(?:ラ|ナ|オ|ア|イェ){2,})$/iu.test(compact);
+}
+
 function classifyStandaloneHumanNonverbal(value) {
   const original = safeString(value || '').replace(/\s+/gu, ' ').trim();
-  if (!original || original.length > 96) return null;
+  if (!original || isLikelySungLyricCue(original)) return null;
   const text = normalizeStandaloneNonverbalText(original);
-  if (!text || text.length > 64) return null;
+  const compactEarly = text.replace(/\s+/gu, '');
+  // Recognizers can emit a whole screen of repeated laughter characters.
+  // Detect the pure vocal run before the ordinary short-caption length guard,
+  // but never touch a cue that also contains real dialogue.
+  if (/^(?:(?:ha|he|heh|ho){2,}|(?:하|후|헤|호){2,}|(?:[ㅎㅋ]){2,}|(?:哈|呵|は){2,})$/iu.test(compactEarly)) {
+    // A bare ㅎ/ㅋ run does not reliably encode loudness; keep it as generic laughter.
+    const soft = /^(?:(?:he|heh|ho){2,}|(?:후|헤|호){2,}|(?:呵){2,})$/iu.test(compactEarly);
+    return { kind: 'laughter', variant: soft ? 'softLaughter' : 'laughter' };
+  }
+  if (original.length > 96 || !text || text.length > 64) return null;
   const decorated = classifyDecoratedCompactNonverbal(original);
   if (decorated) return decorated;
   // Explicit labels, in common source/target caption languages.
@@ -1318,30 +1414,45 @@ function formatCompactNonverbalCaption(signal, language) {
   const lang = nonverbalCaptionLanguage(language);
   const kind = safeString(signal?.variant || signal?.kind || '').trim();
   const labels = MARU_NONVERBAL_CAPTION_LABELS[lang] || MARU_NONVERBAL_CAPTION_LABELS.en;
-  const sounds = MARU_NONVERBAL_CAPTION_SOUNDS[lang] || MARU_NONVERBAL_CAPTION_SOUNDS.en;
   const label = labels[kind] || labels[signal?.kind] || compactEmotiveLabel(kind, lang, labels) || labels.laughter;
-  const sound = sounds[kind] || sounds[signal?.kind] || compactEmotiveSound(kind, lang) || sounds.laughter;
-  return `${sound} (${label})`;
+  // Professional subtitles use a single readable label for a standalone
+  // non-verbal sound. Keep the cue short and never serialize a vocal run.
+  return `[${label}]`;
 }
 
 function annotateStandaloneNonverbalSubtitleCues(segments) {
   return (Array.isArray(segments) ? segments : []).map((segment) => {
+    if (isLikelySungLyricCue(segment?.text || '')) return { ...segment, __maruLyric: true };
     const signal = classifyStandaloneHumanNonverbal(segment?.text || '');
     return signal ? { ...segment, __maruNonverbal: signal } : segment;
   });
 }
 
+function formatSungLyricCaption(text) {
+  const value = safeString(text || '').replace(/\s+/gu, ' ').trim();
+  if (!value) return value;
+  // A single leading note is a compact professional cue marker. It preserves
+  // lyric words while protecting a lyric such as “ha ha ha” from being later
+  // mistaken for laughter by an editorial or translation pass.
+  return /^[♪♫♬]/u.test(value) ? value : `♪ ${value}`;
+}
+
 function renderCompactNonverbalSubtitleCues(segments, language) {
   return (Array.isArray(segments) ? segments : []).map((segment) => {
+    const lyric = segment?.__maruLyric === true || isLikelySungLyricCue(segment?.text || '');
+    if (lyric) {
+      const { __maruLyric, __maruNonverbal, ...clean } = segment || {};
+      return { ...clean, text: formatSungLyricCaption(clean.text) };
+    }
     const signal = segment?.__maruNonverbal || classifyStandaloneHumanNonverbal(segment?.text || '');
     if (!signal) {
-      if (segment && Object.prototype.hasOwnProperty.call(segment, '__maruNonverbal')) {
-        const { __maruNonverbal, ...clean } = segment;
+      if (segment && (Object.prototype.hasOwnProperty.call(segment, '__maruNonverbal') || Object.prototype.hasOwnProperty.call(segment, '__maruLyric'))) {
+        const { __maruNonverbal, __maruLyric, ...clean } = segment;
         return clean;
       }
       return segment;
     }
-    const { __maruNonverbal, ...clean } = segment;
+    const { __maruNonverbal, __maruLyric, ...clean } = segment;
     return { ...clean, text: formatCompactNonverbalCaption(signal, language) };
   });
 }
@@ -1546,7 +1657,8 @@ async function handleGenerateSubtitle(id, body) {
   // Prefer recognizer word timestamps whenever they are available. This is the
   // only path that can attach a caption to the exact spoken moment. It does not
   // use text-length shares, sentence reconstruction, or a dialogue AI pass.
-  const exactSpeechCues = splitExactSpeechWordTimeline(audibleWords);
+  const nativeLyricSegments = segments.filter((segment) => isLikelySungLyricCue(segment?.text || ''));
+  const exactSpeechCues = splitExactSpeechWordTimeline(audibleWords, segments);
   if (exactSpeechCues.length) {
     segments = exactSpeechCues;
   } else if (!segments.length && audibleWords.length) {
@@ -1558,6 +1670,9 @@ async function handleGenerateSubtitle(id, body) {
     segments = normalizeSegments([{ start: offset, end: offset + (knownDuration > 0.18 ? knownDuration : Math.max(0.18, safeString(result.text).length / 8)), text: result.text }], 0);
   }
   segments = constrainSegmentsToSourceWindow(dropMaruInstructionLeakSegments(segments), body);
+  // normalize/constrain intentionally strips internal fields, so restore the
+  // lyric identity from the original recognizer windows only after timing is final.
+  segments = markSungLyricCueWindows(segments, nativeLyricSegments);
   // With native word timings each cue is already an exact speech unit. Without
   // them, preserve native recognizer segments unchanged rather than fabricating
   // a rewritten timeline from character counts or translated text.
@@ -1612,6 +1727,7 @@ async function handleGenerateSubtitle(id, body) {
     directTargetLanguage: !!directTarget,
     generationMode: directTarget ? 'selected-target-language-subtitle' : 'source-language-transcript',
     outputPolicy: directTarget ? 'target-language-subtitle-cues-only' : 'source-language-transcript',
+    lyricPolicy: 'actual-sung-words-only-after-vocal-onset; preserve-lyric-cue-boundaries; no-instrumental-caption',
     requestId: id
   });
 }
