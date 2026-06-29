@@ -85,13 +85,21 @@
 
   function slotsToItems(section){
     const slots = section && Array.isArray(section.slots) ? section.slots : [];
-    return slots.map((slot)=>({
-      title: slot.title || '',
-      thumbnail: slot.thumb || '',
-      url: slot.url || slot.video || '',
-      video: slot.video || '',
-      provider: slot.provider || ''
-    }));
+    return slots.map((slot)=>{
+      const raw = slot && typeof slot === 'object' ? slot : {};
+      // Preserve the media contract instead of dropping it while converting
+      // slot records.  The playback shell consumes these fields directly.
+      return Object.assign({}, raw, {
+        id: raw.id || raw.contentId || raw.videoId || raw.slotId || '',
+        contentId: raw.contentId || raw.id || raw.videoId || '',
+        title: raw.title || raw.name || '',
+        thumbnail: raw.thumbnail || raw.thumb || raw.image || '',
+        url: raw.url || raw.video || raw.streamUrl || raw.embedUrl || raw.link || raw.href || '',
+        video: raw.video || raw.streamUrl || raw.embedUrl || raw.url || '',
+        provider: raw.provider || raw.channel || raw.source || '',
+        metrics: raw.metrics || {}
+      });
+    });
   }
 
   function extractItems(section){
@@ -204,6 +212,26 @@
     }
 
 
+    // Preserve source, identity, section and aggregate metrics on the card.
+    // These are read by the MediaHub playback shell and MARU revenue tracker.
+    const mediaSource = (item && (item.video || item.streamUrl || item.embedUrl || item.url || item.link || item.href)) || '';
+    const mediaMetrics = (item && item.metrics && typeof item.metrics === 'object') ? item.metrics : {};
+    const mediaViews = mediaMetrics.view != null ? mediaMetrics.view : (mediaMetrics.views != null ? mediaMetrics.views : (item && (item.viewCount != null ? item.viewCount : item.views)));
+    const mediaClicks = mediaMetrics.click != null ? mediaMetrics.click : (mediaMetrics.clicks != null ? mediaMetrics.clicks : (item && item.clicks));
+    const mediaWatchTime = mediaMetrics.watchTime != null ? mediaMetrics.watchTime : (mediaMetrics.watchSeconds != null ? mediaMetrics.watchSeconds : (item && (item.watchTime != null ? item.watchTime : item.watchSeconds)));
+
+    a.onclick = null;
+    a.dataset.mediaId = videoId || '';
+    a.dataset.contentId = (item && (item.contentId || item.id || item.videoId)) || videoId || '';
+    a.dataset.itemId = videoId || '';
+    a.dataset.mediaTitle = title || '';
+    a.dataset.mediaSource = mediaSource || '';
+    a.dataset.mediaViews = mediaViews == null ? '' : String(mediaViews);
+    a.dataset.mediaClicks = mediaClicks == null ? '' : String(mediaClicks);
+    a.dataset.mediaWatchSeconds = mediaWatchTime == null ? '' : String(mediaWatchTime);
+    a.dataset.maruRevenue = 'media';
+    a.dataset.revenueLine = 'media_watchtime';
+    a.dataset.itemType = 'media';
     if(item && item.provider) a.dataset.provider = item.provider;
 
     let thumbBox = q('.thumb', a);
