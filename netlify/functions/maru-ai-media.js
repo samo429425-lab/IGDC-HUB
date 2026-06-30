@@ -17,6 +17,9 @@ const DEFAULT_SUBTITLE_TRANSLATE_MODEL = process.env.OPENAI_SUBTITLE_MODEL || 'g
 const DEFAULT_DUBBING_ANALYSIS_MODEL = process.env.MARU_DUBBING_ANALYSIS_MODEL || process.env.OPENAI_DUBBING_ANALYSIS_MODEL || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
 const MARU_DUBBING_ANALYSIS_MAX_CUES = Math.max(20, Math.min(100, Number(process.env.MARU_DUBBING_ANALYSIS_MAX_CUES || 72) || 72));
 const TTS_CHUNK_CHARS = Math.max(500, Math.min(3500, Number(process.env.MARU_TTS_CHUNK_CHARS || 2600) || 2600));
+// A stalled upstream TTS call must fail predictably so the player can retain
+// completed cue clips and resume, rather than waiting indefinitely.
+const MARU_TTS_REQUEST_TIMEOUT_MS = Math.max(20000, Math.min(75000, Number(process.env.MARU_TTS_REQUEST_TIMEOUT_MS || 60000) || 60000));
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
 
 const CORS_HEADERS = {
@@ -279,36 +282,52 @@ async function openAiJson(path, payload, options = {}) {
   try { return text ? JSON.parse(text) : {}; } catch { return { text }; }
 }
 
-async function openAiBinary(path, payload) {
+async function openAiBinary(path, payload, options = {}) {
   if (!OPENAI_API_KEY) {
     const err = new Error('OPENAI_API_KEY is not configured on Netlify.');
     err.statusCode = 500;
     throw err;
   }
-  const res = await fetch(`${OPENAI_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload || {})
-  });
-  const arrayBuffer = await res.arrayBuffer();
-  const buf = Buffer.from(arrayBuffer);
-  if (!res.ok) {
-    let msg = buf.toString('utf8');
-    try {
-      const parsed = JSON.parse(msg);
-      msg = parsed?.error?.message || parsed?.message || msg;
-    } catch {}
-    const err = new Error(msg || `OpenAI binary request failed (${res.status})`);
-    err.statusCode = res.status;
-    err.openAiStatus = res.status;
-    throw err;
+  const timeoutMs = Math.max(10000, Math.min(90000, Number(options.timeoutMs || MARU_TTS_REQUEST_TIMEOUT_MS) || MARU_TTS_REQUEST_TIMEOUT_MS));
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  let timer = null;
+  try {
+    if (controller) timer = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(`${OPENAI_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload || {}),
+      ...(controller ? { signal: controller.signal } : {})
+    });
+    const arrayBuffer = await res.arrayBuffer();
+    const buf = Buffer.from(arrayBuffer);
+    if (!res.ok) {
+      let msg = buf.toString('utf8');
+      try {
+        const parsed = JSON.parse(msg);
+        msg = parsed?.error?.message || parsed?.message || msg;
+      } catch {}
+      const err = new Error(msg || `OpenAI binary request failed (${res.status})`);
+      err.statusCode = res.status;
+      err.openAiStatus = res.status;
+      throw err;
+    }
+    return buf;
+  } catch (error) {
+    if (controller?.signal?.aborted || error?.name === 'AbortError') {
+      const timeoutError = new Error(`OpenAI TTS request timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+      timeoutError.statusCode = 504;
+      timeoutError.serverCode = 'openai_tts_timeout';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    try { if (timer) clearTimeout(timer); } catch {}
   }
-  return buf;
 }
-
 async function openAiMultipart(path, fields, fileField) {
   if (!OPENAI_API_KEY) {
     const err = new Error('OPENAI_API_KEY is not configured on Netlify.');
@@ -1933,7 +1952,7 @@ async function ttsOnce(text, body, model) {
   const instructions = buildDubbingInstructions(body);
   // Newer OpenAI TTS models accept instructions. Older tts-1 may ignore/reject it, so only add for newer model names.
   if (!/^tts-1/i.test(model) && instructions) payload.instructions = instructions;
-  return openAiBinary('/audio/speech', payload);
+  return openAiBinary('/audio/speech', payload, { timeoutMs: MARU_TTS_REQUEST_TIMEOUT_MS });
 }
 
 async function ttsWithFallback(text, body) {
