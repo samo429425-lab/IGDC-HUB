@@ -1,35 +1,32 @@
 /**
- * MediaHub AutoMap v3.3 — production slot pipeline recovery
- * -----------------------------------------------------------
- * Scope:
- * - Preserves the current MediaHub screen/player structure.
- * - Restores the original snapshot -> fixed slot -> thumbnail-card pipeline.
- * - Retains the nine-category ranked first section.
- * - Never removes a reserved slot or manufactures content data.
+ * mediahub-automap.v3.js (PRODUCTION SAFE / SINGLE VERSION)
+ * ------------------------------------------------------------
+ * 목적:
+ *  - MediaHub 메인 10섹션(data-psom-key="media-*")에 "미디어 콘텐츠"를 슬롯-우선(slot-first)으로 꽂는다.
+ *  - 우선순위: /data/media.snapshot*.json -> /.netlify/functions/feed-media?key=... fallback
+ *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
+ *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
+ *  - 우측 패널 없음(처리하지 않음)
+ *  - Hero는 snapshot.hero.rotateFrom 순서로 1개 썸네일을 골라 img src에 적용(가능한 경우)
  */
 (function () {
   'use strict';
 
-  if (window.__MEDIAHUB_AUTOMAP_V33_PROD__) return;
-  window.__MEDIAHUB_AUTOMAP_V33_PROD__ = true;
+  if (window.__MEDIAHUB_AUTOMAP_V3_PROD__) return;
+  window.__MEDIAHUB_AUTOMAP_V3_PROD__ = true;
 
-  var D = document;
-  var LIMIT = 50;
+  const D = document;
 
-  var SNAPSHOT_URLS = [
+  const LIMIT = 50;
+
+  const SNAPSHOT_URLS = [
     '/data/media.snapshot.json',
     '/data/media.snapshot.v6.keys.json',
     '/data/media.snapshot.v5.slots.json',
     '/data/media.snapshot.v4.ott.full.json'
   ];
 
-  var CATEGORY_KEYS = [
-    'media-movie', 'media-drama', 'media-thriller', 'media-romance',
-    'media-variety', 'media-documentary', 'media-animation', 'media-music',
-    'media-shorts'
-  ];
-
-  var KEY_ALIAS = {
+  const KEY_ALIAS = {
     'trending_now': 'media-trending',
     'latest_movie': 'media-movie',
     'latest_drama': 'media-drama',
@@ -42,458 +39,460 @@
     'section_7': 'media-shorts'
   };
 
-  function q(sel, root){ return (root || D).querySelector(sel); }
-  function qa(sel, root){ return Array.prototype.slice.call((root || D).querySelectorAll(sel)); }
-  function text(value){ return value == null ? '' : String(value).trim(); }
-  function number(value){ var n = Number(value); return Number.isFinite(n) ? n : 0; }
+  function q(sel, root){ return (root||D).querySelector(sel); }
+  function qa(sel, root){ return Array.prototype.slice.call((root||D).querySelectorAll(sel)); }
 
-  function canonKey(key){
-    key = text(key);
-    if (!key) return '';
-    return key.indexOf('media-') === 0 ? key : (KEY_ALIAS[key] || key);
-  }
-
-  function isUsableUrl(value){
-    value = text(value);
-    return !!value && value !== '#' && !/^javascript:/i.test(value) && value !== 'about:blank';
-  }
-
-  function slotIdOf(item){
-    return text(item && (item.slotId || item.slot_id || item.position || item.index));
-  }
-
-  function rawSourceOf(item){
-    return text(item && (
-      item.video || item.streamUrl || item.stream_url || item.embedUrl || item.embed_url ||
-      item.url || item.link || item.href || item.source
-    ));
-  }
-
-  function thumbnailOf(item){
-    return text(item && (
-      item.thumbnail || item.thumb || item.image || item.imageUrl || item.image_url ||
-      item.thumbnailUrl || item.thumbnail_url
-    ));
-  }
-
-  function titleOf(item){
-    return text(item && (item.title || item.name || item.label || item.text));
-  }
-
-  function rawContentIdOf(item){
-    return text(item && (
-      item.contentId || item.content_id || item.id || item._id ||
-      item.videoId || item.video_id || item.uid || item.slug
-    ));
-  }
-
-  function metricsOf(item){
-    return (item && (item.metrics || item.metric) && typeof (item.metrics || item.metric) === 'object')
-      ? (item.metrics || item.metric)
-      : {};
-  }
-
-  function metric(item, names){
-    var metrics = metricsOf(item);
-    for (var i = 0; i < names.length; i += 1) {
-      var name = names[i];
-      if (metrics[name] != null) return number(metrics[name]);
-      if (item && item[name] != null) return number(item[name]);
-    }
-    return 0;
-  }
-
-  /*
-   * A slot record is always retained as a stable target.  Rendering is
-   * intentionally decided separately so empty reservation slots do not erase
-   * the existing HTML placeholder/sample card.
-   */
-  function normalizeItem(raw, sectionKey, order){
-    raw = raw && typeof raw === 'object' ? raw : {};
-    return {
-      raw: raw,
-      section: sectionKey,
-      order: order,
-      slotId: slotIdOf(raw),
-      contentId: rawContentIdOf(raw),
-      title: titleOf(raw),
-      thumbnail: thumbnailOf(raw),
-      source: rawSourceOf(raw),
-      provider: text(raw.provider || raw.platform || raw.channel || raw.sourceProvider),
-      description: text(raw.description || raw.summary || raw.excerpt),
-      publishedAt: raw.publishedAt || raw.releaseDate || raw.createdAt || raw.date || '',
-      views: metric(raw, ['view', 'views', 'viewCount']),
-      clicks: metric(raw, ['click', 'clicks']),
-      likes: metric(raw, ['like', 'likes']),
-      recommends: metric(raw, ['recommend', 'recommends', 'recommendations']),
-      watchTime: metric(raw, ['watchTime', 'watchSeconds', 'watch_time']),
-      rating: metric(raw, ['rating', 'voteAverage', 'score', 'popularity'])
-    };
-  }
-
-  function hasPresentation(item){
-    return !!(item && (
-      item.contentId ||
-      item.title ||
-      isUsableUrl(item.thumbnail) ||
-      isUsableUrl(item.source)
-    ));
+  function canonKey(k){
+    if(!k) return '';
+    if(k.indexOf('media-') === 0) return k;
+    return KEY_ALIAS[k] || k;
   }
 
   async function fetchJson(url){
-    var response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    return response.json();
+    const r = await fetch(url, { cache: 'no-store' });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
   }
 
   async function loadSnapshotAny(){
-    for (var i = 0; i < SNAPSHOT_URLS.length; i += 1) {
-      try { return await fetchJson(SNAPSHOT_URLS[i]); } catch (_) {}
+    for (const url of SNAPSHOT_URLS){
+      try { return await fetchJson(url); } catch(e){ /* continue */ }
     }
     return null;
   }
 
   function normalizeSectionMap(snapshot){
-    var map = {};
-    if (!snapshot || !snapshot.sections) return map;
+    const map = {};
+    if(!snapshot) return map;
 
-    if (Array.isArray(snapshot.sections)) {
-      snapshot.sections.forEach(function(section){
-        if (section) map[canonKey(section.key)] = section;
+    // object sections
+    if(snapshot.sections && !Array.isArray(snapshot.sections) && typeof snapshot.sections === 'object'){
+      Object.keys(snapshot.sections).forEach((k)=>{
+        map[canonKey(k)] = snapshot.sections[k] || {};
       });
-    } else if (typeof snapshot.sections === 'object') {
-      Object.keys(snapshot.sections).forEach(function(key){
-        map[canonKey(key)] = snapshot.sections[key];
+      return map;
+    }
+
+    // array sections
+    if(Array.isArray(snapshot.sections)){
+      snapshot.sections.forEach((s)=>{
+        if(!s) return;
+        map[canonKey(s.key || '')] = s;
       });
     }
     return map;
   }
 
-  function sectionRecords(section, key){
-    if (!section) return [];
-    var records = Array.isArray(section)
-      ? section
-      : (Array.isArray(section.items) ? section.items : (Array.isArray(section.slots) ? section.slots : []));
-    return records.map(function(record, index){ return normalizeItem(record, key, index); });
+  function slotsToItems(section){
+    const slots = section && Array.isArray(section.slots) ? section.slots : [];
+    return slots.map((slot)=>({
+      title: slot.title || '',
+      thumbnail: slot.thumb || '',
+      url: slot.url || slot.video || '',
+      video: slot.video || '',
+      provider: slot.provider || ''
+    }));
   }
 
-  async function loadFeedItems(key){
-    try {
-      var data = await fetchJson('/.netlify/functions/feed-media?key=' + encodeURIComponent(key) + '&limit=500');
-      if (data && Array.isArray(data.items)) return data.items;
-      if (data && Array.isArray(data.sections)) {
-        var found = data.sections.find(function(section){
-          return section && canonKey(section.key) === key;
-        });
-        if (found && Array.isArray(found.items)) return found.items;
-      }
-    } catch (_) {}
+  function extractItems(section){
+    if(!section) return [];
+    if(Array.isArray(section.items)) return section.items;
+    if(Array.isArray(section.slots)) return slotsToItems(section);
     return [];
   }
 
-  function getContainer(line){
-    return q('.scroll-content', line) || line;
+  async function loadFeedItems(key){
+    const url = `/.netlify/functions/feed-media?key=${encodeURIComponent(key)}&limit=500`;
+    try{
+      const data = await fetchJson(url);
+      if(data && Array.isArray(data.items)) return data.items;
+      if(data && Array.isArray(data.sections)){
+        const found = data.sections.find(s => s && canonKey(s.key) === key);
+        if(found && Array.isArray(found.items)) return found.items;
+      }
+    }catch(e){ /* ignore */ }
+    return [];
   }
 
   function makePlaceholder(){
-    var anchor = D.createElement('a');
-    anchor.className = 'card media-card';
-    anchor.href = 'javascript:void(0)';
-    anchor.setAttribute('data-placeholder', 'true');
-
-    var thumb = D.createElement('div');
+    const a = D.createElement('a');
+    a.className = 'card media-card';
+    a.setAttribute('data-placeholder','true');
+    a.href = 'javascript:void(0)';
+    const thumb = D.createElement('div');
     thumb.className = 'thumb ph';
-    var meta = D.createElement('div');
+    const meta = D.createElement('div');
     meta.className = 'meta';
     meta.textContent = 'Coming Soon';
-
-    anchor.appendChild(thumb);
-    anchor.appendChild(meta);
-    return anchor;
+    a.appendChild(thumb);
+    a.appendChild(meta);
+    return a;
   }
 
-  function ensureSlotCards(line, key){
-    var container = getContainer(line);
-    var cards = qa('a.card', container);
-
-    if (cards.length < LIMIT) {
-      var fragment = D.createDocumentFragment();
-      for (var i = cards.length; i < LIMIT; i += 1) fragment.appendChild(makePlaceholder());
-      container.appendChild(fragment);
-      cards = qa('a.card', container);
-    }
-
-    cards = cards.slice(0, LIMIT);
-    cards.forEach(function(card, index){
-      if (!card.dataset.mediaSlotId) card.dataset.mediaSlotId = String(index + 1);
-      card.dataset.mediaSection = key;
-      card.dataset.psomKey = key;
-      card.setAttribute('data-igdc-media-card', '1');
-    });
-
-    return cards;
+  function getContainer(line){
+    // Some pages wrap cards in .scroll-content. If not, cards are directly inside .thumb-line.
+    return q('.scroll-content', line) || line;
   }
 
-  function stableContentId(item){
-    if (!item || !hasPresentation(item)) return '';
-    return item.contentId || '';
-  }
+  function ensurePlaceholders(line){
+    const container = getContainer(line);
 
-  function setData(card, name, value){
-    if (value === '' || value == null) delete card.dataset[name];
-    else card.dataset[name] = String(value);
-  }
+    // collect existing placeholders (preferred)
+    let ph = qa('a[data-placeholder="true"]', container);
 
-  function clearLegacyClick(card){
-    try { card.onclick = null; } catch (_) {}
-  }
-
-  function fillCard(card, item, key, slotId){
-    var contentId = stableContentId(item);
-    var source = item.source;
-    var thumbUrl = item.thumbnail;
-    var title = item.title || 'Coming Soon';
-
-    clearLegacyClick(card);
-    card.classList.add('media-card');
-    card.removeAttribute('data-placeholder');
-    card.dataset.mediaSlotId = String(slotId);
-    card.dataset.mediaSection = key;
-    card.dataset.psomKey = key;
-
-    setData(card, 'igdcContentId', contentId);
-    setData(card, 'contentId', contentId);
-    setData(card, 'itemId', contentId);
-    setData(card, 'mediaId', contentId);
-    setData(card, 'mediaSource', source);
-    setData(card, 'mediaTitle', item.title);
-    setData(card, 'title', item.title);
-    setData(card, 'mediaDescription', item.description);
-    setData(card, 'provider', item.provider);
-    setData(card, 'views', item.views);
-    setData(card, 'clicks', item.clicks);
-    setData(card, 'likes', item.likes);
-    setData(card, 'recommends', item.recommends);
-    setData(card, 'watchTime', item.watchTime);
-    setData(card, 'mediaViews', item.views);
-    setData(card, 'mediaClicks', item.clicks);
-    setData(card, 'mediaWatchSeconds', item.watchTime);
-    setData(card, 'maruRevenue', contentId ? 'media' : '');
-    setData(card, 'revenueLine', contentId ? 'media_watchtime' : '');
-    setData(card, 'itemType', 'media');
-
-    /*
-     * The current in-page playback controller captures clicks.  Keep the
-     * original watch route available for non-JS navigation and accessibility.
-     */
-    card.href = contentId
-      ? ('/media/watch.html?id=' + encodeURIComponent(contentId))
-      : 'javascript:void(0)';
-    card.removeAttribute('target');
-    card.removeAttribute('rel');
-    card.setAttribute('aria-label', item.title || 'Media content');
-
-    var thumb = q('.thumb', card);
-    if (!thumb) {
-      thumb = D.createElement('div');
-      thumb.className = 'thumb';
-      card.insertBefore(thumb, card.firstChild);
-    }
-
-    var image = q('img', thumb);
-    if (isUsableUrl(thumbUrl)) {
-      if (!image) {
-        image = D.createElement('img');
-        image.loading = 'lazy';
-        thumb.appendChild(image);
-      }
-      image.alt = item.title || '';
-      image.src = thumbUrl;
-      thumb.classList.remove('ph');
-    } else {
-      if (image) image.remove();
-      thumb.classList.add('ph');
-    }
-
-    var meta = q('.meta', card);
-    if (!meta) {
-      meta = D.createElement('div');
-      meta.className = 'meta';
-      card.appendChild(meta);
-    }
-    meta.textContent = title;
-    card.dataset.igdcAutomapFilled = '1';
-  }
-
-  /*
-   * Reserved snapshot slots are never filtered out.  Only records that carry
-   * presentable content update a card.  Empty reservations leave the existing
-   * sample/placeholder card intact and remain ready for automatic replacement.
-   */
-  function applySlotItems(cards, items, key){
-    var bySlot = {};
-    cards.forEach(function(card){ bySlot[String(card.dataset.mediaSlotId)] = card; });
-
-    var available = cards.slice();
-    var used = {};
-    function takeSequential(){
-      while (available.length) {
-        var candidate = available.shift();
-        if (!used[candidate.dataset.mediaSlotId]) return candidate;
-      }
-      return null;
-    }
-
-    items.forEach(function(item){
-      if (!hasPresentation(item)) return;
-      var requested = text(item.slotId);
-      var target = requested && bySlot[requested] && !used[requested] ? bySlot[requested] : null;
-      if (!target) target = takeSequential();
-      if (!target) return;
-      var resolvedSlot = String(target.dataset.mediaSlotId);
-      used[resolvedSlot] = true;
-      fillCard(target, item, key, resolvedSlot);
-    });
-  }
-
-  async function resolveSection(sectionMap, key){
-    var reservations = sectionRecords(sectionMap[key], key);
-    var visible = reservations.filter(hasPresentation);
-
-    /*
-     * A snapshot containing only empty reservation records must not suppress
-     * the live feed fallback.  The reservations remain fixed targets while
-     * feed content is injected into those targets.
-     */
-    if (!visible.length) {
-      var feed = await loadFeedItems(key);
-      visible = feed.map(function(item, index){ return normalizeItem(item, key, index); }).filter(hasPresentation);
-    }
-    return visible;
-  }
-
-  function recencyScore(item){
-    var timestamp = Date.parse(item.publishedAt || '');
-    if (!Number.isFinite(timestamp)) return 0;
-    var days = Math.max(0, (Date.now() - timestamp) / 86400000);
-    return Math.max(0, 30 - days) / 30;
-  }
-
-  function rankScore(item){
-    return (
-      number(item.views) +
-      number(item.clicks) * 1.5 +
-      number(item.likes) * 2 +
-      number(item.recommends) * 3 +
-      Math.min(number(item.watchTime), 86400) / 60 * 0.25 +
-      number(item.rating) * 10 +
-      recencyScore(item) * 5
-    );
-  }
-
-  function rankedTrending(categoryMap){
-    var seen = {};
-    var merged = [];
-    CATEGORY_KEYS.forEach(function(key){
-      (categoryMap[key] || []).forEach(function(item){
-        var identity = item.contentId || item.source || (item.title + '|' + item.thumbnail + '|' + item.slotId);
-        if (!identity || seen[identity]) return;
-        seen[identity] = true;
-        merged.push(item);
+    // mark empty anchors as placeholders (non-destructive)
+    if(ph.length === 0){
+      const anchors = qa('a.card', container);
+      anchors.forEach((a)=>{
+        const hasImg = !!q('img', a);
+        const hasText = (a.textContent || '').trim().length > 0;
+        if(!hasImg && !hasText) a.setAttribute('data-placeholder','true');
       });
-    });
+      ph = qa('a[data-placeholder="true"]', container);
+    }
 
-    merged = merged.map(function(item, index){
-      item._rankIndex = index;
-      return item;
-    });
+    // add up to LIMIT
+    if(ph.length < LIMIT){
+      const frag = D.createDocumentFragment();
+      for(let i=ph.length;i<LIMIT;i++){
+        frag.appendChild(makePlaceholder());
+      }
+      container.appendChild(frag);
+      ph = qa('a[data-placeholder="true"]', container);
+    }
 
-    merged.sort(function(a, b){
-      var difference = rankScore(b) - rankScore(a);
-      return difference || (a._rankIndex - b._rankIndex);
-    });
+    // if too many, keep first LIMIT as fill targets
+    if(ph.length > LIMIT) ph = ph.slice(0, LIMIT);
 
-    return merged.slice(0, LIMIT);
+    return ph;
   }
 
-  async function applyHero(snapshot, categoryMap){
-    var heroImg = q('.hero img');
-    if (!heroImg) return;
-    var hero = snapshot && snapshot.hero || {};
-    var keys = hero.rotateFrom || hero.source || [];
-    if (!Array.isArray(keys)) keys = [keys];
+  
+ function ensureContentId(item){
+  if(!item) return '';
 
-    for (var i = 0; i < keys.length; i += 1) {
-      var sourceItems = categoryMap[canonKey(keys[i])] || [];
-      var first = sourceItems.find(function(item){ return isUsableUrl(item.thumbnail); });
-      if (first) {
-        heroImg.src = first.thumbnail;
+  const hasRealContent =
+    !!(item.title || item.name || item.text || item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || item.url || item.video || item.link || item.href);
+
+  if(!hasRealContent) return '';
+
+  return (
+    item.id ||
+    item._id ||
+    item.contentId ||
+    item.videoId ||
+    item.slug ||
+    (item.url ? btoa(item.url).replace(/=/g,'') : '')
+  );
+}
+
+  function fillAnchor(a, item){
+    const title = (item && (item.title || item.name || item.text || '')) || '';
+    const thumb = (item && (item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || '')) || '';
+    const url = (item && (item.url || item.video || item.link || item.href || '#')) || '#';
+
+    
+    const videoId = ensureContentId(item);
+
+    if(videoId){
+      a.href = `/media/watch.html?id=${encodeURIComponent(videoId)}`;
+      a.removeAttribute('target');
+      a.removeAttribute('rel');
+    }else{
+      a.href = "javascript:void(0)";
+      a.onclick = function(){ alert("콘텐츠 준비 중입니다."); };
+    }
+
+
+    if(item && item.provider) a.dataset.provider = item.provider;
+
+    let thumbBox = q('.thumb', a);
+    if(!thumbBox){
+      thumbBox = D.createElement('div');
+      thumbBox.className = 'thumb';
+      a.insertBefore(thumbBox, a.firstChild);
+    }
+
+    let img = q('img', thumbBox);
+    if(!img){
+      img = D.createElement('img');
+      thumbBox.appendChild(img);
+    }
+    img.alt = title || '';
+    img.loading = 'lazy';
+    if(thumb) img.src = thumb;
+
+    let metaBox = q('.meta', a);
+    if(!metaBox){
+      metaBox = D.createElement('div');
+      metaBox.className = 'meta';
+      a.appendChild(metaBox);
+    }
+    metaBox.textContent = title;
+
+    a.removeAttribute('data-placeholder');
+  }
+
+  function applyLine(line, items){
+    if(!Array.isArray(items) || items.length === 0) return; // keep dummy
+    const ph = ensurePlaceholders(line);
+    const n = Math.min(LIMIT, ph.length, items.length);
+    for(let i=0;i<n;i++){
+      fillAnchor(ph[i], items[i]);
+    }
+  }
+
+  async function applyHero(heroRotateKeys, sectionMap){
+    const heroImg = q('.hero img');
+    if(!heroImg) return;
+
+    const keys = Array.isArray(heroRotateKeys) ? heroRotateKeys.map(canonKey) : [];
+    if(keys.length === 0) return;
+
+    // snapshot first
+    for(const k of keys){
+      const items = extractItems(sectionMap[k]);
+      const first = items && items[0];
+      const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
+      if(thumb){
+        heroImg.src = thumb;
+        return;
+      }
+    }
+
+    // fallback feed (best-effort)
+    for(const k of keys){
+      const items = await loadFeedItems(k);
+      const first = items && items[0];
+      const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
+      if(thumb){
+        heroImg.src = thumb;
         return;
       }
     }
   }
 
   async function main(){
-    var lines = qa('.thumb-line[data-psom-key]');
-    if (!lines.length) return;
+    const lines = qa('.thumb-line[data-psom-key]');
+    if(lines.length === 0) return;
 
-    var snapshot = await loadSnapshotAny();
-    var sectionMap = normalizeSectionMap(snapshot);
-    var categoryMap = {};
+    // stabilize layout first
+    lines.forEach(ensurePlaceholders);
 
-    await Promise.all(CATEGORY_KEYS.map(async function(key){
-      categoryMap[key] = await resolveSection(sectionMap, key);
-    }));
+    const snapshot = await loadSnapshotAny();
+    const sectionMap = normalizeSectionMap(snapshot);
+	
+// ===== MEDIA TRENDING AUTO-COMBINE (FINAL PRO) =====
+(function(){
 
-    var trending = rankedTrending(categoryMap);
+  if(!sectionMap) return;
 
-    await applyHero(snapshot, categoryMap);
+  const existing = extractItems(sectionMap["media-trending"]);
+  if(Array.isArray(existing) && existing.length > 0){
+    return;
+  }
 
-    lines.forEach(function(line){
-      var key = canonKey(line.getAttribute('data-psom-key') || '');
-      if (!key || key.indexOf('media-') !== 0 || key === 'media-hero') return;
-      var cards = ensureSlotCards(line, key);
-      var items = key === 'media-trending' ? trending : (categoryMap[key] || []);
-      applySlotItems(cards, items, key);
+  const sourceKeys = [
+    "media-movie",
+    "media-drama",
+    "media-variety",
+    "media-music"
+  ];
+
+  let merged = [];
+
+ sourceKeys.forEach(key => {
+  const items = extractItems(sectionMap[key]);
+
+  if(Array.isArray(items)){
+    items.forEach(item => {
+
+      // 🔥 여기서 바로 섹션 정보 주입
+      item._sectionKey = key;
+
+      merged.push(item);
     });
   }
+});
 
-  if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main, { once:true });
-  else main();
+  // 🔥 최신성 점수 (0~1)
+  function getRecency(item){
+    const now = Date.now();
+
+    const t =
+      item.publishedAt ||
+      item.releaseDate ||
+      item.createdAt ||
+      item.date ||
+      null;
+
+    if(!t) return 0;
+
+    const time = new Date(t).getTime();
+    if(isNaN(time)) return 0;
+
+    const diffDays = (now - time) / (1000 * 60 * 60 * 24);
+
+    return Math.max(0, 1 - (diffDays / 30)); // 30일 기준
+  }
+
+  // 🔥 섹션 가중치 (영화/드라마 우선)
+  function getSectionWeight(item){
+    const key = item._sectionKey || '';
+
+    if(key === "media-movie") return 1.2;
+    if(key === "media-drama") return 1.15;
+    if(key === "media-variety") return 1.05;
+    if(key === "media-music") return 1.0;
+
+    return 1.0;
+  }
+
+  // 🔥 점수 계산 (완성형)
+  function getScore(item){
+
+    const views = item.views || item.viewCount || 0;
+    const popularity = item.popularity || item.score || 0;
+    const rating = item.rating || item.voteAverage || 0;
+    const recency = getRecency(item);
+    const weight = getSectionWeight(item);
+
+    const base =
+      views * 0.5 +
+      popularity * 0.2 +
+      rating * 0.1 +
+      recency * 100 * 0.2;
+
+    return base * weight;
+  }
+
+  // 🔥 정렬
+  merged.sort((a, b) => getScore(b) - getScore(a));
+
+  // 🔥 중복 제거
+  const seen = new Set();
+  const filtered = [];
+
+  for(const item of merged){
+    const key =
+      item.url ||
+      item.video ||
+      item.id ||
+      JSON.stringify(item);
+
+    if(seen.has(key)) continue;
+    seen.add(key);
+    filtered.push(item);
+  }
+
+  sectionMap["media-trending"] = {
+    items: filtered.slice(0, 50)
+  };
+
 })();
 
-/*
- * Existing non-cash revenue tracking loader.  Rendering and slot allocation
- * above remain independent from revenue collection.
- */
-(function loadMaruRevenueAutoHookForAutomap(){
-  'use strict';
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    // hero
+    const heroRotateFrom = snapshot && snapshot.hero && (snapshot.hero.rotateFrom || snapshot.hero.source);
+    await applyHero(heroRotateFrom, sectionMap);
 
-  function install(){
-    try {
-      if (window.MaruRevenueAutoHook && typeof window.MaruRevenueAutoHook.install === 'function') {
-        window.MaruRevenueAutoHook.install({ service:'front-automap' });
+    // sections
+    for(const line of lines){
+      const key = canonKey(line.getAttribute('data-psom-key') || '');
+      if(!key || key.indexOf('media-') !== 0) continue;
+
+      let items = extractItems(sectionMap[key]);
+      if(!items || items.length === 0){
+        items = await loadFeedItems(key);
       }
-    } catch (_) {}
+      applyLine(line, items);
+    }
   }
 
-  function load(src, id, globalName, done){
-    if (window[globalName]) { done(); return; }
-    var tag = document.getElementById(id);
-    if (tag) {
-      tag.addEventListener('load', done, { once:true });
+  if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
+  else main();
+
+})();
+
+
+/* ------------------------------------------------------------------
+ * MARU Revenue AutoHook Loader
+ * Added by revenue tracking patch.
+ *
+ * Purpose:
+ * - Load /assets/js/maru-revenue-tracker.js
+ * - Then load /assets/js/maru-revenue-autohook.js
+ * - Do not change this automap's original rendering pipeline.
+ * ------------------------------------------------------------------ */
+(function loadMaruRevenueAutoHookForAutomap(){
+  "use strict";
+
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+
+  function installIfReady(){
+    try {
+      if (
+        window.MaruRevenueAutoHook &&
+        typeof window.MaruRevenueAutoHook.install === "function"
+      ) {
+        window.MaruRevenueAutoHook.install({
+          service: "front-automap"
+        });
+      }
+    } catch (e) {
+      console.warn("[MARU Revenue] autohook install skipped:", e);
+    }
+  }
+
+  function loadScriptOnce(src, id, globalName, done){
+    var existing = document.getElementById(id);
+
+    if (window[globalName]) {
+      if (typeof done === "function") done();
       return;
     }
-    tag = document.createElement('script');
-    tag.id = id;
-    tag.src = src;
-    tag.async = false;
-    tag.onload = done;
-    (document.head || document.documentElement).appendChild(tag);
+
+    if (existing) {
+      existing.addEventListener("load", function(){
+        if (typeof done === "function") done();
+      }, { once:true });
+      existing.addEventListener("error", function(){
+        console.warn("[MARU Revenue] failed to load:", src);
+      }, { once:true });
+      return;
+    }
+
+    var script = document.createElement("script");
+    script.id = id;
+    script.src = src;
+    script.async = false;
+    script.onload = function(){
+      if (typeof done === "function") done();
+    };
+    script.onerror = function(){
+      console.warn("[MARU Revenue] failed to load:", src);
+    };
+
+    (document.head || document.documentElement).appendChild(script);
   }
 
-  load('/assets/js/maru-revenue-tracker.js', 'maruRevenueTrackerScript', 'MaruRevenueTracker', function(){
-    load('/assets/js/maru-revenue-autohook.js', 'maruRevenueAutoHookScript', 'MaruRevenueAutoHook', install);
-  });
+  if (window.__MARU_REVENUE_AUTOMAP_LOADER_DONE__) {
+    installIfReady();
+    return;
+  }
+
+  window.__MARU_REVENUE_AUTOMAP_LOADER_DONE__ = true;
+
+  loadScriptOnce(
+    "/assets/js/maru-revenue-tracker.js",
+    "maruRevenueTrackerScript",
+    "MaruRevenueTracker",
+    function(){
+      loadScriptOnce(
+        "/assets/js/maru-revenue-autohook.js",
+        "maruRevenueAutoHookScript",
+        "MaruRevenueAutoHook",
+        installIfReady
+      );
+    }
+  );
 })();
