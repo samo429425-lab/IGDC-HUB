@@ -1,16 +1,18 @@
 'use strict';
 
 /*
- * Media Hub pilot playback metadata gateway — stages 2–3
+ * Media Hub pilot playback metadata gateway — stages 2–4
  *
  * Delivery URLs are read only from netlify/functions/secure/media-catalog.json.
  * A content record must be explicitly marked ready and rights-cleared before a
- * verified existing IGDC member receives any stream metadata. There is no PG,
- * advertising, resume storage, subtitle generation, translation, or dubbing in
- * this stage.
+ * verified existing IGDC member receives any stream metadata. Stage 4 adds
+ * optional caption-track metadata only; advertising and viewing-state decisions
+ * remain separate authenticated server contracts. There is no PG, subtitle
+ * generation, translation, or dubbing in this browser OTT path.
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { authenticateMember, clean } = require('./lib/media-member-auth');
 
 const MAX_CONTENT_ID_LENGTH = 260;
@@ -68,6 +70,39 @@ function allowedUrl(value) {
   }
 }
 function text(value, limit) { return clean(value).slice(0, limit || 5000); }
+function language(value) {
+  const raw = text(value, 48).toLowerCase().replace(/_/g, '-');
+  return /^[a-z]{2,3}(?:-[a-z0-9]{2,12})?$/i.test(raw) ? raw : '';
+}
+function captionTracks(record, delivery) {
+  const raw = (record && (record.captions || record.subtitleTracks || record.tracks)) ||
+    (delivery && (delivery.captions || delivery.subtitleTracks || delivery.tracks)) || [];
+  const rows = Array.isArray(raw) ? raw : Object.values(raw && typeof raw === 'object' ? raw : {});
+  const seen = new Set();
+  const out = [];
+  for (const item of rows.slice(0, 30)) {
+    if (!item || typeof item !== 'object') continue;
+    const src = allowedUrl(item.src || item.url || item.href || item.vttUrl);
+    const lang = language(item.language || item.lang || item.srclang);
+    const kind = text(item.kind || 'subtitles', 20).toLowerCase();
+    if (!src || !lang || !['subtitles', 'captions'].includes(kind)) continue;
+    const key = lang + '|' + src;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      id: text(item.id || lang, 80).replace(/[^a-z0-9._-]/gi, '') || lang,
+      language: lang,
+      label: text(item.label || item.name || lang, 120) || lang,
+      kind,
+      src,
+      default: item.default === true || item.isDefault === true
+    });
+  }
+  return out;
+}
+function viewerKey(memberId) {
+  return crypto.createHash('sha256').update(text(memberId, 500)).digest('hex').slice(0, 32);
+}
 function isReadyForPilot(record) {
   const status = text(record && record.status, 40).toLowerCase();
   const rights = text(record && (record.rightsStatus || (record.rights && record.rights.status)), 40).toLowerCase();
@@ -84,7 +119,8 @@ function buildContent(record, id) {
     title: text(record.title || record.name || id, 300),
     description: text(record.description || record.summary || '', 4000),
     posterUrl: allowedUrl(record.posterUrl || record.poster || record.thumbnail),
-    stream: { format, url: streamUrl }
+    stream: { format, url: streamUrl },
+    captions: captionTracks(record, delivery)
   };
 }
 
@@ -108,7 +144,7 @@ exports.handler = async (event) => {
     return json(200, {
       ok: true,
       stage: 'pilot_member_playback',
-      viewer: { member: true, roles: member.roles },
+      viewer: { member: true, key: viewerKey(member.memberId), roles: member.roles },
       access: { mode: 'pilot_member_free', memberOnly: true, paymentRequired: false, noticeRequired: true },
       content
     });
