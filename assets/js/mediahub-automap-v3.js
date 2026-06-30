@@ -1,17 +1,19 @@
 /**
- * MediaHub automap v3.1 — slot-first rendering and ranked first section.
- *
+ * MediaHub AutoMap v3.2 — snapshot slot contract preserving renderer
+ * -------------------------------------------------------------------
  * Contract:
- * - Keep the existing 10 section DOM and its 50-slot rails.
- * - Build “Trending Now” from all nine category sections by actual metrics.
- * - Preserve source IDs, source URLs and metrics on cards for the in-page
- *   playback controller and revenue/engagement bridges.
- * - Never manufacture a content ID, thumbnail, view, like or watch value.
+ * - /data/media.snapshot.json is the primary source of truth.
+ * - Every snapshot slot remains a stable front slot target, including a
+ *   replaceable preliminary/sample slot.
+ * - A later real item must replace the same slot by contentId/slotId without
+ *   changing the rail structure or discarding the receiving card.
+ * - The first "trending" rail is derived from ranked, displayable items in
+ *   the nine lower content sections; it never owns an independent inventory.
  */
-(function () {
+(function(){
   'use strict';
-  if (window.__MEDIAHUB_AUTOMAP_V31_PROD__) return;
-  window.__MEDIAHUB_AUTOMAP_V31_PROD__ = true;
+  if(window.__MEDIAHUB_AUTOMAP_V3_PROD__) return;
+  window.__MEDIAHUB_AUTOMAP_V3_PROD__ = true;
 
   var D = document;
   var LIMIT = 50;
@@ -22,8 +24,8 @@
     '/data/media.snapshot.v4.ott.full.json'
   ];
   var CATEGORY_KEYS = [
-    'media-movie', 'media-drama', 'media-thriller', 'media-romance',
-    'media-variety', 'media-documentary', 'media-animation', 'media-music',
+    'media-movie','media-drama','media-thriller','media-romance',
+    'media-variety','media-documentary','media-animation','media-music',
     'media-shorts'
   ];
   var KEY_ALIAS = {
@@ -38,92 +40,82 @@
   function text(value){ return value == null ? '' : String(value).trim(); }
   function number(value){ var n = Number(value); return Number.isFinite(n) ? n : 0; }
   function canonKey(key){ key = text(key); return key.indexOf('media-') === 0 ? key : (KEY_ALIAS[key] || key); }
-  function isValue(value){
-    value = text(value);
-    return !!value && value !== '#' && !/^javascript:/i.test(value) && value !== 'about:blank';
+  function isUsable(value){ value = text(value); return !!value && value !== '#' && value !== 'about:blank' && !/^javascript:/i.test(value); }
+  function sourceOf(raw){
+    raw = raw || {};
+    var outbound = raw.outbound || {};
+    return text(raw.video || raw.videoUrl || raw.video_url || raw.embedUrl || raw.embed_url || raw.url || raw.link || raw.href || outbound.url || outbound.link || outbound.href || raw.source);
   }
-  function mediaUrl(item){ return text(item && (item.embedUrl || item.embed_url || item.video || item.videoUrl || item.video_url || item.url || item.link || item.href || item.source)); }
-  function imageUrl(item){ return text(item && (item.thumbnail || item.thumb || item.image || item.imageUrl || item.image_url || item.thumbnailUrl || item.thumbnail_url)); }
-  function contentId(item){ return text(item && (item.contentId || item.content_id || item.videoId || item.video_id || item.id || item._id || item.uid || item.slug)); }
+  function thumbOf(raw){ raw = raw || {}; return text(raw.thumbnail || raw.thumb || raw.image || raw.imageUrl || raw.image_url || raw.thumbnailUrl || raw.thumbnail_url || raw.poster); }
+  function contentIdOf(raw){ raw = raw || {}; return text(raw.contentId || raw.content_id || raw.videoId || raw.video_id || raw.id || raw._id || raw.uid || raw.slug); }
+  function titleOf(raw){ raw = raw || {}; return text(raw.title || raw.name || raw.label || raw.text); }
+  function metricOf(raw, name){
+    raw = raw || {}; var metrics = raw.metrics || raw.metric || {};
+    if(name === 'views') return number(raw.views != null ? raw.views : (raw.viewCount != null ? raw.viewCount : (metrics.view != null ? metrics.view : metrics.views)));
+    if(name === 'clicks') return number(raw.clicks != null ? raw.clicks : (metrics.click != null ? metrics.click : metrics.clicks));
+    if(name === 'likes') return number(raw.likes != null ? raw.likes : (metrics.like != null ? metrics.like : metrics.likes));
+    if(name === 'recommends') return number(raw.recommendations != null ? raw.recommendations : (raw.recommends != null ? raw.recommends : (raw.recommend != null ? raw.recommend : (metrics.recommend != null ? metrics.recommend : metrics.recommends))));
+    if(name === 'watchTime') return number(raw.watchTime != null ? raw.watchTime : (raw.watch_time != null ? raw.watch_time : metrics.watchTime));
+    if(name === 'priority') return number(raw.priority != null ? raw.priority : (raw.popularity != null ? raw.popularity : (raw.score != null ? raw.score : metrics.priority)));
+    if(name === 'rating') return number(raw.rating != null ? raw.rating : (raw.voteAverage != null ? raw.voteAverage : metrics.rating));
+    return 0;
+  }
 
-  async function fetchJson(url){
-    var response = await fetch(url, { cache:'no-store' });
-    if(!response.ok) throw new Error('HTTP ' + response.status);
-    return response.json();
+  function normalizeSlot(raw, sectionKey, ordinal){
+    raw = raw || {};
+    return {
+      raw:raw,
+      slotId:text(raw.slotId != null ? raw.slotId : (raw.slot_id != null ? raw.slot_id : (raw.position != null ? raw.position : (raw.index != null ? raw.index : ordinal + 1)))),
+      id:contentIdOf(raw),
+      title:titleOf(raw),
+      thumbnail:thumbOf(raw),
+      source:sourceOf(raw),
+      provider:text(raw.provider || raw.platform || raw.channel || raw.sourceProvider),
+      description:text(raw.description || raw.summary || raw.excerpt),
+      section:sectionKey || canonKey(raw.section || raw.psom_key || raw.psomKey),
+      publishedAt:raw.publishedAt || raw.releaseDate || raw.createdAt || raw.date || '',
+      views:metricOf(raw,'views'), clicks:metricOf(raw,'clicks'), likes:metricOf(raw,'likes'), recommends:metricOf(raw,'recommends'), watchTime:metricOf(raw,'watchTime'), priority:metricOf(raw,'priority'), rating:metricOf(raw,'rating')
+    };
   }
-  async function loadSnapshotAny(){
-    for(var i = 0; i < SNAPSHOT_URLS.length; i += 1){
-      try { return await fetchJson(SNAPSHOT_URLS[i]); } catch (_) {}
-    }
-    return null;
-  }
-  async function loadFeedItems(key){
-    try {
-      var data = await fetchJson('/.netlify/functions/feed-media?key=' + encodeURIComponent(key) + '&limit=500');
-      if(data && Array.isArray(data.items)) return data.items;
-      if(data && Array.isArray(data.sections)){
-        var found = data.sections.find(function(section){ return section && canonKey(section.key) === key; });
-        if(found && Array.isArray(found.items)) return found.items;
-      }
-    } catch (_) {}
-    return [];
-  }
+  function isDisplayable(item){ return !!(item && (item.id || item.title || isUsable(item.thumbnail) || isUsable(item.source))); }
   function normalizeSectionMap(snapshot){
     var map = {};
     if(!snapshot || !snapshot.sections) return map;
-    if(Array.isArray(snapshot.sections)){
-      snapshot.sections.forEach(function(section){ if(section) map[canonKey(section.key)] = section; });
-    } else if(typeof snapshot.sections === 'object') {
-      Object.keys(snapshot.sections).forEach(function(key){ map[canonKey(key)] = snapshot.sections[key]; });
-    }
+    if(Array.isArray(snapshot.sections)) snapshot.sections.forEach(function(section){ if(section) map[canonKey(section.key)] = section; });
+    else if(typeof snapshot.sections === 'object') Object.keys(snapshot.sections).forEach(function(key){ map[canonKey(key)] = snapshot.sections[key]; });
     return map;
   }
-  function normalizeItem(raw, sectionKey){
-    if(raw && raw.__igdcMediaNormalized) return raw;
-    raw = raw || {};
-    var metrics = raw.metrics || raw.metric || {};
-    return {
-      __igdcMediaNormalized:true,
-      id: contentId(raw),
-      slotId: text(raw.slotId || raw.slot_id || raw.position || raw.index),
-      title: text(raw.title || raw.name || raw.label || raw.text),
-      thumbnail: imageUrl(raw),
-      source: mediaUrl(raw),
-      provider: text(raw.provider || raw.platform || raw.channel || raw.sourceProvider),
-      description: text(raw.description || raw.summary || raw.excerpt),
-      section: sectionKey || canonKey(raw.section || raw.psom_key || raw.psomKey),
-      publishedAt: raw.publishedAt || raw.releaseDate || raw.createdAt || raw.date || '',
-      views: number(raw.views != null ? raw.views : (raw.viewCount != null ? raw.viewCount : metrics.view)),
-      clicks: number(raw.clicks != null ? raw.clicks : metrics.click),
-      likes: number(raw.likes != null ? raw.likes : metrics.like),
-      recommends: number(raw.recommendations != null ? raw.recommendations : (raw.recommends != null ? raw.recommends : (raw.recommend != null ? raw.recommend : metrics.recommend))),
-      watchTime: number(raw.watchTime != null ? raw.watchTime : (raw.watch_time != null ? raw.watch_time : metrics.watchTime)),
-      rating: number(raw.rating != null ? raw.rating : (raw.voteAverage != null ? raw.voteAverage : raw.score)),
-      raw: raw
-    };
-  }
-  function hasRealContent(item){
-    return !!(item && (item.id || item.title || isValue(item.thumbnail) || isValue(item.source)));
-  }
-  function extractItems(section, sectionKey){
+  function slotsOf(section, sectionKey){
     if(!section) return [];
-    var items = Array.isArray(section) ? section : (Array.isArray(section.items) ? section.items : (Array.isArray(section.slots) ? section.slots : []));
-    return items.map(function(item){ return normalizeItem(item, sectionKey); }).filter(hasRealContent);
+    var list = Array.isArray(section) ? section : (Array.isArray(section.slots) ? section.slots : (Array.isArray(section.items) ? section.items : []));
+    return list.map(function(raw, index){ return normalizeSlot(raw, sectionKey, index); });
   }
-  function getContainer(line){ return q(':scope > .scroll-content', line) || q('.scroll-content', line) || line; }
+  async function fetchJson(url){ var response = await fetch(url, { cache:'no-store' }); if(!response.ok) throw new Error('HTTP ' + response.status); return response.json(); }
+  async function loadSnapshot(){
+    for(var i = 0; i < SNAPSHOT_URLS.length; i += 1){ try { return await fetchJson(SNAPSHOT_URLS[i]); } catch(_){} }
+    return null;
+  }
+  async function loadFeedSlots(key){
+    try{
+      var data = await fetchJson('/.netlify/functions/feed-media?key=' + encodeURIComponent(key) + '&limit=' + LIMIT);
+      var list = data && Array.isArray(data.items) ? data.items : [];
+      if(!list.length && data && Array.isArray(data.sections)){
+        var section = data.sections.find(function(entry){ return entry && canonKey(entry.key) === key; });
+        list = section && Array.isArray(section.items) ? section.items : [];
+      }
+      return list.map(function(raw,index){ return normalizeSlot(raw,key,index); });
+    }catch(_){ return []; }
+  }
+
+  function cardContainer(line){ return q(':scope > .scroll-content', line) || q('.scroll-content', line) || line; }
   function makePlaceholder(){
-    var a = D.createElement('a');
-    a.className = 'card media-card';
-    a.href = 'javascript:void(0)';
-    a.setAttribute('data-placeholder','true');
-    a.setAttribute('data-igdc-media-card','1');
+    var a = D.createElement('a'); a.className = 'card media-card'; a.href = 'javascript:void(0)'; a.setAttribute('data-placeholder','true');
     var thumb = D.createElement('div'); thumb.className = 'thumb ph';
     var meta = D.createElement('div'); meta.className = 'meta'; meta.textContent = 'Coming Soon';
-    a.appendChild(thumb); a.appendChild(meta);
-    return a;
+    a.appendChild(thumb); a.appendChild(meta); return a;
   }
-  function ensurePlaceholders(line){
-    var container = getContainer(line);
+  function ensureCards(line){
+    var container = cardContainer(line);
     var cards = qa(':scope > a.card', container);
     if(cards.length < LIMIT){
       var fragment = D.createDocumentFragment();
@@ -133,150 +125,96 @@
     }
     return cards.slice(0, LIMIT);
   }
-  function setData(a, name, value){
-    if(value === '' || value == null) delete a.dataset[name]; else a.dataset[name] = String(value);
+  function setData(node, name, value){ if(value == null || value === '') delete node.dataset[name]; else node.dataset[name] = String(value); }
+  function clearCard(card, key, ordinal){
+    card.href = 'javascript:void(0)'; card.setAttribute('data-placeholder','true'); card.classList.add('media-card');
+    setData(card,'mediaSlotId',ordinal + 1); setData(card,'slotId',ordinal + 1); setData(card,'mediaSection',key); setData(card,'psomKey',key);
+    ['igdcContentId','contentId','itemId','mediaSource','mediaTitle','title','mediaDescription','provider','views','clicks','likes','recommends','watchTime'].forEach(function(name){ delete card.dataset[name]; });
+    card.removeAttribute('data-media-id'); card.removeAttribute('data-maru-revenue'); card.removeAttribute('aria-label');
+    var thumb = q('.thumb',card); if(!thumb){ thumb = D.createElement('div'); thumb.className = 'thumb'; card.insertBefore(thumb,card.firstChild); }
+    var image = q('img',thumb); if(image) image.remove(); thumb.classList.add('ph');
+    var meta = q('.meta',card); if(!meta){ meta = D.createElement('div'); meta.className='meta'; card.appendChild(meta); } meta.textContent = 'Coming Soon';
   }
-  function fillAnchor(anchor, item, lineKey){
-    anchor.href = 'javascript:void(0)';
-    anchor.classList.add('media-card');
-    anchor.setAttribute('data-igdc-media-card','1');
-    anchor.removeAttribute('data-placeholder');
-    setData(anchor, 'igdcContentId', item.id);
-    setData(anchor, 'contentId', item.id);
-    setData(anchor, 'itemId', item.id);
-    setData(anchor, 'mediaSource', item.source);
-    setData(anchor, 'mediaTitle', item.title);
-    setData(anchor, 'title', item.title);
-    setData(anchor, 'mediaDescription', item.description);
-    setData(anchor, 'mediaSection', item.section || lineKey);
-    setData(anchor, 'psomKey', item.section || lineKey);
-    setData(anchor, 'slotId', item.slotId);
-    setData(anchor, 'provider', item.provider);
-    setData(anchor, 'views', item.views);
-    setData(anchor, 'clicks', item.clicks);
-    setData(anchor, 'likes', item.likes);
-    setData(anchor, 'recommends', item.recommends);
-    setData(anchor, 'watchTime', item.watchTime);
-    if(item.id) anchor.setAttribute('data-maru-revenue','media'); else anchor.removeAttribute('data-maru-revenue');
-    anchor.setAttribute('aria-label', item.title || 'Media content');
-
-    var thumb = q('.thumb', anchor);
-    if(!thumb){ thumb = D.createElement('div'); thumb.className = 'thumb'; anchor.insertBefore(thumb, anchor.firstChild); }
-    var existingImg = q('img', thumb);
-    if(isValue(item.thumbnail)){
-      var img = existingImg || D.createElement('img');
-      img.loading = 'lazy'; img.alt = item.title || ''; img.src = item.thumbnail;
-      if(!existingImg) thumb.appendChild(img);
-      thumb.classList.remove('ph');
-    } else {
-      if(existingImg) existingImg.remove();
-      thumb.classList.add('ph');
-    }
-    var meta = q('.meta', anchor);
-    if(!meta){ meta = D.createElement('div'); meta.className = 'meta'; anchor.appendChild(meta); }
-    meta.textContent = item.title || 'Coming Soon';
+  function fillCard(card, item, key, ordinal){
+    if(!isDisplayable(item)){ clearCard(card,key,ordinal); return; }
+    card.href = 'javascript:void(0)'; card.classList.add('media-card'); card.removeAttribute('data-placeholder');
+    setData(card,'mediaSlotId',item.slotId || ordinal + 1); setData(card,'slotId',item.slotId || ordinal + 1); setData(card,'mediaSection',item.section || key); setData(card,'psomKey',item.section || key);
+    setData(card,'igdcContentId',item.id); setData(card,'contentId',item.id); setData(card,'itemId',item.id);
+    setData(card,'mediaSource',item.source); setData(card,'mediaTitle',item.title); setData(card,'title',item.title); setData(card,'mediaDescription',item.description); setData(card,'provider',item.provider);
+    setData(card,'views',item.views); setData(card,'clicks',item.clicks); setData(card,'likes',item.likes); setData(card,'recommends',item.recommends); setData(card,'watchTime',item.watchTime);
+    if(item.id) { card.setAttribute('data-media-id',item.id); card.setAttribute('data-maru-revenue','media'); }
+    else { card.removeAttribute('data-media-id'); card.removeAttribute('data-maru-revenue'); }
+    card.setAttribute('aria-label',item.title || 'Media content');
+    var thumb = q('.thumb',card); if(!thumb){ thumb = D.createElement('div'); thumb.className='thumb'; card.insertBefore(thumb,card.firstChild); }
+    var image = q('img',thumb);
+    if(isUsable(item.thumbnail)){
+      if(!image){ image = D.createElement('img'); image.loading='lazy'; thumb.appendChild(image); }
+      image.alt = item.title || ''; image.src = item.thumbnail; thumb.classList.remove('ph');
+    } else { if(image) image.remove(); thumb.classList.add('ph'); }
+    var meta = q('.meta',card); if(!meta){ meta = D.createElement('div'); meta.className='meta'; card.appendChild(meta); } meta.textContent = item.title || 'Coming Soon';
   }
-  function applyLine(line, items, key){
-    var cards = ensurePlaceholders(line);
-    for(var i = 0; i < cards.length; i += 1){
-      if(items && items[i]) fillAnchor(cards[i], items[i], key);
-      else {
-        cards[i].setAttribute('data-igdc-media-card','1');
-        cards[i].href = 'javascript:void(0)';
-      }
-    }
+  function renderLine(line, items, key){
+    var cards = ensureCards(line); var used = new Set(); var slotTargets = {};
+    cards.forEach(function(card,index){ var id = text(card.dataset.mediaSlotId || card.dataset.slotId); if(id && !slotTargets[id]) slotTargets[id] = card; });
+    items.slice(0,LIMIT).forEach(function(item,index){
+      var target = item.slotId && slotTargets[item.slotId] && !used.has(slotTargets[item.slotId]) ? slotTargets[item.slotId] : cards[index];
+      if(!target || used.has(target)) target = cards.find(function(card){ return !used.has(card); });
+      if(!target) return; used.add(target); fillCard(target,item,key,index);
+    });
+    cards.forEach(function(card,index){ if(!used.has(card)) clearCard(card,key,index); });
   }
-  function recencyScore(item){
-    var time = Date.parse(item.publishedAt || '');
-    if(!Number.isFinite(time)) return 0;
-    var days = Math.max(0, (Date.now() - time) / 86400000);
-    return Math.max(0, 30 - days) / 30;
-  }
-  function rankScore(item){
-    return (
-      item.views +
-      item.clicks * 1.5 +
-      item.likes * 2 +
-      item.recommends * 3 +
-      Math.min(item.watchTime, 86400) / 60 * 0.25 +
-      item.rating * 10 +
-      recencyScore(item) * 5
-    );
-  }
+  function recency(item){ var time = Date.parse(item.publishedAt || ''); if(!Number.isFinite(time)) return 0; var days = Math.max(0,(Date.now()-time)/86400000); return Math.max(0,30-days)/30; }
+  function rankScore(item){ return item.priority * 10 + item.views + item.clicks * 1.5 + item.likes * 2 + item.recommends * 3 + Math.min(item.watchTime,86400)/60*0.25 + item.rating*10 + recency(item)*5; }
   function rankedTrending(sectionMap){
-    var seen = new Set();
-    var merged = [];
+    var seen = new Set(), merged=[];
     CATEGORY_KEYS.forEach(function(key){
-      extractItems(sectionMap[key], key).forEach(function(item){
-        var identity = item.id || item.source || (item.title + '|' + item.thumbnail);
-        if(!identity || seen.has(identity)) return;
-        seen.add(identity);
-        merged.push(item);
+      slotsOf(sectionMap[key],key).filter(isDisplayable).forEach(function(item){
+        var identity = item.id || item.source || (item.title + '|' + item.thumbnail + '|' + item.slotId);
+        if(!identity || seen.has(identity)) return; seen.add(identity); merged.push(item);
       });
     });
-    merged.sort(function(a, b){
-      var byScore = rankScore(b) - rankScore(a);
-      if(byScore) return byScore;
-      return String(a.title).localeCompare(String(b.title));
-    });
-    return merged.slice(0, LIMIT);
+    merged.sort(function(a,b){ var score = rankScore(b)-rankScore(a); return score || String(a.title).localeCompare(String(b.title)); });
+    return merged.slice(0,LIMIT);
   }
-  async function hydrateCategory(sectionMap, key){
-    var items = extractItems(sectionMap[key], key);
-    if(!items.length){
-      var feed = await loadFeedItems(key);
-      items = feed.map(function(item){ return normalizeItem(item, key); }).filter(hasRealContent);
-    }
-    sectionMap[key] = { items:items };
-    return items;
+  async function sectionSlots(sectionMap,key){
+    var snapshotSlots = slotsOf(sectionMap[key],key);
+    if(snapshotSlots.some(isDisplayable)) return snapshotSlots;
+    var feedSlots = await loadFeedSlots(key);
+    return feedSlots.length ? feedSlots : snapshotSlots;
   }
-  async function applyHero(snapshot, sectionMap){
-    var heroImg = q('.hero img');
-    if(!heroImg) return;
-    var hero = snapshot && snapshot.hero || {};
-    var keys = hero.rotateFrom || hero.source || [];
-    if(!Array.isArray(keys)) keys = [keys];
-    for(var i = 0; i < keys.length; i += 1){
-      var items = extractItems(sectionMap[canonKey(keys[i])], canonKey(keys[i]));
-      if(items[0] && isValue(items[0].thumbnail)){ heroImg.src = items[0].thumbnail; return; }
-    }
+  function heroFrom(snapshot, sectionMap){
+    var heroImage = q('.hero img'); if(!heroImage) return;
+    var hero = snapshot && snapshot.hero || {}; var keys = hero.rotateFrom || hero.source || []; if(!Array.isArray(keys)) keys = [keys];
+    for(var i=0;i<keys.length;i+=1){ var first = slotsOf(sectionMap[canonKey(keys[i])],canonKey(keys[i])).find(isDisplayable); if(first && isUsable(first.thumbnail)){ heroImage.src=first.thumbnail; return; } }
   }
   async function main(){
-    var lines = qa('.thumb-line[data-psom-key]');
-    if(!lines.length) return;
-    lines.forEach(ensurePlaceholders);
-    var snapshot = await loadSnapshotAny();
-    var sectionMap = normalizeSectionMap(snapshot);
-    /* Load the same nine source sections before ranking the first rail. */
-    await Promise.all(CATEGORY_KEYS.map(function(key){ return hydrateCategory(sectionMap, key); }));
+    var lines = qa('.thumb-line[data-psom-key]'); if(!lines.length) return;
+    lines.forEach(ensureCards);
+    var snapshot = await loadSnapshot(); var sectionMap = normalizeSectionMap(snapshot);
+    var resolved = {};
+    for(var i=0;i<CATEGORY_KEYS.length;i+=1) resolved[CATEGORY_KEYS[i]] = await sectionSlots(sectionMap,CATEGORY_KEYS[i]);
+    CATEGORY_KEYS.forEach(function(key){ sectionMap[key] = { slots:resolved[key] || [] }; });
     var trending = rankedTrending(sectionMap);
-    sectionMap['media-trending'] = { items: trending };
-    await applyHero(snapshot, sectionMap);
-    for(var i = 0; i < lines.length; i += 1){
-      var line = lines[i];
+    sectionMap['media-trending'] = { slots:trending };
+    heroFrom(snapshot,sectionMap);
+    lines.forEach(function(line){
       var key = canonKey(line.getAttribute('data-psom-key'));
-      if(!key || key.indexOf('media-') !== 0 || key === 'media-hero') continue;
-      var items = key === 'media-trending' ? trending : extractItems(sectionMap[key], key);
-      applyLine(line, items, key);
-    }
+      if(!key || key.indexOf('media-') !== 0 || key === 'media-hero') return;
+      renderLine(line,key === 'media-trending' ? trending : (resolved[key] || slotsOf(sectionMap[key],key)),key);
+    });
   }
-  if(D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main, { once:true }); else main();
+  if(D.readyState === 'loading') D.addEventListener('DOMContentLoaded',main,{once:true}); else main();
 })();
 
-/* Preserve the existing non-cash revenue tracking loader. */
+/* Keep the existing non-cash revenue event hook available; it does not alter slot rendering. */
 (function loadMaruRevenueAutoHookForAutomap(){
   'use strict';
   if(typeof window === 'undefined' || typeof document === 'undefined') return;
-  function install(){
-    try { if(window.MaruRevenueAutoHook && typeof window.MaruRevenueAutoHook.install === 'function') window.MaruRevenueAutoHook.install({ service:'front-automap' }); } catch (_) {}
-  }
-  function load(src, id, globalName, done){
+  function install(){ try{ if(window.MaruRevenueAutoHook && typeof window.MaruRevenueAutoHook.install === 'function') window.MaruRevenueAutoHook.install({service:'front-automap'}); }catch(_){} }
+  function load(src,id,globalName,done){
     if(window[globalName]) { done(); return; }
-    var tag = document.getElementById(id);
-    if(tag){ tag.addEventListener('load', done, { once:true }); return; }
-    tag = document.createElement('script'); tag.id = id; tag.src = src; tag.async = false; tag.onload = done; (document.head || document.documentElement).appendChild(tag);
+    var tag=document.getElementById(id); if(tag){ tag.addEventListener('load',done,{once:true}); return; }
+    tag=document.createElement('script'); tag.id=id; tag.src=src; tag.async=false; tag.onload=done; (document.head||document.documentElement).appendChild(tag);
   }
-  load('/assets/js/maru-revenue-tracker.js', 'maruRevenueTrackerScript', 'MaruRevenueTracker', function(){
-    load('/assets/js/maru-revenue-autohook.js', 'maruRevenueAutoHookScript', 'MaruRevenueAutoHook', install);
-  });
+  load('/assets/js/maru-revenue-tracker.js','maruRevenueTrackerScript','MaruRevenueTracker',function(){ load('/assets/js/maru-revenue-autohook.js','maruRevenueAutoHookScript','MaruRevenueAutoHook',install); });
 })();
