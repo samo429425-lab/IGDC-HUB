@@ -3928,6 +3928,29 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <!-- Вопросы и ответы transplant (from distributionhub) END -->
 <script src="/assets/js/igdc-core.min.js"></script>
+<!-- IGDC: Media events (click/like/recommend) delegation -->
+<script>
+(function(){
+  document.addEventListener('click', function(ev){
+    try{
+      var el = ev.target;
+      var card = el.closest && el.closest('.card, .product-card, [data-product-id]');
+      if(!card) return;
+      var id = card.getAttribute('data-product-id') || (card.querySelector('.meta') && card.querySelector('.meta').textContent.trim()) || '';
+      var type = 'media';
+      if (el.matches && (el.matches('[data-like], .btn-like, .like') || el.closest('[data-like], .btn-like, .like'))) {
+        if (window.IGDC && IGDC.log) IGDC.log({event:'like', itemId:id, type});
+        return;
+      }
+      if (el.matches && (el.matches('[data-recommend], .btn-recommend, .recommend') || el.closest('[data-recommend], .btn-recommend, .recommend'))) {
+        if (window.IGDC && IGDC.log) IGDC.log({event:'recommend', itemId:id, type});
+        return;
+      }
+      if (window.IGDC && IGDC.log) IGDC.log({event:'click', itemId:id, type});
+    }catch(e){}
+  }, true);
+})();
+</script>
 <!-- IGDC: AI media thumbnail auto-fill -->
 <script>
 (function(){
@@ -4447,6 +4470,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <script id="igdc-qa-email-ensure">
 (function(){ window.__IGDC_QA_EMAIL_ENSURE__ = true; })();
 </script>
+<!-- MediaHub: legacy immediate-card-fullscreen handler retired; playback is handled by mediahub-playback-controller.v2.js. -->
 <!-- stray text suppressed: eleton matching the site's QnA structure
       var m = document.createElement('div'); m.className='igdc-qa-modal';
       var b = document.createElement('div');  -->
@@ -4671,9 +4695,160 @@ window.addEventListener("message",function(ev){
 
 <script defer src="/assets/js/media-hero-engine.js"></script>
 <script defer src="/assets/js/media-empty-handler.js"></script>
+
+<script id="igdc-media-access-script">
+
+/*
+ IGDC Media Access Script
+ ----------------------------------------
+ - MediaHub 전용 (Netflix / KT / Amazon 스타일)
+ - 썸네일 클릭 → 상세 오버레이
+ - Watch / Rent / Buy / Save
+ - 외부 PG 결제 트리거 연동
+ ----------------------------------------
+ 전제:
+  - 썸네일 카드에 data-media-id 존재
+  - IGTC.checkout() 존재
+  - window.__IGDC_ROLE, window.__IGDC_USER 존재
+*/
+
+(function (window, document) {
+  'use strict';
+
+  const MediaAccess = {
+    state: {
+      role: 'guest',
+      user: null,
+      activeMediaId: null
+    },
+
+    init() {
+      this.state.role = window.__IGDC_ROLE || 'guest';
+      this.state.user = window.__IGDC_USER || null;
+      this.bindThumbnailClick();
+    },
+
+    /* 1️⃣ 썸네일 클릭 */
+    bindThumbnailClick() {
+      document.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-media-id]');
+        if (!card) return;
+
+        const mediaId = card.dataset.mediaId;
+        if (!mediaId) return;
+
+        this.openDetail(mediaId, card);
+      });
+    },
+
+    /* 2️⃣ 상세 오버레이 */
+    openDetail(mediaId, card) {
+      this.state.activeMediaId = mediaId;
+
+      this.closeDetail();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'igdc-media-overlay';
+      overlay.innerHTML = `
+        <div class="media-modal">
+          <button class="media-close">✕</button>
+          <h2>${card.dataset.title || 'Media Content'}</h2>
+          <p>${card.dataset.description || ''}</p>
+
+          <div class="media-actions">
+            <button data-action="play">▶ Смотреть сейчас</button>
+            <button data-action="rent">💳 Арендовать</button>
+            <button data-action="own">💳 Купить</button>
+            <button data-action="wish">⭐ Добавить в избранное</button>
+          </div>
+
+          <div class="media-review">
+            <textarea placeholder="Однострочный отзыв (необязательно)" maxlength="200"></textarea>
+            <button data-action="review">Отправить отзыв</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      overlay.querySelector('.media-close').onclick = () => this.closeDetail();
+      overlay.onclick = (e) => { if (e.target === overlay) this.closeDetail(); };
+
+      overlay.querySelectorAll('[data-action]').forEach(btn => {
+        btn.onclick = () => this.handleAction(btn.dataset.action);
+      });
+    },
+
+    /* 3️⃣ 버튼 액션 */
+    handleAction(action) {
+      const mediaId = this.state.activeMediaId;
+
+      switch (action) {
+        case 'play':
+          alert('Playback will begin after viewing rights are confirmed.');
+          break;
+
+        case 'rent':
+        case 'own':
+          IGTC.checkout({
+            type: 'media',
+            mediaId,
+            mode: action, // rent | own
+            user: this.state.user
+          });
+          break;
+
+        case 'wish':
+          alert('Добавлено в список желаний.');
+          break;
+
+        case 'review':
+          alert('Ваш отзыв отправлен.');
+          break;
+      }
+    },
+
+    closeDetail() {
+      const el = document.getElementById('igdc-media-overlay');
+      if (el) el.remove();
+    }
+  };
+
+  /* 기본 스타일 */
+  const style = document.createElement('style');
+  style.textContent = `
+    #igdc-media-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .media-modal {
+      background: #fff; padding: 20px;
+      border-radius: 12px; width: 420px;
+    }
+    .media-actions button {
+      margin: 6px 4px;
+    }
+    .media-close {
+      float: right; border: none; background: none; font-size: 18px;
+    }
+    .media-review textarea {
+      width: 100%; margin-top: 10px;
+    }
+  `;
+  document.head.appendChild(style);
+
+  MediaAccess.init();
+  window.IGDCMediaAccess = MediaAccess;
+
+})(window, document);
+</script>
+
 <!-- Медиа-хаб AutoMap (정본) -->
-<script defer src="/assets/js/mediahub-automap-v3.js"></script>
-<script defer src="/assets/js/mediahub-playback-shell.js"></script>
+<script defer src="/assets/js/igdc-engagement-storage-bridge.js?v=20260629-media-v2"></script>
+<script defer src="/assets/js/mediahub-automap-v3.js?v=20260629-media-v2"></script>
+<script defer src="/assets/js/mediahub-playback-controller.v2.js?v=20260629-media-v2"></script>
 
 <script id="igdc-media-10section-frame">
 (function(){

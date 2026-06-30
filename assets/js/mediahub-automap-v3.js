@@ -1,526 +1,282 @@
 /**
- * mediahub-automap.v3.js (PRODUCTION SAFE / SINGLE VERSION)
- * ------------------------------------------------------------
- * 목적:
- *  - MediaHub 메인 10섹션(data-psom-key="media-*")에 "미디어 콘텐츠"를 슬롯-우선(slot-first)으로 꽂는다.
- *  - 우선순위: /data/media.snapshot*.json -> /.netlify/functions/feed-media?key=... fallback
- *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
- *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
- *  - 우측 패널 없음(처리하지 않음)
- *  - Hero는 snapshot.hero.rotateFrom 순서로 1개 썸네일을 골라 img src에 적용(가능한 경우)
+ * MediaHub automap v3.1 — slot-first rendering and ranked first section.
+ *
+ * Contract:
+ * - Keep the existing 10 section DOM and its 50-slot rails.
+ * - Build “Trending Now” from all nine category sections by actual metrics.
+ * - Preserve source IDs, source URLs and metrics on cards for the in-page
+ *   playback controller and revenue/engagement bridges.
+ * - Never manufacture a content ID, thumbnail, view, like or watch value.
  */
 (function () {
   'use strict';
+  if (window.__MEDIAHUB_AUTOMAP_V31_PROD__) return;
+  window.__MEDIAHUB_AUTOMAP_V31_PROD__ = true;
 
-  if (window.__MEDIAHUB_AUTOMAP_V3_PROD__) return;
-  window.__MEDIAHUB_AUTOMAP_V3_PROD__ = true;
-
-  const D = document;
-
-  const LIMIT = 50;
-
-  const SNAPSHOT_URLS = [
+  var D = document;
+  var LIMIT = 50;
+  var SNAPSHOT_URLS = [
     '/data/media.snapshot.json',
     '/data/media.snapshot.v6.keys.json',
     '/data/media.snapshot.v5.slots.json',
     '/data/media.snapshot.v4.ott.full.json'
   ];
-
-  const KEY_ALIAS = {
-    'trending_now': 'media-trending',
-    'latest_movie': 'media-movie',
-    'latest_drama': 'media-drama',
-    'section_1': 'media-thriller',
-    'section_2': 'media-romance',
-    'section_3': 'media-variety',
-    'section_4': 'media-documentary',
-    'section_5': 'media-animation',
-    'section_6': 'media-music',
-    'section_7': 'media-shorts'
+  var CATEGORY_KEYS = [
+    'media-movie', 'media-drama', 'media-thriller', 'media-romance',
+    'media-variety', 'media-documentary', 'media-animation', 'media-music',
+    'media-shorts'
+  ];
+  var KEY_ALIAS = {
+    trending_now:'media-trending', latest_movie:'media-movie', latest_drama:'media-drama',
+    section_1:'media-thriller', section_2:'media-romance', section_3:'media-variety',
+    section_4:'media-documentary', section_5:'media-animation', section_6:'media-music',
+    section_7:'media-shorts'
   };
 
-  function q(sel, root){ return (root||D).querySelector(sel); }
-  function qa(sel, root){ return Array.prototype.slice.call((root||D).querySelectorAll(sel)); }
-
-  function canonKey(k){
-    if(!k) return '';
-    if(k.indexOf('media-') === 0) return k;
-    return KEY_ALIAS[k] || k;
+  function q(sel, root){ return (root || D).querySelector(sel); }
+  function qa(sel, root){ return Array.prototype.slice.call((root || D).querySelectorAll(sel)); }
+  function text(value){ return value == null ? '' : String(value).trim(); }
+  function number(value){ var n = Number(value); return Number.isFinite(n) ? n : 0; }
+  function canonKey(key){ key = text(key); return key.indexOf('media-') === 0 ? key : (KEY_ALIAS[key] || key); }
+  function isValue(value){
+    value = text(value);
+    return !!value && value !== '#' && !/^javascript:/i.test(value) && value !== 'about:blank';
   }
+  function mediaUrl(item){ return text(item && (item.embedUrl || item.embed_url || item.video || item.videoUrl || item.video_url || item.url || item.link || item.href || item.source)); }
+  function imageUrl(item){ return text(item && (item.thumbnail || item.thumb || item.image || item.imageUrl || item.image_url || item.thumbnailUrl || item.thumbnail_url)); }
+  function contentId(item){ return text(item && (item.contentId || item.content_id || item.videoId || item.video_id || item.id || item._id || item.uid || item.slug)); }
 
   async function fetchJson(url){
-    const r = await fetch(url, { cache: 'no-store' });
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    return await r.json();
+    var response = await fetch(url, { cache:'no-store' });
+    if(!response.ok) throw new Error('HTTP ' + response.status);
+    return response.json();
   }
-
   async function loadSnapshotAny(){
-    for (const url of SNAPSHOT_URLS){
-      try { return await fetchJson(url); } catch(e){ /* continue */ }
+    for(var i = 0; i < SNAPSHOT_URLS.length; i += 1){
+      try { return await fetchJson(SNAPSHOT_URLS[i]); } catch (_) {}
     }
     return null;
   }
-
+  async function loadFeedItems(key){
+    try {
+      var data = await fetchJson('/.netlify/functions/feed-media?key=' + encodeURIComponent(key) + '&limit=500');
+      if(data && Array.isArray(data.items)) return data.items;
+      if(data && Array.isArray(data.sections)){
+        var found = data.sections.find(function(section){ return section && canonKey(section.key) === key; });
+        if(found && Array.isArray(found.items)) return found.items;
+      }
+    } catch (_) {}
+    return [];
+  }
   function normalizeSectionMap(snapshot){
-    const map = {};
-    if(!snapshot) return map;
-
-    // object sections
-    if(snapshot.sections && !Array.isArray(snapshot.sections) && typeof snapshot.sections === 'object'){
-      Object.keys(snapshot.sections).forEach((k)=>{
-        map[canonKey(k)] = snapshot.sections[k] || {};
-      });
-      return map;
-    }
-
-    // array sections
+    var map = {};
+    if(!snapshot || !snapshot.sections) return map;
     if(Array.isArray(snapshot.sections)){
-      snapshot.sections.forEach((s)=>{
-        if(!s) return;
-        map[canonKey(s.key || '')] = s;
-      });
+      snapshot.sections.forEach(function(section){ if(section) map[canonKey(section.key)] = section; });
+    } else if(typeof snapshot.sections === 'object') {
+      Object.keys(snapshot.sections).forEach(function(key){ map[canonKey(key)] = snapshot.sections[key]; });
     }
     return map;
   }
-
-  function slotsToItems(section){
-    const slots = section && Array.isArray(section.slots) ? section.slots : [];
-    return slots.map((slot)=>{
-      const raw = slot && typeof slot === 'object' ? slot : {};
-      // Preserve the media contract instead of dropping it while converting
-      // slot records.  The playback shell consumes these fields directly.
-      return Object.assign({}, raw, {
-        id: raw.id || raw.contentId || raw.videoId || raw.slotId || '',
-        contentId: raw.contentId || raw.id || raw.videoId || '',
-        title: raw.title || raw.name || '',
-        thumbnail: raw.thumbnail || raw.thumb || raw.image || '',
-        url: raw.url || raw.video || raw.streamUrl || raw.embedUrl || raw.link || raw.href || '',
-        video: raw.video || raw.streamUrl || raw.embedUrl || raw.url || '',
-        provider: raw.provider || raw.channel || raw.source || '',
-        metrics: raw.metrics || {}
-      });
-    });
+  function normalizeItem(raw, sectionKey){
+    if(raw && raw.__igdcMediaNormalized) return raw;
+    raw = raw || {};
+    var metrics = raw.metrics || raw.metric || {};
+    return {
+      __igdcMediaNormalized:true,
+      id: contentId(raw),
+      slotId: text(raw.slotId || raw.slot_id || raw.position || raw.index),
+      title: text(raw.title || raw.name || raw.label || raw.text),
+      thumbnail: imageUrl(raw),
+      source: mediaUrl(raw),
+      provider: text(raw.provider || raw.platform || raw.channel || raw.sourceProvider),
+      description: text(raw.description || raw.summary || raw.excerpt),
+      section: sectionKey || canonKey(raw.section || raw.psom_key || raw.psomKey),
+      publishedAt: raw.publishedAt || raw.releaseDate || raw.createdAt || raw.date || '',
+      views: number(raw.views != null ? raw.views : (raw.viewCount != null ? raw.viewCount : metrics.view)),
+      clicks: number(raw.clicks != null ? raw.clicks : metrics.click),
+      likes: number(raw.likes != null ? raw.likes : metrics.like),
+      recommends: number(raw.recommendations != null ? raw.recommendations : (raw.recommends != null ? raw.recommends : (raw.recommend != null ? raw.recommend : metrics.recommend))),
+      watchTime: number(raw.watchTime != null ? raw.watchTime : (raw.watch_time != null ? raw.watch_time : metrics.watchTime)),
+      rating: number(raw.rating != null ? raw.rating : (raw.voteAverage != null ? raw.voteAverage : raw.score)),
+      raw: raw
+    };
   }
-
-  function extractItems(section){
+  function hasRealContent(item){
+    return !!(item && (item.id || item.title || isValue(item.thumbnail) || isValue(item.source)));
+  }
+  function extractItems(section, sectionKey){
     if(!section) return [];
-    if(Array.isArray(section.items)) return section.items;
-    if(Array.isArray(section.slots)) return slotsToItems(section);
-    return [];
+    var items = Array.isArray(section) ? section : (Array.isArray(section.items) ? section.items : (Array.isArray(section.slots) ? section.slots : []));
+    return items.map(function(item){ return normalizeItem(item, sectionKey); }).filter(hasRealContent);
   }
-
-  async function loadFeedItems(key){
-    const url = `/.netlify/functions/feed-media?key=${encodeURIComponent(key)}&limit=500`;
-    try{
-      const data = await fetchJson(url);
-      if(data && Array.isArray(data.items)) return data.items;
-      if(data && Array.isArray(data.sections)){
-        const found = data.sections.find(s => s && canonKey(s.key) === key);
-        if(found && Array.isArray(found.items)) return found.items;
-      }
-    }catch(e){ /* ignore */ }
-    return [];
-  }
-
+  function getContainer(line){ return q(':scope > .scroll-content', line) || q('.scroll-content', line) || line; }
   function makePlaceholder(){
-    const a = D.createElement('a');
+    var a = D.createElement('a');
     a.className = 'card media-card';
-    a.setAttribute('data-placeholder','true');
     a.href = 'javascript:void(0)';
-    const thumb = D.createElement('div');
-    thumb.className = 'thumb ph';
-    const meta = D.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = 'Coming Soon';
-    a.appendChild(thumb);
-    a.appendChild(meta);
+    a.setAttribute('data-placeholder','true');
+    a.setAttribute('data-igdc-media-card','1');
+    var thumb = D.createElement('div'); thumb.className = 'thumb ph';
+    var meta = D.createElement('div'); meta.className = 'meta'; meta.textContent = 'Coming Soon';
+    a.appendChild(thumb); a.appendChild(meta);
     return a;
   }
-
-  function getContainer(line){
-    // Some pages wrap cards in .scroll-content. If not, cards are directly inside .thumb-line.
-    return q('.scroll-content', line) || line;
-  }
-
   function ensurePlaceholders(line){
-    const container = getContainer(line);
+    var container = getContainer(line);
+    var cards = qa(':scope > a.card', container);
+    if(cards.length < LIMIT){
+      var fragment = D.createDocumentFragment();
+      for(var i = cards.length; i < LIMIT; i += 1) fragment.appendChild(makePlaceholder());
+      container.appendChild(fragment);
+      cards = qa(':scope > a.card', container);
+    }
+    return cards.slice(0, LIMIT);
+  }
+  function setData(a, name, value){
+    if(value === '' || value == null) delete a.dataset[name]; else a.dataset[name] = String(value);
+  }
+  function fillAnchor(anchor, item, lineKey){
+    anchor.href = 'javascript:void(0)';
+    anchor.classList.add('media-card');
+    anchor.setAttribute('data-igdc-media-card','1');
+    anchor.removeAttribute('data-placeholder');
+    setData(anchor, 'igdcContentId', item.id);
+    setData(anchor, 'contentId', item.id);
+    setData(anchor, 'itemId', item.id);
+    setData(anchor, 'mediaSource', item.source);
+    setData(anchor, 'mediaTitle', item.title);
+    setData(anchor, 'title', item.title);
+    setData(anchor, 'mediaDescription', item.description);
+    setData(anchor, 'mediaSection', item.section || lineKey);
+    setData(anchor, 'psomKey', item.section || lineKey);
+    setData(anchor, 'slotId', item.slotId);
+    setData(anchor, 'provider', item.provider);
+    setData(anchor, 'views', item.views);
+    setData(anchor, 'clicks', item.clicks);
+    setData(anchor, 'likes', item.likes);
+    setData(anchor, 'recommends', item.recommends);
+    setData(anchor, 'watchTime', item.watchTime);
+    if(item.id) anchor.setAttribute('data-maru-revenue','media'); else anchor.removeAttribute('data-maru-revenue');
+    anchor.setAttribute('aria-label', item.title || 'Media content');
 
-    // collect existing placeholders (preferred)
-    let ph = qa('a[data-placeholder="true"]', container);
-
-    // mark empty anchors as placeholders (non-destructive)
-    if(ph.length === 0){
-      const anchors = qa('a.card', container);
-      anchors.forEach((a)=>{
-        const hasImg = !!q('img', a);
-        const hasText = (a.textContent || '').trim().length > 0;
-        if(!hasImg && !hasText) a.setAttribute('data-placeholder','true');
+    var thumb = q('.thumb', anchor);
+    if(!thumb){ thumb = D.createElement('div'); thumb.className = 'thumb'; anchor.insertBefore(thumb, anchor.firstChild); }
+    var existingImg = q('img', thumb);
+    if(isValue(item.thumbnail)){
+      var img = existingImg || D.createElement('img');
+      img.loading = 'lazy'; img.alt = item.title || ''; img.src = item.thumbnail;
+      if(!existingImg) thumb.appendChild(img);
+      thumb.classList.remove('ph');
+    } else {
+      if(existingImg) existingImg.remove();
+      thumb.classList.add('ph');
+    }
+    var meta = q('.meta', anchor);
+    if(!meta){ meta = D.createElement('div'); meta.className = 'meta'; anchor.appendChild(meta); }
+    meta.textContent = item.title || 'Coming Soon';
+  }
+  function applyLine(line, items, key){
+    var cards = ensurePlaceholders(line);
+    for(var i = 0; i < cards.length; i += 1){
+      if(items && items[i]) fillAnchor(cards[i], items[i], key);
+      else {
+        cards[i].setAttribute('data-igdc-media-card','1');
+        cards[i].href = 'javascript:void(0)';
+      }
+    }
+  }
+  function recencyScore(item){
+    var time = Date.parse(item.publishedAt || '');
+    if(!Number.isFinite(time)) return 0;
+    var days = Math.max(0, (Date.now() - time) / 86400000);
+    return Math.max(0, 30 - days) / 30;
+  }
+  function rankScore(item){
+    return (
+      item.views +
+      item.clicks * 1.5 +
+      item.likes * 2 +
+      item.recommends * 3 +
+      Math.min(item.watchTime, 86400) / 60 * 0.25 +
+      item.rating * 10 +
+      recencyScore(item) * 5
+    );
+  }
+  function rankedTrending(sectionMap){
+    var seen = new Set();
+    var merged = [];
+    CATEGORY_KEYS.forEach(function(key){
+      extractItems(sectionMap[key], key).forEach(function(item){
+        var identity = item.id || item.source || (item.title + '|' + item.thumbnail);
+        if(!identity || seen.has(identity)) return;
+        seen.add(identity);
+        merged.push(item);
       });
-      ph = qa('a[data-placeholder="true"]', container);
-    }
-
-    // add up to LIMIT
-    if(ph.length < LIMIT){
-      const frag = D.createDocumentFragment();
-      for(let i=ph.length;i<LIMIT;i++){
-        frag.appendChild(makePlaceholder());
-      }
-      container.appendChild(frag);
-      ph = qa('a[data-placeholder="true"]', container);
-    }
-
-    // if too many, keep first LIMIT as fill targets
-    if(ph.length > LIMIT) ph = ph.slice(0, LIMIT);
-
-    return ph;
-  }
-
-  
- function ensureContentId(item){
-  if(!item) return '';
-
-  const hasRealContent =
-    !!(item.title || item.name || item.text || item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || item.url || item.video || item.link || item.href);
-
-  if(!hasRealContent) return '';
-
-  return (
-    item.id ||
-    item._id ||
-    item.contentId ||
-    item.videoId ||
-    item.slug ||
-    (item.url ? btoa(item.url).replace(/=/g,'') : '')
-  );
-}
-
-  function fillAnchor(a, item){
-    const title = (item && (item.title || item.name || item.text || '')) || '';
-    const thumb = (item && (item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || '')) || '';
-    const url = (item && (item.url || item.video || item.link || item.href || '#')) || '#';
-
-    
-    const videoId = ensureContentId(item);
-
-    if(videoId){
-      a.href = `/media/watch.html?id=${encodeURIComponent(videoId)}`;
-      a.removeAttribute('target');
-      a.removeAttribute('rel');
-    }else{
-      a.href = "javascript:void(0)";
-      a.onclick = function(){ alert("콘텐츠 준비 중입니다."); };
-    }
-
-
-    // Preserve source, identity, section and aggregate metrics on the card.
-    // These are read by the MediaHub playback shell and MARU revenue tracker.
-    const mediaSource = (item && (item.video || item.streamUrl || item.embedUrl || item.url || item.link || item.href)) || '';
-    const mediaMetrics = (item && item.metrics && typeof item.metrics === 'object') ? item.metrics : {};
-    const mediaViews = mediaMetrics.view != null ? mediaMetrics.view : (mediaMetrics.views != null ? mediaMetrics.views : (item && (item.viewCount != null ? item.viewCount : item.views)));
-    const mediaClicks = mediaMetrics.click != null ? mediaMetrics.click : (mediaMetrics.clicks != null ? mediaMetrics.clicks : (item && item.clicks));
-    const mediaWatchTime = mediaMetrics.watchTime != null ? mediaMetrics.watchTime : (mediaMetrics.watchSeconds != null ? mediaMetrics.watchSeconds : (item && (item.watchTime != null ? item.watchTime : item.watchSeconds)));
-
-    a.onclick = null;
-    a.dataset.mediaId = videoId || '';
-    a.dataset.contentId = (item && (item.contentId || item.id || item.videoId)) || videoId || '';
-    a.dataset.itemId = videoId || '';
-    a.dataset.mediaTitle = title || '';
-    a.dataset.mediaSource = mediaSource || '';
-    a.dataset.mediaViews = mediaViews == null ? '' : String(mediaViews);
-    a.dataset.mediaClicks = mediaClicks == null ? '' : String(mediaClicks);
-    a.dataset.mediaWatchSeconds = mediaWatchTime == null ? '' : String(mediaWatchTime);
-    a.dataset.maruRevenue = 'media';
-    a.dataset.revenueLine = 'media_watchtime';
-    a.dataset.itemType = 'media';
-    if(item && item.provider) a.dataset.provider = item.provider;
-
-    let thumbBox = q('.thumb', a);
-    if(!thumbBox){
-      thumbBox = D.createElement('div');
-      thumbBox.className = 'thumb';
-      a.insertBefore(thumbBox, a.firstChild);
-    }
-
-    let img = q('img', thumbBox);
-    if(!img){
-      img = D.createElement('img');
-      thumbBox.appendChild(img);
-    }
-    img.alt = title || '';
-    img.loading = 'lazy';
-    if(thumb) img.src = thumb;
-
-    let metaBox = q('.meta', a);
-    if(!metaBox){
-      metaBox = D.createElement('div');
-      metaBox.className = 'meta';
-      a.appendChild(metaBox);
-    }
-    metaBox.textContent = title;
-
-    a.removeAttribute('data-placeholder');
-  }
-
-  function applyLine(line, items){
-    if(!Array.isArray(items) || items.length === 0) return; // keep dummy
-    const ph = ensurePlaceholders(line);
-    const n = Math.min(LIMIT, ph.length, items.length);
-    for(let i=0;i<n;i++){
-      fillAnchor(ph[i], items[i]);
-    }
-  }
-
-  async function applyHero(heroRotateKeys, sectionMap){
-    const heroImg = q('.hero img');
-    if(!heroImg) return;
-
-    const keys = Array.isArray(heroRotateKeys) ? heroRotateKeys.map(canonKey) : [];
-    if(keys.length === 0) return;
-
-    // snapshot first
-    for(const k of keys){
-      const items = extractItems(sectionMap[k]);
-      const first = items && items[0];
-      const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
-      if(thumb){
-        heroImg.src = thumb;
-        return;
-      }
-    }
-
-    // fallback feed (best-effort)
-    for(const k of keys){
-      const items = await loadFeedItems(k);
-      const first = items && items[0];
-      const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
-      if(thumb){
-        heroImg.src = thumb;
-        return;
-      }
-    }
-  }
-
-  async function main(){
-    const lines = qa('.thumb-line[data-psom-key]');
-    if(lines.length === 0) return;
-
-    // stabilize layout first
-    lines.forEach(ensurePlaceholders);
-
-    const snapshot = await loadSnapshotAny();
-    const sectionMap = normalizeSectionMap(snapshot);
-	
-// ===== MEDIA TRENDING AUTO-COMBINE (FINAL PRO) =====
-(function(){
-
-  if(!sectionMap) return;
-
-  const existing = extractItems(sectionMap["media-trending"]);
-  if(Array.isArray(existing) && existing.length > 0){
-    return;
-  }
-
-  const sourceKeys = [
-    "media-movie",
-    "media-drama",
-    "media-variety",
-    "media-music"
-  ];
-
-  let merged = [];
-
- sourceKeys.forEach(key => {
-  const items = extractItems(sectionMap[key]);
-
-  if(Array.isArray(items)){
-    items.forEach(item => {
-
-      // 🔥 여기서 바로 섹션 정보 주입
-      item._sectionKey = key;
-
-      merged.push(item);
     });
+    merged.sort(function(a, b){
+      var byScore = rankScore(b) - rankScore(a);
+      if(byScore) return byScore;
+      return String(a.title).localeCompare(String(b.title));
+    });
+    return merged.slice(0, LIMIT);
   }
-});
-
-  // 🔥 최신성 점수 (0~1)
-  function getRecency(item){
-    const now = Date.now();
-
-    const t =
-      item.publishedAt ||
-      item.releaseDate ||
-      item.createdAt ||
-      item.date ||
-      null;
-
-    if(!t) return 0;
-
-    const time = new Date(t).getTime();
-    if(isNaN(time)) return 0;
-
-    const diffDays = (now - time) / (1000 * 60 * 60 * 24);
-
-    return Math.max(0, 1 - (diffDays / 30)); // 30일 기준
+  async function hydrateCategory(sectionMap, key){
+    var items = extractItems(sectionMap[key], key);
+    if(!items.length){
+      var feed = await loadFeedItems(key);
+      items = feed.map(function(item){ return normalizeItem(item, key); }).filter(hasRealContent);
+    }
+    sectionMap[key] = { items:items };
+    return items;
   }
-
-  // 🔥 섹션 가중치 (영화/드라마 우선)
-  function getSectionWeight(item){
-    const key = item._sectionKey || '';
-
-    if(key === "media-movie") return 1.2;
-    if(key === "media-drama") return 1.15;
-    if(key === "media-variety") return 1.05;
-    if(key === "media-music") return 1.0;
-
-    return 1.0;
-  }
-
-  // 🔥 점수 계산 (완성형)
-  function getScore(item){
-
-    const views = item.views || item.viewCount || 0;
-    const popularity = item.popularity || item.score || 0;
-    const rating = item.rating || item.voteAverage || 0;
-    const recency = getRecency(item);
-    const weight = getSectionWeight(item);
-
-    const base =
-      views * 0.5 +
-      popularity * 0.2 +
-      rating * 0.1 +
-      recency * 100 * 0.2;
-
-    return base * weight;
-  }
-
-  // 🔥 정렬
-  merged.sort((a, b) => getScore(b) - getScore(a));
-
-  // 🔥 중복 제거
-  const seen = new Set();
-  const filtered = [];
-
-  for(const item of merged){
-    const key =
-      item.url ||
-      item.video ||
-      item.id ||
-      JSON.stringify(item);
-
-    if(seen.has(key)) continue;
-    seen.add(key);
-    filtered.push(item);
-  }
-
-  sectionMap["media-trending"] = {
-    items: filtered.slice(0, 50)
-  };
-
-})();
-
-    // hero
-    const heroRotateFrom = snapshot && snapshot.hero && (snapshot.hero.rotateFrom || snapshot.hero.source);
-    await applyHero(heroRotateFrom, sectionMap);
-
-    // sections
-    for(const line of lines){
-      const key = canonKey(line.getAttribute('data-psom-key') || '');
-      if(!key || key.indexOf('media-') !== 0) continue;
-
-      let items = extractItems(sectionMap[key]);
-      if(!items || items.length === 0){
-        items = await loadFeedItems(key);
-      }
-      applyLine(line, items);
+  async function applyHero(snapshot, sectionMap){
+    var heroImg = q('.hero img');
+    if(!heroImg) return;
+    var hero = snapshot && snapshot.hero || {};
+    var keys = hero.rotateFrom || hero.source || [];
+    if(!Array.isArray(keys)) keys = [keys];
+    for(var i = 0; i < keys.length; i += 1){
+      var items = extractItems(sectionMap[canonKey(keys[i])], canonKey(keys[i]));
+      if(items[0] && isValue(items[0].thumbnail)){ heroImg.src = items[0].thumbnail; return; }
     }
   }
-
-  if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
-  else main();
-
+  async function main(){
+    var lines = qa('.thumb-line[data-psom-key]');
+    if(!lines.length) return;
+    lines.forEach(ensurePlaceholders);
+    var snapshot = await loadSnapshotAny();
+    var sectionMap = normalizeSectionMap(snapshot);
+    /* Load the same nine source sections before ranking the first rail. */
+    await Promise.all(CATEGORY_KEYS.map(function(key){ return hydrateCategory(sectionMap, key); }));
+    var trending = rankedTrending(sectionMap);
+    sectionMap['media-trending'] = { items: trending };
+    await applyHero(snapshot, sectionMap);
+    for(var i = 0; i < lines.length; i += 1){
+      var line = lines[i];
+      var key = canonKey(line.getAttribute('data-psom-key'));
+      if(!key || key.indexOf('media-') !== 0 || key === 'media-hero') continue;
+      var items = key === 'media-trending' ? trending : extractItems(sectionMap[key], key);
+      applyLine(line, items, key);
+    }
+  }
+  if(D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main, { once:true }); else main();
 })();
 
-
-/* ------------------------------------------------------------------
- * MARU Revenue AutoHook Loader
- * Added by revenue tracking patch.
- *
- * Purpose:
- * - Load /assets/js/maru-revenue-tracker.js
- * - Then load /assets/js/maru-revenue-autohook.js
- * - Do not change this automap's original rendering pipeline.
- * ------------------------------------------------------------------ */
+/* Preserve the existing non-cash revenue tracking loader. */
 (function loadMaruRevenueAutoHookForAutomap(){
-  "use strict";
-
-  if (typeof window === "undefined" || typeof document === "undefined") return;
-
-  function installIfReady(){
-    try {
-      if (
-        window.MaruRevenueAutoHook &&
-        typeof window.MaruRevenueAutoHook.install === "function"
-      ) {
-        window.MaruRevenueAutoHook.install({
-          service: "front-automap"
-        });
-      }
-    } catch (e) {
-      console.warn("[MARU Revenue] autohook install skipped:", e);
-    }
+  'use strict';
+  if(typeof window === 'undefined' || typeof document === 'undefined') return;
+  function install(){
+    try { if(window.MaruRevenueAutoHook && typeof window.MaruRevenueAutoHook.install === 'function') window.MaruRevenueAutoHook.install({ service:'front-automap' }); } catch (_) {}
   }
-
-  function loadScriptOnce(src, id, globalName, done){
-    var existing = document.getElementById(id);
-
-    if (window[globalName]) {
-      if (typeof done === "function") done();
-      return;
-    }
-
-    if (existing) {
-      existing.addEventListener("load", function(){
-        if (typeof done === "function") done();
-      }, { once:true });
-      existing.addEventListener("error", function(){
-        console.warn("[MARU Revenue] failed to load:", src);
-      }, { once:true });
-      return;
-    }
-
-    var script = document.createElement("script");
-    script.id = id;
-    script.src = src;
-    script.async = false;
-    script.onload = function(){
-      if (typeof done === "function") done();
-    };
-    script.onerror = function(){
-      console.warn("[MARU Revenue] failed to load:", src);
-    };
-
-    (document.head || document.documentElement).appendChild(script);
+  function load(src, id, globalName, done){
+    if(window[globalName]) { done(); return; }
+    var tag = document.getElementById(id);
+    if(tag){ tag.addEventListener('load', done, { once:true }); return; }
+    tag = document.createElement('script'); tag.id = id; tag.src = src; tag.async = false; tag.onload = done; (document.head || document.documentElement).appendChild(tag);
   }
-
-  if (window.__MARU_REVENUE_AUTOMAP_LOADER_DONE__) {
-    installIfReady();
-    return;
-  }
-
-  window.__MARU_REVENUE_AUTOMAP_LOADER_DONE__ = true;
-
-  loadScriptOnce(
-    "/assets/js/maru-revenue-tracker.js",
-    "maruRevenueTrackerScript",
-    "MaruRevenueTracker",
-    function(){
-      loadScriptOnce(
-        "/assets/js/maru-revenue-autohook.js",
-        "maruRevenueAutoHookScript",
-        "MaruRevenueAutoHook",
-        installIfReady
-      );
-    }
-  );
+  load('/assets/js/maru-revenue-tracker.js', 'maruRevenueTrackerScript', 'MaruRevenueTracker', function(){
+    load('/assets/js/maru-revenue-autohook.js', 'maruRevenueAutoHookScript', 'MaruRevenueAutoHook', install);
+  });
 })();
