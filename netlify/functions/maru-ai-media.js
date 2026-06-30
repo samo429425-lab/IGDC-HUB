@@ -14,6 +14,8 @@ const DEFAULT_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
 const DEFAULT_TTS_VOICE = process.env.OPENAI_TTS_VOICE || process.env.MARU_AI_DUBBING_VOICE || 'alloy';
 const DEFAULT_TTS_FORMAT = process.env.OPENAI_TTS_FORMAT || 'mp3';
 const DEFAULT_SUBTITLE_TRANSLATE_MODEL = process.env.OPENAI_SUBTITLE_MODEL || 'gpt-4o-mini';
+const DEFAULT_DUBBING_ANALYSIS_MODEL = process.env.MARU_DUBBING_ANALYSIS_MODEL || process.env.OPENAI_DUBBING_ANALYSIS_MODEL || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
+const MARU_DUBBING_ANALYSIS_MAX_CUES = Math.max(20, Math.min(100, Number(process.env.MARU_DUBBING_ANALYSIS_MAX_CUES || 72) || 72));
 const TTS_CHUNK_CHARS = Math.max(500, Math.min(3500, Number(process.env.MARU_TTS_CHUNK_CHARS || 2600) || 2600));
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
 
@@ -1732,6 +1734,176 @@ async function handleGenerateSubtitle(id, body) {
   });
 }
 
+
+/*
+ * Phase-1 automatic dubbing plan.
+ * This deliberately works from the already-timed target-language subtitle flow.
+ * It does not claim to identify a real actor's age, gender, health, or identity.
+ * The output is a fictional performance plan: anonymous recurring dialogue roles,
+ * a stable allowed TTS voice, and a concise delivery direction for each cue.
+ */
+const MARU_DUBBING_ALLOWED_VOICES = Object.freeze(['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse']);
+const MARU_DUBBING_STYLE_FALLBACK = 'natural, clear video dialogue; preserve punctuation and restrained pacing';
+
+function cleanDubbingStyle(value) {
+  const raw = safeString(value || '').replace(/[\r\n\t]+/g, ' ').replace(/[{}<>`]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+  if (/(?:system\s*(?:prompt|message|policy)|developer\s*message|ignore\s+(?:all|previous)|follow\s+these\s+instructions|api\s*key|password|token)/i.test(raw)) return '';
+  return raw.slice(0, 220);
+}
+
+function normalizeDubbingMode(value) {
+  const mode = safeString(value || '').trim().toLowerCase();
+  return ['narration', 'dialogue', 'hybrid'].includes(mode) ? mode : 'narration';
+}
+
+function isDubbingNonSpeechCue(text) {
+  const t = safeString(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return true;
+  if (/^[♪♫♬]/u.test(t)) return true;
+  return /^\s*[\[\(（](?:[^\]\)）]{0,80})(?:\]|\)）)\s*$/u.test(t)
+    && /(?:music|song|instrumental|applause|laughter|laugh|cry|sigh|gasp|cough|scream|noise|sound|음악|노래|박수|웃음|울음|한숨|기침|비명|효과음|소음)/iu.test(t);
+}
+
+function normalizeDubbingCueRows(items) {
+  const rows = Array.isArray(items) ? items : [];
+  return rows.slice(0, MARU_DUBBING_ANALYSIS_MAX_CUES).map((item, index) => {
+    const id = Number.isInteger(Number(item?.id)) ? Number(item.id) : index;
+    const start = Math.max(0, numberOr(item?.start ?? item?.startSeconds, 0));
+    const end = Math.max(start + 0.08, numberOr(item?.end ?? item?.endSeconds, start + 1));
+    const text = safeString(item?.text || '').replace(/\s+/g, ' ').trim().slice(0, 1100);
+    return { id, start, end, text, skipDubbing: isDubbingNonSpeechCue(text) };
+  }).filter((row) => row.text);
+}
+
+function normalizeKnownDubbingProfiles(items, narrationVoice) {
+  const rows = Array.isArray(items) ? items : [];
+  const out = [];
+  const seen = new Set();
+  for (const item of rows.slice(0, 12)) {
+    const id = safeString(item?.speakerId || item?.id || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 36);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      speakerId: id,
+      role: safeString(item?.role || 'dialogue').toLowerCase() === 'narrator' ? 'narrator' : 'dialogue',
+      voice: normalizeVoice(item?.voice || narrationVoice),
+      voiceStyle: cleanDubbingStyle(item?.voiceStyle || item?.style || '')
+    });
+  }
+  return out;
+}
+
+function heuristicDubbingMode(cues) {
+  const spoken = cues.filter((cue) => !cue.skipDubbing);
+  if (!spoken.length) return 'narration';
+  const dialogueHints = spoken.filter((cue) => /[?？！]|[“”'«»]|(?:^|\s)(?:yes|no|you|i|we|he|she|they|네|아니|너|저|우리|당신|왜|뭐|그래|응)(?:\s|[,.!?]|$)/iu.test(cue.text)).length;
+  return dialogueHints >= Math.max(3, Math.ceil(spoken.length * 0.28)) ? 'dialogue' : 'narration';
+}
+
+function fallbackDubbingPlan(cues, narrationVoice, knownProfiles = []) {
+  const mode = heuristicDubbingMode(cues);
+  const narration = normalizeVoice(narrationVoice);
+  const existingNarrator = knownProfiles.find((profile) => profile.role === 'narrator');
+  const narratorProfile = existingNarrator || { speakerId: 'narrator', role: 'narrator', voice: narration, voiceStyle: 'steady, clear documentary or lecture narration' };
+  return {
+    mode,
+    analysisBasis: 'deterministic-subtitle-flow-fallback',
+    profiles: [narratorProfile],
+    cues: cues.map((cue) => ({
+      id: cue.id,
+      speakerId: cue.skipDubbing ? 'original-audio' : narratorProfile.speakerId,
+      role: cue.skipDubbing ? 'original-audio' : 'narrator',
+      voice: narratorProfile.voice,
+      voiceStyle: narratorProfile.voiceStyle,
+      skipDubbing: cue.skipDubbing
+    }))
+  };
+}
+
+const MARU_DUBBING_PLAN_SYSTEM = [
+  'You create a production-safe automatic dubbing performance plan from already translated timed subtitle cues.',
+  'Return JSON only with this exact shape: {"mode":"narration|dialogue|hybrid","profiles":[{"speakerId":"string","role":"narrator|dialogue","voice":"allowed voice","voiceStyle":"short delivery direction"}],"cues":[{"id":number,"speakerId":"string","role":"narrator|dialogue|original-audio","voice":"allowed voice","voiceStyle":"short delivery direction","skipDubbing":boolean}]}.',
+  'Use only anonymous recurring role IDs: narrator, speaker-a, speaker-b, speaker-c, speaker-d, speaker-e, speaker-f, speaker-g, speaker-h. Reuse known profiles when they match the continuing dialogue flow.',
+  'This is not real-person identification. Do not infer or state a real actor identity, precise age, gender, health condition, ethnicity, or any sensitive trait. Use only neutral performance directions grounded in subtitle dialogue flow, such as warm, formal, restrained, tense, dry, energetic, hesitant, stern, or quiet.',
+  'Narration, lectures, explanations, and news should keep one stable narrator voice. Dialogue, drama, interviews, panels, debates, and entertainment should use stable anonymous dialogue roles when the cue flow clearly indicates turn-taking. Use hybrid only when narration and dialogue coexist.',
+  'Do not invent names, relationships, scene facts, or speaker labels that the cue text does not support. When identity is uncertain, keep a narrator or reuse the most plausible existing anonymous role rather than creating many voices.',
+  `Allowed voices are exactly: ${MARU_DUBBING_ALLOWED_VOICES.join(', ')}.`,
+  'VoiceStyle must be short, natural delivery guidance only. Preserve one base voice per role across this batch; vary only delivery intensity where the text clearly warrants it.',
+  'Cues containing lyric markers or bracketed non-speech sounds must have skipDubbing true and role original-audio. Do not dub lyrics, music, effects, laughs, cries, or other standalone non-speech labels in this phase.',
+  'Return one cue object for every input cue id in the same order. Never change cue text, timing, or cue order.'
+].join(' ');
+
+function parseDubbingPlan(content, cues, narrationVoice, knownProfiles) {
+  const raw = safeString(content || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  const first = raw.indexOf('{'); const last = raw.lastIndexOf('}');
+  const parsed = JSON.parse(first >= 0 && last >= first ? raw.slice(first, last + 1) : raw);
+  const fallback = fallbackDubbingPlan(cues, narrationVoice, knownProfiles);
+  const allowedIds = new Set(cues.map((cue) => cue.id));
+  const profileRows = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
+  const profiles = [];
+  const profileById = new Map();
+  for (const item of [...knownProfiles, ...profileRows].slice(0, 20)) {
+    const speakerId = safeString(item?.speakerId || item?.id || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 36);
+    if (!speakerId || profileById.has(speakerId)) continue;
+    const role = safeString(item?.role || '').toLowerCase() === 'narrator' ? 'narrator' : 'dialogue';
+    const profile = { speakerId, role, voice: normalizeVoice(item?.voice || narrationVoice), voiceStyle: cleanDubbingStyle(item?.voiceStyle || item?.style || '') || (role === 'narrator' ? 'steady, clear documentary or lecture narration' : MARU_DUBBING_STYLE_FALLBACK) };
+    profiles.push(profile); profileById.set(speakerId, profile);
+  }
+  if (!profileById.has('narrator')) { const narrator = fallback.profiles[0]; profiles.unshift(narrator); profileById.set('narrator', narrator); }
+  const planByCue = new Map();
+  for (const item of Array.isArray(parsed?.cues) ? parsed.cues : []) {
+    const id = Number(item?.id);
+    if (!allowedIds.has(id) || planByCue.has(id)) continue;
+    const source = cues.find((cue) => cue.id === id);
+    const skipDubbing = source?.skipDubbing || item?.skipDubbing === true;
+    const requestedSpeaker = safeString(item?.speakerId || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 36);
+    const selected = profileById.get(requestedSpeaker) || profileById.get('narrator');
+    planByCue.set(id, {
+      id,
+      speakerId: skipDubbing ? 'original-audio' : selected.speakerId,
+      role: skipDubbing ? 'original-audio' : selected.role,
+      voice: normalizeVoice(item?.voice || selected.voice || narrationVoice),
+      voiceStyle: cleanDubbingStyle(item?.voiceStyle || item?.style || selected.voiceStyle) || selected.voiceStyle,
+      skipDubbing: Boolean(skipDubbing)
+    });
+  }
+  const plannedCues = cues.map((cue) => planByCue.get(cue.id) || fallback.cues.find((item) => item.id === cue.id));
+  if (plannedCues.some((cue) => !cue)) throw new Error('dubbing_plan_missing_cue');
+  const selectedProfiles = profiles.filter((profile) => plannedCues.some((cue) => cue.speakerId === profile.speakerId));
+  return { mode: normalizeDubbingMode(parsed?.mode), analysisBasis: 'subtitle-dialogue-flow', profiles: selectedProfiles.length ? selectedProfiles : fallback.profiles, cues: plannedCues };
+}
+
+async function handleAnalyzeDubbing(id, action, body) {
+  const narrationVoice = normalizeVoice(body.narrationVoice || body.voice || DEFAULT_TTS_VOICE);
+  const cues = normalizeDubbingCueRows(body.cues || body.segments || body.subtitleSegments || []);
+  if (!cues.length) return json(400, { ok: false, action, error: 'Timed subtitle cues are required for automatic dubbing analysis.', requestId: id });
+  const knownProfiles = normalizeKnownDubbingProfiles(body.knownProfiles || body.profiles || [], narrationVoice);
+  const fallback = fallbackDubbingPlan(cues, narrationVoice, knownProfiles);
+  try {
+    const result = await requestTranslationJson({
+      model: safeString(body.dubbingAnalysisModel || body.analysisModel || DEFAULT_DUBBING_ANALYSIS_MODEL).trim() || DEFAULT_DUBBING_ANALYSIS_MODEL,
+      temperature: 0,
+      max_tokens: 4096,
+      messages: [
+        { role: 'system', content: MARU_DUBBING_PLAN_SYSTEM },
+        { role: 'user', content: JSON.stringify({
+          targetLanguage: normalizeLanguage(body.targetLanguage || body.language || '') || 'auto',
+          narrationVoice,
+          knownProfiles,
+          cues: cues.map((cue) => ({ id: cue.id, start: Number(cue.start.toFixed(3)), end: Number(cue.end.toFixed(3)), text: cue.text, nonSpeechOrLyric: cue.skipDubbing }))
+        }) }
+      ]
+    });
+    const content = safeString(result?.choices?.[0]?.message?.content || '');
+    const plan = parseDubbingPlan(content, cues, narrationVoice, knownProfiles);
+    return json(200, { ok: true, action: 'analyze-dubbing', narrationVoice, ...plan, requestId: id });
+  } catch (error) {
+    log(id, 'automatic dubbing analysis fallback:', String(error?.message || error));
+    return json(200, { ok: true, action: 'analyze-dubbing', narrationVoice, ...fallback, analysisFallback: true, requestId: id });
+  }
+}
+
 function isDubbingAction(action) {
   return ['generate-dubbing', 'dubbing', 'ai-dubbing', 'generate-speech', 'text-to-speech', 'tts'].includes(action);
 }
@@ -1854,12 +2026,13 @@ exports.handler = async (event) => {
     if (action === 'generate-subtitle' || action === 'subtitle' || action === 'transcribe') return await handleGenerateSubtitle(id, body);
     if (action === 'review-subtitle' || action === 'subtitle-review' || action === 'final-review') return await handleReviewSubtitle(id, body);
     if (['translate-subtitle', 'subtitle-translate', 'translate'].includes(action)) return await handleTranslateSubtitle(id, body);
+    if (action === 'analyze-dubbing' || action === 'dubbing-analysis' || action === 'plan-dubbing') return await handleAnalyzeDubbing(id, action, body);
     if (isDubbingAction(action)) return await handleGenerateDubbing(id, action, body);
 
     return json(400, {
       ok: false,
       error: `Unsupported action: ${action}`,
-      supportedActions: ['status', 'generate-subtitle', 'translate-subtitle', 'generate-dubbing', 'generate-speech', 'text-to-speech', 'tts'],
+      supportedActions: ['status', 'generate-subtitle', 'translate-subtitle', 'analyze-dubbing', 'generate-dubbing', 'generate-speech', 'text-to-speech', 'tts'],
       requestId: id
     });
   } catch (error) {
