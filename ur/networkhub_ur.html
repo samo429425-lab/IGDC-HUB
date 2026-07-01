@@ -3,7 +3,7 @@
 <!-- patched: removed duplicate bottom 인기 아이템 section and mobile-rail CSS -->
 <!DOCTYPE html>
 
-<html lang="ur" dir="rtl">
+<html lang="ur" dir="ltr">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
@@ -578,7 +578,7 @@ html, body {
 
 <link rel="stylesheet" href="/assets/css/thumbs.standard.css">
 <style id="ur-text-rtl-only-standard">
-html[lang="ur"]{ direction: rtl !important; }
+html[lang="ur"]{ direction: ltr !important; }
 body{ direction: rtl !important; }
 .sidebar, .main-content, main, .main, .content-area, .hero, .intro,
 .region-card, .panel, .card-body, .meta, footer,
@@ -601,6 +601,16 @@ body{ direction: rtl !important; }
 #qnaOpenBtn{
   margin: 10px 12px !important;
 }
+</style>
+
+<style id="igdc-rtl-root-scrollbar-right-v1">
+/*
+  Keep the document scrolling root physically LTR so the browser vertical
+  scrollbar remains on the right. RTL reading and input direction stays on
+  the page body and existing localized content rules.
+*/
+html[lang="ur"] { direction: ltr !important; }
+html[lang="ur"] > body { direction: rtl !important; }
 </style>
 </head>
 <body>

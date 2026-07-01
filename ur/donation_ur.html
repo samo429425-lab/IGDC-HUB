@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="ur" dir="rtl">
+<html class="prelayout" lang="ur" dir="ltr">
 <head>
 <!-- Supabase inline injection (vars + init) -->
 <script>
@@ -2432,6 +2432,16 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
 }
 </style>
 
+
+<style id="igdc-rtl-root-scrollbar-right-v1">
+/*
+  Keep the document scrolling root physically LTR so the browser vertical
+  scrollbar remains on the right. RTL reading and input direction stays on
+  the page body and existing localized content rules.
+*/
+html[lang="ur"] { direction: ltr !important; }
+html[lang="ur"] > body { direction: rtl !important; }
+</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>

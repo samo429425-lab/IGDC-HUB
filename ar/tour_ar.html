@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="ltr">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
@@ -930,7 +930,7 @@ html, body {
 </style>
 
 <style id="ar-text-rtl-only-standard-safe">
-html[lang="ar"]{ direction: rtl !important; }
+html[lang="ar"]{ direction: ltr !important; }
 body{ direction: rtl !important; }
 .sidebar, .main-content, main, .main, .content-area, .hero, .intro,
 .region-card, .panel, .card-body, .meta, footer,
@@ -986,6 +986,16 @@ body{ direction: rtl !important; }
 @media (max-width:900px){ .igdc-qa-panel{left:12px;width:min(92vw,560px)} }
 </style>
 
+
+<style id="igdc-rtl-root-scrollbar-right-v1">
+/*
+  Keep the document scrolling root physically LTR so the browser vertical
+  scrollbar remains on the right. RTL reading and input direction stays on
+  the page body and existing localized content rules.
+*/
+html[lang="ar"] { direction: ltr !important; }
+html[lang="ar"] > body { direction: rtl !important; }
+</style>
 </head>
 
 <body>

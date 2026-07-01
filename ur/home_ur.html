@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="ur" dir="rtl">
+<html lang="ur" dir="ltr">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
@@ -2353,6 +2353,16 @@ html[lang="ur"] body .section-title-row.ph-row .our-sites-title{
   bottom:auto !important;
 }
 </style>
+
+<style id="igdc-rtl-root-scrollbar-right-v1">
+/*
+  Keep the document scrolling root physically LTR so the browser vertical
+  scrollbar remains on the right. RTL reading and input direction stays on
+  the page body and existing localized content rules.
+*/
+html[lang="ur"] { direction: ltr !important; }
+html[lang="ur"] > body { direction: rtl !important; }
+</style>
 </head>
 <body>
 <div class="container">
@@ -3572,13 +3582,13 @@ function reorderRow(row, cc, region){
     const lA = el("label"); lA.textContent="جواب";
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="براہ کرم ایک لمحہ انتظار کریں۔ ہم جلد جواب دیں گے۔";
     const actions = el("div","igdc-qa-actions");
-    const submitBtn = el("button","igdc-qa-btn primary"); submitBtn.textContent="جمع کریں";
-    const clearBtn = el("button","igdc-qa-btn muted"); clearBtn.textContent="صاف کریں";
+    const btnجمع کریں = el("button","igdc-qa-btn primary"); btnجمع کریں.textContent="جمع کریں";
+    const btnصاف کریں = el("button","igdc-qa-btn muted"); btnصاف کریں.textContent="صاف کریں";
     const note = el("div","igdc-qa-note"); note.textContent="※ سادہ سوالات کا جواب AI فوراً دیتا ہے۔ فنی مسائل، خرابیاں یا آپریشن سے متعلق امور خودکار طور پر ایڈمن Q&A کو بھیجے جاتے ہیں۔";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-    actions.append(submitBtn, clearBtn);
+    actions.append(btnجمع کریں, btnصاف کریں);
     panel.append(header, body);
     modal.append(backdrop, panel);
     document.body.append(modal);
@@ -3626,9 +3636,9 @@ function reorderRow(row, cc, region){
     backdrop.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
 
-    clearBtn.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); submitBtn.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); submitBtn.click(); }});
+    btnصاف کریں.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnجمع کریں.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnجمع کریں.click(); }});
 
     async function fetchThreads(){
       const sb = await ensureSupabase(); if(!sb) return;
@@ -3709,7 +3719,7 @@ function reorderRow(row, cc, region){
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
-    submitBtn.addEventListener("click", submit);
+    btnجمع کریں.addEventListener("click", submit);
 
     // realtime refresh
     (async()=>{ try{

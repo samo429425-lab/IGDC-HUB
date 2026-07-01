@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fa">
+<html lang="fa" dir="ltr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -337,7 +337,7 @@
 </style>
   
 <style id="ar-text-rtl-only-standard-safe">
-html[lang="fa"]{ direction: rtl !important; }
+html[lang="fa"]{ direction: ltr !important; }
 body{ direction: rtl !important; }
 .sidebar, .main-content, main, .main, .content-area, .hero, .intro,
 .region-card, .panel, .card-body, .meta, footer,
@@ -373,6 +373,16 @@ body{ direction: rtl !important; }
 }
 </style>
 
+
+<style id="igdc-rtl-root-scrollbar-right-v1">
+/*
+  Keep the document scrolling root physically LTR so the browser vertical
+  scrollbar remains on the right. RTL reading and input direction stays on
+  the page body and existing localized content rules.
+*/
+html[lang="fa"] { direction: ltr !important; }
+html[lang="fa"] > body { direction: rtl !important; }
+</style>
 </head>
 <body>
   <div id="hero"><div class="hero-title"></div></div>
