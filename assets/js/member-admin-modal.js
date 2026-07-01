@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.5.1-roleclaims';
+  var VERSION = '2.5.2-issuer-ui';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -88,6 +88,7 @@
       searchPlaceholder: '이름, 이메일, user_id 검색',
       tabs: {
         memberHome: '회원 홈',
+        memberPage: '회원 페이지',
         submit: '서류 제출',
         question: '질문/문의',
         notice: '공지사항',
@@ -112,6 +113,7 @@
       searchPlaceholder: 'Search name, email, or user_id',
       tabs: {
         memberHome: 'Member Home',
+        memberPage: 'Member Page',
         submit: 'Documents',
         question: 'Questions',
         notice: 'Notices',
@@ -438,11 +440,16 @@
     try { document.dispatchEvent(new CustomEvent('igdc:login-request')); } catch (e) {}
   }
   /* Member and delegated administration stay inside this modal.
-     There is no separate member-page route. The public admin console remains
-     accessible through the site navigation under its own access controls. */
-  function targetPage() { return ''; }
+     `member-page` is an internal modal tab; no separate member.html route exists. */
+  function targetPage() { return canAdmin(readRoles()) ? (cfg().adminPage || 'admin.html') : ''; }
   function openTarget() {
-    setTab(canAdmin(readRoles()) ? 'admin-members' : 'member-home');
+    if (!canAdmin(readRoles())) { setTab('member-page'); return; }
+    var frame = document.getElementById('mainFrame') || document.querySelector('iframe[name="mainFrame"]');
+    var page = targetPage();
+    if (!page) { setTab('member-page'); return; }
+    close();
+    if (frame) frame.src = page;
+    else window.location.href = page;
   }
   function headers() {
     var h = {'Content-Type':'application/json'};
@@ -573,10 +580,15 @@
     '</aside>';
   }
   function bodyHtml(labels, me, admin) {
+    var loginAction = !(hasPlatformRole() || (me && me.role && me.role !== 'guest'))
+      ? '<button type="button" class="primary" data-action="login">'+esc(labels.login)+'</button>'
+      : (!hasValidToken() ? '<button type="button" data-action="login">'+esc(labels.renew || '세션 갱신')+'</button>' : '');
+    var adminAction = admin
+      ? '<button type="button" data-action="open-page">'+esc(labels.adminPage)+'</button>'
+      : '';
     return '<main class="igdc-ma-body">'+
       '<div class="igdc-ma-top"><div><h2>'+esc(titleForTab(labels))+'</h2><div class="muted">IGDC Member/Admin Modal v'+VERSION+'</div></div>'+
-      '<div class="igdc-ma-actions">'+
-        (!(hasPlatformRole() || (me && me.role && me.role !== 'guest'))?'<button type="button" class="primary" data-action="login">'+esc(labels.login)+'</button>':(!hasValidToken()?'<button type="button" data-action="login">'+esc(labels.renew || '세션 갱신')+'</button>':''))+
+      '<div class="igdc-ma-actions">'+loginAction+adminAction+
         '<button type="button" data-close>'+esc(labels.close)+'</button>'+
       '</div></div>'+
       '<div class="igdc-ma-content">'+
@@ -586,11 +598,12 @@
   }
   function titleForTab(labels) {
     var m = labels.tabs;
-    return ({'member-home':m.memberHome,'submit':m.submit,'question':m.question,'notice':m.notice,'admin-members':m.adminMembers,'admin-queue':m.adminQueue,'admin-notice':m.adminNotice})[STATE.tab] || m.memberHome;
+    return ({'member-home':m.memberHome,'member-page':m.memberPage || uiText().memberPageTitle,'submit':m.submit,'question':m.question,'notice':m.notice,'admin-members':m.adminMembers,'admin-queue':m.adminQueue,'admin-notice':m.adminNotice})[STATE.tab] || m.memberHome;
   }
   function renderTab(labels, me, admin) {
     if (STATE.tab.indexOf('admin-') === 0 && !admin) return '<div class="card"><h4>'+esc(labels.noAccess)+'</h4></div>';
     if (STATE.tab === 'member-home') return memberHomeHtml(me);
+    if (STATE.tab === 'member-page') return memberPageHtml(me, admin);
     if (STATE.tab === 'submit') return submitHtml();
     if (STATE.tab === 'question') return questionHtml(admin);
     if (STATE.tab === 'notice') return noticeHtml(admin);
@@ -609,12 +622,20 @@
       '<div class="card"><h4>'+esc(u.premiumTitle)+'</h4><div class="muted">'+esc(u.premiumDesc)+'</div><br><button '+(!canPremium?'disabled':'')+' data-action="request-upgrade" data-role="premium">'+esc(u.premiumApply)+'</button></div>'+
       '<div class="card"><h4>'+esc(u.commerceTitle)+'</h4><div class="muted">'+esc(u.commerceDesc)+'</div><br><button '+(!canCommerce?'disabled':'')+' data-action="request-upgrade" data-role="commerce">'+esc(u.commerceApply)+'</button></div>'+
       '<div class="card"><h4>'+esc(u.standardTitle)+'</h4><div class="muted">'+esc(u.standardDesc)+'</div><br><button '+(!canStandard?'disabled':'')+' data-action="request-upgrade" data-role="standard">'+esc(u.standardApply)+'</button></div>'+
+      '<div class="card"><h4>'+esc(u.memberPageTitle)+'</h4><div class="muted">'+esc(u.memberPageDesc)+'</div><br><button class="primary" data-tab="member-page">'+esc(u.openMemberPage)+'</button></div>'+
       (me.admin ? '<div class="card"><h4>'+esc(u.adminMembersTitle)+'</h4><div class="muted">'+esc(u.adminMembersDesc)+'</div><br><button class="primary" data-tab="admin-members">'+esc(u.openMembers)+'</button> <button data-tab="admin-queue">'+esc(u.openReview)+'</button></div>' : '')+
       (hasPlatformRole()
         ? '<div class="card"><h4>'+esc(u.loginStateTitle)+'</h4><div class="muted">'+esc(u.siteRole)+': <b>'+esc(me.role || 'member')+'</b><br>'+(hasValidToken()?esc(u.tokenOk):esc(u.tokenMissing))+'</div>'+(hasValidToken()?'':'<br><button data-action="login">'+esc(u.renewSession)+'</button>')+'</div>'
         : '<div class="card"><h4>'+esc(u.loginTitle)+'</h4><div class="muted">'+esc(u.loginDesc)+'</div><br><button data-action="login">OS-Login</button></div>')+
     '</div>';
   }
+  function memberPageHtml(me, admin) {
+    var u = uiText();
+    var profile = '<div class="card"><h4>'+esc(u.memberPageTitle)+'</h4>'+      '<div class="muted">'+esc(u.memberPageDesc)+'</div><br>'+      '<div class="muted"><b>'+esc(me.name || me.email || 'Member')+'</b><br>'+      (me.email ? esc(me.email)+'<br>' : '')+      (me.user_id ? 'User ID: '+esc(me.user_id)+'<br>' : '')+      esc(u.currentRole)+': <span class="badge">'+esc(me.role || 'member')+'</span></div></div>';
+    var shortcuts = '<div class="card"><h4>회원 메뉴</h4><div class="row">'+      '<button data-tab="submit">'+esc(t().tabs.submit)+'</button>'+      '<button data-tab="question">'+esc(t().tabs.question)+'</button>'+      '<button data-tab="notice">'+esc(t().tabs.notice)+'</button>'+      (admin ? '<button class="primary" data-tab="admin-members">'+esc(u.openMembers)+'</button>' : '')+      '</div></div>';
+    return '<div class="grid">'+profile+shortcuts+'</div>';
+  }
+
   function submitHtml() {
     var u = uiText();
     return '<form class="card" data-form="document-submit"><h4>'+esc(u.submitTitle)+'</h4><div class="muted">'+esc(u.submitDesc)+'</div><br>'+

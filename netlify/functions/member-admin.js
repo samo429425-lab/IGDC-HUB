@@ -1,11 +1,11 @@
-/* IGDC Member Admin API v2.5.1
+/* IGDC Member Admin API v2.5.2
  * Secure server-side Auth0/OSO member list and hierarchy enforcement.
  * Browser role labels are never trusted for list visibility or management.
  */
 const crypto = require('crypto');
 
 const TOKEN_CACHE = { value: null, exp: 0 };
-const JWKS_CACHE = { value: null, exp: 0 };
+const JWKS_CACHE = new Map();
 
 const ROLE_LEVEL = {
   guest: 0,
@@ -129,14 +129,36 @@ exports.handler = async function handler(event) {
   }
 };
 
+function normalizeIssuer(value) {
+  let issuer = String(value || '').trim();
+  if (!issuer) return '';
+  if (!/^https:\/\//i.test(issuer)) issuer = 'https://' + issuer;
+  return issuer.replace(/\/+$/, '') + '/';
+}
+
+function issuerList(value) {
+  return [...new Set(String(value || '').split(',').map(normalizeIssuer).filter(Boolean))];
+}
+
 function readEnv() {
+  // AUTH0_DOMAIN remains the Auth0 Management API host. The browser signs in
+  // through the public custom domain login.igdcglobal.com, whose issuer/JWKS
+  // must be verified separately from the Management API host.
   const domain = required(process.env.AUTH0_DOMAIN, 'AUTH0_DOMAIN').replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const publicIssuer = normalizeIssuer(process.env.AUTH0_PUBLIC_ISSUER || 'https://login.igdcglobal.com/');
+  const trustedIssuers = [...new Set([
+    publicIssuer,
+    normalizeIssuer(`https://${domain}/`),
+    ...issuerList(process.env.AUTH0_TRUSTED_ISSUERS || '')
+  ].filter(Boolean))];
   return {
     domain,
     audience: process.env.AUTH0_AUDIENCE || `https://${domain}/api/v2/`,
     clientId: required(process.env.AUTH0_M2M_CLIENT_ID, 'AUTH0_M2M_CLIENT_ID'),
     clientSecret: required(process.env.AUTH0_M2M_CLIENT_SECRET, 'AUTH0_M2M_CLIENT_SECRET'),
     publicClientId: String(process.env.AUTH0_PUBLIC_CLIENT_ID || '').trim(),
+    publicIssuer,
+    trustedIssuers,
     rolesClaim: process.env.AUTH0_ROLES_CLAIM || 'https://igdcglobal.com/roles',
     roleIdMap: safeJson(process.env.AUTH0_ROLE_ID_MAP_JSON || '{}'),
     loadUserRoles: String(process.env.AUTH0_LOAD_USER_ROLES || 'true') !== 'false'
@@ -258,13 +280,14 @@ function decodePart(part) {
   return JSON.parse(b64urlToBuffer(part).toString('utf8'));
 }
 
-async function getJwks(env) {
-  if (JWKS_CACHE.value && JWKS_CACHE.exp > Date.now()) return JWKS_CACHE.value;
-  const response = await fetch(`https://${env.domain}/.well-known/jwks.json`);
-  if (!response.ok) throw Object.assign(new Error('Failed to load JWKS'), { statusCode: 401 });
+async function getJwks(issuer) {
+  const normalizedIssuer = normalizeIssuer(issuer);
+  const cached = JWKS_CACHE.get(normalizedIssuer);
+  if (cached && cached.exp > Date.now()) return cached.value;
+  const response = await fetch(normalizedIssuer + '.well-known/jwks.json');
+  if (!response.ok) throw Object.assign(new Error('Failed to load issuer JWKS'), { statusCode: 401 });
   const jwks = await response.json();
-  JWKS_CACHE.value = jwks;
-  JWKS_CACHE.exp = Date.now() + 60 * 60 * 1000;
+  JWKS_CACHE.set(normalizedIssuer, { value: jwks, exp: Date.now() + 60 * 60 * 1000 });
   return jwks;
 }
 
@@ -280,13 +303,14 @@ async function authenticateRequester(event, env) {
   if (header.alg !== 'RS256') throw Object.assign(new Error('Unsupported token algorithm'), { statusCode: 401 });
   if (payload.exp && payload.exp * 1000 < Date.now()) throw Object.assign(new Error('Token expired'), { statusCode: 401 });
   if (payload.nbf && payload.nbf * 1000 > Date.now() + 15000) throw Object.assign(new Error('Token not active'), { statusCode: 401 });
-  if (payload.iss && payload.iss !== `https://${env.domain}/`) throw Object.assign(new Error('Token issuer mismatch'), { statusCode: 401 });
+  const issuer = normalizeIssuer(payload.iss);
+  if (!issuer || env.trustedIssuers.indexOf(issuer) < 0) throw Object.assign(new Error('Token issuer mismatch'), { statusCode: 401 });
   if (env.publicClientId) {
     const audience = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
     if (audience.indexOf(env.publicClientId) === -1) throw Object.assign(new Error('Token audience mismatch'), { statusCode: 401 });
   }
 
-  const jwks = await getJwks(env);
+  const jwks = await getJwks(issuer);
   const jwk = (jwks.keys || []).find(key => key.kid === header.kid);
   if (!jwk) throw Object.assign(new Error('Signing key not found'), { statusCode: 401 });
   const key = crypto.createPublicKey({ key: jwk, format: 'jwk' });

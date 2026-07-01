@@ -1260,8 +1260,18 @@ window.addEventListener('DOMContentLoaded', function() {
       document.body.appendChild(t); } t.textContent=msg; t.style.opacity="1"; setTimeout(()=>{t.style.transition="opacity .4s"; t.style.opacity="0";},1200);}catch(_){}
   }
 
+  // The OSO/Auth0 session stored here is the only browser token source for
+  // member administration. The member modal uses getIdToken() rather than
+  // scanning unrelated legacy token keys.
+  window.IGDC_AUTH_SESSION = {
+    issuer: "https://" + AUTH0_DOMAIN + "/",
+    clientId: CLIENT_ID,
+    tokenKey: STORAGE.TOKENS
+  };
+
   window.osAuth = {
     isAuthenticated(){ const t=load(STORAGE.TOKENS); return !!t && (Math.floor(Date.now()/1000) < Number(t.exp||0)); },
+    getIdToken(){ const t=load(STORAGE.TOKENS); return t ? (t.id_token || "") : ""; },
     getIdTokenPayload(){ const t=load(STORAGE.TOKENS); if(!t) return null; const p=(t.id_token||"").split("."); if(p.length<2) return null; try{ return JSON.parse(atob(p[1].replace(/-/g,"+").replace(/_/g,"/"))); }catch(_){ return null; } },
     getAccessToken(){ const t=load(STORAGE.TOKENS); return t ? (t.access_token||null) : null; },
     logout(to){ del(STORAGE.TOKENS); if(to) location.href=to; else location.reload(); }
@@ -2541,7 +2551,7 @@ function setActive(i){
   }, true);
 })();
 </script>
-<script src="assets/js/member-admin-modal.js?v=2.5.1-roleclaims"></script>
+<script src="assets/js/member-admin-modal.js?v=2.5.2-issuer-ui"></script>
 <!-- IGDC scroll/nav/header minimal shim v9 (header push-down; parent scroll off; nav baseline) -->
 <style id="igdc-scroll-shim-style">
   /* Header: visual hide; when hidden, remove space and ignore pointer events */
@@ -2722,7 +2732,7 @@ function setActive(i){
 })();
 </script>
 <script src="assets/js/seller-modal.addon.js"></script>
-<script src="assets/js/member-admin-modal.js?v=2.5.1-roleclaims"></script>
+<script src="assets/js/member-admin-modal.js?v=2.5.2-issuer-ui"></script>
 <script src="/CoreLogic/modules/thumbnail-feed/thumbnail-loader.min.js"></script>
 <!-- ABSOLUTE-KEY NAV FIX V3 BEGIN -->
 <style>
@@ -3382,7 +3392,7 @@ function normLang(l){
   };
 </script>
 
-<script src="/assets/js/member-admin-modal.js?v=2.5.1-roleclaims"></script>
+<script src="/assets/js/member-admin-modal.js?v=2.5.2-issuer-ui"></script>
 
 <!-- IGDC mobile logout final guard v1 -->
 <script id="igdc-mobile-logout-final-guard-v1">
