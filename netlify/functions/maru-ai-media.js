@@ -16,10 +16,12 @@ const DEFAULT_TTS_FORMAT = process.env.OPENAI_TTS_FORMAT || 'mp3';
 const DEFAULT_SUBTITLE_TRANSLATE_MODEL = process.env.OPENAI_SUBTITLE_MODEL || 'gpt-4o-mini';
 const DEFAULT_DUBBING_ANALYSIS_MODEL = process.env.MARU_DUBBING_ANALYSIS_MODEL || process.env.OPENAI_DUBBING_ANALYSIS_MODEL || DEFAULT_SUBTITLE_TRANSLATE_MODEL;
 const MARU_DUBBING_ANALYSIS_MAX_CUES = Math.max(20, Math.min(100, Number(process.env.MARU_DUBBING_ANALYSIS_MAX_CUES || 72) || 72));
+// Analysis is advisory. Never let it prevent the first TTS cue from starting.
+const MARU_DUBBING_ANALYSIS_TIMEOUT_MS = Math.max(6000, Math.min(25000, Number(process.env.MARU_DUBBING_ANALYSIS_TIMEOUT_MS || 12000) || 12000));
 const TTS_CHUNK_CHARS = Math.max(500, Math.min(3500, Number(process.env.MARU_TTS_CHUNK_CHARS || 2600) || 2600));
 // A stalled upstream TTS call must fail predictably so the player can retain
 // completed cue clips and resume, rather than waiting indefinitely.
-const MARU_TTS_REQUEST_TIMEOUT_MS = Math.max(20000, Math.min(75000, Number(process.env.MARU_TTS_REQUEST_TIMEOUT_MS || 60000) || 60000));
+const MARU_TTS_REQUEST_TIMEOUT_MS = Math.max(20000, Math.min(75000, Number(process.env.MARU_TTS_REQUEST_TIMEOUT_MS || 45000) || 45000));
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
 
 const CORS_HEADERS = {
@@ -260,26 +262,45 @@ async function openAiJson(path, payload, options = {}) {
     err.statusCode = 500;
     throw err;
   }
-  const res = await fetch(`${OPENAI_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
-    },
-    body: JSON.stringify(payload || {})
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    let parsed = null;
-    try { parsed = JSON.parse(text); } catch {}
-    const msg = parsed?.error?.message || parsed?.message || text || `OpenAI failed (${res.status})`;
-    const err = new Error(msg);
-    err.statusCode = res.status;
-    err.openAiStatus = res.status;
-    throw err;
+  const requestedTimeout = Number(options.timeoutMs || 0);
+  const timeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+    ? Math.max(5000, Math.min(90000, requestedTimeout)) : 0;
+  const controller = timeoutMs && typeof AbortController === 'function' ? new AbortController() : null;
+  let timer = null;
+  try {
+    if (controller) timer = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(`${OPENAI_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      },
+      body: JSON.stringify(payload || {}),
+      ...(controller ? { signal: controller.signal } : {})
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      let parsed = null;
+      try { parsed = JSON.parse(text); } catch {}
+      const msg = parsed?.error?.message || parsed?.message || text || `OpenAI failed (${res.status})`;
+      const err = new Error(msg);
+      err.statusCode = res.status;
+      err.openAiStatus = res.status;
+      throw err;
+    }
+    try { return text ? JSON.parse(text) : {}; } catch { return { text }; }
+  } catch (error) {
+    if (controller?.signal?.aborted || error?.name === 'AbortError') {
+      const timeoutError = new Error(`OpenAI analysis request timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+      timeoutError.statusCode = 504;
+      timeoutError.serverCode = 'openai_analysis_timeout';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    try { if (timer) clearTimeout(timer); } catch {}
   }
-  try { return text ? JSON.parse(text) : {}; } catch { return { text }; }
 }
 
 async function openAiBinary(path, payload, options = {}) {
@@ -412,14 +433,14 @@ function parseTranslationRows(value) {
   return rows;
 }
 
-async function requestTranslationJson(payload) {
+async function requestTranslationJson(payload, options = {}) {
   try {
-    return await openAiJson('/chat/completions', { ...payload, response_format: { type: 'json_object' } });
+    return await openAiJson('/chat/completions', { ...payload, response_format: { type: 'json_object' } }, options);
   } catch (error) {
     // Preserve compatibility if an operator configures an older chat model.
     const message = String(error?.message || '').toLowerCase();
     if (!/response_format|json_object|unsupported.*format|unknown parameter/.test(message)) throw error;
-    return openAiJson('/chat/completions', payload);
+    return openAiJson('/chat/completions', payload, options);
   }
 }
 
@@ -1913,7 +1934,7 @@ async function handleAnalyzeDubbing(id, action, body) {
           cues: cues.map((cue) => ({ id: cue.id, start: Number(cue.start.toFixed(3)), end: Number(cue.end.toFixed(3)), text: cue.text, nonSpeechOrLyric: cue.skipDubbing }))
         }) }
       ]
-    });
+    }, { timeoutMs: MARU_DUBBING_ANALYSIS_TIMEOUT_MS });
     const content = safeString(result?.choices?.[0]?.message?.content || '');
     const plan = parseDubbingPlan(content, cues, narrationVoice, knownProfiles);
     return json(200, { ok: true, action: 'analyze-dubbing', narrationVoice, ...plan, requestId: id });
