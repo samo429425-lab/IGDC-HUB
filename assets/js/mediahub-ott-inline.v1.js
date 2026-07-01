@@ -1,13 +1,13 @@
 /*
- * IGDC / MARU Media Hub OTT inline extension — stages 2–3
+ * IGDC / MARU Media Hub OTT inline extension — stages 2–6 hardened
  *
- * This file extends the existing Media Hub detail view. It never navigates to
- * /media/watch.html. The legacy controller still owns card interception,
- * list hiding, fullscreen, Escape handling, Back, and scroll restoration.
+ * This file extends only the existing Media Hub inline detail view. It never
+ * routes a card to /media/watch.html. The legacy controller still owns card
+ * interception, list hiding, fullscreen, Escape, Back, and scroll restore.
  *
- * Only content explicitly registered in the server-side secure media catalog
- * is handled here. Every other card immediately falls back to the exact
- * pre-existing inline player path.
+ * Only a title explicitly registered in the secure server-side media catalog
+ * uses this OTT layer. Every other Media Hub card immediately returns to the
+ * original inline player path.
  */
 (function (global, document) {
   'use strict';
@@ -15,8 +15,15 @@
   if (global.IGDCMediaHubOTTInline) return;
 
   var PLAYBACK_URL = '/.netlify/functions/media-playback';
+  var VIEWING_STATE_URL = '/.netlify/functions/media-viewing-state';
+  var AD_DECISION_URL = '/.netlify/functions/media-ad-decision';
   var LOGIN_RETURN_KEY = 'igdc.media.ott.login-return.v1';
   var LOGIN_RETURN_TTL_MS = 15 * 60 * 1000;
+  var LOCAL_STATE_PREFIX = 'igdc.media.ott.viewing-state.v1';
+  var LOCAL_STATE_TTL_MS = 180 * 24 * 60 * 60 * 1000;
+  var MAX_LOCAL_RECORDS = 200;
+  var LOCAL_SAVE_INTERVAL_MS = 10000;
+  var REMOTE_SAVE_INTERVAL_MS = 30000;
   var instances = new WeakMap();
 
   var COPY = {
@@ -33,7 +40,26 @@
       preparingText: '재생 가능한 권리·전달 경로가 확인되면 이 화면에서 바로 시청할 수 있습니다.',
       unavailableTitle: '시청 정보를 불러올 수 없습니다.',
       unavailableText: '잠시 후 다시 시도해 주세요.',
-      mediaError: '이 브라우저에서 영상을 재생할 수 없습니다.'
+      mediaError: '이 브라우저에서 영상을 재생할 수 없습니다.',
+      hlsUnavailable: '이 HLS 전달 방식은 현재 브라우저에서 지원되지 않습니다. MP4 시범 재생으로 확인해 주세요.',
+      captions: '자막',
+      captionsOff: '자막 없음',
+      resumeTitle: '이어서 시청하시겠습니까?',
+      resumeText: '마지막 시청 위치',
+      resume: '이어서 시청',
+      startOver: '처음부터',
+      advertisement: '광고',
+      skipAd: '건너뛰기',
+      adNotice: '광고 후 본편이 재생됩니다.',
+      seasons: '시즌',
+      episodes: '회차',
+      episode: '화',
+      selectEpisode: '회차 선택',
+      backToEpisodes: '회차 목록',
+      previousEpisodes: '이전 회차',
+      nextEpisodes: '다음 회차',
+      noEpisodes: '현재 시청 가능한 회차가 없습니다.',
+      episodeUnavailable: '이 회차는 아직 시청 준비 중입니다.'
     },
     en: {
       loading: 'Checking viewing access…',
@@ -48,11 +74,35 @@
       preparingText: 'Playback will be available here after its rights and delivery path are confirmed.',
       unavailableTitle: 'Viewing information is unavailable.',
       unavailableText: 'Please try again shortly.',
-      mediaError: 'This browser cannot play the video.'
+      mediaError: 'This browser cannot play the video.',
+      hlsUnavailable: 'This HLS delivery is not supported by the current browser. Please use the MP4 pilot delivery.',
+      captions: 'Captions',
+      captionsOff: 'No captions',
+      resumeTitle: 'Continue watching?',
+      resumeText: 'Last viewing position',
+      resume: 'Continue',
+      startOver: 'Start over',
+      advertisement: 'Advertisement',
+      skipAd: 'Skip',
+      adNotice: 'The program begins after this message.',
+      seasons: 'Seasons',
+      episodes: 'Episodes',
+      episode: 'Episode',
+      selectEpisode: 'Select episode',
+      backToEpisodes: 'Episodes',
+      previousEpisodes: 'Previous episodes',
+      nextEpisodes: 'Next episodes',
+      noEpisodes: 'No episodes are currently available to view.',
+      episodeUnavailable: 'This episode is not ready for viewing yet.'
     }
   };
 
   function text(value) { return value == null ? '' : String(value).trim(); }
+  function finite(value, maximum) {
+    var number = Number(value);
+    if (!Number.isFinite(number) || number < 0) return 0;
+    return Math.min(number, maximum || 60 * 60 * 24 * 365);
+  }
   function currentLanguage() {
     var raw = text(document.documentElement && document.documentElement.lang).toLowerCase();
     if (raw === 'zh-hant' || raw === 'zh-tw' || raw === 'zh-hk') return 'zht';
@@ -109,6 +159,44 @@
     return text(card && card.dataset && (card.dataset.mediaTitle || card.dataset.title)) ||
       text(card && card.querySelector && card.querySelector('.meta') && card.querySelector('.meta').textContent) || 'Media';
   }
+  function allowedUrl(value) {
+    var raw = text(value);
+    if (!raw) return '';
+    if (raw.charAt(0) === '/') return raw;
+    try {
+      var parsed = new URL(raw);
+      return (parsed.protocol === 'https:' || parsed.protocol === 'http:') ? parsed.toString() : '';
+    } catch (_) {
+      return '';
+    }
+  }
+  function validLanguage(value) {
+    var raw = text(value).toLowerCase().replace(/_/g, '-');
+    return /^[a-z]{2,3}(?:-[a-z0-9]{2,12})?$/i.test(raw) ? raw : '';
+  }
+  function cleanCaptions(items) {
+    var rows = Array.isArray(items) ? items : [];
+    var seen = {};
+    var result = [];
+    rows.slice(0, 30).forEach(function (item, index) {
+      var source = allowedUrl(item && (item.src || item.url || item.href));
+      var language = validLanguage(item && (item.language || item.lang || item.srclang));
+      var kind = text(item && item.kind || 'subtitles').toLowerCase();
+      if (!source || !language || (kind !== 'subtitles' && kind !== 'captions')) return;
+      var key = language + '|' + source;
+      if (seen[key]) return;
+      seen[key] = true;
+      result.push({
+        value: String(index),
+        language: language,
+        label: text(item && (item.label || item.name) || language) || language,
+        kind: kind,
+        src: source,
+        isDefault: Boolean(item && (item.default === true || item.isDefault === true))
+      });
+    });
+    return result;
+  }
   function injectStyle() {
     if (document.getElementById('igdc-mediahub-ott-inline-style')) return;
     var style = document.createElement('style');
@@ -123,11 +211,42 @@
       '.igdc-ott-action{display:inline-flex;align-items:center;justify-content:center;min-height:42px;margin-top:18px;padding:9px 16px;border:1px solid rgba(255,255,255,.26);border-radius:8px;background:#275ea8;color:#fff;font:inherit;font-weight:700;cursor:pointer}',
       '.igdc-ott-action:hover{background:#3474c9}',
       '.igdc-ott-action:focus-visible{outline:3px solid #8eb3ff;outline-offset:3px}',
-      '.igdc-ott-video{display:block;width:100%;height:100%;background:#000;object-fit:contain}',
       '.igdc-ott-loading{display:flex;align-items:center;gap:10px;color:#dce9ff}',
       '.igdc-ott-spinner{width:20px;height:20px;border:3px solid rgba(255,255,255,.25);border-top-color:#9ec4ff;border-radius:50%;animation:igdcOttSpin .85s linear infinite}',
+      '.igdc-ott-video-shell{position:relative;width:100%;height:100%;min-height:inherit;background:#000}',
+      '.igdc-ott-video{display:block;width:100%;height:100%;background:#000;object-fit:contain}',
+      '.igdc-ott-tools{position:absolute;top:12px;right:12px;z-index:3;display:flex;gap:8px;max-width:calc(100% - 24px)}',
+      '.igdc-ott-caption-label{display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid rgba(255,255,255,.28);border-radius:7px;background:rgba(5,8,12,.76);color:#fff;font-size:.82rem}',
+      '.igdc-ott-caption-select{max-width:190px;border:0;background:transparent;color:inherit;font:inherit}',
+      '.igdc-ott-caption-select option{background:#111927;color:#fff}',
+      '.igdc-ott-resume,.igdc-ott-ad{position:absolute;inset:0;z-index:4;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.58)}',
+      '.igdc-ott-resume-card,.igdc-ott-ad-card{width:min(440px,100%);padding:20px;border:1px solid rgba(255,255,255,.2);border-radius:12px;background:rgba(8,13,21,.95);color:#eef3fb;text-align:center;line-height:1.5}',
+      '.igdc-ott-resume-card h2,.igdc-ott-ad-card h2{margin:0 0 8px;font-size:1.12rem}',
+      '.igdc-ott-resume-card p,.igdc-ott-ad-card p{margin:0;color:#cbd6e7}',
+      '.igdc-ott-resume-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;margin-top:18px}',
+      '.igdc-ott-resume-actions button,.igdc-ott-ad-skip{min-height:40px;padding:8px 13px;border:1px solid rgba(255,255,255,.26);border-radius:8px;background:#275ea8;color:#fff;font:inherit;font-weight:700;cursor:pointer}',
+      '.igdc-ott-resume-actions button:last-child{background:#202b3d}',
+      '.igdc-ott-ad-media{display:block;width:100%;max-height:52vh;margin:12px 0;border:0;background:#000;object-fit:contain}',
+      '.igdc-ott-ad-skip{margin-top:12px;background:#202b3d}',
+      '.igdc-ott-series{width:100%;height:100%;min-height:inherit;overflow:auto;padding:20px;background:#05070b;color:#eef3fb}',
+      '.igdc-ott-series-head{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;max-width:1180px;margin:0 auto 14px}',
+      '.igdc-ott-series-head h2{margin:0;font-size:1.3rem}.igdc-ott-series-head p{margin:0;color:#cbd6e7;line-height:1.5}',
+      '.igdc-ott-series-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}',
+      '.igdc-ott-series-button{min-height:36px;padding:7px 11px;border:1px solid rgba(255,255,255,.25);border-radius:7px;background:#182235;color:#eef3fb;font:inherit;font-weight:700;cursor:pointer}',
+      '.igdc-ott-series-button[aria-pressed="true"]{background:#275ea8;border-color:#7eaeff}',
+      '.igdc-ott-series-button:focus-visible,.igdc-ott-episode:focus-visible{outline:3px solid #8eb3ff;outline-offset:3px}',
+      '.igdc-ott-series-player{max-width:1180px;min-height:300px;margin:0 auto 16px;background:#000}',
+      '.igdc-ott-series-shelf{max-width:1180px;margin:0 auto}.igdc-ott-series-shelf-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px;font-size:1rem;font-weight:700}',
+      '.igdc-ott-shelf-controls{display:flex;gap:6px}.igdc-ott-shelf-controls button{width:34px;height:32px;border:1px solid rgba(255,255,255,.25);border-radius:6px;background:#182235;color:#fff;font-size:1.1rem;cursor:pointer}',
+      '.igdc-ott-episodes{display:flex;gap:10px;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x proximity;padding:2px 2px 12px;scrollbar-color:#456994 #111927}',
+      '.igdc-ott-episode{flex:0 0 166px;min-height:148px;padding:0;overflow:hidden;border:1px solid rgba(255,255,255,.22);border-radius:9px;background:#111927;color:#eef3fb;text-align:left;font:inherit;cursor:pointer;scroll-snap-align:start}',
+      '.igdc-ott-episode[aria-current="true"]{border-color:#8eb3ff;box-shadow:0 0 0 1px #8eb3ff inset}',
+      '.igdc-ott-episode img,.igdc-ott-episode-fallback{display:block;width:100%;height:91px;object-fit:cover;background:#1b2738}',
+      '.igdc-ott-episode-fallback{display:grid;place-items:center;color:#9db6d5;font-size:.78rem}',
+      '.igdc-ott-episode-meta{display:block;padding:7px 8px 8px;line-height:1.35}.igdc-ott-episode-number{display:block;color:#9ec4ff;font-size:.75rem;font-weight:700}.igdc-ott-episode-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.82rem}',
+      '.igdc-ott-series-empty{max-width:1180px;margin:24px auto;padding:18px;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:#111927;color:#cbd6e7}',
       '@keyframes igdcOttSpin{to{transform:rotate(360deg)}}',
-      '@media(max-width:700px){.igdc-ott-card{margin:14px;padding:18px}.igdc-ott-action{width:100%}}'
+      '@media(max-width:700px){.igdc-ott-card{margin:14px;padding:18px}.igdc-ott-action{width:100%}.igdc-ott-tools{top:8px;right:8px}.igdc-ott-caption-label{font-size:.75rem}.igdc-ott-caption-select{max-width:150px}.igdc-ott-resume-card,.igdc-ott-ad-card{padding:16px}.igdc-ott-series{padding:14px}.igdc-ott-series-head h2{font-size:1.1rem}.igdc-ott-episode{flex-basis:144px}.igdc-ott-episode img,.igdc-ott-episode-fallback{height:80px}}'
     ].join('');
     document.head.appendChild(style);
   }
@@ -197,49 +316,568 @@
       action: { label: phrase('play'), onClick: function () { attachVideo(instance, content); } }
     });
   }
-  function allowedStreamUrl(value) {
-    var raw = text(value);
-    if (!raw) return '';
-    if (raw.charAt(0) === '/') return raw;
+
+
+  function numberValue(value, fallback) {
+    var number = Number(value);
+    return Number.isInteger(number) && number > 0 ? number : fallback;
+  }
+  function seriesSeasons(series) {
+    var raw = Array.isArray(series && series.seasons) ? series.seasons : [];
+    return raw.map(function (season, index) {
+      var episodes = Array.isArray(season && season.episodes) ? season.episodes.slice() : [];
+      return {
+        seasonNumber: numberValue(season && season.seasonNumber, index + 1),
+        title: text(season && season.title) || (phrase('seasons') + ' ' + (index + 1)),
+        description: text(season && season.description),
+        episodes: episodes.filter(function (episode) { return text(episode && episode.contentId); }).sort(function (a, b) {
+          return numberValue(a && a.episodeNumber, 999999) - numberValue(b && b.episodeNumber, 999999);
+        })
+      };
+    }).filter(function (season) { return season.episodes.length; }).sort(function (a, b) { return a.seasonNumber - b.seasonNumber; });
+  }
+  function seriesSeason(series, seasonNumber) {
+    var seasons = seriesSeasons(series);
+    return seasons.find(function (season) { return season.seasonNumber === Number(seasonNumber); }) || seasons[0] || null;
+  }
+  function cleanupActivePlayback(instance) {
+    if (!instance) return;
+    cleanupInstance(instance);
     try {
-      var parsed = new URL(raw);
-      return (parsed.protocol === 'https:' || parsed.protocol === 'http:') ? parsed.toString() : '';
+      if (instance.video) {
+        instance.video.pause();
+        instance.video.removeAttribute('src');
+        instance.video.load();
+      }
+    } catch (_) {}
+    instance.video = null;
+    instance.content = null;
+  }
+  function episodeLabel(episode) {
+    var number = numberValue(episode && episode.episodeNumber, 0);
+    return number ? phrase('episode') + ' ' + number : phrase('episode');
+  }
+  function makeEpisodeCard(instance, series, season, episode, selectedId) {
+    var button = create('button', 'igdc-ott-episode');
+    button.type = 'button';
+    button.setAttribute('aria-current', text(episode && episode.contentId) === text(selectedId) ? 'true' : 'false');
+    button.setAttribute('aria-label', episodeLabel(episode) + ': ' + (text(episode && episode.title) || ''));
+    var poster = allowedUrl(episode && episode.posterUrl);
+    if (poster) {
+      var image = document.createElement('img');
+      image.src = poster;
+      image.alt = '';
+      image.loading = 'lazy';
+      image.decoding = 'async';
+      image.addEventListener('error', function () { try { image.replaceWith(create('span', 'igdc-ott-episode-fallback', episodeLabel(episode))); } catch (_) {} }, { once: true });
+      button.appendChild(image);
+    } else {
+      button.appendChild(create('span', 'igdc-ott-episode-fallback', episodeLabel(episode)));
+    }
+    var meta = create('span', 'igdc-ott-episode-meta');
+    meta.appendChild(create('span', 'igdc-ott-episode-number', episodeLabel(episode)));
+    meta.appendChild(create('span', 'igdc-ott-episode-title', text(episode && episode.title) || episodeLabel(episode)));
+    button.appendChild(meta);
+    button.addEventListener('click', function () { selectSeriesEpisode(instance, series, season, episode); });
+    return button;
+  }
+  function renderSeriesShelf(instance, series, season, selectedId) {
+    var section = create('section', 'igdc-ott-series-shelf');
+    var heading = create('div', 'igdc-ott-series-shelf-title');
+    heading.appendChild(create('span', '', (season.title || (phrase('seasons') + ' ' + season.seasonNumber)) + ' · ' + phrase('episodes')));
+    var controls = create('div', 'igdc-ott-shelf-controls');
+    var previous = create('button', '', '‹');
+    var next = create('button', '', '›');
+    previous.type = 'button'; next.type = 'button';
+    previous.setAttribute('aria-label', phrase('previousEpisodes'));
+    next.setAttribute('aria-label', phrase('nextEpisodes'));
+    controls.appendChild(previous); controls.appendChild(next); heading.appendChild(controls);
+    section.appendChild(heading);
+    var row = create('div', 'igdc-ott-episodes');
+    season.episodes.forEach(function (episode) { row.appendChild(makeEpisodeCard(instance, series, season, episode, selectedId)); });
+    previous.addEventListener('click', function () { row.scrollBy({ left: -Math.max(260, row.clientWidth * 0.82), behavior: 'smooth' }); });
+    next.addEventListener('click', function () { row.scrollBy({ left: Math.max(260, row.clientWidth * 0.82), behavior: 'smooth' }); });
+    section.appendChild(row);
+    return section;
+  }
+  function renderSeriesHeader(instance, series, activeSeason) {
+    var head = create('header', 'igdc-ott-series-head');
+    head.appendChild(create('div', 'igdc-ott-eyebrow', phrase('pilotTag')));
+    head.appendChild(create('h2', '', text(series && series.title) || titleFor(instance.card)));
+    if (text(series && series.description)) head.appendChild(create('p', '', text(series.description)));
+    var tools = create('div', 'igdc-ott-series-tools');
+    seriesSeasons(series).forEach(function (season) {
+      var button = create('button', 'igdc-ott-series-button', season.title || (phrase('seasons') + ' ' + season.seasonNumber));
+      button.type = 'button';
+      button.setAttribute('aria-pressed', String(season.seasonNumber === activeSeason.seasonNumber));
+      button.addEventListener('click', function () { renderSeriesBrowser(instance, series, season.seasonNumber); });
+      tools.appendChild(button);
+    });
+    head.appendChild(tools);
+    return head;
+  }
+  function renderSeriesBrowser(instance, series, wantedSeason) {
+    if (!instance || instance.disposed) return;
+    cleanupActivePlayback(instance);
+    instance.seriesId = text(series && series.contentId) || instance.seriesId || instance.rootContentId;
+    instance.series = series;
+    instance.contentId = instance.seriesId;
+    var season = seriesSeason(series, wantedSeason || instance.activeSeasonNumber);
+    if (!season) { renderCard(instance.stage, { title: phrase('unavailableTitle'), text: phrase('noEpisodes') }); return; }
+    instance.activeSeasonNumber = season.seasonNumber;
+    clearStage(instance.stage);
+    var layout = create('section', 'igdc-ott-series');
+    layout.appendChild(renderSeriesHeader(instance, series, season));
+    layout.appendChild(renderSeriesShelf(instance, series, season, ''));
+    instance.stage.appendChild(layout);
+  }
+  function renderSeriesPlayback(instance, series, content, savedState, ad) {
+    if (!instance || instance.disposed) return;
+    var season = seriesSeason(series, content && content.seasonNumber || instance.activeSeasonNumber);
+    if (!season) { renderVideo(instance, content, savedState, ad); return; }
+    instance.activeSeasonNumber = season.seasonNumber;
+    clearStage(instance.stage);
+    var layout = create('section', 'igdc-ott-series');
+    layout.appendChild(renderSeriesHeader(instance, series, season));
+    var playerTarget = create('div', 'igdc-ott-series-player');
+    layout.appendChild(playerTarget);
+    layout.appendChild(renderSeriesShelf(instance, series, season, content && content.contentId));
+    instance.stage.appendChild(layout);
+    renderVideo(instance, content, savedState, ad, playerTarget);
+  }
+  function selectSeriesEpisode(instance, series, season, episode) {
+    if (!instance || instance.disposed || !text(episode && episode.contentId)) return;
+    cleanupActivePlayback(instance);
+    instance.seriesId = text(series && series.contentId) || instance.seriesId || instance.rootContentId;
+    instance.activeSeasonNumber = season.seasonNumber;
+    renderLoading(instance.stage);
+    loadPlayback(instance, instance.seriesId, text(episode.contentId)).then(function (result) {
+      if (instance.disposed) return;
+      var response = result.response;
+      var payload = result.payload || {};
+      if (response.ok && payload.ok && payload.mode === 'episode' && payload.content) {
+        instance.viewerKey = text(payload.viewer && payload.viewer.key) || instance.viewerKey;
+        instance.contentId = text(payload.content.contentId);
+        instance.series = payload.series || series;
+        attachVideo(instance, payload.content, instance.series);
+        return;
+      }
+      if (response.status === 409 || response.status === 404) {
+        renderSeriesBrowser(instance, series, season.seasonNumber);
+        return;
+      }
+      renderCard(instance.stage, { title: phrase('unavailableTitle'), text: text(payload.message) || phrase('episodeUnavailable') });
+    }).catch(function () {
+      if (instance.disposed) return;
+      renderCard(instance.stage, { title: phrase('unavailableTitle'), text: phrase('unavailableText') });
+    });
+  }
+
+  function localScope(instance) {
+    return text(instance && instance.viewerKey) || 'browser';
+  }
+  function localStateKey(instance) {
+    return LOCAL_STATE_PREFIX + ':' + localScope(instance);
+  }
+  function cleanStoredState(value, expectedId) {
+    if (!value || typeof value !== 'object') return null;
+    var id = text(value.contentId);
+    var updated = Number(value.updatedAtMs || Date.parse(value.updatedAt || '') || 0);
+    if (!id || (expectedId && id !== expectedId) || !updated || Date.now() - updated > LOCAL_STATE_TTL_MS) return null;
+    return {
+      contentId: id,
+      title: text(value.title).slice(0, 300),
+      positionSec: finite(value.positionSec),
+      durationSec: finite(value.durationSec),
+      completed: Boolean(value.completed),
+      captionLanguage: validLanguage(value.captionLanguage),
+      updatedAt: new Date(updated).toISOString(),
+      updatedAtMs: updated
+    };
+  }
+  function readLocalStore(instance) {
+    try {
+      var raw = global.localStorage.getItem(localStateKey(instance)) || '';
+      var parsed = raw ? JSON.parse(raw) : null;
+      var records = parsed && parsed.records && typeof parsed.records === 'object' ? parsed.records : {};
+      var cleaned = {};
+      Object.keys(records).forEach(function (key) {
+        var state = cleanStoredState(records[key], key);
+        if (state) cleaned[key] = state;
+      });
+      return cleaned;
     } catch (_) {
-      return '';
+      return {};
     }
   }
-  function attachVideo(instance, content) {
-    if (!instance || instance.disposed) return;
-    var streamUrl = allowedStreamUrl(content && content.stream && content.stream.url);
-    if (!streamUrl) {
-      renderCard(instance.stage, { title: phrase('preparingTitle'), text: phrase('preparingText') });
+  function writeLocalStore(instance, records) {
+    try {
+      var rows = Object.keys(records || {}).map(function (key) { return records[key]; }).filter(Boolean);
+      rows.sort(function (a, b) { return Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0); });
+      var limited = {};
+      rows.slice(0, MAX_LOCAL_RECORDS).forEach(function (state) { limited[state.contentId] = state; });
+      global.localStorage.setItem(localStateKey(instance), JSON.stringify({ version: 1, updatedAt: Date.now(), records: limited }));
+    } catch (_) {}
+  }
+  function readLocalState(instance) {
+    return cleanStoredState(readLocalStore(instance)[instance.contentId], instance.contentId);
+  }
+  function saveLocalState(instance, state) {
+    if (!instance || !state || !state.contentId) return;
+    var records = readLocalStore(instance);
+    var now = Date.now();
+    records[state.contentId] = {
+      contentId: state.contentId,
+      title: text(state.title).slice(0, 300),
+      positionSec: finite(state.positionSec),
+      durationSec: finite(state.durationSec),
+      completed: Boolean(state.completed),
+      captionLanguage: validLanguage(state.captionLanguage),
+      updatedAt: new Date(now).toISOString(),
+      updatedAtMs: now
+    };
+    writeLocalStore(instance, records);
+  }
+  function updatedAtMs(state) {
+    if (!state) return 0;
+    return Number(state.updatedAtMs || Date.parse(state.updatedAt || '') || 0);
+  }
+  function latestState(first, second) {
+    if (!first) return second || null;
+    if (!second) return first;
+    return updatedAtMs(second) > updatedAtMs(first) ? second : first;
+  }
+  function endpoint(url, contentId, extra) {
+    var value = new URL(url, global.location.origin);
+    value.searchParams.set('id', contentId);
+    Object.keys(extra || {}).forEach(function (key) { value.searchParams.set(key, extra[key]); });
+    return value.toString();
+  }
+  function responseJson(response) {
+    return response.json().catch(function () { return {}; });
+  }
+  function loadRemoteState(instance) {
+    return global.fetch(endpoint(VIEWING_STATE_URL, instance.contentId), {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: Object.assign({ Accept: 'application/json' }, authorizationHeaders())
+    }).then(function (response) {
+      return responseJson(response).then(function (payload) {
+        return response.ok && payload && payload.ok && payload.state ? cleanStoredState(payload.state, instance.contentId) : null;
+      });
+    }).catch(function () { return null; });
+  }
+  function saveRemoteState(instance, state) {
+    if (!instance || !state || instance.disposed) return Promise.resolve(null);
+    return global.fetch(VIEWING_STATE_URL, {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: Object.assign({ 'Content-Type': 'application/json', Accept: 'application/json' }, authorizationHeaders()),
+      body: JSON.stringify({
+        contentId: state.contentId,
+        title: state.title,
+        page: global.location.pathname,
+        positionSec: state.positionSec,
+        durationSec: state.durationSec,
+        completed: state.completed,
+        captionLanguage: state.captionLanguage
+      })
+    }).then(function (response) {
+      return responseJson(response).then(function (payload) {
+        return response.ok && payload && payload.ok && payload.state ? cleanStoredState(payload.state, state.contentId) : null;
+      });
+    }).catch(function () { return null; });
+  }
+  function loadViewingState(instance) {
+    var local = readLocalState(instance);
+    return loadRemoteState(instance).then(function (remote) {
+      return latestState(local, remote);
+    }).catch(function () { return local; });
+  }
+  function loadAdDecision(instance) {
+    return global.fetch(endpoint(AD_DECISION_URL, instance.contentId), {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: Object.assign({ Accept: 'application/json' }, authorizationHeaders())
+    }).then(function (response) {
+      return responseJson(response).then(function (payload) {
+        return response.ok && payload && payload.ok && payload.decision === 'preroll' && payload.ad ? payload.ad : null;
+      });
+    }).catch(function () { return null; });
+  }
+  function formatTime(seconds) {
+    var value = Math.max(0, Math.floor(finite(seconds)));
+    var hours = Math.floor(value / 3600);
+    var minutes = Math.floor((value % 3600) / 60);
+    var rest = value % 60;
+    return hours ? hours + ':' + String(minutes).padStart(2, '0') + ':' + String(rest).padStart(2, '0') : minutes + ':' + String(rest).padStart(2, '0');
+  }
+
+  function appendCaptionControl(instance, shell, video, captions, savedState) {
+    if (!captions.length) return;
+    var tools = create('div', 'igdc-ott-tools');
+    var label = create('label', 'igdc-ott-caption-label');
+    label.appendChild(create('span', '', phrase('captions')));
+    var select = document.createElement('select');
+    select.className = 'igdc-ott-caption-select';
+    select.setAttribute('aria-label', phrase('captions'));
+    var off = document.createElement('option');
+    off.value = 'off';
+    off.textContent = phrase('captionsOff');
+    select.appendChild(off);
+    captions.forEach(function (caption) {
+      var option = document.createElement('option');
+      option.value = caption.value;
+      option.textContent = caption.label;
+      select.appendChild(option);
+      var track = document.createElement('track');
+      track.kind = caption.kind;
+      track.label = caption.label;
+      track.srclang = caption.language;
+      track.src = caption.src;
+      if (caption.isDefault) track.default = true;
+      video.appendChild(track);
+    });
+    label.appendChild(select);
+    tools.appendChild(label);
+    shell.appendChild(tools);
+    function apply(value, remember) {
+      var selected = null;
+      captions.forEach(function (caption, index) {
+        var track = video.textTracks && video.textTracks[index];
+        var active = String(caption.value) === String(value);
+        if (track) {
+          try { track.mode = active ? 'showing' : 'disabled'; } catch (_) {}
+        }
+        if (active) selected = caption;
+      });
+      instance.captionLanguage = selected ? selected.language : '';
+      if (remember && instance.flushProgress) instance.flushProgress(true);
+    }
+    var desired = validLanguage(savedState && savedState.captionLanguage);
+    var selectedCaption = captions.find(function (caption) { return caption.language === desired; }) ||
+      captions.find(function (caption) { return caption.isDefault; }) || null;
+    select.value = selectedCaption ? selectedCaption.value : 'off';
+    global.setTimeout(function () { apply(select.value, false); }, 0);
+    select.addEventListener('change', function () { apply(select.value, true); });
+  }
+  function stateFromVideo(instance, video, content, completed) {
+    return {
+      contentId: instance.contentId,
+      title: text(content && content.title) || titleFor(instance.card),
+      positionSec: finite(video && video.currentTime),
+      durationSec: finite(video && video.duration),
+      completed: Boolean(completed),
+      captionLanguage: validLanguage(instance.captionLanguage)
+    };
+  }
+  function attachProgressTracking(instance, video, content) {
+    var lastLocal = 0;
+    var lastRemote = 0;
+    function capture(force, completed) {
+      if (instance.disposed || !video) return;
+      var state = stateFromVideo(instance, video, content, completed);
+      var now = Date.now();
+      if (force || now - lastLocal >= LOCAL_SAVE_INTERVAL_MS) {
+        saveLocalState(instance, state);
+        lastLocal = now;
+      }
+      if (force || now - lastRemote >= REMOTE_SAVE_INTERVAL_MS) {
+        lastRemote = now;
+        saveRemoteState(instance, state).then(function (saved) {
+          if (saved) saveLocalState(instance, latestState(readLocalState(instance), saved));
+        });
+      }
+    }
+    instance.flushProgress = capture;
+    var onTime = function () { capture(false, false); };
+    var onPause = function () { capture(true, false); };
+    var onEnded = function () { capture(true, true); };
+    video.addEventListener('timeupdate', onTime);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('ended', onEnded);
+    var onPageHide = function () { capture(true, Boolean(video.ended)); };
+    global.addEventListener('pagehide', onPageHide);
+    instance.cleanup.push(function () {
+      try { capture(true, Boolean(video.ended)); } catch (_) {}
+      video.removeEventListener('timeupdate', onTime);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('ended', onEnded);
+      global.removeEventListener('pagehide', onPageHide);
+    });
+  }
+  function playVideo(video, position) {
+    try {
+      if (position > 0) video.currentTime = position;
+    } catch (_) {}
+    var result = video.play();
+    if (result && typeof result.catch === 'function') result.catch(function () {});
+  }
+  function showResume(instance, shell, video, savedState) {
+    var duration = finite(video.duration);
+    var position = finite(savedState && savedState.positionSec);
+    var usable = position > 7 && !Boolean(savedState && savedState.completed) && (!duration || position < Math.max(8, duration - 7));
+    if (!usable) {
+      playVideo(video, 0);
       return;
     }
-    clearStage(instance.stage);
+    var overlay = create('section', 'igdc-ott-resume');
+    var card = create('div', 'igdc-ott-resume-card');
+    card.appendChild(create('h2', '', phrase('resumeTitle')));
+    card.appendChild(create('p', '', phrase('resumeText') + ' · ' + formatTime(position)));
+    var actions = create('div', 'igdc-ott-resume-actions');
+    var resume = create('button', '', phrase('resume'));
+    var restart = create('button', '', phrase('startOver'));
+    resume.type = 'button';
+    restart.type = 'button';
+    function finish(at) {
+      overlay.remove();
+      playVideo(video, at);
+    }
+    resume.addEventListener('click', function () { finish(position); });
+    restart.addEventListener('click', function () {
+      saveLocalState(instance, Object.assign({}, savedState, { positionSec: 0, completed: false }));
+      finish(0);
+    });
+    actions.appendChild(resume);
+    actions.appendChild(restart);
+    card.appendChild(actions);
+    overlay.appendChild(card);
+    shell.appendChild(overlay);
+  }
+  function showAd(instance, shell, ad, done) {
+    if (!ad || !['video', 'image'].includes(text(ad.type).toLowerCase()) || !allowedUrl(ad.src)) {
+      done();
+      return;
+    }
+    var overlay = create('section', 'igdc-ott-ad');
+    var card = create('div', 'igdc-ott-ad-card');
+    card.appendChild(create('h2', '', text(ad.label) || phrase('advertisement')));
+    card.appendChild(create('p', '', phrase('adNotice')));
+    var source = allowedUrl(ad.src);
+    var media;
+    if (text(ad.type).toLowerCase() === 'video') {
+      media = document.createElement('video');
+      media.muted = true;
+      media.autoplay = true;
+      media.playsInline = true;
+      media.preload = 'auto';
+      media.src = source;
+    } else {
+      media = document.createElement('img');
+      media.src = source;
+      media.alt = '';
+    }
+    media.className = 'igdc-ott-ad-media';
+    card.appendChild(media);
+    if (allowedUrl(ad.clickUrl)) {
+      var link = document.createElement('a');
+      link.href = allowedUrl(ad.clickUrl);
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.className = 'igdc-ott-action';
+      link.textContent = text(ad.label) || phrase('advertisement');
+      card.appendChild(link);
+    }
+    overlay.appendChild(card);
+    shell.appendChild(overlay);
+    var finished = false;
+    var timer = 0;
+    function finish() {
+      if (finished) return;
+      finished = true;
+      if (timer) global.clearTimeout(timer);
+      try { overlay.remove(); } catch (_) {}
+      done();
+    }
+    var duration = Math.max(1, Math.min(finite(ad.durationSec, 60) || 0, 60));
+    timer = global.setTimeout(finish, duration * 1000);
+    if (media.tagName === 'VIDEO') {
+      media.addEventListener('ended', finish, { once: true });
+      media.addEventListener('error', finish, { once: true });
+      var start = media.play();
+      if (start && typeof start.catch === 'function') start.catch(finish);
+    } else {
+      media.addEventListener('error', finish, { once: true });
+    }
+    var skipAfter = Math.max(0, Math.min(finite(ad.skipAfterSec, duration), duration));
+    if (skipAfter < duration) {
+      global.setTimeout(function () {
+        if (finished || instance.disposed) return;
+        var skip = create('button', 'igdc-ott-ad-skip', phrase('skipAd'));
+        skip.type = 'button';
+        skip.addEventListener('click', finish);
+        card.appendChild(skip);
+      }, skipAfter * 1000);
+    }
+    instance.cleanup.push(finish);
+  }
+  function browserSupportsNativeHls(video) {
+    try { return Boolean(video && video.canPlayType && video.canPlayType('application/vnd.apple.mpegurl')); } catch (_) { return false; }
+  }
+  function renderVideo(instance, content, savedState, ad, target) {
+    if (!instance || instance.disposed) return;
+    var streamUrl = allowedUrl(content && content.stream && content.stream.url);
+    var mount = target || instance.stage;
+    if (!streamUrl) {
+      renderCard(mount, { title: phrase('preparingTitle'), text: phrase('preparingText') });
+      return;
+    }
+    clearStage(mount);
+    var shell = create('div', 'igdc-ott-video-shell');
     var video = document.createElement('video');
+    if (String(content && content.stream && content.stream.format || '').toLowerCase() === 'hls' && !browserSupportsNativeHls(video)) {
+      renderCard(mount, { title: phrase('unavailableTitle'), text: phrase('hlsUnavailable') });
+      return;
+    }
     video.className = 'igdc-ott-video';
     video.controls = true;
     video.playsInline = true;
     video.preload = 'metadata';
     video.src = streamUrl;
-    if (content.posterUrl) video.poster = allowedStreamUrl(content.posterUrl);
+    if (content.posterUrl) video.poster = allowedUrl(content.posterUrl);
     video.setAttribute('aria-label', text(content.title) || titleFor(instance.card));
+    shell.appendChild(video);
+    mount.appendChild(shell);
+    instance.video = video;
+    instance.content = content;
+    instance.cleanup = instance.cleanup || [];
+    var captions = cleanCaptions(content && content.captions);
+    appendCaptionControl(instance, shell, video, captions, savedState);
     video.addEventListener('error', function () {
       if (instance.disposed) return;
-      renderCard(instance.stage, { title: phrase('unavailableTitle'), text: phrase('mediaError') });
+      renderCard(mount, { title: phrase('unavailableTitle'), text: phrase('mediaError') });
     }, { once: true });
-    instance.stage.appendChild(video);
-    instance.video = video;
-    var play = video.play();
-    if (play && typeof play.catch === 'function') play.catch(function () {});
+    video.addEventListener('loadedmetadata', function () {
+      if (instance.disposed) return;
+      attachProgressTracking(instance, video, content);
+      function startProgram() { showResume(instance, shell, video, savedState); }
+      if (ad) showAd(instance, shell, ad, startProgram);
+      else startProgram();
+    }, { once: true });
   }
-  function responseJson(response) {
-    return response.json().catch(function () { return {}; });
+  function attachVideo(instance, content, series) {
+    if (!instance || instance.disposed) return;
+    renderLoading(instance.stage);
+    Promise.all([loadViewingState(instance), loadAdDecision(instance)]).then(function (result) {
+      if (instance.disposed) return;
+      if (series) renderSeriesPlayback(instance, series, content, result[0], result[1]);
+      else renderVideo(instance, content, result[0], result[1]);
+    }).catch(function () {
+      if (instance.disposed) return;
+      if (series) renderSeriesPlayback(instance, series, content, readLocalState(instance), null);
+      else renderVideo(instance, content, readLocalState(instance), null);
+    });
   }
-  function loadPlayback(instance) {
-    var endpoint = new URL(PLAYBACK_URL, global.location.origin);
-    endpoint.searchParams.set('id', instance.contentId);
-    return global.fetch(endpoint.toString(), {
+
+  function loadPlayback(instance, rootId, episodeId) {
+    var endpointUrl = new URL(PLAYBACK_URL, global.location.origin);
+    endpointUrl.searchParams.set('id', text(rootId) || instance.seriesId || instance.rootContentId || instance.contentId);
+    if (text(episodeId)) endpointUrl.searchParams.set('episode', text(episodeId));
+    return global.fetch(endpointUrl.toString(), {
       method: 'GET',
       credentials: 'same-origin',
       cache: 'no-store',
@@ -248,8 +886,16 @@
       return responseJson(response).then(function (payload) { return { response: response, payload: payload || {} }; });
     });
   }
+  function cleanupInstance(instance) {
+    if (!instance) return;
+    (instance.cleanup || []).splice(0).forEach(function (fn) {
+      try { fn(); } catch (_) {}
+    });
+    instance.flushProgress = null;
+  }
   function fallbackLegacy(instance) {
     if (!instance || instance.disposed) return;
+    cleanupInstance(instance);
     instances.delete(instance.stage);
     clearStage(instance.stage);
     try { instance.legacyMount(instance.stage, instance.card); } catch (_) {
@@ -261,7 +907,15 @@
       if (instance.disposed) return;
       var response = result.response;
       var payload = result.payload || {};
+      if (response.ok && payload.ok && payload.mode === 'series' && payload.series) {
+        instance.viewerKey = text(payload.viewer && payload.viewer.key);
+        instance.seriesId = text(payload.series.contentId) || instance.rootContentId;
+        instance.series = payload.series;
+        renderSeriesBrowser(instance, payload.series);
+        return;
+      }
       if (response.ok && payload.ok && payload.content) {
+        instance.viewerKey = text(payload.viewer && payload.viewer.key);
         showPilotNotice(instance, payload.content);
         return;
       }
@@ -295,9 +949,18 @@
       stage: stage,
       card: card,
       contentId: contentId,
+      rootContentId: contentId,
+      seriesId: '',
+      series: null,
+      activeSeasonNumber: 0,
       legacyMount: options.legacyMount,
       disposed: false,
-      video: null
+      video: null,
+      content: null,
+      viewerKey: '',
+      captionLanguage: '',
+      cleanup: [],
+      flushProgress: null
     };
     instances.set(stage, instance);
     renderLoading(stage);
@@ -307,7 +970,11 @@
   function dispose(stage) {
     var instance = stage && instances.get(stage);
     if (!instance) return;
+    try {
+      if (instance.flushProgress) instance.flushProgress(true, Boolean(instance.video && instance.video.ended));
+    } catch (_) {}
     instance.disposed = true;
+    cleanupInstance(instance);
     try {
       if (instance.video) {
         instance.video.pause();
@@ -350,7 +1017,7 @@
     }, 250);
   }
 
-  global.IGDCMediaHubOTTInline = { mount: mount, dispose: dispose, VERSION: '1.0.0-inline-stage2-3' };
+  global.IGDCMediaHubOTTInline = { mount: mount, dispose: dispose, VERSION: '1.2.0-inline-stage2-6-hardened' };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', resumeAfterLogin, { once: true });
   else resumeAfterLogin();
 })(window, document);

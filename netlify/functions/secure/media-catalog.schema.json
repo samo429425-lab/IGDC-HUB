@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IGDC MARU Media Hub OTT Pilot Catalog v2 — single titles and series",
+  "type": "object",
+  "required": [
+    "version",
+    "updatedAt",
+    "items"
+  ],
+  "properties": {
+    "version": {
+      "const": "media.catalog.v2"
+    },
+    "updatedAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "items": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/catalogItem"
+          }
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/catalogItem"
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "catalogItem": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/single"
+        },
+        {
+          "$ref": "#/$defs/series"
+        }
+      ]
+    },
+    "base": {
+      "type": "object",
+      "required": [
+        "contentId",
+        "title",
+        "status",
+        "pilot",
+        "rights"
+      ],
+      "properties": {
+        "contentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 260
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "status": {
+          "const": "ready"
+        },
+        "pilot": {
+          "$ref": "#/$defs/pilot"
+        },
+        "rights": {
+          "$ref": "#/$defs/rights"
+        },
+        "posterUrl": {
+          "type": "string"
+        },
+        "adPolicy": {
+          "$ref": "#/$defs/adPolicy"
+        }
+      }
+    },
+    "single": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "delivery"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "single",
+                "movie",
+                "video",
+                "documentary"
+              ]
+            },
+            "delivery": {
+              "$ref": "#/$defs/delivery"
+            },
+            "captions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/caption"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "series": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "seasons"
+          ],
+          "properties": {
+            "kind": {
+              "const": "series"
+            },
+            "seasons": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 60,
+              "items": {
+                "$ref": "#/$defs/season"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "season": {
+      "type": "object",
+      "required": [
+        "seasonNumber",
+        "episodes"
+      ],
+      "properties": {
+        "seasonNumber": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 180
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "episodes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 600,
+          "items": {
+            "$ref": "#/$defs/episode"
+          }
+        }
+      }
+    },
+    "episode": {
+      "type": "object",
+      "required": [
+        "contentId",
+        "title",
+        "episodeNumber",
+        "delivery"
+      ],
+      "properties": {
+        "contentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 260
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "episodeNumber": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9999
+        },
+        "status": {
+          "const": "ready"
+        },
+        "pilot": {
+          "$ref": "#/$defs/pilot"
+        },
+        "rights": {
+          "$ref": "#/$defs/rights"
+        },
+        "posterUrl": {
+          "type": "string"
+        },
+        "delivery": {
+          "$ref": "#/$defs/delivery"
+        },
+        "captions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/caption"
+          }
+        },
+        "adPolicy": {
+          "$ref": "#/$defs/adPolicy"
+        }
+      }
+    },
+    "pilot": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "access"
+      ],
+      "properties": {
+        "enabled": {
+          "const": true
+        },
+        "access": {
+          "const": "member_free"
+        }
+      }
+    },
+    "rights": {
+      "type": "object",
+      "required": [
+        "status",
+        "basis",
+        "sourceUrl",
+        "verifiedAt",
+        "verifiedBy",
+        "territories"
+      ],
+      "properties": {
+        "status": {
+          "const": "cleared"
+        },
+        "basis": {
+          "enum": [
+            "public_domain",
+            "cc_by",
+            "cc_by_sa",
+            "government_open",
+            "direct_license",
+            "distribution_agreement"
+          ]
+        },
+        "sourceUrl": {
+          "type": "string"
+        },
+        "licenseUrl": {
+          "type": "string"
+        },
+        "evidenceUrl": {
+          "type": "string"
+        },
+        "verifiedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "verifiedBy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "territories": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "attribution": {
+          "type": "string"
+        }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "required": [
+        "profile",
+        "mode",
+        "format"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "direct",
+            "broker"
+          ]
+        },
+        "format": {
+          "enum": [
+            "mp4",
+            "webm",
+            "hls"
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "assetKey": {
+          "type": "string"
+        },
+        "captions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/caption"
+          }
+        }
+      }
+    },
+    "caption": {
+      "type": "object",
+      "required": [
+        "language",
+        "label",
+        "src"
+      ],
+      "properties": {
+        "language": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "subtitles",
+            "captions"
+          ]
+        },
+        "src": {
+          "type": "string"
+        },
+        "default": {
+          "type": "boolean"
+        }
+      }
+    },
+    "adPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "const": true
+        },
+        "approved": {
+          "const": true
+        },
+        "mode": {
+          "enum": [
+            "house",
+            "sponsored"
+          ]
+        },
+        "placement": {
+          "const": "preroll"
+        },
+        "approvedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "approvedBy": {
+          "type": "string"
+        },
+        "allowedHosts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "creative": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

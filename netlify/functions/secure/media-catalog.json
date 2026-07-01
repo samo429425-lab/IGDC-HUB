@@ -1,5 +1,36 @@
 {
-  "version": "media.catalog.v1",
+  "version": "media.catalog.v2",
   "updatedAt": null,
+  "policy": {
+    "pilotRequires": [
+      "status_ready",
+      "pilot_explicitly_enabled",
+      "pilot_member_free_access",
+      "rights_cleared",
+      "rights_basis_allowed",
+      "source_and_license_or_contract_evidence",
+      "verified_at_and_verified_by",
+      "territory_scope",
+      "enabled_delivery_profile",
+      "https_or_same_origin_allowlisted_delivery"
+    ],
+    "allowedRightsBasis": [
+      "public_domain",
+      "cc_by",
+      "cc_by_sa",
+      "government_open",
+      "direct_license",
+      "distribution_agreement"
+    ],
+    "note": "Keep items empty until a rights-cleared pilot title and its approved delivery profile are verified. Series use seasons[].episodes[]; no episode stream URL is exposed in the initial series response.",
+    "seriesPilotRequires": [
+      "series_ready_and_member_free",
+      "series_rights_cleared",
+      "episode_unique_content_id",
+      "episode_rights_inherited_or_explicitly_cleared",
+      "episode_delivery_profile_and_url_verified",
+      "episode_stream_returned_only_after_episode_selection"
+    ]
+  },
   "items": {}
 }

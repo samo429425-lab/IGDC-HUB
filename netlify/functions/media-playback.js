@@ -1,19 +1,29 @@
 'use strict';
 
 /*
- * Media Hub pilot playback metadata gateway — stages 2–3
+ * Media Hub pilot playback metadata gateway — stages 2–6 + series.
  *
- * Delivery URLs are read only from netlify/functions/secure/media-catalog.json.
- * A content record must be explicitly marked ready and rights-cleared before a
- * verified existing IGDC member receives any stream metadata. There is no PG,
- * advertising, resume storage, subtitle generation, translation, or dubbing in
- * this stage.
+ * A series card opens an in-page season/episode browser. It never receives a
+ * delivery URL. An individual episode receives a delivery URL only after its
+ * own rights, pilot, and delivery validation passes for a verified member.
  */
-const fs = require('fs');
-const path = require('path');
-const { authenticateMember, clean } = require('./lib/media-member-auth');
-
-const MAX_CONTENT_ID_LENGTH = 260;
+const crypto = require('crypto');
+const {
+  contentId,
+  episodeItem,
+  findItem,
+  findSeriesEpisode,
+  isSeriesItem,
+  publicContent,
+  publicSeries,
+  readCatalog,
+  readDeliveryProfiles,
+  text,
+  validatePilotItem,
+  validatePilotSeries
+} = require('./lib/media-catalog-policy');
+const { resolveDelivery } = require('./lib/media-delivery');
+const { authenticateMember } = require('./lib/media-member-auth');
 
 function json(statusCode, body) {
   return {
@@ -28,95 +38,92 @@ function json(statusCode, body) {
     body: JSON.stringify(body || {})
   };
 }
-function readCatalog() {
-  const locations = [
-    path.join(__dirname, 'secure', 'media-catalog.json'),
-    path.join(process.cwd(), 'netlify', 'functions', 'secure', 'media-catalog.json')
-  ];
-  for (const file of locations) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (parsed && typeof parsed === 'object') return parsed;
-    } catch (_) {}
-  }
-  return { items: {} };
+
+function viewerKey(memberId) {
+  return crypto.createHash('sha256').update(text(memberId, 500)).digest('hex').slice(0, 32);
 }
-function contentId(value) {
-  const id = clean(value);
-  if (!id || id.length > MAX_CONTENT_ID_LENGTH || /[\u0000-\u001F<>"'`]/.test(id)) return '';
-  return id;
-}
-function catalogRecord(catalog, id) {
-  const items = catalog && catalog.items;
-  if (Array.isArray(items)) return items.find((item) => contentId(item && (item.contentId || item.id)) === id) || null;
-  if (items && typeof items === 'object') {
-    const direct = items[id];
-    if (direct && typeof direct === 'object') return { ...direct, contentId: contentId(direct.contentId || id) };
-    return Object.values(items).find((item) => item && contentId(item.contentId || item.id) === id) || null;
-  }
-  return null;
-}
-function allowedUrl(value) {
-  const raw = clean(value);
-  if (!raw) return '';
-  if (raw.startsWith('/')) return raw;
-  try {
-    const url = new URL(raw);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : '';
-  } catch (_) {
-    return '';
-  }
-}
-function text(value, limit) { return clean(value).slice(0, limit || 5000); }
-function isReadyForPilot(record) {
-  const status = text(record && record.status, 40).toLowerCase();
-  const rights = text(record && (record.rightsStatus || (record.rights && record.rights.status)), 40).toLowerCase();
-  return status === 'ready' && rights === 'cleared';
-}
-function buildContent(record, id) {
-  const delivery = record && (record.delivery || record.stream || record);
-  const streamUrl = allowedUrl(delivery && (delivery.url || delivery.streamUrl || delivery.manifestUrl));
-  if (!streamUrl) return null;
-  const format = text(delivery && (delivery.format || delivery.type || delivery.protocol), 24).toLowerCase() ||
-    (streamUrl.toLowerCase().includes('.webm') ? 'webm' : streamUrl.toLowerCase().includes('.m3u8') ? 'hls' : 'mp4');
+
+function access(member) {
   return {
-    contentId: id,
-    title: text(record.title || record.name || id, 300),
-    description: text(record.description || record.summary || '', 4000),
-    posterUrl: allowedUrl(record.posterUrl || record.poster || record.thumbnail),
-    stream: { format, url: streamUrl }
+    viewer: { member: true, key: viewerKey(member.memberId), roles: member.roles },
+    access: { mode: 'pilot_member_free', memberOnly: true, paymentRequired: false, noticeRequired: true }
   };
+}
+
+function query(event, name) {
+  return contentId(event && event.queryStringParameters && event.queryStringParameters[name]);
 }
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: { 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Cache-Control': 'no-store' }, body: '' };
   if (event.httpMethod !== 'GET') return json(405, { ok: false, error: 'method_not_allowed' });
+
   try {
-    const id = contentId(event.queryStringParameters && (event.queryStringParameters.id || event.queryStringParameters.contentId));
+    const id = query(event, 'id') || query(event, 'contentId');
+    const requestedEpisodeId = query(event, 'episode') || query(event, 'episodeId');
     if (!id) return json(400, { ok: false, error: 'invalid_content_id' });
 
-    const record = catalogRecord(readCatalog(), id);
-    // Preserve the pre-existing inline player for every card not explicitly
+    const catalog = readCatalog();
+    const record = findItem(catalog, id);
+    // Preserve the original inline player for every card not explicitly
     // enrolled in the OTT pilot catalog.
     if (!record) return json(404, { ok: false, error: 'ott_not_registered' });
-    if (!isReadyForPilot(record)) return json(409, { ok: false, error: 'content_not_ready' });
 
-    const content = buildContent(record, id);
-    if (!content) return json(409, { ok: false, error: 'content_not_ready' });
-
+    // A registered OTT item remains member-only, including a series whose
+    // episodes may still be incomplete. Unregistered cards fall through above.
     const member = await authenticateMember(event);
-    return json(200, {
+    const profiles = readDeliveryProfiles();
+    const identity = access(member);
+
+    if (isSeriesItem(record)) {
+      const seriesValidation = validatePilotSeries(record, profiles);
+      if (!seriesValidation.ok) return json(409, { ok: false, error: 'content_not_ready' });
+      const series = publicSeries(seriesValidation, profiles);
+      if (!series.seasons.length) return json(409, { ok: false, error: 'content_not_ready' });
+
+      if (!requestedEpisodeId) {
+        return json(200, Object.assign({
+          ok: true,
+          stage: 'pilot_member_series',
+          mode: 'series',
+          series
+        }, identity));
+      }
+
+      const episode = findSeriesEpisode(record, requestedEpisodeId);
+      if (!episode) return json(404, { ok: false, error: 'episode_not_found' });
+      const episodeValidation = validatePilotItem(episodeItem(record, episode), profiles);
+      if (!episodeValidation.ok) return json(409, { ok: false, error: 'episode_not_ready' });
+      const stream = await resolveDelivery(episodeValidation, member);
+      return json(200, Object.assign({
+        ok: true,
+        stage: 'pilot_member_playback',
+        mode: 'episode',
+        series: Object.assign({}, series, { selectedEpisodeId: episodeValidation.contentId }),
+        content: Object.assign(publicContent(episodeValidation, stream), {
+          episodeNumber: episode.episodeNumber,
+          seasonNumber: episode.seasonNumber,
+          seasonTitle: episode.seasonTitle || ''
+        })
+      }, identity));
+    }
+
+    if (requestedEpisodeId) return json(400, { ok: false, error: 'episode_parameter_not_allowed' });
+    const validation = validatePilotItem(record, profiles);
+    if (!validation.ok) return json(409, { ok: false, error: 'content_not_ready' });
+
+    const stream = await resolveDelivery(validation, member);
+    return json(200, Object.assign({
       ok: true,
       stage: 'pilot_member_playback',
-      viewer: { member: true, roles: member.roles },
-      access: { mode: 'pilot_member_free', memberOnly: true, paymentRequired: false, noticeRequired: true },
-      content
-    });
+      mode: 'single',
+      content: publicContent(validation, stream)
+    }, identity));
   } catch (error) {
     return json(error.statusCode || 500, {
       ok: false,
       error: error.code || 'media_playback_failed',
-      message: error.message || 'Unable to prepare pilot playback.'
+      message: text(error.message || 'Unable to prepare pilot playback.', 360)
     });
   }
 };

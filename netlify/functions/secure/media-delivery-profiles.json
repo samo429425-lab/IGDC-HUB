@@ -1,0 +1,32 @@
+{
+  "version": "media.delivery.v1",
+  "updatedAt": null,
+  "profiles": {
+    "direct_https": {
+      "enabled": false,
+      "mode": "direct",
+      "formats": ["mp4", "webm"],
+      "allowSameOrigin": false,
+      "allowedHosts": [],
+      "hlsBrowserMode": "disabled"
+    },
+    "hls_https": {
+      "enabled": false,
+      "mode": "direct",
+      "formats": ["hls"],
+      "allowSameOrigin": false,
+      "allowedHosts": [],
+      "hlsBrowserMode": "native_only"
+    },
+    "signed_delivery_broker": {
+      "enabled": false,
+      "mode": "broker",
+      "formats": ["mp4", "webm", "hls"],
+      "allowSameOrigin": false,
+      "allowedHosts": [],
+      "hlsBrowserMode": "native_only",
+      "brokerUrlEnv": "MEDIA_DELIVERY_BROKER_URL",
+      "brokerTokenEnv": "MEDIA_DELIVERY_BROKER_TOKEN"
+    }
+  }
+}
