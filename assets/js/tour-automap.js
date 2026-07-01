@@ -204,14 +204,31 @@
     panel.appendChild(frag);
   }
 
+  function isMobileRailViewport() {
+    if (typeof window.matchMedia === "function") {
+      return window.matchMedia("(max-width: 1024px)").matches;
+    }
+    return (window.innerWidth || document.documentElement.clientWidth || 0) <= 1024;
+  }
+
   function renderMobileRail(items) {
     const rail = byId(MOBILE_RAIL_ID);
     const list = $(MOBILE_LIST_SEL);
     if (!rail || !list) return;
 
-    if (!items || !items.length) return;
+    // The rail is mobile-only. The initial data render must never force it
+    // onto a desktop page, even when the iframe reports a transient narrow width.
+    if (!isMobileRailViewport()) {
+      rail.style.display = "none";
+      rail.setAttribute("aria-hidden", "true");
+      return;
+    }
 
     rail.style.display = "block";
+    rail.setAttribute("aria-hidden", "false");
+
+    if (!items || !items.length) return;
+
     ensureMobileCss();
 
     list.innerHTML = "";
