@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.4.4-i18n';
+  var VERSION = '2.5.1-roleclaims';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -29,6 +29,7 @@
     query: '',
     page: 0,
     total: 0,
+    hasMore: false,
     lastFocus: null
   };
 
@@ -38,7 +39,9 @@
     member_standard: 2,
     member_premium: 3,
     special_menber: 4,
+    special_member: 4,
     commerce_manager: 5,
+    site_manager: 12,
     site_manager_home_om: 10,
     site_manager_home_op: 11,
     site_manager_home: 12,
@@ -64,6 +67,7 @@
     site_manager_director: 14,
     director: 15,
     admin: 20,
+    super_admin: 25,
     owner: 30
   };
 
@@ -140,13 +144,13 @@
       commerceTitle:'커머스/상위 권한', commerceDesc:'상품·커머스·상위 롤은 관리자 검토 후 부여합니다.', commerceApply:'커머스 신청',
       standardTitle:'스탠다드 신청', standardDesc:'기본 회원 서비스 확장 신청입니다.', standardApply:'스탠다드 신청',
       memberPageTitle:'회원 페이지', memberPageDesc:'전용 문서, 문의, 제출 상태를 확인합니다.', openMemberPage:'회원 페이지 열기',
-      adminMembersTitle:'관리자 회원 목록', adminMembersDesc:'owner/admin 권한으로 OS0/Auth0 회원 목록을 불러오고 롤을 관리합니다.', openMembers:'회원 목록 열기', openReview:'승급 검토 열기',
+      adminMembersTitle:'관리자 회원 목록', adminMembersDesc:'실제 Auth0 세션으로 권한 범위의 회원 목록을 불러오고 롤을 관리합니다.', openMembers:'회원 목록 열기', openReview:'승급 검토 열기',
       loginStateTitle:'로그인 상태', siteRole:'사이트 역할 표시', tokenOk:'Auth0 ID 토큰이 정상 연결되어 있습니다.', tokenMissing:'역할 표시는 있으나 Auth0 ID 토큰이 없거나 만료되었습니다. 회원 목록 조회는 세션 갱신 후 가능합니다.', renewSession:'세션 갱신',
       loginTitle:'로그인', loginDesc:'회원전용 영역은 로그인 후 사용할 수 있습니다.',
       submitTitle:'서류 제출', submitDesc:'회원 서류/검토 자료를 제출합니다. 실제 저장은 서버 API 또는 기존 제출 엔진과 연결됩니다.', titleLabel:'제목', submitTitlePlaceholder:'제출 제목', bodyLabel:'내용', submitBodyPlaceholder:'제출 내용', submitButton:'제출',
       questionTitle:'질문/문의', questionDesc:'일반 회원은 질문을 등록할 수 있고, 답글은 관리자 권한에서 활성화됩니다.', qTitleLabel:'질문 제목', qTitlePlaceholder:'질문 제목', qBodyLabel:'질문 내용', qBodyPlaceholder:'질문 내용', qButton:'질문 등록', openReplyAdmin:'답글 관리 열기',
       noticeTitle:'공지사항', noticeDesc:'공지 목록은 서버 API 연결 시 자동으로 표시됩니다.', manageNotice:'공지 작성/답글 관리',
-      noPermission:'권한 없음', save:'변경', block:'차단', adminMembersTitle2:'OS0/Auth0 회원 목록', adminMembersDesc2:'현재 롤 확인, 변경 롤 선택, 차단 관리를 이 목록에서 처리합니다. owner만 owner를 볼 수 있고, admin은 owner를 볼 수 없습니다. director/site_manager_director는 자기보다 아래 롤만 관리합니다.', search:'검색', colMember:'회원', colRole:'현재 롤', colChangeReview:'변경 롤/승급 검토', colManage:'관리', noMembers:'관리 권한으로 볼 수 있는 회원이 없거나 API 연결 대기 중입니다.', shown:'표시', serverQuery:'서버 조회', page:'페이지',
+      noPermission:'권한 없음', save:'변경', block:'차단', adminMembersTitle2:'OS0/Auth0 회원 목록', adminMembersDesc2:'현재 롤 확인·변경·차단을 처리합니다. owner는 전체, admin은 owner를 제외한 전체를 관리합니다. director·site manager는 자기보다 낮은 롤만 보이며, 상위·동급 롤은 목록에서 제외됩니다.', search:'검색', colMember:'회원', colRole:'현재 롤', colChangeReview:'변경 롤/승급 검토', colManage:'관리', noMembers:'관리 권한으로 볼 수 있는 회원이 없거나 API 연결 대기 중입니다.', shown:'표시', serverQuery:'서버 조회', page:'페이지', previous:'이전', next:'다음',
       reviewDocDefault:'제출 서류', open:'열람', detail:'상세', approve:'승인', reject:'반려', reviewTitle:'승급 검토', reviewRefresh:'새로고침', reviewDesc:'회원이 제출한 서류와 승급·권한 신청 자료를 검토하는 영역입니다. owner는 전체, admin은 owner 제외, director/site_manager_director는 자기보다 아래 롤의 제출 자료만 볼 수 있습니다.', reviewHeadDoc:'제출 서류', reviewHeadMember:'회원', reviewHeadTarget:'요청 롤', reviewHeadStatus:'상태', reviewHeadReview:'검토', noReviewDocs:'현재 권한으로 볼 수 있는 제출 서류가 없거나, 서류 검토 API 연결 대기 중입니다.', shownItems:'표시', serverItems:'서버 조회',
       adminNoticeTitle:'답글/공지 관리', adminNoticeDesc:'관리자 권한에서만 답글 작성·공지 등록 버튼이 활성화됩니다.', targetTitleLabel:'대상/제목', targetTitlePlaceholder:'공지 제목 또는 답글 대상', adminNoticeBodyLabel:'내용', adminNoticeBodyPlaceholder:'공지 또는 답글 내용', register:'등록',
       registered:'등록되었습니다.', reviewTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 승급 검토를 다시 열어야 합니다.', reviewApiMissing:'서류 검토 API 연결이 필요합니다.', noAttachment:'열람 가능한 첨부 URL이 없습니다.', confirmProcess:'처리할까요?', memberTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 회원 목록을 다시 열어야 합니다.', tokenExpiredSuffix:' / 현재 로그인 세션 토큰이 만료되었거나 없습니다.', changeNoPerm:'현재 권한으로는 해당 롤로 변경할 수 없습니다.', confirmRoleChangePrefix:'회원 롤을 ', confirmRoleChangeSuffix:' 로 변경할까요?', confirmBlock:'이 회원을 차단/퇴출 처리할까요?', upgradeRequested:'신청되었습니다.'
@@ -157,13 +161,13 @@
       commerceTitle:'Commerce / Higher Permissions', commerceDesc:'Product, commerce, and higher roles are assigned after administrator review.', commerceApply:'Apply for Commerce',
       standardTitle:'Standard Application', standardDesc:'Apply to extend basic member services.', standardApply:'Apply for Standard',
       memberPageTitle:'Member Page', memberPageDesc:'Check private documents, inquiries, and submission status.', openMemberPage:'Open Member Page',
-      adminMembersTitle:'Admin Member List', adminMembersDesc:'Load and manage OS0/Auth0 members and roles with owner/admin permission.', openMembers:'Open Member List', openReview:'Open Review Queue',
+      adminMembersTitle:'Admin Member List', adminMembersDesc:'Load and manage the permitted Auth0 member scope through a real signed-in session.', openMembers:'Open Member List', openReview:'Open Review Queue',
       loginStateTitle:'Login Status', siteRole:'Site role', tokenOk:'The Auth0 ID token is connected correctly.', tokenMissing:'A site role is visible, but the Auth0 ID token is missing or expired. Renew the session before viewing the member list.', renewSession:'Renew session',
       loginTitle:'Login', loginDesc:'Members-only areas are available after login.',
       submitTitle:'Document Submission', submitDesc:'Submit member documents or review materials. Actual saving is handled by the server API or the existing submission engine.', titleLabel:'Title', submitTitlePlaceholder:'Submission title', bodyLabel:'Content', submitBodyPlaceholder:'Submission content', submitButton:'Submit',
       questionTitle:'Questions / Inquiry', questionDesc:'General members can submit questions, and replies are enabled for administrators.', qTitleLabel:'Question title', qTitlePlaceholder:'Question title', qBodyLabel:'Question content', qBodyPlaceholder:'Question content', qButton:'Submit Question', openReplyAdmin:'Open Reply Management',
       noticeTitle:'Notices', noticeDesc:'Notice lists are displayed automatically when the server API is connected.', manageNotice:'Create Notice / Manage Replies',
-      noPermission:'No permission', save:'Save', block:'Block', adminMembersTitle2:'OS0/Auth0 Member List', adminMembersDesc2:'Check current roles, choose new roles, and manage blocking from this list. Only owner can view owner; admin cannot view owner. director/site_manager_director can manage only roles below their own.', search:'Search', colMember:'Member', colRole:'Current Role', colChangeReview:'Change Role / Review', colManage:'Manage', noMembers:'No members are visible with the current permission, or the API is waiting for connection.', shown:'Shown', serverQuery:'Server query', page:'Page',
+      noPermission:'No permission', save:'Save', block:'Block', adminMembersTitle2:'OS0/Auth0 Member List', adminMembersDesc2:'Check roles, change allowed roles, and manage blocking. Owners manage all; admins manage everyone except owners. Directors and site managers see only lower roles; higher and equal roles are excluded.', search:'Search', colMember:'Member', colRole:'Current Role', colChangeReview:'Change Role / Review', colManage:'Manage', noMembers:'No members are visible with the current permission, or the API is waiting for connection.', shown:'Shown', serverQuery:'Server query', page:'Page', previous:'Previous', next:'Next',
       reviewDocDefault:'Submitted Document', open:'Open', detail:'Details', approve:'Approve', reject:'Reject', reviewTitle:'Review Queue', reviewRefresh:'Refresh', reviewDesc:'Review member-submitted documents and upgrade/permission requests. Owner can view all, admin can view all except owner, and director/site_manager_director can view only roles below their own.', reviewHeadDoc:'Document', reviewHeadMember:'Member', reviewHeadTarget:'Requested Role', reviewHeadStatus:'Status', reviewHeadReview:'Review', noReviewDocs:'No submitted documents are visible with the current permission, or the review API is waiting for connection.', shownItems:'Shown', serverItems:'Server query',
       adminNoticeTitle:'Replies / Notice Management', adminNoticeDesc:'Reply and notice registration buttons are enabled only for administrators.', targetTitleLabel:'Target / Title', targetTitlePlaceholder:'Notice title or reply target', adminNoticeBodyLabel:'Content', adminNoticeBodyPlaceholder:'Notice or reply content', register:'Register',
       registered:'Registered.', reviewTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the review queue.', reviewApiMissing:'Document review API connection is required.', noAttachment:'No viewable attachment URL is available.', confirmProcess:'Proceed?', memberTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the member list.', tokenExpiredSuffix:' / The current login session token is missing or expired.', changeNoPerm:'You do not have permission to assign this role.', confirmRoleChangePrefix:'Change this member role to ', confirmRoleChangeSuffix:'?', confirmBlock:'Block or remove this member?', upgradeRequested:'Application submitted.'
@@ -214,7 +218,12 @@
       return true;
     });
   }
-  function roleLevel(role) { return ROLE_LEVEL[normalizeRole(role)] || 0; }
+  function roleLevel(role) {
+    var normalized = normalizeRole(role);
+    if (ROLE_LEVEL[normalized] != null) return ROLE_LEVEL[normalized];
+    if (normalized.indexOf('site_manager_') === 0) return 12;
+    return 0;
+  }
   function highestRole(roles) {
     roles = unique(roles);
     if (!roles.length) return 'guest';
@@ -222,7 +231,7 @@
   }
   function isManagerRole(role) {
     role = normalizeRole(role);
-    return role === 'owner' || role === 'admin' || role === 'director' || role === 'site_manager_director';
+    return role === 'owner' || role === 'admin' || role === 'super_admin' || role === 'director' || role === 'coordinator_director' || role === 'site_manager' || role === 'site_manager_director' || role.indexOf('site_manager_') === 0;
   }
   function canAdmin(roles) {
     roles = unique(roles);
@@ -237,7 +246,7 @@
     if (!isManagerRole(mine)) return false;
     var target = highestRole(targetRoles || []);
     if (mine === 'owner') return true;
-    if (mine === 'admin') return target !== 'owner';
+    if (mine === 'admin' || mine === 'super_admin') return target !== 'owner';
     return roleLevel(target) < roleLevel(mine);
   }
   function canAssignRole(myRoles, targetRole) {
@@ -245,7 +254,7 @@
     targetRole = normalizeRole(targetRole);
     if (!isManagerRole(mine)) return false;
     if (mine === 'owner') return true;
-    if (mine === 'admin') return targetRole !== 'owner';
+    if (mine === 'admin' || mine === 'super_admin') return targetRole !== 'owner';
     return roleLevel(targetRole) < roleLevel(mine);
   }
   function roleEngineRole() {
@@ -313,30 +322,23 @@
   }
 
   function readRoles() {
-    var roles = [];
-    try { pushRoleValue(roles, window.__IGDC_ROLE); } catch (e) {}
-    try { pushRoleValue(roles, window.__IGDC_ROLE_LABEL); } catch (e) {}
-    try { pushRoleValue(roles, window.__IGTC_ROLE); } catch (e) {}
-    try { pushRoleValue(roles, window.__IGTC_ROLE_LABEL); } catch (e) {}
-    try { pushRoleValue(roles, window.USER_ROLE); } catch (e) {}
-    try { if (roleEngineRole()) pushRoleValue(roles, roleEngineRole()); } catch (e) {}
-    try { if (document.documentElement && document.documentElement.dataset && document.documentElement.dataset.role) pushRoleValue(roles, document.documentElement.dataset.role); } catch (e) {}
-    roles = roles.concat(visibleHeaderRoles());
     try {
-      var stored = localStorage.getItem('igdc_role') || localStorage.getItem('igdc_roles');
-      var storedLabel = localStorage.getItem('igdc_role_label');
-      if (stored) roles = roles.concat(stored.indexOf('[') === 0 ? safeJsonParse(stored, []) : stored.split(',')).map(normalizeRole);
-      if (storedLabel) pushRoleValue(roles, storedLabel);
+      if (window.IGDCMemberAuth) {
+        if (!window.IGDCMemberAuth.isAuthenticated || !window.IGDCMemberAuth.isAuthenticated()) return [];
+        if (typeof window.IGDCMemberAuth.getRoles === 'function') return unique(window.IGDCMemberAuth.getRoles());
+      }
     } catch (e) {}
+    if (!hasValidToken()) return [];
+    var roles = [];
     try {
       if (window.osAuth && typeof window.osAuth.getIdTokenPayload === 'function') {
-        var p = window.osAuth.getIdTokenPayload() || {};
-        var keys = [cfg().rolesClaim, 'https://igdcglobal.com/roles', 'https://example.com/roles', 'https://osu/roles', 'roles', 'role', 'permissions'];
-        keys.forEach(function (k) {
-          if (!k) return;
-          var v = p[k];
-          if (Array.isArray(v)) roles = roles.concat(v);
-          else if (typeof v === 'string') roles = roles.concat(v.split(','));
+        var payload = window.osAuth.getIdTokenPayload() || {};
+        var keys = [cfg().rolesClaim, 'https://igdcglobal.com/roles', 'https://os.auth/roles', 'https://os0.app/roles', 'https://example.com/roles', 'https://osu/roles', 'roles', 'role', 'permissions'];
+        keys.forEach(function (key) {
+          if (!key) return;
+          var value = payload[key];
+          if (Array.isArray(value)) roles = roles.concat(value);
+          else if (typeof value === 'string') roles = roles.concat(value.split(','));
         });
       }
     } catch (e) {}
@@ -420,29 +422,27 @@
       admin: canAdmin(roles)
     };
   }
-  function openLogin() {
-    if (hasKnownSession()) {
+  function openLogin(force) {
+    if (!force && hasValidToken()) {
       try { if (window.IGDCMemberAdminModal && typeof window.IGDCMemberAdminModal.open === 'function') { window.IGDCMemberAdminModal.open('member-home'); return; } } catch (e) {}
-      try { alert(lang() === 'ko' ? '이미 로그인되어 있습니다.' : 'You are already signed in.'); } catch (e) {}
       return;
     }
+    try {
+      if (window.IGDCMemberAuth && typeof window.IGDCMemberAuth.beginLogin === 'function') {
+        window.IGDCMemberAuth.beginLogin();
+        return;
+      }
+    } catch (e) {}
     if (typeof window.osLogin === 'function') { window.osLogin(); return; }
     if (typeof window.loginWithRedirect === 'function') { window.loginWithRedirect(); return; }
     try { document.dispatchEvent(new CustomEvent('igdc:login-request')); } catch (e) {}
-    var btn = document.getElementById('osLoginBtn') || document.querySelector('[data-os-login], .os-login, [data-login]');
-    if (btn) {
-      var txt = String(btn.textContent || '').toLowerCase();
-      if (txt.indexOf('logout') < 0 && txt.indexOf('로그아웃') < 0) btn.click();
-    }
   }
-  function targetPage() {
-    return canAdmin(readRoles()) ? (cfg().adminPage || 'admin.html') : (cfg().memberPage || 'member.html');
-  }
+  /* Member and delegated administration stay inside this modal.
+     There is no separate member-page route. The public admin console remains
+     accessible through the site navigation under its own access controls. */
+  function targetPage() { return ''; }
   function openTarget() {
-    var url = targetPage();
-    var frame = document.getElementById('mainFrame') || document.querySelector('iframe[name="mainFrame"]');
-    if (frame) frame.src = url;
-    else window.location.href = url;
+    setTab(canAdmin(readRoles()) ? 'admin-members' : 'member-home');
   }
   function headers() {
     var h = {'Content-Type':'application/json'};
@@ -577,7 +577,6 @@
       '<div class="igdc-ma-top"><div><h2>'+esc(titleForTab(labels))+'</h2><div class="muted">IGDC Member/Admin Modal v'+VERSION+'</div></div>'+
       '<div class="igdc-ma-actions">'+
         (!(hasPlatformRole() || (me && me.role && me.role !== 'guest'))?'<button type="button" class="primary" data-action="login">'+esc(labels.login)+'</button>':(!hasValidToken()?'<button type="button" data-action="login">'+esc(labels.renew || '세션 갱신')+'</button>':''))+
-        '<button type="button" data-action="open-page">'+esc(admin?labels.adminPage:labels.memberPage)+'</button>'+
         '<button type="button" data-close>'+esc(labels.close)+'</button>'+
       '</div></div>'+
       '<div class="igdc-ma-content">'+
@@ -610,7 +609,6 @@
       '<div class="card"><h4>'+esc(u.premiumTitle)+'</h4><div class="muted">'+esc(u.premiumDesc)+'</div><br><button '+(!canPremium?'disabled':'')+' data-action="request-upgrade" data-role="premium">'+esc(u.premiumApply)+'</button></div>'+
       '<div class="card"><h4>'+esc(u.commerceTitle)+'</h4><div class="muted">'+esc(u.commerceDesc)+'</div><br><button '+(!canCommerce?'disabled':'')+' data-action="request-upgrade" data-role="commerce">'+esc(u.commerceApply)+'</button></div>'+
       '<div class="card"><h4>'+esc(u.standardTitle)+'</h4><div class="muted">'+esc(u.standardDesc)+'</div><br><button '+(!canStandard?'disabled':'')+' data-action="request-upgrade" data-role="standard">'+esc(u.standardApply)+'</button></div>'+
-      '<div class="card"><h4>'+esc(u.memberPageTitle)+'</h4><div class="muted">'+esc(u.memberPageDesc)+'</div><br><button class="primary" data-action="open-page">'+esc(u.openMemberPage)+'</button></div>'+
       (me.admin ? '<div class="card"><h4>'+esc(u.adminMembersTitle)+'</h4><div class="muted">'+esc(u.adminMembersDesc)+'</div><br><button class="primary" data-tab="admin-members">'+esc(u.openMembers)+'</button> <button data-tab="admin-queue">'+esc(u.openReview)+'</button></div>' : '')+
       (hasPlatformRole()
         ? '<div class="card"><h4>'+esc(u.loginStateTitle)+'</h4><div class="muted">'+esc(u.siteRole)+': <b>'+esc(me.role || 'member')+'</b><br>'+(hasValidToken()?esc(u.tokenOk):esc(u.tokenMissing))+'</div>'+(hasValidToken()?'':'<br><button data-action="login">'+esc(u.renewSession)+'</button>')+'</div>'
@@ -644,6 +642,7 @@
       'member_premium',
       'special_menber',
       'commerce_manager',
+      'site_manager',
       'site_manager.home.om',
       'site_manager.home.op',
       'site_manager.home',
@@ -704,7 +703,7 @@
         '<div class="igdc-ma-member-head"><div>User ID</div><div>'+esc(u.colMember)+'</div><div>'+esc(u.colRole)+'</div><div>'+esc(u.colChangeReview)+'</div><div>'+esc(u.colManage)+'</div></div>'+
         (rows || '<div class="igdc-ma-member-row"><div class="muted" style="grid-column:1/-1">'+esc(u.noMembers)+'</div></div>')+
       '</div>'+ 
-      '<div class="muted" style="margin-top:8px">'+esc(u.shown)+' '+esc(visibleMembers.length)+' / '+esc(u.serverQuery)+' '+esc(STATE.total || STATE.members.length)+' / '+esc(u.page)+' '+esc(STATE.page + 1)+'</div></div>';
+      '<div class="row" style="margin-top:8px;justify-content:space-between"><div class="muted">'+esc(u.shown)+' '+esc(visibleMembers.length)+' / '+esc(u.serverQuery)+' '+esc(STATE.total || STATE.members.length)+' / '+esc(u.page)+' '+esc(STATE.page + 1)+'</div><div class="row"><button data-action="prev-members" '+(STATE.page > 0 ? '' : 'disabled')+'>'+esc(u.previous || 'Previous')+'</button><button data-action="next-members" '+(STATE.hasMore ? '' : 'disabled')+'>'+esc(u.next || 'Next')+'</button></div></div></div>';
   }
   function docRoles(doc) {
     return unique(
@@ -778,9 +777,11 @@
     if (!action) return;
     ev.preventDefault();
     var act = action.getAttribute('data-action');
-    if (act === 'login') openLogin();
+    if (act === 'login') openLogin(true);
     else if (act === 'open-page') openTarget();
     else if (act === 'reload-members') loadMembers();
+    else if (act === 'prev-members') { if (STATE.page > 0) { STATE.page -= 1; loadMembers(); } }
+    else if (act === 'next-members') { if (STATE.hasMore) { STATE.page += 1; loadMembers(); } }
     else if (act === 'search-members') { var s = document.getElementById('igdc-member-search'); STATE.query = s ? s.value : ''; STATE.page = 0; loadMembers(); }
     else if (act === 'save-role') saveRole(action.closest('[data-user-id]'));
     else if (act === 'block-user') blockUser(action.closest('[data-user-id]'));
@@ -861,6 +862,7 @@
       STATE.loading = false;
       STATE.members = [];
       STATE.total = 0;
+      STATE.hasMore = false;
       STATE.error = uiText().memberTokenMissing;
       render();
       return;
@@ -869,10 +871,12 @@
     apiGet({action:'members', q:STATE.query || '', page:STATE.page || 0, per_page:cfg().perPage || 50}).then(function (data) {
       STATE.members = data.users || data.members || [];
       STATE.total = data.total || STATE.members.length;
+      STATE.hasMore = !!data.has_more;
       STATE.loading = false;
       render();
     }).catch(function (e) {
       STATE.loading = false;
+      STATE.hasMore = false;
       STATE.error = (e.message || t().apiMissing) + (!hasValidToken() ? uiText().tokenExpiredSuffix : '');
       render();
     });
@@ -898,7 +902,7 @@
     apiPost('request-upgrade', {role:role}).then(function () { alert(uiText().upgradeRequested); }).catch(function (e) { setError(e.message); });
   }
   function open(preferredTab) {
-    if (!hasKnownSession()) { openLogin(); return; }
+    if (!hasValidToken()) { openLogin(true); return; }
     STATE.lastFocus = document.activeElement;
     STATE.opened = true;
     STATE.tab = preferredTab || 'member-home';

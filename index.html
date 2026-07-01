@@ -1349,7 +1349,6 @@ window.addEventListener('DOMContentLoaded', function() {
 /* removed auto-detect block */
 </script>
 <!-- Auth0 + Role/Donation unified bridge (popup) -->
-<script src="/assets/js/auth-bridge.v2.js"></script>
 <script>
 // === 7 Role Upgrade ===
 // Define roles: admin, director, siteAdmin, special, commerceAdmin, member, guest
@@ -2509,103 +2508,40 @@ function setActive(i){
 </script>
 <script src="edge-autohide-mobile.js"></script>
 <script src="assets/js/seller-modal.addon.js"></script>
-<script id="igdc-member-auth-click-guard-v1">
+<script src="/assets/js/igdc-member-auth.js?v=1.0.1-roleclaims"></script>
+<script id="igdc-member-auth-click-guard-v2">
 (function(){
-  if (window.__IGDC_MEMBER_AUTH_CLICK_GUARD_V1__) return;
-  window.__IGDC_MEMBER_AUTH_CLICK_GUARD_V1__ = true;
+  'use strict';
+  if (window.__IGDC_MEMBER_AUTH_CLICK_GUARD_V2__) return;
+  window.__IGDC_MEMBER_AUTH_CLICK_GUARD_V2__ = true;
 
-  var ROLE_RE = /^(owner|admin|director|site_manager_director|coordinator_director|commerce_manager|member|member_standard|member_premium|special_menber|special_member|site_manager(?:_[a-z0-9_]+)?|운영자|관리자|회원)$/i;
+  function openOrLogin(){
+    var auth = window.IGDCMemberAuth;
+    if (!auth || typeof auth.isAuthenticated !== 'function' || !auth.isAuthenticated()) {
+      try {
+        if (auth && typeof auth.beginLogin === 'function') { auth.beginLogin(); return; }
+      } catch (e) {}
+      try { if (typeof window.osLogin === 'function') { window.osLogin(); return; } } catch (e) {}
+      return;
+    }
+    try {
+      if (window.IGDCMemberAdminModal && typeof window.IGDCMemberAdminModal.open === 'function') {
+        window.IGDCMemberAdminModal.open('member-home');
+      }
+    } catch (e) {}
+  }
 
-  function norm(v){ return String(v == null ? '' : v).trim().toLowerCase().replace(/[\s.]+/g, '_'); }
-  function cleanText(v){ return String(v == null ? '' : v).replace(/\s+/g,' ').trim(); }
-  function push(out, v){
-    v = cleanText(v);
-    if(!v) return;
-    var n = norm(v);
-    if(!n || n === 'guest' || n === '게스트' || n === 'os-login' || n === 'os_login' || n === 'login' || n === 'logout' || n === '회원전용' || n === 'members_only') return;
-    if (ROLE_RE.test(n) || n.indexOf('site_manager') === 0 || n.indexOf('member') === 0) out.push(n);
-  }
-  function textOf(id){ var el=document.getElementById(id); return el ? el.textContent : ''; }
-  function visibleTopRole(){
-    var out=[];
-    try{
-      ['roleStatusBtn','igtcRoleText3','igtcRoleInline3','userRole'].forEach(function(id){ push(out, textOf(id)); });
-      var login=document.getElementById('osLoginBtn');
-      if(login){
-        var sib=login.nextElementSibling;
-        if(sib) push(out, sib.textContent);
-      }
-      Array.prototype.forEach.call(document.querySelectorAll('[data-role-base], [data-current-role], [data-igdc-role], .role-display'), function(el){
-        push(out, el.getAttribute('data-role-base'));
-        push(out, el.getAttribute('data-current-role'));
-        push(out, el.getAttribute('data-igdc-role'));
-        push(out, el.textContent);
-      });
-      if(!out.length){
-        Array.prototype.forEach.call(document.querySelectorAll('button,span,div'), function(el){
-          try{
-            var r=el.getBoundingClientRect();
-            if(r.top < 130 && r.left < 420 && r.width < 280 && r.height < 80) push(out, el.textContent);
-          }catch(e){}
-        });
-      }
-    }catch(e){}
-    return out[0] || '';
-  }
-  function storedRole(){
-    try{
-      var keys=['igdc_role','igdc_roles','igdc_role_label'];
-      for(var i=0;i<keys.length;i++){
-        var v=localStorage.getItem(keys[i]) || sessionStorage.getItem(keys[i]);
-        if(v){
-          if(v.charAt(0)==='['){ try{ var arr=JSON.parse(v); if(arr && arr.length) return norm(arr[0]); }catch(e){} }
-          return norm(String(v).split(',')[0]);
-        }
-      }
-    }catch(e){}
-    return '';
-  }
-  function sessionRole(){
-    var out=[];
-    try{ push(out, window.__IGDC_ROLE); }catch(e){}
-    try{ push(out, window.__IGDC_ROLE_LABEL); }catch(e){}
-    try{ push(out, window.__IGTC_ROLE); }catch(e){}
-    try{ push(out, window.USER_ROLE); }catch(e){}
-    push(out, visibleTopRole());
-    push(out, storedRole());
-    return out[0] || '';
-  }
-  function isAuthed(){
-    try{ if(window.osAuth && typeof window.osAuth.isAuthenticated === 'function' && window.osAuth.isAuthenticated()) return true; }catch(e){}
-    return !!sessionRole();
-  }
-  function isAdminRole(role){
-    role = norm(role || sessionRole());
-    return role === 'owner' || role === 'admin' || role === 'director' || role === 'site_manager_director' || role === 'coordinator_director' || role.indexOf('site_manager') === 0;
-  }
-  function openMemberArea(){
-    try{ if(window.IGDCMemberAdminModal && typeof window.IGDCMemberAdminModal.open === 'function'){ window.IGDCMemberAdminModal.open('member-home'); return true; } }catch(e){}
-    try{ if(typeof window.openMemberAdminModal === 'function'){ window.openMemberAdminModal('member-home'); return true; } }catch(e){}
-    try{
-      var url = isAdminRole() ? 'admin.html' : 'member.html';
-      var frame = document.getElementById('mainFrame') || document.querySelector('iframe[name="mainFrame"]');
-      if(frame) frame.src = url; else window.location.href = url;
-      return true;
-    }catch(e){}
-    return false;
-  }
-  document.addEventListener('click', function(ev){
-    var t = ev.target && ev.target.closest && ev.target.closest('#mo-btn,[data-member-modal="open"],.js-member-admin-modal-trigger,.js-seller-modal-trigger');
-    if(!t) return;
-    if(!isAuthed()) return;
-    ev.preventDefault();
-    ev.stopImmediatePropagation();
-    ev.stopPropagation();
-    openMemberArea();
+  document.addEventListener('click', function(event){
+    var target = event.target && event.target.closest && event.target.closest('#mo-btn,[data-member-modal="open"],.js-member-admin-modal-trigger,.js-seller-modal-trigger');
+    if (!target) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    event.stopPropagation();
+    openOrLogin();
   }, true);
 })();
 </script>
-<script src="assets/js/member-admin-modal.js?v=2.4.3-sync"></script>
+<script src="assets/js/member-admin-modal.js?v=2.5.1-roleclaims"></script>
 <!-- IGDC scroll/nav/header minimal shim v9 (header push-down; parent scroll off; nav baseline) -->
 <style id="igdc-scroll-shim-style">
   /* Header: visual hide; when hidden, remove space and ignore pointer events */
@@ -2786,7 +2722,7 @@ function setActive(i){
 })();
 </script>
 <script src="assets/js/seller-modal.addon.js"></script>
-<script src="assets/js/member-admin-modal.js?v=2.4.3-sync"></script>
+<script src="assets/js/member-admin-modal.js?v=2.5.1-roleclaims"></script>
 <script src="/CoreLogic/modules/thumbnail-feed/thumbnail-loader.min.js"></script>
 <!-- ABSOLUTE-KEY NAV FIX V3 BEGIN -->
 <style>
@@ -3446,7 +3382,7 @@ function normLang(l){
   };
 </script>
 
-<script src="/assets/js/member-admin-modal.js?v=2.4.3-sync"></script>
+<script src="/assets/js/member-admin-modal.js?v=2.5.1-roleclaims"></script>
 
 <!-- IGDC mobile logout final guard v1 -->
 <script id="igdc-mobile-logout-final-guard-v1">
@@ -3461,15 +3397,26 @@ function normLang(l){
   }
   function hasFreshToken(){
     try{
-      var t = tokenObj();
-      if(!t) return false;
-      var exp = Number(t.exp || 0);
-      if(exp && Math.floor(Date.now()/1000) < exp) return true;
-      if(t.id_token || t.access_token) return true;
+      if(window.IGDCMemberAuth && typeof window.IGDCMemberAuth.isAuthenticated === 'function'){
+        return !!window.IGDCMemberAuth.isAuthenticated();
+      }
     }catch(e){}
     try{
-      return !!(localStorage.getItem('id_token') || localStorage.getItem('os_id_token') || localStorage.getItem('access_token') || localStorage.getItem('os_access_token'));
+      var t = tokenObj();
+      var exp = Number(t && t.exp || 0);
+      return !!(t && exp && Math.floor(Date.now()/1000) < exp);
     }catch(e){ return false; }
+  }
+  function clearStaleRoleMarkers(){
+    try{
+      ['igdc_role','igdc_roles','igdc_role_label'].forEach(function(key){ localStorage.removeItem(key); sessionStorage.removeItem(key); });
+      window.__IGDC_ROLE = 'guest';
+      document.documentElement.dataset.role = 'guest';
+      ['roleStatusBtn','igtcRoleText3','igtcRoleInline3','userRole'].forEach(function(id){
+        var el = byId(id);
+        if(el && /owner|admin|director|manager/i.test(String(el.textContent || ''))) el.textContent = '';
+      });
+    }catch(e){}
   }
   function isAuthed(){
     try{
@@ -3543,6 +3490,7 @@ function normLang(l){
       btn.removeAttribute('data-os-login');
       btn.removeAttribute('data-os-logout');
     } else {
+      clearStaleRoleMarkers();
       if(btn.textContent !== 'OS‑Login') btn.textContent = 'OS‑Login';
       btn.setAttribute('aria-label','OS-Login');
       btn.setAttribute('data-igdc-auth-state','login');
