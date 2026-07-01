@@ -1,11 +1,11 @@
 {
-  "version": "media.catalog.v2",
+  "version": "media.catalog.v3",
   "updatedAt": null,
   "policy": {
     "pilotRequires": [
       "status_ready",
       "pilot_explicitly_enabled",
-      "pilot_member_free_access",
+      "access_rule_member_free_or_explicit_media_access_product",
       "rights_cleared",
       "rights_basis_allowed",
       "source_and_license_or_contract_evidence",
@@ -22,14 +22,15 @@
       "direct_license",
       "distribution_agreement"
     ],
-    "note": "Keep items empty until a rights-cleared pilot title and its approved delivery profile are verified. Series use seasons[].episodes[]; no episode stream URL is exposed in the initial series response.",
+    "note": "Keep items empty until a rights-cleared title and approved delivery profile are verified. Legacy member_free remains available for a pilot; paid titles require an explicit access{} rule with approved server-side products. Series use seasons[].episodes[]; no episode stream URL is exposed in the initial series response.",
     "seriesPilotRequires": [
-      "series_ready_and_member_free",
+      "series_ready_and_explicit_access_rule",
       "series_rights_cleared",
       "episode_unique_content_id",
       "episode_rights_inherited_or_explicitly_cleared",
       "episode_delivery_profile_and_url_verified",
-      "episode_stream_returned_only_after_episode_selection"
+      "episode_stream_returned_only_after_episode_selection",
+      "entitlement_verified_before_paid_delivery"
     ]
   },
   "items": {}

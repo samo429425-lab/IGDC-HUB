@@ -17,6 +17,8 @@
   var PLAYBACK_URL = '/.netlify/functions/media-playback';
   var VIEWING_STATE_URL = '/.netlify/functions/media-viewing-state';
   var AD_DECISION_URL = '/.netlify/functions/media-ad-decision';
+  var ACCESS_URL = '/.netlify/functions/media-access';
+  var ACCESS_ORDER_URL = '/.netlify/functions/media-access-order';
   var LOGIN_RETURN_KEY = 'igdc.media.ott.login-return.v1';
   var LOGIN_RETURN_TTL_MS = 15 * 60 * 1000;
   var LOCAL_STATE_PREFIX = 'igdc.media.ott.viewing-state.v1';
@@ -59,7 +61,27 @@
       previousEpisodes: '이전 회차',
       nextEpisodes: '다음 회차',
       noEpisodes: '현재 시청 가능한 회차가 없습니다.',
-      episodeUnavailable: '이 회차는 아직 시청 준비 중입니다.'
+      episodeUnavailable: '이 회차는 아직 시청 준비 중입니다.',
+      accessTag: 'Media Access',
+      accessTitle: '이 콘텐츠는 이용권이 필요합니다',
+      accessText: '이 콘텐츠는 회원 이용권 또는 구독 권한이 확인된 뒤 시청할 수 있습니다.',
+      accessPrepareTitle: '이용권 결제를 준비 중입니다',
+      accessPrepareText: '카드 결제 연결은 PG 승인 후 활성화됩니다. 현재는 상품·권한·결제 주문 구조만 안전하게 준비되어 있습니다.',
+      accessOpen: '이용권 확인',
+      accessBack: '시청 정보로 돌아가기',
+      accessOffers: '이용권 선택',
+      accessNoOffers: '현재 선택 가능한 이용권이 준비 중입니다.',
+      accessTerms: '이용권 조건 및 환불 안내를 확인했습니다.',
+      accessPrepareOrder: '결제 준비 확인',
+      accessTermsRequired: '이용권 조건 확인이 필요합니다.',
+      accessOrderReadyTitle: '결제 준비가 완료되었습니다',
+      accessOrderReadyText: 'PG 승인과 카드 결제 연결이 완료되면 이 주문 흐름에서 안전하게 결제가 진행됩니다. 현재 결제나 청구는 이루어지지 않습니다.',
+      accessPendingTitle: '결제 연결 준비 중',
+      accessPendingText: '이 콘텐츠의 이용권·권한 구조는 준비되어 있으나 카드 결제 연결은 아직 활성화되지 않았습니다.',
+      accessError: '이용권 정보를 불러올 수 없습니다.',
+      accessPrice: '이용 요금',
+      accessPaymentPending: 'PG 승인 대기',
+      accessPlan: '이용권'
     },
     en: {
       loading: 'Checking viewing access…',
@@ -93,7 +115,27 @@
       previousEpisodes: 'Previous episodes',
       nextEpisodes: 'Next episodes',
       noEpisodes: 'No episodes are currently available to view.',
-      episodeUnavailable: 'This episode is not ready for viewing yet.'
+      episodeUnavailable: 'This episode is not ready for viewing yet.',
+      accessTag: 'Media Access',
+      accessTitle: 'This title requires viewing access',
+      accessText: 'A valid member pass or subscription entitlement is required before playback can begin.',
+      accessPrepareTitle: 'Access payment is being prepared',
+      accessPrepareText: 'Card payment will be activated after PG approval. The product, entitlement, and order safeguards are ready without collecting a charge.',
+      accessOpen: 'View access options',
+      accessBack: 'Back to viewing details',
+      accessOffers: 'Choose access',
+      accessNoOffers: 'Access options are being prepared.',
+      accessTerms: 'I have reviewed the access terms and refund information.',
+      accessPrepareOrder: 'Prepare payment flow',
+      accessTermsRequired: 'Please confirm the access terms first.',
+      accessOrderReadyTitle: 'Payment preparation is complete',
+      accessOrderReadyText: 'After PG approval and card activation, this order flow will continue securely. No payment or charge is made now.',
+      accessPendingTitle: 'Payment connection is being prepared',
+      accessPendingText: 'The access and entitlement structure is ready, but card payment is not activated yet.',
+      accessError: 'Unable to load access information.',
+      accessPrice: 'Price',
+      accessPaymentPending: 'PG approval pending',
+      accessPlan: 'Access pass'
     }
   };
 
@@ -245,6 +287,12 @@
       '.igdc-ott-episode-fallback{display:grid;place-items:center;color:#9db6d5;font-size:.78rem}',
       '.igdc-ott-episode-meta{display:block;padding:7px 8px 8px;line-height:1.35}.igdc-ott-episode-number{display:block;color:#9ec4ff;font-size:.75rem;font-weight:700}.igdc-ott-episode-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.82rem}',
       '.igdc-ott-series-empty{max-width:1180px;margin:24px auto;padding:18px;border:1px solid rgba(255,255,255,.16);border-radius:10px;background:#111927;color:#cbd6e7}',
+      '.igdc-ott-access{max-width:760px;margin:24px;padding:24px;border:1px solid rgba(255,255,255,.18);border-radius:12px;background:rgba(9,14,22,.96);color:#eef3fb;line-height:1.5}',
+      '.igdc-ott-access h2{margin:0 0 8px;font-size:1.2rem}.igdc-ott-access p{margin:0;color:#cbd6e7}',
+      '.igdc-ott-access-products{display:grid;gap:10px;margin-top:16px}.igdc-ott-access-product{padding:14px;border:1px solid rgba(255,255,255,.18);border-radius:9px;background:#111927}',
+      '.igdc-ott-access-product h3{margin:0 0 5px;font-size:1rem}.igdc-ott-access-price{margin-top:8px;color:#9ec4ff;font-weight:700}',
+      '.igdc-ott-access-terms{display:flex;align-items:flex-start;gap:8px;margin-top:14px;color:#d5deec;font-size:.88rem}.igdc-ott-access-terms input{margin-top:3px}',
+      '.igdc-ott-access-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.igdc-ott-access-actions button{min-height:40px;padding:8px 13px;border:1px solid rgba(255,255,255,.26);border-radius:8px;background:#275ea8;color:#fff;font:inherit;font-weight:700;cursor:pointer}.igdc-ott-access-actions button.secondary{background:#202b3d}',
       '@keyframes igdcOttSpin{to{transform:rotate(360deg)}}',
       '@media(max-width:700px){.igdc-ott-card{margin:14px;padding:18px}.igdc-ott-action{width:100%}.igdc-ott-tools{top:8px;right:8px}.igdc-ott-caption-label{font-size:.75rem}.igdc-ott-caption-select{max-width:150px}.igdc-ott-resume-card,.igdc-ott-ad-card{padding:16px}.igdc-ott-series{padding:14px}.igdc-ott-series-head h2{font-size:1.1rem}.igdc-ott-episode{flex-basis:144px}.igdc-ott-episode img,.igdc-ott-episode-fallback{height:80px}}'
     ].join('');
@@ -264,6 +312,14 @@
       button.type = 'button';
       button.addEventListener('click', options.action.onClick);
       card.appendChild(button);
+    }
+    if (options.secondaryAction) {
+      var secondary = create('button', 'igdc-ott-action', options.secondaryAction.label);
+      secondary.type = 'button';
+      secondary.style.marginLeft = '8px';
+      secondary.style.background = '#202b3d';
+      secondary.addEventListener('click', options.secondaryAction.onClick);
+      card.appendChild(secondary);
     }
     stage.appendChild(card);
   }
@@ -445,10 +501,143 @@
     instance.stage.appendChild(layout);
     renderVideo(instance, content, savedState, ad, playerTarget);
   }
+  function accessTargetId(instance) {
+    return text(instance && (instance.accessTargetId || instance.seriesId || instance.rootContentId || instance.contentId));
+  }
+  function fetchJson(url, init) {
+    return global.fetch(url, init).then(function (response) {
+      return responseJson(response).then(function (payload) { return { response: response, payload: payload || {} }; });
+    });
+  }
+  function money(value) {
+    if (!value || !text(value.currency) || !Number.isFinite(Number(value.amountMinor))) return '';
+    try {
+      return new Intl.NumberFormat(currentLanguage() === 'ko' ? 'ko-KR' : 'en-US', {
+        style: 'currency', currency: text(value.currency), minimumFractionDigits: 2, maximumFractionDigits: 2
+      }).format(Number(value.amountMinor) / 100);
+    } catch (_) { return text(value.currency) + ' ' + (Number(value.amountMinor) / 100).toFixed(2); }
+  }
+  function accessBack(instance) {
+    if (!instance || instance.disposed) return;
+    if (instance.series) { renderSeriesBrowser(instance, instance.series, instance.activeSeasonNumber); return; }
+    run(instance);
+  }
+  function renderAccessPending(instance, payload) {
+    var access = payload && payload.access || {};
+    renderCard(instance.stage, {
+      eyebrow: phrase('accessTag'),
+      title: phrase('accessPendingTitle'),
+      text: text(payload && payload.message) || (access.state === 'offer_pending' ? phrase('accessNoOffers') : phrase('accessPendingText')),
+      secondaryAction: { label: phrase('accessBack'), onClick: function () { accessBack(instance); } }
+    });
+  }
+  function showAccessRequired(instance, payload) {
+    var access = payload && payload.access || {};
+    if (access.state === 'offer_pending' || access.state === 'storage_pending' || access.state === 'configuration_pending') {
+      renderAccessPending(instance, payload || {});
+      return;
+    }
+    renderCard(instance.stage, {
+      eyebrow: phrase('accessTag'),
+      title: phrase('accessTitle'),
+      text: phrase('accessText'),
+      action: { label: phrase('accessOpen'), onClick: function () { openAccessOptions(instance); } },
+      secondaryAction: { label: phrase('accessBack'), onClick: function () { accessBack(instance); } }
+    });
+  }
+  function newAccessButton(label, secondary) {
+    var button = create('button', secondary ? 'secondary' : '', label);
+    button.type = 'button';
+    return button;
+  }
+  function renderAccessOptions(instance, payload) {
+    if (!instance || instance.disposed) return;
+    var access = payload && payload.access || {};
+    var offers = Array.isArray(access.offers) ? access.offers : [];
+    clearStage(instance.stage);
+    var panel = create('section', 'igdc-ott-access');
+    panel.appendChild(create('div', 'igdc-ott-eyebrow', phrase('accessTag')));
+    panel.appendChild(create('h2', '', phrase('accessOffers')));
+    panel.appendChild(create('p', '', phrase('accessText')));
+    var products = create('div', 'igdc-ott-access-products');
+    if (!offers.length) {
+      products.appendChild(create('div', 'igdc-ott-card', phrase('accessNoOffers')));
+    } else {
+      offers.forEach(function (offer) {
+        var product = create('article', 'igdc-ott-access-product');
+        product.appendChild(create('h3', '', text(offer.title) || phrase('accessPlan')));
+        if (text(offer.description)) product.appendChild(create('p', '', text(offer.description)));
+        var price = create('div', 'igdc-ott-access-price');
+        price.textContent = phrase('accessPrice') + ': ' + (money(offer.price) || '-');
+        product.appendChild(price);
+        product.dataset.productId = text(offer.productId);
+        products.appendChild(product);
+      });
+    }
+    panel.appendChild(products);
+    var termsLabel = create('label', 'igdc-ott-access-terms');
+    var checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.name = 'igdc-media-access-terms';
+    termsLabel.appendChild(checkbox);
+    termsLabel.appendChild(create('span', '', phrase('accessTerms')));
+    panel.appendChild(termsLabel);
+    var actions = create('div', 'igdc-ott-access-actions');
+    if (offers.length) {
+      var prepare = newAccessButton(phrase('accessPrepareOrder'));
+      prepare.addEventListener('click', function () {
+        if (!checkbox.checked) { renderCard(instance.stage, { title: phrase('accessPrepareTitle'), text: phrase('accessTermsRequired'), action: { label: phrase('accessOpen'), onClick: function () { openAccessOptions(instance); } } }); return; }
+        var first = offers[0];
+        prepareAccessOrder(instance, first, checkbox.checked);
+      });
+      actions.appendChild(prepare);
+    }
+    var back = newAccessButton(phrase('accessBack'), true);
+    back.addEventListener('click', function () { accessBack(instance); });
+    actions.appendChild(back);
+    panel.appendChild(actions);
+    instance.stage.appendChild(panel);
+  }
+  function openAccessOptions(instance) {
+    if (!instance || instance.disposed) return;
+    renderLoading(instance.stage);
+    var url = new URL(ACCESS_URL, global.location.origin);
+    url.searchParams.set('contentId', accessTargetId(instance));
+    fetchJson(url.toString(), {
+      method: 'GET', credentials: 'same-origin', cache: 'no-store',
+      headers: Object.assign({ Accept: 'application/json' }, authorizationHeaders())
+    }).then(function (result) {
+      if (instance.disposed) return;
+      if (result.response.ok && result.payload && result.payload.ok) { renderAccessOptions(instance, result.payload); return; }
+      if (result.response.status === 401) { showLogin(instance); return; }
+      renderAccessPending(instance, result.payload || {});
+    }).catch(function () { if (!instance.disposed) renderCard(instance.stage, { title: phrase('accessPendingTitle'), text: phrase('accessError') }); });
+  }
+  function prepareAccessOrder(instance, offer, termsAccepted) {
+    if (!instance || instance.disposed || !offer) return;
+    renderLoading(instance.stage);
+    var orderContentId = text(instance.seriesId || instance.rootContentId || instance.contentId);
+    var key = 'ui_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    fetchJson(ACCESS_ORDER_URL, {
+      method: 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: Object.assign({ Accept: 'application/json', 'Content-Type': 'application/json', 'Idempotency-Key': key }, authorizationHeaders()),
+      body: JSON.stringify({ contentId: orderContentId, productId: text(offer.productId), currency: offer.price && offer.price.currency || '', termsAccepted: termsAccepted === true, idempotencyKey: key })
+    }).then(function (result) {
+      if (instance.disposed) return;
+      if (result.response.status === 401) { showLogin(instance); return; }
+      if (result.response.status === 202 && result.payload && result.payload.ok) {
+        renderCard(instance.stage, { eyebrow: phrase('accessPaymentPending'), title: phrase('accessOrderReadyTitle'), text: phrase('accessOrderReadyText'), secondaryAction: { label: phrase('accessBack'), onClick: function () { accessBack(instance); } } });
+        return;
+      }
+      renderCard(instance.stage, { title: phrase('accessPrepareTitle'), text: text(result.payload && result.payload.message) || phrase('accessPendingText'), secondaryAction: { label: phrase('accessBack'), onClick: function () { accessBack(instance); } } });
+    }).catch(function () { if (!instance.disposed) renderCard(instance.stage, { title: phrase('accessPrepareTitle'), text: phrase('accessError') }); });
+  }
+
   function selectSeriesEpisode(instance, series, season, episode) {
     if (!instance || instance.disposed || !text(episode && episode.contentId)) return;
     cleanupActivePlayback(instance);
     instance.seriesId = text(series && series.contentId) || instance.seriesId || instance.rootContentId;
+    instance.accessTargetId = text(episode && episode.contentId) || instance.seriesId;
     instance.activeSeasonNumber = season.seasonNumber;
     renderLoading(instance.stage);
     loadPlayback(instance, instance.seriesId, text(episode.contentId)).then(function (result) {
@@ -462,6 +651,8 @@
         attachVideo(instance, payload.content, instance.series);
         return;
       }
+      if (response.status === 402 && payload.error === 'media_access_required') { showAccessRequired(instance, payload); return; }
+      if (response.status === 503 && (payload.error === 'media_access_not_configured' || payload.error === 'media_access_offer_unavailable')) { renderAccessPending(instance, payload); return; }
       if (response.status === 409 || response.status === 404) {
         renderSeriesBrowser(instance, series, season.seasonNumber);
         return;
@@ -927,6 +1118,14 @@
         showLogin(instance);
         return;
       }
+      if (response.status === 402 && payload.error === 'media_access_required') {
+        showAccessRequired(instance, payload);
+        return;
+      }
+      if (response.status === 503 && (payload.error === 'media_access_not_configured' || payload.error === 'media_access_offer_unavailable')) {
+        renderAccessPending(instance, payload);
+        return;
+      }
       if (response.status === 409 && payload.error === 'content_not_ready') {
         renderCard(instance.stage, { title: phrase('preparingTitle'), text: phrase('preparingText') });
         return;
@@ -950,6 +1149,7 @@
       card: card,
       contentId: contentId,
       rootContentId: contentId,
+      accessTargetId: contentId,
       seriesId: '',
       series: null,
       activeSeasonNumber: 0,
@@ -1017,7 +1217,7 @@
     }, 250);
   }
 
-  global.IGDCMediaHubOTTInline = { mount: mount, dispose: dispose, VERSION: '1.2.0-inline-stage2-6-hardened' };
+  global.IGDCMediaHubOTTInline = { mount: mount, dispose: dispose, VERSION: '1.3.0-inline-stage2-10-access-ready' };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', resumeAfterLogin, { once: true });
   else resumeAfterLogin();
 })(window, document);

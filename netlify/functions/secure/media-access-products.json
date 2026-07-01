@@ -1,0 +1,18 @@
+{
+  "version": "media.access.products.v1",
+  "updatedAt": null,
+  "policy": {
+    "paymentMode": "pg_pending_approval",
+    "cardOnly": true,
+    "allowedCurrencies": ["USD", "CNY", "EUR"],
+    "defaultCurrency": "USD",
+    "currencyRouting": {
+      "chinaTargetedCheckout": "CNY",
+      "euroAreaCheckout": "EUR",
+      "allOtherCheckout": "USD"
+    },
+    "orderIntentTtlMinutes": 30,
+    "note": "Keep products empty until rights-cleared titles, consumer terms, refund policy, and approved card PG onboarding are ready. This file never stores credentials or provider identifiers."
+  },
+  "products": {}
+}

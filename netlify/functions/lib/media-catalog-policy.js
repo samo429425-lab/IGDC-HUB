@@ -23,6 +23,14 @@ const ALLOWED_RIGHTS_BASIS = new Set([
 ]);
 const ALLOWED_FORMATS = new Set(['mp4', 'webm', 'hls']);
 const ALLOWED_PROFILE_MODES = new Set(['direct', 'broker']);
+const ALLOWED_ACCESS_MODES = new Set(['member_free', 'entitlement', 'subscription', 'transaction']);
+const ACCESS_MODE_ALIASES = Object.freeze({
+  member_free: 'member_free', pilot_member_free: 'member_free', free_member: 'member_free',
+  entitlement: 'entitlement', pass: 'entitlement', access_pass: 'entitlement',
+  subscription: 'subscription', recurring: 'subscription',
+  transaction: 'transaction', rental: 'transaction', purchase: 'transaction'
+});
+const ACCESS_SCOPE_TYPES = new Set(['content', 'series', 'catalog']);
 
 function clean(value) {
   return String(value == null ? '' : value).replace(/[\u0000-\u001F]/g, ' ').trim();
@@ -280,21 +288,51 @@ function validateDelivery(item, profiles) {
   };
 }
 
+
+function accessProductIds(value) {
+  const raw = Array.isArray(value) ? value : (typeof value === 'string' ? value.split(',') : []);
+  return Array.from(new Set(raw.map((entry) => text(entry, 120)).filter((entry) => /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(entry)))).slice(0, 24);
+}
+
+function validateAccessRule(item) {
+  const source = item && item.access && typeof item.access === 'object' ? item.access : {};
+  const pilot = item && item.pilot && typeof item.pilot === 'object' ? item.pilot : {};
+  const rawMode = text(source.mode || source.model || pilot.access || 'member_free', 40).toLowerCase().replace(/[\s-]+/g, '_');
+  const mode = ACCESS_MODE_ALIASES[rawMode] || '';
+  const rawScope = text(source.scope || source.scopeType || '', 32).toLowerCase();
+  const scopeType = rawScope || 'content';
+  const productIds = accessProductIds(source.productIds || source.products || source.productId);
+  const availability = text(source.availability || 'active', 32).toLowerCase();
+  const issues = [];
+  if (!ALLOWED_ACCESS_MODES.has(mode)) issues.push('access_mode_not_allowed');
+  if (!ACCESS_SCOPE_TYPES.has(scopeType)) issues.push('access_scope_not_allowed');
+  if (mode && mode !== 'member_free' && !productIds.length) issues.push('access_product_missing');
+  if (!['active', 'scheduled', 'disabled'].includes(availability)) issues.push('access_availability_not_allowed');
+  return {
+    ok: issues.length === 0,
+    issues,
+    mode: mode || 'member_free',
+    scopeType: ACCESS_SCOPE_TYPES.has(scopeType) ? scopeType : 'content',
+    productIds,
+    availability: ['active', 'scheduled', 'disabled'].includes(availability) ? availability : 'disabled',
+    requireTerms: source.requireTerms !== false
+  };
+}
+
 function validatePilotItem(item, profiles) {
   const id = contentId(item && (item.contentId || item.id));
   const issues = [];
   const status = text(item && item.status, 40).toLowerCase();
   const pilot = item && item.pilot && typeof item.pilot === 'object' ? item.pilot : {};
   const pilotEnabled = pilot.enabled === true;
-  const pilotAccess = text(pilot.access || '', 40).toLowerCase();
+  const access = validateAccessRule(item);
   const rights = validateRights(item);
   const delivery = validateDelivery(item, profiles);
 
   if (!id) issues.push('content_id_missing');
   if (status !== 'ready') issues.push('content_status_not_ready');
   if (!pilotEnabled) issues.push('pilot_not_explicitly_enabled');
-  if (pilotAccess !== 'member_free') issues.push('pilot_access_not_member_free');
-  issues.push(...rights.issues, ...delivery.issues);
+  issues.push(...access.issues, ...rights.issues, ...delivery.issues);
 
   return {
     ok: issues.length === 0,
@@ -302,10 +340,12 @@ function validatePilotItem(item, profiles) {
     contentId: id,
     title: text(item && (item.title || item.name || id), 300) || id,
     description: text(item && (item.description || item.summary), 4000),
+    access,
     rights,
     delivery
   };
 }
+
 
 function publicContent(validation, stream) {
   const result = validation || {};
@@ -395,7 +435,7 @@ function seriesSeasons(item) {
 
 function episodeItem(series, episode) {
   if (!series || !episode) return null;
-  // Rights and pilot rules may be stated once at series level, but every
+  // Rights and access rules may be stated once at series level, but every
   // episode must still provide its own delivery target and content id.
   return {
     contentId: contentId(episode.contentId || episode.id),
@@ -403,6 +443,7 @@ function episodeItem(series, episode) {
     description: text(episode.description || episode.summary || '', 4000),
     status: text(episode.status || series.status, 40).toLowerCase(),
     pilot: episode.pilot && typeof episode.pilot === 'object' ? episode.pilot : series.pilot,
+    access: episode.access && typeof episode.access === 'object' ? episode.access : series.access,
     rights: episode.rights && typeof episode.rights === 'object' ? episode.rights : series.rights,
     territories: episode.territories || series.territories,
     posterUrl: episode.posterUrl || episode.poster || episode.thumbnail || series.posterUrl || series.poster || series.thumbnail,
@@ -414,13 +455,14 @@ function episodeItem(series, episode) {
   };
 }
 
+
 function validatePilotSeries(item, profiles) {
   const id = contentId(item && (item.contentId || item.id));
   const issues = [];
   const status = text(item && item.status, 40).toLowerCase();
   const pilot = item && item.pilot && typeof item.pilot === 'object' ? item.pilot : {};
   const pilotEnabled = pilot.enabled === true;
-  const pilotAccess = text(pilot.access || '', 40).toLowerCase();
+  const access = validateAccessRule(item);
   const rights = validateRights(item);
   const seasons = seriesSeasons(item);
 
@@ -428,9 +470,8 @@ function validatePilotSeries(item, profiles) {
   if (!isSeriesItem(item)) issues.push('series_type_missing');
   if (status !== 'ready') issues.push('content_status_not_ready');
   if (!pilotEnabled) issues.push('pilot_not_explicitly_enabled');
-  if (pilotAccess !== 'member_free') issues.push('pilot_access_not_member_free');
   if (!seasons.length) issues.push('series_episodes_missing');
-  issues.push(...rights.issues);
+  issues.push(...access.issues, ...rights.issues);
 
   return {
     ok: issues.length === 0,
@@ -439,10 +480,12 @@ function validatePilotSeries(item, profiles) {
     title: text(item && (item.title || item.name || id), 300) || id,
     description: text(item && (item.description || item.summary), 4000),
     posterUrl: allowedUrl(item && (item.posterUrl || item.poster || item.thumbnail)),
+    access,
     rights,
     seasons
   };
 }
+
 
 function findSeriesEpisode(series, wantedEpisodeId) {
   const wanted = contentId(wantedEpisodeId);
@@ -482,7 +525,14 @@ function publicSeries(validation, profiles) {
       const candidate = episodeItem({
         title: result.title,
         status: 'ready',
-        pilot: { enabled: true, access: 'member_free' },
+        pilot: { enabled: true, access: result.access && result.access.mode === 'member_free' ? 'member_free' : (result.access && result.access.mode || 'member_free') },
+        access: result.access ? {
+          mode: result.access.mode,
+          scope: result.access.scopeType,
+          productIds: result.access.productIds,
+          availability: result.access.availability,
+          requireTerms: result.access.requireTerms
+        } : null,
         rights: result.rights && result.rights.rights,
         posterUrl: result.posterUrl
       }, episode);
@@ -541,6 +591,8 @@ function safeAuditSeries(validation, profiles) {
 
 module.exports = {
   ALLOWED_RIGHTS_BASIS,
+  ALLOWED_ACCESS_MODES,
+  ACCESS_SCOPE_TYPES,
   allowedByProfile,
   allowedUrl,
   clean,
@@ -557,6 +609,7 @@ module.exports = {
   secureDeliveryUrl,
   text,
   validatePilotItem,
+  validateAccessRule,
   validLanguage,
   isSeriesItem,
   validatePilotSeries,

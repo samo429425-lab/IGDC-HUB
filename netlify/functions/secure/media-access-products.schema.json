@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IGDC MARU Media Access Product Catalog v1",
+  "type": "object",
+  "required": ["version", "policy", "products"],
+  "properties": {
+    "version": {"const": "media.access.products.v1"},
+    "updatedAt": {"type": ["string", "null"], "format": "date-time"},
+    "policy": {
+      "type": "object",
+      "required": ["paymentMode", "cardOnly", "allowedCurrencies", "defaultCurrency"],
+      "properties": {
+        "paymentMode": {"const": "pg_pending_approval"},
+        "cardOnly": {"const": true},
+        "allowedCurrencies": {"type": "array", "items": {"enum": ["USD", "CNY", "EUR"]}, "minItems": 1},
+        "defaultCurrency": {"enum": ["USD", "CNY", "EUR"]},
+        "orderIntentTtlMinutes": {"type": "integer", "minimum": 5, "maximum": 120}
+      }
+    },
+    "products": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": {"$ref": "#/$defs/product"}},
+        {"type": "array", "items": {"$ref": "#/$defs/product"}}
+      ]
+    }
+  },
+  "$defs": {
+    "product": {
+      "type": "object",
+      "required": ["productId", "status", "title", "billing", "scope", "prices"],
+      "properties": {
+        "productId": {"type": "string", "minLength": 1, "maxLength": 120},
+        "status": {"enum": ["draft", "active", "retired"]},
+        "title": {"type": "string", "minLength": 1, "maxLength": 180},
+        "description": {"type": "string", "maxLength": 1000},
+        "billing": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {"type": {"enum": ["one_time", "recurring"]}, "durationDays": {"type": "integer", "minimum": 1, "maximum": 36500}}
+        },
+        "scope": {
+          "type": "object",
+          "required": ["type", "ids"],
+          "properties": {"type": {"enum": ["content", "series", "catalog"]}, "ids": {"type": "array", "minItems": 1, "items": {"type": "string"}}}
+        },
+        "prices": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["amountMinor"],
+            "properties": {"amountMinor": {"type": "integer", "minimum": 0}, "taxIncluded": {"type": "boolean"}, "label": {"type": "string", "maxLength": 120}}
+          }
+        },
+        "refundWindowHours": {"type": "integer", "minimum": 0, "maximum": 8760},
+        "termsVersion": {"type": "string", "maxLength": 80}
+      }
+    }
+  }
+}

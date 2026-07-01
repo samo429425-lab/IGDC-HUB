@@ -2963,7 +2963,7 @@ function handleVideoSearch(e){
 
   let activeProvider = "youtube";
 
-  function renderMga provider(){
+  function renderProviders(){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     const bar  = document.querySelector('.provider-bar');
@@ -2999,7 +2999,7 @@ function handleVideoSearch(e){
 
   function setProvider(p){
     activeProvider = p;
-    renderMga provider();
+    renderProviders();
   }
 
   // Click on buttons -> set provider
@@ -3026,7 +3026,7 @@ function handleVideoSearch(e){
   }
 
   // initial render
-  renderMga provider();
+  renderProviders();
 })();
 </script>
 <script>
@@ -3060,7 +3060,7 @@ function handleVideoSearch(e){
 
   function labelOf(p, lang){ return (p.labels && p.labels[lang]) || p.labels?.en || p.key; }
 
-  function orderMga provider(lang){
+  function orderProviders(lang){
     const pri = { global:50, kr:40, cn:40, jp:40 };
     if (lang === "ko") { pri.kr = 10; pri.global = 30; pri.cn = 40; }
     else if (lang === "zh") { pri.cn = 10; pri.global = 30; pri.kr = 40; }
@@ -3086,7 +3086,7 @@ function handleVideoSearch(e){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     if (!form || !sel) return;
-    const ordered = orderMga provider(currentLang);
+    const ordered = orderProviders(currentLang);
     sel.innerHTML = "";
     ordered.forEach(p => {
       const opt = document.createElement("option");
@@ -3111,7 +3111,7 @@ function handleVideoSearch(e){
       const sel = e.target.querySelector('select[name="provider"]');
       const key = sel?.value || "youtube";
       if(!q) return false;
-      const p = [...orderMga provider(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
+      const p = [...orderProviders(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
       window.open((p?.url || "https://www.youtube.com/results?search_query=") + encodeURIComponent(q), "_blank", "noopener,noreferrer");
       return false;
     }
@@ -4161,41 +4161,26 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <script id="igdc-qa-email-ensure">
 (function(){
+  'use strict';
   if (window.__IGDC_QA_EMAIL_ENSURE__) return;
   window.__IGDC_QA_EMAIL_ENSURE__ = true;
-
-  var CONTACT_HTML = "";
-
-  function stripFooterEmail(){
-    try{
-      var footers = document.querySelectorAll('footer');
-      footers.forEach(function(f){
-        // Remove any mailto links
-        f.querySelectorAll('a[href^="mailto:"]').forEach(function(a){
-          var parent = a.parentNode;
-          if(parent){
-            parent.removeChild(a);
-            var html = parent.innerHTML;
-            html = html.replace(/대표\s*이메일\s*:\s*/g, '');
-            html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '<br/>');
-            parent.innerHTML = html;
-          }
-        });
-        // Remove any plain-text "Email ng Kinatawan: ..." remnants
-        f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
-      });
-    }catch(e){}
+})();
+</script>
+<script id="mediahub-mobile-provider-guard">
+(function(){
+  function apply(){
+    try {
+      if (window.matchMedia && window.matchMedia('(max-width:768px)').matches) {
+        var line = document.querySelector('.platform-line');
+        if (line) line.setAttribute('data-providers', '');
+      }
+    } catch (_) {}
   }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply, { once:true });
+  else apply();
+})();
+</script>
 
-  function ensureModal(){
-    var modal = document.querySelector('.igdc-qa-modal');
-    if(!modal){
-      // Create minimal modal sk
-<!-- MediaHub: legacy immediate-card-fullscreen handler retired; playback is handled by mediahub-playback-controller.v2.js. -->
-<!-- stray text suppressed: eleton matching the site's QnA structure
-      var m = document.createElement('div'); m.className='igdc-qa-modal';
-      var b = document.createElement('div');  -->
-<script>document.addEventListener("DOMContentLoaded",()=>{if(matchMedia("(max-width:768px)").matches){const p=document.querySelector(".platform-line");if(p)p.setAttribute("data-providers","");}});</script>
 <!-- thumbnail automapping -->
 <script>
 window.IGDC_QA=window.IGDC_QA||{};
@@ -4209,61 +4194,7 @@ window.addEventListener("message",function(ev){
   try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
 });
 </script>
-<script id="igtc-checkout-trigger-v1">
-(function(){
-  if (window.__IGTC_CHECKOUT_READY__) return;
-  window.IGTC = window.IGTC || {};
-  function safeJSON(s){ try{ return JSON.parse(s); }catch(_){ return null; } }
-  IGTC.checkout = function(opts){
-    try{
-      // Normalize
-      var payload = Object.assign({ method: 'card', amount: 0, currency: 'KRW', meta: {} }, opts||{});
-      // 1) CustomEvent for same-page listeners (optional)
-      try{ window.dispatchEvent(new CustomEvent('IGTC_CHECKOUT', { detail: payload })); }catch(_){}
-      // 2) postMessage for index.html dispatcher (if present)
-      try{ window.postMessage({ type: 'CHECKOUT', payload: payload }, '*'); }catch(_){}
-      // 3) Fallback: call serverless function directly (no-op if not configured)
-      try{
-        fetch('/.netlify/functions/checkout', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
-          .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
-          .then(function(res){
-            if(res && res.redirectUrl){ window.location.assign(res.redirectUrl); }
-            else if(res && res.qr && res.qr.html){
-              // Minimal inline QR modal (scoped)
-              var wrap = document.getElementById('igtc-qr-modal'); 
-              if(!wrap){
-                wrap = document.createElement('div');
-                wrap.id = 'igtc-qr-modal';
-                wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
-                wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Isara</button></div>'
-                  + '<div id="igtc-qr-area"></div></div>';
-                document.body.appendChild(wrap);
-                var btn = document.getElementById('igtc-qr-close');
-                if(btn) btn.addEventListener('click', function(){ wrap.remove(); }, { passive:true });
-              }
-              var area = document.getElementById('igtc-qr-area'); if(area){ area.innerHTML = res.qr.html; }
-            }
-          })
-          .catch(function(){ /* silent fallback */ });
-      }catch(_){}
-    }catch(_){}
-  };
-  // Data-API: any element with [data-checkout] will trigger checkout with attributes
-  document.addEventListener('click', function(e){
-    var el = e.target.closest('[data-checkout]'); if(!el) return;
-    var metaAttr = el.getAttribute('data-meta');
-    var meta = metaAttr ? (safeJSON(metaAttr) || { note: metaAttr }) : {};
-    var amount = parseFloat(el.getAttribute('data-amount')||'0') || 0;
-    var currency = el.getAttribute('data-currency') || 'KRW';
-    var method = el.getAttribute('data-method') || 'card';
-    IGTC.checkout({ method: method, amount: amount, currency: currency, meta: meta });
-    e.preventDefault();
-  }, { passive:true });
-  window.__IGTC_CHECKOUT_READY__ = true;
-})();
-</script>
+
 <script>
 (()=> {
   const form=document.querySelector('#qnaForm,[data-qna-form]');
@@ -4408,158 +4339,11 @@ window.addEventListener("message",function(ev){
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/media-hero-engine.js"></script>
 <script defer="" src="/assets/js/media-empty-handler.js"></script>
-<script id="igdc-media-access-script">
 
-/*
- IGDC Media Access Script
- ----------------------------------------
- - MediaHub 전용 (Netflix / KT / Amazon 스타일)
- - 썸네일 클릭 → 상세 오버레이
- - 시청 / 대여 / 소장 / 찜하기
- - 외부 PG 결제 트리거 연동
- ----------------------------------------
- 전제:
-  - 썸네일 카드에 data-media-id 존재
-  - IGTC.checkout() 존재
-  - window.__IGDC_ROLE, window.__IGDC_USER 존재
-*/
-
-(function (window, document) {
-  'use strict';
-
-  const MediaAccess = {
-    state: {
-      role: 'guest',
-      user: null,
-      activeMediaId: null
-    },
-
-    init() {
-      this.state.role = window.__IGDC_ROLE || 'guest';
-      this.state.user = window.__IGDC_USER || null;
-      this.bindThumbnailClick();
-    },
-
-    /* 1️⃣ 썸네일 클릭 */
-    bindThumbnailClick() {
-      document.addEventListener('click', (e) => {
-        const card = e.target.closest('[data-media-id]');
-        if (!card) return;
-
-        const mediaId = card.dataset.mediaId;
-        if (!mediaId) return;
-
-        this.openDetail(mediaId, card);
-      });
-    },
-
-    /* 2️⃣ 상세 오버레이 */
-    openDetail(mediaId, card) {
-      this.state.activeMediaId = mediaId;
-
-      this.closeDetail();
-
-      const overlay = document.createElement('div');
-      overlay.id = 'igdc-media-overlay';
-      overlay.innerHTML = `
-        <div class="media-modal">
-          <button class="media-close">✕</button>
-          <h2>${card.dataset.title || 'Nilalamang media'}</h2>
-          <p>${card.dataset.description || ''}</p>
-
-          <div class="media-actions">
-            <button data-action="play">▶ Watch Now</button>
-            <button data-action="rent">💳 Rent</button>
-            <button data-action="own">💳 Purchase</button>
-            <button data-action="wish">⭐ Add to Wishlist</button>
-          </div>
-
-          <div class="media-review">
-            <textarea placeholder="Isang-linyang review (opsyonal)" maxlength="200"></textarea>
-            <button data-action="review">Isumite ang review</button>
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(overlay);
-
-      overlay.querySelector('.media-close').onclick = () => this.closeDetail();
-      overlay.onclick = (e) => { if (e.target === overlay) this.closeDetail(); };
-
-      overlay.querySelectorAll('[data-action]').forEach(btn => {
-        btn.onclick = () => this.handleAction(btn.dataset.action);
-      });
-    },
-
-    /* 3️⃣ 버튼 액션 */
-    handleAction(action) {
-      const mediaId = this.state.activeMediaId;
-
-      switch (action) {
-        case 'play':
-          alert('Magsisimula ang playback pagkatapos makumpirma ang mga karapatan sa panonood.');
-          break;
-
-        case 'rent':
-        case 'own':
-          IGTC.checkout({
-            type: 'media',
-            mediaId,
-            mode: action, // rent | own
-            user: this.state.user
-          });
-          break;
-
-        case 'wish':
-          alert('Naidagdag sa iyong wishlist.');
-          break;
-
-        case 'review':
-          alert('Naisumite na ang iyong review.');
-          break;
-      }
-    },
-
-    closeDetail() {
-      const el = document.getElementById('igdc-media-overlay');
-      if (el) el.remove();
-    }
-  };
-
-  /* 기본 스타일 */
-  const style = document.createElement('style');
-  style.textContent = `
-    #igdc-media-overlay {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,.6);
-      z-index: 9999;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .media-modal {
-      background: #fff; padding: 20px;
-      border-radius: 12px; width: 420px;
-    }
-    .media-actions button {
-      margin: 6px 4px;
-    }
-    .media-close {
-      float: right; border: none; background: none; font-size: 18px;
-    }
-    .media-review textarea {
-      width: 100%; margin-top: 10px;
-    }
-  `;
-  document.head.appendChild(style);
-
-  MediaAccess.init();
-  window.IGDCMediaAccess = MediaAccess;
-
-})(window, document);
-</script>
 <!-- Media Hub AutoMap (정본) -->
 <script defer src="/assets/js/igdc-engagement-storage-bridge.js?v=20260629-media-v2"></script>
 <script defer src="/assets/js/mediahub-automap-v3.js?v=20260629-media-v2"></script>
-<script defer src="/assets/js/mediahub-ott-inline.v1.js?v=20260630-ott-stage2-3"></script>
+<script defer src="/assets/js/mediahub-ott-inline.v1.js?v=20260701-ott-stage7-10"></script>
 <script defer src="/assets/js/mediahub-playback-controller.v2.js?v=20260629-media-v2"></script>
 <script id="igdc-media-10section-frame">
 (function(){
