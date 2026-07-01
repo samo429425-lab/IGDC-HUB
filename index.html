@@ -328,6 +328,43 @@ let currentLang = (function () {
 
 let currentPageIndex = 0;
 
+/*
+ * Keep the top-level browser history clean when the same iframe page is
+ * re-applied by language/auth restoration events.  A same-page assignment to
+ * mainFrame creates an extra joint-session-history entry in some browsers.
+ */
+function setMainFramePage(page) {
+  try {
+    var frame = document.getElementById('mainFrame');
+    if (!frame) return false;
+
+    var requested = new URL(String(page || ''), window.location.href).href;
+    var declared = frame.getAttribute('src') || '';
+    if (declared) {
+      try {
+        if (new URL(declared, window.location.href).href === requested) return false;
+      } catch (_) {}
+    }
+
+    try {
+      var live = frame.contentWindow && frame.contentWindow.location && frame.contentWindow.location.href;
+      if (live && new URL(live, window.location.href).href === requested) return false;
+    } catch (_) {}
+
+    frame.src = page;
+    return true;
+  } catch (_) {
+    try {
+      var fallback = document.getElementById('mainFrame');
+      if (fallback) {
+        fallback.src = page;
+        return true;
+      }
+    } catch (_) {}
+  }
+  return false;
+}
+
 function changeLanguage(lang) {
   const nextLang =
     (lang && pageMap[lang]) ? lang :
@@ -387,8 +424,7 @@ function changeLanguage(lang) {
       (pageMap['ko'] && pageMap['ko'][currentPageIndex]) ||
       'home.html';
 
-    var f = document.getElementById('mainFrame');
-    if (f) f.src = page;
+    setMainFramePage(page);
   }catch(e){}
 }
 
@@ -419,7 +455,7 @@ function loadPage(index){
   }catch(e){}
 
   currentPageIndex = index;
-  document.getElementById("mainFrame").src = page;
+  setMainFramePage(page);
 }
 </script>
   
