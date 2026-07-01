@@ -1800,7 +1800,7 @@ function openPopup(url){
       +      info
       +   '</div>'
       +   '<button type="button"'
-      +           ' onclick="if(window.IGDC_WALLET_OPEN){window.IGDC_WALLET_OPEN();}else{alert(\\'지갑 팝업 모듈이 아직 연결되지 않았습니다.\\');}"'
+      +           ' onclick="if(window.IGDC_WALLET_OPEN){window.IGDC_WALLET_OPEN();}else{alert(\'지갑 팝업 모듈이 아직 연결되지 않았습니다.\');}"'
       +           ' style="padding:6px 12px;border-radius:8px;border:1px solid #d8b894;'
       +                  'background:#fff7ec;cursor:pointer;font-size:13px;font-weight:600;">'
       +      '지갑 현황 보기'
@@ -3278,7 +3278,7 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 </div>
 <script>
       (function(){
-        var openBtn   = document.getElementById('igdc-adminpanel-open');.
+        var openBtn   = document.getElementById('igdc-adminpanel-open');
         var modal     = document.getElementById('igdc-int-modal');
         var backdrop  = document.getElementById('igdc-int-backdrop');
         var closeBtn  = document.getElementById('igdc-int-close');

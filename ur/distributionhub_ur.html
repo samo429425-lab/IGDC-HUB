@@ -1702,13 +1702,13 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     const lA = el("label"); lA.textContent="جواب";
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="براہ کرم ایک لمحہ انتظار کریں۔ ہم جلد جواب دیں گے۔";
     const actions = el("div","igdc-qa-actions");
-    const btnجمع کریں = el("button","igdc-qa-btn primary"); btnجمع کریں.textContent="جمع کریں";
-    const btnصاف کریں = el("button","igdc-qa-btn muted"); btnصاف کریں.textContent="صاف کریں";
+    const submitBtn = el("button","igdc-qa-btn primary"); submitBtn.textContent="جمع کریں";
+    const clearBtn = el("button","igdc-qa-btn muted"); clearBtn.textContent="صاف کریں";
     const note = el("div","igdc-qa-note"); note.textContent="※ سادہ سوالات کا جواب AI فوراً دیتا ہے۔ فنی مسائل، خرابیاں یا آپریشن سے متعلق امور خودکار طور پر ایڈمن سوال و جواب کو بھیجے جاتے ہیں۔";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-    actions.append(btnجمع کریں, btnصاف کریں);
+    actions.append(submitBtn, clearBtn);
     panel.append(header, body);
     modal.append(backdrop, panel);
     document.body.append(modal);
@@ -1756,9 +1756,9 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     backdrop.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
 
-    btnصاف کریں.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnجمع کریں.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnجمع کریں.click(); }});
+    clearBtn.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); submitBtn.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); submitBtn.click(); }});
 
     async function fetchThreads(){
       const sb = await ensureSupabase(); if(!sb) return;
@@ -1839,7 +1839,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
-    btnجمع کریں.addEventListener("click", submit);
+    submitBtn.addEventListener("click", submit);
 
     // realtime refresh
     (async()=>{ try{
@@ -2009,7 +2009,8 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   } else {
     hideLiteratureAcademic();
   }
-})(
+})();
+</script>
 <!-- Minimal runtime to toggle off-canvas; no bindings to existing logic -->
 <script id="ml-offcanvas-js">
 (function(){
@@ -2461,7 +2462,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 

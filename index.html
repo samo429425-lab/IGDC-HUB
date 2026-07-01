@@ -1381,7 +1381,6 @@ function applyRoleUI(role) {
     });
   }catch(e){}
 }
-)();
 </script>
 <script src="/osauth-index-listener-safe.min.js"></script>
 <!-- Auth/UI add-ons v2 (non-invasive) -->
@@ -2026,7 +2025,7 @@ function applyRoleUI(role) {
     const out = [];
     try{ const htmlLang = (document.documentElement && document.documentElement.lang) || ""; if (htmlLang) out.push(htmlLang); }catch(_){}
     try{ if (navigator && navigator.language) out.push(navigator.language); }catch(_){}
-    try{ if (navigator && Array.isArray(/* removed */)) out.push(./* removed */); }catch(_){}
+    try{ if (navigator && Array.isArray(navigator.languages)) out.push.apply(out, navigator.languages); }catch(_){}
     return out.map(s=>String(s).toLowerCase());
   }
   function mapLangToCurrency(code){
@@ -2129,7 +2128,7 @@ document.addEventListener("osauth:ready", applyAdminGate);
     const lang = (document.documentElement && document.documentElement.lang) || "en";
 
     const amount = Number(payload && payload.amount || 0);
-    let currency = String((payload && payload.currency) || (__DEFAULT_CCY||\"USD\")).toUpperCase().slice(0,4);
+    let currency = String((payload && payload.currency) || (__DEFAULT_CCY||"USD")).toUpperCase().slice(0,4);
     const memo = String((payload && payload.memo) || "Donation").slice(0,140);
     const meta = Object.assign({}, payload && payload.meta || {});
 

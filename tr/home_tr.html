@@ -785,24 +785,6 @@ function reorderRowByCountry(row, cc){
     row.wrap.setAttribute('data-current-cc', cc);
 }
 
-    // Others (exclude same + neighbors)
-    var exclude = new Set(top4.concat(restSame).concat(neighbors));
-    var others = idx.order.filter(function(a){ return !exclude.has(a); });
-
-    var merged = top4.concat(restSame).concat(neighbors).concat(others);
-
-    // rebuild DOM
-    row.anchors.forEach(function(a){ a.remove(); });
-    merged.forEach(function(a, i){
-      if ((i % 4) === 0) row.track.appendChild(document.createTextNode("
-"));
-      row.track.appendChild(a);
-    });
-    row.track.appendChild(document.createTextNode("
-"));
-
-    row.wrap.setAttribute('data-current-cc', cc);
-  }
 
   window.updateMainÜst = function(){ /* no-op */ };
 
@@ -2522,12 +2504,6 @@ function reorderRow(rowId){
   [...exact, ...sameReg, ...rest].forEach(n=> row.appendChild(n));
 }
 
-    const head = row.firstElementChild && row.firstElementChild.classList.contains('continent-tag')
-      ? [row.firstElementChild] : [];
-
-    for(const el of head) row.appendChild(el);
-    [...exact, ...sameReg, ...rest].forEach(n=> row.appendChild(n));
-  }
   function run(){
     reorderRow('newsRow1');
     reorderRow('newsRow2');
@@ -3043,27 +3019,6 @@ function reorderRow(row, cc, region){
   sameReg.forEach(el=>row.appendChild(el));
   others.forEach(el=>row.appendChild(el));
 }
-);
-    // Asia micro-priority: KR -> CN -> JP inside sameReg
-    if(isAsia){
-      const PRI=['KR','CN','JP'];
-      sameReg.sort((a,b)=>{
-        const pa=PRI.indexOf((a.dataset.cc||'').toUpperCase());
-        const pb=PRI.indexOf((b.dataset.cc||'').toUpperCase());
-        return ((pa===-1)-(pb===-1)) || (pa-pb);
-      });
-    }
-    // Build order: head, up to 3 own, then remaining sameReg, then others, keeping original relative order otherwise
-    const docFrag = document.createDocumentFragment();
-    if(head) docFrag.appendChild(head);
-    own.slice(0, 999).forEach(el=>docFrag.appendChild(el));
-    sameReg.forEach(el=>docFrag.appendChild(el));
-    // append rest (own beyond 3 then others)
-    others.forEach(el=>docFrag.appendChild(el));
-    // apply
-
-    row.appendChild(docFrag);
-  }
   async function applyAutoOrder(){
     ensureCNDataAttrs();
     labelBilingualize();
