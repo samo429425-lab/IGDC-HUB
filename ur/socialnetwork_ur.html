@@ -392,8 +392,20 @@ html[lang="ur"] .ad-box a{
 html[lang="ur"] { direction: ltr !important; }
 html[lang="ur"] > body { direction: rtl !important; }
 </style>
+
+<style id="igdc-rtl-scrollbar-iframe-safe-v2">
+/* Keep the document scroll owner LTR: embedded iframe scrollbars stay on the physical right. */
+html[lang="ur"], html[lang="ur"] > body { direction:ltr !important; }
+/* Preserve RTL reading for page regions without giving the scrolling body RTL direction. */
+html[lang="ur"] > body > :not(script):not(style) { direction:rtl; }
+/* Keep the three-column platform layout physically left-to-right. */
+html[lang="ur"] > body > .container { direction:ltr !important; }
+html[lang="ur"] > body > .container > .sidebar,
+html[lang="ur"] > body > .container > .main-content,
+html[lang="ur"] > body > .container > .ad-panel { direction:rtl !important; }
+</style>
 </head>
-<body>
+<body dir="ltr">
   <div id="hero"><div class="hero-title"></div></div>
 
   <div class="container">
