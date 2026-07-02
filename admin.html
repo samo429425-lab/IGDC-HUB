@@ -3774,5 +3774,99 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 })();
 </script>
 
+
+
+<!-- Global Slot Management Console: single right-panel launcher -->
+<style id="igdc-admin-global-slot-console-link-style">
+  .igdc-admin-global-slot-console-card { border-color:#7da8dd !important; background:#f2f7ff !important; }
+  .igdc-admin-global-slot-console-card:hover { border-color:#3b82c4 !important; background:#e6f1ff !important; }
+  .igdc-admin-global-slot-console-card .igdc-admin-global-slot-title { font-size:12px; font-weight:800; color:#164f86; }
+  .igdc-admin-global-slot-console-card .igdc-admin-global-slot-desc { font-size:11px; color:#38648e; line-height:1.35; margin:3px 0 6px; }
+  .igdc-admin-global-slot-console-card .igdc-admin-global-slot-btn { width:100%; padding:5px 7px; font-size:11px; font-weight:800; border-radius:5px; border:1px solid #80aee0; background:linear-gradient(180deg,#fcfeff 0%,#dcecff 100%); color:#164f86; cursor:pointer; }
+  .igdc-admin-global-slot-console-card .igdc-admin-global-slot-btn:hover { background:#cfe4ff; }
+  .igdc-admin-global-slot-console-card .igdc-admin-global-slot-mini { margin-top:4px; font-size:10px; color:#5d7e9e; }
+</style>
+<script id="igdc-admin-global-slot-console-link-script">
+(function(){
+  if (window.__IGDC_ADMIN_GLOBAL_SLOT_CONSOLE_LINK_INSTALLED__) return;
+  window.__IGDC_ADMIN_GLOBAL_SLOT_CONSOLE_LINK_INSTALLED__ = true;
+
+  function consoleUrl(){
+    var u = new URL('/admin/global-slot-console/', window.location.origin);
+    u.searchParams.set('returnPath', window.location.pathname + window.location.search + window.location.hash);
+    return u.pathname + u.search;
+  }
+  function findCard(panel, re){
+    var cards = Array.prototype.slice.call(panel.querySelectorAll('.igdc-sc-card'));
+    for (var i = 0; i < cards.length; i += 1) {
+      var text = (cards[i].textContent || '').replace(/\s+/g, ' ');
+      if (re.test(text)) return cards[i];
+    }
+    return null;
+  }
+  function makeCard(){
+    var card = document.createElement('div');
+    card.id = 'igdc-admin-global-slot-console-link-card';
+    card.className = 'igdc-sc-card igdc-admin-global-slot-console-card';
+    card.setAttribute('data-igdc-admin-global-slot-console-link', '1');
+    card.innerHTML = '' +
+      '<div class="igdc-sc-card-header">' +
+        '<span class="igdc-admin-global-slot-title">🌐 글로벌 슬롯 · 상품 · 콘텐츠 · 제휴 관리</span>' +
+        '<span class="igdc-sc-card-status">↗</span>' +
+      '</div>' +
+      '<div class="igdc-admin-global-slot-desc">후보·증빙·국가·정책·승인·제외·제휴·발행을 관리합니다.</div>' +
+      '<button class="igdc-admin-global-slot-btn" type="button">관리 콘솔 열기</button>' +
+      '<div class="igdc-admin-global-slot-mini">기존 owner/admin 서버 권한을 다시 확인한 뒤 열립니다.</div>';
+    function open(ev){
+      if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+      window.location.assign(consoleUrl());
+      return false;
+    }
+    var button = card.querySelector('button');
+    if (button) button.addEventListener('click', open);
+    card.addEventListener('click', function(ev){
+      if (ev.target && ev.target.tagName === 'BUTTON') return;
+      open(ev);
+    });
+    return card;
+  }
+  function install(){
+    var panel = document.getElementById('igdc-site-control');
+    if (!panel) return false;
+    var existing = document.getElementById('igdc-admin-global-slot-console-link-card');
+    if (existing && panel.contains(existing)) return true;
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+    var card = makeCard();
+    var product = document.getElementById('igdc-admin-product-go-live-link-card') || findCard(panel, /실상품\s*공급\s*개방\s*점검/i);
+    var insight = findCard(panel, /MARU\s*Global\s*Insight|마루\s*Global\s*Insight/i);
+    if (product && product.parentNode) {
+      product.insertAdjacentElement('afterend', card);
+      return true;
+    }
+    if (insight && insight.parentNode) {
+      insight.parentNode.insertBefore(card, insight);
+      return true;
+    }
+    (panel.querySelector('.igdc-sc-grid') || panel).appendChild(card);
+    return true;
+  }
+  function arm(){
+    var tries = 0;
+    var timer = setInterval(function(){
+      tries += 1;
+      if (install() || tries > 100) clearInterval(timer);
+    }, 200);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+    else install();
+    var panel = document.getElementById('igdc-site-control');
+    if (panel && window.MutationObserver) {
+      new MutationObserver(function(){ install(); }).observe(panel, { childList:true, subtree:true });
+    }
+  }
+  arm();
+})();
+</script>
+
 </body>
 </html>

@@ -1,0 +1,12 @@
+{
+  "version": "gslot-managed-overlay-v1",
+  "enabled": false,
+  "generatedAt": null,
+  "reason": "initial_seed_before_first_netlify_build",
+  "global": {
+    "additions": [],
+    "patches": [],
+    "suppressions": []
+  },
+  "scopedAssignments": []
+}
