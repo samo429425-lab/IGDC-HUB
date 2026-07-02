@@ -45,7 +45,9 @@
   .notice { margin-top:12px; color:#7a5600; background:#fff8e5; border:1px solid #f2dfad; border-radius:10px; padding:10px 12px; font-size:14px; }
   .full { grid-column:1/-1; }
   .footer { margin-top:18px; color:#6f7f8f; font-size:13px; text-align:center; }
-  body.rtl { direction:rtl; }
+  /* The iframe document itself must remain LTR so Chrome keeps its vertical scrollbar on the physical right.
+     RTL is applied only to the support content panels below. */
+  html, body { direction:ltr !important; }
   body.rtl ul { margin:8px 20px 0 0; }
   @media (max-width:760px) { .grid { grid-template-columns:1fr; } h1 { font-size:25px; } }
 </style>
@@ -1270,6 +1272,337 @@ const SUPPORT_EXTRA = {
 };
 Object.keys(SUPPORT_EXTRA).forEach(function(code){ I18N[code]=Object.assign(I18N[code]||{}, SUPPORT_EXTRA[code]); });
 
+/* Translation completion: visible support-page text for all 30 configured languages. */
+const SUPPORT_TRANSLATION_COMPLETION = {
+  ar:{
+    subtitle:"مساعدة المنصة، وأذونات الوصول، وإرشادات الدفع، وتنزيلات البرامج في مكان واحد.",
+    platform:"دليل المنصة",
+    platformText:"استخدم القائمة العلوية لفتح صفحات الرئيسية ومركز الشبكة ومركز التوزيع والشبكة الاجتماعية ومركز الوسائط والسفر والتبرعات. تتبع الصفحات اللغة المختارة.",
+    access:"العضوية وأذونات الوصول",
+    accessItems:["يمكن للزوار عرض الصفحات العامة ومعلومات التنزيل العامة.","تتطلب صفحات الأعضاء وأدوات الإدارة ومعلومات الإيرادات والتسوية تسجيل الدخول والحصول على إذن معتمد.","لا تُمنح صلاحيات المسؤول أو المالك إلا للحسابات التي يتحقق منها المشغّل.","يمكن تقديم طلبات الوصول من خلال طلب الترقية في صفحة الأعضاء."],
+    payment:"الدفع · الاشتراك · إرشادات الاسترداد",
+    paymentItems:["تُفعّل وظائف الدفع بعد اعتماد بوابة الدفع أو البطاقة وإتمام إعدادات المشغّل.","تُعرض للخدمات المدفوعة الأسعار ودورة الفوترة والمحتوى وطريقة الإلغاء قبل الدفع.","يجب أن تتيح الدفعات المتكررة طلب الإلغاء، ويخضع وقت سريان الإلغاء لإشعار الخدمة.","يراجع المشغّل طلبات الاسترداد والإلغاء وأخطاء التنزيل وفق الإجراء المنشور."],
+    downloads:"تنزيلات البرامج",
+    policy:"إشعار تشغيلي",
+    policyText:"هذه الصفحة هي صفحة الإشعار الأساسية للدعم والتنزيلات والوصول وإرشادات الدفع. ويمكن عند الحاجة توسيع الشروط وسياسة الخصوصية وسياسة الاسترداد إلى مستندات مستقلة.",
+    btnDownload:"تنزيل",
+    footer:"© IGDC Global Hub. صفحة معلومات الدعم والتنزيل."
+  },
+  vi:{
+    subtitle:"Trợ giúp nền tảng, quyền truy cập, hướng dẫn thanh toán và tải chương trình ở một nơi.",
+    platform:"Hướng dẫn nền tảng",
+    platformText:"Dùng menu trên cùng để mở các trang Trang chủ, Trung tâm Mạng, Trung tâm Phân phối, Mạng xã hội, Trung tâm Truyền thông, Du lịch và Quyên góp. Các trang hiển thị theo ngôn ngữ đã chọn.",
+    access:"Thành viên và quyền truy cập",
+    accessItems:["Khách truy cập có thể xem các trang công khai và thông tin tải xuống công khai.","Trang dành cho thành viên, công cụ quản trị, thông tin doanh thu và quyết toán yêu cầu đăng nhập và quyền đã được phê duyệt.","Quyền quản trị viên/chủ sở hữu chỉ được cấp cho tài khoản đã được đơn vị vận hành xác minh.","Có thể gửi yêu cầu quyền truy cập qua yêu cầu nâng cấp tại trang thành viên."],
+    payment:"Thanh toán · đăng ký · hướng dẫn hoàn tiền",
+    paymentItems:["Chức năng thanh toán được kích hoạt sau khi PG/thẻ được phê duyệt và cấu hình vận hành hoàn tất.","Dịch vụ trả phí hiển thị giá, chu kỳ thanh toán, nội dung cung cấp và cách hủy trước khi thanh toán.","Thanh toán định kỳ phải cho phép yêu cầu hủy; thời điểm có hiệu lực tuân theo thông báo dịch vụ.","Hoàn tiền, hủy và lỗi tải xuống được đơn vị vận hành xem xét theo quy trình đã công bố."],
+    downloads:"Tải chương trình",
+    policy:"Thông báo vận hành",
+    policyText:"Trang này là thông báo cơ bản về hỗ trợ, tải xuống, quyền truy cập và thanh toán. Điều khoản, chính sách quyền riêng tư và chính sách hoàn tiền có thể được mở rộng thành tài liệu riêng khi cần.",
+    btnDownload:"Tải xuống",
+    footer:"© IGDC Global Hub. Trang thông tin hỗ trợ và tải xuống."
+  },
+  th:{
+    subtitle:"รวมความช่วยเหลือการใช้งานแพลตฟอร์ม สิทธิ์การเข้าถึง คำแนะนำการชำระเงิน และการดาวน์โหลดโปรแกรมไว้ในที่เดียว",
+    platform:"คู่มือการใช้งานแพลตฟอร์ม",
+    platformText:"ใช้เมนูด้านบนเพื่อเปิดหน้าแรก ศูนย์เครือข่าย ศูนย์กระจายสินค้า เครือข่ายสังคม ศูนย์สื่อ การเดินทาง และการบริจาค หน้าเว็บจะแสดงตามภาษาที่เลือก",
+    access:"สมาชิกและสิทธิ์การเข้าถึง",
+    accessItems:["ผู้เข้าชมสามารถดูหน้าสาธารณะและข้อมูลการดาวน์โหลดสาธารณะได้","หน้าสำหรับสมาชิก เครื่องมือผู้ดูแล ข้อมูลรายได้ และการชำระบัญชี ต้องเข้าสู่ระบบและได้รับสิทธิ์อนุมัติ","สิทธิ์ผู้ดูแลหรือเจ้าของมอบให้เฉพาะบัญชีที่ผู้ดำเนินงานตรวจสอบแล้ว","สามารถส่งคำขอสิทธิ์ผ่านคำขออัปเกรดในหน้าสำหรับสมาชิกได้"],
+    payment:"การชำระเงิน · การสมัครสมาชิก · คำแนะนำการคืนเงิน",
+    paymentItems:["ฟังก์ชันการชำระเงินจะเปิดใช้หลังจากได้รับอนุมัติ PG/บัตรและตั้งค่าการดำเนินงานเสร็จสิ้น","บริการแบบชำระเงินจะแสดงราคา รอบการเรียกเก็บ เนื้อหาที่ให้ และวิธียกเลิกก่อนชำระเงิน","การชำระเงินแบบต่ออายุต้องให้ผู้ใช้ส่งคำขอยกเลิกได้ โดยเวลามีผลเป็นไปตามประกาศบริการ","การคืนเงิน การยกเลิก และข้อผิดพลาดในการดาวน์โหลดจะได้รับการตรวจสอบตามขั้นตอนที่ประกาศไว้"],
+    downloads:"ดาวน์โหลดโปรแกรม",
+    policy:"ประกาศการดำเนินงาน",
+    policyText:"หน้านี้เป็นหน้าประกาศพื้นฐานสำหรับการสนับสนุน การดาวน์โหลด สิทธิ์การเข้าถึง และคำแนะนำการชำระเงิน เมื่อจำเป็น สามารถขยายเป็นเอกสารแยกสำหรับข้อกำหนด นโยบายความเป็นส่วนตัว และนโยบายการคืนเงินได้",
+    btnDownload:"ดาวน์โหลด",
+    footer:"© IGDC Global Hub. หน้าข้อมูลการสนับสนุนและการดาวน์โหลด.",
+    commerceText:"IGDC เป็นแพลตฟอร์มที่เชื่อมโยงสินค้า เนื้อหา บริการ ผู้ขาย และผู้ให้บริการ เว้นแต่ IGDC จะระบุชัดว่าเป็นผู้ขายโดยตรง ควรตรวจสอบรายละเอียด ราคา การจัดส่ง การคืนเงิน เงื่อนไขการใช้บริการ และความรับผิดชอบในการดำเนินธุรกรรมกับผู้ขายหรือผู้ให้บริการ"
+  },
+  id:{
+    subtitle:"Bantuan platform, izin akses, panduan pembayaran, dan unduhan program dalam satu tempat.",
+    platform:"Panduan platform",
+    platformText:"Gunakan menu atas untuk membuka halaman Beranda, Pusat Jaringan, Pusat Distribusi, Jaringan Sosial, Pusat Media, Perjalanan, dan Donasi. Halaman mengikuti bahasa yang dipilih.",
+    access:"Keanggotaan dan izin akses",
+    accessItems:["Pengunjung dapat melihat halaman publik dan informasi unduhan publik.","Halaman khusus anggota, alat admin, informasi pendapatan, dan penyelesaian memerlukan login serta izin yang disetujui.","Akses admin/pemilik hanya diberikan kepada akun yang telah diverifikasi oleh operator.","Permintaan akses dapat diajukan melalui permohonan peningkatan di halaman anggota."],
+    payment:"Pembayaran · langganan · panduan pengembalian dana",
+    paymentItems:["Fungsi pembayaran aktif setelah persetujuan PG/kartu dan pengaturan operator selesai.","Layanan berbayar menampilkan harga, siklus penagihan, isi layanan, dan cara pembatalan sebelum pembayaran.","Pembayaran berulang harus mengizinkan permintaan pembatalan; waktu berlakunya mengikuti pemberitahuan layanan.","Pengembalian dana, pembatalan, dan kesalahan unduhan ditinjau oleh operator sesuai prosedur yang diumumkan."],
+    downloads:"Unduhan program",
+    policy:"Pemberitahuan operasional",
+    policyText:"Halaman ini adalah halaman pemberitahuan dasar untuk dukungan, unduhan, akses, dan panduan pembayaran. Syarat, kebijakan privasi, dan kebijakan pengembalian dana dapat diperluas menjadi dokumen terpisah bila diperlukan.",
+    btnDownload:"Unduh",
+    footer:"© IGDC Global Hub. Halaman informasi dukungan dan unduhan."
+  },
+  hi:{
+    subtitle:"प्लेटफ़ॉर्म सहायता, पहुँच अनुमतियाँ, भुगतान मार्गदर्शन और प्रोग्राम डाउनलोड एक ही स्थान पर।",
+    platform:"प्लेटफ़ॉर्म मार्गदर्शिका",
+    platformText:"होम, नेटवर्क हब, वितरण हब, सोशल नेटवर्क, मीडिया हब, यात्रा और दान पृष्ठ खोलने के लिए ऊपर का मेनू उपयोग करें। पृष्ठ चुनी गई भाषा के अनुसार प्रदर्शित होते हैं।",
+    access:"सदस्यता और पहुँच अनुमतियाँ",
+    accessItems:["आगंतुक सार्वजनिक पृष्ठ और सार्वजनिक डाउनलोड जानकारी देख सकते हैं।","सदस्य-विशेष पृष्ठ, व्यवस्थापक उपकरण, राजस्व और निपटान जानकारी के लिए लॉगिन और स्वीकृत अनुमति आवश्यक है।","व्यवस्थापक/स्वामी की पहुँच केवल संचालक द्वारा सत्यापित खातों को दी जाती है।","पहुँच अनुरोध सदस्य पृष्ठ के अपग्रेड अनुरोध से भेजे जा सकते हैं।"],
+    payment:"भुगतान · सदस्यता · धनवापसी मार्गदर्शन",
+    paymentItems:["भुगतान सुविधाएँ PG/कार्ड अनुमोदन और संचालक सेटअप पूरा होने के बाद सक्रिय होती हैं।","सशुल्क सेवाएँ भुगतान से पहले मूल्य, बिलिंग चक्र, उपलब्ध सामग्री और रद्द करने का तरीका दिखाती हैं।","आवर्ती भुगतान में रद्द करने का अनुरोध उपलब्ध होना चाहिए; प्रभावी समय सेवा सूचना के अनुसार होगा।","धनवापसी, रद्दीकरण और डाउनलोड त्रुटियों की समीक्षा संचालक प्रकाशित प्रक्रिया के अनुसार करता है।"],
+    downloads:"प्रोग्राम डाउनलोड",
+    policy:"संचालन सूचना",
+    policyText:"यह पृष्ठ सहायता, डाउनलोड, पहुँच और भुगतान मार्गदर्शन का मूल सूचना पृष्ठ है। आवश्यकता होने पर नियम, गोपनीयता नीति और धनवापसी नीति को अलग दस्तावेज़ों में विस्तृत किया जा सकता है।",
+    btnDownload:"डाउनलोड करें",
+    footer:"© IGDC Global Hub. सहायता और डाउनलोड जानकारी पृष्ठ।",
+    commerceText:"IGDC एक मंच है जो उत्पादों, सामग्री, सेवाओं, विक्रेताओं और प्रदाताओं को जोड़ता है। जब तक IGDC को स्पष्ट रूप से प्रत्यक्ष विक्रेता के रूप में न बताया गया हो, वस्तु विवरण, मूल्य, डिलीवरी, धनवापसी, उपयोग की शर्तें और लेन-देन निष्पादन की जिम्मेदारी विक्रेता या प्रदाता से जांचें।"
+  },
+  tr:{
+    subtitle:"Platform yardımı, erişim izinleri, ödeme rehberliği ve program indirmeleri tek yerde.",
+    platform:"Platform rehberi",
+    platformText:"Ana Sayfa, Ağ Merkezi, Dağıtım Merkezi, Sosyal Ağ, Medya Merkezi, Seyahat ve Bağış sayfalarını açmak için üst menüyü kullanın. Sayfalar seçilen dili izler.",
+    access:"Üyelik ve erişim izinleri",
+    accessItems:["Ziyaretçiler herkese açık sayfaları ve indirme bilgilerini görebilir.","Üyelere özel sayfalar, yönetici araçları, gelir ve mutabakat bilgileri giriş ve onaylı izin gerektirir.","Yönetici/sahip erişimi yalnızca işletmeci tarafından doğrulanan hesaplara verilir.","Erişim istekleri üye sayfasındaki yükseltme isteği üzerinden gönderilebilir."],
+    payment:"Ödeme · abonelik · iade rehberi",
+    paymentItems:["Ödeme işlevleri PG/kart onayı ve işletmeci ayarları tamamlandıktan sonra etkinleşir.","Ücretli hizmetler ödeme öncesinde fiyatı, faturalama döngüsünü, içeriği ve iptal yöntemini gösterir.","Yinelenen ödemeler iptal isteğine izin vermelidir; yürürlük zamanı hizmet duyurusunu izler.","İadeler, iptaller ve indirme hataları duyurulan sürece göre işletmeci tarafından incelenir."],
+    downloads:"Program indirmeleri",
+    policy:"İşletim bildirimi",
+    policyText:"Bu sayfa destek, indirme, erişim ve ödeme rehberliği için temel bildirim sayfasıdır. Gerektiğinde şartlar, gizlilik politikası ve iade politikası ayrı belgelere genişletilebilir.",
+    btnDownload:"İndir",
+    footer:"© IGDC Global Hub. Destek ve indirme bilgi sayfası."
+  },
+  fa:{
+    subtitle:"راهنمای پلتفرم، مجوزهای دسترسی، راهنمای پرداخت و دانلود برنامه‌ها در یک مکان.",
+    platform:"راهنمای پلتفرم",
+    platformText:"برای باز کردن صفحه‌های خانه، هاب شبکه، هاب توزیع، شبکه اجتماعی، هاب رسانه، سفر و کمک مالی از منوی بالا استفاده کنید. صفحه‌ها با زبان انتخاب‌شده نمایش داده می‌شوند.",
+    access:"عضویت و مجوزهای دسترسی",
+    accessItems:["بازدیدکنندگان می‌توانند صفحه‌های عمومی و اطلاعات دانلود عمومی را ببینند.","صفحه‌های ویژه اعضا، ابزارهای مدیریت، اطلاعات درآمد و تسویه به ورود و مجوز تأییدشده نیاز دارند.","دسترسی مدیر/مالک فقط به حساب‌هایی داده می‌شود که توسط گرداننده تأیید شده‌اند.","درخواست دسترسی را می‌توان از طریق درخواست ارتقا در صفحه اعضا ارسال کرد."],
+    payment:"پرداخت · اشتراک · راهنمای بازپرداخت",
+    paymentItems:["امکانات پرداخت پس از تأیید PG/کارت و تکمیل تنظیمات گرداننده فعال می‌شوند.","خدمات پولی پیش از پرداخت، قیمت، دوره صورتحساب، محتوای ارائه‌شده و روش لغو را نشان می‌دهند.","پرداخت‌های دوره‌ای باید امکان درخواست لغو داشته باشند و زمان اثرگذاری تابع اطلاعیه خدمت است.","بازپرداخت‌ها، لغوها و خطاهای دانلود طبق فرایند اعلام‌شده توسط گرداننده بررسی می‌شوند."],
+    downloads:"دانلود برنامه‌ها",
+    policy:"اطلاعیه عملیاتی",
+    policyText:"این صفحه، صفحه اطلاع‌رسانی پایه برای پشتیبانی، دانلود، دسترسی و راهنمای پرداخت است. در صورت نیاز، شرایط، سیاست حریم خصوصی و سیاست بازپرداخت می‌توانند به اسناد جداگانه گسترش یابند.",
+    btnDownload:"دانلود",
+    footer:"© IGDC Global Hub. صفحه اطلاعات پشتیبانی و دانلود."
+  },
+  bn:{
+    subtitle:"প্ল্যাটফর্ম সহায়তা, প্রবেশাধিকার অনুমতি, পেমেন্ট নির্দেশনা এবং প্রোগ্রাম ডাউনলোড এক জায়গায়।",
+    platform:"প্ল্যাটফর্ম নির্দেশিকা",
+    platformText:"হোম, নেটওয়ার্ক হাব, ডিস্ট্রিবিউশন হাব, সোশ্যাল নেটওয়ার্ক, মিডিয়া হাব, ভ্রমণ এবং অনুদান পৃষ্ঠা খুলতে উপরের মেনু ব্যবহার করুন। পৃষ্ঠাগুলো নির্বাচিত ভাষা অনুযায়ী প্রদর্শিত হবে।",
+    access:"সদস্যতা ও প্রবেশাধিকার অনুমতি",
+    accessItems:["দর্শনার্থীরা পাবলিক পৃষ্ঠা এবং পাবলিক ডাউনলোড তথ্য দেখতে পারেন।","সদস্য-নির্দিষ্ট পৃষ্ঠা, প্রশাসক টুল, আয় ও নিষ্পত্তি তথ্যের জন্য লগইন এবং অনুমোদিত অধিকার প্রয়োজন।","অ্যাডমিন/মালিকের প্রবেশাধিকার কেবল পরিচালনাকারীর যাচাইকৃত অ্যাকাউন্টকে দেওয়া হয়।","সদস্য পৃষ্ঠার আপগ্রেড অনুরোধের মাধ্যমে প্রবেশাধিকার আবেদন করা যায়।"],
+    payment:"পেমেন্ট · সদস্যতা · ফেরত নির্দেশিকা",
+    paymentItems:["PG/কার্ড অনুমোদন ও পরিচালনাকারীর সেটআপ শেষ হলে পেমেন্ট ফাংশন সক্রিয় হয়।","অর্থপ্রদেয় সেবা পেমেন্টের আগে মূল্য, বিলিং চক্র, প্রদত্ত বিষয়বস্তু এবং বাতিলের পদ্ধতি দেখায়।","পুনরাবৃত্ত পেমেন্টে বাতিলের অনুরোধের সুযোগ থাকতে হবে; কার্যকর সময় সেবা বিজ্ঞপ্তি অনুসরণ করে।","ফেরত, বাতিল এবং ডাউনলোড ত্রুটি ঘোষিত পদ্ধতি অনুযায়ী পরিচালনাকারী পর্যালোচনা করেন।"],
+    downloads:"প্রোগ্রাম ডাউনলোড",
+    policy:"পরিচালনাগত বিজ্ঞপ্তি",
+    policyText:"এই পৃষ্ঠাটি সহায়তা, ডাউনলোড, প্রবেশাধিকার ও পেমেন্ট নির্দেশনার মৌলিক বিজ্ঞপ্তি পৃষ্ঠা। প্রয়োজনে শর্তাবলি, গোপনীয়তা নীতি ও ফেরত নীতিকে পৃথক নথিতে বিস্তৃত করা যেতে পারে।",
+    btnDownload:"ডাউনলোড",
+    footer:"© IGDC Global Hub. সহায়তা ও ডাউনলোড তথ্য পৃষ্ঠা।",
+    commerceText:"IGDC একটি প্ল্যাটফর্ম যা পণ্য, কনটেন্ট, সেবা, বিক্রেতা ও প্রদানকারীদের সংযুক্ত করে। IGDC-কে সরাসরি বিক্রেতা হিসেবে স্পষ্টভাবে উল্লেখ না করা হলে পণ্যের বিবরণ, মূল্য, ডেলিভারি, ফেরত, ব্যবহারের শর্ত ও লেনদেন সম্পাদনের দায়িত্ব বিক্রেতা বা প্রদানকারীর সঙ্গে যাচাই করুন।"
+  },
+  ur:{
+    subtitle:"پلیٹ فارم مدد، رسائی کی اجازتیں، ادائیگی کی رہنمائی اور پروگرام ڈاؤن لوڈ ایک ہی جگہ پر۔",
+    platform:"پلیٹ فارم رہنما",
+    platformText:"ہوم، نیٹ ورک ہب، ڈسٹری بیوشن ہب، سوشل نیٹ ورک، میڈیا ہب، سفر اور عطیات کے صفحات کھولنے کے لیے اوپر والے مینو کا استعمال کریں۔ صفحات منتخب زبان کے مطابق دکھائے جاتے ہیں۔",
+    access:"رکنیت اور رسائی کی اجازتیں",
+    accessItems:["زائرین عوامی صفحات اور عوامی ڈاؤن لوڈ معلومات دیکھ سکتے ہیں۔","صرف اراکین کے صفحات، ایڈمن ٹولز، آمدنی اور تصفیے کی معلومات کے لیے لاگ اِن اور منظور شدہ اجازت درکار ہے۔","ایڈمن/مالک کی رسائی صرف آپریٹر کی تصدیق شدہ اکاؤنٹس کو دی جاتی ہے۔","رسائی کی درخواستیں ممبر صفحے کے اپ گریڈ درخواست کے ذریعے بھیجی جا سکتی ہیں۔"],
+    payment:"ادائیگی · سبسکرپشن · رقم واپسی کی رہنمائی",
+    paymentItems:["ادائیگی کے افعال PG/کارڈ منظوری اور آپریٹر کی ترتیب مکمل ہونے کے بعد فعال ہوتے ہیں۔","بامعاوضہ خدمات ادائیگی سے پہلے قیمت، بلنگ سائیکل، فراہم کردہ مواد اور منسوخی کا طریقہ دکھاتی ہیں۔","بار بار ہونے والی ادائیگیوں میں منسوخی کی درخواست کی سہولت ہونی چاہیے؛ مؤثر وقت سروس نوٹس کے مطابق ہوگا۔","رقم واپسی، منسوخی اور ڈاؤن لوڈ کی خرابیوں کا آپریٹر شائع شدہ طریقہ کار کے مطابق جائزہ لیتا ہے۔"],
+    downloads:"پروگرام ڈاؤن لوڈ",
+    policy:"عملیاتی نوٹس",
+    policyText:"یہ صفحہ معاونت، ڈاؤن لوڈ، رسائی اور ادائیگی کی رہنمائی کے لیے بنیادی اطلاع کا صفحہ ہے۔ ضرورت کے مطابق شرائط، رازداری کی پالیسی اور رقم واپسی کی پالیسی کو الگ دستاویزات میں وسیع کیا جا سکتا ہے۔",
+    btnDownload:"ڈاؤن لوڈ",
+    footer:"© IGDC Global Hub. معاونت اور ڈاؤن لوڈ معلومات کا صفحہ۔",
+    commerceText:"IGDC ایک پلیٹ فارم ہے جو مصنوعات، مواد، خدمات، فروخت کنندگان اور فراہم کنندگان کو جوڑتا ہے۔ جب تک IGDC کو براہِ راست فروخت کنندہ کے طور پر واضح نہ کیا جائے، مصنوعات کی تفصیل، قیمت، ترسیل، رقم واپسی، استعمال کی شرائط اور لین دین کی تکمیل کی ذمہ داری فروشندہ یا فراہم کنندہ سے تصدیق کریں۔"
+  },
+  sw:{
+    subtitle:"Msaada wa jukwaa, ruhusa za ufikiaji, mwongozo wa malipo na upakuaji wa programu mahali pamoja.",
+    platform:"Mwongozo wa jukwaa",
+    platformText:"Tumia menyu ya juu kufungua kurasa za Nyumbani, Kitovu cha Mtandao, Kitovu cha Usambazaji, Mtandao wa Kijamii, Kitovu cha Media, Safari na Mchango. Kurasa hufuata lugha iliyochaguliwa.",
+    access:"Uanachama na ruhusa za ufikiaji",
+    accessItems:["Wageni wanaweza kuona kurasa za umma na taarifa za upakuaji za umma.","Kurasa za wanachama, zana za msimamizi, mapato na taarifa za malipo zinahitaji kuingia na ruhusa iliyoidhinishwa.","Ufikiaji wa msimamizi/mmiliki hutolewa tu kwa akaunti zilizothibitishwa na mwendeshaji.","Maombi ya ufikiaji yanaweza kutumwa kupitia ombi la kuboresha uanachama kwenye ukurasa wa wanachama."],
+    payment:"Malipo · usajili · mwongozo wa kurejeshewa fedha",
+    paymentItems:["Vipengele vya malipo huwashwa baada ya idhini ya PG/kadi na usanidi wa mwendeshaji kukamilika.","Huduma za kulipia huonyesha bei, mzunguko wa bili, yaliyomo na namna ya kughairi kabla ya malipo.","Malipo ya mara kwa mara lazima yaruhusu ombi la kughairi; muda wa utekelezaji hufuata taarifa ya huduma.","Marejesho ya fedha, kughairi na hitilafu za upakuaji hupitiwa na mwendeshaji kwa utaratibu uliotangazwa."],
+    downloads:"Upakuaji wa programu",
+    policy:"Taarifa ya uendeshaji",
+    policyText:"Ukurasa huu ni taarifa ya msingi ya usaidizi, upakuaji, ufikiaji na mwongozo wa malipo. Masharti, sera ya faragha na sera ya kurejesha fedha zinaweza kupanuliwa kuwa hati tofauti inapohitajika.",
+    btnDownload:"Pakua",
+    footer:"© IGDC Global Hub. Ukurasa wa taarifa za usaidizi na upakuaji."
+  },
+  ta:{
+    subtitle:"தள உதவி, அணுகல் அனுமதிகள், கட்டண வழிகாட்டல் மற்றும் நிரல் பதிவிறக்கங்கள் ஒரே இடத்தில்.",
+    platform:"தள வழிகாட்டி",
+    platformText:"முகப்பு, நெட்வொர்க் ஹப், விநியோக ஹப், சமூக வலைப்பின்னல், மீடியா ஹப், பயணம் மற்றும் நன்கொடை பக்கங்களைத் திறக்க மேலுள்ள மெனுவைப் பயன்படுத்தவும். பக்கங்கள் தேர்ந்தெடுத்த மொழிக்கு ஏற்ப காட்டப்படும்.",
+    access:"உறுப்பினர் மற்றும் அணுகல் அனுமதிகள்",
+    accessItems:["பார்வையாளர்கள் பொது பக்கங்களையும் பொது பதிவிறக்க தகவல்களையும் பார்க்கலாம்.","உறுப்பினர் பக்கங்கள், நிர்வாக கருவிகள், வருவாய் மற்றும் தீர்வுத் தகவல்களுக்கு உள்நுழைவு மற்றும் அனுமதிக்கப்பட்ட உரிமை தேவை.","நிர்வாகி/உரிமையாளர் அணுகல் இயக்குநரால் சரிபார்க்கப்பட்ட கணக்குகளுக்கு மட்டுமே வழங்கப்படும்.","அணுகல் கோரிக்கைகளை உறுப்பினர் பக்கத்தின் மேம்படுத்தல் கோரிக்கையின் மூலம் அனுப்பலாம்."],
+    payment:"கட்டணம் · சந்தா · பணம் திரும்பப்பெறும் வழிகாட்டி",
+    paymentItems:["PG/அட்டை ஒப்புதல் மற்றும் இயக்குநர் அமைப்பு முடிந்த பிறகு கட்டண செயல்பாடுகள் இயக்கப்படும்.","கட்டண சேவைகள் பணம் செலுத்துவதற்கு முன் விலை, பில்லிங் சுழற்சி, வழங்கப்படும் உள்ளடக்கம் மற்றும் ரத்து செய்யும் முறையை காட்டும்.","தொடர்ச்சியான கட்டணங்களில் ரத்து கோரிக்கை இருக்க வேண்டும்; செயல்படும் நேரம் சேவை அறிவிப்பைப் பின்பற்றும்.","பணம் திரும்பப்பெறுதல், ரத்துசெய்தல் மற்றும் பதிவிறக்கப் பிழைகள் வெளியிடப்பட்ட நடைமுறையின்படி பரிசீலிக்கப்படும்."],
+    downloads:"நிரல் பதிவிறக்கங்கள்",
+    policy:"செயல்பாட்டு அறிவிப்பு",
+    policyText:"இந்தப் பக்கம் ஆதரவு, பதிவிறக்கம், அணுகல் மற்றும் கட்டண வழிகாட்டலுக்கான அடிப்படை அறிவிப்பு பக்கம். தேவையானபோது விதிமுறைகள், தனியுரிமைக் கொள்கை மற்றும் பணம் திரும்பப்பெறும் கொள்கை தனி ஆவணங்களாக விரிவாக்கப்படலாம்.",
+    btnDownload:"பதிவிறக்கு",
+    footer:"© IGDC Global Hub. ஆதரவு மற்றும் பதிவிறக்க தகவல் பக்கம்."
+  },
+  hu:{
+    subtitle:"Platformsegítség, hozzáférési jogosultságok, fizetési útmutató és programletöltések egy helyen.",
+    platform:"Platformútmutató",
+    platformText:"A felső menüben nyissa meg a Kezdőlap, Hálózati központ, Disztribúciós központ, Közösségi hálózat, Médiaközpont, Utazás és Adomány oldalakat. Az oldalak a kiválasztott nyelvet követik.",
+    access:"Tagság és hozzáférési jogosultságok",
+    accessItems:["A látogatók megtekinthetik a nyilvános oldalakat és a nyilvános letöltési információkat.","A tagi oldalakhoz, adminisztrátori eszközökhöz, bevételi és elszámolási adatokhoz bejelentkezés és jóváhagyott jogosultság szükséges.","Adminisztrátori/tulajdonosi hozzáférést csak az üzemeltető által ellenőrzött fiókok kapnak.","Hozzáférési kérelem a tagi oldalon található szintemelési kérelemmel küldhető."],
+    payment:"Fizetés · előfizetés · visszatérítési útmutató",
+    paymentItems:["A fizetési funkciók a PG/kártya jóváhagyása és az üzemeltetői beállítások után válnak aktívvá.","A fizetős szolgáltatások a fizetés előtt megjelenítik az árat, a számlázási ciklust, a tartalmat és a lemondás módját.","Az ismétlődő fizetésekhez lemondási kérelemnek kell rendelkezésre állnia; a hatály idejét a szolgáltatási tájékoztató szabályozza.","A visszatérítéseket, lemondásokat és letöltési hibákat az üzemeltető a közzétett eljárás szerint vizsgálja."],
+    downloads:"Programletöltések",
+    policy:"Üzemeltetési tájékoztató",
+    policyText:"Ez az oldal a támogatásról, letöltésekről, hozzáférésről és fizetési útmutatásról szóló alapvető tájékoztató. Szükség esetén a feltételek, adatvédelmi szabályzat és visszatérítési szabályzat külön dokumentummá bővíthető.",
+    btnDownload:"Letöltés",
+    footer:"© IGDC Global Hub. Támogatási és letöltési információs oldal."
+  },
+  ms:{
+    subtitle:"Bantuan platform, kebenaran akses, panduan pembayaran dan muat turun program di satu tempat.",
+    platform:"Panduan platform",
+    platformText:"Gunakan menu atas untuk membuka halaman Laman Utama, Hab Rangkaian, Hab Pengedaran, Rangkaian Sosial, Hab Media, Perjalanan dan Sumbangan. Halaman mengikut bahasa yang dipilih.",
+    access:"Keahlian dan kebenaran akses",
+    accessItems:["Pelawat boleh melihat halaman awam dan maklumat muat turun awam.","Halaman ahli, alat pentadbir, maklumat hasil dan penyelesaian memerlukan log masuk serta kebenaran yang diluluskan.","Akses pentadbir/pemilik hanya diberikan kepada akaun yang disahkan oleh pengendali.","Permohonan akses boleh dihantar melalui permohonan naik taraf pada halaman ahli."],
+    payment:"Pembayaran · langganan · panduan bayaran balik",
+    paymentItems:["Fungsi pembayaran diaktifkan selepas kelulusan PG/kad dan persediaan pengendali selesai.","Perkhidmatan berbayar memaparkan harga, kitaran bil, kandungan dan kaedah pembatalan sebelum pembayaran.","Pembayaran berulang mesti membenarkan permintaan pembatalan; masa kuat kuasa mengikut notis perkhidmatan.","Bayaran balik, pembatalan dan ralat muat turun disemak oleh pengendali mengikut proses yang diumumkan."],
+    downloads:"Muat turun program",
+    policy:"Notis operasi",
+    policyText:"Halaman ini ialah halaman notis asas untuk sokongan, muat turun, akses dan panduan pembayaran. Terma, dasar privasi dan dasar bayaran balik boleh dikembangkan sebagai dokumen berasingan apabila diperlukan.",
+    btnDownload:"Muat turun",
+    footer:"© IGDC Global Hub. Halaman maklumat sokongan dan muat turun."
+  },
+  nl:{
+    subtitle:"Platformhulp, toegangsrechten, betalingsinformatie en programma-downloads op één plek.",
+    platform:"Platformgids",
+    platformText:"Gebruik het bovenste menu om de pagina's Home, Netwerkhub, Distributiehub, Sociaal netwerk, Mediahub, Reizen en Donatie te openen. Pagina's volgen de gekozen taal.",
+    access:"Lidmaatschap en toegangsrechten",
+    accessItems:["Bezoekers kunnen openbare pagina's en openbare downloadinformatie bekijken.","Ledenpagina's, beheertools, omzet- en afrekeninformatie vereisen inloggen en goedgekeurde rechten.","Beheerders-/eigenaarsrechten worden alleen toegekend aan accounts die door de beheerder zijn geverifieerd.","Toegangsverzoeken kunnen via het upgradeverzoek op de ledenpagina worden ingediend."],
+    payment:"Betaling · abonnement · terugbetalingsinformatie",
+    paymentItems:["Betaalfuncties worden actief na PG-/kaartgoedkeuring en voltooiing van de beheerdersinstellingen.","Betaalde diensten tonen vóór betaling de prijs, factureringscyclus, inhoud en annuleringsmethode.","Terugkerende betalingen moeten annuleringsverzoeken toestaan; het tijdstip volgt de servicekennisgeving.","Terugbetalingen, annuleringen en downloadfouten worden door de beheerder volgens de gepubliceerde procedure beoordeeld."],
+    downloads:"Programma-downloads",
+    policy:"Operationele kennisgeving",
+    policyText:"Deze pagina is de basiskennisgeving voor ondersteuning, downloads, toegang en betalingsinformatie. Voorwaarden, privacybeleid en terugbetalingsbeleid kunnen indien nodig als afzonderlijke documenten worden uitgebreid.",
+    btnDownload:"Downloaden",
+    footer:"© IGDC Global Hub. Pagina met ondersteunings- en downloadinformatie."
+  },
+  pl:{
+    subtitle:"Pomoc dotycząca platformy, uprawnienia dostępu, wskazówki dotyczące płatności i pobieranie programów w jednym miejscu.",
+    platform:"Przewodnik po platformie",
+    platformText:"Użyj górnego menu, aby otworzyć strony: Strona główna, Centrum sieci, Centrum dystrybucji, Sieć społecznościowa, Centrum mediów, Podróże i Darowizny. Strony są wyświetlane w wybranym języku.",
+    access:"Członkostwo i uprawnienia dostępu",
+    accessItems:["Odwiedzający mogą przeglądać strony publiczne i publiczne informacje o pobieraniu.","Strony członkowskie, narzędzia administracyjne oraz informacje o przychodach i rozliczeniach wymagają logowania i zatwierdzonych uprawnień.","Dostęp administratora/właściciela jest przyznawany wyłącznie kontom zweryfikowanym przez operatora.","Wnioski o dostęp można składać poprzez prośbę o podwyższenie poziomu na stronie członkowskiej."],
+    payment:"Płatność · subskrypcja · wskazówki dotyczące zwrotów",
+    paymentItems:["Funkcje płatności są aktywowane po zatwierdzeniu PG/karty i zakończeniu konfiguracji operatora.","Usługi płatne pokazują cenę, cykl rozliczeniowy, zawartość i sposób anulowania przed płatnością.","Płatności cykliczne muszą umożliwiać złożenie wniosku o anulowanie; termin obowiązywania określa komunikat usługi.","Zwroty, anulowania i błędy pobierania są sprawdzane przez operatora zgodnie z opublikowaną procedurą."],
+    downloads:"Pobieranie programów",
+    policy:"Informacja operacyjna",
+    policyText:"Ta strona jest podstawową stroną informacyjną dotyczącą wsparcia, pobierania, dostępu i płatności. W razie potrzeby regulamin, polityka prywatności i polityka zwrotów mogą zostać rozszerzone do oddzielnych dokumentów.",
+    btnDownload:"Pobierz",
+    footer:"© IGDC Global Hub. Strona informacji o wsparciu i pobieraniu."
+  },
+  sv:{
+    subtitle:"Plattformhjälp, åtkomstbehörigheter, betalningsvägledning och programnedladdningar på ett ställe.",
+    platform:"Plattformsguide",
+    platformText:"Använd den övre menyn för att öppna sidorna Hem, Nätverkshubb, Distributionshubb, Socialt nätverk, Mediehubb, Resor och Donation. Sidorna följer det valda språket.",
+    access:"Medlemskap och åtkomstbehörigheter",
+    accessItems:["Besökare kan se offentliga sidor och offentlig nedladdningsinformation.","Medlemssidor, administratörsverktyg, intäkts- och avräkningsinformation kräver inloggning och godkänd behörighet.","Administratörs-/ägaråtkomst ges endast till konton som har verifierats av operatören.","Åtkomstförfrågningar kan skickas via uppgraderingsbegäran på medlemssidan."],
+    payment:"Betalning · prenumeration · återbetalningsvägledning",
+    paymentItems:["Betalningsfunktioner aktiveras efter PG-/kortgodkännande och slutförd operatörsinställning.","Betaltjänster visar pris, faktureringscykel, innehåll och uppsägningssätt före betalning.","Återkommande betalningar måste tillåta begäran om uppsägning; tidpunkten följer tjänsteinformationen.","Återbetalningar, uppsägningar och nedladdningsfel granskas av operatören enligt publicerad process."],
+    downloads:"Programnedladdningar",
+    policy:"Driftsmeddelande",
+    policyText:"Den här sidan är den grundläggande informationssidan för stöd, nedladdningar, åtkomst och betalningsvägledning. Villkor, integritetspolicy och återbetalningspolicy kan vid behov utökas till separata dokument.",
+    btnDownload:"Ladda ned",
+    footer:"© IGDC Global Hub. Sida för support- och nedladdningsinformation."
+  },
+  tl:{
+    subtitle:"Tulong sa platform, mga pahintulot sa pag-access, gabay sa pagbabayad at mga pag-download ng programa sa isang lugar.",
+    platform:"Gabay sa platform",
+    platformText:"Gamitin ang menu sa itaas upang buksan ang mga pahina ng Tahanan, Network Hub, Distribution Hub, Social Network, Media Hub, Paglalakbay at Donasyon. Ang mga pahina ay sumusunod sa napiling wika.",
+    access:"Membership at mga pahintulot sa pag-access",
+    accessItems:["Maaaring tingnan ng mga bisita ang mga pampublikong pahina at pampublikong impormasyon sa pag-download.","Ang mga pahina para sa miyembro, admin tool, impormasyon sa kita at pagsasaayos ay nangangailangan ng pag-login at aprubadong pahintulot.","Ang admin/may-ari na access ay ibinibigay lamang sa mga account na na-verify ng operator.","Maaaring isumite ang kahilingan sa access sa pamamagitan ng upgrade request sa pahina ng miyembro."],
+    payment:"Bayad · subscription · gabay sa refund",
+    paymentItems:["Ina-activate ang mga function sa pagbabayad pagkatapos ng pag-apruba ng PG/card at matapos ang setup ng operator.","Ipinapakita ng bayad na serbisyo ang presyo, cycle ng pagsingil, nilalaman at paraan ng pagkansela bago magbayad.","Dapat pahintulutan ng paulit-ulit na bayad ang kahilingan sa pagkansela; ang oras ng epekto ay ayon sa abiso ng serbisyo.","Ang refund, pagkansela at error sa pag-download ay sinusuri ng operator ayon sa inilathalang proseso."],
+    downloads:"Mga pag-download ng programa",
+    policy:"Paunawa sa operasyon",
+    policyText:"Ang pahinang ito ay pangunahing paunawa para sa suporta, pag-download, access at gabay sa pagbabayad. Maaaring palawakin ang mga tuntunin, patakaran sa privacy at refund bilang magkakahiwalay na dokumento kung kinakailangan.",
+    btnDownload:"I-download",
+    footer:"© IGDC Global Hub. Pahina ng impormasyon sa suporta at pag-download."
+  },
+  uk:{
+    subtitle:"Допомога з платформою, дозволи доступу, вказівки щодо оплати та завантаження програм в одному місці.",
+    platform:"Посібник з платформи",
+    platformText:"Використовуйте верхнє меню, щоб відкрити сторінки Головна, Мережевий хаб, Дистрибуційний хаб, Соціальна мережа, Медіахаб, Подорожі та Пожертви. Сторінки відображаються вибраною мовою.",
+    access:"Членство та дозволи доступу",
+    accessItems:["Відвідувачі можуть переглядати публічні сторінки та публічну інформацію про завантаження.","Сторінки учасників, інструменти адміністратора, відомості про дохід і розрахунки потребують входу та схваленого дозволу.","Доступ адміністратора/власника надається лише обліковим записам, перевіреним оператором.","Запити на доступ можна подати через заявку на підвищення рівня на сторінці учасника."],
+    payment:"Оплата · підписка · вказівки щодо повернення коштів",
+    paymentItems:["Функції оплати активуються після схвалення PG/картки та завершення налаштування оператора.","Платні послуги до оплати показують ціну, цикл виставлення рахунків, вміст і спосіб скасування.","Регулярні платежі мають дозволяти подати запит на скасування; час набрання чинності визначається повідомленням послуги.","Повернення коштів, скасування та помилки завантаження перевіряє оператор згідно з оприлюдненою процедурою."],
+    downloads:"Завантаження програм",
+    policy:"Операційне повідомлення",
+    policyText:"Ця сторінка є базовою інформаційною сторінкою для підтримки, завантажень, доступу та оплати. За потреби умови, політика конфіденційності та політика повернення коштів можуть бути розширені до окремих документів.",
+    btnDownload:"Завантажити",
+    footer:"© IGDC Global Hub. Сторінка інформації про підтримку та завантаження."
+  },
+  uz:{
+    subtitle:"Platforma yordami, kirish ruxsatlari, to‘lov bo‘yicha yo‘riqnoma va dastur yuklamalari bir joyda.",
+    platform:"Platforma yo‘riqnomasi",
+    platformText:"Bosh sahifa, Tarmoq markazi, Taqsimot markazi, Ijtimoiy tarmoq, Media markazi, Sayohat va Xayriya sahifalarini ochish uchun yuqori menyudan foydalaning. Sahifalar tanlangan tilga mos ko‘rsatiladi.",
+    access:"A’zolik va kirish ruxsatlari",
+    accessItems:["Tashrif buyuruvchilar ochiq sahifalar va ochiq yuklab olish ma’lumotlarini ko‘rishlari mumkin.","A’zolar sahifalari, administrator vositalari, daromad va hisob-kitob ma’lumotlari uchun kirish va tasdiqlangan ruxsat talab qilinadi.","Administrator/egasi ruxsati faqat operator tasdiqlagan hisoblar uchun beriladi.","Kirish so‘rovini a’zolar sahifasidagi darajani oshirish so‘rovi orqali yuborish mumkin."],
+    payment:"To‘lov · obuna · pulni qaytarish bo‘yicha yo‘riqnoma",
+    paymentItems:["To‘lov funksiyalari PG/karta tasdiqlangandan va operator sozlamalari yakunlangandan keyin yoqiladi.","Pullik xizmatlar to‘lovdan oldin narx, hisob-kitob davri, taqdim etiladigan mazmun va bekor qilish usulini ko‘rsatadi.","Davriy to‘lovlar bekor qilish so‘rovini qabul qilishi kerak; kuchga kirish vaqti xizmat bildirishnomasiga muvofiq bo‘ladi.","Pul qaytarish, bekor qilish va yuklab olish xatolari operator tomonidan e’lon qilingan tartibga ko‘ra ko‘rib chiqiladi."],
+    downloads:"Dastur yuklamalari",
+    policy:"Operatsion bildirishnoma",
+    policyText:"Bu sahifa qo‘llab-quvvatlash, yuklab olish, kirish va to‘lov bo‘yicha asosiy ma’lumot sahifasidir. Zarurat bo‘lsa, shartlar, maxfiylik siyosati va pulni qaytarish siyosati alohida hujjatlarga kengaytirilishi mumkin.",
+    btnDownload:"Yuklab olish",
+    footer:"© IGDC Global Hub. Qo‘llab-quvvatlash va yuklab olish ma’lumotlari sahifasi."
+  }
+};
+Object.keys(SUPPORT_TRANSLATION_COMPLETION).forEach(function(code){
+  I18N[code] = Object.assign(I18N[code] || {}, SUPPORT_TRANSLATION_COMPLETION[code]);
+});
+
+/* Repair earlier mixed-language remnants and localize download buttons where the page had English text. */
+const SUPPORT_TRANSLATION_REPAIRS = {
+  ko:{btnDownload:"다운로드"}, zh:{btnDownload:"下载", paymentItems:["支付功能将在 PG/银行卡审批和运营设置完成后启用。","付费服务会在付款前显示价格、周期、内容和取消方式。","定期付款应允许用户申请取消，生效时间以服务说明为准。","退款、取消和下载错误将按已公布的流程由运营方确认。"]}, zht:{btnDownload:"下載"}, ja:{btnDownload:"ダウンロード"}, es:{btnDownload:"Descargar"}, fr:{btnDownload:"Télécharger"}, de:{btnDownload:"Herunterladen"}, ru:{btnDownload:"Скачать", downloadText:"Установщик Windows предоставляется по официальной ссылке на загрузку IGDC. Будущие файлы можно добавить в этот раздел."}, pt:{btnDownload:"Baixar"}, it:{btnDownload:"Scarica"},
+  zh_qna:{}, zht_qna:{}, ru_qna:{}, hi_qna:{}, bn_qna:{}, pl_qna:{}, uk_qna:{}
+};
+Object.keys(SUPPORT_TRANSLATION_REPAIRS).forEach(function(code){
+  if (I18N[code]) I18N[code] = Object.assign(I18N[code], SUPPORT_TRANSLATION_REPAIRS[code]);
+});
+Object.assign(I18N.zh, { qnaAskText:"一般问题请先在这里提交。AI 顾问会以邮件形式提供初步回复，重要问题会转交管理员审核。", officialEmailNote:"点击电子邮件地址后，AI 顾问会立即为您提供说明并答复。" });
+Object.assign(I18N.zht, { qnaAskText:"一般問題請先在此提交。AI 顧問會以電子郵件形式提供初步回覆，重要問題會轉交管理員審核。" });
+Object.assign(I18N.ru, { officialEmailNote:"Нажмите на адрес электронной почты, и ИИ-консультант сразу предоставит разъяснение и ответ." });
+Object.assign(I18N.hi, { officialEmailNote:"ईमेल पते पर क्लिक करें, AI सलाहकार तुरंत मार्गदर्शन और उत्तर देगा।" });
+Object.assign(I18N.bn, { officialEmailNote:"ইমেইল ঠিকানায় ক্লিক করলে AI পরামর্শদাতা সঙ্গে সঙ্গে নির্দেশনা ও উত্তর দেবেন।" });
+Object.assign(I18N.pl, { officialEmailNote:"Kliknij adres e-mail, a konsultant AI od razu udzieli wskazówek i odpowiedzi." });
+Object.assign(I18N.uk, { officialEmailNote:"Натисніть адресу електронної пошти, і AI-консультант одразу надасть пояснення та відповідь." });
+
+
+const DOWNLOAD_GUIDE_I18N = {
+  ko:{guideSteps:"1. IGDC 도움말 · 다운로드 센터를 엽니다.\n2. MARU Media Player · Windows 항목 옆의 다운로드 버튼을 누르고 maru-media-player-setup.exe 파일을 저장합니다.\n3. 다운로드가 끝나면 설치 파일을 실행합니다. Windows 보안 확인 창이 나오면 IGDC 공식 사이트에서 받은 파일임을 확인한 경우에만 계속합니다.",guideAdditionalNotes:"다운로드 시간은 네트워크 상태에 따라 달라질 수 있습니다. Android/모바일 앱은 현재 이 페이지에서 배포하지 않습니다. 새 버전이 출시되면 같은 공식 다운로드 위치의 설치 파일이 교체될 수 있습니다. 비공식 링크의 파일은 다운로드하거나 실행하지 마십시오."},
+  en:{guideSteps:"1. Open the IGDC Help · Download Center.\n2. Click Download next to MARU Media Player · Windows and save maru-media-player-setup.exe.\n3. Run the installer after the download. Continue a Windows security prompt only after confirming that the file came from the official IGDC site.",guideAdditionalNotes:"Download time may vary with the network. The Android/mobile app is not distributed on this page at this stage. A later release may replace the installer at the same official download location. Do not download or run files from unofficial links."},
+  zh:{guideSteps:"1. 打开 IGDC 帮助 · 下载中心。\n2. 点击 MARU Media Player · Windows 项目旁的下载按钮，并保存 maru-media-player-setup.exe。\n3. 下载完成后运行安装程序。只有确认文件来自 IGDC 官方网站时，才继续 Windows 安全确认。",guideAdditionalNotes:"下载时间可能因网络状况而不同。现阶段本页面不提供 Android/移动应用。后续版本可能会在同一官方下载位置替换安装文件。请勿下载或运行来自非官方链接的文件。"},
+  zht:{guideSteps:"1. 開啟 IGDC 說明 · 下載中心。\n2. 點擊 MARU Media Player · Windows 項目旁的下載按鈕，並儲存 maru-media-player-setup.exe。\n3. 下載完成後執行安裝程式。只有確認檔案來自 IGDC 官方網站時，才繼續 Windows 安全確認。",guideAdditionalNotes:"下載時間可能因網路狀況而不同。現階段本頁面不提供 Android/行動應用程式。後續版本可能會在相同官方下載位置替換安裝檔。請勿下載或執行來自非官方連結的檔案。"},
+  ja:{guideSteps:"1. IGDCヘルプ・ダウンロードセンターを開きます。\n2. MARU Media Player · Windows の横にあるダウンロードを押し、maru-media-player-setup.exe を保存します。\n3. ダウンロード完了後にインストーラーを実行します。Windows のセキュリティ確認は、IGDC公式サイトから取得したファイルであることを確認した場合にのみ続行してください。",guideAdditionalNotes:"ダウンロード時間はネットワーク状況により異なります。Android/モバイルアプリは現時点ではこのページで配布していません。今後の版では同じ公式ダウンロード先のインストーラーが置き換えられる場合があります。非公式リンクのファイルはダウンロードまたは実行しないでください。"},
+  es:{guideSteps:"1. Abra el Centro de ayuda y descargas de IGDC.\n2. Haga clic en Descargar junto a MARU Media Player · Windows y guarde maru-media-player-setup.exe.\n3. Ejecute el instalador cuando termine la descarga. Continúe una confirmación de seguridad de Windows solo después de comprobar que el archivo procede del sitio oficial de IGDC.",guideAdditionalNotes:"El tiempo de descarga puede variar según la red. La aplicación Android/móvil no se distribuye actualmente en esta página. Una versión futura puede sustituir el instalador en la misma ubicación oficial. No descargue ni ejecute archivos de enlaces no oficiales."},
+  fr:{guideSteps:"1. Ouvrez le centre d’aide et de téléchargement IGDC.\n2. Cliquez sur Télécharger à côté de MARU Media Player · Windows et enregistrez maru-media-player-setup.exe.\n3. Lancez le programme d’installation après le téléchargement. Ne poursuivez une confirmation de sécurité Windows qu’après avoir vérifié que le fichier provient du site officiel IGDC.",guideAdditionalNotes:"La durée du téléchargement peut varier selon le réseau. L’application Android/mobile n’est pas distribuée sur cette page à ce stade. Une version ultérieure peut remplacer l’installateur au même emplacement officiel. Ne téléchargez ni n’exécutez de fichiers provenant de liens non officiels."},
+  de:{guideSteps:"1. Öffnen Sie das IGDC-Hilfe- und Download-Center.\n2. Klicken Sie neben MARU Media Player · Windows auf Herunterladen und speichern Sie maru-media-player-setup.exe.\n3. Starten Sie das Installationsprogramm nach dem Download. Setzen Sie eine Windows-Sicherheitsabfrage nur fort, nachdem Sie bestätigt haben, dass die Datei von der offiziellen IGDC-Website stammt.",guideAdditionalNotes:"Die Downloadzeit kann je nach Netzwerk variieren. Die Android/Mobil-App wird derzeit nicht auf dieser Seite verteilt. Eine spätere Version kann die Installationsdatei am selben offiziellen Downloadort ersetzen. Laden Sie keine Dateien von inoffiziellen Links herunter und führen Sie sie nicht aus."},
+  ru:{guideSteps:"1. Откройте справочный центр и центр загрузок IGDC.\n2. Нажмите Скачать рядом с MARU Media Player · Windows и сохраните maru-media-player-setup.exe.\n3. После завершения загрузки запустите установщик. Продолжайте проверку безопасности Windows только после подтверждения, что файл получен с официального сайта IGDC.",guideAdditionalNotes:"Время загрузки зависит от сети. Приложение для Android/мобильных устройств пока не распространяется на этой странице. Будущая версия может заменить установщик по тому же официальному адресу загрузки. Не загружайте и не запускайте файлы по неофициальным ссылкам."},
+  pt:{guideSteps:"1. Abra a Central de Ajuda e Downloads da IGDC.\n2. Clique em Baixar ao lado de MARU Media Player · Windows e salve maru-media-player-setup.exe.\n3. Execute o instalador após o download. Prossiga em uma confirmação de segurança do Windows somente depois de confirmar que o arquivo veio do site oficial da IGDC.",guideAdditionalNotes:"O tempo de download pode variar conforme a rede. O aplicativo Android/móvel não é distribuído nesta página nesta fase. Uma versão futura poderá substituir o instalador no mesmo local oficial. Não baixe nem execute arquivos de links não oficiais."},
+  it:{guideSteps:"1. Apri il Centro assistenza e download IGDC.\n2. Fai clic su Scarica accanto a MARU Media Player · Windows e salva maru-media-player-setup.exe.\n3. Al termine del download esegui il programma di installazione. Procedi con una conferma di sicurezza di Windows solo dopo avere verificato che il file proviene dal sito ufficiale IGDC.",guideAdditionalNotes:"Il tempo di download può variare in base alla rete. L’app Android/mobile non viene distribuita in questa pagina in questa fase. Una versione futura può sostituire l’installer nella stessa posizione ufficiale. Non scaricare né eseguire file da collegamenti non ufficiali."},
+  ar:{guideSteps:"1. افتح مركز مساعدة وتنزيلات IGDC.\n2. اضغط على تنزيل بجوار MARU Media Player · Windows واحفظ الملف maru-media-player-setup.exe.\n3. شغّل برنامج التثبيت بعد اكتمال التنزيل. لا تتابع تأكيد أمان Windows إلا بعد التحقق من أن الملف جاء من موقع IGDC الرسمي.",guideAdditionalNotes:"قد يختلف وقت التنزيل بحسب الشبكة. لا يتم توزيع تطبيق Android/الجوال في هذه الصفحة حالياً. قد يستبدل إصدار لاحق ملف التثبيت في موقع التنزيل الرسمي نفسه. لا تنزّل أو تشغّل ملفات من روابط غير رسمية."},
+  vi:{guideSteps:"1. Mở Trung tâm Trợ giúp và Tải xuống IGDC.\n2. Nhấp Tải xuống bên cạnh MARU Media Player · Windows và lưu maru-media-player-setup.exe.\n3. Chạy trình cài đặt sau khi tải xong. Chỉ tiếp tục xác nhận bảo mật của Windows khi đã xác nhận tệp đến từ trang IGDC chính thức.",guideAdditionalNotes:"Thời gian tải có thể khác nhau tùy mạng. Ứng dụng Android/di động hiện chưa được phát hành trên trang này. Bản phát hành sau có thể thay thế tệp cài đặt tại cùng vị trí tải xuống chính thức. Không tải hoặc chạy tệp từ liên kết không chính thức."},
+  th:{guideSteps:"1. เปิดศูนย์ช่วยเหลือและดาวน์โหลด IGDC\n2. กดดาวน์โหลดข้าง MARU Media Player · Windows แล้วบันทึกไฟล์ maru-media-player-setup.exe\n3. เมื่อดาวน์โหลดเสร็จให้เรียกใช้ตัวติดตั้ง และดำเนินการยืนยันความปลอดภัยของ Windows ต่อเมื่อยืนยันได้ว่าไฟล์มาจากเว็บไซต์ทางการของ IGDC เท่านั้น",guideAdditionalNotes:"ระยะเวลาดาวน์โหลดอาจต่างกันตามเครือข่าย แอป Android/มือถือยังไม่ได้เผยแพร่ในหน้านี้ รุ่นใหม่ในอนาคตอาจแทนที่ไฟล์ติดตั้งในตำแหน่งดาวน์โหลดทางการเดิม ห้ามดาวน์โหลดหรือเรียกใช้ไฟล์จากลิงก์ที่ไม่เป็นทางการ"},
+  id:{guideSteps:"1. Buka Pusat Bantuan dan Unduhan IGDC.\n2. Klik Unduh di samping MARU Media Player · Windows dan simpan maru-media-player-setup.exe.\n3. Jalankan penginstal setelah unduhan selesai. Lanjutkan konfirmasi keamanan Windows hanya setelah memastikan bahwa file berasal dari situs resmi IGDC.",guideAdditionalNotes:"Waktu unduhan dapat berbeda bergantung pada jaringan. Aplikasi Android/seluler belum didistribusikan pada halaman ini. Rilis berikutnya dapat mengganti penginstal di lokasi unduhan resmi yang sama. Jangan mengunduh atau menjalankan file dari tautan tidak resmi."},
+  hi:{guideSteps:"1. IGDC सहायता और डाउनलोड केंद्र खोलें।\n2. MARU Media Player · Windows के पास डाउनलोड करें दबाएँ और maru-media-player-setup.exe सहेजें।\n3. डाउनलोड पूरा होने पर इंस्टॉलर चलाएँ। Windows सुरक्षा पुष्टि केवल तब जारी रखें जब आपने पुष्टि कर ली हो कि फ़ाइल आधिकारिक IGDC साइट से आई है।",guideAdditionalNotes:"डाउनलोड समय नेटवर्क के अनुसार बदल सकता है। Android/मोबाइल ऐप इस चरण में इस पृष्ठ पर वितरित नहीं किया जाता है। भविष्य का संस्करण उसी आधिकारिक डाउनलोड स्थान पर इंस्टॉलर को बदल सकता है। गैर-आधिकारिक लिंक से फ़ाइल डाउनलोड या चलाएँ नहीं।"},
+  tr:{guideSteps:"1. IGDC Yardım ve İndirme Merkezini açın.\n2. MARU Media Player · Windows öğesinin yanındaki İndir düğmesine tıklayın ve maru-media-player-setup.exe dosyasını kaydedin.\n3. İndirme tamamlanınca yükleyiciyi çalıştırın. Windows güvenlik onayına yalnızca dosyanın resmi IGDC sitesinden geldiğini doğruladıktan sonra devam edin.",guideAdditionalNotes:"İndirme süresi ağa göre değişebilir. Android/mobil uygulama bu aşamada bu sayfada dağıtılmamaktadır. Gelecekteki bir sürüm yükleyiciyi aynı resmi indirme konumunda değiştirebilir. Resmi olmayan bağlantılardan dosya indirmeyin veya çalıştırmayın."},
+  fa:{guideSteps:"1. مرکز راهنما و دانلود IGDC را باز کنید.\n2. کنار MARU Media Player · Windows روی دانلود بزنید و maru-media-player-setup.exe را ذخیره کنید.\n3. پس از پایان دانلود، نصب‌کننده را اجرا کنید. فقط پس از تأیید اینکه فایل از وب‌سایت رسمی IGDC دریافت شده است، تأیید امنیتی Windows را ادامه دهید.",guideAdditionalNotes:"زمان دانلود بسته به شبکه متفاوت است. برنامه Android/موبایل در این مرحله در این صفحه توزیع نمی‌شود. نسخه بعدی ممکن است فایل نصب را در همان محل رسمی دانلود جایگزین کند. فایل‌های پیوندهای غیررسمی را دانلود یا اجرا نکنید."},
+  bn:{guideSteps:"1. IGDC সহায়তা ও ডাউনলোড কেন্দ্র খুলুন।\n2. MARU Media Player · Windows-এর পাশে ডাউনলোডে ক্লিক করে maru-media-player-setup.exe সংরক্ষণ করুন।\n3. ডাউনলোড শেষ হলে ইনস্টলার চালান। ফাইলটি IGDC-এর অফিসিয়াল সাইট থেকে এসেছে নিশ্চিত হওয়ার পরেই Windows নিরাপত্তা নিশ্চিতকরণ চালিয়ে যান।",guideAdditionalNotes:"নেটওয়ার্ক অনুযায়ী ডাউনলোড সময় ভিন্ন হতে পারে। এই পর্যায়ে Android/মোবাইল অ্যাপ এই পৃষ্ঠায় বিতরণ করা হয় না। ভবিষ্যৎ সংস্করণ একই অফিসিয়াল ডাউনলোড স্থানে ইনস্টলার প্রতিস্থাপন করতে পারে। অনানুষ্ঠানিক লিংক থেকে ফাইল ডাউনলোড বা চালাবেন না।"},
+  ur:{guideSteps:"1. IGDC مدد اور ڈاؤن لوڈ سینٹر کھولیں۔\n2. MARU Media Player · Windows کے ساتھ ڈاؤن لوڈ دبائیں اور maru-media-player-setup.exe محفوظ کریں۔\n3. ڈاؤن لوڈ مکمل ہونے کے بعد انسٹالر چلائیں۔ Windows کی حفاظتی تصدیق صرف اس وقت جاری رکھیں جب فائل کے IGDC کی سرکاری ویب سائٹ سے آنے کی تصدیق ہو جائے۔",guideAdditionalNotes:"ڈاؤن لوڈ کا وقت نیٹ ورک کے مطابق مختلف ہو سکتا ہے۔ Android/موبائل ایپ اس مرحلے پر اس صفحے سے تقسیم نہیں کی جاتی۔ آئندہ ورژن اسی سرکاری ڈاؤن لوڈ مقام پر انسٹالر کو بدل سکتا ہے۔ غیر سرکاری روابط سے فائلیں ڈاؤن لوڈ یا چلائیں نہیں۔"},
+  sw:{guideSteps:"1. Fungua Kituo cha Msaada na Upakuaji cha IGDC.\n2. Bofya Pakua karibu na MARU Media Player · Windows na uhifadhi maru-media-player-setup.exe.\n3. Endesha kisakinishi baada ya upakuaji kukamilika. Endelea na uthibitisho wa usalama wa Windows tu baada ya kuthibitisha kuwa faili imetoka kwenye tovuti rasmi ya IGDC.",guideAdditionalNotes:"Muda wa upakuaji unaweza kutofautiana kulingana na mtandao. Programu ya Android/simu haijasambazwa kwenye ukurasa huu kwa sasa. Toleo la baadaye linaweza kubadilisha kisakinishi katika eneo lilelile rasmi la upakuaji. Usipakue au kuendesha faili kutoka viungo visivyo rasmi."},
+  ta:{guideSteps:"1. IGDC உதவி மற்றும் பதிவிறக்க மையத்தைத் திறக்கவும்.\n2. MARU Media Player · Windows அருகிலுள்ள பதிவிறக்கு பொத்தானை அழுத்தி maru-media-player-setup.exe கோப்பைச் சேமிக்கவும்.\n3. பதிவிறக்கம் முடிந்ததும் நிறுவியை இயக்கவும். கோப்பு அதிகாரப்பூர்வ IGDC தளத்திலிருந்து வந்தது என உறுதிப்படுத்திய பின்னரே Windows பாதுகாப்பு உறுதிப்படுத்தலைத் தொடரவும்.",guideAdditionalNotes:"பதிவிறக்க நேரம் வலையமைப்பைப் பொறுத்து மாறலாம். Android/மொபைல் பயன்பாடு இந்நிலையில் இந்தப் பக்கத்தில் விநியோகிக்கப்படவில்லை. எதிர்கால வெளியீடு அதே அதிகாரப்பூர்வ பதிவிறக்க இடத்தில் நிறுவியை மாற்றக்கூடும். அதிகாரப்பூர்வமற்ற இணைப்புகளிலிருந்து கோப்புகளை பதிவிறக்கவோ இயக்கவோ வேண்டாம்."},
+  hu:{guideSteps:"1. Nyissa meg az IGDC súgó- és letöltőközpontját.\n2. Kattintson a Letöltés gombra a MARU Media Player · Windows mellett, és mentse a maru-media-player-setup.exe fájlt.\n3. A letöltés után futtassa a telepítőt. Windows biztonsági megerősítést csak akkor folytasson, ha ellenőrizte, hogy a fájl az IGDC hivatalos webhelyéről származik.",guideAdditionalNotes:"A letöltési idő a hálózattól függően eltérhet. Az Android/mobilalkalmazás jelenleg nem érhető el ezen az oldalon. Egy későbbi kiadás ugyanazon a hivatalos letöltési helyen lecserélheti a telepítőt. Ne töltsön le és ne futtasson fájlokat nem hivatalos hivatkozásokról."},
+  ms:{guideSteps:"1. Buka Pusat Bantuan dan Muat Turun IGDC.\n2. Klik Muat turun di sebelah MARU Media Player · Windows dan simpan maru-media-player-setup.exe.\n3. Jalankan pemasang selepas muat turun selesai. Teruskan pengesahan keselamatan Windows hanya selepas mengesahkan fail datang daripada laman rasmi IGDC.",guideAdditionalNotes:"Masa muat turun mungkin berbeza mengikut rangkaian. Aplikasi Android/mudah alih tidak diedarkan pada halaman ini pada peringkat ini. Keluaran akan datang mungkin menggantikan pemasang di lokasi muat turun rasmi yang sama. Jangan muat turun atau jalankan fail daripada pautan tidak rasmi."},
+  nl:{guideSteps:"1. Open het IGDC-help- en downloadcentrum.\n2. Klik op Downloaden naast MARU Media Player · Windows en sla maru-media-player-setup.exe op.\n3. Voer het installatieprogramma uit nadat de download is voltooid. Ga alleen verder met een Windows-beveiligingsbevestiging nadat u hebt gecontroleerd dat het bestand van de officiële IGDC-site komt.",guideAdditionalNotes:"De downloadtijd kan per netwerk verschillen. De Android/mobiele app wordt in deze fase niet op deze pagina verspreid. Een toekomstige versie kan het installatieprogramma op dezelfde officiële downloadlocatie vervangen. Download of voer geen bestanden uit via onofficiële links."},
+  pl:{guideSteps:"1. Otwórz Centrum pomocy i pobierania IGDC.\n2. Kliknij Pobierz obok MARU Media Player · Windows i zapisz maru-media-player-setup.exe.\n3. Po zakończeniu pobierania uruchom instalator. Kontynuuj potwierdzenie zabezpieczeń Windows tylko po sprawdzeniu, że plik pochodzi z oficjalnej strony IGDC.",guideAdditionalNotes:"Czas pobierania może się różnić zależnie od sieci. Aplikacja Android/mobilna nie jest obecnie rozpowszechniana na tej stronie. Przyszła wersja może zastąpić instalator w tym samym oficjalnym miejscu pobierania. Nie pobieraj ani nie uruchamiaj plików z nieoficjalnych łączy."},
+  sv:{guideSteps:"1. Öppna IGDC:s hjälp- och nedladdningscenter.\n2. Klicka på Ladda ned bredvid MARU Media Player · Windows och spara maru-media-player-setup.exe.\n3. Kör installationsprogrammet när nedladdningen är klar. Fortsätt med en Windows-säkerhetsbekräftelse först efter att du har bekräftat att filen kommer från IGDC:s officiella webbplats.",guideAdditionalNotes:"Nedladdningstiden kan variera med nätverket. Android/mobilappen distribueras inte på denna sida i detta skede. En framtida version kan ersätta installationsprogrammet på samma officiella nedladdningsplats. Ladda inte ned eller kör filer från inofficiella länkar."},
+  tl:{guideSteps:"1. Buksan ang IGDC Help at Download Center.\n2. I-click ang I-download sa tabi ng MARU Media Player · Windows at i-save ang maru-media-player-setup.exe.\n3. Patakbuhin ang installer matapos ang pag-download. Ipagpatuloy lamang ang Windows security confirmation kapag napatunayang mula sa opisyal na site ng IGDC ang file.",guideAdditionalNotes:"Maaaring mag-iba ang oras ng pag-download ayon sa network. Hindi pa ipinamamahagi ang Android/mobile app sa pahinang ito. Maaaring palitan ng susunod na bersyon ang installer sa parehong opisyal na lokasyon ng pag-download. Huwag mag-download o magpatakbo ng file mula sa hindi opisyal na link."},
+  uk:{guideSteps:"1. Відкрийте Центр довідки та завантажень IGDC.\n2. Натисніть Завантажити поруч із MARU Media Player · Windows і збережіть maru-media-player-setup.exe.\n3. Після завершення завантаження запустіть інсталятор. Продовжуйте підтвердження безпеки Windows лише після перевірки, що файл отримано з офіційного сайту IGDC.",guideAdditionalNotes:"Час завантаження може відрізнятися залежно від мережі. Android/мобільний застосунок поки не розповсюджується на цій сторінці. Майбутня версія може замінити інсталятор у тому самому офіційному місці завантаження. Не завантажуйте та не запускайте файли з неофіційних посилань."},
+  uz:{guideSteps:"1. IGDC yordam va yuklab olish markazini oching.\n2. MARU Media Player · Windows yonidagi Yuklab olish tugmasini bosing va maru-media-player-setup.exe faylini saqlang.\n3. Yuklab olish tugagach, o‘rnatuvchini ishga tushiring. Windows xavfsizlik tasdig‘ini faqat fayl rasmiy IGDC saytidan olingani tekshirilgandan keyin davom ettiring.",guideAdditionalNotes:"Yuklab olish vaqti tarmoqqa qarab farq qilishi mumkin. Android/mobil ilova hozircha bu sahifada tarqatilmaydi. Kelajakdagi versiya o‘rnatuvchini shu rasmiy yuklab olish joyida almashtirishi mumkin. Norasmiy havolalardan fayllarni yuklab olmang yoki ishga tushirmang."}
+};
+Object.keys(DOWNLOAD_GUIDE_I18N).forEach(function(code){
+  I18N[code] = Object.assign(I18N[code] || {}, DOWNLOAD_GUIDE_I18N[code]);
+});
+
+
 const RTL = new Set(['ar','fa','ur']);
 function getLang(){
   try{
@@ -1389,38 +1722,28 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
   if(!guideBtn) return;
   function safe(v){ return (v == null ? '' : String(v)); }
   function buildGuideText(){
-    const lines = [];
-    lines.push('IGDC DOWNLOAD GUIDE');
+    const t=I18N[getLang()] || I18N.en || I18N.ko;
+    const en=I18N.en || {};
+    const lines=[];
+    lines.push(t.title || 'IGDC Help');
     lines.push('===================');
     lines.push('');
     lines.push('MARU Media Player · Windows');
     lines.push('');
-    lines.push('This guide explains how to download and install the official Windows version of MARU Media Player from the IGDC Help · Download Center.');
+    lines.push(t.downloadText || en.downloadText || '');
     lines.push('');
-    lines.push('Download and installation');
-    lines.push('-------------------------');
-    lines.push('1. Open the IGDC Help · Download Center page.');
-    lines.push('2. Find the MARU Media Player · Windows item.');
-    lines.push('3. Click the Download button.');
-    lines.push('4. Save maru-media-player-setup.exe to your computer.');
-    lines.push('5. After the download is complete, run the installer.');
-    lines.push('6. If Windows displays a security confirmation, continue only after confirming that the file was downloaded from the official IGDC site.');
+    lines.push(t.guideSteps || en.guideSteps || '');
     lines.push('');
-    lines.push('Important notes');
-    lines.push('---------------');
-    lines.push('- The Windows installer is a large file, about 197 MB.');
-    lines.push('- Download time may vary depending on the network.');
-    lines.push('- The Android/mobile app is not distributed on this page at this stage.');
-    lines.push('- If a new version is released later, the installer file may be replaced at the same official download location.');
-    lines.push('- Do not download or run files from unofficial links.');
+    lines.push(t.notice || en.notice || '');
     lines.push('');
-    lines.push('Support');
-    lines.push('-------');
-    lines.push('If you need help, use the Q&A/help area on the IGDC site first. The AI consultant may provide the first guidance and answer.');
-    lines.push('Official support contact: igdcplatform@gmail.com');
+    lines.push(t.guideAdditionalNotes || en.guideAdditionalNotes || '');
+    lines.push('');
+    lines.push(t.officialEmailNote || en.officialEmailNote || '');
+    lines.push('igdcplatform@gmail.com');
     lines.push('');
     return lines.join('\r\n');
   }
+
   guideBtn.addEventListener('click', function(ev){
     ev.preventDefault();
     const blob = new Blob([buildGuideText()], { type:'text/plain;charset=utf-8' });
@@ -1439,6 +1762,11 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
 <script id="support-sidebar-lang-sync">
 (function(){
   var SUPPORT_SIDE_LABELS = {"ko": {"home": "🏠 홈", "network": "🛒 마켓 허브", "distribution": "🏭 유통허브", "social": "📢 쇼셜 네트워크", "media": "🎬 미디어 허브", "tour": "🧳 여행·관광·숙박", "qna": "💬 Q&A 문의", "literature": "📚 문학 학술교류"}, "en": {"home": "🏠 Home", "network": "🛒 Market Hub", "distribution": "🏭 Distribution Hub", "social": "📢 Social Network", "media": "🎬 Media Hub", "tour": "🧳 Travel · Tourism", "qna": "💬 Q&A Contact", "literature": "📚 Literature & Academic Exchange"}, "zh": {"home": "🏠 首页", "network": "🛒 市场中心", "distribution": "🏭 流通中心", "social": "📢 社交网络", "media": "🎬 媒体中心", "tour": "🧳 旅行 · 旅游 · 住宿", "qna": "💬 问答咨询", "literature": "📚 文学与学术交流"}, "zht": {"home": "🏠 首頁", "network": "🛒 市場中心", "distribution": "🏭 分銷中心", "social": "📢 社交網絡", "media": "🎬 媒體中心", "tour": "🧳 旅遊 · 觀光", "qna": "💬 問答諮詢", "literature": "📚 Literature & Academic Exchange"}, "ja": {"home": "🏠 ホーム", "network": "🛒 マーケットハブ", "distribution": "🏭 流通ハブ", "social": "📢 ソーシャルネットワーク", "media": "🎬 メディアハブ", "tour": "🧳 旅行・観光・宿泊", "qna": "💬 質問と回答", "literature": "📚 文学・学術交流"}, "es": {"home": "🏠 Inicio", "network": "🛒 Centro de Mercado", "distribution": "🏭 Centro de Distribución", "social": "📢 Red Social", "media": "🎬 Centro de Medios", "tour": "🧳 Viajes · Turismo · Alojamiento", "qna": "💬 Preguntas y respuestas", "literature": "📚 Intercambio Literario y Académico"}, "fr": {"home": "🏠 Accueil", "network": "🛒 Hub Marché", "distribution": "🏭 Hub Distribution", "social": "📢 Réseau Social", "media": "🎬 Hub Média", "tour": "🧳 Voyage · Tourisme · Hébergement", "qna": "💬 Questions-réponses", "literature": "📚 Échange Littéraire et Académique"}, "de": {"home": "🏠 Startseite", "network": "🛒 Marktplatz-Hub", "distribution": "🏭 Vertriebs-Hub", "social": "📢 Soziales Netzwerk", "media": "🎬 Medien-Hub", "tour": "🧳 Reisen · Tourismus · Unterkunft", "qna": "💬 Fragen und Antworten", "literature": "📚 Literatur & Akademischer Austausch"}, "ru": {"home": "🏠 Главная", "network": "🛒 Маркет-хаб", "distribution": "🏭 Дистрибуционный хаб", "social": "📢 Социальная сеть", "media": "🎬 Медиа-хаб", "tour": "🧳 Путешествия · Туризм · Проживание", "qna": "💬 Вопросы и ответы", "literature": "📚 Литературный и академический обмен"}, "pt": {"home": "🏠 Início", "network": "🛒 Hub de Mercado", "distribution": "🏭 Hub de Distribuição", "social": "📢 Rede Social", "media": "🎬 Hub de Mídia", "tour": "🧳 Viagem · Turismo · Hospedagem", "qna": "💬 Consulta Perguntas e respostas", "literature": "📚 Intercâmbio Literário e Acadêmico"}, "it": {"home": "🏠 Home", "network": "🛒 Hub del Mercato", "distribution": "🏭 Hub di Distribuzione", "social": "📢 Rete Sociale", "media": "🎬 Hub dei Media", "tour": "🧳 Viaggi · Turismo · Alloggio", "qna": "💬 Domande e risposte", "literature": "📚 Scambio Letterario e Accademico"}, "ar": {"home": "🏠 الرئيسية", "network": "🛒 مركز السوق", "distribution": "🏭 مركز التوزيع", "social": "📢 الشبكة الاجتماعية", "media": "🎬 مركز الوسائط", "tour": "🧳 السفر · السياحة · الإقامة", "qna": "💬 الأسئلة والأجوبة", "literature": "📚 التبادل الأدبي والعلمي"}, "vi": {"home": "🏠 Trang chủ", "network": "🛒 Trung tâm thị trường", "distribution": "🏭 Trung tâm phân phối", "social": "📢 Mạng xã hội", "media": "🎬 Trung tâm truyền thông", "tour": "🧳 Du lịch · Lữ hành · Lưu trú", "qna": "💬 Hỏi & Đáp", "literature": "📚 Giao lưu Văn học & Học thuật"}, "th": {"home": "🏠 หน้าแรก", "network": "🛒 ศูนย์กลางตลาด", "distribution": "🏭 ศูนย์กระจายสินค้า", "social": "📢 โซเชียลเน็ตเวิร์ก", "media": "🎬 ศูนย์กลางสื่อ", "tour": "🧳 การเดินทาง · การท่องเที่ยว · ที่พัก", "qna": "💬 ถาม-ตอบ", "literature": "📚 การแลกเปลี่ยนวรรณกรรมและวิชาการ"}, "id": {"home": "🏠 Beranda", "network": "🛒 Pusat Pasar", "distribution": "🏭 Pusat Distribusi", "social": "📢 Jaringan Sosial", "media": "🎬 Pusat Media", "tour": "🧳 Perjalanan · Pariwisata · Akomodasi", "qna": "💬 Tanya Jawab", "literature": "📚 Pertukaran Sastra & Akademik"}, "hi": {"home": "🏠 होम", "network": "🛒 मार्केट हब", "distribution": "🏭 डिस्ट्रीब्यूशन हब", "social": "📢 सोशल नेटवर्क", "media": "🎬 मीडिया हब", "tour": "🧳 यात्रा · पर्यटन · आवास", "qna": "💬 प्रश्नोत्तर संपर्क", "literature": "📚 साहित्य एवं शैक्षणिक आदान-प्रदान"}, "tr": {"home": "🏠 Ana Sayfa", "network": "🛒 Pazar Merkezi", "distribution": "🏭 Dağıtım Merkezi", "social": "📢 Sosyal Ağ", "media": "🎬 Medya Merkezi", "tour": "🧳 Seyahat · Turizm · Konaklama", "qna": "💬 Soru-Cevap", "literature": "📚 Edebiyat ve Akademik Değişim"}, "fa": {"home": "🏠 خانه", "network": "🛒 مرکز بازار", "distribution": "🏭 مرکز توزیع", "social": "📢 شبکه اجتماعی", "media": "🎬 مرکز رسانه", "tour": "🧳 سفر · گردشگری · اقامت", "qna": "💬 پرسش و پاسخ", "literature": "📚 تبادل ادبی و علمی"}, "bn": {"home": "🏠 হোম", "network": "🛒 মার্কেট হাব", "distribution": "🏭 ডিস্ট্রিবিউশন হাব", "social": "📢 সোশ্যাল নেটওয়ার্ক", "media": "🎬 মিডিয়া হাব", "tour": "🧳 ভ্রমণ · পর্যটন", "qna": "💬 প্রশ্নোত্তর যোগাযোগ", "literature": "📚 সাহিত্য ও একাডেমিক বিনিময়"}, "ur": {"home": "🏠 ہوم", "network": "🛒 مارکیٹ ہب", "distribution": "🏭 ڈسٹری بیوشن ہب", "social": "📢 سوشل نیٹ ورک", "media": "🎬 میڈیا ہب", "tour": "🧳 سفر · سیاحت · رہائش", "qna": "💬 سوال و جواب", "literature": "📚 ادبی و علمی تبادلہ"}, "sw": {"home": "🏠 Nyumbani", "network": "🛒 Kitovu cha Soko", "distribution": "🏭 Kitovu cha Usambazaji", "social": "📢 Mtandao wa Kijamii", "media": "🎬 Kitovu cha Vyombo vya Habari", "tour": "🧳 Safari · Utalii · Malazi", "qna": "💬 Maswali na majibu", "literature": "📚 Fasihi na Mabadilishano ya Kitaaluma"}, "ta": {"home": "🏠 முகப்பு", "network": "🛒 சந்தை மையம்", "distribution": "🏭 விநியோக மையம்", "social": "📢 சமூக வலைப்பின்னல்", "media": "🎬 ஊடக மையம்", "tour": "🧳 பயணம் · சுற்றுலா · தங்குமிடம்", "qna": "💬 கேள்வி-பதில் தொடர்பு", "literature": "📚 இலக்கியம் மற்றும் கல்வி பரிமாற்றம்"}, "hu": {"home": "🏠 Főoldal", "network": "🛒 Piaci központ", "distribution": "🏭 Disztribúciós központ", "social": "📢 Közösségi hálózat", "media": "🎬 Médiaközpont", "tour": "🧳 Utazás · Turizmus", "qna": "💬 Kérdések és válaszok", "literature": "📚 Literature & Academic Exchange"}, "ms": {"home": "🏠 Laman Utama", "network": "🛒 Hab Pasaran", "distribution": "🏭 Hab Pengedaran", "social": "📢 Rangkaian Sosial", "media": "🎬 Hab Media", "tour": "🧳 Perjalanan · Pelancongan", "qna": "💬 Soal Jawab", "literature": "📚 Pertukaran Sastera & Akademik"}, "nl": {"home": "🏠 Home", "network": "🛒 Markthub", "distribution": "🏭 Distributiehub", "social": "📢 Sociaal netwerk", "media": "🎬 Mediahub", "tour": "🧳 Reizen · Toerisme", "qna": "💬 Vragen en antwoorden", "literature": "📚 Literaire en academische uitwisseling"}, "pl": {"home": "🏠 Strona główna", "network": "🛒 Centrum rynku", "distribution": "🏭 Centrum dystrybucji", "social": "📢 Sieć społecznościowa", "media": "🎬 Centrum mediów", "tour": "🧳 Podróże · Turystyka", "qna": "💬 Pytania i odpowiedzi", "literature": "📚 Wymiana literacka i akademicka"}, "sv": {"home": "🏠 Hem", "network": "🛒 Marknadshubb", "distribution": "🏭 Distributionshubb", "social": "📢 Socialt nätverk", "media": "🎬 Mediehubb", "tour": "🧳 Resor · Turism", "qna": "💬 Frågor och svar", "literature": "📚 Litterärt och akademiskt utbyte"}, "tl": {"home": "🏠 Tahanan", "network": "🛒 Sentro ng Pamilihan", "distribution": "🏭 Sentro ng Distribusyon", "social": "📢 Sosyal na Network", "media": "🎬 Sentro ng Media", "tour": "🧳 Paglalakbay · Turismo", "qna": "💬 Tanong at Sagot", "literature": "📚 Palitang Pampanitikan at Akademiko"}, "uk": {"home": "🏠 Головна", "network": "🛒 Маркет-хаб", "distribution": "🏭 Дистрибуційний хаб", "social": "📢 Соціальна мережа", "media": "🎬 Медіа-хаб", "tour": "🧳 Подорожі · Туризм", "qna": "💬 Запитання й відповіді", "literature": "📚 Literature & Academic Exchange"}, "uz": {"home": "🏠 Bosh sahifa", "network": "🛒 Market markazi", "distribution": "🏭 Tarqatish markazi", "social": "📢 Ijtimoiy tarmoq", "media": "🎬 Media markazi", "tour": "🧳 Sayohat · Turizm", "qna": "💬 Savol-javob", "literature": "📚 Literature & Academic Exchange"}};
+  Object.assign(SUPPORT_SIDE_LABELS.ko, {social:'📢 소셜 네트워크'});
+  Object.assign(SUPPORT_SIDE_LABELS.zht, {literature:'📚 文學與學術交流'});
+  Object.assign(SUPPORT_SIDE_LABELS.hu, {literature:'📚 Irodalmi és tudományos csere'});
+  Object.assign(SUPPORT_SIDE_LABELS.uk, {literature:'📚 Літературний та академічний обмін'});
+  Object.assign(SUPPORT_SIDE_LABELS.uz, {literature:'📚 Adabiy va akademik almashinuv'});
   var SUPPORT_SIDE_PAGES = {"ko": ["home.html", "networkhub.html", "distributionhub.html", "socialnetwork.html", "mediahub.html", "tour.html"], "en": ["en/home_en.html", "en/networkhub_en.html", "en/distributionhub_en.html", "en/socialnetwork_en.html", "en/mediahub_en.html", "en/tour_en.html"], "zh": ["zh/home_zh.html", "zh/networkhub_zh.html", "zh/distributionhub_zh.html", "zh/socialnetwork_zh.html", "zh/mediahub_zh.html", "zh/tour_zh.html"], "zht": ["zht/home_zht.html", "zht/networkhub_zht.html", "zht/distributionhub_zht.html", "zht/socialnetwork_zht.html", "zht/mediahub_zht.html", "zht/tour_zht.html"], "ja": ["ja/home_ja.html", "ja/networkhub_ja.html", "ja/distributionhub_ja.html", "ja/socialnetwork_ja.html", "ja/mediahub_ja.html", "ja/tour_ja.html"], "es": ["es/home_es.html", "es/networkhub_es.html", "es/distributionhub_es.html", "es/socialnetwork_es.html", "es/mediahub_es.html", "es/tour_es.html"], "fr": ["fr/home_fr.html", "fr/networkhub_fr.html", "fr/distributionhub_fr.html", "fr/socialnetwork_fr.html", "fr/mediahub_fr.html", "fr/tour_fr.html"], "de": ["de/home_de.html", "de/networkhub_de.html", "de/distributionhub_de.html", "de/socialnetwork_de.html", "de/mediahub_de.html", "de/tour_de.html"], "ru": ["ru/home_ru.html", "ru/networkhub_ru.html", "ru/distributionhub_ru.html", "ru/socialnetwork_ru.html", "ru/mediahub_ru.html", "ru/tour_ru.html"], "pt": ["pt/home_pt.html", "pt/networkhub_pt.html", "pt/distributionhub_pt.html", "pt/socialnetwork_pt.html", "pt/mediahub_pt.html", "pt/tour_pt.html"], "it": ["it/home_it.html", "it/networkhub_it.html", "it/distributionhub_it.html", "it/socialnetwork_it.html", "it/mediahub_it.html", "it/tour_it.html"], "ar": ["ar/home_ar.html", "ar/networkhub_ar.html", "ar/distributionhub_ar.html", "ar/socialnetwork_ar.html", "ar/mediahub_ar.html", "ar/tour_ar.html"], "vi": ["vi/home_vi.html", "vi/networkhub_vi.html", "vi/distributionhub_vi.html", "vi/socialnetwork_vi.html", "vi/mediahub_vi.html", "vi/tour_vi.html"], "th": ["th/home_th.html", "th/networkhub_th.html", "th/distributionhub_th.html", "th/socialnetwork_th.html", "th/mediahub_th.html", "th/tour_th.html"], "id": ["id/home_id.html", "id/networkhub_id.html", "id/distributionhub_id.html", "id/socialnetwork_id.html", "id/mediahub_id.html", "id/tour_id.html"], "hi": ["hi/home_hi.html", "hi/networkhub_hi.html", "hi/distributionhub_hi.html", "hi/socialnetwork_hi.html", "hi/mediahub_hi.html", "hi/tour_hi.html"], "tr": ["tr/home_tr.html", "tr/networkhub_tr.html", "tr/distributionhub_tr.html", "tr/socialnetwork_tr.html", "tr/mediahub_tr.html", "tr/tour_tr.html"], "fa": ["fa/home_fa.html", "fa/networkhub_fa.html", "fa/distributionhub_fa.html", "fa/socialnetwork_fa.html", "fa/mediahub_fa.html", "fa/tour_fa.html"], "bn": ["bn/home_bn.html", "bn/networkhub_bn.html", "bn/distributionhub_bn.html", "bn/socialnetwork_bn.html", "bn/mediahub_bn.html", "bn/tour_bn.html"], "ur": ["ur/home_ur.html", "ur/networkhub_ur.html", "ur/distributionhub_ur.html", "ur/socialnetwork_ur.html", "ur/mediahub_ur.html", "ur/tour_ur.html"], "sw": ["sw/home_sw.html", "sw/networkhub_sw.html", "sw/distributionhub_sw.html", "sw/socialnetwork_sw.html", "sw/mediahub_sw.html", "sw/tour_sw.html"], "ta": ["ta/home_ta.html", "ta/networkhub_ta.html", "ta/distributionhub_ta.html", "ta/socialnetwork_ta.html", "ta/mediahub_ta.html", "ta/tour_ta.html"], "hu": ["hu/home_hu.html", "hu/networkhub_hu.html", "hu/distributionhub_hu.html", "hu/socialnetwork_hu.html", "hu/mediahub_hu.html", "hu/tour_hu.html"], "ms": ["ms/home_ms.html", "ms/networkhub_ms.html", "ms/distributionhub_ms.html", "ms/socialnetwork_ms.html", "ms/mediahub_ms.html", "ms/tour_ms.html"], "nl": ["nl/home_nl.html", "nl/networkhub_nl.html", "nl/distributionhub_nl.html", "nl/socialnetwork_nl.html", "nl/mediahub_nl.html", "nl/tour_nl.html"], "pl": ["pl/home_pl.html", "pl/networkhub_pl.html", "pl/distributionhub_pl.html", "pl/socialnetwork_pl.html", "pl/mediahub_pl.html", "pl/tour_pl.html"], "sv": ["sv/home_sv.html", "sv/networkhub_sv.html", "sv/distributionhub_sv.html", "sv/socialnetwork_sv.html", "sv/mediahub_sv.html", "sv/tour_sv.html"], "tl": ["tl/home_tl.html", "tl/networkhub_tl.html", "tl/distributionhub_tl.html", "tl/socialnetwork_tl.html", "tl/mediahub_tl.html", "tl/tour_tl.html"], "uk": ["uk/home_uk.html", "uk/networkhub_uk.html", "uk/distributionhub_uk.html", "uk/socialnetwork_uk.html", "uk/mediahub_uk.html", "uk/tour_uk.html"], "uz": ["uz/home_uz.html", "uz/networkhub_uz.html", "uz/distributionhub_uz.html", "uz/socialnetwork_uz.html", "uz/mediahub_uz.html", "uz/tour_uz.html"]};
   var KEYS = ['home','network','distribution','social','media','tour'];
   function normalizeLang(v){
@@ -1600,6 +1928,8 @@ window.addEventListener('message', e=>{ try{ const lang=e.data && (e.data.lang |
     uk:{clear:'Очистити',close:'Закрити',question:'Питання',answer:'Відповідь',answerPlaceholder:'Будь ласка, зачекайте. Ми скоро відповімо.',note:'※ На прості питання може одразу відповісти AI. Технічні, помилки або операційні питання надсилаються до admin Q&A.',pending:'Очікує',normal:'Загальне',admin:'Запит адміну',delete:'Видалити',deleteFail:'Не вдалося видалити (дозвіл/політика).',saveDisabled:'Серверне збереження вимкнено, бо Supabase url/key ще не підключені.',saveFail:'Надсилання не вдалося',fallbackOps:'Операційні питання перевірить адміністратор.',fallbackPrice:'Дивіться повідомлення на сторінці щодо ціни/плати.',fallbackThanks:'Дякуємо за питання. Ми швидко перевіримо.'},
     uz:{clear:'Tozalash',close:'Yopish',question:'Savol',answer:'Javob',answerPlaceholder:'Iltimos, biroz kuting. Tez orada javob beramiz.',note:'※ Oddiy savollarga AI darhol javob berishi mumkin. Texnik, xato yoki operatsion masalalar admin Q&A ga yuboriladi.',pending:'Kutilmoqda',normal:'Umumiy',admin:'Admin so‘rovi',delete:'O‘chirish',deleteFail:'O‘chirish amalga oshmadi (ruxsat/siyosat).',saveDisabled:'Supabase url/key ulanmagani uchun serverga saqlash o‘chirilgan.',saveFail:'Yuborish amalga oshmadi',fallbackOps:'Operatsion savollar admin tomonidan ko‘rib chiqiladi.',fallbackPrice:'Narx/to‘lov uchun sahifa bildirishnomasini ko‘ring.',fallbackThanks:'Savolingiz uchun rahmat. Tezda tekshiramiz.'}
   });
+
+  Object.assign(SUPPORT_QA_UI_FALLBACK.fa, {note:'※ پرسش‌های ساده می‌توانند فوراً توسط AI پاسخ داده شوند. موارد فنی، خطا یا مسائل عملیاتی به Q&A مدیر ارسال می‌شوند.'});
 
   function qnaLang(){
     try{ if(typeof getLang === 'function') return getLang(); }catch(e){}
