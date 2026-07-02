@@ -1,0 +1,1 @@
+Scratch recovery validation only.
