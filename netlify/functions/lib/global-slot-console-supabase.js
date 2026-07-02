@@ -17,13 +17,16 @@ function config() {
 
 async function request(path, init) {
   const cfg = config();
-  const response = await fetch(cfg.url + path, Object.assign({
-    headers: {
-      apikey: cfg.serviceKey,
-      Authorization: 'Bearer ' + cfg.serviceKey,
-      'Content-Type': 'application/json'
-    }
-  }, init || {}));
+  const baseHeaders = {
+    apikey: cfg.serviceKey,
+    Authorization: 'Bearer ' + cfg.serviceKey,
+    'Content-Type': 'application/json'
+  };
+  // Per-call headers such as Prefer must be added without discarding the
+  // service-role headers required by Supabase REST and Storage APIs.
+  const options = Object.assign({}, init || {});
+  options.headers = Object.assign({}, (init && init.headers) || {}, baseHeaders);
+  const response = await fetch(cfg.url + path, options);
   const raw = await response.text();
   let body = null;
   try { body = raw ? JSON.parse(raw) : null; } catch (_) { body = raw; }
