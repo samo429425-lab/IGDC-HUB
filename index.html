@@ -603,22 +603,30 @@ try{
 /* Keep header as positioning context */
 header{position:relative!important}
 /* Generic overrides (visuals unchanged) */
-#osLoginBtn, #igtcRoleInline3, #roleStatusBtn{
+#osLoginBtn, #igtcRoleInline3{
   z-index:2147483600!important; margin:0!important; white-space:nowrap!important;
 }
 </style>
 <style id="role-status-fix">
-  /* 롤 표시 박스 크기 고정 + 글자 균형 */
-  #userRole, .role-display, #roleStatusBtn, #igtcRoleInline3 {
-    display: inline-block;
-	position: fixed; top: 44px; left: 150px;
-    font-size: 14px;
-    line-height: 1.2;
-    padding: 8px 14px;
-    vertical-align: middle;
-    min-width: 180px;   /* 최소 크기만 제한 */
-    white-space: nowrap;
+  /* Canonical login-adjacent status badge. Only #igtcRoleInline3 is displayed. */
+  #igtcRoleInline3 {
+    display:inline-flex !important;
+    align-items:center;
+    box-sizing:border-box;
+    min-width:104px;
+    height:34px;
+    padding:7px 12px;
+    border:2px solid #005bb5;
+    border-radius:5px;
+    background:#fff;
+    color:#005bb5;
+    font-size:14px;
+    line-height:1;
+    white-space:nowrap;
+    text-align:left;
   }
+  #igtcRoleText3 { display:inline-block; min-width:0; }
+  #roleStatusBtn, #userRole, .role-display { display:none !important; }
 </style>
 <script id="authbar-pin-v4-js">
 (function(){
@@ -642,7 +650,7 @@ header{position:relative!important}
     return {hdr, rect:{left:lb.left-hb.left, top:lb.top-hb.top, width:lb.width, height:lb.height}};
   }
   function lockRole(loginInfo){
-    var role = byId('roleStatusBtn') || byId('igtcRoleInline3'); if (!role) return;
+    var role = byId('igtcRoleInline3'); if (!role) return;
     var hdr = inHeader(role); if (!hdr) return;
     // Force inline override to beat any prior CSS (including injected roleStatusBtn-style)
     role.style.position = 'absolute';
@@ -692,7 +700,8 @@ nav{transition:transform .1s ease;}
  iframe#mainFrame{min-height:0;height:calc(100dvh - var(--igdc-head-h,0px) - var(--igdc-nav-h,48px) + 85px) !important;display:block}</style>
 <style>a.js-seller-modal-trigger:hover { background-color:#FFFFFA; } </style>
 <script>(function(){try{var s=(localStorage.getItem('igdc_lang')||'').toLowerCase();if(s){document.documentElement.setAttribute('lang',s);window.IGTC_CURRENT_LANG=s;}}catch(e){}})();</script>
-<script>(function(){try{var r=(localStorage.getItem('igdc_role')||'').toLowerCase();if(!r&&window.osAuth&&osAuth.getIdTokenPayload){var c=osAuth.getIdTokenPayload()||{};var roles=(c['https://example.com/roles']||[]).map(String);if(roles.indexOf('admin')>-1)r='admin';}if(r){window.__IGDC_ROLE=r;document.documentElement.dataset.role=r;}}catch(e){}document.addEventListener('osauth:ready',function(){try{var r2=(window.__IGDC_ROLE||'').toLowerCase();if(!r2&&window.osAuth&&osAuth.getIdTokenPayload){var c=osAuth.getIdTokenPayload()||{};var roles=(c['https://example.com/roles']||[]).map(String);if(roles.indexOf('admin')>-1){window.__IGDC_ROLE='admin';document.documentElement.dataset.role='admin';}}}catch(e){}});})();</script>
+<!-- Removed: unverified localStorage role bootstrap.
+     Role display and admin navigation are now set only by the canonical fresh-token controller at the end of this file. -->
 <script src="/igtc-language-role-bridge.min.js"></script>
 
 <script id="igdc-igtc-adapter">
@@ -755,6 +764,10 @@ nav{transition:transform .1s ease;}
 @media (max-width: 920px), (max-height: 480px) and (orientation: landscape) {
   #mobileQnaLink { display: block !important; visibility: visible !important; opacity: 1 !important; }
 }
+</style>
+<style id="igdc-auth-prehide">
+/* Prevent the admin menu from flashing before a fresh authenticated role is verified. */
+html:not([data-igdc-auth-ready="1"]) nav [data-role~="admin"] { display:none !important; }
 </style>
 </head>
 <body>
@@ -1640,43 +1653,13 @@ function applyRoleUI(role) {
 /* ===== Refined Login UI Patch ===== */
 (function(){
   function findRoleEl(){
-    var el = document.getElementById('roleStatusBtn');
-    if (el) return el;
-    try{
-      var login = document.getElementById('osLoginBtn');
-      if (login){
-        var sib = login.nextElementSibling;
-        if (sib && (sib.tagName==='BUTTON' || sib.tagName==='SPAN' || sib.tagName==='DIV')){
-          if ((sib.textContent||'').trim().toLowerCase().includes('guest')){
-            sib.id = 'roleStatusBtn'; return sib;
-          }
-        }
-        var cand = Array.from(document.querySelectorAll('button,span,div')).find(function(x){
-          var t=(x.textContent||'').trim().toLowerCase();
-          var rect=x.getBoundingClientRect();
-          return t==='guest' && rect.top<120 && rect.left<300;
-        });
-        if (cand){ cand.id='roleStatusBtn'; return cand; }
-      }
-    }catch(e){}
-    return null;
+    // Canonical element only. Do not rename a guest badge into roleStatusBtn.
+    return document.getElementById('igtcRoleInline3');
   }
 
   function restyle(){
-    var login = document.getElementById('osLoginBtn');
-    var role  = findRoleEl();
-    if (!login || !role) return;
-    var css = [
-      '#roleStatusBtn{',
-      'position: fixed; top: 44px; left: 150px;',
-      'background: #fff; color:#005bb5; border:2px solid #005bb5;',
-      'padding:8px 14px; border-radius:5px; cursor:pointer; z-index:2000;',
-      'font-size:14px; min-width:180px; text-align:left;',  // ~2–2.5x width
-      '}'
-    ].join('');
-    var s=document.getElementById('roleStatusBtn-style');
-    if(!s){ s=document.createElement('style'); s.id='roleStatusBtn-style'; document.head.appendChild(s); }
-    s.textContent = css;
+    // Login-adjacent role styling is owned by #role-status-fix.
+    // Keep this compatibility hook because the toast behavior below is still used.
   }
 
   function overrideToast(){
@@ -3541,6 +3524,168 @@ function normLang(l){
 <!-- /IGDC mobile logout final guard v1 -->
 
 
+
+<!-- IGDC canonical auth bar and role gate v1 -->
+<script id="igdc-canonical-authbar-v1">
+(function(){
+  'use strict';
+  if (window.__IGDC_CANONICAL_AUTHBAR_V1__) return;
+  window.__IGDC_CANONICAL_AUTHBAR_V1__ = true;
+
+  var syncQueued = false;
+  var repeatTimer = 0;
+
+  function byId(id){ return document.getElementById(id); }
+  function normal(value){ return String(value == null ? '' : value).trim().toLowerCase().replace(/[\s.]+/g, '_'); }
+  function isFresh(payload){
+    var exp = Number(payload && payload.exp || 0);
+    return !!(payload && exp && exp * 1000 > Date.now() + 15000);
+  }
+  function languageIsKorean(){
+    try {
+      var lang = document.documentElement.getAttribute('lang') || 'ko';
+      return /^ko(?:[-_]|$)/i.test(lang);
+    } catch (_) { return true; }
+  }
+  function guestLabel(){ return languageIsKorean() ? '게스트' : 'Guest'; }
+  function roleRank(role){
+    var ranks = { guest:0, member:1, member_standard:2, member_premium:3, special_member:4,
+      commerce_manager:5, site_manager:12, coordinator_director:13, site_manager_director:14,
+      director:15, admin:20, super_admin:25, owner:30 };
+    role = normal(role);
+    if (Object.prototype.hasOwnProperty.call(ranks, role)) return ranks[role];
+    if (role.indexOf('site_manager_') === 0) return 12;
+    return 0;
+  }
+  function highestRole(values){
+    var best = 'guest';
+    var bestRank = 0;
+    (values || []).forEach(function(value){
+      var role = normal(value);
+      var rank = roleRank(role);
+      if (rank > bestRank) { best = role; bestRank = rank; }
+    });
+    return best;
+  }
+  function getFreshIdentity(){
+    try{
+      var auth = window.IGDCMemberAuth;
+      if (!auth || typeof auth.getIdTokenPayload !== 'function') return { authenticated:false, role:'guest', label:guestLabel() };
+      var payload = auth.getIdTokenPayload();
+      if (!isFresh(payload)) return { authenticated:false, role:'guest', label:guestLabel() };
+      var roles = typeof auth.getRoles === 'function' ? auth.getRoles() : [];
+      var role = highestRole(roles);
+      return { authenticated:true, role:role, label:role || 'member' };
+    }catch(_){
+      return { authenticated:false, role:'guest', label:guestLabel() };
+    }
+  }
+  function clearLegacyRoleMarkers(){
+    ['igdc_role','igdc_roles','igdc_role_label'].forEach(function(key){
+      try { localStorage.removeItem(key); } catch (_) {}
+      try { sessionStorage.removeItem(key); } catch (_) {}
+    });
+  }
+  function canonicalBadge(){
+    var badge = byId('igtcRoleInline3');
+    var old = byId('roleStatusBtn');
+    if (!badge && old) {
+      old.removeAttribute('id');
+      badge = old;
+      badge.id = 'igtcRoleInline3';
+    }
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.id = 'igtcRoleInline3';
+      var header = document.querySelector('header') || document.body;
+      header.insertBefore(badge, header.firstChild || null);
+    }
+    if (old && old !== badge && old.parentNode) old.parentNode.removeChild(old);
+    var text = byId('igtcRoleText3');
+    if (!text || !badge.contains(text)) {
+      badge.textContent = '';
+      text = document.createElement('span');
+      text.id = 'igtcRoleText3';
+      badge.appendChild(text);
+    }
+    return { badge:badge, text:text };
+  }
+  function alignBadge(badge){
+    try{
+      var header = document.querySelector('header');
+      var login = byId('osLoginBtn');
+      if (!header || !login || !badge) return;
+      if (!header.contains(login)) header.insertBefore(login, header.firstChild || null);
+      if (!header.contains(badge)) header.insertBefore(badge, login.nextSibling);
+      var hb = header.getBoundingClientRect();
+      var lb = login.getBoundingClientRect();
+      login.style.position = 'absolute';
+      login.style.left = Math.max(0, Math.round(lb.left - hb.left)) + 'px';
+      login.style.top = Math.max(0, Math.round(lb.top - hb.top)) + 'px';
+      badge.style.position = 'absolute';
+      badge.style.left = Math.max(0, Math.round((lb.left - hb.left) + lb.width + 2)) + 'px';
+      badge.style.top = Math.max(0, Math.round(lb.top - hb.top)) + 'px';
+    }catch(_){}
+  }
+  function apply(){
+    syncQueued = false;
+    var identity = getFreshIdentity();
+    var role = identity.authenticated ? identity.role : 'guest';
+    var label = identity.authenticated ? identity.label : guestLabel();
+
+    if (!identity.authenticated) clearLegacyRoleMarkers();
+
+    window.__IGDC_ROLE = role;
+    window.__IGDC_ROLE_LABEL = label;
+    window.__IGTC_ROLE = role;
+    window.__IGTC_ROLE_LABEL = label;
+    try {
+      document.documentElement.dataset.role = role;
+      document.documentElement.dataset.igdcAuthReady = '1';
+    } catch (_) {}
+
+    var badge = canonicalBadge();
+    badge.text.textContent = label;
+    badge.badge.setAttribute('data-role-base', role);
+    badge.badge.setAttribute('aria-label', identity.authenticated ? ('현재 권한: ' + label) : '현재 상태: 게스트');
+    alignBadge(badge.badge);
+
+    var canAdmin = identity.authenticated && (role === 'owner' || role === 'super_admin' || role === 'admin');
+    document.querySelectorAll('nav [data-role~="admin"]').forEach(function(el){
+      el.style.display = canAdmin ? '' : 'none';
+      el.setAttribute('aria-hidden', canAdmin ? 'false' : 'true');
+    });
+  }
+  function schedule(){
+    if (syncQueued) return;
+    syncQueued = true;
+    if (window.requestAnimationFrame) window.requestAnimationFrame(apply);
+    else setTimeout(apply, 0);
+  }
+  function arm(){
+    schedule();
+    document.addEventListener('osauth:ready', schedule, true);
+    document.addEventListener('osauth:done', schedule, true);
+    document.addEventListener('igdc:member-auth-ready', schedule, true);
+    window.addEventListener('pageshow', schedule);
+    window.addEventListener('resize', schedule);
+    window.addEventListener('storage', schedule);
+    // Auth events plus the short startup resync below cover late-loading login scripts.
+    // No global MutationObserver: it would fight legacy DOM writers and cause a render loop.
+    var deadline = Date.now() + 30000;
+    repeatTimer = window.setInterval(function(){
+      schedule();
+      if (Date.now() > deadline) {
+        window.clearInterval(repeatTimer);
+        repeatTimer = 0;
+      }
+    }, 750);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arm, { once:true });
+  else arm();
+})();
+</script>
+<!-- /IGDC canonical auth bar and role gate v1 -->
 </body>
 
 
