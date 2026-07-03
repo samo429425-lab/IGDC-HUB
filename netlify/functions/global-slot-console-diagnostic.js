@@ -2,7 +2,7 @@
 
 /*
  * Owner-only, read-only diagnostic for the isolated Global Slot management DB.
- * It never returns a database key, token, or row data.
+ * It never returns a database key, token, or table-row data.
  */
 const { resolveUser, capability } = require('./lib/global-slot-console-auth');
 const sb = require('./lib/global-slot-console-supabase');

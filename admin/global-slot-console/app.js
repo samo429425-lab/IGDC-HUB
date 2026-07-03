@@ -55,7 +55,105 @@
   async function saveMediaRights(e){e.preventDefault();if(!requireCandidate())return;await api('media.rights.save',{candidateId:selectedId,countryCode:$('mediaRightsCountry').value,rightsState:$('mediaCountryRightsState').value,accessType:$('mediaRightsAccessType').value,startAt:$('mediaRightsStart').value,endAt:$('mediaRightsEnd').value,licenseEvidenceUrl:$('mediaRightsEvidenceUrl').value,licenseReference:$('mediaRightsReference').value,note:$('mediaRightsNote').value},'POST');note('국가별 영상 권리 상태를 저장했습니다.','success');loadMediaDetail(selectedId)}
   async function queueMediaJob(){if(!requireCandidate())return;var d=await api('media.job.queue',{candidateId:selectedId,jobType:$('mediaJobType').value},'POST');note(d.note||'영상 처리 작업을 등록했습니다.','success');loadMediaDetail(selectedId)}
   async function refreshMediaReadiness(){if(!requireCandidate())return;var d=await api('media.readiness',{candidateId:selectedId},'POST');renderReadiness(d.readiness);note(d.readiness.canEnablePlayback?'권리·자산·전송 경로 기준을 모두 통과했습니다.':'아직 공개 전 보강 항목이 있습니다.','info')}
-  function wire(){if(wired)return;wired=true;document.querySelectorAll('.nav button').forEach(function(b){b.addEventListener('click',function(){activate(b.dataset.view)})});$('returnBtn').addEventListener('click',function(){
+  function installDiagnosticMenu(){
+    if(document.getElementById('gslotDiagnosticMenu'))return;
+    var nav=document.querySelector('.nav');
+    if(!nav)return;
+    var style=document.createElement('style');
+    style.id='gslotDiagnosticStyle';
+    style.textContent=''
+      +'.gslot-diag-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.48);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:18px}'
+      +'.gslot-diag-modal{width:min(980px,100%);max-height:90vh;overflow:hidden;background:#fff;border-radius:14px;box-shadow:0 22px 70px rgba(15,23,42,.35);display:flex;flex-direction:column;color:#172033}'
+      +'.gslot-diag-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:18px 20px;border-bottom:1px solid #d9e1ee;background:#f8fbff}'
+      +'.gslot-diag-head h2{margin:0;font-size:18px}.gslot-diag-head p{margin:5px 0 0;color:#64748b;font-size:12px}'
+      +'.gslot-diag-close{border:1px solid #bcc9db;border-radius:7px;background:#fff;color:#334155;padding:6px 10px;cursor:pointer;font:inherit}'
+      +'.gslot-diag-body{padding:18px 20px;overflow:auto}.gslot-diag-note{border:1px solid #d9e1ee;border-radius:10px;background:#f8fafc;padding:12px 14px;white-space:pre-wrap;word-break:break-word}'
+      +'.gslot-diag-actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.gslot-diag-actions button{border:1px solid #0c5ea8;border-radius:8px;background:#0c5ea8;color:#fff;padding:8px 12px;font:inherit;font-weight:700;cursor:pointer}.gslot-diag-actions button.secondary{background:#fff;color:#0c5ea8}.gslot-diag-actions button:disabled{opacity:.55;cursor:default}'
+      +'.gslot-diag-json{margin:0;max-height:420px;overflow:auto;border-radius:10px;background:#0f172a;color:#e2e8f0;padding:14px;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;word-break:break-word}'
+      +'.gslot-diag-meta{font-size:12px;color:#64748b;margin:8px 0 0}'
+      +'.gslot-diag-menu{margin-top:8px!important;border-top:1px solid #d9e1ee!important;padding-top:13px!important;color:#0c5ea8!important;font-weight:800!important}';
+    document.head.appendChild(style);
+    var menu=document.createElement('button');
+    menu.type='button';
+    menu.id='gslotDiagnosticMenu';
+    menu.className='gslot-diag-menu';
+    menu.textContent='🔎 시스템 진단 · JSON';
+    menu.addEventListener('click',function(){openDiagnosticPopup(true)});
+    nav.appendChild(menu);
+  }
+  function diagnosticToken(){return authToken();}
+  function diagnosticArtifact(payload,requestError){
+    return {
+      reportType:'igdc-global-slot-console-diagnostic',
+      version:'v1.0.0-owner-readonly',
+      generatedAt:new Date().toISOString(),
+      source:{href:location.href,origin:location.origin,pathname:location.pathname},
+      scope:{mode:'owner-only-readonly',writes:false,secretsExcluded:true},
+      result:payload||null,
+      requestError:requestError||null
+    };
+  }
+  function diagnosticSummary(report){
+    var result=report&&report.result||{};
+    var diagnosis=result.diagnosis||{};
+    var probe=result.probe||{};
+    if(report&&report.requestError)return '진단 함수 호출 실패: '+report.requestError;
+    if(probe.ok)return '정상 · '+(diagnosis.summary||'관리 DB 연결과 기본 테이블 읽기 권한이 확인되었습니다.');
+    return '확인 필요 · '+(diagnosis.summary||probe.message||'관리 DB 진단 결과를 확인하세요.');
+  }
+  function downloadDiagnosticJson(report){
+    var text=JSON.stringify(report,null,2);
+    var blob=new Blob([text],{type:'application/json;charset=utf-8'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;
+    a.download='IGDC_Global_Slot_Diagnostic_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(url)},1000);
+  }
+  function openDiagnosticPopup(autoRun){
+    var existing=document.getElementById('gslotDiagnosticBackdrop');
+    if(existing){existing.style.display='flex';if(autoRun){var rerun=document.getElementById('gslotDiagRun');if(rerun)rerun.click()}return;}
+    var backdrop=document.createElement('div');
+    backdrop.id='gslotDiagnosticBackdrop';backdrop.className='gslot-diag-backdrop';
+    backdrop.innerHTML=''
+      +'<section class="gslot-diag-modal" role="dialog" aria-modal="true" aria-labelledby="gslotDiagTitle">'
+      +'<header class="gslot-diag-head"><div><h2 id="gslotDiagTitle">글로벌 슬롯 시스템 진단</h2><p>현재 owner 세션을 재사용합니다. 관리 DB의 연결·권한 상태만 읽기 전용으로 점검하며 키·토큰·테이블 원문은 저장하거나 표시하지 않습니다.</p></div><button id="gslotDiagClose" class="gslot-diag-close" type="button">닫기</button></header>'
+      +'<div class="gslot-diag-body"><div id="gslotDiagNotice" class="gslot-diag-note">진단을 준비 중입니다.</div><div class="gslot-diag-actions"><button id="gslotDiagRun" type="button">지금 진단</button><button id="gslotDiagCopy" class="secondary" type="button" disabled>JSON 복사</button><button id="gslotDiagDownload" class="secondary" type="button" disabled>JSON 다운로드</button></div><div id="gslotDiagMeta" class="gslot-diag-meta"></div><pre id="gslotDiagJson" class="gslot-diag-json">아직 결과가 없습니다.</pre></div>'
+      +'</section>';
+    document.body.appendChild(backdrop);
+    var report=null;
+    function close(){backdrop.style.display='none'}
+    function setNotice(text){$('gslotDiagNotice').textContent=text}
+    async function runDiagnostic(){
+      var runButton=$('gslotDiagRun');
+      runButton.disabled=true;setNotice('owner 세션으로 관리 DB를 읽기 전용 점검 중입니다.');
+      try{
+        var token=diagnosticToken();
+        if(!token)throw new Error('현재 브라우저에서 기존 owner 로그인 토큰을 찾지 못했습니다. 어드민 로그인 상태를 확인해 주세요.');
+        var response=await fetch('/.netlify/functions/global-slot-console-diagnostic',{method:'GET',headers:{Accept:'application/json',Authorization:'Bearer '+token},cache:'no-store'});
+        var data=await response.json().catch(function(){return {ok:false,error:'JSON 응답이 아닙니다.'}});
+        if(!response.ok||!data.ok)throw new Error(data.error||('HTTP '+response.status));
+        report=diagnosticArtifact(data,null);
+      }catch(error){report=diagnosticArtifact(null,error&&error.message||String(error));}
+      $('gslotDiagJson').textContent=JSON.stringify(report,null,2);
+      $('gslotDiagMeta').textContent='생성 시각: '+report.generatedAt+' · 읽기 전용 · 비밀키/토큰/테이블 원문 제외';
+      setNotice(diagnosticSummary(report));
+      $('gslotDiagCopy').disabled=false;$('gslotDiagDownload').disabled=false;runButton.disabled=false;
+    }
+    $('gslotDiagClose').addEventListener('click',close);
+    backdrop.addEventListener('click',function(e){if(e.target===backdrop)close()});
+    $('gslotDiagRun').addEventListener('click',runDiagnostic);
+    $('gslotDiagCopy').addEventListener('click',function(){
+      if(!report)return;
+      var text=JSON.stringify(report,null,2);
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(function(){setNotice('진단 JSON을 복사했습니다.')}).catch(function(){setNotice('자동 복사에 실패했습니다. 아래 JSON을 직접 복사해 주세요.')});}
+      else setNotice('아래 JSON을 직접 복사해 주세요.');
+    });
+    $('gslotDiagDownload').addEventListener('click',function(){if(report)downloadDiagnosticJson(report)});
+    if(autoRun)runDiagnostic();
+  }
+  function wire(){if(wired)return;wired=true;installDiagnosticMenu();document.querySelectorAll('.nav button').forEach(function(b){if(b.id==='gslotDiagnosticMenu')return;b.addEventListener('click',function(){activate(b.dataset.view)})});$('returnBtn').addEventListener('click',function(){
     var raw='';
     try{raw=new URLSearchParams(location.search).get('returnPath')||'';}catch(_){}
     var target=(raw&&raw.charAt(0)==='/'&&raw.indexOf('//')!==0)?raw:'/admin.html';
