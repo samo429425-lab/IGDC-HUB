@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.5.2-issuer-ui';
+  var VERSION = '2.6.0-oso-role-control';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -152,7 +152,7 @@
       submitTitle:'서류 제출', submitDesc:'회원 서류/검토 자료를 제출합니다. 실제 저장은 서버 API 또는 기존 제출 엔진과 연결됩니다.', titleLabel:'제목', submitTitlePlaceholder:'제출 제목', bodyLabel:'내용', submitBodyPlaceholder:'제출 내용', submitButton:'제출',
       questionTitle:'질문/문의', questionDesc:'일반 회원은 질문을 등록할 수 있고, 답글은 관리자 권한에서 활성화됩니다.', qTitleLabel:'질문 제목', qTitlePlaceholder:'질문 제목', qBodyLabel:'질문 내용', qBodyPlaceholder:'질문 내용', qButton:'질문 등록', openReplyAdmin:'답글 관리 열기',
       noticeTitle:'공지사항', noticeDesc:'공지 목록은 서버 API 연결 시 자동으로 표시됩니다.', manageNotice:'공지 작성/답글 관리',
-      noPermission:'권한 없음', save:'변경', block:'차단', adminMembersTitle2:'OS0/Auth0 회원 목록', adminMembersDesc2:'현재 롤 확인·변경·차단을 처리합니다. owner는 전체, admin은 owner를 제외한 전체를 관리합니다. director·site manager는 자기보다 낮은 롤만 보이며, 상위·동급 롤은 목록에서 제외됩니다.', search:'검색', colMember:'회원', colRole:'현재 롤', colChangeReview:'변경 롤/승급 검토', colManage:'관리', noMembers:'관리 권한으로 볼 수 있는 회원이 없거나 API 연결 대기 중입니다.', shown:'표시', serverQuery:'서버 조회', page:'페이지', previous:'이전', next:'다음',
+      noPermission:'권한 없음', save:'예외 적용', restoreOsO:'OSO 기준 복귀', block:'차단 검토', unblock:'차단 해제', protectedAccount:'보호 계정', selectSpecialRole:'특수 역할 선택', roleReasonPrompt:'예외 역할 적용 사유를 입력하십시오.', restoreReasonPrompt:'OSO 자동 역할 기준으로 복귀시키는 사유를 입력하십시오.', blockReasonPrompt:'차단 사유를 입력하십시오.', unblockReasonPrompt:'차단 해제 사유를 입력하십시오.', roleSourceOsO:'OSO/M2M 원본', roleSourceManual:'관리자 예외 적용', roleSourceReturned:'OSO 변경 반영', confirmProtectedBlockPrefix:'보호 계정입니다. 아래 확인 문구를 정확히 입력하십시오:\n', adminMembersTitle2:'OSO/Auth0 회원 목록', adminMembersDesc2:'member와 member_standard는 OSO/M2M 자동 역할을 읽어 표시합니다. 이 화면에서는 프리미엄·커머스·특수·관리자 역할 같은 예외만 조정하고, 문제 회원만 차단 검토합니다. owner는 전체, admin은 owner를 제외한 전체를 관리합니다. director·site manager는 자기보다 낮은 롤만 보입니다.', search:'검색', colMember:'회원', colRole:'적용 역할 / OSO 원본', colChangeReview:'특수 역할 조정', colManage:'관리', noMembers:'관리 권한으로 볼 수 있는 회원이 없거나 API 연결 대기 중입니다.', shown:'표시', serverQuery:'서버 조회', page:'페이지', previous:'이전', next:'다음',
       reviewDocDefault:'제출 서류', open:'열람', detail:'상세', approve:'승인', reject:'반려', reviewTitle:'승급 검토', reviewRefresh:'새로고침', reviewDesc:'회원이 제출한 서류와 승급·권한 신청 자료를 검토하는 영역입니다. owner는 전체, admin은 owner 제외, director/site_manager_director는 자기보다 아래 롤의 제출 자료만 볼 수 있습니다.', reviewHeadDoc:'제출 서류', reviewHeadMember:'회원', reviewHeadTarget:'요청 롤', reviewHeadStatus:'상태', reviewHeadReview:'검토', noReviewDocs:'현재 권한으로 볼 수 있는 제출 서류가 없거나, 서류 검토 API 연결 대기 중입니다.', shownItems:'표시', serverItems:'서버 조회',
       adminNoticeTitle:'답글/공지 관리', adminNoticeDesc:'관리자 권한에서만 답글 작성·공지 등록 버튼이 활성화됩니다.', targetTitleLabel:'대상/제목', targetTitlePlaceholder:'공지 제목 또는 답글 대상', adminNoticeBodyLabel:'내용', adminNoticeBodyPlaceholder:'공지 또는 답글 내용', register:'등록',
       registered:'등록되었습니다.', reviewTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 승급 검토를 다시 열어야 합니다.', reviewApiMissing:'서류 검토 API 연결이 필요합니다.', noAttachment:'열람 가능한 첨부 URL이 없습니다.', confirmProcess:'처리할까요?', memberTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 회원 목록을 다시 열어야 합니다.', tokenExpiredSuffix:' / 현재 로그인 세션 토큰이 만료되었거나 없습니다.', changeNoPerm:'현재 권한으로는 해당 롤로 변경할 수 없습니다.', confirmRoleChangePrefix:'회원 롤을 ', confirmRoleChangeSuffix:' 로 변경할까요?', confirmBlock:'이 회원을 차단/퇴출 처리할까요?', upgradeRequested:'신청되었습니다.'
@@ -169,7 +169,7 @@
       submitTitle:'Document Submission', submitDesc:'Submit member documents or review materials. Actual saving is handled by the server API or the existing submission engine.', titleLabel:'Title', submitTitlePlaceholder:'Submission title', bodyLabel:'Content', submitBodyPlaceholder:'Submission content', submitButton:'Submit',
       questionTitle:'Questions / Inquiry', questionDesc:'General members can submit questions, and replies are enabled for administrators.', qTitleLabel:'Question title', qTitlePlaceholder:'Question title', qBodyLabel:'Question content', qBodyPlaceholder:'Question content', qButton:'Submit Question', openReplyAdmin:'Open Reply Management',
       noticeTitle:'Notices', noticeDesc:'Notice lists are displayed automatically when the server API is connected.', manageNotice:'Create Notice / Manage Replies',
-      noPermission:'No permission', save:'Save', block:'Block', adminMembersTitle2:'OS0/Auth0 Member List', adminMembersDesc2:'Check roles, change allowed roles, and manage blocking. Owners manage all; admins manage everyone except owners. Directors and site managers see only lower roles; higher and equal roles are excluded.', search:'Search', colMember:'Member', colRole:'Current Role', colChangeReview:'Change Role / Review', colManage:'Manage', noMembers:'No members are visible with the current permission, or the API is waiting for connection.', shown:'Shown', serverQuery:'Server query', page:'Page', previous:'Previous', next:'Next',
+      noPermission:'No permission', save:'Apply exception', restoreOsO:'Restore OSO role', block:'Review block', unblock:'Unblock', protectedAccount:'Protected account', selectSpecialRole:'Select special role', roleReasonPrompt:'Enter the reason for this role exception.', restoreReasonPrompt:'Enter the reason for restoring the OSO automatic role.', blockReasonPrompt:'Enter the reason for blocking this member.', unblockReasonPrompt:'Enter the reason for unblocking this member.', roleSourceOsO:'OSO/M2M source', roleSourceManual:'Admin exception active', roleSourceReturned:'OSO change applied', confirmProtectedBlockPrefix:'This is a protected account. Enter the exact confirmation phrase:\n', adminMembersTitle2:'OSO/Auth0 Member List', adminMembersDesc2:'member and member_standard are displayed from the OSO/M2M automatic role source. This page adjusts only premium, commerce, special, and management exceptions, and reviews blocking only for problem accounts. Owners manage all; admins manage everyone except owners. Directors and site managers see only lower roles.', search:'Search', colMember:'Member', colRole:'Applied / OSO source', colChangeReview:'Special role exception', colManage:'Manage', noMembers:'No members are visible with the current permission, or the API is waiting for connection.', shown:'Shown', serverQuery:'Server query', page:'Page', previous:'Previous', next:'Next',
       reviewDocDefault:'Submitted Document', open:'Open', detail:'Details', approve:'Approve', reject:'Reject', reviewTitle:'Review Queue', reviewRefresh:'Refresh', reviewDesc:'Review member-submitted documents and upgrade/permission requests. Owner can view all, admin can view all except owner, and director/site_manager_director can view only roles below their own.', reviewHeadDoc:'Document', reviewHeadMember:'Member', reviewHeadTarget:'Requested Role', reviewHeadStatus:'Status', reviewHeadReview:'Review', noReviewDocs:'No submitted documents are visible with the current permission, or the review API is waiting for connection.', shownItems:'Shown', serverItems:'Server query',
       adminNoticeTitle:'Replies / Notice Management', adminNoticeDesc:'Reply and notice registration buttons are enabled only for administrators.', targetTitleLabel:'Target / Title', targetTitlePlaceholder:'Notice title or reply target', adminNoticeBodyLabel:'Content', adminNoticeBodyPlaceholder:'Notice or reply content', register:'Register',
       registered:'Registered.', reviewTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the review queue.', reviewApiMissing:'Document review API connection is required.', noAttachment:'No viewable attachment URL is available.', confirmProcess:'Proceed?', memberTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the member list.', tokenExpiredSuffix:' / The current login session token is missing or expired.', changeNoPerm:'You do not have permission to assign this role.', confirmRoleChangePrefix:'Change this member role to ', confirmRoleChangeSuffix:'?', confirmBlock:'Block or remove this member?', upgradeRequested:'Application submitted.'
@@ -242,6 +242,22 @@
   function managerRole(roles) {
     roles = unique(roles).filter(isManagerRole);
     return highestRole(roles);
+  }
+  function isAutoManagedRole(role) {
+    role = normalizeRole(role);
+    return role === 'guest' || role === 'member' || role === 'member_standard';
+  }
+  function isProtectedMember(member) {
+    var state = member && member.role_state || {};
+    var role = normalizeRole(member && (member.role || highestRole(member.roles || [])));
+    return !!(member && (member.protected_account || state.protected_account || role === 'owner' || role === 'admin' || role === 'super_admin'));
+  }
+  function memberForRow(row) {
+    if (!row) return null;
+    var userId = row.getAttribute('data-user-id');
+    return (STATE.members || []).filter(function (member) {
+      return String(member.user_id || member.id || '') === String(userId || '');
+    })[0] || null;
   }
   function canViewOrManageRole(myRoles, targetRoles) {
     var mine = managerRole(myRoles);
@@ -657,11 +673,8 @@
   }
   function rolesForSelect(current) {
     var roles = (cfg().roleOptions || [
-      'guest',
-      'member',
-      'member_standard',
       'member_premium',
-      'special_menber',
+      'special_member',
       'commerce_manager',
       'site_manager',
       'site_manager.home.om',
@@ -692,38 +705,76 @@
       'owner'
     ]);
     var myRoles = (STATE.me && STATE.me.roles) || readRoles();
-    var filtered = roles.filter(function (r) { return canAssignRole(myRoles, r); });
-    if (current && filtered.map(normalizeRole).indexOf(normalizeRole(current)) < 0 && canAssignRole(myRoles, current)) filtered.unshift(current);
-    return filtered.map(function (r) { return '<option value="'+esc(r)+'" '+(normalizeRole(current)===normalizeRole(r)?'selected':'')+'>'+esc(r)+'</option>'; }).join('');
+    var currentRole = normalizeRole(current);
+    var filtered = roles.filter(function (role) {
+      return !isAutoManagedRole(role) && canAssignRole(myRoles, role);
+    });
+    if (currentRole && !isAutoManagedRole(currentRole) && filtered.map(normalizeRole).indexOf(currentRole) < 0 && canAssignRole(myRoles, currentRole)) {
+      filtered.unshift(currentRole);
+    }
+    var prompt = uiText().selectSpecialRole || 'Select special role';
+    var options = '<option value="" '+(isAutoManagedRole(currentRole) ? 'selected' : '')+'>'+esc(prompt)+'</option>';
+    return options + filtered.map(function (role) {
+      return '<option value="'+esc(role)+'" '+(currentRole === normalizeRole(role) ? 'selected' : '')+'>'+esc(role)+'</option>';
+    }).join('');
   }
+
+  function roleStateHtml(member) {
+    var u = uiText();
+    var state = member.role_state || {};
+    var effective = normalizeRole(member.role || highestRole(member.roles || [])) || 'guest';
+    var source = normalizeRole(state.source_role || effective) || effective;
+    var sourceLabel = state.applied_source === 'member_admin'
+      ? (u.roleSourceManual || 'Admin exception active')
+      : (state.manual_override_changed_by_source ? (u.roleSourceReturned || 'OSO change applied') : (u.roleSourceOsO || 'OSO/M2M source'));
+    var protection = isProtectedMember(member) ? '<br><span class="badge">'+esc(u.protectedAccount || 'Protected account')+'</span>' : '';
+    var blocked = member.blocked ? '<br><span class="badge">blocked</span>' : '';
+    return '<span class="badge">'+esc(effective)+'</span><br>'+
+      '<span class="muted">'+esc(u.roleSourceOsO || 'OSO/M2M source')+': '+esc(source)+'</span><br>'+
+      '<span class="muted">'+esc(sourceLabel)+'</span>'+protection+blocked;
+  }
+
   function adminMembersHtml(labels) {
     var u = uiText();
     var myRoles = (STATE.me && STATE.me.roles) || readRoles();
-    var visibleMembers = (STATE.members || []).filter(function (m) {
-      var roles = unique(m.roles || (m.app_metadata && m.app_metadata.roles) || []);
+    var visibleMembers = (STATE.members || []).filter(function (member) {
+      var roles = unique(member.roles || (member.app_metadata && member.app_metadata.roles) || []);
       return canViewOrManageRole(myRoles, roles);
     });
-    var rows = visibleMembers.map(function (m) {
-      var roles = unique(m.roles || (m.app_metadata && m.app_metadata.roles) || []);
-      var role = highestRole(roles);
+    var rows = visibleMembers.map(function (member) {
+      var roles = unique(member.roles || (member.app_metadata && member.app_metadata.roles) || []);
+      var role = normalizeRole(member.role || highestRole(roles));
       var canManage = canViewOrManageRole(myRoles, roles);
       var options = rolesForSelect(role);
-      return '<div class="igdc-ma-member-row" data-user-id="'+esc(m.user_id || m.id || '')+'">'+
-        '<div class="igdc-ma-member-id">'+esc(m.user_id || '')+'</div>'+ 
-        '<div class="igdc-ma-member-name"><b>'+esc(m.name || m.nickname || '')+'</b><br><span class="muted">'+esc(m.email || '')+'</span></div>'+ 
-        '<div>'+roles.map(function (r) { return '<span class="badge">'+esc(r)+'</span>'; }).join('')+'</div>'+ 
-        '<div>'+(canManage && options ? '<select data-role-select>'+options+'</select>' : '<span class="muted">'+esc(u.noPermission)+'</span>')+'</div>'+ 
-        '<div class="igdc-ma-member-actions">'+(canManage && options ? '<button data-action="save-role">'+esc(u.save)+'</button><button data-action="block-user" class="danger">'+esc(u.block)+'</button>' : '')+'</div>'+ 
+      var state = member.role_state || {};
+      var actions = '';
+      if (canManage && options) {
+        actions += '<button data-action="save-role">'+esc(u.save)+'</button>';
+        if (state.manual_override_active) {
+          actions += '<button data-action="clear-role-override">'+esc(u.restoreOsO || 'Restore OSO role')+'</button>';
+        }
+        if (member.blocked) {
+          actions += '<button data-action="unblock-user">'+esc(u.unblock || 'Unblock')+'</button>';
+        } else {
+          actions += '<button data-action="block-user" class="danger">'+esc(u.block)+'</button>';
+        }
+      }
+      return '<div class="igdc-ma-member-row" data-user-id="'+esc(member.user_id || member.id || '')+'">'+
+        '<div class="igdc-ma-member-id">'+esc(member.user_id || '')+'</div>'+
+        '<div class="igdc-ma-member-name"><b>'+esc(member.name || member.nickname || '')+'</b><br><span class="muted">'+esc(member.email || '')+'</span></div>'+
+        '<div>'+roleStateHtml(member)+'</div>'+
+        '<div>'+(canManage && options ? '<select data-role-select>'+options+'</select>' : '<span class="muted">'+esc(u.noPermission)+'</span>')+'</div>'+
+        '<div class="igdc-ma-member-actions">'+actions+'</div>'+
       '</div>';
     }).join('');
-    return '<div class="card igdc-ma-member-card"><div class="row" style="justify-content:space-between"><h4>'+esc(u.adminMembersTitle2)+'</h4><button data-action="reload-members">'+esc(labels.refresh)+'</button></div>'+ 
+    return '<div class="card igdc-ma-member-card"><div class="row" style="justify-content:space-between"><h4>'+esc(u.adminMembersTitle2)+'</h4><button data-action="reload-members">'+esc(labels.refresh)+'</button></div>'+
       '<div class="muted" style="margin-bottom:8px">'+esc(u.adminMembersDesc2)+'</div>'+
-      '<div class="row igdc-ma-member-tools"><input id="igdc-member-search" value="'+esc(STATE.query)+'" placeholder="'+esc(labels.searchPlaceholder)+'"><button data-action="search-members">'+esc(u.search)+'</button></div>'+ 
+      '<div class="row igdc-ma-member-tools"><input id="igdc-member-search" value="'+esc(STATE.query)+'" placeholder="'+esc(labels.searchPlaceholder)+'"><button data-action="search-members">'+esc(u.search)+'</button></div>'+
       (STATE.loading?'<div class="muted">'+esc(labels.loading)+'</div>':'')+
       '<div class="igdc-ma-member-list">'+
         '<div class="igdc-ma-member-head"><div>User ID</div><div>'+esc(u.colMember)+'</div><div>'+esc(u.colRole)+'</div><div>'+esc(u.colChangeReview)+'</div><div>'+esc(u.colManage)+'</div></div>'+
         (rows || '<div class="igdc-ma-member-row"><div class="muted" style="grid-column:1/-1">'+esc(u.noMembers)+'</div></div>')+
-      '</div>'+ 
+      '</div>'+
       '<div class="row" style="margin-top:8px;justify-content:space-between"><div class="muted">'+esc(u.shown)+' '+esc(visibleMembers.length)+' / '+esc(u.serverQuery)+' '+esc(STATE.total || STATE.members.length)+' / '+esc(u.page)+' '+esc(STATE.page + 1)+'</div><div class="row"><button data-action="prev-members" '+(STATE.page > 0 ? '' : 'disabled')+'>'+esc(u.previous || 'Previous')+'</button><button data-action="next-members" '+(STATE.hasMore ? '' : 'disabled')+'>'+esc(u.next || 'Next')+'</button></div></div></div>';
   }
   function docRoles(doc) {
@@ -805,7 +856,9 @@
     else if (act === 'next-members') { if (STATE.hasMore) { STATE.page += 1; loadMembers(); } }
     else if (act === 'search-members') { var s = document.getElementById('igdc-member-search'); STATE.query = s ? s.value : ''; STATE.page = 0; loadMembers(); }
     else if (act === 'save-role') saveRole(action.closest('[data-user-id]'));
+    else if (act === 'clear-role-override') clearRoleOverride(action.closest('[data-user-id]'));
     else if (act === 'block-user') blockUser(action.closest('[data-user-id]'));
+    else if (act === 'unblock-user') unblockUser(action.closest('[data-user-id]'));
     else if (act === 'request-upgrade') requestUpgrade(action.getAttribute('data-role'));
     else if (act === 'reload-review-queue') loadReviewDocs();
     else if (act === 'open-review-doc') openReviewDoc(action.closest('[data-review-id]'), action.getAttribute('data-url'));
@@ -902,22 +955,83 @@
       render();
     });
   }
+  function promptReason(message) {
+    var reason = window.prompt(message || '');
+    if (reason === null) return null;
+    reason = String(reason || '').trim();
+    if (!reason) {
+      setError((lang() === 'ko') ? '처리 사유를 입력해야 합니다.' : 'A reason is required.');
+      return null;
+    }
+    return reason;
+  }
   function saveRole(row) {
     if (!row) return;
     var userId = row.getAttribute('data-user-id');
     var sel = row.querySelector('[data-role-select]');
-    var role = sel && sel.value;
-    if (!userId || !role) return;
+    var role = normalizeRole(sel && sel.value);
+    if (!userId || !role) {
+      setError((lang() === 'ko') ? '적용할 특수 역할을 선택하십시오.' : 'Select a special role to apply.');
+      return;
+    }
+    if (isAutoManagedRole(role)) {
+      setError((lang() === 'ko') ? 'member와 member_standard는 OSO/M2M 자동 역할입니다.' : 'member and member_standard are OSO/M2M automatic roles.');
+      return;
+    }
     if (!canAssignRole((STATE.me && STATE.me.roles) || readRoles(), role)) { setError(uiText().changeNoPerm); return; }
-    var u = uiText(); if (!confirm(u.confirmRoleChangePrefix + role + u.confirmRoleChangeSuffix)) return;
-    apiPost('update-role', {user_id:userId, role:role}).then(loadMembers).catch(function (e) { setError(e.message); });
+    var reason = promptReason(uiText().roleReasonPrompt);
+    if (reason === null) return;
+    var u = uiText();
+    if (!confirm(u.confirmRoleChangePrefix + role + u.confirmRoleChangeSuffix)) return;
+    apiPost('update-role', {user_id:userId, role:role, reason:reason}).then(loadMembers).catch(function (e) { setError(e.message); });
+  }
+  function clearRoleOverride(row) {
+    if (!row) return;
+    var userId = row.getAttribute('data-user-id');
+    if (!userId) return;
+    var reason = promptReason(uiText().restoreReasonPrompt);
+    if (reason === null) return;
+    if (!confirm((lang() === 'ko') ? '관리자 예외 역할을 해제하고 OSO/M2M 기준으로 복귀하시겠습니까?' : 'Clear this admin exception and restore the OSO/M2M role?')) return;
+    apiPost('clear-role-override', {user_id:userId, reason:reason}).then(loadMembers).catch(function (e) { setError(e.message); });
   }
   function blockUser(row) {
     if (!row) return;
     var userId = row.getAttribute('data-user-id');
     if (!userId) return;
-    if (!confirm(uiText().confirmBlock)) return;
-    apiPost('block-user', {user_id:userId, blocked:true}).then(loadMembers).catch(function (e) { setError(e.message); });
+    var member = memberForRow(row) || {};
+    var reason = promptReason(uiText().blockReasonPrompt);
+    if (reason === null) return;
+    apiPost('prepare-block', {user_id:userId, reason:reason}).then(function (data) {
+      if (!data) return null;
+      var phrase = '';
+      if (data.protected_account) {
+        phrase = window.prompt((uiText().confirmProtectedBlockPrefix || '') + String(data.confirmation_phrase || ''));
+        if (phrase === null) return null;
+        if (String(phrase) !== String(data.confirmation_phrase || '')) {
+          throw new Error((lang() === 'ko') ? '보호 계정 최종 확인 문구가 일치하지 않습니다.' : 'The protected-account confirmation phrase does not match.');
+        }
+      }
+      var message = data.protected_account
+        ? ((lang() === 'ko') ? '보호 계정의 차단을 최종 실행하시겠습니까?' : 'Apply the final block to this protected account?')
+        : uiText().confirmBlock;
+      if (!confirm(message)) return null;
+      return apiPost('block-user', {
+        user_id:userId,
+        block_token:data.block_token,
+        confirmation_phrase:phrase
+      });
+    }).then(function (result) {
+      if (result) loadMembers();
+    }).catch(function (e) { setError(e.message); });
+  }
+  function unblockUser(row) {
+    if (!row) return;
+    var userId = row.getAttribute('data-user-id');
+    if (!userId) return;
+    var reason = promptReason(uiText().unblockReasonPrompt);
+    if (reason === null) return;
+    if (!confirm((lang() === 'ko') ? '이 회원의 차단을 해제하시겠습니까?' : 'Unblock this member?')) return;
+    apiPost('unblock-user', {user_id:userId, reason:reason}).then(loadMembers).catch(function (e) { setError(e.message); });
   }
   function requestUpgrade(role) {
     apiPost('request-upgrade', {role:role}).then(function () { alert(uiText().upgradeRequested); }).catch(function (e) { setError(e.message); });

@@ -1,5 +1,6 @@
-/* IGDC Member Admin API v2.5.2
+/* IGDC Member Admin API v2.6.0
  * Secure server-side Auth0/OSO member list and hierarchy enforcement.
+ * OSO/M2M remains the automatic source for ordinary member roles.
  * Browser role labels are never trusted for list visibility or management.
  */
 const crypto = require('crypto');
@@ -44,6 +45,11 @@ const ROLE_LEVEL = {
   super_admin: 25,
   owner: 30
 };
+
+const AUTO_MANAGED_ROLES = new Set(['guest', 'member', 'member_standard']);
+const PROTECTED_ROLES = new Set(['owner', 'admin', 'super_admin']);
+const ROLE_AUDIT_LIMIT = 32;
+const BLOCK_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
 exports.handler = async function handler(event) {
   try {
@@ -93,24 +99,72 @@ exports.handler = async function handler(event) {
       const target = await getPublicUserWithRoles(env, userId);
       requireTargetVisible(scope, target.roles || []);
       requireRoleAssignment(scope, requestedRole);
-      await updateUserRole(env, userId, requestedRole, requester);
+      requireManualRoleAssignment(requestedRole);
+      await updateUserRole(env, userId, requestedRole, requester, body.reason);
       return json(200, { ok: true });
     }
 
-    if (method === 'POST' && (action === 'block-user' || action === 'unblock-user')) {
+    if (method === 'POST' && action === 'clear-role-override') {
       const scope = managementScope(requester);
       const userId = required(body.user_id, 'user_id');
       const target = await getPublicUserWithRoles(env, userId);
       requireTargetVisible(scope, target.roles || []);
-      const blocked = action === 'block-user' ? body.blocked !== false : false;
-      await auth0Patch(env, `/api/v2/users/${encodeURIComponent(userId)}`, {
-        blocked,
-        app_metadata: {
-          igdc_status: blocked ? 'blocked' : 'active',
-          [blocked ? 'blocked_by' : 'unblocked_by']: requester.sub,
-          [blocked ? 'blocked_at' : 'unblocked_at']: new Date().toISOString()
-        }
+      await clearRoleOverride(env, userId, requester, body.reason);
+      return json(200, { ok: true });
+    }
+
+    if (method === 'POST' && action === 'prepare-block') {
+      const scope = managementScope(requester);
+      const userId = required(body.user_id, 'user_id');
+      const target = await getPublicUserWithRoles(env, userId);
+      const reason = normalizeReason(body.reason);
+      requireBlockTarget(scope, requester, target, env);
+      const protectedAccount = !!target.protected_account;
+      const challenge = issueBlockChallenge(env, {
+        requester_id: requester.sub,
+        user_id: userId,
+        protected_account: protectedAccount,
+        reason,
+        exp: Date.now() + BLOCK_CHALLENGE_TTL_MS
       });
+      return json(200, {
+        ok: true,
+        block_token: challenge,
+        protected_account: protectedAccount,
+        confirmation_phrase: protectedAccount ? blockConfirmationPhrase(target) : '',
+        expires_at: new Date(Date.now() + BLOCK_CHALLENGE_TTL_MS).toISOString()
+      });
+    }
+
+    if (method === 'POST' && action === 'block-user') {
+      const scope = managementScope(requester);
+      const userId = required(body.user_id, 'user_id');
+      const challenge = verifyBlockChallenge(env, required(body.block_token, 'block_token'));
+      if (challenge.requester_id !== requester.sub || challenge.user_id !== userId || !challenge.exp || Number(challenge.exp) < Date.now()) {
+        throw forbidden('차단 검토 확인이 만료되었거나 대상과 일치하지 않습니다.');
+      }
+      const target = await getPublicUserWithRoles(env, userId);
+      requireBlockTarget(scope, requester, target, env);
+      if (!!challenge.protected_account !== !!target.protected_account) {
+        throw forbidden('보호 계정 상태가 변경되었습니다. 차단 검토를 다시 시작해야 합니다.');
+      }
+      if (target.protected_account && String(body.confirmation_phrase || '') !== blockConfirmationPhrase(target)) {
+        throw forbidden('보호 계정 최종 확인 문구가 일치하지 않습니다.');
+      }
+      await setUserBlocked(env, target, requester, true, challenge.reason);
+      return json(200, { ok: true });
+    }
+
+    if (method === 'POST' && action === 'unblock-user') {
+      const scope = managementScope(requester);
+      const userId = required(body.user_id, 'user_id');
+      const target = await getPublicUserWithRoles(env, userId);
+      requireTargetVisible(scope, target.roles || []);
+      if (requester.sub === userId) throw forbidden('자기 자신의 차단 상태는 이 화면에서 변경할 수 없습니다.');
+      if (target.protected_account && scope.role !== 'owner') {
+        throw forbidden('보호 계정의 상태 변경은 owner만 처리할 수 있습니다.');
+      }
+      await setUserBlocked(env, target, requester, false, body.reason);
       return json(200, { ok: true });
     }
 
@@ -161,7 +215,8 @@ function readEnv() {
     trustedIssuers,
     rolesClaim: process.env.AUTH0_ROLES_CLAIM || 'https://igdcglobal.com/roles',
     roleIdMap: safeJson(process.env.AUTH0_ROLE_ID_MAP_JSON || '{}'),
-    loadUserRoles: String(process.env.AUTH0_LOAD_USER_ROLES || 'true') !== 'false'
+    loadUserRoles: String(process.env.AUTH0_LOAD_USER_ROLES || 'true') !== 'false',
+    protectedUserIds: new Set(String(process.env.IGDC_PROTECTED_USER_IDS || '').split(',').map(value => value.trim()).filter(Boolean))
   };
 }
 
@@ -179,7 +234,10 @@ function normalizeRole(value) {
 }
 
 function uniqueRoles(values) {
-  return [...new Set((values || []).map(normalizeRole).filter(Boolean))];
+  const list = Array.isArray(values)
+    ? values
+    : (typeof values === 'string' ? values.split(',') : []);
+  return [...new Set(list.map(normalizeRole).filter(Boolean))];
 }
 
 function roleLevel(role) {
@@ -239,6 +297,184 @@ function requireRoleAssignment(scope, requestedRole) {
   const err = new Error('현재 권한으로 해당 롤을 부여할 수 없습니다.');
   err.statusCode = 403;
   throw err;
+}
+
+function requireManualRoleAssignment(role) {
+  const normalized = normalizeRole(role);
+  if (AUTO_MANAGED_ROLES.has(normalized)) {
+    const err = new Error('guest, member, member_standard은 OSO/M2M 자동 역할입니다. 이 화면에서는 특수 역할만 예외 적용할 수 있습니다.');
+    err.statusCode = 400;
+    throw err;
+  }
+}
+
+function forbidden(message) {
+  const err = new Error(message);
+  err.statusCode = 403;
+  return err;
+}
+
+function normalizeReason(value) {
+  const reason = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!reason) {
+    const err = new Error('처리 사유를 입력해야 합니다.');
+    err.statusCode = 400;
+    throw err;
+  }
+  return reason.slice(0, 500);
+}
+
+function metadataRole(metadata, key) {
+  const value = metadata && metadata[key];
+  if (Array.isArray(value)) return highestRole(value);
+  return normalizeRole(value);
+}
+
+function os0SourceSnapshot(metadata, fallbackRoles) {
+  const sourceKeys = [
+    'igdc_os0_role',
+    'os0_role',
+    'oso_role',
+    'm2m_role',
+    'igdc_auto_role',
+    'auto_role'
+  ];
+  for (const key of sourceKeys) {
+    const role = metadataRole(metadata, key);
+    if (role) {
+      return {
+        role,
+        updated_at: String((metadata && (
+          metadata[`${key}_updated_at`] ||
+          metadata.os0_role_updated_at ||
+          metadata.oso_role_updated_at ||
+          metadata.m2m_role_updated_at ||
+          metadata.igdc_auto_role_updated_at
+        )) || ''),
+        explicit: true
+      };
+    }
+  }
+  const role = metadataRole(metadata, 'igdc_role') || highestRole(metadata && metadata.roles) || highestRole(fallbackRoles || []);
+  return {
+    role: role || 'guest',
+    updated_at: String((metadata && (metadata.os0_role_updated_at || metadata.oso_role_updated_at || metadata.m2m_role_updated_at || metadata.igdc_auto_role_updated_at)) || ''),
+    explicit: false
+  };
+}
+
+function readManualOverride(metadata) {
+  const value = metadata && metadata.igdc_manual_role_override;
+  if (!value || typeof value !== 'object' || value.active === false) return null;
+  const role = normalizeRole(value.role);
+  if (!role) return null;
+  return {
+    active: true,
+    role,
+    source_role: normalizeRole(value.source_role),
+    source_updated_at: String(value.source_updated_at || ''),
+    updated_at: String(value.updated_at || ''),
+    updated_by: String(value.updated_by || ''),
+    reason: String(value.reason || '')
+  };
+}
+
+function toMs(value) {
+  const ms = Date.parse(String(value || ''));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function resolveRoleState(metadata, rawRoles) {
+  const source = os0SourceSnapshot(metadata || {}, rawRoles || []);
+  const manual = readManualOverride(metadata || {});
+  let effectiveRole = source.role || 'guest';
+  let sourceKind = 'oso';
+  let manualActive = false;
+  let sourceChanged = false;
+
+  if (manual) {
+    const sourceRoleChanged = source.explicit
+      ? (!!manual.source_role && !!source.role && source.role !== manual.source_role)
+      : (!!source.role && source.role !== manual.role);
+    const sourceTimeChanged = !!source.explicit && !!source.updated_at && !!manual.updated_at && toMs(source.updated_at) > toMs(manual.updated_at);
+    sourceChanged = sourceRoleChanged || sourceTimeChanged;
+
+    if (!sourceChanged) {
+      effectiveRole = manual.role;
+      sourceKind = 'member_admin';
+      manualActive = true;
+    }
+  }
+
+  return {
+    source_role: manualActive
+      ? (manual.source_role || source.role || 'guest')
+      : (source.role || (manual && manual.source_role) || 'guest'),
+    source_updated_at: manualActive
+      ? (manual.source_updated_at || source.updated_at || '')
+      : (source.updated_at || (manual && manual.source_updated_at) || ''),
+    effective_role: effectiveRole,
+    applied_source: sourceKind,
+    manual_override_active: manualActive,
+    manual_override_changed_by_source: !!manual && sourceChanged,
+    manual_updated_at: manual ? manual.updated_at : '',
+    manual_updated_by: manual ? manual.updated_by : ''
+  };
+}
+
+function protectedAccount(env, user, roleState, rawRoles) {
+  const metadata = (user && user.app_metadata) || {};
+  if (env.protectedUserIds && env.protectedUserIds.has(user && user.user_id)) return true;
+  if (metadata.igdc_protected_account === true || metadata.igdc_protected_account === 'true') return true;
+  const roles = uniqueRoles([roleState && roleState.effective_role].concat(rawRoles || []).filter(Boolean));
+  return roles.some(role => PROTECTED_ROLES.has(normalizeRole(role)));
+}
+
+function memberAudit(metadata, entry) {
+  const previous = Array.isArray(metadata && metadata.igdc_member_role_audit) ? metadata.igdc_member_role_audit : [];
+  const safeEntry = {
+    at: new Date().toISOString(),
+    action: String(entry.action || '').slice(0, 80),
+    actor_id: String(entry.actor_id || '').slice(0, 300),
+    role: normalizeRole(entry.role),
+    source_role: normalizeRole(entry.source_role),
+    reason: String(entry.reason || '').slice(0, 500)
+  };
+  return previous.concat([safeEntry]).slice(-ROLE_AUDIT_LIMIT);
+}
+
+function blockConfirmationPhrase(target) {
+  return 'BLOCK ' + String(target.user_id || '');
+}
+
+function issueBlockChallenge(env, payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', env.clientSecret).update(body).digest('base64url');
+  return body + '.' + signature;
+}
+
+function verifyBlockChallenge(env, token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 2) throw forbidden('차단 검토 확인이 올바르지 않습니다.');
+  const expected = crypto.createHmac('sha256', env.clientSecret).update(parts[0]).digest('base64url');
+  const actualBuffer = Buffer.from(parts[1]);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(actualBuffer, expectedBuffer)) {
+    throw forbidden('차단 검토 확인이 올바르지 않습니다.');
+  }
+  try {
+    return JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+  } catch (_) {
+    throw forbidden('차단 검토 확인이 올바르지 않습니다.');
+  }
+}
+
+function requireBlockTarget(scope, requester, target, env) {
+  requireTargetVisible(scope, target.roles || []);
+  if (requester.sub === target.user_id) throw forbidden('자기 자신의 계정은 차단할 수 없습니다.');
+  if (target.protected_account && scope.role !== 'owner') {
+    throw forbidden('보호 owner/admin 계정은 owner만 이중 확인 절차로 조치할 수 있습니다.');
+  }
 }
 
 function safeJson(value) {
@@ -425,7 +661,14 @@ async function auth0UserRoles(env, user) {
 
 async function publicUserWithRoles(env, user) {
   const metadata = user.app_metadata || {};
-  const roles = await auth0UserRoles(env, user);
+  const rawRoles = await auth0UserRoles(env, user);
+  const roleState = resolveRoleState(metadata, rawRoles);
+  const override = readManualOverride(metadata);
+  const rolesWithoutSupersededManual = (roleState.manual_override_changed_by_source && override)
+    ? rawRoles.filter(role => normalizeRole(role) !== override.role)
+    : rawRoles;
+  const effectiveRoles = uniqueRoles([roleState.effective_role].concat(rolesWithoutSupersededManual));
+  const protectedFlag = protectedAccount(env, user, roleState, effectiveRoles);
   return {
     user_id: user.user_id,
     email: user.email,
@@ -435,7 +678,13 @@ async function publicUserWithRoles(env, user) {
     blocked: !!user.blocked,
     created_at: user.created_at,
     last_login: user.last_login,
-    roles
+    roles: effectiveRoles,
+    source_roles: uniqueRoles(rawRoles),
+    role: highestRole(effectiveRoles),
+    role_state: Object.assign({}, roleState, {
+      protected_account: protectedFlag
+    }),
+    protected_account: protectedFlag
   };
 }
 
@@ -479,17 +728,8 @@ function auth0Patch(env, path, body) {
   return auth0Request(env, 'PATCH', path, body);
 }
 
-async function updateUserRole(env, userId, role, requester) {
+async function replaceManagedAuth0Role(env, userId, role) {
   const roleId = env.roleIdMap && env.roleIdMap[role];
-  await auth0Patch(env, `/api/v2/users/${encodeURIComponent(userId)}`, {
-    app_metadata: {
-      roles: [role],
-      igdc_role: role,
-      role_updated_by: requester.sub,
-      role_updated_at: new Date().toISOString()
-    }
-  });
-
   if (!roleId) return;
 
   try {
@@ -504,4 +744,107 @@ async function updateUserRole(env, userId, role, requester) {
   }
 
   await auth0Request(env, 'POST', `/api/v2/users/${encodeURIComponent(userId)}/roles`, { roles: [roleId] });
+}
+
+async function updateUserRole(env, userId, role, requester, reason) {
+  const user = await auth0Get(env, `/api/v2/users/${encodeURIComponent(userId)}`);
+  const metadata = user.app_metadata || {};
+  const rawRoles = await auth0UserRoles(env, user);
+  const current = resolveRoleState(metadata, rawRoles);
+  const now = new Date().toISOString();
+  const normalizedReason = normalizeReason(reason);
+  const manualOverride = {
+    active: true,
+    role,
+    source_role: current.source_role,
+    source_updated_at: current.source_updated_at || '',
+    updated_at: now,
+    updated_by: requester.sub,
+    reason: normalizedReason
+  };
+
+  await auth0Patch(env, `/api/v2/users/${encodeURIComponent(userId)}`, {
+    app_metadata: {
+      roles: [role],
+      igdc_role: role,
+      igdc_manual_role_override: manualOverride,
+      role_updated_by: requester.sub,
+      role_updated_at: now,
+      role_source: 'member_admin',
+      igdc_member_role_audit: memberAudit(metadata, {
+        action: 'manual_role_override',
+        actor_id: requester.sub,
+        role,
+        source_role: current.source_role,
+        reason: normalizedReason
+      })
+    }
+  });
+
+  await replaceManagedAuth0Role(env, userId, role);
+}
+
+async function clearRoleOverride(env, userId, requester, reason) {
+  const user = await auth0Get(env, `/api/v2/users/${encodeURIComponent(userId)}`);
+  const metadata = user.app_metadata || {};
+  const rawRoles = await auth0UserRoles(env, user);
+  const current = resolveRoleState(metadata, rawRoles);
+  const existing = readManualOverride(metadata);
+  if (!existing) {
+    const err = new Error('해제할 관리자 예외 역할이 없습니다.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const sourceRole = normalizeRole(current.source_role || existing.source_role || 'member');
+  const now = new Date().toISOString();
+  const normalizedReason = normalizeReason(reason);
+
+  await auth0Patch(env, `/api/v2/users/${encodeURIComponent(userId)}`, {
+    app_metadata: {
+      roles: [sourceRole],
+      igdc_role: sourceRole,
+      igdc_manual_role_override: Object.assign({}, existing, {
+        active: false,
+        cleared_at: now,
+        cleared_by: requester.sub,
+        clear_reason: normalizedReason
+      }),
+      role_updated_by: requester.sub,
+      role_updated_at: now,
+      role_source: 'oso_restore',
+      igdc_member_role_audit: memberAudit(metadata, {
+        action: 'clear_manual_override',
+        actor_id: requester.sub,
+        role: sourceRole,
+        source_role: sourceRole,
+        reason: normalizedReason
+      })
+    }
+  });
+
+  await replaceManagedAuth0Role(env, userId, sourceRole);
+}
+
+async function setUserBlocked(env, target, requester, blocked, reason) {
+  const user = await auth0Get(env, `/api/v2/users/${encodeURIComponent(target.user_id)}`);
+  const metadata = user.app_metadata || {};
+  const now = new Date().toISOString();
+  const normalizedReason = normalizeReason(reason);
+
+  await auth0Patch(env, `/api/v2/users/${encodeURIComponent(target.user_id)}`, {
+    blocked,
+    app_metadata: {
+      igdc_status: blocked ? 'blocked' : 'active',
+      [blocked ? 'blocked_by' : 'unblocked_by']: requester.sub,
+      [blocked ? 'blocked_at' : 'unblocked_at']: now,
+      [blocked ? 'block_reason' : 'unblock_reason']: normalizedReason,
+      igdc_member_role_audit: memberAudit(metadata, {
+        action: blocked ? 'block_user' : 'unblock_user',
+        actor_id: requester.sub,
+        role: target.role,
+        source_role: target.role_state && target.role_state.source_role,
+        reason: normalizedReason
+      })
+    }
+  });
 }
