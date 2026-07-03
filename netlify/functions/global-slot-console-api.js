@@ -61,11 +61,11 @@ function hubLabel(key) {
   return ({ home:'홈', distribution:'유통', network:'네트워크', media:'미디어', social:'소셜', tour:'여행·관광', donation:'후원', literature_academic:'문학·학술' })[key] || key;
 }
 
-async function session(event) {
-  const actor = await resolveUser(event);
+function session(actor) {
+  // The handler has already verified the existing admin login and its server-side role.
+  // Do not touch the management database here: DB availability must never look like a login failure.
   const caps = capability(actor);
   if (!caps.read) { const e = new Error('글로벌 슬롯 관리 콘솔은 admin 이상 권한에서 열립니다.'); e.statusCode = 403; throw e; }
-  await ensureBaseHubs(actor);
   return { ok: true, user: { id: actor.sub, email: actor.email, name: actor.name, role: actor.role, roles: actor.roles }, capabilities: caps };
 }
 
@@ -265,7 +265,7 @@ exports.handler = async function handler(event) {
 
     // This isolated console deliberately has no front publication, build-hook, or Snapshot action.
     let out;
-    if (action === 'session') out = await session(event);
+    if (action === 'session') out = session(actor);
     else if (action === 'hubs') out = await listHubs(actor);
     else if (action === 'regions') out = await listRegions();
     else if (action === 'countries') out = await listCountries();
