@@ -1,4 +1,4 @@
-/* IGDC Member Admin API v2.7.4-member-privacy-matrix
+/* IGDC Member Admin API v2.7.5-member-review-diagnostic
  * Secure server-side Auth0/OSO member list and hierarchy enforcement.
  * OSO/M2M remains the automatic source for ordinary member roles.
  * Browser role labels are never trusted for list visibility or management.
@@ -68,6 +68,11 @@ exports.handler = async function handler(event) {
         me: publicRequester(requester),
         management_scope: safeManagementScope(requester)
       });
+    }
+
+    if (method === 'GET' && action === 'member-review-diagnostic') {
+      const report = await memberReviewDiagnostic(env, requester);
+      return json(200, { ok: true, report });
     }
 
     if (method === 'GET' && action === 'members') {
@@ -753,6 +758,132 @@ const MEMBER_REQUEST_ROLE_MAP = Object.freeze({
   commerce: 'commerce_manager',
   commerce_manager: 'commerce_manager'
 });
+
+function diagnosticRoleAllowed(requester) {
+  const role = highestRole(requester && requester.roles || []);
+  return role === 'owner' || role === 'admin' || role === 'super_admin';
+}
+
+function requireMemberReviewDiagnosticAccess(requester) {
+  if (diagnosticRoleAllowed(requester)) return;
+  throw forbidden('회원 심사 Supabase 시스템 점검은 owner와 admin 계열만 실행할 수 있습니다.');
+}
+
+function describeSupabaseServiceKey(value) {
+  const key = String(value || '').trim();
+  if (!key) return { configured: false, kind: 'missing', role: null };
+  if (key.indexOf('sb_secret_') === 0) return { configured: true, kind: 'secret', role: 'secret' };
+  if (key.indexOf('sb_publishable_') === 0) return { configured: true, kind: 'publishable', role: 'anon' };
+  const payload = safeJsonFromJwt(key);
+  if (payload) return { configured: true, kind: 'legacy_jwt', role: String(payload.role || 'unknown') };
+  return { configured: true, kind: 'unknown', role: null };
+}
+
+function safeJsonFromJwt(value) {
+  try {
+    const parts = String(value || '').split('.');
+    if (parts.length !== 3) return null;
+    return JSON.parse(b64urlToBuffer(parts[1]).toString('utf8'));
+  } catch (_) { return null; }
+}
+
+function safeSupabaseHost(url) {
+  try { return new URL(String(url || '')).host || null; }
+  catch (_) { return null; }
+}
+
+function compactDiagnosticMessage(error) {
+  return String(error && error.message || 'Supabase probe failed').replace(/\s+/g, ' ').slice(0, 500);
+}
+
+async function diagnosticProbe(name, task, success) {
+  try {
+    const value = await task();
+    return Object.assign({ name, ok: true }, success ? success(value) : {});
+  } catch (error) {
+    return {
+      name,
+      ok: false,
+      status_code: Number(error && error.statusCode) || 502,
+      message: compactDiagnosticMessage(error)
+    };
+  }
+}
+
+function memberReviewDiagnosticSummary(report) {
+  if (!report.database.url_configured || !report.database.key.configured) {
+    return { code: 'config_missing', summary: 'SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 Netlify 환경변수에 등록되지 않았습니다.' };
+  }
+  const failed = (report.probes || []).filter(item => !item.ok);
+  if (!failed.length) {
+    return { code: 'ok', summary: '회원 심사 Supabase 연결, 심사 테이블, 사이트 소속 열, 비공개 파일 보관함을 읽기 전용으로 확인했습니다.' };
+  }
+  const allMessages = failed.map(item => String(item.message || '')).join(' ').toLowerCase();
+  if (allMessages.indexOf('submitted_site_keys') >= 0 || allMessages.indexOf('does not exist') >= 0 || allMessages.indexOf('schema cache') >= 0 || allMessages.indexOf('could not find') >= 0) {
+    return { code: 'schema_migration_required', summary: '회원 심사 테이블 또는 submitted_site_keys 열이 없습니다. 패키지의 supabase/member-review-schema-final.sql을 Supabase SQL Editor에서 실행해야 합니다.' };
+  }
+  if (allMessages.indexOf('permission denied') >= 0 || allMessages.indexOf('42501') >= 0) {
+    return { code: 'service_role_grant_missing', summary: '서비스 역할의 회원 심사 테이블 또는 비공개 보관함 접근 권한이 부족합니다. 최종 스키마 SQL의 service_role 권한 구문을 실행했는지 확인하십시오.' };
+  }
+  if (allMessages.indexOf('invalid api key') >= 0 || allMessages.indexOf('jwt') >= 0 || failed.some(item => item.status_code === 401)) {
+    return { code: 'key_invalid', summary: 'SUPABASE_SERVICE_ROLE_KEY가 SUPABASE_URL의 프로젝트 키와 일치하지 않거나 사용할 수 없습니다.' };
+  }
+  if (allMessages.indexOf('bucket') >= 0 || failed.some(item => item.name === 'private_review_bucket')) {
+    return { code: 'private_bucket_missing', summary: '비공개 심사 보관함이 없거나 서버가 해당 버킷을 읽을 수 없습니다. 최종 스키마 SQL의 storage.buckets 구문을 확인하십시오.' };
+  }
+  return { code: 'connection_failed', summary: '회원 심사 Supabase 연결 또는 스키마 확인에 실패했습니다. JSON의 probes 항목을 기준으로 원인을 확인하십시오.' };
+}
+
+async function memberReviewDiagnostic(env, requester) {
+  requireMemberReviewDiagnosticAccess(requester);
+  const report = {
+    report_type: 'igdc-member-review-supabase-diagnostic',
+    checked_at: new Date().toISOString(),
+    ok: false,
+    read_only: true,
+    access: { role: highestRole(requester.roles || []), owner_or_admin: true },
+    database: {
+      url_configured: !!env.supabaseUrl,
+      host: safeSupabaseHost(env.supabaseUrl),
+      key: describeSupabaseServiceKey(env.supabaseServiceRoleKey)
+    },
+    review_store: {
+      cases_table: env.memberReviewTable,
+      files_table: env.memberReviewFilesTable,
+      events_table: env.memberReviewEventsTable,
+      private_bucket: env.memberReviewBucket
+    },
+    probes: [],
+    note: '읽기 전용 점검입니다. 회원 정보·제출 서류·첨부 파일·서명 URL·비밀키·시험 데이터는 반환하거나 생성하지 않습니다.'
+  };
+  if (!report.database.url_configured || !report.database.key.configured) {
+    report.diagnosis = memberReviewDiagnosticSummary(report);
+    return report;
+  }
+  report.probes.push(await diagnosticProbe('review_cases_table',
+    () => supabaseSelect(env, env.memberReviewTable, { select: 'id', limit: 1 }),
+    rows => ({ row_count_at_most_one: Array.isArray(rows) ? rows.length : 0 })
+  ));
+  report.probes.push(await diagnosticProbe('review_cases_site_scope_column',
+    () => supabaseSelect(env, env.memberReviewTable, { select: 'id,submitted_site_keys', limit: 1 }),
+    rows => ({ row_count_at_most_one: Array.isArray(rows) ? rows.length : 0, required_column: 'submitted_site_keys' })
+  ));
+  report.probes.push(await diagnosticProbe('review_files_table',
+    () => supabaseSelect(env, env.memberReviewFilesTable, { select: 'id', limit: 1 }),
+    rows => ({ row_count_at_most_one: Array.isArray(rows) ? rows.length : 0 })
+  ));
+  report.probes.push(await diagnosticProbe('review_events_table',
+    () => supabaseSelect(env, env.memberReviewEventsTable, { select: 'id', limit: 1 }),
+    rows => ({ row_count_at_most_one: Array.isArray(rows) ? rows.length : 0 })
+  ));
+  report.probes.push(await diagnosticProbe('private_review_bucket',
+    () => supabaseStorageRequest(env, 'bucket/' + encodeURIComponent(env.memberReviewBucket), { method: 'GET', headers: { Accept: 'application/json' } }),
+    () => ({ private_bucket: env.memberReviewBucket })
+  ));
+  report.diagnosis = memberReviewDiagnosticSummary(report);
+  report.ok = report.diagnosis.code === 'ok';
+  return report;
+}
 
 function optionalPositiveInt(value) {
   const parsed = Number.parseInt(String(value || ''), 10);

@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.7.4-member-privacy-matrix';
+  var VERSION = '2.7.5-member-review-diagnostic';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -26,6 +26,8 @@
     myReviewDocs: [],
     loadingReview: false,
     loadingMyReview: false,
+    diagnosticReport: null,
+    loadingDiagnostic: false,
     loading: false,
     error: '',
     query: '',
@@ -97,7 +99,8 @@
         notice: '공지사항',
         adminMembers: '회원 목록',
         adminQueue: '승급 검토',
-        adminNotice: '답글/공지 관리'
+        adminNotice: '답글/공지 관리',
+        adminDiagnostic: '시스템 점검'
       }
     },
     en: {
@@ -122,7 +125,8 @@
         notice: 'Notices',
         adminMembers: 'Members',
         adminQueue: 'Review Documents',
-        adminNotice: 'Replies/Notices'
+        adminNotice: 'Replies/Notices',
+        adminDiagnostic: 'System Diagnostic'
       }
     }
   };
@@ -158,7 +162,7 @@
       noPermission:'권한 없음', viewOnly:'조회 전용', save:'예외 적용', restoreOsO:'OSO 기준 복귀', block:'차단 검토', unblock:'차단 해제', protectedAccount:'보호 계정', selectSpecialRole:'특수 역할 선택', roleReasonPrompt:'예외 역할 적용 사유를 입력하십시오.', restoreReasonPrompt:'OSO 자동 역할 기준으로 복귀시키는 사유를 입력하십시오.', blockReasonPrompt:'차단 사유를 입력하십시오.', unblockReasonPrompt:'차단 해제 사유를 입력하십시오.', roleSourceOsO:'OSO/M2M 원본', roleSourceManual:'관리자 예외 적용', roleSourceReturned:'OSO 변경 반영', confirmProtectedBlockPrefix:'보호 계정입니다. 아래 확인 문구를 정확히 입력하십시오:\n', adminMembersTitle2:'OSO/Auth0 회원 목록', adminMembersDesc2:'일반·스탠다드·프리미엄·특수·커머스는 공통회원으로 조회만 표시됩니다. 사이트 매니저는 자기 사이트의 OM·OP만 관리할 수 있고, OM·OP도 자기보다 낮은 같은 사이트 OM·OP만 관리할 수 있습니다. 다른 사이트 운영회원 정보와 서류는 열리지 않습니다. director는 하위 사이트 매니저와 그 아래 전체, admin은 owner를 제외한 전체, owner는 전체를 관리합니다.', search:'검색', colMember:'회원', colRole:'적용 역할 / OSO 원본', colChangeReview:'특수 역할 조정', colManage:'관리', noMembers:'관리 권한으로 볼 수 있는 회원이 없거나 API 연결 대기 중입니다.', shown:'표시', serverQuery:'서버 조회', page:'페이지', previous:'이전', next:'다음',
       reviewDocDefault:'제출 서류', open:'열람', detail:'상세', approve:'승인', reject:'반려', reviewTitle:'승급 검토', reviewRefresh:'새로고침', reviewDesc:'회원이 제출한 서류와 승급·권한 신청 자료를 검토하는 영역입니다. 일반 회원은 본인 자료만 회원 페이지에서 확인합니다. 사이트 매니저는 자기 사이트 OM·OP만, OM·OP는 자기보다 낮은 같은 사이트 OM·OP만 검토할 수 있습니다. director/site_manager_director는 하위 사이트 매니저와 그 아래 전체, admin은 owner 제외 전체, owner는 전체를 검토합니다.', reviewHeadDoc:'제출 서류', reviewHeadMember:'회원', reviewHeadTarget:'요청 롤', reviewHeadStatus:'상태', reviewHeadReview:'검토', noReviewDocs:'현재 권한으로 볼 수 있는 제출 서류가 없거나, 서류 검토 API 연결 대기 중입니다.', shownItems:'표시', serverItems:'서버 조회',
       adminNoticeTitle:'답글/공지 관리', adminNoticeDesc:'관리자 권한에서만 답글 작성·공지 등록 버튼이 활성화됩니다.', targetTitleLabel:'대상/제목', targetTitlePlaceholder:'공지 제목 또는 답글 대상', adminNoticeBodyLabel:'내용', adminNoticeBodyPlaceholder:'공지 또는 답글 내용', register:'등록',
-      registered:'등록되었습니다.', reviewTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 승급 검토를 다시 열어야 합니다.', reviewApiMissing:'서류 검토 API 연결이 필요합니다.', noAttachment:'열람 가능한 첨부 URL이 없습니다.', confirmProcess:'처리할까요?', memberTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 회원 목록을 다시 열어야 합니다.', tokenExpiredSuffix:' / 현재 로그인 세션 토큰이 만료되었거나 없습니다.', changeNoPerm:'현재 권한으로는 해당 롤로 변경할 수 없습니다.', confirmRoleChangePrefix:'회원 롤을 ', confirmRoleChangeSuffix:' 로 변경할까요?', confirmBlock:'이 회원을 차단/퇴출 처리할까요?', upgradeRequested:'신청되었습니다.', myReviewTitle:'내 신청·서류 현황', myReviewDesc:'본인이 제출한 신청과 서류의 처리 상태만 확인할 수 있습니다.', myReviewNone:'제출한 신청 또는 서류가 없습니다.', myReviewOpen:'내 제출 자료 열기', myReviewReload:'내 현황 새로고침'
+      registered:'등록되었습니다.', reviewTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 승급 검토를 다시 열어야 합니다.', reviewApiMissing:'서류 검토 API 연결이 필요합니다.', noAttachment:'열람 가능한 첨부 URL이 없습니다.', confirmProcess:'처리할까요?', memberTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 회원 목록을 다시 열어야 합니다.', tokenExpiredSuffix:' / 현재 로그인 세션 토큰이 만료되었거나 없습니다.', changeNoPerm:'현재 권한으로는 해당 롤로 변경할 수 없습니다.', confirmRoleChangePrefix:'회원 롤을 ', confirmRoleChangeSuffix:' 로 변경할까요?', confirmBlock:'이 회원을 차단/퇴출 처리할까요?', upgradeRequested:'신청되었습니다.', myReviewTitle:'내 신청·서류 현황', myReviewDesc:'본인이 제출한 신청과 서류의 처리 상태만 확인할 수 있습니다.', myReviewNone:'제출한 신청 또는 서류가 없습니다.', myReviewOpen:'내 제출 자료 열기', myReviewReload:'내 현황 새로고침', diagnosticTitle:'Supabase 심사 보관함 시스템 점검', diagnosticDesc:'이 점검은 서버에서 심사 테이블·필수 사이트 소속 열·비공개 파일 보관함·서비스 역할 연결을 읽기 전용으로 확인합니다. 회원 정보, 제출 서류, 서명 URL, 비밀키는 JSON에 포함되지 않습니다.', diagnosticRun:'지금 점검', diagnosticDownload:'JSON 다운로드', diagnosticWaiting:'점검 중입니다.', diagnosticEmpty:'아직 점검 결과가 없습니다.', diagnosticNotAllowed:'시스템 점검은 owner와 admin 계열만 사용할 수 있습니다.', diagnosticReadOnly:'점검은 읽기 전용이며 운영 DB에 시험 자료를 만들거나 수정하지 않습니다.'
     },
     en: {
       memberStatusTitle:'Member Status', currentRole:'Current role', memberStatusDesc:'General members use this area mainly for media content purchases and viewing.',
@@ -175,7 +179,7 @@
       noPermission:'No permission', viewOnly:'View only', save:'Apply exception', restoreOsO:'Restore OSO role', block:'Review block', unblock:'Unblock', protectedAccount:'Protected account', selectSpecialRole:'Select special role', roleReasonPrompt:'Enter the reason for this role exception.', restoreReasonPrompt:'Enter the reason for restoring the OSO automatic role.', blockReasonPrompt:'Enter the reason for blocking this member.', unblockReasonPrompt:'Enter the reason for unblocking this member.', roleSourceOsO:'OSO/M2M source', roleSourceManual:'Admin exception active', roleSourceReturned:'OSO change applied', confirmProtectedBlockPrefix:'This is a protected account. Enter the exact confirmation phrase:\n', adminMembersTitle2:'OSO/Auth0 Member List', adminMembersDesc2:'Common member tiers are directory-only. A site manager may manage only OM/OP accounts in the same site; OM/OP may manage only lower same-site OM/OP accounts. Other-site operational data and files are unavailable. Directors manage lower site managers and all lower accounts, admins manage everyone except owners, and owners manage all accounts.', search:'Search', colMember:'Member', colRole:'Applied / OSO source', colChangeReview:'Special role exception', colManage:'Manage', noMembers:'No members are visible with the current permission, or the API is waiting for connection.', shown:'Shown', serverQuery:'Server query', page:'Page', previous:'Previous', next:'Next',
       reviewDocDefault:'Submitted Document', open:'Open', detail:'Details', approve:'Approve', reject:'Reject', reviewTitle:'Review Queue', reviewRefresh:'Refresh', reviewDesc:'Review member-submitted documents and upgrade/permission requests. Members see only their own records in Member Page. Site-manager, OM, and OP roles review only lower operational records in their own site; directors and site_manager_director review only lower roles. Admins see everyone except owners, and owners see all.', reviewHeadDoc:'Document', reviewHeadMember:'Member', reviewHeadTarget:'Requested Role', reviewHeadStatus:'Status', reviewHeadReview:'Review', noReviewDocs:'No submitted documents are visible with the current permission, or the review API is waiting for connection.', shownItems:'Shown', serverItems:'Server query',
       adminNoticeTitle:'Replies / Notice Management', adminNoticeDesc:'Reply and notice registration buttons are enabled only for administrators.', targetTitleLabel:'Target / Title', targetTitlePlaceholder:'Notice title or reply target', adminNoticeBodyLabel:'Content', adminNoticeBodyPlaceholder:'Notice or reply content', register:'Register',
-      registered:'Registered.', reviewTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the review queue.', reviewApiMissing:'Document review API connection is required.', noAttachment:'No viewable attachment URL is available.', confirmProcess:'Proceed?', memberTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the member list.', tokenExpiredSuffix:' / The current login session token is missing or expired.', changeNoPerm:'You do not have permission to assign this role.', confirmRoleChangePrefix:'Change this member role to ', confirmRoleChangeSuffix:'?', confirmBlock:'Block or remove this member?', upgradeRequested:'Application submitted.', myReviewTitle:'My Applications and Documents', myReviewDesc:'Only your own submitted applications and documents are shown here.', myReviewNone:'There are no submitted applications or documents.', myReviewOpen:'Open My Submission', myReviewReload:'Refresh My Status'
+      registered:'Registered.', reviewTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the review queue.', reviewApiMissing:'Document review API connection is required.', noAttachment:'No viewable attachment URL is available.', confirmProcess:'Proceed?', memberTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the member list.', tokenExpiredSuffix:' / The current login session token is missing or expired.', changeNoPerm:'You do not have permission to assign this role.', confirmRoleChangePrefix:'Change this member role to ', confirmRoleChangeSuffix:'?', confirmBlock:'Block or remove this member?', upgradeRequested:'Application submitted.', myReviewTitle:'My Applications and Documents', myReviewDesc:'Only your own submitted applications and documents are shown here.', myReviewNone:'There are no submitted applications or documents.', myReviewOpen:'Open My Submission', myReviewReload:'Refresh My Status', diagnosticTitle:'Supabase Review Store Diagnostic', diagnosticDesc:'This read-only server diagnostic checks review tables, the required site-scope column, the private storage bucket, and the service-role connection. It never includes member data, submitted files, signed URLs, or secrets in the JSON.', diagnosticRun:'Run diagnostic', diagnosticDownload:'Download JSON', diagnosticWaiting:'Running diagnostic.', diagnosticEmpty:'No diagnostic result yet.', diagnosticNotAllowed:'The system diagnostic is limited to owner and admin roles.', diagnosticReadOnly:'The diagnostic is read-only and never creates or modifies production test data.'
     }
   };
   function uiText() { return lang() === 'ko' ? UI_TEXT.ko : UI_TEXT.en; }
@@ -241,6 +245,12 @@
   function canAdmin(roles) {
     roles = unique(roles);
     return roles.some(isManagerRole);
+  }
+  // System diagnostics are intentionally limited to owner/admin classes.
+  // The API repeats this check on the server; this only controls visible UI.
+  function canRunSystemDiagnostic(roles) {
+    var role = highestRole(roles || []);
+    return role === 'owner' || role === 'admin' || role === 'super_admin';
   }
   function managerRole(roles) {
     roles = unique(roles).filter(isManagerRole);
@@ -628,6 +638,7 @@
 
       '#'+ROOT_ID+' .badge{display:inline-block;border-radius:999px;background:#eef4fb;color:#0b3f74;padding:2px 7px;margin:1px 2px;font-size:11px;font-weight:700}'+
       '#'+ROOT_ID+' .error{background:#fff1f0;color:#b42318;border:1px solid #ffccc7;border-radius:10px;padding:10px;margin-bottom:10px}'+
+      '#'+ROOT_ID+' .igdc-ma-diagnostic-json{margin:12px 0 0;max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#0b1726;color:#e6edf3;border-radius:10px;padding:12px;font-size:12px;line-height:1.4}'+
       '#'+ROOT_ID+' .ok{background:#ecfdf3;color:#027a48;border:1px solid #abefc6;border-radius:10px;padding:10px;margin-bottom:10px}'+
       '@media(max-width:1120px){#'+ROOT_ID+' .igdc-ma-side{width:220px;flex-basis:220px;padding:14px}#'+ROOT_ID+' .igdc-ma-top{padding:12px 14px}#'+ROOT_ID+' .igdc-ma-content{padding:12px 14px}}'+
       '@media(max-width:820px){#'+ROOT_ID+' .igdc-ma-modal{width:calc(100vw - 20px);height:calc(100vh - 20px);flex-direction:column}#'+ROOT_ID+' .igdc-ma-side{width:auto;flex:0 0 auto;max-height:190px;padding:14px;overflow:auto}#'+ROOT_ID+' .grid{grid-template-columns:1fr}#'+ROOT_ID+' .igdc-ma-member-head{display:none!important}#'+ROOT_ID+' .igdc-ma-member-row{min-width:0;grid-template-columns:1fr!important;gap:5px!important}#'+ROOT_ID+' .igdc-ma-review-head{display:none!important}#'+ROOT_ID+' .igdc-ma-review-row{min-width:0;grid-template-columns:1fr!important;gap:5px!important}#'+ROOT_ID+' th:nth-child(1),#'+ROOT_ID+' td:nth-child(1){display:none}}';
@@ -653,6 +664,7 @@
     if (tab === 'member-page') loadMyReviewDocs();
     if (tab === 'admin-members') loadMembers();
     if (tab === 'admin-queue') loadReviewDocs();
+    if (tab === 'admin-diagnostic' && canRunSystemDiagnostic((STATE.me && STATE.me.roles) || readRoles())) loadSystemDiagnostic();
   }
   function setError(msg) { STATE.error = msg || ''; render(); }
   function render() {
@@ -679,6 +691,7 @@
       tab('admin-members', labels.tabs.adminMembers, true) +
       tab('admin-queue', labels.tabs.adminQueue, true) +
       tab('admin-notice', labels.tabs.adminNotice, true) +
+      (canRunSystemDiagnostic((me && me.roles) || readRoles()) ? tab('admin-diagnostic', labels.tabs.adminDiagnostic, false) : '') +
     '</aside>';
   }
   function bodyHtml(labels, me, admin) {
@@ -700,10 +713,11 @@
   }
   function titleForTab(labels) {
     var m = labels.tabs;
-    return ({'member-home':m.memberHome,'member-page':m.memberPage || uiText().memberPageTitle,'submit':m.submit,'question':m.question,'notice':m.notice,'admin-members':m.adminMembers,'admin-queue':m.adminQueue,'admin-notice':m.adminNotice})[STATE.tab] || m.memberHome;
+    return ({'member-home':m.memberHome,'member-page':m.memberPage || uiText().memberPageTitle,'submit':m.submit,'question':m.question,'notice':m.notice,'admin-members':m.adminMembers,'admin-queue':m.adminQueue,'admin-notice':m.adminNotice,'admin-diagnostic':m.adminDiagnostic})[STATE.tab] || m.memberHome;
   }
   function renderTab(labels, me, admin) {
     if (STATE.tab.indexOf('admin-') === 0 && !admin) return '<div class="card"><h4>'+esc(labels.noAccess)+'</h4></div>';
+    if (STATE.tab === 'admin-diagnostic' && !canRunSystemDiagnostic((me && me.roles) || readRoles())) return '<div class="card"><h4>'+esc(uiText().diagnosticNotAllowed)+'</h4></div>';
     if (STATE.tab === 'member-home') return memberHomeHtml(me);
     if (STATE.tab === 'member-page') return memberPageHtml(me, admin);
     if (STATE.tab === 'submit') return submitHtml();
@@ -712,6 +726,7 @@
     if (STATE.tab === 'admin-members') return adminMembersHtml(labels);
     if (STATE.tab === 'admin-queue') return adminQueueHtml(labels);
     if (STATE.tab === 'admin-notice') return adminNoticeHtml();
+    if (STATE.tab === 'admin-diagnostic') return systemDiagnosticHtml(me);
     return '';
   }
   function memberHomeHtml(me) {
@@ -959,6 +974,20 @@
       '<label>'+esc(u.adminNoticeBodyLabel)+'<textarea name="body" required placeholder="'+esc(u.adminNoticeBodyPlaceholder)+'"></textarea></label><br><br>'+
       '<button class="primary" type="submit">'+esc(u.register)+'</button></form>';
   }
+  function systemDiagnosticHtml(me) {
+    var u = uiText();
+    var allowed = canRunSystemDiagnostic((me && me.roles) || readRoles());
+    if (!allowed) return '<div class="card"><h4>'+esc(u.diagnosticNotAllowed)+'</h4></div>';
+    var report = STATE.diagnosticReport;
+    var json = report ? JSON.stringify(report, null, 2) : u.diagnosticEmpty;
+    var status = STATE.loadingDiagnostic ? u.diagnosticWaiting : (report && report.diagnosis && report.diagnosis.summary ? report.diagnosis.summary : u.diagnosticReadOnly);
+    return '<div class="card igdc-ma-diagnostic-card"><h4>'+esc(u.diagnosticTitle)+'</h4>'+
+      '<div class="muted">'+esc(u.diagnosticDesc)+'</div><div class="muted" style="margin-top:8px">'+esc(u.diagnosticReadOnly)+'</div><br>'+
+      '<div class="row"><button class="primary" data-action="run-system-diagnostic" '+(STATE.loadingDiagnostic ? 'disabled' : '')+'>'+esc(u.diagnosticRun)+'</button>'+
+      '<button data-action="download-system-diagnostic" '+(report ? '' : 'disabled')+'>'+esc(u.diagnosticDownload)+'</button></div>'+
+      '<div class="muted" style="margin-top:10px">'+esc(status)+'</div>'+
+      '<pre class="igdc-ma-diagnostic-json">'+esc(json)+'</pre></div>';
+  }
   function handleClick(ev) {
     var closeBtn = ev.target.closest('[data-close]');
     if (closeBtn) { ev.preventDefault(); close(); return; }
@@ -984,6 +1013,8 @@
     else if (act === 'open-review-doc') openReviewDoc(action.closest('[data-review-id]'), action.getAttribute('data-url'));
     else if (act === 'approve-review-doc') reviewDoc(action.closest('[data-review-id]'), 'approve');
     else if (act === 'reject-review-doc') reviewDoc(action.closest('[data-review-id]'), 'reject');
+    else if (act === 'run-system-diagnostic') loadSystemDiagnostic(true);
+    else if (act === 'download-system-diagnostic') downloadSystemDiagnostic();
   }
   function handleChange(ev) {
     if (ev.target && ev.target.id === 'igdc-member-search') STATE.query = ev.target.value;
@@ -1130,6 +1161,50 @@
     if (note === null) return;
     apiPost('review-document', {id:id, decision:decision, review_note:note}).then(loadReviewDocs).catch(function (e) { setError(e.message); });
   }
+  function diagnosticArtifact(data, requestError) {
+    if (data && data.report) return data.report;
+    if (data && typeof data === 'object') return data;
+    return {
+      report_type: 'igdc-member-review-supabase-diagnostic',
+      checked_at: new Date().toISOString(),
+      ok: false,
+      diagnosis: { code: 'request_failed', summary: requestError || '시스템 점검 응답을 읽을 수 없습니다.' }
+    };
+  }
+  function loadSystemDiagnostic(force) {
+    var roles = (STATE.me && STATE.me.roles) || readRoles();
+    if (!canRunSystemDiagnostic(roles)) { setError(uiText().diagnosticNotAllowed); return; }
+    if (STATE.loadingDiagnostic) return;
+    if (STATE.diagnosticReport && !force) { render(); return; }
+    if (!hasValidToken()) { setError(uiText().reviewTokenMissing); return; }
+    STATE.loadingDiagnostic = true;
+    STATE.error = '';
+    render();
+    apiGet({action:'member-review-diagnostic'}).then(function (data) {
+      STATE.diagnosticReport = diagnosticArtifact(data, '');
+      STATE.loadingDiagnostic = false;
+      render();
+    }).catch(function (error) {
+      STATE.diagnosticReport = diagnosticArtifact(null, error && error.message ? error.message : String(error || ''));
+      STATE.loadingDiagnostic = false;
+      render();
+    });
+  }
+  function downloadSystemDiagnostic() {
+    var roles = (STATE.me && STATE.me.roles) || readRoles();
+    if (!canRunSystemDiagnostic(roles)) { setError(uiText().diagnosticNotAllowed); return; }
+    var report = STATE.diagnosticReport;
+    if (!report) return;
+    var blob = new Blob([JSON.stringify(report, null, 2)], {type:'application/json;charset=utf-8'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'IGDC_Member_Review_Supabase_Diagnostic_' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 0);
+  }
   function loadMe() {
     STATE.me = userProfile();
     return apiGet({action:'me'}).then(function (data) {
@@ -1250,7 +1325,7 @@
     STATE.tab = preferredTab || 'member-home';
     var el = root();
     el.hidden = false;
-    loadMe().then(function () { render(); if (STATE.tab === 'member-page') loadMyReviewDocs(); if (STATE.tab === 'admin-members') loadMembers(); if (STATE.tab === 'admin-queue') loadReviewDocs(); });
+    loadMe().then(function () { render(); if (STATE.tab === 'member-page') loadMyReviewDocs(); if (STATE.tab === 'admin-members') loadMembers(); if (STATE.tab === 'admin-queue') loadReviewDocs(); if (STATE.tab === 'admin-diagnostic') loadSystemDiagnostic(); });
     render();
     try { el.querySelector('button').focus(); } catch (e) {}
   }
