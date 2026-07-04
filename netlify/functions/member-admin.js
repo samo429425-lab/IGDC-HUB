@@ -1,4 +1,4 @@
-/* IGDC Member Admin API v2.7.5-member-review-diagnostic
+/* IGDC Member Admin API v2.7.6-member-review-dedicated-store
  * Secure server-side Auth0/OSO member list and hierarchy enforcement.
  * OSO/M2M remains the automatic source for ordinary member roles.
  * Browser role labels are never trusted for list visibility or management.
@@ -244,6 +244,25 @@ function readEnv() {
     normalizeIssuer(`https://${domain}/`),
     ...issuerList(process.env.AUTH0_TRUSTED_ISSUERS || '')
   ].filter(Boolean))];
+
+  // Member-review storage may be isolated from the legacy/shared Supabase
+  // project. When either dedicated value is set, require the dedicated pair
+  // and never mix it with generic SUPABASE_* values from another subsystem.
+  const dedicatedMemberReviewUrl = String(
+    process.env.MEMBER_REVIEW_SUPABASE_URL || process.env.MEMBER_REVIEW_SUPABASE_PROJECT_URL || ''
+  ).trim().replace(/\/+$/, '');
+  const dedicatedMemberReviewKey = String(
+    process.env.MEMBER_REVIEW_SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.MEMBER_REVIEW_SUPABASE_SECRET_KEY ||
+    process.env.MEMBER_REVIEW_SUPABASE_SERVICE_KEY || ''
+  ).trim();
+  const sharedSupabaseUrl = String(process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
+  const sharedSupabaseServiceRoleKey = String(
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || ''
+  ).trim();
+  const hasDedicatedMemberReviewConfig = !!(dedicatedMemberReviewUrl || dedicatedMemberReviewKey);
+  const memberReviewSupabaseConfigSource = hasDedicatedMemberReviewConfig ? 'member_review_dedicated' : 'shared_legacy';
+
   return {
     domain,
     audience: process.env.AUTH0_AUDIENCE || `https://${domain}/api/v2/`,
@@ -256,8 +275,9 @@ function readEnv() {
     roleIdMap: safeJson(process.env.AUTH0_ROLE_ID_MAP_JSON || '{}'),
     loadUserRoles: String(process.env.AUTH0_LOAD_USER_ROLES || 'true') !== 'false',
     protectedUserIds: new Set(String(process.env.IGDC_PROTECTED_USER_IDS || '').split(',').map(value => value.trim()).filter(Boolean)),
-    supabaseUrl: String(process.env.SUPABASE_URL || '').trim().replace(/\/+$/, ''),
-    supabaseServiceRoleKey: String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim(),
+    supabaseUrl: hasDedicatedMemberReviewConfig ? dedicatedMemberReviewUrl : sharedSupabaseUrl,
+    supabaseServiceRoleKey: hasDedicatedMemberReviewConfig ? dedicatedMemberReviewKey : sharedSupabaseServiceRoleKey,
+    memberReviewSupabaseConfigSource,
     memberReviewTable: String(process.env.MEMBER_REVIEW_TABLE || 'igdc_member_review_cases').trim(),
     memberReviewFilesTable: String(process.env.MEMBER_REVIEW_FILES_TABLE || 'igdc_member_review_files').trim(),
     memberReviewEventsTable: String(process.env.MEMBER_REVIEW_EVENTS_TABLE || 'igdc_member_review_events').trim(),
@@ -812,7 +832,7 @@ async function diagnosticProbe(name, task, success) {
 
 function memberReviewDiagnosticSummary(report) {
   if (!report.database.url_configured || !report.database.key.configured) {
-    return { code: 'config_missing', summary: 'SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 Netlify 환경변수에 등록되지 않았습니다.' };
+    return { code: 'config_missing', summary: '회원 심사용 MEMBER_REVIEW_SUPABASE_URL과 MEMBER_REVIEW_SUPABASE_SERVICE_ROLE_KEY를 함께 등록해야 합니다. 전용 값이 없으면 기존 SUPABASE_* 공용 값을 사용합니다.' };
   }
   const failed = (report.probes || []).filter(item => !item.ok);
   if (!failed.length) {
@@ -845,7 +865,8 @@ async function memberReviewDiagnostic(env, requester) {
     database: {
       url_configured: !!env.supabaseUrl,
       host: safeSupabaseHost(env.supabaseUrl),
-      key: describeSupabaseServiceKey(env.supabaseServiceRoleKey)
+      key: describeSupabaseServiceKey(env.supabaseServiceRoleKey),
+      config_source: env.memberReviewSupabaseConfigSource
     },
     review_store: {
       cases_table: env.memberReviewTable,
@@ -892,7 +913,7 @@ function optionalPositiveInt(value) {
 
 function requireSupabase(env) {
   if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-    const err = new Error('회원 심사 저장소를 사용하려면 SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY가 Netlify 환경변수에 등록되어 있어야 합니다.');
+    const err = new Error('회원 심사 저장소에는 MEMBER_REVIEW_SUPABASE_URL과 MEMBER_REVIEW_SUPABASE_SERVICE_ROLE_KEY를 함께 등록해야 합니다. 전용 값이 없으면 기존 SUPABASE_* 공용 값을 사용합니다.');
     err.statusCode = 503;
     throw err;
   }
