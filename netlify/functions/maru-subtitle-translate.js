@@ -40,34 +40,23 @@ function postOpenAI(apiKey, payload) {
 function normalizeCueTimes(text) { return (String(text || '').match(/^\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*-->\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}.*$/gm) || []).map((x) => x.replace(/\./g, ',').replace(/\s+/g, ' ').trim()); }
 function cueCount(text) { return normalizeCueTimes(text).length; }
 function isInstructionLeak(text) {
-  const raw = String(text || '').replace(/\s+/g, ' ').trim();
-  const value = raw.toLowerCase();
-  if (!value) return false;
-  const inner = raw.replace(/^\s*[\[(（]\s*|\s*[\])）]\s*$/gu, '').replace(/[.。！？!?…:：\-–—\s]+/gu, '').toLowerCase();
-  if (/^(?:speech|speaking|spokendialogue|dialogue|voice|voiceover|narration|spokenwords|말|대화|음성|음성대화|말소리|대사|나레이션)$/iu.test(inner)) return true;
-  if (/(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|target\s+language\s*[:=]|source\s+(?:file|language)|translate\s+only\s+subtitle|preserve\s+every\s+cue)/i.test(value)) return true;
-  const internalMarker = /(?:시스템\s*(?:프롬프트|메시지|정책|지시)|개발자\s*(?:메시지|지시)|내부\s*(?:정책|규칙|지침|명령)|프롬프트|json|대상\s*언어|원문\s*언어|타임스탬프|큐\s*(?:번호|id)|자막\s*(?:규칙|엔진|형식))/iu.test(raw);
-  const directive = /(?:반환|출력|번역|보존|무시|따르|지켜|반드시|하지\s*마|규정대로|return|output|translate|preserve|ignore|follow|must|do\s*not|never)/iu.test(raw);
-  return internalMarker && directive;
+  const value = String(text || '').replace(/\s+/g, ' ').trim();
+  const lower = value.toLowerCase();
+  if (/(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|target\s+language\s*[:=]|source\s+(?:file|language)|translate\s+only\s+subtitle|preserve\s+every\s+cue)/i.test(lower)) return true;
+  return /(?:명확(?:하게|히)\s*(?:노래(?:된|한|하는)?|불러(?:진|지는)|가사(?:가)?).{0,48}(?:유지|보존|번역|자막|표시|생성)|(?:짧은|하나의)\s*(?:음표|마커)(?:\s*(?:또는|나|를|가))?.{0,64}|음악적(?:이거나|인).{0,64}(?:표시|이미지|사용)|가사(?:가)?\s*명확하게\s*(?:불려|노래).{0,48}|(?:노래|가사).{0,64}(?:음성\s*시작|보컬\s*시작|실제\s*가사만|연주만|허밍|멜로디만|경계))/iu.test(value);
 }
 function isRecoverable(error) { const status = Number(error?.statusCode || 0); const msg = String(error?.message || '').toLowerCase(); return status === 429 || status === 500 || status === 502 || status === 503 || status === 504 || /timeout|overload|rate.limit|temporar/.test(msg); }
 function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 async function translateOnce(apiKey, subtitle, targetLang, targetName, fileName) {
   const system = [
     'You are a subtitle translation engine.',
-    'Translate only the lexical spoken dialogue and actual sung lyric words already present in the subtitle into the authoritative requested target language.',
+    'Translate only subtitle dialogue into the authoritative requested target language.',
     'Preserve every cue number, timestamp, tag, blank line, line break and cue order exactly.',
     'Do not add commentary, markdown, explanations or code fences.',
     'Leave numbers, timestamp lines, cue settings, tags and empty lines unchanged.',
-    'Use natural, concise, faithful subtitle phrasing and preserve relationship-appropriate honorifics, titles, professional register, dialectal or historical wording when the local context supports it.',
-    'For actual sung lyric words, translate the lyric words in the same cue without replacing them with [music], [song], [speech], [speaking], [singing], [lyrics], or another generic label. Preserve a supplied leading ♪ marker.',
-    'Never introduce generic classifier labels such as [speech], [speaking], [spoken dialogue], [dialogue], [voice], [narration], 말, 대화, 음성, 대사, or 나레이션. They are not subtitle text.',
+    'Use natural, concise, faithful subtitle phrasing.',
     'Use standard established target-language names for people, places, buildings, countries, organizations, institutions, parties, products, and species. If no standard form exists, use faithful transliteration or the official name form.',
     'Never translate the literal components of a proper name into a newly invented descriptive phrase. Do not turn Seoraksan, Cheonggyecheon, or Cheongwadae into literal semantic translations; use their established target-language names.',
-    'For historical, ancient, revived, regional, dialectal, code-switched, slang, colloquial, or newly coined expressions, use the surrounding subtitle context, genre, era, place, speaker relationship, and domain. Use a standard equivalent only when the intended meaning is clear. Never invent a dictionary definition, an etymology, a live-reference lookup, or an unsupported expansion; when uncertain, preserve the recognized form, official form, or a conservative transliteration.',
-    'Preserve relationship-appropriate register and forms of address. For Korean, retain honorific speech and titles in unfamiliar, professional, service, official, senior-junior, medical, educational, military, public-safety, and respectful family contexts; use informal speech only when clearly supported. Apply equivalent formality in other target languages.',
-    'For specialist material, use an established target-language term only when the field and meaning are clear from the subtitle context. Do not replace a precise but uncertain term with a vague paraphrase or a guessed everyday word.',
-    'For medical, scientific, legal, historical, academic, technical, archaic, regional, slang, and newly coined terms, infer the domain from nearby subtitle context. When certainty is low, preserve the recognized official form or conservative transliteration instead of inventing a meaning.',
     'For Korean output, use established Korean names or accurate Hangul transliteration for foreign proper names; preserve official titles and technical terminology.',
     'Never output instructions, policies, prompts, JSON directions, source metadata, or commentary as subtitle dialogue.'
   ].join(' ');
@@ -75,21 +64,13 @@ async function translateOnce(apiKey, subtitle, targetLang, targetName, fileName)
   const result = await postOpenAI(apiKey, { model: MODEL, temperature: 0, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] });
   return String(result?.choices?.[0]?.message?.content || '').trim();
 }
-function resumeDisposition(error) {
-  const status = Number(error?.statusCode || 0);
-  const msg = String(error?.message || error || '').toLowerCase();
-  const transient = status === 429 || [500, 502, 503, 504].includes(status)
-    || /timeout|timed out|overload|rate.?limit|temporar|socket|econnreset|econnrefused|enotfound|network|connection reset|connection closed/.test(msg);
-  if (transient) return { retryable: true, resumable: true, resumeScope: 'same-unfinished-subtitle-group', checkpointPolicy: 'preserve-completed-retry-current-from-last-safe-overlap', doNotSkip: true, mediaQualityReviewRequired: false };
-  return { retryable: false, resumable: true, resumeScope: 'manual-operator-review', checkpointPolicy: 'preserve-completed-do-not-auto-skip-unfinished', doNotSkip: true, mediaQualityReviewRequired: false };
-}
 function classifyError(error) {
-  const status = Number(error?.statusCode || 500); const msg = String(error?.message || error || 'translate_failed'); const disposition = resumeDisposition(error);
-  if (status === 429) return { statusCode: 429, code: 'openai_rate_limit', error: 'Translation service rate limit reached. Preserve completed groups and retry this unfinished group from the last safe overlap.', ...disposition };
-  if (status === 504 || /timeout/i.test(msg)) return { statusCode: 504, code: 'openai_timeout', error: 'The current subtitle translation group timed out. Preserve completed groups and retry this unfinished group from the last safe overlap.', ...disposition };
-  if (/api.?key|unauthor/i.test(msg)) return { statusCode: status === 500 ? 401 : status, code: 'openai_api_key', error: 'OpenAI API key is missing or invalid.', ...disposition };
-  if (/quota|billing|payment/i.test(msg)) return { statusCode: status === 500 ? 402 : status, code: 'openai_billing_or_quota', error: 'OpenAI API quota or billing limit reached.', ...disposition };
-  return { statusCode: status || 500, code: 'translate_failed', error: msg.slice(0, 700), ...disposition };
+  const status = Number(error?.statusCode || 500); const msg = String(error?.message || error || 'translate_failed');
+  if (status === 429) return { statusCode: 429, code: 'openai_rate_limit', error: 'Translation service rate limit reached. Retry this subtitle group after a short delay.' };
+  if (status === 504 || /timeout/i.test(msg)) return { statusCode: 504, code: 'openai_timeout', error: 'The current subtitle translation group timed out. Retry this group.' };
+  if (/api.?key|unauthor/i.test(msg)) return { statusCode: status === 500 ? 401 : status, code: 'openai_api_key', error: 'OpenAI API key is missing or invalid.' };
+  if (/quota|billing|payment/i.test(msg)) return { statusCode: status === 500 ? 402 : status, code: 'openai_billing_or_quota', error: 'OpenAI API quota or billing limit reached.' };
+  return { statusCode: status || 500, code: 'translate_failed', error: msg.slice(0, 700) };
 }
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: headers(), body: '' };
@@ -113,19 +94,6 @@ exports.handler = async (event) => {
     if (translatedTimes.length !== sourceTimes.length || translatedTimes.some((x, i) => x !== sourceTimes[i]) || cueCount(translated) !== cueCount(subtitle)) {
       return json(422, { ok: false, code: 'translation_structure_invalid', error: 'Translation did not preserve the original SRT cue structure. Retry this group.' });
     }
-    return json(200, { ok: true, targetLang, targetLanguage: targetLang, targetLanguageVerified: targetLang, targetName: LANG_NAMES[targetLang], translatedSubtitle: translated, resumePolicy: 'desktop-preserve-completed-retry-unfinished-from-last-safe-overlap', transientFailurePolicy: 'never-skip-transient-network-or-server-failures' });
-  } catch (error) {
-    const out = classifyError(error);
-    return json(out.statusCode, {
-      ok: false,
-      code: out.code,
-      error: out.error,
-      retryable: out.retryable,
-      resumable: out.resumable,
-      resumeScope: out.resumeScope,
-      checkpointPolicy: out.checkpointPolicy,
-      doNotSkip: out.doNotSkip,
-      mediaQualityReviewRequired: out.mediaQualityReviewRequired
-    });
-  }
+    return json(200, { ok: true, targetLang, targetLanguage: targetLang, targetLanguageVerified: targetLang, targetName: LANG_NAMES[targetLang], translatedSubtitle: translated });
+  } catch (error) { const out = classifyError(error); return json(out.statusCode, { ok: false, code: out.code, error: out.error }); }
 };

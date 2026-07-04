@@ -200,57 +200,23 @@ function normalizeSegment(item, offsetSeconds = 0) {
     compressionRatio: numberOr(item.compression_ratio ?? item.compressionRatio, 0)
   };
 }
-/*
- * Generated-caption hygiene
- * -------------------------
- * A recognizer may return generic labels such as [Music], [Speech] or
- * [Speaking]. They are not subtitle text. The key distinction is that an
- * explicit lyric cue carrying real lexical words remains a subtitle cue.
- */
-function maruUnwrapCaptionLabel(value) {
-  const raw = safeString(value || '').replace(/\s+/g, ' ').trim();
-  const matched = raw.match(/^\s*[\[(（]\s*([\s\S]*?)\s*[\])）]\s*$/u);
-  return (matched ? matched[1] : raw).replace(/\s+/g, ' ').trim();
-}
-
 function isMaruPureNonSpeechLabel(value) {
-  const raw = safeString(value || '').replace(/\s+/g, ' ').trim();
-  if (!raw) return true;
-  if (/^[♪♫♬]+$/u.test(raw)) return true;
-  if (isLikelySungLyricCue(raw)) return false;
-  const wrapped = /^[\[(（]/u.test(raw) && /[\])）]\s*$/u.test(raw);
-  const label = maruUnwrapCaptionLabel(raw);
-  // A bracketed label with lexical text after its marker is a lyric cue, not a
-  // music label. This protects [Singing: ...], [Lyrics: ...], [노래: ...].
-  if (/^(?:sing(?:ing)?|sung|lyrics?|vocal(?:s)?|노래|가사|노래함|노래하는|歌詞|歌う|歌唱|唱)\s*[:：\-–—]\s*.+$/iu.test(label)) return false;
-  if (!wrapped && label.length > 24) return false;
-  return /^(?:music|background music|song|instrumental|instrumental music|applause|noise|silence|sound effect|sound effects|ambient|audio only|음악|노래|연주|반주|박수|소음|무음|효과음|배경음|musique|música|музыка)(?:\s+(?:only|playing|continues|starts|ends|fades))?$/iu.test(label);
+  const text = safeString(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return true;
+  if (/^[♪♫♬]+$/u.test(text)) return true;
+  const wrapped = text.match(/^\s*[\[(（]\s*([^\]）)]+?)\s*[\]）)]\s*$/u);
+  const label = (wrapped ? wrapped[1] : text).replace(/\s+/g, ' ').trim().toLowerCase();
+  // Only pure labels are non-speech. A label followed by actual words such as
+  // "[노래: 사랑해]" or "[Singing: I love you]" is a real lyric cue and must stay.
+  return /^(?:music|instrumental|background music|song|singing|lyrics?|vocal(?:s)?|applause|noise|silence|sound effect(?:s)?|ambient|음악|연주|노래|가사|노래함|박수|소음|무음|효과음|배경음|허밍|musique|música|музыка|歌|歌詞|歌唱|演奏)$/iu.test(label);
 }
-
-function isMaruGeneratedMetaCue(value) {
-  const raw = safeString(value || '').replace(/\s+/g, ' ').trim();
-  if (!raw || isLikelySungLyricCue(raw)) return false;
-  const label = maruUnwrapCaptionLabel(raw);
-  const compact = label.toLowerCase().replace(/[.。！？!?…:：\-–—\s]+/gu, '');
-  // Do not allow an internal classification name to become a visible caption.
-  // This is intentionally exact/standalone so ordinary dialogue containing the
-  // Korean word 말 or the English word speech is never removed.
-  return /^(?:speech|speaking|spokendialogue|dialogue|voice|voiceover|narration|spokenwords|spokenword|말|대화|음성|음성대화|말소리|대사|나레이션|speechrecognition|transcription)$/iu.test(compact);
-}
-
 function isLikelyNonDialogueSegment(segment) {
   const text = safeString(segment?.text || '').replace(/\s+/g, ' ').trim();
   if (!text) return true;
-  // Always retain lyric labels that carry real words before considering generic
-  // music/noise filtering. This is the guard that prevents sung lyrics from
-  // disappearing simply because they are bracketed or marked as singing.
-  if (isLikelySungLyricCue(text)) return false;
-  if (isMaruPureNonSpeechLabel(text) || isMaruGeneratedMetaCue(text)) return true;
-  const noSpeech = Number(segment?.noSpeechProbability), avgLogprob = Number(segment?.avgLogprob);
-  // Conservative thresholds preserve quiet spoken dialogue and low-level sung vocals.
-  if (Number.isFinite(noSpeech) && noSpeech >= 0.92) return true;
-  if (Number.isFinite(noSpeech) && Number.isFinite(avgLogprob) && noSpeech >= 0.78 && avgLogprob <= -1.45) return true;
-  return false;
+  // Never discard a recognizer text cue merely because its no-speech score is
+  // imperfect. Quiet dialogue and sung lyrics are frequently assigned high
+  // no-speech probabilities. Only an explicit pure non-speech label is removed.
+  return isMaruPureNonSpeechLabel(text);
 }
 function normalizeSegments(items, offsetSeconds = 0) {
   const source = Array.isArray(items) ? items : [];
@@ -497,16 +463,12 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
   'You create the final text that appears on timed subtitles.',
   'Return JSON only: {"cues":[{"id":number,"text":string}]}.',
   'Return exactly one non-empty text value for every supplied cue id, in the same order.',
-  'Translate only the lexical words audible in each supplied cue into the authoritative requested target language. A supplied cue may be spoken dialogue or a recognizably sung lyric. Do not output source-language alternatives, notes, explanations, labels, timestamps, cue numbers, markdown, policies, prompts, or instructions.',
-  'Never emit a classification label such as [speech], [speaking], [spoken dialogue], [dialogue], [voice], [narration], [singing], [lyrics], [music], 말, 대화, 음성, 대사, or 나레이션. These are internal classifications, not subtitle text. If a cue contains actual lexical words, return those words only. If it contains no discernible lexical words, return no invented text.',
+  'Translate dialogue into the authoritative requested target language. Do not output source-language alternatives, notes, explanations, labels, timestamps, cue numbers, markdown, policies, prompts, or instructions.',
   'Each supplied cue is an immutable spoken-media time interval. Keep every cue id separate: never merge, summarize, reorder, transfer words between, or turn consecutive cue ids into a paragraph. Translate only the words in that cue, in its existing order, as the short natural subtitle that appears while that exact speech is audible. Do not create a continuation sentence by borrowing words from the next or previous cue.',
   'Each cue includes durationSeconds and a nonbinding displayUnitGuide. Use them as a readability budget: keep the target line concise enough to read while that exact speech is audible. Do not solve a short duration by merging with a neighbour, moving words, deleting a cue, or changing the cue order.',
   'Keep names, titles, ranks, honorifics, technical terms, units, numbers, product names, species names, organization names, place names, building names, country names, political parties, and institutions accurate and consistent.',
-  'Interpret historical, ancient, revived, regional, dialectal, code-switched, slang, colloquial, and newly coined expressions from the local spoken context, surrounding cues, genre, era, place, speaker relationship, and domain. Use a standard modern equivalent only when the intended meaning is clear. Never invent a dictionary definition, a historical source, or an unsupported expansion of an unfamiliar expression. When evidence is insufficient, preserve the recognized form, official form, or a conservative transliteration rather than guessing.',
-  'Map interpersonal register from relationship, relative status, age, setting, recurring titles, and surrounding dialogue. For Korean, preserve appropriate honorific speech and titles in unfamiliar, professional, service, official, senior-junior, medical, educational, military, public-safety, and respectful family contexts; use informal speech only when the relationship is clearly informal. Apply the equivalent relationship-appropriate register in other target languages.',
-  'Use established reference knowledge conservatively, but never claim to have consulted a live encyclopedia, dictionary, or external database. Preserve a specialized, historical, dialectal, or emerging term when the available cue context does not establish one reliable target-language equivalent.',
   'Classify recurring personal names, aliases, nicknames, pet names, call signs, kinship forms, and forms of address from nearby cue context before translating. Never allow one unclear or imperfectly recognized pronunciation to become a global canonical name. Use one canonical target-language form only when repeated textual/context evidence clearly identifies the same entity; otherwise preserve the current recognized official/transliterated form without forcing later cues to match it.',
-  'For every cue marked isSungLyric=true, return the actual audible lyric words in the requested target language. Do not skip, delete, summarize, relabel, or replace a lyric cue with [music], [song], [speech], [singing], [laughter], or another generic sound label. Keep each lyric phrase in its existing cue and time interval; never merge adjacent lyric phrases, extend a lyric through an instrumental gap, or move lyric words into a neighbouring cue. Preserve an existing ♪ lyric marker when supplied. Do not create a caption for instrumental lead-in, melody-only passages, humming without discernible words, or imagined lyric text.',
+  'For sung lyrics, preserve actual lyric words only after audible vocal onset. Keep every lyric phrase in its existing cue and time interval; never merge adjacent lyric phrases, extend a lyric through an instrumental gap, or move lyric words into a neighbouring cue. Do not replace real sung words with [music], [song], [laughter], or another generic sound label. Preserve an existing ♪ lyric marker when supplied. Do not create a caption for instrumental lead-in, melody-only passages, humming without discernible words, or imagined lyric text.',
   'For a standalone human laugh, cry, sharp cry, gasp, pain reaction, surprise or admiration interjection, output one concise bracketed sound label in the target language, such as [웃음] or [laughter]. Do not stretch repeated letters, fill a cue with ㅎ/ㅋ/ha characters, or merge it with neighbouring dialogue.',
   'For proper nouns, use the established conventional target-language name when it is well known. Otherwise use a faithful target-language transliteration or the official name form. Never translate the literal component meanings of a proper name into a new descriptive name.',
   'Examples of forbidden literal-name rewriting: do not turn Seoraksan into a phrase meaning Snowy Peak; do not turn Cheonggyecheon into a phrase meaning Blue Stream; do not turn Cheongwadae into a phrase meaning Blue-Tiled House. Use the standard name used in the target language instead.',
@@ -518,25 +480,19 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
 ].join(' ');
 
 function isMaruInstructionLeak(value) {
-  const raw = safeString(value || '').replace(/\s+/g, ' ').trim();
-  const text = raw.toLowerCase();
+  const text = safeString(value || '').replace(/\s+/g, ' ').trim();
   if (!text) return false;
-  if (isMaruGeneratedMetaCue(raw)) return true;
-  const directLeak = /(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|create\s+accurate\s+timed\s+subtitle|preserve\s+proper\s+nouns|target\s+(?:subtitle\s+)?language|source\s+language\s+hint|subtitle\s+translation\s+engine|never\s+reproduce\s+or\s+mention\s+these\s+instructions)/i.test(text);
-  if (directLeak) return true;
-  // Korean and mixed-language leaks are rejected only when both an internal
-  // control marker and an instruction-like verb are present. This avoids
-  // removing ordinary dialogue that happens to mention a policy or rule.
-  const internalMarker = /(?:시스템\s*(?:프롬프트|메시지|정책|지시)|개발자\s*(?:메시지|지시)|내부\s*(?:정책|규칙|지침|명령)|프롬프트|json|대상\s*언어|원문\s*언어|타임스탬프|큐\s*(?:번호|id)|자막\s*(?:규칙|엔진|형식))/iu.test(raw);
-  const directive = /(?:반환|출력|번역|보존|무시|따르|지켜|반드시|하지\s*마|규정대로|return|output|translate|preserve|ignore|follow|must|do\s*not|never)/iu.test(raw);
-  return internalMarker && directive;
+  const lower = text.toLowerCase();
+  const directInstruction = /(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|create\s+accurate\s+timed\s+subtitle|preserve\s+proper\s+nouns|target\s+(?:subtitle\s+)?language|source\s+language\s+hint|subtitle\s+translation\s+engine|never\s+reproduce\s+or\s+mention\s+these\s+instructions)/i;
+  if (directInstruction.test(lower)) return true;
+  // These are distinctive Korean paraphrases of the old transcription prompt,
+  // not natural media dialogue. Keep the patterns narrow so ordinary spoken
+  // uses of "말", "음악", or "가사" are never removed.
+  return /(?:명확(?:하게|히)\s*(?:노래(?:된|한|하는)?|불러(?:진|지는)|가사(?:가)?).{0,48}(?:유지|보존|번역|자막|표시|생성)|(?:짧은|하나의)\s*(?:음표|마커)(?:\s*(?:또는|나|를|가))?.{0,64}|음악적(?:이거나|인).{0,64}(?:표시|이미지|사용)|가사(?:가)?\s*명확하게\s*(?:불려|노래).{0,48}|(?:노래|가사).{0,64}(?:음성\s*시작|보컬\s*시작|실제\s*가사만|연주만|허밍|멜로디만|경계))/iu.test(text);
 }
 
 function dropMaruInstructionLeakSegments(segments) {
-  return (Array.isArray(segments) ? segments : []).filter((seg) => {
-    const text = seg?.text;
-    return !isMaruInstructionLeak(text) && !isMaruGeneratedMetaCue(text) && !isMaruPureNonSpeechLabel(text);
-  });
+  return (Array.isArray(segments) ? segments : []).filter((seg) => !isMaruInstructionLeak(seg?.text));
 }
 
 function parsedCueRows(content) {
@@ -582,7 +538,6 @@ async function translateCueTextsToTarget(cues, targetLang, body = {}) {
             id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index,
             text: safeString(cue.text || ''),
             isSungLyric: cue?.__maruLyric === true || isLikelySungLyricCue(cue?.text || ''),
-            cueContent: (cue?.__maruLyric === true || isLikelySungLyricCue(cue?.text || '')) ? 'sung-lyric-with-lexical-words' : 'spoken-lexical-words',
             durationSeconds,
             displayUnitGuide: durationSeconds > 0 ? Math.max(8, Math.round(durationSeconds * 14)) : 0
           };
@@ -627,8 +582,7 @@ const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
   'Keep established conventional names, official organization and institution names, places, buildings, countries, products, species, ranks, aliases, nicknames, call signs, kinship forms, and recurring personal names consistent only when the same entity is clearly confirmed by repeated in-video textual/context evidence.',
   'Use each supplied terminologyLedger item only when it has confidence "confirmed" and evidenceCount at least 2, and only when it clearly refers to the same entity or concept in this cue. Otherwise preserve the current form.',
   'For specialist content, use the established target-language term only when the context makes the domain unambiguous. Do not replace a precise but uncertain term with a guessed everyday paraphrase.',
-  'For historical, ancient, revived, regional, dialectal, slang, code-switched, colloquial, or newly coined language, review the local context, era, place, relationship, and genre before changing anything. Never invent an etymology, dictionary sense, or modern substitute when the evidence is weak; preserve the existing recognized form or a conservative transliteration in that case.',
-  'Match the requested genre and relationship register: exact and restrained for scholarship or professional discussion; natural and relationship-appropriate for dialogue and fiction. Preserve honorifics, titles, and social distance when the relationship evidence supports them. Do not make already natural subtitles more literary merely for style.',
+  'Match the requested genre and relationship register: exact and restrained for scholarship or professional discussion; natural and relationship-appropriate for dialogue and fiction. Do not make already natural subtitles more literary merely for style.',
   'For a cue made only of laughter, crying, a gasp, a scream, coughing, or a sigh, use one compact bracketed target-language sound label. Never expand it into repeated characters such as ㅎㅎㅎㅎ, ㅋㅋㅋㅋ, ha ha ha, or similar filler. This rule never applies to actual sung lyric words: retain clear lyric text, its existing ♪ marker when present, and its exact cue boundary; do not replace lyrics with [music], [song], [laughter], or any generic sound label.',
   'Add a terminologyLedger item only for a short canonical form that appears at least twice in these cues or is independently confirmed by the supplied confirmed ledger. Set confidence exactly to "confirmed" and evidenceCount to at least 2. Otherwise return an empty ledger.'
 ].join(' ');
@@ -768,16 +722,16 @@ function buildTranscriptionFields(body, options = {}) {
   if (granularities.length) fields['timestamp_granularities[]'] = granularities;
   const sourceLanguage = normalizeLanguage(body.sourceLanguage || '');
   if (sourceLanguage) fields.language = sourceLanguage.split('-')[0];
-  // Keep lyric-bearing vocals on the same exact audio timeline as spoken dialogue.
-  // This is intentionally a transcription hint, not an instruction to invent lyrics.
-  const defaultPrompt = [
-    'Transcribe audible spoken dialogue and clearly sung lyric words with exact segment and word timing.',
-    'For sung lyrics, begin at the audible vocal onset, keep each lyric phrase separate at its real pause or native segment boundary, and include actual sung words only.',
-    'Return the actual lexical words for speech or singing. Never output policy text, instructions, translation rules, or generic classification labels such as [speech], [speaking], [spoken dialogue], [dialogue], [voice], [narration], [singing], or 말/대화/음성/대사.',
-    'Do not create text for instrumental-only music, melody-only passages, humming without discernible words, or background score. Return no segment for those portions.',
-    'When lyrics are clearly sung, retain a leading musical-note marker already present or use one short leading ♪ marker so lyric text is never confused with laughter or a sound effect.'
-  ].join(' ');
-  fields.prompt = safeString(body.transcriptionPrompt || defaultPrompt).slice(0, 900);
+  // Do not send long policy prose as a transcription prompt. Speech-to-text
+  // models can echo or semantically translate that prose into subtitle cues.
+  // A caller may supply a short vocabulary-only hint, but instruction-shaped
+  // prompts are ignored. Actual dialogue and clearly audible lyrics are kept
+  // by the recognizer without a policy sentence injected into the audio task.
+  const rawHint = safeString(body.transcriptionVocabulary || body.vocabularyHint || '').replace(/[\r\n]+/g, ' ').trim();
+  const safeHint = rawHint && rawHint.length <= 180
+    && !/(?:transcribe|translate|subtitle|caption|policy|instruction|return|output|do not|must|should|자막|번역|정책|지시|규칙|출력|반환)/iu.test(rawHint)
+    ? rawHint : '';
+  if (safeHint) fields.prompt = safeHint;
   return fields;
 }
 
@@ -1805,10 +1759,6 @@ async function handleGenerateSubtitle(id, body) {
     targetSegments,
     directTarget ? targetLang : (sourceLanguageDetected || targetLang || 'en')
   );
-  // Final safety boundary: no internal instruction or generic speech/music
-  // classifier is permitted to reach the saved subtitle file. Real lyric cues
-  // are retained because isLikelySungLyricCue takes priority above.
-  targetSegments = dropMaruInstructionLeakSegments(targetSegments);
   // Never split or redistribute a translated line after its source speech
   // timing has been fixed. Translation may correct wording only; cue count and
   // source start/end values remain immutable.
@@ -1834,8 +1784,6 @@ async function handleGenerateSubtitle(id, body) {
     generationMode: directTarget ? 'selected-target-language-subtitle' : 'source-language-transcript',
     outputPolicy: directTarget ? 'target-language-subtitle-cues-only' : 'source-language-transcript',
     lyricPolicy: 'actual-sung-words-only-after-vocal-onset; preserve-lyric-cue-boundaries; no-instrumental-caption',
-    resumePolicy: 'desktop-preserve-completed-retry-unfinished-from-last-safe-overlap',
-    transientFailurePolicy: 'never-skip-transient-network-or-server-failures',
     requestId: id
   });
 }
@@ -2100,41 +2048,13 @@ async function handleGenerateDubbing(id, action, body) {
   });
 }
 
-function classifyResumeDisposition(error) {
-  const status = Number(error?.statusCode || error?.openAiStatus || 0);
-  const message = String(error?.message || error || '').toLowerCase();
-  const transient = status === 429 || [500, 502, 503, 504].includes(status)
-    || /timeout|timed out|abort|aborted|overload|rate.?limit|temporar|socket|econnreset|econnrefused|enotfound|network|fetch failed|connection reset|connection closed|upstream/.test(message);
-  if (transient) {
-    return {
-      retryable: true,
-      resumable: true,
-      resumeScope: 'same-unfinished-media-chunk',
-      checkpointPolicy: 'preserve-completed-retry-current-from-last-safe-overlap',
-      doNotSkip: true,
-      mediaQualityReviewRequired: false
-    };
-  }
-  const mediaInput = status === 400 || status === 415 || status === 422
-    || /audio|media|codec|decode|format|corrupt|damaged|unsupported|unreadable|invalid.*file/.test(message);
-  return {
-    retryable: false,
-    resumable: true,
-    resumeScope: mediaInput ? 'manual-media-quality-review' : 'manual-operator-review',
-    checkpointPolicy: 'preserve-completed-do-not-auto-skip-unfinished',
-    doNotSkip: true,
-    mediaQualityReviewRequired: mediaInput
-  };
-}
-
 function classifyOpenAiError(error) {
   const status = Number(error?.statusCode || error?.openAiStatus || 500);
   const msg = String(error?.message || error || 'Unknown server error');
-  const disposition = classifyResumeDisposition(error);
-  if (/insufficient_quota|quota|billing|payment/i.test(msg)) return { statusCode: status || 402, code: 'openai_billing_or_quota', message: 'OpenAI API quota/billing limit reached. Check OpenAI Platform billing and project limits.', ...disposition };
-  if (/api key|invalid_api_key|incorrect api key|unauthorized/i.test(msg)) return { statusCode: status || 401, code: 'openai_api_key', message: 'OpenAI API key is invalid or missing in Netlify environment variable OPENAI_API_KEY.', ...disposition };
-  if (/timeout|timed out/i.test(msg)) return { statusCode: 504, code: 'server_timeout', message: 'OpenAI/Netlify request timed out. Preserve completed chunks and retry the same unfinished media chunk from the last safe overlap.', ...disposition };
-  return { statusCode: status || 500, code: 'server_error', message: msg.slice(0, 1000), ...disposition };
+  if (/insufficient_quota|quota|billing|payment/i.test(msg)) return { statusCode: status || 402, code: 'openai_billing_or_quota', message: 'OpenAI API quota/billing limit reached. Check OpenAI Platform billing and project limits.' };
+  if (/api key|invalid_api_key|incorrect api key|unauthorized/i.test(msg)) return { statusCode: status || 401, code: 'openai_api_key', message: 'OpenAI API key is invalid or missing in Netlify environment variable OPENAI_API_KEY.' };
+  if (/timeout|timed out/i.test(msg)) return { statusCode: 504, code: 'server_timeout', message: 'OpenAI/Netlify request timed out. Split the media/text into smaller chunks and retry.' };
+  return { statusCode: status || 500, code: 'server_error', message: msg.slice(0, 1000) };
 }
 
 exports.handler = async (event) => {
@@ -2176,12 +2096,6 @@ exports.handler = async (event) => {
       ok: false,
       error: classified.message,
       code: classified.code,
-      retryable: classified.retryable,
-      resumable: classified.resumable,
-      resumeScope: classified.resumeScope,
-      checkpointPolicy: classified.checkpointPolicy,
-      doNotSkip: classified.doNotSkip,
-      mediaQualityReviewRequired: classified.mediaQualityReviewRequired,
       requestId: id
     });
   } finally {
