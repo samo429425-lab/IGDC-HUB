@@ -1,4 +1,4 @@
-/* IGDC Member Admin API v2.7.6-member-review-dedicated-store
+/* IGDC Member Admin API v2.8.0-member-service-qna-notices
  * Secure server-side Auth0/OSO member list and hierarchy enforcement.
  * OSO/M2M remains the automatic source for ordinary member roles.
  * Browser role labels are never trusted for list visibility or management.
@@ -210,10 +210,36 @@ exports.handler = async function handler(event) {
       return json(200, { ok: true, document });
     }
 
-    // The Q&A / reply store is intentionally kept inactive until its own operational
-    // workflow is connected. It is separate from membership-review records.
-    if (method === 'POST' && ['submit-question', 'admin-reply'].includes(action)) {
-      return json(501, { ok: false, error: '질문·답글 저장소는 별도 운영 연결 후 활성화됩니다.' });
+    // Member questions, replies, and notices use the same dedicated server-only
+    // Supabase store as member review records. The browser never receives a service key.
+    if (method === 'POST' && action === 'submit-question') {
+      const question = await createMemberQuestion(env, requester, body);
+      return json(201, { ok: true, question });
+    }
+
+    if (method === 'GET' && action === 'my-questions') {
+      const result = await listOwnMemberQuestions(env, requester, qs);
+      return json(200, Object.assign({ ok: true }, result));
+    }
+
+    if (method === 'GET' && action === 'admin-questions') {
+      const result = await listManagedMemberQuestions(env, requester, qs);
+      return json(200, Object.assign({ ok: true }, result));
+    }
+
+    if (method === 'POST' && action === 'admin-reply') {
+      const question = await replyToMemberQuestion(env, requester, body);
+      return json(201, { ok: true, question });
+    }
+
+    if (method === 'GET' && action === 'notices') {
+      const result = await listMemberNotices(env, requester, qs);
+      return json(200, Object.assign({ ok: true }, result));
+    }
+
+    if (method === 'POST' && action === 'publish-notice') {
+      const notice = await publishMemberNotice(env, requester, body);
+      return json(201, { ok: true, notice });
     }
 
     return json(404, { ok: false, error: 'Unknown action: ' + action });
@@ -281,6 +307,9 @@ function readEnv() {
     memberReviewTable: String(process.env.MEMBER_REVIEW_TABLE || 'igdc_member_review_cases').trim(),
     memberReviewFilesTable: String(process.env.MEMBER_REVIEW_FILES_TABLE || 'igdc_member_review_files').trim(),
     memberReviewEventsTable: String(process.env.MEMBER_REVIEW_EVENTS_TABLE || 'igdc_member_review_events').trim(),
+    memberQuestionTable: String(process.env.MEMBER_QUESTION_TABLE || 'igdc_member_questions').trim(),
+    memberQuestionRepliesTable: String(process.env.MEMBER_QUESTION_REPLIES_TABLE || 'igdc_member_question_replies').trim(),
+    memberNoticeTable: String(process.env.MEMBER_NOTICE_TABLE || 'igdc_member_notices').trim(),
     memberReviewBucket: String(process.env.MEMBER_REVIEW_BUCKET || 'igdc-member-review').trim(),
     memberReviewMaxFiles: optionalPositiveInt(process.env.MEMBER_REVIEW_MAX_FILES),
     memberReviewMaxUploadBytes: optionalPositiveInt(process.env.MEMBER_REVIEW_MAX_UPLOAD_BYTES),
@@ -836,11 +865,11 @@ function memberReviewDiagnosticSummary(report) {
   }
   const failed = (report.probes || []).filter(item => !item.ok);
   if (!failed.length) {
-    return { code: 'ok', summary: '회원 심사 Supabase 연결, 심사 테이블, 사이트 소속 열, 비공개 파일 보관함을 읽기 전용으로 확인했습니다.' };
+    return { code: 'ok', summary: '회원 심사·문의·공지 Supabase 연결, 심사 테이블, 문의·답글·공지 테이블, 사이트 소속 열, 비공개 파일 보관함을 읽기 전용으로 확인했습니다.' };
   }
   const allMessages = failed.map(item => String(item.message || '')).join(' ').toLowerCase();
   if (allMessages.indexOf('submitted_site_keys') >= 0 || allMessages.indexOf('does not exist') >= 0 || allMessages.indexOf('schema cache') >= 0 || allMessages.indexOf('could not find') >= 0) {
-    return { code: 'schema_migration_required', summary: '회원 심사 테이블 또는 submitted_site_keys 열이 없습니다. 패키지의 supabase/member-review-schema-final.sql을 Supabase SQL Editor에서 실행해야 합니다.' };
+    return { code: 'schema_migration_required', summary: '회원 심사·문의·공지 테이블 또는 submitted_site_keys 열이 없습니다. 패키지의 supabase/IGDC_Member_Service_Final_Schema.sql을 Supabase SQL Editor에서 실행해야 합니다.' };
   }
   if (allMessages.indexOf('permission denied') >= 0 || allMessages.indexOf('42501') >= 0) {
     return { code: 'service_role_grant_missing', summary: '서비스 역할의 회원 심사 테이블 또는 비공개 보관함 접근 권한이 부족합니다. 최종 스키마 SQL의 service_role 권한 구문을 실행했는지 확인하십시오.' };
@@ -874,8 +903,13 @@ async function memberReviewDiagnostic(env, requester) {
       events_table: env.memberReviewEventsTable,
       private_bucket: env.memberReviewBucket
     },
+    member_service_store: {
+      questions_table: env.memberQuestionTable,
+      replies_table: env.memberQuestionRepliesTable,
+      notices_table: env.memberNoticeTable
+    },
     probes: [],
-    note: '읽기 전용 점검입니다. 회원 정보·제출 서류·첨부 파일·서명 URL·비밀키·시험 데이터는 반환하거나 생성하지 않습니다.'
+    note: '읽기 전용 점검입니다. 회원 정보·제출 서류·첨부 파일·질문·답글·공지 원문·서명 URL·비밀키·시험 데이터는 반환하거나 생성하지 않습니다.'
   };
   if (!report.database.url_configured || !report.database.key.configured) {
     report.diagnosis = memberReviewDiagnosticSummary(report);
@@ -895,6 +929,18 @@ async function memberReviewDiagnostic(env, requester) {
   ));
   report.probes.push(await diagnosticProbe('review_events_table',
     () => supabaseSelect(env, env.memberReviewEventsTable, { select: 'id', limit: 1 }),
+    rows => ({ row_count_at_most_one: Array.isArray(rows) ? rows.length : 0 })
+  ));
+  report.probes.push(await diagnosticProbe('member_questions_table',
+    () => supabaseSelect(env, env.memberQuestionTable, { select: 'id', limit: 1 }),
+    rows => ({ row_count_at_most_one: Array.isArray(rows) ? rows.length : 0 })
+  ));
+  report.probes.push(await diagnosticProbe('member_question_replies_table',
+    () => supabaseSelect(env, env.memberQuestionRepliesTable, { select: 'id', limit: 1 }),
+    rows => ({ row_count_at_most_one: Array.isArray(rows) ? rows.length : 0 })
+  ));
+  report.probes.push(await diagnosticProbe('member_notices_table',
+    () => supabaseSelect(env, env.memberNoticeTable, { select: 'id', limit: 1 }),
     rows => ({ row_count_at_most_one: Array.isArray(rows) ? rows.length : 0 })
   ));
   report.probes.push(await diagnosticProbe('private_review_bucket',
@@ -1437,6 +1483,257 @@ async function reviewMemberDocument(env, requester, body) {
   });
   const files = await supabaseSelect(env, env.memberReviewFilesTable, { select: '*', review_case_id: 'eq.' + id, order: 'created_at.asc' });
   return publicReviewCase(current, files);
+}
+
+
+function questionPayload(requester, values) {
+  const role = normalizeRole(requester.role || highestRole(requester.roles || [])) || 'guest';
+  return {
+    user_id: requester.sub,
+    user_email: normalizeOptionalText(requester.email, 320) || null,
+    user_name: normalizeOptionalText(requester.name, 320) || null,
+    submitted_role: role,
+    submitted_role_level: roleLevel(role),
+    submitted_site_keys: uniqueSiteKeys(requester.site_keys || []),
+    title: values.title,
+    body: values.body,
+    status: values.status || 'open',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+}
+
+function questionScopeFilters(scope) {
+  if (scope.kind === 'all') return {};
+  if (scope.kind === 'all_except_owner') return { submitted_role: 'neq.owner' };
+  if (scope.kind === 'below_only') return { submitted_role_level: 'lt.' + String(scope.level || 0) };
+  if (scope.kind === 'site_only_below') {
+    const sites = postgrestArrayLiteral(scope.siteKeys || []);
+    const allowedRoles = uniqueSiteKeys(scope.siteKeys || []).flatMap(site => {
+      const roles = [];
+      const om = 'site_manager_' + site + '_om';
+      const op = 'site_manager_' + site + '_op';
+      if (canSiteManagerAssignRole(scope, om)) roles.push(om);
+      if (canSiteManagerAssignRole(scope, op)) roles.push(op);
+      return roles;
+    });
+    if (!sites || !allowedRoles.length) return noReviewRowsFilter();
+    return {
+      submitted_role: 'in.(' + allowedRoles.join(',') + ')',
+      submitted_role_level: 'lt.' + String(scope.level || 0),
+      submitted_site_keys: 'ov.' + sites
+    };
+  }
+  return noReviewRowsFilter();
+}
+
+function questionAllowed(scope, question) {
+  return scopeAllows(
+    scope,
+    [normalizeRole(question && question.submitted_role) || 'guest'],
+    uniqueSiteKeys(question && question.submitted_site_keys)
+  );
+}
+
+async function questionRepliesByQuestionIds(env, ids) {
+  const cleanIds = (ids || []).map(value => String(value || '')).filter(Boolean);
+  if (!cleanIds.length) return new Map();
+  const rows = await supabaseSelect(env, env.memberQuestionRepliesTable, {
+    select: '*', question_id: 'in.(' + cleanIds.join(',') + ')', order: 'created_at.asc'
+  });
+  const map = new Map();
+  rows.forEach(row => {
+    const list = map.get(row.question_id) || [];
+    list.push(row);
+    map.set(row.question_id, list);
+  });
+  return map;
+}
+
+function publicQuestionReply(reply) {
+  return {
+    id: reply.id,
+    question_id: reply.question_id,
+    body: reply.body,
+    responder_id: reply.responder_id,
+    responder_name: reply.responder_name || '',
+    responder_role: reply.responder_role || '',
+    created_at: reply.created_at
+  };
+}
+
+function publicMemberQuestion(question, replies) {
+  return {
+    id: question.id,
+    question_id: question.id,
+    user_id: question.user_id,
+    user_email: question.user_email || '',
+    user_name: question.user_name || '',
+    submitted_role: question.submitted_role || 'guest',
+    submitted_site_keys: uniqueSiteKeys(question.submitted_site_keys || []),
+    title: question.title,
+    body: question.body,
+    status: question.status || 'open',
+    created_at: question.created_at,
+    updated_at: question.updated_at || question.created_at,
+    last_replied_at: question.last_replied_at || null,
+    replies: (replies || []).map(publicQuestionReply)
+  };
+}
+
+async function getMemberQuestion(env, id) {
+  const rows = await supabaseSelect(env, env.memberQuestionTable, { select: '*', id: 'eq.' + id, limit: 1 });
+  const question = rows[0];
+  if (!question) throw Object.assign(new Error('질문·문의를 찾을 수 없습니다.'), { statusCode: 404 });
+  return question;
+}
+
+async function createMemberQuestion(env, requester, body) {
+  const title = normalizeOptionalText(body.title, 500);
+  const text = normalizeOptionalText(body.body, 12000);
+  if (!title || !text) {
+    const err = new Error('질문 제목과 내용을 입력해야 합니다.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const rows = await supabaseInsert(env, env.memberQuestionTable, questionPayload(requester, { title, body: text, status: 'open' }));
+  const question = rows[0];
+  if (!question) throw Object.assign(new Error('질문·문의 저장 결과를 확인할 수 없습니다.'), { statusCode: 502 });
+  return publicMemberQuestion(question, []);
+}
+
+async function listOwnMemberQuestions(env, requester, query) {
+  const page = clampInt(query.page, 0, 1000000);
+  const perPage = clampInt(query.per_page || query.perPage, 1, 100);
+  const questions = await supabaseSelect(env, env.memberQuestionTable, {
+    select: '*', user_id: 'eq.' + requester.sub, order: 'created_at.desc', limit: perPage, offset: page * perPage
+  });
+  const replyMap = await questionRepliesByQuestionIds(env, questions.map(row => row.id));
+  return {
+    questions: questions.map(question => publicMemberQuestion(question, replyMap.get(question.id) || [])),
+    page,
+    per_page: perPage,
+    has_more: questions.length === perPage,
+    scope: { kind: 'self_only', role: highestRole(requester.roles || []) }
+  };
+}
+
+async function listManagedMemberQuestions(env, requester, query) {
+  const scope = managementScope(requester);
+  const page = clampInt(query.page, 0, 1000000);
+  const perPage = clampInt(query.per_page || query.perPage, 1, 100);
+  const params = Object.assign({ select: '*', order: 'updated_at.desc', limit: perPage, offset: page * perPage }, questionScopeFilters(scope));
+  const questions = (await supabaseSelect(env, env.memberQuestionTable, params)).filter(question => questionAllowed(scope, question));
+  const replyMap = await questionRepliesByQuestionIds(env, questions.map(row => row.id));
+  return {
+    questions: questions.map(question => publicMemberQuestion(question, replyMap.get(question.id) || [])),
+    page,
+    per_page: perPage,
+    has_more: questions.length === perPage,
+    scope: publicScope(scope)
+  };
+}
+
+async function authorizeManagedQuestion(env, requester, question) {
+  const scope = managementScope(requester);
+  if (question.user_id === requester.sub || !questionAllowed(scope, question)) {
+    throw forbidden('현재 권한으로는 해당 회원의 질문·문의를 열람하거나 답글을 작성할 수 없습니다.');
+  }
+  return scope;
+}
+
+async function replyToMemberQuestion(env, requester, body) {
+  const id = required(body.question_id || body.id, 'question_id');
+  const text = normalizeOptionalText(body.body, 12000);
+  if (!text) {
+    const err = new Error('답글 내용을 입력해야 합니다.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const question = await getMemberQuestion(env, id);
+  const scope = await authorizeManagedQuestion(env, requester, question);
+  const responderRole = normalizeRole(scope.role || requester.role || highestRole(requester.roles || [])) || 'guest';
+  const now = new Date().toISOString();
+  const inserted = await supabaseInsert(env, env.memberQuestionRepliesTable, {
+    question_id: question.id,
+    body: text,
+    responder_id: requester.sub,
+    responder_email: normalizeOptionalText(requester.email, 320) || null,
+    responder_name: normalizeOptionalText(requester.name, 320) || null,
+    responder_role: responderRole,
+    created_at: now
+  });
+  if (!inserted[0]) throw Object.assign(new Error('답글 저장 결과를 확인할 수 없습니다.'), { statusCode: 502 });
+  const updated = await supabasePatch(env, env.memberQuestionTable, { id: 'eq.' + question.id }, {
+    status: 'answered',
+    last_replied_at: now,
+    last_replied_by: requester.sub,
+    updated_at: now
+  });
+  const current = updated[0] || Object.assign({}, question, { status: 'answered', last_replied_at: now, last_replied_by: requester.sub, updated_at: now });
+  const replies = await questionRepliesByQuestionIds(env, [question.id]);
+  return publicMemberQuestion(current, replies.get(question.id) || []);
+}
+
+function noticePublisherAllowed(requester) {
+  const role = highestRole(requester && requester.roles || []);
+  return role === 'owner' || role === 'admin' || role === 'super_admin';
+}
+
+function requireNoticePublisher(requester) {
+  if (noticePublisherAllowed(requester)) return;
+  throw forbidden('공지 등록은 owner와 admin 계열만 할 수 있습니다.');
+}
+
+function publicMemberNotice(notice) {
+  return {
+    id: notice.id,
+    title: notice.title,
+    body: notice.body,
+    status: notice.status || 'published',
+    published_at: notice.published_at || notice.created_at,
+    created_at: notice.created_at,
+    updated_at: notice.updated_at || notice.created_at,
+    published_by_name: notice.published_by_name || '',
+    published_by_role: notice.published_by_role || ''
+  };
+}
+
+async function listMemberNotices(env, requester, query) {
+  const page = clampInt(query.page, 0, 1000000);
+  const perPage = clampInt(query.per_page || query.perPage, 1, 100);
+  const notices = await supabaseSelect(env, env.memberNoticeTable, {
+    select: '*', status: 'eq.published', order: 'published_at.desc', limit: perPage, offset: page * perPage
+  });
+  return { notices: notices.map(publicMemberNotice), page, per_page: perPage, has_more: notices.length === perPage };
+}
+
+async function publishMemberNotice(env, requester, body) {
+  requireNoticePublisher(requester);
+  const title = normalizeOptionalText(body.title, 500);
+  const text = normalizeOptionalText(body.body, 12000);
+  if (!title || !text) {
+    const err = new Error('공지 제목과 내용을 입력해야 합니다.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const role = highestRole(requester.roles || []);
+  const now = new Date().toISOString();
+  const rows = await supabaseInsert(env, env.memberNoticeTable, {
+    title,
+    body: text,
+    status: 'published',
+    published_at: now,
+    published_by: requester.sub,
+    published_by_email: normalizeOptionalText(requester.email, 320) || null,
+    published_by_name: normalizeOptionalText(requester.name, 320) || null,
+    published_by_role: role,
+    created_at: now,
+    updated_at: now
+  });
+  const notice = rows[0];
+  if (!notice) throw Object.assign(new Error('공지 저장 결과를 확인할 수 없습니다.'), { statusCode: 502 });
+  return publicMemberNotice(notice);
 }
 
 function b64urlToBuffer(input) {

@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.7.5-member-review-diagnostic';
+  var VERSION = '2.8.0-member-service-qna-notices';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -22,10 +22,14 @@
     members: [],
     notices: [],
     questions: [],
+    adminQuestions: [],
     reviewDocs: [],
     myReviewDocs: [],
     loadingReview: false,
     loadingMyReview: false,
+    loadingQuestions: false,
+    loadingAdminQuestions: false,
+    loadingNotices: false,
     diagnosticReport: null,
     loadingDiagnostic: false,
     loading: false,
@@ -157,8 +161,9 @@
       loginStateTitle:'로그인 상태', siteRole:'사이트 역할 표시', tokenOk:'Auth0 ID 토큰이 정상 연결되어 있습니다.', tokenMissing:'역할 표시는 있으나 Auth0 ID 토큰이 없거나 만료되었습니다. 회원 목록 조회는 세션 갱신 후 가능합니다.', renewSession:'세션 갱신',
       loginTitle:'로그인', loginDesc:'회원전용 영역은 로그인 후 사용할 수 있습니다.',
       submitTitle:'서류 제출', submitDesc:'제출한 내용과 첨부 자료는 비공개 심사 보관함에 저장되며, 권한 있는 관리자만 검토할 수 있습니다.', titleLabel:'제목', submitTitlePlaceholder:'제출 제목', bodyLabel:'내용', submitBodyPlaceholder:'제출 내용', requestedRoleLabel:'신청 등급', requestedRoleNone:'일반 서류 제출', requestedRoleStandard:'스탠다드 회원', requestedRolePremium:'프리미엄 회원', requestedRoleCommerce:'커머스 회원', attachmentLabel:'첨부 서류', attachmentHelp:'파일은 비공개 심사 보관함에 저장됩니다.', submitButton:'제출', documentSaved:'제출 자료가 심사 대기열에 저장되었습니다.', documentUploadFailed:'내용은 저장되었지만 첨부 파일 전송이 완료되지 않았습니다. 서류 제출 화면에서 다시 제출해 주세요.', roleSourceReview:'승급 심사 승인', reviewNotePrompt:'검토 메모를 입력하십시오. 비워 두어도 됩니다.',
-      questionTitle:'질문/문의', questionDesc:'일반 회원은 질문을 등록할 수 있고, 답글은 관리자 권한에서 활성화됩니다.', qTitleLabel:'질문 제목', qTitlePlaceholder:'질문 제목', qBodyLabel:'질문 내용', qBodyPlaceholder:'질문 내용', qButton:'질문 등록', openReplyAdmin:'답글 관리 열기',
-      noticeTitle:'공지사항', noticeDesc:'공지 목록은 서버 API 연결 시 자동으로 표시됩니다.', manageNotice:'공지 작성/답글 관리',
+      questionTitle:'질문/문의', questionDesc:'질문·문의는 본인과 권한 범위 안의 관리자만 열람할 수 있습니다. 답글이 등록되면 이 화면에서 확인할 수 있습니다.', qTitleLabel:'질문 제목', qTitlePlaceholder:'질문 제목', qBodyLabel:'질문 내용', qBodyPlaceholder:'질문 내용', qButton:'질문 등록', openReplyAdmin:'답글 관리 열기', myQuestionsTitle:'내 질문·문의', myQuestionsDesc:'본인이 제출한 질문과 관리자 답글만 표시됩니다.', myQuestionsReload:'내 문의 새로고침', myQuestionsNone:'등록한 질문·문의가 없습니다.', questionStatusOpen:'접수', questionStatusAnswered:'답변 완료', questionStatusClosed:'종료', repliesTitle:'관리자 답글', noReplies:'아직 등록된 답글이 없습니다.',
+      noticeTitle:'공지사항', noticeDesc:'등록된 공지는 로그인한 회원에게 표시됩니다.', manageNotice:'공지 작성/답글 관리', noticesReload:'공지 새로고침', noticesNone:'등록된 공지가 없습니다.', publishedAt:'등록일',
+      adminQuestionsTitle:'회원 질문·문의 답글', adminQuestionsDesc:'현재 권한 범위 안의 회원 질문만 표시됩니다. 일반·커머스 공통회원의 문의는 사이트 매니저에게 열리지 않으며, owner/admin과 권한 범위의 상위 관리자만 처리합니다.', adminQuestionsReload:'문의 새로고침', adminQuestionsNone:'현재 권한으로 처리할 질문·문의가 없습니다.', replyLabel:'답글', replyPlaceholder:'회원에게 표시될 답글을 입력하십시오.', replyButton:'답글 등록', noticePublishTitle:'공지 등록', noticePublishDesc:'공지는 모든 로그인 회원에게 표시됩니다. 공지 등록은 owner와 admin 계열만 할 수 있습니다.', noticeTitleLabel:'공지 제목', noticeTitlePlaceholder:'공지 제목', noticeBodyLabel:'공지 내용', noticeBodyPlaceholder:'공지 내용', publishButton:'공지 등록', noticePublishDenied:'공지 등록 권한은 owner와 admin 계열만 갖습니다.',
       noPermission:'권한 없음', viewOnly:'조회 전용', save:'예외 적용', restoreOsO:'OSO 기준 복귀', block:'차단 검토', unblock:'차단 해제', protectedAccount:'보호 계정', selectSpecialRole:'특수 역할 선택', roleReasonPrompt:'예외 역할 적용 사유를 입력하십시오.', restoreReasonPrompt:'OSO 자동 역할 기준으로 복귀시키는 사유를 입력하십시오.', blockReasonPrompt:'차단 사유를 입력하십시오.', unblockReasonPrompt:'차단 해제 사유를 입력하십시오.', roleSourceOsO:'OSO/M2M 원본', roleSourceManual:'관리자 예외 적용', roleSourceReturned:'OSO 변경 반영', confirmProtectedBlockPrefix:'보호 계정입니다. 아래 확인 문구를 정확히 입력하십시오:\n', adminMembersTitle2:'OSO/Auth0 회원 목록', adminMembersDesc2:'일반·스탠다드·프리미엄·특수·커머스는 공통회원으로 조회만 표시됩니다. 사이트 매니저는 자기 사이트의 OM·OP만 관리할 수 있고, OM·OP도 자기보다 낮은 같은 사이트 OM·OP만 관리할 수 있습니다. 다른 사이트 운영회원 정보와 서류는 열리지 않습니다. director는 하위 사이트 매니저와 그 아래 전체, admin은 owner를 제외한 전체, owner는 전체를 관리합니다.', search:'검색', colMember:'회원', colRole:'적용 역할 / OSO 원본', colChangeReview:'특수 역할 조정', colManage:'관리', noMembers:'관리 권한으로 볼 수 있는 회원이 없거나 API 연결 대기 중입니다.', shown:'표시', serverQuery:'서버 조회', page:'페이지', previous:'이전', next:'다음',
       reviewDocDefault:'제출 서류', open:'열람', detail:'상세', approve:'승인', reject:'반려', reviewTitle:'승급 검토', reviewRefresh:'새로고침', reviewDesc:'회원이 제출한 서류와 승급·권한 신청 자료를 검토하는 영역입니다. 일반 회원은 본인 자료만 회원 페이지에서 확인합니다. 사이트 매니저는 자기 사이트 OM·OP만, OM·OP는 자기보다 낮은 같은 사이트 OM·OP만 검토할 수 있습니다. director/site_manager_director는 하위 사이트 매니저와 그 아래 전체, admin은 owner 제외 전체, owner는 전체를 검토합니다.', reviewHeadDoc:'제출 서류', reviewHeadMember:'회원', reviewHeadTarget:'요청 롤', reviewHeadStatus:'상태', reviewHeadReview:'검토', noReviewDocs:'현재 권한으로 볼 수 있는 제출 서류가 없거나, 서류 검토 API 연결 대기 중입니다.', shownItems:'표시', serverItems:'서버 조회',
       adminNoticeTitle:'답글/공지 관리', adminNoticeDesc:'관리자 권한에서만 답글 작성·공지 등록 버튼이 활성화됩니다.', targetTitleLabel:'대상/제목', targetTitlePlaceholder:'공지 제목 또는 답글 대상', adminNoticeBodyLabel:'내용', adminNoticeBodyPlaceholder:'공지 또는 답글 내용', register:'등록',
@@ -174,8 +179,9 @@
       loginStateTitle:'Login Status', siteRole:'Site role', tokenOk:'The Auth0 ID token is connected correctly.', tokenMissing:'A site role is visible, but the Auth0 ID token is missing or expired. Renew the session before viewing the member list.', renewSession:'Renew session',
       loginTitle:'Login', loginDesc:'Members-only areas are available after login.',
       submitTitle:'Document Submission', submitDesc:'Submitted content and attachments are kept in a private review store and are available only to authorized reviewers.', titleLabel:'Title', submitTitlePlaceholder:'Submission title', bodyLabel:'Content', submitBodyPlaceholder:'Submission content', requestedRoleLabel:'Requested membership', requestedRoleNone:'General document submission', requestedRoleStandard:'Standard member', requestedRolePremium:'Premium member', requestedRoleCommerce:'Commerce member', attachmentLabel:'Supporting files', attachmentHelp:'Files are stored in the private review vault.', submitButton:'Submit', documentSaved:'The submission has been stored in the review queue.', documentUploadFailed:'Your content was saved, but attachment upload did not finish. Submit the documents again from this page.', roleSourceReview:'Membership review approved', reviewNotePrompt:'Enter a review note. It may be left blank.',
-      questionTitle:'Questions / Inquiry', questionDesc:'General members can submit questions, and replies are enabled for administrators.', qTitleLabel:'Question title', qTitlePlaceholder:'Question title', qBodyLabel:'Question content', qBodyPlaceholder:'Question content', qButton:'Submit Question', openReplyAdmin:'Open Reply Management',
-      noticeTitle:'Notices', noticeDesc:'Notice lists are displayed automatically when the server API is connected.', manageNotice:'Create Notice / Manage Replies',
+      questionTitle:'Questions / Inquiry', questionDesc:'Questions are visible only to the member who submitted them and administrators within the permitted scope. Replies appear here after they are registered.', qTitleLabel:'Question title', qTitlePlaceholder:'Question title', qBodyLabel:'Question content', qBodyPlaceholder:'Question content', qButton:'Submit Question', openReplyAdmin:'Open Reply Management', myQuestionsTitle:'My Questions / Inquiries', myQuestionsDesc:'Only your submitted questions and administrator replies are shown.', myQuestionsReload:'Refresh My Inquiries', myQuestionsNone:'There are no submitted questions or inquiries.', questionStatusOpen:'Received', questionStatusAnswered:'Answered', questionStatusClosed:'Closed', repliesTitle:'Administrator Replies', noReplies:'No reply has been registered yet.',
+      noticeTitle:'Notices', noticeDesc:'Published notices are shown to signed-in members.', manageNotice:'Create Notice / Manage Replies', noticesReload:'Refresh Notices', noticesNone:'There are no published notices.', publishedAt:'Published',
+      adminQuestionsTitle:'Member Questions / Replies', adminQuestionsDesc:'Only questions inside the current management scope are shown. Global consumer-member inquiries are not visible to site managers; they are handled only by owner/admin and permitted upper managers.', adminQuestionsReload:'Refresh Questions', adminQuestionsNone:'No member questions are available in the current scope.', replyLabel:'Reply', replyPlaceholder:'Enter the reply that will be shown to the member.', replyButton:'Post Reply', noticePublishTitle:'Publish Notice', noticePublishDesc:'Published notices are shown to all signed-in members. Publishing is limited to owner and admin roles.', noticeTitleLabel:'Notice title', noticeTitlePlaceholder:'Notice title', noticeBodyLabel:'Notice content', noticeBodyPlaceholder:'Notice content', publishButton:'Publish Notice', noticePublishDenied:'Only owner and admin roles can publish notices.',
       noPermission:'No permission', viewOnly:'View only', save:'Apply exception', restoreOsO:'Restore OSO role', block:'Review block', unblock:'Unblock', protectedAccount:'Protected account', selectSpecialRole:'Select special role', roleReasonPrompt:'Enter the reason for this role exception.', restoreReasonPrompt:'Enter the reason for restoring the OSO automatic role.', blockReasonPrompt:'Enter the reason for blocking this member.', unblockReasonPrompt:'Enter the reason for unblocking this member.', roleSourceOsO:'OSO/M2M source', roleSourceManual:'Admin exception active', roleSourceReturned:'OSO change applied', confirmProtectedBlockPrefix:'This is a protected account. Enter the exact confirmation phrase:\n', adminMembersTitle2:'OSO/Auth0 Member List', adminMembersDesc2:'Common member tiers are directory-only. A site manager may manage only OM/OP accounts in the same site; OM/OP may manage only lower same-site OM/OP accounts. Other-site operational data and files are unavailable. Directors manage lower site managers and all lower accounts, admins manage everyone except owners, and owners manage all accounts.', search:'Search', colMember:'Member', colRole:'Applied / OSO source', colChangeReview:'Special role exception', colManage:'Manage', noMembers:'No members are visible with the current permission, or the API is waiting for connection.', shown:'Shown', serverQuery:'Server query', page:'Page', previous:'Previous', next:'Next',
       reviewDocDefault:'Submitted Document', open:'Open', detail:'Details', approve:'Approve', reject:'Reject', reviewTitle:'Review Queue', reviewRefresh:'Refresh', reviewDesc:'Review member-submitted documents and upgrade/permission requests. Members see only their own records in Member Page. Site-manager, OM, and OP roles review only lower operational records in their own site; directors and site_manager_director review only lower roles. Admins see everyone except owners, and owners see all.', reviewHeadDoc:'Document', reviewHeadMember:'Member', reviewHeadTarget:'Requested Role', reviewHeadStatus:'Status', reviewHeadReview:'Review', noReviewDocs:'No submitted documents are visible with the current permission, or the review API is waiting for connection.', shownItems:'Shown', serverItems:'Server query',
       adminNoticeTitle:'Replies / Notice Management', adminNoticeDesc:'Reply and notice registration buttons are enabled only for administrators.', targetTitleLabel:'Target / Title', targetTitlePlaceholder:'Notice title or reply target', adminNoticeBodyLabel:'Content', adminNoticeBodyPlaceholder:'Notice or reply content', register:'Register',
@@ -249,6 +255,12 @@
   // System diagnostics are intentionally limited to owner/admin classes.
   // The API repeats this check on the server; this only controls visible UI.
   function canRunSystemDiagnostic(roles) {
+    var role = highestRole(roles || []);
+    return role === 'owner' || role === 'admin' || role === 'super_admin';
+  }
+  // Notices are platform-wide communications, so publication is limited to
+  // owner/admin classes. Site managers may reply only within their server scope.
+  function canPublishNotices(roles) {
     var role = highestRole(roles || []);
     return role === 'owner' || role === 'admin' || role === 'super_admin';
   }
@@ -638,6 +650,13 @@
 
       '#'+ROOT_ID+' .badge{display:inline-block;border-radius:999px;background:#eef4fb;color:#0b3f74;padding:2px 7px;margin:1px 2px;font-size:11px;font-weight:700}'+
       '#'+ROOT_ID+' .error{background:#fff1f0;color:#b42318;border:1px solid #ffccc7;border-radius:10px;padding:10px;margin-bottom:10px}'+
+      '#'+ROOT_ID+' .igdc-ma-qna-list{display:grid;gap:10px;margin-top:12px}'+
+      '#'+ROOT_ID+' .igdc-ma-qna-card{margin:0}'+
+      '#'+ROOT_ID+' .igdc-ma-qna-replies-wrap{margin-top:12px;padding-top:10px;border-top:1px solid #edf0f5}'+
+      '#'+ROOT_ID+' .igdc-ma-qna-replies{display:grid;gap:8px;margin-top:8px}'+
+      '#'+ROOT_ID+' .igdc-ma-qna-reply{background:#f7fbff;border:1px solid #dbeafe;border-radius:10px;padding:9px;white-space:pre-wrap}'+
+      '#'+ROOT_ID+' .igdc-ma-qna-reply-form{margin-top:12px;padding-top:12px;border-top:1px solid #edf0f5}'+
+      '#'+ROOT_ID+' .igdc-ma-qna-reply-form textarea{min-height:90px;margin-top:6px}'+
       '#'+ROOT_ID+' .igdc-ma-diagnostic-json{margin:12px 0 0;max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#0b1726;color:#e6edf3;border-radius:10px;padding:12px;font-size:12px;line-height:1.4}'+
       '#'+ROOT_ID+' .ok{background:#ecfdf3;color:#027a48;border:1px solid #abefc6;border-radius:10px;padding:10px;margin-bottom:10px}'+
       '@media(max-width:1120px){#'+ROOT_ID+' .igdc-ma-side{width:220px;flex-basis:220px;padding:14px}#'+ROOT_ID+' .igdc-ma-top{padding:12px 14px}#'+ROOT_ID+' .igdc-ma-content{padding:12px 14px}}'+
@@ -662,8 +681,11 @@
     STATE.tab = tab;
     render();
     if (tab === 'member-page') loadMyReviewDocs();
+    if (tab === 'question') loadMyQuestions();
+    if (tab === 'notice') loadNotices();
     if (tab === 'admin-members') loadMembers();
     if (tab === 'admin-queue') loadReviewDocs();
+    if (tab === 'admin-notice') { loadAdminQuestions(); loadNotices(); }
     if (tab === 'admin-diagnostic' && canRunSystemDiagnostic((STATE.me && STATE.me.roles) || readRoles())) loadSystemDiagnostic();
   }
   function setError(msg) { STATE.error = msg || ''; render(); }
@@ -787,17 +809,46 @@
       '<label>'+esc(u.attachmentLabel)+'<input name="files" type="file" multiple></label><div class="muted" style="margin-top:6px">'+esc(u.attachmentHelp)+'</div><br>'+
       '<button class="primary" type="submit">'+esc(u.submitButton)+'</button></form>';
   }
+  function qnaStatusLabel(status, u) {
+    var key = String(status || 'open').toLowerCase();
+    if (key === 'answered') return u.questionStatusAnswered || 'Answered';
+    if (key === 'closed') return u.questionStatusClosed || 'Closed';
+    return u.questionStatusOpen || 'Received';
+  }
+  function qnaRepliesHtml(question, u) {
+    var replies = Array.isArray(question && question.replies) ? question.replies : [];
+    if (!replies.length) return '<div class="muted" style="margin-top:8px">'+esc(u.noReplies)+'</div>';
+    return '<div class="igdc-ma-qna-replies">'+replies.map(function (reply) {
+      return '<div class="igdc-ma-qna-reply"><b>'+esc(reply.responder_name || reply.responder_role || 'Admin')+'</b><span class="badge">'+esc(reply.responder_role || 'admin')+'</span><br><span>'+esc(reply.body || '')+'</span><br><span class="muted">'+esc(reply.created_at || '')+'</span></div>';
+    }).join('')+'</div>';
+  }
+  function qnaQuestionCardHtml(question, u, showSubmitter, replyForm) {
+    var submitter = showSubmitter ? '<div class="muted" style="margin-top:5px">'+esc(question.user_name || question.user_email || question.user_id || '')+' · '+esc(question.submitted_role || 'guest')+'</div>' : '';
+    var form = replyForm ? '<form class="igdc-ma-qna-reply-form" data-form="admin-reply"><input type="hidden" name="question_id" value="'+esc(question.id || question.question_id || '')+'"><label>'+esc(u.replyLabel)+'<textarea name="body" required placeholder="'+esc(u.replyPlaceholder)+'"></textarea></label><br><button class="primary" type="submit">'+esc(u.replyButton)+'</button></form>' : '';
+    return '<article class="card igdc-ma-qna-card"><div class="row" style="justify-content:space-between;align-items:flex-start"><h4>'+esc(question.title || u.questionTitle)+'</h4><span class="badge">'+esc(qnaStatusLabel(question.status, u))+'</span></div>'+submitter+
+      '<div style="white-space:pre-wrap;margin-top:9px">'+esc(question.body || '')+'</div><div class="muted" style="margin-top:8px">'+esc(question.created_at || '')+'</div>'+
+      '<div class="igdc-ma-qna-replies-wrap"><b>'+esc(u.repliesTitle)+'</b>'+qnaRepliesHtml(question,u)+'</div>'+form+'</article>';
+  }
   function questionHtml(admin) {
     var u = uiText();
+    var questions = (STATE.questions || []).map(function (question) { return qnaQuestionCardHtml(question, u, false, false); }).join('');
     return '<form class="card" data-form="question-submit"><h4>'+esc(u.questionTitle)+'</h4><div class="muted">'+esc(u.questionDesc)+'</div><br>'+
       '<label>'+esc(u.qTitleLabel)+'<input name="title" required placeholder="'+esc(u.qTitlePlaceholder)+'"></label><br><br>'+
       '<label>'+esc(u.qBodyLabel)+'<textarea name="body" required placeholder="'+esc(u.qBodyPlaceholder)+'"></textarea></label><br><br>'+
-      '<button class="primary" type="submit">'+esc(u.qButton)+'</button> '+(admin?'<button type="button" data-tab="admin-notice">'+esc(u.openReplyAdmin)+'</button>':'')+'</form>';
+      '<button class="primary" type="submit">'+esc(u.qButton)+'</button> '+(admin?'<button type="button" data-tab="admin-notice">'+esc(u.openReplyAdmin)+'</button>':'')+'</form>'+
+      '<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h4>'+esc(u.myQuestionsTitle)+'</h4><button data-action="reload-my-questions">'+esc(u.myQuestionsReload)+'</button></div><div class="muted">'+esc(u.myQuestionsDesc)+'</div>'+
+      (STATE.loadingQuestions ? '<div class="muted" style="margin-top:8px">'+esc(t().loading)+'</div>' : '')+
+      '<div class="igdc-ma-qna-list">'+(questions || '<div class="muted" style="margin-top:12px">'+esc(u.myQuestionsNone)+'</div>')+'</div></section>';
   }
   function noticeHtml(admin) {
     var u = uiText();
-    return '<div class="card"><h4>'+esc(u.noticeTitle)+'</h4><div class="muted">'+esc(u.noticeDesc)+'</div>'+
-      (admin?'<br><button data-tab="admin-notice">'+esc(u.manageNotice)+'</button>':'')+'</div>';
+    var notices = (STATE.notices || []).map(function (notice) {
+      return '<article class="card igdc-ma-qna-card"><h4>'+esc(notice.title || u.noticeTitle)+'</h4><div style="white-space:pre-wrap">'+esc(notice.body || '')+'</div><div class="muted" style="margin-top:8px">'+esc(u.publishedAt)+': '+esc(notice.published_at || notice.created_at || '')+'</div></article>';
+    }).join('');
+    return '<section class="card"><div class="row" style="justify-content:space-between"><h4>'+esc(u.noticeTitle)+'</h4><button data-action="reload-notices">'+esc(u.noticesReload)+'</button></div><div class="muted">'+esc(u.noticeDesc)+'</div>'+
+      (admin?'<br><button data-tab="admin-notice">'+esc(u.manageNotice)+'</button>':'')+
+      (STATE.loadingNotices ? '<div class="muted" style="margin-top:8px">'+esc(t().loading)+'</div>' : '')+
+      '<div class="igdc-ma-qna-list">'+(notices || '<div class="muted" style="margin-top:12px">'+esc(u.noticesNone)+'</div>')+'</div></section>';
   }
   function rolesForSelect(current) {
     var roles = (cfg().roleOptions || [
@@ -969,10 +1020,19 @@
   }
   function adminNoticeHtml() {
     var u = uiText();
-    return '<form class="card" data-form="admin-reply"><h4>'+esc(u.adminNoticeTitle)+'</h4><div class="muted">'+esc(u.adminNoticeDesc)+'</div><br>'+
-      '<label>'+esc(u.targetTitleLabel)+'<input name="title" required placeholder="'+esc(u.targetTitlePlaceholder)+'"></label><br><br>'+
-      '<label>'+esc(u.adminNoticeBodyLabel)+'<textarea name="body" required placeholder="'+esc(u.adminNoticeBodyPlaceholder)+'"></textarea></label><br><br>'+
-      '<button class="primary" type="submit">'+esc(u.register)+'</button></form>';
+    var roles = (STATE.me && STATE.me.roles) || readRoles();
+    var canPublish = canPublishNotices(roles);
+    var questions = (STATE.adminQuestions || []).map(function (question) { return qnaQuestionCardHtml(question, u, true, true); }).join('');
+    var noticeForm = canPublish
+      ? '<form class="card" data-form="publish-notice"><h4>'+esc(u.noticePublishTitle)+'</h4><div class="muted">'+esc(u.noticePublishDesc)+'</div><br>'+
+        '<label>'+esc(u.noticeTitleLabel)+'<input name="title" required placeholder="'+esc(u.noticeTitlePlaceholder)+'"></label><br><br>'+
+        '<label>'+esc(u.noticeBodyLabel)+'<textarea name="body" required placeholder="'+esc(u.noticeBodyPlaceholder)+'"></textarea></label><br><br>'+
+        '<button class="primary" type="submit">'+esc(u.publishButton)+'</button></form>'
+      : '<div class="card"><h4>'+esc(u.noticePublishTitle)+'</h4><div class="muted">'+esc(u.noticePublishDenied)+'</div></div>';
+    return noticeForm+
+      '<section class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h4>'+esc(u.adminQuestionsTitle)+'</h4><button data-action="reload-admin-questions">'+esc(u.adminQuestionsReload)+'</button></div><div class="muted">'+esc(u.adminQuestionsDesc)+'</div>'+
+      (STATE.loadingAdminQuestions ? '<div class="muted" style="margin-top:8px">'+esc(t().loading)+'</div>' : '')+
+      '<div class="igdc-ma-qna-list">'+(questions || '<div class="muted" style="margin-top:12px">'+esc(u.adminQuestionsNone)+'</div>')+'</div></section>';
   }
   function systemDiagnosticHtml(me) {
     var u = uiText();
@@ -1013,6 +1073,9 @@
     else if (act === 'open-review-doc') openReviewDoc(action.closest('[data-review-id]'), action.getAttribute('data-url'));
     else if (act === 'approve-review-doc') reviewDoc(action.closest('[data-review-id]'), 'approve');
     else if (act === 'reject-review-doc') reviewDoc(action.closest('[data-review-id]'), 'reject');
+    else if (act === 'reload-my-questions') loadMyQuestions();
+    else if (act === 'reload-admin-questions') loadAdminQuestions();
+    else if (act === 'reload-notices') loadNotices();
     else if (act === 'run-system-diagnostic') loadSystemDiagnostic(true);
     else if (act === 'download-system-diagnostic') downloadSystemDiagnostic();
   }
@@ -1069,8 +1132,58 @@
       return;
     }
     var body = formDataObj(form);
-    var action = type === 'question-submit' ? 'submit-question' : 'admin-reply';
-    apiPost(action, body).then(function () { setError(''); alert(uiText().registered); form.reset(); }).catch(function (e) { setError(e.message); });
+    var action = type === 'question-submit' ? 'submit-question' : (type === 'publish-notice' ? 'publish-notice' : 'admin-reply');
+    apiPost(action, body).then(function () {
+      setError('');
+      alert(uiText().registered);
+      form.reset();
+      if (action === 'submit-question') loadMyQuestions();
+      else if (action === 'publish-notice') loadNotices();
+      else loadAdminQuestions();
+    }).catch(function (e) { setError(e.message); });
+  }
+  function loadMyQuestions() {
+    if (!hasValidToken()) { STATE.loadingQuestions = false; STATE.questions = []; render(); return; }
+    STATE.loadingQuestions = true; STATE.error = ''; render();
+    apiGet({action:'my-questions', page:0, per_page:cfg().questionPerPage || 50}).then(function (data) {
+      STATE.questions = data.questions || data.items || [];
+      STATE.loadingQuestions = false;
+      render();
+    }).catch(function (e) {
+      STATE.loadingQuestions = false;
+      STATE.questions = [];
+      STATE.error = e.message || t().apiMissing;
+      render();
+    });
+  }
+  function loadAdminQuestions() {
+    if (!canAdmin(readRoles()) && !(STATE.me && STATE.me.admin)) return;
+    if (!hasValidToken()) { STATE.loadingAdminQuestions = false; STATE.adminQuestions = []; STATE.error = uiText().reviewTokenMissing; render(); return; }
+    STATE.loadingAdminQuestions = true; STATE.error = ''; render();
+    apiGet({action:'admin-questions', page:0, per_page:cfg().questionPerPage || 50}).then(function (data) {
+      STATE.adminQuestions = data.questions || data.items || [];
+      STATE.loadingAdminQuestions = false;
+      render();
+    }).catch(function (e) {
+      STATE.loadingAdminQuestions = false;
+      STATE.adminQuestions = [];
+      STATE.error = e.message || t().apiMissing;
+      render();
+    });
+  }
+  function loadNotices() {
+    if (!hasValidToken()) { STATE.loadingNotices = false; STATE.notices = []; render(); return; }
+    STATE.loadingNotices = true; STATE.error = ''; render();
+    apiGet({action:'notices', page:0, per_page:cfg().noticePerPage || 50}).then(function (data) {
+      STATE.notices = data.notices || data.items || [];
+      STATE.loadingNotices = false;
+      render();
+    }).catch(function (e) {
+      STATE.loadingNotices = false;
+      STATE.notices = [];
+      STATE.error = e.message || t().apiMissing;
+      render();
+    });
   }
   function loadMyReviewDocs() {
     if (!hasValidToken()) {
