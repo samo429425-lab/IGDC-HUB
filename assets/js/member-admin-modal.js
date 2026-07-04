@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.6.1-modal-fit';
+  var VERSION = '2.7.4-member-privacy-matrix';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -23,14 +23,17 @@
     notices: [],
     questions: [],
     reviewDocs: [],
+    myReviewDocs: [],
     loadingReview: false,
+    loadingMyReview: false,
     loading: false,
     error: '',
     query: '',
     page: 0,
     total: 0,
     hasMore: false,
-    lastFocus: null
+    lastFocus: null,
+    requestedRole: ''
   };
 
   var ROLE_LEVEL = {
@@ -149,13 +152,13 @@
       adminMembersTitle:'관리자 회원 목록', adminMembersDesc:'실제 Auth0 세션으로 권한 범위의 회원 목록을 불러오고 롤을 관리합니다.', openMembers:'회원 목록 열기', openReview:'승급 검토 열기',
       loginStateTitle:'로그인 상태', siteRole:'사이트 역할 표시', tokenOk:'Auth0 ID 토큰이 정상 연결되어 있습니다.', tokenMissing:'역할 표시는 있으나 Auth0 ID 토큰이 없거나 만료되었습니다. 회원 목록 조회는 세션 갱신 후 가능합니다.', renewSession:'세션 갱신',
       loginTitle:'로그인', loginDesc:'회원전용 영역은 로그인 후 사용할 수 있습니다.',
-      submitTitle:'서류 제출', submitDesc:'회원 서류/검토 자료를 제출합니다. 실제 저장은 서버 API 또는 기존 제출 엔진과 연결됩니다.', titleLabel:'제목', submitTitlePlaceholder:'제출 제목', bodyLabel:'내용', submitBodyPlaceholder:'제출 내용', submitButton:'제출',
+      submitTitle:'서류 제출', submitDesc:'제출한 내용과 첨부 자료는 비공개 심사 보관함에 저장되며, 권한 있는 관리자만 검토할 수 있습니다.', titleLabel:'제목', submitTitlePlaceholder:'제출 제목', bodyLabel:'내용', submitBodyPlaceholder:'제출 내용', requestedRoleLabel:'신청 등급', requestedRoleNone:'일반 서류 제출', requestedRoleStandard:'스탠다드 회원', requestedRolePremium:'프리미엄 회원', requestedRoleCommerce:'커머스 회원', attachmentLabel:'첨부 서류', attachmentHelp:'파일은 비공개 심사 보관함에 저장됩니다.', submitButton:'제출', documentSaved:'제출 자료가 심사 대기열에 저장되었습니다.', documentUploadFailed:'내용은 저장되었지만 첨부 파일 전송이 완료되지 않았습니다. 서류 제출 화면에서 다시 제출해 주세요.', roleSourceReview:'승급 심사 승인', reviewNotePrompt:'검토 메모를 입력하십시오. 비워 두어도 됩니다.',
       questionTitle:'질문/문의', questionDesc:'일반 회원은 질문을 등록할 수 있고, 답글은 관리자 권한에서 활성화됩니다.', qTitleLabel:'질문 제목', qTitlePlaceholder:'질문 제목', qBodyLabel:'질문 내용', qBodyPlaceholder:'질문 내용', qButton:'질문 등록', openReplyAdmin:'답글 관리 열기',
       noticeTitle:'공지사항', noticeDesc:'공지 목록은 서버 API 연결 시 자동으로 표시됩니다.', manageNotice:'공지 작성/답글 관리',
-      noPermission:'권한 없음', save:'예외 적용', restoreOsO:'OSO 기준 복귀', block:'차단 검토', unblock:'차단 해제', protectedAccount:'보호 계정', selectSpecialRole:'특수 역할 선택', roleReasonPrompt:'예외 역할 적용 사유를 입력하십시오.', restoreReasonPrompt:'OSO 자동 역할 기준으로 복귀시키는 사유를 입력하십시오.', blockReasonPrompt:'차단 사유를 입력하십시오.', unblockReasonPrompt:'차단 해제 사유를 입력하십시오.', roleSourceOsO:'OSO/M2M 원본', roleSourceManual:'관리자 예외 적용', roleSourceReturned:'OSO 변경 반영', confirmProtectedBlockPrefix:'보호 계정입니다. 아래 확인 문구를 정확히 입력하십시오:\n', adminMembersTitle2:'OSO/Auth0 회원 목록', adminMembersDesc2:'member와 member_standard는 OSO/M2M 자동 역할을 읽어 표시합니다. 이 화면에서는 프리미엄·커머스·특수·관리자 역할 같은 예외만 조정하고, 문제 회원만 차단 검토합니다. owner는 전체, admin은 owner를 제외한 전체를 관리합니다. director·site manager는 자기보다 낮은 롤만 보입니다.', search:'검색', colMember:'회원', colRole:'적용 역할 / OSO 원본', colChangeReview:'특수 역할 조정', colManage:'관리', noMembers:'관리 권한으로 볼 수 있는 회원이 없거나 API 연결 대기 중입니다.', shown:'표시', serverQuery:'서버 조회', page:'페이지', previous:'이전', next:'다음',
-      reviewDocDefault:'제출 서류', open:'열람', detail:'상세', approve:'승인', reject:'반려', reviewTitle:'승급 검토', reviewRefresh:'새로고침', reviewDesc:'회원이 제출한 서류와 승급·권한 신청 자료를 검토하는 영역입니다. owner는 전체, admin은 owner 제외, director/site_manager_director는 자기보다 아래 롤의 제출 자료만 볼 수 있습니다.', reviewHeadDoc:'제출 서류', reviewHeadMember:'회원', reviewHeadTarget:'요청 롤', reviewHeadStatus:'상태', reviewHeadReview:'검토', noReviewDocs:'현재 권한으로 볼 수 있는 제출 서류가 없거나, 서류 검토 API 연결 대기 중입니다.', shownItems:'표시', serverItems:'서버 조회',
+      noPermission:'권한 없음', viewOnly:'조회 전용', save:'예외 적용', restoreOsO:'OSO 기준 복귀', block:'차단 검토', unblock:'차단 해제', protectedAccount:'보호 계정', selectSpecialRole:'특수 역할 선택', roleReasonPrompt:'예외 역할 적용 사유를 입력하십시오.', restoreReasonPrompt:'OSO 자동 역할 기준으로 복귀시키는 사유를 입력하십시오.', blockReasonPrompt:'차단 사유를 입력하십시오.', unblockReasonPrompt:'차단 해제 사유를 입력하십시오.', roleSourceOsO:'OSO/M2M 원본', roleSourceManual:'관리자 예외 적용', roleSourceReturned:'OSO 변경 반영', confirmProtectedBlockPrefix:'보호 계정입니다. 아래 확인 문구를 정확히 입력하십시오:\n', adminMembersTitle2:'OSO/Auth0 회원 목록', adminMembersDesc2:'일반·스탠다드·프리미엄·특수·커머스는 공통회원으로 조회만 표시됩니다. 사이트 매니저는 자기 사이트의 OM·OP만 관리할 수 있고, OM·OP도 자기보다 낮은 같은 사이트 OM·OP만 관리할 수 있습니다. 다른 사이트 운영회원 정보와 서류는 열리지 않습니다. director는 하위 사이트 매니저와 그 아래 전체, admin은 owner를 제외한 전체, owner는 전체를 관리합니다.', search:'검색', colMember:'회원', colRole:'적용 역할 / OSO 원본', colChangeReview:'특수 역할 조정', colManage:'관리', noMembers:'관리 권한으로 볼 수 있는 회원이 없거나 API 연결 대기 중입니다.', shown:'표시', serverQuery:'서버 조회', page:'페이지', previous:'이전', next:'다음',
+      reviewDocDefault:'제출 서류', open:'열람', detail:'상세', approve:'승인', reject:'반려', reviewTitle:'승급 검토', reviewRefresh:'새로고침', reviewDesc:'회원이 제출한 서류와 승급·권한 신청 자료를 검토하는 영역입니다. 일반 회원은 본인 자료만 회원 페이지에서 확인합니다. 사이트 매니저는 자기 사이트 OM·OP만, OM·OP는 자기보다 낮은 같은 사이트 OM·OP만 검토할 수 있습니다. director/site_manager_director는 하위 사이트 매니저와 그 아래 전체, admin은 owner 제외 전체, owner는 전체를 검토합니다.', reviewHeadDoc:'제출 서류', reviewHeadMember:'회원', reviewHeadTarget:'요청 롤', reviewHeadStatus:'상태', reviewHeadReview:'검토', noReviewDocs:'현재 권한으로 볼 수 있는 제출 서류가 없거나, 서류 검토 API 연결 대기 중입니다.', shownItems:'표시', serverItems:'서버 조회',
       adminNoticeTitle:'답글/공지 관리', adminNoticeDesc:'관리자 권한에서만 답글 작성·공지 등록 버튼이 활성화됩니다.', targetTitleLabel:'대상/제목', targetTitlePlaceholder:'공지 제목 또는 답글 대상', adminNoticeBodyLabel:'내용', adminNoticeBodyPlaceholder:'공지 또는 답글 내용', register:'등록',
-      registered:'등록되었습니다.', reviewTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 승급 검토를 다시 열어야 합니다.', reviewApiMissing:'서류 검토 API 연결이 필요합니다.', noAttachment:'열람 가능한 첨부 URL이 없습니다.', confirmProcess:'처리할까요?', memberTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 회원 목록을 다시 열어야 합니다.', tokenExpiredSuffix:' / 현재 로그인 세션 토큰이 만료되었거나 없습니다.', changeNoPerm:'현재 권한으로는 해당 롤로 변경할 수 없습니다.', confirmRoleChangePrefix:'회원 롤을 ', confirmRoleChangeSuffix:' 로 변경할까요?', confirmBlock:'이 회원을 차단/퇴출 처리할까요?', upgradeRequested:'신청되었습니다.'
+      registered:'등록되었습니다.', reviewTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 승급 검토를 다시 열어야 합니다.', reviewApiMissing:'서류 검토 API 연결이 필요합니다.', noAttachment:'열람 가능한 첨부 URL이 없습니다.', confirmProcess:'처리할까요?', memberTokenMissing:'사이트 역할은 확인되지만 Auth0 ID 토큰이 모달/API에 연결되지 않았습니다. 상단의 세션 갱신 후 회원 목록을 다시 열어야 합니다.', tokenExpiredSuffix:' / 현재 로그인 세션 토큰이 만료되었거나 없습니다.', changeNoPerm:'현재 권한으로는 해당 롤로 변경할 수 없습니다.', confirmRoleChangePrefix:'회원 롤을 ', confirmRoleChangeSuffix:' 로 변경할까요?', confirmBlock:'이 회원을 차단/퇴출 처리할까요?', upgradeRequested:'신청되었습니다.', myReviewTitle:'내 신청·서류 현황', myReviewDesc:'본인이 제출한 신청과 서류의 처리 상태만 확인할 수 있습니다.', myReviewNone:'제출한 신청 또는 서류가 없습니다.', myReviewOpen:'내 제출 자료 열기', myReviewReload:'내 현황 새로고침'
     },
     en: {
       memberStatusTitle:'Member Status', currentRole:'Current role', memberStatusDesc:'General members use this area mainly for media content purchases and viewing.',
@@ -166,13 +169,13 @@
       adminMembersTitle:'Admin Member List', adminMembersDesc:'Load and manage the permitted Auth0 member scope through a real signed-in session.', openMembers:'Open Member List', openReview:'Open Review Queue',
       loginStateTitle:'Login Status', siteRole:'Site role', tokenOk:'The Auth0 ID token is connected correctly.', tokenMissing:'A site role is visible, but the Auth0 ID token is missing or expired. Renew the session before viewing the member list.', renewSession:'Renew session',
       loginTitle:'Login', loginDesc:'Members-only areas are available after login.',
-      submitTitle:'Document Submission', submitDesc:'Submit member documents or review materials. Actual saving is handled by the server API or the existing submission engine.', titleLabel:'Title', submitTitlePlaceholder:'Submission title', bodyLabel:'Content', submitBodyPlaceholder:'Submission content', submitButton:'Submit',
+      submitTitle:'Document Submission', submitDesc:'Submitted content and attachments are kept in a private review store and are available only to authorized reviewers.', titleLabel:'Title', submitTitlePlaceholder:'Submission title', bodyLabel:'Content', submitBodyPlaceholder:'Submission content', requestedRoleLabel:'Requested membership', requestedRoleNone:'General document submission', requestedRoleStandard:'Standard member', requestedRolePremium:'Premium member', requestedRoleCommerce:'Commerce member', attachmentLabel:'Supporting files', attachmentHelp:'Files are stored in the private review vault.', submitButton:'Submit', documentSaved:'The submission has been stored in the review queue.', documentUploadFailed:'Your content was saved, but attachment upload did not finish. Submit the documents again from this page.', roleSourceReview:'Membership review approved', reviewNotePrompt:'Enter a review note. It may be left blank.',
       questionTitle:'Questions / Inquiry', questionDesc:'General members can submit questions, and replies are enabled for administrators.', qTitleLabel:'Question title', qTitlePlaceholder:'Question title', qBodyLabel:'Question content', qBodyPlaceholder:'Question content', qButton:'Submit Question', openReplyAdmin:'Open Reply Management',
       noticeTitle:'Notices', noticeDesc:'Notice lists are displayed automatically when the server API is connected.', manageNotice:'Create Notice / Manage Replies',
-      noPermission:'No permission', save:'Apply exception', restoreOsO:'Restore OSO role', block:'Review block', unblock:'Unblock', protectedAccount:'Protected account', selectSpecialRole:'Select special role', roleReasonPrompt:'Enter the reason for this role exception.', restoreReasonPrompt:'Enter the reason for restoring the OSO automatic role.', blockReasonPrompt:'Enter the reason for blocking this member.', unblockReasonPrompt:'Enter the reason for unblocking this member.', roleSourceOsO:'OSO/M2M source', roleSourceManual:'Admin exception active', roleSourceReturned:'OSO change applied', confirmProtectedBlockPrefix:'This is a protected account. Enter the exact confirmation phrase:\n', adminMembersTitle2:'OSO/Auth0 Member List', adminMembersDesc2:'member and member_standard are displayed from the OSO/M2M automatic role source. This page adjusts only premium, commerce, special, and management exceptions, and reviews blocking only for problem accounts. Owners manage all; admins manage everyone except owners. Directors and site managers see only lower roles.', search:'Search', colMember:'Member', colRole:'Applied / OSO source', colChangeReview:'Special role exception', colManage:'Manage', noMembers:'No members are visible with the current permission, or the API is waiting for connection.', shown:'Shown', serverQuery:'Server query', page:'Page', previous:'Previous', next:'Next',
-      reviewDocDefault:'Submitted Document', open:'Open', detail:'Details', approve:'Approve', reject:'Reject', reviewTitle:'Review Queue', reviewRefresh:'Refresh', reviewDesc:'Review member-submitted documents and upgrade/permission requests. Owner can view all, admin can view all except owner, and director/site_manager_director can view only roles below their own.', reviewHeadDoc:'Document', reviewHeadMember:'Member', reviewHeadTarget:'Requested Role', reviewHeadStatus:'Status', reviewHeadReview:'Review', noReviewDocs:'No submitted documents are visible with the current permission, or the review API is waiting for connection.', shownItems:'Shown', serverItems:'Server query',
+      noPermission:'No permission', viewOnly:'View only', save:'Apply exception', restoreOsO:'Restore OSO role', block:'Review block', unblock:'Unblock', protectedAccount:'Protected account', selectSpecialRole:'Select special role', roleReasonPrompt:'Enter the reason for this role exception.', restoreReasonPrompt:'Enter the reason for restoring the OSO automatic role.', blockReasonPrompt:'Enter the reason for blocking this member.', unblockReasonPrompt:'Enter the reason for unblocking this member.', roleSourceOsO:'OSO/M2M source', roleSourceManual:'Admin exception active', roleSourceReturned:'OSO change applied', confirmProtectedBlockPrefix:'This is a protected account. Enter the exact confirmation phrase:\n', adminMembersTitle2:'OSO/Auth0 Member List', adminMembersDesc2:'Common member tiers are directory-only. A site manager may manage only OM/OP accounts in the same site; OM/OP may manage only lower same-site OM/OP accounts. Other-site operational data and files are unavailable. Directors manage lower site managers and all lower accounts, admins manage everyone except owners, and owners manage all accounts.', search:'Search', colMember:'Member', colRole:'Applied / OSO source', colChangeReview:'Special role exception', colManage:'Manage', noMembers:'No members are visible with the current permission, or the API is waiting for connection.', shown:'Shown', serverQuery:'Server query', page:'Page', previous:'Previous', next:'Next',
+      reviewDocDefault:'Submitted Document', open:'Open', detail:'Details', approve:'Approve', reject:'Reject', reviewTitle:'Review Queue', reviewRefresh:'Refresh', reviewDesc:'Review member-submitted documents and upgrade/permission requests. Members see only their own records in Member Page. Site-manager, OM, and OP roles review only lower operational records in their own site; directors and site_manager_director review only lower roles. Admins see everyone except owners, and owners see all.', reviewHeadDoc:'Document', reviewHeadMember:'Member', reviewHeadTarget:'Requested Role', reviewHeadStatus:'Status', reviewHeadReview:'Review', noReviewDocs:'No submitted documents are visible with the current permission, or the review API is waiting for connection.', shownItems:'Shown', serverItems:'Server query',
       adminNoticeTitle:'Replies / Notice Management', adminNoticeDesc:'Reply and notice registration buttons are enabled only for administrators.', targetTitleLabel:'Target / Title', targetTitlePlaceholder:'Notice title or reply target', adminNoticeBodyLabel:'Content', adminNoticeBodyPlaceholder:'Notice or reply content', register:'Register',
-      registered:'Registered.', reviewTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the review queue.', reviewApiMissing:'Document review API connection is required.', noAttachment:'No viewable attachment URL is available.', confirmProcess:'Proceed?', memberTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the member list.', tokenExpiredSuffix:' / The current login session token is missing or expired.', changeNoPerm:'You do not have permission to assign this role.', confirmRoleChangePrefix:'Change this member role to ', confirmRoleChangeSuffix:'?', confirmBlock:'Block or remove this member?', upgradeRequested:'Application submitted.'
+      registered:'Registered.', reviewTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the review queue.', reviewApiMissing:'Document review API connection is required.', noAttachment:'No viewable attachment URL is available.', confirmProcess:'Proceed?', memberTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the member list.', tokenExpiredSuffix:' / The current login session token is missing or expired.', changeNoPerm:'You do not have permission to assign this role.', confirmRoleChangePrefix:'Change this member role to ', confirmRoleChangeSuffix:'?', confirmBlock:'Block or remove this member?', upgradeRequested:'Application submitted.', myReviewTitle:'My Applications and Documents', myReviewDesc:'Only your own submitted applications and documents are shown here.', myReviewNone:'There are no submitted applications or documents.', myReviewOpen:'Open My Submission', myReviewReload:'Refresh My Status'
     }
   };
   function uiText() { return lang() === 'ko' ? UI_TEXT.ko : UI_TEXT.en; }
@@ -271,9 +274,90 @@
     var mine = managerRole(myRoles);
     targetRole = normalizeRole(targetRole);
     if (!isManagerRole(mine)) return false;
+    var scope = currentManagementScope();
+    if (scope.kind === 'site_only_below') return siteScopeCanAssignRole(scope, targetRole);
     if (mine === 'owner') return true;
     if (mine === 'admin' || mine === 'super_admin') return targetRole !== 'owner';
     return roleLevel(targetRole) < roleLevel(mine);
+  }
+  function uniqueSiteKeys(values) {
+    var out = [], seen = {};
+    function add(value) {
+      var key = String(value == null ? '' : value).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+      if (!key || seen[key]) return;
+      seen[key] = true; out.push(key);
+    }
+    function read(value) {
+      if (Array.isArray(value)) { value.forEach(read); return; }
+      if (typeof value === 'string') { value.split(',').forEach(add); return; }
+      if (value && typeof value === 'object') {
+        if (value.site_key || value.site || value.key || value.id) { add(value.site_key || value.site || value.key || value.id); return; }
+        Object.keys(value).forEach(function (key) { if (value[key] === true || value[key] === 1 || value[key] === 'true') add(key); });
+        return;
+      }
+      if (value !== undefined && value !== null) add(value);
+    }
+    read(values); return out;
+  }
+  function sharesSiteKeys(left, right) {
+    var lookup = {}; uniqueSiteKeys(left || []).forEach(function (key) { lookup[key] = true; });
+    return uniqueSiteKeys(right || []).some(function (key) { return !!lookup[key]; });
+  }
+  function currentManagementScope() {
+    return (STATE.me && STATE.me.management_scope) || {};
+  }
+  function memberSiteKeys(member) {
+    return uniqueSiteKeys(member && (member.site_keys || member.siteKeys || (member.app_metadata && (member.app_metadata.site_keys || member.app_metadata.igdc_site_keys))));
+  }
+  function globalCommonMember(member) {
+    var role = normalizeRole(member && (member.role || highestRole(member.roles || [])));
+    return roleLevel(role) <= roleLevel('commerce_manager') && memberSiteKeys(member).length === 0;
+  }
+  function siteKeyFromManagerRole(role) {
+    var normalized = normalizeRole(role);
+    if (!/^site_manager_[a-z0-9_]+_(?:om|op)$/.test(normalized)) return '';
+    return normalized.replace(/^site_manager_/, '').replace(/_(?:om|op)$/, '');
+  }
+  function siteOperationalManagerRole(role) {
+    return /^site_manager_[a-z0-9_]+_(?:om|op)$/.test(normalizeRole(role));
+  }
+  function sameSiteLowerOperationalMember(scope, member) {
+    var role = normalizeRole(member && (member.role || highestRole(member.roles || [])));
+    if (!siteOperationalManagerRole(role)) return false;
+    if (roleLevel(role) >= Number(scope.level || 0)) return false;
+    var scopeSites = scope.site_keys || (STATE.me && STATE.me.site_keys) || [];
+    return sharesSiteKeys(scopeSites, memberSiteKeys(member)) && sharesSiteKeys(scopeSites, [siteKeyFromManagerRole(role)]);
+  }
+  function siteScopeCanAssignRole(scope, targetRole) {
+    var role = normalizeRole(targetRole);
+    if (!siteOperationalManagerRole(role)) return false;
+    if (roleLevel(role) >= Number(scope.level || 0)) return false;
+    return sharesSiteKeys(scope.site_keys || (STATE.me && STATE.me.site_keys) || [], [siteKeyFromManagerRole(role)]);
+  }
+  function canViewMember(myRoles, member) {
+    var roles = unique(member && (member.roles || (member.app_metadata && member.app_metadata.roles) || []));
+    if (!canViewOrManageRole(myRoles, roles)) return false;
+    var scope = currentManagementScope();
+    if (scope.kind !== 'site_only_below') return true;
+    return globalCommonMember(member) || sameSiteLowerOperationalMember(scope, member);
+  }
+  function canManageMember(myRoles, member) {
+    var roles = unique(member && (member.roles || (member.app_metadata && member.app_metadata.roles) || []));
+    if (!canViewOrManageRole(myRoles, roles)) return false;
+    var scope = currentManagementScope();
+    if (scope.kind !== 'site_only_below') return true;
+    // Global consumer tiers are directory-only. Site managers only act on
+    // same-site OM/OP accounts below their own rank.
+    return sameSiteLowerOperationalMember(scope, member);
+  }
+  function canReviewSiteScopedDoc(doc) {
+    var scope = currentManagementScope();
+    if (scope.kind !== 'site_only_below') return true;
+    var role = normalizeRole((doc && (doc.submitted_role || doc.role)) || highestRole(docRoles(doc)));
+    if (!siteOperationalManagerRole(role) || roleLevel(role) >= Number(scope.level || 0)) return false;
+    var scopeSites = scope.site_keys || (STATE.me && STATE.me.site_keys) || [];
+    return sharesSiteKeys(scopeSites, uniqueSiteKeys(doc && (doc.submitted_site_keys || doc.site_keys || doc.siteKeys))) &&
+      sharesSiteKeys(scopeSites, [siteKeyFromManagerRole(role)]);
   }
   function roleEngineRole() {
     try { if (typeof window.getUserRole === 'function') return window.getUserRole(); } catch (e) {}
@@ -566,6 +650,7 @@
   function setTab(tab) {
     STATE.tab = tab;
     render();
+    if (tab === 'member-page') loadMyReviewDocs();
     if (tab === 'admin-members') loadMembers();
     if (tab === 'admin-queue') loadReviewDocs();
   }
@@ -650,14 +735,41 @@
     var u = uiText();
     var profile = '<div class="card"><h4>'+esc(u.memberPageTitle)+'</h4>'+      '<div class="muted">'+esc(u.memberPageDesc)+'</div><br>'+      '<div class="muted"><b>'+esc(me.name || me.email || 'Member')+'</b><br>'+      (me.email ? esc(me.email)+'<br>' : '')+      (me.user_id ? 'User ID: '+esc(me.user_id)+'<br>' : '')+      esc(u.currentRole)+': <span class="badge">'+esc(me.role || 'member')+'</span></div></div>';
     var shortcuts = '<div class="card"><h4>회원 메뉴</h4><div class="row">'+      '<button data-tab="submit">'+esc(t().tabs.submit)+'</button>'+      '<button data-tab="question">'+esc(t().tabs.question)+'</button>'+      '<button data-tab="notice">'+esc(t().tabs.notice)+'</button>'+      (admin ? '<button class="primary" data-tab="admin-members">'+esc(u.openMembers)+'</button>' : '')+      '</div></div>';
-    return '<div class="grid">'+profile+shortcuts+'</div>';
+    var docs = (STATE.myReviewDocs || []).map(function (doc) {
+      var id = doc.id || doc.document_id || '';
+      var target = doc.target_role || doc.requested_role || '-';
+      var when = doc.reviewed_at || doc.updated_at || doc.submitted_at || doc.created_at || '';
+      var note = doc.review_note ? '<br><span class="muted">'+esc(doc.review_note)+'</span>' : '';
+      var attachments = Array.isArray(doc.attachments || doc.files) ? (doc.attachments || doc.files) : [];
+      var canOpen = attachments.some(function(file) { return String(file.upload_status || 'uploaded') === 'uploaded'; });
+      return '<div class="igdc-ma-review-row" data-review-id="'+esc(id)+'">'+
+        '<div><b>'+esc(doc.title || u.reviewDocDefault)+'</b>'+note+'</div>'+ 
+        '<div>'+esc(target)+'</div>'+ 
+        '<div><span class="badge">'+esc(doc.status || 'pending')+'</span><br><span class="muted">'+esc(when)+'</span></div>'+
+        '<div class="igdc-ma-member-actions">'+(canOpen ? '<button data-action="open-review-doc">'+esc(u.myReviewOpen)+'</button>' : '')+'</div>'+
+      '</div>';
+    }).join('');
+    var myStatus = '<div class="card igdc-ma-member-card"><div class="row" style="justify-content:space-between"><h4>'+esc(u.myReviewTitle)+'</h4><button data-action="reload-my-review">'+esc(u.myReviewReload)+'</button></div>'+ 
+      '<div class="muted" style="margin-bottom:8px">'+esc(u.myReviewDesc)+'</div>'+
+      (STATE.loadingMyReview ? '<div class="muted">'+esc(t().loading)+'</div>' : '')+
+      '<div class="igdc-ma-review-list">'+
+        '<div class="igdc-ma-review-head" style="grid-template-columns:minmax(230px,1.4fr) minmax(120px,.8fr) minmax(160px,.9fr) minmax(140px,.7fr)!important"><div>'+esc(u.reviewHeadDoc)+'</div><div>'+esc(u.reviewHeadTarget)+'</div><div>'+esc(u.reviewHeadStatus)+'</div><div>'+esc(u.open)+'</div></div>'+ 
+        (docs || '<div class="igdc-ma-review-row" style="grid-template-columns:1fr!important"><div class="muted">'+esc(u.myReviewNone)+'</div></div>')+
+      '</div></div>';
+    return '<div class="grid">'+profile+shortcuts+'</div>'+myStatus;
   }
 
   function submitHtml() {
     var u = uiText();
+    var selected = normalizeRole(STATE.requestedRole || '');
+    function option(value, label) { return '<option value="'+esc(value)+'" '+(selected === value ? 'selected' : '')+'>'+esc(label)+'</option>'; }
     return '<form class="card" data-form="document-submit"><h4>'+esc(u.submitTitle)+'</h4><div class="muted">'+esc(u.submitDesc)+'</div><br>'+
+      '<label>'+esc(u.requestedRoleLabel)+'<select name="requested_role">'+
+        option('', u.requestedRoleNone)+option('standard', u.requestedRoleStandard)+option('premium', u.requestedRolePremium)+option('commerce', u.requestedRoleCommerce)+
+      '</select></label><br><br>'+
       '<label>'+esc(u.titleLabel)+'<input name="title" required placeholder="'+esc(u.submitTitlePlaceholder)+'"></label><br><br>'+
       '<label>'+esc(u.bodyLabel)+'<textarea name="body" required placeholder="'+esc(u.submitBodyPlaceholder)+'"></textarea></label><br><br>'+
+      '<label>'+esc(u.attachmentLabel)+'<input name="files" type="file" multiple></label><div class="muted" style="margin-top:6px">'+esc(u.attachmentHelp)+'</div><br>'+
       '<button class="primary" type="submit">'+esc(u.submitButton)+'</button></form>';
   }
   function questionHtml(admin) {
@@ -727,7 +839,9 @@
     var source = normalizeRole(state.source_role || effective) || effective;
     var sourceLabel = state.applied_source === 'member_admin'
       ? (u.roleSourceManual || 'Admin exception active')
-      : (state.manual_override_changed_by_source ? (u.roleSourceReturned || 'OSO change applied') : (u.roleSourceOsO || 'OSO/M2M source'));
+      : (state.applied_source === 'member_review'
+        ? (u.roleSourceReview || 'Membership review approved')
+        : (state.manual_override_changed_by_source ? (u.roleSourceReturned || 'OSO change applied') : (u.roleSourceOsO || 'OSO/M2M source')));
     var protection = isProtectedMember(member) ? '<br><span class="badge">'+esc(u.protectedAccount || 'Protected account')+'</span>' : '';
     var blocked = member.blocked ? '<br><span class="badge">blocked</span>' : '';
     return '<span class="badge">'+esc(effective)+'</span><br>'+
@@ -740,12 +854,12 @@
     var myRoles = (STATE.me && STATE.me.roles) || readRoles();
     var visibleMembers = (STATE.members || []).filter(function (member) {
       var roles = unique(member.roles || (member.app_metadata && member.app_metadata.roles) || []);
-      return canViewOrManageRole(myRoles, roles);
+      return canViewMember(myRoles, member);
     });
     var rows = visibleMembers.map(function (member) {
       var roles = unique(member.roles || (member.app_metadata && member.app_metadata.roles) || []);
       var role = normalizeRole(member.role || highestRole(roles));
-      var canManage = canViewOrManageRole(myRoles, roles);
+      var canManage = canManageMember(myRoles, member);
       var options = rolesForSelect(role);
       var state = member.role_state || {};
       var actions = '';
@@ -764,7 +878,7 @@
         '<div class="igdc-ma-member-id">'+esc(member.user_id || '')+'</div>'+
         '<div class="igdc-ma-member-name"><b>'+esc(member.name || member.nickname || '')+'</b><br><span class="muted">'+esc(member.email || '')+'</span></div>'+
         '<div>'+roleStateHtml(member)+'</div>'+
-        '<div>'+(canManage && options ? '<select data-role-select>'+options+'</select>' : '<span class="muted">'+esc(u.noPermission)+'</span>')+'</div>'+
+        '<div>'+(canManage && options ? '<select data-role-select>'+options+'</select>' : '<span class="muted">'+esc((currentManagementScope().kind === 'site_only_below' && globalCommonMember(member)) ? (u.viewOnly || u.noPermission) : u.noPermission)+'</span>')+'</div>'+
         '<div class="igdc-ma-member-actions">'+actions+'</div>'+
       '</div>';
     }).join('');
@@ -797,7 +911,7 @@
     var target = docTargetRole(doc);
     if (roles.length && !canViewOrManageRole(myRoles, roles)) return false;
     if (target && !canAssignRole(myRoles, target)) return false;
-    return true;
+    return canReviewSiteScopedDoc(doc);
   }
   function adminQueueHtml(labels) {
     var u = uiText();
@@ -812,16 +926,20 @@
       var target = d.target_role || d.requested_role || d.apply_role || '';
       var status = d.status || d.review_status || 'pending';
       var date = d.created_at || d.updated_at || d.date || '';
-      var fileUrl = d.file_url || d.url || d.download_url || d.attachment_url || '';
+      var attachments = Array.isArray(d.attachments || d.files) ? (d.attachments || d.files) : [];
+      var uploadedAttachments = attachments.filter(function (file) { return String(file.upload_status || 'uploaded') === 'uploaded'; });
+      var documentButton = uploadedAttachments.length
+        ? '<button data-action="open-review-doc">'+esc(u.open)+' ('+esc(uploadedAttachments.length)+')</button>'
+        : '<button data-action="open-review-doc">'+esc(u.detail)+'</button>';
       return '<div class="igdc-ma-review-row" data-review-id="'+esc(id)+'">'+
         '<div><b>'+esc(title)+'</b><br><span class="muted">'+esc(name || email || d.user_id || '')+'</span></div>'+ 
         '<div>'+esc(email || d.user_id || '')+'</div>'+ 
         '<div>'+esc(target || '-')+'</div>'+ 
         '<div><span class="badge">'+esc(status)+'</span><br><span class="muted">'+esc(date)+'</span></div>'+ 
         '<div class="igdc-ma-member-actions">'+
-          (fileUrl ? '<button data-action="open-review-doc" data-url="'+esc(fileUrl)+'">'+esc(u.open)+'</button>' : '<button data-action="open-review-doc">'+esc(u.detail)+'</button>')+
-          '<button data-action="approve-review-doc" class="primary">'+esc(u.approve)+'</button>'+
-          '<button data-action="reject-review-doc" class="danger">'+esc(u.reject)+'</button>'+
+          documentButton+
+          '<button data-action="approve-review-doc" class="primary" '+(status === 'pending' ? '' : 'disabled')+'>'+esc(u.approve)+'</button>'+
+          '<button data-action="reject-review-doc" class="danger" '+(status === 'pending' ? '' : 'disabled')+'>'+esc(u.reject)+'</button>'+ 
         '</div>'+ 
       '</div>';
     }).join('');
@@ -861,6 +979,7 @@
     else if (act === 'block-user') blockUser(action.closest('[data-user-id]'));
     else if (act === 'unblock-user') unblockUser(action.closest('[data-user-id]'));
     else if (act === 'request-upgrade') requestUpgrade(action.getAttribute('data-role'));
+    else if (act === 'reload-my-review') loadMyReviewDocs();
     else if (act === 'reload-review-queue') loadReviewDocs();
     else if (act === 'open-review-doc') openReviewDoc(action.closest('[data-review-id]'), action.getAttribute('data-url'));
     else if (act === 'approve-review-doc') reviewDoc(action.closest('[data-review-id]'), 'approve');
@@ -871,18 +990,77 @@
   }
   function formDataObj(form) {
     var fd = new FormData(form), o = {};
-    fd.forEach(function (v,k) { o[k] = v; });
+    fd.forEach(function (v,k) { if (!(v instanceof File)) o[k] = v; });
     return o;
+  }
+  function attachmentFiles(form) {
+    var input = form.querySelector('input[name="files"]');
+    return input && input.files ? Array.prototype.slice.call(input.files) : [];
+  }
+  function uploadSignedAttachment(upload, file) {
+    return fetch(upload.url, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file
+    }).then(function (res) {
+      if (!res.ok) throw new Error('첨부 파일 업로드에 실패했습니다: ' + (file.name || 'file'));
+      return res;
+    });
+  }
+  function submitDocument(form) {
+    var body = formDataObj(form);
+    var files = attachmentFiles(form);
+    body.attachments = files.map(function (file) { return { name:file.name, size:file.size, type:file.type || 'application/octet-stream' }; });
+    return apiPost('submit-document', body).then(function (data) {
+      var uploads = data.uploads || [];
+      if (!uploads.length) return data;
+      if (uploads.length !== files.length) throw new Error('첨부 파일 전송 정보가 일치하지 않습니다.');
+      return Promise.all(uploads.map(function (upload, index) { return uploadSignedAttachment(upload, files[index]); }))
+        .then(function () { return apiPost('complete-document-upload', { id:(data.document && data.document.id), file_ids:uploads.map(function (upload) { return upload.file_id; }) }); });
+    });
   }
   function handleSubmit(ev) {
     var form = ev.target.closest('form[data-form]');
     if (!form) return;
     ev.preventDefault();
     var type = form.getAttribute('data-form');
+    if (type === 'document-submit') {
+      submitDocument(form).then(function () {
+        setError('');
+        STATE.requestedRole = '';
+        alert(uiText().documentSaved || uiText().registered);
+        form.reset();
+      }).catch(function (e) {
+        var message = e && e.message ? e.message : String(e || '');
+        if (/첨부 파일 업로드/.test(message)) message = (uiText().documentUploadFailed || message) + '\n' + message;
+        setError(message);
+      });
+      return;
+    }
     var body = formDataObj(form);
-    var action = type === 'document-submit' ? 'submit-document' : type === 'question-submit' ? 'submit-question' : 'admin-reply';
+    var action = type === 'question-submit' ? 'submit-question' : 'admin-reply';
     apiPost(action, body).then(function () { setError(''); alert(uiText().registered); form.reset(); }).catch(function (e) { setError(e.message); });
   }
+  function loadMyReviewDocs() {
+    if (!hasValidToken()) {
+      STATE.loadingMyReview = false;
+      STATE.myReviewDocs = [];
+      render();
+      return;
+    }
+    STATE.loadingMyReview = true;
+    apiGet({action:'my-review-documents', page:0, per_page:cfg().reviewPerPage || 100}).then(function (data) {
+      STATE.myReviewDocs = data.documents || data.docs || data.items || [];
+      STATE.loadingMyReview = false;
+      render();
+    }).catch(function (e) {
+      STATE.loadingMyReview = false;
+      STATE.myReviewDocs = [];
+      STATE.error = e.message || uiText().reviewApiMissing;
+      render();
+    });
+  }
+
   function loadReviewDocs() {
     if (!canAdmin(readRoles()) && !(STATE.me && STATE.me.admin)) return;
     if (!hasValidToken()) {
@@ -907,28 +1085,55 @@
   function findReviewDoc(row) {
     if (!row) return null;
     var id = row.getAttribute('data-review-id');
-    return (STATE.reviewDocs || []).filter(function (d) {
+    return (STATE.reviewDocs || []).concat(STATE.myReviewDocs || []).filter(function (d) {
       return String(d.id || d.document_id || d.review_id || d.submission_id || '') === String(id || '');
     })[0] || null;
   }
   function openReviewDoc(row, url) {
     var doc = findReviewDoc(row) || {};
+    var attachments = Array.isArray(doc.attachments || doc.files) ? (doc.attachments || doc.files) : [];
+    var uploaded = attachments.filter(function (file) { return String(file.upload_status || 'uploaded') === 'uploaded'; });
     var fileUrl = url || doc.file_url || doc.url || doc.download_url || doc.attachment_url || '';
     if (fileUrl) { window.open(fileUrl, '_blank', 'noopener'); return; }
-    var u = uiText(); alert((doc.title || u.reviewDocDefault) + '\n\n' + (doc.body || doc.memo || doc.description || u.noAttachment));
+    if (!uploaded.length) {
+      var u0 = uiText();
+      alert((doc.title || u0.reviewDocDefault) + '\n\n' + (doc.body || doc.memo || doc.description || u0.noAttachment));
+      return;
+    }
+    var selected = uploaded[0];
+    if (uploaded.length > 1) {
+      var promptText = uploaded.map(function (file, index) { return (index + 1) + '. ' + (file.original_name || file.name || 'file'); }).join('\n');
+      var chosen = window.prompt((lang() === 'ko' ? '열람할 첨부 파일 번호를 입력하십시오.\n' : 'Enter the attachment number to open.\n') + promptText, '1');
+      if (chosen === null) return;
+      var index = Number.parseInt(chosen, 10) - 1;
+      if (Number.isFinite(index) && uploaded[index]) selected = uploaded[index];
+    }
+    var viewer = window.open('about:blank', '_blank');
+    try { if (viewer) viewer.opener = null; } catch (e) {}
+    apiGet({action:'review-document-url', id:(doc.id || doc.document_id), file_id:selected.id}).then(function (data) {
+      if (!data || !data.url) throw new Error(uiText().noAttachment);
+      if (viewer) viewer.location.replace(data.url);
+      else window.open(data.url, '_blank', 'noopener');
+    }).catch(function (e) {
+      try { if (viewer) viewer.close(); } catch (_) {}
+      setError(e.message);
+    });
   }
   function reviewDoc(row, decision) {
     var doc = findReviewDoc(row);
     if (!doc) return;
     var id = doc.id || doc.document_id || doc.review_id || doc.submission_id;
     if (!id) return;
-    var u = uiText(); if (!confirm((decision === 'approve' ? u.approve : u.reject) + ' ' + u.confirmProcess)) return;
-    apiPost('review-document', {id:id, decision:decision}).then(loadReviewDocs).catch(function (e) { setError(e.message); });
+    var u = uiText();
+    if (!confirm((decision === 'approve' ? u.approve : u.reject) + ' ' + u.confirmProcess)) return;
+    var note = window.prompt(u.reviewNotePrompt || 'Review note (optional):', '');
+    if (note === null) return;
+    apiPost('review-document', {id:id, decision:decision, review_note:note}).then(loadReviewDocs).catch(function (e) { setError(e.message); });
   }
   function loadMe() {
     STATE.me = userProfile();
     return apiGet({action:'me'}).then(function (data) {
-      if (data && data.me) STATE.me = Object.assign({}, STATE.me, data.me, {admin: data.me.admin != null ? data.me.admin : STATE.me.admin});
+      if (data && data.me) STATE.me = Object.assign({}, STATE.me, data.me, {admin: data.me.admin != null ? data.me.admin : STATE.me.admin, management_scope: data.management_scope || data.me.management_scope || STATE.me.management_scope});
     }).catch(function () {});
   }
   function loadMembers() {
@@ -1035,7 +1240,8 @@
     apiPost('unblock-user', {user_id:userId, reason:reason}).then(loadMembers).catch(function (e) { setError(e.message); });
   }
   function requestUpgrade(role) {
-    apiPost('request-upgrade', {role:role}).then(function () { alert(uiText().upgradeRequested); }).catch(function (e) { setError(e.message); });
+    STATE.requestedRole = normalizeRole(role || '');
+    setTab('submit');
   }
   function open(preferredTab) {
     if (!hasValidToken()) { openLogin(true); return; }
@@ -1044,7 +1250,7 @@
     STATE.tab = preferredTab || 'member-home';
     var el = root();
     el.hidden = false;
-    loadMe().then(function () { render(); if (STATE.tab === 'admin-members') loadMembers(); if (STATE.tab === 'admin-queue') loadReviewDocs(); });
+    loadMe().then(function () { render(); if (STATE.tab === 'member-page') loadMyReviewDocs(); if (STATE.tab === 'admin-members') loadMembers(); if (STATE.tab === 'admin-queue') loadReviewDocs(); });
     render();
     try { el.querySelector('button').focus(); } catch (e) {}
   }
