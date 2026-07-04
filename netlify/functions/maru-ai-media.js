@@ -460,6 +460,9 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
   'Each supplied cue is an immutable spoken-media time interval. Keep every cue id separate: never merge, summarize, reorder, transfer words between, or turn consecutive cue ids into a paragraph. Translate only the words in that cue, in its existing order, as the short natural subtitle that appears while that exact speech is audible. Do not create a continuation sentence by borrowing words from the next or previous cue.',
   'Each cue includes durationSeconds and a nonbinding displayUnitGuide. Use them as a readability budget: keep the target line concise enough to read while that exact speech is audible. Do not solve a short duration by merging with a neighbour, moving words, deleting a cue, or changing the cue order.',
   'Keep names, titles, ranks, honorifics, technical terms, units, numbers, product names, species names, organization names, place names, building names, country names, political parties, and institutions accurate and consistent.',
+  'Interpret historical, ancient, revived, regional, dialectal, code-switched, slang, colloquial, and newly coined expressions from the local spoken context, surrounding cues, genre, era, place, speaker relationship, and domain. Use a standard modern equivalent only when the intended meaning is clear. Never invent a dictionary definition, a historical source, or an unsupported expansion of an unfamiliar expression. When evidence is insufficient, preserve the recognized form, official form, or a conservative transliteration rather than guessing.',
+  'Map interpersonal register from relationship, relative status, age, setting, recurring titles, and surrounding dialogue. For Korean, preserve appropriate honorific speech and titles in unfamiliar, professional, service, official, senior-junior, medical, educational, military, public-safety, and respectful family contexts; use informal speech only when the relationship is clearly informal. Apply the equivalent relationship-appropriate register in other target languages.',
+  'Use established reference knowledge conservatively, but never claim to have consulted a live encyclopedia, dictionary, or external database. Preserve a specialized, historical, dialectal, or emerging term when the available cue context does not establish one reliable target-language equivalent.',
   'Classify recurring personal names, aliases, nicknames, pet names, call signs, kinship forms, and forms of address from nearby cue context before translating. Never allow one unclear or imperfectly recognized pronunciation to become a global canonical name. Use one canonical target-language form only when repeated textual/context evidence clearly identifies the same entity; otherwise preserve the current recognized official/transliterated form without forcing later cues to match it.',
   'For sung lyrics, preserve actual lyric words only after audible vocal onset. Keep every lyric phrase in its existing cue and time interval; never merge adjacent lyric phrases, extend a lyric through an instrumental gap, or move lyric words into a neighbouring cue. Do not replace real sung words with [music], [song], [laughter], or another generic sound label. Preserve an existing ♪ lyric marker when supplied. Do not create a caption for instrumental lead-in, melody-only passages, humming without discernible words, or imagined lyric text.',
   'For a standalone human laugh, cry, sharp cry, gasp, pain reaction, surprise or admiration interjection, output one concise bracketed sound label in the target language, such as [웃음] or [laughter]. Do not stretch repeated letters, fill a cue with ㅎ/ㅋ/ha characters, or merge it with neighbouring dialogue.',
@@ -569,7 +572,8 @@ const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
   'Keep established conventional names, official organization and institution names, places, buildings, countries, products, species, ranks, aliases, nicknames, call signs, kinship forms, and recurring personal names consistent only when the same entity is clearly confirmed by repeated in-video textual/context evidence.',
   'Use each supplied terminologyLedger item only when it has confidence "confirmed" and evidenceCount at least 2, and only when it clearly refers to the same entity or concept in this cue. Otherwise preserve the current form.',
   'For specialist content, use the established target-language term only when the context makes the domain unambiguous. Do not replace a precise but uncertain term with a guessed everyday paraphrase.',
-  'Match the requested genre and relationship register: exact and restrained for scholarship or professional discussion; natural and relationship-appropriate for dialogue and fiction. Do not make already natural subtitles more literary merely for style.',
+  'For historical, ancient, revived, regional, dialectal, slang, code-switched, colloquial, or newly coined language, review the local context, era, place, relationship, and genre before changing anything. Never invent an etymology, dictionary sense, or modern substitute when the evidence is weak; preserve the existing recognized form or a conservative transliteration in that case.',
+  'Match the requested genre and relationship register: exact and restrained for scholarship or professional discussion; natural and relationship-appropriate for dialogue and fiction. Preserve honorifics, titles, and social distance when the relationship evidence supports them. Do not make already natural subtitles more literary merely for style.',
   'For a cue made only of laughter, crying, a gasp, a scream, coughing, or a sigh, use one compact bracketed target-language sound label. Never expand it into repeated characters such as ㅎㅎㅎㅎ, ㅋㅋㅋㅋ, ha ha ha, or similar filler. This rule never applies to actual sung lyric words: retain clear lyric text, its existing ♪ marker when present, and its exact cue boundary; do not replace lyrics with [music], [song], [laughter], or any generic sound label.',
   'Add a terminologyLedger item only for a short canonical form that appears at least twice in these cues or is independently confirmed by the supplied confirmed ledger. Set confidence exactly to "confirmed" and evidenceCount to at least 2. Otherwise return an empty ledger.'
 ].join(' ');
@@ -1770,6 +1774,8 @@ async function handleGenerateSubtitle(id, body) {
     generationMode: directTarget ? 'selected-target-language-subtitle' : 'source-language-transcript',
     outputPolicy: directTarget ? 'target-language-subtitle-cues-only' : 'source-language-transcript',
     lyricPolicy: 'actual-sung-words-only-after-vocal-onset; preserve-lyric-cue-boundaries; no-instrumental-caption',
+    resumePolicy: 'desktop-preserve-completed-retry-unfinished-from-last-safe-overlap',
+    transientFailurePolicy: 'never-skip-transient-network-or-server-failures',
     requestId: id
   });
 }
@@ -2034,13 +2040,41 @@ async function handleGenerateDubbing(id, action, body) {
   });
 }
 
+function classifyResumeDisposition(error) {
+  const status = Number(error?.statusCode || error?.openAiStatus || 0);
+  const message = String(error?.message || error || '').toLowerCase();
+  const transient = status === 429 || [500, 502, 503, 504].includes(status)
+    || /timeout|timed out|abort|aborted|overload|rate.?limit|temporar|socket|econnreset|econnrefused|enotfound|network|fetch failed|connection reset|connection closed|upstream/.test(message);
+  if (transient) {
+    return {
+      retryable: true,
+      resumable: true,
+      resumeScope: 'same-unfinished-media-chunk',
+      checkpointPolicy: 'preserve-completed-retry-current-from-last-safe-overlap',
+      doNotSkip: true,
+      mediaQualityReviewRequired: false
+    };
+  }
+  const mediaInput = status === 400 || status === 415 || status === 422
+    || /audio|media|codec|decode|format|corrupt|damaged|unsupported|unreadable|invalid.*file/.test(message);
+  return {
+    retryable: false,
+    resumable: true,
+    resumeScope: mediaInput ? 'manual-media-quality-review' : 'manual-operator-review',
+    checkpointPolicy: 'preserve-completed-do-not-auto-skip-unfinished',
+    doNotSkip: true,
+    mediaQualityReviewRequired: mediaInput
+  };
+}
+
 function classifyOpenAiError(error) {
   const status = Number(error?.statusCode || error?.openAiStatus || 500);
   const msg = String(error?.message || error || 'Unknown server error');
-  if (/insufficient_quota|quota|billing|payment/i.test(msg)) return { statusCode: status || 402, code: 'openai_billing_or_quota', message: 'OpenAI API quota/billing limit reached. Check OpenAI Platform billing and project limits.' };
-  if (/api key|invalid_api_key|incorrect api key|unauthorized/i.test(msg)) return { statusCode: status || 401, code: 'openai_api_key', message: 'OpenAI API key is invalid or missing in Netlify environment variable OPENAI_API_KEY.' };
-  if (/timeout|timed out/i.test(msg)) return { statusCode: 504, code: 'server_timeout', message: 'OpenAI/Netlify request timed out. Split the media/text into smaller chunks and retry.' };
-  return { statusCode: status || 500, code: 'server_error', message: msg.slice(0, 1000) };
+  const disposition = classifyResumeDisposition(error);
+  if (/insufficient_quota|quota|billing|payment/i.test(msg)) return { statusCode: status || 402, code: 'openai_billing_or_quota', message: 'OpenAI API quota/billing limit reached. Check OpenAI Platform billing and project limits.', ...disposition };
+  if (/api key|invalid_api_key|incorrect api key|unauthorized/i.test(msg)) return { statusCode: status || 401, code: 'openai_api_key', message: 'OpenAI API key is invalid or missing in Netlify environment variable OPENAI_API_KEY.', ...disposition };
+  if (/timeout|timed out/i.test(msg)) return { statusCode: 504, code: 'server_timeout', message: 'OpenAI/Netlify request timed out. Preserve completed chunks and retry the same unfinished media chunk from the last safe overlap.', ...disposition };
+  return { statusCode: status || 500, code: 'server_error', message: msg.slice(0, 1000), ...disposition };
 }
 
 exports.handler = async (event) => {
@@ -2082,6 +2116,12 @@ exports.handler = async (event) => {
       ok: false,
       error: classified.message,
       code: classified.code,
+      retryable: classified.retryable,
+      resumable: classified.resumable,
+      resumeScope: classified.resumeScope,
+      checkpointPolicy: classified.checkpointPolicy,
+      doNotSkip: classified.doNotSkip,
+      mediaQualityReviewRequired: classified.mediaQualityReviewRequired,
       requestId: id
     });
   } finally {
