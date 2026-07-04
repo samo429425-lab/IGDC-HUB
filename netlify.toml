@@ -11,7 +11,7 @@
   included_files = ["netlify/functions/**", "netlify/functions/data/**", "netlify/functions/search-bank.snapshot.json", "netlify/functions/data/search-bank.snapshot.json", "data/search-bank.snapshot.json", "netlify/functions/api-key.json"]
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
   
 [dev]
   command = "netlify dev"
