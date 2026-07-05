@@ -1,4 +1,4 @@
-/* IGDC Member Admin API v2.8.0-member-service-qna-notices
+/* IGDC Member Admin API v2.9.1-member-profile-upgrade
  * Secure server-side Auth0/OSO member list and hierarchy enforcement.
  * OSO/M2M remains the automatic source for ordinary member roles.
  * Browser role labels are never trusted for list visibility or management.
@@ -46,7 +46,9 @@ const ROLE_LEVEL = {
   owner: 30
 };
 
-const AUTO_MANAGED_ROLES = new Set(['guest', 'member', 'member_standard']);
+const AUTO_MANAGED_ROLES = new Set(['guest', 'member', 'member_standard', 'member_premium']);
+const MEMBER_PROFILE_SCHEMA_VERSION = 1;
+const MEMBER_PROFILE_LOCALES = new Set(['ko','en','zh','zht','ja','es','fr','de','ru','pt','it','ar','vi','th','id','hi','tr','fa','bn','ur','sw','ta','hu','ms','nl','pl','sv','tl','uk','uz']);
 const PROTECTED_ROLES = new Set(['owner', 'admin', 'super_admin']);
 const ROLE_AUDIT_LIMIT = 32;
 const BLOCK_CHALLENGE_TTL_MS = 5 * 60 * 1000;
@@ -68,6 +70,18 @@ exports.handler = async function handler(event) {
         me: publicRequester(requester),
         management_scope: safeManagementScope(requester)
       });
+    }
+
+    // Member profile is private account data. It has its own service-only table and
+    // does not use the document-review store or browser-accessible Auth0 metadata.
+    if (method === 'GET' && action === 'member-profile') {
+      const result = await getOwnMemberProfile(env, requester);
+      return json(200, Object.assign({ ok: true }, result));
+    }
+
+    if (method === 'POST' && action === 'save-member-profile') {
+      const result = await saveOwnMemberProfile(env, requester, body);
+      return json(200, Object.assign({ ok: true }, result));
     }
 
     if (method === 'GET' && action === 'member-review-diagnostic') {
@@ -307,6 +321,8 @@ function readEnv() {
     memberReviewTable: String(process.env.MEMBER_REVIEW_TABLE || 'igdc_member_review_cases').trim(),
     memberReviewFilesTable: String(process.env.MEMBER_REVIEW_FILES_TABLE || 'igdc_member_review_files').trim(),
     memberReviewEventsTable: String(process.env.MEMBER_REVIEW_EVENTS_TABLE || 'igdc_member_review_events').trim(),
+    memberProfileTable: String(process.env.MEMBER_PROFILE_TABLE || 'igdc_member_profiles').trim(),
+    memberProfileEventsTable: String(process.env.MEMBER_PROFILE_EVENTS_TABLE || 'igdc_member_profile_events').trim(),
     memberQuestionTable: String(process.env.MEMBER_QUESTION_TABLE || 'igdc_member_questions').trim(),
     memberQuestionRepliesTable: String(process.env.MEMBER_QUESTION_REPLIES_TABLE || 'igdc_member_question_replies').trim(),
     memberNoticeTable: String(process.env.MEMBER_NOTICE_TABLE || 'igdc_member_notices').trim(),
@@ -563,7 +579,7 @@ function requireRoleAssignment(scope, requestedRole) {
 function requireManualRoleAssignment(role) {
   const normalized = normalizeRole(role);
   if (AUTO_MANAGED_ROLES.has(normalized)) {
-    const err = new Error('guest, member, member_standard은 OSO/M2M 자동 역할입니다. 이 화면에서는 특수 역할만 예외 적용할 수 있습니다.');
+    const err = new Error('guest, member, member_standard, member_premium은 OSO/M2M 자동 역할입니다. 이 화면에서는 특수 역할만 예외 적용할 수 있습니다.');
     err.statusCode = 400;
     throw err;
   }
@@ -700,6 +716,7 @@ function resolveRoleState(metadata, rawRoles) {
   return {
     source_role: source.role || (approval && approval.source_role) || (manual && manual.source_role) || 'guest',
     source_updated_at: source.updated_at || (approval && approval.source_updated_at) || (manual && manual.source_updated_at) || '',
+    source_explicit: !!source.explicit,
     effective_role: effectiveRole,
     applied_source: sourceKind,
     membership_approval_active: !!approval,
@@ -800,10 +817,10 @@ function json(statusCode, data) {
 
 
 const MEMBER_REQUEST_ROLE_MAP = Object.freeze({
-  standard: 'member_standard',
-  member_standard: 'member_standard',
-  premium: 'member_premium',
-  member_premium: 'member_premium',
+  // Member Standard is earned through the private profile-completion signal,
+  // and Member Premium is granted through the loyalty engine. Neither is a
+  // browser-submitted review request. Existing historical review records stay
+  // readable; this map only controls newly created requests.
   commerce: 'commerce_manager',
   commerce_manager: 'commerce_manager'
 });
@@ -869,7 +886,7 @@ function memberReviewDiagnosticSummary(report) {
   }
   const allMessages = failed.map(item => String(item.message || '')).join(' ').toLowerCase();
   if (allMessages.indexOf('submitted_site_keys') >= 0 || allMessages.indexOf('does not exist') >= 0 || allMessages.indexOf('schema cache') >= 0 || allMessages.indexOf('could not find') >= 0) {
-    return { code: 'schema_migration_required', summary: '회원 심사·문의·공지 테이블 또는 submitted_site_keys 열이 없습니다. 패키지의 supabase/IGDC_Member_Service_Final_Schema.sql을 Supabase SQL Editor에서 실행해야 합니다.' };
+    return { code: 'schema_migration_required', summary: '회원 심사·문의·공지 또는 회원정보 프로필 테이블이 없습니다. 패키지의 Supabase 최종 스키마 SQL을 실행해야 합니다.' };
   }
   if (allMessages.indexOf('permission denied') >= 0 || allMessages.indexOf('42501') >= 0) {
     return { code: 'service_role_grant_missing', summary: '서비스 역할의 회원 심사 테이블 또는 비공개 보관함 접근 권한이 부족합니다. 최종 스키마 SQL의 service_role 권한 구문을 실행했는지 확인하십시오.' };
@@ -907,6 +924,10 @@ async function memberReviewDiagnostic(env, requester) {
       questions_table: env.memberQuestionTable,
       replies_table: env.memberQuestionRepliesTable,
       notices_table: env.memberNoticeTable
+    },
+    member_profile_store: {
+      profiles_table: env.memberProfileTable,
+      events_table: env.memberProfileEventsTable
     },
     probes: [],
     note: '읽기 전용 점검입니다. 회원 정보·제출 서류·첨부 파일·질문·답글·공지 원문·서명 URL·비밀키·시험 데이터는 반환하거나 생성하지 않습니다.'
@@ -947,6 +968,14 @@ async function memberReviewDiagnostic(env, requester) {
     () => supabaseStorageRequest(env, 'bucket/' + encodeURIComponent(env.memberReviewBucket), { method: 'GET', headers: { Accept: 'application/json' } }),
     () => ({ private_bucket: env.memberReviewBucket })
   ));
+  report.probes.push(await diagnosticProbe('member_profiles_table',
+    () => supabaseSelect(env, env.memberProfileTable, { select: 'user_id', limit: 1 }),
+    rows => ({ row_count_at_most_one: Array.isArray(rows) ? rows.length : 0 })
+  ));
+  report.probes.push(await diagnosticProbe('member_profile_events_table',
+    () => supabaseSelect(env, env.memberProfileEventsTable, { select: 'id', limit: 1 }),
+    rows => ({ row_count_at_most_one: Array.isArray(rows) ? rows.length : 0 })
+  ));
   report.diagnosis = memberReviewDiagnosticSummary(report);
   report.ok = report.diagnosis.code === 'ok';
   return report;
@@ -971,6 +1000,11 @@ function normalizeOptionalText(value, maxLength) {
 
 function normalizeRequestedRole(value, requiredRole) {
   const normalized = normalizeRole(value);
+  if (normalized === 'standard' || normalized === 'member_standard' || normalized === 'premium' || normalized === 'member_premium') {
+    const err = new Error('member_standard은 회원정보 완료 후 OSO/M2M이 자동 판정하고, member_premium은 우수 고객 로열티 기준으로 자동 부여됩니다.');
+    err.statusCode = 400;
+    throw err;
+  }
   const role = MEMBER_REQUEST_ROLE_MAP[normalized] || '';
   if (requiredRole && !role) {
     const err = new Error('지원하지 않는 승급 신청 등급입니다.');
@@ -1077,6 +1111,20 @@ async function supabaseInsert(env, table, row) {
   return Array.isArray(result.data) ? result.data : [];
 }
 
+async function supabaseUpsert(env, table, row, conflictColumn) {
+  const result = await supabaseRequest(env, '/rest/v1/' + encodeURIComponent(table) + queryString({
+    on_conflict: conflictColumn || 'user_id'
+  }), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=representation'
+    },
+    body: row
+  });
+  return Array.isArray(result.data) ? result.data : [];
+}
+
 async function supabasePatch(env, table, filters, patch) {
   const result = await supabaseRequest(env, '/rest/v1/' + encodeURIComponent(table) + queryString(filters), {
     method: 'PATCH',
@@ -1119,6 +1167,240 @@ function reviewCasePayload(requester, values) {
     status: values.status,
     submitted_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
+  };
+}
+
+
+/* =========================
+ * Private member profile / Standard-member eligibility
+ * ========================= */
+
+function profileLocale(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/^zh-hant$/,'zht').replace(/^zh-tw$/,'zht').replace(/^zh-hk$/,'zht');
+  return MEMBER_PROFILE_LOCALES.has(normalized) ? normalized : 'en';
+}
+
+function profileText(value, maxLength) {
+  return String(value == null ? '' : value)
+    .normalize('NFC')
+    .replace(/\u0000/g, '')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function profileOptionalText(value, maxLength) {
+  return profileText(value, maxLength) || null;
+}
+
+function profileCountryCode(value) {
+  const code = String(value || '').trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(code) ? code : '';
+}
+
+function profilePhone(value) {
+  const phone = String(value || '').trim().replace(/[\s().-]/g, '');
+  return /^\+[1-9]\d{6,18}$/.test(phone) ? phone : '';
+}
+
+function profileMissingFields(profile) {
+  const missing = [];
+  if (!profile.full_name) missing.push('full_name');
+  if (!profile.country_code) missing.push('country_code');
+  if (!profile.phone_e164) missing.push('phone_e164');
+  if (!profile.locality) missing.push('locality');
+  if (!profile.address_line1) missing.push('address_line1');
+  return missing;
+}
+
+function normalizeMemberProfile(body) {
+  const source = body && (body.profile || body) || {};
+  const profile = {
+    full_name: profileText(source.full_name, 240),
+    country_code: profileCountryCode(source.country_code),
+    phone_e164: profilePhone(source.phone_e164),
+    postal_code: profileOptionalText(source.postal_code, 80),
+    administrative_area: profileOptionalText(source.administrative_area, 180),
+    locality: profileText(source.locality, 180),
+    address_line1: profileText(source.address_line1, 500),
+    address_line2: profileOptionalText(source.address_line2, 500),
+    entry_locale: profileLocale(source.entry_locale || source.locale),
+    romanized_name: profileOptionalText(source.romanized_name, 240),
+    romanized_address_line1: profileOptionalText(source.romanized_address_line1, 500),
+    romanized_address_line2: profileOptionalText(source.romanized_address_line2, 500)
+  };
+  const missing = profileMissingFields(profile);
+  if (profile.phone_e164 === '' && String(source.phone_e164 || '').trim()) {
+    const err = new Error('연락처는 국가번호를 포함한 국제 형식으로 입력해야 합니다.');
+    err.statusCode = 400;
+    throw err;
+  }
+  return { profile, missing, standardEligible: missing.length === 0 };
+}
+
+function publicProfile(row) {
+  const profile = row || {};
+  const missing = Array.isArray(profile.completion_missing_fields)
+    ? profile.completion_missing_fields.map(value => String(value || '')).filter(Boolean)
+    : profileMissingFields(profile);
+  return {
+    exists: !!profile.user_id,
+    full_name: profile.full_name || '',
+    country_code: profile.country_code || '',
+    phone_e164: profile.phone_e164 || '',
+    postal_code: profile.postal_code || '',
+    administrative_area: profile.administrative_area || '',
+    locality: profile.locality || '',
+    address_line1: profile.address_line1 || '',
+    address_line2: profile.address_line2 || '',
+    entry_locale: profile.entry_locale || 'en',
+    romanized_name: profile.romanized_name || '',
+    romanized_address_line1: profile.romanized_address_line1 || '',
+    romanized_address_line2: profile.romanized_address_line2 || '',
+    standard_eligible: profile.standard_eligible === true,
+    missing_fields: missing,
+    completed_at: profile.completed_at || null,
+    updated_at: profile.updated_at || null
+  };
+}
+
+function publicProfileStatus(metadata) {
+  const raw = metadata && metadata.igdc_member_profile_status;
+  if (!raw || typeof raw !== 'object') {
+    return { exists: false, standard_eligible: false, missing_fields: [] };
+  }
+  const missing = Array.isArray(raw.missing_fields)
+    ? raw.missing_fields.map(value => String(value || '')).filter(Boolean).slice(0, 16)
+    : [];
+  return {
+    exists: !!raw.exists,
+    standard_eligible: raw.standard_eligible === true,
+    missing_fields: missing,
+    completed_at: raw.completed_at || null,
+    updated_at: raw.updated_at || null,
+    handoff_status: raw.handoff_status || 'unknown'
+  };
+}
+
+async function getOwnMemberProfile(env, requester) {
+  const rows = await supabaseSelect(env, env.memberProfileTable, {
+    select: '*',
+    user_id: 'eq.' + requester.sub,
+    limit: 1
+  });
+  const profile = publicProfile(rows[0] || null);
+  return {
+    profile,
+    profile_status: profile,
+    role_state: requester.role_state || null
+  };
+}
+
+async function logMemberProfileEvent(env, profile, requester, previous, changedFields, handoffStatus) {
+  try {
+    await supabaseInsert(env, env.memberProfileEventsTable, {
+      user_id: requester.sub,
+      event_type: previous ? 'profile_updated' : 'profile_created',
+      actor_id: requester.sub,
+      standard_eligible_before: !!(previous && previous.standard_eligible),
+      standard_eligible_after: !!profile.standard_eligible,
+      changed_fields: changedFields,
+      handoff_status: handoffStatus,
+      created_at: new Date().toISOString()
+    });
+  } catch (_) {
+    // Profile data is already stored. Do not fail a profile save because an
+    // audit row is unavailable; the next diagnostic can expose table setup.
+  }
+}
+
+function changedProfileFields(previous, next) {
+  const keys = [
+    'full_name','country_code','phone_e164','postal_code','administrative_area',
+    'locality','address_line1','address_line2','entry_locale',
+    'romanized_name','romanized_address_line1','romanized_address_line2'
+  ];
+  return keys.filter(key => String((previous && previous[key]) || '') !== String((next && next[key]) || ''));
+}
+
+async function writeProfileHandoff(env, requester, profile) {
+  try {
+    // Use Auth0's PATCH merge semantics for only this service's own keys.
+    // Do not send a copied full app_metadata object: it could race with OSO/M2M
+    // and overwrite a role or another subsystem's metadata change.
+    await auth0Get(env, '/api/v2/users/' + encodeURIComponent(requester.sub));
+    const status = {
+      schema_version: MEMBER_PROFILE_SCHEMA_VERSION,
+      exists: true,
+      standard_eligible: !!profile.standard_eligible,
+      missing_fields: Array.isArray(profile.completion_missing_fields) ? profile.completion_missing_fields : [],
+      completed_at: profile.completed_at || null,
+      updated_at: profile.updated_at || new Date().toISOString(),
+      handoff_status: 'delivered',
+      source: 'member_profile_service'
+    };
+    await auth0Patch(env, '/api/v2/users/' + encodeURIComponent(requester.sub), {
+      app_metadata: {
+        igdc_member_profile_status: status,
+        igdc_profile_complete: !!profile.standard_eligible,
+        igdc_profile_standard_ready: !!profile.standard_eligible
+      }
+    });
+    return { delivered: true, status };
+  } catch (error) {
+    return {
+      delivered: false,
+      status: {
+        schema_version: MEMBER_PROFILE_SCHEMA_VERSION,
+        exists: true,
+        standard_eligible: !!profile.standard_eligible,
+        missing_fields: Array.isArray(profile.completion_missing_fields) ? profile.completion_missing_fields : [],
+        completed_at: profile.completed_at || null,
+        updated_at: profile.updated_at || new Date().toISOString(),
+        handoff_status: 'pending',
+        source: 'member_profile_service'
+      }
+    };
+  }
+}
+
+async function saveOwnMemberProfile(env, requester, body) {
+  const normalized = normalizeMemberProfile(body);
+  const previousRows = await supabaseSelect(env, env.memberProfileTable, {
+    select: '*', user_id: 'eq.' + requester.sub, limit: 1
+  });
+  const previous = previousRows[0] || null;
+  const now = new Date().toISOString();
+  const completedAt = normalized.standardEligible
+    ? ((previous && previous.standard_eligible && previous.completed_at) || now)
+    : null;
+
+  const next = Object.assign({}, normalized.profile, {
+    user_id: requester.sub,
+    schema_version: MEMBER_PROFILE_SCHEMA_VERSION,
+    completion_missing_fields: normalized.missing,
+    standard_eligible: normalized.standardEligible,
+    completed_at: completedAt,
+    created_at: (previous && previous.created_at) || now,
+    updated_at: now
+  });
+
+  const rows = await supabaseUpsert(env, env.memberProfileTable, next, 'user_id');
+  const saved = rows[0] || next;
+  const handoff = await writeProfileHandoff(env, requester, saved);
+  await logMemberProfileEvent(env, saved, requester, previous, changedProfileFields(previous, next), handoff.delivered ? 'delivered' : 'pending');
+
+  return {
+    profile: publicProfile(saved),
+    profile_status: Object.assign({}, publicProfile(saved), {
+      handoff_status: handoff.delivered ? 'delivered' : 'pending'
+    }),
+    m2m_handoff: {
+      delivered: !!handoff.delivered,
+      standard_eligible: !!saved.standard_eligible
+    },
+    // The OSO/M2M role engine remains the only writer of automatic roles.
+    // Saving a profile never directly assigns member_standard here.
+    role_state: requester.role_state || null
   };
 }
 
@@ -1786,17 +2068,53 @@ async function authenticateRequester(event, env) {
   if (!verify.verify(key, b64urlToBuffer(parts[2]))) throw Object.assign(new Error('Token signature invalid'), { statusCode: 401 });
 
   const claimRoles = extractRoles(payload, env);
-  const serverRoles = await requesterRoles(env, payload.sub);
-  // Auth0 role assignments/app_metadata are authoritative when available.
-  // Signed custom-claim roles are retained for deployments that issue roles only in the ID token.
-  const roles = uniqueRoles(serverRoles.length ? serverRoles.concat(claimRoles) : claimRoles);
-  const siteKeys = await requesterSiteKeys(env, payload.sub, roles);
+  let user = null;
+  let rawRoles = [];
+  let roleState = null;
+  try {
+    user = await auth0Get(env, '/api/v2/users/' + encodeURIComponent(payload.sub));
+    if (user && user.blocked) throw forbidden('차단된 계정입니다.');
+    rawRoles = await auth0UserRoles(env, user || {});
+    roleState = resolveRoleState((user && user.app_metadata) || {}, rawRoles);
+  } catch (error) {
+    if (error && error.statusCode === 403) throw error;
+    // A valid signed token still permits its own limited member view when
+    // Auth0 Management lookup is temporarily unavailable. Do not manufacture
+    // a privileged role in this fallback.
+    rawRoles = [];
+    roleState = resolveRoleState({}, []);
+  }
+
+  // Signed custom-claim roles remain a fallback. Where Auth0 user metadata is
+  // available, OSO/M2M-derived role state is the first-class source.
+  let roles = uniqueRoles([roleState.effective_role].concat(rawRoles, claimRoles));
+  const hasAnyExplicitRole = !!roleState.source_explicit || rawRoles.length > 0 || claimRoles.length > 0;
+
+  // Policy baseline: a successful, non-blocked account sign-in is a regular
+  // member immediately. This is a presentation/access baseline only; it never
+  // writes an Auth0 role and never overrides an explicit OSO/M2M result.
+  if (!hasAnyExplicitRole && payload.sub && roleState.effective_role === 'guest') {
+    roleState = Object.assign({}, roleState, {
+      source_role: 'member',
+      effective_role: 'member',
+      applied_source: 'authenticated_member_baseline',
+      source_explicit: false
+    });
+    roles = uniqueRoles(['member'].concat(roles));
+  }
+
+  const siteKeys = user
+    ? siteKeysFromMetadata((user && user.app_metadata) || {}, roles)
+    : await requesterSiteKeys(env, payload.sub, roles);
+
   return {
     sub: payload.sub,
-    email: payload.email,
-    name: payload.name || payload.nickname || payload.email,
+    email: (user && user.email) || payload.email,
+    name: (user && (user.name || user.nickname)) || payload.name || payload.nickname || payload.email,
     roles,
     role: highestRole(roles),
+    role_state: roleState,
+    profile_status: publicProfileStatus((user && user.app_metadata) || {}),
     site_keys: siteKeys
   };
 }
@@ -1828,6 +2146,8 @@ function publicRequester(user) {
     name: user.name,
     roles: user.roles,
     role: user.role,
+    role_state: user.role_state || null,
+    profile_status: user.profile_status || { exists: false, standard_eligible: false, missing_fields: [] },
     site_keys: uniqueSiteKeys(user.site_keys || []),
     admin: safeManagementScope(user).kind !== 'self_only',
     manager: safeManagementScope(user).kind !== 'self_only',
