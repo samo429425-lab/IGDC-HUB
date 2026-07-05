@@ -715,6 +715,7 @@
       tab('admin-members', labels.tabs.adminMembers, true) +
       tab('admin-queue', labels.tabs.adminQueue, true) +
       tab('admin-notice', labels.tabs.adminNotice, true) +
+      (canRunSystemDiagnostic((me && me.roles) || readRoles()) ? tab('admin-diagnostic', labels.tabs.adminDiagnostic, false) : '') +
     '</aside>';
   }
   function bodyHtml(labels, me, admin) {
@@ -1358,11 +1359,11 @@
       return;
     }
     if (!canAdjustRoles((STATE.me && STATE.me.roles) || readRoles()) || !canAssignRole((STATE.me && STATE.me.roles) || readRoles(), role)) { setError(uiText().changeNoPerm); return; }
-    var reason = promptReason(uiText().roleReasonPrompt);
-    if (reason === null) return;
     var u = uiText();
     if (!confirm(u.confirmRoleChangePrefix + role + u.confirmRoleChangeSuffix)) return;
-    apiPost('update-role', {user_id:userId, role:role, reason:reason}).then(loadMembers).catch(function (e) { setError(e.message); });
+    // Routine role application is an OSO/Auth0 synchronization, not a free-form exception note.
+    // The server records the synchronization audit event without requiring a browser prompt.
+    apiPost('update-role', {user_id:userId, role:role}).then(loadMembers).catch(function (e) { setError(e.message); });
   }
   function clearRoleOverride(row) {
     if (!row) return;
