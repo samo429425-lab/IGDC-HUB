@@ -1,4 +1,4 @@
-/* IGDC Member/Admin Modal v2.9.1-member-profile-upgrade
+/* IGDC Member/Admin Modal v2.4.1
    6번 권한별 서비스 패널 + 7번 안정 트리거/호환 구조 통합본.
    - Trigger: #mo-btn, [data-member-modal="open"], .js-member-admin-modal-trigger, .js-seller-modal-trigger
    - Legacy compatibility: openModal('apply'), injectModal(), openMemberAdminModal()
@@ -10,7 +10,7 @@
 
   if (window.IGDCMemberAdminModal && window.IGDCMemberAdminModal.__version) return;
 
-  var VERSION = '2.9.1-member-profile-upgrade';
+  var VERSION = '2.8.0-member-service-qna-notices';
   var DEFAULT_API = '/.netlify/functions/member-admin';
   var ROOT_ID = 'igdc-member-admin-root';
   var STYLE_ID = 'igdc-member-admin-style-v2';
@@ -39,11 +39,7 @@
     total: 0,
     hasMore: false,
     lastFocus: null,
-    requestedRole: '',
-    memberProfile: null,
-    loadingMemberProfile: false,
-    savingMemberProfile: false,
-    profileMessage: ''
+    requestedRole: ''
   };
 
   var ROLE_LEVEL = {
@@ -147,27 +143,19 @@
   }
   function lang() {
     try {
-      var raw = String(document.documentElement.getAttribute('lang') || localStorage.getItem('igdc_lang') || navigator.language || 'en').trim().toLowerCase().replace(/_/g, '-');
-      var aliases = {
-        'ko-kr':'ko','en-us':'en','en-gb':'en','zh-cn':'zh','zh-sg':'zh',
-        'zh-tw':'zht','zh-hk':'zht','zh-mo':'zht','zh-hant':'zht','zh-hans':'zh',
-        'pt-br':'pt','pt-pt':'pt','fil':'tl'
-      };
-      if (aliases[raw]) return aliases[raw];
-      var base = raw.split('-')[0];
-      return ['ko','en','zh','zht','ja','es','fr','de','ru','pt','it','ar','vi','th','id','hi','tr','fa','bn','ur','sw','ta','hu','ms','nl','pl','sv','tl','uk','uz'].indexOf(base) >= 0 ? base : 'en';
+      var v = (document.documentElement.getAttribute('lang') || localStorage.getItem('igdc_lang') || navigator.language || 'en').toLowerCase();
+      if (v.indexOf('ko') === 0) return 'ko';
     } catch (e) {}
     return 'en';
   }
-  function isRtlLanguage(code) { return code === 'ar' || code === 'fa' || code === 'ur'; }
   function t() { return LABELS[lang()] || LABELS.en; }
 
   var UI_TEXT = {
     ko: {
       memberStatusTitle:'회원 상태', currentRole:'현재 역할', memberStatusDesc:'일반 회원은 미디어 콘텐츠 구매/열람 중심으로 사용합니다.',
-      premiumTitle:'프리미엄 회원', premiumDesc:'프리미엄 회원은 우수 고객 로열티 혜택 기준으로 OSO/M2M이 별도로 부여합니다.', premiumApply:'프리미엄 안내',
+      premiumTitle:'프리미엄/스페셜 회원', premiumDesc:'주소·구매 정보 연동이 필요한 회원 등급입니다. 서버 승인 및 M2M 검토 후 승급됩니다.', premiumApply:'프리미엄 신청',
       commerceTitle:'커머스/상위 권한', commerceDesc:'상품·커머스·상위 롤은 관리자 검토 후 부여합니다.', commerceApply:'커머스 신청',
-      standardTitle:'스탠다드 회원', standardDesc:'필수 회원정보를 완료하면 OSO/M2M이 자동으로 정회원 여부를 판정합니다.', standardApply:'승급 요청',
+      standardTitle:'스탠다드 신청', standardDesc:'기본 회원 서비스 확장 신청입니다.', standardApply:'스탠다드 신청',
       memberPageTitle:'회원 페이지', memberPageDesc:'전용 문서, 문의, 제출 상태를 확인합니다.', openMemberPage:'회원 페이지 열기',
       adminMembersTitle:'관리자 회원 목록', adminMembersDesc:'실제 Auth0 세션으로 권한 범위의 회원 목록을 불러오고 롤을 관리합니다.', openMembers:'회원 목록 열기', openReview:'승급 검토 열기',
       loginStateTitle:'로그인 상태', siteRole:'사이트 역할 표시', tokenOk:'Auth0 ID 토큰이 정상 연결되어 있습니다.', tokenMissing:'역할 표시는 있으나 Auth0 ID 토큰이 없거나 만료되었습니다. 회원 목록 조회는 세션 갱신 후 가능합니다.', renewSession:'세션 갱신',
@@ -183,9 +171,9 @@
     },
     en: {
       memberStatusTitle:'Member Status', currentRole:'Current role', memberStatusDesc:'General members use this area mainly for media content purchases and viewing.',
-      premiumTitle:'Premium Member', premiumDesc:'Premium membership is assigned separately by OSO/M2M under excellent-customer loyalty criteria.', premiumApply:'Premium information',
+      premiumTitle:'Premium / Special Member', premiumDesc:'This tier is for members who need address and purchase information integration. Upgrades are approved after server and M2M review.', premiumApply:'Apply for Premium',
       commerceTitle:'Commerce / Higher Permissions', commerceDesc:'Product, commerce, and higher roles are assigned after administrator review.', commerceApply:'Apply for Commerce',
-      standardTitle:'Standard Member', standardDesc:'After required member information is complete, OSO/M2M automatically evaluates Standard membership.', standardApply:'Upgrade Request',
+      standardTitle:'Standard Application', standardDesc:'Apply to extend basic member services.', standardApply:'Apply for Standard',
       memberPageTitle:'Member Page', memberPageDesc:'Check private documents, inquiries, and submission status.', openMemberPage:'Open Member Page',
       adminMembersTitle:'Admin Member List', adminMembersDesc:'Load and manage the permitted Auth0 member scope through a real signed-in session.', openMembers:'Open Member List', openReview:'Open Review Queue',
       loginStateTitle:'Login Status', siteRole:'Site role', tokenOk:'The Auth0 ID token is connected correctly.', tokenMissing:'A site role is visible, but the Auth0 ID token is missing or expired. Renew the session before viewing the member list.', renewSession:'Renew session',
@@ -200,97 +188,7 @@
       registered:'Registered.', reviewTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the review queue.', reviewApiMissing:'Document review API connection is required.', noAttachment:'No viewable attachment URL is available.', confirmProcess:'Proceed?', memberTokenMissing:'The site role is visible, but the Auth0 ID token is not connected to the modal/API. Renew the session at the top and reopen the member list.', tokenExpiredSuffix:' / The current login session token is missing or expired.', changeNoPerm:'You do not have permission to assign this role.', confirmRoleChangePrefix:'Change this member role to ', confirmRoleChangeSuffix:'?', confirmBlock:'Block or remove this member?', upgradeRequested:'Application submitted.', myReviewTitle:'My Applications and Documents', myReviewDesc:'Only your own submitted applications and documents are shown here.', myReviewNone:'There are no submitted applications or documents.', myReviewOpen:'Open My Submission', myReviewReload:'Refresh My Status', diagnosticTitle:'Supabase Review Store Diagnostic', diagnosticDesc:'This read-only server diagnostic checks review tables, the required site-scope column, the private storage bucket, and the service-role connection. It never includes member data, submitted files, signed URLs, or secrets in the JSON.', diagnosticRun:'Run diagnostic', diagnosticDownload:'Download JSON', diagnosticWaiting:'Running diagnostic.', diagnosticEmpty:'No diagnostic result yet.', diagnosticNotAllowed:'The system diagnostic is limited to owner and admin roles.', diagnosticReadOnly:'The diagnostic is read-only and never creates or modifies production test data.'
     }
   };
-  var PROFILE_TEXT = {"ko":{"upgrade":"승급 요청","edit":"회원 정보 수정","title":"회원 정보","upgradeDesc":"필수 회원정보를 입력하면 스탠다드 회원 승급 조건이 OSO/M2M에 전달됩니다.","editDesc":"회원정보를 최신 상태로 유지해 주세요.","fullName":"성명 / 수령인 이름","country":"국가/지역","phone":"연락처","postal":"우편번호","region":"주/도/지역","city":"도시","address1":"주소","address2":"상세 주소","intl":"국제 처리용 영문/로마자 표기 (선택)","romanizedName":"영문/로마자 이름","romanizedAddress1":"영문/로마자 주소","romanizedAddress2":"영문/로마자 상세 주소","optional":"선택","save":"저장","saving":"저장 중…","saved":"회원정보가 저장되었습니다.","eligible":"필수 정보가 완료되었습니다. 스탠다드 회원 승급 조건이 OSO/M2M에 전달되었습니다.","pending":"회원정보는 저장되었으나 자동 회원등급 반영이 아직 대기 중입니다.","loading":"회원정보를 불러오는 중입니다.","required":"필수 항목입니다.","member":"회원","standard":"스탠다드 회원","premium":"프리미엄 회원","missing":"미입력 항목","infoNotice":"주소와 이름은 자국어로 입력할 수 있습니다. 영문/로마자 표기는 국제 배송·결제 등 필요한 경우에만 선택 입력하십시오."},"en":{"upgrade":"Upgrade Request","edit":"Edit Member Information","title":"Member Information","upgradeDesc":"Complete the required profile to send Standard-member eligibility to OSO/M2M.","editDesc":"Keep your member information current.","fullName":"Full name / recipient name","country":"Country / region","phone":"Phone number","postal":"Postal code","region":"State / province / region","city":"City / locality","address1":"Address line 1","address2":"Address line 2","intl":"English / Romanized details for international processing (optional)","romanizedName":"English / Romanized name","romanizedAddress1":"English / Romanized address","romanizedAddress2":"English / Romanized address line 2","optional":"Optional","save":"Save","saving":"Saving…","saved":"Member information has been saved.","eligible":"Required information is complete. Standard-member eligibility was sent to OSO/M2M.","pending":"Member information was saved, but the automatic role reflection is still pending.","loading":"Loading member information.","required":"Required field.","member":"Member","standard":"Standard Member","premium":"Premium Member","missing":"Missing fields","infoNotice":"Names and addresses may be entered in the local language. Add English/Romanized details only when international delivery or payment requires them."},"zh":{"upgrade":"升级申请","edit":"修改会员信息","title":"会员信息","upgradeDesc":"完成必填资料后，标准会员资格将发送至 OSO/M2M。","editDesc":"请保持会员信息为最新状态。","fullName":"姓名 / 收件人姓名","country":"国家/地区","phone":"联系电话","postal":"邮政编码","region":"省/州/地区","city":"城市","address1":"地址","address2":"详细地址","intl":"国际处理用英文/罗马字信息（可选）","romanizedName":"英文/罗马字姓名","romanizedAddress1":"英文/罗马字地址","romanizedAddress2":"英文/罗马字详细地址","optional":"可选","save":"保存","saving":"正在保存…","saved":"会员信息已保存。","eligible":"必填信息已完成。标准会员资格已发送至 OSO/M2M。","pending":"会员信息已保存，但自动角色更新仍在等待中。","loading":"正在加载会员信息。","required":"必填项。","member":"会员","standard":"标准会员","premium":"高级会员","missing":"未填写项目","infoNotice":"姓名和地址可使用当地语言填写。仅在国际配送或付款需要时填写英文/罗马字信息。"},"zht":{"upgrade":"升級申請","edit":"修改會員資料","title":"會員資料","upgradeDesc":"完成必填資料後，標準會員資格將傳送至 OSO/M2M。","editDesc":"請保持會員資料為最新狀態。","fullName":"姓名 / 收件人姓名","country":"國家/地區","phone":"聯絡電話","postal":"郵遞區號","region":"州/省/地區","city":"城市","address1":"地址","address2":"詳細地址","intl":"國際處理用英文/羅馬字資料（選填）","romanizedName":"英文/羅馬字姓名","romanizedAddress1":"英文/羅馬字地址","romanizedAddress2":"英文/羅馬字詳細地址","optional":"選填","save":"儲存","saving":"儲存中…","saved":"會員資料已儲存。","eligible":"必填資料已完成。標準會員資格已傳送至 OSO/M2M。","pending":"會員資料已儲存，但自動角色更新仍在等待中。","loading":"正在載入會員資料。","required":"必填欄位。","member":"會員","standard":"標準會員","premium":"高級會員","missing":"未填欄位","infoNotice":"姓名和地址可使用當地語言填寫。僅在國際配送或付款需要時填寫英文/羅馬字資料。"},"ja":{"upgrade":"昇格申請","edit":"会員情報を編集","title":"会員情報","upgradeDesc":"必須情報を完了すると、スタンダード会員の適格情報が OSO/M2M に送信されます。","editDesc":"会員情報を最新の状態に保ってください。","fullName":"氏名 / 受取人名","country":"国・地域","phone":"電話番号","postal":"郵便番号","region":"都道府県・州・地域","city":"市区町村","address1":"住所","address2":"住所（続き）","intl":"国際処理用の英語・ローマ字表記（任意）","romanizedName":"英語・ローマ字氏名","romanizedAddress1":"英語・ローマ字住所","romanizedAddress2":"英語・ローマ字住所（続き）","optional":"任意","save":"保存","saving":"保存中…","saved":"会員情報を保存しました。","eligible":"必須情報が完了しました。スタンダード会員の適格情報を OSO/M2M に送信しました。","pending":"会員情報は保存されましたが、自動ロール反映は保留中です。","loading":"会員情報を読み込んでいます。","required":"必須項目です。","member":"会員","standard":"スタンダード会員","premium":"プレミアム会員","missing":"未入力項目","infoNotice":"氏名と住所は現地語で入力できます。国際配送・決済で必要な場合のみ英語・ローマ字表記を追加してください。"},"es":{"upgrade":"Solicitar mejora","edit":"Editar información de miembro","title":"Información del miembro","upgradeDesc":"Complete el perfil requerido para enviar la elegibilidad de miembro estándar a OSO/M2M.","editDesc":"Mantenga actualizada su información de miembro.","fullName":"Nombre completo / destinatario","country":"País / región","phone":"Teléfono","postal":"Código postal","region":"Estado / provincia / región","city":"Ciudad / localidad","address1":"Dirección","address2":"Dirección adicional","intl":"Datos en inglés/romanizados para gestión internacional (opcional)","romanizedName":"Nombre en inglés/romanizado","romanizedAddress1":"Dirección en inglés/romanizada","romanizedAddress2":"Dirección adicional en inglés/romanizada","optional":"Opcional","save":"Guardar","saving":"Guardando…","saved":"La información del miembro se ha guardado.","eligible":"La información requerida está completa. La elegibilidad estándar se envió a OSO/M2M.","pending":"La información se guardó, pero la actualización automática del rol sigue pendiente.","loading":"Cargando la información del miembro.","required":"Campo obligatorio.","member":"Miembro","standard":"Miembro estándar","premium":"Miembro prémium","missing":"Campos pendientes","infoNotice":"Los nombres y direcciones pueden escribirse en el idioma local. Añada datos en inglés/romanizados solo si la entrega o el pago internacional lo requiere."},"fr":{"upgrade":"Demander une mise à niveau","edit":"Modifier les informations du membre","title":"Informations du membre","upgradeDesc":"Complétez le profil requis pour transmettre l’éligibilité de membre standard à OSO/M2M.","editDesc":"Gardez vos informations de membre à jour.","fullName":"Nom complet / nom du destinataire","country":"Pays / région","phone":"Téléphone","postal":"Code postal","region":"État / province / région","city":"Ville / localité","address1":"Adresse","address2":"Complément d’adresse","intl":"Informations anglaises/romanisées pour le traitement international (facultatif)","romanizedName":"Nom en anglais/romanisé","romanizedAddress1":"Adresse en anglais/romanisée","romanizedAddress2":"Complément d’adresse en anglais/romanisé","optional":"Facultatif","save":"Enregistrer","saving":"Enregistrement…","saved":"Les informations du membre ont été enregistrées.","eligible":"Les informations requises sont complètes. L’éligibilité standard a été transmise à OSO/M2M.","pending":"Les informations ont été enregistrées, mais la mise à jour automatique du rôle est en attente.","loading":"Chargement des informations du membre.","required":"Champ obligatoire.","member":"Membre","standard":"Membre standard","premium":"Membre premium","missing":"Champs manquants","infoNotice":"Les noms et adresses peuvent être saisis dans la langue locale. Ajoutez une transcription anglaise/romanisée seulement si la livraison ou le paiement international l’exige."},"de":{"upgrade":"Upgrade anfordern","edit":"Mitgliedsdaten bearbeiten","title":"Mitgliedsinformationen","upgradeDesc":"Vervollständigen Sie das erforderliche Profil, um die Standardmitglieds-Berechtigung an OSO/M2M zu senden.","editDesc":"Halten Sie Ihre Mitgliedsinformationen aktuell.","fullName":"Vollständiger Name / Empfängername","country":"Land / Region","phone":"Telefonnummer","postal":"Postleitzahl","region":"Bundesland / Provinz / Region","city":"Stadt / Ort","address1":"Adresse","address2":"Adresszusatz","intl":"Englische/romanische Angaben für internationale Abwicklung (optional)","romanizedName":"Englischer/romanischer Name","romanizedAddress1":"Englische/romanische Adresse","romanizedAddress2":"Englischer/romanischer Adresszusatz","optional":"Optional","save":"Speichern","saving":"Speichern…","saved":"Mitgliedsinformationen wurden gespeichert.","eligible":"Die erforderlichen Angaben sind vollständig. Die Standardmitglieds-Berechtigung wurde an OSO/M2M gesendet.","pending":"Die Mitgliedsinformationen wurden gespeichert, die automatische Rollenübernahme steht noch aus.","loading":"Mitgliedsinformationen werden geladen.","required":"Pflichtfeld.","member":"Mitglied","standard":"Standardmitglied","premium":"Premiummitglied","missing":"Fehlende Felder","infoNotice":"Namen und Adressen können in der Landessprache eingegeben werden. Englische/romanische Angaben sind nur bei internationaler Lieferung oder Zahlung erforderlich."},"ru":{"upgrade":"Запросить повышение","edit":"Изменить данные участника","title":"Данные участника","upgradeDesc":"Заполните обязательный профиль, чтобы передать право на стандартное членство в OSO/M2M.","editDesc":"Поддерживайте данные участника в актуальном состоянии.","fullName":"Полное имя / получатель","country":"Страна / регион","phone":"Телефон","postal":"Почтовый индекс","region":"Регион / область","city":"Город / населённый пункт","address1":"Адрес","address2":"Дополнение к адресу","intl":"Английская/латинская запись для международной обработки (необязательно)","romanizedName":"Имя на английском/латинице","romanizedAddress1":"Адрес на английском/латинице","romanizedAddress2":"Дополнение адреса на английском/латинице","optional":"Необязательно","save":"Сохранить","saving":"Сохранение…","saved":"Данные участника сохранены.","eligible":"Обязательные данные заполнены. Право на стандартное членство отправлено в OSO/M2M.","pending":"Данные сохранены, но автоматическое обновление роли ожидается.","loading":"Загрузка данных участника.","required":"Обязательное поле.","member":"Участник","standard":"Стандартный участник","premium":"Премиум-участник","missing":"Незаполненные поля","infoNotice":"Имя и адрес можно вводить на местном языке. Английскую/латинскую запись добавляйте только при необходимости международной доставки или оплаты."},"pt":{"upgrade":"Solicitar atualização","edit":"Editar informações do membro","title":"Informações do membro","upgradeDesc":"Complete o perfil obrigatório para enviar a elegibilidade de membro padrão ao OSO/M2M.","editDesc":"Mantenha as informações do membro atualizadas.","fullName":"Nome completo / nome do destinatário","country":"País / região","phone":"Telefone","postal":"Código postal","region":"Estado / província / região","city":"Cidade / localidade","address1":"Endereço","address2":"Complemento do endereço","intl":"Dados em inglês/romanizados para processamento internacional (opcional)","romanizedName":"Nome em inglês/romanizado","romanizedAddress1":"Endereço em inglês/romanizado","romanizedAddress2":"Complemento em inglês/romanizado","optional":"Opcional","save":"Salvar","saving":"Salvando…","saved":"As informações do membro foram salvas.","eligible":"As informações obrigatórias estão completas. A elegibilidade padrão foi enviada ao OSO/M2M.","pending":"As informações foram salvas, mas a atualização automática da função está pendente.","loading":"Carregando informações do membro.","required":"Campo obrigatório.","member":"Membro","standard":"Membro padrão","premium":"Membro premium","missing":"Campos pendentes","infoNotice":"Nomes e endereços podem ser inseridos no idioma local. Adicione dados em inglês/romanizados apenas quando a entrega ou pagamento internacional exigir."},"it":{"upgrade":"Richiedi aggiornamento","edit":"Modifica informazioni membro","title":"Informazioni del membro","upgradeDesc":"Completa il profilo richiesto per inviare l’idoneità al membro standard a OSO/M2M.","editDesc":"Mantieni aggiornate le informazioni del membro.","fullName":"Nome completo / destinatario","country":"Paese / regione","phone":"Telefono","postal":"Codice postale","region":"Stato / provincia / regione","city":"Città / località","address1":"Indirizzo","address2":"Dettaglio indirizzo","intl":"Dati in inglese/romanizzati per la gestione internazionale (facoltativo)","romanizedName":"Nome in inglese/romanizzato","romanizedAddress1":"Indirizzo in inglese/romanizzato","romanizedAddress2":"Dettaglio in inglese/romanizzato","optional":"Facoltativo","save":"Salva","saving":"Salvataggio…","saved":"Le informazioni del membro sono state salvate.","eligible":"Le informazioni richieste sono complete. L’idoneità standard è stata inviata a OSO/M2M.","pending":"Le informazioni sono state salvate, ma l’aggiornamento automatico del ruolo è in attesa.","loading":"Caricamento delle informazioni del membro.","required":"Campo obbligatorio.","member":"Membro","standard":"Membro standard","premium":"Membro premium","missing":"Campi mancanti","infoNotice":"Nomi e indirizzi possono essere inseriti nella lingua locale. Aggiungi dati in inglese/romanizzati solo se richiesti da consegna o pagamento internazionale."},"ar":{"upgrade":"طلب الترقية","edit":"تعديل معلومات العضو","title":"معلومات العضو","upgradeDesc":"أكمل الملف المطلوب لإرسال أهلية العضو القياسي إلى OSO/M2M.","editDesc":"حافظ على تحديث معلومات العضو.","fullName":"الاسم الكامل / اسم المستلم","country":"الدولة / المنطقة","phone":"رقم الهاتف","postal":"الرمز البريدي","region":"الولاية / المحافظة / المنطقة","city":"المدينة / المحلية","address1":"العنوان","address2":"تفاصيل العنوان","intl":"بيانات إنجليزية/لاتينية للمعالجة الدولية (اختياري)","romanizedName":"الاسم بالإنجليزية/اللاتينية","romanizedAddress1":"العنوان بالإنجليزية/اللاتينية","romanizedAddress2":"تفاصيل العنوان بالإنجليزية/اللاتينية","optional":"اختياري","save":"حفظ","saving":"جارٍ الحفظ…","saved":"تم حفظ معلومات العضو.","eligible":"اكتملت المعلومات المطلوبة. تم إرسال أهلية العضو القياسي إلى OSO/M2M.","pending":"تم حفظ المعلومات، لكن انعكاس الدور التلقائي ما زال قيد الانتظار.","loading":"جارٍ تحميل معلومات العضو.","required":"حقل مطلوب.","member":"عضو","standard":"عضو قياسي","premium":"عضو مميز","missing":"حقول ناقصة","infoNotice":"يمكن إدخال الأسماء والعناوين باللغة المحلية. أضف البيانات الإنجليزية/اللاتينية فقط عند الحاجة إلى شحن أو دفع دولي."},"vi":{"upgrade":"Yêu cầu nâng hạng","edit":"Chỉnh sửa thông tin thành viên","title":"Thông tin thành viên","upgradeDesc":"Hoàn tất hồ sơ bắt buộc để gửi điều kiện thành viên tiêu chuẩn đến OSO/M2M.","editDesc":"Hãy cập nhật thông tin thành viên của bạn.","fullName":"Họ tên / người nhận","country":"Quốc gia / khu vực","phone":"Số điện thoại","postal":"Mã bưu chính","region":"Tỉnh / bang / khu vực","city":"Thành phố / địa phương","address1":"Địa chỉ","address2":"Địa chỉ bổ sung","intl":"Thông tin tiếng Anh/La-tinh cho xử lý quốc tế (tùy chọn)","romanizedName":"Tên tiếng Anh/La-tinh","romanizedAddress1":"Địa chỉ tiếng Anh/La-tinh","romanizedAddress2":"Địa chỉ bổ sung tiếng Anh/La-tinh","optional":"Tùy chọn","save":"Lưu","saving":"Đang lưu…","saved":"Thông tin thành viên đã được lưu.","eligible":"Thông tin bắt buộc đã hoàn tất. Điều kiện thành viên tiêu chuẩn đã được gửi đến OSO/M2M.","pending":"Thông tin đã được lưu nhưng việc cập nhật vai trò tự động đang chờ.","loading":"Đang tải thông tin thành viên.","required":"Trường bắt buộc.","member":"Thành viên","standard":"Thành viên tiêu chuẩn","premium":"Thành viên cao cấp","missing":"Mục còn thiếu","infoNotice":"Tên và địa chỉ có thể nhập bằng ngôn ngữ địa phương. Chỉ thêm thông tin tiếng Anh/La-tinh khi giao hàng hoặc thanh toán quốc tế yêu cầu."},"th":{"upgrade":"คำขอเลื่อนระดับ","edit":"แก้ไขข้อมูลสมาชิก","title":"ข้อมูลสมาชิก","upgradeDesc":"กรอกข้อมูลที่จำเป็นให้ครบเพื่อส่งสิทธิ์สมาชิกมาตรฐานไปยัง OSO/M2M","editDesc":"โปรดอัปเดตข้อมูลสมาชิกให้เป็นปัจจุบัน","fullName":"ชื่อเต็ม / ชื่อผู้รับ","country":"ประเทศ / ภูมิภาค","phone":"หมายเลขโทรศัพท์","postal":"รหัสไปรษณีย์","region":"รัฐ / จังหวัด / ภูมิภาค","city":"เมือง / ท้องถิ่น","address1":"ที่อยู่","address2":"รายละเอียดที่อยู่","intl":"ข้อมูลภาษาอังกฤษ/อักษรโรมันสำหรับการดำเนินการระหว่างประเทศ (ไม่บังคับ)","romanizedName":"ชื่อภาษาอังกฤษ/อักษรโรมัน","romanizedAddress1":"ที่อยู่ภาษาอังกฤษ/อักษรโรมัน","romanizedAddress2":"รายละเอียดที่อยู่ภาษาอังกฤษ/อักษรโรมัน","optional":"ไม่บังคับ","save":"บันทึก","saving":"กำลังบันทึก…","saved":"บันทึกข้อมูลสมาชิกแล้ว","eligible":"กรอกข้อมูลที่จำเป็นครบแล้ว ส่งสิทธิ์สมาชิกมาตรฐานไปยัง OSO/M2M แล้ว","pending":"บันทึกข้อมูลแล้ว แต่การอัปเดตบทบาทอัตโนมัติยังรอดำเนินการ","loading":"กำลังโหลดข้อมูลสมาชิก","required":"ช่องบังคับ","member":"สมาชิก","standard":"สมาชิกมาตรฐาน","premium":"สมาชิกพรีเมียม","missing":"ช่องที่ขาด","infoNotice":"ชื่อและที่อยู่สามารถกรอกเป็นภาษาท้องถิ่นได้ เพิ่มข้อมูลภาษาอังกฤษ/อักษรโรมันเฉพาะเมื่อจำเป็นสำหรับการจัดส่งหรือชำระเงินระหว่างประเทศ"},"id":{"upgrade":"Ajukan peningkatan","edit":"Edit informasi anggota","title":"Informasi anggota","upgradeDesc":"Lengkapi profil wajib untuk mengirim kelayakan anggota standar ke OSO/M2M.","editDesc":"Pastikan informasi anggota tetap terbaru.","fullName":"Nama lengkap / penerima","country":"Negara / wilayah","phone":"Nomor telepon","postal":"Kode pos","region":"Negara bagian / provinsi / wilayah","city":"Kota / lokalitas","address1":"Alamat","address2":"Detail alamat","intl":"Data Inggris/Romanisasi untuk pemrosesan internasional (opsional)","romanizedName":"Nama Inggris/Romanisasi","romanizedAddress1":"Alamat Inggris/Romanisasi","romanizedAddress2":"Detail alamat Inggris/Romanisasi","optional":"Opsional","save":"Simpan","saving":"Menyimpan…","saved":"Informasi anggota telah disimpan.","eligible":"Informasi wajib telah lengkap. Kelayakan anggota standar dikirim ke OSO/M2M.","pending":"Informasi telah disimpan, tetapi pembaruan peran otomatis masih menunggu.","loading":"Memuat informasi anggota.","required":"Kolom wajib.","member":"Anggota","standard":"Anggota standar","premium":"Anggota premium","missing":"Kolom belum lengkap","infoNotice":"Nama dan alamat dapat dimasukkan dalam bahasa setempat. Tambahkan data Inggris/Romanisasi hanya jika pengiriman atau pembayaran internasional memerlukannya."},"hi":{"upgrade":"अपग्रेड अनुरोध","edit":"सदस्य जानकारी संपादित करें","title":"सदस्य जानकारी","upgradeDesc":"OSO/M2M को मानक सदस्य पात्रता भेजने के लिए आवश्यक प्रोफ़ाइल पूरी करें।","editDesc":"अपनी सदस्य जानकारी अद्यतन रखें।","fullName":"पूरा नाम / प्राप्तकर्ता का नाम","country":"देश / क्षेत्र","phone":"फोन नंबर","postal":"डाक कोड","region":"राज्य / प्रांत / क्षेत्र","city":"शहर / स्थानीय क्षेत्र","address1":"पता","address2":"पते का अतिरिक्त विवरण","intl":"अंतरराष्ट्रीय प्रक्रिया के लिए अंग्रेज़ी/रोमन विवरण (वैकल्पिक)","romanizedName":"अंग्रेज़ी/रोमन नाम","romanizedAddress1":"अंग्रेज़ी/रोमन पता","romanizedAddress2":"अंग्रेज़ी/रोमन पते का विवरण","optional":"वैकल्पिक","save":"सहेजें","saving":"सहेजा जा रहा है…","saved":"सदस्य जानकारी सहेज दी गई है।","eligible":"आवश्यक जानकारी पूरी है। मानक सदस्य पात्रता OSO/M2M को भेज दी गई है।","pending":"सदस्य जानकारी सहेज दी गई है, पर स्वचालित भूमिका अपडेट लंबित है।","loading":"सदस्य जानकारी लोड हो रही है।","required":"अनिवार्य फ़ील्ड।","member":"सदस्य","standard":"मानक सदस्य","premium":"प्रीमियम सदस्य","missing":"अपूर्ण फ़ील्ड","infoNotice":"नाम और पते स्थानीय भाषा में दर्ज किए जा सकते हैं। अंग्रेज़ी/रोमन विवरण केवल अंतरराष्ट्रीय डिलीवरी या भुगतान की आवश्यकता पर जोड़ें।"},"tr":{"upgrade":"Yükseltme talebi","edit":"Üye bilgilerini düzenle","title":"Üye bilgileri","upgradeDesc":"Standart üyelik uygunluğunu OSO/M2M’ye göndermek için gerekli profili tamamlayın.","editDesc":"Üye bilgilerinizi güncel tutun.","fullName":"Ad soyad / alıcı adı","country":"Ülke / bölge","phone":"Telefon numarası","postal":"Posta kodu","region":"Eyalet / il / bölge","city":"Şehir / yerleşim","address1":"Adres","address2":"Adres ayrıntısı","intl":"Uluslararası işlem için İngilizce/Romanize bilgiler (isteğe bağlı)","romanizedName":"İngilizce/Romanize ad","romanizedAddress1":"İngilizce/Romanize adres","romanizedAddress2":"İngilizce/Romanize adres ayrıntısı","optional":"İsteğe bağlı","save":"Kaydet","saving":"Kaydediliyor…","saved":"Üye bilgileri kaydedildi.","eligible":"Zorunlu bilgiler tamamlandı. Standart üyelik uygunluğu OSO/M2M’ye gönderildi.","pending":"Üye bilgileri kaydedildi ancak otomatik rol yansıtması beklemede.","loading":"Üye bilgileri yükleniyor.","required":"Zorunlu alan.","member":"Üye","standard":"Standart üye","premium":"Premium üye","missing":"Eksik alanlar","infoNotice":"Adlar ve adresler yerel dilde girilebilir. İngilizce/Romanize bilgileri yalnızca uluslararası teslimat veya ödeme gerektiğinde ekleyin."},"fa":{"upgrade":"درخواست ارتقا","edit":"ویرایش اطلاعات عضو","title":"اطلاعات عضو","upgradeDesc":"برای ارسال واجد شرایط بودن عضویت استاندارد به OSO/M2M، مشخصات لازم را تکمیل کنید.","editDesc":"اطلاعات عضو را به‌روز نگه دارید.","fullName":"نام کامل / نام گیرنده","country":"کشور / منطقه","phone":"شماره تلفن","postal":"کد پستی","region":"استان / منطقه","city":"شهر / محل","address1":"نشانی","address2":"جزئیات نشانی","intl":"اطلاعات انگلیسی/رومی برای پردازش بین‌المللی (اختیاری)","romanizedName":"نام انگلیسی/رومی","romanizedAddress1":"نشانی انگلیسی/رومی","romanizedAddress2":"جزئیات نشانی انگلیسی/رومی","optional":"اختیاری","save":"ذخیره","saving":"در حال ذخیره…","saved":"اطلاعات عضو ذخیره شد.","eligible":"اطلاعات لازم کامل است. واجد شرایط بودن عضویت استاندارد به OSO/M2M ارسال شد.","pending":"اطلاعات عضو ذخیره شد، اما بازتاب خودکار نقش در انتظار است.","loading":"در حال بارگیری اطلاعات عضو.","required":"فیلد الزامی.","member":"عضو","standard":"عضو استاندارد","premium":"عضو ویژه","missing":"فیلدهای ناقص","infoNotice":"نام و نشانی را می‌توان به زبان محلی وارد کرد. فقط در صورت نیاز به تحویل یا پرداخت بین‌المللی اطلاعات انگلیسی/رومی را اضافه کنید."},"bn":{"upgrade":"আপগ্রেড অনুরোধ","edit":"সদস্য তথ্য সম্পাদনা","title":"সদস্য তথ্য","upgradeDesc":"স্ট্যান্ডার্ড সদস্যের যোগ্যতা OSO/M2M-এ পাঠাতে প্রয়োজনীয় প্রোফাইল পূরণ করুন।","editDesc":"সদস্য তথ্য হালনাগাদ রাখুন।","fullName":"পূর্ণ নাম / প্রাপকের নাম","country":"দেশ / অঞ্চল","phone":"ফোন নম্বর","postal":"পোস্টাল কোড","region":"রাজ্য / প্রদেশ / অঞ্চল","city":"শহর / স্থানীয় এলাকা","address1":"ঠিকানা","address2":"ঠিকানার বিবরণ","intl":"আন্তর্জাতিক প্রক্রিয়ার জন্য ইংরেজি/রোমানাইজড তথ্য (ঐচ্ছিক)","romanizedName":"ইংরেজি/রোমানাইজড নাম","romanizedAddress1":"ইংরেজি/রোমানাইজড ঠিকানা","romanizedAddress2":"ইংরেজি/রোমানাইজড ঠিকানার বিবরণ","optional":"ঐচ্ছিক","save":"সংরক্ষণ","saving":"সংরক্ষণ করা হচ্ছে…","saved":"সদস্য তথ্য সংরক্ষিত হয়েছে।","eligible":"প্রয়োজনীয় তথ্য সম্পূর্ণ। স্ট্যান্ডার্ড সদস্যের যোগ্যতা OSO/M2M-এ পাঠানো হয়েছে।","pending":"সদস্য তথ্য সংরক্ষিত হয়েছে, তবে স্বয়ংক্রিয় ভূমিকা প্রতিফলন অপেক্ষমাণ।","loading":"সদস্য তথ্য লোড হচ্ছে।","required":"আবশ্যক ক্ষেত্র।","member":"সদস্য","standard":"স্ট্যান্ডার্ড সদস্য","premium":"প্রিমিয়াম সদস্য","missing":"অসম্পূর্ণ ক্ষেত্র","infoNotice":"নাম ও ঠিকানা স্থানীয় ভাষায় লেখা যায়। আন্তর্জাতিক ডেলিভারি বা পেমেন্টে প্রয়োজন হলে শুধু ইংরেজি/রোমানাইজড তথ্য যোগ করুন।"},"ur":{"upgrade":"اپ گریڈ کی درخواست","edit":"رکن کی معلومات میں ترمیم","title":"رکن کی معلومات","upgradeDesc":"اسٹینڈرڈ رکن کی اہلیت OSO/M2M کو بھیجنے کے لیے مطلوبہ پروفائل مکمل کریں۔","editDesc":"اپنی رکن معلومات کو تازہ رکھیں۔","fullName":"پورا نام / وصول کنندہ کا نام","country":"ملک / علاقہ","phone":"فون نمبر","postal":"پوسٹل کوڈ","region":"صوبہ / خطہ","city":"شہر / مقام","address1":"پتہ","address2":"پتے کی تفصیل","intl":"بین الاقوامی کارروائی کے لیے انگریزی/رومن معلومات (اختیاری)","romanizedName":"انگریزی/رومن نام","romanizedAddress1":"انگریزی/رومن پتہ","romanizedAddress2":"انگریزی/رومن پتے کی تفصیل","optional":"اختیاری","save":"محفوظ کریں","saving":"محفوظ کیا جا رہا ہے…","saved":"رکن کی معلومات محفوظ ہو گئی ہیں۔","eligible":"مطلوبہ معلومات مکمل ہیں۔ اسٹینڈرڈ رکن کی اہلیت OSO/M2M کو بھیج دی گئی ہے۔","pending":"رکن کی معلومات محفوظ ہو گئی ہیں، مگر خودکار کردار کی عکاسی زیر التوا ہے۔","loading":"رکن کی معلومات لوڈ ہو رہی ہیں۔","required":"لازمی خانہ۔","member":"رکن","standard":"اسٹینڈرڈ رکن","premium":"پریمیم رکن","missing":"نامکمل خانے","infoNotice":"نام اور پتے مقامی زبان میں درج کیے جا سکتے ہیں۔ انگریزی/رومن معلومات صرف بین الاقوامی ترسیل یا ادائیگی کی ضرورت پر شامل کریں۔"},"sw":{"upgrade":"Ombi la kuboresha","edit":"Hariri taarifa za mwanachama","title":"Taarifa za mwanachama","upgradeDesc":"Kamilisha wasifu unaohitajika ili kutuma ustahiki wa mwanachama wa kawaida kwa OSO/M2M.","editDesc":"Weka taarifa za mwanachama zikiwa za sasa.","fullName":"Jina kamili / jina la mpokeaji","country":"Nchi / eneo","phone":"Nambari ya simu","postal":"Msimbo wa posta","region":"Jimbo / mkoa / eneo","city":"Jiji / eneo la makazi","address1":"Anwani","address2":"Maelezo ya anwani","intl":"Maelezo ya Kiingereza/Romanized kwa uchakataji wa kimataifa (hiari)","romanizedName":"Jina la Kiingereza/Romanized","romanizedAddress1":"Anwani ya Kiingereza/Romanized","romanizedAddress2":"Maelezo ya anwani ya Kiingereza/Romanized","optional":"Hiari","save":"Hifadhi","saving":"Inahifadhi…","saved":"Taarifa za mwanachama zimehifadhiwa.","eligible":"Taarifa zinazohitajika zimekamilika. Ustahiki wa mwanachama wa kawaida umetumwa kwa OSO/M2M.","pending":"Taarifa zimehifadhiwa, lakini sasisho la jukumu kiotomatiki linasubiri.","loading":"Inapakia taarifa za mwanachama.","required":"Sehemu inayohitajika.","member":"Mwanachama","standard":"Mwanachama wa kawaida","premium":"Mwanachama wa malipo","missing":"Sehemu zinazokosekana","infoNotice":"Majina na anwani zinaweza kuingizwa kwa lugha ya eneo. Ongeza maelezo ya Kiingereza/Romanized tu inapohitajika kwa usafirishaji au malipo ya kimataifa."},"ta":{"upgrade":"மேம்படுத்தல் கோரிக்கை","edit":"உறுப்பினர் தகவலைத் திருத்து","title":"உறுப்பினர் தகவல்","upgradeDesc":"ஸ்டாண்டர்டு உறுப்பினர் தகுதியை OSO/M2M-க்கு அனுப்ப தேவையான சுயவிவரத்தை நிறைவு செய்யவும்.","editDesc":"உங்கள் உறுப்பினர் தகவலை புதுப்பித்த நிலையில் வைத்திருங்கள்.","fullName":"முழுப் பெயர் / பெறுநர் பெயர்","country":"நாடு / பகுதி","phone":"தொலைபேசி எண்","postal":"அஞ்சல் குறியீடு","region":"மாநிலம் / மாகாணம் / பகுதி","city":"நகரம் / வட்டாரம்","address1":"முகவரி","address2":"முகவரி விவரம்","intl":"சர்வதேச செயலாக்கத்திற்கான ஆங்கில/ரோமன் தகவல் (விருப்பம்)","romanizedName":"ஆங்கில/ரோமன் பெயர்","romanizedAddress1":"ஆங்கில/ரோமன் முகவரி","romanizedAddress2":"ஆங்கில/ரோமன் முகவரி விவரம்","optional":"விருப்பம்","save":"சேமி","saving":"சேமிக்கப்படுகிறது…","saved":"உறுப்பினர் தகவல் சேமிக்கப்பட்டது.","eligible":"தேவையான தகவல் நிறைவடைந்தது. ஸ்டாண்டர்டு உறுப்பினர் தகுதி OSO/M2M-க்கு அனுப்பப்பட்டது.","pending":"உறுப்பினர் தகவல் சேமிக்கப்பட்டது, ஆனால் தானியங்கி பங்கு புதுப்பிப்பு நிலுவையில் உள்ளது.","loading":"உறுப்பினர் தகவல் ஏற்றப்படுகிறது.","required":"தேவையான புலம்.","member":"உறுப்பினர்","standard":"ஸ்டாண்டர்டு உறுப்பினர்","premium":"பிரீமியம் உறுப்பினர்","missing":"விடுபட்ட புலங்கள்","infoNotice":"பெயர் மற்றும் முகவரியை உள்ளூர் மொழியில் உள்ளிடலாம். சர்வதேச விநியோகம் அல்லது கட்டணம் தேவைப்பட்டால் மட்டும் ஆங்கில/ரோமன் தகவலைச் சேர்க்கவும்."},"hu":{"upgrade":"Szintemelési kérelem","edit":"Tagsági adatok szerkesztése","title":"Tagsági adatok","upgradeDesc":"Töltse ki a szükséges profilt, hogy a standard tagsági jogosultságot elküldje az OSO/M2M rendszernek.","editDesc":"Tartsa naprakészen tagsági adatait.","fullName":"Teljes név / címzett neve","country":"Ország / régió","phone":"Telefonszám","postal":"Irányítószám","region":"Állam / megye / régió","city":"Város / település","address1":"Cím","address2":"Cím kiegészítése","intl":"Angol/latin betűs adatok nemzetközi feldolgozáshoz (opcionális)","romanizedName":"Angol/latin betűs név","romanizedAddress1":"Angol/latin betűs cím","romanizedAddress2":"Angol/latin betűs címkiegészítés","optional":"Opcionális","save":"Mentés","saving":"Mentés…","saved":"A tagsági adatok mentve lettek.","eligible":"A szükséges adatok teljesek. A standard tagsági jogosultság elküldve az OSO/M2M rendszernek.","pending":"A tagsági adatok mentve lettek, de az automatikus szerepfrissítés függőben van.","loading":"Tagsági adatok betöltése.","required":"Kötelező mező.","member":"Tag","standard":"Standard tag","premium":"Prémium tag","missing":"Hiányzó mezők","infoNotice":"A név és cím helyi nyelven is megadható. Angol/latin betűs adatokat csak nemzetközi szállítás vagy fizetés esetén adjon meg."},"ms":{"upgrade":"Permohonan naik taraf","edit":"Sunting maklumat ahli","title":"Maklumat ahli","upgradeDesc":"Lengkapkan profil yang diperlukan untuk menghantar kelayakan ahli standard ke OSO/M2M.","editDesc":"Pastikan maklumat ahli sentiasa terkini.","fullName":"Nama penuh / nama penerima","country":"Negara / wilayah","phone":"Nombor telefon","postal":"Poskod","region":"Negeri / wilayah / kawasan","city":"Bandar / lokaliti","address1":"Alamat","address2":"Butiran alamat","intl":"Butiran Inggeris/Romanisasi untuk pemprosesan antarabangsa (pilihan)","romanizedName":"Nama Inggeris/Romanisasi","romanizedAddress1":"Alamat Inggeris/Romanisasi","romanizedAddress2":"Butiran alamat Inggeris/Romanisasi","optional":"Pilihan","save":"Simpan","saving":"Menyimpan…","saved":"Maklumat ahli telah disimpan.","eligible":"Maklumat diperlukan telah lengkap. Kelayakan ahli standard telah dihantar ke OSO/M2M.","pending":"Maklumat ahli telah disimpan, tetapi kemas kini peranan automatik masih menunggu.","loading":"Memuatkan maklumat ahli.","required":"Medan wajib.","member":"Ahli","standard":"Ahli standard","premium":"Ahli premium","missing":"Medan belum lengkap","infoNotice":"Nama dan alamat boleh dimasukkan dalam bahasa tempatan. Tambah butiran Inggeris/Romanisasi hanya jika penghantaran atau pembayaran antarabangsa memerlukannya."},"nl":{"upgrade":"Upgrade aanvragen","edit":"Lidgegevens bewerken","title":"Lidgegevens","upgradeDesc":"Vul het vereiste profiel in om de geschiktheid voor standaardlidmaatschap naar OSO/M2M te sturen.","editDesc":"Houd uw lidgegevens actueel.","fullName":"Volledige naam / naam ontvanger","country":"Land / regio","phone":"Telefoonnummer","postal":"Postcode","region":"Staat / provincie / regio","city":"Stad / plaats","address1":"Adres","address2":"Adresaanvulling","intl":"Engelse/geromaniseerde gegevens voor internationale verwerking (optioneel)","romanizedName":"Engelse/geromaniseerde naam","romanizedAddress1":"Engels/geromaniseerd adres","romanizedAddress2":"Engelse/geromaniseerde adresaanvulling","optional":"Optioneel","save":"Opslaan","saving":"Opslaan…","saved":"Lidgegevens zijn opgeslagen.","eligible":"De vereiste gegevens zijn compleet. De geschiktheid voor standaardlidmaatschap is naar OSO/M2M gestuurd.","pending":"Lidgegevens zijn opgeslagen, maar de automatische rolupdate wacht nog.","loading":"Lidgegevens laden.","required":"Verplicht veld.","member":"Lid","standard":"Standaardlid","premium":"Premiumlid","missing":"Ontbrekende velden","infoNotice":"Namen en adressen mogen in de lokale taal worden ingevoerd. Voeg alleen Engelse/geromaniseerde gegevens toe wanneer internationale levering of betaling dit vereist."},"pl":{"upgrade":"Wniosek o podwyższenie poziomu","edit":"Edytuj dane członka","title":"Dane członka","upgradeDesc":"Uzupełnij wymagany profil, aby przesłać uprawnienie członka standardowego do OSO/M2M.","editDesc":"Dbaj o aktualność danych członka.","fullName":"Imię i nazwisko / odbiorca","country":"Kraj / region","phone":"Numer telefonu","postal":"Kod pocztowy","region":"Województwo / prowincja / region","city":"Miasto / miejscowość","address1":"Adres","address2":"Uzupełnienie adresu","intl":"Dane angielskie/romanizowane do obsługi międzynarodowej (opcjonalne)","romanizedName":"Imię i nazwisko po angielsku/romanizowane","romanizedAddress1":"Adres po angielsku/romanizowany","romanizedAddress2":"Uzupełnienie adresu po angielsku/romanizowane","optional":"Opcjonalne","save":"Zapisz","saving":"Zapisywanie…","saved":"Dane członka zostały zapisane.","eligible":"Wymagane informacje są kompletne. Uprawnienie członka standardowego wysłano do OSO/M2M.","pending":"Dane członka zapisano, ale automatyczna aktualizacja roli oczekuje.","loading":"Ładowanie danych członka.","required":"Pole wymagane.","member":"Członek","standard":"Członek standardowy","premium":"Członek premium","missing":"Brakujące pola","infoNotice":"Nazwiska i adresy można wpisywać w języku lokalnym. Dane angielskie/romanizowane dodawaj tylko, gdy wymaga tego dostawa lub płatność międzynarodowa."},"sv":{"upgrade":"Begär uppgradering","edit":"Redigera medlemsuppgifter","title":"Medlemsuppgifter","upgradeDesc":"Fyll i den nödvändiga profilen för att skicka standardmedlemsbehörighet till OSO/M2M.","editDesc":"Håll medlemsuppgifterna uppdaterade.","fullName":"Fullständigt namn / mottagare","country":"Land / region","phone":"Telefonnummer","postal":"Postnummer","region":"Delstat / provins / region","city":"Stad / ort","address1":"Adress","address2":"Adressrad 2","intl":"Engelska/romaniserade uppgifter för internationell hantering (valfritt)","romanizedName":"Engelskt/romaniserat namn","romanizedAddress1":"Engelsk/romaniserad adress","romanizedAddress2":"Engelsk/romaniserad adressrad 2","optional":"Valfritt","save":"Spara","saving":"Sparar…","saved":"Medlemsuppgifterna har sparats.","eligible":"Obligatoriska uppgifter är kompletta. Standardmedlemsbehörighet har skickats till OSO/M2M.","pending":"Medlemsuppgifterna har sparats, men automatisk rolluppdatering väntar.","loading":"Laddar medlemsuppgifter.","required":"Obligatoriskt fält.","member":"Medlem","standard":"Standardmedlem","premium":"Premiummedlem","missing":"Saknade fält","infoNotice":"Namn och adresser kan anges på lokalt språk. Lägg till engelska/romaniserade uppgifter endast när internationell leverans eller betalning kräver det."},"tl":{"upgrade":"Humiling ng pag-upgrade","edit":"I-edit ang impormasyon ng miyembro","title":"Impormasyon ng miyembro","upgradeDesc":"Kumpletuhin ang kinakailangang profile upang ipadala ang pagiging karapat-dapat sa Standard Member sa OSO/M2M.","editDesc":"Panatilihing napapanahon ang impormasyon ng miyembro.","fullName":"Buong pangalan / pangalan ng tatanggap","country":"Bansa / rehiyon","phone":"Numero ng telepono","postal":"Postal code","region":"Estado / lalawigan / rehiyon","city":"Lungsod / lokalidad","address1":"Address","address2":"Karagdagang address","intl":"Detalye sa English/Romanized para sa internasyonal na pagproseso (opsyonal)","romanizedName":"Pangalan sa English/Romanized","romanizedAddress1":"Address sa English/Romanized","romanizedAddress2":"Karagdagang address sa English/Romanized","optional":"Opsyonal","save":"I-save","saving":"Sine-save…","saved":"Na-save ang impormasyon ng miyembro.","eligible":"Kumpleto ang kinakailangang impormasyon. Ipinadala ang pagiging karapat-dapat sa Standard Member sa OSO/M2M.","pending":"Na-save ang impormasyon ng miyembro ngunit nakabinbin pa ang awtomatikong pag-update ng papel.","loading":"Naglo-load ng impormasyon ng miyembro.","required":"Kinakailangang field.","member":"Miyembro","standard":"Standard na miyembro","premium":"Premium na miyembro","missing":"Kulang na field","infoNotice":"Maaaring ilagay ang pangalan at address sa lokal na wika. Magdagdag lamang ng English/Romanized na detalye kapag kailangan para sa internasyonal na paghahatid o pagbabayad."},"uk":{"upgrade":"Запит на підвищення","edit":"Редагувати дані учасника","title":"Дані учасника","upgradeDesc":"Заповніть обов’язковий профіль, щоб передати право на стандартне членство до OSO/M2M.","editDesc":"Підтримуйте дані учасника актуальними.","fullName":"Повне ім’я / одержувач","country":"Країна / регіон","phone":"Номер телефону","postal":"Поштовий індекс","region":"Область / регіон","city":"Місто / населений пункт","address1":"Адреса","address2":"Деталі адреси","intl":"Англійська/латинська транслітерація для міжнародної обробки (необов’язково)","romanizedName":"Ім’я англійською/латинкою","romanizedAddress1":"Адреса англійською/латинкою","romanizedAddress2":"Деталі адреси англійською/латинкою","optional":"Необов’язково","save":"Зберегти","saving":"Збереження…","saved":"Дані учасника збережено.","eligible":"Обов’язкові дані заповнено. Право на стандартне членство надіслано до OSO/M2M.","pending":"Дані учасника збережено, але автоматичне оновлення ролі очікується.","loading":"Завантаження даних учасника.","required":"Обов’язкове поле.","member":"Учасник","standard":"Стандартний учасник","premium":"Преміум-учасник","missing":"Незаповнені поля","infoNotice":"Ім’я та адресу можна вводити місцевою мовою. Додавайте англійську/латинську транслітерацію лише за потреби міжнародної доставки або оплати."},"uz":{"upgrade":"Darajani oshirish so‘rovi","edit":"A’zo ma’lumotlarini tahrirlash","title":"A’zo ma’lumotlari","upgradeDesc":"Standart a’zolik mosligini OSO/M2M ga yuborish uchun zarur profilni to‘ldiring.","editDesc":"A’zo ma’lumotlaringizni yangilab turing.","fullName":"To‘liq ism / qabul qiluvchi ismi","country":"Mamlakat / hudud","phone":"Telefon raqami","postal":"Pochta indeksi","region":"Viloyat / hudud","city":"Shahar / aholi punkti","address1":"Manzil","address2":"Manzil tafsiloti","intl":"Xalqaro ishlov uchun inglizcha/romanlashtirilgan ma’lumotlar (ixtiyoriy)","romanizedName":"Inglizcha/romanlashtirilgan ism","romanizedAddress1":"Inglizcha/romanlashtirilgan manzil","romanizedAddress2":"Inglizcha/romanlashtirilgan manzil tafsiloti","optional":"Ixtiyoriy","save":"Saqlash","saving":"Saqlanmoqda…","saved":"A’zo ma’lumotlari saqlandi.","eligible":"Zarur ma’lumotlar to‘liq. Standart a’zolik mosligi OSO/M2M ga yuborildi.","pending":"A’zo ma’lumotlari saqlandi, ammo avtomatik rol yangilanishi kutilmoqda.","loading":"A’zo ma’lumotlari yuklanmoqda.","required":"Majburiy maydon.","member":"A’zo","standard":"Standart a’zo","premium":"Premium a’zo","missing":"To‘ldirilmagan maydonlar","infoNotice":"Ism va manzilni mahalliy tilda kiritish mumkin. Inglizcha/romanlashtirilgan ma’lumotlarni faqat xalqaro yetkazib berish yoki to‘lov talab qilganda qo‘shing."}};
-  function profileText() { return PROFILE_TEXT[lang()] || PROFILE_TEXT.en; }
-  function uiText() { return UI_TEXT[lang()] || UI_TEXT.en; }
-  var PROFILE_COUNTRY_CODES = ["AW","AF","AO","AI","AX","AL","AD","AE","AR","AM","AS","AQ","TF","AG","AU","AT","AZ","BI","BE","BJ","BQ","BF","BD","BG","BH","BS","BA","BL","BY","BZ","BM","BO","BR","BB","BN","BT","BV","BW","CF","CA","CC","CH","CL","CN","CI","CM","CD","CG","CK","CO","KM","CV","CR","CU","CW","CX","KY","CY","CZ","DE","DJ","DM","DK","DO","DZ","EC","EG","ER","EH","ES","EE","ET","FI","FJ","FK","FR","FO","FM","GA","GB","GE","GG","GH","GI","GN","GP","GM","GW","GQ","GR","GD","GL","GT","GF","GU","GY","HK","HM","HN","HR","HT","HU","ID","IM","IN","IO","IE","IR","IQ","IS","IL","IT","JM","JE","JO","JP","KZ","KE","KG","KH","KI","KN","KR","KW","LA","LB","LR","LY","LC","LI","LK","LS","LT","LU","LV","MO","MF","MA","MC","MD","MG","MV","MX","MH","MK","ML","MT","MM","ME","MN","MP","MZ","MR","MS","MQ","MU","MW","MY","YT","NA","NC","NE","NF","NG","NI","NU","NL","NO","NP","NR","NZ","OM","PK","PA","PN","PE","PH","PW","PG","PL","PR","KP","PT","PY","PS","PF","QA","RE","RO","RU","RW","SA","SD","SN","SG","GS","SH","SJ","SB","SL","SV","SM","SO","PM","RS","SS","ST","SR","SK","SI","SE","SZ","SX","SC","SY","TC","TD","TG","TH","TJ","TK","TM","TL","TO","TT","TN","TR","TV","TW","TZ","UG","UA","UM","UY","US","UZ","VA","VC","VE","VG","VI","VN","VU","WF","WS","YE","ZA","ZM","ZW"];
-  function localizedCountryName(code) {
-    try {
-      if (window.Intl && typeof window.Intl.DisplayNames === 'function') {
-        var locale = lang() === 'zht' ? 'zh-Hant' : lang();
-        return new window.Intl.DisplayNames([locale], {type:'region'}).of(code) || code;
-      }
-    } catch (e) {}
-    return code;
-  }
-  function countryOptionsHtml(value) {
-    var selected = String(value || '').toUpperCase();
-    var p = profileText();
-    var first = '<option value="">— '+esc(p.country)+' —</option>';
-    return first + PROFILE_COUNTRY_CODES.map(function(code) {
-      return '<option value="'+esc(code)+'" '+(code === selected ? 'selected' : '')+'>'+esc(localizedCountryName(code))+' ('+esc(code)+')</option>';
-    }).join('');
-  }
-  function membershipRole(me) {
-    var state = me && me.role_state || {};
-    var source = normalizeRole(state.source_role || '');
-    if (source === 'member' || source === 'member_standard' || source === 'member_premium') return source;
-    var effective = normalizeRole(me && me.role || '');
-    if (effective === 'member' || effective === 'member_standard' || effective === 'member_premium') return effective;
-    return effective || 'guest';
-  }
-  // Membership tier identifiers are intentionally fixed in global English.
-  // The surrounding buttons, field labels, help, and validation guidance remain
-  // localized in the 30-language profile UI.
-  function membershipRoleLabel(role) {
-    role = normalizeRole(role);
-    if (role === 'member') return 'Member';
-    if (role === 'member_standard') return 'Member Standard';
-    if (role === 'member_premium') return 'Member Premium';
-    return role || 'guest';
-  }
-  function displayRoleLabel(me) {
-    var tier = membershipRole(me);
-    if (tier === 'member' || tier === 'member_standard' || tier === 'member_premium') return membershipRoleLabel(tier);
-    return normalizeRole(me && me.role) || 'guest';
-  }
-  function profileMissingLabel(field) {
-    var p = profileText();
-    var map = {
-      full_name:p.fullName, country_code:p.country, phone_e164:p.phone,
-      locality:p.city, address_line1:p.address1
-    };
-    return map[field] || field;
-  }
-  function profileValue(profile, key) {
-    return profile && profile[key] != null ? String(profile[key]) : '';
-  }
-  function profileInput(name, label, value, required, attrs) {
-    return '<label>'+esc(label)+(required ? ' <span class="muted">('+esc(profileText().required)+')</span>' : '')+
-      '<input name="'+esc(name)+'" value="'+esc(value)+'" '+(required ? 'required ' : '')+(attrs || '')+'></label>';
-  }
-  function memberProfileHtml(me) {
-    var p = profileText();
-    var profile = STATE.memberProfile || {};
-    if (STATE.loadingMemberProfile) return '<section class="card"><h4>'+esc(p.title)+'</h4><div class="muted">'+esc(p.loading)+'</div></section>';
-    var tier = membershipRole(me);
-    var upgrading = tier === 'member';
-    var message = STATE.profileMessage ? '<div class="ok">'+esc(STATE.profileMessage)+'</div>' : '';
-    var missing = Array.isArray(profile.missing_fields) && profile.missing_fields.length
-      ? '<div class="muted" style="margin-top:10px"><b>'+esc(p.missing)+':</b> '+esc(profile.missing_fields.map(profileMissingLabel).join(', '))+'</div>'
-      : '';
-    var dir = isRtlLanguage(lang()) ? ' dir="rtl"' : '';
-    return '<form class="card igdc-ma-profile-form" data-form="member-profile"'+dir+'>'+
-      '<h4>'+esc(p.title)+'</h4><div class="muted">'+esc(upgrading ? p.upgradeDesc : p.editDesc)+'</div><div class="muted" style="margin-top:8px">'+esc(p.infoNotice)+'</div><br>'+
-      message+
-      '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">'+
-        profileInput('full_name',p.fullName,profileValue(profile,'full_name'),true,'autocomplete="name" maxlength="240"')+
-        '<label>'+esc(p.country)+' <span class="muted">('+esc(p.required)+')</span><select name="country_code" required autocomplete="country">'+countryOptionsHtml(profileValue(profile,'country_code'))+'</select></label>'+
-        profileInput('phone_e164',p.phone,profileValue(profile,'phone_e164'),true,'autocomplete="tel" inputmode="tel" placeholder="+821012345678" pattern="\+[1-9][0-9]{6,18}" maxlength="20"')+
-        profileInput('postal_code',p.postal,profileValue(profile,'postal_code'),false,'autocomplete="postal-code" maxlength="80"')+
-        profileInput('administrative_area',p.region,profileValue(profile,'administrative_area'),false,'autocomplete="address-level1" maxlength="180"')+
-        profileInput('locality',p.city,profileValue(profile,'locality'),true,'autocomplete="address-level2" maxlength="180"')+
-      '</div><br>'+
-      profileInput('address_line1',p.address1,profileValue(profile,'address_line1'),true,'autocomplete="address-line1" maxlength="500"')+'<br><br>'+
-      profileInput('address_line2',p.address2+' ('+p.optional+')',profileValue(profile,'address_line2'),false,'autocomplete="address-line2" maxlength="500"')+'<br><br>'+
-      '<details><summary>'+esc(p.intl)+'</summary><div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-top:12px">'+
-        profileInput('romanized_name',p.romanizedName,profileValue(profile,'romanized_name'),false,'maxlength="240"')+
-        profileInput('romanized_address_line1',p.romanizedAddress1,profileValue(profile,'romanized_address_line1'),false,'maxlength="500"')+
-      '</div><br>'+profileInput('romanized_address_line2',p.romanizedAddress2,profileValue(profile,'romanized_address_line2'),false,'maxlength="500"')+'</details><br>'+
-      missing+
-      '<button class="primary" type="submit" '+(STATE.savingProfile ? 'disabled' : '')+'>'+esc(STATE.savingProfile ? p.saving : p.save)+'</button>'+
-    '</form>';
-  }
+  function uiText() { return lang() === 'ko' ? UI_TEXT.ko : UI_TEXT.en; }
 
   function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>'"]/g, function (c) {
@@ -783,7 +681,6 @@
     STATE.tab = tab;
     render();
     if (tab === 'member-page') loadMyReviewDocs();
-    if (tab === 'member-profile') loadMemberProfile();
     if (tab === 'question') loadMyQuestions();
     if (tab === 'notice') loadNotices();
     if (tab === 'admin-members') loadMembers();
@@ -816,11 +713,10 @@
       tab('admin-members', labels.tabs.adminMembers, true) +
       tab('admin-queue', labels.tabs.adminQueue, true) +
       tab('admin-notice', labels.tabs.adminNotice, true) +
-      (canRunSystemDiagnostic((me && me.roles) || readRoles()) ? tab('admin-diagnostic', labels.tabs.adminDiagnostic, false) : '') +
     '</aside>';
   }
   function bodyHtml(labels, me, admin) {
-    var loginAction = !(hasKnownSession() || (me && me.role && me.role !== 'guest'))
+    var loginAction = !(hasPlatformRole() || (me && me.role && me.role !== 'guest'))
       ? '<button type="button" class="primary" data-action="login">'+esc(labels.login)+'</button>'
       : (!hasValidToken() ? '<button type="button" data-action="login">'+esc(labels.renew || '세션 갱신')+'</button>' : '');
     var adminAction = admin
@@ -838,13 +734,12 @@
   }
   function titleForTab(labels) {
     var m = labels.tabs;
-    return ({'member-home':m.memberHome,'member-page':m.memberPage || uiText().memberPageTitle,'member-profile':profileText().title,'submit':m.submit,'question':m.question,'notice':m.notice,'admin-members':m.adminMembers,'admin-queue':m.adminQueue,'admin-notice':m.adminNotice,'admin-diagnostic':m.adminDiagnostic})[STATE.tab] || m.memberHome;
+    return ({'member-home':m.memberHome,'member-page':m.memberPage || uiText().memberPageTitle,'submit':m.submit,'question':m.question,'notice':m.notice,'admin-members':m.adminMembers,'admin-queue':m.adminQueue,'admin-notice':m.adminNotice,'admin-diagnostic':m.adminDiagnostic})[STATE.tab] || m.memberHome;
   }
   function renderTab(labels, me, admin) {
     if (STATE.tab.indexOf('admin-') === 0 && !admin) return '<div class="card"><h4>'+esc(labels.noAccess)+'</h4></div>';
     if (STATE.tab === 'admin-diagnostic' && !canRunSystemDiagnostic((me && me.roles) || readRoles())) return '<div class="card"><h4>'+esc(uiText().diagnosticNotAllowed)+'</h4></div>';
     if (STATE.tab === 'member-home') return memberHomeHtml(me);
-    if (STATE.tab === 'member-profile') return memberProfileHtml(me);
     if (STATE.tab === 'member-page') return memberPageHtml(me, admin);
     if (STATE.tab === 'submit') return submitHtml();
     if (STATE.tab === 'question') return questionHtml(admin);
@@ -857,30 +752,24 @@
   }
   function memberHomeHtml(me) {
     var u = uiText();
-    var p = profileText();
-    var role = membershipRole(me);
-    var signedIn = hasKnownSession() || (me && me.role && me.role !== 'guest');
-    if (!signedIn) {
-      return '<div class="grid"><div class="card"><h4>'+esc(u.loginTitle)+'</h4><div class="muted">'+esc(u.loginDesc)+'</div><br><button class="primary" data-action="login">'+esc(t().login)+'</button></div></div>';
-    }
-    var editProfile = role !== 'member' && role !== 'guest';
-    var profileAction = '<button class="primary" data-action="open-member-profile">'+esc(editProfile ? p.edit : p.upgrade)+'</button>';
-    var profileState = me && me.profile_status || {};
-    var profileHint = '';
-    if (role === 'member' && profileState.standard_eligible) profileHint = '<br><span class="muted">'+esc(p.pending)+'</span>';
+    var canStandard = roleEngineHas('APPLY_STANDARD') || roleLevel(me.role) >= 1;
+    var canPremium = roleEngineHas('APPLY_PREMIUM') || roleLevel(me.role) >= 2;
     var canCommerce = roleEngineHas('APPLY_COMMERCE') || roleLevel(me.role) >= 3;
     return '<div class="grid">'+
-      '<div class="card"><h4>'+esc(u.memberStatusTitle)+'</h4><div class="muted">'+esc(u.currentRole)+': <b>'+esc(membershipRoleLabel(role))+'</b>'+profileHint+'</div><br>'+profileAction+'</div>'+
-      '<div class="card"><h4>'+esc(u.premiumTitle)+'</h4><div class="muted">'+esc(u.premiumDesc)+'</div></div>'+
+      '<div class="card"><h4>'+esc(u.memberStatusTitle)+'</h4><div class="muted">'+esc(u.currentRole)+': <b>'+esc(me.role)+'</b><br>'+esc(u.memberStatusDesc)+'</div></div>'+
+      '<div class="card"><h4>'+esc(u.premiumTitle)+'</h4><div class="muted">'+esc(u.premiumDesc)+'</div><br><button '+(!canPremium?'disabled':'')+' data-action="request-upgrade" data-role="premium">'+esc(u.premiumApply)+'</button></div>'+
       '<div class="card"><h4>'+esc(u.commerceTitle)+'</h4><div class="muted">'+esc(u.commerceDesc)+'</div><br><button '+(!canCommerce?'disabled':'')+' data-action="request-upgrade" data-role="commerce">'+esc(u.commerceApply)+'</button></div>'+
-      '<div class="card"><h4>'+esc(u.memberPageTitle)+'</h4><div class="muted">'+esc(u.memberPageDesc)+'</div><br><button data-tab="member-page">'+esc(u.openMemberPage)+'</button></div>'+
+      '<div class="card"><h4>'+esc(u.standardTitle)+'</h4><div class="muted">'+esc(u.standardDesc)+'</div><br><button '+(!canStandard?'disabled':'')+' data-action="request-upgrade" data-role="standard">'+esc(u.standardApply)+'</button></div>'+
+      '<div class="card"><h4>'+esc(u.memberPageTitle)+'</h4><div class="muted">'+esc(u.memberPageDesc)+'</div><br><button class="primary" data-tab="member-page">'+esc(u.openMemberPage)+'</button></div>'+
       (me.admin ? '<div class="card"><h4>'+esc(u.adminMembersTitle)+'</h4><div class="muted">'+esc(u.adminMembersDesc)+'</div><br><button class="primary" data-tab="admin-members">'+esc(u.openMembers)+'</button> <button data-tab="admin-queue">'+esc(u.openReview)+'</button></div>' : '')+
-      '<div class="card"><h4>'+esc(u.loginStateTitle)+'</h4><div class="muted">'+esc(u.siteRole)+': <b>'+esc(displayRoleLabel(me))+'</b><br>'+(hasValidToken()?esc(u.tokenOk):esc(u.tokenMissing))+'</div>'+(hasValidToken()?'':'<br><button data-action="login">'+esc(u.renewSession)+'</button>')+'</div>'+
+      (hasPlatformRole()
+        ? '<div class="card"><h4>'+esc(u.loginStateTitle)+'</h4><div class="muted">'+esc(u.siteRole)+': <b>'+esc(me.role || 'member')+'</b><br>'+(hasValidToken()?esc(u.tokenOk):esc(u.tokenMissing))+'</div>'+(hasValidToken()?'':'<br><button data-action="login">'+esc(u.renewSession)+'</button>')+'</div>'
+        : '<div class="card"><h4>'+esc(u.loginTitle)+'</h4><div class="muted">'+esc(u.loginDesc)+'</div><br><button data-action="login">OS-Login</button></div>')+
     '</div>';
   }
   function memberPageHtml(me, admin) {
     var u = uiText();
-    var profile = '<div class="card"><h4>'+esc(u.memberPageTitle)+'</h4>'+      '<div class="muted">'+esc(u.memberPageDesc)+'</div><br>'+      '<div class="muted"><b>'+esc(me.name || me.email || 'Member')+'</b><br>'+      (me.email ? esc(me.email)+'<br>' : '')+      (me.user_id ? 'User ID: '+esc(me.user_id)+'<br>' : '')+      esc(u.currentRole)+': <span class="badge">'+esc(displayRoleLabel(me))+'</span></div></div>';
+    var profile = '<div class="card"><h4>'+esc(u.memberPageTitle)+'</h4>'+      '<div class="muted">'+esc(u.memberPageDesc)+'</div><br>'+      '<div class="muted"><b>'+esc(me.name || me.email || 'Member')+'</b><br>'+      (me.email ? esc(me.email)+'<br>' : '')+      (me.user_id ? 'User ID: '+esc(me.user_id)+'<br>' : '')+      esc(u.currentRole)+': <span class="badge">'+esc(me.role || 'member')+'</span></div></div>';
     var shortcuts = '<div class="card"><h4>회원 메뉴</h4><div class="row">'+      '<button data-tab="submit">'+esc(t().tabs.submit)+'</button>'+      '<button data-tab="question">'+esc(t().tabs.question)+'</button>'+      '<button data-tab="notice">'+esc(t().tabs.notice)+'</button>'+      (admin ? '<button class="primary" data-tab="admin-members">'+esc(u.openMembers)+'</button>' : '')+      '</div></div>';
     var docs = (STATE.myReviewDocs || []).map(function (doc) {
       var id = doc.id || doc.document_id || '';
@@ -912,7 +801,7 @@
     function option(value, label) { return '<option value="'+esc(value)+'" '+(selected === value ? 'selected' : '')+'>'+esc(label)+'</option>'; }
     return '<form class="card" data-form="document-submit"><h4>'+esc(u.submitTitle)+'</h4><div class="muted">'+esc(u.submitDesc)+'</div><br>'+
       '<label>'+esc(u.requestedRoleLabel)+'<select name="requested_role">'+
-        option('', u.requestedRoleNone)+option('commerce', u.requestedRoleCommerce)+
+        option('', u.requestedRoleNone)+option('standard', u.requestedRoleStandard)+option('premium', u.requestedRolePremium)+option('commerce', u.requestedRoleCommerce)+
       '</select></label><br><br>'+
       '<label>'+esc(u.titleLabel)+'<input name="title" required placeholder="'+esc(u.submitTitlePlaceholder)+'"></label><br><br>'+
       '<label>'+esc(u.bodyLabel)+'<textarea name="body" required placeholder="'+esc(u.submitBodyPlaceholder)+'"></textarea></label><br><br>'+
@@ -964,31 +853,30 @@
     var roles = (cfg().roleOptions || [
       'special_menber',
       'commerce_manager',
-      'site_manager_home_om',
-      'site_manager_home_op',
-      'site_manager_home',
-      'site_manager_distribution_om',
-      'site_manager_distribution_op',
-      'site_manager_distribution',
-      'site_manager_mediahub_om',
-      'site_manager_mediahub_op',
-      'site_manager_mediahub',
-      'site_manager_networkhub_om',
-      'site_manager_networkhub_op',
-      'site_manager_networkhub',
-      'site_manager_socialnetwork_om',
-      'site_manager_socialnetwork_op',
-      'site_manager_socialnetwork',
-      'site_manager_tour_om',
-      'site_manager_tour_op',
-      'site_manager_tour',
-      'site_manager_donation_om',
-      'site_manager_donation_op',
-      'site_manager_donation',
+      'site_manager.home.om',
+      'site_manager.home.op',
+      'site_manager.home',
+      'site_manager.distribution.om',
+      'site_manager.distribution.op',
+      'site_manager.distribution',
+      'site_manager.mediahub.om',
+      'site_manager.mediahub.op',
+      'site_manager.mediahub',
+      'site_manager.networkhub.om',
+      'site_manager.networkhub.op',
+      'site_manager.networkhub',
+      'site_manager.socialnetwork.om',
+      'site_manager.socialnetwork.op',
+      'site_manager.socialnetwork',
+      'site_manager.tour.om',
+      'site_manager.tour.op',
+      'site_manager.tour',
+      'site_manager.donation.om',
+      'site_manager.donation.op',
+      'site_manager.donation',
       'coordinator_director',
       'director',
-      'admin',
-      'owner'
+      'admin'
     ]);
     var myRoles = (STATE.me && STATE.me.roles) || readRoles();
     var currentRole = normalizeRole(current);
@@ -1032,7 +920,8 @@
     var rows = visibleMembers.map(function (member) {
       var roles = unique(member.roles || (member.app_metadata && member.app_metadata.roles) || []);
       var role = normalizeRole(member.role || highestRole(roles));
-      var canManage = canManageMember(myRoles, member);
+      var ownerLocked = role === 'owner' || normalizeRole((member.role_state || {}).source_role) === 'owner';
+      var canManage = !ownerLocked && canManageMember(myRoles, member);
       var options = rolesForSelect(role);
       var state = member.role_state || {};
       var actions = '';
@@ -1051,7 +940,7 @@
         '<div class="igdc-ma-member-id">'+esc(member.user_id || '')+'</div>'+
         '<div class="igdc-ma-member-name"><b>'+esc(member.name || member.nickname || '')+'</b><br><span class="muted">'+esc(member.email || '')+'</span></div>'+
         '<div>'+roleStateHtml(member)+'</div>'+
-        '<div>'+(canManage && options ? '<select data-role-select>'+options+'</select>' : '<span class="muted">'+esc((currentManagementScope().kind === 'site_only_below' && globalCommonMember(member)) ? (u.viewOnly || u.noPermission) : u.noPermission)+'</span>')+'</div>'+
+        '<div>'+(ownerLocked ? '<span class="muted">'+esc(u.protectedAccount || 'Protected account')+'</span>' : (canManage && options ? '<select data-role-select>'+options+'</select>' : '<span class="muted">'+esc((currentManagementScope().kind === 'site_only_below' && globalCommonMember(member)) ? (u.viewOnly || u.noPermission) : u.noPermission)+'</span>'))+'</div>'+
         '<div class="igdc-ma-member-actions">'+actions+'</div>'+
       '</div>';
     }).join('');
@@ -1175,7 +1064,6 @@
     else if (act === 'block-user') blockUser(action.closest('[data-user-id]'));
     else if (act === 'unblock-user') unblockUser(action.closest('[data-user-id]'));
     else if (act === 'request-upgrade') requestUpgrade(action.getAttribute('data-role'));
-    else if (act === 'open-member-profile') setTab('member-profile');
     else if (act === 'reload-my-review') loadMyReviewDocs();
     else if (act === 'reload-review-queue') loadReviewDocs();
     else if (act === 'open-review-doc') openReviewDoc(action.closest('[data-review-id]'), action.getAttribute('data-url'));
@@ -1226,10 +1114,6 @@
     if (!form) return;
     ev.preventDefault();
     var type = form.getAttribute('data-form');
-    if (type === 'member-profile') {
-      saveMemberProfile(form);
-      return;
-    }
     if (type === 'document-submit') {
       submitDocument(form).then(function () {
         setError('');
@@ -1430,53 +1314,6 @@
     a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 0);
   }
-  function loadMemberProfile() {
-    if (!hasValidToken()) {
-      STATE.memberProfile = null;
-      STATE.loadingMemberProfile = false;
-      render();
-      return Promise.resolve(null);
-    }
-    STATE.loadingMemberProfile = true;
-    STATE.profileMessage = '';
-    render();
-    return apiGet({action:'member-profile'}).then(function (data) {
-      STATE.memberProfile = (data && (data.profile || data.member_profile)) || {};
-      if (STATE.me && data && data.profile_status) STATE.me.profile_status = data.profile_status;
-      STATE.loadingMemberProfile = false;
-      render();
-      return data;
-    }).catch(function (error) {
-      STATE.loadingMemberProfile = false;
-      STATE.memberProfile = {};
-      STATE.error = (error && error.message) || t().apiMissing;
-      render();
-      return null;
-    });
-  }
-  function saveMemberProfile(form) {
-    if (STATE.savingProfile) return;
-    var values = formDataObj(form);
-    values.entry_locale = lang();
-    STATE.savingProfile = true;
-    STATE.profileMessage = '';
-    STATE.error = '';
-    render();
-    apiPost('save-member-profile', {profile:values}).then(function (data) {
-      STATE.memberProfile = (data && data.profile) || values;
-      if (STATE.me && data && data.profile_status) STATE.me.profile_status = data.profile_status;
-      var p = profileText();
-      STATE.profileMessage = data && data.m2m_handoff && data.m2m_handoff.delivered ? p.eligible : p.pending;
-      STATE.savingProfile = false;
-      return loadMe();
-    }).then(function () {
-      render();
-    }).catch(function (error) {
-      STATE.savingProfile = false;
-      STATE.error = (error && error.message) || t().apiMissing;
-      render();
-    });
-  }
   function loadMe() {
     STATE.me = userProfile();
     return apiGet({action:'me'}).then(function (data) {
@@ -1528,7 +1365,7 @@
       return;
     }
     if (isAutoManagedRole(role)) {
-      setError((lang() === 'ko') ? 'member, member_standard, member_premium은 OSO/M2M 자동 역할입니다.' : 'member, member_standard, and member_premium are OSO/M2M automatic roles.');
+      setError((lang() === 'ko') ? 'member와 member_standard는 OSO/M2M 자동 역할입니다.' : 'member and member_standard are OSO/M2M automatic roles.');
       return;
     }
     if (!canAssignRole((STATE.me && STATE.me.roles) || readRoles(), role)) { setError(uiText().changeNoPerm); return; }
