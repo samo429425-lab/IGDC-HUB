@@ -39,7 +39,9 @@
     total: 0,
     hasMore: false,
     lastFocus: null,
-    requestedRole: ''
+    requestedRole: '',
+    roleCatalog: [],
+    loadingRoleCatalog: false
   };
 
   var ROLE_LEVEL = {
@@ -272,10 +274,15 @@
     role = normalizeRole(role);
     return role === 'guest' || role === 'member' || role === 'member_standard' || role === 'member_premium';
   }
+  function canAdjustRoles(myRoles) {
+    var role = highestRole(myRoles || []);
+    return role === 'owner' || role === 'admin' || role === 'super_admin';
+  }
   function isProtectedMember(member) {
     var state = member && member.role_state || {};
-    var role = normalizeRole(member && (member.role || highestRole(member.roles || [])));
-    return !!(member && (member.protected_account || state.protected_account || role === 'owner' || role === 'admin' || role === 'super_admin'));
+    var source = normalizeRole(state.source_role || '');
+    var roles = unique([member && member.role, source].concat((member && member.roles) || []));
+    return roles.indexOf('owner') >= 0;
   }
   function memberForRow(row) {
     if (!row) return null;
@@ -290,17 +297,12 @@
     var target = highestRole(targetRoles || []);
     if (mine === 'owner') return true;
     if (mine === 'admin' || mine === 'super_admin') return target !== 'owner';
+    if (mine === 'director' || mine === 'coordinator_director') return roleLevel(target) <= roleLevel('commerce_manager');
     return roleLevel(target) < roleLevel(mine);
   }
   function canAssignRole(myRoles, targetRole) {
-    var mine = managerRole(myRoles);
     targetRole = normalizeRole(targetRole);
-    if (!isManagerRole(mine)) return false;
-    var scope = currentManagementScope();
-    if (scope.kind === 'site_only_below') return siteScopeCanAssignRole(scope, targetRole);
-    if (mine === 'owner') return true;
-    if (mine === 'admin' || mine === 'super_admin') return targetRole !== 'owner';
-    return roleLevel(targetRole) < roleLevel(mine);
+    return canAdjustRoles(myRoles) && targetRole !== 'owner';
   }
   function uniqueSiteKeys(values) {
     var out = [], seen = {};
@@ -850,46 +852,19 @@
       '<div class="igdc-ma-qna-list">'+(notices || '<div class="muted" style="margin-top:12px">'+esc(u.noticesNone)+'</div>')+'</div></section>';
   }
   function rolesForSelect(current) {
-    var roles = (cfg().roleOptions || [
-      'special_menber',
-      'commerce_manager',
-      'site_manager.home.om',
-      'site_manager.home.op',
-      'site_manager.home',
-      'site_manager.distribution.om',
-      'site_manager.distribution.op',
-      'site_manager.distribution',
-      'site_manager.mediahub.om',
-      'site_manager.mediahub.op',
-      'site_manager.mediahub',
-      'site_manager.networkhub.om',
-      'site_manager.networkhub.op',
-      'site_manager.networkhub',
-      'site_manager.socialnetwork.om',
-      'site_manager.socialnetwork.op',
-      'site_manager.socialnetwork',
-      'site_manager.tour.om',
-      'site_manager.tour.op',
-      'site_manager.tour',
-      'site_manager.donation.om',
-      'site_manager.donation.op',
-      'site_manager.donation',
-      'coordinator_director',
-      'director',
-      'admin'
-    ]);
     var myRoles = (STATE.me && STATE.me.roles) || readRoles();
+    if (!canAdjustRoles(myRoles)) return '';
     var currentRole = normalizeRole(current);
-    var filtered = roles.filter(function (role) {
-      return !isAutoManagedRole(role) && canAssignRole(myRoles, role);
-    });
-    if (currentRole && !isAutoManagedRole(currentRole) && filtered.map(normalizeRole).indexOf(currentRole) < 0 && canAssignRole(myRoles, currentRole)) {
-      filtered.unshift(currentRole);
-    }
-    var prompt = uiText().selectSpecialRole || 'Select special role';
-    var options = '<option value="" '+(isAutoManagedRole(currentRole) ? 'selected' : '')+'>'+esc(prompt)+'</option>';
-    return options + filtered.map(function (role) {
-      return '<option value="'+esc(role)+'" '+(currentRole === normalizeRole(role) ? 'selected' : '')+'>'+esc(role)+'</option>';
+    var catalog = (STATE.roleCatalog || []).map(function (item) {
+      return normalizeRole(typeof item === 'string' ? item : item && item.name);
+    }).filter(Boolean);
+    if (currentRole && catalog.indexOf(currentRole) < 0) catalog.unshift(currentRole);
+    if (!catalog.length) return '';
+    return catalog.map(function (role) {
+      // owner is visible as an OSO role but cannot be granted in this list.
+      var locked = role === 'owner' ? ' disabled' : '';
+      var selected = currentRole === role ? ' selected' : '';
+      return '<option value="'+esc(role)+'"'+selected+locked+'>'+esc(role)+'</option>';
     }).join('');
   }
 
@@ -920,12 +895,13 @@
     var rows = visibleMembers.map(function (member) {
       var roles = unique(member.roles || (member.app_metadata && member.app_metadata.roles) || []);
       var role = normalizeRole(member.role || highestRole(roles));
-      var ownerLocked = role === 'owner' || normalizeRole((member.role_state || {}).source_role) === 'owner';
+      var ownerLocked = isProtectedMember(member);
       var canManage = !ownerLocked && canManageMember(myRoles, member);
-      var options = rolesForSelect(role);
+      var canAdjust = !ownerLocked && canAdjustRoles(myRoles) && canManage;
+      var options = canAdjust ? rolesForSelect(role) : '';
       var state = member.role_state || {};
       var actions = '';
-      if (canManage && options) {
+      if (canAdjust && options) {
         actions += '<button data-action="save-role">'+esc(u.save)+'</button>';
         if (state.manual_override_active) {
           actions += '<button data-action="clear-role-override">'+esc(u.restoreOsO || 'Restore OSO role')+'</button>';
@@ -940,7 +916,7 @@
         '<div class="igdc-ma-member-id">'+esc(member.user_id || '')+'</div>'+
         '<div class="igdc-ma-member-name"><b>'+esc(member.name || member.nickname || '')+'</b><br><span class="muted">'+esc(member.email || '')+'</span></div>'+
         '<div>'+roleStateHtml(member)+'</div>'+
-        '<div>'+(ownerLocked ? '<span class="muted">'+esc(u.protectedAccount || 'Protected account')+'</span>' : (canManage && options ? '<select data-role-select>'+options+'</select>' : '<span class="muted">'+esc((currentManagementScope().kind === 'site_only_below' && globalCommonMember(member)) ? (u.viewOnly || u.noPermission) : u.noPermission)+'</span>'))+'</div>'+
+        '<div>'+(ownerLocked ? '<span class="muted">'+esc(u.protectedAccount || 'Protected account')+'</span>' : (canAdjust && options ? '<select data-role-select>'+options+'</select>' : '<span class="muted">—</span>'))+'</div>'+
         '<div class="igdc-ma-member-actions">'+actions+'</div>'+
       '</div>';
     }).join('');
@@ -1320,6 +1296,21 @@
       if (data && data.me) STATE.me = Object.assign({}, STATE.me, data.me, {admin: data.me.admin != null ? data.me.admin : STATE.me.admin, management_scope: data.management_scope || data.me.management_scope || STATE.me.management_scope});
     }).catch(function () {});
   }
+  function loadRoleCatalog() {
+    var myRoles = (STATE.me && STATE.me.roles) || readRoles();
+    if (!canAdjustRoles(myRoles) || !hasValidToken()) return Promise.resolve();
+    if (STATE.loadingRoleCatalog) return Promise.resolve();
+    STATE.loadingRoleCatalog = true;
+    return apiGet({action:'role-catalog'}).then(function (data) {
+      STATE.roleCatalog = (data && data.roles) || [];
+      STATE.loadingRoleCatalog = false;
+    }).catch(function (e) {
+      STATE.roleCatalog = [];
+      STATE.loadingRoleCatalog = false;
+      setError((e && e.message) || t().apiMissing);
+    });
+  }
+
   function loadMembers() {
     if (!canAdmin(readRoles()) && !(STATE.me && STATE.me.admin)) return;
     if (!hasValidToken()) {
@@ -1332,7 +1323,9 @@
       return;
     }
     STATE.loading = true; STATE.error = ''; render();
-    apiGet({action:'members', q:STATE.query || '', page:STATE.page || 0, per_page:cfg().perPage || 50}).then(function (data) {
+    loadRoleCatalog().then(function () {
+      return apiGet({action:'members', q:STATE.query || '', page:STATE.page || 0, per_page:cfg().perPage || 50});
+    }).then(function (data) {
       STATE.members = data.users || data.members || [];
       STATE.total = data.total || STATE.members.length;
       STATE.hasMore = !!data.has_more;
@@ -1364,11 +1357,7 @@
       setError((lang() === 'ko') ? '적용할 특수 역할을 선택하십시오.' : 'Select a special role to apply.');
       return;
     }
-    if (isAutoManagedRole(role)) {
-      setError((lang() === 'ko') ? 'member와 member_standard는 OSO/M2M 자동 역할입니다.' : 'member and member_standard are OSO/M2M automatic roles.');
-      return;
-    }
-    if (!canAssignRole((STATE.me && STATE.me.roles) || readRoles(), role)) { setError(uiText().changeNoPerm); return; }
+    if (!canAdjustRoles((STATE.me && STATE.me.roles) || readRoles()) || !canAssignRole((STATE.me && STATE.me.roles) || readRoles(), role)) { setError(uiText().changeNoPerm); return; }
     var reason = promptReason(uiText().roleReasonPrompt);
     if (reason === null) return;
     var u = uiText();

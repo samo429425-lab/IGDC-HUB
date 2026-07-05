@@ -47,7 +47,7 @@ const ROLE_LEVEL = {
 };
 
 const AUTO_MANAGED_ROLES = new Set(['guest', 'member', 'member_standard', 'member_premium']);
-const PROTECTED_ROLES = new Set(['owner', 'admin', 'super_admin']);
+const PROTECTED_ROLES = new Set(['owner']);
 const ROLE_AUDIT_LIMIT = 32;
 const BLOCK_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
@@ -67,6 +67,19 @@ exports.handler = async function handler(event) {
         ok: true,
         me: publicRequester(requester),
         management_scope: safeManagementScope(requester)
+      });
+    }
+
+    // The OSO/Auth0 role selector is intentionally server-sourced.  The browser
+    // receives only public role names/ids after the requester is verified; it
+    // never receives an M2M credential and never relies on a hard-coded catalog.
+    if (method === 'GET' && action === 'role-catalog') {
+      requireRoleAdjustmentAuthority(requester);
+      const roles = await listOsoRoleCatalog(env);
+      return json(200, {
+        ok: true,
+        roles: roles.map(publicOsoRoleCatalogEntry),
+        source: 'oso_auth0'
       });
     }
 
@@ -99,19 +112,22 @@ exports.handler = async function handler(event) {
 
     if (method === 'POST' && action === 'update-role') {
       const scope = managementScope(requester);
+      requireRoleAdjustmentAuthority(requester);
       const userId = required(body.user_id, 'user_id');
       const requestedRole = normalizeRole(required(body.role, 'role'));
       const target = await getPublicUserWithRoles(env, userId);
       requireMutableTarget(target);
       requireTargetVisible(scope, target.roles || [], target.site_keys || []);
+      const catalog = await listOsoRoleCatalog(env);
+      requireCatalogRole(catalog, requestedRole);
       requireRoleAssignment(scope, requestedRole);
-      requireManualRoleAssignment(requestedRole);
-      await updateUserRole(env, userId, requestedRole, requester, body.reason);
+      await updateUserRole(env, userId, requestedRole, requester, body.reason, catalog);
       return json(200, { ok: true });
     }
 
     if (method === 'POST' && action === 'clear-role-override') {
       const scope = managementScope(requester);
+      requireRoleAdjustmentAuthority(requester);
       const userId = required(body.user_id, 'user_id');
       const target = await getPublicUserWithRoles(env, userId);
       requireMutableTarget(target);
@@ -470,7 +486,10 @@ function managementScope(requester) {
   const role = highestRole(roles);
   if (role === 'owner') return { kind: 'all', role, level: roleLevel(role), siteKeys: [] };
   if (role === 'admin' || role === 'super_admin') return { kind: 'all_except_owner', role, level: roleLevel(role), siteKeys: [] };
-  if (isDirectorRole(role)) return { kind: 'below_only', role, level: roleLevel(role), siteKeys: [] };
+  // Directors are intentionally limited to the consumer/member layer.  Site
+  // manager / OM / OP / coordinator and higher operational accounts are not
+  // exposed in their directory, and role-adjustment is never delegated here.
+  if (isDirectorRole(role)) return { kind: 'common_members_only', role, level: roleLevel(role), siteKeys: [] };
   if (isSiteManagerRole(role)) {
     // All site-manager variants use the same privacy boundary:
     // - OM/OP/basic site managers may see global consumer/member tiers only as a directory;
@@ -523,6 +542,8 @@ function scopeAllows(scope, targetRoles, targetSiteKeys) {
   if (scope.kind === 'all') return true;
   if (scope.kind === 'all_except_owner') return target !== 'owner';
   if (scope.kind === 'below_only') return roleLevel(target) < scope.level;
+  // Directory-only director scope; no state-changing action is delegated.
+  if (scope.kind === 'common_members_only') return false;
   if (scope.kind === 'site_only_below') {
     // Common members are never administrable by a site manager. Only an OM/OP
     // in the same assigned site, lower than the requester, is an actionable target.
@@ -536,6 +557,10 @@ function scopeAllows(scope, targetRoles, targetSiteKeys) {
 // only same-site OM/OP accounts below their own level. Other site-bound accounts
 // never appear merely because their generic role level is lower.
 function scopeAllowsDirectory(scope, targetRoles, targetSiteKeys) {
+  const target = highestRole(targetRoles || []);
+  if (scope.kind === 'common_members_only') {
+    return isCommonGlobalMember(targetRoles, targetSiteKeys) && roleLevel(target) <= roleLevel('commerce_manager');
+  }
   if (scope.kind !== 'site_only_below') return scopeAllows(scope, targetRoles, targetSiteKeys);
   return isCommonGlobalMember(targetRoles, targetSiteKeys) ||
     isSameSiteLowerOperationalTarget(scope, targetRoles, targetSiteKeys);
@@ -563,10 +588,24 @@ function requireRoleAssignment(scope, requestedRole) {
   throw err;
 }
 
-function requireManualRoleAssignment(role) {
-  const normalized = normalizeRole(role);
-  if (AUTO_MANAGED_ROLES.has(normalized)) {
-    const err = new Error('guest, member, member_standard은 OSO/M2M 자동 역할입니다. 이 화면에서는 특수 역할만 예외 적용할 수 있습니다.');
+function canAdjustRoles(requester) {
+  const role = highestRole(requester && requester.roles || []);
+  return role === 'owner' || role === 'admin' || role === 'super_admin';
+}
+
+function requireRoleAdjustmentAuthority(requester) {
+  if (canAdjustRoles(requester)) return;
+  throw forbidden('역할 조정은 owner 또는 admin만 수행할 수 있습니다. director와 사이트 매니저는 허용된 회원 목록을 조회만 할 수 있습니다.');
+}
+
+function requireCatalogRole(catalog, requestedRole) {
+  const normalized = normalizeRole(requestedRole);
+  if (normalized === 'owner') {
+    throw forbidden('owner 역할은 이 회원 목록의 선택창에서 부여하거나 변경할 수 없습니다. owner 보존은 별도 최상위 운영 절차로만 처리합니다.');
+  }
+  const found = (catalog || []).some(item => normalizeRole(item && item.name) === normalized);
+  if (!found) {
+    const err = new Error('현재 OSO/Auth0 역할 목록에 없는 역할입니다. 역할 목록을 새로고침한 뒤 다시 선택하십시오.');
     err.statusCode = 400;
     throw err;
   }
@@ -751,10 +790,12 @@ function requireMutableTarget(target) {
 }
 
 function protectedAccount(env, user, roleState, rawRoles) {
-  const metadata = (user && user.app_metadata) || {};
-  if (env.protectedUserIds && env.protectedUserIds.has(user && user.user_id)) return true;
-  if (metadata.igdc_protected_account === true || metadata.igdc_protected_account === 'true') return true;
-  const roles = uniqueRoles([roleState && roleState.effective_role].concat(rawRoles || []).filter(Boolean));
+  // A protected account is exactly an OSO/Auth0 owner account.  Admin, director,
+  // metadata flags, and local configuration never create a protected badge.
+  const roles = uniqueRoles([
+    roleState && roleState.source_role,
+    roleState && roleState.effective_role
+  ].concat(rawRoles || []).filter(Boolean));
   return roles.some(role => PROTECTED_ROLES.has(normalizeRole(role)));
 }
 
@@ -1986,6 +2027,46 @@ async function publicUserWithRoles(env, user) {
   };
 }
 
+function publicOsoRoleCatalogEntry(role) {
+  return {
+    name: normalizeRole(role && role.name),
+    display_name: String((role && (role.name || role.display_name)) || ''),
+    description: String((role && role.description) || '')
+  };
+}
+
+function roleCatalogPayloadRows(payload) {
+  return Array.isArray(payload) ? payload : ((payload && (payload.roles || payload.items)) || []);
+}
+
+async function listOsoRoleCatalog(env) {
+  const roles = [];
+  const seen = new Set();
+  let page = 0;
+  let total = null;
+  do {
+    const payload = await auth0Get(env, `/api/v2/roles?per_page=100&page=${page}&include_totals=true`);
+    const batch = roleCatalogPayloadRows(payload);
+    if (total === null && payload && !Array.isArray(payload) && Number.isFinite(Number(payload.total))) total = Number(payload.total);
+    batch.forEach(item => {
+      const name = normalizeRole(item && item.name);
+      if (!name || seen.has(name)) return;
+      seen.add(name);
+      roles.push({ id: String(item.id || ''), name, display_name: String(item.name || name), description: String(item.description || '') });
+    });
+    page += 1;
+    if (!batch.length || batch.length < 100) break;
+  } while (total === null || roles.length < total);
+  return roles.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function isManagedOsoRoleName(name) {
+  const role = normalizeRole(name);
+  if (!role) return false;
+  if (Object.prototype.hasOwnProperty.call(ROLE_LEVEL, role)) return true;
+  return /^site_manager_(?:home|distribution|donation|mediahub|networkhub|socialnetwork|tour)(?:_(?:om|op))?$/.test(role);
+}
+
 async function managementToken(env) {
   if (TOKEN_CACHE.value && TOKEN_CACHE.exp > Date.now() + 30000) return TOKEN_CACHE.value;
   const response = await fetch(`https://${env.domain}/oauth/token`, {
@@ -2026,25 +2107,29 @@ function auth0Patch(env, path, body) {
   return auth0Request(env, 'PATCH', path, body);
 }
 
-async function replaceManagedAuth0Role(env, userId, role) {
-  const roleId = env.roleIdMap && env.roleIdMap[role];
-  if (!roleId) return;
-
-  try {
-    const assigned = await auth0Get(env, `/api/v2/users/${encodeURIComponent(userId)}/roles`);
-    const managedIds = new Set(Object.keys(env.roleIdMap || {}).map(key => env.roleIdMap[key]).filter(Boolean));
-    const replaceIds = (assigned || []).map(item => item.id).filter(id => managedIds.has(id));
-    if (replaceIds.length) {
-      await auth0Request(env, 'DELETE', `/api/v2/users/${encodeURIComponent(userId)}/roles`, { roles: replaceIds });
-    }
-  } catch (_) {
-    // Metadata remains authoritative where M2M role replacement is not enabled.
+async function replaceManagedAuth0Role(env, userId, role, catalog) {
+  const normalized = normalizeRole(role);
+  const roleCatalog = Array.isArray(catalog) && catalog.length ? catalog : await listOsoRoleCatalog(env);
+  const desired = roleCatalog.find(item => normalizeRole(item && item.name) === normalized);
+  if (!desired || !desired.id) {
+    const err = new Error('선택한 역할을 현재 OSO/Auth0 역할 목록에서 찾을 수 없습니다.');
+    err.statusCode = 400;
+    throw err;
   }
 
-  await auth0Request(env, 'POST', `/api/v2/users/${encodeURIComponent(userId)}/roles`, { roles: [roleId] });
+  const assigned = await auth0Get(env, `/api/v2/users/${encodeURIComponent(userId)}/roles`);
+  const catalogById = new Map(roleCatalog.map(item => [String(item.id || ''), normalizeRole(item.name)]));
+  const replaceIds = (assigned || [])
+    .filter(item => isManagedOsoRoleName(catalogById.get(String(item.id || '')) || item.name))
+    .map(item => item.id)
+    .filter(Boolean);
+  if (replaceIds.length) {
+    await auth0Request(env, 'DELETE', `/api/v2/users/${encodeURIComponent(userId)}/roles`, { roles: replaceIds });
+  }
+  await auth0Request(env, 'POST', `/api/v2/users/${encodeURIComponent(userId)}/roles`, { roles: [desired.id] });
 }
 
-async function updateUserRole(env, userId, role, requester, reason) {
+async function updateUserRole(env, userId, role, requester, reason, catalog) {
   const user = await auth0Get(env, `/api/v2/users/${encodeURIComponent(userId)}`);
   const metadata = user.app_metadata || {};
   const rawRoles = await auth0UserRoles(env, user);
@@ -2079,7 +2164,7 @@ async function updateUserRole(env, userId, role, requester, reason) {
     }
   });
 
-  await replaceManagedAuth0Role(env, userId, role);
+  await replaceManagedAuth0Role(env, userId, role, catalog);
 }
 
 async function clearRoleOverride(env, userId, requester, reason) {
