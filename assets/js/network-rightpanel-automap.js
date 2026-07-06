@@ -11,7 +11,7 @@
   window.__NETWORK_AUTOMAP_V6__ = true;
 
   const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
-  const FEED_URL = '/.netlify/functions/feed-network?limit=100';
+  const FEED_URL = ''; // IP-scoped network market slots never fall back to a generic feed.
   const LIMIT = 100;
 
   const MOBILE_ID = 'nh-mobile-rail-list';
@@ -29,7 +29,7 @@
   }
 
   function pickId(it){ return pick(it, ['id','contentId','productId','itemId','sku','code','pid']); }
-  function pickLink(it){ return pick(it, ['contentUrl','pageUrl','detailUrl','checkoutUrl','paymentUrl','productUrl','purchaseUrl','orderUrl','link','url','href']) || '#'; }
+  function pickLink(it){ return pick(it, ['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','contentUrl','pageUrl','detailUrl','checkoutUrl','paymentUrl','productUrl','purchaseUrl','orderUrl','link','url','href']) || '#'; }
   function pickThumb(it){ return pick(it, ['thumb','image','thumbnail','img','photo','cover','coverUrl','thumbnailUrl']); }
   function pickTitle(it){ return pick(it, ['title','name','label','caption']); }
 
@@ -46,6 +46,8 @@
   }
   function contentHref(id){ return id ? ('/content.html?id=' + encodeURIComponent(id)) : ''; }
   function resolveItemHref(item){
+    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || '');
+    if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
     if (item && item.id) return contentHref(item.id);
     const link = item && item.link;
     if (isBadUrl(link) || isExampleUrl(link)) return '';
@@ -67,6 +69,8 @@
     a.href = href;
     if (item && item.id) a.setAttribute('data-igdc-content-id', item.id);
     if (item && item.sourceUrl) a.setAttribute('data-igdc-source-url', item.sourceUrl);
+    if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound','1');
+    if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound','1');
     if (isExternal(href)){
       a.target = '_top';
       a.rel = 'noopener';
@@ -132,7 +136,9 @@
         title,
         thumb,
         link: pickLink(it),
-        sourceUrl: pickLink(it)
+        sourceUrl: pickLink(it),
+        affiliateOutboundUrl: pick(it, ['affiliateOutboundUrl','affiliate_outbound_url']),
+        externalOutboundUrl: pick(it, ['externalOutboundUrl','external_outbound_url'])
       });
       if (out.length >= LIMIT) break;
     }
@@ -163,10 +169,20 @@
     return card;
   }
 
+  function disablePsomThumbGrid(){
+    document.querySelectorAll('.thumb-grid[data-psom-key="network-right"]').forEach(function(grid){
+      grid.innerHTML = '';
+      grid.style.display = 'none';
+      grid.setAttribute('data-psom-mode', 'disabled');
+      grid.setAttribute('data-disabled', '1');
+      grid.setAttribute('aria-hidden', 'true');
+    });
+  }
+
   function renderMobile(items){
     const list = $(MOBILE_ID);
     if (!list) return;
-    if (!items || !items.length) return;
+    if (!items || !items.length) { list.innerHTML = ''; return; }
 
     ensureMobileCss();
     list.innerHTML = '';
@@ -181,7 +197,7 @@
   function renderDesktopDirect(items){
     const panel = document.getElementById('rightAutoPanel');
     if (!panel) return;
-    if (!items || !items.length) return;
+    if (!items || !items.length) { panel.innerHTML = ''; return; }
 
     panel.innerHTML = '';
     const frag = document.createDocumentFragment();
@@ -192,6 +208,7 @@
   }
 
   async function run(){
+    disablePsomThumbGrid();
     installExternalTopNavigation();
     const snap = await fetchJson(SNAPSHOT_URL);
 
@@ -199,16 +216,12 @@
       ? normalizeItems(snap.items)
       : [];
 
-    if (!items.length){
-      const feed = await fetchJson(FEED_URL);
-      items = feed && Array.isArray(feed.items)
-        ? normalizeItems(feed.items)
-        : [];
-    }
-
+    // No generic feed fallback: it has no canonical country/region scope.
     renderMobile(items);
     renderDesktopDirect(items);
   }
+
+  disablePsomThumbGrid();
 
   if (document.readyState === 'complete' || document.readyState === 'interactive'){
     setTimeout(run, 0);

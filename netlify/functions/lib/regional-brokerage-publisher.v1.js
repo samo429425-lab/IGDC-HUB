@@ -15,6 +15,7 @@ const crypto = require("crypto");
 const Policy = require("./regional-brokerage-policy.core.v1");
 const Gate = require("./regional-brokerage-front-supply-gate.core.v1");
 const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
+const CanonicalPublisher = require("./canonical-snapshot-publisher.v1");
 
 const SNAPSHOT_FILE = "distribution.snapshot.json";
 const REGISTRY_FILE = "regional-brokerage-outbound.json";
@@ -32,14 +33,29 @@ function rootOf(input) { return path.resolve(input && input.root || process.cwd(
 function firstExisting(paths) { return paths.find((p) => { try { return fs.existsSync(p) && fs.statSync(p).isFile(); } catch (_e) { return false; } }) || ""; }
 function unique(values) { const out = []; const seen = new Set(); for (const value of values || []) { const x = text(value); if (!x || seen.has(x)) continue; seen.add(x); out.push(x); } return out; }
 
+function canonicalDistributionItem(item) {
+  const publication = item && item.canonicalPublication;
+  const placement = item && item.placement;
+  return !!(
+    publication && publication.status === "published" && publication.releaseId && publication.candidateId && publication.mappingDigest &&
+    placement && placement.page === "distribution" && placement.section && Number.isInteger(Number(placement.slot)) && placement.country && placement.region
+  );
+}
 function sourceBank(root) {
+  const verification = CanonicalPublisher.verifyPublished({ root });
+  if (!verification || !verification.ok) return { file:null, items:[], verification:verification || { ok:false, problems:["CANONICAL_VERIFIER_UNAVAILABLE"] } };
   const file = firstExisting([
     path.join(root, "data", "search-bank.snapshot.json"),
     path.join(root, "netlify", "functions", "data", "search-bank.snapshot.json"),
     path.join(root, "netlify", "functions", "search-bank.snapshot.json")
   ]);
   const data = file ? safeRead(file) : null;
-  return { file, items: Array.isArray(data && data.items) ? data.items : [] };
+  const canonical = !!(data && data.meta && data.meta.schema === "search-bank.snapshot.canonical.v1");
+  return {
+    file: canonical ? file : null,
+    items: canonical && Array.isArray(data && data.items) ? data.items.filter(canonicalDistributionItem) : [],
+    verification
+  };
 }
 function sourceDistributionTemplate(root) {
   const file = firstExisting([
@@ -188,6 +204,9 @@ function makeCard(item, decision, market, region, registry) {
   // Preserve only an explicit, provider-approved affiliate contract.
   // A generic seller URL or a policy percentage never becomes a claimed margin.
   const affiliate = NonPgRevenue.publicAffiliate(item);
+  const outboundRoute = item && item.outboundRoute && typeof item.outboundRoute === "object" ? clone(item.outboundRoute) : null;
+  const providerOutbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl) || "";
+  const outboundUrl = providerOutbound || ("/.netlify/functions/regional-brokerage-outbound?id=" + encodeURIComponent(id));
   registry[id] = {
     id,
     targetUrl: destination,
@@ -208,8 +227,11 @@ function makeCard(item, decision, market, region, registry) {
     price: item.price == null ? undefined : item.price,
     currency: item.currency || undefined,
     cta: first(item.cta, "View seller offer"),
-    url: "/.netlify/functions/regional-brokerage-outbound?id=" + encodeURIComponent(id),
+    url: outboundUrl,
     externalProductUrl: destination,
+    affiliateOutboundUrl: item && item.affiliateOutboundUrl || undefined,
+    externalOutboundUrl: item && item.externalOutboundUrl || undefined,
+    outboundRoute,
     thumb: imageOf(item),
     image: imageOf(item),
     tags: Array.isArray(item.tags) ? item.tags.slice(0, 20) : undefined,
@@ -219,8 +241,8 @@ function makeCard(item, decision, market, region, registry) {
     directSale: { enabled: false, policy: "seller_checkout_only" },
     commerce: { mode: "external_seller_referral", sellerCheckout: true, inventoryOwner: "external_seller", fulfilmentOwner: "external_seller", returnsOwner: "external_seller" },
     monetization: {
-      model: "brokerage_referral_lead_ad",
-      revenueLine: "brokerage_referral_lead_ad",
+      model: outboundRoute && outboundRoute.mode === "approved_manual_affiliate" ? "approved_manual_affiliate" : (outboundRoute && outboundRoute.mode === "verified_external_referral" ? "external_referral_traffic" : "brokerage_referral_lead_ad"),
+      revenueLine: outboundRoute && outboundRoute.mode === "approved_manual_affiliate" ? "product_affiliate" : "external_seller_visit",
       outboundTracking: true,
       affiliate: affiliate ? {
         eligible: affiliate.eligible === true,
@@ -230,7 +252,7 @@ function makeCard(item, decision, market, region, registry) {
       } : null
     },
     affiliate,
-    revenueDestination: "external-seller-referral",
+    revenueDestination: outboundRoute && outboundRoute.mode === "approved_manual_affiliate" ? "provider-approved-affiliate" : "external-seller-referral",
     seller: { name: sellerLabel(item), responsibility: "external_seller" },
     countrySupply: {
       targetMarket: market,
@@ -245,7 +267,15 @@ function makeCard(item, decision, market, region, registry) {
       localResponsibilityVerified: decision.localResponsibilityVerified === true,
       supplyTier: decision.supplyTier || "unknown",
       policyVersion: decision.policyVersion || null
-    }
+    },
+    // The brokerage renderer may rewrite the outbound URL for tracking, but it
+    // must preserve the Canonical Publisher admission envelope and exact PSOM
+    // placement. The IP router verifies this envelope before exposing a scope.
+    canonicalPublication: item && item.canonicalPublication ? clone(item.canonicalPublication) : null,
+    placement: item && item.placement ? clone(item.placement) : null,
+    ipSlot: item && item.ipSlot ? clone(item.ipSlot) : null,
+    marketScope: item && item.marketScope ? clone(item.marketScope) : null,
+    productMapping: item && item.productMapping ? clone(item.productMapping) : null
   };
 }
 function outputPath(root, market, region) {
@@ -337,6 +367,7 @@ function publishFromSearchBank(input) {
     version: "regional-brokerage-publisher-v1.1",
     generatedAt: new Date().toISOString(),
     sourceBank: source.file ? path.relative(root, source.file) : null,
+    canonicalPublicationVerified: !!(source.verification && source.verification.ok),
     scopes: [],
     removedStaleSnapshots: []
   };

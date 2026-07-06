@@ -2,11 +2,10 @@
 // IGDC/MARU Distribution Hub: immediate local first paint + safely merged verified snapshots.
 //
 // Display contract:
-// - Never leave the visitor with a blank hub while data is loading.
-// - Reuse the most recent same-session view immediately, then revalidate safely.
-// - Prefer a verified regional snapshot, but never replace a visible valid view
-//   with an error, an empty response, or an older snapshot.
-// - Recheck a no-result or transient failure soon; do not impose a long cooldown.
+// - Canonical IP snapshot only: no seed cards, session cache or generic feed may
+//   fill a product slot before the same-country snapshot is selected.
+// - An unresolved IP scope stays empty rather than falling back across country or
+//   to a global catalog.
 // - Only this renderer owns Distribution Hub PSOM slots.
 // - A partial regional response overlays only the sections it actually contains.
 (function(){
@@ -15,7 +14,7 @@
   window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V8__=true;
 
   const STATIC_SNAPSHOT_URL='/data/distribution.snapshot.json';
-  const REGIONAL_SNAPSHOT_URL='/.netlify/functions/regional-brokerage-snapshot?hub=distribution';
+  const REGIONAL_SNAPSHOT_URL=''; // Edge-routed canonical snapshot is the only source.
   const LIMIT_MAIN=100, LIMIT_RIGHT=100;
 
   // Cached content is only the instant first view. Every return visit revalidates
@@ -26,7 +25,7 @@
   const REGIONAL_EMPTY_RECHECK_TTL=90*1000;
   const REGIONAL_FAILURE_RECHECK_TTL=45*1000;
   const REGIONAL_REFRESH_DELAY=1400;
-  const INITIAL_SEED_PER_SECTION=8;
+  const INITIAL_SEED_PER_SECTION=0;
   const STATIC_TIMEOUT=12000;
   const REGIONAL_TIMEOUT=8500;
   const CACHE_PREFIX='igdc:distribution:instant-render:v5:';
@@ -110,10 +109,11 @@
       description:pick(item,['description','summary']),
       thumb:pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']),
       image:pick(item,['image','thumbnail','thumb','imageUrl']),
-      url:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','url','href','link']),
-      href:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','href','url','link']),
-      link:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','link','url','href']),
+      url:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','url','href','link']),
+      href:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','href','url','link']),
+      link:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','link','url','href']),
       affiliateOutboundUrl:pick(item,['affiliateOutboundUrl','affiliate_outbound_url']),
+      externalOutboundUrl:pick(item,['externalOutboundUrl','external_outbound_url']),
       affiliate:item&&item.affiliate&&typeof item.affiliate==='object'?item.affiliate:null,
       trackId:pick(item,['trackId','track_id']) || pick(item,['id','uid','productId','contentId']),
       revenueLine:pick(item,['revenueLine','revenue_line']),
@@ -141,7 +141,10 @@
       targetRegion:rawMeta.targetRegion||'',
       snapshotRevision:rawMeta.snapshotRevision||rawMeta.revision||rawMeta.version||rawMeta.contentHash||'',
       etag:networkMeta&&networkMeta.etag||'',
-      compact:true
+      compact:true,
+      geoResolutionRequired:rawMeta.geoResolutionRequired===true,
+      geoMatched:rawMeta.geoMatched===true,
+      canonicalReleaseId:rawMeta.canonicalReleaseId||''
     }};
   }
   // Local seed cards are used only when the server HTML has no visible cards.
@@ -156,6 +159,7 @@
     if(item&&item.trackId) root.setAttribute('data-track-id',text(item.trackId));
     if(item&&item.section) root.setAttribute('data-section',text(item.section));
     if(item&&item.affiliateOutboundUrl) root.setAttribute('data-affiliate-outbound','1');
+    if(item&&item.externalOutboundUrl) root.setAttribute('data-external-outbound','1');
     const img=document.createElement('div'); img.className='thumb-img';
     const image=pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']);
     if(image){
@@ -272,16 +276,7 @@
     return card;
   }
   function seedInitialView(){
-    // The HTML starts with empty hosts. Build only the immediately useful cards
-    // locally so slow networks never leave the hub blank while the full snapshot
-    // is downloading. Verified data always replaces these cards later.
-    SECTION_MAP.forEach(function(cfg){
-      const box=document.querySelector(cfg.selector);
-      if(!box||box.children.length) return;
-      const fragment=document.createDocumentFragment();
-      for(let i=0;i<INITIAL_SEED_PER_SECTION;i++) fragment.appendChild(makeSeedCard(cfg,i));
-      box.appendChild(fragment);
-    });
+    // Legacy no-op. IP-scoped surfaces must never synthesize placeholder cards.
   }
   function replaceChildren(box,fragment){
     if(typeof box.replaceChildren==='function'){box.replaceChildren(fragment);return;}
@@ -322,8 +317,15 @@
         if(!box) continue;
         const raw=sections[cfg.key]||sections[ALIAS[cfg.key]];
         const list=normalizeList(raw).slice(0,cfg.limit);
-        // A partial/empty response must never erase the last valid visible section.
-        if(!list.length) continue;
+        // A canonical IP gate deliberately returns an empty scope when no exact
+        // same-country supply exists. Empty sections must therefore clear rather
+        // than preserve a previous-country cache or a local seed.
+        if(!list.length){
+          if(snapshot&&snapshot.meta&&snapshot.meta.geoResolutionRequired===true){
+            replaceChildren(box,document.createDocumentFragment());
+          }
+          continue;
+        }
         const fragment=document.createDocumentFragment();
         list.forEach(function(item){fragment.appendChild(makeCard(item));});
         if(generation!==renderGeneration) return;
@@ -388,58 +390,20 @@
     }).catch(function(){/* Existing visible cards or same-session cache stay visible. */});
   }
   function refreshRegional(){
-    if(!canRefreshRegional()) return Promise.resolve(false);
-    regionalRefreshInFlight=true;
-    return fetchJson(REGIONAL_SNAPSHOT_URL,REGIONAL_TIMEOUT,'no-store').then(function(result){
-      if(result.empty||!result.payload){
-        const waitMs=nextRegionalRetryDelay('empty');
-        setRegionalStatus('empty',waitMs);
-        scheduleSingleRegionalFollowUp(waitMs);
-        return false;
-      }
-      const raw=result.payload;
-      if(raw&&raw.meta&&raw.meta.regionalBrokerage===true){
-        const compact=compactSnapshot(raw,{etag:result.etag});
-        if(compact){
-          regionalSnapshot=compact;
-          setCached('regional',compact);
-          regionalRetryCount=0;
-          setRegionalStatus('success',REGIONAL_SUCCESS_RECHECK_TTL);
-          renderMerged();
-          scheduleSingleRegionalFollowUp(REGIONAL_SUCCESS_RECHECK_TTL);
-          return true;
-        }
-      }
-      const waitMs=nextRegionalRetryDelay('empty');
-      setRegionalStatus('empty',waitMs);
-      scheduleSingleRegionalFollowUp(waitMs);
-      return false;
-    }).catch(function(){
-      const waitMs=nextRegionalRetryDelay('failure');
-      setRegionalStatus('failure',waitMs);
-      scheduleSingleRegionalFollowUp(waitMs);
-      return false;
-    }).finally(function(){regionalRefreshInFlight=false;});
+    // Deliberately disabled: the Edge-routed canonical snapshot already applies
+    // the exact country/region scope. A second endpoint could reintroduce a
+    // different selection contract or cross-scope overlay.
+    return Promise.resolve(false);
   }
   function boot(){
     controlHosts();
-    const regional=getCached('regional',REGIONAL_CACHE_TTL);
-    const statik=getCached('static',STATIC_CACHE_TTL);
-    baseSnapshot=statik&&statik.value||null;
-    regionalSnapshot=regional&&regional.value||null;
-    if(!renderMerged()) seedInitialView();
-
-    // Start the public snapshot request on the next paint, not during an idle
-    // window. The request remains non-blocking, while the local seed keeps the
-    // page immediately usable on a slow connection.
+    // Never restore session-cached product cards: an IP scope can change
+    // between visits and a cached card has no request-time geo proof.
+    baseSnapshot=null;
+    regionalSnapshot=null;
     nextFrame(function(){refreshStatic();});
-    idle(refreshRegional,REGIONAL_REFRESH_DELAY);
-
     document.addEventListener('visibilitychange',function(){
-      if(document.hidden===false){
-        nextFrame(function(){refreshStatic();});
-        if(canRefreshRegional()) idle(refreshRegional,REGIONAL_REFRESH_DELAY);
-      }
+      if(document.hidden===false) nextFrame(function(){refreshStatic();});
     });
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true});

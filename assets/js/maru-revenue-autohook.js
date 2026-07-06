@@ -12,6 +12,7 @@
   var MARKER = [
     "[data-maru-revenue]",
     "[data-affiliate-outbound]",
+    "[data-external-outbound]",
     "[data-igdc-content-id]",
     "[data-product-id]",
     "[data-item-id]",
@@ -51,7 +52,9 @@
   function itemFrom(el){
     var anchor = el && el.closest ? el.closest("a,button") : null;
     var href = text(dataset(el,"url") || dataset(el,"productUrl") || dataset(el,"productLink") || dataset(el,"externalUrl") || (anchor && anchor.getAttribute("href")) || attr(el,"href"));
-    var affiliate = bool(dataset(el,"affiliateOutbound")) || /\/\.netlify\/functions\/affiliate-outbound\b/.test(href);
+    var affiliate = bool(dataset(el,"affiliateOutbound"));
+    var externalOutbound = bool(dataset(el,"externalOutbound"));
+    if(!affiliate && !externalOutbound && /\/\.netlify\/functions\/affiliate-outbound\b/.test(href)) externalOutbound = true;
     var id = text(
       dataset(el,"itemId") || dataset(el,"productId") || dataset(el,"igdcContentId") ||
       dataset(el,"contentId") || dataset(el,"trackId") || attr(el,"data-item-id") || attr(el,"data-product-id")
@@ -68,19 +71,22 @@
       url:href || null,
       page:pageType(),
       section:text(dataset(el,"section") || dataset(el,"psomKey")) || null,
-      revenueLine:line || null,
+      revenueLine:line || (externalOutbound ? "external_seller_visit" : null),
       affiliateId: affiliate ? text(dataset(el,"affiliateProvider") || "approved_affiliate") : null,
-      itemType: affiliate ? "product" : text(dataset(el,"itemType")) || null
+      itemType: affiliate || externalOutbound ? "product" : text(dataset(el,"itemType")) || null
     };
   }
   function context(el, extra){
     var href = text(dataset(el,"url") || dataset(el,"productUrl") || dataset(el,"productLink") || attr(el,"href"));
-    var affiliate = bool(dataset(el,"affiliateOutbound")) || /\/\.netlify\/functions\/affiliate-outbound\b/.test(href);
+    var affiliate = bool(dataset(el,"affiliateOutbound"));
+    var externalOutbound = bool(dataset(el,"externalOutbound"));
+    if(!affiliate && !externalOutbound && /\/\.netlify\/functions\/affiliate-outbound\b/.test(href)) externalOutbound = true;
     return Object.assign({
       service:"maru-revenue-autohook",
       pageType:pageType(),
-      revenueLine: affiliate ? "product_affiliate" : (text(dataset(el,"revenueLine")) || ""),
+      revenueLine: affiliate ? "product_affiliate" : (externalOutbound ? "external_seller_visit" : (text(dataset(el,"revenueLine")) || "")),
       affiliate:affiliate,
+      externalOutbound:externalOutbound,
       // This marker is deliberately non-cash; provider confirmation/settlement
       // remains the only way to create a confirmed ledger row.
       sourceType:"front_signal"
@@ -147,5 +153,5 @@
     return true;
   }
 
-  global.MaruRevenueAutoHook = { VERSION:"maru-revenue-autohook-v1.0.0", install:install, scan:scan };
+  global.MaruRevenueAutoHook = { VERSION:"maru-revenue-autohook-v1.1.0-approved-outbound", install:install, scan:scan };
 })(window);

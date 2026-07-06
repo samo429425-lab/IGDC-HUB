@@ -13,10 +13,9 @@
   window.__HOME_PRODUCTS_AUTOMAP_V2__ = true;
 
   const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
-  const SNAPSHOT_CANDIDATES = [
-    '/data/front.snapshot.json',
-    '/front.snapshot.json'
-  ];
+  // The Edge function resolves this path to an approved same-country snapshot.
+  // Do not try a legacy root fallback because that would bypass the IP gate.
+  const SNAPSHOT_CANDIDATES = [ '/data/front.snapshot.json' ];
 
   const KEYS_MAIN = ['home_1', 'home_2', 'home_3', 'home_4', 'home_5'];
   const KEYS_RIGHT = ['home_right_top', 'home_right_middle', 'home_right_bottom'];
@@ -141,6 +140,8 @@
 
   function resolveSlotHref(item) {
     if (!item) return '';
+    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.outboundUrl || '');
+    if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
     if (item.id) return contentHref(item.id);
     const url = item.url || '';
     if (isBadUrl(url) || isExampleUrl(url)) return '';
@@ -164,6 +165,8 @@
     a.href = href;
     if (item && item.id) a.setAttribute('data-igdc-content-id', item.id);
     if (item && item.sourceUrl) a.setAttribute('data-igdc-source-url', item.sourceUrl);
+    if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound', '1');
+    if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound', '1');
 
     if (isExternal(href)) {
       a.target = '_top';
@@ -183,7 +186,7 @@
 
     const page = src.page || fb.page || 'home';
     const section = src.section || fb.section || null;
-    const sourceUrl = pick(src, ['checkoutUrl', 'paymentUrl', 'productUrl', 'purchaseUrl', 'orderUrl', 'url', 'href', 'link', 'path', 'detailUrl', 'contentUrl', 'pageUrl']) || '#';
+    const sourceUrl = pick(src, ['affiliateOutboundUrl', 'affiliate_outbound_url', 'externalOutboundUrl', 'external_outbound_url', 'checkoutUrl', 'paymentUrl', 'productUrl', 'purchaseUrl', 'orderUrl', 'url', 'href', 'link', 'path', 'detailUrl', 'contentUrl', 'pageUrl']) || '#';
     const priority = (typeof src.priority === 'number')
       ? src.priority
       : (Number.isFinite(Number(src.priority)) ? Number(src.priority) : safeNumber(fb.priority, null));
@@ -196,6 +199,8 @@
       thumb: pick(src, ['thumb', 'image', 'image_url', 'img', 'photo', 'thumbnail', 'thumbnailUrl', 'cover', 'coverUrl']),
       url: sourceUrl,
       sourceUrl,
+      affiliateOutboundUrl: pick(src, ['affiliateOutboundUrl', 'affiliate_outbound_url']),
+      externalOutboundUrl: pick(src, ['externalOutboundUrl', 'external_outbound_url']),
       priority,
       weight: safeNumber(src.weight, safeNumber(fb.weight, 0)),
       order,
@@ -528,19 +533,9 @@ function bindIncremental(target, items) {
   }
 
   async function loadSections() {
-    try {
-      return await loadFromSnapshot();
-    } catch (snapshotErr) {
-      try {
-        return await loadFromFeed();
-      } catch (feedErr) {
-        throw new Error(
-          'HOME_AUTOMAP_LOAD_FAILED :: ' +
-          String((snapshotErr && snapshotErr.message) || snapshotErr) + ' :: ' +
-          String((feedErr && feedErr.message) || feedErr)
-        );
-      }
-    }
+    // Home product and right-panel slots are IP scoped. A generic feed is not
+    // a safe fallback because it has no request-time country/region proof.
+    return await loadFromSnapshot();
   }
 
 

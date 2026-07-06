@@ -22,9 +22,10 @@ const path = require("path");
 const crypto = require("crypto");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const MarketSaleScope = require("./market-sale-scope.v1");
+const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 
-const VERSION = "canonical-snapshot-publisher-v1.4.0-social-right-market-evidence-integrity";
-const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.4-social-right-market-evidence-integrity";
+const VERSION = "canonical-snapshot-publisher-v1.5.0-commerce-candidate-intake";
+const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.5-commerce-candidate-intake";
 const UPSTREAM_FILE = "search-bank.upstream.snapshot.json";
 const PUBLIC_FILE = "search-bank.snapshot.json";
 const POLICY_FILE = "canonical-snapshot-policy.v1.json";
@@ -465,6 +466,15 @@ function validateCandidate(raw, index, context) {
     ipSlot = IpSlotPolicy.validateCandidate(item, { policy: context.ipPolicy, page, section, country, region });
     if (!ipSlot.ok) reasons.push(...ipSlot.reasons);
     if (ipSlot.scoped && country === "GLOBAL") reasons.push("IP_SLOT_GLOBAL_SCOPE_FORBIDDEN");
+    // IP-owned product surfaces must arrive through the private Commerce
+    // Candidate Intake envelope.  Raw SearchBank rows cannot bypass the
+    // life-need, non-PG revenue-right, review and release-key gates.
+    if (ipSlot.scoped) {
+      const selection = isObject(item.candidateSelection) ? item.candidateSelection : {};
+      const commerceCandidate = isObject(item.commerceCandidate) ? item.commerceCandidate : {};
+      if (selection.releaseEligible !== true || commerceCandidate.releaseEligible !== true) reasons.push("COMMERCE_CANDIDATE_RELEASE_ENVELOPE_MISSING");
+      if (!str(selection.sourceTier) || !str(selection.selectionDigest)) reasons.push("COMMERCE_CANDIDATE_PROVENANCE_MISSING");
+    }
   }
 
   if (!source.name) reasons.push("SOURCE_NAME_MISSING");
@@ -532,59 +542,90 @@ function loadLedger(root) {
   const entries = isObject(existing && existing.entries) ? existing.entries : {};
   return { version: "canonical-placement-ledger-v1", entries };
 }
+function sourceTierOf(candidate) {
+  const raw = candidate && candidate.raw || {};
+  const selection = isObject(raw.candidateSelection) ? raw.candidateSelection : {};
+  return str(selection.sourceTier || objectAt(raw, ["commerceCandidate", "sourceTier"]));
+}
+function isApprovedDirect(candidate) { return sourceTierOf(candidate) === "approved_commerce_member"; }
+function numeric(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function getPriority(candidate) {
   const raw = candidate.raw || {};
-  const values = [raw.managedPriority === true ? 1000000 : 0, raw.priority, raw.score, raw.compositeScore, raw.qualityScore];
-  for (const value of values) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return 0;
+  const selection = isObject(raw.candidateSelection) ? raw.candidateSelection : {};
+  const sourceTier = sourceTierOf(candidate);
+  const sourceBoost = sourceTier === "approved_commerce_member" ? 10000000 : (sourceTier === "managed_sponsor" ? 5000000 : 0);
+  const managedBoost = raw.managedPriority === true ? 1000000 : 0;
+  // Use a sum, not the first numeric value: a generic candidate with
+  // managedPriority=false must still keep its verified ranking score.
+  return sourceBoost + managedBoost + numeric(selection.rankingScore) + numeric(raw.priority) + numeric(raw.score) + numeric(raw.compositeScore) + numeric(raw.qualityScore);
 }
 function assignSlots(candidates, ledger, policy) {
   const rejected = [];
   const assigned = [];
   const capacity = Math.max(1, Number(policy.slotCapacityDefault) || 100);
   const groups = new Map();
+  const firstFree = used => { for (let i = 1; i <= capacity; i += 1) if (!used.has(i)) return i; return null; };
   for (const candidate of candidates) {
-    // Slots are fixed per page/section and market scope. A KR candidate and a
-    // US candidate may both occupy slot 1; they are never rendered together.
     const key = candidate.page + "|" + candidate.section + "|" + candidate.country + "|" + candidate.region;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(candidate);
   }
-  for (const [key, group] of groups.entries()) {
+  for (const [, group] of groups.entries()) {
     const used = new Map();
+    const priorFor = candidate => {
+      const prior = ledger.entries[candidate.candidateId];
+      return prior && prior.fingerprint === candidate.fingerprint && prior.page === candidate.page && prior.section === candidate.section && prior.country === candidate.country && prior.region === candidate.region && Number(prior.slot) >= 1 && Number(prior.slot) <= capacity ? Number(prior.slot) : null;
+    };
+    const place = (candidate, slot, origin) => {
+      used.set(slot, candidate.candidateId);
+      assigned.push(Object.assign({}, candidate, { slot, slotOrigin: origin }));
+    };
+
+    // Administrator-approved direct commerce is intentionally allowed to take
+    // the foremost free positions before generic referral rows retained from a
+    // prior release. It still must satisfy all Canonical evidence contracts.
+    const direct = group.filter(isApprovedDirect).sort((a, b) => getPriority(b) - getPriority(a) || a.candidateId.localeCompare(b.candidateId));
+    const remaining = group.filter(candidate => !isApprovedDirect(candidate));
+    for (const candidate of direct) {
+      // Direct listings are re-ranked ahead of generic brokerage on every
+      // release unless an administrator explicitly pins a slot upstream.
+      let slot = candidate.requestedSlot != null ? candidate.requestedSlot : firstFree(used);
+      if (slot != null && used.has(slot)) {
+        // A direct item may not displace another direct item; when the desired
+        // slot is occupied it falls to the next free slot rather than silently
+        // overwriting a manager's approved placement.
+        slot = firstFree(used);
+      }
+      if (!slot || slot > capacity) { rejected.push({ candidate, reason: "SECTION_CAPACITY_EXHAUSTED" }); continue; }
+      place(candidate, slot, candidate.requestedSlot != null ? "upstream-direct" : "publisher-direct");
+    }
+
     const retained = [];
     const incoming = [];
-    for (const candidate of group) {
-      const prior = ledger.entries[candidate.candidateId];
-      const priorMatches = prior && prior.fingerprint === candidate.fingerprint && prior.page === candidate.page && prior.section === candidate.section && prior.country === candidate.country && prior.region === candidate.region && Number(prior.slot) >= 1 && Number(prior.slot) <= capacity;
-      if (priorMatches) retained.push({ candidate, slot: Number(prior.slot), origin: "ledger" });
+    for (const candidate of remaining) {
+      const priorSlot = priorFor(candidate);
+      if (priorSlot != null && !used.has(priorSlot)) retained.push({ candidate, slot: priorSlot, origin: "ledger" });
       else incoming.push(candidate);
     }
-    retained.sort((a, b) => a.slot - b.slot || a.candidate.candidateId.localeCompare(b.candidate.candidateId));
+    retained.sort((a, b) => a.slot - b.slot || getPriority(b.candidate) - getPriority(a.candidate) || a.candidate.candidateId.localeCompare(b.candidate.candidateId));
     for (const entry of retained) {
-      if (used.has(entry.slot)) {
-        rejected.push({ candidate: entry.candidate, reason: "LEDGER_SLOT_COLLISION" });
-      } else {
-        used.set(entry.slot, entry.candidate.candidateId);
-        assigned.push(Object.assign({}, entry.candidate, { slot: entry.slot, slotOrigin: entry.origin }));
-      }
+      if (used.has(entry.slot)) { incoming.push(entry.candidate); continue; }
+      place(entry.candidate, entry.slot, entry.origin);
     }
     incoming.sort((a, b) => getPriority(b) - getPriority(a) || a.candidateId.localeCompare(b.candidateId));
     for (const candidate of incoming) {
       let slot = candidate.requestedSlot;
-      if (slot != null) {
-        if (used.has(slot)) { rejected.push({ candidate, reason: "REQUESTED_SLOT_COLLISION" }); continue; }
-      } else {
-        for (let i = 1; i <= capacity; i += 1) {
-          if (!used.has(i)) { slot = i; break; }
-        }
+      if (slot != null && used.has(slot)) {
+        const incumbentId = used.get(slot);
+        const incumbent = assigned.find(entry => entry.candidateId === incumbentId);
+        // An approved direct item may legitimately take the prominent slot;
+        // retain the otherwise valid generic candidate in the next free slot.
+        if (incumbent && isApprovedDirect(incumbent)) slot = firstFree(used);
+        else { rejected.push({ candidate, reason: "REQUESTED_SLOT_COLLISION" }); continue; }
       }
+      if (slot == null) slot = firstFree(used);
       if (!slot || slot > capacity) { rejected.push({ candidate, reason: "SECTION_CAPACITY_EXHAUSTED" }); continue; }
-      used.set(slot, candidate.candidateId);
-      assigned.push(Object.assign({}, candidate, { slot, slotOrigin: candidate.requestedSlot != null ? "upstream" : "publisher" }));
+      place(candidate, slot, candidate.requestedSlot != null ? "upstream" : "publisher");
     }
   }
   return { assigned, rejected };
@@ -649,6 +690,18 @@ function buildCanonicalItem(entry, releaseId) {
       marketScopeKey: entry.ipSlotMapping.marketScopeKey || null,
       marketEvidenceDigest: entry.ipSlotMapping.marketEvidenceDigest || null,
       marketServicesVerified: entry.ipSlotMapping.marketServicesVerified === true
+    };
+  }
+  if (isObject(item.candidateSelection) || isObject(item.commerceCandidate)) {
+    const selection = isObject(item.candidateSelection) ? item.candidateSelection : {};
+    const commerceCandidate = isObject(item.commerceCandidate) ? item.commerceCandidate : {};
+    item.commerceCandidatePublication = {
+      version: CommerceCandidateIntake.VERSION,
+      sourceTier: str(selection.sourceTier || commerceCandidate.sourceTier) || null,
+      selectionDigest: str(selection.selectionDigest || commerceCandidate.selectionDigest) || null,
+      rankingScore: Number(selection.rankingScore) || null,
+      revenue: isObject(selection.revenue) ? clone(selection.revenue) : (isObject(commerceCandidate.revenue) ? clone(commerceCandidate.revenue) : null),
+      review: isObject(selection.review) ? clone(selection.review) : (isObject(commerceCandidate.review) ? clone(commerceCandidate.review) : null)
     };
   }
   item.canonicalPublication = {
@@ -758,8 +811,26 @@ function publish(input) {
 
   const trust = loadTrustResources(root);
   const context = { root, policy, registry, trust, ipPolicy };
-  const rawItems = Array.isArray(upstream.doc.items) ? upstream.doc.items : [];
-  report.counts.received = rawItems.length;
+  // Build the private commerce staging queue first.  The intake owns category,
+  // non-PG revenue-right, direct-listing approval and release-key gating;
+  // Canonical remains the sole public publication boundary.
+  const commerceIntake = CommerceCandidateIntake.build({ root, items: Array.isArray(upstream.doc.items) ? upstream.doc.items : [], trigger: report.trigger });
+  report.commerceCandidateIntake = {
+    version: CommerceCandidateIntake.VERSION,
+    digest: commerceIntake.digest,
+    releaseGate: commerceIntake.releaseGate,
+    summary: commerceIntake.summary,
+    queue: { digest: commerceIntake.queue && commerceIntake.queue.digest || null, stale: !!(commerceIntake.queue && commerceIntake.queue.stale) },
+    stagePath: path.relative(root, path.join(root, "netlify", "functions", "data", CommerceCandidateIntake.STAGING_FILE)).replace(/\\/g, "/")
+  };
+  if (!commerceIntake.ok) { report.errors.push(...(commerceIntake.problems || ["COMMERCE_CANDIDATE_INTAKE_BLOCKED"])); return report; }
+  const effectiveUpstream = Object.assign({}, upstream, {
+    digest: sha256({ upstreamDigest: upstream.digest, commerceCandidateIntakeDigest: commerceIntake.digest }),
+    source: String(upstream.source || "upstream") + "+commerce-candidate-intake",
+    candidateIntakeDigest: commerceIntake.digest
+  });
+  const rawItems = commerceIntake.releaseItems;
+  report.counts.received = commerceIntake.summary.considered;
   const expandedItems = [];
   for (let index = 0; index < rawItems.length; index += 1) {
     const marketVariants = MarketSaleScope.expand(rawItems[index]);
@@ -800,7 +871,7 @@ function publish(input) {
   for (const rejected of slotResult.rejected) {
     auditRows.push(Object.assign({ status: "rejected", reasons: [rejected.reason] }, rejected.candidate.audit));
   }
-  const provisionalReleaseId = makeReleaseId(upstream.digest, slotResult.assigned);
+  const provisionalReleaseId = makeReleaseId(effectiveUpstream.digest, slotResult.assigned);
   const items = slotResult.assigned
     .sort((a, b) => a.page.localeCompare(b.page) || a.section.localeCompare(b.section) || a.slot - b.slot || a.candidateId.localeCompare(b.candidateId))
     .map(entry => buildCanonicalItem(entry, provisionalReleaseId));
@@ -810,7 +881,7 @@ function publish(input) {
 
   const previousManifest = safeReadJson(manifestPath(root));
   const rollback = snapshotForRollback(root, previousManifest);
-  const document = publishedDoc(provisionalReleaseId, registry, upstream, items, report.counts);
+  const document = publishedDoc(provisionalReleaseId, registry, effectiveUpstream, items, report.counts);
   const outputs = writePublicMirrors(root, document);
   const nextLedger = { version: "canonical-placement-ledger-v1", updatedAt: nowIso(), releaseId: provisionalReleaseId, entries: {} };
   for (const entry of slotResult.assigned) {
@@ -825,8 +896,8 @@ function publish(input) {
     generatedAt: nowIso(),
     trigger: report.trigger,
     input: {
-      source: upstream.source,
-      upstreamDigest: upstream.digest,
+      source: effectiveUpstream.source,
+      upstreamDigest: effectiveUpstream.digest,
       upstreamMirrors: upstream.mirrors,
       routeRegistryDigest: registry.fingerprint,
       received: report.counts.received,
@@ -835,6 +906,13 @@ function publish(input) {
     },
     outputs,
     rollback,
+    commerceCandidateIntake: {
+      version: CommerceCandidateIntake.VERSION,
+      digest: commerceIntake.digest,
+      releaseGate: { enabled: commerceIntake.releaseGate.enabled, mode: commerceIntake.releaseGate.mode, reason: commerceIntake.releaseGate.reason },
+      summary: commerceIntake.summary,
+      queueDigest: commerceIntake.queue && commerceIntake.queue.digest || null
+    },
     mapping: items.map(item => ({
       candidateId: item.canonicalPublication.candidateId,
       candidateFingerprint: item.canonicalPublication.candidateFingerprint,
@@ -859,6 +937,8 @@ function publish(input) {
       originCountryIsNotEligibilityGate: true,
       crossCountrySnapshotFallbackDisabled: true,
       legacyFallbackDisabled: true,
+      commerceCandidateIntakeRequiredForIpSlots: true,
+      commercePublicationReleaseKeyRequired: true,
       ipSlotPolicyDigest: ipPolicy.fingerprint
     }
   };
@@ -866,7 +946,7 @@ function publish(input) {
     schema: "canonical-snapshot-audit-v1",
     releaseId: provisionalReleaseId,
     generatedAt: nowIso(),
-    sourceDigest: upstream.digest,
+    sourceDigest: effectiveUpstream.digest,
     received: report.counts.received,
     accepted: manifest.mapping,
     rejected: auditRows.slice(0, MAX_AUDIT_ROWS),

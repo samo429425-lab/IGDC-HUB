@@ -3775,85 +3775,60 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 </script>
 
 
-<!-- Global Slot Management: isolated launcher only; no front/build/snapshot hook -->
-<script id="igdc-admin-global-slot-console-link-script">
+<!-- IGDC private commerce candidate pipeline launcher -->
+<style id="igdc-admin-commerce-candidate-link-style">
+  .igdc-admin-commerce-candidate-card { border-color:#7fa9d8 !important; background:#f1f7ff !important; }
+  .igdc-admin-commerce-candidate-card:hover { border-color:#4f86bf !important; background:#e7f1ff !important; }
+  .igdc-admin-commerce-candidate-card .igdc-admin-commerce-candidate-title { font-size:12px;font-weight:800;color:#1d5488; }
+  .igdc-admin-commerce-candidate-card .igdc-admin-commerce-candidate-desc { font-size:11px;color:#3d6388;line-height:1.35;margin:3px 0 6px; }
+  .igdc-admin-commerce-candidate-card .igdc-admin-commerce-candidate-btn { width:100%;padding:5px 7px;font-size:11px;font-weight:800;border-radius:5px;border:1px solid #87acd4;background:linear-gradient(180deg,#fbfdff 0%,#dcecff 100%);color:#1d5488;cursor:pointer; }
+  .igdc-admin-commerce-candidate-card .igdc-admin-commerce-candidate-btn:hover { background:#d0e5ff; }
+  .igdc-admin-commerce-candidate-card .igdc-admin-commerce-candidate-mini { margin-top:4px;font-size:10px;color:#6382a2; }
+</style>
+<script id="igdc-admin-commerce-candidate-link-script">
 (function(){
-  'use strict';
-  if (window.__IGDC_GLOBAL_SLOT_CONSOLE_LAUNCHER_V1__) return;
-  window.__IGDC_GLOBAL_SLOT_CONSOLE_LAUNCHER_V1__ = true;
-
-  function consoleUrl(){
-    var u = new URL('/admin/global-slot-console/', window.location.origin);
+  if (window.__IGDC_ADMIN_COMMERCE_CANDIDATE_LINK_INSTALLED__) return;
+  window.__IGDC_ADMIN_COMMERCE_CANDIDATE_LINK_INSTALLED__ = true;
+  function pageUrl(){
+    var u = new URL('/commerce-candidate-pipeline.html', window.location.origin);
+    u.searchParams.set('source', 'admin-right-panel');
     u.searchParams.set('returnPath', window.location.pathname + window.location.search + window.location.hash);
     return u.pathname + u.search;
   }
-  function findInsightCard(panel){
-    var cards = panel.querySelectorAll('.igdc-sc-card');
-    for (var i = 0; i < cards.length; i += 1) {
-      var text = (cards[i].textContent || '').replace(/\s+/g, ' ');
-      if (/MARU\s*Global\s*Insight|마루\s*Global\s*Insight/i.test(text)) return cards[i];
-    }
+  function findCard(panel, re){
+    var cards = Array.prototype.slice.call(panel.querySelectorAll('.igdc-sc-card'));
+    for (var i=0;i<cards.length;i++) if (re.test((cards[i].textContent||'').replace(/\s+/g,' '))) return cards[i];
     return null;
   }
   function makeCard(){
-    var card = document.createElement('div');
-    card.id = 'igdc-admin-global-slot-console-link-card';
-    card.className = 'igdc-sc-card';
-    card.setAttribute('data-igdc-global-slot-console-launcher', '1');
-    card.style.borderColor = '#b9a36c';
-    card.style.background = '#fffaf0';
-    card.innerHTML =
-      '<div class="igdc-sc-card-header">' +
-        '<span class="igdc-sc-card-title" style="color:#6f5417">🗂️ 글로벌 슬롯 · 상품 · 콘텐츠 · 제휴 관리</span>' +
-        '<span class="igdc-sc-card-status">↗</span>' +
-      '</div>' +
-      '<div class="igdc-sc-card-body" style="color:#705d30">후보·증빙·권역·권리·제휴·배치 원장만 별도 관리합니다.</div>' +
-      '<button type="button" style="width:100%;margin-top:6px;padding:5px 7px;font-size:11px;font-weight:800;border:1px solid #c5ad72;border-radius:5px;background:#fffdf7;color:#6f5417;cursor:pointer">관리 창 열기</button>' +
-      '<div style="margin-top:4px;font-size:10px;color:#8a7546">현재 프런트·SearchBank·Snapshot·Netlify 빌드에는 연결하지 않습니다.</div>';
-    function open(event){
-      if (event) { event.preventDefault(); event.stopPropagation(); }
-      window.location.assign(consoleUrl());
-      return false;
-    }
-    var button = card.querySelector('button');
-    if (button) button.addEventListener('click', open);
-    card.addEventListener('click', function(event){
-      if (event.target && event.target.tagName === 'BUTTON') return;
-      open(event);
-    });
+    var card=document.createElement('div');
+    card.id='igdc-admin-commerce-candidate-link-card';
+    card.className='igdc-sc-card igdc-admin-commerce-candidate-card';
+    card.setAttribute('data-igdc-admin-commerce-candidate-link','1');
+    card.innerHTML='<div class="igdc-sc-card-header"><span class="igdc-admin-commerce-candidate-title">📦 상품 후보·중개수익 대기열</span><span class="igdc-sc-card-status">↗</span></div>'+
+      '<div class="igdc-admin-commerce-candidate-desc">생활필수·판매시장·수익권한·관리승인 후보를 비공개로 검토합니다.</div>'+
+      '<button class="igdc-admin-commerce-candidate-btn" type="button">상품 후보 관리 열기</button>'+
+      '<div class="igdc-admin-commerce-candidate-mini">공개 발행·결제 실행 없이 대기열만 확인</div>';
+    function open(ev){if(ev){ev.preventDefault();ev.stopPropagation();}window.location.href=pageUrl();return false;}
+    var b=card.querySelector('button');if(b)b.addEventListener('click',open);
+    card.addEventListener('click',function(ev){if(ev.target&&ev.target.tagName==='BUTTON')return;open(ev);});
     return card;
   }
   function install(){
-    var panel = document.getElementById('igdc-site-control');
-    if (!panel) return false;
-    var existing = document.getElementById('igdc-admin-global-slot-console-link-card');
-    if (existing && panel.contains(existing)) return true;
-    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-
-    var card = makeCard();
-    var product = document.getElementById('igdc-admin-product-go-live-link-card');
-    var insight = findInsightCard(panel);
-    if (product && product.parentNode) {
-      product.insertAdjacentElement('afterend', card);
-      return true;
-    }
-    if (insight && insight.parentNode) {
-      insight.parentNode.insertBefore(card, insight);
-      return true;
-    }
-    return false;
+    var panel=document.getElementById('igdc-site-control');if(!panel)return false;
+    var current=document.getElementById('igdc-admin-commerce-candidate-link-card');if(current&&panel.contains(current))return true;
+    if(current&&current.parentNode)current.parentNode.removeChild(current);
+    var card=makeCard();
+    var product=document.getElementById('igdc-admin-product-go-live-link-card')||findCard(panel,/실상품\s*공급\s*개방\s*점검/i);
+    var insight=findCard(panel,/MARU\s*Global\s*Insight|마루\s*Global\s*Insight/i);
+    if(product&&product.parentNode){product.insertAdjacentElement('afterend',card);return true;}
+    if(insight&&insight.parentNode){insight.parentNode.insertBefore(card,insight);return true;}
+    (panel.querySelector('.igdc-sc-grid')||panel).appendChild(card);return true;
   }
-  function arm(){
-    var tries = 0;
-    var timer = setInterval(function(){
-      tries += 1;
-      if (install() || tries >= 80) clearInterval(timer);
-    }, 250);
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
-    else install();
-  }
+  function arm(){var tries=0,timer=setInterval(function(){tries+=1;if(install()||tries>80)clearInterval(timer);},250);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();var panel=document.getElementById('igdc-site-control');if(panel&&window.MutationObserver){var o=new MutationObserver(install);o.observe(panel,{childList:true,subtree:true});}}
   arm();
 })();
 </script>
+
 </body>
 </html>

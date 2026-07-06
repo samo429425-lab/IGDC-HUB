@@ -29,6 +29,10 @@
 
   function pickUrl(it){
     return safeText(it && (
+      it.affiliateOutboundUrl ||
+      it.affiliate_outbound_url ||
+      it.externalOutboundUrl ||
+      it.external_outbound_url ||
       it.checkoutUrl ||
       it.paymentUrl ||
       it.contentUrl ||
@@ -390,6 +394,8 @@ function paintRightCard(box, it){
   a.dataset.productLink = url;
   a.dataset.productUrl = url;
   a.dataset.detailUrl = url;
+  if(it && it.affiliateOutboundUrl) a.dataset.affiliateOutbound = '1';
+  if(it && it.externalOutboundUrl) a.dataset.externalOutbound = '1';
   a.dataset.href = url;
   if(externalUrl) a.dataset.externalUrl = externalUrl;
   else delete a.dataset.externalUrl;

@@ -1,0 +1,35 @@
+{
+  "version": "affiliate-program-registry-v1.0.0-manual-link-first",
+  "purpose": "Run approved manual affiliate links and verified official external referrals without provider API credentials. API integrations remain disabled until an operator enables them after provider approval.",
+  "programs": [
+    {
+      "id": "coupang-partners-kr",
+      "name": "Coupang Partners Korea",
+      "enabled": true,
+      "mode": "manual_link_only",
+      "allowedCountries": ["KR"],
+      "policyStatus": "operator_review_required",
+      "policyCheckedAt": "",
+      "policyMaxAgeDays": 14,
+      "manualLink": {
+        "enabled": true,
+        "requireOperatorApproval": true,
+        "requireProviderGeneratedUrl": true,
+        "requireDisclosure": true
+      },
+      "api": {
+        "mode": "disabled",
+        "enabledEnv": "COUPANG_API_ENABLED",
+        "requiredSecrets": ["COUPANG_ACCESS_KEY", "COUPANG_SECRET_KEY"]
+      }
+    }
+  ],
+  "externalReferral": {
+    "enabled": true,
+    "requireOperatorApproval": true,
+    "requireOfficialDestination": true,
+    "requireDisclosure": true,
+    "requireFreshVerification": true,
+    "verificationMaxAgeDays": 30
+  }
+}

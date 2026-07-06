@@ -1,0 +1,8 @@
+{
+  "schema": "commerce-candidate-review-queue.v1",
+  "version": "commerce-candidate-review-queue-v1",
+  "generatedAt": null,
+  "expiresAt": null,
+  "source": "initial-empty-queue",
+  "items": []
+}

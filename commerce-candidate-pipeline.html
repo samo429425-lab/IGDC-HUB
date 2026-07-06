@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IGDC 상품 후보·중개수익 대기열</title>
+  <style>
+    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#e5eefb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1280px;margin:0 auto;padding:28px 18px 72px}h1{margin:0 0 8px;font-size:25px}.lead{margin:0;max-width:980px;color:#b9c8db;line-height:1.6}.bar{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}.bar button{border:0;border-radius:9px;padding:10px 13px;font-weight:800;cursor:pointer;background:#4cc3ff;color:#06233a}.bar button.secondary{background:#dbe5f0;color:#172033}.bar button:disabled{opacity:.55;cursor:not-allowed}.state{font-size:13px;line-height:1.45;color:#b9c8db;align-self:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:11px;margin:16px 0}.card,.panel{background:#111c2d;border:1px solid #28405f;border-radius:14px;padding:14px}.card h2{font-size:13px;margin:0 0 7px;color:#cfe5ff}.num{font-size:27px;font-weight:850}.small{font-size:12px;line-height:1.48;color:#9eb2cb}.panel{margin-top:14px}.panel h2{font-size:16px;margin:0 0 8px}.notice{padding:11px 12px;border-radius:9px;border-left:4px solid #4cc3ff;background:#0b2942;color:#d7efff;line-height:1.5}.notice.warn{border-left-color:#f2b349;background:#3b2a0a;color:#ffe8b4}.notice.ok{border-left-color:#4ed18b;background:#0d2f22;color:#c9f7df}.hidden{display:none!important}.status-ok{color:#5de6a0}.status-warn{color:#ffd070}.status-fail{color:#ff8794}.status-info{color:#8bd8ff}table{width:100%;border-collapse:collapse;font-size:12px;min-width:950px}th,td{text-align:left;vertical-align:top;padding:9px 8px;border-bottom:1px solid #293e5b}th{color:#b6d0ee;white-space:nowrap}td{color:#e6eef8}.tablewrap{overflow:auto;border:1px solid #28405f;border-radius:12px;margin-top:10px}.pill{display:inline-block;border-radius:999px;padding:2px 7px;font-size:11px;font-weight:800;background:#243953;color:#d5e7f8}.pill.release{background:#104e35;color:#c6f9dd}.pill.hold{background:#5b3b10;color:#ffe2a1}.pill.direct{background:#3d2762;color:#e7d3ff}.pill.sponsor{background:#5e3115;color:#ffe0bd}.pill.external{background:#173f61;color:#c9ebff}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}.reason{max-width:340px;color:#ffd69a}.empty{padding:18px;color:#a9b9cb}.foot{margin-top:14px;color:#8ea2ba;font-size:12px;line-height:1.5}
+  </style>
+</head>
+<body>
+<main>
+  <h1>상품 후보·중개수익 비공개 대기열</h1>
+  <p class="lead">SearchBank 후보를 생활필수성·판매시장·공식 판매처·수동 제휴 링크·외부 연결·운영비·관리승인 기준으로 선별한 비공개 검토 목록입니다. 이 화면은 상품을 공개하거나 결제를 실행하지 않습니다. 정식 Snapshot 발행은 별도의 배포 환경 키와 Canonical 검증을 모두 통과할 때만 가능합니다.</p>
+  <div class="bar">
+    <button id="refreshBtn" type="button">대기열 새로고침</button>
+    <button id="loginBtn" type="button" class="secondary">관리자 로그인</button>
+    <button id="returnBtn" type="button" class="secondary">관리자 화면으로</button>
+    <span id="state" class="state">로그인 상태를 확인하는 중입니다.</span>
+  </div>
+  <div id="notice" class="notice hidden"></div>
+  <section id="summaryGrid" class="grid hidden"></section>
+  <section id="policyPanel" class="panel hidden"></section>
+  <section id="tablePanel" class="panel hidden">
+    <h2>비공개 선별 결과</h2>
+    <div class="small">직접등록·스폰서·승인 수동 제휴·공식 외부연결은 각각 수익 상태가 다릅니다. 외부연결형은 상품별 수익을 확정으로 표시하지 않으며, 판매시장 증빙·표시 고지·Canonical 검증을 모두 통과해야만 향후 정식 발행 대상이 됩니다.</div>
+    <div class="tablewrap"><table><thead><tr><th>후보</th><th>출처</th><th>상태</th><th>PSOM 배정</th><th>판매시장</th><th>생활 상품군</th><th>수익·검토</th><th>랭킹</th><th>차단 사유</th></tr></thead><tbody id="candidateRows"></tbody></table></div>
+  </section>
+  <p class="foot">이 목록은 관리자·운영진 검토용입니다. 실제 판매처·제휴·광고·직접중개 계약의 등록과 수정은 기존 상품 관리/운영 절차에서 처리하며, 이 화면은 공개 전에 일관되게 추적·검증된 후보만 확인합니다.</p>
+</main>
+<script src="/assets/js/igdc-member-auth.js"></script>
+<script src="/assets/js/admin-commerce-candidate-pipeline.js"></script>
+</body>
+</html>

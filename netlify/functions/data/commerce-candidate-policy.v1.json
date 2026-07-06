@@ -1,0 +1,284 @@
+{
+  "version": "commerce-candidate-policy-v1.1.0-manual-affiliate-external-referral",
+  "contractVersion": "sanmaru-searchbank-commerce-candidate-intake-v1.1",
+  "mode": "stage-before-publication-key",
+  "purpose": "Select everyday, rights-safe and market-verifiable goods before Canonical Snapshot publication. Support approved manual affiliate links and verified official external referrals without direct payment, provider API calls, or undisclosed revenue claims.",
+  "publication": {
+    "defaultMode": "staging_only",
+    "enableEnv": "COMMERCE_CANDIDATE_RELEASE_MODE",
+    "enableValue": "enabled",
+    "keyEnv": "COMMERCE_CANDIDATE_RELEASE_KEY",
+    "minimumKeyLength": 32,
+    "requireManualReleaseKey": true,
+    "allowAutomaticPublicPromotion": false
+  },
+  "sources": {
+    "external_brokerage": {
+      "requiresVerifiedRevenueRight": false,
+      "requiresExplicitAffiliateOrBrokerageContract": false,
+      "rankBoost": 1800,
+      "requiresApprovedManualAffiliateOrOfficialOutboundReferral": true
+    },
+    "approved_commerce_member": {
+      "requiresAdminApproval": true,
+      "requiresApprovedListingAssignment": true,
+      "requiresDirectSellerResponsibility": true,
+      "rankBoost": 5000
+    },
+    "managed_sponsor": {
+      "requiresAdminApproval": true,
+      "requiresDisclosure": true,
+      "rankBoost": 3500
+    }
+  },
+  "eligibility": {
+    "requireProductIdentity": true,
+    "requireExternalHttpsDestination": true,
+    "requireImageHttps": true,
+    "requireExactPsomPlacement": true,
+    "requireMarketSaleEvidence": true,
+    "requireFreshMarketEvidence": true,
+    "marketEvidenceMaxAgeDays": 30,
+    "requireSearchBankEligibilityFlags": true,
+    "requireTrustedSellerOrProducer": true,
+    "requireNonPgRevenueRight": true,
+    "rejectSamplesAndPlaceholders": true,
+    "rejectUnknownSourceTier": true
+  },
+  "essentialGoods": {
+    "preferredClasses": [
+      "food_grocery",
+      "household_essentials",
+      "personal_care",
+      "beauty_everyday",
+      "basic_apparel",
+      "small_electronics",
+      "home_appliance_small",
+      "family_education",
+      "producer_cooperative",
+      "local_essential_service",
+      "travel_product"
+    ],
+    "keywords": {
+      "food_grocery": [
+        "food",
+        "grocery",
+        "ramen",
+        "rice",
+        "noodle",
+        "snack",
+        "beverage",
+        "fresh",
+        "농산",
+        "축산",
+        "수산",
+        "식품",
+        "라면",
+        "쌀",
+        "면",
+        "간편식",
+        "조미료"
+      ],
+      "household_essentials": [
+        "household",
+        "cleaner",
+        "detergent",
+        "kitchen",
+        "storage",
+        "bedding",
+        "hygiene",
+        "생활",
+        "세제",
+        "청소",
+        "주방",
+        "수납",
+        "침구",
+        "위생"
+      ],
+      "personal_care": [
+        "personal care",
+        "body",
+        "hair",
+        "soap",
+        "tooth",
+        "shampoo",
+        "바디",
+        "헤어",
+        "비누",
+        "치약",
+        "샴푸",
+        "개인관리"
+      ],
+      "beauty_everyday": [
+        "beauty",
+        "cosmetic",
+        "skincare",
+        "makeup",
+        "화장품",
+        "스킨",
+        "기초",
+        "뷰티"
+      ],
+      "basic_apparel": [
+        "apparel",
+        "clothing",
+        "shirt",
+        "pants",
+        "shoes",
+        "bag",
+        "의류",
+        "옷",
+        "신발",
+        "가방",
+        "패션"
+      ],
+      "small_electronics": [
+        "earphone",
+        "earbuds",
+        "charger",
+        "cable",
+        "tablet",
+        "bluetooth",
+        "power bank",
+        "이어폰",
+        "충전기",
+        "케이블",
+        "태블릿",
+        "블루투스",
+        "보조배터리"
+      ],
+      "home_appliance_small": [
+        "vacuum",
+        "cleaner",
+        "lamp",
+        "kettle",
+        "appliance",
+        "청소기",
+        "조명",
+        "전기포트",
+        "소형가전"
+      ],
+      "family_education": [
+        "baby",
+        "child",
+        "family",
+        "education",
+        "school",
+        "learning",
+        "유아",
+        "육아",
+        "가정",
+        "교육",
+        "학습"
+      ],
+      "producer_cooperative": [
+        "cooperative",
+        "co-op",
+        "farmers",
+        "fisheries",
+        "producer",
+        "농협",
+        "축협",
+        "수협",
+        "협동조합",
+        "생산자",
+        "공판장"
+      ],
+      "local_essential_service": [
+        "local service",
+        "repair",
+        "delivery service",
+        "지역 서비스",
+        "수리",
+        "생활 서비스"
+      ],
+      "travel_product": [
+        "travel",
+        "tour",
+        "hotel",
+        "tourism",
+        "여행",
+        "관광",
+        "호텔"
+      ]
+    },
+    "allowNonEssentialOnlyWhen": [
+      "approved_commerce_member",
+      "managed_sponsor"
+    ]
+  },
+  "revenue": {
+    "allowedTypes": [
+      "advertising",
+      "affiliate",
+      "brokerage",
+      "external_referral",
+      "lead",
+      "manual_affiliate",
+      "referral",
+      "sponsor"
+    ],
+    "requireVerifiedAffiliateTracking": true,
+    "requireApprovedDirectAgreement": true,
+    "allowUnknownRevenueOnlyInReviewQueue": true,
+    "maxCommissionRate": 1,
+    "maxExpectedConversionRate": 1,
+    "sourcePriority": {
+      "approved_commerce_member": 100,
+      "managed_sponsor": 80,
+      "external_brokerage": 60
+    },
+    "allowVerifiedExternalReferral": true,
+    "externalReferralCreatesConfirmedProductRevenue": false,
+    "externalReferralTrafficValueOnly": true,
+    "manualAffiliateRequiresProgramRegistry": true,
+    "manualAffiliateRequiresPolicyReview": true,
+    "apiProviderIntegrationDefault": "disabled"
+  },
+  "ranking": {
+    "weights": {
+      "sourcePriority": 50,
+      "essentiality": 24,
+      "affordability": 10,
+      "repeatPurchase": 8,
+      "sellerTrust": 18,
+      "marketReadiness": 22,
+      "revenueCertainty": 24,
+      "expectedNetRevenue": 12,
+      "searchExposure": 6,
+      "conversionQuality": 8,
+      "operatorCostPenalty": 14,
+      "riskPenalty": 30,
+      "trafficValue": 4
+    },
+    "searchExposure": {
+      "minimumVerifiedImpressions": 100,
+      "minimumVerifiedOutboundClicks": 10,
+      "maximumContribution": 6,
+      "ignoreUnverifiedClientSignals": true
+    },
+    "priorityOrder": [
+      "approved_commerce_member",
+      "managed_sponsor",
+      "external_brokerage"
+    ],
+    "trafficValue": {
+      "maximumContribution": 4,
+      "requiresServerVerifiedOutboundSignals": true,
+      "doesNotRepresentAffiliateRevenue": true
+    }
+  },
+  "reviewQueue": {
+    "maxQueueAgeDays": 7,
+    "directMemberRequiresApprovalState": "approved",
+    "directMemberRequiresAssignmentState": [
+      "approved",
+      "pinned"
+    ],
+    "allowReleaseOnlyWhenAllExistingCanonicalChecksPass": true,
+    "queueIsNotPublicSupply": true,
+    "requireApprovedOutboundReferralForExternalRelease": true,
+    "manualAffiliateApiDisabledAllowed": true,
+    "outboundRevenueStateMustBeDisclosed": true
+  }
+}

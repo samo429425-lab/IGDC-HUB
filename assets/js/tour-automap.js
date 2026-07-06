@@ -12,7 +12,7 @@
 
   const HUB = "tour";
   const SNAPSHOT_URL = "/data/tour-snapshot.json";
-  const FEED_URL = "/.netlify/functions/feed-tour?limit=100";
+  const FEED_URL = ""; // No non-IP fallback for the tour offer rail.
 
   const RIGHT_PANEL_ID = "rightAutoPanel";
   const RIGHT_SLOT_COUNT = 100;
@@ -21,7 +21,6 @@
   const MOBILE_LIST_SEL = "#tour-mobile-rail .list";
   const MOBILE_LIMIT = 30;
 
-  const PLACEHOLDER_IMG = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
   const MOBILE_CSS_ID = "tour-mobile-rail-cap-v2";
 
   function $(sel, root = document) { return root.querySelector(sel); }
@@ -37,7 +36,7 @@
   }
 
   function pickId(it){ return pick(it, ["id", "contentId", "productId", "itemId", "sku", "code", "pid"]); }
-  function pickLink(it){ return pick(it, ["contentUrl", "pageUrl", "detailUrl", "checkoutUrl", "paymentUrl", "productUrl", "purchaseUrl", "orderUrl", "link", "url", "href"]) || "#"; }
+  function pickLink(it){ return pick(it, ["affiliateOutboundUrl", "affiliate_outbound_url", "externalOutboundUrl", "external_outbound_url", "contentUrl", "pageUrl", "detailUrl", "checkoutUrl", "paymentUrl", "productUrl", "purchaseUrl", "orderUrl", "link", "url", "href"]) || "#"; }
 
   function isExternal(url){ return /^https?:\/\//i.test(String(url || "")); }
   function isBadUrl(url){
@@ -52,6 +51,8 @@
   }
   function contentHref(id){ return id ? ("/content.html?id=" + encodeURIComponent(id)) : ""; }
   function resolveItemHref(item){
+    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || '');
+    if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
     if (item && item.id) return contentHref(item.id);
     const link = item && item.link;
     if (isBadUrl(link) || isExampleUrl(link)) return "";
@@ -67,7 +68,7 @@
       const link = pickLink(it);
       const id = pickId(it);
       if (!title || !thumb) continue;
-      out.push({ id, title, thumb, link, sourceUrl: link });
+      out.push({ id, title, thumb, link, sourceUrl: link, affiliateOutboundUrl: pick(it, ["affiliateOutboundUrl","affiliate_outbound_url"]), externalOutboundUrl: pick(it, ["externalOutboundUrl","external_outbound_url"]) });
       if (out.length >= RIGHT_SLOT_COUNT) break;
     }
     return out;
@@ -134,15 +135,6 @@
     document.head.appendChild(style);
   }
 
-  function makeDummy(idx) {
-    const n = idx + 1;
-    return {
-      id: "",
-      title: `Tour Brand ${n}`,
-      thumb: PLACEHOLDER_IMG,
-      link: "#"
-    };
-  }
 
   function applyAnchor(a, item){
     const href = resolveItemHref(item);
@@ -159,6 +151,8 @@
     a.href = href;
     if (item && item.id) a.setAttribute('data-igdc-content-id', item.id);
     if (item && item.sourceUrl) a.setAttribute('data-igdc-source-url', item.sourceUrl);
+    if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound','1');
+    if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound','1');
     if (isExternal(href)){
       a.target = '_top';
       a.rel = 'noopener';
@@ -174,7 +168,7 @@
     applyAnchor(a, item);
 
     const img = document.createElement("img");
-    img.src = item.thumb || PLACEHOLDER_IMG;
+    img.src = item.thumb;
     img.alt = item.title || "";
     img.loading = "lazy";
     img.decoding = "async";
@@ -194,21 +188,10 @@
     if (!panel) return;
 
     panel.innerHTML = "";
+    if (!items || !items.length) return;
     const frag = document.createDocumentFragment();
-
-    for (let i = 0; i < RIGHT_SLOT_COUNT; i++) {
-      const it = items[i] || makeDummy(i);
-      frag.appendChild(createRightBox(it));
-    }
-
+    for (const it of items.slice(0, RIGHT_SLOT_COUNT)) frag.appendChild(createRightBox(it));
     panel.appendChild(frag);
-  }
-
-  function isMobileRailViewport() {
-    if (typeof window.matchMedia === "function") {
-      return window.matchMedia("(max-width: 1024px)").matches;
-    }
-    return (window.innerWidth || document.documentElement.clientWidth || 0) <= 1024;
   }
 
   function renderMobileRail(items) {
@@ -216,19 +199,9 @@
     const list = $(MOBILE_LIST_SEL);
     if (!rail || !list) return;
 
-    // The rail is mobile-only. The initial data render must never force it
-    // onto a desktop page, even when the iframe reports a transient narrow width.
-    if (!isMobileRailViewport()) {
-      rail.style.display = "none";
-      rail.setAttribute("aria-hidden", "true");
-      return;
-    }
+    if (!items || !items.length) { list.innerHTML = ""; rail.style.display = "none"; return; }
 
     rail.style.display = "block";
-    rail.setAttribute("aria-hidden", "false");
-
-    if (!items || !items.length) return;
-
     ensureMobileCss();
 
     list.innerHTML = "";
@@ -252,13 +225,8 @@
 
     items = normalizeItems((snap && (snap.items || snap.slots)) || []);
 
-    if (!items.length) {
-      const feed = await fetchJson(FEED_URL);
-      items = (feed && Array.isArray(feed.items))
-        ? normalizeItems(feed.items)
-        : [];
-    }
-
+    // No generic feed fallback: only the Edge-routed canonical IP snapshot is
+    // allowed to populate the tour right panel and mobile rail.
     disablePsomThumbGrid();
     renderMobileRail(items);
     renderRightPanel(items);

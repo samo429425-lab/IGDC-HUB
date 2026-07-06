@@ -20,7 +20,7 @@ const Canonical = require("./canonical-snapshot-publisher.v1");
 const IpPolicy = require("./ip-slot-policy.v1");
 const MarketSaleScope = require("./market-sale-scope.v1");
 
-const VERSION = "canonical-ip-slot-snapshot-publisher-v1.3.0-social-right-market-evidence-integrity";
+const VERSION = "canonical-ip-slot-snapshot-publisher-v1.4.0-commerce-outbound-route";
 const MANIFEST_FILE = "ip-slot-manifest.json";
 const AUTO_ROOT = ["data", "auto"];
 const ROUTES = Object.freeze({
@@ -164,7 +164,11 @@ function cloneCard(item) {
     countrySupply: clone(item.countrySupply || null),
     marketScope: clone(item.marketScope || null),
     productMapping: clone(item.productMapping || null),
-    searchBankContract: clone(item.searchBankContract || item.sanmaruSearchBankContract || item.searchBankUnifiedContract || null)
+    searchBankContract: clone(item.searchBankContract || item.sanmaruSearchBankContract || item.searchBankUnifiedContract || null),
+    commerceCandidatePublication: clone(item.commerceCandidatePublication || null),
+    outboundRoute: clone(item.outboundRoute || null),
+    affiliateOutboundUrl: text(item.affiliateOutboundUrl || "") || undefined,
+    externalOutboundUrl: text(item.externalOutboundUrl || "") || undefined
   };
   for (const key of Object.keys(card)) if (card[key] === undefined) delete card[key];
   return card;
