@@ -5,7 +5,6 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const canonical = require(path.join(root, "netlify", "functions", "lib", "canonical-snapshot-publisher.v1"));
 const snapshots = require(path.join(root, "netlify", "functions", "snapshot-engine"));
-const donation = require(path.join(root, "netlify", "functions", "donation-snapshot-builder"));
 const regional = require(path.join(root, "netlify", "functions", "lib", "regional-brokerage-publisher.v1"));
 const ipSlots = require(path.join(root, "netlify", "functions", "lib", "ip-slot-snapshot-publisher.v1"));
 const commerceRegistry = require(path.join(root, "netlify", "functions", "lib", "commerce-candidate-registry-sync.v1"));
@@ -27,12 +26,10 @@ function upstreamMirrorFiles() {
 }
 
 function emptyStagingUpstream() {
-  // The private candidate source is intentionally not committed until real
-  // SearchBank/Sanmaru intake is provisioned.  In staging-only mode, its
-  // absence must produce an empty Canonical release and existing empty-slot
-  // gates, not fail the entire Netlify deployment.  A real public release
-  // remains fail-closed: once release mode is enabled, a missing upstream
-  // source still aborts the build.
+  // The private SearchBank/Sanmaru candidate source is intentionally absent
+  // until real verified intake is provisioned.  During staging-only builds,
+  // use an explicit empty input so the site deploys with the existing empty
+  // commercial slot state.  In release mode, absence remains a hard failure.
   const releaseMode = String(process.env.COMMERCE_CANDIDATE_RELEASE_MODE || "").trim().toLowerCase();
   if (releaseMode === "enabled" || upstreamMirrorFiles().some(fileExists)) return null;
   return {
@@ -45,6 +42,7 @@ function emptyStagingUpstream() {
     items: []
   };
 }
+
 function isCardRow(entry) {
   return !!(
     entry && typeof entry === "object" &&
@@ -52,6 +50,7 @@ function isCardRow(entry) {
     (entry.title || entry.name || entry.url || entry.link || entry.video)
   );
 }
+
 function cardRows(value, rows) {
   if (Array.isArray(value)) {
     for (const entry of value) {
@@ -72,6 +71,7 @@ function cardRows(value, rows) {
   cardRows(value.results, rows);
   cardRows(value.cards, rows);
 }
+
 function downstreamRows(doc) {
   const rows = [];
   if (doc.pages && typeof doc.pages === "object") {
@@ -87,15 +87,18 @@ function downstreamRows(doc) {
   cardRows(doc.slots, rows);
   return rows;
 }
-function verifyDownstream() {
+
+function verifyCommercialDownstream() {
+  // Donation is deliberately outside the Canonical commercial/IP-slot chain.
+  // Its endpoint owns its own snapshot lifecycle, so this build must neither
+  // call its private implementation nor rewrite its snapshot data.
   const targets = [
     "data/front.snapshot.json",
     "data/distribution.snapshot.json",
     "data/media.snapshot.json",
     "data/social.snapshot.json",
     "data/networkhub-snapshot.json",
-    "data/tour-snapshot.json",
-    "data/donation.snapshot.json"
+    "data/tour-snapshot.json"
   ];
   const unmanaged = [];
   const summary = [];
@@ -110,53 +113,58 @@ function verifyDownstream() {
 }
 
 async function main() {
-// Approved direct-commerce listings live in the management registry.  A
-// build may mirror them into the private review queue when the secure registry
-// is configured; absence of that optional connection is fail-closed and does
-// not activate any candidate or public slot.
-const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
-const upstreamFallback = emptyStagingUpstream();
-const publication = canonical.publish({
-  root,
-  trigger: "netlify-build",
-  bank: upstreamFallback || undefined
-});
-if (publication.status !== "published") {
-  throw new Error("Canonical Snapshot Publisher blocked build: " + JSON.stringify(publication.errors || publication));
-}
-const published = canonical.verifyPublished({ root });
-if (!published.ok) {
-  throw new Error("Canonical Snapshot Publisher integrity failure: " + JSON.stringify(published.problems));
-}
+  // Approved direct-commerce listings may be mirrored from the management
+  // registry into the private review queue.  Missing optional registry access
+  // cannot activate any candidate or public slot.
+  const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
+  const upstreamFallback = emptyStagingUpstream();
+  const publication = canonical.publish({
+    root,
+    trigger: "netlify-build",
+    bank: upstreamFallback || undefined
+  });
+  if (publication.status !== "published") {
+    throw new Error("Canonical Snapshot Publisher blocked build: " + JSON.stringify(publication.errors || publication));
+  }
+  const published = canonical.verifyPublished({ root });
+  if (!published.ok) {
+    throw new Error("Canonical Snapshot Publisher integrity failure: " + JSON.stringify(published.problems));
+  }
 
-// Lower snapshots receive only canonical rows. Existing seed/sample cards are
-// removed by the canonical guard in Snapshot Engine before any merge occurs.
-snapshots.run({ canonicalReleaseId: publication.releaseId });
-const donationSnapshot = donation.buildCanonicalSnapshotFromDisk();
-donation.writeCanonicalSnapshot(donationSnapshot);
+  // Only commercial Snapshot surfaces are built here.  Donation has an
+  // independent endpoint/snapshot contract and is intentionally excluded.
+  snapshots.run({ canonicalReleaseId: publication.releaseId });
+  const downstreamBeforeIpGate = verifyCommercialDownstream();
+  if (!downstreamBeforeIpGate.ok) {
+    throw new Error("Unmanaged commercial lower-snapshot card detected before IP publication: " + JSON.stringify(downstreamBeforeIpGate.unmanaged));
+  }
 
-const downstreamBeforeIpGate = verifyDownstream();
-if (!downstreamBeforeIpGate.ok) {
-  throw new Error("Unmanaged lower-snapshot card detected before IP publication: " + JSON.stringify(downstreamBeforeIpGate.unmanaged));
-}
-// Existing Distribution brokerage retains ownership of outbound/referral links.
-// The Canonical IP publisher then validates that output, publishes all other
-// IP-scoped page snapshots and converts root snapshots into empty geo gates.
-const regionalReport = regional.publishFromSearchBank({ root, trigger: "netlify-build-canonical" });
-const ipSlotReport = ipSlots.publish({ root, trigger: "netlify-build-canonical-ip-slots" });
-if (ipSlotReport.status !== "published") {
-  throw new Error("Canonical IP Slot Publisher blocked build: " + JSON.stringify(ipSlotReport.errors || ipSlotReport));
-}
-const ipSlotVerification = ipSlots.verifyPublished({ root });
-if (!ipSlotVerification.ok) {
-  throw new Error("Canonical IP Slot Publisher integrity failure: " + JSON.stringify(ipSlotVerification.problems));
-}
-const downstreamAfterIpGate = verifyDownstream();
-if (!downstreamAfterIpGate.ok) {
-  throw new Error("Unmanaged lower-snapshot card detected after IP publication: " + JSON.stringify(downstreamAfterIpGate.unmanaged));
-}
+  const regionalReport = regional.publishFromSearchBank({ root, trigger: "netlify-build-canonical" });
+  const ipSlotReport = ipSlots.publish({ root, trigger: "netlify-build-canonical-ip-slots" });
+  if (ipSlotReport.status !== "published") {
+    throw new Error("Canonical IP Slot Publisher blocked build: " + JSON.stringify(ipSlotReport.errors || ipSlotReport));
+  }
+  const ipSlotVerification = ipSlots.verifyPublished({ root });
+  if (!ipSlotVerification.ok) {
+    throw new Error("Canonical IP Slot Publisher integrity failure: " + JSON.stringify(ipSlotVerification.problems));
+  }
+  const downstreamAfterIpGate = verifyCommercialDownstream();
+  if (!downstreamAfterIpGate.ok) {
+    throw new Error("Unmanaged commercial lower-snapshot card detected after IP publication: " + JSON.stringify(downstreamAfterIpGate.unmanaged));
+  }
 
-process.stdout.write(JSON.stringify({ commerceRegistrySync, upstreamFallback: upstreamFallback ? { mode: "staging-empty", reason: upstreamFallback.meta.reason } : null, publication, published, donation: { items: donationSnapshot.items.length }, downstreamBeforeIpGate, regional: regionalReport, ipSlots: ipSlotReport, ipSlotVerification, downstreamAfterIpGate }, null, 2) + "\n");
+  process.stdout.write(JSON.stringify({
+    commerceRegistrySync,
+    upstreamFallback: upstreamFallback ? { mode: "staging-empty", reason: upstreamFallback.meta.reason } : null,
+    publication,
+    published,
+    donation: { mode: "independent-runtime-contract-not-touched" },
+    downstreamBeforeIpGate,
+    regional: regionalReport,
+    ipSlots: ipSlotReport,
+    ipSlotVerification,
+    downstreamAfterIpGate
+  }, null, 2) + "\n");
 }
 
 main().catch((error) => {
