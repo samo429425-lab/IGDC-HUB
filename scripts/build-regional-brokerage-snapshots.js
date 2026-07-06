@@ -13,6 +13,39 @@ const commerceRegistry = require(path.join(root, "netlify", "functions", "lib", 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
+
+function fileExists(file) {
+  try { return fs.existsSync(file) && fs.statSync(file).isFile(); } catch (_e) { return false; }
+}
+
+function upstreamMirrorFiles() {
+  return [
+    path.join(root, "data", "search-bank.upstream.snapshot.json"),
+    path.join(root, "netlify", "functions", "data", "search-bank.upstream.snapshot.json"),
+    path.join(root, "netlify", "functions", "search-bank.upstream.snapshot.json")
+  ];
+}
+
+function emptyStagingUpstream() {
+  // The private candidate source is intentionally not committed until real
+  // SearchBank/Sanmaru intake is provisioned.  In staging-only mode, its
+  // absence must produce an empty Canonical release and existing empty-slot
+  // gates, not fail the entire Netlify deployment.  A real public release
+  // remains fail-closed: once release mode is enabled, a missing upstream
+  // source still aborts the build.
+  const releaseMode = String(process.env.COMMERCE_CANDIDATE_RELEASE_MODE || "").trim().toLowerCase();
+  if (releaseMode === "enabled" || upstreamMirrorFiles().some(fileExists)) return null;
+  return {
+    meta: {
+      schema: "search-bank.upstream.staging-empty.v1",
+      source: "netlify-build-empty-upstream",
+      generatedAt: new Date().toISOString(),
+      reason: "upstream-candidate-source-not-yet-provisioned"
+    },
+    items: []
+  };
+}
+
 function isCardRow(entry) {
   return !!(
     entry && typeof entry === "object" &&
@@ -83,7 +116,12 @@ async function main() {
 // is configured; absence of that optional connection is fail-closed and does
 // not activate any candidate or public slot.
 const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
-const publication = canonical.publish({ root, trigger: "netlify-build" });
+const upstreamFallback = emptyStagingUpstream();
+const publication = canonical.publish({
+  root,
+  trigger: "netlify-build",
+  bank: upstreamFallback || undefined
+});
 if (publication.status !== "published") {
   throw new Error("Canonical Snapshot Publisher blocked build: " + JSON.stringify(publication.errors || publication));
 }
@@ -119,7 +157,7 @@ if (!downstreamAfterIpGate.ok) {
   throw new Error("Unmanaged lower-snapshot card detected after IP publication: " + JSON.stringify(downstreamAfterIpGate.unmanaged));
 }
 
-process.stdout.write(JSON.stringify({ commerceRegistrySync, publication, published, donation: { items: donationSnapshot.items.length }, downstreamBeforeIpGate, regional: regionalReport, ipSlots: ipSlotReport, ipSlotVerification, downstreamAfterIpGate }, null, 2) + "\n");
+process.stdout.write(JSON.stringify({ commerceRegistrySync, upstreamFallback: upstreamFallback ? { mode: "staging-empty", reason: upstreamFallback.meta.reason } : null, publication, published, donation: { items: donationSnapshot.items.length }, downstreamBeforeIpGate, regional: regionalReport, ipSlots: ipSlotReport, ipSlotVerification, downstreamAfterIpGate }, null, 2) + "\n");
 }
 
 main().catch((error) => {
