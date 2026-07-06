@@ -8,10 +8,10 @@
  */
 
 const CommerceIntake = require("./lib/commerce-candidate-intake.v1");
-const MemberAuth = require("./lib/media-member-auth");
+const CommerceAuth = require("./lib/commerce-candidate-auth.v1");
 const SlotStore = require("./lib/global-slot-console-supabase");
 
-const VERSION = "commerce-candidate-review-api-v1.1.0-manual-affiliate-outbound";
+const VERSION = "commerce-candidate-review-api-v1.2.0-private-queue-diagnostic";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -36,6 +36,74 @@ function requireRole(member, scope){
 function stage(root){return CommerceIntake.readStage(root)||{schema:"commerce-candidate-staging.snapshot.v1",summary:{considered:0},candidates:[]};}
 function summaryDoc(doc){return {version:VERSION,stageVersion:doc.version||null,generatedAt:doc.generatedAt||null,releaseGate:doc.releaseGate||null,summary:doc.summary||{},candidateCount:Array.isArray(doc.candidates)?doc.candidates.length:0};}
 function pageMap(hub){const h=lower(hub);return ({home:"home",distribution:"distribution",network:"network",tour:"tour",social:"social"})[h]||"";}
+
+function countBy(rows, selector){
+  const out={};
+  for(const row of Array.isArray(rows)?rows:[]){
+    const key=text(selector(row))||"unknown";
+    out[key]=(out[key]||0)+1;
+  }
+  return Object.keys(out).sort().reduce((result,key)=>{result[key]=out[key];return result;},{});
+}
+function topReasons(rows){
+  const out={};
+  for(const row of Array.isArray(rows)?rows:[]){
+    for(const reason of Array.isArray(row&&row.reasons)?row.reasons:[]){
+      const key=text(reason);if(key)out[key]=(out[key]||0)+1;
+    }
+  }
+  return Object.entries(out).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,80).map(([reason,count])=>({reason,count}));
+}
+function candidateDigestRows(rows){
+  return (Array.isArray(rows)?rows:[]).slice(0,500).map((row)=>({
+    candidateId:text(row&&row.candidateId), sourceTier:text(row&&row.sourceTier), origin:text(row&&row.origin),
+    stageStatus:text(row&&row.stageStatus), releaseEligible:row&&row.releaseEligible===true,
+    placement:plain(row&&row.placement), marketKeys:Array.isArray(row&&row.marketKeys)?row.marketKeys.slice(0,30):[],
+    revenue:{type:text(row&&row.revenue&&row.revenue.type),monetizationState:text(row&&row.revenue&&row.revenue.monetizationState),contractId:text(row&&row.revenue&&row.revenue.contractId)},
+    review:{state:text(row&&row.review&&row.review.state)}, reasons:Array.isArray(row&&row.reasons)?row.reasons.slice(0,30):[]
+  }));
+}
+function diagnosticDoc(doc, member){
+  const stage=doc||{};
+  const candidates=Array.isArray(stage.candidates)?stage.candidates:[];
+  const summary=plain(stage.summary);
+  const gate=plain(stage.releaseGate);
+  const source=plain(stage.source);
+  const affiliate=plain(stage.affiliateRegistry);
+  const held=candidates.filter((row)=>row&&row.releaseEligible!==true);
+  const releaseReady=candidates.filter((row)=>row&&row.releaseEligible===true);
+  const blockers=[];
+  if(Number(source.searchBankCount||summary.receivedSearchBank||0)===0)blockers.push("no_searchbank_commerce_candidate");
+  if(candidates.length===0)blockers.push("private_queue_empty");
+  if(gate.enabled!==true)blockers.push(text(gate.reason)||"release_gate_disabled");
+  if(source.reviewQueueStale===true)blockers.push("admin_review_queue_stale");
+  if(affiliate.ok===false)blockers.push("affiliate_registry_invalid");
+  return {
+    ok:true,
+    reportType:"igdc-commerce-candidate-queue-diagnostic",
+    version:VERSION,
+    generatedAt:new Date().toISOString(),
+    mode:gate.enabled===true?"private-review-release-gate-armed":"pre-product-private-review",
+    safety:{readOnly:true,writes:false,publicSnapshotPublication:false,externalNavigation:false,providerCalls:false,secretsExcluded:true},
+    administrator:{roles:roles(member),access:"validated-private-queue-read"},
+    queue:{
+      schema:text(stage.schema),stageVersion:text(stage.version),stageGeneratedAt:text(stage.generatedAt),
+      totalCandidates:candidates.length,eligibleForRelease:releaseReady.length,held:held.length,
+      bySource:countBy(candidates,(row)=>row&&row.sourceTier),
+      byStageStatus:countBy(candidates,(row)=>row&&row.stageStatus),
+      byRevenueType:countBy(candidates,(row)=>row&&row.revenue&&row.revenue.type),
+      byReviewState:countBy(candidates,(row)=>row&&row.review&&row.review.state),
+      topBlockingReasons:topReasons(held),
+      rows:candidateDigestRows(candidates)
+    },
+    upstream:{searchBankCommerceInput:Number(source.searchBankCount||summary.receivedSearchBank||0),adminReviewQueueStale:source.reviewQueueStale===true,reviewQueueDigest:text(source.reviewQueueDigest)||null},
+    revenueRegistry:{version:text(affiliate.version)||null,valid:affiliate.ok!==false,problems:Array.isArray(affiliate.problems)?affiliate.problems.slice(0,50):[]},
+    releaseGate:{enabled:gate.enabled===true,mode:text(gate.mode)||"staging_only",reason:text(gate.reason)||"unknown",keyPresent:gate.keyPresent===true},
+    blockingConditions:blockers,
+    summary:{considered:Number(summary.considered||candidates.length||0),eligibleForRelease:Number(summary.eligibleForRelease||releaseReady.length||0),releasedToCanonical:Number(summary.releasedToCanonical||0),held:Number(summary.held||held.length||0)}
+  };
+}
+function sessionDoc(member){return {ok:true,version:VERSION,session:{authenticated:true,roles:roles(member),readOnlyQueueAccess:true}};}
 function cleanCandidatePayload(body, actor){
   const input=plain(body.candidate); const page=lower(first(input.page,input.channel,input.placement&&input.placement.page)); const section=text(first(input.section,input.psom_key,input.placement&&input.placement.section));
   const result=Object.assign({},input,{
@@ -129,16 +197,19 @@ async function decide(member, body){
   return {ok:true,candidateId:id,status:"enrollable",assignment:(rows||[])[0]||null,note:"승인 배정만 완료되었습니다. 시장별 배송·반품·지원·책임 근거와 승인된 수익 계약이 등록된 뒤에만 다음 빌드의 비공개 대기열에 반영됩니다. 공개 발행 키는 별도로 필요합니다."};
 }
 
+exports.buildDiagnostic=diagnosticDoc;
 exports.handler=async function(event){
   try{
     if(String(event&&event.httpMethod||"GET").toUpperCase()==="OPTIONS")return json(204,{});
     const method=String(event&&event.httpMethod||"GET").toUpperCase();
-    const member=await MemberAuth.authenticateMember(event);
+    const member=await CommerceAuth.authenticateCommerceAdmin(event);
     const body=method==="GET"?{}:parse(event);const action=lower((event.queryStringParameters||{}).action||body.action||"summary");
     if(method==="GET"){
       requireRole(member,"read");const doc=stage(process.cwd());
+      if(action==="session")return json(200,sessionDoc(member));
       if(action==="summary")return json(200,{ok:true,summary:summaryDoc(doc)});
       if(action==="candidates")return json(200,{ok:true,summary:summaryDoc(doc),candidates:(doc.candidates||[]).slice(0,500)});
+      if(action==="diagnostic")return json(200,diagnosticDoc(doc,member));
       return json(404,{ok:false,error:"지원하지 않는 조회 요청입니다."});
     }
     if(method!=="POST")return json(405,{ok:false,error:"method_not_allowed"});
