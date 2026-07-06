@@ -43,73 +43,63 @@ function emptyStagingUpstream() {
   };
 }
 
-function isCardRow(entry) {
-  return !!(
-    entry && typeof entry === "object" &&
-    (entry.id || entry.uid || entry.contentId || entry.productId || entry.indexId) &&
-    (entry.title || entry.name || entry.url || entry.link || entry.video)
-  );
+const ROOT_GATE_PAGE_BY_FILE = Object.freeze({
+  "front.snapshot.json": "home",
+  "distribution.snapshot.json": "distribution",
+  "networkhub-snapshot.json": "network",
+  "tour-snapshot.json": "tour",
+  "social.snapshot.json": "social"
+});
+
+function listRows(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object" && Array.isArray(value.slots)) return value.slots;
+  return [];
 }
 
-function cardRows(value, rows) {
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      if (isCardRow(entry)) rows.push(entry);
-      else if (entry && typeof entry === "object") {
-        cardRows(entry.slots, rows);
-        cardRows(entry.items, rows);
-        cardRows(entry.results, rows);
-        cardRows(entry.cards, rows);
-      }
-    }
-    return;
+function rootGateRows(doc, page) {
+  if (!doc || typeof doc !== "object") return [];
+  if (page === "home") {
+    const sections = doc.pages && doc.pages.home && doc.pages.home.sections;
+    return Object.values(sections || {}).flatMap(listRows);
   }
-  if (!value || typeof value !== "object") return;
-  if (isCardRow(value)) rows.push(value);
-  cardRows(value.slots, rows);
-  cardRows(value.items, rows);
-  cardRows(value.results, rows);
-  cardRows(value.cards, rows);
+  if (page === "distribution") {
+    const sections = doc.pages && doc.pages.distribution && doc.pages.distribution.sections;
+    return Object.values(sections || {}).flatMap(listRows);
+  }
+  if (page === "social") {
+    const sections = doc.pages && doc.pages.social && doc.pages.social.sections;
+    return listRows(sections && sections.rightPanel);
+  }
+  return listRows(doc.items).concat(listRows(doc.slots));
 }
 
-function downstreamRows(doc) {
-  const rows = [];
-  if (doc.pages && typeof doc.pages === "object") {
-    for (const page of Object.values(doc.pages)) {
-      if (!page || !page.sections) continue;
-      for (const section of Object.values(page.sections)) cardRows(section, rows);
-    }
-  }
-  if (doc.sections && typeof doc.sections === "object") {
-    for (const section of Object.values(doc.sections)) cardRows(section, rows);
-  }
-  cardRows(doc.items, rows);
-  cardRows(doc.slots, rows);
-  return rows;
-}
-
-function verifyCommercialDownstream() {
-  // Donation is deliberately outside the Canonical commercial/IP-slot chain.
-  // Its endpoint owns its own snapshot lifecycle, so this build must neither
-  // call its private implementation nor rewrite its snapshot data.
-  const targets = [
-    "data/front.snapshot.json",
-    "data/distribution.snapshot.json",
-    "data/media.snapshot.json",
-    "data/social.snapshot.json",
-    "data/networkhub-snapshot.json",
-    "data/tour-snapshot.json"
-  ];
-  const unmanaged = [];
+function verifyPublishedRootGeoGates(ipSlotReport) {
+  const writes = Array.isArray(ipSlotReport && ipSlotReport.rootGates) ? ipSlotReport.rootGates : [];
+  const checked = new Set();
   const summary = [];
-  for (const relative of targets) {
-    const doc = readJson(path.join(root, relative));
-    const rows = downstreamRows(doc);
-    const stale = rows.filter(row => !(row.canonicalPublication && row.canonicalPublication.status === "published" && row.placement));
-    summary.push({ path: relative, cardCount: rows.length, unmanagedCount: stale.length });
-    for (const row of stale.slice(0, 100)) unmanaged.push({ path: relative, id: row.id || row.uid || null, title: row.title || null });
+  const problems = [];
+  for (const write of writes) {
+    const relative = String(write && write.path || "").replace(/\\/g, "/");
+    if (!relative || checked.has(relative)) continue;
+    checked.add(relative);
+    const file = path.basename(relative);
+    const page = ROOT_GATE_PAGE_BY_FILE[file];
+    if (!page) {
+      problems.push("IP_SLOT_ROOT_GATE_UNKNOWN_FILE:" + relative);
+      continue;
+    }
+    const absolute = path.join(root, relative);
+    const doc = readJson(absolute);
+    const meta = doc && doc.meta && typeof doc.meta === "object" ? doc.meta : {};
+    const rows = rootGateRows(doc, page);
+    const metaOk = meta.ipSlotGeoGate === true && meta.geoResolutionRequired === true && meta.geoMatched === false && meta.noCrossCountryFallback === true && meta.noGlobalFallback === true;
+    summary.push({ path: relative, page, cardCount: rows.length, metaOk });
+    if (!metaOk) problems.push("IP_SLOT_ROOT_GATE_META_INVALID:" + relative);
+    if (rows.length) problems.push("IP_SLOT_ROOT_GATE_NOT_EMPTY:" + relative + ":" + rows.length);
   }
-  return { ok: unmanaged.length === 0, summary, unmanaged };
+  if (!checked.size) problems.push("IP_SLOT_ROOT_GATE_OUTPUT_MISSING");
+  return { ok: problems.length === 0, summary, problems };
 }
 
 async function main() {
@@ -131,13 +121,11 @@ async function main() {
     throw new Error("Canonical Snapshot Publisher integrity failure: " + JSON.stringify(published.problems));
   }
 
-  // Only commercial Snapshot surfaces are built here.  Donation has an
+  // Only commercial Snapshot surfaces are built here. Donation has an
   // independent endpoint/snapshot contract and is intentionally excluded.
+  // Legacy root cards must not be interpreted as Canonical output before the
+  // IP publisher replaces each IP-owned root surface with its empty geo gate.
   snapshots.run({ canonicalReleaseId: publication.releaseId });
-  const downstreamBeforeIpGate = verifyCommercialDownstream();
-  if (!downstreamBeforeIpGate.ok) {
-    throw new Error("Unmanaged commercial lower-snapshot card detected before IP publication: " + JSON.stringify(downstreamBeforeIpGate.unmanaged));
-  }
 
   const regionalReport = regional.publishFromSearchBank({ root, trigger: "netlify-build-canonical" });
   const ipSlotReport = ipSlots.publish({ root, trigger: "netlify-build-canonical-ip-slots" });
@@ -148,9 +136,9 @@ async function main() {
   if (!ipSlotVerification.ok) {
     throw new Error("Canonical IP Slot Publisher integrity failure: " + JSON.stringify(ipSlotVerification.problems));
   }
-  const downstreamAfterIpGate = verifyCommercialDownstream();
-  if (!downstreamAfterIpGate.ok) {
-    throw new Error("Unmanaged commercial lower-snapshot card detected after IP publication: " + JSON.stringify(downstreamAfterIpGate.unmanaged));
+  const rootGateVerification = verifyPublishedRootGeoGates(ipSlotReport);
+  if (!rootGateVerification.ok) {
+    throw new Error("Canonical IP root geo-gate integrity failure: " + JSON.stringify(rootGateVerification.problems));
   }
 
   process.stdout.write(JSON.stringify({
@@ -159,11 +147,10 @@ async function main() {
     publication,
     published,
     donation: { mode: "independent-runtime-contract-not-touched" },
-    downstreamBeforeIpGate,
     regional: regionalReport,
     ipSlots: ipSlotReport,
     ipSlotVerification,
-    downstreamAfterIpGate
+    rootGateVerification
   }, null, 2) + "\n");
 }
 
