@@ -14,8 +14,9 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const MarketSaleScope = require("./market-sale-scope.v1");
 
-const VERSION = "regional-brokerage-autoselection-core-v1.0.0";
+const VERSION = "regional-brokerage-autoselection-core-v1.2.0-market-evidence-integrity";
 const MAX_CANDIDATES = 240;
 const MAX_PER_SECTION = 100;
 
@@ -97,6 +98,16 @@ function findFile(relatives){
   }
   return null;
 }
+function canonicalSearchBankItem(item){
+  const publication=item && item.canonicalPublication;
+  const placement=item && item.placement;
+  return !!(publication && publication.status==="published" && publication.releaseId && publication.candidateId && publication.mappingDigest &&
+    placement && placement.page==="distribution" && placement.section && Number.isInteger(Number(placement.slot)) && placement.country && placement.region &&
+    item && item.ipSlot && item.ipSlot.required===true && item.ipSlot.marketEvidenceDigest);
+}
+function canonicalSearchBankDocument(doc){
+  return !!(doc && doc.meta && doc.meta.schema === "search-bank.snapshot.canonical.v1" && Array.isArray(doc.items));
+}
 function flattenSnapshot(doc){
   const out=[];
   const push=(x)=>{ if(x && typeof x==="object") out.push(x); };
@@ -121,16 +132,31 @@ function candidateSources(){
   const result=[];
   for(const file of unique(files)){
     const doc=safeRead(file,{});
-    const items=flattenSnapshot(doc).concat(Array.isArray(doc && doc.items)?doc.items:[]);
+    const isSearchBank=/search-bank\.snapshot\.json$/i.test(file);
+    const items=isSearchBank
+      ? (canonicalSearchBankDocument(doc) ? (doc.items || []).filter(canonicalSearchBankItem) : [])
+      : flattenSnapshot(doc).concat(Array.isArray(doc && doc.items)?doc.items:[]);
     result.push({file,items});
   }
   return result;
 }
+function expandMarketCandidates(items){
+  const output=[];
+  for(const item of Array.isArray(items)?items:[]){
+    const variants=MarketSaleScope.expand(item);
+    // Dynamic distribution selection is a public front surface. It must never
+    // reconstruct a market from a raw candidate or a visitor request. Only an
+    // exact, materialized sale-market envelope can proceed to verification.
+    variants.forEach(variant=>output.push(variant.item));
+  }
+  return output;
+}
 function loadStoredCandidates(){
   const output=[]; const sources=[];
   for(const source of candidateSources()){
-    source.items.forEach(item=>output.push(safeJsonClone(item)));
-    sources.push({file:source.file,count:source.items.length});
+    const expanded=expandMarketCandidates(source.items);
+    output.push(...expanded);
+    sources.push({file:source.file,count:source.items.length,marketVariants:expanded.length});
   }
   return {items:output,sources};
 }
@@ -162,24 +188,29 @@ function signalText(item){
 }
 function distributionScope(item){
   const seller=item && (item.seller || item.merchant || item.provider || item.organization || item.org) || {};
-  const country=normalizeCountry(first(item&&item.distributionMarketCountry,item&&item.sellerMarketCountry,item&&item.marketCountry,item&&item.country,item&&item.geo&&item.geo.country,item&&item.location&&item.location.country,seller&&seller.country));
-  const region=normalizeRegion(first(item&&item.distributionMarketRegion,item&&item.sellerRegion,item&&item.region,item&&item.geo&&item.geo.state,item&&item.geo&&item.geo.province,item&&item.location&&item.location.region,seller&&seller.region),country);
-  const availabilityCountries=normalizeCountryList(first(item&&item.availabilityCountries,item&&item.shippingCountries,item&&item.serviceCountries,item&&item.deliveryCountries,item&&item.brokerageVerification&&item.brokerageVerification.availabilityCountries));
-  const availabilityRegions=normalizeRegionList(first(item&&item.availabilityRegions,item&&item.shippingRegions,item&&item.serviceRegions,item&&item.deliveryRegions,item&&item.brokerageVerification&&item.brokerageVerification.availabilityRegions),country);
-  const national=truthy(item&&item.nationalAvailability)||truthy(item&&item.nationwideShipping)||truthy(item&&item.countrywideService)||truthy(item&&item.brokerageVerification&&item.brokerageVerification.nationalAvailability);
+  const market=item&&item.marketScope&&item.marketScope.marketEvidence||{};
+  const country=normalizeCountry(first(item&&item.marketScope&&item.marketScope.marketCountry,item&&item.countrySupply&&item.countrySupply.targetMarket,item&&item.distributionMarketCountry,item&&item.sellerMarketCountry,item&&item.marketCountry,item&&item.country,item&&item.geo&&item.geo.country,item&&item.location&&item.location.country,seller&&seller.country));
+  const region=normalizeRegion(first(item&&item.marketScope&&item.marketScope.marketRegion,item&&item.countrySupply&&item.countrySupply.targetRegion,item&&item.distributionMarketRegion,item&&item.sellerRegion,item&&item.region,item&&item.geo&&item.geo.state,item&&item.geo&&item.geo.province,item&&item.location&&item.location.region,seller&&seller.region),country);
+  const availabilityCountries=normalizeCountryList(first(item&&item.marketScope&&item.marketScope.marketCountry,item&&item.countrySupply&&item.countrySupply.availabilityCountries,item&&item.availabilityCountries,item&&item.shippingCountries,item&&item.serviceCountries,item&&item.deliveryCountries,item&&item.brokerageVerification&&item.brokerageVerification.availabilityCountries));
+  const availabilityRegions=normalizeRegionList(first(market&&market.regions,item&&item.countrySupply&&item.countrySupply.availabilityRegions,item&&item.availabilityRegions,item&&item.shippingRegions,item&&item.serviceRegions,item&&item.deliveryRegions,item&&item.brokerageVerification&&item.brokerageVerification.availabilityRegions),country);
+  const national=truthy(market&&market.nationwide)||truthy(item&&item.countrySupply&&item.countrySupply.nationalAvailability)||truthy(item&&item.nationalAvailability)||truthy(item&&item.nationwideShipping)||truthy(item&&item.countrywideService)||truthy(item&&item.brokerageVerification&&item.brokerageVerification.nationalAvailability);
   return {country,region,availabilityCountries,availabilityRegions,national};
 }
 function evidenceSummary(item){
   const textValue=signalText(item);
   const verification=item&&item.brokerageVerification||{};
-  const verified=truthy(item&&item.platformVerified)||truthy(item&&item.sellerVerified)||truthy(item&&item.businessVerified)||truthy(item&&item.officialSource)||truthy(item&&item.officialDomain)||truthy(verification.verified);
-  const official=verified || OFFICIAL_WORDS.test(textValue);
-  const shipping=truthy(item&&item.shippingAvailable)||truthy(item&&item.deliveryAvailable)||truthy(verification.shipping) || SHIPPING_WORDS.test(textValue);
-  const returns=truthy(item&&item.returnPolicyAvailable)||truthy(item&&item.returnsAvailable)||truthy(verification.returns) || RETURN_WORDS.test(textValue);
-  const service=truthy(item&&item.customerServiceAvailable)||truthy(item&&item.supportAvailable)||truthy(verification.service) || SERVICE_WORDS.test(textValue);
+  const market=item&&item.marketScope&&item.marketScope.marketEvidence||null;
+  const scopedService=(service)=>!!(service&&truthy(service.verified)&&((Array.isArray(service.evidence)&&service.evidence.length)||text(service.evidenceUrl)||text(service.policyUrl)||text(service.url)));
+  const scopedSeller=market&&market.sellerResponsibility||{};
+  const scopedSellerVerified=!!(market&&truthy(scopedSeller.verified)&&text(scopedSeller.legalEntity)&&text(scopedSeller.supportUrl));
+  const verified=market?scopedSellerVerified:(truthy(item&&item.platformVerified)||truthy(item&&item.sellerVerified)||truthy(item&&item.businessVerified)||truthy(item&&item.officialSource)||truthy(item&&item.officialDomain)||truthy(verification.verified));
+  const official=verified || (!market && OFFICIAL_WORDS.test(textValue));
+  const shipping=market?scopedService(market.shipping):(truthy(item&&item.shippingAvailable)||truthy(item&&item.deliveryAvailable)||truthy(verification.shipping) || SHIPPING_WORDS.test(textValue));
+  const returns=market?scopedService(market.returns):(truthy(item&&item.returnPolicyAvailable)||truthy(item&&item.returnsAvailable)||truthy(verification.returns) || RETURN_WORDS.test(textValue));
+  const service=market?scopedService(market.support):(truthy(item&&item.customerServiceAvailable)||truthy(item&&item.supportAvailable)||truthy(verification.service) || SERVICE_WORDS.test(textValue));
   const trust=Number(item&&item.sourceTrust||item&&item.trust||item&&item.qualityScore||0);
   const risk=truthy(item&&item.unsafeProductRisk)||truthy(item&&item.illegalSiteRisk)||truthy(item&&item.harmfulContentRisk)||/^(high|critical)$/i.test(text(item&&item.riskLevel))||RISK_WORDS.test(textValue);
-  return {verified,official,shipping,returns,service,trust,risk,text:textValue};
+  return {verified,official,shipping,returns,service,trust,risk,text:textValue,marketScoped:!!market};
 }
 function verifyCandidate(item,target){
   const url=externalUrl(item);
@@ -188,8 +219,12 @@ function verifyCandidate(item,target){
   if(isMarketplace(item,url)) return {allowed:false,code:"MARKETPLACE_SEPARATE_HUB"};
   const scope=distributionScope(item);
   const evidence=evidenceSummary(item);
-  if(evidence.risk) return {allowed:false,code:"RISK_SIGNAL"};
   const market=target&&target.country||"GLOBAL";
+  if(market==="GLOBAL") return {allowed:false,code:"GEO_UNRESOLVED"};
+  const marketValidation=MarketSaleScope.validateMarketScope(item&&item.marketScope, scope.country, scope.region, {maxVerificationAgeDays:30,requireFresh:true});
+  if(!marketValidation.ok) return {allowed:false,code:"MARKET_SCOPE_EVIDENCE_INVALID:"+marketValidation.reasons.join(",")};
+  if(!item.ipSlot || item.ipSlot.marketEvidenceDigest!==marketValidation.evidenceDigest) return {allowed:false,code:"MARKET_SCOPE_EVIDENCE_DIGEST_MISMATCH"};
+  if(evidence.risk) return {allowed:false,code:"RISK_SIGNAL"};
   if(market!=="GLOBAL" && scope.country && scope.country!==market) return {allowed:false,code:"FOREIGN_DISTRIBUTION_MARKET"};
   if(market!=="GLOBAL" && !scope.country && !scope.availabilityCountries.includes(market)) return {allowed:false,code:"DISTRIBUTION_MARKET_UNRESOLVED"};
   if(market!=="GLOBAL" && scope.availabilityCountries.length && !scope.availabilityCountries.includes(market) && scope.country!==market) return {allowed:false,code:"TARGET_AVAILABILITY_MISSING"};
@@ -215,7 +250,7 @@ function managerPriorityItems(){
 }
 function selection(items,target){
   const accepted=[]; const rejected=[]; const seen=new Set();
-  const rawAll=managerPriorityItems().map(x=>Object.assign({},x,{managedPriority:true})).concat(Array.isArray(items)?items:[]);
+  const rawAll=expandMarketCandidates(managerPriorityItems().map(x=>Object.assign({},x,{managedPriority:true})).concat(Array.isArray(items)?items:[]));
   // SearchBank can contain thousands of layer/sample records.  Assess real external
   // seller candidates first, otherwise valid entries after the reservoir cannot be reached.
   const preliminaryScore=(item)=>{
@@ -312,4 +347,4 @@ function buildSnapshot(template,selected,target,meta){
   return doc;
 }
 
-module.exports={VERSION,parseGeo,loadStoredCandidates,verifyCandidate,selection,buildSnapshot,normalizeCountry,normalizeRegion,COUNTRY_NAMES,externalUrl,isMarketplace};
+module.exports={VERSION,parseGeo,loadStoredCandidates,expandMarketCandidates,verifyCandidate,selection,buildSnapshot,normalizeCountry,normalizeRegion,COUNTRY_NAMES,externalUrl,isMarketplace};
