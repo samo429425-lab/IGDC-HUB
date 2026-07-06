@@ -3,18 +3,14 @@
 /*
  * Commerce-candidate administrator authentication.
  *
- * This module is intentionally scoped to the private commerce-candidate
- * review queue. It accepts only a signed ID token issued for the public
- * IGDC SPA client (or an explicitly configured replacement), then lets the
- * caller apply its own role policy. No client secret, API key, or token value
- * is exposed by this module.
+ * This private queue verifier accepts a signed ID token only when its audience
+ * matches a server-side Netlify environment setting. No identifier value,
+ * secret, API key, or token is embedded in deployable source.
  */
-
 const crypto = require("crypto");
 
-const VERSION = "commerce-candidate-auth-v1.0.0-spa-id-token";
+const VERSION = "commerce-candidate-auth-v1.0.1-server-audience-only";
 const DEFAULT_ISSUER_HOST = "login.igdcglobal.com";
-const DEFAULT_SPA_CLIENT_ID = "4JeT1FdyDZaN7nEODVsKe2Sx8kKMWagj";
 const JWKS_CACHE = { value: null, expiresAt: 0, issuer: "" };
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -44,7 +40,7 @@ function config() {
     process.env.COMMERCE_CANDIDATE_AUTH_AUDIENCE,
     process.env.AUTH0_SPA_CLIENT_ID,
     process.env.IGDC_AUTH0_SPA_CLIENT_ID,
-    DEFAULT_SPA_CLIENT_ID
+    process.env.AUTH0_CLIENT_ID
   ]);
   if (!domain || !issuer || !audiences.length) {
     throw fail(503, "commerce_auth_not_configured", "Commerce candidate authentication is not configured.");
@@ -145,4 +141,4 @@ async function authenticateCommerceAdmin(event) {
   };
 }
 
-module.exports = { VERSION, DEFAULT_SPA_CLIENT_ID, authenticateCommerceAdmin, config };
+module.exports = { VERSION, authenticateCommerceAdmin, config };
