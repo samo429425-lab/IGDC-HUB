@@ -45,7 +45,6 @@ function emptyStagingUpstream() {
     items: []
   };
 }
-
 function isCardRow(entry) {
   return !!(
     entry && typeof entry === "object" &&
