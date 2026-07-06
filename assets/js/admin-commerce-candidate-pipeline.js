@@ -1,4 +1,4 @@
-/* IGDC Commerce Candidate Pipeline Admin View v1.3.0
+/* IGDC Commerce Candidate Pipeline Admin View v1.4.0
  * Private staging viewer + read-only commerce queue diagnostic.
  * It reuses the existing administrator session.  No second commerce login,
  * provider call, seller navigation, publication, payment, or browser secret.
@@ -118,13 +118,32 @@
   function gridCard(title,value,small){return '<article class="card"><h2>'+esc(title)+'</h2><div class="num">'+esc(value)+'</div><div class="small">'+esc(small||'')+'</div></article>';}
   function renderSummary(summary){var s=summary.summary||{};var g=$('summaryGrid');g.innerHTML=''+gridCard('검토 후보',s.considered||0,'SearchBank·관리자 대기열 결합')+gridCard('발행 전 통과',s.eligibleForRelease||0,'공개 키는 별도 배포 환경에서만')+gridCard('현재 정식 발행',s.releasedToCanonical||0,'현재 실행 기준 Canonical 전달 수')+gridCard('검토 보류',s.held||0,'증빙·수익·승인 누락 포함');g.classList.remove('hidden');var gate=summary.releaseGate||{};var panel=$('policyPanel');var release=gate.enabled===true;panel.innerHTML='<h2>공개 전 안전 상태</h2><div class="notice '+(release?'ok':'warn')+'"><strong>'+esc(release?'발행 키가 배포 환경에서 확인됨':'현재는 비공개 대기열 상태')+'</strong><br>'+esc(release?'그래도 각 후보는 Canonical·IP·판매시장 검증을 다시 통과해야 합니다.':'현재 후보는 관리자 검토와 증빙 수집 단계에만 남으며, 프론트 상품 슬롯으로 자동 공개되지 않습니다.')+'</div><div class="small" style="margin-top:9px">릴리스 키 값과 비밀정보는 이 화면에 표시하지 않습니다. stage: '+esc(summary.generatedAt||'아직 생성되지 않음')+'</div>';panel.classList.remove('hidden');}
   function renderRows(candidates){var tbody=$('candidateRows');var list=Array.isArray(candidates)?candidates:[];if(!list.length){tbody.innerHTML='<tr><td colspan="9" class="empty">현재 표시할 비공개 후보가 없습니다. 기존 샘플·미검증 후보는 정상적으로 대기열에서 제외됩니다.</td></tr>';$('tablePanel').classList.remove('hidden');return;}tbody.innerHTML=list.map(function(c){var p=c.placement||{},r=c.revenue||{},v=c.review||{},rank=c.ranking||{};var reasons=Array.isArray(c.reasons)&&c.reasons.length?c.reasons.join('\n'):'-';return '<tr><td><strong class="mono">'+esc(c.candidateId||'-')+'</strong><br><span class="small">host: '+esc(c.destinationHost||'-')+'</span></td><td><span class="pill '+tierClass(c.sourceTier)+'">'+esc(labelTier(c.sourceTier))+'</span></td><td>'+statusPill(c)+'</td><td><span class="mono">'+esc((p.page||'-')+' / '+(p.section||'-')+(p.slot?' / '+p.slot:''))+'</span></td><td>'+esc((c.marketKeys||[]).join(', ')||'-')+'</td><td>'+esc(c.essentialClass||'-')+'</td><td><span class="mono">'+esc(r.type||'-')+'</span><br><span class="small">상태: '+esc(r.monetizationState||'-')+' · 계약: '+esc(r.contractId||'-')+' · 검토: '+esc(v.state||'-')+'</span><br><span class="small">경로: '+esc(r.outboundRoute&&r.outboundRoute.mode||'-')+'</span></td><td><strong>'+esc(number(rank.finalScore).toFixed(2))+'</strong><br><span class="small">생활 '+esc(rank.essentiality||0)+' · 신뢰 '+esc(rank.sellerTrust||0)+' · 수익 '+esc(rank.revenueCertainty||0)+'</span></td><td class="reason">'+esc(reasons).replace(/\n/g,'<br>')+'</td></tr>';}).join('');$('tablePanel').classList.remove('hidden');}
-  function renderDiagnostic(doc){diagnosticCache=doc||null;var panel=$('diagnosticPanel'),pre=$('diagnosticJson');pre.textContent=JSON.stringify(doc||{},null,2);panel.classList.remove('hidden');$('copyDiagnosticBtn').disabled=!diagnosticCache;}
+  function renderDiagnostic(doc){diagnosticCache=doc||null;var panel=$('diagnosticPanel'),pre=$('diagnosticJson');pre.textContent=JSON.stringify(doc||{},null,2);panel.classList.remove('hidden');$('downloadDiagnosticBtn').disabled=!diagnosticCache;}
   async function refresh(){hideNotice();var button=$('refreshBtn');button.disabled=true;try{await ensureSession(false);var both=await Promise.all([api('summary'),api('candidates')]);renderSummary(both[0].summary||{});renderRows(both[1].candidates||[]);show('비공개 상품 후보 대기열을 새로 읽었습니다. 이 동작은 공개 발행·외부 판매처 이동·결제를 실행하지 않습니다.','ok');}catch(error){show(authErrorMessage(error),'warn');}finally{button.disabled=false;}}
   async function diagnostic(){hideNotice();var button=$('diagnosticBtn');button.disabled=true;try{await ensureSession(false);var data=await api('diagnostic');renderDiagnostic(data);show('상품 후보·중개수익 전용 점검 JSON을 읽었습니다. 이 동작은 읽기 전용입니다.','ok');}catch(error){show(authErrorMessage(error),'warn');}finally{button.disabled=false;}}
-  async function copyDiagnostic(){if(!diagnosticCache)return;var raw=JSON.stringify(diagnosticCache,null,2);try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(raw);show('점검 JSON을 클립보드에 복사했습니다.','ok');return;}}catch(_e){}var area=document.createElement('textarea');area.value=raw;area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();try{document.execCommand('copy');show('점검 JSON을 클립보드에 복사했습니다.','ok');}catch(_e){show('브라우저가 클립보드 복사를 허용하지 않았습니다. JSON 창에서 직접 복사해 주세요.','warn');}finally{area.remove();}}
+  function safeFilePart(value){return text(value).toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80)||'commerce-candidate-queue';}
+  function jsonFileName(doc){
+    var type=safeFilePart(doc&&doc.reportType||'commerce-candidate-queue-diagnostic');
+    var stamp=new Date().toISOString().replace(/[:.]/g,'-').replace('T','_').replace('Z','Z');
+    return 'igdc-'+type+'_'+stamp+'.json';
+  }
+  function downloadDiagnostic(){
+    if(!diagnosticCache){show('먼저 후보·수익 점검 JSON을 읽어 주세요.','warn');return;}
+    var raw=JSON.stringify(diagnosticCache,null,2)+'\n';
+    var blob=new Blob([raw],{type:'application/json;charset=utf-8'});
+    var href=URL.createObjectURL(blob);
+    var link=document.createElement('a');
+    link.href=href;
+    link.download=jsonFileName(diagnosticCache);
+    link.style.display='none';
+    document.body.appendChild(link);
+    link.click();
+    window.setTimeout(function(){try{link.remove();URL.revokeObjectURL(href);}catch(_e){}},0);
+    show('상품 후보·중개수익 점검 JSON 파일을 다운로드했습니다.','ok');
+  }
   function back(){var q=new URLSearchParams(location.search);var p=q.get('returnPath');location.href=p&&p.charAt(0)==='/'?p:'/admin.html';}
   function init(){
-    $('refreshBtn').addEventListener('click',refresh);$('diagnosticBtn').addEventListener('click',diagnostic);$('copyDiagnosticBtn').addEventListener('click',copyDiagnostic);$('returnBtn').addEventListener('click',back);
+    $('refreshBtn').addEventListener('click',refresh);$('diagnosticBtn').addEventListener('click',diagnostic);$('downloadDiagnosticBtn').addEventListener('click',downloadDiagnostic);$('returnBtn').addEventListener('click',back);
     document.addEventListener('igdc:member-auth-ready',function(){acceptedToken='';acceptedSession=null;refresh();});
     window.addEventListener('pageshow',function(){acceptedToken='';acceptedSession=null;refresh();});
     refresh();
