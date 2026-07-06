@@ -29,20 +29,49 @@
       ['id_token','idToken','access_token','accessToken','token','__raw','raw'].forEach(function(key){pushToken(value[key],out,seen,depth+1);});
     }
   }
-  function storageTokens(){
-    var out=[],seen={};
-    [window.localStorage,window.sessionStorage].forEach(function(store){
+  function ownStorageTokens(source,out,seen){
+    [source&&source.localStorage,source&&source.sessionStorage].forEach(function(store){
       if(!store)return;
       TOKEN_KEYS.forEach(function(key){try{pushToken(store.getItem(key),out,seen,0);}catch(_e){}});
     });
-    return out;
+  }
+  function sameOriginWindows(){
+    var values=[],seen=[];
+    function add(candidate){
+      try{
+        if(!candidate||seen.indexOf(candidate)>=0)return;
+        // Touching location verifies that the candidate is same-origin before
+        // any session object is inspected. Cross-origin parents are ignored.
+        void candidate.location.href;
+        seen.push(candidate);values.push(candidate);
+      }catch(_e){}
+    }
+    add(window);
+    try{add(window.parent);}catch(_e){}
+    try{add(window.top);}catch(_e){}
+    return values;
   }
   async function tokenCandidates(){
-    var out=[],seen={};
-    async function from(fn){try{pushToken(await fn(),out,seen,0);}catch(_e){}}
-    await from(function(){return window.IGDCMemberAuth&&window.IGDCMemberAuth.getIdToken?window.IGDCMemberAuth.getIdToken():'';});
-    await from(function(){return window.osAuth&&window.osAuth.getIdToken?window.osAuth.getIdToken():'';});
-    storageTokens().forEach(function(token){pushToken(token,out,seen,0);});
+    var out=[],seen={},tasks=[];
+    function from(fn){
+      tasks.push(Promise.resolve().then(fn).then(function(value){pushToken(value,out,seen,0);}).catch(function(){}));
+    }
+    var sources=sameOriginWindows();
+    for(var i=0;i<sources.length;i++){
+      (function(source){
+        from(function(){return source.IGDCMemberAuth&&source.IGDCMemberAuth.getIdToken?source.IGDCMemberAuth.getIdToken():'';});
+        from(function(){
+          if(!source.osAuth)return '';
+          if(typeof source.osAuth.getIdTokenClaims==='function')return source.osAuth.getIdTokenClaims();
+          return '';
+        });
+        from(function(){return source.osAuth&&source.osAuth.getIdToken?source.osAuth.getIdToken():'';});
+        ownStorageTokens(source,out,seen);
+      })(sources[i]);
+    }
+    // Auth0 adapters can return promises. All candidate reads must finish before
+    // the server-side common-session probe begins.
+    await Promise.all(tasks);
     return out;
   }
   async function request(action,token){
@@ -79,7 +108,7 @@
     }}
   function authErrorMessage(error){
     var message=text(error&&error.message);
-    if(Number(error&&error.status)===401||/session|token|로그인/i.test(message))return '관리자 공통 세션의 서버 확인에 실패했습니다. 별도 로그인은 필요하지 않으며, 관리자 화면으로 돌아가 해당 메뉴를 다시 여세요.';
+    if(Number(error&&error.status)===401||/session|token|로그인/i.test(message))return '관리자 공통 세션을 아직 찾지 못했습니다. 이 화면은 상위 사이트의 기존 관리자 세션을 자동 승계하며, 별도 로그인은 필요하지 않습니다.';
     return message||'대기열 요청을 처리하지 못했습니다.';
   }
   function labelTier(v){var x=text(v);return x==='approved_commerce_member'?'직접등록 승인':x==='managed_sponsor'?'관리 스폰서':x==='external_brokerage'?'외부중개/연결':x||'미분류';}

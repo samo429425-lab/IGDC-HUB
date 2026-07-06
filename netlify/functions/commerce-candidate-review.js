@@ -8,7 +8,7 @@
  */
 
 const CommerceIntake = require("./lib/commerce-candidate-intake.v1");
-const CommerceAuth = require("./lib/commerce-candidate-auth.v1");
+const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 
 const VERSION = "commerce-candidate-review-api-v1.2.0-private-queue-diagnostic";
@@ -32,6 +32,12 @@ function requireRole(member, scope){
     err.statusCode=403;throw err;
   }
   return values;
+}
+async function resolveCurrentAdmin(event){
+  // Reuse the exact server-side Auth0/JWKS + role resolver used by the existing
+  // administrator console.  This queue has no separate login realm.
+  const actor=await AdminSession.resolveUser(event);
+  return {memberId:text(actor&&actor.sub),email:text(actor&&actor.email),name:text(actor&&actor.name),roles:Array.isArray(actor&&actor.roles)?actor.roles:[]};
 }
 function stage(root){return CommerceIntake.readStage(root)||{schema:"commerce-candidate-staging.snapshot.v1",summary:{considered:0},candidates:[]};}
 function summaryDoc(doc){return {version:VERSION,stageVersion:doc.version||null,generatedAt:doc.generatedAt||null,releaseGate:doc.releaseGate||null,summary:doc.summary||{},candidateCount:Array.isArray(doc.candidates)?doc.candidates.length:0};}
@@ -202,7 +208,7 @@ exports.handler=async function(event){
   try{
     if(String(event&&event.httpMethod||"GET").toUpperCase()==="OPTIONS")return json(204,{});
     const method=String(event&&event.httpMethod||"GET").toUpperCase();
-    const member=await CommerceAuth.authenticateCommerceAdmin(event);
+    const member=await resolveCurrentAdmin(event);
     const body=method==="GET"?{}:parse(event);const action=lower((event.queryStringParameters||{}).action||body.action||"summary");
     if(method==="GET"){
       requireRole(member,"read");const doc=stage(process.cwd());
