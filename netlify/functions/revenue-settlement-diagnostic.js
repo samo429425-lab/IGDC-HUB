@@ -20,14 +20,14 @@
 const fs = require("fs");
 const path = require("path");
 
-const CommerceAuth = require("./lib/commerce-candidate-auth.v1");
+const MemberAdmin = require("./member-admin");
 const RevenueEngine = require("./revenue-engine");
 const Ledger = require("./ledger");
 const IncomeSummary = require("./igdc-income-summary");
 const CommerceIntake = require("./lib/commerce-candidate-intake.v1");
 const AffiliateRegistry = require("./lib/affiliate-program-registry.v1");
 
-const VERSION = "igdc-revenue-settlement-diagnostic-v1.0.0";
+const VERSION = "igdc-revenue-settlement-diagnostic-v1.0.1-member-admin-common-session";
 const FX_KRW_PER_USD = Math.max(1, Number(process.env.IGDC_FX_KRW_PER_USD || 1300) || 1300);
 const ADMIN_ROLES = new Set(["owner", "super_admin", "admin"]);
 
@@ -99,25 +99,54 @@ function highestRole(roles) {
   return order.find(role => (roles || []).includes(role)) || "guest";
 }
 async function resolveAdministrator(event) {
-  // Reuse the already-deployed common site session verifier used by the
-  // commerce candidate queue. It validates issuer, audience, expiry and JWKS
-  // signature server-side; no browser role label is trusted.
+  /*
+   * Reuse the same server-side member-admin verifier that already governs
+   * access to the existing administrator page.  The commerce queue and the
+   * settlement diagnostic must not independently reinterpret an Auth0 token:
+   * doing so caused a valid administrator iframe session to be rejected by a
+   * second, incompatible audience/issuer contract.
+   *
+   * The proxy keeps the original Authorization header intact. member-admin
+   * verifies the token signature, issuer, expiry and roles server-side; the
+   * browser role label is never trusted here.
+   */
+  let response;
+  let body;
   try {
-    const user = await CommerceAuth.authenticateCommerceAdmin(event || {});
-    const roles = roleList(user);
-    if (!roles.some(role => ADMIN_ROLES.has(role))) {
+    response = await MemberAdmin.handler({
+      httpMethod: "GET",
+      headers: event && event.headers || {},
+      queryStringParameters: { action: "me" },
+      body: null
+    });
+    body = responseBody(response);
+  } catch (_error) {
+    throw fail(503, "member_admin_verifier_unavailable", "관리자 공통 세션 검증 서버를 확인하지 못했습니다.");
+  }
+
+  const statusCode = Number(response && response.statusCode) || 500;
+  if (statusCode !== 200 || !body || body.ok !== true || !body.me) {
+    if (statusCode === 403) {
       throw fail(403, "admin_role_required", "수익 정산 점검은 owner/admin 권한에서만 열립니다.");
     }
-    return {
-      source: "commerce_common_auth",
-      role: highestRole(roles),
-      roles
-    };
-  } catch (error) {
-    const statusCode = Number(error && error.statusCode) || 401;
-    if (statusCode === 403) throw fail(403, "admin_role_required", "수익 정산 점검은 owner/admin 권한에서만 열립니다.");
-    throw fail(401, "admin_session_not_verified", "관리자 공통 세션의 서버 확인에 실패했습니다.");
+    if (statusCode === 401) {
+      throw fail(401, "admin_session_not_verified", "관리자 공통 세션의 서버 확인에 실패했습니다.");
+    }
+    throw fail(503, "member_admin_verifier_unavailable", "관리자 공통 세션 검증 서버를 확인하지 못했습니다.");
   }
+
+  const roles = roleList(body.me);
+  if (!roles.some(role => ADMIN_ROLES.has(role))) {
+    throw fail(403, "admin_role_required", "수익 정산 점검은 owner/admin 권한에서만 열립니다.");
+  }
+
+  return {
+    source: "member_admin_common_session",
+    role: highestRole(roles),
+    roles,
+    memberId: text(body.me.user_id),
+    email: text(body.me.email)
+  };
 }
 function currency(value) {
   return text(value || "USD").toUpperCase() || "USD";
