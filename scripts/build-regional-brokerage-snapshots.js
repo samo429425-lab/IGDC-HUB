@@ -27,9 +27,11 @@ function upstreamMirrorFiles() {
 
 function emptyStagingUpstream() {
   // The private SearchBank/Sanmaru candidate source is intentionally absent
-  // until real verified intake is provisioned.  During staging-only builds,
-  // use an explicit empty input so the site deploys with the existing empty
-  // commercial slot state.  In release mode, absence remains a hard failure.
+  // until real verified intake is provisioned. During staging-only builds, use
+  // an explicit empty input for Canonical safety accounting only. Do not run
+  // lower snapshot publishers in this mode; the existing front snapshots and
+  // their sample/automap placeholders must remain untouched until real product
+  // candidates are present.
   const releaseMode = String(process.env.COMMERCE_CANDIDATE_RELEASE_MODE || "").trim().toLowerCase();
   if (releaseMode === "enabled" || upstreamMirrorFiles().some(fileExists)) return null;
   return {
@@ -104,10 +106,11 @@ function verifyPublishedRootGeoGates(ipSlotReport) {
 
 async function main() {
   // Approved direct-commerce listings may be mirrored from the management
-  // registry into the private review queue.  Missing optional registry access
+  // registry into the private review queue. Missing optional registry access
   // cannot activate any candidate or public slot.
   const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
   const upstreamFallback = emptyStagingUpstream();
+  const stagingEmptyUpstream = !!upstreamFallback;
   const publication = canonical.publish({
     root,
     trigger: "netlify-build",
@@ -121,10 +124,28 @@ async function main() {
     throw new Error("Canonical Snapshot Publisher integrity failure: " + JSON.stringify(published.problems));
   }
 
+  if (stagingEmptyUpstream) {
+    // Critical preservation branch: there is no real upstream product feed yet.
+    // Do not call Snapshot Engine, Regional Brokerage Publisher, or IP Slot
+    // Publisher because those modules are allowed to rewrite root snapshots for
+    // real geo-scoped releases. In this preparation mode the deployed site must
+    // keep the current sample/automap slots exactly as committed.
+    process.stdout.write(JSON.stringify({
+      commerceRegistrySync,
+      upstreamFallback: { mode: "staging-empty", reason: upstreamFallback.meta.reason },
+      publication,
+      published,
+      lowerSnapshotPublishers: "skipped-preserve-existing-front-snapshots",
+      donation: { mode: "independent-runtime-contract-not-touched" },
+      ipSlots: { mode: "not-run-no-upstream-candidates" }
+    }, null, 2) + "\n");
+    return;
+  }
+
   // Only commercial Snapshot surfaces are built here. Donation has an
   // independent endpoint/snapshot contract and is intentionally excluded.
-  // Legacy root cards must not be interpreted as Canonical output before the
-  // IP publisher replaces each IP-owned root surface with its empty geo gate.
+  // Existing root placeholders are replaced only when a real upstream candidate
+  // source exists or release mode explicitly requires one.
   snapshots.run({ canonicalReleaseId: publication.releaseId });
 
   const regionalReport = regional.publishFromSearchBank({ root, trigger: "netlify-build-canonical" });
@@ -143,7 +164,7 @@ async function main() {
 
   process.stdout.write(JSON.stringify({
     commerceRegistrySync,
-    upstreamFallback: upstreamFallback ? { mode: "staging-empty", reason: upstreamFallback.meta.reason } : null,
+    upstreamFallback: null,
     publication,
     published,
     donation: { mode: "independent-runtime-contract-not-touched" },
