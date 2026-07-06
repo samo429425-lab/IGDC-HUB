@@ -1,0 +1,287 @@
+{
+  "version": "ip-slot-policy-v1.2.0-market-evidence-integrity",
+  "contractVersion": "sanmaru-searchbank-ip-slot-contract-v1.2-market-evidence-integrity",
+  "derivedFrom": {
+    "psom": "data/psom.json",
+    "purpose": "PSOM defines the strategic page and section map; the upper engine must explicitly classify, verify and bind each candidate to one exact IP-scoped slot profile."
+  },
+  "mode": "country-region-required-market-sale-scope-no-cross-market-snapshot-fallback",
+  "excludedPages": [
+    "social",
+    "media",
+    "donation"
+  ],
+  "ipScopedPages": [
+    "home",
+    "network",
+    "distribution",
+    "tour"
+  ],
+  "fallback": {
+    "regionToNationwideWithinSameCountry": true,
+    "crossCountry": false,
+    "global": false,
+    "unresolvedGeo": "empty"
+  },
+  "validation": {
+    "requireExplicitSlotProfile": true,
+    "requireProductIdentity": true,
+    "requireMarketAvailabilityEvidence": true,
+    "requireSellerResponsibility": true,
+    "requireIpRegionCodeForRegionalSupply": true,
+    "requireFreshAvailabilityVerification": true,
+    "maxAvailabilityVerificationAgeDays": 30,
+    "requireSponsorDisclosure": true,
+    "requireTrendEvidenceForTrending": true,
+    "requireNewnessEvidenceForNew": true,
+    "newnessMaxAgeDays": 45,
+    "requireSpecialEvidenceForSpecial": true,
+    "requireTravelOperatorEvidence": true,
+    "requireMarketScopedSellerResponsibility": true,
+    "requireMarketFulfillmentEvidence": true,
+    "requireMarketReturnsEvidence": true,
+    "requireMarketSupportEvidence": true,
+    "requireMarketVerificationRecord": true,
+    "requireMarketScopeEnvelope": true,
+    "requireMarketEvidenceDigest": true,
+    "requireFreshMarketEvidenceAtRequestTime": true
+  },
+  "slotStrategies": {
+    "home": {
+      "home_1": {
+        "strategyId": "home-featured-local-verified",
+        "role": "featured_local_verified",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "home-featured-local-verified"
+        ]
+      },
+      "home_2": {
+        "strategyId": "home-essential-local-supply",
+        "role": "essential_local_supply",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "home-essential-local-supply"
+        ]
+      },
+      "home_3": {
+        "strategyId": "home-producer-cooperative",
+        "role": "producer_cooperative_or_local_origin",
+        "allowedProductClasses": [
+          "producer_cooperative_offer",
+          "physical_product"
+        ],
+        "requiredSlotProfiles": [
+          "home-producer-cooperative"
+        ]
+      },
+      "home_4": {
+        "strategyId": "home-local-service-market",
+        "role": "local_service_or_market",
+        "allowedProductClasses": [
+          "local_service",
+          "verified_marketplace_offer",
+          "physical_product"
+        ],
+        "requiredSlotProfiles": [
+          "home-local-service-market"
+        ]
+      },
+      "home_5": {
+        "strategyId": "home-newly-verified-discovery",
+        "role": "newly_verified_discovery",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "home-newly-verified-discovery"
+        ]
+      },
+      "home_right_top": {
+        "strategyId": "home-right-top-trust",
+        "role": "highest_trust_featured",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "producer_cooperative_offer",
+          "verified_marketplace_offer"
+        ],
+        "requiredSlotProfiles": [
+          "home-right-top-trust"
+        ]
+      },
+      "home_right_middle": {
+        "strategyId": "home-right-middle-local-value",
+        "role": "local_value_and_responsibility",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "home-right-middle-local-value"
+        ]
+      },
+      "home_right_bottom": {
+        "strategyId": "home-right-bottom-discovery",
+        "role": "new_local_discovery",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "home-right-bottom-discovery"
+        ]
+      }
+    },
+    "distribution": {
+      "distribution-recommend": {
+        "strategyId": "distribution-recommend",
+        "role": "verified_recommended_offer",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "distribution-recommend"
+        ]
+      },
+      "distribution-sponsor": {
+        "strategyId": "distribution-sponsor",
+        "role": "disclosed_sponsored_offer",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "distribution-sponsor"
+        ],
+        "requires": "sponsorDisclosure"
+      },
+      "distribution-trending": {
+        "strategyId": "distribution-trending",
+        "role": "verified_market_demand",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "distribution-trending"
+        ],
+        "requires": "trendEvidence"
+      },
+      "distribution-new": {
+        "strategyId": "distribution-new",
+        "role": "recently_verified_listing",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "distribution-new"
+        ],
+        "requires": "newnessEvidence"
+      },
+      "distribution-special": {
+        "strategyId": "distribution-special",
+        "role": "certified_or_producer_special",
+        "allowedProductClasses": [
+          "producer_cooperative_offer",
+          "physical_product",
+          "local_service"
+        ],
+        "requiredSlotProfiles": [
+          "distribution-special"
+        ],
+        "requires": "specialEvidence"
+      },
+      "distribution-others": {
+        "strategyId": "distribution-others",
+        "role": "verified_long_tail_offer",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "distribution-others"
+        ]
+      },
+      "distribution-right": {
+        "strategyId": "distribution-right-curated",
+        "role": "curated_high_confidence_offer",
+        "allowedProductClasses": [
+          "physical_product",
+          "local_service",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "distribution-right-curated"
+        ]
+      }
+    },
+    "network": {
+      "network-right": {
+        "strategyId": "network-market-right",
+        "role": "market_hub_verified_offer",
+        "allowedProductClasses": [
+          "verified_marketplace_offer",
+          "physical_product",
+          "local_service",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "network-market-right"
+        ]
+      }
+    },
+    "tour": {
+      "tour": {
+        "strategyId": "tour-local-responsible-offer",
+        "role": "local_travel_or_tourism_offer",
+        "allowedProductClasses": [
+          "travel_service",
+          "travel_product"
+        ],
+        "requiredSlotProfiles": [
+          "tour-local-responsible-offer"
+        ],
+        "requires": "travelOperatorEvidence"
+      }
+    }
+  },
+  "globalMarketRule": {
+    "originCountryIsNotAnEligibilityGate": true,
+    "publishPerVerifiedSaleMarket": true,
+    "requireMarketSpecificFulfillmentReturnsSupportAndResponsibleSeller": true,
+    "forbidGenericInternationalShippingInference": true,
+    "forbidCrossCountrySnapshotFallback": true,
+    "marketEvidenceDigestRequired": true,
+    "requireMarketScopeEnvelope": true,
+    "rejectStaleMarketEvidenceAtRequestTime": true
+  }
+}
