@@ -18,7 +18,7 @@ const dns = require('dns').promises;
 const https = require('https');
 const net = require('net');
 
-const VERSION = 'igdc-core-link-lite-v1.0.11-dedicated-url-and-key-pairing';
+const VERSION = 'igdc-core-link-lite-v1.0.12-supabase-secret-key-header-fix';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -346,17 +346,29 @@ async function verifyAuth0IdToken(token, cfg) {
   return claims;
 }
 
+function supabaseStorageHeaders(serviceKey) {
+  const key = clean(serviceKey, 4096);
+  const headers = {
+    apikey: key,
+    'Content-Type': 'application/json'
+  };
+  // Supabase's current sb_secret_ server keys authenticate through `apikey`.
+  // They are not JWT bearer tokens. Legacy service_role JWT keys retain the
+  // established Authorization header for compatibility with existing projects.
+  if (!/^sb_secret_/i.test(key)) headers.Authorization = `Bearer ${key}`;
+  return headers;
+}
+
 async function dbRequest(cfg, path, init) {
   if (!cfg || !cfg.ready) throw configurationError(cfg || {});
   let response;
   try {
     response = await platformFetch(cfg.url + path, {
       method: (init && init.method) || 'GET',
-      headers: Object.assign({
-        apikey: cfg.serviceKey,
-        Authorization: `Bearer ${cfg.serviceKey}`,
-        'Content-Type': 'application/json'
-      }, (init && init.headers) || {}),
+      headers: Object.assign(
+        supabaseStorageHeaders(cfg.serviceKey),
+        (init && init.headers) || {}
+      ),
       body: init && init.body
     });
   } catch (error) {
@@ -1253,5 +1265,6 @@ exports._test = {
   normalizeSupabaseUrl,
   validateAuthClaims,
   verifyAuth0IdToken,
-  base64urlBuffer
+  base64urlBuffer,
+  supabaseStorageHeaders
 };
