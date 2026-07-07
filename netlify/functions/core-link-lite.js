@@ -18,8 +18,12 @@ const dns = require('dns').promises;
 const https = require('https');
 const net = require('net');
 const { createClient } = require('@supabase/supabase-js');
+// package.json already pins node-fetch for existing Netlify functions. Core Link
+// injects it explicitly because older Netlify Node runtimes do not guarantee a
+// global fetch implementation for the Supabase SDK.
+const nodeFetch = require('node-fetch');
 
-const VERSION = 'igdc-core-link-lite-v1.1.0-supabase-sdk-storage-adapter';
+const VERSION = 'igdc-core-link-lite-v1.1.1-supabase-sdk-node-fetch-final';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -348,10 +352,51 @@ async function verifyAuth0IdToken(token, cfg) {
   return claims;
 }
 
+function safeStorageStatus(error) {
+  const candidates = [
+    error,
+    error && error.response,
+    error && error.cause,
+    error && error.cause && error.cause.response
+  ];
+  for (const candidate of candidates) {
+    const status = Number(candidate && (candidate.status || candidate.statusCode) || 0);
+    if (Number.isInteger(status) && status > 0) return status;
+  }
+  return 0;
+}
+
+function safeStorageApiCode(error) {
+  const candidates = [
+    error && error.code,
+    error && error.cause && error.cause.code,
+    error && error.response && error.response.code,
+    error && error.cause && error.cause.response && error.cause.response.code
+  ];
+  for (const candidate of candidates) {
+    const code = clean(candidate, 80).toUpperCase();
+    if (/^[A-Z0-9_]{2,80}$/.test(code)) return code;
+  }
+  return null;
+}
+
+function safeStorageTransport(error) {
+  const candidates = [error, error && error.cause];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const code = clean(candidate.code, 80).toUpperCase();
+    const name = clean(candidate.name, 80);
+    const safeCode = /^[A-Z0-9_]{2,80}$/.test(code) ? code : null;
+    const safeName = ['FetchError', 'TypeError', 'AbortError', 'Error', 'RequestError'].includes(name) ? name : null;
+    if (safeCode || safeName) return { code: safeCode, name: safeName };
+  }
+  return null;
+}
+
 function storageFailure(error) {
-  const status = Number(error && (error.status || error.statusCode) || 0);
-  const rawCode = clean(error && error.code, 80).toUpperCase();
-  const apiCode = /^[A-Z0-9_]{2,80}$/.test(rawCode) ? rawCode : null;
+  const status = safeStorageStatus(error);
+  const apiCode = safeStorageApiCode(error);
+  const transport = safeStorageTransport(error);
   let code = 'core_link_lite_storage_failed';
   let category = 'remote_request_rejected';
   if (status === 401) {
@@ -370,12 +415,13 @@ function storageFailure(error) {
     category = 'supabase_service_error';
   } else if (!status) {
     code = 'core_link_lite_storage_unavailable';
-    category = 'sdk_or_transport_unavailable';
+    category = transport ? 'sdk_transport_failed' : 'sdk_response_unclassified';
   }
   const failureError = failure(503, code, 'Core Link Lite 전용 테이블 또는 저장소 연결 상태를 확인해야 합니다.');
-  // Only provider status/code are retained. The URL, key, headers, payload and
-  // provider response body are never returned in a diagnostic.
+  // Only provider status/code and a fixed transport class are retained. URL, key,
+  // headers, raw provider messages, payload and stored data never enter diagnostics.
   failureError.storageHttp = { status: status || null, category, apiCode };
+  if (transport) failureError.transport = transport;
   return failureError;
 }
 
@@ -386,9 +432,10 @@ function storageClient(cfg) {
   if (cached) return cached;
   let client;
   try {
-    // This is the same official SDK path used by existing IGDC Supabase
-    // functions. The SDK owns key/header compatibility for both legacy
-    // service_role JWT keys and current Supabase secret API keys.
+    // The repository already declares node-fetch and existing server functions use
+    // it directly. Injecting it here removes dependence on a global fetch that is
+    // absent in some Netlify Function runtimes, while Supabase SDK keeps ownership
+    // of the URL/key/header contract.
     client = createClient(cfg.url, cfg.serviceKey, {
       auth: {
         autoRefreshToken: false,
@@ -396,7 +443,8 @@ function storageClient(cfg) {
         detectSessionInUrl: false
       },
       global: {
-        headers: { 'X-Client-Info': 'igdc-core-link-lite/1.1.0' }
+        fetch: nodeFetch,
+        headers: { 'X-Client-Info': 'igdc-core-link-lite/1.1.1' }
       }
     });
   } catch (error) {
@@ -1287,6 +1335,9 @@ exports._test = {
   validateAuthClaims,
   verifyAuth0IdToken,
   base64urlBuffer,
+  safeStorageStatus,
+  safeStorageApiCode,
+  safeStorageTransport,
   storageFailure,
   storageClient,
   storageRows
