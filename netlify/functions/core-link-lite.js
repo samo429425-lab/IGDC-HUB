@@ -18,7 +18,7 @@ const dns = require('dns').promises;
 const https = require('https');
 const net = require('net');
 
-const VERSION = 'igdc-core-link-lite-v1.0.7-supabase-url-transport-diagnostic';
+const VERSION = 'igdc-core-link-lite-v1.0.8-supabase-http-response-diagnostic';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -350,10 +350,31 @@ async function dbRequest(cfg, path, init) {
   const text = await response.text().catch(() => '');
   const data = text ? safeJson(text, null) : null;
   if (!response.ok) {
-    const code = response.status === 404 || response.status === 400
-      ? 'core_link_lite_schema_required'
-      : 'core_link_lite_storage_failed';
-    throw failure(503, code, 'Core Link Lite 전용 테이블 또는 저장소 연결 상태를 확인해야 합니다.');
+    const status = Number(response.status || 0);
+    const rawCode = clean(data && data.code, 80).toUpperCase();
+    const apiCode = /^[A-Z0-9_]{2,80}$/.test(rawCode) ? rawCode : null;
+    let code = 'core_link_lite_storage_failed';
+    let category = 'remote_request_rejected';
+    if (status === 401) {
+      code = 'core_link_lite_storage_auth_rejected';
+      category = 'api_key_rejected';
+    } else if (status === 403) {
+      code = 'core_link_lite_storage_forbidden';
+      category = 'request_forbidden';
+    } else if (status === 400 || status === 404) {
+      code = 'core_link_lite_schema_required';
+      category = 'schema_or_api_route_unavailable';
+    } else if (status === 406) {
+      code = 'core_link_lite_storage_query_rejected';
+      category = 'rest_query_rejected';
+    } else if (status >= 500) {
+      category = 'supabase_service_error';
+    }
+    const error = failure(503, code, 'Core Link Lite 전용 테이블 또는 저장소 연결 상태를 확인해야 합니다.');
+    // Safe diagnostic only: HTTP status/category and provider error code; no URL,
+    // key, authorization header, response body, SQL text, link payload or user data.
+    error.storageHttp = { status: status || null, category, apiCode };
+    throw error;
   }
   return data;
 }
@@ -1122,6 +1143,11 @@ async function diagnostic(cfg, event) {
       transport: error && error.transport ? {
         primary: clean(error.transport.primary, 80) || null,
         fallback: clean(error.transport.fallback, 80) || null
+      } : null,
+      response: error && error.storageHttp ? {
+        status: Number.isInteger(error.storageHttp.status) ? error.storageHttp.status : null,
+        category: clean(error.storageHttp.category, 80) || null,
+        apiCode: clean(error.storageHttp.apiCode, 80) || null
       } : null
     };
     report.storedDataInventory.state = 'schema_or_storage_unavailable';
@@ -1129,6 +1155,12 @@ async function diagnostic(cfg, event) {
       report.warnings.push('Core Link Lite Supabase URL 형식이 올바르지 않아 전용 저장소 조회를 시작하지 않았습니다. URL 값만 확인하면 됩니다.');
     } else if (report.storage.reason === 'core_link_lite_storage_transport_failed') {
       report.warnings.push('Core Link Lite 전용 저장소 연결 요청이 전송 단계에서 실패했습니다. 이 JSON의 storage.transport 값은 오류 종류만 표시하며 URL·키·자료 내용은 포함하지 않습니다.');
+    } else if (report.storage.response && report.storage.response.category === 'api_key_rejected') {
+      report.warnings.push('Supabase가 전용 서버 키를 거부했습니다. Netlify의 CORE_LINK_LITE_SERVICE_ROLE_KEY가 현재 Supabase 프로젝트의 서버용 service_role 또는 secret 키와 같은지 확인해야 합니다. 키 값은 이 JSON에 포함되지 않습니다.');
+    } else if (report.storage.response && report.storage.response.category === 'request_forbidden') {
+      report.warnings.push('Supabase가 전용 저장소 요청을 거부했습니다. 서버 키·프로젝트 일치 또는 API 접근 정책을 확인해야 합니다. 키 값과 요청 내용은 이 JSON에 포함되지 않습니다.');
+    } else if (report.storage.response && report.storage.response.category === 'schema_or_api_route_unavailable') {
+      report.warnings.push('Supabase 응답상 전용 테이블·진단 뷰 또는 REST API 경로를 확인해야 합니다. SQL을 다시 실행하기 전에 JSON의 storage.response.apiCode를 확인하면 됩니다.');
     } else {
       report.warnings.push('Core Link Lite 전용 테이블·진단 인벤토리 또는 저장소를 아직 읽을 수 없습니다. 이 JSON은 계속 읽기 전용으로 저장되며 기존 사이트에는 영향이 없습니다.');
     }
