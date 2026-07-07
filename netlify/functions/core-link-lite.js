@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * IGDC Core Link Lite v1.0.2
+ * IGDC Core Link Lite v1.0.3
  * --------------------------------------------------------------------------
  * Independent external-data inbox/outbox.  This function deliberately does
  * not import or mutate SearchBank, Sanmaru, Snapshot, Automap, Index, Front,
@@ -18,18 +18,25 @@ const dns = require('dns').promises;
 const https = require('https');
 const net = require('net');
 
-const VERSION = 'igdc-core-link-lite-v1.0.2-isolated-inbox-outbox-readonly-diagnostic';
+const VERSION = 'igdc-core-link-lite-v1.0.4-isolated-auth0-session-inventory-diagnostic';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
 const MAX_LINKS = 100;
 const MAX_MESSAGES = 80;
+const MAX_DIAGNOSTIC_RECENT_MESSAGES = 20;
+const INVENTORY_VIEW = 'igdc_core_link_lite_inventory';
+const INVENTORY_SUMMARY_VIEW = 'igdc_core_link_lite_inventory_summary';
 const DEFAULT_MAX_PAYLOAD_BYTES = 256 * 1024;
 const DEFAULT_MAX_SEND_BYTES = 64 * 1024;
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const DIRECTIONS = new Set(['pull', 'push', 'inbound']);
 const STATES = new Set(['draft', 'enabled', 'blocked']);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'POST']);
+const DEFAULT_AUTH_ISSUER = 'https://login.igdcglobal.com/';
+const DEFAULT_AUTH_AUDIENCE = '4JeT1FdyDZaN7nEODVsKe2Sx8kKMWagj';
+const AUTH_JWKS_CACHE_MS = 10 * 60 * 1000;
+let authJwksCache = null;
 
 
 // These rows are display-only diagnostic metadata. They are not probed, invoked,
@@ -156,6 +163,10 @@ function config() {
     adminsByUserId,
     inboundSecrets: objectEnv('CORE_LINK_LITE_INBOUND_SECRETS_JSON'),
     outboundHeaders: objectEnv('CORE_LINK_LITE_OUTBOUND_HEADERS_JSON'),
+    // These defaults match the existing IGDC browser login. They are optional
+    // overrides only; no new environment variable is required for the current site.
+    authIssuer: normalizeAuthIssuer(process.env.CORE_LINK_LITE_AUTH_ISSUER || DEFAULT_AUTH_ISSUER),
+    authAudience: clean(process.env.CORE_LINK_LITE_AUTH_AUDIENCE || DEFAULT_AUTH_AUDIENCE, 500),
     maxPayloadBytes: intEnv('CORE_LINK_LITE_MAX_PAYLOAD_BYTES', DEFAULT_MAX_PAYLOAD_BYTES, 1024, 1024 * 1024),
     maxSendBytes: intEnv('CORE_LINK_LITE_MAX_SEND_BYTES', DEFAULT_MAX_SEND_BYTES, 1024, 512 * 1024)
   };
@@ -166,9 +177,118 @@ function configurationError(cfg) {
   return failure(503, 'core_link_lite_not_configured', 'Core Link Lite 전용 환경변수와 관리자 허용 목록을 먼저 설정해야 합니다.');
 }
 
+function canonicalAuthIssuer(value) {
+  const raw = clean(value, 500).replace(/\/+$/, '');
+  if (!/^https:\/\//i.test(raw)) return '';
+  try {
+    const url = new URL(raw + '/');
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) return '';
+    return url.origin + '/';
+  } catch (_) {
+    return '';
+  }
+}
+
+function normalizeAuthIssuer(value) {
+  return canonicalAuthIssuer(value) || DEFAULT_AUTH_ISSUER;
+}
+
+function nativeHttpsFetch(urlText, init) {
+  return new Promise((resolve, reject) => {
+    let target;
+    try { target = new URL(urlText); }
+    catch (_) { reject(failure(503, 'runtime_fetch_unavailable', '서버 HTTP 요청 주소가 올바르지 않습니다.')); return; }
+    if (target.protocol !== 'https:') { reject(failure(503, 'runtime_fetch_unavailable', '서버 HTTP 요청은 HTTPS만 사용할 수 있습니다.')); return; }
+    const options = init || {};
+    const headers = Object.assign({}, options.headers || {});
+    const body = options.body == null ? null : Buffer.from(String(options.body), 'utf8');
+    if (body && !Object.keys(headers).some(key => String(key).toLowerCase() === 'content-length')) headers['Content-Length'] = String(body.length);
+    const request = https.request({
+      protocol: 'https:', hostname: target.hostname, port: target.port || 443,
+      path: (target.pathname || '/') + (target.search || ''),
+      method: options.method || 'GET', headers, agent: false, servername: target.hostname
+    }, response => {
+      const chunks = [];
+      response.on('data', chunk => chunks.push(chunk));
+      response.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        const status = Number(response.statusCode || 0);
+        resolve({ ok: status >= 200 && status < 300, status, text: async () => text });
+      });
+    });
+    request.setTimeout(10000, () => request.destroy(new Error('timeout')));
+    request.on('error', error => reject(error));
+    if (body) request.write(body);
+    request.end();
+  });
+}
+
 async function platformFetch(url, init) {
-  if (typeof fetch !== 'function') throw failure(503, 'runtime_fetch_unavailable', '서버 런타임의 HTTP 클라이언트를 사용할 수 없습니다.');
-  return fetch(url, init);
+  if (typeof fetch === 'function') return fetch(url, init);
+  return nativeHttpsFetch(url, init);
+}
+
+function base64urlBuffer(value) {
+  const raw = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  const padded = raw + '='.repeat((4 - raw.length % 4) % 4);
+  return Buffer.from(padded, 'base64');
+}
+
+function jwtJsonPart(part, code) {
+  try { return JSON.parse(base64urlBuffer(part).toString('utf8')); }
+  catch (_) { throw failure(401, code || 'core_link_lite_session_required', '관리자 로그인 토큰 형식이 올바르지 않습니다.'); }
+}
+
+function audienceIncludes(aud, expected) {
+  const values = Array.isArray(aud) ? aud : [aud];
+  return values.some(value => clean(value, 500) === expected);
+}
+
+function validateAuthClaims(payload, cfg) {
+  const now = Math.floor(Date.now() / 1000);
+  const issuer = canonicalAuthIssuer(payload && payload.iss || '');
+  if (!payload || !issuer || issuer !== cfg.authIssuer) throw failure(401, 'core_link_lite_session_required', '관리자 로그인 발급자를 확인할 수 없습니다.');
+  if (!audienceIncludes(payload.aud, cfg.authAudience)) throw failure(401, 'core_link_lite_session_required', '관리자 로그인 대상 정보를 확인할 수 없습니다.');
+  if (!Number.isFinite(Number(payload.exp)) || Number(payload.exp) <= now - 60) throw failure(401, 'core_link_lite_session_required', '관리자 로그인 세션이 만료되었습니다.');
+  if (Number.isFinite(Number(payload.nbf)) && Number(payload.nbf) > now + 60) throw failure(401, 'core_link_lite_session_required', '관리자 로그인 세션이 아직 유효하지 않습니다.');
+  if (Number.isFinite(Number(payload.iat)) && Number(payload.iat) > now + 300) throw failure(401, 'core_link_lite_session_required', '관리자 로그인 세션 시간이 올바르지 않습니다.');
+  const email = clean(payload.email, 320).toLowerCase();
+  const subject = clean(payload.sub, 320);
+  if (!email || !subject) throw failure(401, 'core_link_lite_session_required', '관리자 이메일 또는 사용자 식별자가 없는 세션입니다.');
+  return { email, subject, name: clean(payload.name || payload.nickname || email, 160) };
+}
+
+async function authJwks(issuer) {
+  if (authJwksCache && authJwksCache.issuer === issuer && (Date.now() - authJwksCache.at) < AUTH_JWKS_CACHE_MS) return authJwksCache.keys;
+  let response;
+  try { response = await platformFetch(new URL('.well-known/jwks.json', issuer).toString(), { method: 'GET', headers: { Accept: 'application/json' } }); }
+  catch (_) { throw failure(503, 'core_link_lite_auth_unavailable', 'Core Link Lite 전용 관리자 로그인 확인에 실패했습니다.'); }
+  const raw = await response.text().catch(() => '');
+  const body = raw ? safeJson(raw, null) : null;
+  if (!response.ok || !body || !Array.isArray(body.keys)) throw failure(503, 'core_link_lite_auth_unavailable', 'Core Link Lite 전용 관리자 로그인 확인에 실패했습니다.');
+  const keys = body.keys.filter(key => key && key.kty === 'RSA' && clean(key.kid, 300));
+  if (!keys.length) throw failure(503, 'core_link_lite_auth_unavailable', 'Core Link Lite 전용 관리자 로그인 키를 확인할 수 없습니다.');
+  authJwksCache = { issuer, at: Date.now(), keys };
+  return keys;
+}
+
+async function verifyAuth0IdToken(token, cfg) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) throw failure(401, 'core_link_lite_session_required', '관리자 로그인 세션이 필요합니다.');
+  const headerValue = jwtJsonPart(parts[0]);
+  const payload = jwtJsonPart(parts[1]);
+  if (clean(headerValue.alg, 20) !== 'RS256' || !clean(headerValue.kid, 300)) throw failure(401, 'core_link_lite_session_required', '지원하지 않는 관리자 로그인 토큰 형식입니다.');
+  const claims = validateAuthClaims(payload, cfg);
+  const keys = await authJwks(cfg.authIssuer);
+  const key = keys.find(candidate => clean(candidate.kid, 300) === clean(headerValue.kid, 300));
+  if (!key) throw failure(401, 'core_link_lite_session_required', '관리자 로그인 서명 키를 찾을 수 없습니다.');
+  let verified = false;
+  try {
+    const publicKey = crypto.createPublicKey({ key, format: 'jwk' });
+    verified = crypto.verify('RSA-SHA256', Buffer.from(parts[0] + '.' + parts[1], 'utf8'), { key: publicKey, padding: crypto.constants.RSA_PKCS1_PADDING }, base64urlBuffer(parts[2]));
+  } catch (_) { verified = false; }
+  if (!verified) throw failure(401, 'core_link_lite_session_required', '관리자 로그인 서명을 확인할 수 없습니다.');
+  return claims;
 }
 
 async function dbRequest(cfg, path, init) {
@@ -250,29 +370,14 @@ async function verifyAdministrator(event, cfg) {
   const token = bearerToken(event);
   if (!token) throw failure(401, 'core_link_lite_session_required', 'Core Link Lite 관리에는 관리자 로그인 세션이 필요합니다.');
 
-  let response;
-  try {
-    response = await platformFetch(`${cfg.url}/auth/v1/user`, {
-      method: 'GET',
-      headers: {
-        apikey: cfg.serviceKey,
-        Authorization: `Bearer ${token}`
-      }
-    });
-  } catch (_) {
-    throw failure(503, 'core_link_lite_auth_unavailable', 'Core Link Lite 전용 관리자 세션 확인에 실패했습니다.');
-  }
-  const body = await response.text().catch(() => '');
-  const user = body ? safeJson(body, null) : null;
-  if (!response.ok || !user || !user.id) {
-    throw failure(401, 'core_link_lite_session_required', '관리자 로그인 세션을 확인할 수 없습니다.');
-  }
-  const email = clean(user.email, 320).toLowerCase();
-  const id = clean(user.id, 320).toLowerCase();
-  if (!cfg.adminsByEmail.has(email) && !cfg.adminsByUserId.has(id)) {
+  // IGDC uses Auth0-issued ID tokens, not Supabase Auth tokens. This validates
+  // that signed ID token against the issuer's public JWKS; it does not call,
+  // import, mutate, or depend on any IGDC business/engine function.
+  const identity = await verifyAuth0IdToken(token, cfg);
+  if (!cfg.adminsByEmail.has(identity.email) && !cfg.adminsByUserId.has(identity.subject.toLowerCase())) {
     throw failure(403, 'core_link_lite_admin_required', 'Core Link Lite는 전용 관리자 허용 목록에 등록된 계정만 사용할 수 있습니다.');
   }
-  return { id: clean(user.id, 320), email, name: clean((user.user_metadata || {}).name || user.email, 160) };
+  return { id: identity.subject, email: identity.email, name: identity.name, sessionValidation: 'auth0_jwks_id_token' };
 }
 
 function parseRawBody(event, maxBytes) {
@@ -808,10 +913,102 @@ function diagnosticBase(cfg) {
 // Read-only diagnostic is intentionally available before SQL, environment variables,
 // and administrator allow-list setup. It reveals no secret, administrator ID, link
 // payload, or external connection list without a verified administrator session.
+function numeric(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function emptyStoredDataSummary() {
+  return {
+    exact: false,
+    state: 'not_checked',
+    externalLinkCount: null,
+    storedRecordCount: null,
+    receivedCount: null,
+    pulledCount: null,
+    sentCount: null,
+    storedBytes: null,
+    hasStoredData: null,
+    lastStoredAt: null,
+    lastReceivedAt: null,
+    lastPulledAt: null,
+    lastSentAt: null,
+    recentRecordLimit: MAX_DIAGNOSTIC_RECENT_MESSAGES,
+    recentRecordsIncluded: 0,
+    recordBodiesIncluded: false
+  };
+}
+
+function safeInventory(row) {
+  const raw = row && typeof row === 'object' ? row : {};
+  const storedRecordCount = numeric(raw.stored_record_count);
+  return {
+    linkId: safeId(raw.link_id, 160),
+    storedRecordCount,
+    receivedCount: numeric(raw.received_count),
+    pulledCount: numeric(raw.pulled_count),
+    sentCount: numeric(raw.sent_count),
+    storedBytes: numeric(raw.stored_bytes),
+    hasStoredData: storedRecordCount > 0,
+    lastStoredAt: raw.last_stored_at || null,
+    lastReceivedAt: raw.last_received_at || null,
+    lastPulledAt: raw.last_pulled_at || null,
+    lastSentAt: raw.last_sent_at || null
+  };
+}
+
+function safeInventorySummary(row) {
+  const raw = row && typeof row === 'object' ? row : {};
+  const storedRecordCount = numeric(raw.stored_record_count);
+  return {
+    exact: true,
+    state: 'available',
+    externalLinkCount: numeric(raw.external_link_count),
+    storedRecordCount,
+    receivedCount: numeric(raw.received_count),
+    pulledCount: numeric(raw.pulled_count),
+    sentCount: numeric(raw.sent_count),
+    storedBytes: numeric(raw.stored_bytes),
+    hasStoredData: storedRecordCount > 0,
+    lastStoredAt: raw.last_stored_at || null,
+    lastReceivedAt: raw.last_received_at || null,
+    lastPulledAt: raw.last_pulled_at || null,
+    lastSentAt: raw.last_sent_at || null,
+    recentRecordLimit: MAX_DIAGNOSTIC_RECENT_MESSAGES,
+    recentRecordsIncluded: 0,
+    recordBodiesIncluded: false
+  };
+}
+
+async function diagnosticInventory(cfg) {
+  const [summaryRows, inventoryRows, recentRows] = await Promise.all([
+    dbSelect(cfg, INVENTORY_SUMMARY_VIEW,
+      'select=external_link_count,stored_record_count,received_count,pulled_count,sent_count,stored_bytes,last_stored_at,last_received_at,last_pulled_at,last_sent_at&limit=1'),
+    dbSelect(cfg, INVENTORY_VIEW,
+      'select=link_id,stored_record_count,received_count,pulled_count,sent_count,stored_bytes,last_stored_at,last_received_at,last_pulled_at,last_sent_at&order=link_id.asc&limit=' + MAX_LINKS),
+    dbSelect(cfg, MESSAGE_TABLE,
+      'select=id,link_id,flow,title,content_type,payload_bytes,payload_sha256,external_status,response_summary,created_at&order=created_at.desc&limit=' + MAX_DIAGNOSTIC_RECENT_MESSAGES)
+  ]);
+  const summary = safeInventorySummary(Array.isArray(summaryRows) ? summaryRows[0] : null);
+  const inventoryByLink = new Map((Array.isArray(inventoryRows) ? inventoryRows : [])
+    .map(safeInventory)
+    .filter(row => row.linkId)
+    .map(row => [row.linkId, row]));
+  const recentRecords = (Array.isArray(recentRows) ? recentRows : []).map(row => safeMessage(row, false));
+  summary.recentRecordsIncluded = recentRecords.length;
+  return { summary, inventoryByLink, recentRecords };
+}
+
+// Read-only diagnostic is intentionally available before SQL, environment variables,
+// and administrator allow-list setup. It reveals no secret or administrator ID. With
+// a verified administrator + available dedicated storage, it also reports exact stored
+// data counts and recent metadata, but never returns stored payload bodies.
 async function diagnostic(cfg, event) {
   const report = diagnosticBase(cfg);
   report.externalLinks = [];
   report.externalSummary = summaryForLinks([]);
+  report.storedDataInventory = emptyStoredDataSummary();
+  report.recentStoredData = [];
   report.storage = {
     state: report.configuration.state,
     databaseReadAttempted: false,
@@ -819,12 +1016,14 @@ async function diagnostic(cfg, event) {
   };
   report.administrator = {
     state: 'not_checked',
-    externalLinkListIncluded: false
+    externalLinkListIncluded: false,
+    storedDataInventoryIncluded: false
   };
   report.warnings = [];
 
   if (!cfg || !cfg.ready) {
-    report.warnings.push('Core Link Lite 전용 SQL·환경변수·관리자 허용 목록이 아직 완성되지 않아 외부 보관함은 사용하지 않습니다. 기존 내부 기본 목록과 격리 상태만 읽기 전용으로 확인했습니다.');
+    report.storedDataInventory.state = 'not_available_before_configuration';
+    report.warnings.push('Core Link Lite 전용 SQL·환경변수·관리자 허용 목록이 아직 완성되지 않아 외부 보관함의 실제 등록·저장 자료를 조회하지 않았습니다. 기존 내부 기본 목록과 격리 상태만 읽기 전용으로 확인했습니다.');
     return report;
   }
 
@@ -833,28 +1032,41 @@ async function diagnostic(cfg, event) {
     actor = await verifyAdministrator(event, cfg);
     report.administrator = {
       state: 'verified',
-      email: actor.email,
-      externalLinkListIncluded: true
+      externalLinkListIncluded: true,
+      storedDataInventoryIncluded: true
     };
   } catch (error) {
     report.administrator = {
       state: 'not_verified',
       reason: clean(error && error.code, 120) || 'administrator_session_not_available',
-      externalLinkListIncluded: false
+      externalLinkListIncluded: false,
+      storedDataInventoryIncluded: false
     };
-    report.warnings.push('외부 연결 목록은 전용 관리자 로그인 확인 후에만 포함됩니다. 현재 JSON은 설정·격리 상태만 제공합니다.');
+    report.storedDataInventory.state = 'administrator_session_not_verified';
+    report.warnings.push('외부 연결 및 저장 자료의 실제 존재 여부는 전용 관리자 로그인 확인 후에만 JSON에 포함됩니다. 현재 JSON은 설정·격리 상태만 제공합니다.');
     return report;
   }
 
   try {
-    const links = await listLinks(cfg);
-    report.externalLinks = links;
+    const [links, inventory] = await Promise.all([listLinks(cfg), diagnosticInventory(cfg)]);
+    report.externalLinks = links.map(link => Object.assign({}, link, {
+      storedData: inventory.inventoryByLink.get(link.id) || {
+        linkId: link.id, storedRecordCount: 0, receivedCount: 0, pulledCount: 0, sentCount: 0,
+        storedBytes: 0, hasStoredData: false, lastStoredAt: null, lastReceivedAt: null,
+        lastPulledAt: null, lastSentAt: null
+      }
+    }));
     report.externalSummary = summaryForLinks(links);
+    report.storedDataInventory = inventory.summary;
+    report.recentStoredData = inventory.recentRecords;
     report.storage = {
       state: 'ready',
       databaseReadAttempted: true,
       schemaVerified: true
     };
+    if (!inventory.summary.hasStoredData) {
+      report.warnings.push('전용 저장소는 정상 연결되었으며, 현재 저장된 외부 자료는 없습니다.');
+    }
     return report;
   } catch (error) {
     report.storage = {
@@ -863,7 +1075,8 @@ async function diagnostic(cfg, event) {
       schemaVerified: false,
       reason: clean(error && error.code, 120) || 'storage_unavailable'
     };
-    report.warnings.push('Core Link Lite 전용 테이블 또는 저장소를 아직 읽을 수 없습니다. 이 JSON은 계속 읽기 전용으로 저장되며 기존 사이트에는 영향이 없습니다.');
+    report.storedDataInventory.state = 'schema_or_storage_unavailable';
+    report.warnings.push('Core Link Lite 전용 테이블·진단 인벤토리 또는 저장소를 아직 읽을 수 없습니다. 이 JSON은 계속 읽기 전용으로 저장되며 기존 사이트에는 영향이 없습니다.');
     return report;
   }
 }
@@ -931,5 +1144,10 @@ exports._test = {
   safeId,
   summaryForLinks,
   publicConfigurationSummary,
-  payloadFromControl
+  payloadFromControl,
+  normalizeAuthIssuer,
+  canonicalAuthIssuer,
+  validateAuthClaims,
+  verifyAuth0IdToken,
+  base64urlBuffer
 };
