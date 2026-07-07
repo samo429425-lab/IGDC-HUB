@@ -2,19 +2,25 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const root = path.resolve(__dirname, "..");
 const canonical = require(path.join(root, "netlify", "functions", "lib", "canonical-snapshot-publisher.v1"));
 const snapshots = require(path.join(root, "netlify", "functions", "snapshot-engine"));
 const regional = require(path.join(root, "netlify", "functions", "lib", "regional-brokerage-publisher.v1"));
 const ipSlots = require(path.join(root, "netlify", "functions", "lib", "ip-slot-snapshot-publisher.v1"));
 const commerceRegistry = require(path.join(root, "netlify", "functions", "lib", "commerce-candidate-registry-sync.v1"));
+const commerceIntake = require(path.join(root, "netlify", "functions", "lib", "commerce-candidate-intake.v1"));
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
 function fileExists(file) {
-  try { return fs.existsSync(file) && fs.statSync(file).isFile(); } catch (_e) { return false; }
+  try { return fs.existsSync(file) && fs.statSync(file).isFile(); } catch (_error) { return false; }
+}
+
+function sha256File(file) {
+  return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
 
 function upstreamMirrorFiles() {
@@ -25,23 +31,45 @@ function upstreamMirrorFiles() {
   ];
 }
 
-function emptyStagingUpstream() {
-  // The private SearchBank/Sanmaru candidate source is intentionally absent
-  // until real verified intake is provisioned. During staging-only builds, use
-  // an explicit empty input for Canonical safety accounting only. Do not run
-  // lower snapshot publishers in this mode; the existing front snapshots and
-  // their sample/automap placeholders must remain untouched until real product
-  // candidates are present.
-  const releaseMode = String(process.env.COMMERCE_CANDIDATE_RELEASE_MODE || "").trim().toLowerCase();
-  if (releaseMode === "enabled" || upstreamMirrorFiles().some(fileExists)) return null;
+/*
+ * Snapshot publication is allowed only with a confirmed, non-empty upstream
+ * candidate set. Ordinary site/admin updates must preserve the committed
+ * SearchBank and front Snapshot files exactly as they are.
+ */
+function loadConfirmedUpstream() {
+  const files = upstreamMirrorFiles();
+  const mirrors = files.map(file => ({ path: path.relative(root, file).replace(/\\/g, "/"), present: fileExists(file) }));
+
+  if (mirrors.some(row => !row.present)) {
+    return { ok: false, reason: "upstream-candidate-source-missing", mirrors };
+  }
+
+  const parsed = [];
+  for (let index = 0; index < files.length; index += 1) {
+    try {
+      const doc = readJson(files[index]);
+      if (!doc || !Array.isArray(doc.items)) {
+        return { ok: false, reason: "upstream-candidate-source-invalid", mirrors };
+      }
+      parsed.push({ doc, hash: sha256File(files[index]) });
+    } catch (_error) {
+      return { ok: false, reason: "upstream-candidate-source-invalid", mirrors };
+    }
+  }
+
+  if (new Set(parsed.map(row => row.hash)).size !== 1) {
+    return { ok: false, reason: "upstream-candidate-mirrors-differ", mirrors };
+  }
+
+  if (parsed[0].doc.items.length === 0) {
+    return { ok: false, reason: "upstream-candidate-source-empty", mirrors };
+  }
+
   return {
-    meta: {
-      schema: "search-bank.upstream.staging-empty.v1",
-      source: "netlify-build-empty-upstream",
-      generatedAt: new Date().toISOString(),
-      reason: "upstream-candidate-source-not-yet-provisioned"
-    },
-    items: []
+    ok: true,
+    doc: parsed[0].doc,
+    candidateCount: parsed[0].doc.items.length,
+    mirrors
   };
 }
 
@@ -104,48 +132,93 @@ function verifyPublishedRootGeoGates(ipSlotReport) {
   return { ok: problems.length === 0, summary, problems };
 }
 
+function writePreservedBuild(reason, details) {
+  process.stdout.write(JSON.stringify({
+    mode: "preserve-existing-snapshots",
+    reason,
+    details: details || null,
+    publication: "skipped-no-confirmed-release-ready-candidates",
+    lowerSnapshotPublishers: "skipped-preserve-existing-front-snapshots",
+    donation: { mode: "independent-runtime-contract-not-touched" },
+    ipSlots: { mode: "not-run-no-confirmed-release-ready-candidates" }
+  }, null, 2) + "\n");
+}
+
 async function main() {
-  // Approved direct-commerce listings may be mirrored from the management
-  // registry into the private review queue. Missing optional registry access
-  // cannot activate any candidate or public slot.
+  // This sync only refreshes the private approved-candidate review queue. It
+  // never writes a public Snapshot and cannot by itself publish front cards.
   const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
-  const upstreamFallback = emptyStagingUpstream();
-  const stagingEmptyUpstream = !!upstreamFallback;
-  const publication = canonical.publish({
-    root,
-    trigger: "netlify-build",
-    bank: upstreamFallback || undefined
-  });
+
+  // Ordinary builds do not publish or regenerate Snapshot files. Publication
+  // begins only after a real, mirrored upstream candidate source is present.
+  const upstream = loadConfirmedUpstream();
+  if (!upstream.ok) {
+    writePreservedBuild(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors });
+    return;
+  }
+
+  // Check the same release-ready candidate set that Canonical Publisher will
+  // receive. A non-empty source alone is not enough: the candidates must also
+  // pass the existing verification/release contract before anything is written.
+  let intake;
+  try {
+    intake = commerceIntake.build({
+      root,
+      items: upstream.doc.items,
+      trigger: "netlify-build-preflight",
+      write: false
+    });
+  } catch (error) {
+    writePreservedBuild("candidate-intake-preflight-failed", {
+      commerceRegistrySync,
+      candidateCount: upstream.candidateCount,
+      error: String(error && error.message || error)
+    });
+    return;
+  }
+
+  if (!intake.ok) {
+    writePreservedBuild("candidate-intake-not-ready", {
+      commerceRegistrySync,
+      candidateCount: upstream.candidateCount,
+      problems: intake.problems || []
+    });
+    return;
+  }
+
+  if (!intake.releaseGate || intake.releaseGate.enabled !== true) {
+    writePreservedBuild("candidate-release-not-authorized", {
+      commerceRegistrySync,
+      candidateCount: upstream.candidateCount,
+      releaseGate: intake.releaseGate || null
+    });
+    return;
+  }
+
+  if (!Array.isArray(intake.releaseItems) || intake.releaseItems.length === 0) {
+    writePreservedBuild("no-release-ready-candidates", {
+      commerceRegistrySync,
+      candidateCount: upstream.candidateCount,
+      intakeSummary: intake.summary || null
+    });
+    return;
+  }
+
+  const publication = canonical.publish({ root, trigger: "netlify-build" });
   if (publication.status !== "published") {
     throw new Error("Canonical Snapshot Publisher blocked build: " + JSON.stringify(publication.errors || publication));
   }
+  if (!publication.counts || Number(publication.counts.accepted || 0) <= 0) {
+    throw new Error("Canonical Snapshot Publisher produced no accepted candidates; deployment halted before front Snapshot publishing.");
+  }
+
   const published = canonical.verifyPublished({ root });
   if (!published.ok) {
     throw new Error("Canonical Snapshot Publisher integrity failure: " + JSON.stringify(published.problems));
   }
 
-  if (stagingEmptyUpstream) {
-    // Critical preservation branch: there is no real upstream product feed yet.
-    // Do not call Snapshot Engine, Regional Brokerage Publisher, or IP Slot
-    // Publisher because those modules are allowed to rewrite root snapshots for
-    // real geo-scoped releases. In this preparation mode the deployed site must
-    // keep the current sample/automap slots exactly as committed.
-    process.stdout.write(JSON.stringify({
-      commerceRegistrySync,
-      upstreamFallback: { mode: "staging-empty", reason: upstreamFallback.meta.reason },
-      publication,
-      published,
-      lowerSnapshotPublishers: "skipped-preserve-existing-front-snapshots",
-      donation: { mode: "independent-runtime-contract-not-touched" },
-      ipSlots: { mode: "not-run-no-upstream-candidates" }
-    }, null, 2) + "\n");
-    return;
-  }
-
   // Only commercial Snapshot surfaces are built here. Donation has an
   // independent endpoint/snapshot contract and is intentionally excluded.
-  // Existing root placeholders are replaced only when a real upstream candidate
-  // source exists or release mode explicitly requires one.
   snapshots.run({ canonicalReleaseId: publication.releaseId });
 
   const regionalReport = regional.publishFromSearchBank({ root, trigger: "netlify-build-canonical" });
@@ -164,7 +237,8 @@ async function main() {
 
   process.stdout.write(JSON.stringify({
     commerceRegistrySync,
-    upstreamFallback: null,
+    upstream: { candidateCount: upstream.candidateCount, mirrors: upstream.mirrors },
+    intake: { releaseGate: intake.releaseGate, summary: intake.summary },
     publication,
     published,
     donation: { mode: "independent-runtime-contract-not-touched" },
