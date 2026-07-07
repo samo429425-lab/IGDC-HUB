@@ -924,6 +924,19 @@
     if(!response.ok||!payload.ok){ throw new Error(payload.message||payload.error||('HTTP '+response.status)); }
     return payload;
   }
+  // The read-only diagnostic must remain available before SQL, storage
+  // variables, or the Core Link Lite administrator allow-list are configured.
+  // A current admin token is sent when available, but is never required merely
+  // to download the pre-setup isolation/configuration report.
+  async function diagnosticApi(){
+    var token=adminToken();
+    var init={method:'GET',headers:{},credentials:'same-origin',cache:'no-store'};
+    if(token) init.headers.Authorization='Bearer '+token;
+    var response=await fetch(ENDPOINT+'?action=diagnostic',init);
+    var payload=await response.json().catch(function(){ return {}; });
+    if(!response.ok||!payload.ok){ throw new Error(payload.message||payload.error||('HTTP '+response.status)); }
+    return payload;
+  }
   function renderInternal(){
     var tbody=byId('igdc-core-lite-internal-tbody'); if(!tbody) return;
     tbody.innerHTML=INTERNAL.map(function(row){ return '<tr><td style="padding:7px;border-bottom:1px solid #eef2f7;font-weight:700;">'+esc(row[0])+'</td><td style="padding:7px;border-bottom:1px solid #eef2f7;word-break:break-all;">'+esc(row[1])+'</td><td style="padding:7px;border-bottom:1px solid #eef2f7;color:#047857;">'+esc(row[2])+'</td><td style="padding:7px;border-bottom:1px solid #eef2f7;">'+esc(row[3])+'</td></tr>'; }).join('');
@@ -998,8 +1011,10 @@
   async function syncAll(){ try{ var result=await api('sync',{method:'POST',body:{id:'all'}}); alert('활성 연결 '+Number(result.result&&result.result.checked||0)+'개를 상태확인했습니다.'); await refresh(); }catch(error){ alert('전체 동기화 실패: '+error.message); } return false; }
   async function download(){
     try{
-      var report=await api('diagnostic');
-      var blob=new Blob([JSON.stringify(report,null,2)+'\n'],{type:'application/json;charset=utf-8'}); var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; a.download='igdc-core-link-lite-diagnostic_'+new Date().toISOString().replace(/[.:]/g,'-')+'.json'; a.style.display='none'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(url);},0); setSummary('Core Link Lite 독립 점검 JSON 저장 완료',false);
+      var report=await diagnosticApi();
+      var blob=new Blob([JSON.stringify(report,null,2)+'\n'],{type:'application/json;charset=utf-8'}); var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; a.download='igdc-core-link-lite-diagnostic_'+new Date().toISOString().replace(/[.:]/g,'-')+'.json'; a.style.display='none'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(url);},0);
+      var mode=report&&report.configuration&&report.configuration.state;
+      setSummary(mode==='ready'?'Core Link Lite 독립 점검 JSON 저장 완료':'점검 JSON 저장 완료 · 외부 보관함 설정 전 읽기 전용 상태',false);
     }catch(error){ setSummary('점검 JSON 저장 실패: '+error.message,true); }
     return false;
   }

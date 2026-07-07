@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * IGDC Core Link Lite v1.0.0
+ * IGDC Core Link Lite v1.0.2
  * --------------------------------------------------------------------------
  * Independent external-data inbox/outbox.  This function deliberately does
  * not import or mutate SearchBank, Sanmaru, Snapshot, Automap, Index, Front,
@@ -18,7 +18,7 @@ const dns = require('dns').promises;
 const https = require('https');
 const net = require('net');
 
-const VERSION = 'igdc-core-link-lite-v1.0.0-isolated-inbox-outbox';
+const VERSION = 'igdc-core-link-lite-v1.0.2-isolated-inbox-outbox-readonly-diagnostic';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -30,6 +30,21 @@ const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const DIRECTIONS = new Set(['pull', 'push', 'inbound']);
 const STATES = new Set(['draft', 'enabled', 'blocked']);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'POST']);
+
+
+// These rows are display-only diagnostic metadata. They are not probed, invoked,
+// imported, or otherwise connected to the existing systems by Core Link Lite.
+const INTERNAL_DISPLAY_LINKS = Object.freeze([
+  { name: 'Search Bank Engine', endpoint: '/.netlify/functions/search-bank-engine', state: 'connected', purpose: '검색/슬롯/스냅샷 데이터 게이트웨이' },
+  { name: 'Maru Search', endpoint: '/.netlify/functions/maru-search', state: 'connected', purpose: '외부 검색/미디어/뉴스/상품 검색 통로' },
+  { name: 'Revenue / Commerce Engine', endpoint: '/.netlify/functions/maru-revenue-engine', state: 'connected', purpose: '수익 구조/상품/정산/제휴 라인' },
+  { name: 'Ledger / Donation', endpoint: '/api/ledger', state: 'connected', purpose: '도네이션/입금/정산 로그 확인' },
+  { name: 'Web3 / Wallet Provider', endpoint: '/api/wallets', state: 'connected', purpose: '블록체인 지갑/네트워크 상태 확인' },
+  { name: 'Supabase Core Registry', endpoint: 'igdc_core_status', state: 'connected', purpose: '기존 Core 상태 저장소' },
+  { name: 'Maru Global Insight', endpoint: '/.netlify/functions/maru-global-insight-engine', state: 'connected', purpose: '글로벌 인사이트/국가·권역 분석 연결' },
+  { name: 'Planetary / Collector', endpoint: '/.netlify/functions/planetary-data-connector', state: 'partial', purpose: '외부 데이터 어댑터/수집기 확장' },
+  { name: 'Media / SNS / Broadcaster Adapter', endpoint: 'pending-adapter', state: 'planned', purpose: '향후 SNS·방송·미디어 소스 어댑터' }
+]);
 
 function clean(value, maxLength) {
   const text = String(value == null ? '' : value)
@@ -133,6 +148,8 @@ function config() {
   return {
     enabled,
     ready,
+    storageCredentialsConfigured: Boolean(url && serviceKey),
+    administratorAllowListConfigured: Boolean(adminsByEmail.size || adminsByUserId.size),
     url,
     serviceKey,
     adminsByEmail,
@@ -678,16 +695,20 @@ async function receiveData(event, cfg) {
   const secretRef = safeId(row.secret_ref, 120);
   const secret = secretRef && clean(cfg.inboundSecrets[secretRef], 4096);
   if (!secret) return json(503, { ok: false, error: 'inbound_secret_not_configured' });
-  const timestamp = timestampValue(header(event, 'x-core-link-timestamp'));
+  // Validate time using a normalized millisecond value, but sign the exact
+  // cleaned header representation.  This keeps UNIX-seconds and ISO-time
+  // senders compatible with the documented HMAC contract.
+  const timestampRaw = clean(header(event, 'x-core-link-timestamp'), 80);
+  const timestamp = timestampValue(timestampRaw);
   const nonce = clean(header(event, 'x-core-link-nonce'), 160);
   const signature = clean(header(event, 'x-core-link-signature'), 300).replace(/^sha256=/i, '');
-  if (!timestamp || Math.abs(Date.now() - timestamp) > MAX_CLOCK_SKEW_MS || !/^[A-Za-z0-9._:-]{8,160}$/.test(nonce)) {
+  if (!timestampRaw || !timestamp || Math.abs(Date.now() - timestamp) > MAX_CLOCK_SKEW_MS || !/^[A-Za-z0-9._:-]{8,160}$/.test(nonce)) {
     return json(403, { ok: false, error: 'invalid_timestamp_or_nonce' });
   }
   let raw;
   try { raw = parseRawBody(event, cfg.maxPayloadBytes); }
   catch (error) { return json(error.statusCode || 400, { ok: false, error: error.code || 'invalid_payload' }); }
-  const expected = hmac(secret, `${timestamp}.${nonce}.${sha256(raw)}`);
+  const expected = hmac(secret, `${timestampRaw}.${nonce}.${sha256(raw)}`);
   if (!signature || !timingSafeEqual(signature, expected)) return json(403, { ok: false, error: 'invalid_signature' });
   const nonceHash = sha256(`${link.id}|${nonce}`);
   if (await nonceUsed(cfg, link.id, nonceHash)) return json(409, { ok: false, error: 'replay_detected' });
@@ -730,28 +751,121 @@ function summaryForLinks(links) {
   };
 }
 
-async function diagnostic(cfg, actor) {
-  const links = await listLinks(cfg);
+function publicConfigurationSummary(cfg) {
+  const source = cfg || {};
+  const enabled = Boolean(source.enabled);
+  const storageCredentialsConfigured = Boolean(source.storageCredentialsConfigured);
+  const administratorAllowListConfigured = Boolean(source.administratorAllowListConfigured);
+  let state = 'ready';
+  if (!enabled) state = 'disabled';
+  else if (!storageCredentialsConfigured && !administratorAllowListConfigured) state = 'storage_and_admin_not_configured';
+  else if (!storageCredentialsConfigured) state = 'storage_not_configured';
+  else if (!administratorAllowListConfigured) state = 'administrator_allow_list_not_configured';
   return {
+    state,
+    enabled,
+    storageCredentialsConfigured,
+    administratorAllowListConfigured,
+    storageAccessAttempted: false,
+    secretsIncluded: false,
+    administratorIdentifiersIncluded: false
+  };
+}
+
+function diagnosticBase(cfg) {
+  return {
+    ok: true,
     reportType: 'igdc-core-link-lite-diagnostic',
     version: VERSION,
     generatedAt: isoNow(),
+    readOnly: true,
     isolation: {
       writesOnlyTo: [LINK_TABLE, MESSAGE_TABLE],
       automaticHandoffs: false,
       doesNotReadOrWrite: ['SearchBank', 'Sanmaru', 'Snapshot', 'Automap', 'Index', 'Front rendering', 'Revenue', 'Payment', 'Existing Core Engines']
     },
-    administrator: { email: actor.email },
-    summary: summaryForLinks(links),
-    links,
+    existingInternalDisplayLinks: INTERNAL_DISPLAY_LINKS,
+    existingInternalDisplaySummary: {
+      total: INTERNAL_DISPLAY_LINKS.length,
+      connected: INTERNAL_DISPLAY_LINKS.filter(row => row.state === 'connected').length,
+      partial: INTERNAL_DISPLAY_LINKS.filter(row => row.state === 'partial').length,
+      planned: INTERNAL_DISPLAY_LINKS.filter(row => row.state === 'planned').length,
+      readOnly: true,
+      endpointTestsExecuted: false
+    },
+    configuration: publicConfigurationSummary(cfg),
     safety: {
       externalDataIsStoredOnlyInCoreLinkLite: true,
       automaticFrontOrEnginePublishing: false,
       externalEndpointPolicy: 'HTTPS public host only; private network, IP host, query token, redirect, and oversized payload are denied.',
       inboundPolicy: 'Registered inbound link + enabled state + HMAC signature + timestamp + nonce required.',
-      outboundPolicy: 'Administrator manual action only; no scheduled or automatic send.'
+      outboundPolicy: 'Administrator manual action only; no scheduled or automatic send.',
+      diagnosticPolicy: 'This diagnostic never writes, never tests endpoints, never exposes secrets, and remains downloadable before Core Link Lite storage setup.'
     }
   };
+}
+
+// Read-only diagnostic is intentionally available before SQL, environment variables,
+// and administrator allow-list setup. It reveals no secret, administrator ID, link
+// payload, or external connection list without a verified administrator session.
+async function diagnostic(cfg, event) {
+  const report = diagnosticBase(cfg);
+  report.externalLinks = [];
+  report.externalSummary = summaryForLinks([]);
+  report.storage = {
+    state: report.configuration.state,
+    databaseReadAttempted: false,
+    schemaVerified: false
+  };
+  report.administrator = {
+    state: 'not_checked',
+    externalLinkListIncluded: false
+  };
+  report.warnings = [];
+
+  if (!cfg || !cfg.ready) {
+    report.warnings.push('Core Link Lite 전용 SQL·환경변수·관리자 허용 목록이 아직 완성되지 않아 외부 보관함은 사용하지 않습니다. 기존 내부 기본 목록과 격리 상태만 읽기 전용으로 확인했습니다.');
+    return report;
+  }
+
+  let actor;
+  try {
+    actor = await verifyAdministrator(event, cfg);
+    report.administrator = {
+      state: 'verified',
+      email: actor.email,
+      externalLinkListIncluded: true
+    };
+  } catch (error) {
+    report.administrator = {
+      state: 'not_verified',
+      reason: clean(error && error.code, 120) || 'administrator_session_not_available',
+      externalLinkListIncluded: false
+    };
+    report.warnings.push('외부 연결 목록은 전용 관리자 로그인 확인 후에만 포함됩니다. 현재 JSON은 설정·격리 상태만 제공합니다.');
+    return report;
+  }
+
+  try {
+    const links = await listLinks(cfg);
+    report.externalLinks = links;
+    report.externalSummary = summaryForLinks(links);
+    report.storage = {
+      state: 'ready',
+      databaseReadAttempted: true,
+      schemaVerified: true
+    };
+    return report;
+  } catch (error) {
+    report.storage = {
+      state: 'schema_or_storage_unavailable',
+      databaseReadAttempted: true,
+      schemaVerified: false,
+      reason: clean(error && error.code, 120) || 'storage_unavailable'
+    };
+    report.warnings.push('Core Link Lite 전용 테이블 또는 저장소를 아직 읽을 수 없습니다. 이 JSON은 계속 읽기 전용으로 저장되며 기존 사이트에는 영향이 없습니다.');
+    return report;
+  }
 }
 
 function actionOf(event) {
@@ -772,6 +886,10 @@ async function handler(event) {
   const method = requestMethod(event);
   const action = actionOf(event);
   if (method === 'OPTIONS') return json(204, {});
+  // The diagnostic path is deliberately before administrator/storage gating.
+  // It only returns static isolation/configuration metadata until a verified
+  // administrator session and Core Link Lite storage are both available.
+  if (method === 'GET' && action === 'diagnostic') return json(200, await diagnostic(cfg, event));
   if (action === 'receive') return receiveData(event, cfg);
   try {
     assertSameOrigin(event);
@@ -784,7 +902,6 @@ async function handler(event) {
       const query = (event && event.queryStringParameters) || {};
       return json(200, { ok: true, messages: await listMessages(cfg, query.link_id || query.linkId) });
     }
-    if (method === 'GET' && action === 'diagnostic') return json(200, await diagnostic(cfg, actor));
     if (method !== 'POST') throw failure(404, 'unsupported_core_link_lite_route', '지원하지 않는 Core Link Lite 경로입니다.');
     const body = parseControlBody(event);
     if (action === 'create') return json(201, { ok: true, link: await createLink(cfg, actor, body) });
@@ -813,5 +930,6 @@ exports._test = {
   blockedHost,
   safeId,
   summaryForLinks,
+  publicConfigurationSummary,
   payloadFromControl
 };
