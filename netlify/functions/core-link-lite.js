@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * IGDC Core Link Lite v1.0.3
+ * IGDC Core Link Lite v1.0.6
  * --------------------------------------------------------------------------
  * Independent external-data inbox/outbox.  This function deliberately does
  * not import or mutate SearchBank, Sanmaru, Snapshot, Automap, Index, Front,
@@ -18,7 +18,7 @@ const dns = require('dns').promises;
 const https = require('https');
 const net = require('net');
 
-const VERSION = 'igdc-core-link-lite-v1.0.4-isolated-auth0-session-inventory-diagnostic';
+const VERSION = 'igdc-core-link-lite-v1.0.6-flat-root-build-safe-diagnostic';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -34,7 +34,6 @@ const DIRECTIONS = new Set(['pull', 'push', 'inbound']);
 const STATES = new Set(['draft', 'enabled', 'blocked']);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'POST']);
 const DEFAULT_AUTH_ISSUER = 'https://login.igdcglobal.com/';
-const DEFAULT_AUTH_AUDIENCE = '4JeT1FdyDZaN7nEODVsKe2Sx8kKMWagj';
 const AUTH_JWKS_CACHE_MS = 10 * 60 * 1000;
 let authJwksCache = null;
 
@@ -151,7 +150,10 @@ function config() {
   const adminsByUserId = new Set(listEnv('CORE_LINK_LITE_ADMIN_USER_IDS'));
   const explicitEnabled = String(process.env.CORE_LINK_LITE_ENABLED || '').trim().toLowerCase();
   const enabled = !['0', 'false', 'off', 'no'].includes(explicitEnabled);
-  const ready = Boolean(enabled && url && serviceKey && (adminsByEmail.size || adminsByUserId.size));
+  // The existing Auth0 client ID is already held in Netlify runtime configuration.
+  // Keep it out of repository source so Netlify secret scanning does not block deployment.
+  const authAudience = clean(process.env.CORE_LINK_LITE_AUTH_AUDIENCE || process.env.AUTH0_CLIENT_ID || '', 500);
+  const ready = Boolean(enabled && url && serviceKey && authAudience && (adminsByEmail.size || adminsByUserId.size));
   return {
     enabled,
     ready,
@@ -163,10 +165,10 @@ function config() {
     adminsByUserId,
     inboundSecrets: objectEnv('CORE_LINK_LITE_INBOUND_SECRETS_JSON'),
     outboundHeaders: objectEnv('CORE_LINK_LITE_OUTBOUND_HEADERS_JSON'),
-    // These defaults match the existing IGDC browser login. They are optional
-    // overrides only; no new environment variable is required for the current site.
+    // The deployed site's existing AUTH0_CLIENT_ID is the default audience.
+    // CORE_LINK_LITE_AUTH_AUDIENCE remains an optional isolated override.
     authIssuer: normalizeAuthIssuer(process.env.CORE_LINK_LITE_AUTH_ISSUER || DEFAULT_AUTH_ISSUER),
-    authAudience: clean(process.env.CORE_LINK_LITE_AUTH_AUDIENCE || DEFAULT_AUTH_AUDIENCE, 500),
+    authAudience,
     maxPayloadBytes: intEnv('CORE_LINK_LITE_MAX_PAYLOAD_BYTES', DEFAULT_MAX_PAYLOAD_BYTES, 1024, 1024 * 1024),
     maxSendBytes: intEnv('CORE_LINK_LITE_MAX_SEND_BYTES', DEFAULT_MAX_SEND_BYTES, 1024, 512 * 1024)
   };
@@ -174,6 +176,7 @@ function config() {
 
 function configurationError(cfg) {
   if (!cfg.enabled) return failure(503, 'core_link_lite_disabled', 'Core Link Lite가 현재 비활성화되어 있습니다.');
+  if (!cfg.authAudience) return failure(503, 'core_link_lite_auth_audience_not_configured', 'Core Link Lite의 Auth0 client ID 설정을 확인해야 합니다.');
   return failure(503, 'core_link_lite_not_configured', 'Core Link Lite 전용 환경변수와 관리자 허용 목록을 먼저 설정해야 합니다.');
 }
 
