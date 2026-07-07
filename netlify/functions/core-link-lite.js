@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * IGDC Core Link Lite v1.0.6
+ * IGDC Core Link Lite v1.0.9
  * --------------------------------------------------------------------------
  * Independent external-data inbox/outbox.  This function deliberately does
  * not import or mutate SearchBank, Sanmaru, Snapshot, Automap, Index, Front,
@@ -18,7 +18,7 @@ const dns = require('dns').promises;
 const https = require('https');
 const net = require('net');
 
-const VERSION = 'igdc-core-link-lite-v1.0.8-supabase-http-response-diagnostic';
+const VERSION = 'igdc-core-link-lite-v1.0.9-existing-server-key-fallback';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -159,9 +159,23 @@ function normalizeSupabaseUrl(value) {
 }
 
 function config() {
-  const configuredStorageUrl = clean(process.env.CORE_LINK_LITE_SUPABASE_URL, 500);
+  // Reuse the existing server-side Supabase connection already used by IGDC
+  // Functions. Core Link Lite never uses a browser anon/public key. Dedicated
+  // Core Link variables remain optional fallbacks for a later isolated project.
+  const configuredStorageUrl = clean(
+    process.env.SUPABASE_URL ||
+    process.env.CORE_LINK_LITE_SUPABASE_URL ||
+    '',
+    500
+  );
   const url = normalizeSupabaseUrl(configuredStorageUrl);
-  const serviceKey = clean(process.env.CORE_LINK_LITE_SERVICE_ROLE_KEY, 4096);
+  const serviceKey = clean(
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.CORE_LINK_LITE_SERVICE_ROLE_KEY ||
+    '',
+    4096
+  );
   const adminsByEmail = new Set(listEnv('CORE_LINK_LITE_ADMIN_EMAILS'));
   const adminsByUserId = new Set(listEnv('CORE_LINK_LITE_ADMIN_USER_IDS'));
   const explicitEnabled = String(process.env.CORE_LINK_LITE_ENABLED || '').trim().toLowerCase();
@@ -1156,7 +1170,7 @@ async function diagnostic(cfg, event) {
     } else if (report.storage.reason === 'core_link_lite_storage_transport_failed') {
       report.warnings.push('Core Link Lite 전용 저장소 연결 요청이 전송 단계에서 실패했습니다. 이 JSON의 storage.transport 값은 오류 종류만 표시하며 URL·키·자료 내용은 포함하지 않습니다.');
     } else if (report.storage.response && report.storage.response.category === 'api_key_rejected') {
-      report.warnings.push('Supabase가 전용 서버 키를 거부했습니다. Netlify의 CORE_LINK_LITE_SERVICE_ROLE_KEY가 현재 Supabase 프로젝트의 서버용 service_role 또는 secret 키와 같은지 확인해야 합니다. 키 값은 이 JSON에 포함되지 않습니다.');
+      report.warnings.push('Supabase가 서버 키를 거부했습니다. 기존 Netlify의 SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_SECRET_KEY가 현재 SUPABASE_URL과 같은 Supabase 프로젝트의 서버용 키인지 확인해야 합니다. Core Link Lite는 anon/public key를 사용하지 않습니다. 키 값은 이 JSON에 포함되지 않습니다.');
     } else if (report.storage.response && report.storage.response.category === 'request_forbidden') {
       report.warnings.push('Supabase가 전용 저장소 요청을 거부했습니다. 서버 키·프로젝트 일치 또는 API 접근 정책을 확인해야 합니다. 키 값과 요청 내용은 이 JSON에 포함되지 않습니다.');
     } else if (report.storage.response && report.storage.response.category === 'schema_or_api_route_unavailable') {
