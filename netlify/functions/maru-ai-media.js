@@ -200,23 +200,16 @@ function normalizeSegment(item, offsetSeconds = 0) {
     compressionRatio: numberOr(item.compression_ratio ?? item.compressionRatio, 0)
   };
 }
-function isMaruPureNonSpeechLabel(value) {
-  const text = safeString(value || '').replace(/\s+/g, ' ').trim();
-  if (!text) return true;
-  if (/^[♪♫♬]+$/u.test(text)) return true;
-  const wrapped = text.match(/^\s*[\[(（]\s*([^\]）)]+?)\s*[\]）)]\s*$/u);
-  const label = (wrapped ? wrapped[1] : text).replace(/\s+/g, ' ').trim().toLowerCase();
-  // Only pure labels are non-speech. A label followed by actual words such as
-  // "[노래: 사랑해]" or "[Singing: I love you]" is a real lyric cue and must stay.
-  return /^(?:music|instrumental|background music|song|singing|lyrics?|vocal(?:s)?|applause|noise|silence|sound effect(?:s)?|ambient|음악|연주|노래|가사|노래함|박수|소음|무음|효과음|배경음|허밍|musique|música|музыка|歌|歌詞|歌唱|演奏)$/iu.test(label);
-}
 function isLikelyNonDialogueSegment(segment) {
   const text = safeString(segment?.text || '').replace(/\s+/g, ' ').trim();
   if (!text) return true;
-  // Never discard a recognizer text cue merely because its no-speech score is
-  // imperfect. Quiet dialogue and sung lyrics are frequently assigned high
-  // no-speech probabilities. Only an explicit pure non-speech label is removed.
-  return isMaruPureNonSpeechLabel(text);
+  // Explicit music/noise labels should not become a shifted opening caption.
+  if (/^(?:[♪♫♬]+|\[[^\]]*(?:music|song|instrumental|applause|noise|silence|sound effect|음악|노래|연주|박수|소음|무음|musique|música|música|музыка)[^\]]*\]|\([^)]*(?:music|song|instrumental|applause|noise|silence|sound effect|음악|노래|연주|박수|소음|무음|musique|música|музыка)[^)]*\))$/i.test(text)) return true;
+  const noSpeech = Number(segment?.noSpeechProbability), avgLogprob = Number(segment?.avgLogprob);
+  // Conservative thresholds preserve quiet spoken dialogue.
+  if (Number.isFinite(noSpeech) && noSpeech >= 0.86) return true;
+  if (Number.isFinite(noSpeech) && Number.isFinite(avgLogprob) && noSpeech >= 0.68 && avgLogprob <= -1.20) return true;
+  return false;
 }
 function normalizeSegments(items, offsetSeconds = 0) {
   const source = Array.isArray(items) ? items : [];
@@ -480,15 +473,9 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
 ].join(' ');
 
 function isMaruInstructionLeak(value) {
-  const text = safeString(value || '').replace(/\s+/g, ' ').trim();
+  const text = safeString(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
   if (!text) return false;
-  const lower = text.toLowerCase();
-  const directInstruction = /(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|create\s+accurate\s+timed\s+subtitle|preserve\s+proper\s+nouns|target\s+(?:subtitle\s+)?language|source\s+language\s+hint|subtitle\s+translation\s+engine|never\s+reproduce\s+or\s+mention\s+these\s+instructions)/i;
-  if (directInstruction.test(lower)) return true;
-  // These are distinctive Korean paraphrases of the old transcription prompt,
-  // not natural media dialogue. Keep the patterns narrow so ordinary spoken
-  // uses of "말", "음악", or "가사" are never removed.
-  return /(?:명확(?:하게|히)\s*(?:노래(?:된|한|하는)?|불러(?:진|지는)|가사(?:가)?).{0,48}(?:유지|보존|번역|자막|표시|생성)|(?:짧은|하나의)\s*(?:음표|마커)(?:\s*(?:또는|나|를|가))?.{0,64}|음악적(?:이거나|인).{0,64}(?:표시|이미지|사용)|가사(?:가)?\s*명확하게\s*(?:불려|노래).{0,48}|(?:노래|가사).{0,64}(?:음성\s*시작|보컬\s*시작|실제\s*가사만|연주만|허밍|멜로디만|경계))/iu.test(text);
+  return /(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|create\s+accurate\s+timed\s+subtitle|preserve\s+proper\s+nouns|target\s+(?:subtitle\s+)?language|source\s+language\s+hint|subtitle\s+translation\s+engine|never\s+reproduce\s+or\s+mention\s+these\s+instructions)/i.test(text);
 }
 
 function dropMaruInstructionLeakSegments(segments) {
@@ -722,16 +709,15 @@ function buildTranscriptionFields(body, options = {}) {
   if (granularities.length) fields['timestamp_granularities[]'] = granularities;
   const sourceLanguage = normalizeLanguage(body.sourceLanguage || '');
   if (sourceLanguage) fields.language = sourceLanguage.split('-')[0];
-  // Do not send long policy prose as a transcription prompt. Speech-to-text
-  // models can echo or semantically translate that prose into subtitle cues.
-  // A caller may supply a short vocabulary-only hint, but instruction-shaped
-  // prompts are ignored. Actual dialogue and clearly audible lyrics are kept
-  // by the recognizer without a policy sentence injected into the audio task.
-  const rawHint = safeString(body.transcriptionVocabulary || body.vocabularyHint || '').replace(/[\r\n]+/g, ' ').trim();
-  const safeHint = rawHint && rawHint.length <= 180
-    && !/(?:transcribe|translate|subtitle|caption|policy|instruction|return|output|do not|must|should|자막|번역|정책|지시|규칙|출력|반환)/iu.test(rawHint)
-    ? rawHint : '';
-  if (safeHint) fields.prompt = safeHint;
+  // Keep lyric-bearing vocals on the same exact audio timeline as spoken dialogue.
+  // This is intentionally a transcription hint, not an instruction to invent lyrics.
+  const defaultPrompt = [
+    'Transcribe audible spoken dialogue and clearly sung lyric words with exact segment and word timing.',
+    'For sung lyrics, begin at the audible vocal onset, keep each lyric phrase separate at its real pause or native segment boundary, and include actual sung words only.',
+    'Do not create text for instrumental-only music, melody-only passages, humming without discernible words, or background score.',
+    'When lyrics are clearly sung, retain a leading musical-note marker already present or use one short leading ♪ marker so lyric text is never confused with laughter or a sound effect.'
+  ].join(' ');
+  fields.prompt = safeString(body.transcriptionPrompt || defaultPrompt).slice(0, 900);
   return fields;
 }
 

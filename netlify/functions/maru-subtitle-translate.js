@@ -40,10 +40,8 @@ function postOpenAI(apiKey, payload) {
 function normalizeCueTimes(text) { return (String(text || '').match(/^\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}\s*-->\s*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}.*$/gm) || []).map((x) => x.replace(/\./g, ',').replace(/\s+/g, ' ').trim()); }
 function cueCount(text) { return normalizeCueTimes(text).length; }
 function isInstructionLeak(text) {
-  const value = String(text || '').replace(/\s+/g, ' ').trim();
-  const lower = value.toLowerCase();
-  if (/(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|target\s+language\s*[:=]|source\s+(?:file|language)|translate\s+only\s+subtitle|preserve\s+every\s+cue)/i.test(lower)) return true;
-  return /(?:명확(?:하게|히)\s*(?:노래(?:된|한|하는)?|불러(?:진|지는)|가사(?:가)?).{0,48}(?:유지|보존|번역|자막|표시|생성)|(?:짧은|하나의)\s*(?:음표|마커)(?:\s*(?:또는|나|를|가))?.{0,64}|음악적(?:이거나|인).{0,64}(?:표시|이미지|사용)|가사(?:가)?\s*명확하게\s*(?:불려|노래).{0,48}|(?:노래|가사).{0,64}(?:음성\s*시작|보컬\s*시작|실제\s*가사만|연주만|허밍|멜로디만|경계))/iu.test(value);
+  const value = String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  return /(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|target\s+language\s*[:=]|source\s+(?:file|language)|translate\s+only\s+subtitle|preserve\s+every\s+cue)/i.test(value);
 }
 function isRecoverable(error) { const status = Number(error?.statusCode || 0); const msg = String(error?.message || '').toLowerCase(); return status === 429 || status === 500 || status === 502 || status === 503 || status === 504 || /timeout|overload|rate.limit|temporar/.test(msg); }
 function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }

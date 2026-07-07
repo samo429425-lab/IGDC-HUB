@@ -314,20 +314,7 @@ function pushOrReplaceSnapshotSlot(list, card, raw, opts) {
 
   if (!isRealIncomingCandidate(raw)) return false;
 
-  let replaceIndex = list.findIndex(isSeedLikeSnapshotSlot);
-
-  // A manually pinned, approved Global Slot Console assignment may replace the
-  // lowest-priority non-pinned card when a section is full. Ordinary approved
-  // assignments never evict a real card; they remain in the managed queue.
-  if (replaceIndex < 0 && raw && raw.managedSlot && raw.managedSlot.source === "global-slot-console" && raw.managedSlot.pinned === true) {
-    let lowest = Infinity;
-    for (let i = 0; i < list.length; i += 1) {
-      const existing = list[i] || {};
-      if (existing && existing.managedSlot && existing.managedSlot.pinned === true) continue;
-      const priority = Number(existing.priority || existing.score || 0);
-      if (priority < lowest) { lowest = priority; replaceIndex = i; }
-    }
-  }
+  const replaceIndex = list.findIndex(isSeedLikeSnapshotSlot);
   if (replaceIndex < 0) return false;
 
   const previous = list[replaceIndex] || {};
@@ -747,50 +734,10 @@ function buildTrackingMeta(raw, context) {
 }
 
 
-function loadManagedSearchBankOverlay() {
-  const found = readSnapshotJson("search-bank.managed.overlay.json");
-  const overlay = found && found.data && typeof found.data === "object" ? found.data : null;
-  if (!overlay || overlay.enabled !== true || !overlay.global || typeof overlay.global !== "object") return null;
-  return overlay;
-}
-
-function applyManagedSearchBankOverlay(base, overlay) {
-  if (!base || !Array.isArray(base.items) || !overlay) return base;
-  const global = overlay.global || {};
-  const suppressions = new Set((Array.isArray(global.suppressions) ? global.suppressions : []).map(v => String(v || "").trim()).filter(Boolean));
-  const patchMap = new Map();
-  for (const entry of (Array.isArray(global.patches) ? global.patches : [])) {
-    if (!entry || typeof entry !== "object") continue;
-    const key = String(entry.sourceId || entry.id || "").trim();
-    if (key) patchMap.set(key, entry.patch && typeof entry.patch === "object" ? entry.patch : entry);
-  }
-  const byId = new Map();
-  for (const raw of base.items) {
-    if (!raw || typeof raw !== "object") continue;
-    const id = String(raw.id || raw.contentId || raw.productId || "").trim();
-    if (id && suppressions.has(id)) continue;
-    const patched = id && patchMap.has(id) ? Object.assign({}, raw, patchMap.get(id)) : raw;
-    const key = String(patched.id || patched.contentId || patched.productId || stableId(JSON.stringify(patched)));
-    byId.set(key, patched);
-  }
-  for (const item of (Array.isArray(global.additions) ? global.additions : [])) {
-    if (!item || typeof item !== "object") continue;
-    const key = String(item.id || item.contentId || item.productId || stableId(JSON.stringify(item)));
-    byId.set(key, item);
-  }
-  const copy = Object.assign({}, base, { items: Array.from(byId.values()) });
-  copy.meta = Object.assign({}, base.meta || {}, {
-    managedOverlay: { enabled: true, generatedAt: overlay.generatedAt || null, source: overlay.source || "global-slot-console" }
-  });
-  return copy;
-}
-
 function loadSearchBank() {
   const found = readSnapshotJson("search-bank.snapshot.json");
-  const base = found.data && Array.isArray(found.data.items)
-    ? found.data
-    : { meta: { source: "search-bank.snapshot.json", missing: true, generatedAt: new Date().toISOString() }, items: [] };
-  return applyManagedSearchBankOverlay(base, loadManagedSearchBankOverlay());
+  if (found.data && Array.isArray(found.data.items)) return found.data;
+  return { meta: { source: "search-bank.snapshot.json", missing: true, generatedAt: new Date().toISOString() }, items: [] };
 }
 
 function loadSnapshot(page) {
