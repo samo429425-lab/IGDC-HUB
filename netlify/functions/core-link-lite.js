@@ -18,7 +18,7 @@ const dns = require('dns').promises;
 const https = require('https');
 const net = require('net');
 
-const VERSION = 'igdc-core-link-lite-v1.0.9-existing-server-key-fallback';
+const VERSION = 'igdc-core-link-lite-v1.0.10-dedicated-url-shared-server-key';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -159,12 +159,14 @@ function normalizeSupabaseUrl(value) {
 }
 
 function config() {
-  // Reuse the existing server-side Supabase connection already used by IGDC
-  // Functions. Core Link Lite never uses a browser anon/public key. Dedicated
-  // Core Link variables remain optional fallbacks for a later isolated project.
+  // Core Link Lite has its own explicit storage target. Always prefer that
+  // dedicated project URL when it is configured. The established IGDC server
+  // key remains the preferred server credential. Browser anon/public keys are
+  // never used here. This avoids an unrelated legacy SUPABASE_URL selecting a
+  // paused or retired project for Core Link Lite.
   const configuredStorageUrl = clean(
-    process.env.SUPABASE_URL ||
     process.env.CORE_LINK_LITE_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
     '',
     500
   );
