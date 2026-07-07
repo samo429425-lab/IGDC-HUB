@@ -18,7 +18,7 @@ const dns = require('dns').promises;
 const https = require('https');
 const net = require('net');
 
-const VERSION = 'igdc-core-link-lite-v1.0.10-dedicated-url-shared-server-key';
+const VERSION = 'igdc-core-link-lite-v1.0.11-dedicated-url-and-key-pairing';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -159,11 +159,11 @@ function normalizeSupabaseUrl(value) {
 }
 
 function config() {
-  // Core Link Lite has its own explicit storage target. Always prefer that
-  // dedicated project URL when it is configured. The established IGDC server
-  // key remains the preferred server credential. Browser anon/public keys are
-  // never used here. This avoids an unrelated legacy SUPABASE_URL selecting a
-  // paused or retired project for Core Link Lite.
+  // Core Link Lite uses an explicit URL/key pair when dedicated values are
+  // present. This prevents a valid Core Link URL from being combined with a
+  // server key belonging to an unrelated legacy Supabase project. Browser
+  // anon/public keys are never used. Shared server credentials remain strict
+  // fallbacks only when no dedicated Core Link key has been configured.
   const configuredStorageUrl = clean(
     process.env.CORE_LINK_LITE_SUPABASE_URL ||
     process.env.SUPABASE_URL ||
@@ -172,9 +172,9 @@ function config() {
   );
   const url = normalizeSupabaseUrl(configuredStorageUrl);
   const serviceKey = clean(
+    process.env.CORE_LINK_LITE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SECRET_KEY ||
-    process.env.CORE_LINK_LITE_SERVICE_ROLE_KEY ||
     '',
     4096
   );
