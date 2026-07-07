@@ -17,8 +17,9 @@ const crypto = require('crypto');
 const dns = require('dns').promises;
 const https = require('https');
 const net = require('net');
+const { createClient } = require('@supabase/supabase-js');
 
-const VERSION = 'igdc-core-link-lite-v1.0.12-supabase-secret-key-header-fix';
+const VERSION = 'igdc-core-link-lite-v1.1.0-supabase-sdk-storage-adapter';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -36,6 +37,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'POST']);
 const DEFAULT_AUTH_ISSUER = 'https://login.igdcglobal.com/';
 const AUTH_JWKS_CACHE_MS = 10 * 60 * 1000;
 let authJwksCache = null;
+const storageClientCache = new Map();
 
 
 // These rows are display-only diagnostic metadata. They are not probed, invoked,
@@ -346,89 +348,88 @@ async function verifyAuth0IdToken(token, cfg) {
   return claims;
 }
 
-function supabaseStorageHeaders(serviceKey) {
-  const key = clean(serviceKey, 4096);
-  const headers = {
-    apikey: key,
-    'Content-Type': 'application/json'
-  };
-  // Supabase's current sb_secret_ server keys authenticate through `apikey`.
-  // They are not JWT bearer tokens. Legacy service_role JWT keys retain the
-  // established Authorization header for compatibility with existing projects.
-  if (!/^sb_secret_/i.test(key)) headers.Authorization = `Bearer ${key}`;
-  return headers;
+function storageFailure(error) {
+  const status = Number(error && (error.status || error.statusCode) || 0);
+  const rawCode = clean(error && error.code, 80).toUpperCase();
+  const apiCode = /^[A-Z0-9_]{2,80}$/.test(rawCode) ? rawCode : null;
+  let code = 'core_link_lite_storage_failed';
+  let category = 'remote_request_rejected';
+  if (status === 401) {
+    code = 'core_link_lite_storage_auth_rejected';
+    category = 'api_key_rejected';
+  } else if (status === 403) {
+    code = 'core_link_lite_storage_forbidden';
+    category = 'request_forbidden';
+  } else if (status === 400 || status === 404) {
+    code = 'core_link_lite_schema_required';
+    category = 'schema_or_api_route_unavailable';
+  } else if (status === 406) {
+    code = 'core_link_lite_storage_query_rejected';
+    category = 'rest_query_rejected';
+  } else if (status >= 500) {
+    category = 'supabase_service_error';
+  } else if (!status) {
+    code = 'core_link_lite_storage_unavailable';
+    category = 'sdk_or_transport_unavailable';
+  }
+  const failureError = failure(503, code, 'Core Link Lite 전용 테이블 또는 저장소 연결 상태를 확인해야 합니다.');
+  // Only provider status/code are retained. The URL, key, headers, payload and
+  // provider response body are never returned in a diagnostic.
+  failureError.storageHttp = { status: status || null, category, apiCode };
+  return failureError;
 }
 
-async function dbRequest(cfg, path, init) {
+function storageClient(cfg) {
   if (!cfg || !cfg.ready) throw configurationError(cfg || {});
-  let response;
+  const cacheKey = sha256(`${cfg.url}\n${cfg.serviceKey}`);
+  const cached = storageClientCache.get(cacheKey);
+  if (cached) return cached;
+  let client;
   try {
-    response = await platformFetch(cfg.url + path, {
-      method: (init && init.method) || 'GET',
-      headers: Object.assign(
-        supabaseStorageHeaders(cfg.serviceKey),
-        (init && init.headers) || {}
-      ),
-      body: init && init.body
+    // This is the same official SDK path used by existing IGDC Supabase
+    // functions. The SDK owns key/header compatibility for both legacy
+    // service_role JWT keys and current Supabase secret API keys.
+    client = createClient(cfg.url, cfg.serviceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false
+      },
+      global: {
+        headers: { 'X-Client-Info': 'igdc-core-link-lite/1.1.0' }
+      }
     });
   } catch (error) {
-    if (error && error.code === 'core_link_lite_storage_transport_failed') throw error;
-    throw failure(503, 'core_link_lite_storage_unavailable', 'Core Link Lite 전용 저장소에 연결할 수 없습니다.');
+    throw storageFailure(error);
   }
-  const text = await response.text().catch(() => '');
-  const data = text ? safeJson(text, null) : null;
-  if (!response.ok) {
-    const status = Number(response.status || 0);
-    const rawCode = clean(data && data.code, 80).toUpperCase();
-    const apiCode = /^[A-Z0-9_]{2,80}$/.test(rawCode) ? rawCode : null;
-    let code = 'core_link_lite_storage_failed';
-    let category = 'remote_request_rejected';
-    if (status === 401) {
-      code = 'core_link_lite_storage_auth_rejected';
-      category = 'api_key_rejected';
-    } else if (status === 403) {
-      code = 'core_link_lite_storage_forbidden';
-      category = 'request_forbidden';
-    } else if (status === 400 || status === 404) {
-      code = 'core_link_lite_schema_required';
-      category = 'schema_or_api_route_unavailable';
-    } else if (status === 406) {
-      code = 'core_link_lite_storage_query_rejected';
-      category = 'rest_query_rejected';
-    } else if (status >= 500) {
-      category = 'supabase_service_error';
-    }
-    const error = failure(503, code, 'Core Link Lite 전용 테이블 또는 저장소 연결 상태를 확인해야 합니다.');
-    // Safe diagnostic only: HTTP status/category and provider error code; no URL,
-    // key, authorization header, response body, SQL text, link payload or user data.
-    error.storageHttp = { status: status || null, category, apiCode };
-    throw error;
+  storageClientCache.set(cacheKey, client);
+  if (storageClientCache.size > 4) {
+    const oldest = storageClientCache.keys().next().value;
+    if (oldest && oldest !== cacheKey) storageClientCache.delete(oldest);
   }
-  return data;
+  return client;
 }
 
-function rest(table, query) {
-  return `/rest/v1/${encodeURIComponent(table)}${query ? `?${query}` : ''}`;
+async function storageRows(query) {
+  let result;
+  try {
+    result = await query;
+  } catch (error) {
+    if (error && String(error.code || '').startsWith('core_link_lite_')) throw error;
+    throw storageFailure(error);
+  }
+  if (!result || result.error) throw storageFailure(result && result.error);
+  return result.data;
 }
 
-function dbSelect(cfg, table, query) {
-  return dbRequest(cfg, rest(table, query), { method: 'GET' });
+async function storageInsert(cfg, table, value) {
+  const client = storageClient(cfg);
+  return storageRows(client.from(table).insert(Array.isArray(value) ? value : [value]));
 }
 
-function dbInsert(cfg, table, value, prefer) {
-  return dbRequest(cfg, rest(table), {
-    method: 'POST',
-    headers: { Prefer: prefer || 'return=representation' },
-    body: JSON.stringify(Array.isArray(value) ? value : [value])
-  });
-}
-
-function dbPatch(cfg, table, query, value) {
-  return dbRequest(cfg, rest(table, query), {
-    method: 'PATCH',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify(value)
-  });
+async function storagePatchById(cfg, table, id, value) {
+  const client = storageClient(cfg);
+  return storageRows(client.from(table).update(value).eq('id', id));
 }
 
 function normalizeOrigin(event) {
@@ -684,15 +685,20 @@ function safeMessage(row, includePayload) {
 }
 
 async function listLinks(cfg) {
-  const rows = await dbSelect(cfg, LINK_TABLE,
-    'select=id,name,direction,endpoint,purpose,state,secret_ref,header_ref,last_sync_at,last_sync_status,last_received_at,last_sent_at,last_error,created_at,updated_at&order=updated_at.desc&limit=' + MAX_LINKS);
+  const rows = await storageRows(storageClient(cfg).from(LINK_TABLE)
+    .select('id,name,direction,endpoint,purpose,state,secret_ref,header_ref,last_sync_at,last_sync_status,last_received_at,last_sent_at,last_error,created_at,updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(MAX_LINKS));
   return (Array.isArray(rows) ? rows : []).map(safeLink).filter(row => row.id);
 }
 
 async function findLink(cfg, id) {
   const safe = safeId(id, 160);
   if (!safe) throw failure(400, 'invalid_core_link_lite_id', 'Core Link Lite 링크 ID가 올바르지 않습니다.');
-  const rows = await dbSelect(cfg, LINK_TABLE, 'select=*&id=eq.' + encodeURIComponent(safe) + '&limit=1');
+  const rows = await storageRows(storageClient(cfg).from(LINK_TABLE)
+    .select('*')
+    .eq('id', safe)
+    .limit(1));
   const row = Array.isArray(rows) && rows[0];
   if (!row) throw failure(404, 'core_link_lite_not_found', 'Core Link Lite 등록 항목을 찾을 수 없습니다.');
   return row;
@@ -715,7 +721,7 @@ async function insertMessage(cfg, input) {
     response_summary: clean(input && input.responseSummary, 600) || null,
     created_at: isoNow()
   };
-  await dbInsert(cfg, MESSAGE_TABLE, record, 'return=minimal');
+  await storageInsert(cfg, MESSAGE_TABLE, record);
   return record;
 }
 
@@ -744,7 +750,7 @@ async function createLink(cfg, actor, body) {
     state: 'draft', secret_ref: secretRef, header_ref: headerRef,
     created_by: actor.id, created_at: now, updated_at: now
   };
-  await dbInsert(cfg, LINK_TABLE, row, 'return=minimal');
+  await storageInsert(cfg, LINK_TABLE, row);
   return safeLink(row);
 }
 
@@ -758,7 +764,7 @@ async function setLinkState(cfg, id, state) {
       throw failure(409, 'inbound_secret_ref_unconfigured', '외부 수신 활성화 전에는 전용 수신 키 참조값을 환경변수에 등록해야 합니다.');
     }
   }
-  await dbPatch(cfg, LINK_TABLE, 'id=eq.' + encodeURIComponent(row.id), {
+  await storagePatchById(cfg, LINK_TABLE, row.id, {
     state: requested,
     updated_at: isoNow(),
     last_error: requested === 'blocked' ? '관리자가 Core Link Lite 연결을 차단했습니다.' : null
@@ -783,7 +789,7 @@ async function syncLink(cfg, id) {
     error = result.ok ? null : '외부 endpoint 상태확인에 실패했습니다.';
   }
   const now = isoNow();
-  await dbPatch(cfg, LINK_TABLE, 'id=eq.' + encodeURIComponent(link.id), {
+  await storagePatchById(cfg, LINK_TABLE, link.id, {
     last_sync_at: now, last_sync_status: status, last_error: error, updated_at: now
   });
   return { id: link.id, ok: !error, status, at: now };
@@ -811,7 +817,7 @@ async function pullData(cfg, id) {
   const now = isoNow();
   if (!result.ok || result.redirect) {
     const code = result.redirect ? 'external_redirect_blocked' : (result.error || `http_${result.status || 0}`);
-    await dbPatch(cfg, LINK_TABLE, 'id=eq.' + encodeURIComponent(link.id), {
+    await storagePatchById(cfg, LINK_TABLE, link.id, {
       last_sync_at: now, last_sync_status: code, last_error: '외부 자료 수신에 실패했습니다.', updated_at: now
     });
     throw failure(502, 'core_link_lite_pull_failed', '외부 자료 수신에 실패했습니다. 리디렉션과 과도한 자료는 안전상 저장하지 않습니다.');
@@ -823,7 +829,7 @@ async function pullData(cfg, id) {
     raw: result.raw, payloadJson: payload.payloadJson, payloadText: payload.payloadText,
     externalStatus: result.status, responseSummary: `외부 GET 수신 ${result.status}`
   });
-  await dbPatch(cfg, LINK_TABLE, 'id=eq.' + encodeURIComponent(link.id), {
+  await storagePatchById(cfg, LINK_TABLE, link.id, {
     last_sync_at: now, last_sync_status: `received_${result.status}`, last_received_at: now, last_error: null, updated_at: now
   });
   return { message: safeMessage(message, false), receivedAt: now };
@@ -851,7 +857,7 @@ async function sendData(cfg, id, body) {
     raw: outgoing.raw, payloadJson: outgoing.payloadJson, payloadText: outgoing.payloadText,
     externalStatus: result.status, responseSummary: summary
   });
-  await dbPatch(cfg, LINK_TABLE, 'id=eq.' + encodeURIComponent(link.id), {
+  await storagePatchById(cfg, LINK_TABLE, link.id, {
     last_sent_at: now, last_sync_at: now, last_sync_status: result.ok ? `sent_${result.status}` : 'send_failed',
     last_error: result.ok ? null : '외부 자료 전송에 실패했습니다.', updated_at: now
   });
@@ -870,8 +876,11 @@ function timestampValue(value) {
 
 async function nonceUsed(cfg, linkId, nonceHash) {
   if (!nonceHash) return false;
-  const rows = await dbSelect(cfg, MESSAGE_TABLE,
-    'select=id&link_id=eq.' + encodeURIComponent(linkId) + '&source_nonce_hash=eq.' + encodeURIComponent(nonceHash) + '&limit=1');
+  const rows = await storageRows(storageClient(cfg).from(MESSAGE_TABLE)
+    .select('id')
+    .eq('link_id', linkId)
+    .eq('source_nonce_hash', nonceHash)
+    .limit(1));
   return Array.isArray(rows) && rows.length > 0;
 }
 
@@ -918,7 +927,7 @@ async function receiveData(event, cfg) {
     externalStatus: 202, responseSummary: '서명 검증된 외부 수신 자료'
   });
   const now = isoNow();
-  await dbPatch(cfg, LINK_TABLE, 'id=eq.' + encodeURIComponent(link.id), {
+  await storagePatchById(cfg, LINK_TABLE, link.id, {
     last_received_at: now, last_sync_at: now, last_sync_status: 'received_202', last_error: null, updated_at: now
   });
   return json(202, { ok: true, received: true, messageId: message.id });
@@ -927,8 +936,11 @@ async function receiveData(event, cfg) {
 async function listMessages(cfg, linkId) {
   const safe = safeId(linkId, 160);
   if (!safe) throw failure(400, 'invalid_core_link_lite_id', '자료를 조회할 링크 ID가 올바르지 않습니다.');
-  const rows = await dbSelect(cfg, MESSAGE_TABLE,
-    'select=id,link_id,flow,title,content_type,payload_json,payload_text,payload_bytes,payload_sha256,external_status,response_summary,created_at&link_id=eq.' + encodeURIComponent(safe) + '&order=created_at.desc&limit=' + MAX_MESSAGES);
+  const rows = await storageRows(storageClient(cfg).from(MESSAGE_TABLE)
+    .select('id,link_id,flow,title,content_type,payload_json,payload_text,payload_bytes,payload_sha256,external_status,response_summary,created_at')
+    .eq('link_id', safe)
+    .order('created_at', { ascending: false })
+    .limit(MAX_MESSAGES));
   return (Array.isArray(rows) ? rows : []).map(row => safeMessage(row, true));
 }
 
@@ -1075,13 +1087,19 @@ function safeInventorySummary(row) {
 }
 
 async function diagnosticInventory(cfg) {
+  const client = storageClient(cfg);
   const [summaryRows, inventoryRows, recentRows] = await Promise.all([
-    dbSelect(cfg, INVENTORY_SUMMARY_VIEW,
-      'select=external_link_count,stored_record_count,received_count,pulled_count,sent_count,stored_bytes,last_stored_at,last_received_at,last_pulled_at,last_sent_at&limit=1'),
-    dbSelect(cfg, INVENTORY_VIEW,
-      'select=link_id,stored_record_count,received_count,pulled_count,sent_count,stored_bytes,last_stored_at,last_received_at,last_pulled_at,last_sent_at&order=link_id.asc&limit=' + MAX_LINKS),
-    dbSelect(cfg, MESSAGE_TABLE,
-      'select=id,link_id,flow,title,content_type,payload_bytes,payload_sha256,external_status,response_summary,created_at&order=created_at.desc&limit=' + MAX_DIAGNOSTIC_RECENT_MESSAGES)
+    storageRows(client.from(INVENTORY_SUMMARY_VIEW)
+      .select('external_link_count,stored_record_count,received_count,pulled_count,sent_count,stored_bytes,last_stored_at,last_received_at,last_pulled_at,last_sent_at')
+      .limit(1)),
+    storageRows(client.from(INVENTORY_VIEW)
+      .select('link_id,stored_record_count,received_count,pulled_count,sent_count,stored_bytes,last_stored_at,last_received_at,last_pulled_at,last_sent_at')
+      .order('link_id', { ascending: true })
+      .limit(MAX_LINKS)),
+    storageRows(client.from(MESSAGE_TABLE)
+      .select('id,link_id,flow,title,content_type,payload_bytes,payload_sha256,external_status,response_summary,created_at')
+      .order('created_at', { ascending: false })
+      .limit(MAX_DIAGNOSTIC_RECENT_MESSAGES))
   ]);
   const summary = safeInventorySummary(Array.isArray(summaryRows) ? summaryRows[0] : null);
   const inventoryByLink = new Map((Array.isArray(inventoryRows) ? inventoryRows : [])
@@ -1105,6 +1123,7 @@ async function diagnostic(cfg, event) {
   report.recentStoredData = [];
   report.storage = {
     state: report.configuration.state,
+    adapter: 'supabase-js-v2',
     databaseReadAttempted: false,
     schemaVerified: false
   };
@@ -1155,6 +1174,7 @@ async function diagnostic(cfg, event) {
     report.recentStoredData = inventory.recentRecords;
     report.storage = {
       state: 'ready',
+      adapter: 'supabase-js-v2',
       databaseReadAttempted: true,
       schemaVerified: true
     };
@@ -1165,6 +1185,7 @@ async function diagnostic(cfg, event) {
   } catch (error) {
     report.storage = {
       state: 'schema_or_storage_unavailable',
+      adapter: 'supabase-js-v2',
       databaseReadAttempted: true,
       schemaVerified: false,
       reason: clean(error && error.code, 120) || 'storage_unavailable',
@@ -1266,5 +1287,7 @@ exports._test = {
   validateAuthClaims,
   verifyAuth0IdToken,
   base64urlBuffer,
-  supabaseStorageHeaders
+  storageFailure,
+  storageClient,
+  storageRows
 };
