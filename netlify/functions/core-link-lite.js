@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * IGDC Core Link Lite v1.0.9
+ * IGDC Core Link Lite v1.1.2
  * --------------------------------------------------------------------------
  * Independent external-data inbox/outbox.  This function deliberately does
  * not import or mutate SearchBank, Sanmaru, Snapshot, Automap, Index, Front,
@@ -23,7 +23,7 @@ const { createClient } = require('@supabase/supabase-js');
 // global fetch implementation for the Supabase SDK.
 const nodeFetch = require('node-fetch');
 
-const VERSION = 'igdc-core-link-lite-v1.1.1-supabase-sdk-node-fetch-final';
+const VERSION = 'igdc-core-link-lite-v1.1.2-sdk-result-status-preserved';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -466,7 +466,23 @@ async function storageRows(query) {
     if (error && String(error.code || '').startsWith('core_link_lite_')) throw error;
     throw storageFailure(error);
   }
-  if (!result || result.error) throw storageFailure(result && result.error);
+
+  // Supabase/PostgREST returns HTTP status on the result envelope, while the
+  // nested error normally carries only provider code/message. Preserve the
+  // envelope status before classifying it; otherwise 401/404/403 were being
+  // incorrectly reported as an unclassified SDK response.
+  if (!result) throw storageFailure(null);
+  if (result.error) {
+    const providerError = result.error;
+    const responseStatus = Number(result.status || result.statusCode || 0);
+    throw storageFailure({
+      status: Number.isInteger(responseStatus) && responseStatus > 0 ? responseStatus : 0,
+      statusCode: Number.isInteger(responseStatus) && responseStatus > 0 ? responseStatus : 0,
+      code: providerError && providerError.code,
+      name: providerError && providerError.name,
+      cause: providerError
+    });
+  }
   return result.data;
 }
 
