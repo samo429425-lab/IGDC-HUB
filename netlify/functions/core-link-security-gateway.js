@@ -22,7 +22,7 @@ const https = require('https');
 const net = require('net');
 const memberAdmin = require('./member-admin');
 
-const VERSION = 'igdc-core-link-security-gateway-v1.0.2-direct-function-pinned-dns';
+const VERSION = 'igdc-core-link-security-gateway-v1.0.3-storage-fallback-diagnostic';
 const GATEWAY_PATH = '/.netlify/functions/core-link-security-gateway';
 const INGRESS_PATH = GATEWAY_PATH + '?action=ingress';
 const MAX_ROWS = 300;
@@ -536,31 +536,46 @@ function controlSummary(rows, events) {
   };
 }
 
-async function buildSnapshot(config, actor, query) {
-  const storage = { ready: Boolean(config && config.ready), mode: config && config.mode || 'unconfigured', reason: config && config.reason || null };
-  if (!config || !config.ready) {
-    const rows = builtInRows();
-    return {
-      ok: true,
-      version: VERSION,
-      administrator: actor ? { role: actor.role, roles: actor.roles, sessionValidation: actor.sessionValidation } : null,
-      storage,
-      defaultDeny: true,
-      rows,
-      events: [],
-      decisions: [],
-      summary: controlSummary(rows, []),
-      coverage: coverageStatement(),
-      warnings: ['Core Link 보안 저장소가 아직 구성되지 않아 외부 유입 로그·승인 이력을 보존할 수 없습니다.']
-    };
+function publicStorageState(config, issue) {
+  const configured = Boolean(config && config.ready);
+  const code = clean(issue && issue.code, 100) || (config && config.reason) || null;
+  const base = {
+    configured,
+    ready: configured && !issue,
+    mode: configured ? 'supabase' : (config && config.mode || 'unconfigured'),
+    reason: code,
+    diagnosticCode: code,
+    lastCheckedAt: isoNow()
+  };
+  if (!issue) return base;
+  if (code === 'core_link_storage_schema_required') {
+    base.ready = false;
+    base.mode = 'schema_required';
+    base.message = 'Core Link 전용 보안 테이블을 찾지 못했습니다. 기존 목록과 점검 JSON은 유지되며, 등록·승인·차단·테스트는 닫힌 상태입니다.';
+    return base;
   }
-  const eventLimit = Math.max(1, Math.min(Number(query && query.event_limit) || 100, MAX_EVENTS));
-  const decisionLimit = Math.max(1, Math.min(Number(query && query.decision_limit) || 100, MAX_DECISIONS));
-  const [registry, rawEvents, rawDecisions] = await Promise.all([listRegistry(config), listSecurityEvents(config, eventLimit), listDecisions(config, decisionLimit)]);
-  const external = registry.map(row => safeRegistryRow(row, config)).filter(row => row.id);
-  const rows = builtInRows().concat(external);
-  const events = rawEvents.map(safeEvent);
-  const decisions = rawDecisions.map(safeDecision);
+  if (code === 'core_link_storage_unavailable') {
+    base.ready = false;
+    base.mode = 'supabase_unavailable';
+    base.message = 'Core Link 보안 저장소 연결을 확인하지 못했습니다. 기존 목록과 점검 JSON은 유지되며, 등록·승인·차단·테스트는 닫힌 상태입니다.';
+    return base;
+  }
+  if (code === 'core_link_storage_required' || code === 'core_link_security_disabled' || code === 'supabase_credentials_missing') {
+    base.ready = false;
+    base.mode = configured ? 'storage_unavailable' : (config && config.mode || 'unconfigured');
+    base.message = 'Core Link 보안 저장소가 아직 구성되지 않았습니다. 기존 목록과 점검 JSON은 유지되며, 등록·승인·차단·테스트는 닫힌 상태입니다.';
+    return base;
+  }
+  base.ready = false;
+  base.mode = 'storage_error';
+  base.message = 'Core Link 보안 저장소 상태를 확인하지 못했습니다. 기존 목록과 점검 JSON은 유지되며, 등록·승인·차단·테스트는 닫힌 상태입니다.';
+  return base;
+}
+
+function fallbackSnapshot(config, actor, issue) {
+  const rows = builtInRows();
+  const storage = publicStorageState(config, issue || null);
+  const warning = storage.message || 'Core Link 보안 저장소가 아직 구성되지 않아 외부 유입 로그·승인 이력을 보존할 수 없습니다.';
   return {
     ok: true,
     version: VERSION,
@@ -568,12 +583,49 @@ async function buildSnapshot(config, actor, query) {
     storage,
     defaultDeny: true,
     rows,
-    events,
-    decisions,
-    summary: controlSummary(rows, events),
+    events: [],
+    decisions: [],
+    summary: controlSummary(rows, []),
     coverage: coverageStatement(),
-    warnings: []
+    warnings: [warning],
+    degraded: true
   };
+}
+
+async function buildSnapshot(config, actor, query) {
+  if (!config || !config.ready) return fallbackSnapshot(config, actor, null);
+  const eventLimit = Math.max(1, Math.min(Number(query && query.event_limit) || 100, MAX_EVENTS));
+  const decisionLimit = Math.max(1, Math.min(Number(query && query.decision_limit) || 100, MAX_DECISIONS));
+  try {
+    const [registry, rawEvents, rawDecisions] = await Promise.all([
+      listRegistry(config),
+      listSecurityEvents(config, eventLimit),
+      listDecisions(config, decisionLimit)
+    ]);
+    const external = registry.map(row => safeRegistryRow(row, config)).filter(row => row.id);
+    const rows = builtInRows().concat(external);
+    const events = rawEvents.map(safeEvent);
+    const decisions = rawDecisions.map(safeDecision);
+    return {
+      ok: true,
+      version: VERSION,
+      administrator: actor ? { role: actor.role, roles: actor.roles, sessionValidation: actor.sessionValidation } : null,
+      storage: publicStorageState(config, null),
+      defaultDeny: true,
+      rows,
+      events,
+      decisions,
+      summary: controlSummary(rows, events),
+      coverage: coverageStatement(),
+      warnings: [],
+      degraded: false
+    };
+  } catch (error) {
+    // A failed storage read must not erase the built-in Core Link registry or
+    // prevent the administrator from downloading a diagnostic. Control writes
+    // still remain fail-closed through ensureStorage/dbRequest.
+    return fallbackSnapshot(config, actor, error);
+  }
 }
 
 function coverageStatement() {

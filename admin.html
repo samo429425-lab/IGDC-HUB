@@ -1160,15 +1160,26 @@
     var status = document.getElementById("igdc-core-status");
     var storage = snapshot && snapshot.storage || {};
     if(status){
-      status.textContent = storage.ready ? "상태: 서버 보안 게이트웨이·관리자 공통 세션 연결" : "상태: Core Link 저장소 구성 필요 — 승인·차단은 서버에서 닫혀 있습니다.";
-      status.style.color = storage.ready ? "#047857" : "#a16207";
+      if(storage.ready){
+        status.textContent = "상태: 서버 보안 게이트웨이·관리자 공통 세션 연결";
+        status.style.color = "#047857";
+      }else{
+        var storageNotice = clean(storage.message) || "Core Link 보안 저장소 미연결";
+        status.textContent = "상태: " + storageNotice + " 기존 목록·점검 JSON은 읽기 전용으로 유지됩니다.";
+        status.style.color = "#a16207";
+      }
     }
     var line = document.getElementById("igdc-core-gateway-summary");
     if(line) line.textContent = "내부연동 " + Number(summary.internalConnected || 0) + " · 후보/보류 " + Number(summary.externalCandidate || 0) + " · 승인 " + Number(summary.approved || 0) + " · 활성 " + Number(summary.active || 0) + " · 차단 " + Number(summary.blocked || 0) + " · 보안이벤트 " + Number(summary.securityEvents || 0);
     var exportStatus = document.getElementById("igdc-core-gateway-export-status");
     if(exportStatus){
-      exportStatus.textContent = storage.ready ? "서버 읽기 전용 보안 감사 JSON" : "저장소 미구성: 내부 목록만 표시";
-      exportStatus.style.color = storage.ready ? "#047857" : "#a16207";
+      if(storage.ready){
+        exportStatus.textContent = "서버 읽기 전용 보안 감사 JSON";
+        exportStatus.style.color = "#047857";
+      }else{
+        exportStatus.textContent = "저장소 미연결: 기존 목록과 저장소 진단을 포함한 읽기 전용 JSON 다운로드 가능";
+        exportStatus.style.color = "#a16207";
+      }
     }
   }
 
