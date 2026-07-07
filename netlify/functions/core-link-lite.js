@@ -18,7 +18,7 @@ const dns = require('dns').promises;
 const https = require('https');
 const net = require('net');
 
-const VERSION = 'igdc-core-link-lite-v1.0.6-flat-root-build-safe-diagnostic';
+const VERSION = 'igdc-core-link-lite-v1.0.7-supabase-url-transport-diagnostic';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -143,8 +143,24 @@ function listEnv(name) {
     .filter(Boolean);
 }
 
+function normalizeSupabaseUrl(value) {
+  // Values are entered in Netlify as a plain project URL. Trim accidental
+  // outer quotes and normalize the base origin, but never expose the value.
+  const raw = clean(value, 500).replace(/^['\"]+|['\"]+$/g, '').replace(/\/+$/, '');
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) return '';
+    if (url.pathname && url.pathname !== '/') return '';
+    return url.origin;
+  } catch (_) {
+    return '';
+  }
+}
+
 function config() {
-  const url = clean(process.env.CORE_LINK_LITE_SUPABASE_URL, 500).replace(/\/+$/, '');
+  const configuredStorageUrl = clean(process.env.CORE_LINK_LITE_SUPABASE_URL, 500);
+  const url = normalizeSupabaseUrl(configuredStorageUrl);
   const serviceKey = clean(process.env.CORE_LINK_LITE_SERVICE_ROLE_KEY, 4096);
   const adminsByEmail = new Set(listEnv('CORE_LINK_LITE_ADMIN_EMAILS'));
   const adminsByUserId = new Set(listEnv('CORE_LINK_LITE_ADMIN_USER_IDS'));
@@ -158,6 +174,8 @@ function config() {
     enabled,
     ready,
     storageCredentialsConfigured: Boolean(url && serviceKey),
+    storageUrlConfigured: Boolean(configuredStorageUrl),
+    storageUrlValid: Boolean(url),
     administratorAllowListConfigured: Boolean(adminsByEmail.size || adminsByUserId.size),
     url,
     serviceKey,
@@ -176,6 +194,7 @@ function config() {
 
 function configurationError(cfg) {
   if (!cfg.enabled) return failure(503, 'core_link_lite_disabled', 'Core Link Lite가 현재 비활성화되어 있습니다.');
+  if (cfg.storageUrlConfigured && !cfg.storageUrlValid) return failure(503, 'core_link_lite_storage_url_invalid', 'Core Link Lite Supabase URL 형식을 확인해야 합니다.');
   if (!cfg.authAudience) return failure(503, 'core_link_lite_auth_audience_not_configured', 'Core Link Lite의 Auth0 client ID 설정을 확인해야 합니다.');
   return failure(503, 'core_link_lite_not_configured', 'Core Link Lite 전용 환경변수와 관리자 허용 목록을 먼저 설정해야 합니다.');
 }
@@ -227,8 +246,25 @@ function nativeHttpsFetch(urlText, init) {
 }
 
 async function platformFetch(url, init) {
-  if (typeof fetch === 'function') return fetch(url, init);
-  return nativeHttpsFetch(url, init);
+  let primaryError = null;
+  if (typeof fetch === 'function') {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      primaryError = error;
+    }
+  }
+  try {
+    return await nativeHttpsFetch(url, init);
+  } catch (fallbackError) {
+    const error = failure(503, 'core_link_lite_storage_transport_failed', 'Core Link Lite 전용 저장소 연결을 시작할 수 없습니다.');
+    // Safe diagnostics only: no URL, key, token, header or response body is retained.
+    error.transport = {
+      primary: clean(primaryError && (primaryError.code || primaryError.name), 80) || null,
+      fallback: clean(fallbackError && (fallbackError.code || fallbackError.name), 80) || null
+    };
+    throw error;
+  }
 }
 
 function base64urlBuffer(value) {
@@ -307,7 +343,8 @@ async function dbRequest(cfg, path, init) {
       }, (init && init.headers) || {}),
       body: init && init.body
     });
-  } catch (_) {
+  } catch (error) {
+    if (error && error.code === 'core_link_lite_storage_transport_failed') throw error;
     throw failure(503, 'core_link_lite_storage_unavailable', 'Core Link Lite 전용 저장소에 연결할 수 없습니다.');
   }
   const text = await response.text().catch(() => '');
@@ -863,9 +900,12 @@ function publicConfigurationSummary(cfg) {
   const source = cfg || {};
   const enabled = Boolean(source.enabled);
   const storageCredentialsConfigured = Boolean(source.storageCredentialsConfigured);
+  const storageUrlConfigured = Boolean(source.storageUrlConfigured);
+  const storageUrlValid = Boolean(source.storageUrlValid);
   const administratorAllowListConfigured = Boolean(source.administratorAllowListConfigured);
   let state = 'ready';
   if (!enabled) state = 'disabled';
+  else if (storageUrlConfigured && !storageUrlValid) state = 'storage_url_invalid';
   else if (!storageCredentialsConfigured && !administratorAllowListConfigured) state = 'storage_and_admin_not_configured';
   else if (!storageCredentialsConfigured) state = 'storage_not_configured';
   else if (!administratorAllowListConfigured) state = 'administrator_allow_list_not_configured';
@@ -873,6 +913,8 @@ function publicConfigurationSummary(cfg) {
     state,
     enabled,
     storageCredentialsConfigured,
+    storageUrlConfigured,
+    storageUrlValid,
     administratorAllowListConfigured,
     storageAccessAttempted: false,
     secretsIncluded: false,
@@ -1076,10 +1118,20 @@ async function diagnostic(cfg, event) {
       state: 'schema_or_storage_unavailable',
       databaseReadAttempted: true,
       schemaVerified: false,
-      reason: clean(error && error.code, 120) || 'storage_unavailable'
+      reason: clean(error && error.code, 120) || 'storage_unavailable',
+      transport: error && error.transport ? {
+        primary: clean(error.transport.primary, 80) || null,
+        fallback: clean(error.transport.fallback, 80) || null
+      } : null
     };
     report.storedDataInventory.state = 'schema_or_storage_unavailable';
-    report.warnings.push('Core Link Lite 전용 테이블·진단 인벤토리 또는 저장소를 아직 읽을 수 없습니다. 이 JSON은 계속 읽기 전용으로 저장되며 기존 사이트에는 영향이 없습니다.');
+    if (report.storage.reason === 'core_link_lite_storage_url_invalid') {
+      report.warnings.push('Core Link Lite Supabase URL 형식이 올바르지 않아 전용 저장소 조회를 시작하지 않았습니다. URL 값만 확인하면 됩니다.');
+    } else if (report.storage.reason === 'core_link_lite_storage_transport_failed') {
+      report.warnings.push('Core Link Lite 전용 저장소 연결 요청이 전송 단계에서 실패했습니다. 이 JSON의 storage.transport 값은 오류 종류만 표시하며 URL·키·자료 내용은 포함하지 않습니다.');
+    } else {
+      report.warnings.push('Core Link Lite 전용 테이블·진단 인벤토리 또는 저장소를 아직 읽을 수 없습니다. 이 JSON은 계속 읽기 전용으로 저장되며 기존 사이트에는 영향이 없습니다.');
+    }
     return report;
   }
 }
@@ -1150,6 +1202,7 @@ exports._test = {
   payloadFromControl,
   normalizeAuthIssuer,
   canonicalAuthIssuer,
+  normalizeSupabaseUrl,
   validateAuthClaims,
   verifyAuth0IdToken,
   base64urlBuffer
