@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const root = path.resolve(__dirname, "..");
 const canonical = require(path.join(root, "netlify", "functions", "lib", "canonical-snapshot-publisher.v1"));
 const snapshots = require(path.join(root, "netlify", "functions", "snapshot-engine"));
@@ -104,17 +105,117 @@ function verifyPublishedRootGeoGates(ipSlotReport) {
   return { ok: problems.length === 0, summary, problems };
 }
 
+
+const PREPRODUCT_PROTECTED_SNAPSHOTS = Object.freeze([
+  { file: "data/search-bank.snapshot.json", kind: "searchBank" },
+  { file: "netlify/functions/data/search-bank.snapshot.json", kind: "searchBank" },
+  { file: "netlify/functions/search-bank.snapshot.json", kind: "searchBank" },
+  { file: "data/front.snapshot.json", page: "home" },
+  { file: "data/distribution.snapshot.json", page: "distribution" },
+  { file: "data/networkhub-snapshot.json", page: "network" },
+  { file: "data/tour-snapshot.json", page: "tour" },
+  { file: "data/social.snapshot.json", page: "social" }
+]);
+
+function sha256File(file) {
+  return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+}
+
+function snapshotItemCount(doc, page) {
+  if (!doc || typeof doc !== "object") return 0;
+  if (page === "home") {
+    return Object.values(doc.pages && doc.pages.home && doc.pages.home.sections || {}).flatMap(listRows).length;
+  }
+  if (page === "distribution") {
+    return Object.values(doc.pages && doc.pages.distribution && doc.pages.distribution.sections || {}).flatMap(listRows).length;
+  }
+  if (page === "social") {
+    const sections = doc.pages && doc.pages.social && doc.pages.social.sections || {};
+    return Object.values(sections).flatMap(listRows).length;
+  }
+  return listRows(doc.items).concat(listRows(doc.slots)).length;
+}
+
+function capturePreproductSnapshotBaseline() {
+  const rows = [];
+  const problems = [];
+  for (const descriptor of PREPRODUCT_PROTECTED_SNAPSHOTS) {
+    const absolute = path.join(root, descriptor.file);
+    if (!fileExists(absolute)) {
+      problems.push("PREPRODUCT_SNAPSHOT_MISSING:" + descriptor.file);
+      continue;
+    }
+    let doc;
+    try { doc = readJson(absolute); }
+    catch (error) {
+      problems.push("PREPRODUCT_SNAPSHOT_INVALID_JSON:" + descriptor.file);
+      continue;
+    }
+    const itemCount = descriptor.kind === "searchBank"
+      ? (Array.isArray(doc.items) ? doc.items.length : 0)
+      : snapshotItemCount(doc, descriptor.page);
+    if (itemCount <= 0) problems.push("PREPRODUCT_SNAPSHOT_EMPTY:" + descriptor.file);
+    rows.push({ path: descriptor.file, sha256: sha256File(absolute), itemCount });
+  }
+  const searchBank = rows.filter(row => row.path.endsWith("search-bank.snapshot.json"));
+  if (searchBank.length !== 3) problems.push("PREPRODUCT_SEARCHBANK_MIRROR_COUNT_INVALID");
+  else if (new Set(searchBank.map(row => row.sha256)).size !== 1) problems.push("PREPRODUCT_SEARCHBANK_MIRROR_DIVERGENCE");
+  return { ok: problems.length === 0, rows, problems };
+}
+
+function assertPreproductSnapshotBaselineUnchanged(before) {
+  const after = capturePreproductSnapshotBaseline();
+  const problems = (before && before.problems || []).concat(after.problems || []);
+  const beforeByPath = new Map((before && before.rows || []).map(row => [row.path, row]));
+  for (const row of after.rows || []) {
+    const prior = beforeByPath.get(row.path);
+    if (!prior || prior.sha256 !== row.sha256 || prior.itemCount !== row.itemCount) {
+      problems.push("PREPRODUCT_SNAPSHOT_MUTATED_DURING_BUILD:" + row.path);
+    }
+  }
+  if (problems.length) {
+    throw new Error("Pre-product snapshot preservation failure: " + JSON.stringify(problems));
+  }
+  return after;
+}
+
 async function main() {
-  // Approved direct-commerce listings may be mirrored from the management
-  // registry into the private review queue. Missing optional registry access
-  // cannot activate any candidate or public slot.
-  const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
   const upstreamFallback = emptyStagingUpstream();
   const stagingEmptyUpstream = !!upstreamFallback;
+
+  if (stagingEmptyUpstream) {
+    // There is no real verified upstream candidate source yet. A deployment in
+    // this state is not a publication run. It must preserve every committed
+    // SearchBank mirror and every existing front Snapshot byte-for-byte.
+    // Running Canonical Publisher with an artificial empty bank previously
+    // rewrote all SearchBank mirrors to zero items, which can cut existing
+    // sample/automap supply even though no real publication was authorized.
+    const before = capturePreproductSnapshotBaseline();
+    if (!before.ok) {
+      throw new Error("Pre-product snapshot baseline is not deployable: " + JSON.stringify(before.problems));
+    }
+    const after = assertPreproductSnapshotBaselineUnchanged(before);
+    process.stdout.write(JSON.stringify({
+      mode: "preproduct-preserve-existing-snapshots",
+      upstreamFallback: { mode: "staging-empty", reason: upstreamFallback.meta.reason },
+      publication: "skipped-no-real-upstream-candidates",
+      commerceRegistrySync: "skipped-no-publication-run",
+      protectedSnapshots: after.rows,
+      lowerSnapshotPublishers: "skipped-preserve-existing-front-snapshots",
+      donation: { mode: "independent-runtime-contract-not-touched" },
+      ipSlots: { mode: "not-run-no-upstream-candidates" }
+    }, null, 2) + "\n");
+    return;
+  }
+
+  // Approved direct-commerce listings may be mirrored from the management
+  // registry into the private review queue only when a real upstream candidate
+  // source exists for this build. Missing optional registry access cannot
+  // activate any candidate or public slot.
+  const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
   const publication = canonical.publish({
     root,
-    trigger: "netlify-build",
-    bank: upstreamFallback || undefined
+    trigger: "netlify-build"
   });
   if (publication.status !== "published") {
     throw new Error("Canonical Snapshot Publisher blocked build: " + JSON.stringify(publication.errors || publication));
@@ -122,24 +223,6 @@ async function main() {
   const published = canonical.verifyPublished({ root });
   if (!published.ok) {
     throw new Error("Canonical Snapshot Publisher integrity failure: " + JSON.stringify(published.problems));
-  }
-
-  if (stagingEmptyUpstream) {
-    // Critical preservation branch: there is no real upstream product feed yet.
-    // Do not call Snapshot Engine, Regional Brokerage Publisher, or IP Slot
-    // Publisher because those modules are allowed to rewrite root snapshots for
-    // real geo-scoped releases. In this preparation mode the deployed site must
-    // keep the current sample/automap slots exactly as committed.
-    process.stdout.write(JSON.stringify({
-      commerceRegistrySync,
-      upstreamFallback: { mode: "staging-empty", reason: upstreamFallback.meta.reason },
-      publication,
-      published,
-      lowerSnapshotPublishers: "skipped-preserve-existing-front-snapshots",
-      donation: { mode: "independent-runtime-contract-not-touched" },
-      ipSlots: { mode: "not-run-no-upstream-candidates" }
-    }, null, 2) + "\n");
-    return;
   }
 
   // Only commercial Snapshot surfaces are built here. Donation has an
