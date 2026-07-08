@@ -1,6 +1,6 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
 // PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
-// PATCH: search-owned proxy viewer + bounded 2,000 intake + real-content card media/body display + 30-language search UI labels
+// PATCH: search-owned proxy viewer + bounded 2,000 intake + 30-language search UI labels
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -1852,17 +1852,18 @@ function adaptiveSearchTarget(q, type){
   const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|스포츠|금융|도서|쇼핑|웹툰|공공|학술|논문|사이트|홈페이지|global|world|news|tour|travel|technology|market|sports|finance|book|shopping|webtoon)/i;
   const narrowHints = /(카페|맛집|식당|주소|전화|위치|지도|병원|약국|학교|교회|상호|주차|near me|cafe|restaurant|address|map)/i;
 
-  // Search.js remains only a receiver/container. Keep the first 300-result
-  // preload window, but cap the search-page intake around 1,500~2,000 so the
-  // browser is not asked to cache/render the old 4,500-result window. Front-page
-  // SearchBank/Sanmaru supply is separate and is not changed here.
-  let target = 1500;
-  if (safeType === 'all') target = 2000;
-  if (safeType !== 'all') target = 1500;
-  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 1500);
-  if (words.length <= 1 || broadHints.test(text)) target = Math.max(target, 2000);
-  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 2000);
-  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(1500, Math.min(target, 2000));
+  // Search.js remains only a receiver/container. Search UI keeps a bounded
+  // 1,500~2,000 candidate pool; the larger 4,500~5,000 Search Bank/Sanmaru
+  // supply contracts remain backend/front-supply concerns, not browser render
+  // intake. First paint still keeps the existing 300-item preload window.
+  const NORMAL_TARGET = 1500;
+  const WIDE_TARGET = 2000;
+  let target = NORMAL_TARGET;
+  if (safeType === 'all') target = WIDE_TARGET;
+  if (words.length <= 1 || broadHints.test(text)) target = WIDE_TARGET;
+  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = WIDE_TARGET;
+  if (words.length >= 3 || narrowHints.test(text)) target = Math.min(WIDE_TARGET, Math.max(target, NORMAL_TARGET));
+  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.min(WIDE_TARGET, Math.max(NORMAL_TARGET, target));
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
@@ -2142,6 +2143,10 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('noBlockingWide', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
+  sp.set('displayRich', '1');
+  sp.set('richCards', '1');
+  sp.set('fastRichProbeMs', '1200');
+  sp.set('searchUiTarget', String(adaptiveSearchTarget(q, safeType)));
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
@@ -2178,6 +2183,10 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
   sp.set('providerPassthrough', '1');
+  sp.set('displayRich', '1');
+  sp.set('richCards', '1');
+  sp.set('fastRichProbeMs', '1200');
+  sp.set('searchUiTarget', String(adaptiveSearchTarget(q, safeType)));
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('reason', 'search-ui-first-paint');
@@ -2806,74 +2815,60 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const raw = []
         .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
-        .concat(displayCard.thumb ? [displayCard.thumb] : [])
         .concat(displayCard.image ? [displayCard.image] : [])
         .concat(displayCard.imageUrl ? [displayCard.imageUrl] : [])
+        .concat(displayCard.originalImage ? [displayCard.originalImage] : [])
+        .concat(displayCard.fullImage ? [displayCard.fullImage] : [])
         .concat(displayCard.cardImage ? [displayCard.cardImage] : [])
         .concat(displayCard.poster ? [displayCard.poster] : [])
         .concat(displayCard.videoPoster ? [displayCard.videoPoster] : [])
         .concat(displayCard.videoThumbnail ? [displayCard.videoThumbnail] : [])
         .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
-        .concat(displayCard.preview && displayCard.preview.poster ? [displayCard.preview.poster] : [])
         .concat(displayCard.preview && displayCard.preview.thumbnail ? [displayCard.preview.thumbnail] : [])
         .concat(displayCard.preview && displayCard.preview.image ? [displayCard.preview.image] : [])
-        .concat(displayCard.preview && displayCard.preview.original ? [displayCard.preview.original] : [])
-        .concat(it && it.thumbnail ? [it.thumbnail] : [])
-        .concat(it && it.thumb ? [it.thumb] : [])
-        .concat(it && it.image ? [it.image] : [])
-        .concat(it && it.imageUrl ? [it.imageUrl] : [])
-        .concat(it && it.image_url ? [it.image_url] : [])
-        .concat(it && it.cardImage ? [it.cardImage] : [])
-        .concat(it && it.poster ? [it.poster] : [])
-        .concat(it && it.cover ? [it.cover] : [])
-        .concat(it && it.og_image ? [it.og_image] : [])
-        .concat(it && it.ogImage ? [it.ogImage] : [])
         .concat(it && it.originalImage ? [it.originalImage] : [])
         .concat(it && it.fullImage ? [it.fullImage] : [])
         .concat(it && it.imageOriginal ? [it.imageOriginal] : [])
         .concat(it && it.viewerImage ? [it.viewerImage] : [])
         .concat(it && it.openImageUrl ? [it.openImageUrl] : [])
         .concat(it && it.contentUrl ? [it.contentUrl] : [])
-        .concat(payload.thumbnail ? [payload.thumbnail] : [])
-        .concat(payload.thumb ? [payload.thumb] : [])
-        .concat(payload.image ? [payload.image] : [])
-        .concat(payload.imageUrl ? [payload.imageUrl] : [])
-        .concat(payload.image_url ? [payload.image_url] : [])
-        .concat(payload.cardImage ? [payload.cardImage] : [])
-        .concat(payload.og_image ? [payload.og_image] : [])
-        .concat(payload.ogImage ? [payload.ogImage] : [])
-        .concat(payload.poster ? [payload.poster] : [])
-        .concat(payload.videoPoster ? [payload.videoPoster] : [])
-        .concat(payload.videoThumbnail ? [payload.videoThumbnail] : [])
-        .concat(payload.cover ? [payload.cover] : [])
+        .concat(it && it.cardImage ? [it.cardImage] : [])
+        .concat(it && it.imageUrl ? [it.imageUrl] : [])
+        .concat(it && it.videoPoster ? [it.videoPoster] : [])
+        .concat(it && it.videoThumbnail ? [it.videoThumbnail] : [])
+        .concat(it && it.thumbnail ? [it.thumbnail] : [])
+        .concat(it && it.thumb ? [it.thumb] : [])
+        .concat(it && it.image ? [it.image] : [])
+        .concat(it && it.poster ? [it.poster] : [])
+        .concat(it && it.cover ? [it.cover] : [])
+        .concat(it && it.og_image ? [it.og_image] : [])
+        .concat(it && it.ogImage ? [it.ogImage] : [])
         .concat(payload.originalImage ? [payload.originalImage] : [])
         .concat(payload.fullImage ? [payload.fullImage] : [])
         .concat(payload.imageOriginal ? [payload.imageOriginal] : [])
         .concat(payload.viewerImage ? [payload.viewerImage] : [])
         .concat(payload.openImageUrl ? [payload.openImageUrl] : [])
         .concat(payload.contentUrl ? [payload.contentUrl] : [])
+        .concat(payload.cardImage ? [payload.cardImage] : [])
+        .concat(payload.imageUrl ? [payload.imageUrl] : [])
+        .concat(payload.videoPoster ? [payload.videoPoster] : [])
+        .concat(payload.videoThumbnail ? [payload.videoThumbnail] : [])
+        .concat(payload.thumbnail ? [payload.thumbnail] : [])
+        .concat(payload.thumb ? [payload.thumb] : [])
+        .concat(payload.image ? [payload.image] : [])
+        .concat(payload.image_url ? [payload.image_url] : [])
+        .concat(payload.og_image ? [payload.og_image] : [])
+        .concat(payload.ogImage ? [payload.ogImage] : [])
+        .concat(payload.poster ? [payload.poster] : [])
+        .concat(payload.cover ? [payload.cover] : [])
         .concat(data.thumbnail ? [data.thumbnail] : [])
         .concat(data.thumb ? [data.thumb] : [])
         .concat(data.image ? [data.image] : [])
-        .concat(data.imageUrl ? [data.imageUrl] : [])
-        .concat(data.image_url ? [data.image_url] : [])
-        .concat(data.cardImage ? [data.cardImage] : [])
         .concat(data.og_image ? [data.og_image] : [])
-        .concat(data.ogImage ? [data.ogImage] : [])
         .concat(data.poster ? [data.poster] : [])
-        .concat(data.videoPoster ? [data.videoPoster] : [])
-        .concat(data.videoThumbnail ? [data.videoThumbnail] : [])
-        .concat(data.originalImage ? [data.originalImage] : [])
-        .concat(data.fullImage ? [data.fullImage] : [])
-        .concat(data.imageOriginal ? [data.imageOriginal] : [])
-        .concat(data.viewerImage ? [data.viewerImage] : [])
-        .concat(data.openImageUrl ? [data.openImageUrl] : [])
-        .concat(data.contentUrl ? [data.contentUrl] : [])
         .concat(preview.poster ? [preview.poster] : [])
         .concat(preview.thumbnail ? [preview.thumbnail] : [])
-        .concat(preview.thumb ? [preview.thumb] : [])
         .concat(preview.image ? [preview.image] : [])
-        .concat(preview.original ? [preview.original] : [])
         .concat(Array.isArray(it && it.imageSet) ? it.imageSet : [])
         .concat(Array.isArray(payload.imageSet) ? payload.imageSet : [])
         .concat(Array.isArray(data.imageSet) ? data.imageSet : []);
@@ -3896,8 +3891,7 @@ function displayGroupOfItem(it){
       if(typeof v === 'object'){
         return compactCardTextClient([
           v.summary, v.snippet, v.description, v.contentSnippet, v.content, v.text,
-          v.abstract, v.excerpt, v.intro, v.lead, v.subtitle, v.body, v.bodyText,
-          v.article, v.articleBody, v.mainText, v.plainText, v.caption
+          v.abstract, v.excerpt, v.intro, v.body, v.caption
         ]);
       }
       return '';
@@ -4561,12 +4555,12 @@ function displayGroupOfItem(it){
         it && it.abstract,
         it && it.content,
         it && it.text,
-        it && it.article,
+        it && it.body,
+        it && it.bodyText,
         it && it.articleBody,
         it && it.mainText,
         it && it.plainText,
-        it && it.body,
-        it && it.bodyText,
+        it && it.rawText,
         it && it.lead,
         it && it.subtitle,
         it && it.description,
@@ -4578,12 +4572,12 @@ function displayGroupOfItem(it){
         payload.abstract,
         payload.content,
         payload.text,
-        payload.article,
+        payload.body,
+        payload.bodyText,
         payload.articleBody,
         payload.mainText,
         payload.plainText,
-        payload.body,
-        payload.bodyText,
+        payload.rawText,
         payload.lead,
         payload.subtitle,
         payload.description,
@@ -4594,12 +4588,12 @@ function displayGroupOfItem(it){
         data.abstract,
         data.content,
         data.text,
-        data.article,
+        data.body,
+        data.bodyText,
         data.articleBody,
         data.mainText,
         data.plainText,
-        data.body,
-        data.bodyText,
+        data.rawText,
         data.lead,
         data.subtitle,
         data.description,
@@ -4643,15 +4637,6 @@ function displayGroupOfItem(it){
         return text.slice(0, 620);
       }
       return '';
-    }
-
-    function searchCardDescriptionLineClampClient(it){
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      const explicit = parseInt(displayCard.lineClamp, 10);
-      if(explicit > 0) return Math.max(3, Math.min(6, explicit));
-      const hasMedia = collectNaturalImages(it).length > 0 || isYoutubeLikeItemClient(it) || !!getPlayableMediaInfo(it, (it && (it.url || it.link)) || '');
-      const hasPlace = !!(it && (it.placeInfo || it.mapQuery || it.__maruAllowMapPreview));
-      return hasMedia || hasPlace ? 5 : 4;
     }
 
     function shouldRenderMapPreviewForItemClient(it){
@@ -4765,7 +4750,8 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
-        d.style.webkitLineClamp = String(searchCardDescriptionLineClampClient(it));
+        const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(6, cardLineClamp) : 6);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -4830,15 +4816,7 @@ if (it.riskLabel === '⚠️ high-risk') {
           img.src = src;
           img.loading = 'lazy';
           img.alt = '';
-          img.onerror = () => {
-            img.remove();
-            if(!mediaWrap.querySelector('img')){
-              mediaWrap.remove();
-              delete body.dataset.mediaCount;
-              delete body.dataset.mediaKind;
-              body.style.minHeight = '';
-            }
-          };
+          img.onerror = () => img.remove();
           mediaWrap.appendChild(img);
         });
 

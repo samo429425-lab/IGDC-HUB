@@ -12,7 +12,7 @@
  * - search.js remains the UI executor: it hides/shows/reorders categories using this policy.
  */
 
-const VERSION = 'maru-search-display-engine-v1.4.6-search-ui-stable-rich-body-no-guide-contract';
+const VERSION = 'maru-search-display-engine-v1.4.7-rich-real-content-contract';
 const ENGINE_NAME = 'maru-search-display-engine';
 
 const BASE_GROUP_ORDER = [
@@ -89,7 +89,7 @@ function compactTextFromAny(v){
   if(typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return stripHtml(v);
   if(Array.isArray(v)) return v.map(compactTextFromAny).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
   if(typeof v === 'object'){
-    return compactTextFromAny([v.summary, v.snippet, v.description, v.contentSnippet, v.excerpt, v.abstract, v.text, v.content, v.caption]);
+    return compactTextFromAny([v.summary, v.snippet, v.description, v.contentSnippet, v.excerpt, v.abstract, v.text, v.content, v.body, v.bodyText, v.articleBody, v.mainText, v.plainText, v.rawText, v.caption]);
   }
   return '';
 }
@@ -104,9 +104,9 @@ function naturalSummary(item, query){
   const data = pickObject(item.data);
   const displayCard = pickObject(item.displayCard, item.card, item.presentation);
   const candidates = [
-    item.snippet, item.contentSnippet, item.excerpt, item.abstract, item.text, item.content, item.body, item.description, item.summary, item.displaySummary,
-    payload.snippet, payload.contentSnippet, payload.excerpt, payload.abstract, payload.text, payload.content, payload.body, payload.description, payload.summary,
-    data.snippet, data.contentSnippet, data.excerpt, data.abstract, data.text, data.content, data.body, data.description, data.summary,
+    item.snippet, item.contentSnippet, item.excerpt, item.abstract, item.text, item.content, item.body, item.bodyText, item.articleBody, item.mainText, item.plainText, item.rawText, item.description, item.summary, item.displaySummary,
+    payload.snippet, payload.contentSnippet, payload.excerpt, payload.abstract, payload.text, payload.content, payload.body, payload.bodyText, payload.articleBody, payload.mainText, payload.plainText, payload.rawText, payload.description, payload.summary,
+    data.snippet, data.contentSnippet, data.excerpt, data.abstract, data.text, data.content, data.body, data.bodyText, data.articleBody, data.mainText, data.plainText, data.rawText, data.description, data.summary,
     item.metaDescription, item.ogDescription, payload.metaDescription, payload.ogDescription, data.metaDescription, data.ogDescription,
     displayCard.body, displayCard.text, displayCard.snippet, displayCard.description, displayCard.summary
   ];
@@ -132,6 +132,11 @@ function collectDisplayImages(item){
   const raw = []
     .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
     .concat(displayCard.image ? [displayCard.image] : [])
+    .concat(displayCard.imageUrl ? [displayCard.imageUrl] : [])
+    .concat(displayCard.cardImage ? [displayCard.cardImage] : [])
+    .concat(displayCard.poster ? [displayCard.poster] : [])
+    .concat(displayCard.videoPoster ? [displayCard.videoPoster] : [])
+    .concat(displayCard.videoThumbnail ? [displayCard.videoThumbnail] : [])
     .concat(displayCard.originalImage ? [displayCard.originalImage] : [])
     .concat(displayCard.fullImage ? [displayCard.fullImage] : [])
     .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
@@ -142,6 +147,10 @@ function collectDisplayImages(item){
     .concat(item.openImageUrl ? [item.openImageUrl] : [])
     .concat(item.contentUrl ? [item.contentUrl] : [])
     .concat(item.cardImage ? [item.cardImage] : [])
+    .concat(item.imageUrl ? [item.imageUrl] : [])
+    .concat(item.poster ? [item.poster] : [])
+    .concat(item.videoPoster ? [item.videoPoster] : [])
+    .concat(item.videoThumbnail ? [item.videoThumbnail] : [])
     .concat(item.thumbnail ? [item.thumbnail] : [])
     .concat(item.thumb ? [item.thumb] : [])
     .concat(item.image ? [item.image] : [])
@@ -155,6 +164,9 @@ function collectDisplayImages(item){
     .concat(payload.openImageUrl ? [payload.openImageUrl] : [])
     .concat(payload.contentUrl ? [payload.contentUrl] : [])
     .concat(payload.cardImage ? [payload.cardImage] : [])
+    .concat(payload.poster ? [payload.poster] : [])
+    .concat(payload.videoPoster ? [payload.videoPoster] : [])
+    .concat(payload.videoThumbnail ? [payload.videoThumbnail] : [])
     .concat(payload.thumbnail ? [payload.thumbnail] : [])
     .concat(payload.thumb ? [payload.thumb] : [])
     .concat(payload.image ? [payload.image] : [])
