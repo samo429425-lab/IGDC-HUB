@@ -42,16 +42,17 @@ ready(function () {
     const PAGE_SIZE = 25;
     const BLOCK_SIZE = 10;
     const MAX_PAGER_PAGES = 499;
-    const INITIAL_PRELOAD_PAGES = 12;
+    const INITIAL_PRELOAD_PAGES = 10;
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
-    const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
-    const MAX_PROGRESSIVE_PAGER_PAGES = 180;
+    const INITIAL_PROGRESSIVE_PAGER_PAGES = 10;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 38;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 5;
-    const INTAKE_BURST_DELAY_MS = 10;
+    const INTAKE_CONCURRENCY = 6;
+    const INTAKE_BURST_DELAY_MS = 0;
+    const LEADING_IMAGE_WARM_PAGES = 4;
     // Search HTML should behave as an immediate receiver: once Sanmaru/MaruSearch
     // sends any real packet, open the follow-up faucet on the next short UI beat.
     // This is a handoff cadence, not a network timeout or a result cutoff.
@@ -1852,27 +1853,24 @@ function adaptiveSearchTarget(q, type){
   const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|스포츠|금융|도서|쇼핑|웹툰|공공|학술|논문|사이트|홈페이지|global|world|news|tour|travel|technology|market|sports|finance|book|shopping|webtoon)/i;
   const narrowHints = /(카페|맛집|식당|주소|전화|위치|지도|병원|약국|학교|교회|상호|주차|near me|cafe|restaurant|address|map)/i;
 
-  // Search.js remains only a receiver/container. This target is the amount of
-  // Sanmaru/MaruSearch supply the UI is ready to cache for search pages. It is
-  // separate from the 4,500~5,000 Search Bank Snapshot supply used by front pages.
-  // Broad searches may keep filling up to 4,500 candidates, while first paint
-  // still renders only the current viewport and uses continuous intake for the rest.
-  let target = 3200;
-  if (safeType === 'all') target = 4500;
-  if (safeType !== 'all') target = 2400;
-  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 2400);
-  if (words.length <= 1 || broadHints.test(text)) target = 4500;
-  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 3000);
-  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(2200, Math.min(target, 3200));
+  // Search page maximum is intentionally slimmer than the front-page snapshot pipeline.
+  // Goal: faster first response, quicker follow-up fill, and a practical cap of 38 pages.
+  let target = MAX_SMOOTH_CANDIDATES;
+  if (safeType !== 'all') target = 875;
+  if (/^(map|tour|knowledge|wiki|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = 750;
+  if (words.length >= 3) target = Math.min(target, 875);
+  if (words.length <= 1 || broadHints.test(text)) target = MAX_SMOOTH_CANDIDATES;
+  if (narrowHints.test(text)) target = Math.min(target, 625);
+  if (/^(image|video|news|sns|blog|cafe|site|academic|public_data)$/.test(safeType)) {
+    target = Math.max(target, 875);
+  }
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
 
 function firstPaintLimitFor(q, type){
-  // Keep the UI first paint light, but ask Sanmaru for the first 12 pages of
-  // already-prepared resident candidates. The DOM still renders only the
-  // current viewport; the extra candidates keep the initial pager at 10~12 pages
-  // and let page navigation feel immediate.
+  // The search page should open quickly but still feel rich.
+  // Keep the first supply window at about 10 pages / 250 cards.
   return Math.min(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(q, type));
 }
 
@@ -1906,7 +1904,7 @@ function updateProgressiveTotalFromPayload(payload, fallbackCount, opts){
     ? Math.min(MAX_PROGRESSIVE_PAGER_PAGES, wantedPages)
     : (opts && opts.expandAll
       ? Math.min(MAX_PROGRESSIVE_PAGER_PAGES, wantedPages)
-      : Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(minPages, previousPages, Math.min(wantedPages, previousPages + 8 || minPages))));
+      : Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(minPages, previousPages, Math.min(wantedPages, previousPages + 12 || minPages))));
   progressivePagerPages = Math.max(minPages, nextPages);
   serverTotalItems = signal.exhausted
     ? Math.max(floorCount, Math.min(authoritativeServerTotalItems || 0, progressivePagerPages * PAGE_SIZE))
@@ -2171,7 +2169,7 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
-  sp.set('firstPaintLimit', String(INITIAL_PRELOAD_TARGET));
+  sp.set('firstPaintLimit', String(firstPaintLimitFor(q, safeType)));
   sp.set('candidatePool', String(adaptiveSearchTarget(q, safeType)));
   sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
   sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
@@ -4934,6 +4932,20 @@ if (it.riskLabel === '⚠️ high-risk') {
 
 
 
+    function warmLeadingPageImages(maxPages = LEADING_IMAGE_WARM_PAGES){
+      const pageCount = Math.min(
+        Math.max(1, Number(maxPages) || LEADING_IMAGE_WARM_PAGES),
+        preloadPageCountFromItems(allItems),
+        LEADING_IMAGE_WARM_PAGES
+      );
+      for(let pageNo = 1; pageNo <= pageCount; pageNo++){
+        const start = (pageNo - 1) * PAGE_SIZE;
+        const slice = allItems.slice(start, start + PAGE_SIZE);
+        if(slice.length) enrichRenderedPageImages(pageNo, slice, start);
+      }
+    }
+
+
     function stateKeyForGroup(page, group){
       return `${lastQuery || input.value || ''}::${activeType || 'all'}::${page}::${group}`;
     }
@@ -5472,7 +5484,7 @@ async function runSearch(q, type = activeType){
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `${uiText('receiving', 'receiving...')} ${getTypeLabel(activeType)} · "${qq}"...`;
   renderSkeleton();
-  // Search.js is ready to receive the first 12 pages immediately. Show the
+  // Search.js is ready to receive the first 10 pages immediately. Show the
   // basic pager while Sanmaru/MaruSearch fills the packet, instead of leaving
   // the page with no page structure.
   drawPager();
@@ -5522,7 +5534,7 @@ async function runSearch(q, type = activeType){
     }
 
     // Cache the supply window immediately. Rendering still shows only the current
-    // viewport, but pages 2~12 are already in memory when the user clicks them.
+    // viewport, but pages 2~10 are already in memory when the user clicks them.
     const initialWindow = Math.min(
       MAX_SMOOTH_CANDIDATES,
       Math.max(INITIAL_PRELOAD_TARGET, incoming.length)
@@ -5545,6 +5557,7 @@ async function runSearch(q, type = activeType){
       drawPager();
     }
     status.textContent = statusResultsText(actualResultCountForStatus(), qq, activeType, supplySignal.exhausted ? false : true);
+    warmLeadingPageImages();
     if(!intakeStarted && !supplySignal.exhausted){
       schedulePipeHandoff('receiver-packet-open-pipe', allItems.length >= INITIAL_PRELOAD_TARGET ? 0 : FIRST_PIPE_HANDOFF_MS);
     }
