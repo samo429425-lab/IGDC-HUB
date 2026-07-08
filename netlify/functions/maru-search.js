@@ -87,7 +87,7 @@ const MAX_SEARCH_BANK_PAGES_DEEP = 60;
 const SEARCH_UI_FIRST_RESPONSE_WINDOW = 300;
 const SEARCH_UI_DEFAULT_CANDIDATE_TARGET = 1500;
 const SEARCH_UI_WIDE_CANDIDATE_TARGET = 2000;
-const SEARCH_UI_FAST_PROBE_BUDGET_MS = 1200;
+const SEARCH_UI_FAST_PROBE_BUDGET_MS = 280;
 
 function nowMs(){ return Date.now(); }
 
@@ -4980,8 +4980,8 @@ async function attachFastDisplayRichProbe(base, event, ctx){
   const searchUiGateway = isSearchUiGatewayRequest(raw || {});
   const requestedProbeMs = Number(raw.fastRichProbeMs || raw.displayProbeMs || (searchUiGateway ? SEARCH_UI_FAST_PROBE_BUDGET_MS : 650)) || (searchUiGateway ? SEARCH_UI_FAST_PROBE_BUDGET_MS : 650);
   const budgetMs = searchUiGateway
-    ? Math.max(450, Math.min(1600, requestedProbeMs))
-    : Math.max(350, Math.min(1200, requestedProbeMs));
+    ? Math.max(120, Math.min(350, requestedProbeMs))
+    : Math.max(350, Math.min(900, requestedProbeMs));
   const searchType = normalizeSearchType(ctx.searchType || raw.type || raw.tab || raw.category || raw.vertical || 'all');
   const tasks = [];
 
