@@ -2143,6 +2143,14 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
+  // Search cards must prefer real provider snippets/media over fast route-only cards.
+  // This does not change the 300 first preload / 2,000 candidate cap; it only tells
+  // maru-search not to short-circuit the visible search UI with title-only roads.
+  sp.set('realContentFirst', '1');
+  sp.set('richContent', '1');
+  sp.set('displayRich', '1');
+  sp.set('requireSnippets', '1');
+  sp.set('fastRichProbeMs', '650');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
@@ -2177,10 +2185,13 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('providerPassthrough', '1');
+  sp.set('providerPassthrough', '0');
+  sp.set('realContentFirst', '1');
+  sp.set('richContent', '1');
+  sp.set('displayRich', '1');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
-  sp.set('reason', 'search-ui-first-paint');
+  sp.set('reason', 'search-ui-first-paint-real-content');
 
   try {
     const r = await fetch(`${SANMARU_BOOT_URL}?${sp.toString()}`, { cache: 'no-store' });
@@ -5624,17 +5635,19 @@ async function runSearch(q, type = activeType){
     return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
   }
 
-  // PATCH: first render uses Sanmaru/MaruSearch first supply window, not forced 25-only paint
+  // Real-content first render: prefer Maru Search's provider-result window over
+  // Sanmaru's instant route lanes. Sanmaru instant still runs as a fallback/merge,
+  // but it should not be the first paint when it only contains title-only roads.
   const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
 
   try{
-    const first = await Promise.race([instantPromise, maruWindowPromise]);
+    const first = await maruWindowPromise;
     if(runSearch._seq !== seq) return;
 
     const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
     if(!firstCount){
-      const second = first && first.kind === 'sanmaru-instant' ? await maruWindowPromise : await instantPromise;
+      const second = await instantPromise;
       if(runSearch._seq !== seq) return;
       if(second && !second.error) applySupplyPack(second.pack, second.kind);
     }
