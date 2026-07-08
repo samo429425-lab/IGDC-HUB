@@ -122,30 +122,6 @@ function fallbackDisplaySummary(item, query, group){
   // for later enrichment instead of showing 안내문.
   return '';
 }
-function isSyntheticSearchPathItem(item){
-  item = item && typeof item === 'object' ? item : {};
-  const payload = pickObject(item.payload);
-  const text = [
-    item.generatedBy, item.sourceType, item.route, item.provider, item.source,
-    payload.providerLane, payload.providerUrl, Array.isArray(item.tags) ? item.tags.join(' ') : ''
-  ].map(s).join(' ').toLowerCase();
-  return /provider[-_ ]?lane|provider-window|sanmaru-fast-provider-lane|passthrough/.test(text);
-}
-
-function hasRealDisplayCardData(item, ctx){
-  item = item && typeof item === 'object' ? item : {};
-  const q = firstNonEmpty(ctx && ctx.q, ctx && ctx.query);
-  if(naturalSummary(item, q)) return true;
-  if(collectDisplayImages(item).length) return true;
-  if(youtubeThumb(item)) return true;
-  const place = pickObject(item.placeInfo);
-  if(firstNonEmpty(place.address, item.address, place.summary, place.description)) return true;
-  return false;
-}
-
-function filterDisplayableItems(items, ctx){
-  return (Array.isArray(items) ? items : []).filter(item => hasRealDisplayCardData(item, ctx || {}));
-}
 function collectDisplayImages(item){
   item = item && typeof item === 'object' ? item : {};
   const payload = pickObject(item.payload);
@@ -365,8 +341,8 @@ function decorateDisplayItem(item, ctx, index){
       showThumbnail: !!images.length,
       showMapPreview: mapLike,
       showVideoPreview: cardType === 'video',
-      showBody: !!summary,
-      bodySource: summary ? 'provider' : 'none',
+      showBody: true,
+      bodySource: naturalSummary(item, q) ? 'provider' : 'display-engine-fallback',
       thumbnailPolicy: 'actual-content-image-only; no-logo-no-favicon-no-banner-no-placard-no-search-url',
       displayMode: mapLike ? 'map-plus-list-card' : (images.length ? 'text-plus-thumbnail-card' : 'text-summary-card')
     })
@@ -409,10 +385,8 @@ function decorateDisplayItem(item, ctx, index){
   return copy;
 }
 function decorateItems(items, ctx){
-  const safeCtx = ctx || {};
-  const displayable = filterDisplayableItems(Array.isArray(items) ? items : [], safeCtx);
-  const ordered = prioritizeDisplayItems(displayable, safeCtx);
-  return ordered.map((item, idx) => decorateDisplayItem(item, safeCtx, idx));
+  const ordered = prioritizeDisplayItems(Array.isArray(items) ? items : [], ctx || {});
+  return ordered.map((item, idx) => decorateDisplayItem(item, ctx || {}, idx));
 }
 
 function normalizeGroup(group){
@@ -593,10 +567,10 @@ function buildDisplayPolicy(input){
   input = input || {};
   const q = firstNonEmpty(input.q, input.query);
   const rawType = firstNonEmpty(input.type, input.searchType, input.tab, input.category, input.vertical, input.raw && (input.raw.type || input.raw.tab || input.raw.category));
-  const items = filterDisplayableItems([]
+  const items = []
     .concat(Array.isArray(input.items) ? input.items : [])
     .concat(Array.isArray(input.results) ? input.results : [])
-    .concat(Array.isArray(input.pageItems) ? input.pageItems : []), input);
+    .concat(Array.isArray(input.pageItems) ? input.pageItems : []);
   const counts = countGroups(items);
   const intentInfo = inferIntent(q, counts, rawType);
   const p = policyForIntent(intentInfo, counts);
