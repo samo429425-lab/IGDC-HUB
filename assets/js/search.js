@@ -3220,6 +3220,7 @@ function displayGroupOfItem(it){
       const groups = new Map();
 
       (Array.isArray(slice) ? slice : []).forEach((it, idx) => {
+        if(!hasRealCardSubstanceClient(it)) return;
         const group = displayGroupOfItem(it);
         if (!groups.has(group)) {
           groups.set(group, {
@@ -3301,7 +3302,7 @@ function displayGroupOfItem(it){
       };
 
       const groups = groupSliceForDisplay(source).map(g => {
-        const items = diversifyGroupPreviewItems(g.group, g.items || []);
+        const items = diversifyGroupPreviewItems(g.group, (g.items || []).filter(hasRealCardSubstanceClient));
         return Object.assign({}, g, { items });
       });
 
@@ -3343,13 +3344,7 @@ function displayGroupOfItem(it){
     function renderGroupedSlice(slice, page){
       const groups = (Array.isArray(slice) && slice.length && slice[0] && Array.isArray(slice[0].items) && slice[0].group) ? slice : groupSliceForDisplay(slice);
       groups.forEach(groupInfo => {
-        groupInfo.items = (Array.isArray(groupInfo.items) ? groupInfo.items : []).filter(it => {
-          if(!isSyntheticProviderGuideCardClient(it)) return true;
-          // News provider shortcuts are not news cards.  Image/video groups,
-          // however, must stay visible as gallery lanes even while actual
-          // thumbnails are still being supplied.
-          return !/^(news)$/.test(String(groupInfo.group || ''));
-        });
+        groupInfo.items = (Array.isArray(groupInfo.items) ? groupInfo.items : []).filter(hasRealCardSubstanceClient);
         groupInfo.items = diversifyGroupPreviewItems(groupInfo.group, groupInfo.items);
         if(!groupInfo.items.length) return;
 
@@ -3402,14 +3397,14 @@ function displayGroupOfItem(it){
           if(gallerySource.length) {
             renderImageGalleryInto(gallerySource.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, false)), body, Math.max(previewLimit, 12));
           } else {
-            renderVisualPendingPlaceholderClient(body, 8);
+            return;
           }
         } else if (videoSection) {
           const videoSource = videoSnapshotItemsClient(previewItems);
           if(videoSource.length) {
             videoSource.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
           } else {
-            renderVisualPendingPlaceholderClient(body, 6);
+            return;
           }
         } else {
           previewItems.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
@@ -3897,7 +3892,7 @@ function displayGroupOfItem(it){
       const text = compactCardTextClient(v);
       if(!text) return false;
       const low = text.toLowerCase();
-      return /(확인할 수 있는 결과입니다|연결되는 결과입니다|표시됩니다|함께 표시|대표 이미지가 있으면|대표 스냅샷|본문 요약이 제공|2~3줄|사진·그래픽·이미지|현장 화면·리뷰|최신 보도·이슈·기사|통합 검색 결과|검색 결과로 연결|자료를 확인할 수 있는|news 흐름|image 자료|video 자료)/i.test(text) ||
+      return /(확인할 수 있는 결과입니다|연결되는 결과입니다|표시됩니다|함께 표시|대표 이미지가 있으면|대표 스냅샷|본문 요약이 제공|2~3줄|사진·그래픽·이미지|현장 화면·리뷰|최신 보도·이슈·기사|통합 검색 결과|검색 결과로 연결|자료를 확인할 수 있는|news 흐름|image 자료|video 자료|공식정보 경로|검색 통로 기준|관련된 페이지를 확인하는|경로입니다)/i.test(text) ||
         /(google news|bing images|bing videos|naver images|naver videos|google images)/i.test(low);
     }
 
@@ -3916,6 +3911,39 @@ function displayGroupOfItem(it){
       const shortcutTitle = /(google news|bing images|bing videos|google images|naver images|naver videos|통합 검색|이미지 검색|동영상 검색|뉴스 검색)/i.test(title);
       const providerShortcut = /(google\.com|bing\.com|naver\.com|news\.google\.com)/i.test(url + ' ' + source) && shortcutTitle;
       return (shortcutTitle || providerShortcut) && (!desc || isGeneratedGuideTextClient(desc));
+    }
+
+
+    function isGeneratedRoadOnlyCardClient(it){
+      it = it && typeof it === 'object' ? it : {};
+      const payload = it.payload && typeof it.payload === 'object' ? it.payload : {};
+      const hay = String([
+        it.generatedBy, it.sourceType, it.route, it.source, it.provider,
+        payload.providerLane, payload.providerUrl, payload.sourceType, payload.generatedBy
+      ].join(' ')).toLowerCase();
+      return !!(
+        it.placeholder === true ||
+        it.passthrough === true ||
+        it.publicProviderRoad === true ||
+        it.sanmaruEmergencyDiscovery === true ||
+        /provider-lane|search-link|public-provider-road|open-discovery|emergency-discovery|direct-navigation-links/.test(hay)
+      );
+    }
+
+    function hasRealCardSubstanceClient(it){
+      it = it && typeof it === 'object' ? it : {};
+      if(isSyntheticProviderGuideCardClient(it) || isGeneratedRoadOnlyCardClient(it)) return false;
+      const desc = descriptionForItemClient(it);
+      if(desc && desc.length >= 18 && !isGeneratedGuideTextClient(desc)) return true;
+      if(collectNaturalImages(it).length) return true;
+      const media = it.media && typeof it.media === 'object' ? it.media : {};
+      const preview = media.preview && typeof media.preview === 'object' ? media.preview : {};
+      const videoThumb = preferredYoutubeThumbClient(it);
+      const videoFile = /\.(mp4|webm|m3u8)(\?|#|$)/i.test(String([it.videoUrl, it.watchUrl, it.embedUrl, preview.videoUrl, preview.embedUrl].filter(Boolean).join(' ')));
+      if(it.videoId || videoThumb || preview.poster || preview.image || videoFile) return true;
+      const place = it.placeInfo && typeof it.placeInfo === 'object' ? it.placeInfo : {};
+      if(place.address || place.roadAddress || place.telephone || place.phone || it.address || it.telephone || it.phone) return true;
+      return false;
     }
 
     function hasRenderableVisualClient(it){
@@ -4533,26 +4561,6 @@ function displayGroupOfItem(it){
       }
     }
 
-    function routeSummaryForItemClient(it){
-      it = it && typeof it === 'object' ? it : {};
-      const sourceType = String(it.sourceType || '').toLowerCase();
-      const generatedBy = String(it.generatedBy || '').toLowerCase();
-      if(sourceType !== 'provider-lane-window' && generatedBy.indexOf('provider-lane') < 0 && sourceType !== 'official-authority' && generatedBy.indexOf('local-authority') < 0) return '';
-      const title = compactCardTextClient(it.title || '');
-      const q = compactCardTextClient((input && input.value) || lastQuery || '').trim();
-      const route = compactCardTextClient([it.route, it.provider, it.source]).trim();
-      const type = normalizeSearchType(it.searchCategory || it.type || it.mediaType || activeType || 'web');
-      const subject = q ? '“' + q + '” 관련 ' : '';
-      if(sourceType === 'official-authority' || generatedBy.indexOf('local-authority') >= 0) return subject + '공식 행정, 공공 데이터, 지역 정보를 확인할 수 있는 주요 기관 카드입니다.';
-      if(type === 'image') return subject + '사진, 갤러리, 이미지 후보를 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
-      if(type === 'video') return subject + '영상, 브이로그, 현장 스냅샷 후보를 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
-      if(type === 'news') return subject + '최신 보도, 지역 소식, 이슈 흐름을 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
-      if(type === 'map' || type === 'tour') return subject + '위치, 관광, 교통, 방문 정보를 확인하는 지역 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
-      if(type === 'blog' || type === 'cafe' || type === 'sns') return subject + '후기, 커뮤니티, 공개 소셜 반응을 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
-      if(type === 'knowledge') return subject + '백과, 지식, 자료형 정보를 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
-      return subject + '웹문서와 관련 페이지를 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : (title ? ' ' + title + ' 항목입니다.' : ''));
-    }
-
     function descriptionForItemClient(it){
       const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
@@ -4651,8 +4659,7 @@ function displayGroupOfItem(it){
         if(/^(google news|bing images|bing videos|google images|naver images|naver videos)$/i.test(key)) continue;
         return text.slice(0, 620);
       }
-      const routeFallback = routeSummaryForItemClient(it);
-      return routeFallback ? routeFallback.slice(0, 620) : '';
+      return '';
     }
 
     function shouldRenderMapPreviewForItemClient(it){
@@ -4767,7 +4774,8 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(6, cardLineClamp) : 6);
+        const visualRich = collectNaturalImages(it).length || isYoutubeLikeItemClient(it) || playableMedia;
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(8, cardLineClamp) : (visualRich ? 8 : 5));
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -5066,13 +5074,7 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       function pushCategoryModule(g){
         if(!g || !Array.isArray(g.items) || !g.items.length) return;
-        if(/^(news)$/.test(String(g.group || ''))) {
-          g = Object.assign({}, g, { items: g.items.filter(it => !isSyntheticProviderGuideCardClient(it)) });
-        }
-        // Do not pre-filter image/video groups down to thumbnail-ready items here.
-        // The renderer will show a gallery lane with real thumbnails when they
-        // exist, or an empty gallery skeleton while the thumbnails are still
-        // arriving.  Pre-filtering here makes the entire category disappear.
+        g = Object.assign({}, g, { items: g.items.filter(hasRealCardSubstanceClient) });
         if(!g.items.length) return;
         const previewLimit = Math.max(1, displayGroupPreviewLimit(g.group, g.items[0]));
         const moduleCap = Math.max(previewLimit, displayGroupModuleTotalCap(g.group));
@@ -5291,7 +5293,8 @@ if (it.riskLabel === '⚠️ high-risk') {
           return;
         }
       }
-      const slice = visibleItemsForPage(page);
+      let slice = visibleItemsForPage(page);
+      slice = (Array.isArray(slice) ? slice : []).filter(it => isDisplayGroupModule(it) || hasRealCardSubstanceClient(it));
       const start = (page - 1) * PAGE_SIZE;
 
       if (!slice.length && normalizeSearchType(activeType) === 'all') {

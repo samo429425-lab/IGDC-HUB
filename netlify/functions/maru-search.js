@@ -1126,6 +1126,61 @@ function compactResultItem(it){
 }
 
 
+function isSearchUiSyntheticRoadItem(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const hay = safeString([
+    it.generatedBy, it.sourceType, it.route, it.source, it.provider,
+    p.providerLane, p.providerUrl, p.sourceType, p.generatedBy
+  ].join(' ')).toLowerCase();
+  return !!(
+    it.placeholder === true ||
+    it.passthrough === true ||
+    it.publicProviderRoad === true ||
+    it.sanmaruEmergencyDiscovery === true ||
+    /provider-lane|search-link|public-provider-road|open-discovery|emergency-discovery|direct-navigation-links/.test(hay)
+  );
+}
+
+function hasSearchUiRealCardContent(it){
+  it = (it && typeof it === 'object') ? it : {};
+  if(isSearchUiSyntheticRoadItem(it)) return false;
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const media = (it.media && typeof it.media === 'object') ? it.media : {};
+  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+  const place = (it.placeInfo && typeof it.placeInfo === 'object') ? it.placeInfo : {};
+
+  const body = stripInlineHtml(firstNonEmpty(
+    it.summary, it.description, it.snippet, it.contentSnippet, it.excerpt, it.abstract,
+    it.text, it.content, it.body, it.displaySummary,
+    p.summary, p.description, p.snippet, p.contentSnippet, p.excerpt, p.abstract,
+    p.text, p.content, p.body,
+    it.metaDescription, it.ogDescription, p.metaDescription, p.ogDescription,
+    place.address, place.description, place.roadAddress, place.category
+  ));
+  if(body && body.length >= 18 && !isSyntheticSearchSummaryText(body)) return true;
+
+  const image = firstNonEmpty(
+    it.thumbnail, it.thumb, it.image, it.imageUrl, it.cardImage,
+    it.originalImage, it.fullImage, it.imageOriginal, it.viewerImage, it.openImageUrl, it.contentUrl,
+    preview.poster, preview.image, preview.thumbnail, preview.thumb,
+    p.thumbnail, p.thumb, p.image, p.imageUrl, p.originalImage, p.fullImage
+  );
+  if(isMeaningfulImageForItem(image, it)) return true;
+  if(Array.isArray(it.imageSet) && it.imageSet.some(img => isMeaningfulImageForItem(img, it))) return true;
+  const directVideo = firstNonEmpty(it.videoId, p.videoId, youtubeIdFromUrl(firstNonEmpty(it.videoUrl, it.watchUrl, it.embedUrl, it.url, it.link, p.videoUrl, p.watchUrl, p.embedUrl)), preview.poster, preview.image);
+  const videoFile = /\.(mp4|webm|m3u8)(\?|#|$)/i.test(safeString(firstNonEmpty(it.videoUrl, it.watchUrl, it.embedUrl, preview.videoUrl, preview.embedUrl)));
+  if(directVideo || videoFile) return true;
+  if(place.address || place.roadAddress || place.telephone || place.phone) return true;
+  return false;
+}
+
+function filterSearchUiRealCardItems(items){
+  const list = Array.isArray(items) ? items : [];
+  return list.filter(hasSearchUiRealCardContent);
+}
+
+
 
 // =========================================================
 // SEARCH RESULT SECTION PACK — FRONT SECTION SUPPLY LAYER
@@ -1970,41 +2025,6 @@ function sanmaruFastLayerEnough(residentPack, requestedLimit, raw){
 
 
 
-
-function searchCardRouteSummary(q, lane, topicLabel, region){
-  q = safeString(q || '').trim();
-  lane = lane || {};
-  topicLabel = safeString(topicLabel || '').trim();
-  const label = safeString(lane.label || lane.id || '').trim();
-  const type = normalizeSearchType(lane.type || 'web');
-  const regionText = safeString(region || '').toUpperCase() === 'KR' ? '한국어 우선' : '글로벌';
-  const baseSubject = q ? '“' + q + '” 관련' : '관련';
-  const topic = topicLabel ? ' · ' + topicLabel : '';
-  const byType = {
-    official: baseSubject + ' 공식 기관, 공공자료, 행정·정책 정보를 우선 확인하는 ' + label + topic + ' 경로입니다.',
-    map: baseSubject + ' 위치, 관광, 교통, 방문 정보와 지역 안내를 확인하는 ' + label + topic + ' 경로입니다.',
-    news: baseSubject + ' 최신 보도, 지역 소식, 현안 흐름을 확인하는 ' + label + topic + ' 경로입니다.',
-    image: baseSubject + ' 사진, 갤러리, 현장 이미지 자료를 확인하는 ' + label + topic + ' 경로입니다.',
-    video: baseSubject + ' 영상, 브이로그, 현장 스냅샷 후보를 확인하는 ' + label + topic + ' 경로입니다.',
-    blog: baseSubject + ' 블로그 후기, 방문 기록, 이용자 리뷰를 확인하는 ' + label + topic + ' 경로입니다.',
-    cafe: baseSubject + ' 카페, 커뮤니티, 이용자 대화 흐름을 확인하는 ' + label + topic + ' 경로입니다.',
-    sns: baseSubject + ' 공개 SNS, 소셜 반응, 짧은 영상 흐름을 확인하는 ' + label + topic + ' 경로입니다.',
-    knowledge: baseSubject + ' 백과, 지식, 자료형 정보를 확인하는 ' + label + topic + ' 경로입니다.',
-    shopping: baseSubject + ' 상품, 가격, 판매처 정보를 확인하는 ' + label + topic + ' 경로입니다.'
-  };
-  return (byType[type] || (baseSubject + ' 웹문서와 관련 페이지를 확인하는 ' + label + topic + ' 경로입니다.')) + ' ' + regionText + ' 검색 통로 기준으로 연결됩니다.';
-}
-
-function localAuthoritySummaryForSearchCard(q, row){
-  q = safeString(q || '').trim();
-  row = Array.isArray(row) ? row : [];
-  const city = safeString(row[0] || '').trim();
-  const label = safeString(row[1] || '').trim();
-  const type = normalizeSearchType(row[3] || 'official');
-  const subject = q ? '“' + q + '” 검색에서 ' : '';
-  if(type === 'map') return subject + city + ' 관광·문화·지역 방문 정보를 공식/기관 경로로 확인할 수 있는 카드입니다. 대표 안내, 행사, 교통, 방문 정보가 연결됩니다.';
-  return subject + city + ' 공식 행정, 공공 데이터, 정책·민원·지역 정보를 확인할 수 있는 ' + (label || '공식 기관') + ' 카드입니다.';
-}
 function buildKoreaLocalAuthorityCardsForSearch(q, region){
   q = safeString(q || '').trim();
   if(!q) return [];
@@ -2025,28 +2045,23 @@ function buildKoreaLocalAuthorityCardsForSearch(q, region){
     ['세종','세종특별자치시 공식 홈페이지','https://www.sejong.go.kr','official',1.090],
     ['제주','제주특별자치도청 공식 홈페이지','https://www.jeju.go.kr','official',1.090]
   ];
-  return rows.filter(r => q.indexOf(r[0]) >= 0).map((r, idx) => {
-    const localSummary = localAuthoritySummaryForSearchCard(q, r);
-    return canonicalizeItem({
-      id:'maru-local-authority-' + safeString([q,r[0],r[1]].join('|')).replace(/[^a-z0-9가-힣]+/gi,'-').slice(0,80),
-      title:r[1],
-      summary:localSummary,
-      description:localSummary,
-      displaySummary:localSummary,
-      url:r[2], link:r[2],
-      source:'local_authority', provider:'local-authority',
-      type:r[3], searchCategory:r[3], mediaType:'article', route:'local-authority',
-      region:region || 'KR', generatedBy:'maru-local-authority-first-rank', sourceType:'official-authority',
-      sanmaruFirstPaint:true, passthrough:false, placeholder:false,
-      displayCard:{ body:localSummary, summary:localSummary, description:localSummary, lineClamp:4, bodyLines:4, showBody:true, cardType:r[3] === 'map' ? 'map' : 'article' },
-      score:30 + r[4] - idx * 0.0001,
-      _finalScore:30 + r[4] - idx * 0.0001,
-      _authorityScore:30 + r[4] - idx * 0.0001,
-      searchCategory:r[3],
-      _category:r[3],
-      tags:['official','authority','public',r[0]].filter(Boolean)
-    }, q, 'local_authority');
-  });
+  return rows.filter(r => q.indexOf(r[0]) >= 0).map((r, idx) => canonicalizeItem({
+    id:'maru-local-authority-' + safeString([q,r[0],r[1]].join('|')).replace(/[^a-z0-9가-힣]+/gi,'-').slice(0,80),
+    title:r[1],
+    summary:'',
+    description:'',
+    url:r[2], link:r[2],
+    source:'local_authority', provider:'local-authority',
+    type:r[3], searchCategory:r[3], mediaType:'article', route:'local-authority',
+    region:region || 'KR', generatedBy:'maru-local-authority-first-rank', sourceType:'official-authority',
+    sanmaruFirstPaint:true, passthrough:false, placeholder:false,
+    score:30 + r[4] - idx * 0.0001,
+    _finalScore:30 + r[4] - idx * 0.0001,
+    _authorityScore:30 + r[4] - idx * 0.0001,
+    searchCategory:r[3],
+    _category:r[3],
+    tags:['official','authority','public',r[0]].filter(Boolean)
+  }, q, 'local_authority'));
 }
 
 function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, existingCount){
@@ -2222,13 +2237,14 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
       const topicLabel = maruTopicLabels[(round - 1) % maruTopicLabels.length];
       const titleSuffix = round > 1 ? ' · ' + topicLabel : '';
       const cleanTitle = q + ' · ' + lane.label + titleSuffix;
-      const cleanSummary = searchCardRouteSummary(q, lane, topicLabel, region);
+      // Provider-lane cards are fast roads, not page bodies.
+      // Keep real snippets only when providers return them; never show 안내문 as body text.
+      const cleanSummary = '';
       out.push(canonicalizeItem({
         id:'sanmaru-fast-provider-lane-' + localStableHash([q, lane.id, region, round].join('|')),
         title:cleanTitle,
         summary:cleanSummary,
         description:cleanSummary,
-        displaySummary:cleanSummary,
         url, link:url,
         source:lane.source,
         provider:lane.id,
@@ -2242,10 +2258,9 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
         sanmaruFirstPaint:true,
         passthrough:true,
         placeholder:false,
-        displayCard:{ body:cleanSummary, summary:cleanSummary, description:cleanSummary, lineClamp:4, bodyLines:4, showBody:true, cardType:lane.type === 'video' ? 'video' : (lane.type === 'image' ? 'image' : (lane.type === 'map' ? 'map' : 'article')) },
         score:(lane.score || 0.8) + preferredBoost - (round * 0.0001),
         tags:['provider-window',lane.type,lane.id,region].filter(Boolean),
-        payload:{ providerLane:lane.id, providerUrl:url, pageWindow:round, country:region, firstPaint:true, summary:cleanSummary }
+        payload:{ providerLane:lane.id, providerUrl:url, pageWindow:round, country:region, firstPaint:true }
       }, q, lane.source));
       addedThisRound++;
     }
@@ -2253,15 +2268,11 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
     round++;
   }
   return out.map(x => ({
-    id:x.id, title:x.title, summary:x.summary, description:x.description, snippet:x.snippet || x.summary || x.description || '', displaySummary:x.displaySummary || x.summary || x.description || '',
+    id:x.id, title:x.title, summary:x.summary, description:x.description,
     url:x.url, link:x.url || x.link, source:x.source, provider:x.provider,
     type:x.type, searchCategory:x.searchCategory || x.type, mediaType:x.mediaType,
-    thumbnail:x.thumbnail || x.thumb || x.image || '', thumb:x.thumb || x.thumbnail || x.image || '', image:x.image || x.thumbnail || x.thumb || '', imageUrl:x.imageUrl || x.image || x.thumbnail || '', imageSet:Array.isArray(x.imageSet) ? x.imageSet : [],
-    originalImage:x.originalImage || x.fullImage || x.imageOriginal || '', fullImage:x.fullImage || x.originalImage || '', imageOriginal:x.imageOriginal || x.originalImage || '', viewerImage:x.viewerImage || '', openImageUrl:x.openImageUrl || '', contentUrl:x.contentUrl || '', cardImage:x.cardImage || x.thumbnail || x.image || '',
-    media:x.media, videoId:x.videoId, videoUrl:x.videoUrl, watchUrl:x.watchUrl, embedUrl:x.embedUrl,
+    thumbnail:x.thumbnail || x.thumb || x.image || '', thumb:x.thumb || x.thumbnail || x.image || '', image:x.image || x.thumbnail || x.thumb || '', imageSet:Array.isArray(x.imageSet) ? x.imageSet : [],
     route:x.route, region:x.region, generatedBy:x.generatedBy, sourceType:x.sourceType,
-    displayCard:x.displayCard && typeof x.displayCard === 'object' ? x.displayCard : undefined,
-    payload:x.payload && typeof x.payload === 'object' ? x.payload : undefined,
     sanmaruFirstPaint:true, passthrough:true, placeholder:false, score:x.score
   }));
 }
@@ -5237,7 +5248,7 @@ exports.handler = async function(event){
     const providerLaneTarget = fastDisplayFirstWindow
       ? fastWindowCandidateTarget
       : Math.min(MAX_LIMIT, Math.max(handlerLimit, MIN_RESULT_TARGET, visibleNeed * 12, requestedPageForWindow * visibleNeed));
-    if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
+    if(!searchUiGateway && sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
       const laneItems = buildSanmaruProviderLaneExpansionCards(q, Object.assign({}, raw || {}, { limit: providerLaneTarget }), { region:detectRuntimeRegion(event, lang, q) }, providerLaneTarget, (base.items || []).length);
       base.items = dedupeCanonicalItems([].concat(base.items || [], laneItems)).slice(0, providerLaneTarget);
       base.results = base.items;
@@ -5260,7 +5271,7 @@ exports.handler = async function(event){
       searchUiGateway ? searchUiTarget : MAX_LIMIT,
       Math.max(visibleNeed * 12, requestedPageForWindowGuarantee * visibleNeed + visibleNeed, fastDisplayFirstWindow ? SEARCH_UI_FIRST_RESPONSE_WINDOW : 0)
     );
-    if((base.items || []).length < pageWindowCandidateNeed){
+    if(!searchUiGateway && (base.items || []).length < pageWindowCandidateNeed){
       const guaranteedLaneItems = buildSanmaruProviderLaneExpansionCards(
         q,
         Object.assign({}, raw || {}, { limit: pageWindowCandidateNeed, providerLaneTarget: pageWindowCandidateNeed }),
@@ -5296,10 +5307,16 @@ exports.handler = async function(event){
     const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
     const maruLocalAuthorityCards = buildKoreaLocalAuthorityCardsForSearch(q, base.region || base.route || 'KR');
-    if(maruLocalAuthorityCards.length){
+    if(!searchUiGateway && maruLocalAuthorityCards.length){
       base.items = dedupeCanonicalItems([].concat(maruLocalAuthorityCards, base.items || []));
     }
     base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
+    if(searchUiGateway){
+      const beforeRealCardFilter = base.items.length;
+      base.items = filterSearchUiRealCardItems(base.items);
+      base.results = base.items;
+      base.meta = Object.assign({}, base.meta || {}, { searchUiRealCardFilter:{ enabled:true, before:beforeRealCardFilter, after:base.items.length, removed:Math.max(0, beforeRealCardFilter - base.items.length), policy:'only-real-body-image-video-place-cards' } });
+    }
     // Sanmaru must keep neutral/search data, not browser-specific display contracts.
     // Store the compact neutral candidate layer first, then decorate only the HTTP response for search.js.
     if(searchUiGateway && fastDisplayFirstWindow){
