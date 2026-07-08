@@ -461,7 +461,7 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
   'Each cue includes durationSeconds and a nonbinding displayUnitGuide. Use them as a readability budget: keep the target line concise enough to read while that exact speech is audible. Do not solve a short duration by merging with a neighbour, moving words, deleting a cue, or changing the cue order.',
   'Keep names, titles, ranks, honorifics, technical terms, units, numbers, product names, species names, organization names, place names, building names, country names, political parties, and institutions accurate and consistent.',
   'Classify recurring personal names, aliases, nicknames, pet names, call signs, kinship forms, and forms of address from nearby cue context before translating. Never allow one unclear or imperfectly recognized pronunciation to become a global canonical name. Use one canonical target-language form only when repeated textual/context evidence clearly identifies the same entity; otherwise preserve the current recognized official/transliterated form without forcing later cues to match it.',
-  'For sung lyrics, preserve actual lyric words only after audible vocal onset. Keep every lyric phrase in its existing cue and time interval; never merge adjacent lyric phrases, extend a lyric through an instrumental gap, or move lyric words into a neighbouring cue. Do not replace real sung words with [music], [song], [laughter], or another generic sound label. Preserve an existing ♪ lyric marker when supplied. Do not create a caption for instrumental lead-in, melody-only passages, humming without discernible words, or imagined lyric text.',
+  'For sung passages, subtitle only the actual audible words after the vocal begins. Do not create captions for instrumental music, melody-only passages, humming without words, or imagined text. Do not add music symbols, labels, explanations, marker descriptions, viewer messages, or generic sound labels in place of real words.',
   'For a standalone human laugh, cry, sharp cry, gasp, pain reaction, surprise or admiration interjection, output one concise bracketed sound label in the target language, such as [웃음] or [laughter]. Do not stretch repeated letters, fill a cue with ㅎ/ㅋ/ha characters, or merge it with neighbouring dialogue.',
   'For proper nouns, use the established conventional target-language name when it is well known. Otherwise use a faithful target-language transliteration or the official name form. Never translate the literal component meanings of a proper name into a new descriptive name.',
   'Examples of forbidden literal-name rewriting: do not turn Seoraksan into a phrase meaning Snowy Peak; do not turn Cheonggyecheon into a phrase meaning Blue Stream; do not turn Cheongwadae into a phrase meaning Blue-Tiled House. Use the standard name used in the target language instead.',
@@ -475,7 +475,7 @@ const MARU_DIRECT_SUBTITLE_SYSTEM = [
 function isMaruInstructionLeak(value) {
   const text = safeString(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
   if (!text) return false;
-  return /(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|create\s+accurate\s+timed\s+subtitle|preserve\s+proper\s+nouns|target\s+(?:subtitle\s+)?language|source\s+language\s+hint|subtitle\s+translation\s+engine|never\s+reproduce\s+or\s+mention\s+these\s+instructions)/i.test(text);
+  return /(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|create\s+accurate\s+timed\s+subtitle|preserve\s+proper\s+nouns|target\s+(?:subtitle\s+)?language|source\s+language\s+hint|subtitle\s+translation\s+engine|never\s+reproduce\s+or\s+mention\s+these\s+instructions|musical[-\s]*note\s+marker|marker\s*for\s*lyrics?|lyrics?\s*(?:handling|policy|rule|instruction|marker)|when\s+lyrics?|instrumental[-\s]*only|melody[-\s]*only|thanks?\s+for\s+watching|thank\s+you\s+for\s+watching|like\s+and\s+subscribe|시청해\s*주셔서\s*감사|구독과\s*좋아요|음표\s*마커|가사(?:가)?\s*(?:명확|있는\s*경우|시작|처리|규칙|수칙|지침|유지|구분)|가사에\s*대해|멜로디만|연주만|현재\s*사용)/i.test(text);
 }
 
 function dropMaruInstructionLeakSegments(segments) {
@@ -524,7 +524,6 @@ async function translateCueTextsToTarget(cues, targetLang, body = {}) {
           return {
             id: Number.isInteger(Number(cue.id)) ? Number(cue.id) : index,
             text: safeString(cue.text || ''),
-            isSungLyric: cue?.__maruLyric === true || isLikelySungLyricCue(cue?.text || ''),
             durationSeconds,
             displayUnitGuide: durationSeconds > 0 ? Math.max(8, Math.round(durationSeconds * 14)) : 0
           };
@@ -570,7 +569,7 @@ const MARU_FINAL_SUBTITLE_REVIEW_SYSTEM = [
   'Use each supplied terminologyLedger item only when it has confidence "confirmed" and evidenceCount at least 2, and only when it clearly refers to the same entity or concept in this cue. Otherwise preserve the current form.',
   'For specialist content, use the established target-language term only when the context makes the domain unambiguous. Do not replace a precise but uncertain term with a guessed everyday paraphrase.',
   'Match the requested genre and relationship register: exact and restrained for scholarship or professional discussion; natural and relationship-appropriate for dialogue and fiction. Do not make already natural subtitles more literary merely for style.',
-  'For a cue made only of laughter, crying, a gasp, a scream, coughing, or a sigh, use one compact bracketed target-language sound label. Never expand it into repeated characters such as ㅎㅎㅎㅎ, ㅋㅋㅋㅋ, ha ha ha, or similar filler. This rule never applies to actual sung lyric words: retain clear lyric text, its existing ♪ marker when present, and its exact cue boundary; do not replace lyrics with [music], [song], [laughter], or any generic sound label.',
+  'For a cue made only of laughter, crying, a gasp, a scream, coughing, or a sigh, use one compact bracketed target-language sound label. Never expand it into repeated characters such as ㅎㅎㅎㅎ, ㅋㅋㅋㅋ, ha ha ha, or similar filler. This rule never applies to actual sung words: retain clear sung text and its exact cue boundary; do not replace sung words with [music], [song], [laughter], or any generic sound label.',
   'Add a terminologyLedger item only for a short canonical form that appears at least twice in these cues or is independently confirmed by the supplied confirmed ledger. Set confidence exactly to "confirmed" and evidenceCount to at least 2. Otherwise return an empty ledger.'
 ].join(' ');
 function parseFinalReviewPayload(content) {
@@ -709,15 +708,14 @@ function buildTranscriptionFields(body, options = {}) {
   if (granularities.length) fields['timestamp_granularities[]'] = granularities;
   const sourceLanguage = normalizeLanguage(body.sourceLanguage || '');
   if (sourceLanguage) fields.language = sourceLanguage.split('-')[0];
-  // Keep lyric-bearing vocals on the same exact audio timeline as spoken dialogue.
-  // This is intentionally a transcription hint, not an instruction to invent lyrics.
+  // Keep the recognizer focused on audible words only. Background music is not a subtitle cue.
   const defaultPrompt = [
-    'Transcribe audible spoken dialogue and clearly sung lyric words with exact segment and word timing.',
-    'For sung lyrics, begin at the audible vocal onset, keep each lyric phrase separate at its real pause or native segment boundary, and include actual sung words only.',
-    'Do not create text for instrumental-only music, melody-only passages, humming without discernible words, or background score.',
-    'When lyrics are clearly sung, retain a leading musical-note marker already present or use one short leading ♪ marker so lyric text is never confused with laughter or a sound effect.'
+    'Transcribe only audible human speech and clearly discernible sung words with exact timing.',
+    'If a person is speaking while music plays in the background, transcribe the speech.',
+    'Return no text for silence, instrumental music, melody-only passages, humming without discernible words, background score, noise, or effects.',
+    'Do not add descriptions, labels, music symbols, markers, explanations, viewer messages, policies, or instructions.'
   ].join(' ');
-  fields.prompt = safeString(body.transcriptionPrompt || defaultPrompt).slice(0, 900);
+  fields.prompt = defaultPrompt.slice(0, 900);
   return fields;
 }
 
@@ -1471,12 +1469,7 @@ function annotateStandaloneNonverbalSubtitleCues(segments) {
 }
 
 function formatSungLyricCaption(text) {
-  const value = safeString(text || '').replace(/\s+/gu, ' ').trim();
-  if (!value) return value;
-  // A single leading note is a compact professional cue marker. It preserves
-  // lyric words while protecting a lyric such as “ha ha ha” from being later
-  // mistaken for laughter by an editorial or translation pass.
-  return /^[♪♫♬]/u.test(value) ? value : `♪ ${value}`;
+  return safeString(text || '').replace(/[♪♫♬]+/gu, '').replace(/\s+/gu, ' ').trim();
 }
 
 function renderCompactNonverbalSubtitleCues(segments, language) {
@@ -1769,7 +1762,7 @@ async function handleGenerateSubtitle(id, body) {
     directTargetLanguage: !!directTarget,
     generationMode: directTarget ? 'selected-target-language-subtitle' : 'source-language-transcript',
     outputPolicy: directTarget ? 'target-language-subtitle-cues-only' : 'source-language-transcript',
-    lyricPolicy: 'actual-sung-words-only-after-vocal-onset; preserve-lyric-cue-boundaries; no-instrumental-caption',
+    subtitlePolicy: 'audible-dialogue-and-discernible-sung-words-only',
     requestId: id
   });
 }
