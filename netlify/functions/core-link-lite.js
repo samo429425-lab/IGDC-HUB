@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * IGDC Core Link Lite v1.1.2
+ * IGDC Core Link Lite v1.1.3
  * --------------------------------------------------------------------------
  * Independent external-data inbox/outbox.  This function deliberately does
  * not import or mutate SearchBank, Sanmaru, Snapshot, Automap, Index, Front,
@@ -23,7 +23,7 @@ const { createClient } = require('@supabase/supabase-js');
 // global fetch implementation for the Supabase SDK.
 const nodeFetch = require('node-fetch');
 
-const VERSION = 'igdc-core-link-lite-v1.1.2-sdk-result-status-preserved';
+const VERSION = 'igdc-core-link-lite-v1.1.3-key-pair-normalized-diagnostic';
 const FUNCTION_PATH = '/.netlify/functions/core-link-lite';
 const LINK_TABLE = 'igdc_core_link_lite_links';
 const MESSAGE_TABLE = 'igdc_core_link_lite_messages';
@@ -164,26 +164,109 @@ function normalizeSupabaseUrl(value) {
   }
 }
 
+
+function storageUrlProjectRef(urlText) {
+  try {
+    const host = new URL(urlText).hostname.toLowerCase();
+    const first = host.split('.')[0] || '';
+    return /^[a-z0-9]{20}$/.test(first) ? first : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function normalizeSupabaseServiceKey(value) {
+  let raw = String(value == null ? '' : value)
+    .replace(/[\u0000-\u001f\u007f\u200b\u200c\u200d\ufeff]/g, ' ')
+    .trim();
+  let changed = false;
+  for (let i = 0; i < 4; i += 1) {
+    const next = raw.replace(/^[\s'"`]+|[\s'"`]+$/g, '').trim();
+    if (next === raw) break;
+    raw = next;
+    changed = true;
+  }
+  const prefixMatch = raw.match(/^(?:bearer|apikey|api_key|service_role|secret|key)\s*[:=]\s*(.+)$/i);
+  if (prefixMatch) {
+    raw = prefixMatch[1].trim();
+    changed = true;
+  }
+  const normalized = clean(raw, 4096);
+  return { key: normalized, normalized: changed };
+}
+
+function safeJwtPayload(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) return null;
+  try { return JSON.parse(base64urlBuffer(parts[1]).toString('utf8')); }
+  catch (_) { return null; }
+}
+
+function serviceKeyKind(key) {
+  const value = String(key || '');
+  if (!value) return 'missing';
+  if (/^sb_secret_/i.test(value)) return 'supabase_secret_key';
+  if (/^sb_publishable_/i.test(value)) return 'publishable_key_wrong_for_server';
+  const payload = safeJwtPayload(value);
+  if (payload && clean(payload.role, 80)) return 'legacy_jwt_' + clean(payload.role, 80).toLowerCase();
+  if (value.split('.').length === 3) return 'jwt_unreadable';
+  return 'unknown_key_format';
+}
+
+function safeServiceKeyDiagnostics(cfg) {
+  const key = cfg && cfg.serviceKey || '';
+  const payload = safeJwtPayload(key) || {};
+  const urlProjectRef = storageUrlProjectRef(cfg && cfg.url || '');
+  const jwtProjectRef = clean(payload.ref, 80).toLowerCase();
+  const jwtRole = clean(payload.role, 80).toLowerCase();
+  const pair = urlProjectRef && jwtProjectRef
+    ? (urlProjectRef === jwtProjectRef ? 'url_and_jwt_key_ref_match' : 'url_and_jwt_key_ref_mismatch')
+    : (urlProjectRef ? 'url_ref_known_key_ref_not_decodable' : 'url_ref_not_decodable');
+  return {
+    storageUrlSource: clean(cfg && cfg.storageUrlSource, 80) || null,
+    storageKeySource: clean(cfg && cfg.serviceKeySource, 80) || null,
+    storageProjectRef: urlProjectRef || null,
+    storageKeyKind: serviceKeyKind(key),
+    storageKeyNormalized: Boolean(cfg && cfg.serviceKeyNormalized),
+    jwtRole: jwtRole || null,
+    jwtProjectRef: jwtProjectRef || null,
+    keyPairCheck: pair,
+    secretsIncluded: false
+  };
+}
+
 function config() {
   // Core Link Lite uses an explicit URL/key pair when dedicated values are
   // present. This prevents a valid Core Link URL from being combined with a
   // server key belonging to an unrelated legacy Supabase project. Browser
   // anon/public keys are never used. Shared server credentials remain strict
   // fallbacks only when no dedicated Core Link key has been configured.
-  const configuredStorageUrl = clean(
-    process.env.CORE_LINK_LITE_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    '',
-    500
-  );
+  let storageUrlSource = 'missing';
+  let configuredStorageUrlRaw = '';
+  if (process.env.CORE_LINK_LITE_SUPABASE_URL) {
+    storageUrlSource = 'CORE_LINK_LITE_SUPABASE_URL';
+    configuredStorageUrlRaw = process.env.CORE_LINK_LITE_SUPABASE_URL;
+  } else if (process.env.SUPABASE_URL) {
+    storageUrlSource = 'SUPABASE_URL';
+    configuredStorageUrlRaw = process.env.SUPABASE_URL;
+  }
+  const configuredStorageUrl = clean(configuredStorageUrlRaw, 500);
   const url = normalizeSupabaseUrl(configuredStorageUrl);
-  const serviceKey = clean(
-    process.env.CORE_LINK_LITE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SECRET_KEY ||
-    '',
-    4096
-  );
+
+  let serviceKeySource = 'missing';
+  let serviceKeyRaw = '';
+  if (process.env.CORE_LINK_LITE_SERVICE_ROLE_KEY) {
+    serviceKeySource = 'CORE_LINK_LITE_SERVICE_ROLE_KEY';
+    serviceKeyRaw = process.env.CORE_LINK_LITE_SERVICE_ROLE_KEY;
+  } else if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    serviceKeySource = 'SUPABASE_SERVICE_ROLE_KEY';
+    serviceKeyRaw = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  } else if (process.env.SUPABASE_SECRET_KEY) {
+    serviceKeySource = 'SUPABASE_SECRET_KEY';
+    serviceKeyRaw = process.env.SUPABASE_SECRET_KEY;
+  }
+  const normalizedServiceKey = normalizeSupabaseServiceKey(serviceKeyRaw);
+  const serviceKey = normalizedServiceKey.key;
   const adminsByEmail = new Set(listEnv('CORE_LINK_LITE_ADMIN_EMAILS'));
   const adminsByUserId = new Set(listEnv('CORE_LINK_LITE_ADMIN_USER_IDS'));
   const explicitEnabled = String(process.env.CORE_LINK_LITE_ENABLED || '').trim().toLowerCase();
@@ -200,7 +283,10 @@ function config() {
     storageUrlValid: Boolean(url),
     administratorAllowListConfigured: Boolean(adminsByEmail.size || adminsByUserId.size),
     url,
+    storageUrlSource,
     serviceKey,
+    serviceKeySource,
+    serviceKeyNormalized: normalizedServiceKey.normalized,
     adminsByEmail,
     adminsByUserId,
     inboundSecrets: objectEnv('CORE_LINK_LITE_INBOUND_SECRETS_JSON'),
@@ -444,7 +530,7 @@ function storageClient(cfg) {
       },
       global: {
         fetch: nodeFetch,
-        headers: { 'X-Client-Info': 'igdc-core-link-lite/1.1.1' }
+        headers: { 'X-Client-Info': 'igdc-core-link-lite/1.1.3' }
       }
     });
   } catch (error) {
@@ -1068,7 +1154,9 @@ function diagnosticBase(cfg) {
       readOnly: true,
       endpointTestsExecuted: false
     },
-    configuration: publicConfigurationSummary(cfg),
+    configuration: Object.assign(publicConfigurationSummary(cfg), {
+      storageConnection: safeServiceKeyDiagnostics(cfg)
+    }),
     safety: {
       externalDataIsStoredOnlyInCoreLinkLite: true,
       automaticFrontOrEnginePublishing: false,
@@ -1269,7 +1357,16 @@ async function diagnostic(cfg, event) {
     } else if (report.storage.reason === 'core_link_lite_storage_transport_failed') {
       report.warnings.push('Core Link Lite 전용 저장소 연결 요청이 전송 단계에서 실패했습니다. 이 JSON의 storage.transport 값은 오류 종류만 표시하며 URL·키·자료 내용은 포함하지 않습니다.');
     } else if (report.storage.response && report.storage.response.category === 'api_key_rejected') {
-      report.warnings.push('Supabase가 서버 키를 거부했습니다. 기존 Netlify의 SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_SECRET_KEY가 현재 SUPABASE_URL과 같은 Supabase 프로젝트의 서버용 키인지 확인해야 합니다. Core Link Lite는 anon/public key를 사용하지 않습니다. 키 값은 이 JSON에 포함되지 않습니다.');
+      const keyInfo = report.configuration && report.configuration.storageConnection || {};
+      if (keyInfo.keyPairCheck === 'url_and_jwt_key_ref_mismatch') {
+        report.warnings.push('Supabase가 Core Link Lite 전용 키를 거부했습니다. 진단상 URL의 프로젝트 ref와 JWT 키의 프로젝트 ref가 서로 다릅니다. CORE_LINK_LITE_SUPABASE_URL과 CORE_LINK_LITE_SERVICE_ROLE_KEY를 같은 Supabase 프로젝트 값으로 맞춰야 합니다. 키 값은 이 JSON에 포함되지 않습니다.');
+      } else if (keyInfo.storageKeyKind === 'publishable_key_wrong_for_server') {
+        report.warnings.push('Supabase가 Core Link Lite 전용 키를 거부했습니다. 현재 키 형식이 서버용 service_role/secret key가 아니라 publishable key로 보입니다. 키 값은 이 JSON에 포함되지 않습니다.');
+      } else if (keyInfo.jwtRole && keyInfo.jwtRole !== 'service_role') {
+        report.warnings.push('Supabase가 Core Link Lite 전용 키를 거부했습니다. 현재 JWT role이 service_role이 아닙니다. CORE_LINK_LITE_SERVICE_ROLE_KEY에는 서버용 service_role 또는 secret key만 넣어야 합니다. 키 값은 이 JSON에 포함되지 않습니다.');
+      } else {
+        report.warnings.push('Supabase가 Core Link Lite 전용 키를 거부했습니다. configuration.storageConnection의 storageKeySource, storageKeyKind, keyPairCheck를 기준으로 전용 URL과 전용 서버 키의 프로젝트/활성 상태를 확인해야 합니다. 키 값은 이 JSON에 포함되지 않습니다.');
+      }
     } else if (report.storage.response && report.storage.response.category === 'request_forbidden') {
       report.warnings.push('Supabase가 전용 저장소 요청을 거부했습니다. 서버 키·프로젝트 일치 또는 API 접근 정책을 확인해야 합니다. 키 값과 요청 내용은 이 JSON에 포함되지 않습니다.');
     } else if (report.storage.response && report.storage.response.category === 'schema_or_api_route_unavailable') {
