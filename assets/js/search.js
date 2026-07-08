@@ -4533,6 +4533,26 @@ function displayGroupOfItem(it){
       }
     }
 
+    function routeSummaryForItemClient(it){
+      it = it && typeof it === 'object' ? it : {};
+      const sourceType = String(it.sourceType || '').toLowerCase();
+      const generatedBy = String(it.generatedBy || '').toLowerCase();
+      if(sourceType !== 'provider-lane-window' && generatedBy.indexOf('provider-lane') < 0 && sourceType !== 'official-authority' && generatedBy.indexOf('local-authority') < 0) return '';
+      const title = compactCardTextClient(it.title || '');
+      const q = compactCardTextClient((input && input.value) || lastQuery || '').trim();
+      const route = compactCardTextClient([it.route, it.provider, it.source]).trim();
+      const type = normalizeSearchType(it.searchCategory || it.type || it.mediaType || activeType || 'web');
+      const subject = q ? '“' + q + '” 관련 ' : '';
+      if(sourceType === 'official-authority' || generatedBy.indexOf('local-authority') >= 0) return subject + '공식 행정, 공공 데이터, 지역 정보를 확인할 수 있는 주요 기관 카드입니다.';
+      if(type === 'image') return subject + '사진, 갤러리, 이미지 후보를 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
+      if(type === 'video') return subject + '영상, 브이로그, 현장 스냅샷 후보를 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
+      if(type === 'news') return subject + '최신 보도, 지역 소식, 이슈 흐름을 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
+      if(type === 'map' || type === 'tour') return subject + '위치, 관광, 교통, 방문 정보를 확인하는 지역 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
+      if(type === 'blog' || type === 'cafe' || type === 'sns') return subject + '후기, 커뮤니티, 공개 소셜 반응을 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
+      if(type === 'knowledge') return subject + '백과, 지식, 자료형 정보를 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : '');
+      return subject + '웹문서와 관련 페이지를 확인하는 검색 경로입니다.' + (route ? ' ' + route + ' 통로로 연결됩니다.' : (title ? ' ' + title + ' 항목입니다.' : ''));
+    }
+
     function descriptionForItemClient(it){
       const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
@@ -4631,7 +4651,8 @@ function displayGroupOfItem(it){
         if(/^(google news|bing images|bing videos|google images|naver images|naver videos)$/i.test(key)) continue;
         return text.slice(0, 620);
       }
-      return '';
+      const routeFallback = routeSummaryForItemClient(it);
+      return routeFallback ? routeFallback.slice(0, 620) : '';
     }
 
     function shouldRenderMapPreviewForItemClient(it){

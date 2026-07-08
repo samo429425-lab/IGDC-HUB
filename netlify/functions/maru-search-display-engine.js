@@ -104,11 +104,11 @@ function naturalSummary(item, query){
   const data = pickObject(item.data);
   const displayCard = pickObject(item.displayCard, item.card, item.presentation);
   const candidates = [
-    item.snippet, item.contentSnippet, item.excerpt, item.abstract, item.text, item.content, item.body, item.description, item.summary, item.displaySummary,
-    payload.snippet, payload.contentSnippet, payload.excerpt, payload.abstract, payload.text, payload.content, payload.body, payload.description, payload.summary,
-    data.snippet, data.contentSnippet, data.excerpt, data.abstract, data.text, data.content, data.body, data.description, data.summary,
-    item.metaDescription, item.ogDescription, payload.metaDescription, payload.ogDescription, data.metaDescription, data.ogDescription,
-    displayCard.body, displayCard.text, displayCard.snippet, displayCard.description, displayCard.summary
+    item.snippet, item.contentSnippet, item.excerpt, item.abstract, item.text, item.content, item.body, item.bodyText, item.lead, item.subtitle, item.overview, item.intro, item.description, item.summary, item.displaySummary, item.displayDescription,
+    payload.snippet, payload.contentSnippet, payload.excerpt, payload.abstract, payload.text, payload.content, payload.body, payload.bodyText, payload.lead, payload.subtitle, payload.overview, payload.intro, payload.description, payload.summary, payload.displaySummary,
+    data.snippet, data.contentSnippet, data.excerpt, data.abstract, data.text, data.content, data.body, data.bodyText, data.lead, data.subtitle, data.overview, data.intro, data.description, data.summary,
+    item.metaDescription, item.ogDescription, item.seoDescription, payload.metaDescription, payload.ogDescription, payload.seoDescription, data.metaDescription, data.ogDescription,
+    displayCard.body, displayCard.text, displayCard.snippet, displayCard.htmlSnippet, displayCard.description, displayCard.summary, displayCard.displaySummary, displayCard.caption
   ];
   for(const v of candidates){
     const clean = compactTextFromAny(v);
@@ -117,9 +117,31 @@ function naturalSummary(item, query){
   return '';
 }
 function fallbackDisplaySummary(item, query, group){
-  // Do not invent guide copy as card body. Search cards should show provider/body
-  // text only; when no body exists, search.js renders title/source/link and waits
-  // for later enrichment instead of showing 안내문.
+  item = item && typeof item === 'object' ? item : {};
+  const q = compact(query || '');
+  const sourceType = low(item.sourceType);
+  const generatedBy = low(item.generatedBy);
+  const route = compact(firstNonEmpty(item.route, item.provider, item.source));
+  const title = compact(firstNonEmpty(item.title, item.name));
+  const g = normalizeGroup(group || groupOfItem(item));
+  const subject = q ? `“${q}” 관련` : '관련';
+
+  // Only route/window cards get a generated route explanation.  Normal provider
+  // result cards still require real snippets/body from upstream.
+  if(sourceType === 'provider-lane-window' || generatedBy.indexOf('provider-lane') >= 0){
+    if(g === 'image') return `${subject} 사진, 갤러리, 이미지 후보를 확인하는 검색 경로입니다. ${route || title} 통로로 연결됩니다.`;
+    if(g === 'video' || g === 'media') return `${subject} 영상, 브이로그, 현장 스냅샷 후보를 확인하는 검색 경로입니다. ${route || title} 통로로 연결됩니다.`;
+    if(g === 'news') return `${subject} 최신 보도, 지역 소식, 이슈 흐름을 확인하는 검색 경로입니다. ${route || title} 통로로 연결됩니다.`;
+    if(g === 'local_tour') return `${subject} 위치, 관광, 교통, 방문 정보를 확인하는 지역 검색 경로입니다. ${route || title} 통로로 연결됩니다.`;
+    if(g === 'blog' || g === 'cafe' || g === 'community' || g === 'social') return `${subject} 후기, 커뮤니티, 공개 소셜 반응을 확인하는 검색 경로입니다. ${route || title} 통로로 연결됩니다.`;
+    if(g === 'authority' || g === 'public_data') return `${subject} 공식 기관, 공공자료, 정책·행정 정보를 확인하는 검색 경로입니다. ${route || title} 통로로 연결됩니다.`;
+    return `${subject} 웹문서와 관련 페이지를 확인하는 검색 경로입니다. ${route || title} 통로로 연결됩니다.`;
+  }
+
+  if(sourceType === 'official-authority' || generatedBy.indexOf('local-authority') >= 0){
+    return `${subject} 공식 행정, 공공 데이터, 지역 정보를 확인할 수 있는 주요 기관 카드입니다.`;
+  }
+
   return '';
 }
 function collectDisplayImages(item){
