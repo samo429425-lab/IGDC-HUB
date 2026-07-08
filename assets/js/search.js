@@ -1,6 +1,6 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
 // PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
-// PATCH: search-owned proxy viewer + continuous 4,500 intake + 30-language search UI labels
+// PATCH: search-owned proxy viewer + bounded 2,000 intake + real-content card media/body display + 30-language search UI labels
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -46,7 +46,7 @@ ready(function () {
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
-    const MAX_PROGRESSIVE_PAGER_PAGES = 180;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 80;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
@@ -1852,18 +1852,17 @@ function adaptiveSearchTarget(q, type){
   const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|스포츠|금융|도서|쇼핑|웹툰|공공|학술|논문|사이트|홈페이지|global|world|news|tour|travel|technology|market|sports|finance|book|shopping|webtoon)/i;
   const narrowHints = /(카페|맛집|식당|주소|전화|위치|지도|병원|약국|학교|교회|상호|주차|near me|cafe|restaurant|address|map)/i;
 
-  // Search.js remains only a receiver/container. This target is the amount of
-  // Sanmaru/MaruSearch supply the UI is ready to cache for search pages. It is
-  // separate from the 4,500~5,000 Search Bank Snapshot supply used by front pages.
-  // Broad searches may keep filling up to 4,500 candidates, while first paint
-  // still renders only the current viewport and uses continuous intake for the rest.
-  let target = 3200;
-  if (safeType === 'all') target = 4500;
-  if (safeType !== 'all') target = 2400;
-  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 2400);
-  if (words.length <= 1 || broadHints.test(text)) target = 4500;
-  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 3000);
-  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(2200, Math.min(target, 3200));
+  // Search.js remains only a receiver/container. Keep the first 300-result
+  // preload window, but cap the search-page intake around 1,500~2,000 so the
+  // browser is not asked to cache/render the old 4,500-result window. Front-page
+  // SearchBank/Sanmaru supply is separate and is not changed here.
+  let target = 1500;
+  if (safeType === 'all') target = 2000;
+  if (safeType !== 'all') target = 1500;
+  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 1500);
+  if (words.length <= 1 || broadHints.test(text)) target = Math.max(target, 2000);
+  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 2000);
+  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(1500, Math.min(target, 2000));
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
@@ -2807,33 +2806,74 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const raw = []
         .concat(displayCard.thumbnail ? [displayCard.thumbnail] : [])
+        .concat(displayCard.thumb ? [displayCard.thumb] : [])
         .concat(displayCard.image ? [displayCard.image] : [])
+        .concat(displayCard.imageUrl ? [displayCard.imageUrl] : [])
+        .concat(displayCard.cardImage ? [displayCard.cardImage] : [])
+        .concat(displayCard.poster ? [displayCard.poster] : [])
+        .concat(displayCard.videoPoster ? [displayCard.videoPoster] : [])
+        .concat(displayCard.videoThumbnail ? [displayCard.videoThumbnail] : [])
         .concat(Array.isArray(displayCard.imageSet) ? displayCard.imageSet : [])
+        .concat(displayCard.preview && displayCard.preview.poster ? [displayCard.preview.poster] : [])
         .concat(displayCard.preview && displayCard.preview.thumbnail ? [displayCard.preview.thumbnail] : [])
         .concat(displayCard.preview && displayCard.preview.image ? [displayCard.preview.image] : [])
+        .concat(displayCard.preview && displayCard.preview.original ? [displayCard.preview.original] : [])
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
+        .concat(it && it.imageUrl ? [it.imageUrl] : [])
+        .concat(it && it.image_url ? [it.image_url] : [])
+        .concat(it && it.cardImage ? [it.cardImage] : [])
         .concat(it && it.poster ? [it.poster] : [])
         .concat(it && it.cover ? [it.cover] : [])
         .concat(it && it.og_image ? [it.og_image] : [])
         .concat(it && it.ogImage ? [it.ogImage] : [])
+        .concat(it && it.originalImage ? [it.originalImage] : [])
+        .concat(it && it.fullImage ? [it.fullImage] : [])
+        .concat(it && it.imageOriginal ? [it.imageOriginal] : [])
+        .concat(it && it.viewerImage ? [it.viewerImage] : [])
+        .concat(it && it.openImageUrl ? [it.openImageUrl] : [])
+        .concat(it && it.contentUrl ? [it.contentUrl] : [])
         .concat(payload.thumbnail ? [payload.thumbnail] : [])
         .concat(payload.thumb ? [payload.thumb] : [])
         .concat(payload.image ? [payload.image] : [])
+        .concat(payload.imageUrl ? [payload.imageUrl] : [])
         .concat(payload.image_url ? [payload.image_url] : [])
+        .concat(payload.cardImage ? [payload.cardImage] : [])
         .concat(payload.og_image ? [payload.og_image] : [])
         .concat(payload.ogImage ? [payload.ogImage] : [])
         .concat(payload.poster ? [payload.poster] : [])
+        .concat(payload.videoPoster ? [payload.videoPoster] : [])
+        .concat(payload.videoThumbnail ? [payload.videoThumbnail] : [])
         .concat(payload.cover ? [payload.cover] : [])
+        .concat(payload.originalImage ? [payload.originalImage] : [])
+        .concat(payload.fullImage ? [payload.fullImage] : [])
+        .concat(payload.imageOriginal ? [payload.imageOriginal] : [])
+        .concat(payload.viewerImage ? [payload.viewerImage] : [])
+        .concat(payload.openImageUrl ? [payload.openImageUrl] : [])
+        .concat(payload.contentUrl ? [payload.contentUrl] : [])
         .concat(data.thumbnail ? [data.thumbnail] : [])
         .concat(data.thumb ? [data.thumb] : [])
         .concat(data.image ? [data.image] : [])
+        .concat(data.imageUrl ? [data.imageUrl] : [])
+        .concat(data.image_url ? [data.image_url] : [])
+        .concat(data.cardImage ? [data.cardImage] : [])
         .concat(data.og_image ? [data.og_image] : [])
+        .concat(data.ogImage ? [data.ogImage] : [])
         .concat(data.poster ? [data.poster] : [])
+        .concat(data.videoPoster ? [data.videoPoster] : [])
+        .concat(data.videoThumbnail ? [data.videoThumbnail] : [])
+        .concat(data.originalImage ? [data.originalImage] : [])
+        .concat(data.fullImage ? [data.fullImage] : [])
+        .concat(data.imageOriginal ? [data.imageOriginal] : [])
+        .concat(data.viewerImage ? [data.viewerImage] : [])
+        .concat(data.openImageUrl ? [data.openImageUrl] : [])
+        .concat(data.contentUrl ? [data.contentUrl] : [])
         .concat(preview.poster ? [preview.poster] : [])
         .concat(preview.thumbnail ? [preview.thumbnail] : [])
+        .concat(preview.thumb ? [preview.thumb] : [])
         .concat(preview.image ? [preview.image] : [])
+        .concat(preview.original ? [preview.original] : [])
         .concat(Array.isArray(it && it.imageSet) ? it.imageSet : [])
         .concat(Array.isArray(payload.imageSet) ? payload.imageSet : [])
         .concat(Array.isArray(data.imageSet) ? data.imageSet : []);
@@ -3856,7 +3896,8 @@ function displayGroupOfItem(it){
       if(typeof v === 'object'){
         return compactCardTextClient([
           v.summary, v.snippet, v.description, v.contentSnippet, v.content, v.text,
-          v.abstract, v.excerpt, v.intro, v.body, v.caption
+          v.abstract, v.excerpt, v.intro, v.lead, v.subtitle, v.body, v.bodyText,
+          v.article, v.articleBody, v.mainText, v.plainText, v.caption
         ]);
       }
       return '';
@@ -4520,6 +4561,10 @@ function displayGroupOfItem(it){
         it && it.abstract,
         it && it.content,
         it && it.text,
+        it && it.article,
+        it && it.articleBody,
+        it && it.mainText,
+        it && it.plainText,
         it && it.body,
         it && it.bodyText,
         it && it.lead,
@@ -4533,6 +4578,10 @@ function displayGroupOfItem(it){
         payload.abstract,
         payload.content,
         payload.text,
+        payload.article,
+        payload.articleBody,
+        payload.mainText,
+        payload.plainText,
         payload.body,
         payload.bodyText,
         payload.lead,
@@ -4545,6 +4594,10 @@ function displayGroupOfItem(it){
         data.abstract,
         data.content,
         data.text,
+        data.article,
+        data.articleBody,
+        data.mainText,
+        data.plainText,
         data.body,
         data.bodyText,
         data.lead,
@@ -4590,6 +4643,15 @@ function displayGroupOfItem(it){
         return text.slice(0, 620);
       }
       return '';
+    }
+
+    function searchCardDescriptionLineClampClient(it){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const explicit = parseInt(displayCard.lineClamp, 10);
+      if(explicit > 0) return Math.max(3, Math.min(6, explicit));
+      const hasMedia = collectNaturalImages(it).length > 0 || isYoutubeLikeItemClient(it) || !!getPlayableMediaInfo(it, (it && (it.url || it.link)) || '');
+      const hasPlace = !!(it && (it.placeInfo || it.mapQuery || it.__maruAllowMapPreview));
+      return hasMedia || hasPlace ? 5 : 4;
     }
 
     function shouldRenderMapPreviewForItemClient(it){
@@ -4703,8 +4765,7 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
-        const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(6, cardLineClamp) : 6);
+        d.style.webkitLineClamp = String(searchCardDescriptionLineClampClient(it));
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -4769,7 +4830,15 @@ if (it.riskLabel === '⚠️ high-risk') {
           img.src = src;
           img.loading = 'lazy';
           img.alt = '';
-          img.onerror = () => img.remove();
+          img.onerror = () => {
+            img.remove();
+            if(!mediaWrap.querySelector('img')){
+              mediaWrap.remove();
+              delete body.dataset.mediaCount;
+              delete body.dataset.mediaKind;
+              body.style.minHeight = '';
+            }
+          };
           mediaWrap.appendChild(img);
         });
 
