@@ -1,6 +1,6 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
 // PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
-// PATCH: search-owned proxy viewer + bounded 2,000 intake + 30-language search UI labels
+// PATCH: search-owned proxy viewer + continuous 4,500 intake + 30-language search UI labels
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -46,7 +46,7 @@ ready(function () {
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
-    const MAX_PROGRESSIVE_PAGER_PAGES = 80;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 180;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
@@ -1855,7 +1855,7 @@ function adaptiveSearchTarget(q, type){
   // Search.js remains only a receiver/container. This target is the amount of
   // Sanmaru/MaruSearch supply the UI is ready to cache for search pages. It is
   // separate from the 4,500~5,000 Search Bank Snapshot supply used by front pages.
-  // Broad searches may keep filling up to the bounded search-page candidate pool, while first paint
+  // Broad searches may keep filling up to 4,500 candidates, while first paint
   // still renders only the current viewport and uses continuous intake for the rest.
   let target = 3200;
   if (safeType === 'all') target = 4500;
@@ -2814,15 +2814,6 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
-        .concat(it && it.imageUrl ? [it.imageUrl] : [])
-        .concat(it && it.image_url ? [it.image_url] : [])
-        .concat(it && it.cardImage ? [it.cardImage] : [])
-        .concat(it && it.originalImage ? [it.originalImage] : [])
-        .concat(it && it.fullImage ? [it.fullImage] : [])
-        .concat(it && it.imageOriginal ? [it.imageOriginal] : [])
-        .concat(it && it.viewerImage ? [it.viewerImage] : [])
-        .concat(it && it.openImageUrl ? [it.openImageUrl] : [])
-        .concat(it && it.contentUrl ? [it.contentUrl] : [])
         .concat(it && it.poster ? [it.poster] : [])
         .concat(it && it.cover ? [it.cover] : [])
         .concat(it && it.og_image ? [it.og_image] : [])
@@ -2830,15 +2821,7 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(payload.thumbnail ? [payload.thumbnail] : [])
         .concat(payload.thumb ? [payload.thumb] : [])
         .concat(payload.image ? [payload.image] : [])
-        .concat(payload.imageUrl ? [payload.imageUrl] : [])
         .concat(payload.image_url ? [payload.image_url] : [])
-        .concat(payload.cardImage ? [payload.cardImage] : [])
-        .concat(payload.originalImage ? [payload.originalImage] : [])
-        .concat(payload.fullImage ? [payload.fullImage] : [])
-        .concat(payload.imageOriginal ? [payload.imageOriginal] : [])
-        .concat(payload.viewerImage ? [payload.viewerImage] : [])
-        .concat(payload.openImageUrl ? [payload.openImageUrl] : [])
-        .concat(payload.contentUrl ? [payload.contentUrl] : [])
         .concat(payload.og_image ? [payload.og_image] : [])
         .concat(payload.ogImage ? [payload.ogImage] : [])
         .concat(payload.poster ? [payload.poster] : [])
@@ -2846,15 +2829,6 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(data.thumbnail ? [data.thumbnail] : [])
         .concat(data.thumb ? [data.thumb] : [])
         .concat(data.image ? [data.image] : [])
-        .concat(data.imageUrl ? [data.imageUrl] : [])
-        .concat(data.image_url ? [data.image_url] : [])
-        .concat(data.cardImage ? [data.cardImage] : [])
-        .concat(data.originalImage ? [data.originalImage] : [])
-        .concat(data.fullImage ? [data.fullImage] : [])
-        .concat(data.imageOriginal ? [data.imageOriginal] : [])
-        .concat(data.viewerImage ? [data.viewerImage] : [])
-        .concat(data.openImageUrl ? [data.openImageUrl] : [])
-        .concat(data.contentUrl ? [data.contentUrl] : [])
         .concat(data.og_image ? [data.og_image] : [])
         .concat(data.poster ? [data.poster] : [])
         .concat(preview.poster ? [preview.poster] : [])
@@ -3343,11 +3317,15 @@ function displayGroupOfItem(it){
     function renderGroupedSlice(slice, page){
       const groups = (Array.isArray(slice) && slice.length && slice[0] && Array.isArray(slice[0].items) && slice[0].group) ? slice : groupSliceForDisplay(slice);
       groups.forEach(groupInfo => {
-        groupInfo.items = (Array.isArray(groupInfo.items) ? groupInfo.items : []).filter(hasSearchCardRealContentClient);
-        groupInfo.items = diversifyGroupPreviewItems(groupInfo.group, groupInfo.items).filter(hasSearchCardRealContentClient);
+        groupInfo.items = (Array.isArray(groupInfo.items) ? groupInfo.items : []).filter(it => {
+          if(!isSyntheticProviderGuideCardClient(it)) return true;
+          // News provider shortcuts are not news cards.  Image/video groups,
+          // however, must stay visible as gallery lanes even while actual
+          // thumbnails are still being supplied.
+          return !/^(news)$/.test(String(groupInfo.group || ''));
+        });
+        groupInfo.items = diversifyGroupPreviewItems(groupInfo.group, groupInfo.items);
         if(!groupInfo.items.length) return;
-        if((groupInfo.group === 'image' || groupInfo.group === 'media') && !visualGalleryItemsClient(groupInfo.items).length) return;
-        if(groupInfo.group === 'video' && !videoSnapshotItemsClient(groupInfo.items).length) return;
 
         const section = document.createElement('section');
         section.className = 'maru-display-section';
@@ -3376,8 +3354,7 @@ function displayGroupOfItem(it){
         body.className = 'maru-display-section-body';
 
         const previewLimit = Math.max(1, parseInt(groupInfo.previewLimit, 10) || displayGroupPreviewLimit(groupInfo.group, groupInfo.items[0]));
-        const previewItems = (Array.isArray(groupInfo.previewItems) ? groupInfo.previewItems : groupInfo.items.slice(0, previewLimit)).filter(hasSearchCardRealContentClient);
-        if(!previewItems.length) return;
+        const previewItems = Array.isArray(groupInfo.previewItems) ? groupInfo.previewItems : groupInfo.items.slice(0, previewLimit);
         let hiddenItems = Array.isArray(groupInfo.hiddenItems) ? groupInfo.hiddenItems : null;
         if(!hiddenItems && normalizeSearchType(activeType) === 'all'){
           const fullGroup = diversifyGroupPreviewItems(groupInfo.group, groupSliceForDisplay(allItems).find(g => g.group === groupInfo.group)?.items || []);
@@ -3388,7 +3365,7 @@ function displayGroupOfItem(it){
             return !key || !visibleKeys.has(key);
           });
         }
-        hiddenItems = (Array.isArray(hiddenItems) ? hiddenItems : groupInfo.items.slice(previewItems.length)).filter(hasSearchCardRealContentClient);
+        hiddenItems = Array.isArray(hiddenItems) ? hiddenItems : groupInfo.items.slice(previewItems.length);
         let hiddenMounted = false;
         let hiddenWrap = null;
 
@@ -3399,14 +3376,14 @@ function displayGroupOfItem(it){
           if(gallerySource.length) {
             renderImageGalleryInto(gallerySource.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, false)), body, Math.max(previewLimit, 12));
           } else {
-            return;
+            renderVisualPendingPlaceholderClient(body, 8);
           }
         } else if (videoSection) {
           const videoSource = videoSnapshotItemsClient(previewItems);
           if(videoSource.length) {
             videoSource.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
           } else {
-            return;
+            renderVisualPendingPlaceholderClient(body, 6);
           }
         } else {
           previewItems.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
@@ -3435,7 +3412,7 @@ function displayGroupOfItem(it){
             if(!hiddenMounted){
               hiddenWrap = document.createElement('div');
               hiddenWrap.className = 'maru-display-hidden-wrap';
-              const hiddenSlice = hiddenItems.slice(0, displayGroupModuleTotalCap(groupInfo.group)).filter(hasSearchCardRealContentClient);
+              const hiddenSlice = hiddenItems.slice(0, displayGroupModuleTotalCap(groupInfo.group)).filter(it => !isSyntheticProviderGuideCardClient(it));
               if (groupInfo.group === 'image' || groupInfo.group === 'media') {
                 const hiddenVisuals = visualGalleryItemsClient(hiddenSlice);
                 if(hiddenVisuals.length) renderImageGalleryInto(hiddenVisuals.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, true)), hiddenWrap, hiddenVisuals.length);
@@ -3878,13 +3855,8 @@ function displayGroupOfItem(it){
       }
       if(typeof v === 'object'){
         return compactCardTextClient([
-          v.summary, v.snippet, v.description, v.desc, v.contentSnippet,
-          v.content, v.text, v.body, v.bodyText, v.lead, v.subtitle,
-          v.abstract, v.excerpt, v.intro, v.overview, v.caption,
-          v.metaDescription, v.ogDescription,
-          v.displaySummary, v.displayDescription,
-          v.displayCard, v.payload, v.data, v.meta, v.raw, v.result, v.item,
-          v.page, v.document, v.article
+          v.summary, v.snippet, v.description, v.contentSnippet, v.content, v.text,
+          v.abstract, v.excerpt, v.intro, v.body, v.caption
         ]);
       }
       return '';
@@ -3910,31 +3882,9 @@ function displayGroupOfItem(it){
       ]);
       const url = String(it.url || it.link || it.openUrl || payload.url || payload.link || '').toLowerCase();
       const source = String(it.source || it.provider || it.channel || payload.source || '').toLowerCase();
-      const routeText = String([
-        it.generatedBy, it.sourceType, it.route, it.provider,
-        payload.providerLane, payload.providerUrl,
-        Array.isArray(it.tags) ? it.tags.join(' ') : ''
-      ].filter(Boolean).join(' ')).toLowerCase();
-
       const shortcutTitle = /(google news|bing images|bing videos|google images|naver images|naver videos|통합 검색|이미지 검색|동영상 검색|뉴스 검색)/i.test(title);
-      const providerShortcut = /(google\.com|bing\.com|naver\.com|news\.google\.com|search\.naver\.com)/i.test(url + ' ' + source) && shortcutTitle;
-      const providerLaneOnly = /provider[-_ ]?lane|provider-window|sanmaru-fast-provider-lane|passthrough/.test(routeText + ' ' + source);
-      return (shortcutTitle || providerShortcut || providerLaneOnly) && (!desc || isGeneratedGuideTextClient(desc));
-    }
-
-    function shouldSuppressSearchCardClient(it){
-      if(!it || typeof it !== 'object') return true;
-      const desc = descriptionForItemClient(it);
-      const images = dedupeImageVariantsClient(collectNaturalImages(it));
-      const playable = getPlayableMediaInfo(it, String((it && (it.url || it.link || it.videoUrl || it.embedUrl)) || ''));
-      const place = (it.placeInfo && typeof it.placeInfo === 'object') ? it.placeInfo : {};
-      const hasPlace = !!compactCardTextClient([place.address, it.address, place.summary, place.description]);
-      if(desc || images.length || playable || hasPlace) return false;
-      return isSyntheticProviderGuideCardClient(it);
-    }
-
-    function hasSearchCardRealContentClient(it){
-      return !shouldSuppressSearchCardClient(it);
+      const providerShortcut = /(google\.com|bing\.com|naver\.com|news\.google\.com)/i.test(url + ' ' + source) && shortcutTitle;
+      return (shortcutTitle || providerShortcut) && (!desc || isGeneratedGuideTextClient(desc));
     }
 
     function hasRenderableVisualClient(it){
@@ -4574,13 +4524,9 @@ function displayGroupOfItem(it){
         it && it.bodyText,
         it && it.lead,
         it && it.subtitle,
-        it && it.overview,
-        it && it.intro,
         it && it.description,
-        it && it.desc,
         it && it.summary,
         it && it.displaySummary,
-        it && it.displayDescription,
         payload.snippet,
         payload.contentSnippet,
         payload.excerpt,
@@ -4627,13 +4573,6 @@ function displayGroupOfItem(it){
         data.desc,
         data.metaDescription,
         data.ogDescription,
-        compactCardTextClient(it && it.meta),
-        compactCardTextClient(it && it.raw),
-        compactCardTextClient(it && it.result),
-        compactCardTextClient(it && it.article),
-        compactCardTextClient(payload.raw),
-        compactCardTextClient(payload.result),
-        compactCardTextClient(payload.article),
         preview.summary,
         preview.description,
         preview.caption
@@ -4664,7 +4603,6 @@ function displayGroupOfItem(it){
     }
 
     function renderItem(it, mountTarget){
-      if(shouldSuppressSearchCardClient(it)) return null;
       const url = it.url || it.link || '';
       const domain = domainOf(url);
 
@@ -4814,8 +4752,11 @@ if (it.riskLabel === '⚠️ high-risk') {
         mediaWrap.dataset.kind = mediaKind;
         body.dataset.mediaCount = String(mediaCount);
         body.dataset.mediaKind = mediaKind;
-        // Keep the card height natural.  Only real loaded media should expand the card.
-        body.style.minHeight = '';
+        body.style.minHeight =
+          mediaKind === 'poster' ? '220px' :
+          mediaCount >= 3 ? '214px' :
+          mediaCount === 2 ? '164px' :
+          '176px';
 
         mediaWrap.addEventListener('click', (e) => {
           e.preventDefault();
@@ -4828,15 +4769,7 @@ if (it.riskLabel === '⚠️ high-risk') {
           img.src = src;
           img.loading = 'lazy';
           img.alt = '';
-          img.onerror = () => {
-            img.remove();
-            if(!mediaWrap.querySelector('img')){
-              mediaWrap.remove();
-              body.style.minHeight = '';
-              delete body.dataset.mediaCount;
-              delete body.dataset.mediaKind;
-            }
-          };
+          img.onerror = () => img.remove();
           mediaWrap.appendChild(img);
         });
 
@@ -5295,7 +5228,7 @@ if (it.riskLabel === '⚠️ high-risk') {
           return;
         }
       }
-      const slice = visibleItemsForPage(page).filter(entry => isDisplayGroupModule(entry) || hasSearchCardRealContentClient(entry));
+      const slice = visibleItemsForPage(page);
       const start = (page - 1) * PAGE_SIZE;
 
       if (!slice.length && normalizeSearchType(activeType) === 'all') {
