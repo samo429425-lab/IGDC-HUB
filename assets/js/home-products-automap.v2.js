@@ -435,9 +435,8 @@ function bindIncremental(target, items) {
 
   target.list.innerHTML = '';
 
-  // 🔥 핵심: 초기 한번에 많이 뿌림
+  // 초기 렌더링은 1회만 실행한다. 모바일 전체 렌더링 안전판은 그대로 유지한다.
   renderMore();
-  renderMore();  // 2번 실행 → 최소 10~40개 확보
 
   // 🔥 모바일 대응: 강제 전체 렌더
   if (window.innerWidth <= 768) {
