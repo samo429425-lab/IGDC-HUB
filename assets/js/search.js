@@ -3220,7 +3220,6 @@ function displayGroupOfItem(it){
       const groups = new Map();
 
       (Array.isArray(slice) ? slice : []).forEach((it, idx) => {
-        if(!hasRealCardSubstanceClient(it)) return;
         const group = displayGroupOfItem(it);
         if (!groups.has(group)) {
           groups.set(group, {
@@ -3302,7 +3301,7 @@ function displayGroupOfItem(it){
       };
 
       const groups = groupSliceForDisplay(source).map(g => {
-        const items = diversifyGroupPreviewItems(g.group, (g.items || []).filter(hasRealCardSubstanceClient));
+        const items = diversifyGroupPreviewItems(g.group, g.items || []);
         return Object.assign({}, g, { items });
       });
 
@@ -3344,9 +3343,11 @@ function displayGroupOfItem(it){
     function renderGroupedSlice(slice, page){
       const groups = (Array.isArray(slice) && slice.length && slice[0] && Array.isArray(slice[0].items) && slice[0].group) ? slice : groupSliceForDisplay(slice);
       groups.forEach(groupInfo => {
-        groupInfo.items = (Array.isArray(groupInfo.items) ? groupInfo.items : []).filter(hasRealCardSubstanceClient);
-        groupInfo.items = diversifyGroupPreviewItems(groupInfo.group, groupInfo.items);
+        groupInfo.items = (Array.isArray(groupInfo.items) ? groupInfo.items : []).filter(hasSearchCardRealContentClient);
+        groupInfo.items = diversifyGroupPreviewItems(groupInfo.group, groupInfo.items).filter(hasSearchCardRealContentClient);
         if(!groupInfo.items.length) return;
+        if((groupInfo.group === 'image' || groupInfo.group === 'media') && !visualGalleryItemsClient(groupInfo.items).length) return;
+        if(groupInfo.group === 'video' && !videoSnapshotItemsClient(groupInfo.items).length) return;
 
         const section = document.createElement('section');
         section.className = 'maru-display-section';
@@ -3375,7 +3376,8 @@ function displayGroupOfItem(it){
         body.className = 'maru-display-section-body';
 
         const previewLimit = Math.max(1, parseInt(groupInfo.previewLimit, 10) || displayGroupPreviewLimit(groupInfo.group, groupInfo.items[0]));
-        const previewItems = Array.isArray(groupInfo.previewItems) ? groupInfo.previewItems : groupInfo.items.slice(0, previewLimit);
+        const previewItems = (Array.isArray(groupInfo.previewItems) ? groupInfo.previewItems : groupInfo.items.slice(0, previewLimit)).filter(hasSearchCardRealContentClient);
+        if(!previewItems.length) return;
         let hiddenItems = Array.isArray(groupInfo.hiddenItems) ? groupInfo.hiddenItems : null;
         if(!hiddenItems && normalizeSearchType(activeType) === 'all'){
           const fullGroup = diversifyGroupPreviewItems(groupInfo.group, groupSliceForDisplay(allItems).find(g => g.group === groupInfo.group)?.items || []);
@@ -3386,7 +3388,7 @@ function displayGroupOfItem(it){
             return !key || !visibleKeys.has(key);
           });
         }
-        hiddenItems = Array.isArray(hiddenItems) ? hiddenItems : groupInfo.items.slice(previewItems.length);
+        hiddenItems = (Array.isArray(hiddenItems) ? hiddenItems : groupInfo.items.slice(previewItems.length)).filter(hasSearchCardRealContentClient);
         let hiddenMounted = false;
         let hiddenWrap = null;
 
@@ -3433,7 +3435,7 @@ function displayGroupOfItem(it){
             if(!hiddenMounted){
               hiddenWrap = document.createElement('div');
               hiddenWrap.className = 'maru-display-hidden-wrap';
-              const hiddenSlice = hiddenItems.slice(0, displayGroupModuleTotalCap(groupInfo.group)).filter(it => !isSyntheticProviderGuideCardClient(it));
+              const hiddenSlice = hiddenItems.slice(0, displayGroupModuleTotalCap(groupInfo.group)).filter(hasSearchCardRealContentClient);
               if (groupInfo.group === 'image' || groupInfo.group === 'media') {
                 const hiddenVisuals = visualGalleryItemsClient(hiddenSlice);
                 if(hiddenVisuals.length) renderImageGalleryInto(hiddenVisuals.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, true)), hiddenWrap, hiddenVisuals.length);
@@ -3892,7 +3894,7 @@ function displayGroupOfItem(it){
       const text = compactCardTextClient(v);
       if(!text) return false;
       const low = text.toLowerCase();
-      return /(확인할 수 있는 결과입니다|연결되는 결과입니다|표시됩니다|함께 표시|대표 이미지가 있으면|대표 스냅샷|본문 요약이 제공|2~3줄|사진·그래픽·이미지|현장 화면·리뷰|최신 보도·이슈·기사|통합 검색 결과|검색 결과로 연결|자료를 확인할 수 있는|news 흐름|image 자료|video 자료|공식정보 경로|검색 통로 기준|관련된 페이지를 확인하는|경로입니다)/i.test(text) ||
+      return /(확인할 수 있는 결과입니다|연결되는 결과입니다|표시됩니다|함께 표시|대표 이미지가 있으면|대표 스냅샷|본문 요약이 제공|2~3줄|사진·그래픽·이미지|현장 화면·리뷰|최신 보도·이슈·기사|통합 검색 결과|검색 결과로 연결|자료를 확인할 수 있는|news 흐름|image 자료|video 자료)/i.test(text) ||
         /(google news|bing images|bing videos|naver images|naver videos|google images)/i.test(low);
     }
 
@@ -3908,42 +3910,31 @@ function displayGroupOfItem(it){
       ]);
       const url = String(it.url || it.link || it.openUrl || payload.url || payload.link || '').toLowerCase();
       const source = String(it.source || it.provider || it.channel || payload.source || '').toLowerCase();
+      const routeText = String([
+        it.generatedBy, it.sourceType, it.route, it.provider,
+        payload.providerLane, payload.providerUrl,
+        Array.isArray(it.tags) ? it.tags.join(' ') : ''
+      ].filter(Boolean).join(' ')).toLowerCase();
+
       const shortcutTitle = /(google news|bing images|bing videos|google images|naver images|naver videos|통합 검색|이미지 검색|동영상 검색|뉴스 검색)/i.test(title);
-      const providerShortcut = /(google\.com|bing\.com|naver\.com|news\.google\.com)/i.test(url + ' ' + source) && shortcutTitle;
-      return (shortcutTitle || providerShortcut) && (!desc || isGeneratedGuideTextClient(desc));
+      const providerShortcut = /(google\.com|bing\.com|naver\.com|news\.google\.com|search\.naver\.com)/i.test(url + ' ' + source) && shortcutTitle;
+      const providerLaneOnly = /provider[-_ ]?lane|provider-window|sanmaru-fast-provider-lane|passthrough/.test(routeText + ' ' + source);
+      return (shortcutTitle || providerShortcut || providerLaneOnly) && (!desc || isGeneratedGuideTextClient(desc));
     }
 
-
-    function isGeneratedRoadOnlyCardClient(it){
-      it = it && typeof it === 'object' ? it : {};
-      const payload = it.payload && typeof it.payload === 'object' ? it.payload : {};
-      const hay = String([
-        it.generatedBy, it.sourceType, it.route, it.source, it.provider,
-        payload.providerLane, payload.providerUrl, payload.sourceType, payload.generatedBy
-      ].join(' ')).toLowerCase();
-      return !!(
-        it.placeholder === true ||
-        it.passthrough === true ||
-        it.publicProviderRoad === true ||
-        it.sanmaruEmergencyDiscovery === true ||
-        /provider-lane|search-link|public-provider-road|open-discovery|emergency-discovery|direct-navigation-links/.test(hay)
-      );
-    }
-
-    function hasRealCardSubstanceClient(it){
-      it = it && typeof it === 'object' ? it : {};
-      if(isSyntheticProviderGuideCardClient(it) || isGeneratedRoadOnlyCardClient(it)) return false;
+    function shouldSuppressSearchCardClient(it){
+      if(!it || typeof it !== 'object') return true;
       const desc = descriptionForItemClient(it);
-      if(desc && desc.length >= 18 && !isGeneratedGuideTextClient(desc)) return true;
-      if(collectNaturalImages(it).length) return true;
-      const media = it.media && typeof it.media === 'object' ? it.media : {};
-      const preview = media.preview && typeof media.preview === 'object' ? media.preview : {};
-      const videoThumb = preferredYoutubeThumbClient(it);
-      const videoFile = /\.(mp4|webm|m3u8)(\?|#|$)/i.test(String([it.videoUrl, it.watchUrl, it.embedUrl, preview.videoUrl, preview.embedUrl].filter(Boolean).join(' ')));
-      if(it.videoId || videoThumb || preview.poster || preview.image || videoFile) return true;
-      const place = it.placeInfo && typeof it.placeInfo === 'object' ? it.placeInfo : {};
-      if(place.address || place.roadAddress || place.telephone || place.phone || it.address || it.telephone || it.phone) return true;
-      return false;
+      const images = dedupeImageVariantsClient(collectNaturalImages(it));
+      const playable = getPlayableMediaInfo(it, String((it && (it.url || it.link || it.videoUrl || it.embedUrl)) || ''));
+      const place = (it.placeInfo && typeof it.placeInfo === 'object') ? it.placeInfo : {};
+      const hasPlace = !!compactCardTextClient([place.address, it.address, place.summary, place.description]);
+      if(desc || images.length || playable || hasPlace) return false;
+      return isSyntheticProviderGuideCardClient(it);
+    }
+
+    function hasSearchCardRealContentClient(it){
+      return !shouldSuppressSearchCardClient(it);
     }
 
     function hasRenderableVisualClient(it){
@@ -4673,6 +4664,7 @@ function displayGroupOfItem(it){
     }
 
     function renderItem(it, mountTarget){
+      if(shouldSuppressSearchCardClient(it)) return null;
       const url = it.url || it.link || '';
       const domain = domainOf(url);
 
@@ -4774,8 +4766,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (d && d.textContent) {
         d.style.display = '-webkit-box';
         const cardLineClamp = it && it.displayCard && parseInt(it.displayCard.lineClamp, 10);
-        const visualRich = collectNaturalImages(it).length || isYoutubeLikeItemClient(it) || playableMedia;
-        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(8, cardLineClamp) : (visualRich ? 8 : 5));
+        d.style.webkitLineClamp = String(cardLineClamp > 0 ? Math.min(6, cardLineClamp) : 6);
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
@@ -4823,11 +4814,8 @@ if (it.riskLabel === '⚠️ high-risk') {
         mediaWrap.dataset.kind = mediaKind;
         body.dataset.mediaCount = String(mediaCount);
         body.dataset.mediaKind = mediaKind;
-        body.style.minHeight =
-          mediaKind === 'poster' ? '220px' :
-          mediaCount >= 3 ? '214px' :
-          mediaCount === 2 ? '164px' :
-          '176px';
+        // Keep the card height natural.  Only real loaded media should expand the card.
+        body.style.minHeight = '';
 
         mediaWrap.addEventListener('click', (e) => {
           e.preventDefault();
@@ -4840,7 +4828,15 @@ if (it.riskLabel === '⚠️ high-risk') {
           img.src = src;
           img.loading = 'lazy';
           img.alt = '';
-          img.onerror = () => img.remove();
+          img.onerror = () => {
+            img.remove();
+            if(!mediaWrap.querySelector('img')){
+              mediaWrap.remove();
+              body.style.minHeight = '';
+              delete body.dataset.mediaCount;
+              delete body.dataset.mediaKind;
+            }
+          };
           mediaWrap.appendChild(img);
         });
 
@@ -5074,7 +5070,13 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       function pushCategoryModule(g){
         if(!g || !Array.isArray(g.items) || !g.items.length) return;
-        g = Object.assign({}, g, { items: g.items.filter(hasRealCardSubstanceClient) });
+        if(/^(news)$/.test(String(g.group || ''))) {
+          g = Object.assign({}, g, { items: g.items.filter(it => !isSyntheticProviderGuideCardClient(it)) });
+        }
+        // Do not pre-filter image/video groups down to thumbnail-ready items here.
+        // The renderer will show a gallery lane with real thumbnails when they
+        // exist, or an empty gallery skeleton while the thumbnails are still
+        // arriving.  Pre-filtering here makes the entire category disappear.
         if(!g.items.length) return;
         const previewLimit = Math.max(1, displayGroupPreviewLimit(g.group, g.items[0]));
         const moduleCap = Math.max(previewLimit, displayGroupModuleTotalCap(g.group));
@@ -5293,8 +5295,7 @@ if (it.riskLabel === '⚠️ high-risk') {
           return;
         }
       }
-      let slice = visibleItemsForPage(page);
-      slice = (Array.isArray(slice) ? slice : []).filter(it => isDisplayGroupModule(it) || hasRealCardSubstanceClient(it));
+      const slice = visibleItemsForPage(page).filter(entry => isDisplayGroupModule(entry) || hasSearchCardRealContentClient(entry));
       const start = (page - 1) * PAGE_SIZE;
 
       if (!slice.length && normalizeSearchType(activeType) === 'all') {

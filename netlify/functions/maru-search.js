@@ -1026,6 +1026,41 @@ function resultSummaryText(it){
   return '';
 }
 
+
+function isSyntheticSearchPathItem(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const text = [
+    it.generatedBy, it.sourceType, it.route, it.provider, it.source,
+    p.providerLane, p.providerUrl, Array.isArray(it.tags) ? it.tags.join(' ') : ''
+  ].map(safeString).join(' ').toLowerCase();
+
+  return /provider[-_ ]?lane|provider-window|sanmaru-fast-provider-lane|passthrough/.test(text) ||
+    /^(web_google_passthrough|web_naver_passthrough|web_youtube_passthrough|naver_image_passthrough|naver_news_passthrough|bing_web_passthrough|bing_news_passthrough|bing_image_passthrough)$/i.test(safeString(it.source));
+}
+
+function hasRealSearchCardData(it){
+  it = (it && typeof it === 'object') ? it : {};
+  if(resultSummaryText(it)) return true;
+  const images = naturalImagesForItem(it, 1);
+  if(images && images.length) return true;
+  const profile = mediaProfileForItem(it);
+  if(profile && (profile.videoId || profile.videoUrl || profile.embedUrl) && (profile.thumbnail || profile.image || profile.originalImage)) return true;
+  const place = (it.placeInfo && typeof it.placeInfo === 'object') ? it.placeInfo : {};
+  if(firstNonEmpty(place.address, it.address, place.description, place.summary)) return true;
+  return false;
+}
+
+function filterRealSearchUiItems(items){
+  const source = Array.isArray(items) ? items : [];
+  return source.filter(it => {
+    if(!it || typeof it !== 'object') return false;
+    if(hasRealSearchCardData(it)) return true;
+    return false;
+  });
+}
+
+
 function compactResultItem(it){
   it = (it && typeof it === 'object') ? it : {};
 
@@ -1123,61 +1158,6 @@ function compactResultItem(it){
     sectionTitle: it.sectionTitle || (SEARCH_SECTION_META[sectionIdForItem(it)] && SEARCH_SECTION_META[sectionIdForItem(it)].title),
     _category: it._category || classifySearchCategory(it)
   };
-}
-
-
-function isSearchUiSyntheticRoadItem(it){
-  it = (it && typeof it === 'object') ? it : {};
-  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
-  const hay = safeString([
-    it.generatedBy, it.sourceType, it.route, it.source, it.provider,
-    p.providerLane, p.providerUrl, p.sourceType, p.generatedBy
-  ].join(' ')).toLowerCase();
-  return !!(
-    it.placeholder === true ||
-    it.passthrough === true ||
-    it.publicProviderRoad === true ||
-    it.sanmaruEmergencyDiscovery === true ||
-    /provider-lane|search-link|public-provider-road|open-discovery|emergency-discovery|direct-navigation-links/.test(hay)
-  );
-}
-
-function hasSearchUiRealCardContent(it){
-  it = (it && typeof it === 'object') ? it : {};
-  if(isSearchUiSyntheticRoadItem(it)) return false;
-  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
-  const media = (it.media && typeof it.media === 'object') ? it.media : {};
-  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
-  const place = (it.placeInfo && typeof it.placeInfo === 'object') ? it.placeInfo : {};
-
-  const body = stripInlineHtml(firstNonEmpty(
-    it.summary, it.description, it.snippet, it.contentSnippet, it.excerpt, it.abstract,
-    it.text, it.content, it.body, it.displaySummary,
-    p.summary, p.description, p.snippet, p.contentSnippet, p.excerpt, p.abstract,
-    p.text, p.content, p.body,
-    it.metaDescription, it.ogDescription, p.metaDescription, p.ogDescription,
-    place.address, place.description, place.roadAddress, place.category
-  ));
-  if(body && body.length >= 18 && !isSyntheticSearchSummaryText(body)) return true;
-
-  const image = firstNonEmpty(
-    it.thumbnail, it.thumb, it.image, it.imageUrl, it.cardImage,
-    it.originalImage, it.fullImage, it.imageOriginal, it.viewerImage, it.openImageUrl, it.contentUrl,
-    preview.poster, preview.image, preview.thumbnail, preview.thumb,
-    p.thumbnail, p.thumb, p.image, p.imageUrl, p.originalImage, p.fullImage
-  );
-  if(isMeaningfulImageForItem(image, it)) return true;
-  if(Array.isArray(it.imageSet) && it.imageSet.some(img => isMeaningfulImageForItem(img, it))) return true;
-  const directVideo = firstNonEmpty(it.videoId, p.videoId, youtubeIdFromUrl(firstNonEmpty(it.videoUrl, it.watchUrl, it.embedUrl, it.url, it.link, p.videoUrl, p.watchUrl, p.embedUrl)), preview.poster, preview.image);
-  const videoFile = /\.(mp4|webm|m3u8)(\?|#|$)/i.test(safeString(firstNonEmpty(it.videoUrl, it.watchUrl, it.embedUrl, preview.videoUrl, preview.embedUrl)));
-  if(directVideo || videoFile) return true;
-  if(place.address || place.roadAddress || place.telephone || place.phone) return true;
-  return false;
-}
-
-function filterSearchUiRealCardItems(items){
-  const list = Array.isArray(items) ? items : [];
-  return list.filter(hasSearchUiRealCardContent);
 }
 
 
@@ -5248,7 +5228,7 @@ exports.handler = async function(event){
     const providerLaneTarget = fastDisplayFirstWindow
       ? fastWindowCandidateTarget
       : Math.min(MAX_LIMIT, Math.max(handlerLimit, MIN_RESULT_TARGET, visibleNeed * 12, requestedPageForWindow * visibleNeed));
-    if(!searchUiGateway && sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
+    if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh){
       const laneItems = buildSanmaruProviderLaneExpansionCards(q, Object.assign({}, raw || {}, { limit: providerLaneTarget }), { region:detectRuntimeRegion(event, lang, q) }, providerLaneTarget, (base.items || []).length);
       base.items = dedupeCanonicalItems([].concat(base.items || [], laneItems)).slice(0, providerLaneTarget);
       base.results = base.items;
@@ -5271,7 +5251,7 @@ exports.handler = async function(event){
       searchUiGateway ? searchUiTarget : MAX_LIMIT,
       Math.max(visibleNeed * 12, requestedPageForWindowGuarantee * visibleNeed + visibleNeed, fastDisplayFirstWindow ? SEARCH_UI_FIRST_RESPONSE_WINDOW : 0)
     );
-    if(!searchUiGateway && (base.items || []).length < pageWindowCandidateNeed){
+    if((base.items || []).length < pageWindowCandidateNeed){
       const guaranteedLaneItems = buildSanmaruProviderLaneExpansionCards(
         q,
         Object.assign({}, raw || {}, { limit: pageWindowCandidateNeed, providerLaneTarget: pageWindowCandidateNeed }),
@@ -5307,15 +5287,12 @@ exports.handler = async function(event){
     const revenueOff = truthy(raw && (raw.noRevenue || raw.disableRevenue)) || !realtimeRevenueRequested;
     if(!analyticsOff) syncSearchAnalytics(event, q, base.items).catch(() => null);
     const maruLocalAuthorityCards = buildKoreaLocalAuthorityCardsForSearch(q, base.region || base.route || 'KR');
-    if(!searchUiGateway && maruLocalAuthorityCards.length){
+    if(maruLocalAuthorityCards.length){
       base.items = dedupeCanonicalItems([].concat(maruLocalAuthorityCards, base.items || []));
     }
     base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
     if(searchUiGateway){
-      const beforeRealCardFilter = base.items.length;
-      base.items = filterSearchUiRealCardItems(base.items);
-      base.results = base.items;
-      base.meta = Object.assign({}, base.meta || {}, { searchUiRealCardFilter:{ enabled:true, before:beforeRealCardFilter, after:base.items.length, removed:Math.max(0, beforeRealCardFilter - base.items.length), policy:'only-real-body-image-video-place-cards' } });
+      base.items = filterRealSearchUiItems(base.items);
     }
     // Sanmaru must keep neutral/search data, not browser-specific display contracts.
     // Store the compact neutral candidate layer first, then decorate only the HTTP response for search.js.

@@ -89,7 +89,7 @@ function compactTextFromAny(v){
   if(typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return stripHtml(v);
   if(Array.isArray(v)) return v.map(compactTextFromAny).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
   if(typeof v === 'object'){
-    return compactTextFromAny([v.summary, v.snippet, v.description, v.contentSnippet, v.excerpt, v.abstract, v.text, v.content, v.body, v.caption, v.address, v.roadAddress, v.telephone, v.phone]);
+    return compactTextFromAny([v.summary, v.snippet, v.description, v.contentSnippet, v.excerpt, v.abstract, v.text, v.content, v.caption]);
   }
   return '';
 }
@@ -103,14 +103,12 @@ function naturalSummary(item, query){
   const payload = pickObject(item.payload);
   const data = pickObject(item.data);
   const displayCard = pickObject(item.displayCard, item.card, item.presentation);
-  const placeInfo = pickObject(item.placeInfo, item.place, item.local);
   const candidates = [
     item.snippet, item.contentSnippet, item.excerpt, item.abstract, item.text, item.content, item.body, item.description, item.summary, item.displaySummary,
     payload.snippet, payload.contentSnippet, payload.excerpt, payload.abstract, payload.text, payload.content, payload.body, payload.description, payload.summary,
     data.snippet, data.contentSnippet, data.excerpt, data.abstract, data.text, data.content, data.body, data.description, data.summary,
     item.metaDescription, item.ogDescription, payload.metaDescription, payload.ogDescription, data.metaDescription, data.ogDescription,
-    displayCard.body, displayCard.text, displayCard.snippet, displayCard.description, displayCard.summary,
-    placeInfo.description, placeInfo.address, placeInfo.roadAddress, placeInfo.category
+    displayCard.body, displayCard.text, displayCard.snippet, displayCard.description, displayCard.summary
   ];
   for(const v of candidates){
     const clean = compactTextFromAny(v);
@@ -123,6 +121,30 @@ function fallbackDisplaySummary(item, query, group){
   // text only; when no body exists, search.js renders title/source/link and waits
   // for later enrichment instead of showing 안내문.
   return '';
+}
+function isSyntheticSearchPathItem(item){
+  item = item && typeof item === 'object' ? item : {};
+  const payload = pickObject(item.payload);
+  const text = [
+    item.generatedBy, item.sourceType, item.route, item.provider, item.source,
+    payload.providerLane, payload.providerUrl, Array.isArray(item.tags) ? item.tags.join(' ') : ''
+  ].map(s).join(' ').toLowerCase();
+  return /provider[-_ ]?lane|provider-window|sanmaru-fast-provider-lane|passthrough/.test(text);
+}
+
+function hasRealDisplayCardData(item, ctx){
+  item = item && typeof item === 'object' ? item : {};
+  const q = firstNonEmpty(ctx && ctx.q, ctx && ctx.query);
+  if(naturalSummary(item, q)) return true;
+  if(collectDisplayImages(item).length) return true;
+  if(youtubeThumb(item)) return true;
+  const place = pickObject(item.placeInfo);
+  if(firstNonEmpty(place.address, item.address, place.summary, place.description)) return true;
+  return false;
+}
+
+function filterDisplayableItems(items, ctx){
+  return (Array.isArray(items) ? items : []).filter(item => hasRealDisplayCardData(item, ctx || {}));
 }
 function collectDisplayImages(item){
   item = item && typeof item === 'object' ? item : {};
@@ -282,24 +304,6 @@ function prioritizeDisplayItems(items, ctx){
     .map(x => x.item);
 }
 
-
-function hasDisplaySubstance(item, ctx){
-  item = item && typeof item === 'object' ? item : {};
-  ctx = ctx || {};
-  const q = firstNonEmpty(ctx.q, ctx.query);
-  if(naturalSummary(item, q)) return true;
-  if(collectDisplayImages(item).length) return true;
-  if(youtubeThumb(item)) return true;
-  const media = pickObject(item.media);
-  const preview = pickObject(media.preview);
-  const videoCandidate = firstNonEmpty(item.videoId, youtubeThumb(item), preview.poster, preview.image);
-  const videoFile = /\.(mp4|webm|m3u8)(\?|#|$)/i.test(firstNonEmpty(item.videoUrl, item.watchUrl, item.embedUrl, preview.videoUrl, preview.embedUrl));
-  if(videoCandidate || videoFile) return true;
-  const place = pickObject(item.placeInfo, item.place, item.local);
-  if(firstNonEmpty(place.address, place.roadAddress, place.telephone, place.phone, item.address, item.telephone, item.phone)) return true;
-  return false;
-}
-
 function decorateDisplayItem(item, ctx, index){
   item = item && typeof item === 'object' ? item : {};
   ctx = ctx || {};
@@ -362,7 +366,7 @@ function decorateDisplayItem(item, ctx, index){
       showMapPreview: mapLike,
       showVideoPreview: cardType === 'video',
       showBody: !!summary,
-      bodySource: naturalSummary(item, q) ? 'provider' : 'none',
+      bodySource: summary ? 'provider' : 'none',
       thumbnailPolicy: 'actual-content-image-only; no-logo-no-favicon-no-banner-no-placard-no-search-url',
       displayMode: mapLike ? 'map-plus-list-card' : (images.length ? 'text-plus-thumbnail-card' : 'text-summary-card')
     })
@@ -405,9 +409,10 @@ function decorateDisplayItem(item, ctx, index){
   return copy;
 }
 function decorateItems(items, ctx){
-  ctx = ctx || {};
-  const ordered = prioritizeDisplayItems(Array.isArray(items) ? items : [], ctx);
-  return ordered.filter(item => hasDisplaySubstance(item, ctx)).map((item, idx) => decorateDisplayItem(item, ctx, idx));
+  const safeCtx = ctx || {};
+  const displayable = filterDisplayableItems(Array.isArray(items) ? items : [], safeCtx);
+  const ordered = prioritizeDisplayItems(displayable, safeCtx);
+  return ordered.map((item, idx) => decorateDisplayItem(item, safeCtx, idx));
 }
 
 function normalizeGroup(group){
@@ -488,7 +493,6 @@ function countGroups(items){
   const counts = Object.create(null);
   const list = Array.isArray(items) ? items.slice(0, 800) : [];
   for(const item of list){
-    if(!hasDisplaySubstance(item, {})) continue;
     const g = groupOfItem(item);
     counts[g] = (counts[g] || 0) + 1;
   }
@@ -589,10 +593,10 @@ function buildDisplayPolicy(input){
   input = input || {};
   const q = firstNonEmpty(input.q, input.query);
   const rawType = firstNonEmpty(input.type, input.searchType, input.tab, input.category, input.vertical, input.raw && (input.raw.type || input.raw.tab || input.raw.category));
-  const items = []
+  const items = filterDisplayableItems([]
     .concat(Array.isArray(input.items) ? input.items : [])
     .concat(Array.isArray(input.results) ? input.results : [])
-    .concat(Array.isArray(input.pageItems) ? input.pageItems : []);
+    .concat(Array.isArray(input.pageItems) ? input.pageItems : []), input);
   const counts = countGroups(items);
   const intentInfo = inferIntent(q, counts, rawType);
   const p = policyForIntent(intentInfo, counts);
