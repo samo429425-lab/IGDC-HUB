@@ -1,6 +1,6 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
 // PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
-// PATCH: search-owned proxy viewer + continuous 4,500 intake + 30-language search UI labels
+// PATCH: search-owned proxy viewer + bounded 2,000 intake + 30-language search UI labels
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -42,17 +42,16 @@ ready(function () {
     const PAGE_SIZE = 25;
     const BLOCK_SIZE = 10;
     const MAX_PAGER_PAGES = 499;
-    const INITIAL_PRELOAD_PAGES = 10;
+    const INITIAL_PRELOAD_PAGES = 12;
     const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
-    const INITIAL_PROGRESSIVE_PAGER_PAGES = 10;
-    const MAX_PROGRESSIVE_PAGER_PAGES = 38;
+    const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
+    const MAX_PROGRESSIVE_PAGER_PAGES = 80;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
-    const INTAKE_CONCURRENCY = 6;
-    const INTAKE_BURST_DELAY_MS = 0;
-    const LEADING_IMAGE_WARM_PAGES = 4;
+    const INTAKE_CONCURRENCY = 5;
+    const INTAKE_BURST_DELAY_MS = 10;
     // Search HTML should behave as an immediate receiver: once Sanmaru/MaruSearch
     // sends any real packet, open the follow-up faucet on the next short UI beat.
     // This is a handoff cadence, not a network timeout or a result cutoff.
@@ -1853,24 +1852,27 @@ function adaptiveSearchTarget(q, type){
   const broadHints = /(세계|전세계|글로벌|뉴스|영상|이미지|관광|여행|ai|인공지능|기술|시장|경제|정치|스포츠|금융|도서|쇼핑|웹툰|공공|학술|논문|사이트|홈페이지|global|world|news|tour|travel|technology|market|sports|finance|book|shopping|webtoon)/i;
   const narrowHints = /(카페|맛집|식당|주소|전화|위치|지도|병원|약국|학교|교회|상호|주차|near me|cafe|restaurant|address|map)/i;
 
-  // Search page maximum is intentionally slimmer than the front-page snapshot pipeline.
-  // Goal: faster first response, quicker follow-up fill, and a practical cap of 38 pages.
-  let target = MAX_SMOOTH_CANDIDATES;
-  if (safeType !== 'all') target = 875;
-  if (/^(map|tour|knowledge|wiki|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = 750;
-  if (words.length >= 3) target = Math.min(target, 875);
-  if (words.length <= 1 || broadHints.test(text)) target = MAX_SMOOTH_CANDIDATES;
-  if (narrowHints.test(text)) target = Math.min(target, 625);
-  if (/^(image|video|news|sns|blog|cafe|site|academic|public_data)$/.test(safeType)) {
-    target = Math.max(target, 875);
-  }
+  // Search.js remains only a receiver/container. This target is the amount of
+  // Sanmaru/MaruSearch supply the UI is ready to cache for search pages. It is
+  // separate from the 4,500~5,000 Search Bank Snapshot supply used by front pages.
+  // Broad searches may keep filling up to the bounded search-page candidate pool, while first paint
+  // still renders only the current viewport and uses continuous intake for the rest.
+  let target = 3200;
+  if (safeType === 'all') target = 4500;
+  if (safeType !== 'all') target = 2400;
+  if (words.length >= 3 || narrowHints.test(text)) target = Math.max(target, 2400);
+  if (words.length <= 1 || broadHints.test(text)) target = 4500;
+  if (/^(news|image|video|sns|blog|cafe|tour|site|academic|wiki|public_data)$/.test(safeType)) target = Math.max(target, 3000);
+  if (/^(map|knowledge|book|shopping|sports|finance|webtoon)$/.test(safeType)) target = Math.max(2200, Math.min(target, 3200));
 
   return Math.max(INITIAL_PRELOAD_TARGET, Math.min(MAX_SMOOTH_CANDIDATES, target));
 }
 
 function firstPaintLimitFor(q, type){
-  // The search page should open quickly but still feel rich.
-  // Keep the first supply window at about 10 pages / 250 cards.
+  // Keep the UI first paint light, but ask Sanmaru for the first 12 pages of
+  // already-prepared resident candidates. The DOM still renders only the
+  // current viewport; the extra candidates keep the initial pager at 10~12 pages
+  // and let page navigation feel immediate.
   return Math.min(INITIAL_PRELOAD_TARGET, adaptiveSearchTarget(q, type));
 }
 
@@ -1904,7 +1906,7 @@ function updateProgressiveTotalFromPayload(payload, fallbackCount, opts){
     ? Math.min(MAX_PROGRESSIVE_PAGER_PAGES, wantedPages)
     : (opts && opts.expandAll
       ? Math.min(MAX_PROGRESSIVE_PAGER_PAGES, wantedPages)
-      : Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(minPages, previousPages, Math.min(wantedPages, previousPages + 12 || minPages))));
+      : Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(minPages, previousPages, Math.min(wantedPages, previousPages + 8 || minPages))));
   progressivePagerPages = Math.max(minPages, nextPages);
   serverTotalItems = signal.exhausted
     ? Math.max(floorCount, Math.min(authoritativeServerTotalItems || 0, progressivePagerPages * PAGE_SIZE))
@@ -2169,7 +2171,7 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
-  sp.set('firstPaintLimit', String(firstPaintLimitFor(q, safeType)));
+  sp.set('firstPaintLimit', String(INITIAL_PRELOAD_TARGET));
   sp.set('candidatePool', String(adaptiveSearchTarget(q, safeType)));
   sp.set('candidatePoolTarget', String(adaptiveSearchTarget(q, safeType)));
   sp.set('initialPreloadPages', String(INITIAL_PRELOAD_PAGES));
@@ -2812,6 +2814,15 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
+        .concat(it && it.imageUrl ? [it.imageUrl] : [])
+        .concat(it && it.image_url ? [it.image_url] : [])
+        .concat(it && it.cardImage ? [it.cardImage] : [])
+        .concat(it && it.originalImage ? [it.originalImage] : [])
+        .concat(it && it.fullImage ? [it.fullImage] : [])
+        .concat(it && it.imageOriginal ? [it.imageOriginal] : [])
+        .concat(it && it.viewerImage ? [it.viewerImage] : [])
+        .concat(it && it.openImageUrl ? [it.openImageUrl] : [])
+        .concat(it && it.contentUrl ? [it.contentUrl] : [])
         .concat(it && it.poster ? [it.poster] : [])
         .concat(it && it.cover ? [it.cover] : [])
         .concat(it && it.og_image ? [it.og_image] : [])
@@ -2819,7 +2830,15 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(payload.thumbnail ? [payload.thumbnail] : [])
         .concat(payload.thumb ? [payload.thumb] : [])
         .concat(payload.image ? [payload.image] : [])
+        .concat(payload.imageUrl ? [payload.imageUrl] : [])
         .concat(payload.image_url ? [payload.image_url] : [])
+        .concat(payload.cardImage ? [payload.cardImage] : [])
+        .concat(payload.originalImage ? [payload.originalImage] : [])
+        .concat(payload.fullImage ? [payload.fullImage] : [])
+        .concat(payload.imageOriginal ? [payload.imageOriginal] : [])
+        .concat(payload.viewerImage ? [payload.viewerImage] : [])
+        .concat(payload.openImageUrl ? [payload.openImageUrl] : [])
+        .concat(payload.contentUrl ? [payload.contentUrl] : [])
         .concat(payload.og_image ? [payload.og_image] : [])
         .concat(payload.ogImage ? [payload.ogImage] : [])
         .concat(payload.poster ? [payload.poster] : [])
@@ -2827,6 +2846,15 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(data.thumbnail ? [data.thumbnail] : [])
         .concat(data.thumb ? [data.thumb] : [])
         .concat(data.image ? [data.image] : [])
+        .concat(data.imageUrl ? [data.imageUrl] : [])
+        .concat(data.image_url ? [data.image_url] : [])
+        .concat(data.cardImage ? [data.cardImage] : [])
+        .concat(data.originalImage ? [data.originalImage] : [])
+        .concat(data.fullImage ? [data.fullImage] : [])
+        .concat(data.imageOriginal ? [data.imageOriginal] : [])
+        .concat(data.viewerImage ? [data.viewerImage] : [])
+        .concat(data.openImageUrl ? [data.openImageUrl] : [])
+        .concat(data.contentUrl ? [data.contentUrl] : [])
         .concat(data.og_image ? [data.og_image] : [])
         .concat(data.poster ? [data.poster] : [])
         .concat(preview.poster ? [preview.poster] : [])
@@ -3853,8 +3881,13 @@ function displayGroupOfItem(it){
       }
       if(typeof v === 'object'){
         return compactCardTextClient([
-          v.summary, v.snippet, v.description, v.contentSnippet, v.content, v.text,
-          v.abstract, v.excerpt, v.intro, v.body, v.caption
+          v.summary, v.snippet, v.description, v.desc, v.contentSnippet,
+          v.content, v.text, v.body, v.bodyText, v.lead, v.subtitle,
+          v.abstract, v.excerpt, v.intro, v.overview, v.caption,
+          v.metaDescription, v.ogDescription,
+          v.displaySummary, v.displayDescription,
+          v.displayCard, v.payload, v.data, v.meta, v.raw, v.result, v.item,
+          v.page, v.document, v.article
         ]);
       }
       return '';
@@ -4522,9 +4555,13 @@ function displayGroupOfItem(it){
         it && it.bodyText,
         it && it.lead,
         it && it.subtitle,
+        it && it.overview,
+        it && it.intro,
         it && it.description,
+        it && it.desc,
         it && it.summary,
         it && it.displaySummary,
+        it && it.displayDescription,
         payload.snippet,
         payload.contentSnippet,
         payload.excerpt,
@@ -4571,6 +4608,13 @@ function displayGroupOfItem(it){
         data.desc,
         data.metaDescription,
         data.ogDescription,
+        compactCardTextClient(it && it.meta),
+        compactCardTextClient(it && it.raw),
+        compactCardTextClient(it && it.result),
+        compactCardTextClient(it && it.article),
+        compactCardTextClient(payload.raw),
+        compactCardTextClient(payload.result),
+        compactCardTextClient(payload.article),
         preview.summary,
         preview.description,
         preview.caption
@@ -4930,20 +4974,6 @@ if (it.riskLabel === '⚠️ high-risk') {
       }
     }
 
-
-
-    function warmLeadingPageImages(maxPages = LEADING_IMAGE_WARM_PAGES){
-      const pageCount = Math.min(
-        Math.max(1, Number(maxPages) || LEADING_IMAGE_WARM_PAGES),
-        preloadPageCountFromItems(allItems),
-        LEADING_IMAGE_WARM_PAGES
-      );
-      for(let pageNo = 1; pageNo <= pageCount; pageNo++){
-        const start = (pageNo - 1) * PAGE_SIZE;
-        const slice = allItems.slice(start, start + PAGE_SIZE);
-        if(slice.length) enrichRenderedPageImages(pageNo, slice, start);
-      }
-    }
 
 
     function stateKeyForGroup(page, group){
@@ -5484,7 +5514,7 @@ async function runSearch(q, type = activeType){
   signalSanmaruSearch(qq, activeType, 'run-search');
   status.textContent = `${uiText('receiving', 'receiving...')} ${getTypeLabel(activeType)} · "${qq}"...`;
   renderSkeleton();
-  // Search.js is ready to receive the first 10 pages immediately. Show the
+  // Search.js is ready to receive the first 12 pages immediately. Show the
   // basic pager while Sanmaru/MaruSearch fills the packet, instead of leaving
   // the page with no page structure.
   drawPager();
@@ -5534,7 +5564,7 @@ async function runSearch(q, type = activeType){
     }
 
     // Cache the supply window immediately. Rendering still shows only the current
-    // viewport, but pages 2~10 are already in memory when the user clicks them.
+    // viewport, but pages 2~12 are already in memory when the user clicks them.
     const initialWindow = Math.min(
       MAX_SMOOTH_CANDIDATES,
       Math.max(INITIAL_PRELOAD_TARGET, incoming.length)
@@ -5557,7 +5587,6 @@ async function runSearch(q, type = activeType){
       drawPager();
     }
     status.textContent = statusResultsText(actualResultCountForStatus(), qq, activeType, supplySignal.exhausted ? false : true);
-    warmLeadingPageImages();
     if(!intakeStarted && !supplySignal.exhausted){
       schedulePipeHandoff('receiver-packet-open-pipe', allItems.length >= INITIAL_PRELOAD_TARGET ? 0 : FIRST_PIPE_HANDOFF_MS);
     }
