@@ -1004,35 +1004,20 @@ function isSyntheticSearchSummaryText(v){
     /(Google|Naver|네이버|구글|YouTube|유튜브|Instagram|Facebook|TikTok|Threads|Twitter|X\/Twitter|위키백과|나무위키|지식백과).*검색$/i.test(t);
 }
 
-function searchUiRealText(v, maxLen){
-  const clean = stripInlineHtml(v);
-  if(!clean || isSyntheticSearchSummaryText(clean)) return '';
-  return clean.slice(0, maxLen || 900);
-}
-
 function resultSummaryText(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const meta = (it.meta && typeof it.meta === 'object') ? it.meta : {};
-  const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
   const candidates = [
-    it.summary, it.snippet, it.contentSnippet, it.description, it.excerpt, it.abstract,
-    it.content, it.text, it.article, it.articleBody, it.mainText, it.plainText,
-    it.body, it.bodyText, it.articleText, it.pageText, it.pageContent, it.documentText,
-    it.newsBody, it.longDescription, it.shortDescription, it.ogDescription,
-    it.metaDescription, it.seoDescription,
-    p.summary, p.snippet, p.contentSnippet, p.description, p.excerpt, p.abstract,
-    p.content, p.text, p.article, p.articleBody, p.mainText, p.plainText,
-    p.body, p.bodyText, p.articleText, p.pageText, p.pageContent, p.documentText,
-    p.newsBody, p.longDescription, p.shortDescription, p.ogDescription,
-    p.metaDescription, p.seoDescription,
-    meta.description, meta.summary, meta.snippet, meta.ogDescription, meta.metaDescription,
-    displayCard.body, displayCard.bodyText, displayCard.articleBody, displayCard.pageText,
-    displayCard.description, displayCard.summary, displayCard.snippet
+    it.summary, it.snippet, it.description, it.excerpt, it.content, it.text,
+    it.ogDescription, it.metaDescription, it.seoDescription,
+    p.summary, p.snippet, p.description, p.excerpt, p.content, p.text,
+    p.ogDescription, p.metaDescription,
+    meta.description, meta.ogDescription
   ];
   for(const v of candidates){
-    const clean = searchUiRealText(v, 720);
-    if(clean && clean.length >= 18) return clean;
+    const clean = stripInlineHtml(v);
+    if(clean && clean.length >= 18 && !isSyntheticSearchSummaryText(clean)) return clean.slice(0, 300);
   }
 
   // Do not manufacture card summaries such as "...검색 결과입니다".
@@ -1079,37 +1064,13 @@ function compactResultItem(it){
     }
   }
 
-  const summaryText = resultSummaryText(it);
-  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
-  const meta = (it.meta && typeof it.meta === 'object') ? it.meta : {};
-
   return {
     id: safeString(firstNonEmpty(it.id, it.url, it.link, it.title)).trim(),
     type,
     mediaType,
     title: safeString(it.title).trim(),
-    summary: summaryText,
-    description: summaryText,
-    snippet: searchUiRealText(firstNonEmpty(it.snippet, it.contentSnippet, p.snippet, p.contentSnippet, summaryText), 900),
-    contentSnippet: searchUiRealText(firstNonEmpty(it.contentSnippet, p.contentSnippet, it.snippet, p.snippet, summaryText), 900),
-    excerpt: searchUiRealText(firstNonEmpty(it.excerpt, p.excerpt, summaryText), 900),
-    abstract: searchUiRealText(firstNonEmpty(it.abstract, p.abstract, summaryText), 900),
-    content: searchUiRealText(firstNonEmpty(it.content, p.content, it.text, p.text, summaryText), 1200),
-    text: searchUiRealText(firstNonEmpty(it.text, p.text, it.content, p.content, summaryText), 1200),
-    body: searchUiRealText(firstNonEmpty(it.body, p.body, it.articleBody, p.articleBody, it.content, p.content, summaryText), 1200),
-    bodyText: searchUiRealText(firstNonEmpty(it.bodyText, p.bodyText, it.body, p.body, summaryText), 1200),
-    articleBody: searchUiRealText(firstNonEmpty(it.articleBody, p.articleBody, it.articleText, p.articleText, it.body, p.body, summaryText), 1200),
-    mainText: searchUiRealText(firstNonEmpty(it.mainText, p.mainText, it.plainText, p.plainText, summaryText), 1200),
-    plainText: searchUiRealText(firstNonEmpty(it.plainText, p.plainText, it.mainText, p.mainText, summaryText), 1200),
-    pageText: searchUiRealText(firstNonEmpty(it.pageText, p.pageText, it.pageContent, p.pageContent, summaryText), 1200),
-    pageContent: searchUiRealText(firstNonEmpty(it.pageContent, p.pageContent, it.pageText, p.pageText, summaryText), 1200),
-    documentText: searchUiRealText(firstNonEmpty(it.documentText, p.documentText, summaryText), 1200),
-    newsBody: searchUiRealText(firstNonEmpty(it.newsBody, p.newsBody, summaryText), 1200),
-    longDescription: searchUiRealText(firstNonEmpty(it.longDescription, p.longDescription, summaryText), 1200),
-    shortDescription: searchUiRealText(firstNonEmpty(it.shortDescription, p.shortDescription, summaryText), 900),
-    metaDescription: searchUiRealText(firstNonEmpty(it.metaDescription, p.metaDescription, meta.metaDescription, summaryText), 900),
-    ogDescription: searchUiRealText(firstNonEmpty(it.ogDescription, p.ogDescription, meta.ogDescription, summaryText), 900),
-    seoDescription: searchUiRealText(firstNonEmpty(it.seoDescription, p.seoDescription, summaryText), 900),
+    summary: resultSummaryText(it),
+    description: resultSummaryText(it),
     url: safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim(),
     link: safeString(firstNonEmpty(it.link, it.url, it.href, profile.openUrl)).trim(),
     source: it.source || null,
