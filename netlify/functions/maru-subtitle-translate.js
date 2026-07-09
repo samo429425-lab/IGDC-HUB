@@ -41,7 +41,7 @@ function normalizeCueTimes(text) { return (String(text || '').match(/^\s*\d{1,2}
 function cueCount(text) { return normalizeCueTimes(text).length; }
 function isInstructionLeak(text) {
   const value = String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
-  return /(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|target\s+language\s*[:=]|source\s+(?:file|language)|translate\s+only\s+subtitle|preserve\s+every\s+cue|musical[-\s]*note\s+marker|lyrics?\s*(?:handling|policy|rule|instruction|marker)|thanks?\s+for\s+watching|시청해\s*주셔서\s*감사|음표\s*마커|가사(?:가)?\s*(?:명확|있는\s*경우|처리|규칙|수칙|지침))/i.test(value);
+  return /(?:system\s*(?:prompt|message|policy)|developer\s*message|internal\s*(?:policy|instruction)|return\s+(?:json|only)|target\s+language\s*[:=]|source\s+(?:file|language)|translate\s+only\s+subtitle|preserve\s+every\s+cue|thanks\s+for\s+(?:watching|viewing)|thank\s+you\s+for\s+watching|translated\s+by|transcribed\s+by|written\s+by|marker|guideline|instruction|policy|번역가|전사자|필기자|시청해\s*주셔서\s*감사|마커|지침|규칙|단어만\s*구분|가사.{0,40}시작|가사.{0,60}(?:유지|보존).{0,60}(?:하세요|하십시오|한다))/i.test(value);
 }
 function isRecoverable(error) { const status = Number(error?.statusCode || 0); const msg = String(error?.message || '').toLowerCase(); return status === 429 || status === 500 || status === 502 || status === 503 || status === 504 || /timeout|overload|rate.limit|temporar/.test(msg); }
 function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
