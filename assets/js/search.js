@@ -429,6 +429,9 @@ function ensureSearchCardMediaStyle(){
       align-items: flex-start;
       width: 100%;
     }
+    .maru-search-card-body[data-media-count] {
+      gap: 16px;
+    }
     .maru-search-card-text {
       min-width: 0;
       flex: 1 1 auto;
@@ -2177,7 +2180,7 @@ async function fetchInstantSearchPack(q, type = activeType){
   sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('providerPassthrough', '1');
+  sp.set('providerPassthrough', '0');
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('reason', 'search-ui-first-paint');
@@ -2876,7 +2879,8 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(preview.original ? [preview.original] : [])
         .concat(Array.isArray(it && it.imageSet) ? it.imageSet : [])
         .concat(Array.isArray(payload.imageSet) ? payload.imageSet : [])
-        .concat(Array.isArray(data.imageSet) ? data.imageSet : []);
+        .concat(Array.isArray(data.imageSet) ? data.imageSet : [])
+        .concat(deepImageCandidatesClient(it));
 
       const out = [];
       const seen = new Set();
@@ -3895,12 +3899,92 @@ function displayGroupOfItem(it){
       }
       if(typeof v === 'object'){
         return compactCardTextClient([
-          v.summary, v.snippet, v.description, v.contentSnippet, v.content, v.text,
+          v.summary, v.snippet, v.description, v.contentSnippet, v.content, v.contentText, v.text,
           v.abstract, v.excerpt, v.intro, v.lead, v.subtitle, v.body, v.bodyText,
-          v.article, v.articleBody, v.mainText, v.plainText, v.caption
+          v.article, v.articleBody, v.articleText, v.mainText, v.plainText, v.pageText,
+          v.pageContent, v.documentText, v.newsBody, v.longDescription, v.shortDescription,
+          v.caption, v.paragraph, v.paragraphs
         ]);
       }
       return '';
+    }
+
+
+    function deepNaturalTextCandidatesClient(root){
+      const out = [];
+      const seenObjects = new Set();
+      const goodKey = /(snippet|summary|description|desc|excerpt|abstract|content|body|article|text|caption|lead|subtitle|paragraph|intro|metaDescription|ogDescription|plainText|mainText|bodyText|contentSnippet)/i;
+      const badKey = /(title|name|url|link|href|src|image|thumb|thumbnail|poster|icon|favicon|domain|source|provider|channel|id|key|hash|date|time|lang|type|kind|category|price|score|rank|width|height|count|total|page|section|tag)/i;
+      const urlLike = /^(https?:\/\/|\/|#|javascript:)|\.(png|jpe?g|webp|gif|svg|ico|mp4|webm)(\?|#|$)/i;
+
+      function visit(v, key, depth){
+        if(out.length >= 28 || depth > 5 || v == null) return;
+        if(typeof v === 'string' || typeof v === 'number'){
+          if(!goodKey.test(String(key || '')) || badKey.test(String(key || ''))) return;
+          const text = compactCardTextClient(v);
+          if(!text || text.length < 18 || text.length > 2400 || urlLike.test(text)) return;
+          out.push(text);
+          return;
+        }
+        if(Array.isArray(v)){
+          for(let i = 0; i < Math.min(v.length, 24); i++) visit(v[i], key, depth + 1);
+          return;
+        }
+        if(typeof v === 'object'){
+          if(seenObjects.has(v)) return;
+          seenObjects.add(v);
+          const keys = Object.keys(v).slice(0, 80).sort((a,b) => {
+            const ag = goodKey.test(a) ? 0 : 1;
+            const bg = goodKey.test(b) ? 0 : 1;
+            return ag - bg;
+          });
+          for(const k of keys){
+            if(badKey.test(k) && !goodKey.test(k)) continue;
+            visit(v[k], k, depth + 1);
+            if(out.length >= 28) break;
+          }
+        }
+      }
+      visit(root, '', 0);
+      return out;
+    }
+
+    function deepImageCandidatesClient(root){
+      const out = [];
+      const seenObjects = new Set();
+      const goodKey = /(image|img|thumb|thumbnail|poster|cover|photo|picture|og_image|ogImage|contentUrl|mediaUrl|preview|visual|snapshot)/i;
+      const badKey = /(title|summary|description|text|body|caption|urlText|source|provider|domain|favicon|icon|logo)/i;
+      const imageUrl = /^(https?:\/\/|\/).+?(\.(png|jpe?g|webp|gif)(\?|#|$)|ytimg\.com|img\.youtube\.com|search\.pstatic\.net|kakaocdn|cloudfront|twimg|fbcdn|instagram|googleusercontent|gstatic)/i;
+
+      function visit(v, key, depth){
+        if(out.length >= 18 || depth > 5 || v == null) return;
+        if(typeof v === 'string'){
+          const s = v.trim();
+          if(!s || badKey.test(String(key || ''))) return;
+          if((goodKey.test(String(key || '')) || imageUrl.test(s)) && imageUrl.test(s)) out.push(s);
+          return;
+        }
+        if(Array.isArray(v)){
+          for(let i = 0; i < Math.min(v.length, 18); i++) visit(v[i], key, depth + 1);
+          return;
+        }
+        if(typeof v === 'object'){
+          if(seenObjects.has(v)) return;
+          seenObjects.add(v);
+          const keys = Object.keys(v).slice(0, 70).sort((a,b) => {
+            const ag = goodKey.test(a) ? 0 : 1;
+            const bg = goodKey.test(b) ? 0 : 1;
+            return ag - bg;
+          });
+          for(const k of keys){
+            if(badKey.test(k) && !goodKey.test(k)) continue;
+            visit(v[k], k, depth + 1);
+            if(out.length >= 18) break;
+          }
+        }
+      }
+      visit(root, '', 0);
+      return out;
     }
 
     function isGeneratedGuideTextClient(v){
@@ -4640,15 +4724,23 @@ function displayGroupOfItem(it){
         if(isGeneratedGuideTextClient(text)) continue;
         if(titleText && key === titleText) continue;
         if(/^(google news|bing images|bing videos|google images|naver images|naver videos)$/i.test(key)) continue;
-        return text.slice(0, 620);
+        return text.slice(0, 720);
+      }
+      for(const text of deepNaturalTextCandidatesClient(it)){
+        const key = text.toLowerCase();
+        if(seen.has(key)) continue;
+        seen.add(key);
+        if(isGeneratedGuideTextClient(text)) continue;
+        if(titleText && key === titleText) continue;
+        return text.slice(0, 720);
       }
       return '';
     }
 
     function searchCardDescriptionLineClampClient(it){
       const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      const explicit = parseInt(displayCard.lineClamp, 10);
-      if(explicit > 0) return Math.max(3, Math.min(6, explicit));
+      const explicit = parseInt(displayCard.lineClamp || displayCard.bodyLines, 10);
+      if(explicit > 0) return Math.max(4, Math.min(6, explicit));
       const hasMedia = collectNaturalImages(it).length > 0 || isYoutubeLikeItemClient(it) || !!getPlayableMediaInfo(it, (it && (it.url || it.link)) || '');
       const hasPlace = !!(it && (it.placeInfo || it.mapQuery || it.__maruAllowMapPreview));
       return hasMedia || hasPlace ? 5 : 4;
@@ -4769,6 +4861,11 @@ if (it.riskLabel === '⚠️ high-risk') {
         d.style.webkitBoxOrient = 'vertical';
         d.style.overflow = 'hidden';
         d.style.textOverflow = 'ellipsis';
+        d.style.marginTop = '7px';
+        d.style.fontSize = '13px';
+        d.style.lineHeight = '1.55';
+        d.style.color = '#475569';
+        d.style.whiteSpace = 'normal';
       }
 
       const hasImageSet = Array.isArray(it.imageSet) && it.imageSet.length > 0;
@@ -5624,17 +5721,19 @@ async function runSearch(q, type = activeType){
     return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
   }
 
-  // PATCH: first render uses Sanmaru/MaruSearch first supply window, not forced 25-only paint
+  // Real-content first render: prefer Maru Search's provider-result window over
+  // Sanmaru's instant route lanes. Sanmaru instant still runs as a fallback/merge,
+  // but it should not be the first paint when it only contains title-only roads.
   const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
 
   try{
-    const first = await Promise.race([instantPromise, maruWindowPromise]);
+    const first = await maruWindowPromise;
     if(runSearch._seq !== seq) return;
 
     const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
     if(!firstCount){
-      const second = first && first.kind === 'sanmaru-instant' ? await maruWindowPromise : await instantPromise;
+      const second = await instantPromise;
       if(runSearch._seq !== seq) return;
       if(second && !second.error) applySupplyPack(second.pack, second.kind);
     }
