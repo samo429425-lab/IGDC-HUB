@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-596-probe-stable-fastpath';
+const VERSION = 'A1.5.46-597-partial-probe-fast-rich-firstpaint';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -5034,9 +5034,14 @@ async function attachFastDisplayRichProbe(base, event, ctx){
     : Math.max(350, Math.min(900, requestedProbeMs));
   const searchType = normalizeSearchType(ctx.searchType || raw.type || raw.tab || raw.category || raw.vertical || 'all');
   const tasks = [];
+  const completed = [];
 
   function pushTask(name, promise){
-    tasks.push(Promise.resolve(promise).then(v => ({ name, pack:v })).catch(e => ({ name, error:safeString((e && e.message) || e).slice(0,120) })));
+    const task = Promise.resolve(promise)
+      .then(v => ({ name, pack:v }))
+      .catch(e => ({ name, error:safeString((e && e.message) || e).slice(0,120) }))
+      .then(row => { completed.push(row); return row; });
+    tasks.push(task);
   }
 
   if(['all','blog','web'].includes(searchType)) pushTask('naver_blog_quick', naverGenericSearch('blog.json', q, 8, 1, 'naver_blog', 'blog'));
@@ -5048,14 +5053,15 @@ async function attachFastDisplayRichProbe(base, event, ctx){
 
   if(!tasks.length) return base;
 
-  const timeout = new Promise(resolve => setTimeout(() => resolve({ __timeout:true }), budgetMs));
-  let settled = await Promise.race([Promise.allSettled(tasks), timeout]);
-  if(settled && settled.__timeout) settled = [];
+  const timeout = new Promise(resolve => setTimeout(resolve, budgetMs));
+  await Promise.race([Promise.all(tasks), timeout]);
 
+  // Use every provider result that completed inside the first-paint budget.
+  // Do not discard fast Naver/Google results merely because another lane is still pending.
+  const settled = completed.slice();
   const richItems = [];
   const trace = [];
-  for(const row of Array.isArray(settled) ? settled : []){
-    const val = row && row.status === 'fulfilled' ? row.value : null;
+  for(const val of settled){
     const name = val && val.name || 'quick_probe';
     const pack = val && val.pack;
     const results = pack && Array.isArray(pack.results) ? pack.results : [];
@@ -5177,7 +5183,10 @@ exports.handler = async function(event){
     const fastOpenPipeFirstWindow = sanmaruOpenGateRequested && isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
     const contentFirstSearchUi = searchUiContentFirstRequested(raw || {});
     const residentSeedHasRealCards = residentSeedPack && searchUiHasRealCards(residentSeedPack.items);
-    const sanmaruCanServeFromFastLayer = (fastOpenPipeFirstWindow || (residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, handlerLimit, raw || {}))) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (!contentFirstSearchUi || residentSeedHasRealCards);
+    const sanmaruCanServeFromFastLayer = sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (
+      fastOpenPipeFirstWindow ||
+      ((residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, handlerLimit, raw || {})) && (!contentFirstSearchUi || residentSeedHasRealCards))
+    );
     if(sanmaruCanServeFromFastLayer){
       base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit: fastDisplayFirstWindow ? (searchUiGateway ? handlerLimit : Math.min(handlerLimit, Math.max(visibleNeed * 12, SEARCH_UI_FIRST_RESPONSE_WINDOW))) : handlerLimit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
