@@ -5816,19 +5816,18 @@ async function runSearch(q, type = activeType){
     return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
   }
 
-  // Real-content first render: prefer Maru Search's provider-result window over
-  // Sanmaru's instant route lanes. Sanmaru instant still runs as a fallback/merge,
-  // but it should not be the first paint when it only contains title-only roads.
+  // First paint must be fast. Use whichever supply arrives first, then merge
+  // the richer Maru Search window when it arrives in the background.
   const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
 
   try{
-    const first = await maruWindowPromise;
+    const first = await Promise.race([instantPromise, maruWindowPromise]);
     if(runSearch._seq !== seq) return;
 
     const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
     if(!firstCount){
-      const second = await instantPromise;
+      const second = first && first.kind === 'sanmaru-instant' ? await maruWindowPromise : await instantPromise;
       if(runSearch._seq !== seq) return;
       if(second && !second.error) applySupplyPack(second.pack, second.kind);
     }
