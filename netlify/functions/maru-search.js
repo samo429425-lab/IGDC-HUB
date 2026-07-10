@@ -4319,7 +4319,7 @@ async function googleSearch(q, limit, start){
   return { source: 'google', results, meta };
 }
 
-async function googleSnsSearch(q, limit, start, timeoutMs){
+async function googleSnsSearch(q, limit, start){
   const keys = googleCseKeys();
   const cseParams = { hl:'ko', gl:'kr', safe:'off', filter:'0', lr:'removed' };
   if(!keys.key) return { source:'google_sns', results: [], meta:{ status:'google key missing', reason:'GOOGLE_API_KEY missing', cseParams } };
@@ -4334,13 +4334,12 @@ async function googleSnsSearch(q, limit, start, timeoutMs){
   ];
 
   const perRoute = Math.max(1, Math.min(4, Math.ceil(Math.min(limit || 20, 20) / 5)));
-  const routeTimeoutMs = clampInt(timeoutMs, 1600, 600, 3500);
   const settled = await Promise.allSettled(routes.map(route =>
     googleCseRequest(route.query, perRoute, start || 1, {
       source: route.source,
       type: route.type,
       mediaType: route.mediaType,
-      timeoutMs: routeTimeoutMs
+      timeoutMs: 1600
     }).then(bundle => Object.assign({}, bundle, { route: route.name }))
   ));
 
@@ -4376,11 +4375,11 @@ async function bingSearch(q, limit, offset){
   return { source: 'bing', results: ((data.webPages && data.webPages.value) || []).map(it => ({ title: it.name, link: it.url, url: it.url, snippet: it.snippet, type: 'web', source: 'bing' })) };
 }
 
-async function youtubeSearch(q, limit, timeoutMs){
+async function youtubeSearch(q, limit){
   const key = envFirst('YOUTUBE_API_KEY','GOOGLE_YOUTUBE_API_KEY','GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY');
   if(!key) return null;
   const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=' + Math.min(limit,50) + '&q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(key);
-  const res = await fetchWithTimeout(url, null, clampInt(timeoutMs, 3500, 600, 5000));
+  const res = await fetchWithTimeout(url, null, 3500);
   if(!res.ok) return null;
   const data = await res.json();
   const results = (data.items || []).map(it => {
@@ -5078,17 +5077,6 @@ async function attachFastDisplayRichProbe(base, event, ctx){
   if(['all','map','tour'].includes(searchType)) pushTask('naver_local_quick', naverGenericSearch('local.json', q, 10, naverStart10, 'naver_local', 'map'));
   if(['all','web','news'].includes(searchType)) pushTask('google_web_quick', googleCseRequest(q, 10, googleStart10, { source:'google_quick', type:'web', timeoutMs:1100 }));
   if(['all','image','web'].includes(searchType)) pushTask('google_image_quick', googleCseRequest(q, 10, googleStart10, { source:'google_image_quick', type:'image', mediaType:'image', searchType:'image', timeoutMs:1100 }));
-  if(['all','sns'].includes(searchType)) pushTask('google_sns_quick', googleSnsSearch(q, 20, googleStart10, 1100));
-  if(['all','sns','video'].includes(searchType)) pushTask('youtube_quick', youtubeSearch(q, searchType === 'sns' ? 16 : 12, 1100).then(pack => {
-    if(searchType !== 'sns' || !pack || !Array.isArray(pack.results)) return pack;
-    return Object.assign({}, pack, {
-      results: pack.results.map(it => Object.assign({}, it, {
-        searchCategory:'sns',
-        displayGroup:'community_sns',
-        displayGroupHint:'community_sns'
-      }))
-    });
-  }));
 
   if(!tasks.length) return base;
 
@@ -5202,6 +5190,7 @@ exports.handler = async function(event){
     const fastDisplayFirstWindow = isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceResident || raw.waitResident || raw.waitProviders || raw.waitExternal));
     const requestedSearchUiPage = clampInt(firstNonEmpty(raw && (raw.page || raw.p || raw.visiblePage || raw.sectionPage), 1), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
     let fastRichFirstBase = null;
+    let fastRichPagedDirect = false;
     if(searchUiGateway && fastDisplayFirstWindow && requestedSearchUiPage === 1){
       const quickBase = await attachFastDisplayRichProbe(
         { source:'maru-search-fast-rich-first-window', route:[], sourceRoute:[], region:detectRuntimeRegion(event, lang, q), items:[], results:[], meta:{ trace:[] } },
@@ -5258,6 +5247,33 @@ exports.handler = async function(event){
             }
           };
         }
+      }
+    }else if(searchUiGateway && fastDisplayFirstWindow && requestedSearchUiPage > 1){
+      // Follow-up intake pages must not wait for the full wide/media/augment chain.
+      // Reuse the existing page-aware rich probe and return its new provider window directly.
+      const quickPageBase = await attachFastDisplayRichProbe(
+        { source:'maru-search-fast-rich-followup-page', route:[], sourceRoute:[], region:detectRuntimeRegion(event, lang, q), items:[], results:[], meta:{ trace:[] } },
+        event,
+        {
+          q,
+          raw:Object.assign({}, raw || {}, {
+            displayRich:'1',
+            fastRichProbeMs:firstNonEmpty(raw && raw.fastRichProbeMs, 1050)
+          }),
+          searchType,
+          lang
+        }
+      );
+      if(searchUiHasRealCards(quickPageBase && quickPageBase.items)){
+        fastRichFirstBase = quickPageBase;
+        fastRichPagedDirect = true;
+        fastRichFirstBase.meta = Object.assign({}, fastRichFirstBase.meta || {}, {
+          fastRichFirstWindowComplete:true,
+          followupPageDirect:true,
+          requestedPage:requestedSearchUiPage,
+          firstResponseMode:'fast-rich-followup-page',
+          heavyWideGatewayDeferred:true
+        });
       }
     }
     const sanmaruRouteContext = fastDisplayFirstWindow
@@ -5479,7 +5495,27 @@ exports.handler = async function(event){
       displayPolicy: displayPack.displayPolicy || null
     });
     const fullSectionPack = buildSearchSections(base.items, q, { searchType });
-    const visiblePagePack = buildCollapseAwareVisiblePagePack(base.items, q, raw || {}, fullSectionPack);
+    let visiblePagePack = buildCollapseAwareVisiblePagePack(base.items, q, raw || {}, fullSectionPack);
+    if(fastRichPagedDirect){
+      const directPageItems = base.items.slice(0, visibleNeed);
+      const directTotalPages = Math.min(MARU_SEARCH_MAX_PAGER_PAGES, Math.max(requestedSearchUiPage, Math.ceil(searchUiTarget / visibleNeed)));
+      visiblePagePack = Object.assign({}, visiblePagePack, {
+        page:requestedSearchUiPage,
+        requestedPage:requestedSearchUiPage,
+        perPage:visibleNeed,
+        visibleCardsPerPage:visibleNeed,
+        pageItems:directPageItems,
+        visibleCount:directPageItems.length,
+        totalItems:searchUiTarget,
+        totalVisibleItems:searchUiTarget,
+        totalPages:directTotalPages,
+        hasPrevPage:requestedSearchUiPage > 1,
+        hasNextPage:requestedSearchUiPage < directTotalPages,
+        prevPage:requestedSearchUiPage > 1 ? requestedSearchUiPage - 1 : null,
+        nextPage:requestedSearchUiPage < directTotalPages ? requestedSearchUiPage + 1 : null,
+        directPagedRich:true
+      });
+    }
     const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q, fullSectionPack, visiblePagePack);
     const sectionPackWithViewport = Object.assign({}, fullSectionPack, {
       sections: viewportSections.sections,
