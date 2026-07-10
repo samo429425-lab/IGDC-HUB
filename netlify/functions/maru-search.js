@@ -532,10 +532,15 @@ function canonicalizeItem(raw, query, sourceHint){
   const it = (raw && typeof raw === 'object') ? raw : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const rawUrl = safeString(firstNonEmpty(it.url, it.link, it.href, p.url, p.link)).trim();
-  const type = safeString(it.type || p.type || 'web') || 'web';
-  const mediaType = safeString(it.mediaType || p.mediaType || (type === 'image' ? 'image' : (type === 'video' ? 'video' : 'article')));
-  const imageLike = type === 'image' || mediaType === 'image' || safeString(firstNonEmpty(it.source, p.source)).toLowerCase().includes('image');
+  const rawType = safeString(it.type || p.type || 'web') || 'web';
+  const rawMediaType = safeString(it.mediaType || p.mediaType || (rawType === 'image' ? 'image' : (rawType === 'video' ? 'video' : 'article')));
+  const imageLike = rawType === 'image' || rawMediaType === 'image' || safeString(firstNonEmpty(it.source, p.source)).toLowerCase().includes('image');
   const sourcePageUrl = imageLike ? sourcePageUrlForItem(it, p) : '';
+  // A search result is a doorway to the source page, not a detached image file.
+  // When an image provider also gives the hosting page, convert that result into
+  // a normal page card and keep the image only as card media.
+  const type = (imageLike && sourcePageUrl) ? 'web' : rawType;
+  const mediaType = (imageLike && sourcePageUrl) ? 'article' : rawMediaType;
   const url = sourcePageUrl || rawUrl;
   const title = safeString(firstNonEmpty(it.title, it.name, p.title, p.name, url)).trim();
   const summary = safeString(firstNonEmpty(it.summary, it.snippet, it.description, p.summary, p.snippet, p.description)).trim();
@@ -551,7 +556,13 @@ function canonicalizeItem(raw, query, sourceHint){
   // Large card thumbnails must be real content media only.
   // Favicon/provider logos remain available to the UI as small source icons,
   // but they must never become thumbnail/image/imageSet.
-  const imageCandidates = rawImageCandidates.filter(img => isMeaningfulImageForItem(img, it));
+  const imageCandidates = rawImageCandidates.filter(img => {
+    // Preserve provider-supplied page media unless it is a hard reject.
+    // The previous quality gate was too aggressive and stripped legitimate
+    // blog/news/video thumbnails before Search.js could render them.
+    if(!isRealImageUrl(img) || isHardRejectImageUrl(img)) return false;
+    return true;
+  });
   const thumbnail = imageCandidates[0] || '';
   const source = firstNonEmpty(it.source, p.source, sourceHint, domainOf(url));
   const id = safeString(firstNonEmpty(it.id, url, title, source + '-' + Math.random().toString(16).slice(2))).trim();
@@ -681,6 +692,57 @@ function mergeCanonicalPageCard(base, incoming){
   if(base.watchUrl || incoming.watchUrl) merged.watchUrl = firstNonEmpty(base.watchUrl, incoming.watchUrl);
   if(base.embedUrl || incoming.embedUrl) merged.embedUrl = firstNonEmpty(base.embedUrl, incoming.embedUrl);
   return merged;
+}
+
+function normalizePageCardKey(it){
+  const pageUrl = sourcePageUrlForItem(it, it && it.payload) || firstNonEmpty(it && it.pageUrl, it && it.sourcePageUrl, it && it.contextLink, it && it.url, it && it.link);
+  const s = safeString(pageUrl).trim();
+  if(!s || isDirectImageResourceUrl(s)) return '';
+  try{
+    const u = new URL(s);
+    u.hash = '';
+    ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid'].forEach(k => u.searchParams.delete(k));
+    return u.toString().replace(/\/$/, '').toLowerCase();
+  }catch(e){
+    return s.replace(/#.*$/, '').replace(/\/$/, '').toLowerCase();
+  }
+}
+
+function consolidatePageCentricCards(items){
+  const out = [];
+  const byPage = new Map();
+  for(const raw of (Array.isArray(items) ? items : [])){
+    const it = (raw && typeof raw === 'object') ? raw : {};
+    if(isOrphanMediaOnlySearchCard(it)) continue;
+    const key = normalizePageCardKey(it);
+    if(!key){
+      out.push(it);
+      continue;
+    }
+    if(byPage.has(key)){
+      const idx = byPage.get(key);
+      out[idx] = mergeCanonicalPageCard(out[idx], it);
+      continue;
+    }
+    const sourcePage = sourcePageUrlForItem(it, it.payload);
+    const imageLike = safeString(it.type).toLowerCase() === 'image' || safeString(it.mediaType).toLowerCase() === 'image';
+    const pageCard = (imageLike && sourcePage)
+      ? Object.assign({}, it, {
+          type: 'web',
+          mediaType: 'article',
+          url: sourcePage,
+          link: sourcePage,
+          pageUrl: sourcePage,
+          sourcePageUrl: sourcePage,
+          contextLink: sourcePage,
+          clickTargetType: 'page',
+          pageMediaCard: true
+        })
+      : it;
+    byPage.set(key, out.length);
+    out.push(pageCard);
+  }
+  return out;
 }
 
 function dedupeCanonicalItems(items){
@@ -3811,6 +3873,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     }
 
     let unique = dedupeCanonicalItems(collected);
+    unique = consolidatePageCentricCards(unique);
     unique = backfillVisuals(unique);
     unique = await applyCorePipeline(q, unique);
     unique = applyServerSideBoosts(unique, { q, lang, searchType: viewType });
@@ -3826,7 +3889,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     }
 
     const finalTarget = Math.min(MAX_LIMIT, Math.max(limit, MIN_RESULT_TARGET));
-    const finalItems = unique.slice(0, finalTarget).map(compactResultItem);
+    const finalItems = consolidatePageCentricCards(unique).slice(0, finalTarget).map(compactResultItem);
 
     const result = {
       source: sourceState.used || (finalItems.length ? 'multi' : null),
