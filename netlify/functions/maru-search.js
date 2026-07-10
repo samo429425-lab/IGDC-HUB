@@ -1146,6 +1146,16 @@ function resultSummaryText(it){
   return best.slice(0, 720);
 }
 
+function richerDisplayText(){
+  let best = '';
+  for(let i=0; i<arguments.length; i++){
+    const clean = stripInlineHtml(arguments[i]);
+    if(!clean || isSyntheticSearchSummaryText(clean)) continue;
+    if(clean.length > best.length) best = clean;
+  }
+  return best;
+}
+
 function compactResultItem(it){
   it = (it && typeof it === 'object') ? it : {};
 
@@ -1163,17 +1173,26 @@ function compactResultItem(it){
   const placeInfo = (it.placeInfo && typeof it.placeInfo === 'object') ? Object.assign({}, it.placeInfo) : undefined;
   const summaryText = resultSummaryText(it);
   const sourcePageUrl = firstNonEmpty(profile.sourcePageUrl, profile.pageUrl, sourcePageUrlForItem(it, it.payload));
-  const resolvedUrl = (type === 'image' || mediaType === 'image') && sourcePageUrl
-    ? sourcePageUrl
-    : safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim();
+  const rawResolvedUrl = safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim();
+  // A search card must open the page/post that owns the media.  Direct image
+  // resources remain thumbnail data only and never replace a valid page URL.
+  const resolvedUrl = safeString(firstNonEmpty(
+    sourcePageUrl,
+    !isDirectImageResourceUrl(rawResolvedUrl) ? rawResolvedUrl : '',
+    profile.videoUrl,
+    profile.watchUrl
+  )).trim();
   const resolvedSectionId = it.sectionId || sectionIdForItem(it);
   const displayCardBase = (it.displayCard && typeof it.displayCard === 'object') ? Object.assign({}, it.displayCard) : {};
+  const richBody = richerDisplayText(summaryText, displayCardBase.body, displayCardBase.text, displayCardBase.summary, it.displaySummary);
   const displayCard = Object.assign({}, displayCardBase, {
     lineClamp:5,
     bodyLines:5
-  }, summaryText ? {
-    body:firstNonEmpty(displayCardBase.body, displayCardBase.text, summaryText),
-    summary:firstNonEmpty(displayCardBase.summary, summaryText)
+  }, richBody ? {
+    body:richBody,
+    text:richBody,
+    summary:richBody,
+    description:richBody
   } : {});
   if(media){
     if(youtubeLike){
@@ -1228,14 +1247,14 @@ function compactResultItem(it){
     mediaQuality: mediaQualityProfileForItem(it, ownImages),
     selectedImageQuality: profile.selectedImageQuality,
     selectedCardImageQuality: profile.selectedCardImageQuality,
-    clickTargetType: profile.videoUrl ? 'video' : (originalImage ? 'image' : 'page'),
+    clickTargetType: profile.videoUrl ? 'video' : (resolvedUrl ? 'page' : (originalImage ? 'image' : 'page')),
     media,
     videoId: profile.videoId || undefined,
     videoUrl: profile.videoUrl || undefined,
     watchUrl: profile.watchUrl || undefined,
     embedUrl: profile.embedUrl || undefined,
-    openUrl: sourcePageUrl || profile.openUrl || undefined,
-    pageUrl: sourcePageUrl || profile.pageUrl || undefined,
+    openUrl: resolvedUrl || sourcePageUrl || profile.openUrl || undefined,
+    pageUrl: resolvedUrl || sourcePageUrl || profile.pageUrl || undefined,
     sourcePageUrl: sourcePageUrl || undefined,
     contextLink: firstNonEmpty(profile.contextLink, it.contextLink, it.payload && it.payload.contextLink, sourcePageUrl) || undefined,
     channel: it.channel || undefined,
@@ -1253,7 +1272,7 @@ function compactResultItem(it){
     displayGroupHint: it.displayGroupHint || undefined,
     displayGroupLabel: it.displayGroupLabel || it.displayGroupLabelHint || undefined,
     displayGroupLabelHint: it.displayGroupLabelHint || undefined,
-    displaySummary: firstNonEmpty(it.displaySummary, displayCard.summary, summaryText),
+    displaySummary: richerDisplayText(summaryText, displayCard.summary, it.displaySummary),
     displayCard,
     sectionId: resolvedSectionId,
     sectionTitle: it.sectionTitle || (SEARCH_SECTION_META[resolvedSectionId] && SEARCH_SECTION_META[resolvedSectionId].title),
@@ -4207,8 +4226,8 @@ async function naverImageSearch(q, limit, start){
       const context = sourcePageUrlForItem(it, it);
       return {
         title: stripHtml(it.title || q),
-        link: context || imageUrl,
-        url: context || imageUrl,
+        link: context || '',
+        url: context || '',
         pageUrl: context || undefined,
         sourcePageUrl: context || undefined,
         contextLink: context || undefined,
@@ -4427,10 +4446,11 @@ async function googleSnsSearch(q, limit, start, timeoutMs){
     { name:'facebook', query:'site:facebook.com ' + q, source:'google_sns_facebook', type:'sns', mediaType:'article' },
     { name:'tiktok', query:'site:tiktok.com ' + q, source:'google_sns_tiktok', type:'sns', mediaType:'video' },
     { name:'x_twitter', query:'(site:x.com OR site:twitter.com) ' + q, source:'google_sns_x_twitter', type:'sns', mediaType:'article' },
-    { name:'threads', query:'site:threads.net ' + q, source:'google_sns_threads', type:'sns', mediaType:'article' }
+    { name:'threads', query:'site:threads.net ' + q, source:'google_sns_threads', type:'sns', mediaType:'article' },
+    { name:'youtube', query:'site:youtube.com/watch ' + q, source:'google_sns_youtube', type:'sns', mediaType:'video' }
   ];
 
-  const perRoute = Math.max(1, Math.min(4, Math.ceil(Math.min(limit || 20, 20) / 5)));
+  const perRoute = Math.max(1, Math.min(4, Math.ceil(Math.min(limit || 24, 24) / routes.length)));
   const settled = await Promise.allSettled(routes.map(route =>
     googleCseRequest(route.query, perRoute, start || 1, {
       source: route.source,
@@ -4444,7 +4464,14 @@ async function googleSnsSearch(q, limit, start, timeoutMs){
   const routeMeta = [];
   for(const s of settled){
     const pack = s && s.status === 'fulfilled' ? s.value : null;
-    if(pack && Array.isArray(pack.results)) results.push.apply(results, pack.results.slice(0, perRoute));
+    if(pack && Array.isArray(pack.results)){
+      const routed = pack.results.slice(0, perRoute).map(it => Object.assign({}, it, {
+        searchCategory:'sns',
+        displayGroup:'social',
+        displayGroupHint:'social'
+      }));
+      results.push.apply(results, routed);
+    }
     routeMeta.push({ route: pack && pack.route || 'unknown', status: pack && pack.meta && pack.meta.status || (s && s.status) || 'unknown', count: pack && pack.results ? pack.results.length : 0 });
   }
 
@@ -4474,10 +4501,24 @@ async function bingSearch(q, limit, offset){
 
 async function youtubeSearch(q, limit, timeoutMs){
   const key = envFirst('YOUTUBE_API_KEY','GOOGLE_YOUTUBE_API_KEY','GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY');
-  if(!key) return null;
+  if(!key){
+    const cseFallback = await googleCseRequest('site:youtube.com/watch ' + q, Math.min(limit || 10, 10), 1, {
+      source:'google_youtube_fallback', type:'sns', mediaType:'video', timeoutMs:Math.max(700, Math.min(1600, Number(timeoutMs) || 1200))
+    }).catch(() => null);
+    if(cseFallback && Array.isArray(cseFallback.results)){
+      cseFallback.results = cseFallback.results.map(it => Object.assign({}, it, {
+        searchCategory:'sns', displayGroup:'social', displayGroupHint:'social'
+      }));
+    }
+    return cseFallback;
+  }
   const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=' + Math.min(limit,50) + '&q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(key);
   const res = await fetchWithTimeout(url, null, Math.max(700, Math.min(3500, Number(timeoutMs) || 3500)));
-  if(!res.ok) return null;
+  if(!res.ok){
+    return await googleCseRequest('site:youtube.com/watch ' + q, Math.min(limit || 10, 10), 1, {
+      source:'google_youtube_fallback', type:'sns', mediaType:'video', timeoutMs:Math.max(700, Math.min(1600, Number(timeoutMs) || 1200))
+    }).catch(() => null);
+  }
   const data = await res.json();
   const results = (data.items || []).map(it => {
     const rawThumb = (it.snippet && it.snippet.thumbnails && (it.snippet.thumbnails.high || it.snippet.thumbnails.medium || it.snippet.thumbnails.default) || {}).url || '';
