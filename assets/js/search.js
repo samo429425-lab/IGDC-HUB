@@ -2821,6 +2821,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(displayCard.preview && displayCard.preview.thumbnail ? [displayCard.preview.thumbnail] : [])
         .concat(displayCard.preview && displayCard.preview.image ? [displayCard.preview.image] : [])
         .concat(displayCard.preview && displayCard.preview.original ? [displayCard.preview.original] : [])
+        .concat(displayCard.mediaUrl ? [displayCard.mediaUrl] : [])
+        .concat(displayCard.visual ? [displayCard.visual] : [])
+        .concat(displayCard.snapshot ? [displayCard.snapshot] : [])
+        .concat(Array.isArray(displayCard.images) ? displayCard.images : [])
+        .concat(Array.isArray(displayCard.thumbnails) ? displayCard.thumbnails : [])
         .concat(it && it.thumbnail ? [it.thumbnail] : [])
         .concat(it && it.thumb ? [it.thumb] : [])
         .concat(it && it.image ? [it.image] : [])
@@ -2837,6 +2842,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(it && it.viewerImage ? [it.viewerImage] : [])
         .concat(it && it.openImageUrl ? [it.openImageUrl] : [])
         .concat(it && it.contentUrl ? [it.contentUrl] : [])
+        .concat(it && it.mediaUrl ? [it.mediaUrl] : [])
+        .concat(it && it.visual ? [it.visual] : [])
+        .concat(it && it.snapshot ? [it.snapshot] : [])
+        .concat(Array.isArray(it && it.images) ? it.images : [])
+        .concat(Array.isArray(it && it.thumbnails) ? it.thumbnails : [])
         .concat(payload.thumbnail ? [payload.thumbnail] : [])
         .concat(payload.thumb ? [payload.thumb] : [])
         .concat(payload.image ? [payload.image] : [])
@@ -2855,6 +2865,11 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(payload.viewerImage ? [payload.viewerImage] : [])
         .concat(payload.openImageUrl ? [payload.openImageUrl] : [])
         .concat(payload.contentUrl ? [payload.contentUrl] : [])
+        .concat(payload.mediaUrl ? [payload.mediaUrl] : [])
+        .concat(payload.visual ? [payload.visual] : [])
+        .concat(payload.snapshot ? [payload.snapshot] : [])
+        .concat(Array.isArray(payload.images) ? payload.images : [])
+        .concat(Array.isArray(payload.thumbnails) ? payload.thumbnails : [])
         .concat(data.thumbnail ? [data.thumbnail] : [])
         .concat(data.thumb ? [data.thumb] : [])
         .concat(data.image ? [data.image] : [])
@@ -2872,11 +2887,21 @@ async function fetchInstantSearchPack(q, type = activeType){
         .concat(data.viewerImage ? [data.viewerImage] : [])
         .concat(data.openImageUrl ? [data.openImageUrl] : [])
         .concat(data.contentUrl ? [data.contentUrl] : [])
+        .concat(data.mediaUrl ? [data.mediaUrl] : [])
+        .concat(data.visual ? [data.visual] : [])
+        .concat(data.snapshot ? [data.snapshot] : [])
+        .concat(Array.isArray(data.images) ? data.images : [])
+        .concat(Array.isArray(data.thumbnails) ? data.thumbnails : [])
         .concat(preview.poster ? [preview.poster] : [])
         .concat(preview.thumbnail ? [preview.thumbnail] : [])
         .concat(preview.thumb ? [preview.thumb] : [])
         .concat(preview.image ? [preview.image] : [])
         .concat(preview.original ? [preview.original] : [])
+        .concat(preview.mediaUrl ? [preview.mediaUrl] : [])
+        .concat(preview.visual ? [preview.visual] : [])
+        .concat(preview.snapshot ? [preview.snapshot] : [])
+        .concat(Array.isArray(preview.images) ? preview.images : [])
+        .concat(Array.isArray(preview.thumbnails) ? preview.thumbnails : [])
         .concat(Array.isArray(it && it.imageSet) ? it.imageSet : [])
         .concat(Array.isArray(payload.imageSet) ? payload.imageSet : [])
         .concat(Array.isArray(data.imageSet) ? data.imageSet : [])
@@ -3416,22 +3441,32 @@ function displayGroupOfItem(it){
         const visualSection = groupInfo.group === 'image' || groupInfo.group === 'media';
         const videoSection = groupInfo.group === 'video';
         if (visualSection) {
-          const gallerySource = visualGalleryItemsClient((groupInfo.items || []).concat(previewItems || [], hiddenItems || []));
+          const sectionSource = (groupInfo.items || []).concat(previewItems || [], hiddenItems || []);
+          const gallerySource = visualGalleryItemsClient(sectionSource);
           if(gallerySource.length) {
             renderImageGalleryInto(gallerySource.map((it, idx) => decorateDisplayItemForRender(it, groupInfo, idx, false)), body, Math.max(previewLimit, 12));
           } else {
-            renderVisualPendingPlaceholderClient(body, 8);
+            fallbackTextCardsForVisualSectionClient(sectionSource).slice(0, previewLimit).forEach((it, idx) => {
+              renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body);
+            });
           }
         } else if (videoSection) {
           const videoSource = videoSnapshotItemsClient(previewItems);
           if(videoSource.length) {
             videoSource.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
           } else {
-            renderVisualPendingPlaceholderClient(body, 6);
+            fallbackTextCardsForVisualSectionClient(previewItems).slice(0, previewLimit).forEach((it, idx) => {
+              renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body);
+            });
           }
         } else {
           previewItems.forEach((it, idx) => renderItem(decorateDisplayItemForRender(it, groupInfo, idx, false), body));
         }
+
+        // Body category blocks are hidden when they have no real rendered card.
+        // The top search category tabs remain intact, and source items stay in
+        // allItems/items/results without filtering or deletion.
+        if(!body.children.length) return;
 
         section.appendChild(head);
         section.appendChild(body);
@@ -3954,7 +3989,7 @@ function displayGroupOfItem(it){
       const seenObjects = new Set();
       const goodKey = /(image|img|thumb|thumbnail|poster|cover|photo|picture|og_image|ogImage|contentUrl|mediaUrl|preview|visual|snapshot)/i;
       const badKey = /(title|summary|description|text|body|caption|urlText|source|provider|domain|favicon|icon|logo)/i;
-      const imageUrl = /^(https?:\/\/|\/).+?(\.(png|jpe?g|webp|gif)(\?|#|$)|ytimg\.com|img\.youtube\.com|search\.pstatic\.net|kakaocdn|cloudfront|twimg|fbcdn|instagram|googleusercontent|gstatic)/i;
+      const imageUrl = /^(https?:\/\/|\/).+?(\.(png|jpe?g|webp|gif|avif)(\?|#|$)|ytimg\.com|img\.youtube\.com|search\.pstatic\.net|kakaocdn|cloudfront|twimg|fbcdn|instagram|googleusercontent|gstatic|wikimedia|wp\.com|blogspot|staticflickr)/i;
 
       function visit(v, key, depth){
         if(out.length >= 18 || depth > 5 || v == null) return;
@@ -4014,6 +4049,26 @@ function displayGroupOfItem(it){
 
     function hasRenderableVisualClient(it){
       return !!(it && collectNaturalImages(it).length);
+    }
+
+    function hasSearchCardRenderableBodyClient(it){
+      if(!it || isSyntheticProviderGuideCardClient(it)) return false;
+      if(String((it.title || '')).trim()) return true;
+      if(String((it.url || it.link || it.openUrl || it.href || '')).trim()) return true;
+      return !!descriptionForItemClient(it);
+    }
+
+    function fallbackTextCardsForVisualSectionClient(items){
+      const out = [];
+      const seen = new Set();
+      (Array.isArray(items) ? items : []).forEach(it => {
+        if(!hasSearchCardRenderableBodyClient(it)) return;
+        const key = displayItemKey ? displayItemKey(it) : String((it && (it.url || it.link || it.openUrl || it.id || it.title)) || '').toLowerCase();
+        if(key && seen.has(key)) return;
+        if(key) seen.add(key);
+        out.push(it);
+      });
+      return out;
     }
 
     function visualGalleryItemsClient(items){
@@ -4651,6 +4706,14 @@ function displayGroupOfItem(it){
         it && it.plainText,
         it && it.body,
         it && it.bodyText,
+        it && it.articleText,
+        it && it.pageText,
+        it && it.pageContent,
+        it && it.documentText,
+        it && it.newsBody,
+        it && it.longDescription,
+        it && it.shortDescription,
+        it && it.seoDescription,
         it && it.lead,
         it && it.subtitle,
         it && it.description,
@@ -4668,6 +4731,14 @@ function displayGroupOfItem(it){
         payload.plainText,
         payload.body,
         payload.bodyText,
+        payload.articleText,
+        payload.pageText,
+        payload.pageContent,
+        payload.documentText,
+        payload.newsBody,
+        payload.longDescription,
+        payload.shortDescription,
+        payload.seoDescription,
         payload.lead,
         payload.subtitle,
         payload.description,
@@ -4684,11 +4755,29 @@ function displayGroupOfItem(it){
         data.plainText,
         data.body,
         data.bodyText,
+        data.articleText,
+        data.pageText,
+        data.pageContent,
+        data.documentText,
+        data.newsBody,
+        data.longDescription,
+        data.shortDescription,
+        data.seoDescription,
         data.lead,
         data.subtitle,
         data.description,
         data.summary,
         displayCard.body,
+        displayCard.bodyText,
+        displayCard.articleBody,
+        displayCard.articleText,
+        displayCard.pageText,
+        displayCard.pageContent,
+        displayCard.documentText,
+        displayCard.newsBody,
+        displayCard.longDescription,
+        displayCard.shortDescription,
+        displayCard.seoDescription,
         displayCard.text,
         displayCard.snippet,
         displayCard.htmlSnippet,
@@ -4712,9 +4801,16 @@ function displayGroupOfItem(it){
         data.ogDescription,
         preview.summary,
         preview.description,
-        preview.caption
+        preview.caption,
+        preview.snippet,
+        preview.body,
+        preview.bodyText,
+        preview.articleBody,
+        preview.longDescription,
+        preview.shortDescription
       ];
       const seen = new Set();
+      const natural = [];
       for(const v of candidates){
         const text = compactCardTextClient(v);
         if(!text) continue;
@@ -4724,7 +4820,7 @@ function displayGroupOfItem(it){
         if(isGeneratedGuideTextClient(text)) continue;
         if(titleText && key === titleText) continue;
         if(/^(google news|bing images|bing videos|google images|naver images|naver videos)$/i.test(key)) continue;
-        return text.slice(0, 720);
+        natural.push(text);
       }
       for(const text of deepNaturalTextCandidatesClient(it)){
         const key = text.toLowerCase();
@@ -4732,9 +4828,25 @@ function displayGroupOfItem(it){
         seen.add(key);
         if(isGeneratedGuideTextClient(text)) continue;
         if(titleText && key === titleText) continue;
-        return text.slice(0, 720);
+        natural.push(text);
       }
-      return '';
+      if(!natural.length) return '';
+
+      // Prefer the most informative real excerpt instead of the first short field.
+      // Some providers put a one-line teaser in summary and the fuller body in
+      // snippet/body/metaDescription. Choosing the longest natural candidate lets
+      // ordinary cards show three to five lines without manufacturing text.
+      natural.sort((a, b) => b.length - a.length);
+      let best = natural[0];
+      if(best.length < 220){
+        for(const extra of natural.slice(1)){
+          if(extra.length < 24) continue;
+          if(best.includes(extra) || extra.includes(best)) continue;
+          best += ' ' + extra;
+          if(best.length >= 360) break;
+        }
+      }
+      return best.slice(0, 720);
     }
 
     function searchCardDescriptionLineClampClient(it){
@@ -4757,7 +4869,9 @@ function displayGroupOfItem(it){
     }
 
     function renderItem(it, mountTarget){
-      const url = it.url || it.link || '';
+      const rawUrl = it.url || it.link || '';
+      const hasNaturalMedia = collectNaturalImages(it).length > 0 || isYoutubeLikeItemClient(it) || !!getPlayableMediaInfo(it, rawUrl);
+      const url = hasNaturalMedia ? (displayUrlForImageItemClient(it, rawUrl) || rawUrl) : rawUrl;
       const domain = domainOf(url);
 
       const card = document.createElement('div');
@@ -5114,6 +5228,29 @@ if (it.riskLabel === '⚠️ high-risk') {
 
     function makePlainWebItem(it){
       const copy = Object.assign({}, it || {});
+      const payload = (copy.payload && typeof copy.payload === 'object') ? copy.payload : {};
+      const displayCard = (copy.displayCard && typeof copy.displayCard === 'object') ? copy.displayCard : {};
+      const media = (copy.media && typeof copy.media === 'object') ? copy.media : {};
+      const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+
+      // Category overflow becomes an ordinary result card, but its real media and
+      // provider-page link must survive the conversion. This keeps images/video
+      // visible on later pages instead of leaving title-only rows.
+      copy.thumbnail = copy.thumbnail || copy.thumb || copy.image || copy.imageUrl ||
+        displayCard.thumbnail || displayCard.image || payload.thumbnail || payload.image ||
+        preview.poster || preview.image || preview.thumbnail || '';
+      copy.thumb = copy.thumb || copy.thumbnail || '';
+      copy.image = copy.image || copy.imageUrl || copy.thumbnail || '';
+      if(!Array.isArray(copy.imageSet) || !copy.imageSet.length){
+        copy.imageSet = [
+          copy.thumbnail, copy.image, copy.imageUrl, copy.originalImage, copy.fullImage,
+          displayCard.thumbnail, displayCard.image, payload.thumbnail, payload.image,
+          preview.poster, preview.image, preview.thumbnail
+        ].filter(Boolean);
+      }
+      copy.pageUrl = copy.pageUrl || copy.contextLink || copy.sourcePageUrl || copy.originalPageUrl ||
+        displayCard.pageUrl || payload.pageUrl || payload.contextLink || '';
+
       delete copy.displayGroup;
       delete copy.displayGroupLabel;
       delete copy.displayGroupVisibleIndex;
