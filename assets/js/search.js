@@ -4496,14 +4496,19 @@ function displayGroupOfItem(it){
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
-      return String(
-        (it && (it.pageUrl || it.openUrl || it.contextLink || it.originalPageUrl)) ||
-        displayCard.pageUrl || displayCard.openUrl || displayCard.url ||
-        payload.pageUrl || payload.openUrl || payload.contextLink || payload.url || payload.link ||
-        preview.pageUrl || preview.openUrl ||
-        (it && (it.url || it.link || it.href)) ||
-        src || ''
-      ).trim();
+      const candidates = [
+        it && it.sourcePageUrl, it && it.pageUrl, it && it.contextLink, it && it.originalPageUrl,
+        displayCard.sourcePageUrl, displayCard.pageUrl, displayCard.contextLink, displayCard.openUrl, displayCard.url,
+        payload.sourcePageUrl, payload.pageUrl, payload.contextLink, payload.originalPageUrl, payload.originallink, payload.openUrl, payload.url, payload.link,
+        preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.openUrl,
+        it && it.openUrl, it && it.url, it && it.link, it && it.href
+      ].map(v => String(v || '').trim()).filter(Boolean);
+      const isDirectImage = (v) => {
+        const low = String(v || '').trim().toLowerCase().split('#')[0];
+        return /^data:image\//.test(low) || /\.(?:jpe?g|png|gif|webp|avif|bmp|svg)(?:\?|$)/i.test(low);
+      };
+      const sourcePage = candidates.find(v => !isDirectImage(v));
+      return String(sourcePage || candidates[0] || src || '').trim();
     }
 
     function normalizeImageVariantKeyClient(imageUrl){
@@ -4757,7 +4762,9 @@ function displayGroupOfItem(it){
     }
 
     function renderItem(it, mountTarget){
-      const url = it.url || it.link || '';
+      const rawUrl = it.url || it.link || '';
+      const imageLike = normalizeSearchType(activeType) === 'image' || displayGroupOfItem(it) === 'image' || String(it.type || it.mediaType || '').toLowerCase() === 'image';
+      const url = imageLike ? (displayUrlForImageItemClient(it, rawUrl) || rawUrl) : rawUrl;
       const domain = domainOf(url);
 
       const card = document.createElement('div');

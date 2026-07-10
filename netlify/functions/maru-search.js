@@ -954,10 +954,40 @@ function preferredYoutubePoster(videoId, current){
   return cur;
 }
 
+function isDirectImageAssetUrlForSourceLink(v){
+  const s = safeString(v).trim();
+  if(!s) return false;
+  const low = s.toLowerCase().split('#')[0];
+  if(/^data:image\//i.test(low)) return true;
+  if(/\.(?:jpe?g|png|gif|webp|avif|bmp|svg)(?:\?|$)/i.test(low)) return true;
+  return /(?:images?|img|photo|thumbnail|thumb|media)\.(?:googleusercontent|pstatic|naver|fbcdn|cdninstagram|twimg)\./i.test(low);
+}
+
+function sourcePageUrlForImageItem(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const dc = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+  const media = (it.media && typeof it.media === 'object') ? it.media : {};
+  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+  const candidates = [
+    it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
+    dc.sourcePageUrl, dc.pageUrl, dc.contextLink, dc.openUrl, dc.url,
+    p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.originallink, p.url, p.link,
+    preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.openUrl,
+    it.url, it.link, it.href
+  ];
+  for(const v of candidates){
+    const u = safeString(v).trim();
+    if(u && !isDirectImageAssetUrlForSourceLink(u)) return u;
+  }
+  return safeString(firstNonEmpty.apply(null, candidates)).trim();
+}
+
 function mediaProfileForItem(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const url = safeString(firstNonEmpty(it.url, it.link, it.href, p.url, p.link, p.contextLink)).trim();
+  const sourcePageUrl = sourcePageUrlForImageItem(it) || url;
   const sourceText = safeString(firstNonEmpty(it.source, p.source)).toLowerCase();
   const typeText = safeString(firstNonEmpty(it.type, it.mediaType, p.type, p.mediaType)).toLowerCase();
   const videoId = firstNonEmpty(it.videoId, p.videoId, youtubeIdFromUrl(url));
@@ -991,7 +1021,9 @@ function mediaProfileForItem(it){
       watchUrl: videoUrl,
       embedUrl,
       openUrl: videoUrl || url,
-      pageUrl: url
+      pageUrl: url,
+      sourcePageUrl: url,
+      contextLink: url
     };
   }
 
@@ -1022,8 +1054,10 @@ function mediaProfileForItem(it){
     videoUrl,
     watchUrl: videoUrl,
     embedUrl,
-    openUrl: videoUrl || url,
-    pageUrl: url
+    openUrl: videoUrl || sourcePageUrl || url,
+    pageUrl: sourcePageUrl || url,
+    sourcePageUrl: sourcePageUrl || url,
+    contextLink: firstNonEmpty(it.contextLink, p.contextLink, sourcePageUrl)
   };
 }
 
@@ -1164,6 +1198,8 @@ function compactResultItem(it){
     embedUrl: profile.embedUrl || undefined,
     openUrl: profile.openUrl || undefined,
     pageUrl: profile.pageUrl || undefined,
+    sourcePageUrl: profile.sourcePageUrl || profile.pageUrl || undefined,
+    contextLink: profile.contextLink || (it.payload && it.payload.contextLink) || it.contextLink || undefined,
     channel: it.channel || undefined,
     section: it.section || undefined,
     page: it.page || undefined,
@@ -1364,7 +1400,7 @@ function sectionIdForItem(it){
   if(category === 'webtoon' || /웹툰|만화|코믹|망가|webtoon|comic|manga/.test(text)) return 'webtoon';
   if(category === 'official' || host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || /공식|관공서|시청|구청|정부|공공기관|official|government office/.test(text)) return 'official_authority';
   if(category === 'map' || category === 'tour' || mediaType === 'map' || type === 'map' || /지도|주소|위치|길찾기|관광|여행|맛집|명소|랜드마크|박물관|미술관|축제|교통|지하철|map|nearby|travel|tour|restaurant|landmark|attraction/.test(text)) return 'map_local_tour';
-  if(category === 'cafe' || category === 'sns' || type === 'sns' || mediaType === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|sns|community|forum|instagram|facebook|tiktok/.test(text)) return 'community_sns';
+  if(category === 'cafe' || category === 'sns' || type === 'sns' || mediaType === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || source.includes('youtube') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || host.includes('youtube.com') || host.includes('youtu.be') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|유튜브|sns|community|forum|instagram|facebook|tiktok|youtube/.test(text)) return 'community_sns';
   if(category === 'knowledge' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|encyclopedia|knowledge/.test(text)) return 'knowledge_wiki';
   if(category === 'news' || source.includes('news') || /뉴스|속보|보도|신문|latest|breaking|press/.test(text)) return 'news';
   if(category === 'video' || mediaType === 'video' || type === 'video' || source.includes('youtube') || host.includes('youtube') || host.includes('youtu.be') || /동영상|영상|유튜브|브이로그|쇼츠|릴스|vlog|video|shorts|reels/.test(text)) return 'video_vlog';
@@ -4525,8 +4561,8 @@ function classifySearchCategory(it){
   if(text.includes('법원') || text.includes('구청') || text.includes('시청') || text.includes('관공서') || text.includes('court') || text.includes('city hall') || text.includes('district office') || text.includes('government office')) return 'map';
   if(text.includes('지하철') || text.includes('지하철역') || text.includes('버스') || text.includes('교통') || text.includes('metro') || text.includes('subway') || text.includes('station') || text.includes('bus route')) return 'map';
 
-  if(text.includes('인스타') || text.includes('instagram') || text.includes('facebook') || text.includes('페이스북') || text.includes('tiktok') || text.includes('틱톡') || text.includes('threads') || text.includes('twitter') || text.includes('트위터') || text.includes('x / twitter') || host.includes('instagram.') || host.includes('threads.net') || host.includes('tiktok.') || host.includes('facebook.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'sns';
-  if(mediaType === 'video' || type === 'video' || source.includes('youtube') || source.includes('video') || host.includes('youtube.com') || host.includes('youtu.be')) return 'video';
+  if(text.includes('인스타') || text.includes('instagram') || text.includes('facebook') || text.includes('페이스북') || text.includes('tiktok') || text.includes('틱톡') || text.includes('threads') || text.includes('twitter') || text.includes('트위터') || text.includes('x / twitter') || text.includes('youtube') || text.includes('유튜브') || host.includes('instagram.') || host.includes('threads.net') || host.includes('tiktok.') || host.includes('facebook.') || host.includes('x.com') || host.includes('twitter.') || host.includes('youtube.com') || host.includes('youtu.be') || source.includes('sns') || source.includes('social') || source.includes('youtube')) return 'sns';
+  if(mediaType === 'video' || type === 'video' || source.includes('video')) return 'video';
   if(text.includes('쇼핑') || text.includes('가격') || text.includes('구매') || text.includes('shopping') || text.includes('price') || text.includes('product') || type === 'product' || mediaType === 'product') return 'shopping';
   if(text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('sports')) return 'sports';
   if(text.includes('증권') || text.includes('주식') || text.includes('환율') || text.includes('금융') || text.includes('finance') || text.includes('stock')) return 'finance';
