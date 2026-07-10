@@ -75,9 +75,9 @@ const DEFAULT_SOFT_TIMEOUT_MS = 10500;
 const MARU_GATEWAY_CACHE_TTL_MS = 5 * 60 * 1000;
 const MARU_INFLIGHT_TTL_MS = 30 * 1000;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
-const OG_IMAGE_ENRICH_LIMIT = 36;
-const OG_IMAGE_ENRICH_CONCURRENCY = 6;
-const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
+const OG_IMAGE_ENRICH_LIMIT = 200;
+const OG_IMAGE_ENRICH_CONCURRENCY = 8;
+const OG_IMAGE_ENRICH_TIMEOUT_MS = 900;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
 const MAX_SEARCH_BANK_PAGES_DEEP = 60;
@@ -427,10 +427,41 @@ function isDirectImageResourceUrl(v){
 function sourcePageUrlForItem(it, payload){
   it = (it && typeof it === 'object') ? it : {};
   const p = (payload && typeof payload === 'object') ? payload : ((it.payload && typeof it.payload === 'object') ? it.payload : {});
+  const data = (it.data && typeof it.data === 'object') ? it.data : {};
+  const raw = (it.raw && typeof it.raw === 'object') ? it.raw : {};
+  const provider = (it.providerResult && typeof it.providerResult === 'object') ? it.providerResult : {};
+  const imageObj = (it.image && typeof it.image === 'object') ? it.image : {};
+  const pImageObj = (p.image && typeof p.image === 'object') ? p.image : {};
+  const dataImageObj = (data.image && typeof data.image === 'object') ? data.image : {};
+  const rawImageObj = (raw.image && typeof raw.image === 'object') ? raw.image : {};
+  const providerImageObj = (provider.image && typeof provider.image === 'object') ? provider.image : {};
+
+  function metaUrls(obj){
+    const pm = obj && obj.pagemap && typeof obj.pagemap === 'object' ? obj.pagemap : {};
+    const metas = Array.isArray(pm.metatags) ? pm.metatags : [];
+    const out = [];
+    metas.forEach(m => {
+      if(!m || typeof m !== 'object') return;
+      out.push(m['og:url'], m['twitter:url'], m.canonical, m.url, m['al:web:url']);
+    });
+    return out;
+  }
+
   const candidates = [
     it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.articleUrl, it.canonicalUrl, it.hostPageUrl,
+    it.originallink, it.originalLink, it.publisherLink, it.sourceUrl, it.postUrl,
     p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.articleUrl, p.canonicalUrl, p.hostPageUrl,
-    it.url, it.link, it.href, p.url, p.link, p.href
+    p.originallink, p.originalLink, p.publisherLink, p.sourceUrl, p.postUrl,
+    data.sourcePageUrl, data.pageUrl, data.contextLink, data.originalPageUrl, data.articleUrl, data.canonicalUrl,
+    raw.sourcePageUrl, raw.pageUrl, raw.contextLink, raw.originalPageUrl, raw.articleUrl, raw.canonicalUrl,
+    provider.sourcePageUrl, provider.pageUrl, provider.contextLink, provider.originalPageUrl, provider.articleUrl, provider.canonicalUrl,
+    imageObj.contextLink, imageObj.pageUrl, imageObj.sourcePageUrl, imageObj.hostPageUrl,
+    pImageObj.contextLink, pImageObj.pageUrl, pImageObj.sourcePageUrl, pImageObj.hostPageUrl,
+    dataImageObj.contextLink, dataImageObj.pageUrl, dataImageObj.sourcePageUrl,
+    rawImageObj.contextLink, rawImageObj.pageUrl, rawImageObj.sourcePageUrl,
+    providerImageObj.contextLink, providerImageObj.pageUrl, providerImageObj.sourcePageUrl,
+    ...metaUrls(it), ...metaUrls(p), ...metaUrls(data), ...metaUrls(raw), ...metaUrls(provider),
+    it.url, it.link, it.href, p.url, p.link, p.href, data.url, data.link, raw.url, raw.link, provider.url, provider.link
   ];
   for(const v of candidates){
     const u = safeString(v).trim();
@@ -438,6 +469,18 @@ function sourcePageUrlForItem(it, payload){
     return u;
   }
   return '';
+}
+
+function isOrphanMediaOnlySearchCard(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const type = safeString(it.type).toLowerCase();
+  const mediaType = safeString(it.mediaType).toLowerCase();
+  const source = safeString(it.source).toLowerCase();
+  const imageLike = type === 'image' || mediaType === 'image' || source.includes('image');
+  if(!imageLike) return false;
+  if(sourcePageUrlForItem(it, it.payload)) return false;
+  const direct = firstNonEmpty(it.originalImage, it.fullImage, it.imageOriginal, it.viewerImage, it.openImageUrl, it.contentUrl, it.image, it.imageUrl, it.thumbnail, it.thumb, it.url, it.link);
+  return !!direct && isDirectImageResourceUrl(direct);
 }
 
 function firstNonEmpty(){
@@ -541,6 +584,7 @@ function canonicalizeItem(raw, query, sourceHint){
     bind: (it.bind && typeof it.bind === 'object') ? it.bind : p.bind,
     tags,
     score: typeof it.score === 'number' ? it.score : (typeof p.score === 'number' ? p.score : 0.9),
+    pageMediaCard: !!(sourcePageUrl && imageCandidates.length),
     payload: p
   });
 
@@ -569,16 +613,95 @@ function toStandardItems(arr, source){
   });
 }
 
+function mergeCanonicalPageCard(base, incoming){
+  base = (base && typeof base === 'object') ? base : {};
+  incoming = (incoming && typeof incoming === 'object') ? incoming : {};
+
+  const baseSummary = resultSummaryText(base);
+  const incomingSummary = resultSummaryText(incoming);
+  const summary = incomingSummary.length > baseSummary.length ? incomingSummary : baseSummary;
+
+  const images = compactImages([].concat(
+    base.imageSet || [], incoming.imageSet || [],
+    base.thumbnail, base.thumb, base.image, base.imageUrl, base.originalImage, base.cardImage,
+    incoming.thumbnail, incoming.thumb, incoming.image, incoming.imageUrl, incoming.originalImage, incoming.cardImage,
+    base.media && base.media.preview && [base.media.preview.poster, base.media.preview.image, base.media.preview.thumbnail],
+    incoming.media && incoming.media.preview && [incoming.media.preview.poster, incoming.media.preview.image, incoming.media.preview.thumbnail]
+  ).flat().filter(Boolean));
+
+  const baseType = safeString(base.type).toLowerCase();
+  const incomingType = safeString(incoming.type).toLowerCase();
+  const preferIncomingType = (baseType === 'image' && incomingType && incomingType !== 'image');
+  const type = preferIncomingType ? incoming.type : (base.type || incoming.type || 'web');
+  const mediaType = preferIncomingType
+    ? (incoming.mediaType || 'article')
+    : (base.mediaType || incoming.mediaType || (type === 'video' ? 'video' : 'article'));
+
+  const pageUrl = firstNonEmpty(
+    sourcePageUrlForItem(base, base.payload),
+    sourcePageUrlForItem(incoming, incoming.payload),
+    !isDirectImageResourceUrl(base.url) ? base.url : '',
+    !isDirectImageResourceUrl(incoming.url) ? incoming.url : ''
+  );
+
+  const mergedMedia = Object.assign({}, base.media || {}, incoming.media || {});
+  if(images.length){
+    const preview = Object.assign({}, (base.media && base.media.preview) || {}, (incoming.media && incoming.media.preview) || {});
+    preview.poster = firstNonEmpty(preview.poster, images[0]);
+    preview.image = firstNonEmpty(preview.image, images[0]);
+    preview.thumbnail = firstNonEmpty(preview.thumbnail, images[0]);
+    mergedMedia.preview = preview;
+    if(!mergedMedia.type) mergedMedia.type = (type === 'video' || mediaType === 'video') ? 'video' : 'image';
+  }
+
+  const merged = Object.assign({}, base, incoming, {
+    type,
+    mediaType,
+    url: pageUrl || firstNonEmpty(base.url, incoming.url),
+    link: pageUrl || firstNonEmpty(base.link, incoming.link, base.url, incoming.url),
+    pageUrl: pageUrl || firstNonEmpty(base.pageUrl, incoming.pageUrl),
+    sourcePageUrl: pageUrl || firstNonEmpty(base.sourcePageUrl, incoming.sourcePageUrl),
+    contextLink: pageUrl || firstNonEmpty(base.contextLink, incoming.contextLink),
+    summary,
+    description: summary,
+    snippet: summary || firstNonEmpty(base.snippet, incoming.snippet),
+    thumbnail: images[0] || firstNonEmpty(base.thumbnail, incoming.thumbnail),
+    thumb: images[0] || firstNonEmpty(base.thumb, incoming.thumb),
+    image: images[0] || firstNonEmpty(base.image, incoming.image),
+    imageUrl: images[0] || firstNonEmpty(base.imageUrl, incoming.imageUrl),
+    imageSet: images,
+    originalImage: images[0] || firstNonEmpty(base.originalImage, incoming.originalImage),
+    cardImage: images[0] || firstNonEmpty(base.cardImage, incoming.cardImage),
+    media: Object.keys(mergedMedia).length ? mergedMedia : undefined,
+    pageMediaCard: !!(pageUrl && images.length)
+  });
+
+  if(base.videoId || incoming.videoId) merged.videoId = firstNonEmpty(base.videoId, incoming.videoId);
+  if(base.videoUrl || incoming.videoUrl) merged.videoUrl = firstNonEmpty(base.videoUrl, incoming.videoUrl);
+  if(base.watchUrl || incoming.watchUrl) merged.watchUrl = firstNonEmpty(base.watchUrl, incoming.watchUrl);
+  if(base.embedUrl || incoming.embedUrl) merged.embedUrl = firstNonEmpty(base.embedUrl, incoming.embedUrl);
+  return merged;
+}
+
 function dedupeCanonicalItems(items){
-  const seen = new Set();
+  const indexByKey = new Map();
   const out = [];
-  for(const it of (Array.isArray(items) ? items : [])){
-    const rawUrl = safeString(it && (it.url || it.link)).trim();
+  for(const raw of (Array.isArray(items) ? items : [])){
+    const it = (raw && typeof raw === 'object') ? raw : {};
+    const pageUrl = sourcePageUrlForItem(it, it.payload);
+    const rawUrl = safeString(firstNonEmpty(pageUrl, it.url, it.link)).trim();
     const normUrl = rawUrl.toLowerCase();
     const placeholder = !rawUrl || rawUrl === '#' || rawUrl === '/' || normUrl === 'javascript:void(0)' || normUrl.startsWith('javascript:');
-    const key = (placeholder ? (safeString(it && it.id).trim() || safeString(it && it.title).trim() + '|' + safeString(it && it.source).trim()) : rawUrl).toLowerCase();
-    if(!key || seen.has(key)) continue;
-    seen.add(key);
+    const key = (placeholder
+      ? (safeString(it.id).trim() || safeString(it.title).trim() + '|' + safeString(it.source).trim())
+      : rawUrl).toLowerCase();
+    if(!key) continue;
+    if(indexByKey.has(key)){
+      const idx = indexByKey.get(key);
+      out[idx] = mergeCanonicalPageCard(out[idx], it);
+      continue;
+    }
+    indexByKey.set(key, out.length);
     out.push(it);
   }
   return out;
@@ -1146,6 +1269,16 @@ function resultSummaryText(it){
   return best.slice(0, 720);
 }
 
+function richerDisplayText(){
+  let best = '';
+  for(let i=0; i<arguments.length; i++){
+    const clean = stripInlineHtml(arguments[i]);
+    if(!clean || isSyntheticSearchSummaryText(clean)) continue;
+    if(clean.length > best.length) best = clean;
+  }
+  return best;
+}
+
 function compactResultItem(it){
   it = (it && typeof it === 'object') ? it : {};
 
@@ -1163,17 +1296,26 @@ function compactResultItem(it){
   const placeInfo = (it.placeInfo && typeof it.placeInfo === 'object') ? Object.assign({}, it.placeInfo) : undefined;
   const summaryText = resultSummaryText(it);
   const sourcePageUrl = firstNonEmpty(profile.sourcePageUrl, profile.pageUrl, sourcePageUrlForItem(it, it.payload));
-  const resolvedUrl = (type === 'image' || mediaType === 'image') && sourcePageUrl
-    ? sourcePageUrl
-    : safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim();
+  const rawResolvedUrl = safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim();
+  // A search card must open the page/post that owns the media.  Direct image
+  // resources remain thumbnail data only and never replace a valid page URL.
+  const resolvedUrl = safeString(firstNonEmpty(
+    sourcePageUrl,
+    !isDirectImageResourceUrl(rawResolvedUrl) ? rawResolvedUrl : '',
+    profile.videoUrl,
+    profile.watchUrl
+  )).trim();
   const resolvedSectionId = it.sectionId || sectionIdForItem(it);
   const displayCardBase = (it.displayCard && typeof it.displayCard === 'object') ? Object.assign({}, it.displayCard) : {};
+  const richBody = richerDisplayText(summaryText, displayCardBase.body, displayCardBase.text, displayCardBase.summary, it.displaySummary);
   const displayCard = Object.assign({}, displayCardBase, {
-    lineClamp:5,
-    bodyLines:5
-  }, summaryText ? {
-    body:firstNonEmpty(displayCardBase.body, displayCardBase.text, summaryText),
-    summary:firstNonEmpty(displayCardBase.summary, summaryText)
+    lineClamp:4,
+    bodyLines:4
+  }, richBody ? {
+    body:richBody,
+    text:richBody,
+    summary:richBody,
+    description:richBody
   } : {});
   if(media){
     if(youtubeLike){
@@ -1228,16 +1370,17 @@ function compactResultItem(it){
     mediaQuality: mediaQualityProfileForItem(it, ownImages),
     selectedImageQuality: profile.selectedImageQuality,
     selectedCardImageQuality: profile.selectedCardImageQuality,
-    clickTargetType: profile.videoUrl ? 'video' : (originalImage ? 'image' : 'page'),
+    clickTargetType: resolvedUrl ? 'page' : (originalImage ? 'image' : 'page'),
     media,
     videoId: profile.videoId || undefined,
     videoUrl: profile.videoUrl || undefined,
     watchUrl: profile.watchUrl || undefined,
     embedUrl: profile.embedUrl || undefined,
-    openUrl: sourcePageUrl || profile.openUrl || undefined,
-    pageUrl: sourcePageUrl || profile.pageUrl || undefined,
+    openUrl: resolvedUrl || sourcePageUrl || profile.openUrl || undefined,
+    pageUrl: resolvedUrl || sourcePageUrl || profile.pageUrl || undefined,
     sourcePageUrl: sourcePageUrl || undefined,
     contextLink: firstNonEmpty(profile.contextLink, it.contextLink, it.payload && it.payload.contextLink, sourcePageUrl) || undefined,
+    pageMediaCard: !!(resolvedUrl && (ownImages.length || ownThumb || originalImage)),
     channel: it.channel || undefined,
     section: it.section || undefined,
     page: it.page || undefined,
@@ -1253,7 +1396,7 @@ function compactResultItem(it){
     displayGroupHint: it.displayGroupHint || undefined,
     displayGroupLabel: it.displayGroupLabel || it.displayGroupLabelHint || undefined,
     displayGroupLabelHint: it.displayGroupLabelHint || undefined,
-    displaySummary: firstNonEmpty(it.displaySummary, displayCard.summary, summaryText),
+    displaySummary: richerDisplayText(summaryText, displayCard.summary, it.displaySummary),
     displayCard,
     sectionId: resolvedSectionId,
     sectionTitle: it.sectionTitle || (SEARCH_SECTION_META[resolvedSectionId] && SEARCH_SECTION_META[resolvedSectionId].title),
@@ -1378,7 +1521,8 @@ function sectionIdForItem(it){
   if(category === 'knowledge' || category === 'book' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|논문|연구|자료|encyclopedia|knowledge|research|paper/.test(text)) return 'knowledge_wiki';
   if(category === 'news' || source.includes('news') || /뉴스|속보|보도|신문|latest|breaking|press/.test(text)) return 'news';
   if(category === 'video' || mediaType === 'video' || type === 'video' || source.includes('youtube') || host.includes('youtube') || host.includes('youtu.be') || /동영상|영상|유튜브|브이로그|쇼츠|릴스|vlog|video|shorts|reels/.test(text)) return 'video_vlog';
-  if(category === 'image' || mediaType === 'image' || type === 'image' || source.includes('image') || /이미지|사진|갤러리|포토|스냅샷|photo|image|gallery/.test(text)) return 'image_gallery';
+  const pageMediaCard = !!(it && it.pageMediaCard) || (!!sourcePageUrlForItem(it, it && it.payload) && !!firstNonEmpty(it && it.thumbnail, it && it.image, it && it.originalImage));
+  if(!pageMediaCard && (category === 'image' || mediaType === 'image' || type === 'image' || source.includes('image') || /이미지|사진|갤러리|포토|스냅샷|photo|image|gallery/.test(text))) return 'image_gallery';
   if(category === 'blog' || source.includes('blog') || host.includes('blog') || /블로그|후기|리뷰|방문기|blog|review/.test(text)) return 'blog_review';
   if(category === 'shopping' || mediaType === 'product' || type === 'product' || /쇼핑|상품|가격|구매|판매|광고|프로모션|shopping|product|price|buy|sale|ad\b/.test(text)) return 'shopping_product';
   if(/회사|기업|브랜드|홈페이지|공식 사이트|company|corporate|brand|homepage|official site/.test(text)) return 'company_web';
@@ -3995,7 +4139,7 @@ async function fetchOwnOgImage(url){
 
 async function enrichOwnImages(items, opts){
   const list = Array.isArray(items) ? items.slice() : [];
-  const max = Math.min(list.length, OG_IMAGE_ENRICH_LIMIT);
+  const max = Math.min(list.length, Math.max(0, Number(opts && opts.maxItems) || OG_IMAGE_ENRICH_LIMIT), OG_IMAGE_ENRICH_LIMIT);
   const trace = opts && Array.isArray(opts.trace) ? opts.trace : null;
   const timeLeft = opts && typeof opts.timeLeft === 'function' ? opts.timeLeft : (() => 9999);
 
@@ -4004,7 +4148,7 @@ async function enrichOwnImages(items, opts){
   let cursor = 0;
 
   async function worker(){
-    while(cursor < max && timeLeft() > 1200){
+    while(cursor < max && timeLeft() > 180){
       const idx = cursor++;
       const it = list[idx];
       if(!it) { skipped += 1; continue; }
@@ -4030,7 +4174,11 @@ async function enrichOwnImages(items, opts){
           mediaQuality: mediaQualityProfileForItem(it, ownImages),
           selectedImageQuality: imageQualityScore(ownImages[0], it),
           selectedCardImageQuality: imageQualityScore(ownImages[0], it),
-          clickTargetType: 'image',
+          clickTargetType: sourcePageUrlForItem(it, it.payload) ? 'page' : 'image',
+          pageUrl: sourcePageUrlForItem(it, it.payload) || it.pageUrl || it.url || it.link,
+          sourcePageUrl: sourcePageUrlForItem(it, it.payload) || it.sourcePageUrl || it.pageUrl,
+          contextLink: sourcePageUrlForItem(it, it.payload) || it.contextLink,
+          openUrl: sourcePageUrlForItem(it, it.payload) || it.openUrl || it.url || it.link,
           _providedImagePreserved: hasProviderSuppliedMedia(it)
         });
         skipped += 1;
@@ -4066,7 +4214,7 @@ async function enrichOwnImages(items, opts){
             mediaQuality: mediaQualityProfileForItem(it, nextImages),
             selectedImageQuality: imageQualityScore(nextImages[0], it),
             selectedCardImageQuality: imageQualityScore(nextImages[0], it),
-            clickTargetType: 'image',
+            clickTargetType: 'page',
             _ogImageEnriched: true
           });
           enriched += 1;
@@ -4147,7 +4295,7 @@ function backfillVisuals(items){
       mediaQuality: mediaQualityProfileForItem(it, imageSet),
       selectedImageQuality: imageQualityScore(original, it),
       selectedCardImageQuality: imageQualityScore(thumb || original, it),
-      clickTargetType: profile.videoUrl ? 'video' : (original ? 'image' : 'page'),
+      clickTargetType: profile.videoUrl ? 'video' : 'page',
       media
     });
   });
@@ -4207,8 +4355,8 @@ async function naverImageSearch(q, limit, start){
       const context = sourcePageUrlForItem(it, it);
       return {
         title: stripHtml(it.title || q),
-        link: context || imageUrl,
-        url: context || imageUrl,
+        link: context || '',
+        url: context || '',
         pageUrl: context || undefined,
         sourcePageUrl: context || undefined,
         contextLink: context || undefined,
@@ -4427,10 +4575,11 @@ async function googleSnsSearch(q, limit, start, timeoutMs){
     { name:'facebook', query:'site:facebook.com ' + q, source:'google_sns_facebook', type:'sns', mediaType:'article' },
     { name:'tiktok', query:'site:tiktok.com ' + q, source:'google_sns_tiktok', type:'sns', mediaType:'video' },
     { name:'x_twitter', query:'(site:x.com OR site:twitter.com) ' + q, source:'google_sns_x_twitter', type:'sns', mediaType:'article' },
-    { name:'threads', query:'site:threads.net ' + q, source:'google_sns_threads', type:'sns', mediaType:'article' }
+    { name:'threads', query:'site:threads.net ' + q, source:'google_sns_threads', type:'sns', mediaType:'article' },
+    { name:'youtube', query:'site:youtube.com/watch ' + q, source:'google_sns_youtube', type:'sns', mediaType:'video' }
   ];
 
-  const perRoute = Math.max(1, Math.min(4, Math.ceil(Math.min(limit || 20, 20) / 5)));
+  const perRoute = Math.max(1, Math.min(4, Math.ceil(Math.min(limit || 24, 24) / routes.length)));
   const settled = await Promise.allSettled(routes.map(route =>
     googleCseRequest(route.query, perRoute, start || 1, {
       source: route.source,
@@ -4444,7 +4593,14 @@ async function googleSnsSearch(q, limit, start, timeoutMs){
   const routeMeta = [];
   for(const s of settled){
     const pack = s && s.status === 'fulfilled' ? s.value : null;
-    if(pack && Array.isArray(pack.results)) results.push.apply(results, pack.results.slice(0, perRoute));
+    if(pack && Array.isArray(pack.results)){
+      const routed = pack.results.slice(0, perRoute).map(it => Object.assign({}, it, {
+        searchCategory:'sns',
+        displayGroup:'social',
+        displayGroupHint:'social'
+      }));
+      results.push.apply(results, routed);
+    }
     routeMeta.push({ route: pack && pack.route || 'unknown', status: pack && pack.meta && pack.meta.status || (s && s.status) || 'unknown', count: pack && pack.results ? pack.results.length : 0 });
   }
 
@@ -4474,10 +4630,24 @@ async function bingSearch(q, limit, offset){
 
 async function youtubeSearch(q, limit, timeoutMs){
   const key = envFirst('YOUTUBE_API_KEY','GOOGLE_YOUTUBE_API_KEY','GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY');
-  if(!key) return null;
+  if(!key){
+    const cseFallback = await googleCseRequest('site:youtube.com/watch ' + q, Math.min(limit || 10, 10), 1, {
+      source:'google_youtube_fallback', type:'sns', mediaType:'video', timeoutMs:Math.max(700, Math.min(1600, Number(timeoutMs) || 1200))
+    }).catch(() => null);
+    if(cseFallback && Array.isArray(cseFallback.results)){
+      cseFallback.results = cseFallback.results.map(it => Object.assign({}, it, {
+        searchCategory:'sns', displayGroup:'social', displayGroupHint:'social'
+      }));
+    }
+    return cseFallback;
+  }
   const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=' + Math.min(limit,50) + '&q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(key);
   const res = await fetchWithTimeout(url, null, Math.max(700, Math.min(3500, Number(timeoutMs) || 3500)));
-  if(!res.ok) return null;
+  if(!res.ok){
+    return await googleCseRequest('site:youtube.com/watch ' + q, Math.min(limit || 10, 10), 1, {
+      source:'google_youtube_fallback', type:'sns', mediaType:'video', timeoutMs:Math.max(700, Math.min(1600, Number(timeoutMs) || 1200))
+    }).catch(() => null);
+  }
   const data = await res.json();
   const results = (data.items || []).map(it => {
     const rawThumb = (it.snippet && it.snippet.thumbnails && (it.snippet.thumbnails.high || it.snippet.thumbnails.medium || it.snippet.thumbnails.default) || {}).url || '';
@@ -4536,7 +4706,8 @@ function classifySearchCategory(it){
   const type = safeString(it && it.type).toLowerCase();
   const text = [host, source, title, summary, mediaType, type].join(' ');
 
-  if(mediaType === 'image' || type === 'image' || source.includes('image')) return 'image';
+  const pageMediaCard = !!(it && it.pageMediaCard) || (!!sourcePageUrlForItem(it, it && it.payload) && !!firstNonEmpty(it && it.thumbnail, it && it.image, it && it.originalImage));
+  if(!pageMediaCard && (mediaType === 'image' || type === 'image' || source.includes('image'))) return 'image';
   if(source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('실시간') || text.includes('보도자료') || text.includes('breaking') || text.includes('latest')) return 'news';
   if(mediaType === 'map' || type === 'map' || source.includes('local') || source.includes('map') || text.includes('지도') || text.includes('길찾기') || text.includes('주소') || text.includes('directions') || text.includes('nearby') || text.includes('transit')) return 'map';
   if(source.includes('book') || type === 'book' || text.includes('도서') || text.includes('책 ') || text.includes('서적') || text.includes('출판') || text.includes('저자') || text.includes('book') || text.includes('author')) return 'book';
@@ -5594,7 +5765,77 @@ exports.handler = async function(event){
       base.items = base.items.slice(0, SEARCH_UI_FIRST_RESPONSE_WINDOW);
       base.results = base.items;
     }
+    // Search UI only: keep each result as one page-centric card and attach the
+    // representative media owned by that page. This never touches front/SearchBank
+    // supply and never turns the image file itself into the card destination.
+    if(searchUiGateway && Array.isArray(base.items) && base.items.length){
+      const enrichStarted = nowMs();
+      const enrichTrace = [];
+      // Normalize every Search UI card first without extra network work. Existing
+      // provider thumbnails/posters stay attached to the page card, and all clicks
+      // keep the owning page/post URL. Then use the bounded OG probe only for cards
+      // that still have no representative media.
+      base.items = base.items.map(it => {
+        if(!it || typeof it !== 'object') return it;
+        const pageUrl = sourcePageUrlForItem(it, it.payload) || (!isDirectImageResourceUrl(firstNonEmpty(it.url, it.link)) ? firstNonEmpty(it.url, it.link) : '');
+        const images = naturalImagesForItem(it, 3);
+        const bodyText = resultSummaryText(it);
+        const displayCardBase = (it.displayCard && typeof it.displayCard === 'object') ? Object.assign({}, it.displayCard) : {};
+        const next = Object.assign({}, it, {
+          url: pageUrl || it.url || it.link,
+          link: pageUrl || it.link || it.url,
+          pageUrl: pageUrl || it.pageUrl,
+          sourcePageUrl: pageUrl || it.sourcePageUrl,
+          contextLink: pageUrl || it.contextLink,
+          openUrl: pageUrl || it.openUrl || it.url || it.link,
+          clickTargetType: pageUrl ? 'page' : it.clickTargetType,
+          displayCard: Object.assign({}, displayCardBase, {
+            lineClamp: 4,
+            bodyLines: 4
+          }, bodyText ? {
+            body: bodyText,
+            text: bodyText,
+            summary: bodyText,
+            description: bodyText
+          } : {})
+        });
+        if(images.length){
+          next.thumbnail = images[0];
+          next.thumb = images[0];
+          next.image = images[0];
+          next.imageUrl = images[0];
+          next.imageSet = images;
+          next.cardImage = images[0];
+          next.pageMediaCard = !!pageUrl;
+          if(next.media && typeof next.media === 'object'){
+            next.media = Object.assign({}, next.media, {
+              preview: Object.assign({}, next.media.preview || {}, {
+                poster: firstNonEmpty(next.media.preview && next.media.preview.poster, images[0]),
+                image: firstNonEmpty(next.media.preview && next.media.preview.image, images[0]),
+                thumbnail: firstNonEmpty(next.media.preview && next.media.preview.thumbnail, images[0])
+              })
+            });
+          }
+        }
+        return next;
+      });
+      base.items = await enrichOwnImages(base.items, {
+        trace: enrichTrace,
+        maxItems: base.items.length,
+        timeLeft: () => Math.max(0, 1450 - (nowMs() - enrichStarted))
+      });
+      base.meta = Object.assign({}, base.meta || {}, {
+        searchUiPageCardMediaEnrich: true,
+        searchUiPageCardMediaTrace: enrichTrace
+      });
+    }
     base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
+    // Keep the neutral resident/search supply intact.  Only the Search UI response
+    // suppresses orphan image-file cards that have no owning page/post URL.
+    // Page-backed image/video cards remain one card: title + body + media + page link.
+    const searchUiResponseItems = searchUiGateway
+      ? base.items.filter(it => !isOrphanMediaOnlySearchCard(it))
+      : base.items;
     // Sanmaru must keep neutral/search data, not browser-specific display contracts.
     // Store the compact neutral candidate layer first, then decorate only the HTTP response for search.js.
     if(searchUiGateway && fastDisplayFirstWindow){
@@ -5602,6 +5843,7 @@ exports.handler = async function(event){
     }else{
       absorbIntoSanmaruResident(q, base.items, { searchType, lang });
     }
+    if(searchUiGateway) base.items = searchUiResponseItems;
     const displayPack = applySearchDisplayEngineToItems(base.items, q, raw || {}, { searchType, lang, region:base.region || null });
     base.items = displayPack.items;
     base.results = base.items;
