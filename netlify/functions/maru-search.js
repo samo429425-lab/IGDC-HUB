@@ -427,10 +427,41 @@ function isDirectImageResourceUrl(v){
 function sourcePageUrlForItem(it, payload){
   it = (it && typeof it === 'object') ? it : {};
   const p = (payload && typeof payload === 'object') ? payload : ((it.payload && typeof it.payload === 'object') ? it.payload : {});
+  const data = (it.data && typeof it.data === 'object') ? it.data : {};
+  const raw = (it.raw && typeof it.raw === 'object') ? it.raw : {};
+  const provider = (it.providerResult && typeof it.providerResult === 'object') ? it.providerResult : {};
+  const imageObj = (it.image && typeof it.image === 'object') ? it.image : {};
+  const pImageObj = (p.image && typeof p.image === 'object') ? p.image : {};
+  const dataImageObj = (data.image && typeof data.image === 'object') ? data.image : {};
+  const rawImageObj = (raw.image && typeof raw.image === 'object') ? raw.image : {};
+  const providerImageObj = (provider.image && typeof provider.image === 'object') ? provider.image : {};
+
+  function metaUrls(obj){
+    const pm = obj && obj.pagemap && typeof obj.pagemap === 'object' ? obj.pagemap : {};
+    const metas = Array.isArray(pm.metatags) ? pm.metatags : [];
+    const out = [];
+    metas.forEach(m => {
+      if(!m || typeof m !== 'object') return;
+      out.push(m['og:url'], m['twitter:url'], m.canonical, m.url, m['al:web:url']);
+    });
+    return out;
+  }
+
   const candidates = [
     it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.articleUrl, it.canonicalUrl, it.hostPageUrl,
+    it.originallink, it.originalLink, it.publisherLink, it.sourceUrl, it.postUrl,
     p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.articleUrl, p.canonicalUrl, p.hostPageUrl,
-    it.url, it.link, it.href, p.url, p.link, p.href
+    p.originallink, p.originalLink, p.publisherLink, p.sourceUrl, p.postUrl,
+    data.sourcePageUrl, data.pageUrl, data.contextLink, data.originalPageUrl, data.articleUrl, data.canonicalUrl,
+    raw.sourcePageUrl, raw.pageUrl, raw.contextLink, raw.originalPageUrl, raw.articleUrl, raw.canonicalUrl,
+    provider.sourcePageUrl, provider.pageUrl, provider.contextLink, provider.originalPageUrl, provider.articleUrl, provider.canonicalUrl,
+    imageObj.contextLink, imageObj.pageUrl, imageObj.sourcePageUrl, imageObj.hostPageUrl,
+    pImageObj.contextLink, pImageObj.pageUrl, pImageObj.sourcePageUrl, pImageObj.hostPageUrl,
+    dataImageObj.contextLink, dataImageObj.pageUrl, dataImageObj.sourcePageUrl,
+    rawImageObj.contextLink, rawImageObj.pageUrl, rawImageObj.sourcePageUrl,
+    providerImageObj.contextLink, providerImageObj.pageUrl, providerImageObj.sourcePageUrl,
+    ...metaUrls(it), ...metaUrls(p), ...metaUrls(data), ...metaUrls(raw), ...metaUrls(provider),
+    it.url, it.link, it.href, p.url, p.link, p.href, data.url, data.link, raw.url, raw.link, provider.url, provider.link
   ];
   for(const v of candidates){
     const u = safeString(v).trim();
@@ -438,6 +469,18 @@ function sourcePageUrlForItem(it, payload){
     return u;
   }
   return '';
+}
+
+function isOrphanMediaOnlySearchCard(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const type = safeString(it.type).toLowerCase();
+  const mediaType = safeString(it.mediaType).toLowerCase();
+  const source = safeString(it.source).toLowerCase();
+  const imageLike = type === 'image' || mediaType === 'image' || source.includes('image');
+  if(!imageLike) return false;
+  if(sourcePageUrlForItem(it, it.payload)) return false;
+  const direct = firstNonEmpty(it.originalImage, it.fullImage, it.imageOriginal, it.viewerImage, it.openImageUrl, it.contentUrl, it.image, it.imageUrl, it.thumbnail, it.thumb, it.url, it.link);
+  return !!direct && isDirectImageResourceUrl(direct);
 }
 
 function firstNonEmpty(){
@@ -5719,6 +5762,12 @@ exports.handler = async function(event){
       base.results = base.items;
     }
     base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
+    // Keep the neutral resident/search supply intact.  Only the Search UI response
+    // suppresses orphan image-file cards that have no owning page/post URL.
+    // Page-backed image/video cards remain one card: title + body + media + page link.
+    const searchUiResponseItems = searchUiGateway
+      ? base.items.filter(it => !isOrphanMediaOnlySearchCard(it))
+      : base.items;
     // Sanmaru must keep neutral/search data, not browser-specific display contracts.
     // Store the compact neutral candidate layer first, then decorate only the HTTP response for search.js.
     if(searchUiGateway && fastDisplayFirstWindow){
@@ -5726,6 +5775,7 @@ exports.handler = async function(event){
     }else{
       absorbIntoSanmaruResident(q, base.items, { searchType, lang });
     }
+    if(searchUiGateway) base.items = searchUiResponseItems;
     const displayPack = applySearchDisplayEngineToItems(base.items, q, raw || {}, { searchType, lang, region:base.region || null });
     base.items = displayPack.items;
     base.results = base.items;
