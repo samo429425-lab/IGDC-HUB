@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-597-partial-probe-fast-rich-firstpaint';
+const VERSION = 'A1.5.46-598-content-guard-partial-probe';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -5056,8 +5056,8 @@ async function attachFastDisplayRichProbe(base, event, ctx){
   const timeout = new Promise(resolve => setTimeout(resolve, budgetMs));
   await Promise.race([Promise.all(tasks), timeout]);
 
-  // Use every provider result that completed inside the first-paint budget.
-  // Do not discard fast Naver/Google results merely because another lane is still pending.
+  // Preserve the content-first gate, but keep every provider result that finishes
+  // inside the first-paint budget instead of discarding all partial completions.
   const settled = completed.slice();
   const richItems = [];
   const trace = [];
@@ -5183,10 +5183,7 @@ exports.handler = async function(event){
     const fastOpenPipeFirstWindow = sanmaruOpenGateRequested && isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
     const contentFirstSearchUi = searchUiContentFirstRequested(raw || {});
     const residentSeedHasRealCards = residentSeedPack && searchUiHasRealCards(residentSeedPack.items);
-    const sanmaruCanServeFromFastLayer = sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (
-      fastOpenPipeFirstWindow ||
-      ((residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, handlerLimit, raw || {})) && (!contentFirstSearchUi || residentSeedHasRealCards))
-    );
+    const sanmaruCanServeFromFastLayer = (fastOpenPipeFirstWindow || (residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, handlerLimit, raw || {}))) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (!contentFirstSearchUi || residentSeedHasRealCards);
     if(sanmaruCanServeFromFastLayer){
       base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit: fastDisplayFirstWindow ? (searchUiGateway ? handlerLimit : Math.min(handlerLimit, Math.max(visibleNeed * 12, SEARCH_UI_FIRST_RESPONSE_WINDOW))) : handlerLimit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
