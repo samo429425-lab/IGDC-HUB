@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-596-probe-stable-fastpath';
+const VERSION = 'A1.5.46-597-search-ui-page-door-media-bundle';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -4200,6 +4200,259 @@ async function fetchOwnOgImage(url){
   }
 }
 
+
+function pageCardMetaValue(html, names){
+  const text = safeString(html);
+  const wanted = Array.isArray(names) ? names : [names];
+  for(const name of wanted){
+    const safeName = safeString(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const patterns = [
+      new RegExp('<meta[^>]+(?:property|name|itemprop)=["\\\']' + safeName + '["\\\'][^>]+content=["\\\']([^"\\\']+)["\\\'][^>]*>', 'i'),
+      new RegExp('<meta[^>]+content=["\\\']([^"\\\']+)["\\\'][^>]+(?:property|name|itemprop)=["\\\']' + safeName + '["\\\'][^>]*>', 'i')
+    ];
+    for(const re of patterns){
+      const m = text.match(re);
+      if(m && m[1]) return decodeHtmlEntitiesLite(m[1]).trim();
+    }
+  }
+  return '';
+}
+
+function extractSearchUiPageCardMeta(html, baseUrl){
+  const text = safeString(html);
+  if(!text) return { title:'', description:'', image:'', hasVideo:false };
+
+  const title = firstNonEmpty(
+    pageCardMetaValue(text, ['og:title','twitter:title']),
+    ((text.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '')
+  );
+  const description = stripInlineHtml(firstNonEmpty(
+    pageCardMetaValue(text, ['og:description','twitter:description','description']),
+    ''
+  )).slice(0, 720);
+  const image = extractOgImageFromHtml(text, baseUrl);
+  const hasVideo = /<video\b/i.test(text) || !!pageCardMetaValue(text, ['og:video','og:video:url','og:video:secure_url','twitter:player']);
+
+  return {
+    title: stripInlineHtml(title).slice(0, 300),
+    description: (!isSyntheticSearchSummaryText(description) ? description : ''),
+    image: image || '',
+    hasVideo
+  };
+}
+
+async function fetchSearchUiPageCardMeta(url, timeoutMs){
+  const pageUrl = safeString(url).trim();
+  if(!pageUrl || !/^https?:\/\//i.test(pageUrl) || isDirectImageResourceUrl(pageUrl)) return { title:'', description:'', image:'', hasVideo:false };
+
+  globalThis.__MARU_SEARCH_UI_PAGE_CARD_META_CACHE = globalThis.__MARU_SEARCH_UI_PAGE_CARD_META_CACHE || new Map();
+  const cache = globalThis.__MARU_SEARCH_UI_PAGE_CARD_META_CACHE;
+  const hit = cache.get(pageUrl);
+  if(hit && Date.now() - hit.t < OG_IMAGE_CACHE_TTL_MS) return hit.v;
+
+  try{
+    const res = await fetchWithTimeout(pageUrl, {
+      method:'GET',
+      headers:{
+        'Accept':'text/html,application/xhtml+xml',
+        'User-Agent':'Mozilla/5.0 (compatible; MARU-SearchUI-PageCard/1.0)'
+      },
+      redirect:'follow'
+    }, Math.max(350, Math.min(1100, Number(timeoutMs) || 750)));
+
+    if(!res || !res.ok){
+      const empty = { title:'', description:'', image:'', hasVideo:false };
+      cache.set(pageUrl, { t:Date.now(), v:empty });
+      return empty;
+    }
+    const ctype = safeString(res.headers && res.headers.get && res.headers.get('content-type')).toLowerCase();
+    if(ctype && !ctype.includes('text/html') && !ctype.includes('application/xhtml')){
+      const empty = { title:'', description:'', image:'', hasVideo:false };
+      cache.set(pageUrl, { t:Date.now(), v:empty });
+      return empty;
+    }
+    const html = (await res.text()).slice(0, 320000);
+    const meta = extractSearchUiPageCardMeta(html, pageUrl);
+    cache.set(pageUrl, { t:Date.now(), v:meta });
+    return meta;
+  }catch(e){
+    return { title:'', description:'', image:'', hasVideo:false };
+  }
+}
+
+function normalizeSearchUiPageDoorCard(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const profile = mediaProfileForItem(it);
+  const rawUrl = safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim();
+  const pageUrl = safeString(firstNonEmpty(
+    sourcePageUrlForItem(it, it.payload),
+    profile.sourcePageUrl,
+    profile.pageUrl,
+    !isDirectImageResourceUrl(rawUrl) ? rawUrl : '',
+    profile.videoUrl,
+    profile.watchUrl
+  )).trim();
+  const body = resultSummaryText(it);
+  const images = naturalImagesForItem(it, 3);
+  const displayCardBase = (it.displayCard && typeof it.displayCard === 'object') ? Object.assign({}, it.displayCard) : {};
+  const previewBase = (it.media && it.media.preview && typeof it.media.preview === 'object') ? Object.assign({}, it.media.preview) : {};
+  const mediaBase = (it.media && typeof it.media === 'object') ? Object.assign({}, it.media) : undefined;
+  const videoLike = isYoutubeLikeItem(it) || safeString(it.mediaType).toLowerCase() === 'video' || safeString(it.type).toLowerCase() === 'video';
+
+  const next = Object.assign({}, it, {
+    url: pageUrl || rawUrl,
+    link: pageUrl || rawUrl,
+    pageUrl: pageUrl || undefined,
+    sourcePageUrl: pageUrl || undefined,
+    contextLink: pageUrl || undefined,
+    openUrl: pageUrl || undefined,
+    clickTargetType: pageUrl ? 'page' : it.clickTargetType,
+    summary: body || safeString(it.summary),
+    description: body || safeString(it.description),
+    snippet: body || safeString(it.snippet),
+    displaySummary: body || safeString(it.displaySummary),
+    displayCard: Object.assign({}, displayCardBase, {
+      lineClamp:4,
+      bodyLines:4
+    }, body ? { body, text:body, summary:body, description:body } : {})
+  });
+
+  if(images.length){
+    next.thumbnail = images[0];
+    next.thumb = images[0];
+    next.image = images[0];
+    next.imageUrl = images[0];
+    next.imageSet = images;
+    next.originalImage = images[0];
+    next.fullImage = images[0];
+    next.viewerImage = images[0];
+    next.openImageUrl = images[0];
+    next.contentUrl = images[0];
+    next.cardImage = images[0];
+    next.pageMediaCard = !!pageUrl;
+  }
+
+  if(videoLike || mediaBase){
+    next.media = Object.assign({}, mediaBase || {}, {
+      type: videoLike ? 'video' : firstNonEmpty(mediaBase && mediaBase.type, 'image'),
+      preview: Object.assign({}, previewBase, images.length ? {
+        poster:firstNonEmpty(previewBase.poster, images[0]),
+        image:firstNonEmpty(previewBase.image, images[0]),
+        thumbnail:firstNonEmpty(previewBase.thumbnail, images[0]),
+        thumb:firstNonEmpty(previewBase.thumb, images[0])
+      } : {})
+    });
+  }
+  return next;
+}
+
+async function enrichSearchUiPageDoorCards(items, opts){
+  opts = opts || {};
+  const started = nowMs();
+  const budgetMs = Math.max(500, Math.min(6500, Number(opts.budgetMs) || 2200));
+  const maxFetch = Math.max(0, Math.min(200, Number(opts.maxFetch) || 96));
+  const concurrency = Math.max(1, Math.min(24, Number(opts.concurrency) || 18));
+  const perFetchTimeoutMs = Math.max(350, Math.min(1100, Number(opts.perFetchTimeoutMs) || 750));
+  const trace = Array.isArray(opts.trace) ? opts.trace : null;
+
+  let list = consolidatePageCentricCards((Array.isArray(items) ? items : []).map(normalizeSearchUiPageDoorCard));
+  const candidateIndexes = [];
+  for(let i=0; i<list.length && candidateIndexes.length < maxFetch; i++){
+    const it = list[i];
+    if(!it || isSearchUiProviderRoadCard(it)) continue;
+    const pageUrl = safeString(firstNonEmpty(it.pageUrl, it.sourcePageUrl, it.contextLink, it.url, it.link)).trim();
+    if(!pageUrl || !/^https?:\/\//i.test(pageUrl) || isDirectImageResourceUrl(pageUrl)) continue;
+    const hasImage = naturalImagesForItem(it, 1).length > 0;
+    const body = resultSummaryText(it);
+    if(hasImage && body.length >= 90) continue;
+    candidateIndexes.push(i);
+  }
+
+  let cursor = 0;
+  let enrichedMedia = 0;
+  let enrichedText = 0;
+  async function worker(){
+    while(cursor < candidateIndexes.length && (nowMs() - started) < budgetMs - 120){
+      const idx = candidateIndexes[cursor++];
+      const it = list[idx];
+      const pageUrl = safeString(firstNonEmpty(it.pageUrl, it.sourcePageUrl, it.contextLink, it.url, it.link)).trim();
+      const meta = await fetchSearchUiPageCardMeta(pageUrl, perFetchTimeoutMs);
+      if(!meta) continue;
+
+      const currentBody = resultSummaryText(it);
+      const nextBody = meta.description && meta.description.length > currentBody.length ? meta.description : currentBody;
+      const existingImages = naturalImagesForItem(it, 3);
+      const images = existingImages.length ? existingImages : compactImages([meta.image]);
+      const displayCardBase = (it.displayCard && typeof it.displayCard === 'object') ? Object.assign({}, it.displayCard) : {};
+      const next = Object.assign({}, it, {
+        title: safeString(it.title).trim() || meta.title || '',
+        url:pageUrl,
+        link:pageUrl,
+        pageUrl,
+        sourcePageUrl:pageUrl,
+        contextLink:pageUrl,
+        openUrl:pageUrl,
+        clickTargetType:'page',
+        summary:nextBody || safeString(it.summary),
+        description:nextBody || safeString(it.description),
+        snippet:nextBody || safeString(it.snippet),
+        displaySummary:nextBody || safeString(it.displaySummary),
+        displayCard:Object.assign({}, displayCardBase, {
+          lineClamp:4,
+          bodyLines:4
+        }, nextBody ? { body:nextBody, text:nextBody, summary:nextBody, description:nextBody } : {})
+      });
+      if(nextBody && nextBody !== currentBody) enrichedText += 1;
+      if(images.length){
+        next.thumbnail = images[0];
+        next.thumb = images[0];
+        next.image = images[0];
+        next.imageUrl = images[0];
+        next.imageSet = images;
+        next.originalImage = images[0];
+        next.fullImage = images[0];
+        next.viewerImage = images[0];
+        next.openImageUrl = images[0];
+        next.contentUrl = images[0];
+        next.cardImage = images[0];
+        next.pageMediaCard = true;
+        const videoLike = meta.hasVideo || isYoutubeLikeItem(next) || safeString(next.mediaType).toLowerCase() === 'video' || safeString(next.type).toLowerCase() === 'video';
+        next.media = Object.assign({}, (next.media && typeof next.media === 'object') ? next.media : {}, {
+          type:videoLike ? 'video' : firstNonEmpty(next.media && next.media.type, 'image'),
+          preview:Object.assign({}, (next.media && next.media.preview) || {}, {
+            poster:firstNonEmpty(next.media && next.media.preview && next.media.preview.poster, images[0]),
+            image:firstNonEmpty(next.media && next.media.preview && next.media.preview.image, images[0]),
+            thumbnail:firstNonEmpty(next.media && next.media.preview && next.media.preview.thumbnail, images[0]),
+            thumb:firstNonEmpty(next.media && next.media.preview && next.media.preview.thumb, images[0])
+          })
+        });
+        if(!existingImages.length) enrichedMedia += 1;
+      }
+      list[idx] = next;
+    }
+  }
+
+  const workers = [];
+  const workerCount = Math.min(concurrency, candidateIndexes.length);
+  for(let i=0; i<workerCount; i++) workers.push(worker());
+  await Promise.allSettled(workers);
+
+  list = consolidatePageCentricCards(list.map(normalizeSearchUiPageDoorCard));
+  if(trace){
+    trace.push({
+      name:'search-ui-page-door-card-bundle',
+      status:(enrichedMedia || enrichedText) ? 'ok' : 'preserved-provider-media',
+      checked:candidateIndexes.length,
+      enrichedMedia,
+      enrichedText,
+      elapsedMs:nowMs() - started,
+      searchUiOnly:true,
+      frontSupplyUntouched:true
+    });
+  }
+  return list;
+}
+
 async function enrichOwnImages(items, opts){
   const list = Array.isArray(items) ? items.slice() : [];
   const max = Math.min(list.length, Math.max(0, Number(opts && opts.maxItems) || OG_IMAGE_ENRICH_LIMIT), OG_IMAGE_ENRICH_LIMIT);
@@ -5488,9 +5741,12 @@ exports.handler = async function(event){
       const trace = [];
       const started = nowMs();
 
-      const enriched = await enrichOwnImages(incoming, {
+      const enriched = await enrichSearchUiPageDoorCards(incoming, {
         trace,
-        timeLeft: () => Math.max(0, 6500 - (nowMs() - started))
+        budgetMs:6200,
+        maxFetch:Math.min(25, incoming.length),
+        concurrency:12,
+        perFetchTimeoutMs:900
       });
 
       let items = enriched.map(compactResultItem);
@@ -5882,13 +6138,15 @@ exports.handler = async function(event){
         }
         return next;
       });
-      base.items = await enrichOwnImages(base.items, {
-        trace: enrichTrace,
-        maxItems: base.items.length,
-        timeLeft: () => Math.max(0, 1450 - (nowMs() - enrichStarted))
+      base.items = await enrichSearchUiPageDoorCards(base.items, {
+        trace:enrichTrace,
+        budgetMs:requestedSearchUiPage === 1 ? 2400 : 1250,
+        maxFetch:requestedSearchUiPage === 1 ? Math.min(120, base.items.length) : Math.min(25, base.items.length),
+        concurrency:requestedSearchUiPage === 1 ? 20 : 10,
+        perFetchTimeoutMs:requestedSearchUiPage === 1 ? 760 : 650
       });
       base.meta = Object.assign({}, base.meta || {}, {
-        searchUiPageCardMediaEnrich: true,
+        searchUiPageDoorCardBundle: true,
         searchUiPageCardMediaTrace: enrichTrace
       });
     }
