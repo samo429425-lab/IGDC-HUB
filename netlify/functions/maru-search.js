@@ -4319,7 +4319,7 @@ async function googleSearch(q, limit, start){
   return { source: 'google', results, meta };
 }
 
-async function googleSnsSearch(q, limit, start){
+async function googleSnsSearch(q, limit, start, timeoutMs){
   const keys = googleCseKeys();
   const cseParams = { hl:'ko', gl:'kr', safe:'off', filter:'0', lr:'removed' };
   if(!keys.key) return { source:'google_sns', results: [], meta:{ status:'google key missing', reason:'GOOGLE_API_KEY missing', cseParams } };
@@ -4334,12 +4334,13 @@ async function googleSnsSearch(q, limit, start){
   ];
 
   const perRoute = Math.max(1, Math.min(4, Math.ceil(Math.min(limit || 20, 20) / 5)));
+  const routeTimeoutMs = clampInt(timeoutMs, 1600, 600, 3500);
   const settled = await Promise.allSettled(routes.map(route =>
     googleCseRequest(route.query, perRoute, start || 1, {
       source: route.source,
       type: route.type,
       mediaType: route.mediaType,
-      timeoutMs: 1600
+      timeoutMs: routeTimeoutMs
     }).then(bundle => Object.assign({}, bundle, { route: route.name }))
   ));
 
@@ -4375,11 +4376,11 @@ async function bingSearch(q, limit, offset){
   return { source: 'bing', results: ((data.webPages && data.webPages.value) || []).map(it => ({ title: it.name, link: it.url, url: it.url, snippet: it.snippet, type: 'web', source: 'bing' })) };
 }
 
-async function youtubeSearch(q, limit){
+async function youtubeSearch(q, limit, timeoutMs){
   const key = envFirst('YOUTUBE_API_KEY','GOOGLE_YOUTUBE_API_KEY','GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY');
   if(!key) return null;
   const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=' + Math.min(limit,50) + '&q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(key);
-  const res = await fetchWithTimeout(url, null, 3500);
+  const res = await fetchWithTimeout(url, null, clampInt(timeoutMs, 3500, 600, 5000));
   if(!res.ok) return null;
   const data = await res.json();
   const results = (data.items || []).map(it => {
@@ -5077,6 +5078,17 @@ async function attachFastDisplayRichProbe(base, event, ctx){
   if(['all','map','tour'].includes(searchType)) pushTask('naver_local_quick', naverGenericSearch('local.json', q, 10, naverStart10, 'naver_local', 'map'));
   if(['all','web','news'].includes(searchType)) pushTask('google_web_quick', googleCseRequest(q, 10, googleStart10, { source:'google_quick', type:'web', timeoutMs:1100 }));
   if(['all','image','web'].includes(searchType)) pushTask('google_image_quick', googleCseRequest(q, 10, googleStart10, { source:'google_image_quick', type:'image', mediaType:'image', searchType:'image', timeoutMs:1100 }));
+  if(['all','sns'].includes(searchType)) pushTask('google_sns_quick', googleSnsSearch(q, 20, googleStart10, 1100));
+  if(['all','sns','video'].includes(searchType)) pushTask('youtube_quick', youtubeSearch(q, searchType === 'sns' ? 16 : 12, 1100).then(pack => {
+    if(searchType !== 'sns' || !pack || !Array.isArray(pack.results)) return pack;
+    return Object.assign({}, pack, {
+      results: pack.results.map(it => Object.assign({}, it, {
+        searchCategory:'sns',
+        displayGroup:'community_sns',
+        displayGroupHint:'community_sns'
+      }))
+    });
+  }));
 
   if(!tasks.length) return base;
 
