@@ -1050,16 +1050,20 @@ function resultSummaryText(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const meta = (it.meta && typeof it.meta === 'object') ? it.meta : {};
+  const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
   const candidates = [
-    it.summary, it.snippet, it.description, it.excerpt, it.content, it.text,
+    it.summary, it.snippet, it.contentSnippet, it.description, it.excerpt, it.abstract,
+    it.lead, it.subtitle, it.content, it.text, it.htmlSnippet,
     it.ogDescription, it.metaDescription, it.seoDescription,
-    p.summary, p.snippet, p.description, p.excerpt, p.content, p.text,
+    p.summary, p.snippet, p.contentSnippet, p.description, p.excerpt, p.abstract,
+    p.lead, p.subtitle, p.content, p.text, p.htmlSnippet,
     p.ogDescription, p.metaDescription,
-    meta.description, meta.ogDescription
+    meta.description, meta.summary, meta.snippet, meta.ogDescription, meta.metaDescription,
+    displayCard.body, displayCard.text, displayCard.snippet, displayCard.description, displayCard.summary
   ];
   for(const v of candidates){
     const clean = stripInlineHtml(v);
-    if(clean && clean.length >= 18 && !isSyntheticSearchSummaryText(clean)) return clean.slice(0, 300);
+    if(clean && clean.length >= 18 && !isSyntheticSearchSummaryText(clean)) return clean.slice(0, 520);
   }
 
   // Do not manufacture card summaries such as "...검색 결과입니다".
@@ -5177,7 +5181,7 @@ exports.handler = async function(event){
     const fastOpenPipeFirstWindow = sanmaruOpenGateRequested && isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
     const contentFirstSearchUi = searchUiContentFirstRequested(raw || {});
     const residentSeedHasRealCards = residentSeedPack && searchUiHasRealCards(residentSeedPack.items);
-    const sanmaruCanServeFromFastLayer = (fastOpenPipeFirstWindow || (residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, handlerLimit, raw || {}))) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (!contentFirstSearchUi || residentSeedHasRealCards);
+    const sanmaruCanServeFromFastLayer = (fastOpenPipeFirstWindow || (residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, handlerLimit, raw || {}))) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (!contentFirstSearchUi || residentSeedHasRealCards || fastOpenPipeFirstWindow);
     if(sanmaruCanServeFromFastLayer){
       base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit: fastDisplayFirstWindow ? (searchUiGateway ? handlerLimit : Math.min(handlerLimit, Math.max(visibleNeed * 12, SEARCH_UI_FIRST_RESPONSE_WINDOW))) : handlerLimit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
