@@ -1,6 +1,7 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
 // PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
 // PATCH: search-owned proxy viewer + bounded 2,000 intake + real-content card media/body display + 30-language search UI labels
+// PATCH: visible-page media enrichment retry + page-door click target preservation (Search UI only)
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -72,6 +73,8 @@ ready(function () {
     let lastType = 'all';
     let lastSearchPayload = null;
     const pageImageEnrichCache = new Set();
+    const pageImageEnrichInFlight = new Set();
+    const pageImageEnrichAttempts = new Map();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
 
@@ -1576,7 +1579,7 @@ if (q0) {
   if(restoreSearchReturnItemsFromSession(q0, activeType)){
     input.value = q0;
     updateSearchTabsActive(q0);
-    renderPage(currentPage || 1, true);
+    renderPage(currentPage || 1);
     status.textContent = statusResultsText(actualResultCountForStatus(), q0, activeType);
     try{
       const restoreSeq = (Number(runSearch._seq) || 0) + 1;
@@ -1964,7 +1967,7 @@ function startContinuousIntake(q, type, seq){
           allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice).slice(0, MAX_SMOOTH_CANDIDATES);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
           updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(target, allItems.length));
-          if(page === currentPage) renderPage(page, true);
+          if(page === currentPage) renderPage(page);
           else drawPager();
           status.textContent = statusResultsText(actualResultCountForStatus(), q, type, true);
         }else{
@@ -2146,6 +2149,17 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
+  if (isSearchPage) {
+    sp.set('action', 'search-ui');
+    sp.set('gateway', 'search-html');
+    sp.set('searchUi', '1');
+    sp.set('displayRich', '1');
+    sp.set('richContent', '1');
+    sp.set('realContentFirst', '1');
+    sp.set('realResultCards', '1');
+    sp.set('requireSnippets', '1');
+    sp.set('includeMedia', '1');
+  }
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
   try {
@@ -2554,7 +2568,7 @@ async function fetchInstantSearchPack(q, type = activeType){
       // They must not restart Sanmaru/MaruSearch from zero. The all search
       // keeps receiving in the background; this view re-renders from allItems.
       if (Array.isArray(allItems) && allItems.length) {
-        renderPage(1, true);
+        renderPage(1);
         status.textContent = statusResultsText(actualResultCountForStatus(), q, activeType, continuousIntakeActive);
         return;
       }
@@ -4429,7 +4443,7 @@ function displayGroupOfItem(it){
           history.replaceState({ ...(history.state || {}), __maruSearchOwnedResult:false }, '', u.toString());
         }catch(e){}
         try{ document.querySelectorAll('.maru-search-owned-proxy-frame').forEach(f => { if(f.__maruProxyBlobUrl){ URL.revokeObjectURL(f.__maruProxyBlobUrl); f.__maruProxyBlobUrl=''; } }); }catch(e){}
-        renderPage(currentPage || 1, true);
+        renderPage(currentPage || 1);
         status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType);
       });
 
@@ -5011,28 +5025,84 @@ if (it.riskLabel === '⚠️ high-risk') {
     function mergeEnrichedItems(baseItems, enrichedItems){
       const byKey = new Map();
 
+      function candidateKeys(it){
+        if(!it) return [];
+        return [
+          it.id,
+          it.pageUrl,
+          it.sourcePageUrl,
+          it.contextLink,
+          it.openUrl,
+          it.url,
+          it.link,
+          it.href,
+          it.title
+        ].map(v => String(v || '').trim().toLowerCase()).filter(Boolean);
+      }
+
       (Array.isArray(enrichedItems) ? enrichedItems : []).forEach(it => {
-        const key = itemStableKey(it);
-        if(key) byKey.set(key, it);
+        candidateKeys(it).forEach(key => {
+          if(!byKey.has(key)) byKey.set(key, it);
+        });
       });
 
       return (Array.isArray(baseItems) ? baseItems : []).map(it => {
-        const key = itemStableKey(it);
-        const hit = key ? byKey.get(key) : null;
+        const hit = candidateKeys(it).map(key => byKey.get(key)).find(Boolean);
         if(!hit) return it;
 
-        const imgs = collectNaturalImages(hit);
-        if(!imgs.length) return it;
+        const imgs = dedupeImageVariantsClient(collectNaturalImages(hit));
+        const baseMedia = (it.media && typeof it.media === 'object') ? it.media : {};
+        const hitMedia = (hit.media && typeof hit.media === 'object') ? hit.media : {};
+        const basePreview = (baseMedia.preview && typeof baseMedia.preview === 'object') ? baseMedia.preview : {};
+        const hitPreview = (hitMedia.preview && typeof hitMedia.preview === 'object') ? hitMedia.preview : {};
+        const baseCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+        const hitCard = (hit.displayCard && typeof hit.displayCard === 'object') ? hit.displayCard : {};
 
-        const merged = {
-          ...it,
-          thumbnail: hit.thumbnail || imgs[0] || it.thumbnail || '',
-          thumb: hit.thumb || imgs[0] || it.thumb || '',
-          image: hit.image || imgs[0] || it.image || '',
-          imageSet: imgs
-        };
+        const baseText = descriptionForItemClient(it);
+        const hitText = descriptionForItemClient(hit);
+        const body = hitText.length >= baseText.length ? hitText : baseText;
+        const pageTarget = String(
+          hit.pageUrl || hit.sourcePageUrl || hit.contextLink || hit.openUrl ||
+          it.pageUrl || it.sourcePageUrl || it.contextLink || it.openUrl ||
+          hit.url || hit.link || it.url || it.link || ''
+        ).trim();
 
-        itemImageEnrichCache.set(key, merged);
+        const merged = Object.assign({}, it, hit, {
+          url: pageTarget || it.url || hit.url || '',
+          link: pageTarget || it.link || hit.link || '',
+          pageUrl: pageTarget || hit.pageUrl || it.pageUrl || '',
+          sourcePageUrl: pageTarget || hit.sourcePageUrl || it.sourcePageUrl || '',
+          contextLink: pageTarget || hit.contextLink || it.contextLink || '',
+          openUrl: pageTarget || hit.openUrl || it.openUrl || '',
+          clickTargetType: pageTarget ? 'page' : (hit.clickTargetType || it.clickTargetType),
+          summary: body || hit.summary || it.summary || '',
+          description: body || hit.description || it.description || '',
+          snippet: body || hit.snippet || it.snippet || '',
+          displaySummary: body || hit.displaySummary || it.displaySummary || '',
+          displayCard: Object.assign({}, baseCard, hitCard, body ? {
+            body,
+            text: body,
+            summary: body,
+            description: body
+          } : {}),
+          media: Object.keys(baseMedia).length || Object.keys(hitMedia).length ? Object.assign({}, baseMedia, hitMedia, {
+            preview: Object.assign({}, basePreview, hitPreview)
+          }) : undefined
+        });
+
+        if(imgs.length){
+          merged.thumbnail = hit.thumbnail || imgs[0] || it.thumbnail || '';
+          merged.thumb = hit.thumb || imgs[0] || it.thumb || '';
+          merged.image = hit.image || imgs[0] || it.image || '';
+          merged.imageUrl = hit.imageUrl || imgs[0] || it.imageUrl || '';
+          merged.imageSet = imgs;
+          merged.originalImage = hit.originalImage || imgs[0] || it.originalImage || '';
+          merged.fullImage = hit.fullImage || imgs[0] || it.fullImage || '';
+          merged.cardImage = hit.cardImage || imgs[0] || it.cardImage || '';
+        }
+
+        const key = itemStableKey(merged);
+        if(key) itemImageEnrichCache.set(key, merged);
         return merged;
       });
     }
@@ -5042,25 +5112,39 @@ if (it.riskLabel === '⚠️ high-risk') {
       if(!q || !Array.isArray(slice) || !slice.length) return;
 
       const cacheKey = [q, activeType || 'all', page].join('::');
-      if(pageImageEnrichCache.has(cacheKey)) return;
-      pageImageEnrichCache.add(cacheKey);
+      if(pageImageEnrichCache.has(cacheKey) || pageImageEnrichInFlight.has(cacheKey)) return;
 
       const candidates = slice
         .map((it, idx) => ({ it, idx }))
         .filter(x => {
           const key = itemStableKey(x.it);
-          if(key && itemImageEnrichCache.has(key)) return false;
+          if(key && itemImageEnrichCache.has(key) && collectNaturalImages(itemImageEnrichCache.get(key)).length) return false;
           if(collectNaturalImages(x.it).length) return false;
-          const url = String((x.it && (x.it.url || x.it.link)) || '').trim();
+          const url = String((x.it && (x.it.pageUrl || x.it.sourcePageUrl || x.it.openUrl || x.it.url || x.it.link)) || '').trim();
           return /^https?:\/\//i.test(url);
         })
         .slice(0, PAGE_SIZE);
 
-      if(!candidates.length) return;
+      if(!candidates.length){
+        pageImageEnrichCache.add(cacheKey);
+        return;
+      }
+
+      const attempt = (pageImageEnrichAttempts.get(cacheKey) || 0) + 1;
+      pageImageEnrichAttempts.set(cacheKey, attempt);
+      pageImageEnrichInFlight.add(cacheKey);
 
       try{
-        const url =
-          `/.netlify/functions/maru-search?action=enrich-images&q=${encodeURIComponent(q)}&type=${encodeURIComponent(activeType || 'all')}`;
+        const sp = new URLSearchParams();
+        sp.set('action', 'enrich-images');
+        sp.set('q', q);
+        sp.set('type', activeType || 'all');
+        sp.set('handoff', 'search-html');
+        sp.set('gateway', 'search-html');
+        sp.set('searchUi', '1');
+        sp.set('includeMedia', '1');
+        sp.set('realResultCards', '1');
+        const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
         const res = await fetch(url, {
           method: 'POST',
@@ -5069,32 +5153,41 @@ if (it.riskLabel === '⚠️ high-risk') {
           body: JSON.stringify({
             q,
             type: activeType || 'all',
+            page,
             items: candidates.map(x => x.it)
           })
         });
 
-        if(!res.ok) return;
+        if(!res.ok) throw new Error('IMAGE_ENRICH_HTTP_' + res.status);
 
         const json = await res.json();
         const enriched = normalizeItems(json);
-        if(!enriched.length) return;
+        if(!enriched.length) throw new Error('IMAGE_ENRICH_EMPTY');
 
         const updatedCandidates = mergeEnrichedItems(candidates.map(x => x.it), enriched);
-        let changed = false;
+        const richUpdated = updatedCandidates.filter(item => collectNaturalImages(item).length || (item.media && item.media.preview && item.media.preview.poster));
+        if(!richUpdated.length) throw new Error('IMAGE_ENRICH_NO_MEDIA');
 
-        updatedCandidates.forEach((item, i) => {
-          const globalIdx = startIndex + candidates[i].idx;
-          if(globalIdx >= 0 && globalIdx < allItems.length && collectNaturalImages(item).length){
-            allItems[globalIdx] = item;
-            changed = true;
-          }
+        allItems = mergeEnrichedItems(allItems, richUpdated);
+        loadedServerPages.forEach((items, pageNo) => {
+          loadedServerPages.set(pageNo, mergeEnrichedItems(items, richUpdated));
         });
 
-        if(changed && page === currentPage){
-          renderPage(page, true);
-        }
+        pageImageEnrichCache.add(cacheKey);
+        pageImageEnrichAttempts.delete(cacheKey);
+        if(page === currentPage) renderPage(page, true);
       }catch(e){
+        if(attempt < 3 && runSearch._seq){
+          setTimeout(() => {
+            pageImageEnrichInFlight.delete(cacheKey);
+            enrichRenderedPageImages(page, visibleItemsForPage(page), (page - 1) * PAGE_SIZE);
+          }, attempt * 650);
+          return;
+        }
+        pageImageEnrichCache.add(cacheKey);
         console.warn('page image enrichment skipped:', e);
+      }finally{
+        pageImageEnrichInFlight.delete(cacheKey);
       }
     }
 
@@ -5428,6 +5521,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (normalizeSearchType(activeType) === 'image') {
         renderImageGalleryPage(slice);
         drawPager();
+        if(!skipEnrich) enrichRenderedPageImages(page, slice, start);
         return;
       }
 
@@ -5455,7 +5549,7 @@ if (it.riskLabel === '⚠️ high-risk') {
 
     async function loadServerPageAndRender(page){
       if (normalizeSearchType(activeType) !== 'all') {
-        renderPage(page, true);
+        renderPage(page);
         status.textContent = statusResultsText(actualResultCountForStatus(), lastQuery || input.value || '', activeType, continuousIntakeActive);
         return;
       }
@@ -5648,6 +5742,8 @@ async function runSearch(q, type = activeType){
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
+  pageImageEnrichInFlight.clear();
+  pageImageEnrichAttempts.clear();
   itemImageEnrichCache.clear();
   expandedDisplayGroups.clear();
 
@@ -5706,7 +5802,7 @@ async function runSearch(q, type = activeType){
       firstPaintDone = true;
       renderPage(1);
     }else if(firstPaintDone && currentPage === 1){
-      renderPage(1, true);
+      renderPage(1);
     }else if(firstPaintDone){
       drawPager();
     }
