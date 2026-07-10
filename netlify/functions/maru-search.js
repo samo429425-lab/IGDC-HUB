@@ -88,7 +88,6 @@ const SEARCH_UI_FIRST_RESPONSE_WINDOW = 300;
 const SEARCH_UI_DEFAULT_CANDIDATE_TARGET = 1500;
 const SEARCH_UI_WIDE_CANDIDATE_TARGET = 2000;
 const SEARCH_UI_FAST_PROBE_BUDGET_MS = 280;
-const SEARCH_UI_FAST_FIRST_PAINT_TARGET = 120;
 
 function nowMs(){ return Date.now(); }
 
@@ -142,11 +141,7 @@ function isSearchUiGatewayRequest(raw){
 
 function searchUiContentFirstRequested(raw){
   raw = raw || {};
-  // Keep Search UI fast by default. Content-first is only an explicit/strict
-  // provider wait mode; normal search UI still receives a quick first paint and
-  // then merges richer provider cards as they arrive.
-  return truthy(raw.forceRealContentFirst) || truthy(raw.waitRealContent) ||
-    truthy(raw.requireBody) || safeString(raw.requireSnippets).toLowerCase() === 'strict';
+  return isSearchUiGatewayRequest(raw) || truthy(raw.realContentFirst) || truthy(raw.richContent) || truthy(raw.requireSnippets) || truthy(raw.realResultCards);
 }
 
 function isSearchUiProviderRoadCard(it){
@@ -1055,26 +1050,17 @@ function resultSummaryText(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const meta = (it.meta && typeof it.meta === 'object') ? it.meta : {};
-  const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
   const candidates = [
-    it.summary, it.snippet, it.contentSnippet, it.description, it.excerpt, it.abstract,
-    it.lead, it.subtitle, it.content, it.text, it.htmlSnippet,
+    it.summary, it.snippet, it.description, it.excerpt, it.content, it.text,
     it.ogDescription, it.metaDescription, it.seoDescription,
-    p.summary, p.snippet, p.contentSnippet, p.description, p.excerpt, p.abstract,
-    p.lead, p.subtitle, p.content, p.text, p.htmlSnippet,
+    p.summary, p.snippet, p.description, p.excerpt, p.content, p.text,
     p.ogDescription, p.metaDescription,
-    meta.description, meta.summary, meta.snippet, meta.ogDescription, meta.metaDescription,
-    displayCard.body, displayCard.text, displayCard.snippet, displayCard.description, displayCard.summary
+    meta.description, meta.ogDescription
   ];
-  let best = '';
   for(const v of candidates){
     const clean = stripInlineHtml(v);
-    if(!clean || clean.length < 18 || isSyntheticSearchSummaryText(clean)) continue;
-    // Prefer a richer natural snippet, but keep the response light.
-    if(!best || clean.length > best.length) best = clean;
-    if(best.length >= 520) break;
+    if(clean && clean.length >= 18 && !isSyntheticSearchSummaryText(clean)) return clean.slice(0, 300);
   }
-  if(best) return best.slice(0, 520);
 
   // Do not manufacture card summaries such as "...검색 결과입니다".
   // A search card should show only real provider snippets/body/OG descriptions.
@@ -5158,10 +5144,6 @@ exports.handler = async function(event){
     const searchUiGateway = isSearchUiGatewayRequest(raw || {});
     const searchUiTarget = searchUiGateway ? searchUiCandidateTarget(q, searchType, raw || {}) : limit;
     const handlerLimit = searchUiGateway ? searchUiTarget : limit;
-    const requestedSearchPage = clampInt(firstNonEmpty(raw && (raw.page || raw.p || raw.visiblePage || raw.sectionPage), 1), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
-    const searchUiFastFirstTarget = searchUiGateway
-      ? Math.min(searchUiTarget, Math.max(visibleNeed * 4, requestedSearchPage === 1 ? SEARCH_UI_FAST_FIRST_PAINT_TARGET : (requestedSearchPage * visibleNeed + visibleNeed)))
-      : handlerLimit;
     const forceProviderRefresh = deep || explicitExternalRequested(raw) || truthy(raw && (raw.refresh || raw.forceRefresh || raw.waitProviders || raw.waitExternal));
 
     // IMPORTANT: Sanmaru is the top resident information CPU. Maru Search is the
@@ -5195,9 +5177,9 @@ exports.handler = async function(event){
     const fastOpenPipeFirstWindow = sanmaruOpenGateRequested && isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
     const contentFirstSearchUi = searchUiContentFirstRequested(raw || {});
     const residentSeedHasRealCards = residentSeedPack && searchUiHasRealCards(residentSeedPack.items);
-    const sanmaruCanServeFromFastLayer = (fastOpenPipeFirstWindow || (residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, handlerLimit, raw || {}))) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (!contentFirstSearchUi || residentSeedHasRealCards || fastOpenPipeFirstWindow);
+    const sanmaruCanServeFromFastLayer = (fastOpenPipeFirstWindow || (residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, handlerLimit, raw || {}))) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (!contentFirstSearchUi || residentSeedHasRealCards);
     if(sanmaruCanServeFromFastLayer){
-      base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit: fastDisplayFirstWindow ? (searchUiGateway ? searchUiFastFirstTarget : Math.min(handlerLimit, Math.max(visibleNeed * 12, SEARCH_UI_FIRST_RESPONSE_WINDOW))) : handlerLimit }), { region:detectRuntimeRegion(event, lang, q) });
+      base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit: fastDisplayFirstWindow ? (searchUiGateway ? handlerLimit : Math.min(handlerLimit, Math.max(visibleNeed * 12, SEARCH_UI_FIRST_RESPONSE_WINDOW))) : handlerLimit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
         sanmaruResidentSeed: Object.assign({}, residentSeedPack.meta || {}, {
           servedAsTopCpuFastLayer:true,
@@ -5258,7 +5240,7 @@ exports.handler = async function(event){
     }
     const requestedPageForWindow = clampInt(firstNonEmpty(raw && (raw.page || raw.p || raw.visiblePage || raw.sectionPage), 1), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
     const fastWindowCandidateTarget = fastDisplayFirstWindow
-      ? (searchUiGateway ? searchUiFastFirstTarget : Math.min(MAX_LIMIT, Math.max(visibleNeed * 12, requestedPageForWindow * visibleNeed + visibleNeed, SEARCH_UI_FIRST_RESPONSE_WINDOW)))
+      ? Math.min(searchUiGateway ? searchUiTarget : MAX_LIMIT, Math.max(visibleNeed * 12, requestedPageForWindow * visibleNeed + visibleNeed, SEARCH_UI_FIRST_RESPONSE_WINDOW))
       : handlerLimit;
     const providerLaneTarget = fastDisplayFirstWindow
       ? fastWindowCandidateTarget
@@ -5282,12 +5264,10 @@ exports.handler = async function(event){
     // the first 10~12 preload pages.  This is still a light metadata/provider-lane
     // expansion and does not render all candidates on the client.
     const requestedPageForWindowGuarantee = clampInt(firstNonEmpty(raw && (raw.page || raw.p || raw.visiblePage || raw.sectionPage), 1), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
-    const pageWindowCandidateNeed = (searchUiGateway && fastDisplayFirstWindow && requestedPageForWindowGuarantee === 1)
-      ? searchUiFastFirstTarget
-      : Math.min(
-        searchUiGateway ? searchUiTarget : MAX_LIMIT,
-        Math.max(visibleNeed * 12, requestedPageForWindowGuarantee * visibleNeed + visibleNeed, fastDisplayFirstWindow ? SEARCH_UI_FIRST_RESPONSE_WINDOW : 0)
-      );
+    const pageWindowCandidateNeed = Math.min(
+      searchUiGateway ? searchUiTarget : MAX_LIMIT,
+      Math.max(visibleNeed * 12, requestedPageForWindowGuarantee * visibleNeed + visibleNeed, fastDisplayFirstWindow ? SEARCH_UI_FIRST_RESPONSE_WINDOW : 0)
+    );
     if((base.items || []).length < pageWindowCandidateNeed && (!contentFirstSearchUi || !(base.items || []).length)){
       const guaranteedLaneItems = buildSanmaruProviderLaneExpansionCards(
         q,
@@ -5315,17 +5295,6 @@ exports.handler = async function(event){
     });
 
     base = await attachFastDisplayRichProbe(base, event, { q, raw: raw || {}, searchType, lang });
-    if(searchUiGateway && searchUiHasRealCards(base.items)){
-      const realCards = [];
-      const roadCards = [];
-      for(const it of (Array.isArray(base.items) ? base.items : [])){
-        if(hasSearchUiRealCardSignal(it) && !isSearchUiProviderRoadCard(it)) realCards.push(it);
-        else roadCards.push(it);
-      }
-      base.items = dedupeCanonicalItems([].concat(realCards, roadCards));
-      base.results = base.items;
-      base.meta = Object.assign({}, base.meta || {}, { searchUiRealCardsPromoted:true, searchUiRealCardCount:realCards.length });
-    }
 
     // Search must not trigger heavy settlement/distribution by default.
     // Analytics is opt-in for this endpoint; weekly settlement is handled by revenue/commerce engines.
