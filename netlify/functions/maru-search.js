@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-598-content-guard-partial-probe';
+const VERSION = 'A1.5.46-596-probe-stable-fastpath';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -84,10 +84,10 @@ const MAX_SEARCH_BANK_PAGES_DEEP = 60;
 
 // Search UI gateway policy is deliberately local to maru-search.
 // It does not change Sanmaru capacity, front supply, snapshot supply, or Global Insight.
-const SEARCH_UI_FIRST_RESPONSE_WINDOW = 300;
+const SEARCH_UI_FIRST_RESPONSE_WINDOW = 200;
 const SEARCH_UI_DEFAULT_CANDIDATE_TARGET = 1500;
 const SEARCH_UI_WIDE_CANDIDATE_TARGET = 2000;
-const SEARCH_UI_FAST_PROBE_BUDGET_MS = 280;
+const SEARCH_UI_FAST_PROBE_BUDGET_MS = 850;
 
 function nowMs(){ return Date.now(); }
 
@@ -5016,6 +5016,7 @@ function parseEventJsonBody(event){
 
 async function attachFastDisplayRichProbe(base, event, ctx){
   base = base && typeof base === 'object' ? base : { items:[], results:[], meta:{} };
+  if(base.meta && base.meta.fastRichFirstWindowComplete) return base;
   ctx = ctx || {};
   const raw = ctx.raw || {};
   const q = safeString(ctx.q || '').trim();
@@ -5030,7 +5031,7 @@ async function attachFastDisplayRichProbe(base, event, ctx){
   const searchUiGateway = isSearchUiGatewayRequest(raw || {});
   const requestedProbeMs = Number(raw.fastRichProbeMs || raw.displayProbeMs || (searchUiGateway ? SEARCH_UI_FAST_PROBE_BUDGET_MS : 650)) || (searchUiGateway ? SEARCH_UI_FAST_PROBE_BUDGET_MS : 650);
   const budgetMs = searchUiGateway
-    ? Math.max(120, Math.min(350, requestedProbeMs))
+    ? Math.max(350, Math.min(950, requestedProbeMs))
     : Math.max(350, Math.min(900, requestedProbeMs));
   const searchType = normalizeSearchType(ctx.searchType || raw.type || raw.tab || raw.category || raw.vertical || 'all');
   const tasks = [];
@@ -5040,7 +5041,10 @@ async function attachFastDisplayRichProbe(base, event, ctx){
     const task = Promise.resolve(promise)
       .then(v => ({ name, pack:v }))
       .catch(e => ({ name, error:safeString((e && e.message) || e).slice(0,120) }))
-      .then(row => { completed.push(row); return row; });
+      .then(v => {
+        completed.push({ status:'fulfilled', value:v });
+        return v;
+      });
     tasks.push(task);
   }
 
@@ -5053,15 +5057,14 @@ async function attachFastDisplayRichProbe(base, event, ctx){
 
   if(!tasks.length) return base;
 
-  const timeout = new Promise(resolve => setTimeout(resolve, budgetMs));
+  const timeout = new Promise(resolve => setTimeout(() => resolve({ __timeout:true }), budgetMs));
   await Promise.race([Promise.all(tasks), timeout]);
-
-  // Preserve the content-first gate, but keep every provider result that finishes
-  // inside the first-paint budget instead of discarding all partial completions.
   const settled = completed.slice();
+
   const richItems = [];
   const trace = [];
-  for(const val of settled){
+  for(const row of Array.isArray(settled) ? settled : []){
+    const val = row && row.status === 'fulfilled' ? row.value : null;
     const name = val && val.name || 'quick_probe';
     const pack = val && val.pack;
     const results = pack && Array.isArray(pack.results) ? pack.results : [];
@@ -5162,6 +5165,32 @@ exports.handler = async function(event){
     // into Sanmaru. items/results are never capped to the viewport; only
     // visiblePagePack.pageItems is page-sized.
     const fastDisplayFirstWindow = isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceResident || raw.waitResident || raw.waitProviders || raw.waitExternal));
+    const requestedSearchUiPage = clampInt(firstNonEmpty(raw && (raw.page || raw.p || raw.visiblePage || raw.sectionPage), 1), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
+    let fastRichFirstBase = null;
+    if(searchUiGateway && fastDisplayFirstWindow && requestedSearchUiPage === 1){
+      const quickBase = await attachFastDisplayRichProbe(
+        { source:'maru-search-fast-rich-first-window', route:[], sourceRoute:[], region:detectRuntimeRegion(event, lang, q), items:[], results:[], meta:{ trace:[] } },
+        event,
+        {
+          q,
+          raw:Object.assign({}, raw || {}, {
+            displayRich:'1',
+            fastRichProbeMs:firstNonEmpty(raw && raw.fastRichProbeMs, SEARCH_UI_FAST_PROBE_BUDGET_MS)
+          }),
+          searchType,
+          lang
+        }
+      );
+      if(searchUiHasRealCards(quickBase && quickBase.items)){
+        fastRichFirstBase = quickBase;
+        fastRichFirstBase.meta = Object.assign({}, fastRichFirstBase.meta || {}, {
+          fastRichFirstWindowComplete:true,
+          firstResponseMode:'fast-rich-provider-results',
+          heavyWideGatewayDeferred:true,
+          firstResponseTarget:SEARCH_UI_FIRST_RESPONSE_WINDOW
+        });
+      }
+    }
     const sanmaruRouteContext = fastDisplayFirstWindow
       ? { available:true, routePlan:null, providerHealth:[], meta:{ status:'fast-display-first-window', nonBlockingSanmaru:true, reason:'skip-heavy-sanmaru-require-for-first-paint' } }
       : getSanmaruRouteContextForMaru(q, raw || {}, { searchType, lang, limit:handlerLimit, reason:'maru-top-route-owner-context' });
@@ -5184,7 +5213,9 @@ exports.handler = async function(event){
     const contentFirstSearchUi = searchUiContentFirstRequested(raw || {});
     const residentSeedHasRealCards = residentSeedPack && searchUiHasRealCards(residentSeedPack.items);
     const sanmaruCanServeFromFastLayer = (fastOpenPipeFirstWindow || (residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, handlerLimit, raw || {}))) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (!contentFirstSearchUi || residentSeedHasRealCards);
-    if(sanmaruCanServeFromFastLayer){
+    if(fastRichFirstBase){
+      base = fastRichFirstBase;
+    }else if(sanmaruCanServeFromFastLayer){
       base = buildSanmaruFastLayerBase(q, residentSeedPack, Object.assign({}, raw || {}, { limit: fastDisplayFirstWindow ? (searchUiGateway ? handlerLimit : Math.min(handlerLimit, Math.max(visibleNeed * 12, SEARCH_UI_FIRST_RESPONSE_WINDOW))) : handlerLimit }), { region:detectRuntimeRegion(event, lang, q) });
       base.meta = Object.assign({}, base.meta || {}, {
         sanmaruResidentSeed: Object.assign({}, residentSeedPack.meta || {}, {
@@ -5210,7 +5241,7 @@ exports.handler = async function(event){
       }
     }
     if(!base || !Array.isArray(base.items)) base = Object.assign({ source:null, route:[], sourceRoute:[], region:detectRuntimeRegion(event, lang, q), items:[], results:[], meta:{ trace:[] } }, base || {});
-    if((base.items || []).length < Math.min(visibleNeed, 25)){
+    if(!fastRichFirstBase && (base.items || []).length < Math.min(visibleNeed, 25)){
       const fallbackCards = [].concat(
         (residentSeedPack && Array.isArray(residentSeedPack.items) ? residentSeedPack.items : []),
         mapCards(q, detectRuntimeRegion(event, lang, q)),
