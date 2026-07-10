@@ -1093,29 +1093,57 @@ function resultSummaryText(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const meta = (it.meta && typeof it.meta === 'object') ? it.meta : {};
+  const data = (it.data && typeof it.data === 'object') ? it.data : {};
+  const raw = (it.raw && typeof it.raw === 'object') ? it.raw : {};
+  const provider = (it.providerResult && typeof it.providerResult === 'object') ? it.providerResult : {};
   const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
   const candidates = [
     it.summary, it.snippet, it.contentSnippet, it.description, it.excerpt, it.abstract,
     it.lead, it.subtitle, it.content, it.text, it.body, it.bodyText, it.articleBody,
-    it.ogDescription, it.metaDescription, it.seoDescription,
+    it.articleText, it.mainText, it.plainText, it.pageText, it.newsBody,
+    it.ogDescription, it.metaDescription, it.seoDescription, it.htmlSnippet,
     p.summary, p.snippet, p.contentSnippet, p.description, p.excerpt, p.abstract,
     p.lead, p.subtitle, p.content, p.text, p.body, p.bodyText, p.articleBody,
-    p.ogDescription, p.metaDescription,
+    p.articleText, p.mainText, p.plainText, p.pageText, p.newsBody,
+    p.ogDescription, p.metaDescription, p.seoDescription, p.htmlSnippet,
+    data.summary, data.snippet, data.contentSnippet, data.description, data.excerpt,
+    data.content, data.text, data.body, data.bodyText, data.articleBody, data.articleText,
+    data.mainText, data.plainText, data.pageText, data.newsBody, data.ogDescription, data.metaDescription,
+    raw.summary, raw.snippet, raw.contentSnippet, raw.description, raw.excerpt,
+    raw.content, raw.text, raw.body, raw.bodyText, raw.articleBody, raw.articleText,
+    raw.mainText, raw.plainText, raw.pageText, raw.newsBody, raw.ogDescription, raw.metaDescription,
+    provider.summary, provider.snippet, provider.contentSnippet, provider.description, provider.excerpt,
+    provider.content, provider.text, provider.body, provider.bodyText, provider.articleBody,
+    provider.ogDescription, provider.metaDescription,
     meta.description, meta.summary, meta.snippet, meta.ogDescription,
     displayCard.body, displayCard.text, displayCard.snippet, displayCard.description, displayCard.summary
   ];
-  let best = '';
+  const unique = [];
+  const seen = new Set();
   for(const v of candidates){
     const clean = stripInlineHtml(v);
     if(!clean || clean.length < 18 || isSyntheticSearchSummaryText(clean)) continue;
-    if(clean.length > best.length) best = clean;
+    const key = clean.toLowerCase();
+    if(seen.has(key)) continue;
+    seen.add(key);
+    unique.push(clean);
   }
-  if(best) return best.slice(0, 560);
+  if(!unique.length) return '';
 
-  // Do not manufacture card summaries such as "...검색 결과입니다".
-  // A search card should show only real provider snippets/body/OG descriptions.
-  // If the provider has not supplied real body text yet, leave the summary blank.
-  return '';
+  unique.sort((a, b) => b.length - a.length);
+  let best = unique[0];
+  // If providers split one real excerpt across separate fields, join only
+  // distinct natural text fragments. This keeps the response compact while
+  // giving the search card enough real body text for four to five lines.
+  if(best.length < 260){
+    for(const extra of unique.slice(1)){
+      if(extra.length < 24) continue;
+      if(best.includes(extra) || extra.includes(best)) continue;
+      best += ' ' + extra;
+      if(best.length >= 420) break;
+    }
+  }
+  return best.slice(0, 720);
 }
 
 function compactResultItem(it){
@@ -1141,8 +1169,8 @@ function compactResultItem(it){
   const resolvedSectionId = it.sectionId || sectionIdForItem(it);
   const displayCardBase = (it.displayCard && typeof it.displayCard === 'object') ? Object.assign({}, it.displayCard) : {};
   const displayCard = Object.assign({}, displayCardBase, {
-    lineClamp:4,
-    bodyLines:4
+    lineClamp:5,
+    bodyLines:5
   }, summaryText ? {
     body:firstNonEmpty(displayCardBase.body, displayCardBase.text, summaryText),
     summary:firstNonEmpty(displayCardBase.summary, summaryText)
