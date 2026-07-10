@@ -411,6 +411,35 @@ function isRealImageUrl(u){
   return false;
 }
 
+function isDirectImageResourceUrl(v){
+  const s = safeString(v).trim();
+  if(!s) return false;
+  try{
+    const u = new URL(s);
+    const path = (u.pathname || '').toLowerCase();
+    return /\.(?:jpe?g|png|gif|webp|avif|bmp|svg)(?:$|[?#])/i.test(s) ||
+      /(?:image|img|photo|thumbnail|thumb)\.(?:php|ashx)$/i.test(path);
+  }catch(e){
+    return /\.(?:jpe?g|png|gif|webp|avif|bmp|svg)(?:$|[?#])/i.test(s);
+  }
+}
+
+function sourcePageUrlForItem(it, payload){
+  it = (it && typeof it === 'object') ? it : {};
+  const p = (payload && typeof payload === 'object') ? payload : ((it.payload && typeof it.payload === 'object') ? it.payload : {});
+  const candidates = [
+    it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.articleUrl, it.canonicalUrl, it.hostPageUrl,
+    p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.articleUrl, p.canonicalUrl, p.hostPageUrl,
+    it.url, it.link, it.href, p.url, p.link, p.href
+  ];
+  for(const v of candidates){
+    const u = safeString(v).trim();
+    if(!u || !/^https?:\/\//i.test(u) || isDirectImageResourceUrl(u)) continue;
+    return u;
+  }
+  return '';
+}
+
 function firstNonEmpty(){
   for(let i=0; i<arguments.length; i++){
     const v = arguments[i];
@@ -459,7 +488,12 @@ function mediaPoster(raw, payload){
 function canonicalizeItem(raw, query, sourceHint){
   const it = (raw && typeof raw === 'object') ? raw : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
-  const url = safeString(firstNonEmpty(it.url, it.link, it.href, p.url, p.link)).trim();
+  const rawUrl = safeString(firstNonEmpty(it.url, it.link, it.href, p.url, p.link)).trim();
+  const type = safeString(it.type || p.type || 'web') || 'web';
+  const mediaType = safeString(it.mediaType || p.mediaType || (type === 'image' ? 'image' : (type === 'video' ? 'video' : 'article')));
+  const imageLike = type === 'image' || mediaType === 'image' || safeString(firstNonEmpty(it.source, p.source)).toLowerCase().includes('image');
+  const sourcePageUrl = imageLike ? sourcePageUrlForItem(it, p) : '';
+  const url = sourcePageUrl || rawUrl;
   const title = safeString(firstNonEmpty(it.title, it.name, p.title, p.name, url)).trim();
   const summary = safeString(firstNonEmpty(it.summary, it.snippet, it.description, p.summary, p.snippet, p.description)).trim();
 
@@ -476,8 +510,6 @@ function canonicalizeItem(raw, query, sourceHint){
   // but they must never become thumbnail/image/imageSet.
   const imageCandidates = rawImageCandidates.filter(img => isMeaningfulImageForItem(img, it));
   const thumbnail = imageCandidates[0] || '';
-  const type = safeString(it.type || p.type || 'web') || 'web';
-  const mediaType = safeString(it.mediaType || p.mediaType || (type === 'image' ? 'image' : (type === 'video' ? 'video' : 'article')));
   const source = firstNonEmpty(it.source, p.source, sourceHint, domainOf(url));
   const id = safeString(firstNonEmpty(it.id, url, title, source + '-' + Math.random().toString(16).slice(2))).trim();
   const tags = Array.isArray(it.tags) ? it.tags : (Array.isArray(p.tags) ? p.tags : []);
@@ -490,7 +522,10 @@ function canonicalizeItem(raw, query, sourceHint){
     summary,
     description: it.description !== undefined ? it.description : summary,
     url,
-    link: firstNonEmpty(it.link, url),
+    link: sourcePageUrl || firstNonEmpty(it.link, url),
+    pageUrl: sourcePageUrl || firstNonEmpty(it.pageUrl, p.pageUrl, url),
+    sourcePageUrl: sourcePageUrl || firstNonEmpty(it.sourcePageUrl, p.sourcePageUrl, it.pageUrl, p.pageUrl),
+    contextLink: sourcePageUrl || firstNonEmpty(it.contextLink, p.contextLink),
     source,
     lang: it.lang || p.lang || detectLangFromTextFallback(title + ' ' + summary),
     thumbnail,
@@ -958,6 +993,7 @@ function mediaProfileForItem(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const url = safeString(firstNonEmpty(it.url, it.link, it.href, p.url, p.link, p.contextLink)).trim();
+  const sourcePageUrl = sourcePageUrlForItem(it, p);
   const sourceText = safeString(firstNonEmpty(it.source, p.source)).toLowerCase();
   const typeText = safeString(firstNonEmpty(it.type, it.mediaType, p.type, p.mediaType)).toLowerCase();
   const videoId = firstNonEmpty(it.videoId, p.videoId, youtubeIdFromUrl(url));
@@ -991,7 +1027,9 @@ function mediaProfileForItem(it){
       watchUrl: videoUrl,
       embedUrl,
       openUrl: videoUrl || url,
-      pageUrl: url
+      pageUrl: url,
+      sourcePageUrl: url,
+      contextLink: url
     };
   }
 
@@ -1022,8 +1060,10 @@ function mediaProfileForItem(it){
     videoUrl,
     watchUrl: videoUrl,
     embedUrl,
-    openUrl: videoUrl || url,
-    pageUrl: url
+    openUrl: videoUrl || sourcePageUrl || url,
+    pageUrl: sourcePageUrl || url,
+    sourcePageUrl: sourcePageUrl || url,
+    contextLink: firstNonEmpty(it.contextLink, p.contextLink, sourcePageUrl)
   };
 }
 
@@ -1094,6 +1134,10 @@ function compactResultItem(it){
   const media = mediaBase || (mediaType === 'video' || ownThumb ? { type: mediaType === 'video' ? 'video' : 'image' } : undefined);
   const placeInfo = (it.placeInfo && typeof it.placeInfo === 'object') ? Object.assign({}, it.placeInfo) : undefined;
   const summaryText = resultSummaryText(it);
+  const sourcePageUrl = firstNonEmpty(profile.sourcePageUrl, profile.pageUrl, sourcePageUrlForItem(it, it.payload));
+  const resolvedUrl = (type === 'image' || mediaType === 'image') && sourcePageUrl
+    ? sourcePageUrl
+    : safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim();
   const resolvedSectionId = it.sectionId || sectionIdForItem(it);
   const displayCardBase = (it.displayCard && typeof it.displayCard === 'object') ? Object.assign({}, it.displayCard) : {};
   const displayCard = Object.assign({}, displayCardBase, {
@@ -1133,8 +1177,8 @@ function compactResultItem(it){
     title: safeString(it.title).trim(),
     summary: summaryText,
     description: summaryText,
-    url: safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim(),
-    link: safeString(firstNonEmpty(it.link, it.url, it.href, profile.openUrl)).trim(),
+    url: resolvedUrl,
+    link: resolvedUrl,
     source: it.source || null,
     lang: it.lang || null,
     thumbnail: ownThumb,
@@ -1162,8 +1206,10 @@ function compactResultItem(it){
     videoUrl: profile.videoUrl || undefined,
     watchUrl: profile.watchUrl || undefined,
     embedUrl: profile.embedUrl || undefined,
-    openUrl: profile.openUrl || undefined,
-    pageUrl: profile.pageUrl || undefined,
+    openUrl: sourcePageUrl || profile.openUrl || undefined,
+    pageUrl: sourcePageUrl || profile.pageUrl || undefined,
+    sourcePageUrl: sourcePageUrl || undefined,
+    contextLink: firstNonEmpty(profile.contextLink, it.contextLink, it.payload && it.payload.contextLink, sourcePageUrl) || undefined,
     channel: it.channel || undefined,
     section: it.section || undefined,
     page: it.page || undefined,
@@ -1197,21 +1243,14 @@ function compactResultItem(it){
 // =========================================================
 const SEARCH_SECTION_ORDER = [
   'official_authority',
-  'public_data',
   'map_local_tour',
   'knowledge_wiki',
-  'academic',
-  'book',
   'news',
   'video_vlog',
   'image_gallery',
   'blog_review',
   'community_sns',
   'shopping_product',
-  'sports',
-  'finance',
-  'webtoon',
-  'site',
   'company_web',
   'general_web'
 ];
@@ -1223,13 +1262,6 @@ const SEARCH_SECTION_META = {
     previewLimit: 5,
     rank: 10,
     description: '정부·공공기관·공식 홈페이지·주요 정보를 먼저 보여주는 섹션'
-  },
-  public_data: {
-    title: '공공자료 / 공개 데이터',
-    label: '공공자료',
-    previewLimit: 6,
-    rank: 15,
-    description: '공공데이터, 공개 통계, 기관 자료와 데이터셋 결과'
   },
   map_local_tour: {
     title: '지도 / 지역 / 관광 / 맛집',
@@ -1244,20 +1276,6 @@ const SEARCH_SECTION_META = {
     previewLimit: 6,
     rank: 30,
     description: '위키, 백과, 지식, 연구·자료형 결과'
-  },
-  academic: {
-    title: '학술 / 논문 / 연구자료',
-    label: '학술/논문',
-    previewLimit: 6,
-    rank: 32,
-    description: '논문, 학술자료, 연구보고서와 전문 지식 결과'
-  },
-  book: {
-    title: '도서 / 출판 / 서적',
-    label: '도서',
-    previewLimit: 6,
-    rank: 34,
-    description: '책, 저자, 출판, 서평과 도서 관련 결과'
   },
   news: {
     title: '뉴스 / 보도 / 최신 이슈',
@@ -1301,34 +1319,6 @@ const SEARCH_SECTION_META = {
     rank: 90,
     description: '상품, 가격, 쇼핑, 광고·홍보형 결과'
   },
-  sports: {
-    title: '스포츠 / 경기 / 선수',
-    label: '스포츠',
-    previewLimit: 6,
-    rank: 92,
-    description: '경기, 선수, 구단과 스포츠 관련 결과'
-  },
-  finance: {
-    title: '금융 / 증권 / 시장',
-    label: '금융/증권',
-    previewLimit: 6,
-    rank: 94,
-    description: '주식, 금융, 환율, 시장과 경제 관련 결과'
-  },
-  webtoon: {
-    title: '웹툰 / 만화 / 콘텐츠',
-    label: '웹툰/만화',
-    previewLimit: 6,
-    rank: 96,
-    description: '웹툰, 만화, 코믹과 연재 콘텐츠 결과'
-  },
-  site: {
-    title: '사이트 / 홈페이지',
-    label: '사이트',
-    previewLimit: 8,
-    rank: 98,
-    description: '공식 사이트, 기관·단체 홈페이지와 주요 웹페이지 결과'
-  },
   company_web: {
     title: '기업 / 홈페이지 / 일반 웹',
     label: '기업/웹',
@@ -1354,25 +1344,16 @@ function sectionIdForItem(it){
   const type = safeString(it && it.type).toLowerCase();
   const text = [host, source, type, mediaType, safeString(it && it.title), safeString(firstNonEmpty(it && it.summary, it && it.description))].join(' ').toLowerCase();
 
-  // Search-body sections are intentionally flexible: only sections with real
-  // matching items are emitted by buildSearchSections().
-  if(category === 'public_data' || host.includes('data.go.kr') || /공공데이터|공공 자료|공개 데이터|통계자료|데이터셋|open data|dataset/.test(text)) return 'public_data';
-  if(category === 'academic' || host.includes('scholar.google') || host.includes('arxiv.org') || host.includes('doi.org') || /학술|논문|연구보고서|학회|저널|paper|journal|research report|academic/.test(text)) return 'academic';
-  if(category === 'book' || type === 'book' || /도서|책 |서적|출판|저자|isbn|book|publisher|author/.test(text)) return 'book';
-  if(category === 'sports' || /스포츠|축구|야구|농구|배구|골프|경기|선수|구단|sports|football|baseball|basketball/.test(text)) return 'sports';
-  if(category === 'finance' || /금융|증권|주식|환율|채권|시장지수|finance|stock|exchange rate|securities/.test(text)) return 'finance';
-  if(category === 'webtoon' || /웹툰|만화|코믹|망가|webtoon|comic|manga/.test(text)) return 'webtoon';
   if(category === 'official' || host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || /공식|관공서|시청|구청|정부|공공기관|official|government office/.test(text)) return 'official_authority';
   if(category === 'map' || category === 'tour' || mediaType === 'map' || type === 'map' || /지도|주소|위치|길찾기|관광|여행|맛집|명소|랜드마크|박물관|미술관|축제|교통|지하철|map|nearby|travel|tour|restaurant|landmark|attraction/.test(text)) return 'map_local_tour';
   if(category === 'cafe' || category === 'sns' || type === 'sns' || mediaType === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || source.includes('youtube') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || host.includes('youtube.com') || host.includes('youtu.be') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|유튜브|sns|community|forum|instagram|facebook|tiktok|youtube/.test(text)) return 'community_sns';
-  if(category === 'knowledge' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|encyclopedia|knowledge/.test(text)) return 'knowledge_wiki';
+  if(category === 'knowledge' || category === 'book' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|논문|연구|자료|encyclopedia|knowledge|research|paper/.test(text)) return 'knowledge_wiki';
   if(category === 'news' || source.includes('news') || /뉴스|속보|보도|신문|latest|breaking|press/.test(text)) return 'news';
   if(category === 'video' || mediaType === 'video' || type === 'video' || source.includes('youtube') || host.includes('youtube') || host.includes('youtu.be') || /동영상|영상|유튜브|브이로그|쇼츠|릴스|vlog|video|shorts|reels/.test(text)) return 'video_vlog';
   if(category === 'image' || mediaType === 'image' || type === 'image' || source.includes('image') || /이미지|사진|갤러리|포토|스냅샷|photo|image|gallery/.test(text)) return 'image_gallery';
   if(category === 'blog' || source.includes('blog') || host.includes('blog') || /블로그|후기|리뷰|방문기|blog|review/.test(text)) return 'blog_review';
   if(category === 'shopping' || mediaType === 'product' || type === 'product' || /쇼핑|상품|가격|구매|판매|광고|프로모션|shopping|product|price|buy|sale|ad\b/.test(text)) return 'shopping_product';
-  if(category === 'site' || /홈페이지|공식 사이트|웹사이트|website|homepage/.test(text)) return 'site';
-  if(/회사|기업|브랜드|company|corporate|brand/.test(text)) return 'company_web';
+  if(/회사|기업|브랜드|홈페이지|공식 사이트|company|corporate|brand|homepage|official site/.test(text)) return 'company_web';
   return 'general_web';
 }
 
@@ -4195,11 +4176,14 @@ async function naverImageSearch(q, limit, start){
     results: (Array.isArray(data.items) ? data.items : []).map(it => {
       const thumb = it.thumbnail || '';
       const imageUrl = it.link || thumb || '';
-      const context = it.originallink || imageUrl;
+      const context = sourcePageUrlForItem(it, it);
       return {
         title: stripHtml(it.title || q),
-        link: context,
-        url: context,
+        link: context || imageUrl,
+        url: context || imageUrl,
+        pageUrl: context || undefined,
+        sourcePageUrl: context || undefined,
+        contextLink: context || undefined,
         snippet: '',
         type: 'image',
         mediaType: 'image',
@@ -4219,7 +4203,9 @@ async function naverImageSearch(q, limit, start){
           source: 'naver_image',
           thumb,
           image: imageUrl || thumb,
-          contextLink: context,
+          contextLink: context || undefined,
+          pageUrl: context || undefined,
+          sourcePageUrl: context || undefined,
           qualityMode: 'prefer-original'
         }
       };
@@ -4341,20 +4327,38 @@ async function googleCseRequest(q, limit, start, opts){
     const pagemap = it.pagemap || {};
     const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
     const cseImg = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
-    const img = (cseImg && cseImg.src) || (cseThumb && cseThumb.src) || '';
+    const imageSearch = opts.searchType === 'image' || type === 'image' || opts.mediaType === 'image';
+    const directImage = imageSearch ? safeString(it.link || '').trim() : '';
+    const imageMeta = (it.image && typeof it.image === 'object') ? it.image : {};
+    const pageUrl = imageSearch
+      ? safeString(firstNonEmpty(imageMeta.contextLink, it.contextLink, it.pageUrl, it.sourcePageUrl)).trim()
+      : safeString(it.link || '').trim();
+    const img = imageSearch
+      ? firstNonEmpty(imageMeta.thumbnailLink, directImage, cseImg && cseImg.src, cseThumb && cseThumb.src)
+      : ((cseImg && cseImg.src) || (cseThumb && cseThumb.src) || '');
     return {
       title: it.title || '',
-      link: it.link || '',
-      url: it.link || '',
-      snippet: it.snippet || '',
+      link: pageUrl || it.link || '',
+      url: pageUrl || it.link || '',
+      pageUrl: pageUrl || undefined,
+      sourcePageUrl: pageUrl || undefined,
+      contextLink: pageUrl || undefined,
+      snippet: it.snippet || it.htmlSnippet || '',
       type,
-      mediaType: opts.mediaType || (type === 'sns_video' ? 'video' : 'article'),
+      mediaType: opts.mediaType || (type === 'sns_video' ? 'video' : (imageSearch ? 'image' : 'article')),
       source,
       thumbnail: img,
       thumb: img,
-      image: img,
-      imageSet: compactImages([img]),
-      payload: { source, thumb: img, image: img, cseQuery: q }
+      image: directImage || img,
+      imageUrl: directImage || img,
+      imageSet: compactImages([directImage, img]),
+      originalImage: directImage || img,
+      fullImage: directImage || img,
+      viewerImage: directImage || img,
+      openImageUrl: directImage || img,
+      contentUrl: directImage || img,
+      cardImage: img || directImage,
+      payload: { source, thumb: img, image: directImage || img, originalImage:directImage || img, contextLink:pageUrl || undefined, pageUrl:pageUrl || undefined, sourcePageUrl:pageUrl || undefined, cseQuery: q }
     };
   });
 
@@ -4384,7 +4388,7 @@ async function googleSearch(q, limit, start){
   return { source: 'google', results, meta };
 }
 
-async function googleSnsSearch(q, limit, start){
+async function googleSnsSearch(q, limit, start, timeoutMs){
   const keys = googleCseKeys();
   const cseParams = { hl:'ko', gl:'kr', safe:'off', filter:'0', lr:'removed' };
   if(!keys.key) return { source:'google_sns', results: [], meta:{ status:'google key missing', reason:'GOOGLE_API_KEY missing', cseParams } };
@@ -4404,7 +4408,7 @@ async function googleSnsSearch(q, limit, start){
       source: route.source,
       type: route.type,
       mediaType: route.mediaType,
-      timeoutMs: 1600
+      timeoutMs: Math.max(700, Math.min(1600, Number(timeoutMs) || 1600))
     }).then(bundle => Object.assign({}, bundle, { route: route.name }))
   ));
 
@@ -4440,11 +4444,11 @@ async function bingSearch(q, limit, offset){
   return { source: 'bing', results: ((data.webPages && data.webPages.value) || []).map(it => ({ title: it.name, link: it.url, url: it.url, snippet: it.snippet, type: 'web', source: 'bing' })) };
 }
 
-async function youtubeSearch(q, limit){
+async function youtubeSearch(q, limit, timeoutMs){
   const key = envFirst('YOUTUBE_API_KEY','GOOGLE_YOUTUBE_API_KEY','GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY');
   if(!key) return null;
   const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=' + Math.min(limit,50) + '&q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(key);
-  const res = await fetchWithTimeout(url, null, 3500);
+  const res = await fetchWithTimeout(url, null, Math.max(700, Math.min(3500, Number(timeoutMs) || 3500)));
   if(!res.ok) return null;
   const data = await res.json();
   const results = (data.items || []).map(it => {
@@ -4531,9 +4535,6 @@ function classifySearchCategory(it){
   if(text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('sports')) return 'sports';
   if(text.includes('증권') || text.includes('주식') || text.includes('환율') || text.includes('금융') || text.includes('finance') || text.includes('stock')) return 'finance';
   if(text.includes('웹툰') || text.includes('만화') || text.includes('webtoon') || text.includes('comic') || text.includes('manga')) return 'webtoon';
-  if(host.includes('data.go.kr') || text.includes('공공데이터') || text.includes('공개 데이터') || text.includes('데이터셋') || text.includes('open data') || text.includes('dataset')) return 'public_data';
-  if(host.includes('scholar.google') || host.includes('arxiv.org') || host.includes('doi.org') || text.includes('학술') || text.includes('논문') || text.includes('연구보고서') || text.includes('journal') || text.includes('academic')) return 'academic';
-  if(text.includes('홈페이지') || text.includes('웹사이트') || text.includes('official site') || text.includes('homepage') || text.includes('website')) return 'site';
 
   if(host.includes('go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('gov.uk') || host.includes('korea.kr')) return 'official';
 
@@ -5145,6 +5146,20 @@ async function attachFastDisplayRichProbe(base, event, ctx){
   if(['all','map','tour'].includes(searchType)) pushTask('naver_local_quick', naverGenericSearch('local.json', q, 10, naverStart10, 'naver_local', 'map'));
   if(['all','web','news'].includes(searchType)) pushTask('google_web_quick', googleCseRequest(q, 10, googleStart10, { source:'google_quick', type:'web', timeoutMs:1100 }));
   if(['all','image','web'].includes(searchType)) pushTask('google_image_quick', googleCseRequest(q, 10, googleStart10, { source:'google_image_quick', type:'image', mediaType:'image', searchType:'image', timeoutMs:1100 }));
+  if(['all','sns'].includes(searchType)) pushTask('google_sns_quick', googleSnsSearch(q, searchType === 'sns' ? 20 : 10, googleStart10, 1050));
+  if(['all','video','sns'].includes(searchType) && !truthy(raw.noMedia) && !truthy(raw.disableMedia)){
+    pushTask('youtube_quick', youtubeSearch(q, searchType === 'video' ? 20 : 12, 1100).then(pack => {
+      if(!pack || !Array.isArray(pack.results)) return pack;
+      return Object.assign({}, pack, {
+        results: pack.results.map(it => Object.assign({}, it, {
+          searchCategory:'sns',
+          displayGroup:'social',
+          displayGroupHint:'social',
+          mediaType:'video'
+        }))
+      });
+    }));
+  }
 
   if(!tasks.length) return base;
 
@@ -5161,7 +5176,12 @@ async function attachFastDisplayRichProbe(base, event, ctx){
     const results = pack && Array.isArray(pack.results) ? pack.results : [];
     trace.push({ name, status: results.length ? 'ok' : (pack && pack.meta && pack.meta.status || val && val.error || 'empty'), count: results.length });
     for(const it of results){
-      richItems.push(canonicalizeItem(it, q, it && (it.source || it.provider || name)));
+      const normalized = canonicalizeItem(it, q, it && (it.source || it.provider || name));
+      const imageOnly = (normalized.type === 'image' || normalized.mediaType === 'image') &&
+        !sourcePageUrlForItem(normalized, normalized.payload) &&
+        isDirectImageResourceUrl(firstNonEmpty(normalized.url, normalized.link));
+      if(imageOnly) continue;
+      richItems.push(normalized);
     }
   }
 
