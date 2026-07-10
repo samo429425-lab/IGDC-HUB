@@ -87,7 +87,7 @@ const MAX_SEARCH_BANK_PAGES_DEEP = 60;
 const SEARCH_UI_FIRST_RESPONSE_WINDOW = 200;
 const SEARCH_UI_DEFAULT_CANDIDATE_TARGET = 1500;
 const SEARCH_UI_WIDE_CANDIDATE_TARGET = 2000;
-const SEARCH_UI_FAST_PROBE_BUDGET_MS = 850;
+const SEARCH_UI_FAST_PROBE_BUDGET_MS = 1400;
 
 function nowMs(){ return Date.now(); }
 
@@ -1050,17 +1050,24 @@ function resultSummaryText(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const meta = (it.meta && typeof it.meta === 'object') ? it.meta : {};
+  const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
   const candidates = [
-    it.summary, it.snippet, it.description, it.excerpt, it.content, it.text,
+    it.summary, it.snippet, it.contentSnippet, it.description, it.excerpt, it.abstract,
+    it.lead, it.subtitle, it.content, it.text, it.body, it.bodyText, it.articleBody,
     it.ogDescription, it.metaDescription, it.seoDescription,
-    p.summary, p.snippet, p.description, p.excerpt, p.content, p.text,
+    p.summary, p.snippet, p.contentSnippet, p.description, p.excerpt, p.abstract,
+    p.lead, p.subtitle, p.content, p.text, p.body, p.bodyText, p.articleBody,
     p.ogDescription, p.metaDescription,
-    meta.description, meta.ogDescription
+    meta.description, meta.summary, meta.snippet, meta.ogDescription,
+    displayCard.body, displayCard.text, displayCard.snippet, displayCard.description, displayCard.summary
   ];
+  let best = '';
   for(const v of candidates){
     const clean = stripInlineHtml(v);
-    if(clean && clean.length >= 18 && !isSyntheticSearchSummaryText(clean)) return clean.slice(0, 300);
+    if(!clean || clean.length < 18 || isSyntheticSearchSummaryText(clean)) continue;
+    if(clean.length > best.length) best = clean;
   }
+  if(best) return best.slice(0, 560);
 
   // Do not manufacture card summaries such as "...검색 결과입니다".
   // A search card should show only real provider snippets/body/OG descriptions.
@@ -1083,6 +1090,16 @@ function compactResultItem(it){
 
   const media = mediaBase || (mediaType === 'video' || ownThumb ? { type: mediaType === 'video' ? 'video' : 'image' } : undefined);
   const placeInfo = (it.placeInfo && typeof it.placeInfo === 'object') ? Object.assign({}, it.placeInfo) : undefined;
+  const summaryText = resultSummaryText(it);
+  const resolvedSectionId = it.sectionId || sectionIdForItem(it);
+  const displayCardBase = (it.displayCard && typeof it.displayCard === 'object') ? Object.assign({}, it.displayCard) : {};
+  const displayCard = Object.assign({}, displayCardBase, {
+    lineClamp:4,
+    bodyLines:4
+  }, summaryText ? {
+    body:firstNonEmpty(displayCardBase.body, displayCardBase.text, summaryText),
+    summary:firstNonEmpty(displayCardBase.summary, summaryText)
+  } : {});
   if(media){
     if(youtubeLike){
       media.type = 'video';
@@ -1111,8 +1128,8 @@ function compactResultItem(it){
     type,
     mediaType,
     title: safeString(it.title).trim(),
-    summary: resultSummaryText(it),
-    description: resultSummaryText(it),
+    summary: summaryText,
+    description: summaryText,
     url: safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim(),
     link: safeString(firstNonEmpty(it.link, it.url, it.href, profile.openUrl)).trim(),
     source: it.source || null,
@@ -1159,10 +1176,10 @@ function compactResultItem(it){
     displayGroupHint: it.displayGroupHint || undefined,
     displayGroupLabel: it.displayGroupLabel || it.displayGroupLabelHint || undefined,
     displayGroupLabelHint: it.displayGroupLabelHint || undefined,
-    displaySummary: firstNonEmpty(it.displaySummary, it.displayCard && it.displayCard.summary, resultSummaryText(it)),
-    displayCard: it.displayCard && typeof it.displayCard === 'object' ? it.displayCard : undefined,
-    sectionId: it.sectionId || sectionIdForItem(it),
-    sectionTitle: it.sectionTitle || (SEARCH_SECTION_META[sectionIdForItem(it)] && SEARCH_SECTION_META[sectionIdForItem(it)].title),
+    displaySummary: firstNonEmpty(it.displaySummary, displayCard.summary, summaryText),
+    displayCard,
+    sectionId: resolvedSectionId,
+    sectionTitle: it.sectionTitle || (SEARCH_SECTION_META[resolvedSectionId] && SEARCH_SECTION_META[resolvedSectionId].title),
     _category: it._category || classifySearchCategory(it)
   };
 }
@@ -5031,7 +5048,7 @@ async function attachFastDisplayRichProbe(base, event, ctx){
   const searchUiGateway = isSearchUiGatewayRequest(raw || {});
   const requestedProbeMs = Number(raw.fastRichProbeMs || raw.displayProbeMs || (searchUiGateway ? SEARCH_UI_FAST_PROBE_BUDGET_MS : 650)) || (searchUiGateway ? SEARCH_UI_FAST_PROBE_BUDGET_MS : 650);
   const budgetMs = searchUiGateway
-    ? Math.max(350, Math.min(950, requestedProbeMs))
+    ? Math.max(500, Math.min(1800, requestedProbeMs))
     : Math.max(350, Math.min(900, requestedProbeMs));
   const searchType = normalizeSearchType(ctx.searchType || raw.type || raw.tab || raw.category || raw.vertical || 'all');
   const tasks = [];
@@ -5189,6 +5206,40 @@ exports.handler = async function(event){
           heavyWideGatewayDeferred:true,
           firstResponseTarget:SEARCH_UI_FIRST_RESPONSE_WINDOW
         });
+      }else{
+        // The live quick providers may miss their short first-paint budget.
+        // Reuse only real resident cards here; never promote provider-road cards
+        // as if they were article bodies.
+        const residentQuick = getSanmaruResidentForMaru(q, Object.assign({}, raw || {}, {
+          limit:SEARCH_UI_FIRST_RESPONSE_WINDOW,
+          candidatePool:SEARCH_UI_FIRST_RESPONSE_WINDOW
+        }), {
+          searchType,
+          lang,
+          limit:SEARCH_UI_FIRST_RESPONSE_WINDOW,
+          reason:'search-ui-fast-rich-resident-fallback'
+        });
+        const residentRichItems = (residentQuick && Array.isArray(residentQuick.items) ? residentQuick.items : [])
+          .map(x => canonicalizeItem(x, q, x && (x.source || x.provider || 'sanmaru-resident-fast-rich')))
+          .filter(it => hasSearchUiRealCardSignal(it) && !isSearchUiProviderRoadCard(it))
+          .slice(0, SEARCH_UI_FIRST_RESPONSE_WINDOW);
+        if(residentRichItems.length){
+          fastRichFirstBase = {
+            source:'sanmaru-resident-fast-rich',
+            route:[],
+            sourceRoute:[],
+            region:detectRuntimeRegion(event, lang, q),
+            items:residentRichItems,
+            results:residentRichItems,
+            meta:{
+              trace:[{ name:'search-ui-fast-rich-resident', status:'ok', count:residentRichItems.length }],
+              fastRichFirstWindowComplete:true,
+              firstResponseMode:'fast-rich-resident-results',
+              heavyWideGatewayDeferred:true,
+              firstResponseTarget:SEARCH_UI_FIRST_RESPONSE_WINDOW
+            }
+          };
+        }
       }
     }
     const sanmaruRouteContext = fastDisplayFirstWindow
@@ -5226,6 +5277,46 @@ exports.handler = async function(event){
           principle:'Sanmaru already holds the mounted web information layer; Maru Search only formats and pages it.'
         })
       });
+    }else if(searchUiGateway && fastDisplayFirstWindow && requestedSearchUiPage === 1){
+      // First paint must have a hard deadline. Do not wait for the full wide,
+      // media and Sanmaru augment chain, which can otherwise accumulate to
+      // tens of seconds. Later intake/page requests keep the original full path.
+      const firstPaintDeadlineMs = Math.max(1600, Math.min(2800, Number(raw && raw.firstPaintDeadlineMs) || 2200));
+      try{
+        const timedWide = await Promise.race([
+          orchestrateSearch({ event, q, limit:Math.min(handlerLimit, SEARCH_UI_FIRST_RESPONSE_WINDOW), start, lang, deep:false, externalOff, externalMode, noMedia, searchType, sanmaruRouteContext }),
+          new Promise(resolve => setTimeout(() => resolve(null), firstPaintDeadlineMs))
+        ]);
+        if(timedWide && Array.isArray(timedWide.items) && timedWide.items.length){
+          base = timedWide;
+          base.meta = Object.assign({}, base.meta || {}, {
+            firstPaintDeadlineMs,
+            firstResponseMode:'bounded-wide-results',
+            mediaAndDeepAugmentDeferred:true
+          });
+        }else{
+          base = buildSanmaruFastLayerBase(
+            q,
+            residentSeedPack || { items:[], meta:{} },
+            Object.assign({}, raw || {}, { limit:SEARCH_UI_FIRST_RESPONSE_WINDOW }),
+            { region:detectRuntimeRegion(event, lang, q) }
+          );
+          base.meta = Object.assign({}, base.meta || {}, {
+            firstPaintDeadlineMs,
+            firstResponseMode:'deadline-fast-layer-fallback',
+            mediaAndDeepAugmentDeferred:true,
+            trace:[].concat(base.meta && base.meta.trace || [], [{ name:'first-paint-deadline', status:'timeout-or-empty', count:(base.items || []).length }])
+          });
+        }
+      }catch(e){
+        base = buildSanmaruFastLayerBase(q, residentSeedPack || { items: [], meta:{} }, Object.assign({}, raw || {}, { limit:SEARCH_UI_FIRST_RESPONSE_WINDOW }), { region:detectRuntimeRegion(event, lang, q) });
+        base.meta = Object.assign({}, base.meta || {}, {
+          wideGatewayErrorFallback:true,
+          wideGatewayError:safeString((e && e.message) || e).slice(0,160),
+          firstResponseMode:'deadline-error-fast-layer-fallback',
+          trace:[].concat(base.meta && base.meta.trace || [], [{ name:'wide-gateway', status:'error-fallback-to-sanmaru', count:(base.items || []).length }])
+        });
+      }
     }else{
       try{
         base = await orchestrateSearch({ event, q, limit, start, lang, deep, externalOff, externalMode, noMedia, searchType, sanmaruRouteContext });
@@ -5343,6 +5434,15 @@ exports.handler = async function(event){
     const maruLocalAuthorityCards = buildKoreaLocalAuthorityCardsForSearch(q, base.region || base.route || 'KR');
     if(maruLocalAuthorityCards.length){
       base.items = dedupeCanonicalItems([].concat(maruLocalAuthorityCards, base.items || []));
+    }
+    if(searchUiGateway && fastDisplayFirstWindow && requestedSearchUiPage === 1 && Array.isArray(base.items) && base.items.length > SEARCH_UI_FIRST_RESPONSE_WINDOW){
+      base.meta = Object.assign({}, base.meta || {}, {
+        firstResponseSourceCount:base.items.length,
+        firstResponseWindow:SEARCH_UI_FIRST_RESPONSE_WINDOW,
+        remainingCandidatesContinueThroughIntake:true
+      });
+      base.items = base.items.slice(0, SEARCH_UI_FIRST_RESPONSE_WINDOW);
+      base.results = base.items;
     }
     base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
     // Sanmaru must keep neutral/search data, not browser-specific display contracts.
