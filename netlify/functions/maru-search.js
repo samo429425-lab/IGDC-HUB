@@ -541,6 +541,7 @@ function canonicalizeItem(raw, query, sourceHint){
     bind: (it.bind && typeof it.bind === 'object') ? it.bind : p.bind,
     tags,
     score: typeof it.score === 'number' ? it.score : (typeof p.score === 'number' ? p.score : 0.9),
+    pageMediaCard: !!(sourcePageUrl && imageCandidates.length),
     payload: p
   });
 
@@ -569,16 +570,95 @@ function toStandardItems(arr, source){
   });
 }
 
+function mergeCanonicalPageCard(base, incoming){
+  base = (base && typeof base === 'object') ? base : {};
+  incoming = (incoming && typeof incoming === 'object') ? incoming : {};
+
+  const baseSummary = resultSummaryText(base);
+  const incomingSummary = resultSummaryText(incoming);
+  const summary = incomingSummary.length > baseSummary.length ? incomingSummary : baseSummary;
+
+  const images = compactImages([].concat(
+    base.imageSet || [], incoming.imageSet || [],
+    base.thumbnail, base.thumb, base.image, base.imageUrl, base.originalImage, base.cardImage,
+    incoming.thumbnail, incoming.thumb, incoming.image, incoming.imageUrl, incoming.originalImage, incoming.cardImage,
+    base.media && base.media.preview && [base.media.preview.poster, base.media.preview.image, base.media.preview.thumbnail],
+    incoming.media && incoming.media.preview && [incoming.media.preview.poster, incoming.media.preview.image, incoming.media.preview.thumbnail]
+  ).flat().filter(Boolean));
+
+  const baseType = safeString(base.type).toLowerCase();
+  const incomingType = safeString(incoming.type).toLowerCase();
+  const preferIncomingType = (baseType === 'image' && incomingType && incomingType !== 'image');
+  const type = preferIncomingType ? incoming.type : (base.type || incoming.type || 'web');
+  const mediaType = preferIncomingType
+    ? (incoming.mediaType || 'article')
+    : (base.mediaType || incoming.mediaType || (type === 'video' ? 'video' : 'article'));
+
+  const pageUrl = firstNonEmpty(
+    sourcePageUrlForItem(base, base.payload),
+    sourcePageUrlForItem(incoming, incoming.payload),
+    !isDirectImageResourceUrl(base.url) ? base.url : '',
+    !isDirectImageResourceUrl(incoming.url) ? incoming.url : ''
+  );
+
+  const mergedMedia = Object.assign({}, base.media || {}, incoming.media || {});
+  if(images.length){
+    const preview = Object.assign({}, (base.media && base.media.preview) || {}, (incoming.media && incoming.media.preview) || {});
+    preview.poster = firstNonEmpty(preview.poster, images[0]);
+    preview.image = firstNonEmpty(preview.image, images[0]);
+    preview.thumbnail = firstNonEmpty(preview.thumbnail, images[0]);
+    mergedMedia.preview = preview;
+    if(!mergedMedia.type) mergedMedia.type = (type === 'video' || mediaType === 'video') ? 'video' : 'image';
+  }
+
+  const merged = Object.assign({}, base, incoming, {
+    type,
+    mediaType,
+    url: pageUrl || firstNonEmpty(base.url, incoming.url),
+    link: pageUrl || firstNonEmpty(base.link, incoming.link, base.url, incoming.url),
+    pageUrl: pageUrl || firstNonEmpty(base.pageUrl, incoming.pageUrl),
+    sourcePageUrl: pageUrl || firstNonEmpty(base.sourcePageUrl, incoming.sourcePageUrl),
+    contextLink: pageUrl || firstNonEmpty(base.contextLink, incoming.contextLink),
+    summary,
+    description: summary,
+    snippet: summary || firstNonEmpty(base.snippet, incoming.snippet),
+    thumbnail: images[0] || firstNonEmpty(base.thumbnail, incoming.thumbnail),
+    thumb: images[0] || firstNonEmpty(base.thumb, incoming.thumb),
+    image: images[0] || firstNonEmpty(base.image, incoming.image),
+    imageUrl: images[0] || firstNonEmpty(base.imageUrl, incoming.imageUrl),
+    imageSet: images,
+    originalImage: images[0] || firstNonEmpty(base.originalImage, incoming.originalImage),
+    cardImage: images[0] || firstNonEmpty(base.cardImage, incoming.cardImage),
+    media: Object.keys(mergedMedia).length ? mergedMedia : undefined,
+    pageMediaCard: !!(pageUrl && images.length)
+  });
+
+  if(base.videoId || incoming.videoId) merged.videoId = firstNonEmpty(base.videoId, incoming.videoId);
+  if(base.videoUrl || incoming.videoUrl) merged.videoUrl = firstNonEmpty(base.videoUrl, incoming.videoUrl);
+  if(base.watchUrl || incoming.watchUrl) merged.watchUrl = firstNonEmpty(base.watchUrl, incoming.watchUrl);
+  if(base.embedUrl || incoming.embedUrl) merged.embedUrl = firstNonEmpty(base.embedUrl, incoming.embedUrl);
+  return merged;
+}
+
 function dedupeCanonicalItems(items){
-  const seen = new Set();
+  const indexByKey = new Map();
   const out = [];
-  for(const it of (Array.isArray(items) ? items : [])){
-    const rawUrl = safeString(it && (it.url || it.link)).trim();
+  for(const raw of (Array.isArray(items) ? items : [])){
+    const it = (raw && typeof raw === 'object') ? raw : {};
+    const pageUrl = sourcePageUrlForItem(it, it.payload);
+    const rawUrl = safeString(firstNonEmpty(pageUrl, it.url, it.link)).trim();
     const normUrl = rawUrl.toLowerCase();
     const placeholder = !rawUrl || rawUrl === '#' || rawUrl === '/' || normUrl === 'javascript:void(0)' || normUrl.startsWith('javascript:');
-    const key = (placeholder ? (safeString(it && it.id).trim() || safeString(it && it.title).trim() + '|' + safeString(it && it.source).trim()) : rawUrl).toLowerCase();
-    if(!key || seen.has(key)) continue;
-    seen.add(key);
+    const key = (placeholder
+      ? (safeString(it.id).trim() || safeString(it.title).trim() + '|' + safeString(it.source).trim())
+      : rawUrl).toLowerCase();
+    if(!key) continue;
+    if(indexByKey.has(key)){
+      const idx = indexByKey.get(key);
+      out[idx] = mergeCanonicalPageCard(out[idx], it);
+      continue;
+    }
+    indexByKey.set(key, out.length);
     out.push(it);
   }
   return out;
@@ -1186,8 +1266,8 @@ function compactResultItem(it){
   const displayCardBase = (it.displayCard && typeof it.displayCard === 'object') ? Object.assign({}, it.displayCard) : {};
   const richBody = richerDisplayText(summaryText, displayCardBase.body, displayCardBase.text, displayCardBase.summary, it.displaySummary);
   const displayCard = Object.assign({}, displayCardBase, {
-    lineClamp:5,
-    bodyLines:5
+    lineClamp:4,
+    bodyLines:4
   }, richBody ? {
     body:richBody,
     text:richBody,
@@ -1257,6 +1337,7 @@ function compactResultItem(it){
     pageUrl: resolvedUrl || sourcePageUrl || profile.pageUrl || undefined,
     sourcePageUrl: sourcePageUrl || undefined,
     contextLink: firstNonEmpty(profile.contextLink, it.contextLink, it.payload && it.payload.contextLink, sourcePageUrl) || undefined,
+    pageMediaCard: !!(resolvedUrl && (ownImages.length || ownThumb || originalImage)),
     channel: it.channel || undefined,
     section: it.section || undefined,
     page: it.page || undefined,
@@ -1397,7 +1478,8 @@ function sectionIdForItem(it){
   if(category === 'knowledge' || category === 'book' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|논문|연구|자료|encyclopedia|knowledge|research|paper/.test(text)) return 'knowledge_wiki';
   if(category === 'news' || source.includes('news') || /뉴스|속보|보도|신문|latest|breaking|press/.test(text)) return 'news';
   if(category === 'video' || mediaType === 'video' || type === 'video' || source.includes('youtube') || host.includes('youtube') || host.includes('youtu.be') || /동영상|영상|유튜브|브이로그|쇼츠|릴스|vlog|video|shorts|reels/.test(text)) return 'video_vlog';
-  if(category === 'image' || mediaType === 'image' || type === 'image' || source.includes('image') || /이미지|사진|갤러리|포토|스냅샷|photo|image|gallery/.test(text)) return 'image_gallery';
+  const pageMediaCard = !!(it && it.pageMediaCard) || (!!sourcePageUrlForItem(it, it && it.payload) && !!firstNonEmpty(it && it.thumbnail, it && it.image, it && it.originalImage));
+  if(!pageMediaCard && (category === 'image' || mediaType === 'image' || type === 'image' || source.includes('image') || /이미지|사진|갤러리|포토|스냅샷|photo|image|gallery/.test(text))) return 'image_gallery';
   if(category === 'blog' || source.includes('blog') || host.includes('blog') || /블로그|후기|리뷰|방문기|blog|review/.test(text)) return 'blog_review';
   if(category === 'shopping' || mediaType === 'product' || type === 'product' || /쇼핑|상품|가격|구매|판매|광고|프로모션|shopping|product|price|buy|sale|ad\b/.test(text)) return 'shopping_product';
   if(/회사|기업|브랜드|홈페이지|공식 사이트|company|corporate|brand|homepage|official site/.test(text)) return 'company_web';
@@ -4577,7 +4659,8 @@ function classifySearchCategory(it){
   const type = safeString(it && it.type).toLowerCase();
   const text = [host, source, title, summary, mediaType, type].join(' ');
 
-  if(mediaType === 'image' || type === 'image' || source.includes('image')) return 'image';
+  const pageMediaCard = !!(it && it.pageMediaCard) || (!!sourcePageUrlForItem(it, it && it.payload) && !!firstNonEmpty(it && it.thumbnail, it && it.image, it && it.originalImage));
+  if(!pageMediaCard && (mediaType === 'image' || type === 'image' || source.includes('image'))) return 'image';
   if(source.includes('news') || type === 'news' || text.includes('뉴스') || text.includes('속보') || text.includes('실시간') || text.includes('보도자료') || text.includes('breaking') || text.includes('latest')) return 'news';
   if(mediaType === 'map' || type === 'map' || source.includes('local') || source.includes('map') || text.includes('지도') || text.includes('길찾기') || text.includes('주소') || text.includes('directions') || text.includes('nearby') || text.includes('transit')) return 'map';
   if(source.includes('book') || type === 'book' || text.includes('도서') || text.includes('책 ') || text.includes('서적') || text.includes('출판') || text.includes('저자') || text.includes('book') || text.includes('author')) return 'book';
