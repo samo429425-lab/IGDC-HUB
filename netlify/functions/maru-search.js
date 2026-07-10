@@ -411,35 +411,6 @@ function isRealImageUrl(u){
   return false;
 }
 
-function isDirectImageResourceUrl(v){
-  const s = safeString(v).trim();
-  if(!s) return false;
-  try{
-    const u = new URL(s);
-    const path = (u.pathname || '').toLowerCase();
-    return /\.(?:jpe?g|png|gif|webp|avif|bmp|svg)(?:$|[?#])/i.test(s) ||
-      /(?:image|img|photo|thumbnail|thumb)\.(?:php|ashx)$/i.test(path);
-  }catch(e){
-    return /\.(?:jpe?g|png|gif|webp|avif|bmp|svg)(?:$|[?#])/i.test(s);
-  }
-}
-
-function sourcePageUrlForItem(it, payload){
-  it = (it && typeof it === 'object') ? it : {};
-  const p = (payload && typeof payload === 'object') ? payload : ((it.payload && typeof it.payload === 'object') ? it.payload : {});
-  const candidates = [
-    it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.articleUrl, it.canonicalUrl, it.hostPageUrl,
-    p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.articleUrl, p.canonicalUrl, p.hostPageUrl,
-    it.url, it.link, it.href, p.url, p.link, p.href
-  ];
-  for(const v of candidates){
-    const u = safeString(v).trim();
-    if(!u || !/^https?:\/\//i.test(u) || isDirectImageResourceUrl(u)) continue;
-    return u;
-  }
-  return '';
-}
-
 function firstNonEmpty(){
   for(let i=0; i<arguments.length; i++){
     const v = arguments[i];
@@ -488,12 +459,7 @@ function mediaPoster(raw, payload){
 function canonicalizeItem(raw, query, sourceHint){
   const it = (raw && typeof raw === 'object') ? raw : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
-  const rawUrl = safeString(firstNonEmpty(it.url, it.link, it.href, p.url, p.link)).trim();
-  const type = safeString(it.type || p.type || 'web') || 'web';
-  const mediaType = safeString(it.mediaType || p.mediaType || (type === 'image' ? 'image' : (type === 'video' ? 'video' : 'article')));
-  const imageLike = type === 'image' || mediaType === 'image' || safeString(firstNonEmpty(it.source, p.source)).toLowerCase().includes('image');
-  const sourcePageUrl = imageLike ? sourcePageUrlForItem(it, p) : '';
-  const url = sourcePageUrl || rawUrl;
+  const url = safeString(firstNonEmpty(it.url, it.link, it.href, p.url, p.link)).trim();
   const title = safeString(firstNonEmpty(it.title, it.name, p.title, p.name, url)).trim();
   const summary = safeString(firstNonEmpty(it.summary, it.snippet, it.description, p.summary, p.snippet, p.description)).trim();
 
@@ -510,6 +476,8 @@ function canonicalizeItem(raw, query, sourceHint){
   // but they must never become thumbnail/image/imageSet.
   const imageCandidates = rawImageCandidates.filter(img => isMeaningfulImageForItem(img, it));
   const thumbnail = imageCandidates[0] || '';
+  const type = safeString(it.type || p.type || 'web') || 'web';
+  const mediaType = safeString(it.mediaType || p.mediaType || (type === 'image' ? 'image' : (type === 'video' ? 'video' : 'article')));
   const source = firstNonEmpty(it.source, p.source, sourceHint, domainOf(url));
   const id = safeString(firstNonEmpty(it.id, url, title, source + '-' + Math.random().toString(16).slice(2))).trim();
   const tags = Array.isArray(it.tags) ? it.tags : (Array.isArray(p.tags) ? p.tags : []);
@@ -522,10 +490,7 @@ function canonicalizeItem(raw, query, sourceHint){
     summary,
     description: it.description !== undefined ? it.description : summary,
     url,
-    link: sourcePageUrl || firstNonEmpty(it.link, url),
-    pageUrl: sourcePageUrl || firstNonEmpty(it.pageUrl, p.pageUrl, url),
-    sourcePageUrl: sourcePageUrl || firstNonEmpty(it.sourcePageUrl, p.sourcePageUrl, it.pageUrl, p.pageUrl),
-    contextLink: sourcePageUrl || firstNonEmpty(it.contextLink, p.contextLink),
+    link: firstNonEmpty(it.link, url),
     source,
     lang: it.lang || p.lang || detectLangFromTextFallback(title + ' ' + summary),
     thumbnail,
@@ -993,7 +958,6 @@ function mediaProfileForItem(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const url = safeString(firstNonEmpty(it.url, it.link, it.href, p.url, p.link, p.contextLink)).trim();
-  const sourcePageUrl = sourcePageUrlForItem(it, p);
   const sourceText = safeString(firstNonEmpty(it.source, p.source)).toLowerCase();
   const typeText = safeString(firstNonEmpty(it.type, it.mediaType, p.type, p.mediaType)).toLowerCase();
   const videoId = firstNonEmpty(it.videoId, p.videoId, youtubeIdFromUrl(url));
@@ -1027,9 +991,7 @@ function mediaProfileForItem(it){
       watchUrl: videoUrl,
       embedUrl,
       openUrl: videoUrl || url,
-      pageUrl: url,
-      sourcePageUrl: url,
-      contextLink: url
+      pageUrl: url
     };
   }
 
@@ -1060,10 +1022,8 @@ function mediaProfileForItem(it){
     videoUrl,
     watchUrl: videoUrl,
     embedUrl,
-    openUrl: videoUrl || sourcePageUrl || url,
-    pageUrl: sourcePageUrl || url,
-    sourcePageUrl: sourcePageUrl || url,
-    contextLink: firstNonEmpty(it.contextLink, p.contextLink, sourcePageUrl)
+    openUrl: videoUrl || url,
+    pageUrl: url
   };
 }
 
@@ -1093,57 +1053,29 @@ function resultSummaryText(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const meta = (it.meta && typeof it.meta === 'object') ? it.meta : {};
-  const data = (it.data && typeof it.data === 'object') ? it.data : {};
-  const raw = (it.raw && typeof it.raw === 'object') ? it.raw : {};
-  const provider = (it.providerResult && typeof it.providerResult === 'object') ? it.providerResult : {};
   const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
   const candidates = [
     it.summary, it.snippet, it.contentSnippet, it.description, it.excerpt, it.abstract,
     it.lead, it.subtitle, it.content, it.text, it.body, it.bodyText, it.articleBody,
-    it.articleText, it.mainText, it.plainText, it.pageText, it.newsBody,
-    it.ogDescription, it.metaDescription, it.seoDescription, it.htmlSnippet,
+    it.ogDescription, it.metaDescription, it.seoDescription,
     p.summary, p.snippet, p.contentSnippet, p.description, p.excerpt, p.abstract,
     p.lead, p.subtitle, p.content, p.text, p.body, p.bodyText, p.articleBody,
-    p.articleText, p.mainText, p.plainText, p.pageText, p.newsBody,
-    p.ogDescription, p.metaDescription, p.seoDescription, p.htmlSnippet,
-    data.summary, data.snippet, data.contentSnippet, data.description, data.excerpt,
-    data.content, data.text, data.body, data.bodyText, data.articleBody, data.articleText,
-    data.mainText, data.plainText, data.pageText, data.newsBody, data.ogDescription, data.metaDescription,
-    raw.summary, raw.snippet, raw.contentSnippet, raw.description, raw.excerpt,
-    raw.content, raw.text, raw.body, raw.bodyText, raw.articleBody, raw.articleText,
-    raw.mainText, raw.plainText, raw.pageText, raw.newsBody, raw.ogDescription, raw.metaDescription,
-    provider.summary, provider.snippet, provider.contentSnippet, provider.description, provider.excerpt,
-    provider.content, provider.text, provider.body, provider.bodyText, provider.articleBody,
-    provider.ogDescription, provider.metaDescription,
+    p.ogDescription, p.metaDescription,
     meta.description, meta.summary, meta.snippet, meta.ogDescription,
     displayCard.body, displayCard.text, displayCard.snippet, displayCard.description, displayCard.summary
   ];
-  const unique = [];
-  const seen = new Set();
+  let best = '';
   for(const v of candidates){
     const clean = stripInlineHtml(v);
     if(!clean || clean.length < 18 || isSyntheticSearchSummaryText(clean)) continue;
-    const key = clean.toLowerCase();
-    if(seen.has(key)) continue;
-    seen.add(key);
-    unique.push(clean);
+    if(clean.length > best.length) best = clean;
   }
-  if(!unique.length) return '';
+  if(best) return best.slice(0, 560);
 
-  unique.sort((a, b) => b.length - a.length);
-  let best = unique[0];
-  // If providers split one real excerpt across separate fields, join only
-  // distinct natural text fragments. This keeps the response compact while
-  // giving the search card enough real body text for four to five lines.
-  if(best.length < 260){
-    for(const extra of unique.slice(1)){
-      if(extra.length < 24) continue;
-      if(best.includes(extra) || extra.includes(best)) continue;
-      best += ' ' + extra;
-      if(best.length >= 420) break;
-    }
-  }
-  return best.slice(0, 720);
+  // Do not manufacture card summaries such as "...검색 결과입니다".
+  // A search card should show only real provider snippets/body/OG descriptions.
+  // If the provider has not supplied real body text yet, leave the summary blank.
+  return '';
 }
 
 function compactResultItem(it){
@@ -1162,15 +1094,11 @@ function compactResultItem(it){
   const media = mediaBase || (mediaType === 'video' || ownThumb ? { type: mediaType === 'video' ? 'video' : 'image' } : undefined);
   const placeInfo = (it.placeInfo && typeof it.placeInfo === 'object') ? Object.assign({}, it.placeInfo) : undefined;
   const summaryText = resultSummaryText(it);
-  const sourcePageUrl = firstNonEmpty(profile.sourcePageUrl, profile.pageUrl, sourcePageUrlForItem(it, it.payload));
-  const resolvedUrl = (type === 'image' || mediaType === 'image') && sourcePageUrl
-    ? sourcePageUrl
-    : safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim();
   const resolvedSectionId = it.sectionId || sectionIdForItem(it);
   const displayCardBase = (it.displayCard && typeof it.displayCard === 'object') ? Object.assign({}, it.displayCard) : {};
   const displayCard = Object.assign({}, displayCardBase, {
-    lineClamp:5,
-    bodyLines:5
+    lineClamp:4,
+    bodyLines:4
   }, summaryText ? {
     body:firstNonEmpty(displayCardBase.body, displayCardBase.text, summaryText),
     summary:firstNonEmpty(displayCardBase.summary, summaryText)
@@ -1205,8 +1133,8 @@ function compactResultItem(it){
     title: safeString(it.title).trim(),
     summary: summaryText,
     description: summaryText,
-    url: resolvedUrl,
-    link: resolvedUrl,
+    url: safeString(firstNonEmpty(it.url, it.link, it.href, profile.openUrl)).trim(),
+    link: safeString(firstNonEmpty(it.link, it.url, it.href, profile.openUrl)).trim(),
     source: it.source || null,
     lang: it.lang || null,
     thumbnail: ownThumb,
@@ -1234,10 +1162,8 @@ function compactResultItem(it){
     videoUrl: profile.videoUrl || undefined,
     watchUrl: profile.watchUrl || undefined,
     embedUrl: profile.embedUrl || undefined,
-    openUrl: sourcePageUrl || profile.openUrl || undefined,
-    pageUrl: sourcePageUrl || profile.pageUrl || undefined,
-    sourcePageUrl: sourcePageUrl || undefined,
-    contextLink: firstNonEmpty(profile.contextLink, it.contextLink, it.payload && it.payload.contextLink, sourcePageUrl) || undefined,
+    openUrl: profile.openUrl || undefined,
+    pageUrl: profile.pageUrl || undefined,
     channel: it.channel || undefined,
     section: it.section || undefined,
     page: it.page || undefined,
@@ -1374,7 +1300,7 @@ function sectionIdForItem(it){
 
   if(category === 'official' || host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || /공식|관공서|시청|구청|정부|공공기관|official|government office/.test(text)) return 'official_authority';
   if(category === 'map' || category === 'tour' || mediaType === 'map' || type === 'map' || /지도|주소|위치|길찾기|관광|여행|맛집|명소|랜드마크|박물관|미술관|축제|교통|지하철|map|nearby|travel|tour|restaurant|landmark|attraction/.test(text)) return 'map_local_tour';
-  if(category === 'cafe' || category === 'sns' || type === 'sns' || mediaType === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || source.includes('youtube') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || host.includes('youtube.com') || host.includes('youtu.be') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|유튜브|sns|community|forum|instagram|facebook|tiktok|youtube/.test(text)) return 'community_sns';
+  if(category === 'cafe' || category === 'sns' || type === 'sns' || mediaType === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|SNS|community|forum|instagram|facebook|tiktok/.test(text)) return 'community_sns';
   if(category === 'knowledge' || category === 'book' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|논문|연구|자료|encyclopedia|knowledge|research|paper/.test(text)) return 'knowledge_wiki';
   if(category === 'news' || source.includes('news') || /뉴스|속보|보도|신문|latest|breaking|press/.test(text)) return 'news';
   if(category === 'video' || mediaType === 'video' || type === 'video' || source.includes('youtube') || host.includes('youtube') || host.includes('youtu.be') || /동영상|영상|유튜브|브이로그|쇼츠|릴스|vlog|video|shorts|reels/.test(text)) return 'video_vlog';
@@ -4204,14 +4130,11 @@ async function naverImageSearch(q, limit, start){
     results: (Array.isArray(data.items) ? data.items : []).map(it => {
       const thumb = it.thumbnail || '';
       const imageUrl = it.link || thumb || '';
-      const context = sourcePageUrlForItem(it, it);
+      const context = it.originallink || imageUrl;
       return {
         title: stripHtml(it.title || q),
-        link: context || imageUrl,
-        url: context || imageUrl,
-        pageUrl: context || undefined,
-        sourcePageUrl: context || undefined,
-        contextLink: context || undefined,
+        link: context,
+        url: context,
         snippet: '',
         type: 'image',
         mediaType: 'image',
@@ -4231,9 +4154,7 @@ async function naverImageSearch(q, limit, start){
           source: 'naver_image',
           thumb,
           image: imageUrl || thumb,
-          contextLink: context || undefined,
-          pageUrl: context || undefined,
-          sourcePageUrl: context || undefined,
+          contextLink: context,
           qualityMode: 'prefer-original'
         }
       };
@@ -4355,38 +4276,20 @@ async function googleCseRequest(q, limit, start, opts){
     const pagemap = it.pagemap || {};
     const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
     const cseImg = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
-    const imageSearch = opts.searchType === 'image' || type === 'image' || opts.mediaType === 'image';
-    const directImage = imageSearch ? safeString(it.link || '').trim() : '';
-    const imageMeta = (it.image && typeof it.image === 'object') ? it.image : {};
-    const pageUrl = imageSearch
-      ? safeString(firstNonEmpty(imageMeta.contextLink, it.contextLink, it.pageUrl, it.sourcePageUrl)).trim()
-      : safeString(it.link || '').trim();
-    const img = imageSearch
-      ? firstNonEmpty(imageMeta.thumbnailLink, directImage, cseImg && cseImg.src, cseThumb && cseThumb.src)
-      : ((cseImg && cseImg.src) || (cseThumb && cseThumb.src) || '');
+    const img = (cseImg && cseImg.src) || (cseThumb && cseThumb.src) || '';
     return {
       title: it.title || '',
-      link: pageUrl || it.link || '',
-      url: pageUrl || it.link || '',
-      pageUrl: pageUrl || undefined,
-      sourcePageUrl: pageUrl || undefined,
-      contextLink: pageUrl || undefined,
-      snippet: it.snippet || it.htmlSnippet || '',
+      link: it.link || '',
+      url: it.link || '',
+      snippet: it.snippet || '',
       type,
-      mediaType: opts.mediaType || (type === 'sns_video' ? 'video' : (imageSearch ? 'image' : 'article')),
+      mediaType: opts.mediaType || (type === 'sns_video' ? 'video' : 'article'),
       source,
       thumbnail: img,
       thumb: img,
-      image: directImage || img,
-      imageUrl: directImage || img,
-      imageSet: compactImages([directImage, img]),
-      originalImage: directImage || img,
-      fullImage: directImage || img,
-      viewerImage: directImage || img,
-      openImageUrl: directImage || img,
-      contentUrl: directImage || img,
-      cardImage: img || directImage,
-      payload: { source, thumb: img, image: directImage || img, originalImage:directImage || img, contextLink:pageUrl || undefined, pageUrl:pageUrl || undefined, sourcePageUrl:pageUrl || undefined, cseQuery: q }
+      image: img,
+      imageSet: compactImages([img]),
+      payload: { source, thumb: img, image: img, cseQuery: q }
     };
   });
 
@@ -4416,7 +4319,7 @@ async function googleSearch(q, limit, start){
   return { source: 'google', results, meta };
 }
 
-async function googleSnsSearch(q, limit, start, timeoutMs){
+async function googleSnsSearch(q, limit, start){
   const keys = googleCseKeys();
   const cseParams = { hl:'ko', gl:'kr', safe:'off', filter:'0', lr:'removed' };
   if(!keys.key) return { source:'google_sns', results: [], meta:{ status:'google key missing', reason:'GOOGLE_API_KEY missing', cseParams } };
@@ -4436,7 +4339,7 @@ async function googleSnsSearch(q, limit, start, timeoutMs){
       source: route.source,
       type: route.type,
       mediaType: route.mediaType,
-      timeoutMs: Math.max(700, Math.min(1600, Number(timeoutMs) || 1600))
+      timeoutMs: 1600
     }).then(bundle => Object.assign({}, bundle, { route: route.name }))
   ));
 
@@ -4472,11 +4375,11 @@ async function bingSearch(q, limit, offset){
   return { source: 'bing', results: ((data.webPages && data.webPages.value) || []).map(it => ({ title: it.name, link: it.url, url: it.url, snippet: it.snippet, type: 'web', source: 'bing' })) };
 }
 
-async function youtubeSearch(q, limit, timeoutMs){
+async function youtubeSearch(q, limit){
   const key = envFirst('YOUTUBE_API_KEY','GOOGLE_YOUTUBE_API_KEY','GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY');
   if(!key) return null;
   const url = 'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=' + Math.min(limit,50) + '&q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(key);
-  const res = await fetchWithTimeout(url, null, Math.max(700, Math.min(3500, Number(timeoutMs) || 3500)));
+  const res = await fetchWithTimeout(url, null, 3500);
   if(!res.ok) return null;
   const data = await res.json();
   const results = (data.items || []).map(it => {
@@ -4557,8 +4460,8 @@ function classifySearchCategory(it){
   if(text.includes('법원') || text.includes('구청') || text.includes('시청') || text.includes('관공서') || text.includes('court') || text.includes('city hall') || text.includes('district office') || text.includes('government office')) return 'map';
   if(text.includes('지하철') || text.includes('지하철역') || text.includes('버스') || text.includes('교통') || text.includes('metro') || text.includes('subway') || text.includes('station') || text.includes('bus route')) return 'map';
 
-  if(text.includes('인스타') || text.includes('instagram') || text.includes('facebook') || text.includes('페이스북') || text.includes('tiktok') || text.includes('틱톡') || text.includes('threads') || text.includes('twitter') || text.includes('트위터') || text.includes('x / twitter') || text.includes('youtube') || text.includes('유튜브') || host.includes('instagram.') || host.includes('threads.net') || host.includes('tiktok.') || host.includes('facebook.') || host.includes('x.com') || host.includes('twitter.') || host.includes('youtube.com') || host.includes('youtu.be') || source.includes('sns') || source.includes('social') || source.includes('youtube')) return 'sns';
-  if(mediaType === 'video' || type === 'video' || source.includes('video')) return 'video';
+  if(text.includes('인스타') || text.includes('instagram') || text.includes('facebook') || text.includes('페이스북') || text.includes('tiktok') || text.includes('틱톡') || text.includes('threads') || text.includes('twitter') || text.includes('트위터') || text.includes('x / twitter') || host.includes('instagram.') || host.includes('threads.net') || host.includes('tiktok.') || host.includes('facebook.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social')) return 'sns';
+  if(mediaType === 'video' || type === 'video' || source.includes('youtube') || source.includes('video') || host.includes('youtube.com') || host.includes('youtu.be')) return 'video';
   if(text.includes('쇼핑') || text.includes('가격') || text.includes('구매') || text.includes('shopping') || text.includes('price') || text.includes('product') || type === 'product' || mediaType === 'product') return 'shopping';
   if(text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('sports')) return 'sports';
   if(text.includes('증권') || text.includes('주식') || text.includes('환율') || text.includes('금융') || text.includes('finance') || text.includes('stock')) return 'finance';
@@ -5174,20 +5077,6 @@ async function attachFastDisplayRichProbe(base, event, ctx){
   if(['all','map','tour'].includes(searchType)) pushTask('naver_local_quick', naverGenericSearch('local.json', q, 10, naverStart10, 'naver_local', 'map'));
   if(['all','web','news'].includes(searchType)) pushTask('google_web_quick', googleCseRequest(q, 10, googleStart10, { source:'google_quick', type:'web', timeoutMs:1100 }));
   if(['all','image','web'].includes(searchType)) pushTask('google_image_quick', googleCseRequest(q, 10, googleStart10, { source:'google_image_quick', type:'image', mediaType:'image', searchType:'image', timeoutMs:1100 }));
-  if(['all','sns'].includes(searchType)) pushTask('google_sns_quick', googleSnsSearch(q, searchType === 'sns' ? 20 : 10, googleStart10, 1050));
-  if(['all','video','sns'].includes(searchType) && !truthy(raw.noMedia) && !truthy(raw.disableMedia)){
-    pushTask('youtube_quick', youtubeSearch(q, searchType === 'video' ? 20 : 12, 1100).then(pack => {
-      if(!pack || !Array.isArray(pack.results)) return pack;
-      return Object.assign({}, pack, {
-        results: pack.results.map(it => Object.assign({}, it, {
-          searchCategory:'sns',
-          displayGroup:'social',
-          displayGroupHint:'social',
-          mediaType:'video'
-        }))
-      });
-    }));
-  }
 
   if(!tasks.length) return base;
 
@@ -5204,12 +5093,7 @@ async function attachFastDisplayRichProbe(base, event, ctx){
     const results = pack && Array.isArray(pack.results) ? pack.results : [];
     trace.push({ name, status: results.length ? 'ok' : (pack && pack.meta && pack.meta.status || val && val.error || 'empty'), count: results.length });
     for(const it of results){
-      const normalized = canonicalizeItem(it, q, it && (it.source || it.provider || name));
-      const imageOnly = (normalized.type === 'image' || normalized.mediaType === 'image') &&
-        !sourcePageUrlForItem(normalized, normalized.payload) &&
-        isDirectImageResourceUrl(firstNonEmpty(normalized.url, normalized.link));
-      if(imageOnly) continue;
-      richItems.push(normalized);
+      richItems.push(canonicalizeItem(it, q, it && (it.source || it.provider || name)));
     }
   }
 
@@ -5306,7 +5190,6 @@ exports.handler = async function(event){
     const fastDisplayFirstWindow = isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceResident || raw.waitResident || raw.waitProviders || raw.waitExternal));
     const requestedSearchUiPage = clampInt(firstNonEmpty(raw && (raw.page || raw.p || raw.visiblePage || raw.sectionPage), 1), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
     let fastRichFirstBase = null;
-    let fastRichPagedDirect = false;
     if(searchUiGateway && fastDisplayFirstWindow && requestedSearchUiPage === 1){
       const quickBase = await attachFastDisplayRichProbe(
         { source:'maru-search-fast-rich-first-window', route:[], sourceRoute:[], region:detectRuntimeRegion(event, lang, q), items:[], results:[], meta:{ trace:[] } },
@@ -5363,33 +5246,6 @@ exports.handler = async function(event){
             }
           };
         }
-      }
-    }else if(searchUiGateway && fastDisplayFirstWindow && requestedSearchUiPage > 1){
-      // Follow-up intake pages must not wait for the full wide/media/augment chain.
-      // Reuse the existing page-aware rich probe and return its new provider window directly.
-      const quickPageBase = await attachFastDisplayRichProbe(
-        { source:'maru-search-fast-rich-followup-page', route:[], sourceRoute:[], region:detectRuntimeRegion(event, lang, q), items:[], results:[], meta:{ trace:[] } },
-        event,
-        {
-          q,
-          raw:Object.assign({}, raw || {}, {
-            displayRich:'1',
-            fastRichProbeMs:firstNonEmpty(raw && raw.fastRichProbeMs, 1050)
-          }),
-          searchType,
-          lang
-        }
-      );
-      if(searchUiHasRealCards(quickPageBase && quickPageBase.items)){
-        fastRichFirstBase = quickPageBase;
-        fastRichPagedDirect = true;
-        fastRichFirstBase.meta = Object.assign({}, fastRichFirstBase.meta || {}, {
-          fastRichFirstWindowComplete:true,
-          followupPageDirect:true,
-          requestedPage:requestedSearchUiPage,
-          firstResponseMode:'fast-rich-followup-page',
-          heavyWideGatewayDeferred:true
-        });
       }
     }
     const sanmaruRouteContext = fastDisplayFirstWindow
@@ -5611,27 +5467,7 @@ exports.handler = async function(event){
       displayPolicy: displayPack.displayPolicy || null
     });
     const fullSectionPack = buildSearchSections(base.items, q, { searchType });
-    let visiblePagePack = buildCollapseAwareVisiblePagePack(base.items, q, raw || {}, fullSectionPack);
-    if(fastRichPagedDirect){
-      const directPageItems = base.items.slice(0, visibleNeed);
-      const directTotalPages = Math.min(MARU_SEARCH_MAX_PAGER_PAGES, Math.max(requestedSearchUiPage, Math.ceil(searchUiTarget / visibleNeed)));
-      visiblePagePack = Object.assign({}, visiblePagePack, {
-        page:requestedSearchUiPage,
-        requestedPage:requestedSearchUiPage,
-        perPage:visibleNeed,
-        visibleCardsPerPage:visibleNeed,
-        pageItems:directPageItems,
-        visibleCount:directPageItems.length,
-        totalItems:searchUiTarget,
-        totalVisibleItems:searchUiTarget,
-        totalPages:directTotalPages,
-        hasPrevPage:requestedSearchUiPage > 1,
-        hasNextPage:requestedSearchUiPage < directTotalPages,
-        prevPage:requestedSearchUiPage > 1 ? requestedSearchUiPage - 1 : null,
-        nextPage:requestedSearchUiPage < directTotalPages ? requestedSearchUiPage + 1 : null,
-        directPagedRich:true
-      });
-    }
+    const visiblePagePack = buildCollapseAwareVisiblePagePack(base.items, q, raw || {}, fullSectionPack);
     const viewportSections = buildViewportDisplaySections(visiblePagePack.pageItems, q, fullSectionPack, visiblePagePack);
     const sectionPackWithViewport = Object.assign({}, fullSectionPack, {
       sections: viewportSections.sections,
