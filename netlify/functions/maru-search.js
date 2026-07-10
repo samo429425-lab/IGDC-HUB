@@ -1197,14 +1197,21 @@ function compactResultItem(it){
 // =========================================================
 const SEARCH_SECTION_ORDER = [
   'official_authority',
+  'public_data',
   'map_local_tour',
   'knowledge_wiki',
+  'academic',
+  'book',
   'news',
   'video_vlog',
   'image_gallery',
   'blog_review',
   'community_sns',
   'shopping_product',
+  'sports',
+  'finance',
+  'webtoon',
+  'site',
   'company_web',
   'general_web'
 ];
@@ -1216,6 +1223,13 @@ const SEARCH_SECTION_META = {
     previewLimit: 5,
     rank: 10,
     description: '정부·공공기관·공식 홈페이지·주요 정보를 먼저 보여주는 섹션'
+  },
+  public_data: {
+    title: '공공자료 / 공개 데이터',
+    label: '공공자료',
+    previewLimit: 6,
+    rank: 15,
+    description: '공공데이터, 공개 통계, 기관 자료와 데이터셋 결과'
   },
   map_local_tour: {
     title: '지도 / 지역 / 관광 / 맛집',
@@ -1230,6 +1244,20 @@ const SEARCH_SECTION_META = {
     previewLimit: 6,
     rank: 30,
     description: '위키, 백과, 지식, 연구·자료형 결과'
+  },
+  academic: {
+    title: '학술 / 논문 / 연구자료',
+    label: '학술/논문',
+    previewLimit: 6,
+    rank: 32,
+    description: '논문, 학술자료, 연구보고서와 전문 지식 결과'
+  },
+  book: {
+    title: '도서 / 출판 / 서적',
+    label: '도서',
+    previewLimit: 6,
+    rank: 34,
+    description: '책, 저자, 출판, 서평과 도서 관련 결과'
   },
   news: {
     title: '뉴스 / 보도 / 최신 이슈',
@@ -1273,6 +1301,34 @@ const SEARCH_SECTION_META = {
     rank: 90,
     description: '상품, 가격, 쇼핑, 광고·홍보형 결과'
   },
+  sports: {
+    title: '스포츠 / 경기 / 선수',
+    label: '스포츠',
+    previewLimit: 6,
+    rank: 92,
+    description: '경기, 선수, 구단과 스포츠 관련 결과'
+  },
+  finance: {
+    title: '금융 / 증권 / 시장',
+    label: '금융/증권',
+    previewLimit: 6,
+    rank: 94,
+    description: '주식, 금융, 환율, 시장과 경제 관련 결과'
+  },
+  webtoon: {
+    title: '웹툰 / 만화 / 콘텐츠',
+    label: '웹툰/만화',
+    previewLimit: 6,
+    rank: 96,
+    description: '웹툰, 만화, 코믹과 연재 콘텐츠 결과'
+  },
+  site: {
+    title: '사이트 / 홈페이지',
+    label: '사이트',
+    previewLimit: 8,
+    rank: 98,
+    description: '공식 사이트, 기관·단체 홈페이지와 주요 웹페이지 결과'
+  },
   company_web: {
     title: '기업 / 홈페이지 / 일반 웹',
     label: '기업/웹',
@@ -1298,16 +1354,25 @@ function sectionIdForItem(it){
   const type = safeString(it && it.type).toLowerCase();
   const text = [host, source, type, mediaType, safeString(it && it.title), safeString(firstNonEmpty(it && it.summary, it && it.description))].join(' ').toLowerCase();
 
+  // Search-body sections are intentionally flexible: only sections with real
+  // matching items are emitted by buildSearchSections().
+  if(category === 'public_data' || host.includes('data.go.kr') || /공공데이터|공공 자료|공개 데이터|통계자료|데이터셋|open data|dataset/.test(text)) return 'public_data';
+  if(category === 'academic' || host.includes('scholar.google') || host.includes('arxiv.org') || host.includes('doi.org') || /학술|논문|연구보고서|학회|저널|paper|journal|research report|academic/.test(text)) return 'academic';
+  if(category === 'book' || type === 'book' || /도서|책 |서적|출판|저자|isbn|book|publisher|author/.test(text)) return 'book';
+  if(category === 'sports' || /스포츠|축구|야구|농구|배구|골프|경기|선수|구단|sports|football|baseball|basketball/.test(text)) return 'sports';
+  if(category === 'finance' || /금융|증권|주식|환율|채권|시장지수|finance|stock|exchange rate|securities/.test(text)) return 'finance';
+  if(category === 'webtoon' || /웹툰|만화|코믹|망가|webtoon|comic|manga/.test(text)) return 'webtoon';
   if(category === 'official' || host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || /공식|관공서|시청|구청|정부|공공기관|official|government office/.test(text)) return 'official_authority';
   if(category === 'map' || category === 'tour' || mediaType === 'map' || type === 'map' || /지도|주소|위치|길찾기|관광|여행|맛집|명소|랜드마크|박물관|미술관|축제|교통|지하철|map|nearby|travel|tour|restaurant|landmark|attraction/.test(text)) return 'map_local_tour';
-  if(category === 'cafe' || category === 'sns' || type === 'sns' || mediaType === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|SNS|community|forum|instagram|facebook|tiktok/.test(text)) return 'community_sns';
-  if(category === 'knowledge' || category === 'book' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|논문|연구|자료|encyclopedia|knowledge|research|paper/.test(text)) return 'knowledge_wiki';
+  if(category === 'cafe' || category === 'sns' || type === 'sns' || mediaType === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|sns|community|forum|instagram|facebook|tiktok/.test(text)) return 'community_sns';
+  if(category === 'knowledge' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|encyclopedia|knowledge/.test(text)) return 'knowledge_wiki';
   if(category === 'news' || source.includes('news') || /뉴스|속보|보도|신문|latest|breaking|press/.test(text)) return 'news';
   if(category === 'video' || mediaType === 'video' || type === 'video' || source.includes('youtube') || host.includes('youtube') || host.includes('youtu.be') || /동영상|영상|유튜브|브이로그|쇼츠|릴스|vlog|video|shorts|reels/.test(text)) return 'video_vlog';
   if(category === 'image' || mediaType === 'image' || type === 'image' || source.includes('image') || /이미지|사진|갤러리|포토|스냅샷|photo|image|gallery/.test(text)) return 'image_gallery';
   if(category === 'blog' || source.includes('blog') || host.includes('blog') || /블로그|후기|리뷰|방문기|blog|review/.test(text)) return 'blog_review';
   if(category === 'shopping' || mediaType === 'product' || type === 'product' || /쇼핑|상품|가격|구매|판매|광고|프로모션|shopping|product|price|buy|sale|ad\b/.test(text)) return 'shopping_product';
-  if(/회사|기업|브랜드|홈페이지|공식 사이트|company|corporate|brand|homepage|official site/.test(text)) return 'company_web';
+  if(category === 'site' || /홈페이지|공식 사이트|웹사이트|website|homepage/.test(text)) return 'site';
+  if(/회사|기업|브랜드|company|corporate|brand/.test(text)) return 'company_web';
   return 'general_web';
 }
 
@@ -4466,6 +4531,9 @@ function classifySearchCategory(it){
   if(text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('sports')) return 'sports';
   if(text.includes('증권') || text.includes('주식') || text.includes('환율') || text.includes('금융') || text.includes('finance') || text.includes('stock')) return 'finance';
   if(text.includes('웹툰') || text.includes('만화') || text.includes('webtoon') || text.includes('comic') || text.includes('manga')) return 'webtoon';
+  if(host.includes('data.go.kr') || text.includes('공공데이터') || text.includes('공개 데이터') || text.includes('데이터셋') || text.includes('open data') || text.includes('dataset')) return 'public_data';
+  if(host.includes('scholar.google') || host.includes('arxiv.org') || host.includes('doi.org') || text.includes('학술') || text.includes('논문') || text.includes('연구보고서') || text.includes('journal') || text.includes('academic')) return 'academic';
+  if(text.includes('홈페이지') || text.includes('웹사이트') || text.includes('official site') || text.includes('homepage') || text.includes('website')) return 'site';
 
   if(host.includes('go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('gov.uk') || host.includes('korea.kr')) return 'official';
 
