@@ -336,7 +336,10 @@ function pickQ(event){
   const qs = (event && event.queryStringParameters) || {};
   const q = safeString(qs.q || qs.query || '').trim();
   const limit = clampInt(qs.limit || qs.max || qs.count, DEFAULT_LIMIT, 1, MAX_LIMIT);
-  const start = clampInt(qs.start || 1, 1, 1, 1000);
+  const requestedPage = clampInt(qs.page || qs.p || qs.visiblePage || qs.sectionPage, 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
+  const requestedPerPage = clampInt(qs.perPage || qs.pageSize || qs.visibleCardsPerPage || qs.visibleLimit, 25, 1, 100);
+  const inferredStart = ((requestedPage - 1) * requestedPerPage) + 1;
+  const start = clampInt(qs.start || inferredStart, inferredStart, 1, 1000);
   const lang = safeString(qs.lang || qs.uiLang || qs.locale || '').trim() || null;
   const deep = truthy(qs.deep) || String(qs.external || '').toLowerCase() === 'deep';
 
@@ -5042,7 +5045,10 @@ async function attachFastDisplayRichProbe(base, event, ctx){
   if(!displayProbeRequested) return base;
 
   const page = clampInt(firstNonEmpty(raw.page, raw.p, raw.visiblePage, raw.sectionPage), 1, 1, MARU_SEARCH_MAX_PAGER_PAGES);
-  if(page !== 1) return base;
+  const naverStart20 = Math.min(1000, ((page - 1) * 20) + 1);
+  const naverStart30 = Math.min(1000, ((page - 1) * 30) + 1);
+  const naverStart10 = Math.min(1000, ((page - 1) * 10) + 1);
+  const googleStart10 = Math.min(91, ((page - 1) * 10) + 1);
 
   const started = nowMs();
   const searchUiGateway = isSearchUiGatewayRequest(raw || {});
@@ -5065,12 +5071,12 @@ async function attachFastDisplayRichProbe(base, event, ctx){
     tasks.push(task);
   }
 
-  if(['all','blog','web'].includes(searchType)) pushTask('naver_blog_quick', naverGenericSearch('blog.json', q, 20, 1, 'naver_blog', 'blog'));
-  if(['all','news','web'].includes(searchType)) pushTask('naver_news_quick', naverGenericSearch('news.json', q, 20, 1, 'naver_news', 'news'));
-  if(['all','image','web','blog','news','sns'].includes(searchType)) pushTask('naver_image_quick', naverImageSearch(q, 30, 1));
-  if(['all','map','tour'].includes(searchType)) pushTask('naver_local_quick', naverGenericSearch('local.json', q, 10, 1, 'naver_local', 'map'));
-  if(['all','web','news'].includes(searchType)) pushTask('google_web_quick', googleCseRequest(q, 10, 1, { source:'google_quick', type:'web', timeoutMs:1100 }));
-  if(['all','image','web'].includes(searchType)) pushTask('google_image_quick', googleCseRequest(q, 10, 1, { source:'google_image_quick', type:'image', mediaType:'image', searchType:'image', timeoutMs:1100 }));
+  if(['all','blog','web'].includes(searchType)) pushTask('naver_blog_quick', naverGenericSearch('blog.json', q, 20, naverStart20, 'naver_blog', 'blog'));
+  if(['all','news','web'].includes(searchType)) pushTask('naver_news_quick', naverGenericSearch('news.json', q, 20, naverStart20, 'naver_news', 'news'));
+  if(['all','image','web','blog','news','sns'].includes(searchType)) pushTask('naver_image_quick', naverImageSearch(q, 30, naverStart30));
+  if(['all','map','tour'].includes(searchType)) pushTask('naver_local_quick', naverGenericSearch('local.json', q, 10, naverStart10, 'naver_local', 'map'));
+  if(['all','web','news'].includes(searchType)) pushTask('google_web_quick', googleCseRequest(q, 10, googleStart10, { source:'google_quick', type:'web', timeoutMs:1100 }));
+  if(['all','image','web'].includes(searchType)) pushTask('google_image_quick', googleCseRequest(q, 10, googleStart10, { source:'google_image_quick', type:'image', mediaType:'image', searchType:'image', timeoutMs:1100 }));
 
   if(!tasks.length) return base;
 
@@ -5262,9 +5268,8 @@ exports.handler = async function(event){
     const sanmaruOpenGateRequested = truthy(raw && (raw.sanmaruFastOnly || raw.cacheOnly || raw.instantOnly || raw.sanmaruFirst || raw.residentFirst || raw.naturalFlow || raw.residentSwitch)) || safeString(raw && raw.routeOwner).toLowerCase() === 'sanmaru';
     const fastOpenPipeFirstWindow = sanmaruOpenGateRequested && isOpenPipeRequest(raw || {}) && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal));
     const contentFirstSearchUi = searchUiContentFirstRequested(raw || {});
-    const continuationSearchUi = searchUiGateway && requestedSearchUiPage > 1;
     const residentSeedHasRealCards = residentSeedPack && searchUiHasRealCards(residentSeedPack.items);
-    const sanmaruCanServeFromFastLayer = (fastOpenPipeFirstWindow || (residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, handlerLimit, raw || {}))) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (!contentFirstSearchUi || residentSeedHasRealCards || continuationSearchUi);
+    const sanmaruCanServeFromFastLayer = (fastOpenPipeFirstWindow || (residentSeedPack && sanmaruFastLayerEnough(residentSeedPack, handlerLimit, raw || {}))) && sanmaruOpenGateRequested && !forceProviderRefresh && !truthy(raw && (raw.forceWide || raw.waitProviders || raw.waitExternal)) && (!contentFirstSearchUi || residentSeedHasRealCards);
     if(fastRichFirstBase){
       base = fastRichFirstBase;
     }else if(sanmaruCanServeFromFastLayer){
@@ -5374,7 +5379,7 @@ exports.handler = async function(event){
     const providerLaneTarget = fastDisplayFirstWindow
       ? fastWindowCandidateTarget
       : Math.min(MAX_LIMIT, Math.max(handlerLimit, MIN_RESULT_TARGET, visibleNeed * 12, requestedPageForWindow * visibleNeed));
-    if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh && (!contentFirstSearchUi || !(base.items || []).length || continuationSearchUi)){
+    if(sanmaruOpenGateRequested && (base.items || []).length < providerLaneTarget && !forceProviderRefresh && (!contentFirstSearchUi || !(base.items || []).length)){
       const laneItems = buildSanmaruProviderLaneExpansionCards(q, Object.assign({}, raw || {}, { limit: providerLaneTarget }), { region:detectRuntimeRegion(event, lang, q) }, providerLaneTarget, (base.items || []).length);
       base.items = dedupeCanonicalItems([].concat(base.items || [], laneItems)).slice(0, providerLaneTarget);
       base.results = base.items;
@@ -5397,7 +5402,7 @@ exports.handler = async function(event){
       searchUiGateway ? searchUiTarget : MAX_LIMIT,
       Math.max(visibleNeed * 12, requestedPageForWindowGuarantee * visibleNeed + visibleNeed, fastDisplayFirstWindow ? SEARCH_UI_FIRST_RESPONSE_WINDOW : 0)
     );
-    if((base.items || []).length < pageWindowCandidateNeed && (!contentFirstSearchUi || !(base.items || []).length || continuationSearchUi)){
+    if((base.items || []).length < pageWindowCandidateNeed && (!contentFirstSearchUi || !(base.items || []).length)){
       const guaranteedLaneItems = buildSanmaruProviderLaneExpansionCards(
         q,
         Object.assign({}, raw || {}, { limit: pageWindowCandidateNeed, providerLaneTarget: pageWindowCandidateNeed }),
