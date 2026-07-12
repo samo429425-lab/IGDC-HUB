@@ -43,8 +43,7 @@ ready(function () {
     const BLOCK_SIZE = 10;
     const MAX_PAGER_PAGES = 499;
     const INITIAL_PRELOAD_PAGES = 5;
-    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES; // 125 real cards
-    const INITIAL_SERVER_WINDOW_MAX = 130;
+    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES; // 125 cards; server may return up to 130
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PAGER_PAGES = 10;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = INITIAL_PAGER_PAGES;
@@ -54,9 +53,9 @@ ready(function () {
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
     const INTAKE_CONCURRENCY = 5;
     const INTAKE_BURST_DELAY_MS = 8;
-    const SEARCH_FETCH_TIMEOUT_MS = 15000;
     const INTAKE_PAGE_RETRY_LIMIT = 4;
-    const INTAKE_CONFIRMED_EMPTY_STOP = 12;
+    const INTAKE_RETRY_BASE_DELAY_MS = 350;
+    const INTAKE_CONFIRMED_EMPTY_STOP = 16;
     // Search HTML should behave as an immediate receiver: once Sanmaru/MaruSearch
     // sends any real packet, open the follow-up faucet on the next short UI beat.
     // This is a handoff cadence, not a network timeout or a result cutoff.
@@ -1943,18 +1942,29 @@ function startContinuousIntake(q, type, seq){
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
   updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
 
-  // Page 1 is requested separately by runSearch. Start the open intake faucet at
-  // page 2 immediately; once the first 125~130 cards arrive, partial page 6 is
-  // fetched again instead of being mistaken for a complete loaded page.
+  // Page 1 is requested separately. Open pages 2+ immediately so the first
+  // 125~130 cards and the following windows can arrive in parallel.
   let nextPage = allItems.length
     ? Math.max(2, Math.floor(allItems.length / PAGE_SIZE) + 1)
     : 2;
   const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE)));
   const retryPages = [];
   const retryCounts = new Map();
+  const retryQueued = new Set();
   const confirmedEmptyPages = new Set();
   let highestConfirmedEmptyPage = 0;
   let stopForConfirmedEmptyTail = false;
+
+  function queueRetry(page, attempt){
+    if(!page || retryQueued.has(page) || hasCompleteLoadedServerPage(page)) return;
+    const delay = Math.min(4200, INTAKE_RETRY_BASE_DELAY_MS * Math.pow(2, Math.max(0, attempt - 1)));
+    retryQueued.add(page);
+    setTimeout(() => {
+      retryQueued.delete(page);
+      if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
+      if(!hasCompleteLoadedServerPage(page)) retryPages.push(page);
+    }, delay);
+  }
 
   function confirmedEmptyTailLength(){
     let count = 0;
@@ -1963,6 +1973,13 @@ function startContinuousIntake(q, type, seq){
       count += 1;
     }
     return count;
+  }
+
+  function markConfirmedEmpty(page){
+    confirmedEmptyPages.add(page);
+    highestConfirmedEmptyPage = Math.max(highestConfirmedEmptyPage, page);
+    loadedServerPages.set(page, []);
+    if(confirmedEmptyTailLength() >= INTAKE_CONFIRMED_EMPTY_STOP) stopForConfirmedEmptyTail = true;
   }
 
   function takeNextIntakePage(){
@@ -1981,16 +1998,22 @@ function startContinuousIntake(q, type, seq){
   async function worker(){
     while(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq){
       const page = takeNextIntakePage();
-      if(!page) break;
+      if(!page){
+        if(retryQueued.size && !stopForConfirmedEmptyTail){
+          await sleepIntake(80);
+          continue;
+        }
+        break;
+      }
+
       try{
-        const beforeCount = allItems.length;
         const pack = await fetchSearch(q, type, page);
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
+
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice);
           confirmedEmptyPages.delete(page);
-          retryCounts.delete(page);
           allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice).slice(0, MAX_SMOOTH_CANDIDATES);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
           updateProgressiveTotalFromPayload(pack && pack.payload, Math.max(target, allItems.length));
@@ -1998,40 +2021,45 @@ function startContinuousIntake(q, type, seq){
           else drawPager();
           status.textContent = statusResultsText(actualResultCountForStatus(), q, type, true);
 
-          // A partial page can be a temporarily incomplete provider packet. Give it
-          // one more chance later without blocking the following pages.
-          if(pageSlice.length < PAGE_SIZE && allItems.length < target && allItems.length > beforeCount){
-            const tried = retryCounts.get(page) || 0;
-            if(tried < 1){
-              retryCounts.set(page, tried + 1);
-              retryPages.push(page);
+          // A short page can be a temporarily incomplete provider packet. Keep
+          // moving forward, then retry it later without blanking the current UI.
+          if(pageSlice.length < PAGE_SIZE && allItems.length < target){
+            const nextAttempt = (retryCounts.get(page) || 0) + 1;
+            if(nextAttempt <= INTAKE_PAGE_RETRY_LIMIT){
+              retryCounts.set(page, nextAttempt);
+              queueRetry(page, nextAttempt);
             }
+          }else{
+            retryCounts.delete(page);
           }
         }else{
-          const tried = retryCounts.get(page) || 0;
-          if(tried < INTAKE_PAGE_RETRY_LIMIT && allItems.length < target){
-            retryCounts.set(page, tried + 1);
-            retryPages.push(page);
+          const nextAttempt = (retryCounts.get(page) || 0) + 1;
+          if(nextAttempt <= INTAKE_PAGE_RETRY_LIMIT && allItems.length < target){
+            retryCounts.set(page, nextAttempt);
+            queueRetry(page, nextAttempt);
           }else{
-            confirmedEmptyPages.add(page);
-            highestConfirmedEmptyPage = Math.max(highestConfirmedEmptyPage, page);
-            loadedServerPages.set(page, []);
-            if(confirmedEmptyTailLength() >= INTAKE_CONFIRMED_EMPTY_STOP) stopForConfirmedEmptyTail = true;
+            retryCounts.delete(page);
+            markConfirmedEmpty(page);
           }
         }
       }catch(e){
-        const tried = retryCounts.get(page) || 0;
-        if(tried < INTAKE_PAGE_RETRY_LIMIT && allItems.length < target){
-          retryCounts.set(page, tried + 1);
-          retryPages.push(page);
+        const nextAttempt = (retryCounts.get(page) || 0) + 1;
+        if(nextAttempt <= INTAKE_PAGE_RETRY_LIMIT && allItems.length < target){
+          retryCounts.set(page, nextAttempt);
+          queueRetry(page, nextAttempt);
+        }else{
+          retryCounts.delete(page);
+          markConfirmedEmpty(page);
         }
         console.warn('continuous intake page skipped:', page, e);
       }
+
       await sleepIntake(INTAKE_BURST_DELAY_MS);
     }
+
     if(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq){
       drawPager();
-      if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES) || stopForConfirmedEmptyTail) {
+      if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES) || stopForConfirmedEmptyTail){
         status.textContent = statusResultsText(actualResultCountForStatus(), q, type);
       }
     }
@@ -2167,36 +2195,29 @@ async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
 
-  const requestedPage = Math.max(1, Number(page) || 1);
   const sp = new URLSearchParams();
-  sp.set('action', 'search-ui');
-  sp.set('gateway', 'search-ui');
-  sp.set('searchUi', '1');
   sp.set('q', q);
   sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('page', String(requestedPage));
-  sp.set('visiblePage', String(requestedPage));
-  sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
-  sp.set('firstResponseWindow', String(INITIAL_SERVER_WINDOW_MAX));
-  sp.set('realContentFirst', '1');
-  sp.set('richContent', '1');
-  sp.set('requireSnippets', '1');
-  sp.set('realResultCards', '1');
+  sp.set('page', String(Math.max(1, Number(page) || 1)));
+  sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
   sp.set('pageWindowOnly', '1');
+  sp.set('residentFirst', '1');
+  sp.set('sanmaruFirst', '1');
+  sp.set('routeOwner', 'sanmaru');
   sp.set('naturalFlow', '1');
   sp.set('smoothIntake', '1');
   sp.set('noBlockingWide', '1');
+  sp.set('residentSwitch', '1');
+  sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => { try { ctrl.abort(); } catch(e) {} }, SEARCH_FETCH_TIMEOUT_MS);
   try {
-    const r = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+    const r = await fetch(url, { cache: 'no-store' });
     if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
 
     const json = await r.json();
@@ -2206,10 +2227,8 @@ async function fetchSearch(q, type = activeType, page = 1){
 
     return normalizeSearchPayload(json);
   } catch (e) {
-    if(e && e.name !== 'AbortError') console.error('fetchSearch failed:', e);
+    console.error('fetchSearch failed:', e);
     return { items: [], payload: null, pageItems: [], viewportSections: [] };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -5424,7 +5443,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         const preloadFloor = lastQuery ? (INITIAL_PAGER_PAGES * PAGE_SIZE) : 0;
         return Math.max(portalCount, allItems.length || 0, preloadFloor);
       }
-      if (normalizeSearchType(activeType) !== 'all') return activeTabItemsFromPool(allItems).length;
+      if (normalizeSearchType(activeType) !== 'all') return Math.max(lastQuery ? (INITIAL_PAGER_PAGES * PAGE_SIZE) : 0, activeTabItemsFromPool(allItems).length);
       if(serverPagedMode && serverTotalItems > 0) return Math.max(INITIAL_PAGER_PAGES * PAGE_SIZE, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
       return Math.max(lastQuery ? (INITIAL_PAGER_PAGES * PAGE_SIZE) : 0, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
     }
@@ -5750,10 +5769,7 @@ async function runSearch(q, type = activeType){
       Math.max(INITIAL_PRELOAD_TARGET, incoming.length)
     );
     const windowItems = incoming.slice(0, initialWindow);
-    allItems = (sourceName === 'maru-search-window'
-      ? mergeItemsPreferDisplayRichness(windowItems, allItems)
-      : mergeItemsPreferDisplayRichness(allItems, windowItems)
-    ).slice(0, MAX_SMOOTH_CANDIDATES);
+    allItems = mergeItemsPreferDisplayRichness(allItems, windowItems).slice(0, MAX_SMOOTH_CANDIDATES);
     seedLoadedServerPagesFromItems(allItems, Math.min(allItems.length, Math.max(INITIAL_PRELOAD_TARGET, windowItems.length)));
     if(pageItems.length) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
 
@@ -5780,14 +5796,14 @@ async function runSearch(q, type = activeType){
     return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
   }
 
-  // The result pipeline is single-gateway: search.js receives search cards only
-  // from maru-search. Sanmaru stays a warm/resident signal behind that gateway,
-  // but its direct instant packet is not merged into the browser result pool.
+  // Search cards enter the browser through maru-search only. Sanmaru remains
+  // a warm/resident signal behind that gateway, but its direct packet is not
+  // mixed into the Search.js result pool.
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
 
-  // Open pages 2+ immediately instead of waiting for page 1 to finish. On a fast
-  // connection this fills the first 125~130 cards nearly at once; on a slow
-  // connection the workers keep retrying without replacing the page with blank UI.
+  // Open the follow-up faucet immediately. Page 1 and pages 2+ can arrive in
+  // parallel, while the existing skeleton and 10-page pager stay visible on a
+  // slow network instead of being replaced by an empty result screen.
   startIntakeOnce('parallel-initial-intake');
 
   try{
@@ -5800,8 +5816,6 @@ async function runSearch(q, type = activeType){
       if(!results.children.length) renderSkeleton();
       status.textContent = `${uiText('receiving', 'receiving...')} "${qq}"...`;
     }
-
-    schedulePipeHandoff('first-paint-handoff', FIRST_PIPE_HANDOFF_MS);
   }catch(e){
     console.error(e);
     const fallbackPack = await fetchSearch(qq, activeType, 1);
