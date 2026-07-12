@@ -84,7 +84,7 @@ const MAX_SEARCH_BANK_PAGES_DEEP = 60;
 
 // Search UI gateway policy is deliberately local to maru-search.
 // It does not change Sanmaru capacity, front supply, snapshot supply, or Global Insight.
-const SEARCH_UI_FIRST_RESPONSE_WINDOW = 200;
+const SEARCH_UI_FIRST_RESPONSE_WINDOW = 130;
 const SEARCH_UI_DEFAULT_CANDIDATE_TARGET = 1500;
 const SEARCH_UI_WIDE_CANDIDATE_TARGET = 2000;
 const SEARCH_UI_FAST_PROBE_BUDGET_MS = 1400;

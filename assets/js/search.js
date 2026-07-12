@@ -42,16 +42,18 @@ ready(function () {
     const PAGE_SIZE = 25;
     const BLOCK_SIZE = 10;
     const MAX_PAGER_PAGES = 499;
-    const INITIAL_PRELOAD_PAGES = 12;
-    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES;
+    const INITIAL_PRELOAD_PAGES = 5;
+    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES; // 125 cards
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
-    const INITIAL_PROGRESSIVE_PAGER_PAGES = 12;
+    const INITIAL_PROGRESSIVE_PAGER_PAGES = 10;
     const MAX_PROGRESSIVE_PAGER_PAGES = 80;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
     const INTAKE_CONCURRENCY = 5;
-    const INTAKE_BURST_DELAY_MS = 10;
+    const INTAKE_BURST_DELAY_MS = 8;
+    const INTAKE_PAGE_RETRY_LIMIT = 4;
+    const INTAKE_CONFIRMED_EMPTY_STOP = 12;
     // Search HTML should behave as an immediate receiver: once Sanmaru/MaruSearch
     // sends any real packet, open the follow-up faucet on the next short UI beat.
     // This is a handoff cadence, not a network timeout or a result cutoff.
@@ -1848,6 +1850,11 @@ function preloadPageCountFromItems(items){
   return Math.max(1, Math.ceil((Array.isArray(items) ? items.length : 0) / PAGE_SIZE));
 }
 
+function hasCompleteLoadedServerPage(page){
+  const list = loadedServerPages.get(page);
+  return Array.isArray(list) && list.length >= PAGE_SIZE;
+}
+
 function adaptiveSearchTarget(q, type){
   const text = String(q || '').trim().toLowerCase();
   const words = text.split(/\s+/).filter(Boolean);
@@ -1933,19 +1940,34 @@ function startContinuousIntake(q, type, seq){
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
   updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
 
-  let nextPage = Math.max(2, preloadPageCountFromItems(allItems) + 1);
+  let nextPage = allItems.length
+    ? Math.max(2, Math.floor(allItems.length / PAGE_SIZE) + 1)
+    : 2;
   const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE)));
   const retryPages = [];
   const retryCounts = new Map();
+  const confirmedEmptyPages = new Set();
+  let highestConfirmedEmptyPage = 0;
+  let stopForConfirmedEmptyTail = false;
+
+  function confirmedEmptyTailLength(){
+    let count = 0;
+    for(let p = highestConfirmedEmptyPage; p >= 2; p--){
+      if(!confirmedEmptyPages.has(p)) break;
+      count += 1;
+    }
+    return count;
+  }
 
   function takeNextIntakePage(){
+    if(stopForConfirmedEmptyTail) return 0;
     while(retryPages.length){
       const p = retryPages.shift();
-      if(p && !loadedServerPages.has(p)) return p;
+      if(p && !hasCompleteLoadedServerPage(p)) return p;
     }
     while(nextPage <= maxPages){
       const p = nextPage++;
-      if(p && !loadedServerPages.has(p)) return p;
+      if(p && !hasCompleteLoadedServerPage(p)) return p;
     }
     return 0;
   }
@@ -1955,11 +1977,13 @@ function startContinuousIntake(q, type, seq){
       const page = takeNextIntakePage();
       if(!page) break;
       try{
+        const beforeCount = allItems.length;
         const pack = await fetchSearch(q, type, page);
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice);
+          confirmedEmptyPages.delete(page);
           retryCounts.delete(page);
           allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice).slice(0, MAX_SMOOTH_CANDIDATES);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
@@ -1967,21 +1991,29 @@ function startContinuousIntake(q, type, seq){
           if(page === currentPage) renderPage(page, true);
           else drawPager();
           status.textContent = statusResultsText(actualResultCountForStatus(), q, type, true);
-        }else{
-          const signal = supplySignalFromPayload(pack && pack.payload, 0);
-          if(signal.exhausted){
-            retryCounts.delete(page);
-          }else if(allItems.length < target){
+
+          if(pageSlice.length < PAGE_SIZE && allItems.length < target && allItems.length > beforeCount){
             const tried = retryCounts.get(page) || 0;
-            if(tried < 3){
+            if(tried < 1){
               retryCounts.set(page, tried + 1);
               retryPages.push(page);
             }
           }
+        }else{
+          const tried = retryCounts.get(page) || 0;
+          if(tried < INTAKE_PAGE_RETRY_LIMIT && allItems.length < target){
+            retryCounts.set(page, tried + 1);
+            retryPages.push(page);
+          }else{
+            confirmedEmptyPages.add(page);
+            highestConfirmedEmptyPage = Math.max(highestConfirmedEmptyPage, page);
+            loadedServerPages.set(page, []);
+            if(confirmedEmptyTailLength() >= INTAKE_CONFIRMED_EMPTY_STOP) stopForConfirmedEmptyTail = true;
+          }
         }
       }catch(e){
         const tried = retryCounts.get(page) || 0;
-        if(tried < 3 && allItems.length < target){
+        if(tried < INTAKE_PAGE_RETRY_LIMIT && allItems.length < target){
           retryCounts.set(page, tried + 1);
           retryPages.push(page);
         }
@@ -1991,7 +2023,7 @@ function startContinuousIntake(q, type, seq){
     }
     if(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq){
       drawPager();
-      if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES)) {
+      if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES) || stopForConfirmedEmptyTail){
         status.textContent = statusResultsText(actualResultCountForStatus(), q, type);
       }
     }
@@ -5372,12 +5404,12 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (normalizeSearchType(activeType) === 'all') {
         const model = buildPortalPageModel();
         const portalCount = model && model.virtualCount ? model.virtualCount : buildClientVisibleStream(currentPage || 1).length;
-        const preloadFloor = lastQuery ? INITIAL_PRELOAD_TARGET : 0;
+        const preloadFloor = lastQuery ? (INITIAL_PROGRESSIVE_PAGER_PAGES * PAGE_SIZE) : 0;
         return Math.max(portalCount, allItems.length || 0, preloadFloor);
       }
       if (normalizeSearchType(activeType) !== 'all') return activeTabItemsFromPool(allItems).length;
-      if(serverPagedMode && serverTotalItems > 0) return Math.max(INITIAL_PRELOAD_TARGET, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
-      return Math.max(lastQuery ? INITIAL_PRELOAD_TARGET : 0, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
+      if(serverPagedMode && serverTotalItems > 0) return Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES * PAGE_SIZE, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
+      return Math.max(lastQuery ? (INITIAL_PROGRESSIVE_PAGER_PAGES * PAGE_SIZE) : 0, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
     }
 
     function frontPageSectionSource(){
