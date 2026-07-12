@@ -43,7 +43,7 @@ ready(function () {
     const BLOCK_SIZE = 10;
     const MAX_PAGER_PAGES = 499;
     const INITIAL_PRELOAD_PAGES = 5;
-    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES; // 125 real cards
+    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES; // 125 cards
     const INITIAL_SERVER_WINDOW_MAX = 130;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PAGER_PAGES = 10;
@@ -1943,9 +1943,6 @@ function startContinuousIntake(q, type, seq){
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
   updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
 
-  // Page 1 is requested separately by runSearch. Start the open intake faucet at
-  // page 2 immediately; once the first 125~130 cards arrive, partial page 6 is
-  // fetched again instead of being mistaken for a complete loaded page.
   let nextPage = allItems.length
     ? Math.max(2, Math.floor(allItems.length / PAGE_SIZE) + 1)
     : 2;
@@ -1998,8 +1995,6 @@ function startContinuousIntake(q, type, seq){
           else drawPager();
           status.textContent = statusResultsText(actualResultCountForStatus(), q, type, true);
 
-          // A partial page can be a temporarily incomplete provider packet. Give it
-          // one more chance later without blocking the following pages.
           if(pageSlice.length < PAGE_SIZE && allItems.length < target && allItems.length > beforeCount){
             const tried = retryCounts.get(page) || 0;
             if(tried < 1){
@@ -2031,7 +2026,7 @@ function startContinuousIntake(q, type, seq){
     }
     if(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq){
       drawPager();
-      if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES) || stopForConfirmedEmptyTail) {
+      if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES) || stopForConfirmedEmptyTail){
         status.textContent = statusResultsText(actualResultCountForStatus(), q, type);
       }
     }
@@ -2182,15 +2177,7 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('visiblePage', String(requestedPage));
   sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
   sp.set('firstResponseWindow', String(INITIAL_SERVER_WINDOW_MAX));
-  sp.set('realContentFirst', '1');
-  sp.set('richContent', '1');
-  sp.set('requireSnippets', '1');
-  sp.set('realResultCards', '1');
   sp.set('pageWindowOnly', '1');
-
-  // Preserve the working page-linked media/context layer. Search.js still receives
-  // cards through maru-search; Maru Search may use its Sanmaru resident layer behind
-  // that gateway so pageUrl/contextLink/sourcePageUrl are not detached from media.
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('routeOwner', 'sanmaru');
@@ -2199,6 +2186,10 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('noBlockingWide', '1');
   sp.set('residentSwitch', '1');
   sp.set('activateResident', '1');
+  sp.set('realContentFirst', '1');
+  sp.set('richContent', '1');
+  sp.set('requireSnippets', '1');
+  sp.set('realResultCards', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
@@ -5792,9 +5783,8 @@ async function runSearch(q, type = activeType){
   const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
 
-  // Speed-only reinforcement: page 2+ intake starts immediately in parallel.
-  // The existing instant/context layer remains active and continues enriching cards.
-  startIntakeOnce('parallel-initial-intake');
+  // Open the follow-up faucet without changing the existing card/media/page-link layers.
+  schedulePipeHandoff('parallel-initial-intake', FIRST_PIPE_HANDOFF_MS);
 
   try{
     const first = await maruWindowPromise;
