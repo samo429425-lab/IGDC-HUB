@@ -43,7 +43,8 @@ ready(function () {
     const BLOCK_SIZE = 10;
     const MAX_PAGER_PAGES = 499;
     const INITIAL_PRELOAD_PAGES = 5;
-    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES; // 125 cards
+    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES; // 125 real cards
+    const INITIAL_SERVER_WINDOW_MAX = 130;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
     const INITIAL_PAGER_PAGES = 10;
     const INITIAL_PROGRESSIVE_PAGER_PAGES = INITIAL_PAGER_PAGES;
@@ -53,8 +54,9 @@ ready(function () {
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
     const INTAKE_CONCURRENCY = 5;
     const INTAKE_BURST_DELAY_MS = 8;
-    const INTAKE_RETRY_LIMIT = 5;
-    const INTAKE_RETRY_BASE_DELAY_MS = 320;
+    const SEARCH_FETCH_TIMEOUT_MS = 15000;
+    const INTAKE_PAGE_RETRY_LIMIT = 4;
+    const INTAKE_CONFIRMED_EMPTY_STOP = 12;
     // Search HTML should behave as an immediate receiver: once Sanmaru/MaruSearch
     // sends any real packet, open the follow-up faucet on the next short UI beat.
     // This is a handoff cadence, not a network timeout or a result cutoff.
@@ -1851,6 +1853,11 @@ function preloadPageCountFromItems(items){
   return Math.max(1, Math.ceil((Array.isArray(items) ? items.length : 0) / PAGE_SIZE));
 }
 
+function hasCompleteLoadedServerPage(page){
+  const list = loadedServerPages.get(page);
+  return Array.isArray(list) && list.length >= PAGE_SIZE;
+}
+
 function adaptiveSearchTarget(q, type){
   const text = String(q || '').trim().toLowerCase();
   const words = text.split(/\s+/).filter(Boolean);
@@ -1936,22 +1943,37 @@ function startContinuousIntake(q, type, seq){
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
   updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
 
-  // Start from page 2 and skip only pages already fully seeded by the original
-  // first-window layer. This prevents page 2~5 from being skipped when the first
-  // packet is partial, while preserving the existing card/click data contract.
-  let nextPage = 2;
+  // Page 1 is requested separately by runSearch. Start the open intake faucet at
+  // page 2 immediately; once the first 125~130 cards arrive, partial page 6 is
+  // fetched again instead of being mistaken for a complete loaded page.
+  let nextPage = allItems.length
+    ? Math.max(2, Math.floor(allItems.length / PAGE_SIZE) + 1)
+    : 2;
   const maxPages = Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES, Math.ceil(target / PAGE_SIZE)));
   const retryPages = [];
   const retryCounts = new Map();
+  const confirmedEmptyPages = new Set();
+  let highestConfirmedEmptyPage = 0;
+  let stopForConfirmedEmptyTail = false;
+
+  function confirmedEmptyTailLength(){
+    let count = 0;
+    for(let p = highestConfirmedEmptyPage; p >= 2; p--){
+      if(!confirmedEmptyPages.has(p)) break;
+      count += 1;
+    }
+    return count;
+  }
 
   function takeNextIntakePage(){
+    if(stopForConfirmedEmptyTail) return 0;
     while(retryPages.length){
       const p = retryPages.shift();
-      if(p && !loadedServerPages.has(p)) return p;
+      if(p && !hasCompleteLoadedServerPage(p)) return p;
     }
     while(nextPage <= maxPages){
       const p = nextPage++;
-      if(p && !loadedServerPages.has(p)) return p;
+      if(p && !hasCompleteLoadedServerPage(p)) return p;
     }
     return 0;
   }
@@ -1961,11 +1983,13 @@ function startContinuousIntake(q, type, seq){
       const page = takeNextIntakePage();
       if(!page) break;
       try{
+        const beforeCount = allItems.length;
         const pack = await fetchSearch(q, type, page);
         if(!continuousIntakeActive || continuousIntakeSeq !== token || runSearch._seq !== seq) return;
         const pageSlice = dedupeItems(filterSearchResultItems(pageItemsFromPack(pack))).slice(0, PAGE_SIZE);
         if(pageSlice.length){
           loadedServerPages.set(page, pageSlice);
+          confirmedEmptyPages.delete(page);
           retryCounts.delete(page);
           allItems = mergeItemsPreferDisplayRichness(allItems, pageSlice).slice(0, MAX_SMOOTH_CANDIDATES);
           lastSearchPayload = pack && pack.payload || lastSearchPayload;
@@ -1973,24 +1997,32 @@ function startContinuousIntake(q, type, seq){
           if(page === currentPage) renderPage(page, true);
           else drawPager();
           status.textContent = statusResultsText(actualResultCountForStatus(), q, type, true);
+
+          // A partial page can be a temporarily incomplete provider packet. Give it
+          // one more chance later without blocking the following pages.
+          if(pageSlice.length < PAGE_SIZE && allItems.length < target && allItems.length > beforeCount){
+            const tried = retryCounts.get(page) || 0;
+            if(tried < 1){
+              retryCounts.set(page, tried + 1);
+              retryPages.push(page);
+            }
+          }
         }else{
-          const signal = supplySignalFromPayload(pack && pack.payload, 0);
           const tried = retryCounts.get(page) || 0;
-          const protectInitialPager = page <= INITIAL_PAGER_PAGES || allItems.length < INITIAL_PRELOAD_TARGET;
-          const mayRetry = allItems.length < target && tried < INTAKE_RETRY_LIMIT && (protectInitialPager || !signal.exhausted);
-          if(mayRetry){
+          if(tried < INTAKE_PAGE_RETRY_LIMIT && allItems.length < target){
             retryCounts.set(page, tried + 1);
-            await sleepIntake(Math.min(2600, INTAKE_RETRY_BASE_DELAY_MS * Math.pow(2, tried)));
             retryPages.push(page);
           }else{
-            retryCounts.delete(page);
+            confirmedEmptyPages.add(page);
+            highestConfirmedEmptyPage = Math.max(highestConfirmedEmptyPage, page);
+            loadedServerPages.set(page, []);
+            if(confirmedEmptyTailLength() >= INTAKE_CONFIRMED_EMPTY_STOP) stopForConfirmedEmptyTail = true;
           }
         }
       }catch(e){
         const tried = retryCounts.get(page) || 0;
-        if(tried < INTAKE_RETRY_LIMIT && allItems.length < target){
+        if(tried < INTAKE_PAGE_RETRY_LIMIT && allItems.length < target){
           retryCounts.set(page, tried + 1);
-          await sleepIntake(Math.min(2600, INTAKE_RETRY_BASE_DELAY_MS * Math.pow(2, tried)));
           retryPages.push(page);
         }
         console.warn('continuous intake page skipped:', page, e);
@@ -1999,7 +2031,7 @@ function startContinuousIntake(q, type, seq){
     }
     if(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq){
       drawPager();
-      if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES)) {
+      if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES) || stopForConfirmedEmptyTail) {
         status.textContent = statusResultsText(actualResultCountForStatus(), q, type);
       }
     }
@@ -2135,16 +2167,30 @@ async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
 
+  const requestedPage = Math.max(1, Number(page) || 1);
   const sp = new URLSearchParams();
+  sp.set('action', 'search-ui');
+  sp.set('gateway', 'search-ui');
+  sp.set('searchUi', '1');
   sp.set('q', q);
   sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('page', String(Math.max(1, Number(page) || 1)));
-  sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
+  sp.set('page', String(requestedPage));
+  sp.set('visiblePage', String(requestedPage));
+  sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
+  sp.set('firstResponseWindow', String(INITIAL_SERVER_WINDOW_MAX));
+  sp.set('realContentFirst', '1');
+  sp.set('richContent', '1');
+  sp.set('requireSnippets', '1');
+  sp.set('realResultCards', '1');
   sp.set('pageWindowOnly', '1');
+
+  // Preserve the working page-linked media/context layer. Search.js still receives
+  // cards through maru-search; Maru Search may use its Sanmaru resident layer behind
+  // that gateway so pageUrl/contextLink/sourcePageUrl are not detached from media.
   sp.set('residentFirst', '1');
   sp.set('sanmaruFirst', '1');
   sp.set('routeOwner', 'sanmaru');
@@ -2156,8 +2202,10 @@ async function fetchSearch(q, type = activeType, page = 1){
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => { try { ctrl.abort(); } catch(e) {} }, SEARCH_FETCH_TIMEOUT_MS);
   try {
-    const r = await fetch(url, { cache: 'no-store' });
+    const r = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
     if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
 
     const json = await r.json();
@@ -2167,8 +2215,10 @@ async function fetchSearch(q, type = activeType, page = 1){
 
     return normalizeSearchPayload(json);
   } catch (e) {
-    console.error('fetchSearch failed:', e);
+    if(e && e.name !== 'AbortError') console.error('fetchSearch failed:', e);
     return { items: [], payload: null, pageItems: [], viewportSections: [] };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -5383,7 +5433,7 @@ if (it.riskLabel === '⚠️ high-risk') {
         const preloadFloor = lastQuery ? (INITIAL_PAGER_PAGES * PAGE_SIZE) : 0;
         return Math.max(portalCount, allItems.length || 0, preloadFloor);
       }
-      if (normalizeSearchType(activeType) !== 'all') return Math.max(lastQuery ? (INITIAL_PAGER_PAGES * PAGE_SIZE) : 0, activeTabItemsFromPool(allItems).length);
+      if (normalizeSearchType(activeType) !== 'all') return activeTabItemsFromPool(allItems).length;
       if(serverPagedMode && serverTotalItems > 0) return Math.max(INITIAL_PAGER_PAGES * PAGE_SIZE, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
       return Math.max(lastQuery ? (INITIAL_PAGER_PAGES * PAGE_SIZE) : 0, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
     }
@@ -5742,6 +5792,10 @@ async function runSearch(q, type = activeType){
   const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
 
+  // Speed-only reinforcement: page 2+ intake starts immediately in parallel.
+  // The existing instant/context layer remains active and continues enriching cards.
+  startIntakeOnce('parallel-initial-intake');
+
   try{
     const first = await maruWindowPromise;
     if(runSearch._seq !== seq) return;
@@ -5779,8 +5833,8 @@ async function runSearch(q, type = activeType){
     applySupplyPack(fallbackPack, 'fallback-maru-search');
     if(!firstPaintDone){
       if(!results.children.length) renderSkeleton();
-      clearPager();
-      status.textContent = `${uiText('noResults', 'No results')} "${qq}"`;
+      drawPager();
+      status.textContent = `${uiText('receiving', 'receiving...')} "${qq}"...`;
     }
     startIntakeOnce('fallback');
   }
