@@ -2066,7 +2066,8 @@ function startContinuousIntake(q, type, seq){
   const seen = new Set();
 
   for (const it of Array.isArray(items) ? items : []) {
-    const rawUrl = String(it?.url || it?.link || '').trim();
+    const rawFallbackUrl = String(it?.url || it?.link || '').trim();
+    const rawUrl = String(displayUrlForImageItemClient(it, rawFallbackUrl) || rawFallbackUrl).trim();
     const normUrl = rawUrl.toLowerCase();
 
     const isPlaceholderUrl =
@@ -2094,7 +2095,8 @@ function startContinuousIntake(q, type, seq){
 
 function searchDisplayKeyForItem(it){
   if(!it) return '';
-  const rawUrl = String(it.url || it.link || it.openUrl || '').trim();
+  const rawFallbackUrl = String(it.url || it.link || it.openUrl || '').trim();
+  const rawUrl = String(displayUrlForImageItemClient(it, rawFallbackUrl) || rawFallbackUrl).trim();
   const normUrl = rawUrl.toLowerCase();
   const isPlaceholderUrl =
     !rawUrl ||
@@ -4523,24 +4525,71 @@ function displayGroupOfItem(it){
       goToOriginalSourceSameTab(url);
     }
 
-    function displayUrlForImageItemClient(it, src){
+    function isDirectMediaAssetUrlForCardLinkClient(v){
+      const s = String(v || '').trim();
+      if(!s) return false;
+      const low = s.toLowerCase().split('#')[0];
+      if(/^data:(?:image|video)\//i.test(low) || /^blob:/i.test(low)) return true;
+      if(/\.(?:jpe?g|png|gif|webp|avif|bmp|svg|ico|mp4|webm|mov|m4v|m3u8)(?:\?|$)/i.test(low)) return true;
+      if(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi\//i.test(low)) return true;
+      if(/(?:googleusercontent|gstatic|pstatic|kakaocdn|fbcdn|cdninstagram|twimg)\./i.test(low)) return true;
+      if(/(?:^|\/\/)(?:images?|img|photo|photos|thumbnail|thumb|media)\.[^/]+\//i.test(low)) return true;
+      if(/cloudfront\./i.test(low) && /(?:image|images|img|photo|photos|thumbnail|thumb|media|video|poster|cdn)/i.test(low)) return true;
+      return false;
+    }
+
+    function youtubeWatchUrlForCardLinkClient(it){
       const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
       const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
-      const candidates = [
-        it && it.sourcePageUrl, it && it.pageUrl, it && it.contextLink, it && it.originalPageUrl,
-        displayCard.sourcePageUrl, displayCard.pageUrl, displayCard.contextLink, displayCard.openUrl, displayCard.url,
-        payload.sourcePageUrl, payload.pageUrl, payload.contextLink, payload.originalPageUrl, payload.originallink, payload.openUrl, payload.url, payload.link,
-        preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.openUrl,
-        it && it.openUrl, it && it.url, it && it.link, it && it.href
+      const values = [
+        it && it.videoId, displayCard.videoId, payload.videoId, preview.videoId,
+        it && it.watchUrl, it && it.videoUrl, it && it.embedUrl,
+        displayCard.watchUrl, displayCard.videoUrl, displayCard.embedUrl,
+        payload.watchUrl, payload.videoUrl, payload.embedUrl,
+        preview.watchUrl, preview.videoUrl, preview.embedUrl,
+        it && it.url, it && it.link, it && it.openUrl,
+        displayCard.url, displayCard.openUrl,
+        payload.url, payload.link, payload.openUrl,
+        it && it.thumbnail, it && it.image, displayCard.thumbnail, displayCard.image,
+        preview.poster, preview.thumbnail, preview.image
+      ];
+      for(const v of values){
+        const raw = String(v || '').trim();
+        const id = /^[A-Za-z0-9_-]{11}$/.test(raw) ? raw : extractYouTubeIdQuickClient(raw);
+        if(id) return `https://www.youtube.com/watch?v=${id}`;
+      }
+      return '';
+    }
+
+    function displayUrlForImageItemClient(it, src){
+      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
+      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
+      const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+
+      const youtubeWatch = youtubeWatchUrlForCardLinkClient(it);
+      if(youtubeWatch) return youtubeWatch;
+
+      const preferred = [
+        it && it.sourcePageUrl, it && it.pageUrl, it && it.contextLink, it && it.originalPageUrl, it && it.originallink,
+        displayCard.sourcePageUrl, displayCard.pageUrl, displayCard.contextLink, displayCard.originalPageUrl,
+        payload.sourcePageUrl, payload.pageUrl, payload.contextLink, payload.originalPageUrl, payload.originallink,
+        data.sourcePageUrl, data.pageUrl, data.contextLink, data.originalPageUrl, data.originallink,
+        preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.originalPageUrl,
+        it && it.watchUrl, displayCard.watchUrl, payload.watchUrl, preview.watchUrl,
+        it && it.openUrl, displayCard.openUrl, payload.openUrl, preview.openUrl,
+        displayCard.url, payload.url, payload.link, data.url, data.link,
+        it && it.url, it && it.link, it && it.href
       ].map(v => String(v || '').trim()).filter(Boolean);
-      const isDirectImage = (v) => {
-        const low = String(v || '').trim().toLowerCase().split('#')[0];
-        return /^data:image\//.test(low) || /\.(?:jpe?g|png|gif|webp|avif|bmp|svg)(?:\?|$)/i.test(low);
-      };
-      const sourcePage = candidates.find(v => !isDirectImage(v));
-      return String(sourcePage || candidates[0] || src || '').trim();
+
+      const sourcePage = preferred.find(v => !isDirectMediaAssetUrlForCardLinkClient(v));
+      if(sourcePage) return sourcePage;
+
+      const fallback = String(src || preferred[0] || '').trim();
+      return fallback;
     }
 
     function normalizeImageVariantKeyClient(imageUrl){
@@ -4795,8 +4844,9 @@ function displayGroupOfItem(it){
 
     function renderItem(it, mountTarget){
       const rawUrl = it.url || it.link || '';
-      const imageLike = normalizeSearchType(activeType) === 'image' || displayGroupOfItem(it) === 'image' || String(it.type || it.mediaType || '').toLowerCase() === 'image';
-      const url = imageLike ? (displayUrlForImageItemClient(it, rawUrl) || rawUrl) : rawUrl;
+      // Every rich search card is a doorway to its source page. Media URLs stay
+      // in thumbnail/image/video fields and must never become the card click target.
+      const url = displayUrlForImageItemClient(it, rawUrl) || rawUrl;
       const domain = domainOf(url);
 
       const card = document.createElement('div');

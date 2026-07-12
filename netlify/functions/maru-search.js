@@ -1112,6 +1112,101 @@ function resultSummaryText(it){
   return '';
 }
 
+function isDirectMediaAssetUrlForSearchUiLink(v){
+  const s = safeString(v).trim();
+  if(!s) return false;
+  const low = s.toLowerCase().split('#')[0];
+  if(/^data:(?:image|video)\//i.test(low) || /^blob:/i.test(low)) return true;
+  if(/\.(?:jpe?g|png|gif|webp|avif|bmp|svg|ico|mp4|webm|mov|m4v|m3u8)(?:\?|$)/i.test(low)) return true;
+  if(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi\//i.test(low)) return true;
+  if(/(?:googleusercontent|gstatic|pstatic|kakaocdn|fbcdn|cdninstagram|twimg)\./i.test(low)) return true;
+  if(/(?:^|\/\/)(?:images?|img|photo|photos|thumbnail|thumb|media)\.[^/]+\//i.test(low)) return true;
+  if(/cloudfront\./i.test(low) && /(?:image|images|img|photo|photos|thumbnail|thumb|media|video|poster|cdn)/i.test(low)) return true;
+  return false;
+}
+
+function youtubeWatchUrlForSearchUiCard(compact, original){
+  const c = (compact && typeof compact === 'object') ? compact : {};
+  const o = (original && typeof original === 'object') ? original : {};
+  const p = (o.payload && typeof o.payload === 'object') ? o.payload : {};
+  const dc = (o.displayCard && typeof o.displayCard === 'object') ? o.displayCard : {};
+  const media = (o.media && typeof o.media === 'object') ? o.media : {};
+  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+  const values = [
+    c.videoId, o.videoId, p.videoId, dc.videoId, preview.videoId,
+    c.watchUrl, c.videoUrl, c.embedUrl,
+    o.watchUrl, o.videoUrl, o.embedUrl,
+    p.watchUrl, p.videoUrl, p.embedUrl,
+    dc.watchUrl, dc.videoUrl, dc.embedUrl,
+    preview.watchUrl, preview.videoUrl, preview.embedUrl,
+    c.url, c.link, c.openUrl,
+    o.url, o.link, o.href, o.openUrl,
+    p.url, p.link, p.openUrl,
+    dc.url, dc.openUrl,
+    c.thumbnail, c.image, o.thumbnail, o.image, p.thumbnail, p.image,
+    dc.thumbnail, dc.image, preview.poster, preview.thumbnail, preview.image
+  ];
+  for(const v of values){
+    const raw = safeString(v).trim();
+    const mediaMatch = raw.match(/(?:youtube\.com\/shorts\/|(?:i\.ytimg\.com|img\.youtube\.com)\/vi\/)([A-Za-z0-9_-]{11})/i);
+    const id = /^[A-Za-z0-9_-]{11}$/.test(raw) ? raw : (youtubeIdFromUrl(raw) || (mediaMatch && mediaMatch[1]) || '');
+    if(id) return 'https://www.youtube.com/watch?v=' + id;
+  }
+  return '';
+}
+
+function stabilizeSearchUiCardPageLink(compact, original){
+  const c = (compact && typeof compact === 'object') ? Object.assign({}, compact) : {};
+  const o = (original && typeof original === 'object') ? original : {};
+  const p = (o.payload && typeof o.payload === 'object') ? o.payload : {};
+  const data = (o.data && typeof o.data === 'object') ? o.data : {};
+  const dc = (o.displayCard && typeof o.displayCard === 'object') ? o.displayCard : {};
+  const media = (o.media && typeof o.media === 'object') ? o.media : {};
+  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+  const compactCard = (c.displayCard && typeof c.displayCard === 'object') ? c.displayCard : {};
+
+  const youtubeWatch = youtubeWatchUrlForSearchUiCard(c, o);
+  const candidates = [
+    youtubeWatch,
+    o.sourcePageUrl, o.pageUrl, o.contextLink, o.originalPageUrl, o.originallink,
+    dc.sourcePageUrl, dc.pageUrl, dc.contextLink, dc.originalPageUrl,
+    p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.originallink,
+    data.sourcePageUrl, data.pageUrl, data.contextLink, data.originalPageUrl, data.originallink,
+    preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.originalPageUrl,
+    c.sourcePageUrl, c.pageUrl, c.contextLink,
+    o.watchUrl, p.watchUrl, dc.watchUrl, preview.watchUrl,
+    o.openUrl, p.openUrl, dc.openUrl, preview.openUrl,
+    compactCard.sourcePageUrl, compactCard.pageUrl, compactCard.contextLink, compactCard.openUrl, compactCard.url,
+    o.url, o.link, o.href,
+    p.url, p.link,
+    data.url, data.link,
+    c.url, c.link, c.openUrl
+  ].map(v => safeString(v).trim()).filter(Boolean);
+
+  const pageUrl = candidates.find(v => !isDirectMediaAssetUrlForSearchUiLink(v)) || candidates[0] || '';
+  if(!pageUrl) return c;
+
+  c.url = pageUrl;
+  c.link = pageUrl;
+  c.openUrl = pageUrl;
+  c.pageUrl = pageUrl;
+  c.sourcePageUrl = pageUrl;
+  c.contextLink = pageUrl;
+  if(youtubeWatch){
+    c.videoUrl = youtubeWatch;
+    c.watchUrl = youtubeWatch;
+    c.clickTargetType = 'video';
+  }
+  c.displayCard = Object.assign({}, compactCard, {
+    url:pageUrl,
+    openUrl:pageUrl,
+    pageUrl,
+    sourcePageUrl:pageUrl,
+    contextLink:pageUrl
+  });
+  return c;
+}
+
 function compactResultItem(it){
   it = (it && typeof it === 'object') ? it : {};
 
@@ -5582,7 +5677,10 @@ exports.handler = async function(event){
       base.items = base.items.slice(0, SEARCH_UI_FIRST_RESPONSE_WINDOW);
       base.results = base.items;
     }
-    base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
+    const neutralItemsBeforeCompact = Array.isArray(base.items) ? base.items : [];
+    base.items = searchUiGateway
+      ? neutralItemsBeforeCompact.map(it => stabilizeSearchUiCardPageLink(compactResultItem(it), it))
+      : neutralItemsBeforeCompact.map(compactResultItem);
     // Sanmaru must keep neutral/search data, not browser-specific display contracts.
     // Store the compact neutral candidate layer first, then decorate only the HTTP response for search.js.
     if(searchUiGateway && fastDisplayFirstWindow){
