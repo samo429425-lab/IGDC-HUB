@@ -3170,10 +3170,64 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 (function(){
   if (window.__IGDC_ADMIN_MEDIA_CANDIDATE_LINK_INSTALLED__) return;
   window.__IGDC_ADMIN_MEDIA_CANDIDATE_LINK_INSTALLED__ = true;
+  function text(value){return String(value==null?'':value).trim();}
+  function jwtFresh(token){
+    token=text(token);
+    if(!token||token.split('.').length!==3||token.length<=32)return false;
+    try{
+      var p=token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+      p+='='.repeat((4-p.length%4)%4);
+      var payload=JSON.parse(atob(p));
+      return !payload.exp||Number(payload.exp)>Math.floor(Date.now()/1000)+10;
+    }catch(_e){return true;}
+  }
+  function parseJson(value){try{return JSON.parse(value);}catch(_e){return null;}}
+  function pushToken(value,out,seen,depth){
+    if(depth>5||value==null)return;
+    if(typeof value==='string'){
+      var token=text(value);
+      if(jwtFresh(token)&&!seen[token]){seen[token]=true;out.push(token);return;}
+      var parsed=parseJson(value);if(parsed)pushToken(parsed,out,seen,depth+1);
+      return;
+    }
+    if(Array.isArray(value)){value.forEach(function(item){pushToken(item,out,seen,depth+1);});return;}
+    if(typeof value==='object'){
+      ['id_token','idToken','access_token','accessToken','token','jwt','bearer','authorization','Authorization','__raw','raw'].forEach(function(key){pushToken(value[key],out,seen,depth+1);});
+    }
+  }
+  function scanStore(store,out,seen){
+    if(!store)return;
+    ['igdc.mediaCandidateQueue.adminBearer','osauth.tokens.v2','osauth.tokens.v1','igdc.auth.tokens','igdc.tokens','igdc_auth_tokens','member_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token','igdc_access_token','access_token'].forEach(function(key){try{pushToken(store.getItem(key),out,seen,0);}catch(_e){}});
+    try{
+      for(var i=0;i<Math.min(store.length||0,250);i++){
+        var k=store.key(i)||'';
+        if(/auth0|osauth|igdc|token/i.test(k))pushToken(store.getItem(k),out,seen,0);
+      }
+    }catch(_e){}
+  }
+  function collectAdminTokensFrom(candidate,out,seen){
+    try{if(candidate&&candidate.IGDCMemberAuth&&typeof candidate.IGDCMemberAuth.getIdToken==='function')pushToken(candidate.IGDCMemberAuth.getIdToken(),out,seen,0);}catch(_e){}
+    try{if(candidate&&candidate.osAuth&&typeof candidate.osAuth.getIdToken==='function')pushToken(candidate.osAuth.getIdToken(),out,seen,0);}catch(_e){}
+    try{if(candidate&&candidate.osAuth&&typeof candidate.osAuth.getIdTokenClaims==='function')pushToken(candidate.osAuth.getIdTokenClaims(),out,seen,0);}catch(_e){}
+    try{scanStore(candidate.localStorage,out,seen);scanStore(candidate.sessionStorage,out,seen);}catch(_e){}
+  }
+  function captureMediaQueueAdminSession(){
+    var out=[],seen={};
+    [window].forEach(function(w){collectAdminTokensFrom(w,out,seen);});
+    try{if(window.parent&&window.parent.location.origin===window.location.origin)collectAdminTokensFrom(window.parent,out,seen);}catch(_e){}
+    try{if(window.top&&window.top.location.origin===window.location.origin)collectAdminTokensFrom(window.top,out,seen);}catch(_e){}
+    if(out[0]){
+      try{sessionStorage.setItem('igdc.mediaCandidateQueue.adminBearer',out[0]);}catch(_e){}
+      try{localStorage.setItem('igdc.mediaCandidateQueue.adminBearer',out[0]);}catch(_e){}
+      return true;
+    }
+    return false;
+  }
   function pageUrl(){
     var u = new URL('/media-candidate-queue.html', window.location.origin);
     u.searchParams.set('source', 'admin-right-panel');
     u.searchParams.set('returnPath', window.location.pathname + window.location.search + window.location.hash);
+    u.searchParams.set('handoff', captureMediaQueueAdminSession() ? '1' : '0');
     return u.pathname + u.search;
   }
   function findCard(panel, re){
@@ -3190,7 +3244,7 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
       '<div class="igdc-admin-media-candidate-desc">영상 후보·권리상태·화질·산마루 검색시드를 프론트 공개 전에 검토합니다.</div>'+
       '<button class="igdc-admin-media-candidate-btn" type="button">미디어 후보 점검 열기</button>'+
       '<div class="igdc-admin-media-candidate-mini">읽기 전용 · JSON 다운로드 · 샘플 슬롯 미변경</div>';
-    function open(ev){if(ev){ev.preventDefault();ev.stopPropagation();}window.location.href=pageUrl();return false;}
+    function open(ev){if(ev){ev.preventDefault();ev.stopPropagation();}captureMediaQueueAdminSession();window.location.href=pageUrl();return false;}
     var b=card.querySelector('button');if(b)b.addEventListener('click',open);
     card.addEventListener('click',function(ev){if(ev.target&&ev.target.tagName==='BUTTON')return;open(ev);});
     return card;
@@ -3253,7 +3307,7 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
       '<div class="igdc-admin-commerce-candidate-desc">생활필수·판매시장·수익권한·관리승인 후보를 비공개로 검토합니다.</div>'+
       '<button class="igdc-admin-commerce-candidate-btn" type="button">상품 후보·수익 점검 열기</button>'+
       '<div class="igdc-admin-commerce-candidate-mini">대기열·수익 점검 JSON 확인 · 공개 발행·결제 실행 없음</div>';
-    function open(ev){if(ev){ev.preventDefault();ev.stopPropagation();}window.location.href=pageUrl();return false;}
+    function open(ev){if(ev){ev.preventDefault();ev.stopPropagation();}captureMediaQueueAdminSession();window.location.href=pageUrl();return false;}
     var b=card.querySelector('button');if(b)b.addEventListener('click',open);
     card.addEventListener('click',function(ev){if(ev.target&&ev.target.tagName==='BUTTON')return;open(ev);});
     return card;

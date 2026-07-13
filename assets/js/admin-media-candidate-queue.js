@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue Admin View v1.0.1
+/* IGDC Media Candidate Queue Admin View v1.0.2
  * Read-only media candidate verifier. It reuses the administrator session,
  * reads the private media candidate snapshot through a Netlify function, and
  * never promotes candidates to the public media snapshot.
@@ -11,7 +11,7 @@
   var text=function(v){return String(v==null?'':v).trim();};
   var lower=function(v){return text(v).toLowerCase();};
   var state=$('state'), notice=$('notice'), diagnosticCache=null, acceptedToken='', acceptedSession=null, resolvingSession=null, rowsCache=[];
-  var TOKEN_KEYS=['osauth.tokens.v2','osauth.tokens.v1','igdc.auth.tokens','igdc.tokens','igdc_auth_tokens','member_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token'];
+  var TOKEN_KEYS=['igdc.mediaCandidateQueue.adminBearer','osauth.tokens.v2','osauth.tokens.v1','igdc.auth.tokens','igdc.tokens','igdc_auth_tokens','member_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token','igdc_access_token','access_token'];
 
   function cls(kind){return kind==='ok'?'ok':kind==='warn'?'warn':'';}
   function show(message,kind){notice.className='notice '+cls(kind);notice.textContent=message;notice.classList.remove('hidden');}
@@ -38,6 +38,12 @@
     [source&&source.localStorage,source&&source.sessionStorage].forEach(function(store){
       if(!store)return;
       TOKEN_KEYS.forEach(function(key){try{pushToken(store.getItem(key),out,seen,0);}catch(_e){}});
+      try{
+        for(var i=0;i<Math.min(store.length||0,250);i++){
+          var key=store.key(i)||'';
+          if(/auth0|osauth|igdc|token/i.test(key))pushToken(store.getItem(key),out,seen,0);
+        }
+      }catch(_e){}
     });
   }
   function sameOriginWindows(){
@@ -49,12 +55,13 @@
     var out=[],seen={},tasks=[],sources=sameOriginWindows();
     function from(fn){tasks.push(Promise.resolve().then(fn).then(function(value){pushToken(value,out,seen,0);}).catch(function(){}));}
     for(var i=0;i<sources.length;i++)(function(source){
+      ownStorageTokens(source,out,seen);
       from(function(){return source.IGDCMemberAuth&&source.IGDCMemberAuth.getIdToken?source.IGDCMemberAuth.getIdToken():'';});
       from(function(){if(!source.osAuth)return '';if(typeof source.osAuth.getIdTokenClaims==='function')return source.osAuth.getIdTokenClaims();return '';});
       from(function(){return source.osAuth&&source.osAuth.getIdToken?source.osAuth.getIdToken():'';});
-      ownStorageTokens(source,out,seen);
     })(sources[i]);
-    await Promise.all(tasks);return out;
+    await Promise.all(tasks);
+    return out;
   }
   async function request(action,token){
     var headers={Accept:'application/json'};if(token)headers.Authorization='Bearer '+token;var response=await fetch(ENDPOINT+'?action='+encodeURIComponent(action),{headers:headers,credentials:'same-origin',cache:'no-store'});
@@ -73,7 +80,7 @@
         try{var data=await request('session',candidates[i]);acceptedToken=candidates[i];acceptedSession=data;state.textContent='관리자 공통 세션 확인: '+sessionLabel(data);return data;}catch(_e){}
       }
       acceptedToken='';acceptedSession=null;
-      throw new Error('관리자 페이지의 공통 세션을 확인하지 못했습니다. 이 화면은 별도 로그인 없이 관리자 화면의 기존 세션만 사용합니다.');
+      throw new Error('관리자 공통 세션 토큰을 찾지 못했습니다. 관리자 화면 우측 패널의 미디어 후보 버튼으로 다시 열어 주세요. 이 화면은 별도 로그인을 만들지 않습니다.');
     })();
     try{return await resolvingSession;}finally{resolvingSession=null;}
   }
@@ -167,7 +174,7 @@
   }
   function authErrorMessage(error){
     var message=text(error&&error.message);
-    if(Number(error&&error.status)===401||/session|token|로그인/i.test(message))return '관리자 공통 세션을 아직 찾지 못했습니다. 관리자 화면에서 인증된 오너/관리자 세션을 자동 승계하며, 별도 로그인은 만들지 않습니다.';
+    if(Number(error&&error.status)===401||/session|token|로그인/i.test(message))return '관리자 공통 세션을 아직 찾지 못했습니다. 관리자 화면 우측 패널의 미디어 후보 버튼으로 다시 열어 주세요. Supabase 문제가 아니라 세션 승계 단계 문제입니다.';
     if(Number(error&&error.status)===403)return '미디어 후보 대기열 조회 권한이 없습니다.';
     return message||'요청을 처리하지 못했습니다.';
   }
