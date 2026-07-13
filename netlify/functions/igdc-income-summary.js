@@ -3,13 +3,15 @@
  *
  * Public contract: /api/igdc/income/summary
  *
- * This function reports only durable rows already recorded in inflow_ledger by
- * a signed affiliate conversion callback or protected settlement statement
- * import. It does not read snapshot estimates, create an order, execute PG,
- * settle a payout, or write to the ledger.
+ * Reports only durable rows already recorded in the confirmed revenue ledger.
+ * A successful query with zero rows is a normal "자료 없음" state. Storage,
+ * key, schema, permission, or network failures remain explicit errors.
  */
 "use strict";
 
+const LedgerStore = require("./lib/revenue-ledger-supabase.v1");
+
+const VERSION = "igdc-income-summary-v1.1.0-unified-supabase-key";
 const DASHBOARD_KEYS = ["social","video","platform","distribution","donation","tour","ads","misc"];
 const TABLE = process.env.LEDGER_TABLE || process.env.LEGER_TABLE || "inflow_ledger";
 const KRW_PER_USD = Number(process.env.IGDC_FX_KRW_PER_USD || 1300);
@@ -63,20 +65,31 @@ function periods(ts, now){
   };
 }
 async function readLedger(){
-  const base=String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
-  const key=process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-  if(!base || !key) return { ok:false, unconfigured:true, rows:[] };
+  const config=LedgerStore.resolveConfig();
+  const safeConfig=LedgerStore.describeConfig(config);
+  if(!config.configured) return { ok:false, unconfigured:true, rows:[], config:safeConfig };
+  if(!config.valid) return { ok:false, unconfigured:false, rows:[], errorCode:config.errorCode, error:config.errorMessage, config:safeConfig };
+
   const from=new Date(Date.now()-WINDOW_DAYS*24*60*60*1000).toISOString();
-  const url=base + `/rest/v1/${encodeURIComponent(TABLE)}?` + [
+  const route=`/rest/v1/${encodeURIComponent(TABLE)}?` + [
     "select=ts,source,kind,amount,ccy,channel,note",
     `ts=gte.${encodeURIComponent(from)}`,
     "order=ts.desc",
     "limit=5000"
   ].join("&");
-  const res=await fetch(url,{ method:"GET", headers:{apikey:key,Authorization:`Bearer ${key}`,"content-type":"application/json"} });
-  if(!res.ok) return { ok:false, unconfigured:false, error:`Supabase HTTP ${res.status}`, rows:[] };
-  const data=await res.json();
-  return { ok:true, rows:Array.isArray(data) ? data : [] };
+  const result=await LedgerStore.request(config, route, {method:"GET"});
+  if(!result.ok){
+    return {
+      ok:false,
+      unconfigured:false,
+      rows:[],
+      errorCode:result.errorCode,
+      error:result.errorMessage,
+      statusCode:result.status,
+      config:result.config || safeConfig
+    };
+  }
+  return { ok:true, rows:Array.isArray(result.data) ? result.data : [], config:result.config || safeConfig };
 }
 
 exports.handler=async(event)=>{
@@ -85,7 +98,7 @@ exports.handler=async(event)=>{
 
   let source;
   try { source=await readLedger(); }
-  catch(error){ source={ok:false,unconfigured:false,error:String(error && error.message || error),rows:[]}; }
+  catch(error){ source={ok:false,unconfigured:false,errorCode:"revenue_ledger_unexpected_error",error:String(error && error.message || error),rows:[],config:null}; }
 
   const summary=zeroSummary();
   const now=Date.now();
@@ -112,15 +125,17 @@ exports.handler=async(event)=>{
     ["day","week","month","year","total"].forEach(key => { row[key]=Number(row[key].toFixed(6)); });
   });
   const totalKrw=Math.round(totalUsd*KRW_PER_USD);
-  const dataState=source.unconfigured ? "confirmed_ledger_unconfigured" : (source.ok ? (confirmedRows ? "confirmed_external_income" : "confirmed_ledger_empty") : "confirmed_ledger_unavailable");
+  const dataState=source.unconfigured
+    ? "confirmed_ledger_unconfigured"
+    : (source.ok ? (confirmedRows ? "confirmed_external_income" : "confirmed_ledger_empty") : "confirmed_ledger_unavailable");
 
-  return json(200,{
+  const body={
     ok:source.ok || source.unconfigured,
     status:source.ok || source.unconfigured ? "ok" : "source_unavailable",
     endpoint:"/api/igdc/income/summary",
+    version:VERSION,
     generatedAt:new Date().toISOString(),
     readOnly:true,
-    // Read-only query: no settlement or payout action is executed here.
     dryRun:true,
     settlementExecution:false,
     payoutExecution:false,
@@ -128,12 +143,26 @@ exports.handler=async(event)=>{
     pgStatus:"pending_pg_approval",
     currency:"USD",
     dataState,
+    dataMessage:dataState === "confirmed_ledger_empty"
+      ? "확정 수익 자료 없음"
+      : (dataState === "confirmed_external_income" ? "확정 수익 자료 있음" : (dataState === "confirmed_ledger_unconfigured" ? "확정 수익 원장 미연결" : "확정 수익 원장 연결 오류")),
     summary,
     totalRevenue:totalKrw,
     totalRevenueUsd:Number(totalUsd.toFixed(6)),
     totalRevenueKrw:totalKrw,
     confirmedRows,
     unconvertedRows,
-    source:{ ledgerTable:TABLE, mode:source.unconfigured ? "unconfigured" : (source.ok ? "supabase" : "supabase_error"), error:source.error || null }
-  });
+    source:{
+      ledgerTable:TABLE,
+      mode:source.unconfigured ? "unconfigured" : (source.ok ? "supabase" : "supabase_error"),
+      errorCode:source.errorCode || null,
+      error:source.error || null,
+      statusCode:source.statusCode || null,
+      config:source.config || null
+    }
+  };
+  if(method === "HEAD") return {statusCode:200,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store, max-age=0","x-content-type-options":"nosniff"},body:""};
+  return json(200,body);
 };
+
+module.exports={VERSION,handler:exports.handler,readLedger};

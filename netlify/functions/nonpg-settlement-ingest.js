@@ -7,18 +7,16 @@
  */
 
 const crypto = require("crypto");
+const LedgerStore = require("./lib/revenue-ledger-supabase.v1");
 
 const TABLE = process.env.LEDGER_TABLE || process.env.LEGER_TABLE || "inflow_ledger";
 function json(statusCode, body){ return { statusCode, headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}, body:JSON.stringify(body) }; }
 function timing(a,b){ const x=Buffer.from(String(a||"")); const y=Buffer.from(String(b||"")); return x.length===y.length && crypto.timingSafeEqual(x,y); }
 function parse(event){ try { const raw=event&&event.body||""; const text=event&&event.isBase64Encoded?Buffer.from(raw,"base64").toString("utf8"):raw; return text?JSON.parse(text):{}; } catch(_e){ return null; } }
 async function request(method, route, body){
-  const base=String(process.env.SUPABASE_URL||"").replace(/\/+$/,"");
-  const key=process.env.SUPABASE_SERVICE_ROLE_KEY||"";
-  if(!base||!key) return {ok:false,unavailable:true,status:503};
-  const res=await fetch(base+route,{method,headers:{apikey:key,Authorization:`Bearer ${key}`,"content-type":"application/json",Prefer:"return=representation"},body:body==null?undefined:JSON.stringify(body)});
-  let data=null; try{data=await res.json();}catch(_e){}
-  return {ok:res.ok,unavailable:false,status:res.status,data};
+  const config=LedgerStore.resolveConfig();
+  const result=await LedgerStore.request(config,route,{method,headers:{Prefer:"return=representation"},body:body==null?undefined:JSON.stringify(body)});
+  return {ok:result.ok,unavailable:result.unavailable,status:result.status,data:result.data,errorCode:result.errorCode,errorMessage:result.errorMessage};
 }
 exports.handler = async(event) => {
   if(String(event&&event.httpMethod||"GET").toUpperCase()!=="POST") return json(405,{ok:false,error:"method_not_allowed"});
@@ -34,9 +32,9 @@ exports.handler = async(event) => {
   if(!source||!receiptId||!kind||!Number.isFinite(amount)||amount===0) return json(400,{ok:false,error:"invalid_settlement_payload"});
   const note=`settlement:${source}:${receiptId}`;
   const exists=await request("GET",`/rest/v1/${encodeURIComponent(TABLE)}?select=note&note=eq.${encodeURIComponent(note)}&limit=1`,null);
-  if(!exists.ok) return json(exists.unavailable?503:502,{ok:false,error:"ledger_unavailable"});
+  if(!exists.ok) return json(exists.unavailable?503:502,{ok:false,error:"ledger_unavailable",errorCode:exists.errorCode||null});
   if(Array.isArray(exists.data)&&exists.data.length) return json(200,{ok:true,status:"duplicate_ignored",source,receiptId});
   const saved=await request("POST",`/rest/v1/${encodeURIComponent(TABLE)}`,[{ts:body.ts||new Date().toISOString(),source,kind,amount,ccy:currency,channel:body.channel||"settlement",note}]);
-  if(!saved.ok) return json(saved.unavailable?503:502,{ok:false,error:"settlement_not_persisted"});
+  if(!saved.ok) return json(saved.unavailable?503:502,{ok:false,error:"settlement_not_persisted",errorCode:saved.errorCode||null});
   return json(200,{ok:true,status:"confirmed_settlement_recorded",source,receiptId,amount,currency});
 };

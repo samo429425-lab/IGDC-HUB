@@ -27,7 +27,7 @@ const IncomeSummary = require("./igdc-income-summary");
 const CommerceIntake = require("./lib/commerce-candidate-intake.v1");
 const AffiliateRegistry = require("./lib/affiliate-program-registry.v1");
 
-const VERSION = "igdc-revenue-settlement-diagnostic-v1.0.1-member-admin-common-session";
+const VERSION = "igdc-revenue-settlement-diagnostic-v1.0.2-empty-vs-error-ledger-state";
 const FX_KRW_PER_USD = Math.max(1, Number(process.env.IGDC_FX_KRW_PER_USD || 1300) || 1300);
 const ADMIN_ROLES = new Set(["owner", "super_admin", "admin"]);
 
@@ -212,6 +212,9 @@ function summarizeLedger(body) {
     nonConvertibleRows,
     byKind,
     bySource,
+    dataState: text(body && body.dataState) || (rows.length ? "confirmed_ledger_available" : (body && body.mode === "supabase" ? "confirmed_ledger_empty" : "unknown")),
+    errorCode: text(body && body.errorCode) || null,
+    config: body && body.config && typeof body.config === "object" ? body.config : null,
     warning: text(body && body.warning) || null,
     error: text(body && body.error) || null
   };
@@ -364,12 +367,14 @@ function buildChecks(input) {
     `검토 ${stage.considered} · 공개전 통과 ${stage.eligibleForRelease} · Canonical 전달 ${stage.releasedToCanonical}`);
 
   const ledger = input.ledger;
-  add("confirmed_ledger", ledger.configured && ledger.mode === "supabase" ? "ok" : "warn",
-    ledger.configured ? "확정 수익 ledger 연결" : "확정 수익 ledger 미연결",
-    ledger.rows ? `최근 ${ledger.windowDays || 0}일 ${ledger.rows}행` : "확정 수익 행 없음");
+  const ledgerConnected = ledger.configured && ledger.mode === "supabase";
+  const ledgerEmpty = ledgerConnected && ledger.rows === 0;
+  add("confirmed_ledger", ledgerConnected ? "ok" : "warn",
+    ledgerEmpty ? "확정 수익 자료 없음" : (ledgerConnected ? "확정 수익 ledger 연결" : (ledger.configured ? "확정 수익 ledger 연결 오류" : "확정 수익 ledger 미연결")),
+    ledgerConnected ? (ledger.rows ? `최근 ${ledger.windowDays || 0}일 ${ledger.rows}행` : "정상 조회 완료 · 확정 수익 0행") : (ledger.errorCode || ledger.error || "연결 상태 확인 필요"));
 
   const rec = input.reconciliation;
-  const recStatus = rec.code === "reconciled" ? "ok" : (rec.code === "ready_no_confirmed_income" ? "warn" : "warn");
+  const recStatus = (rec.code === "reconciled" || rec.code === "ready_no_confirmed_income") ? "ok" : "warn";
   add("settlement_reconciliation", recStatus, rec.label, rec.reason || "");
 
   const webhook = input.providerWebhook;
@@ -433,7 +438,7 @@ async function buildDiagnostic(input) {
   const stage = candidateStage(root);
   const canonical = canonicalState(root);
   const providerWebhook = partnerWebhookConfig();
-  const protectedIngestReady = !!text(process.env.IGDC_NONPG_SETTLEMENT_INGEST_TOKEN) && ledger.configured;
+  const protectedIngestReady = !!text(process.env.IGDC_NONPG_SETTLEMENT_INGEST_TOKEN) && ledger.configured && ledger.mode === "supabase";
   const engineSummary = {
     ok: engine && engine.ok === true,
     version: text(engine && engine.version) || null,

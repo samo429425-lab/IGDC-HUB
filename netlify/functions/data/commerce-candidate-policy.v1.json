@@ -1,8 +1,8 @@
 {
-  "version": "commerce-candidate-policy-v1.1.0-manual-affiliate-external-referral",
-  "contractVersion": "sanmaru-searchbank-commerce-candidate-intake-v1.1",
+  "version": "commerce-candidate-policy-v1.2.0-payable-revenue-qualification-gate",
+  "contractVersion": "sanmaru-searchbank-commerce-candidate-intake-v1.2",
   "mode": "stage-before-publication-key",
-  "purpose": "Select everyday, rights-safe and market-verifiable goods before Canonical Snapshot publication. Support approved manual affiliate links and verified official external referrals without direct payment, provider API calls, or undisclosed revenue claims.",
+  "purpose": "Select country-eligible, rights-safe and market-verifiable goods before Canonical Snapshot publication. Public release requires a verified payable non-PG revenue right (approved affiliate, advertising, sponsorship, brokerage, referral or lead agreement). Traffic-only external referrals remain private review candidates and are never represented as confirmed product revenue.",
   "publication": {
     "defaultMode": "staging_only",
     "enableEnv": "COMMERCE_CANDIDATE_RELEASE_MODE",
@@ -14,8 +14,8 @@
   },
   "sources": {
     "external_brokerage": {
-      "requiresVerifiedRevenueRight": false,
-      "requiresExplicitAffiliateOrBrokerageContract": false,
+      "requiresVerifiedRevenueRight": true,
+      "requiresExplicitAffiliateOrBrokerageContract": true,
       "rankBoost": 1800,
       "requiresApprovedManualAffiliateOrOfficialOutboundReferral": true
     },
@@ -43,7 +43,8 @@
     "requireTrustedSellerOrProducer": true,
     "requireNonPgRevenueRight": true,
     "rejectSamplesAndPlaceholders": true,
-    "rejectUnknownSourceTier": true
+    "rejectUnknownSourceTier": true,
+    "requirePayableRevenueQualification": true
   },
   "essentialGoods": {
     "preferredClasses": [
@@ -233,7 +234,32 @@
     "externalReferralTrafficValueOnly": true,
     "manualAffiliateRequiresProgramRegistry": true,
     "manualAffiliateRequiresPolicyReview": true,
-    "apiProviderIntegrationDefault": "disabled"
+    "apiProviderIntegrationDefault": "disabled",
+    "requirePayableRevenueRightForPublicRelease": true,
+    "allowTrafficOnlyPublicRelease": false,
+    "allowTrafficOnlyInReviewQueue": true,
+    "trafficOnlyRequiresManualUpgradeBeforeRelease": true,
+    "directAgreementEvidence": {
+      "requireApprovedState": true,
+      "requireContractOrProgramId": true,
+      "requireCounterparty": true,
+      "requireDisclosureApproval": true,
+      "requirePayoutBasisOrSettlementMode": true,
+      "acceptedSettlementModes": [
+        "manual_invoice",
+        "bank_transfer",
+        "provider_statement",
+        "settlement_statement",
+        "fixed_fee",
+        "per_lead",
+        "cpc",
+        "cpa",
+        "cps",
+        "commission",
+        "operator_approved_statement_or_invoice"
+      ]
+    },
+    "trafficOnlyMonetizationState": "traffic_value_only_review"
   },
   "ranking": {
     "weights": {
@@ -279,6 +305,9 @@
     "queueIsNotPublicSupply": true,
     "requireApprovedOutboundReferralForExternalRelease": true,
     "manualAffiliateApiDisabledAllowed": true,
-    "outboundRevenueStateMustBeDisclosed": true
+    "outboundRevenueStateMustBeDisclosed": true,
+    "requirePayableRevenueQualificationForRelease": true,
+    "trafficOnlyCandidateState": "revenue_review_required",
+    "trafficOnlyCandidateIsPublicSupply": false
   }
 }

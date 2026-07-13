@@ -13,7 +13,7 @@ const path = require("path");
 const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.0.0";
+const VERSION = "commerce-candidate-registry-sync-v1.1.0-revenue-qualification-evidence";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 
 function text(v){ return v == null ? "" : String(v).trim(); }
@@ -69,6 +69,18 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   const payload=sourcePayload(candidate);
   const assignmentInfo=assignment||{};
   const revenue=(revenueRows||[]).find(row=>approvedRevenue(row.status)) || {};
+  const revenueType=lower(revenue.revenue_type);
+  const trafficOnly=revenueType==="external_referral";
+  const payloadDirect=plain(payload.directCommerceListing);
+  const payloadContract=plain(payload.brokerageContract);
+  const revenueProvider=first(revenue.provider_name,payloadContract.providerName,payloadDirect.providerName);
+  const revenueId=first(revenue.id,payloadContract.id,payloadDirect.contractId,assignmentInfo.id);
+  const revenueUrl=safeUrl(first(revenue.affiliate_url,payloadContract.destinationUrl,payloadDirect.destinationUrl));
+  const disclosureReady=bool(first(payloadContract.disclosureReady,payloadDirect.disclosureReady));
+  const payoutBasisVerified=bool(first(payloadContract.payoutBasisVerified,payloadDirect.payoutBasisVerified));
+  const storedSettlementMode=lower(first(payloadContract.settlementMode,payloadDirect.settlementMode));
+  const directPayable=["advertising","brokerage","lead","referral","sponsor"].includes(revenueType) && !!revenueProvider && !!revenueId && disclosureReady && payoutBasisVerified && !!storedSettlementMode;
+  const settlementMode=directPayable?storedSettlementMode:(trafficOnly?"traffic_only":"provider_program");
   const markets=(availabilityRows||[]).map(row=>marketRecord(candidate,row,evidenceRows));
   const pageMap={home:"home",distribution:"distribution",network:"network",tour:"tour",social:"social"};
   const page=pageMap[text(assignmentInfo.hub_key)]||text(payload.page);
@@ -88,10 +100,39 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
     source:{name:first(plain(payload.source).name,candidate.title,"Approved commerce member"),url:first(plain(payload.source).url,candidate.official_url)},
     searchBankContract:Object.assign({},plain(payload.searchBankContract),{frontSupplyAllowed:true,searchBankEligible:true,snapshotEligible:true,indexEligible:true,lastVerifiedAt:first(plain(payload.searchBankContract).lastVerifiedAt,candidate.updated_at),trustScore:Number(plain(payload.searchBankContract).trustScore||payload.trustScore||75),trustTier:first(plain(payload.searchBankContract).trustTier,payload.trustTier,"A"),officialSource:bool(first(plain(payload.searchBankContract).officialSource,payload.officialSource,true)),producerVerified:bool(first(plain(payload.searchBankContract).producerVerified,payload.producerVerified,true))}),
     marketAvailability:{markets},
-    directCommerceListing:Object.assign({},plain(payload.directCommerceListing),{sourceTier:"approved_commerce_member",contractApproved:true,contractStatus:"approved",contractId:first(plain(payload.directCommerceListing).contractId,revenue.id,assignmentInfo.id),expectedNetRevenuePerOrder:first(plain(payload.directCommerceListing).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)}),
+    directCommerceListing:Object.assign({},plain(payload.directCommerceListing),{
+      sourceTier:"approved_commerce_member",
+      revenueType:first(plain(payload.directCommerceListing).revenueType,revenueType),
+      contractApproved:directPayable,
+      contractStatus:directPayable?"approved":(trafficOnly?"traffic_only":"provider_program"),
+      contractId:first(plain(payload.directCommerceListing).contractId,revenueId),
+      providerName:first(plain(payload.directCommerceListing).providerName,revenueProvider),
+      counterparty:first(plain(payload.directCommerceListing).counterparty,revenueProvider),
+      disclosureReady:directPayable,
+      payoutBasisVerified:directPayable,
+      settlementMode:first(plain(payload.directCommerceListing).settlementMode,settlementMode),
+      destinationUrl:first(plain(payload.directCommerceListing).destinationUrl,revenueUrl,candidate.official_url),
+      expectedNetRevenuePerOrder:first(plain(payload.directCommerceListing).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)
+    }),
     commerceCandidate:Object.assign({},plain(payload.commerceCandidate),{sourceTier:"approved_commerce_member",origin:"global-slot-console",essentialClass:first(plain(payload.commerceCandidate).essentialClass,payload.essentialClass)}),
     sellerResponsibility:Object.assign({},plain(payload.sellerResponsibility),{verified:true,legalEntity:first(plain(payload.sellerResponsibility).legalEntity,payload.sellerLegalEntity,payload.sellerName,candidate.title),supportUrl:first(plain(payload.sellerResponsibility).supportUrl,payload.supportUrl,candidate.official_url)}),
-    brokerageContract:Object.assign({},plain(payload.brokerageContract),{approved:true,status:"approved",id:first(plain(payload.brokerageContract).id,revenue.id,assignmentInfo.id),type:first(plain(payload.brokerageContract).type,revenue.revenue_type,"brokerage"),expectedNetRevenuePerOrder:first(plain(payload.brokerageContract).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)}),
+    brokerageContract:Object.assign({},plain(payload.brokerageContract),{
+      approved:directPayable,
+      status:directPayable?"approved":(trafficOnly?"traffic_only":"provider_program"),
+      id:first(plain(payload.brokerageContract).id,revenueId),
+      type:first(plain(payload.brokerageContract).type,revenueType,"brokerage"),
+      providerName:first(plain(payload.brokerageContract).providerName,revenueProvider),
+      counterparty:first(plain(payload.brokerageContract).counterparty,revenueProvider),
+      disclosureReady:directPayable,
+      payoutBasisVerified:directPayable,
+      settlementMode:first(plain(payload.brokerageContract).settlementMode,settlementMode),
+      destinationUrl:first(plain(payload.brokerageContract).destinationUrl,revenueUrl,candidate.official_url),
+      currency:first(plain(payload.brokerageContract).currency,revenue.currency),
+      approvalSource:"global-slot-console-approved-revenue-record",
+      approvalRecordId:revenueId||null,
+      note:first(plain(payload.brokerageContract).note,revenue.note),
+      expectedNetRevenuePerOrder:first(plain(payload.brokerageContract).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)
+    }),
     originCountry:first(payload.originCountry,payload.manufacturingCountry),
     productMapping:Object.assign({},plain(payload.productMapping),{slotProfile:first(plain(payload.productMapping).slotProfile,payload.slotProfile),productClass:first(plain(payload.productMapping).productClass,payload.productClass,"physical_product"),productIdentity:first(plain(payload.productMapping).productIdentity,payload.productId,candidate.id)})
   });
@@ -123,14 +164,21 @@ async function syncApprovedCandidates(input){
       const assignment=aBy.get(candidate.id); if(!assignment) continue;
       const candidateRevenue=rBy.get(candidate.id)||[]; if(!candidateRevenue.some(row=>approvedRevenue(row.status))) continue;
       const avail=avBy.get(candidate.id)||[]; if(!avail.length) continue;
+      const compact=compactPayload(candidate,assignment,avail,candidateRevenue,eBy.get(candidate.id)||[]);
+      const row=candidateRevenue.find(entry=>approvedRevenue(entry.status))||{};
+      const type=lower(row.revenue_type)||"brokerage";
+      const contract=plain(compact.brokerageContract);
+      const listing=plain(compact.directCommerceListing);
+      const trafficOnly=type==="external_referral";
+      const payable=bool(first(contract.approved,listing.contractApproved)) && bool(first(contract.disclosureReady,listing.disclosureReady)) && bool(first(contract.payoutBasisVerified,listing.payoutBasisVerified));
       output.push({
         id:"gslot-"+candidate.id,
         sourceTier:"approved_commerce_member",
         syncedAt:now(),
-        candidate:compactPayload(candidate,assignment,avail,candidateRevenue,eBy.get(candidate.id)||[]),
+        candidate:compact,
         review:{status:"approved",assignmentState:assignment.state,approvalId:assignment.id,approvedAt:assignment.updated_at,approvedBy:assignment.updated_by||null},
         assignment:{id:assignment.id,state:assignment.state,page:assignment.hub_key,section:assignment.slot_key,country:assignment.country_code,region:assignment.region_code||null,priority:assignment.priority,updatedAt:assignment.updated_at},
-        revenue:{id:(candidateRevenue.find(row=>approvedRevenue(row.status))||{}).id||null,status:"approved",type:(candidateRevenue.find(row=>approvedRevenue(row.status))||{}).revenue_type||"brokerage",contractId:assignment.id,approved:true}
+        revenue:{id:row.id||null,status:"approved",type,contractId:first(contract.id,listing.contractId,row.id,assignment.id),approved:payable,trafficValueOnly:trafficOnly,providerName:first(contract.providerName,listing.providerName,row.provider_name)||null,settlementMode:first(contract.settlementMode,listing.settlementMode,trafficOnly?"traffic_only":"provider_program"),disclosureReady:bool(first(contract.disclosureReady,listing.disclosureReady)),payoutBasisVerified:bool(first(contract.payoutBasisVerified,listing.payoutBasisVerified))}
       });
     }
     const expires=new Date(Date.now()+7*86400000).toISOString();

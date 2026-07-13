@@ -17,6 +17,7 @@
 
 const crypto = require("crypto");
 const Contract = require("./lib/nonpg-revenue-contract.core.v1");
+const LedgerStore = require("./lib/revenue-ledger-supabase.v1");
 
 const TABLE = process.env.LEDGER_TABLE || process.env.LEGER_TABLE || "inflow_ledger";
 
@@ -80,22 +81,20 @@ function eventState(value, config){
   return "pending";
 }
 async function supabaseRequest(method, route, body){
-  const base = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-  if(!base || !key) return { ok:false, unavailable:true, status:503, data:null };
-  const res = await fetch(base + route, {
+  const config = LedgerStore.resolveConfig();
+  const result = await LedgerStore.request(config, route, {
     method,
-    headers:{
-      apikey:key,
-      Authorization:`Bearer ${key}`,
-      "content-type":"application/json",
-      Prefer:"return=representation"
-    },
-    body: body == null ? undefined : JSON.stringify(body)
+    headers:{ Prefer:"return=representation" },
+    body:body == null ? undefined : JSON.stringify(body)
   });
-  let data = null;
-  try { data = await res.json(); } catch(_e){}
-  return { ok:res.ok, unavailable:false, status:res.status, data };
+  return {
+    ok:result.ok,
+    unavailable:result.unavailable,
+    status:result.status,
+    data:result.data,
+    errorCode:result.errorCode,
+    errorMessage:result.errorMessage
+  };
 }
 async function duplicateExists(note){
   const route = `/rest/v1/${encodeURIComponent(TABLE)}?select=note&note=eq.${encodeURIComponent(note)}&limit=1`;
@@ -156,7 +155,7 @@ exports.handler = async (event) => {
   const saved = await writeLedger(row);
   if(!saved.ok){
     const status = saved.result && saved.result.unavailable ? 503 : 502;
-    return json(status, { ok:false, error:"confirmed_commission_not_persisted", stage:saved.stage || null, providerId, transactionId });
+    return json(status, { ok:false, error:"confirmed_commission_not_persisted", errorCode:saved.result && saved.result.errorCode || null, stage:saved.stage || null, providerId, transactionId });
   }
   return json(200, {
     ok:true,

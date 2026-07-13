@@ -4,7 +4,7 @@
   var $ = function(id){ return document.getElementById(id); };
   function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
   function text(v){ return v == null ? '' : String(v); }
-  function statusClass(v){ v=String(v||'').toLowerCase(); if(/ready|ok|pass/.test(v)) return 'ok'; if(/block|fail|error/.test(v)) return 'fail'; if(/hold|warn/.test(v)) return 'warn'; return 'info'; }
+  function statusClass(v){ v=String(v||'').toLowerCase(); if(/block|fail|error/.test(v)) return 'fail'; if(/not_ready|hold|warn|review_required|attention|required/.test(v)) return 'warn'; if(/ready|ok|pass/.test(v)) return 'ok'; return 'info'; }
   function setStatus(message, cls){ var el=$('status'); if(!el) return; el.className='small '+(cls||''); el.textContent=message; }
   function nowStamp(){ var d=new Date(), z=function(n){ return String(n).padStart(2,'0'); }; return d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+'_'+z(d.getHours())+z(d.getMinutes())+z(d.getSeconds()); }
   function download(name, data, type){ var blob=new Blob([data],{type:type||'application/octet-stream'}), a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(function(){URL.revokeObjectURL(a.href); a.remove();},1000); }
@@ -16,8 +16,10 @@
     var s=report.summary||{}, gate=report.gate||{}, runtime=report.runtime||{}, ps=runtime.providerSettlement||{};
     $('summary').innerHTML=[
       card('실제 상품 후보',s.realProductCandidates||0,'샘플·시드 제외','info'),
-      card('제휴 수수료 가능',s.readyAffiliate||0,'승인 제휴 계약 + 추적 URL','ok'),
-      card('외부 직거래 가능',s.readyExternalReferral||0,'직접 판매처 연결, 수수료 미확정','ok'),
+      card('제휴 수수료 준비',s.readyAffiliate||0,'승인 제휴 계약 + 추적 URL','ok'),
+      card('직접 광고·중개 수익 준비',s.readyDirectRevenue||0,'검증된 계약·상대방·고지·정산 근거','ok'),
+      card('수익권 검토 필요',s.revenueReviewRequired||0,'트래픽 가치 또는 계약 증빙 보강 필요','warn'),
+      card('구형 외부추천 상태',s.readyExternalReferral||0,'호환 집계값 · 수익 준비로 계산하지 않음','info'),
       card('전면 노출 보류',s.hold||0,'신뢰·권역·배송·계약 보강 필요','warn'),
       card('전면 노출 차단',s.block||0,'URL·식별·프론트 계약 오류','fail'),
       card('샘플/시드',s.seedOrSample||0,'현재 준비용 데이터','info')
@@ -28,18 +30,21 @@
     $('gatePanel').innerHTML='<h2>개방 게이트</h2><div class="notice '+(gateClass==='ok'?'okbox':(gateClass==='warn'?'warnbox':''))+'"><strong class="'+gateClass+'">'+esc(gate.state||'unknown')+'</strong><br>'+esc(gate.reason||'')+'<br><span class="small">'+esc(gate.note||'')+'</span></div>';
 
     var snapRows=(report.snapshots||[]).map(function(row){
-      return '<tr><td>'+esc(row.key)+'</td><td>'+esc(row.totalItems||0)+'</td><td>'+esc(row.seedOrSample||0)+'</td><td>'+esc(row.realProductCandidates||0)+'</td><td>'+esc(row.readyAffiliate||0)+'</td><td>'+esc(row.readyExternalReferral||0)+'</td><td>'+esc(row.hold||0)+'</td><td>'+esc(row.block||0)+'</td><td class="'+(row.copies&&row.copies.synchronized?'ok':'warn')+'">'+(row.copies&&row.copies.synchronized?'동기화':'확인 필요')+'</td></tr>';
+      return '<tr><td>'+esc(row.key)+'</td><td>'+esc(row.totalItems||0)+'</td><td>'+esc(row.seedOrSample||0)+'</td><td>'+esc(row.realProductCandidates||0)+'</td><td>'+esc(row.readyAffiliate||0)+'</td><td>'+esc(row.readyDirectRevenue||0)+'</td><td>'+esc(row.revenueReviewRequired||0)+'</td><td>'+esc(row.readyExternalReferral||0)+'</td><td>'+esc(row.hold||0)+'</td><td>'+esc(row.block||0)+'</td><td class="'+(row.copies&&row.copies.synchronized?'ok':'warn')+'">'+(row.copies&&row.copies.synchronized?'동기화':'확인 필요')+'</td></tr>';
     }).join('');
     $('snapshotPanel').classList.remove('hidden');
-    $('snapshotPanel').innerHTML='<h2>스냅샷별 실상품 준비 상태</h2><div class="small">공개 데이터와 함수 배포본의 해시를 비교합니다. 외부 판매처에는 접속하지 않습니다.</div><table><thead><tr><th>스냅샷</th><th>전체</th><th>샘플</th><th>실상품</th><th>제휴</th><th>외부직거래</th><th>보류</th><th>차단</th><th>복제본</th></tr></thead><tbody>'+snapRows+'</tbody></table>';
+    $('snapshotPanel').innerHTML='<h2>스냅샷별 실상품 준비 상태</h2><div class="small">공개 데이터와 함수 배포본의 해시를 비교합니다. 외부 판매처에는 접속하지 않습니다.</div><table><thead><tr><th>스냅샷</th><th>전체</th><th>샘플</th><th>실상품</th><th>제휴</th><th>직접수익</th><th>수익검토</th><th>구형 외부추천</th><th>보류</th><th>차단</th><th>복제본</th></tr></thead><tbody>'+snapRows+'</tbody></table>';
 
     var candidates=report.candidateRows||[];
     var candRows=candidates.length?candidates.map(function(row){
       var reasons=(row.issues||[]).concat(row.info||[]).slice(0,6).join(', ');
-      return '<tr><td class="'+statusClass(row.status)+'"><strong>'+esc(row.status)+'</strong></td><td>'+esc(row.id||'')+'<br><span class="small">'+esc(row.title||'')+'</span></td><td>'+esc(row.page||'')+' / '+esc(row.section||'')+'</td><td>'+esc(row.sellerHost||'')+'<br><span class="small">'+esc(row.sellerUrlState||'')+'</span></td><td>'+esc(row.affiliate&&row.affiliate.providerId||'없음')+'<br><span class="small">'+esc(row.affiliate&&row.affiliate.status||'')+'</span></td><td>'+esc(reasons)+'</td></tr>';
-    }).join(''):'<tr><td colspan="6" class="small">현재는 실상품 후보가 없습니다. 실제 공급이 아직 꺼져 있거나, 스냅샷이 샘플 상태인 경우 정상입니다.</td></tr>';
+      var revenue=row.revenueQualification||{};
+      var revenueText=(revenue.type||'미확인')+' / '+(revenue.payable?'지급 가능 검증':(revenue.potential?'검토 필요':'수익권 없음'));
+      if(revenue.contractId) revenueText+=' / '+revenue.contractId;
+      return '<tr><td class="'+statusClass(row.status)+'"><strong>'+esc(row.status)+'</strong></td><td>'+esc(row.id||'')+'<br><span class="small">'+esc(row.title||'')+'</span></td><td>'+esc(row.page||'')+' / '+esc(row.section||'')+'</td><td>'+esc(row.sellerHost||'')+'<br><span class="small">'+esc(row.sellerUrlState||'')+'</span></td><td>'+esc(row.affiliate&&row.affiliate.providerId||'없음')+'<br><span class="small">'+esc(row.affiliate&&row.affiliate.status||'')+'</span></td><td>'+esc(revenueText)+'<br><span class="small">'+esc((revenue.verificationReasons||[]).join(', '))+'</span></td><td>'+esc(reasons)+'</td></tr>';
+    }).join(''):'<tr><td colspan="7" class="small">현재는 실상품 후보가 없습니다. 실제 공급이 아직 꺼져 있거나, 스냅샷이 샘플 상태인 경우 정상입니다.</td></tr>';
     $('candidatePanel').classList.remove('hidden');
-    $('candidatePanel').innerHTML='<h2>실상품 후보 판정</h2><div class="small">승인 제휴 계약이 없는 일반 외부 판매처도 신뢰·권역·배송 조건이 충족되면 외부 직거래 후보로만 표시합니다. 확정 수수료로 처리하지 않습니다.</div><table><thead><tr><th>판정</th><th>상품</th><th>배치</th><th>판매처</th><th>제휴 계약</th><th>보류/정보</th></tr></thead><tbody>'+candRows+'</tbody></table>';
+    $('candidatePanel').innerHTML='<h2>실상품 후보 판정</h2><div class="small">승인된 제휴 계약 또는 검증된 직접 광고·중개·리드·협찬 계약만 수익 준비 후보로 계산합니다. 일반 외부 판매처와 트래픽 가치 후보는 수익권 검토 상태로 유지하며 확정 수수료로 처리하지 않습니다.</div><table><thead><tr><th>판정</th><th>상품</th><th>배치</th><th>판매처</th><th>제휴 계약</th><th>수익 자격</th><th>보류/정보</th></tr></thead><tbody>'+candRows+'</tbody></table>';
 
     $('runtimePanel').classList.remove('hidden');
     $('runtimePanel').innerHTML='<h2>비PG 수익 수령 준비</h2><table><tbody>'+

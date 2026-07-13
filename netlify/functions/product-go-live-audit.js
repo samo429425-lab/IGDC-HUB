@@ -16,8 +16,9 @@ const crypto = require("crypto");
 
 const Trust = require("./lib/trustFilter.core.v1");
 const NonPgRevenue = require("./lib/nonpg-revenue-contract.core.v1");
+const LedgerStore = require("./lib/revenue-ledger-supabase.v1");
 
-const VERSION = "product-go-live-audit-v1.0.0-readonly";
+const VERSION = "product-go-live-audit-v1.0.1-revenue-ledger-config-aligned";
 const MAX_ROWS = 120;
 
 const SNAPSHOT_SPECS = [
@@ -128,10 +129,37 @@ function candidateKey(item, source){
   const url = itemUrl(item);
   return id ? `id:${id}` : (url ? `url:${url}` : `src:${source}:${itemTitle(item)}`);
 }
+function revenueQualification(item){
+  const candidateRevenue = isObject(item && item.commerceCandidate && item.commerceCandidate.revenue) ? item.commerceCandidate.revenue : {};
+  const selectionRevenue = isObject(item && item.candidateSelection && item.candidateSelection.revenue) ? item.candidateSelection.revenue : {};
+  const revenue = Object.assign({}, candidateRevenue, selectionRevenue);
+  const contract = isObject(item && item.brokerageContract) ? item.brokerageContract : {};
+  const listing = isObject(item && item.directCommerceListing) ? item.directCommerceListing : {};
+  const type = low(first(revenue.type, contract.type, listing.revenueType));
+  const directPayable = revenue.payable === true || (
+    ["advertising","brokerage","lead","referral","sponsor"].includes(type) &&
+    bool(first(contract.approved, listing.contractApproved)) &&
+    !!first(revenue.contractId, contract.id, listing.contractId) &&
+    !!first(revenue.counterparty, contract.counterparty, contract.providerName, listing.counterparty, listing.providerName) &&
+    bool(first(revenue.disclosureReady, contract.disclosureReady, listing.disclosureReady)) &&
+    bool(first(revenue.payoutBasisVerified, contract.payoutBasisVerified, listing.payoutBasisVerified))
+  );
+  const trafficOnly = revenue.monetizationState === "traffic_value_only_review" || type === "external_referral";
+  return {
+    type:type || null,
+    payable:directPayable,
+    potential:revenue.potential === true || trafficOnly || directPayable,
+    trafficOnly,
+    monetizationState:first(revenue.monetizationState, trafficOnly ? "traffic_value_only_review" : "not_verified"),
+    contractId:first(revenue.contractId,contract.id,listing.contractId)||null,
+    verificationReasons:asArray(revenue.verificationReasons).slice(0,12)
+  };
+}
 function publicItemRow(item, source, page, section){
   const sellerUrl = itemUrl(item);
   const trust = Trust.evaluateFrontEligibility(item, { frontSupply:true, commerce:true, strictFront:true, surface:"distribution" });
   const affiliate = NonPgRevenue.affiliateForItem(item);
+  const revenue = revenueQualification(item);
   const flags = explicitFrontFlags(item);
   const issues = [];
   const info = [];
@@ -157,12 +185,17 @@ function publicItemRow(item, source, page, section){
   if(!affiliate.present) info.push("no-affiliate-contract");
   else if(!affiliate.eligible) info.push("affiliate-contract-not-approved");
   else info.push("approved-affiliate-contract");
+  if(revenue.payable) info.push("verified-payable-revenue-right");
+  else if(revenue.trafficOnly) info.push("traffic-only-not-payable");
+  else info.push("payable-revenue-right-not-verified");
 
   let status = "hold";
   if(issues.some(x => /missing-product-id|missing-title|missing-image|missing-seller-url|seller-url-not-https|front-supply-disabled|snapshot-ineligible|searchbank-ineligible/.test(x))) status = "block";
   else if(!trust.frontEligible || !regional || !delivery) status = "hold";
   else if(affiliate.eligible) status = "ready_affiliate";
-  else status = "ready_external_referral";
+  else if(revenue.payable) status = "ready_direct_revenue";
+  else if(revenue.potential) status = "revenue_review_required";
+  else status = "hold";
 
   return {
     id: id || null,
@@ -191,6 +224,7 @@ function publicItemRow(item, source, page, section){
       trackingHost: affiliate.trackingHost || null,
       conversionMode: affiliate.conversionMode || null
     },
+    revenueQualification: revenue,
     status,
     issues: Array.from(new Set(issues)).slice(0,16),
     info
@@ -270,12 +304,15 @@ function envReady(){
     partnerCount = Array.isArray(partners) ? partners.length : 0;
     partnerConfigValid = Array.isArray(partners);
   } catch(_e){}
-  const hasLedger = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const ledgerConfig = LedgerStore.resolveConfig();
+  const ledgerState = LedgerStore.describeConfig(ledgerConfig);
+  const hasLedger = ledgerConfig.configured === true && ledgerConfig.valid === true;
   const hasClickSecret = !!process.env.IGDC_AFFILIATE_CLICK_SIGNING_SECRET;
   const hasSettlementToken = !!process.env.IGDC_NONPG_SETTLEMENT_INGEST_TOKEN;
   return {
     providerSettlement: {
       ledgerStorageConfigured: hasLedger,
+      ledgerStorageConfig: ledgerState,
       affiliateClickSigningConfigured: hasClickSecret,
       affiliatePartnerConfigConfigured: !!(partnerConfigValid && partnerCount > 0),
       affiliatePartnerConfigSyntaxValid: partnerConfigValid,
@@ -295,7 +332,7 @@ function summarize(mode, limit){
   const loaded = SNAPSHOT_SPECS.map(loadSnapshot);
   const snapshotReports = [];
   const uniqueReal = new Map();
-  const counts = { allItems:0, seedOrSample:0, productSignals:0, realProductCandidates:0, readyAffiliate:0, readyExternalReferral:0, hold:0, block:0 };
+  const counts = { allItems:0, seedOrSample:0, productSignals:0, realProductCandidates:0, readyAffiliate:0, readyDirectRevenue:0, revenueReviewRequired:0, readyExternalReferral:0, hold:0, block:0 };
 
   loaded.forEach(record => {
     const rows = record.source && record.source.exists && record.source.json ? flattenSnapshot(record.source.json, record.spec) : [];
@@ -310,6 +347,8 @@ function summarize(mode, limit){
       productSignals:0,
       realProductCandidates:0,
       readyAffiliate:0,
+      readyDirectRevenue:0,
+      revenueReviewRequired:0,
       readyExternalReferral:0,
       hold:0,
       block:0
@@ -324,6 +363,8 @@ function summarize(mode, limit){
       if(!uniqueReal.has(dedupe)) uniqueReal.set(dedupe, result);
       one.realProductCandidates += 1;
       if(result.status === "ready_affiliate") one.readyAffiliate += 1;
+      else if(result.status === "ready_direct_revenue") one.readyDirectRevenue += 1;
+      else if(result.status === "revenue_review_required") one.revenueReviewRequired += 1;
       else if(result.status === "ready_external_referral") one.readyExternalReferral += 1;
       else if(result.status === "hold") one.hold += 1;
       else one.block += 1;
@@ -335,6 +376,8 @@ function summarize(mode, limit){
   counts.realProductCandidates = realRows.length;
   realRows.forEach(row => {
     if(row.status === "ready_affiliate") counts.readyAffiliate += 1;
+    else if(row.status === "ready_direct_revenue") counts.readyDirectRevenue += 1;
+    else if(row.status === "revenue_review_required") counts.revenueReviewRequired += 1;
     else if(row.status === "ready_external_referral") counts.readyExternalReferral += 1;
     else if(row.status === "hold") counts.hold += 1;
     else counts.block += 1;
@@ -342,14 +385,14 @@ function summarize(mode, limit){
 
   const runtime = envReady();
   const copiesOk = snapshotReports.every(x => x.available && x.copies.synchronized);
-  const realReady = counts.readyAffiliate + counts.readyExternalReferral;
+  const realReady = counts.readyAffiliate + counts.readyDirectRevenue;
   let gate = "not_ready";
   let gateReason = "no-real-product-candidate";
   if(counts.realProductCandidates > 0 && realReady === 0) { gate = "hold"; gateReason = "real-products-require-front-readiness"; }
   if(realReady > 0 && !copiesOk) { gate = "hold"; gateReason = "snapshot-copies-not-synchronized"; }
   if(realReady > 0 && copiesOk) { gate = "ready_for_canary"; gateReason = "use-one-approved-candidate-manual-review"; }
 
-  const statusCounts = { readyAffiliate:counts.readyAffiliate, readyExternalReferral:counts.readyExternalReferral, hold:counts.hold, block:counts.block };
+  const statusCounts = { readyAffiliate:counts.readyAffiliate, readyDirectRevenue:counts.readyDirectRevenue, revenueReviewRequired:counts.revenueReviewRequired, readyExternalReferral:counts.readyExternalReferral, hold:counts.hold, block:counts.block };
   return {
     ok:true,
     status: gate === "ready_for_canary" ? "ok" : (gate === "hold" ? "warn" : "info"),

@@ -19,7 +19,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const AffiliateRegistry = require("./affiliate-program-registry.v1");
 
-const VERSION = "commerce-candidate-intake-v1.1.0-manual-affiliate-external-referral";
+const VERSION = "commerce-candidate-intake-v1.2.0-payable-revenue-qualification-gate";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -61,7 +61,7 @@ function plain(v){ return isObject(v) ? v : {}; }
 function policyPaths(root){ return [path.join(root,"netlify","functions","data",POLICY_FILE),path.join(root,"data",POLICY_FILE)]; }
 function queuePaths(root){ return [path.join(root,"netlify","functions","data",REVIEW_QUEUE_FILE)]; }
 function outputPath(root,name){ return path.join(root,"netlify","functions","data",name); }
-function defaultPolicy(){ return { version:VERSION, publication:{defaultMode:"staging_only",enableEnv:"COMMERCE_CANDIDATE_RELEASE_MODE",enableValue:"enabled",keyEnv:"COMMERCE_CANDIDATE_RELEASE_KEY",minimumKeyLength:32,requireManualReleaseKey:true}, sources:{external_brokerage:{rankBoost:1800},approved_commerce_member:{rankBoost:5000},managed_sponsor:{rankBoost:3500}}, eligibility:{marketEvidenceMaxAgeDays:30}, essentialGoods:{preferredClasses:[],keywords:{},allowNonEssentialOnlyWhen:["approved_commerce_member","managed_sponsor"]}, revenue:{allowedTypes:["affiliate","brokerage","referral","lead","advertising","sponsor"],sourcePriority:{approved_commerce_member:100,managed_sponsor:80,external_brokerage:60}}, ranking:{weights:{},searchExposure:{minimumVerifiedImpressions:100,minimumVerifiedOutboundClicks:10,maximumContribution:6}}, reviewQueue:{maxQueueAgeDays:7,directMemberRequiresApprovalState:"approved",directMemberRequiresAssignmentState:["approved","pinned"]} }; }
+function defaultPolicy(){ return { version:VERSION, publication:{defaultMode:"staging_only",enableEnv:"COMMERCE_CANDIDATE_RELEASE_MODE",enableValue:"enabled",keyEnv:"COMMERCE_CANDIDATE_RELEASE_KEY",minimumKeyLength:32,requireManualReleaseKey:true}, sources:{external_brokerage:{rankBoost:1800},approved_commerce_member:{rankBoost:5000},managed_sponsor:{rankBoost:3500}}, eligibility:{marketEvidenceMaxAgeDays:30}, essentialGoods:{preferredClasses:[],keywords:{},allowNonEssentialOnlyWhen:["approved_commerce_member","managed_sponsor"]}, revenue:{allowedTypes:["advertising","affiliate","brokerage","external_referral","lead","manual_affiliate","referral","sponsor"],requirePayableRevenueRightForPublicRelease:true,allowTrafficOnlyPublicRelease:false,allowVerifiedExternalReferral:true,sourcePriority:{approved_commerce_member:100,managed_sponsor:80,external_brokerage:60}}, ranking:{weights:{},searchExposure:{minimumVerifiedImpressions:100,minimumVerifiedOutboundClicks:10,maximumContribution:6}}, reviewQueue:{maxQueueAgeDays:7,directMemberRequiresApprovalState:"approved",directMemberRequiresAssignmentState:["approved","pinned"]} }; }
 function loadPolicy(root){
   const base=defaultPolicy();
   const files=policyPaths(root);
@@ -131,27 +131,110 @@ function trustedSeller(item){
   return { ok:trust>=62 || bool(item&&item.officialSource)||bool(item&&item.producerVerified)||bool(c.officialSource)||bool(c.producerVerified), score:trust };
 }
 function revenueRight(item, tier, policy, affiliateRegistry, candidateCountries){
-  const source=plain(item&&item.commerceCandidate), direct=plain(item&&item.directCommerceListing), contract=plain(item&&item.brokerageContract), sponsor=plain(item&&item.sponsorship);
+  const source=plain(item&&item.commerceCandidate);
+  const direct=plain(item&&item.directCommerceListing);
+  const contract=plain(item&&item.brokerageContract);
+  const sponsor=plain(item&&item.sponsorship);
   const affiliate=NonPgRevenue.affiliateForItem(item);
-  const allowed=array(policy.revenue&&policy.revenue.allowedTypes).map(lower);
-  const directApproved=bool(direct.contractApproved)||bool(contract.approved)||["approved","active","verified","live","enabled"].includes(lower(first(direct.contractStatus,contract.status)));
-  const sponsorApproved=bool(sponsor.disclosed)&&bool(sponsor.verified)&&!!first(sponsor.sponsorName,sponsor.provider,sponsor.contractId);
+  const revenuePolicy=plain(policy&&policy.revenue);
+  const allowed=array(revenuePolicy.allowedTypes).map(lower);
   const route=AffiliateRegistry.routeForItem(item, affiliateRegistry, candidateCountries);
   const affiliateApproved=route.ok && route.kind==="affiliate";
-  const externalReferralApproved=route.ok && route.kind==="external_referral" && policy.revenue&&policy.revenue.allowVerifiedExternalReferral===true;
-  const type=lower(first(source.revenueType,direct.revenueType,contract.type,sponsor.type,affiliateApproved?"manual_affiliate":(externalReferralApproved?"external_referral":(affiliate.eligible?"affiliate":""))));
-  const permittedType=!type || allowed.length===0 || allowed.includes(type);
-  const rightOk=tier==="external_brokerage" ? (permittedType && (affiliateApproved||externalReferralApproved||directApproved)) :
-    tier==="approved_commerce_member" ? (permittedType && directApproved) :
-    tier==="managed_sponsor" ? (permittedType && (sponsorApproved||directApproved)) : false;
-  const contractId=first(direct.contractId,contract.id,affiliateApproved&&route.affiliate.programId,affiliate.programId,affiliate.providerId,sponsor.contractId);
-  const estimatedNet=affiliateApproved||directApproved ? bounded(first(source.expectedNetRevenuePerOrder,direct.expectedNetRevenuePerOrder,contract.expectedNetRevenuePerOrder),0,1000000000,0) : 0;
+  const externalReferralApproved=route.ok && route.kind==="external_referral" && revenuePolicy.allowVerifiedExternalReferral===true;
+  const type=lower(first(
+    source.revenueType,
+    direct.revenueType,
+    contract.type,
+    sponsor.type,
+    affiliateApproved?"manual_affiliate":(externalReferralApproved?"external_referral":(affiliate.eligible?"affiliate":""))
+  ));
+  const permittedType=!!type && (allowed.length===0 || allowed.includes(type));
+  const activeState=["approved","active","verified","live","enabled"].includes(lower(first(direct.contractStatus,contract.status,sponsor.status)));
+  const contractId=first(
+    direct.contractId,
+    contract.id,
+    sponsor.contractId,
+    affiliateApproved ? route.affiliate.programId : "",
+    affiliate.programId,
+    affiliate.providerId
+  );
+  const counterparty=first(
+    direct.providerName,direct.counterparty,direct.advertiserName,direct.sellerName,
+    contract.providerName,contract.counterparty,contract.advertiserName,contract.sellerName,
+    sponsor.sponsorName,sponsor.provider,sponsor.counterparty
+  );
+  const disclosureReady=bool(first(direct.disclosureReady,direct.disclosureApproved,contract.disclosureReady,contract.disclosureApproved,sponsor.disclosed));
+  const settlementMode=lower(first(direct.settlementMode,direct.billingModel,direct.payoutBasis,contract.settlementMode,contract.billingModel,contract.payoutBasis,sponsor.settlementMode,sponsor.billingModel));
+  const payoutBasisVerified=bool(first(direct.payoutBasisVerified,contract.payoutBasisVerified,sponsor.payoutBasisVerified));
   const commission=affiliateApproved && affiliate.commissionRate!=null ? affiliate.commissionRate : bounded(first(source.commissionRate,direct.commissionRate,contract.commissionRate),0,1,0);
   const conversion=affiliateApproved && affiliate.expectedConversionRate!=null ? affiliate.expectedConversionRate : bounded(first(source.expectedConversionRate,direct.expectedConversionRate,contract.expectedConversionRate),0,1,0);
-  const certainty=rightOk ? (affiliateApproved?100:(directApproved?90:(sponsorApproved?80:35))) : 0;
-  const monetizationState=affiliateApproved||directApproved||sponsorApproved ? "confirmed_or_contractual" : (externalReferralApproved?"traffic_value_only":"not_verified");
-  const publicRoute=AffiliateRegistry.publicRoute(route);
-  return {ok:rightOk,type:type||null,contractId:contractId||null,affiliate,route,publicRoute,allowedCountries:route.allowedCountries||[],monetizationState,estimatedNetRevenuePerOrder:estimatedNet,commissionRate:commission,expectedConversionRate:conversion,certainty};
+  const estimatedNet=bounded(first(source.expectedNetRevenuePerOrder,direct.expectedNetRevenuePerOrder,contract.expectedNetRevenuePerOrder,direct.fixedFee,contract.fixedFee,direct.perLeadAmount,contract.perLeadAmount),0,1000000000,0);
+  const payableAmountEvidence=estimatedNet>0 || commission>0 || bounded(first(direct.fixedFee,contract.fixedFee,sponsor.fixedFee),0,1000000000,0)>0 || bounded(first(direct.perLeadAmount,contract.perLeadAmount),0,1000000000,0)>0;
+  const payableModeEvidence=["manual_invoice","bank_transfer","provider_statement","settlement_statement","fixed_fee","per_lead","cpc","cpa","cps","commission","operator_approved_statement_or_invoice"].includes(settlementMode);
+  const directTypeAllowed=!["affiliate","manual_affiliate","external_referral"].includes(type);
+  const directApproved=directTypeAllowed && permittedType &&
+    (bool(direct.contractApproved)||bool(contract.approved)||activeState) &&
+    !!contractId && !!counterparty && disclosureReady &&
+    (payoutBasisVerified||payableAmountEvidence||payableModeEvidence);
+  const sponsorApproved=type==="sponsor" && permittedType &&
+    bool(sponsor.verified) && disclosureReady && !!contractId && !!counterparty &&
+    (payoutBasisVerified||payableAmountEvidence||payableModeEvidence);
+  const payable=permittedType && (affiliateApproved||directApproved||sponsorApproved);
+  const allowTrafficOnlyPublic=revenuePolicy.allowTrafficOnlyPublicRelease===true;
+  const rightOk=!!tier && (payable || (allowTrafficOnlyPublic && externalReferralApproved));
+  const potential=payable || externalReferralApproved || !!(permittedType && (contractId||counterparty||bool(source.revenueCandidate)||bool(source.monetizationCandidate)));
+  const monetizationState=affiliateApproved
+    ? "verified_affiliate_payable"
+    : (directApproved||sponsorApproved
+      ? "verified_direct_revenue_right"
+      : (externalReferralApproved?"traffic_value_only_review":"not_verified"));
+  let publicRoute=AffiliateRegistry.publicRoute(route);
+  let allowedCountries=route.allowedCountries||[];
+  if(directApproved||sponsorApproved){
+    allowedCountries=unique((candidateCountries||[]).map(normalizeCountry).filter(Boolean));
+    publicRoute={
+      mode:"approved_direct_revenue",
+      revenueType:type,
+      contractId:contractId||null,
+      allowedCountries,
+      disclosureReady:true,
+      settlementMode:settlementMode||"operator_approved_statement_or_invoice"
+    };
+  }
+  const verificationReasons=[];
+  if(!type) verificationReasons.push("REVENUE_TYPE_MISSING");
+  else if(!permittedType) verificationReasons.push("REVENUE_TYPE_NOT_ALLOWED");
+  if(!payable){
+    if(externalReferralApproved) verificationReasons.push("TRAFFIC_ONLY_ROUTE_HAS_NO_PAYABLE_REVENUE_RIGHT");
+    else {
+      if(!contractId && !affiliateApproved) verificationReasons.push("REVENUE_CONTRACT_OR_PROGRAM_ID_MISSING");
+      if(!counterparty && !affiliateApproved) verificationReasons.push("REVENUE_COUNTERPARTY_MISSING");
+      if(!disclosureReady && !affiliateApproved) verificationReasons.push("REVENUE_DISCLOSURE_NOT_APPROVED");
+      if(!payoutBasisVerified&&!payableAmountEvidence&&!payableModeEvidence&&!affiliateApproved) verificationReasons.push("REVENUE_PAYOUT_BASIS_NOT_VERIFIED");
+    }
+  }
+  const certainty=affiliateApproved?100:((directApproved||sponsorApproved)?95:(externalReferralApproved?35:(potential?15:0)));
+  return {
+    ok:rightOk,
+    payable,
+    potential,
+    type:type||null,
+    contractId:contractId||null,
+    counterparty:counterparty||null,
+    settlementMode:settlementMode||null,
+    disclosureReady,
+    payoutBasisVerified:payoutBasisVerified||payableAmountEvidence||payableModeEvidence,
+    verificationReasons,
+    affiliate,
+    route,
+    publicRoute,
+    allowedCountries,
+    monetizationState,
+    estimatedNetRevenuePerOrder:affiliateApproved||directApproved||sponsorApproved?estimatedNet:0,
+    commissionRate:commission,
+    expectedConversionRate:conversion,
+    certainty
+  };
 }
 function reviewApproval(item, tier, policy){
   if(tier!=="approved_commerce_member" && tier!=="managed_sponsor") return {ok:true, state:"not-required"};
@@ -193,7 +276,7 @@ function ranking(item, tier, essentialClass, trust, revenue, market, policy){
   const marketReadiness=market.ok?100:0;
   const revenueCertainty=revenue.certainty;
   const expectedNetRevenue=bounded(revenue.estimatedNetRevenuePerOrder,0,1000000000,0)>0?100:Math.round((revenue.commissionRate||0)*(revenue.expectedConversionRate||0)*10000);
-  const trafficValue=revenue&&revenue.monetizationState==="traffic_value_only" ? 35 : 0;
+  const trafficValue=revenue&&revenue.monetizationState==="traffic_value_only_review" ? 35 : 0;
   const signalSource=lower(first(signal.source,signal.origin,signal.engine));
   const verifiedSignals=(signalSource==="search-exposure-engine" || signalSource==="searchbank-ranking") &&
     (bool(signal.serverVerified)||bool(signal.signed)) && isFresh(first(signal.verifiedAt,signal.updatedAt),30) && !!text(first(signal.evidenceDigest,signal.signatureDigest));
@@ -240,19 +323,21 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   const exception=array(plain(policy.essentialGoods).allowNonEssentialOnlyWhen).map(lower).includes(tier);
   if(!essential && !exception) reasons.push("LIFE_ESSENTIAL_CATEGORY_NOT_CONFIRMED");
   const market=marketReady(item,policy); if(!market.ok) reasons.push("MARKET_SALE_EVIDENCE_INCOMPLETE_OR_STALE");
-  const revenue=revenueRight(item,tier,policy,affiliateRegistry,marketCountries(market.validRecords)); if(!revenue.ok) reasons.push("NON_PG_REVENUE_RIGHT_OR_OUTBOUND_REFERRAL_NOT_VERIFIED");
+  const revenue=revenueRight(item,tier,policy,affiliateRegistry,marketCountries(market.validRecords));
+  if(!revenue.potential) reasons.push("REVENUE_OPPORTUNITY_EVIDENCE_MISSING");
+  if(!revenue.ok) reasons.push("PAYABLE_NON_PG_REVENUE_RIGHT_NOT_VERIFIED");
   const publishMarkets=publicationMarkets(market,revenue); if(market.ok && !publishMarkets.ok) reasons.push("REVENUE_ROUTE_HAS_NO_ALLOWED_VERIFIED_MARKET");
   const approval=reviewApproval(item,tier,policy); if(!approval.ok) reasons.push("DIRECT_LISTING_ADMIN_APPROVAL_OR_ASSIGNMENT_MISSING");
   const rank=ranking(item,tier,essential,trust,revenue,market,policy);
   const releaseEligible=reasons.length===0;
   const result={
     candidateId:id, sourceTier:tier||null, origin:origin||"searchbank", releaseEligible,
-    stageStatus:releaseEligible?"eligible_for_release":"hold", reasons,
+    stageStatus:releaseEligible?"eligible_for_release":(revenue.potential?"revenue_review_required":"hold"), reasons,
     essentialClass:essential||null, placement:pos, market, publishMarkets, marketCount:publishMarkets.validRecords.length,
     heldMarketCount:market.invalidRecords.length+publishMarkets.blocked.length,
     marketKeys:publishMarkets.validRecords.flatMap(record=>{ const values=record.regions.slice(); if(record.nationwide) values.push("NATIONWIDE"); return values.map(region=>MarketSaleScope.marketKey(record,region)); }),
     heldMarketReasons:market.invalidRecords.map(x=>({country:x.record.country,regions:(x.record.regions||[]).slice(),reasons:x.result.reasons.slice()})).concat(publishMarkets.blocked.map(x=>({country:x.country,regions:x.regions,reasons:[x.reason]}))),
-    revenue:{type:revenue.type,contractId:revenue.contractId,certainty:revenue.certainty,affiliateEligible:revenue.route&&revenue.route.kind==="affiliate",outboundRoute:revenue.publicRoute,monetizationState:revenue.monetizationState,allowedCountries:revenue.allowedCountries,estimatedNetRevenuePerOrder:revenue.estimatedNetRevenuePerOrder,commissionRate:revenue.commissionRate,expectedConversionRate:revenue.expectedConversionRate},
+    revenue:{type:revenue.type,contractId:revenue.contractId,counterparty:revenue.counterparty,settlementMode:revenue.settlementMode,disclosureReady:revenue.disclosureReady,payoutBasisVerified:revenue.payoutBasisVerified,payable:revenue.payable,potential:revenue.potential,verificationReasons:revenue.verificationReasons,certainty:revenue.certainty,affiliateEligible:revenue.route&&revenue.route.kind==="affiliate",outboundRoute:revenue.publicRoute,monetizationState:revenue.monetizationState,allowedCountries:revenue.allowedCountries,estimatedNetRevenuePerOrder:revenue.estimatedNetRevenuePerOrder,commissionRate:revenue.commissionRate,expectedConversionRate:revenue.expectedConversionRate},
     review:{ok:approval.ok,state:approval.state,assignment:approval.assignment||null,approvalId:approval.approvalId||null,approvedAt:approval.approvedAt||null},
     ranking:rank, destinationHost:(()=>{try{return new URL(destination).hostname.toLowerCase()}catch(_e){return null}})(),
     item
