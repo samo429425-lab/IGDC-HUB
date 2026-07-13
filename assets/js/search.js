@@ -4872,6 +4872,15 @@ function isDirectMediaAssetUrlClient(v){
     }
 
     function renderItem(it, mountTarget){
+      // Continuous Search.js intake can replace an already enriched card with a
+      // later text-only copy of the same result. Re-apply the search-card media
+      // cache at render time so representative images/video snapshots persist.
+      if(isSearchPage){
+        const cachedKey = itemStableKey(it);
+        const cachedRichItem = cachedKey ? itemImageEnrichCache.get(cachedKey) : null;
+        if(cachedRichItem) it = mergeRichCardMediaClient(it, cachedRichItem);
+      }
+
       const rawUrl = it.url || it.link || '';
       const url = resolveOriginalPageUrlClient(it, rawUrl);
       const domain = domainOf(url);
@@ -5046,6 +5055,8 @@ if (it.riskLabel === '⚠️ high-risk') {
           const img = document.createElement('img');
           img.src = src;
           img.loading = 'lazy';
+          img.decoding = 'async';
+          img.referrerPolicy = 'no-referrer';
           img.alt = '';
           img.onerror = () => {
             img.remove();
@@ -5123,6 +5134,8 @@ if (it.riskLabel === '⚠️ high-risk') {
 
 
     function itemStableKey(it){
+      const explicitKey = String((it && (it._maruCardKey || it.maruCardKey)) || '').trim();
+      if(explicitKey) return explicitKey;
       const pageUrl = String((it && (it.url || it.link || it.pageUrl || it.sourcePageUrl || it.contextLink)) || '').trim();
       if(pageUrl) return canonicalPageKeyClient(pageUrl);
       return String((it && (it.id || it.title)) || '').trim().toLowerCase();
@@ -5278,7 +5291,7 @@ if (it.riskLabel === '⚠️ high-risk') {
             type: activeType || 'all',
             gateway: 'search-ui',
             searchUi: true,
-            items: candidates
+            items: candidates.map(it => Object.assign({}, it, { _maruCardKey: itemStableKey(it) }))
           })
         });
 
