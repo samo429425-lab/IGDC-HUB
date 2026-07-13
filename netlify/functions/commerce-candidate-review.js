@@ -8,10 +8,10 @@
  */
 
 const CommerceIntake = require("./lib/commerce-candidate-intake.v1");
-const AdminSession = require("./lib/global-slot-console-auth");
+const CommerceAuth = require("./lib/commerce-candidate-auth.v1");
 const SlotStore = require("./lib/global-slot-console-supabase");
 
-const VERSION = "commerce-candidate-review-api-v1.2.0-private-queue-diagnostic";
+const VERSION = "commerce-candidate-review-api-v1.2.1-private-queue-auth-repair";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -34,10 +34,11 @@ function requireRole(member, scope){
   return values;
 }
 async function resolveCurrentAdmin(event){
-  // Reuse the exact server-side Auth0/JWKS + role resolver used by the existing
-  // administrator console.  This queue has no separate login realm.
-  const actor=await AdminSession.resolveUser(event);
-  return {memberId:text(actor&&actor.sub),email:text(actor&&actor.email),name:text(actor&&actor.name),roles:Array.isArray(actor&&actor.roles)?actor.roles:[]};
+  // Use the queue's own signed Auth0/JWKS verifier. The prior reference to
+  // global-slot-console-auth pointed to a module that is not present in the
+  // deployed source package, which disconnected this read-only queue endpoint.
+  const actor=await CommerceAuth.authenticateCommerceAdmin(event);
+  return {memberId:text(actor&&actor.memberId),email:text(actor&&actor.email),name:text(actor&&actor.name),roles:Array.isArray(actor&&actor.roles)?actor.roles:[]};
 }
 function stage(root){return CommerceIntake.readStage(root)||{schema:"commerce-candidate-staging.snapshot.v1",summary:{considered:0},candidates:[]};}
 function summaryDoc(doc){return {version:VERSION,stageVersion:doc.version||null,generatedAt:doc.generatedAt||null,releaseGate:doc.releaseGate||null,summary:doc.summary||{},candidateCount:Array.isArray(doc.candidates)?doc.candidates.length:0};}
