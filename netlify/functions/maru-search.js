@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-596-probe-stable-fastpath-nanopin-125-130-page-card-media-link-fix';
+const VERSION = 'A1.5.46-597-search-insight-card-media-front-preserve-nanopin';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -76,8 +76,8 @@ const MARU_GATEWAY_CACHE_TTL_MS = 5 * 60 * 1000;
 const MARU_INFLIGHT_TTL_MS = 30 * 1000;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const OG_IMAGE_ENRICH_LIMIT = 36;
-const OG_IMAGE_ENRICH_CONCURRENCY = 6;
-const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
+const OG_IMAGE_ENRICH_CONCURRENCY = 8;
+const OG_IMAGE_ENRICH_TIMEOUT_MS = 1800;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
 const MAX_SEARCH_BANK_PAGES_DEEP = 60;
@@ -998,6 +998,21 @@ function searchUiPageUrlForItem(it){
   const dc = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
   const media = (it.media && typeof it.media === 'object') ? it.media : {};
   const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+  // Embedded video metadata must not replace the owning article/site URL.
+  // Prefer an explicit non-YouTube source page; direct YouTube result rows are
+  // still normalized to their watch URL by the block below.
+  const owningPageCandidates = [
+    it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
+    dc.sourcePageUrl, dc.pageUrl, dc.contextLink, dc.url,
+    p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.originallink,
+    it.url, it.link, it.href
+  ];
+  for(const v of owningPageCandidates){
+    const page = safeString(v).trim();
+    if(!page || !/^https?:\/\//i.test(page) || isDirectImageAssetUrlForSourceLink(page)) continue;
+    const host = domainOf(page).toLowerCase();
+    if(host && !/youtube\.com|youtu\.be/.test(host)) return page;
+  }
   const ytInputs = [
     it.videoId, p.videoId, it.watchUrl, it.videoUrl, it.embedUrl,
     preview.videoId, preview.watchUrl, preview.videoUrl, preview.embedUrl,
@@ -1424,7 +1439,7 @@ function compactResultItem(it){
     mediaQuality: mediaQualityProfileForItem(it, ownImages),
     selectedImageQuality: profile.selectedImageQuality,
     selectedCardImageQuality: profile.selectedCardImageQuality,
-    clickTargetType: profile.videoUrl ? 'video' : (originalImage ? 'image' : 'page'),
+    clickTargetType: it.clickTargetType || (profile.videoUrl ? 'video' : (originalImage ? 'image' : 'page')),
     media,
     videoId: profile.videoId || undefined,
     videoUrl: profile.videoUrl || undefined,
@@ -4217,12 +4232,147 @@ function shouldSkipOgImageFetch(it){
   return false;
 }
 
-async function fetchOwnOgImage(url){
+function extractPageMetaTextFromHtml(html, acceptedNames){
+  const wanted = new Set((Array.isArray(acceptedNames) ? acceptedNames : []).map(x => safeString(x).toLowerCase()));
+  const text = safeString(html);
+  const re = /<meta\b[^>]*>/ig;
+  let m;
+  while((m = re.exec(text))){
+    const tag = m[0];
+    const key = safeString(firstNonEmpty(attrValue(tag, 'property'), attrValue(tag, 'name'), attrValue(tag, 'itemprop'))).toLowerCase();
+    if(!wanted.has(key)) continue;
+    const content = decodeHtmlEntitiesLite(attrValue(tag, 'content'));
+    if(content) return stripHtml(content).replace(/\s+/g, ' ').trim();
+  }
+  return '';
+}
+
+function extractPageSummaryFromHtml(html){
+  const text = safeString(html);
+  const meta = extractPageMetaTextFromHtml(text, [
+    'description', 'og:description', 'twitter:description', 'dc.description', 'dcterms.description'
+  ]);
+  if(meta && meta.length >= 24) return meta.slice(0, 720);
+
+  const jsonDescription = text.match(/"description"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/i);
+  if(jsonDescription && jsonDescription[1]){
+    const clean = decodeHtmlEntitiesLite(jsonDescription[1].replace(/\\n/g, ' ').replace(/\\"/g, '"')).replace(/\s+/g, ' ').trim();
+    if(clean.length >= 24) return clean.slice(0, 720);
+  }
+
+  const body = text.slice(0, 220000);
+  const pRe = /<p\b[^>]*>([\s\S]*?)<\/p>/ig;
+  let pm;
+  let checked = 0;
+  while((pm = pRe.exec(body)) && checked < 24){
+    checked += 1;
+    const clean = decodeHtmlEntitiesLite(stripHtml(pm[1])).replace(/\s+/g, ' ').trim();
+    if(clean.length >= 60 && !/cookie|privacy|로그인|회원가입|javascript/i.test(clean)) return clean.slice(0, 720);
+  }
+  return '';
+}
+
+function extractPageTitleFromHtml(html){
+  const og = extractPageMetaTextFromHtml(html, ['og:title', 'twitter:title']);
+  if(og) return og.slice(0, 240);
+  const m = safeString(html).match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
+  return m && m[1] ? decodeHtmlEntitiesLite(stripHtml(m[1])).replace(/\s+/g, ' ').trim().slice(0, 240) : '';
+}
+
+function extractPageVideoMediaFromHtml(html, baseUrl){
+  const text = safeString(html);
+  const candidates = [];
+  const posters = [];
+
+  function pushUrl(v){
+    const u = absolutizeUrl(baseUrl, decodeHtmlEntitiesLite(v));
+    if(u && /^https?:\/\//i.test(u)) candidates.push(u);
+  }
+  function pushPoster(v){
+    const u = absolutizeUrl(baseUrl, decodeHtmlEntitiesLite(v));
+    if(u && isLikelyContentImageUrl(u)) posters.push(u);
+  }
+
+  const metaRe = /<meta\b[^>]*>/ig;
+  let mm;
+  while((mm = metaRe.exec(text)) && candidates.length < 20){
+    const tag = mm[0];
+    const key = safeString(firstNonEmpty(attrValue(tag, 'property'), attrValue(tag, 'name'), attrValue(tag, 'itemprop'))).toLowerCase();
+    const content = attrValue(tag, 'content');
+    if(['og:video','og:video:url','og:video:secure_url','twitter:player','player','embedurl'].includes(key)) pushUrl(content);
+    if(['og:video:image','thumbnailurl'].includes(key)) pushPoster(content);
+  }
+
+  const iframeRe = /<iframe\b[^>]*>/ig;
+  let im;
+  while((im = iframeRe.exec(text)) && candidates.length < 28){
+    const tag = im[0];
+    const iframeUrl = firstNonEmpty(attrValue(tag, 'src'), attrValue(tag, 'data-src'), attrValue(tag, 'data-lazy-src'));
+    if(/youtube|youtu\.be|vimeo|dailymotion|twitch|video|player/i.test(safeString(iframeUrl))) pushUrl(iframeUrl);
+  }
+
+  const videoRe = /<video\b[^>]*>/ig;
+  let vm;
+  while((vm = videoRe.exec(text)) && candidates.length < 34){
+    const tag = vm[0];
+    pushUrl(firstNonEmpty(attrValue(tag, 'src'), attrValue(tag, 'data-src')));
+    pushPoster(attrValue(tag, 'poster'));
+  }
+
+  const sourceRe = /<source\b[^>]*>/ig;
+  let sm;
+  while((sm = sourceRe.exec(text)) && candidates.length < 40){
+    const tag = sm[0];
+    const type = safeString(attrValue(tag, 'type')).toLowerCase();
+    if(!type || type.includes('video')) pushUrl(firstNonEmpty(attrValue(tag, 'src'), attrValue(tag, 'data-src')));
+  }
+
+  const rawYoutube = text.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed|shorts|live)\/|youtu\.be\/|youtube\.com\/watch\?v=)([A-Za-z0-9_-]{11})/i);
+  let videoId = rawYoutube && rawYoutube[1] ? rawYoutube[1] : '';
+  if(!videoId){
+    for(const u of candidates){
+      videoId = youtubeIdFromUrl(u);
+      if(videoId) break;
+    }
+  }
+
+  let embedUrl = '';
+  let videoUrl = '';
+  for(const u of candidates){
+    if(!embedUrl && /youtube(?:-nocookie)?\.com\/embed\/|player\.vimeo\.com\/video\/|dailymotion\.com\/embed\/video\//i.test(u)) embedUrl = u;
+    if(!videoUrl && /\.(?:mp4|webm|m3u8|mov|m4v)(?:\?|#|$)/i.test(u)) videoUrl = u;
+  }
+  if(videoId){
+    videoUrl = 'https://www.youtube.com/watch?v=' + videoId;
+    embedUrl = 'https://www.youtube.com/embed/' + videoId;
+  }else if(!videoUrl && candidates.length){
+    videoUrl = candidates[0];
+  }
+
+  const poster = videoId
+    ? preferredYoutubePoster(videoId, '')
+    : (qualitySortImagesForItem(posters, { type:'video', mediaType:'video', url:baseUrl })[0] || '');
+
+  return {
+    hasVideo: !!(videoId || videoUrl || embedUrl),
+    videoId,
+    videoUrl,
+    watchUrl: videoId ? 'https://www.youtube.com/watch?v=' + videoId : videoUrl,
+    embedUrl,
+    poster
+  };
+}
+
+function emptyOwnPageCardMedia(){
+  return { image:'', imageSet:[], summary:'', title:'', hasVideo:false, videoId:'', videoUrl:'', watchUrl:'', embedUrl:'', poster:'' };
+}
+
+async function fetchOwnPageCardMedia(url){
   try{
-    globalThis.__MARU_OG_IMAGE_CACHE = globalThis.__MARU_OG_IMAGE_CACHE || new Map();
+    globalThis.__MARU_PAGE_CARD_MEDIA_CACHE = globalThis.__MARU_PAGE_CARD_MEDIA_CACHE || new Map();
 
     const cacheKey = safeString(url).trim();
-    const hit = globalThis.__MARU_OG_IMAGE_CACHE.get(cacheKey);
+    const hit = globalThis.__MARU_PAGE_CARD_MEDIA_CACHE.get(cacheKey);
     if(hit && Date.now() - hit.t < OG_IMAGE_CACHE_TTL_MS) return hit.v;
 
     const res = await fetchWithTimeout(cacheKey, {
@@ -4234,29 +4384,142 @@ async function fetchOwnOgImage(url){
     }, OG_IMAGE_ENRICH_TIMEOUT_MS);
 
     if(!res || !res.ok) {
-      globalThis.__MARU_OG_IMAGE_CACHE.set(cacheKey, { t: Date.now(), v: '' });
-      return '';
+      const empty = emptyOwnPageCardMedia();
+      globalThis.__MARU_PAGE_CARD_MEDIA_CACHE.set(cacheKey, { t: Date.now(), v: empty });
+      return empty;
     }
 
     const ctype = safeString(res.headers && res.headers.get && res.headers.get('content-type')).toLowerCase();
     if(ctype && !ctype.includes('text/html') && !ctype.includes('application/xhtml')) {
-      globalThis.__MARU_OG_IMAGE_CACHE.set(cacheKey, { t: Date.now(), v: '' });
-      return '';
+      const empty = emptyOwnPageCardMedia();
+      globalThis.__MARU_PAGE_CARD_MEDIA_CACHE.set(cacheKey, { t: Date.now(), v: empty });
+      return empty;
     }
 
-    const html = await res.text();
-    const img = extractOgImageFromHtml(html.slice(0, 300000), cacheKey);
+    const html = (await res.text()).slice(0, 320000);
+    const image = extractOgImageFromHtml(html, cacheKey);
+    const video = extractPageVideoMediaFromHtml(html, cacheKey);
+    const images = qualitySortImagesForItem([image, video.poster].filter(Boolean), {
+      type:'web', mediaType:video.hasVideo ? 'video' : 'article', url:cacheKey
+    }).slice(0, 3);
+    const value = Object.assign(emptyOwnPageCardMedia(), video, {
+      image: images[0] || image || video.poster || '',
+      imageSet: images,
+      summary: extractPageSummaryFromHtml(html),
+      title: extractPageTitleFromHtml(html)
+    });
 
-    globalThis.__MARU_OG_IMAGE_CACHE.set(cacheKey, { t: Date.now(), v: img || '' });
-    return img || '';
+    globalThis.__MARU_PAGE_CARD_MEDIA_CACHE.set(cacheKey, { t: Date.now(), v: value });
+    return value;
   }catch(e){
-    return '';
+    return emptyOwnPageCardMedia();
   }
+}
+
+async function fetchOwnOgImage(url){
+  const media = await fetchOwnPageCardMedia(url);
+  return media && media.image || '';
+}
+
+function mergeOwnPageCardMediaIntoItem(it, pageMedia){
+  it = (it && typeof it === 'object') ? it : {};
+  pageMedia = (pageMedia && typeof pageMedia === 'object') ? pageMedia : emptyOwnPageCardMedia();
+  const url = safeString(firstNonEmpty(it.url, it.link)).trim();
+  const existingImages = naturalImagesForItem(it, 3);
+  const pageImages = compactImages([pageMedia.image].concat(Array.isArray(pageMedia.imageSet) ? pageMedia.imageSet : []).concat(pageMedia.poster ? [pageMedia.poster] : []))
+    .filter(img => isMeaningfulImageForItem(img, it));
+  const images = qualitySortImagesForItem(existingImages.concat(pageImages), it).slice(0, 3);
+  const thumb = images[0] || '';
+  const existingSummary = resultSummaryText(it);
+  const summary = existingSummary || safeString(pageMedia.summary).trim();
+  const mediaBase = (it.media && typeof it.media === 'object') ? Object.assign({}, it.media) : {};
+  const previewBase = (mediaBase.preview && typeof mediaBase.preview === 'object') ? Object.assign({}, mediaBase.preview) : {};
+  const displayCard = Object.assign({}, (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {});
+
+  if(images.length){
+    displayCard.thumbnail = thumb;
+    displayCard.image = firstNonEmpty(pageMedia.image, thumb);
+    displayCard.imageUrl = firstNonEmpty(pageMedia.image, thumb);
+    displayCard.imageSet = images;
+  }
+  if(summary){
+    displayCard.body = firstNonEmpty(displayCard.body, displayCard.text, summary);
+    displayCard.summary = firstNonEmpty(displayCard.summary, summary);
+  }
+
+  let media = Object.keys(mediaBase).length ? mediaBase : undefined;
+  if(pageMedia.hasVideo){
+    media = Object.assign({}, mediaBase, {
+      type:'video',
+      preview:Object.assign({}, previewBase, {
+        videoId:pageMedia.videoId || previewBase.videoId,
+        videoUrl:pageMedia.videoUrl || previewBase.videoUrl,
+        watchUrl:pageMedia.watchUrl || previewBase.watchUrl,
+        embedUrl:pageMedia.embedUrl || previewBase.embedUrl,
+        poster:firstNonEmpty(pageMedia.poster, previewBase.poster, thumb),
+        image:firstNonEmpty(pageMedia.poster, previewBase.image, thumb),
+        thumbnail:firstNonEmpty(pageMedia.poster, previewBase.thumbnail, thumb),
+        pageUrl:url,
+        sourcePageUrl:url,
+        contextLink:url
+      })
+    });
+    displayCard.videoId = pageMedia.videoId || displayCard.videoId;
+    displayCard.videoUrl = pageMedia.videoUrl || displayCard.videoUrl;
+    displayCard.watchUrl = pageMedia.watchUrl || displayCard.watchUrl;
+    displayCard.embedUrl = pageMedia.embedUrl || displayCard.embedUrl;
+    displayCard.videoPoster = firstNonEmpty(pageMedia.poster, thumb, displayCard.videoPoster);
+  }else if(images.length){
+    media = Object.assign({}, mediaBase, {
+      type:firstNonEmpty(mediaBase.type, it.mediaType === 'video' || it.type === 'video' ? 'video' : 'image'),
+      preview:Object.assign({}, previewBase, {
+        poster:firstNonEmpty(previewBase.poster, thumb),
+        image:firstNonEmpty(previewBase.image, pageMedia.image, thumb),
+        thumbnail:firstNonEmpty(previewBase.thumbnail, thumb),
+        pageUrl:url,
+        sourcePageUrl:url,
+        contextLink:url
+      })
+    });
+  }
+
+  const out = Object.assign({}, it, {
+    thumbnail: thumb || it.thumbnail || '',
+    thumb: thumb || it.thumb || '',
+    image: firstNonEmpty(pageMedia.image, thumb, it.image),
+    imageUrl: firstNonEmpty(pageMedia.image, thumb, it.imageUrl),
+    imageSet: images.length ? images : (Array.isArray(it.imageSet) ? it.imageSet : []),
+    originalImage: firstNonEmpty(pageMedia.image, thumb, it.originalImage),
+    fullImage: firstNonEmpty(pageMedia.image, thumb, it.fullImage),
+    viewerImage: firstNonEmpty(pageMedia.image, thumb, it.viewerImage),
+    openImageUrl: firstNonEmpty(pageMedia.image, thumb, it.openImageUrl),
+    contentUrl: firstNonEmpty(pageMedia.image, thumb, it.contentUrl),
+    cardImage: firstNonEmpty(thumb, it.cardImage),
+    mediaQuality: mediaQualityProfileForItem(it, images),
+    selectedImageQuality: imageQualityScore(firstNonEmpty(pageMedia.image, thumb), it),
+    selectedCardImageQuality: imageQualityScore(thumb, it),
+    clickTargetType:'page',
+    pageUrl:url || it.pageUrl,
+    sourcePageUrl:url || it.sourcePageUrl,
+    contextLink:url || it.contextLink,
+    displayCard,
+    _providedImagePreserved: hasProviderSuppliedMedia(it),
+    _pageCardMediaEnriched: !!(pageImages.length || pageMedia.hasVideo || (!existingSummary && summary))
+  });
+  if(media) out.media = media;
+  if(summary && !existingSummary){
+    out.summary = summary;
+    out.description = summary;
+    out.displaySummary = summary;
+  }
+  if(!safeString(out.title).trim() && pageMedia.title) out.title = pageMedia.title;
+  return out;
 }
 
 async function enrichOwnImages(items, opts){
   const list = Array.isArray(items) ? items.slice() : [];
-  const max = Math.min(list.length, OG_IMAGE_ENRICH_LIMIT);
+  const requestedMax = opts && Number(opts.maxItems || opts.limit);
+  const max = Math.min(list.length, Number.isFinite(requestedMax) && requestedMax > 0 ? requestedMax : OG_IMAGE_ENRICH_LIMIT, OG_IMAGE_ENRICH_LIMIT);
   const trace = opts && Array.isArray(opts.trace) ? opts.trace : null;
   const timeLeft = opts && typeof opts.timeLeft === 'function' ? opts.timeLeft : (() => 9999);
 
@@ -4270,73 +4533,23 @@ async function enrichOwnImages(items, opts){
       const it = list[idx];
       if(!it) { skipped += 1; continue; }
 
-      const ownImages = naturalImagesForItem(it, 3);
-
-      // If the provider already supplied a usable thumbnail/media URL, keep it.
-      // Do not skip with compactImages only, because that can preserve a raw URL
-      // that later gets filtered out by the meaningful-image layer.
-      if(ownImages.length) {
-        list[idx] = Object.assign({}, it, {
-          thumbnail: ownImages[0],
-          thumb: ownImages[0],
-          image: ownImages[0],
-          imageUrl: ownImages[0],
-          imageSet: ownImages,
-          originalImage: ownImages[0],
-          fullImage: ownImages[0],
-          viewerImage: ownImages[0],
-          openImageUrl: ownImages[0],
-          contentUrl: ownImages[0],
-          cardImage: ownImages[0],
-          mediaQuality: mediaQualityProfileForItem(it, ownImages),
-          selectedImageQuality: imageQualityScore(ownImages[0], it),
-          selectedCardImageQuality: imageQualityScore(ownImages[0], it),
-          clickTargetType: 'image',
-          _providedImagePreserved: hasProviderSuppliedMedia(it)
-        });
+      const existingImages = naturalImagesForItem(it, 3);
+      if(shouldSkipOgImageFetch(it)) {
+        list[idx] = mergeOwnPageCardMediaIntoItem(it, emptyOwnPageCardMedia());
         skipped += 1;
         continue;
       }
 
-      if(shouldSkipOgImageFetch(it)) { skipped += 1; continue; }
-
       const url = safeString(firstNonEmpty(it.url, it.link)).trim();
-      const img = await fetchOwnOgImage(url);
+      const pageMedia = await fetchOwnPageCardMedia(url);
+      const merged = mergeOwnPageCardMediaIntoItem(it, pageMedia);
+      list[idx] = merged;
 
-      if(img && isMeaningfulImageForItem(img, it)){
-        const nextImages = naturalImagesForItem(Object.assign({}, it, {
-          thumbnail: img,
-          thumb: img,
-          image: img,
-          imageSet: [img]
-        }), 3);
-
-        if(nextImages.length){
-          list[idx] = Object.assign({}, it, {
-            thumbnail: nextImages[0],
-            thumb: nextImages[0],
-            image: nextImages[0],
-            imageUrl: nextImages[0],
-            imageSet: nextImages,
-            originalImage: nextImages[0],
-            fullImage: nextImages[0],
-            viewerImage: nextImages[0],
-            openImageUrl: nextImages[0],
-            contentUrl: nextImages[0],
-            cardImage: nextImages[0],
-            mediaQuality: mediaQualityProfileForItem(it, nextImages),
-            selectedImageQuality: imageQualityScore(nextImages[0], it),
-            selectedCardImageQuality: imageQualityScore(nextImages[0], it),
-            clickTargetType: 'image',
-            _ogImageEnriched: true
-          });
-          enriched += 1;
-        } else {
-          skipped += 1;
-        }
-      } else {
-        skipped += 1;
-      }
+      const gainedImage = collectSearchUiMediaAssets(merged, url).length > existingImages.length;
+      const gainedVideo = !!(pageMedia && pageMedia.hasVideo);
+      const gainedSummary = !resultSummaryText(it) && !!resultSummaryText(merged);
+      if(gainedImage || gainedVideo || gainedSummary) enriched += 1;
+      else skipped += 1;
     }
   }
 
@@ -4347,12 +4560,12 @@ async function enrichOwnImages(items, opts){
 
   if(trace){
     trace.push({
-      name: 'own-og-image-enrich',
+      name: 'own-page-card-media-enrich',
       status: enriched ? 'ok' : 'empty',
       count: enriched,
       checked: max,
       skipped,
-      mode: 'own-page-representative-media-only'
+      mode: 'own-page-summary-image-video-snapshot-only'
     });
   }
 
@@ -5494,6 +5707,96 @@ async function attachFastDisplayRichProbe(base, event, ctx){
   return base;
 }
 
+function isGlobalInsightGatewayAction(action){
+  return action === 'global-insight' || action === 'insight-supply';
+}
+
+function gatewayCardStableKey(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const url = safeString(firstNonEmpty(
+    it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl,
+    it.url, it.link, it.href, it.openUrl
+  )).trim();
+  if(url) return canonicalSearchUiPageKey(url);
+  return safeString(firstNonEmpty(it.id, it.title, it.name)).trim().toLowerCase();
+}
+
+function globalInsightCardArrays(payload){
+  const out = [];
+  const seen = new Set();
+  function add(v){
+    if(!Array.isArray(v) || seen.has(v)) return;
+    seen.add(v);
+    out.push(v);
+  }
+  if(!payload || typeof payload !== 'object') return out;
+  add(payload.items); add(payload.results); add(payload.cards); add(payload.entries); add(payload.pageItems);
+  const data = payload.data && typeof payload.data === 'object' ? payload.data : null;
+  const pack = payload.payload && typeof payload.payload === 'object' ? payload.payload : null;
+  const sectionPack = payload.sectionPack && typeof payload.sectionPack === 'object' ? payload.sectionPack : null;
+  const visible = payload.visiblePagePack && typeof payload.visiblePagePack === 'object' ? payload.visiblePagePack : null;
+  [data, pack, sectionPack, visible].filter(Boolean).forEach(obj => {
+    add(obj.items); add(obj.results); add(obj.cards); add(obj.entries); add(obj.pageItems);
+  });
+  return out;
+}
+
+async function decorateGlobalInsightGatewayResponse(response, raw, q){
+  // Thin gateway decoration only. The Sanmaru/SearchBank payload, ordering,
+  // counts and front-supply route are not changed.
+  if(!response || typeof response !== 'object' || !response.body) return response;
+  let payload;
+  try{ payload = JSON.parse(response.body); }catch(e){ return response; }
+  const arrays = globalInsightCardArrays(payload);
+  const primary = arrays.find(a => a.length && a.some(x => x && typeof x === 'object'));
+  if(!primary) return response;
+
+  const started = nowMs();
+  const sample = primary.slice(0, 25);
+  const enriched = await enrichOwnImages(sample, {
+    maxItems:25,
+    trace:[],
+    timeLeft:() => Math.max(0, 3200 - (nowMs() - started))
+  });
+  const byKey = new Map();
+  enriched.forEach(it => {
+    const key = gatewayCardStableKey(it);
+    if(key) byKey.set(key, it);
+  });
+  if(!byKey.size) return response;
+
+  let changed = 0;
+  arrays.forEach(arr => {
+    for(let i=0; i<arr.length; i++){
+      const row = arr[i];
+      const key = gatewayCardStableKey(row);
+      const hit = key ? byKey.get(key) : null;
+      if(!hit) continue;
+      arr[i] = Object.assign({}, row || {}, hit || {}, {
+        url:firstNonEmpty(row && row.url, row && row.link, hit.url, hit.link),
+        link:firstNonEmpty(row && row.link, row && row.url, hit.link, hit.url),
+        pageUrl:firstNonEmpty(row && row.pageUrl, row && row.sourcePageUrl, hit.pageUrl, hit.sourcePageUrl, row && row.url, row && row.link),
+        sourcePageUrl:firstNonEmpty(row && row.sourcePageUrl, row && row.pageUrl, hit.sourcePageUrl, hit.pageUrl, row && row.url, row && row.link),
+        contextLink:firstNonEmpty(row && row.contextLink, hit.contextLink, row && row.url, row && row.link)
+      });
+      changed += 1;
+    }
+  });
+
+  payload.meta = Object.assign({}, payload.meta || {}, {
+    globalInsightRichCardGateway:{
+      status:changed ? 'ok' : 'unchanged',
+      checked:sample.length,
+      changed,
+      elapsedMs:nowMs() - started,
+      contract:'summary-plus-own-page-image-and-video-snapshot; original-page-click-target',
+      frontGatewayUntouched:true,
+      searchBankUntouched:true
+    }
+  });
+  return Object.assign({}, response, { body:JSON.stringify(payload) });
+}
+
 exports.handler = async function(event){
   try{
     const picked = pickQ(event || {});
@@ -5508,7 +5811,13 @@ exports.handler = async function(event){
       let Sanmaru = null;
       try { Sanmaru = require('./sanmaru_engine_v2'); } catch(e) { Sanmaru = null; }
       if(Sanmaru && typeof Sanmaru.handler === 'function'){
-        return await Sanmaru.handler(Object.assign({}, event || {}, { queryStringParameters: Object.assign({}, raw || {}, { action }) }));
+        const forwarded = await Sanmaru.handler(Object.assign({}, event || {}, { queryStringParameters: Object.assign({}, raw || {}, { action }) }));
+        if(isGlobalInsightGatewayAction(action)){
+          return await decorateGlobalInsightGatewayResponse(forwarded, raw || {}, q);
+        }
+        // Front/slot/content/snapshot/SearchBank supply actions remain byte-for-byte
+        // on the existing Sanmaru route and are not decorated here.
+        return forwarded;
       }
       return ok({ status:'error', engine:'maru-search', version:VERSION, action, message:'sanmaru unavailable' });
     }
@@ -5538,7 +5847,7 @@ exports.handler = async function(event){
         displayPolicy: displayPack.displayPolicy || null,
         meta: {
           count: items.length,
-          imagePolicy: 'render-page-own-og-image-only',
+          imagePolicy: 'render-page-own-summary-image-video-snapshot',
           trace,
           elapsedMs: nowMs() - started
         }
