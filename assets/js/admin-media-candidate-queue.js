@@ -1,7 +1,7 @@
-/* IGDC Media Candidate Queue Admin View v1.0.2
- * Read-only media candidate verifier. It reuses the administrator session,
- * reads the private media candidate snapshot through a Netlify function, and
- * never promotes candidates to the public media snapshot.
+/* IGDC Media Candidate Queue Admin View v1.0.3
+ * Read-only media candidate verifier. This page does not create a second login
+ * and does not block on client-side token handoff. The server function returns
+ * only safe read-only candidate diagnostics and never mutates public snapshots.
  */
 (function(){
   'use strict';
@@ -10,86 +10,27 @@
   var esc=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(ch){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];});};
   var text=function(v){return String(v==null?'':v).trim();};
   var lower=function(v){return text(v).toLowerCase();};
-  var state=$('state'), notice=$('notice'), diagnosticCache=null, acceptedToken='', acceptedSession=null, resolvingSession=null, rowsCache=[];
-  var TOKEN_KEYS=['igdc.mediaCandidateQueue.adminBearer','osauth.tokens.v2','osauth.tokens.v1','igdc.auth.tokens','igdc.tokens','igdc_auth_tokens','member_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token','igdc_access_token','access_token'];
+  var state=$('state'), notice=$('notice'), diagnosticCache=null, rowsCache=[];
 
   function cls(kind){return kind==='ok'?'ok':kind==='warn'?'warn':'';}
   function show(message,kind){notice.className='notice '+cls(kind);notice.textContent=message;notice.classList.remove('hidden');}
   function hideNotice(){notice.classList.add('hidden');notice.textContent='';}
-  function jwtFresh(token){
-    if(!token||token.split('.').length!==3||token.length<=32)return false;
-    try{var p=token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');p+='='.repeat((4-p.length%4)%4);var payload=JSON.parse(atob(p));return !payload.exp||Number(payload.exp)>Math.floor(Date.now()/1000);}catch(_e){return true;}
+  function authHeaders(){
+    var headers={Accept:'application/json'};
+    try{
+      var token=sessionStorage.getItem('igdc.mediaCandidateQueue.adminBearer')||localStorage.getItem('igdc.mediaCandidateQueue.adminBearer')||'';
+      if(token&&String(token).split('.').length===3)headers.Authorization='Bearer '+token;
+    }catch(_e){}
+    return headers;
   }
-  function jwt(value){var token=text(value);return jwtFresh(token)?token:'';}
-  function parseJson(value){try{return JSON.parse(value);}catch(_e){return null;}}
-  function pushToken(value,out,seen,depth){
-    if(depth>4||value==null)return;
-    if(typeof value==='string'){
-      var token=jwt(value);if(token&&!seen[token]){seen[token]=true;out.push(token);return;}
-      var parsed=parseJson(value);if(parsed)pushToken(parsed,out,seen,depth+1);
-      return;
-    }
-    if(Array.isArray(value)){value.forEach(function(item){pushToken(item,out,seen,depth+1);});return;}
-    if(typeof value==='object'){
-      ['id_token','idToken','id-token','access_token','accessToken','access-token','token','jwt','bearer','authorization','Authorization','__raw','raw'].forEach(function(key){pushToken(value[key],out,seen,depth+1);});
-    }
-  }
-  function ownStorageTokens(source,out,seen){
-    [source&&source.localStorage,source&&source.sessionStorage].forEach(function(store){
-      if(!store)return;
-      TOKEN_KEYS.forEach(function(key){try{pushToken(store.getItem(key),out,seen,0);}catch(_e){}});
-      try{
-        for(var i=0;i<Math.min(store.length||0,250);i++){
-          var key=store.key(i)||'';
-          if(/auth0|osauth|igdc|token/i.test(key))pushToken(store.getItem(key),out,seen,0);
-        }
-      }catch(_e){}
-    });
-  }
-  function sameOriginWindows(){
-    var values=[],seen=[];
-    function add(candidate){try{if(!candidate||seen.indexOf(candidate)>=0)return;void candidate.location.href;seen.push(candidate);values.push(candidate);}catch(_e){}}
-    add(window);try{add(window.parent);}catch(_e){}try{add(window.top);}catch(_e){}return values;
-  }
-  async function tokenCandidates(){
-    var out=[],seen={},tasks=[],sources=sameOriginWindows();
-    function from(fn){tasks.push(Promise.resolve().then(fn).then(function(value){pushToken(value,out,seen,0);}).catch(function(){}));}
-    for(var i=0;i<sources.length;i++)(function(source){
-      ownStorageTokens(source,out,seen);
-      from(function(){return source.IGDCMemberAuth&&source.IGDCMemberAuth.getIdToken?source.IGDCMemberAuth.getIdToken():'';});
-      from(function(){if(!source.osAuth)return '';if(typeof source.osAuth.getIdTokenClaims==='function')return source.osAuth.getIdTokenClaims();return '';});
-      from(function(){return source.osAuth&&source.osAuth.getIdToken?source.osAuth.getIdToken():'';});
-    })(sources[i]);
-    await Promise.all(tasks);
-    return out;
-  }
-  async function request(action,token){
-    var headers={Accept:'application/json'};if(token)headers.Authorization='Bearer '+token;var response=await fetch(ENDPOINT+'?action='+encodeURIComponent(action),{headers:headers,credentials:'same-origin',cache:'no-store'});
+  async function request(action){
+    state.textContent='미디어 후보 대기열을 읽는 중입니다.';
+    var response=await fetch(ENDPOINT+'?action='+encodeURIComponent(action),{headers:authHeaders(),credentials:'same-origin',cache:'no-store'});
     var data=null;try{data=await response.json();}catch(_e){}
     if(!response.ok||!data||data.ok!==true){var error=new Error((data&&data.error)||('요청 실패: HTTP '+response.status));error.code=data&&data.code;error.status=response.status;throw error;}
+    var mode=(data.source&&data.source.candidateSourceMode)||data.mode||'read_only';
+    state.textContent='읽기 전용 연결 확인: '+mode;
     return data;
-  }
-  function sessionLabel(data){var roles=(data&&data.session&&data.session.roles)||[];return roles.length?roles.join(', '):'관리자';}
-  async function ensureSession(force){
-    if(!force&&acceptedToken)return acceptedSession;
-    if(resolvingSession)return resolvingSession;
-    resolvingSession=(async function(){
-      state.textContent='관리자 공통 세션을 자동 승계하는 중입니다.';
-      var candidates=await tokenCandidates();
-      for(var i=0;i<candidates.length;i++){
-        try{var data=await request('session',candidates[i]);acceptedToken=candidates[i];acceptedSession=data;state.textContent='관리자 공통 세션 확인: '+sessionLabel(data);return data;}catch(_e){}
-      }
-      acceptedToken='';acceptedSession=null;
-      throw new Error('관리자 공통 세션 토큰을 찾지 못했습니다. 관리자 화면 우측 패널의 미디어 후보 버튼으로 다시 열어 주세요. 이 화면은 별도 로그인을 만들지 않습니다.');
-    })();
-    try{return await resolvingSession;}finally{resolvingSession=null;}
-  }
-  async function api(action){
-    await ensureSession(false);
-    try{return await request(action,acceptedToken);}catch(error){
-      if(Number(error&&error.status)===401){acceptedToken='';acceptedSession=null;await ensureSession(true);return request(action,acceptedToken);}
-      throw error;
-    }
   }
 
   function card(title,value,sub,kind){return '<article class="card"><h2>'+esc(title)+'</h2><div class="num status-'+esc(kind||'info')+'">'+esc(value)+'</div><div class="small">'+esc(sub||'')+'</div></article>';}
@@ -97,7 +38,7 @@
     var s=summary||{};
     $('summaryGrid').innerHTML=[
       card('후보 영상',s.candidateCount||0,'2~10번 섹션 후보','info'),
-      card('프론트 승격 가능',s.promotableCount||0,'현재 검증 완료만 계산','ok'),
+      card('프론트 승격 가능',s.promotableCount||0,'검증 완료 후보만 계산','ok'),
       card('검증 대기',s.verificationRequired||0,'웹/권리/소스 확인 필요','warn'),
       card('최신 섹션 수동후보',s.trendingManualCandidates||0,'0이어야 정상','info'),
       card('공개 스냅샷 영향',s.publicSnapshotMutation||'없음','읽기 전용 대기열','ok')
@@ -144,15 +85,15 @@
     $('filterState').textContent='표시 '+rows.length+'개 / 전체 '+rowsCache.length+'개';
     $('candidateRows').innerHTML=rows.length?rows.map(function(row){
       var stateClass=(row.promotable===true)?'safe':(hasSource(row)?'risk':'hold');
-      return '<tr>'+
-        '<td>'+pill(row.sectionKey,'section')+'<div class="small">slot '+esc(row.slotId||'')+'</div></td>'+
-        '<td><strong>'+esc(row.title||'(제목 없음)')+'</strong><div class="mono small">'+esc(row.contentId||row.id||'')+'</div></td>'+
-        '<td class="nowrap">'+esc(row.year||'-')+'<div class="small">'+esc(row.region||'-')+'</div></td>'+
-        '<td>'+esc(row.provider||'-')+'<div class="small">'+esc(row.rights&&row.rights.sourceHint||'')+'</div></td>'+
-        '<td>'+esc(row.qualityTarget||'-')+'<div class="small">'+esc(row.qualityPriority||'')+'</div></td>'+
-        '<td>'+pill(row.verificationStatus||'verification_required',stateClass)+'<div class="small">'+esc(row.rights&&row.rights.status||'')+' · '+esc(row.riskLevel||'')+'</div></td>'+
-        '<td class="reason">'+esc(sourceState(row))+'</td>'+
-        '<td class="seed">'+esc(row.sanmaruSearchSeed||'')+'</td>'+
+      return '<tr>'+ 
+        '<td>'+pill(row.sectionKey,'section')+'<div class="small">slot '+esc(row.slotId||'')+'</div></td>'+ 
+        '<td><strong>'+esc(row.title||'(제목 없음)')+'</strong><div class="mono small">'+esc(row.contentId||row.id||'')+'</div></td>'+ 
+        '<td class="nowrap">'+esc(row.year||'-')+'<div class="small">'+esc(row.region||'-')+'</div></td>'+ 
+        '<td>'+esc(row.provider||'-')+'<div class="small">'+esc(row.rights&&row.rights.sourceHint||'')+'</div></td>'+ 
+        '<td>'+esc(row.qualityTarget||'-')+'<div class="small">'+esc(row.qualityPriority||'')+'</div></td>'+ 
+        '<td>'+pill(row.verificationStatus||'verification_required',stateClass)+'<div class="small">'+esc(row.rights&&row.rights.status||'')+' · '+esc(row.riskLevel||'')+'</div></td>'+ 
+        '<td class="reason">'+esc(sourceState(row))+'</td>'+ 
+        '<td class="seed">'+esc(row.sanmaruSearchSeed||'')+'</td>'+ 
       '</tr>';
     }).join(''):'<tr><td colspan="8" class="empty">조건에 맞는 미디어 후보가 없습니다.</td></tr>';
     $('tablePanel').classList.remove('hidden');
@@ -164,30 +105,30 @@
     $('downloadJsonBtn').disabled=false;
   }
   function downloadJson(){
-    if(!diagnosticCache)return;
-    var blob=new Blob([JSON.stringify(diagnosticCache,null,2)],{type:'application/json;charset=utf-8'});
+    if(!diagnosticCache){show('먼저 미디어 점검 JSON을 읽어 주세요.','warn');return;}
+    var blob=new Blob([JSON.stringify(diagnosticCache,null,2)+'\n'],{type:'application/json;charset=utf-8'});
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
     a.download='igdc-media-candidate-queue-diagnostic-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.json';
     document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},300);
     show('미디어 후보 점검 JSON 파일을 다운로드했습니다.','ok');
   }
-  function authErrorMessage(error){
+  function errorMessage(error){
     var message=text(error&&error.message);
-    if(Number(error&&error.status)===401||/session|token|로그인/i.test(message))return '관리자 공통 세션을 아직 찾지 못했습니다. 관리자 화면 우측 패널의 미디어 후보 버튼으로 다시 열어 주세요. Supabase 문제가 아니라 세션 승계 단계 문제입니다.';
-    if(Number(error&&error.status)===403)return '미디어 후보 대기열 조회 권한이 없습니다.';
+    if(Number(error&&error.status)===404)return 'media-candidate-review 함수가 아직 배포되지 않았습니다.';
+    if(Number(error&&error.status)===500)return message||'함수 내부 오류입니다. 후보 JSON 위치 또는 Supabase 설정을 확인해야 합니다.';
     return message||'요청을 처리하지 못했습니다.';
   }
   async function refresh(){
     hideNotice();var button=$('refreshBtn');button.disabled=true;
-    try{await ensureSession(false);var data=await api('candidates');rowsCache=data.candidates||[];renderSummary(data.summary||{});setupFilters(data.summary||{});renderRows();show('미디어 후보 대기열을 읽었습니다. 이 동작은 공개 발행·외부 재생·결제를 실행하지 않습니다.','ok');}
-    catch(error){show(authErrorMessage(error),'warn');}
+    try{var data=await request('candidates');rowsCache=data.candidates||[];renderSummary(data.summary||{});setupFilters(data.summary||{});renderRows();show('미디어 후보 대기열을 읽었습니다. 이 동작은 공개 발행·외부 재생·결제를 실행하지 않습니다.','ok');}
+    catch(error){show(errorMessage(error),'warn');}
     finally{button.disabled=false;}
   }
   async function diagnostic(){
     hideNotice();var button=$('diagnosticBtn');button.disabled=true;
-    try{await ensureSession(false);var data=await api('diagnostic');renderDiagnostic(data);if(data.queue&&Array.isArray(data.queue.rows)){rowsCache=data.queue.rows;renderSummary(data.summary||{});setupFilters(data.summary||{});renderRows();}show('미디어 후보 점검 JSON을 읽었습니다.','ok');}
-    catch(error){show(authErrorMessage(error),'warn');}
+    try{var data=await request('diagnostic');renderDiagnostic(data);if(data.queue&&Array.isArray(data.queue.rows)){rowsCache=data.queue.rows;renderSummary(data.summary||{});setupFilters(data.summary||{});renderRows();}show('미디어 후보 점검 JSON을 읽었습니다.','ok');}
+    catch(error){show(errorMessage(error),'warn');}
     finally{button.disabled=false;}
   }
   function returnToAdmin(){
@@ -200,8 +141,7 @@
     $('downloadJsonBtn').addEventListener('click',downloadJson);
     $('returnBtn').addEventListener('click',returnToAdmin);
     ['searchInput','sectionFilter','riskFilter','statusFilter'].forEach(function(id){$(id).addEventListener('input',renderRows);$(id).addEventListener('change',renderRows);});
-    document.addEventListener('igdc:member-auth-ready',function(){acceptedToken='';acceptedSession=null;refresh();});
-    window.addEventListener('pageshow',function(){acceptedToken='';acceptedSession=null;refresh();});
+    window.addEventListener('pageshow',refresh);
     refresh();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();

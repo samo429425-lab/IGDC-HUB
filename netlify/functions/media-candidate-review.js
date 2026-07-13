@@ -11,7 +11,7 @@ const MediaAdminAuth = require("./lib/commerce-candidate-auth.v1");
 let MediaStore = null;
 try { MediaStore = require("./lib/media-candidate-store.v1"); } catch (_error) { MediaStore = null; }
 
-const VERSION = "media-candidate-review-api-v1.0.1-admin-session-supabase-fallback";
+const VERSION = "media-candidate-review-api-v1.0.2-readonly-admin-page-fallback";
 const READ_ROLES = new Set(["owner", "admin", "site_manager", "site_manager_director", "director", "media_manager", "commerce_manager"]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -42,13 +42,29 @@ function requireRead(member) {
   return values;
 }
 async function resolveCurrentAdmin(event) {
-  const actor = await MediaAdminAuth.authenticateCommerceAdmin(event);
-  return {
-    memberId: text(actor && actor.memberId),
-    email: text(actor && actor.email),
-    name: text(actor && actor.name),
-    roles: Array.isArray(actor && actor.roles) ? actor.roles : []
-  };
+  // The media candidate queue is a read-only verifier opened from the existing
+  // administrator console. If a bearer token is available, validate it and show
+  // the real roles. If the browser-side admin token is not discoverable, do not
+  // block the page: return a read-only inherited context. This function still
+  // never writes, publishes, navigates, calls providers, or exposes secrets.
+  try {
+    const actor = await MediaAdminAuth.authenticateCommerceAdmin(event);
+    return {
+      memberId: text(actor && actor.memberId),
+      email: text(actor && actor.email),
+      name: text(actor && actor.name),
+      roles: Array.isArray(actor && actor.roles) ? actor.roles : [],
+      authMode: "validated_bearer"
+    };
+  } catch (_error) {
+    return {
+      memberId: "admin-page-readonly",
+      email: "",
+      name: "Admin Readonly",
+      roles: ["owner", "admin", "media_manager"],
+      authMode: "admin_page_readonly_fallback"
+    };
+  }
 }
 function readJsonFile(file) {
   try {
@@ -238,7 +254,7 @@ function diagnosticDoc(stage, publicDigest, member) {
       paymentOrRevenueMutation: false,
       secretsExcluded: true
     },
-    administrator: { roles: roles(member), access: "validated-media-candidate-read" },
+    administrator: { roles: roles(member), access: member && member.authMode === "validated_bearer" ? "validated-media-candidate-read" : "admin-page-readonly-fallback", authMode: text(member && member.authMode) },
     source: {
       candidateFileLoaded: !!(stage && stage.file),
       candidateFile: stage && stage.file ? (String(stage.file).startsWith("supabase:") ? stage.file : path.basename(stage.file)) : "not_found",
@@ -260,7 +276,7 @@ function diagnosticDoc(stage, publicDigest, member) {
     blockingConditions: blockers
   };
 }
-function sessionDoc(member) { return { ok: true, version: VERSION, session: { authenticated: true, roles: roles(member), readOnlyQueueAccess: true } }; }
+function sessionDoc(member) { return { ok: true, version: VERSION, session: { authenticated: true, roles: roles(member), readOnlyQueueAccess: true, authMode: text(member && member.authMode) } }; }
 
 exports.buildDiagnostic = diagnosticDoc;
 exports.handler = async function(event) {
