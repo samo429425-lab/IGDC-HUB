@@ -77,7 +77,8 @@ ready(function () {
     let lastType = 'all';
     let lastSearchPayload = null;
     const pageImageEnrichCache = new Set();
-    const pageImageEnrichRetryCount = new Map();
+    const pageImageEnrichInFlight = new Set();
+    const pageImageEnrichAttempts = new Map();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
 
@@ -3500,7 +3501,6 @@ function displayGroupOfItem(it){
               }
               body.appendChild(hiddenWrap);
               hiddenMounted = true;
-              enrichRenderedPageImages(page, hiddenSlice, 0);
             }
             if(hiddenWrap) hiddenWrap.style.display = '';
             more.textContent = `${label} ${uiText('collapse', 'Collapse')} ▴`;
@@ -4071,8 +4071,17 @@ function displayGroupOfItem(it){
     function videoSnapshotItemsClient(items){
       return (Array.isArray(items) ? items : []).filter(it => {
         if(!it || isSyntheticProviderGuideCardClient(it)) return false;
-        if(hasRenderableVisualClient(it)) return true;
-        return !!(getPlayableMediaInfo(it, String((it && (it.url || it.link || it.videoUrl || it.embedUrl)) || '')));
+        const media = (it.media && typeof it.media === 'object') ? it.media : {};
+        const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+        const explicitVideo = !!(
+          it.pageHasVideo || it.videoId || it.videoUrl || it.watchUrl || it.embedUrl ||
+          media.type === 'video' || media.kind === 'video' ||
+          preview.videoUrl || preview.embedUrl || preview.mp4 || preview.webm
+        );
+        return explicitVideo || isNativeYoutubePageResultClient(it) || !!getPlayableMediaInfo(
+          it,
+          String((it && (it.url || it.link || it.videoUrl || it.embedUrl)) || '')
+        );
       });
     }
 
@@ -4565,46 +4574,47 @@ function isDirectMediaAssetUrlClient(v){
       }
     }
 
+    function isNativeYoutubePageResultClient(it){
+      it = (it && typeof it === 'object') ? it : {};
+      const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const source = String((it.source && typeof it.source === 'object')
+        ? (it.source.name || it.source.provider || it.source.platform || '')
+        : (it.source || it.provider || payload.source || '')).toLowerCase();
+      const pageCandidates = [
+        it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
+        payload.sourcePageUrl, payload.pageUrl, payload.contextLink, payload.originalPageUrl, payload.originallink,
+        it.url, it.link, it.href, payload.url, payload.link
+      ];
+      const youtubePage = pageCandidates.some(v => {
+        const raw = String(v || '').trim();
+        try{
+          const host = new URL(raw, location.origin).hostname.replace(/^www\./, '').toLowerCase();
+          return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be';
+        }catch(e){
+          return /youtube\.com\/|youtu\.be\//i.test(raw);
+        }
+      });
+      return youtubePage || (source.includes('youtube') && !!youtubeIdFromClientAny(
+        it.videoId || payload.videoId || it.watchUrl || it.videoUrl || it.embedUrl || it.url || it.link
+      ));
+    }
+
     function resolveOriginalPageUrlClient(it, fallback){
       it = (it && typeof it === 'object') ? it : {};
       const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
       const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
       const media = (it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
-      const candidates = [
-        it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
-        displayCard.sourcePageUrl, displayCard.pageUrl, displayCard.contextLink, displayCard.openUrl, displayCard.url,
-        payload.sourcePageUrl, payload.pageUrl, payload.contextLink, payload.originalPageUrl, payload.originallink, payload.openUrl,
-        preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.openUrl,
-        it.watchUrl, it.videoUrl, it.openUrl, it.url, it.link, it.href,
-        payload.watchUrl, payload.videoUrl, payload.url, payload.link,
-        fallback
-      ];
 
-      let pageUrl = '';
-      for(const v of candidates){
-        const u = String(v || '').trim();
-        if(!u || /^javascript:|^(?:data|blob):/i.test(u)) continue;
-        if(!/^https?:\/\//i.test(u) && !u.startsWith('/')) continue;
-        if(isDirectMediaAssetUrlClient(u)) continue;
-        pageUrl = u;
-        break;
-      }
-
-      // Derive a YouTube watch URL only when the search result itself is a
-      // YouTube page. A normal article may contain a YouTube thumbnail, but that
-      // thumbnail must never replace the article's own click destination.
-      const pageHost = domainOf(pageUrl).toLowerCase();
-      const sourceSignal = String([
-        it.source, it.provider, it.type, it.mediaType, it.searchCategory,
-        displayCard.source, payload.source
-      ].filter(Boolean).join(' ')).toLowerCase();
-      const youtubePage = pageHost.includes('youtube.com') || pageHost.includes('youtu.be') || sourceSignal.includes('youtube');
-      if(youtubePage){
+      // A YouTube watch URL is reconstructed only when the search result itself is
+      // a YouTube page.  A normal article may contain a YouTube thumbnail, but the
+      // card must still open the article page that owns that media.
+      if(isNativeYoutubePageResultClient(it)){
         const youtubeInputs = [
           it.videoId, payload.videoId, it.watchUrl, it.videoUrl, it.embedUrl,
           preview.videoId, preview.watchUrl, preview.videoUrl, preview.embedUrl,
-          pageUrl, it.url, it.link, it.href, it.thumbnail, it.image, fallback
+          it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl,
+          it.url, it.link, it.href
         ];
         for(const v of youtubeInputs){
           const id = youtubeIdFromClientAny(v);
@@ -4612,7 +4622,23 @@ function isDirectMediaAssetUrlClient(v){
         }
       }
 
-      return pageUrl;
+      const candidates = [
+        it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
+        displayCard.sourcePageUrl, displayCard.pageUrl, displayCard.contextLink, displayCard.openUrl, displayCard.url,
+        payload.sourcePageUrl, payload.pageUrl, payload.contextLink, payload.originalPageUrl, payload.originallink, payload.openUrl,
+        preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.openUrl,
+        it.openUrl, it.url, it.link, it.href,
+        payload.url, payload.link,
+        fallback
+      ];
+      for(const v of candidates){
+        const u = String(v || '').trim();
+        if(!u || /^javascript:|^(?:data|blob):/i.test(u)) continue;
+        if(!/^https?:\/\//i.test(u) && !u.startsWith('/')) continue;
+        if(isDirectMediaAssetUrlClient(u)) continue;
+        return u;
+      }
+      return '';
     }
 
     function displayUrlForImageItemClient(it, src){
@@ -5118,173 +5144,172 @@ if (it.riskLabel === '⚠️ high-risk') {
 
     function itemStableKey(it){
       const pageUrl = resolveOriginalPageUrlClient(it, '');
-      if(pageUrl){
-        const pageKey = canonicalPageKeyClient(pageUrl);
-        if(pageKey) return 'page:' + pageKey;
-      }
-      const fallbackKey = String(
-        (it && (it.id || it.url || it.link || it.title)) || ''
-      ).trim().toLowerCase();
-      return fallbackKey ? 'item:' + fallbackKey : '';
+      const raw = pageUrl || String((it && (it.id || it.url || it.link || it.title)) || '').trim();
+      return canonicalPageKeyClient(raw) || raw.toLowerCase();
     }
 
-    function mergeEnrichedItems(baseItems, enrichedItems){
-      const byKey = new Map();
-
-      (Array.isArray(enrichedItems) ? enrichedItems : []).forEach(it => {
-        const key = itemStableKey(it);
-        if(key) byKey.set(key, it);
-      });
-
-      return (Array.isArray(baseItems) ? baseItems : []).map(it => {
-        const key = itemStableKey(it);
-        const hit = key ? byKey.get(key) : null;
-        if(!hit) return it;
-
-        const imgs = collectNaturalImages(hit);
-        if(!imgs.length) return it;
-        const first = imgs[0] || '';
-        const baseDisplayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-        const basePayload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
-        const baseMedia = (it && it.media && typeof it.media === 'object') ? it.media : {};
-        const basePreview = (baseMedia.preview && typeof baseMedia.preview === 'object') ? baseMedia.preview : {};
-        const hitMedia = (hit && hit.media && typeof hit.media === 'object') ? hit.media : {};
-        const hitPreview = (hitMedia.preview && typeof hitMedia.preview === 'object') ? hitMedia.preview : {};
-
-        // Preserve the original result page, title, body, category, rank and source.
-        // Only fill media presentation fields from the same result page.
-        const merged = Object.assign({}, it, {
-          thumbnail: first || it.thumbnail || '',
-          thumb: first || it.thumb || '',
-          image: first || it.image || '',
-          imageUrl: first || it.imageUrl || '',
-          imageSet: imgs,
-          originalImage: first || it.originalImage || '',
-          fullImage: first || it.fullImage || '',
-          viewerImage: first || it.viewerImage || '',
-          openImageUrl: first || it.openImageUrl || '',
-          contentUrl: first || it.contentUrl || '',
-          cardImage: first || it.cardImage || ''
-        });
-
-        merged.displayCard = Object.assign({}, baseDisplayCard, {
-          thumbnail: first || baseDisplayCard.thumbnail || '',
-          thumb: first || baseDisplayCard.thumb || '',
-          image: first || baseDisplayCard.image || '',
-          imageUrl: first || baseDisplayCard.imageUrl || '',
-          imageSet: imgs
-        });
-        merged.payload = Object.assign({}, basePayload, {
-          thumbnail: first || basePayload.thumbnail || '',
-          thumb: first || basePayload.thumb || '',
-          image: first || basePayload.image || '',
-          imageUrl: first || basePayload.imageUrl || '',
-          imageSet: imgs
-        });
-        merged.media = Object.assign({}, baseMedia, {
-          preview: Object.assign({}, basePreview, {
-            poster: hitPreview.poster || first || basePreview.poster || '',
-            thumbnail: hitPreview.thumbnail || first || basePreview.thumbnail || '',
-            image: hitPreview.image || first || basePreview.image || '',
-            original: hitPreview.original || first || basePreview.original || ''
-          })
-        });
-
-        itemImageEnrichCache.set(key, merged);
-        return merged;
-      });
-    }
-
-    function mediaEnrichmentItemsFromVisibleSlice(slice){
+    function visibleMediaItemsFromSlice(slice){
       const out = [];
       const seen = new Set();
-
-      function pushItem(it){
-        if(!it || typeof it !== 'object' || isDisplayGroupModule(it) || isSyntheticProviderGuideCardClient(it)) return;
+      function push(it){
+        if(!it || typeof it !== 'object') return;
+        if(isDisplayGroupModule(it)){
+          const rows = []
+            .concat(Array.isArray(it.previewItems) ? it.previewItems : [])
+            .concat(Array.isArray(it.items) ? it.items : []);
+          rows.forEach(push);
+          return;
+        }
         const key = itemStableKey(it);
         if(!key || seen.has(key)) return;
         seen.add(key);
         out.push(it);
       }
-
-      (Array.isArray(slice) ? slice : []).forEach(entry => {
-        if(!isDisplayGroupModule(entry)){
-          pushItem(entry);
-          return;
-        }
-
-        const previewItems = Array.isArray(entry.previewItems) ? entry.previewItems : (Array.isArray(entry.items) ? entry.items : []);
-        const hiddenItems = Array.isArray(entry.hiddenItems) ? entry.hiddenItems : [];
-        const group = String(entry.group || '').toLowerCase();
-
-        // Match the cards that the category renderer can actually place on screen.
-        // Image/media lanes can display up to 12 tiles; other lanes use previewItems.
-        if(group === 'image' || group === 'media'){
-          const limit = Math.max(parseInt(entry.previewLimit, 10) || 0, 12);
-          [].concat(entry.items || [], previewItems, hiddenItems).slice(0, limit).forEach(pushItem);
-        }else{
-          previewItems.forEach(pushItem);
-        }
-      });
-
+      (Array.isArray(slice) ? slice : []).forEach(push);
       return out.slice(0, PAGE_SIZE);
     }
 
-    async function enrichRenderedPageImages(page, slice, startIndex){
+    function mergeMediaOnlyClient(base, hit){
+      base = (base && typeof base === 'object') ? base : {};
+      hit = (hit && typeof hit === 'object') ? hit : {};
+      const images = dedupeImageVariantsClient(collectNaturalImages(hit));
+      const next = Object.assign({}, base);
+      const mediaFields = [
+        'thumbnail','thumb','image','imageUrl','image_url','poster','videoPoster','videoThumbnail',
+        'originalImage','fullImage','imageOriginal','viewerImage','openImageUrl','contentUrl','cardImage'
+      ];
+      if(images.length){
+        mediaFields.forEach((key, idx) => {
+          const v = hit[key] || (idx < 3 ? images[0] : hit[key]);
+          if(v) next[key] = v;
+        });
+        next.thumbnail = hit.thumbnail || images[0];
+        next.thumb = hit.thumb || images[0];
+        next.image = hit.image || images[0];
+        next.imageUrl = hit.imageUrl || images[0];
+        next.imageSet = images;
+        next.originalImage = hit.originalImage || images[0];
+        next.fullImage = hit.fullImage || next.originalImage;
+        next.viewerImage = hit.viewerImage || next.originalImage;
+        next.openImageUrl = hit.openImageUrl || next.originalImage;
+        next.contentUrl = hit.contentUrl || next.originalImage;
+        next.cardImage = hit.cardImage || images[0];
+      }
+
+      ['pageHasVideo','pageVideoType','pageVideoUrl','embeddedVideoUrl','videoId'].forEach(key => {
+        if(hit[key] !== undefined && hit[key] !== null && hit[key] !== '') next[key] = hit[key];
+      });
+      if(isNativeYoutubePageResultClient(base)){
+        ['videoUrl','watchUrl','embedUrl'].forEach(key => {
+          if(hit[key]) next[key] = hit[key];
+        });
+      }
+
+      const baseMedia = (base.media && typeof base.media === 'object') ? base.media : {};
+      const hitMedia = (hit.media && typeof hit.media === 'object') ? hit.media : {};
+      if(Object.keys(baseMedia).length || Object.keys(hitMedia).length || next.pageHasVideo){
+        const basePreview = (baseMedia.preview && typeof baseMedia.preview === 'object') ? baseMedia.preview : {};
+        const hitPreview = (hitMedia.preview && typeof hitMedia.preview === 'object') ? hitMedia.preview : {};
+        next.media = Object.assign({}, baseMedia, hitMedia, {
+          preview:Object.assign({}, basePreview, hitPreview)
+        });
+      }
+
+      const baseCard = (base.displayCard && typeof base.displayCard === 'object') ? base.displayCard : {};
+      const hitCard = (hit.displayCard && typeof hit.displayCard === 'object') ? hit.displayCard : {};
+      if(images.length || Object.keys(hitCard).length){
+        next.displayCard = Object.assign({}, baseCard);
+        ['thumbnail','thumb','image','imageUrl','poster','videoPoster','videoThumbnail','imageSet','showThumbnail','showVideoPreview'].forEach(key => {
+          if(hitCard[key] !== undefined && hitCard[key] !== null && hitCard[key] !== '') next.displayCard[key] = hitCard[key];
+        });
+        if(images.length){
+          next.displayCard.thumbnail = hitCard.thumbnail || images[0];
+          next.displayCard.image = hitCard.image || images[0];
+          next.displayCard.imageUrl = hitCard.imageUrl || images[0];
+          next.displayCard.imageSet = images;
+          next.displayCard.showThumbnail = true;
+          if(next.pageHasVideo) next.displayCard.showVideoPreview = true;
+        }
+      }
+      return next;
+    }
+
+    function mergeEnrichedItems(baseItems, enrichedItems){
+      const byKey = new Map();
+      (Array.isArray(enrichedItems) ? enrichedItems : []).forEach(it => {
+        const key = itemStableKey(it);
+        if(key) byKey.set(key, it);
+      });
+      return (Array.isArray(baseItems) ? baseItems : []).map(it => {
+        const key = itemStableKey(it);
+        const hit = key ? byKey.get(key) : null;
+        if(!hit) return it;
+        const merged = mergeMediaOnlyClient(it, hit);
+        if(collectNaturalImages(merged).length || merged.pageHasVideo){
+          itemImageEnrichCache.set(key, merged);
+        }
+        return merged;
+      });
+    }
+
+    function applyEnrichedMediaToPools(enrichedItems){
+      let changed = false;
+      const updateList = list => {
+        const before = Array.isArray(list) ? list : [];
+        const after = mergeEnrichedItems(before, enrichedItems);
+        after.forEach((it, idx) => {
+          if(it !== before[idx]) changed = true;
+        });
+        return after;
+      };
+      allItems = updateList(allItems);
+      loadedServerPages.forEach((list, pageNo) => {
+        loadedServerPages.set(pageNo, updateList(list));
+      });
+      return changed;
+    }
+
+    async function enrichRenderedPageImages(page, slice){
       const q = (input.value || '').trim();
       if(!q || !Array.isArray(slice) || !slice.length) return;
 
-      const visibleItems = mediaEnrichmentItemsFromVisibleSlice(slice);
-      if(!visibleItems.length) return;
-      const signature = visibleItems.map(itemStableKey).filter(Boolean).join('|').slice(0, 2400);
-      const cacheKey = [q, activeType || 'all', page, signature].join('::');
-      if(pageImageEnrichCache.has(cacheKey)) return;
+      const cacheKey = [q, activeType || 'all', page].join('::');
+      if(pageImageEnrichCache.has(cacheKey) || pageImageEnrichInFlight.has(cacheKey)) return;
+      const attempts = pageImageEnrichAttempts.get(cacheKey) || 0;
+      if(attempts >= 3) return;
+      pageImageEnrichAttempts.set(cacheKey, attempts + 1);
+      pageImageEnrichInFlight.add(cacheKey);
 
-      const candidates = visibleItems
+      const candidates = visibleMediaItemsFromSlice(slice)
         .filter(it => {
           const key = itemStableKey(it);
-          if(key && itemImageEnrichCache.has(key)) return false;
-          if(collectNaturalImages(it).length) return false;
-          const pageUrl = resolveOriginalPageUrlClient(it, '');
-          return /^https?:\/\//i.test(pageUrl) && !isDirectMediaAssetUrlClient(pageUrl);
+          const cached = key ? itemImageEnrichCache.get(key) : null;
+          return !(cached && (collectNaturalImages(cached).length || cached.pageHasVideo));
         })
-        .slice(0, PAGE_SIZE);
-
-      if(!candidates.length){
-        pageImageEnrichCache.add(cacheKey);
-        return;
-      }
-
-      pageImageEnrichCache.add(cacheKey);
-      const attempt = pageImageEnrichRetryCount.get(cacheKey) || 0;
-
-      function scheduleRetry(){
-        pageImageEnrichCache.delete(cacheKey);
-        const nextAttempt = attempt + 1;
-        pageImageEnrichRetryCount.set(cacheKey, nextAttempt);
-        if(nextAttempt <= 2 && page === currentPage){
-          setTimeout(() => enrichRenderedPageImages(page, slice, startIndex), 500 * nextAttempt);
-        }
-      }
-
-      try{
-        const url =
-          `/.netlify/functions/maru-search?action=enrich-images&q=${encodeURIComponent(q)}&type=${encodeURIComponent(activeType || 'all')}`;
-
-        // The enrichment endpoint receives the original page URL explicitly.
-        // This is request-only normalization; the browser's stored card URL is never replaced.
-        const requestItems = candidates.map(it => {
+        .map(it => {
           const pageUrl = resolveOriginalPageUrlClient(it, '');
+          if(!/^https?:\/\//i.test(pageUrl)) return null;
           return Object.assign({}, it, {
             url: pageUrl,
             link: pageUrl,
-            pageUrl,
+            pageUrl: pageUrl,
             sourcePageUrl: pageUrl,
             contextLink: pageUrl,
             openUrl: pageUrl
           });
-        });
+        })
+        .filter(Boolean)
+        .slice(0, PAGE_SIZE);
 
+      if(!candidates.length){
+        pageImageEnrichInFlight.delete(cacheKey);
+        pageImageEnrichCache.add(cacheKey);
+        return;
+      }
+
+      try{
+        const url =
+          `/.netlify/functions/maru-search?action=enrich-images&q=${encodeURIComponent(q)}&type=${encodeURIComponent(activeType || 'all')}&handoff=search-html&pageCardMedia=1`;
         const res = await fetch(url, {
           method: 'POST',
           cache: 'no-store',
@@ -5292,58 +5317,36 @@ if (it.riskLabel === '⚠️ high-risk') {
           body: JSON.stringify({
             q,
             type: activeType || 'all',
-            items: requestItems
+            handoff: 'search-html',
+            pageCardMedia: true,
+            items: candidates
           })
         });
-
-        if(!res.ok){
-          scheduleRetry();
-          return;
-        }
-
+        if(!res.ok) throw new Error('media enrich HTTP ' + res.status);
         const json = await res.json();
         const enriched = normalizeItems(json);
-        if(!enriched.length){
-          scheduleRetry();
-          return;
-        }
+        if(!enriched.length) throw new Error('empty media enrich response');
 
-        const updatedCandidates = mergeEnrichedItems(candidates, enriched);
-        const updatedByKey = new Map();
-        updatedCandidates.forEach(item => {
-          const key = itemStableKey(item);
-          if(key && collectNaturalImages(item).length) updatedByKey.set(key, item);
-        });
-        if(!updatedByKey.size){
-          scheduleRetry();
-          return;
+        const changed = applyEnrichedMediaToPools(enriched);
+        const mediaHits = enriched.filter(it => collectNaturalImages(it).length || it.pageHasVideo).length;
+        const attemptNo = pageImageEnrichAttempts.get(cacheKey) || 1;
+        if(mediaHits >= candidates.length || attemptNo >= 3){
+          pageImageEnrichCache.add(cacheKey);
+        }else{
+          setTimeout(() => {
+            if(page === currentPage) enrichRenderedPageImages(page, visibleItemsForPage(page));
+          }, 450 * attemptNo);
         }
-
-        function applyMediaToList(list){
-          let changed = false;
-          const next = (Array.isArray(list) ? list : []).map(item => {
-            const hit = updatedByKey.get(itemStableKey(item));
-            if(!hit) return item;
-            changed = true;
-            return mergeEnrichedItems([item], [hit])[0];
-          });
-          return { next, changed };
-        }
-
-        const allApplied = applyMediaToList(allItems);
-        if(allApplied.changed) allItems = allApplied.next;
-        loadedServerPages.forEach((pageItems, pageNo) => {
-          const applied = applyMediaToList(pageItems);
-          if(applied.changed) loadedServerPages.set(pageNo, applied.next);
-        });
-
-        pageImageEnrichRetryCount.delete(cacheKey);
-        if(allApplied.changed && page === currentPage){
-          renderPage(page, true);
-        }
+        if(changed && page === currentPage) renderPage(page, true);
       }catch(e){
+        if((pageImageEnrichAttempts.get(cacheKey) || 0) < 3){
+          setTimeout(() => {
+            if(page === currentPage) enrichRenderedPageImages(page, visibleItemsForPage(page));
+          }, 450 * (pageImageEnrichAttempts.get(cacheKey) || 1));
+        }
         console.warn('page media enrichment skipped:', e);
-        scheduleRetry();
+      }finally{
+        pageImageEnrichInFlight.delete(cacheKey);
       }
     }
 
@@ -5520,8 +5523,8 @@ if (it.riskLabel === '⚠️ high-risk') {
       if(group === 'cafe' || group === 'community' || /cafe|카페|community|forum/.test(text)) return 'cafe';
       if(group === 'shopping' || /shopping|shop|commerce|product|쇼핑|상품|가격/.test(text)) return 'shopping';
       if(group === 'news' || /news|뉴스|신문|일보|press/.test(text)) return 'news';
+      if(group === 'video' || isNativeYoutubePageResultClient(it) || /video|youtube|youtu\.be|영상|동영상/.test(raw + ' ' + text)) return 'video';
       if(group === 'image' || isVisualSearchCandidateClient(it) || /image|images|photo|picture|사진|포토|풍경|전경|갤러리|홍보/.test(raw + ' ' + text)) return 'image';
-      if(group === 'video' || group === 'media' || /video|youtube|youtu\.be|영상|동영상/.test(text)) return 'video';
       if(group === 'social' || /sns|social|instagram|facebook|tiktok|twitter|x\.com|소셜/.test(text)) return 'sns';
       if(group === 'sports' || /sports|스포츠|축구|야구|농구/.test(text)) return 'sports';
       if(group === 'finance' || /finance|stock|market|증권|주식|금융|환율/.test(text)) return 'finance';
@@ -5545,7 +5548,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if(t === 'wiki') return itemType === 'wiki' || /wiki|wikipedia|namu\.wiki|위키/.test(url);
       if(t === 'sns') return itemType === 'sns' || group === 'social';
       if(t === 'image') return itemType === 'image' || group === 'image' || group === 'media' || isVisualSearchCandidateClient(it) || hasRenderableVisualClient(it);
-      if(t === 'video') return itemType === 'video' || group === 'video' || group === 'media' || isYoutubeLikeItemClient(it) || !!(it && (it.videoId || it.videoUrl || it.embedUrl));
+      if(t === 'video') return itemType === 'video' || group === 'video' || group === 'media' || isNativeYoutubePageResultClient(it) || !!(it && (it.pageHasVideo || it.videoId || it.videoUrl || it.embedUrl));
       if(t === 'cafe') return itemType === 'cafe' || group === 'community';
       return false;
     }
@@ -5677,9 +5680,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (normalizeSearchType(activeType) === 'image') {
         renderImageGalleryPage(slice);
         drawPager();
-        if(!skipEnrich){
-          enrichRenderedPageImages(page, slice, start);
-        }
+        if(!skipEnrich) enrichRenderedPageImages(page, slice);
         return;
       }
 
@@ -5700,7 +5701,7 @@ if (it.riskLabel === '⚠️ high-risk') {
       drawPager();
 
       if(!skipEnrich){
-        enrichRenderedPageImages(page, slice, start);
+        enrichRenderedPageImages(page, slice);
       }
     }
 
@@ -5900,7 +5901,8 @@ async function runSearch(q, type = activeType){
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
-  pageImageEnrichRetryCount.clear();
+  pageImageEnrichInFlight.clear();
+  pageImageEnrichAttempts.clear();
   itemImageEnrichCache.clear();
   expandedDisplayGroups.clear();
 

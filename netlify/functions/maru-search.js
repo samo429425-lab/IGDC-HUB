@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-596-probe-stable-fastpath-nanopin-125-130-page-card-media-link-fix';
+const VERSION = 'A1.5.47-597-searchui-page-card-own-media-nanopin';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -77,7 +77,7 @@ const MARU_INFLIGHT_TTL_MS = 30 * 1000;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const OG_IMAGE_ENRICH_LIMIT = 36;
 const OG_IMAGE_ENRICH_CONCURRENCY = 6;
-const OG_IMAGE_ENRICH_TIMEOUT_MS = 1600;
+const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
 const MAX_SEARCH_BANK_PAGES_DEEP = 60;
@@ -992,29 +992,62 @@ function searchUiYoutubeIdFromAny(v){
   return m && m[1] ? m[1] : '';
 }
 
+function isNativeYoutubePageItem(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const source = safeString(firstNonEmpty(
+    it.source && typeof it.source === 'object' ? (it.source.name || it.source.provider || it.source.platform) : it.source,
+    it.provider, p.source
+  )).toLowerCase();
+  const pageCandidates = [
+    it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
+    p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.originallink,
+    it.url, it.link, it.href, p.url, p.link
+  ];
+  const youtubePage = pageCandidates.some(v => {
+    const raw = safeString(v).trim();
+    try{
+      const host = new URL(raw).hostname.replace(/^www\./, '').toLowerCase();
+      return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be';
+    }catch(e){
+      return /youtube\.com\/|youtu\.be\//i.test(raw);
+    }
+  });
+  return youtubePage || (source.includes('youtube') && !!searchUiYoutubeIdFromAny(
+    firstNonEmpty(it.videoId, p.videoId, it.watchUrl, it.videoUrl, it.embedUrl, it.url, it.link)
+  ));
+}
+
 function searchUiPageUrlForItem(it){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const dc = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
   const media = (it.media && typeof it.media === 'object') ? it.media : {};
   const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
-  const ytInputs = [
-    it.videoId, p.videoId, it.watchUrl, it.videoUrl, it.embedUrl,
-    preview.videoId, preview.watchUrl, preview.videoUrl, preview.embedUrl,
-    it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl,
-    it.url, it.link, it.href, it.thumbnail, it.image
-  ];
-  for(const v of ytInputs){
-    const id = searchUiYoutubeIdFromAny(v);
-    if(id) return 'https://www.youtube.com/watch?v=' + id;
+
+  // Reconstruct a YouTube watch URL only when the result itself is a YouTube
+  // page.  A normal article may legitimately use a ytimg thumbnail and must
+  // continue to open the article page.
+  if(isNativeYoutubePageItem(it)){
+    const ytInputs = [
+      it.videoId, p.videoId, it.watchUrl, it.videoUrl, it.embedUrl,
+      preview.videoId, preview.watchUrl, preview.videoUrl, preview.embedUrl,
+      it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl,
+      it.url, it.link, it.href
+    ];
+    for(const v of ytInputs){
+      const id = searchUiYoutubeIdFromAny(v);
+      if(id) return 'https://www.youtube.com/watch?v=' + id;
+    }
   }
+
   const candidates = [
     it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
     dc.sourcePageUrl, dc.pageUrl, dc.contextLink, dc.openUrl, dc.url,
     p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.originallink, p.openUrl,
     preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.openUrl,
-    it.watchUrl, it.videoUrl, it.openUrl, it.url, it.link, it.href,
-    p.watchUrl, p.videoUrl, p.url, p.link
+    it.openUrl, it.url, it.link, it.href,
+    p.url, p.link
   ];
   for(const v of candidates){
     const u = safeString(v).trim();
@@ -4102,10 +4135,6 @@ function extractOgImageFromHtml(html, baseUrl){
     /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/ig,
     /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
     /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["'][^>]*>/ig,
-    /<meta[^>]+property=["']og:image:url["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:url["'][^>]*>/ig,
-    /<meta[^>]+name=["']twitter:image:src["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image:src["'][^>]*>/ig,
     /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
     /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/ig
   ];
@@ -4144,18 +4173,6 @@ function extractOgImageFromHtml(html, baseUrl){
   let pm;
   while((pm = posterRe.exec(text)) && candidates.length < 44){
     if(pm && pm[1]) pushOwnImageCandidate(candidates, pm[1], baseUrl, 'video-poster', 75);
-  }
-
-  // A page-owned embedded YouTube player has a deterministic public snapshot.
-  // Keep the result card linked to baseUrl; only use the derived image as its preview.
-  const youtubeEmbedRe = /(?:youtube\.com\/(?:embed|shorts|live)\/|youtu\.be\/)([A-Za-z0-9_-]{11})/ig;
-  let ym;
-  let youtubeSnapshots = 0;
-  while((ym = youtubeEmbedRe.exec(text)) && youtubeSnapshots < 4 && candidates.length < 48){
-    if(ym && ym[1]){
-      pushOwnImageCandidate(candidates, 'https://i.ytimg.com/vi/' + ym[1] + '/hqdefault.jpg', baseUrl, 'video-snapshot', 82);
-      youtubeSnapshots += 1;
-    }
   }
 
   // 5) First meaningful page images.
@@ -4233,12 +4250,46 @@ function shouldSkipOgImageFetch(it){
   return false;
 }
 
-async function fetchOwnOgImage(url){
-  try{
-    globalThis.__MARU_OG_IMAGE_CACHE = globalThis.__MARU_OG_IMAGE_CACHE || new Map();
+function extractOwnPageMediaFromHtml(html, baseUrl){
+  const text = safeString(html);
+  const image = extractOgImageFromHtml(text, baseUrl);
+  let pageHasVideo = false;
+  let embeddedVideoUrl = '';
+  let videoPoster = '';
 
+  const posterMatch = text.match(/<video[^>]+poster=["']([^"']+)["'][^>]*>/i);
+  if(posterMatch && posterMatch[1]){
+    videoPoster = absolutizeUrl(baseUrl, decodeHtmlEntitiesLite(posterMatch[1]));
+    pageHasVideo = true;
+  }
+
+  const ytMatch = text.match(/(?:youtube\.com\/(?:embed|shorts|live)\/|youtu\.be\/|youtube\.com\/watch\?[^"'<>]*[?&]v=)([A-Za-z0-9_-]{11})/i);
+  if(ytMatch && ytMatch[1]){
+    const id = ytMatch[1];
+    embeddedVideoUrl = 'https://www.youtube.com/watch?v=' + id;
+    if(!videoPoster) videoPoster = preferredYoutubePoster(id, '');
+    pageHasVideo = true;
+  }
+
+  if(!pageHasVideo && /<video\b|property=["']og:video|name=["']twitter:player|application\/ld\+json[^>]*>[\s\S]{0,12000}"(?:contentUrl|embedUrl)"/i.test(text)){
+    pageHasVideo = true;
+  }
+
+  const images = compactImages([videoPoster, image]).filter(v => isMeaningfulImageForItem(v, { url:baseUrl, link:baseUrl, source:'own-page-media' }));
+  return {
+    image: images[0] || image || '',
+    images,
+    pageHasVideo,
+    videoPoster: videoPoster || '',
+    embeddedVideoUrl
+  };
+}
+
+async function fetchOwnPageMedia(url){
+  try{
+    globalThis.__MARU_OWN_PAGE_MEDIA_CACHE = globalThis.__MARU_OWN_PAGE_MEDIA_CACHE || new Map();
     const cacheKey = safeString(url).trim();
-    const hit = globalThis.__MARU_OG_IMAGE_CACHE.get(cacheKey);
+    const hit = globalThis.__MARU_OWN_PAGE_MEDIA_CACHE.get(cacheKey);
     if(hit && Date.now() - hit.t < OG_IMAGE_CACHE_TTL_MS) return hit.v;
 
     const res = await fetchWithTimeout(cacheKey, {
@@ -4249,25 +4300,29 @@ async function fetchOwnOgImage(url){
       }
     }, OG_IMAGE_ENRICH_TIMEOUT_MS);
 
-    if(!res || !res.ok) {
-      globalThis.__MARU_OG_IMAGE_CACHE.set(cacheKey, { t: Date.now(), v: '' });
-      return '';
+    if(!res || !res.ok){
+      const empty = { image:'', images:[], pageHasVideo:false, videoPoster:'', embeddedVideoUrl:'' };
+      globalThis.__MARU_OWN_PAGE_MEDIA_CACHE.set(cacheKey, { t:Date.now(), v:empty });
+      return empty;
     }
-
     const ctype = safeString(res.headers && res.headers.get && res.headers.get('content-type')).toLowerCase();
-    if(ctype && !ctype.includes('text/html') && !ctype.includes('application/xhtml')) {
-      globalThis.__MARU_OG_IMAGE_CACHE.set(cacheKey, { t: Date.now(), v: '' });
-      return '';
+    if(ctype && !ctype.includes('text/html') && !ctype.includes('application/xhtml')){
+      const empty = { image:'', images:[], pageHasVideo:false, videoPoster:'', embeddedVideoUrl:'' };
+      globalThis.__MARU_OWN_PAGE_MEDIA_CACHE.set(cacheKey, { t:Date.now(), v:empty });
+      return empty;
     }
-
     const html = await res.text();
-    const img = extractOgImageFromHtml(html.slice(0, 300000), cacheKey);
-
-    globalThis.__MARU_OG_IMAGE_CACHE.set(cacheKey, { t: Date.now(), v: img || '' });
-    return img || '';
+    const media = extractOwnPageMediaFromHtml(html.slice(0, 300000), cacheKey);
+    globalThis.__MARU_OWN_PAGE_MEDIA_CACHE.set(cacheKey, { t:Date.now(), v:media });
+    return media;
   }catch(e){
-    return '';
+    return { image:'', images:[], pageHasVideo:false, videoPoster:'', embeddedVideoUrl:'' };
   }
+}
+
+async function fetchOwnOgImage(url){
+  const media = await fetchOwnPageMedia(url);
+  return media && media.image || '';
 }
 
 async function enrichOwnImages(items, opts){
@@ -4275,7 +4330,6 @@ async function enrichOwnImages(items, opts){
   const max = Math.min(list.length, OG_IMAGE_ENRICH_LIMIT);
   const trace = opts && Array.isArray(opts.trace) ? opts.trace : null;
   const timeLeft = opts && typeof opts.timeLeft === 'function' ? opts.timeLeft : (() => 9999);
-
   let enriched = 0;
   let skipped = 0;
   let cursor = 0;
@@ -4286,73 +4340,77 @@ async function enrichOwnImages(items, opts){
       const it = list[idx];
       if(!it) { skipped += 1; continue; }
 
+      const pageUrl = searchUiPageUrlForItem(it) || safeString(firstNonEmpty(it.url, it.link)).trim();
+      const nativeYoutube = isNativeYoutubePageItem(it);
+      let pageMedia = { image:'', images:[], pageHasVideo:false, videoPoster:'', embeddedVideoUrl:'' };
+
+      if(nativeYoutube){
+        const id = searchUiYoutubeIdFromAny(firstNonEmpty(
+          it.videoId, it.watchUrl, it.videoUrl, it.embedUrl, pageUrl, it.thumbnail, it.image
+        ));
+        const poster = preferredYoutubePoster(id, firstNonEmpty(it.thumbnail, it.image, it.poster));
+        pageMedia = {
+          image:poster || '',
+          images:compactImages([poster]),
+          pageHasVideo:true,
+          videoPoster:poster || '',
+          embeddedVideoUrl:id ? 'https://www.youtube.com/watch?v=' + id : pageUrl
+        };
+      }else if(!shouldSkipOgImageFetch(Object.assign({}, it, { url:pageUrl, link:pageUrl }))){
+        pageMedia = await fetchOwnPageMedia(pageUrl);
+      }
+
       const ownImages = naturalImagesForItem(it, 3);
+      const nextImages = qualitySortImagesForItem(
+        [].concat(pageMedia.images || [], pageMedia.videoPoster || [], ownImages || []),
+        it
+      ).slice(0, 3);
+      const image = nextImages[0] || '';
+      const baseMedia = (it.media && typeof it.media === 'object') ? Object.assign({}, it.media) : {};
+      const basePreview = (baseMedia.preview && typeof baseMedia.preview === 'object') ? Object.assign({}, baseMedia.preview) : {};
+      const next = Object.assign({}, it, {
+        pageHasVideo: !!(it.pageHasVideo || pageMedia.pageHasVideo || nativeYoutube),
+        pageVideoType: nativeYoutube ? 'youtube' : (pageMedia.pageHasVideo ? 'embedded' : it.pageVideoType),
+        pageVideoUrl: nativeYoutube ? (pageMedia.embeddedVideoUrl || pageUrl) : (it.pageVideoUrl || ''),
+        embeddedVideoUrl: nativeYoutube ? (pageMedia.embeddedVideoUrl || pageUrl) : (pageMedia.embeddedVideoUrl || it.embeddedVideoUrl || '')
+      });
 
-      // If the provider already supplied a usable thumbnail/media URL, keep it.
-      // Do not skip with compactImages only, because that can preserve a raw URL
-      // that later gets filtered out by the meaningful-image layer.
-      if(ownImages.length) {
-        list[idx] = Object.assign({}, it, {
-          thumbnail: ownImages[0],
-          thumb: ownImages[0],
-          image: ownImages[0],
-          imageUrl: ownImages[0],
-          imageSet: ownImages,
-          originalImage: ownImages[0],
-          fullImage: ownImages[0],
-          viewerImage: ownImages[0],
-          openImageUrl: ownImages[0],
-          contentUrl: ownImages[0],
-          cardImage: ownImages[0],
-          mediaQuality: mediaQualityProfileForItem(it, ownImages),
-          selectedImageQuality: imageQualityScore(ownImages[0], it),
-          selectedCardImageQuality: imageQualityScore(ownImages[0], it),
-          clickTargetType: 'image',
-          _providedImagePreserved: hasProviderSuppliedMedia(it)
+      if(image){
+        Object.assign(next, {
+          thumbnail:image, thumb:image, image, imageUrl:image, imageSet:nextImages,
+          originalImage:image, fullImage:image, viewerImage:image, openImageUrl:image,
+          contentUrl:image, cardImage:image,
+          mediaQuality:mediaQualityProfileForItem(it, nextImages),
+          selectedImageQuality:imageQualityScore(image, it),
+          selectedCardImageQuality:imageQualityScore(image, it),
+          _ownPageMediaEnriched:true
         });
-        skipped += 1;
-        continue;
       }
 
-      if(shouldSkipOgImageFetch(it)) { skipped += 1; continue; }
-
-      const url = safeString(firstNonEmpty(it.url, it.link)).trim();
-      const img = await fetchOwnOgImage(url);
-
-      if(img && isMeaningfulImageForItem(img, it)){
-        const nextImages = naturalImagesForItem(Object.assign({}, it, {
-          thumbnail: img,
-          thumb: img,
-          image: img,
-          imageSet: [img]
-        }), 3);
-
-        if(nextImages.length){
-          list[idx] = Object.assign({}, it, {
-            thumbnail: nextImages[0],
-            thumb: nextImages[0],
-            image: nextImages[0],
-            imageUrl: nextImages[0],
-            imageSet: nextImages,
-            originalImage: nextImages[0],
-            fullImage: nextImages[0],
-            viewerImage: nextImages[0],
-            openImageUrl: nextImages[0],
-            contentUrl: nextImages[0],
-            cardImage: nextImages[0],
-            mediaQuality: mediaQualityProfileForItem(it, nextImages),
-            selectedImageQuality: imageQualityScore(nextImages[0], it),
-            selectedCardImageQuality: imageQualityScore(nextImages[0], it),
-            clickTargetType: 'image',
-            _ogImageEnriched: true
-          });
-          enriched += 1;
-        } else {
-          skipped += 1;
-        }
-      } else {
-        skipped += 1;
+      if(next.pageHasVideo || image || Object.keys(baseMedia).length){
+        next.media = Object.assign({}, baseMedia, {
+          type: nativeYoutube ? 'video' : (baseMedia.type || (next.pageHasVideo ? 'page-video' : undefined)),
+          preview:Object.assign({}, basePreview, {
+            poster:firstNonEmpty(pageMedia.videoPoster, basePreview.poster, image),
+            image:firstNonEmpty(basePreview.image, image),
+            thumbnail:firstNonEmpty(basePreview.thumbnail, image),
+            pageUrl, sourcePageUrl:pageUrl, contextLink:pageUrl
+          })
+        });
       }
+
+      if(nativeYoutube){
+        const id = searchUiYoutubeIdFromAny(firstNonEmpty(it.videoId, pageMedia.embeddedVideoUrl, pageUrl));
+        const watchUrl = id ? 'https://www.youtube.com/watch?v=' + id : pageUrl;
+        next.videoId = id || it.videoId;
+        next.videoUrl = watchUrl;
+        next.watchUrl = watchUrl;
+        next.embedUrl = id ? 'https://www.youtube.com/embed/' + id : it.embedUrl;
+      }
+
+      list[idx] = next;
+      if(image || next.pageHasVideo) enriched += 1;
+      else skipped += 1;
     }
   }
 
@@ -4363,15 +4421,14 @@ async function enrichOwnImages(items, opts){
 
   if(trace){
     trace.push({
-      name: 'own-og-image-enrich',
-      status: enriched ? 'ok' : 'empty',
-      count: enriched,
-      checked: max,
+      name:'own-page-media-enrich',
+      status:enriched ? 'ok' : 'empty',
+      count:enriched,
+      checked:max,
       skipped,
-      mode: 'own-page-representative-media-only'
+      mode:'page-card-title-body-own-image-video-snapshot'
     });
   }
-
   return list;
 }
 
@@ -5540,9 +5597,10 @@ exports.handler = async function(event){
         timeLeft: () => Math.max(0, 6500 - (nowMs() - started))
       });
 
-      let items = enriched.map(compactResultItem);
-      const displayPack = applySearchDisplayEngineToItems(items, q, raw || {}, { searchType, lang, action:'enrich-images' });
-      items = displayPack.items;
+      // This search-UI-only follow-up returns the same page cards with media
+      // fields added.  It deliberately does not run the display engine again,
+      // because that could replace the page URL/title/body after first paint.
+      const items = enriched;
       return ok({
         status: 'ok',
         engine: 'maru-search',
@@ -5551,10 +5609,11 @@ exports.handler = async function(event){
         query: q,
         items,
         results: items,
-        displayPolicy: displayPack.displayPolicy || null,
         meta: {
           count: items.length,
-          imagePolicy: 'render-page-own-og-image-only',
+          imagePolicy: 'search-ui-page-card-own-image-video-snapshot-only',
+          pageUrlPreserved: true,
+          titleBodyPreserved: true,
           trace,
           elapsedMs: nowMs() - started
         }
