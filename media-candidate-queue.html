@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IGDC 미디어 콘텐츠 후보 대기열</title>
+  <style>
+    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#e5eefb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1360px;margin:0 auto;padding:28px 18px 72px}h1{margin:0 0 8px;font-size:25px}.lead{margin:0;max-width:1040px;color:#b9c8db;line-height:1.6}.bar{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}.bar button{border:0;border-radius:9px;padding:10px 13px;font-weight:800;cursor:pointer;background:#7de0d8;color:#063234}.bar button.secondary{background:#dbe5f0;color:#172033}.bar button:disabled{opacity:.55;cursor:not-allowed}.filters{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}.filters input,.filters select{border:1px solid #28405f;border-radius:9px;background:#0a1525;color:#e7f2ff;padding:9px 10px;font-size:12px}.filters input{min-width:260px;flex:1}.state{font-size:13px;line-height:1.45;color:#b9c8db;align-self:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:11px;margin:16px 0}.card,.panel{background:#111c2d;border:1px solid #28405f;border-radius:14px;padding:14px}.card h2{font-size:13px;margin:0 0 7px;color:#d7fbf8}.num{font-size:27px;font-weight:850}.small{font-size:12px;line-height:1.48;color:#9eb2cb}.panel{margin-top:14px}.panel h2{font-size:16px;margin:0 0 8px}.notice{padding:11px 12px;border-radius:9px;border-left:4px solid #7de0d8;background:#0b3438;color:#ddfffb;line-height:1.5}.notice.warn{border-left-color:#f2b349;background:#3b2a0a;color:#ffe8b4}.notice.ok{border-left-color:#4ed18b;background:#0d2f22;color:#c9f7df}.hidden{display:none!important}.status-ok{color:#5de6a0}.status-warn{color:#ffd070}.status-fail{color:#ff8794}.status-info{color:#8bd8ff}table{width:100%;border-collapse:collapse;font-size:12px;min-width:1180px}th,td{text-align:left;vertical-align:top;padding:9px 8px;border-bottom:1px solid #293e5b}th{color:#b6d0ee;white-space:nowrap}td{color:#e6eef8}.tablewrap{overflow:auto;border:1px solid #28405f;border-radius:12px;margin-top:10px}.pill{display:inline-block;border-radius:999px;padding:2px 7px;font-size:11px;font-weight:800;background:#243953;color:#d5e7f8}.pill.section{background:#173f61;color:#c9ebff}.pill.hold{background:#5b3b10;color:#ffe2a1}.pill.safe{background:#104e35;color:#c6f9dd}.pill.risk{background:#5e3115;color:#ffe0bd}.pill.block{background:#5b1322;color:#ffd1da}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}.json{margin:10px 0 0;max-height:520px;overflow:auto;border:1px solid #28405f;border-radius:10px;background:#08111f;color:#cfe5ff;padding:13px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.reason{max-width:390px;color:#ffd69a}.seed{max-width:380px;color:#b9d4ee}.empty{padding:18px;color:#a9b9cb}.foot{margin-top:14px;color:#8ea2ba;font-size:12px;line-height:1.5}.nowrap{white-space:nowrap}
+  </style>
+</head>
+<body>
+<main>
+  <h1>미디어 콘텐츠 후보 대기열</h1>
+  <p class="lead">산마루/SearchBank가 검증할 영상 후보를 프론트 공개 전에 확인하는 읽기 전용 대기열입니다. 이 화면은 `media.snapshot.json`을 수정하지 않고, 후보를 프론트 샘플 슬롯에 자동 반영하지 않으며, 외부 영상 재생·다운로드·결제·수익 기록을 실행하지 않습니다.</p>
+  <div class="bar">
+    <button id="refreshBtn" type="button">대기열 새로고침</button>
+    <button id="diagnosticBtn" type="button" class="secondary">미디어 점검 JSON</button>
+    <button id="downloadJsonBtn" type="button" class="secondary" disabled>JSON 다운로드</button>
+    <button id="returnBtn" type="button" class="secondary">관리자 화면으로</button>
+    <span id="state" class="state">관리자 공통 세션을 확인하는 중입니다.</span>
+  </div>
+  <div id="notice" class="notice hidden"></div>
+  <section id="summaryGrid" class="grid hidden"></section>
+  <section id="filterPanel" class="panel hidden">
+    <h2>후보 필터</h2>
+    <div class="filters">
+      <input id="searchInput" type="search" placeholder="제목, 출처, 섹션, 산마루 검색시드 검색" />
+      <select id="sectionFilter"><option value="">전체 섹션</option></select>
+      <select id="riskFilter"><option value="">전체 위험도</option></select>
+      <select id="statusFilter"><option value="">전체 검증상태</option></select>
+    </div>
+    <div id="filterState" class="small"></div>
+  </section>
+  <section id="diagnosticPanel" class="panel hidden">
+    <h2>미디어 후보 점검 JSON</h2>
+    <div class="small">후보 라이브러리·섹션·권리검토 상태·프론트 승격 차단 상태를 읽기 전용으로 표시합니다. JSON 다운로드 버튼은 이 점검 결과를 그대로 저장합니다.</div>
+    <pre id="diagnosticJson" class="json"></pre>
+  </section>
+  <section id="tablePanel" class="panel hidden">
+    <h2>영상 후보 목록</h2>
+    <div class="small">1번 최신 섹션은 자동 노출 대상이라 수동 후보에서 제외합니다. 2~10번 섹션 후보만 표시하며, `verification_required/pending/candidateOnly/seedContent` 상태는 프론트 승격 대상이 아닙니다.</div>
+    <div class="tablewrap"><table><thead><tr><th>섹션</th><th>영상</th><th>연도/권역</th><th>출처</th><th>화질</th><th>권리·상태</th><th>링크 상태</th><th>산마루 검색시드</th></tr></thead><tbody id="candidateRows"></tbody></table></div>
+  </section>
+  <p class="foot">이 페이지는 미디어 콘텐츠 후보 점검 전용입니다. 상품 후보·중개수익 대기열, 실상품 공급 개방 점검, 리베뉴/PG 엔진을 변경하지 않습니다. 검증 완료 후보만 별도 승격 절차를 통해 `data/media.snapshot.json`으로 이동해야 프론트 오토맵에 표시됩니다.</p>
+</main>
+<script src="/assets/js/igdc-member-auth.js"></script>
+<script src="/assets/js/admin-media-candidate-queue.js?v=1"></script>
+</body>
+</html>
