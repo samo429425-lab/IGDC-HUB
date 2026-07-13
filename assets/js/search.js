@@ -77,6 +77,7 @@ ready(function () {
     let lastType = 'all';
     let lastSearchPayload = null;
     const pageImageEnrichCache = new Set();
+    const pageImageEnrichAttempts = new Map();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
 
@@ -5100,42 +5101,72 @@ if (it.riskLabel === '⚠️ high-risk') {
 
 
     function itemStableKey(it){
+      it = (it && typeof it === 'object') ? it : {};
+      const pageUrl = resolveOriginalPageUrlClient(it, '');
+      const pageKey = canonicalPageKeyClient(pageUrl);
+      if(pageKey) return pageKey;
       return String(
-        (it && (it.id || it.url || it.link || it.title)) || ''
+        it.id || it.indexId || it.originalId ||
+        ((String(it.title || it.name || '').trim()) + '|' + String((it.source && (it.source.name || it.source.platform)) || it.source || it.provider || '').trim())
       ).trim().toLowerCase();
     }
 
-    function mergeDisplayMediaFields(baseItem, enrichedItem){
-      const base = (baseItem && typeof baseItem === 'object') ? baseItem : {};
-      const hit = (enrichedItem && typeof enrichedItem === 'object') ? enrichedItem : {};
-      const imgs = dedupeImageVariantsClient(
-        collectNaturalImages(hit).concat(collectNaturalImages(base))
-      );
-      const baseMedia = (base.media && typeof base.media === 'object') ? base.media : {};
-      const hitMedia = (hit.media && typeof hit.media === 'object') ? hit.media : {};
-      const basePreview = (baseMedia.preview && typeof baseMedia.preview === 'object') ? baseMedia.preview : {};
-      const hitPreview = (hitMedia.preview && typeof hitMedia.preview === 'object') ? hitMedia.preview : {};
-      const mergedMedia = Object.keys(baseMedia).length || Object.keys(hitMedia).length
-        ? {
-            ...baseMedia,
-            ...hitMedia,
-            preview: {
-              ...basePreview,
-              ...hitPreview
-            }
-          }
-        : base.media;
-      const merged = {
-        ...base,
-        thumbnail: hit.thumbnail || imgs[0] || base.thumbnail || '',
-        thumb: hit.thumb || imgs[0] || base.thumb || '',
-        image: hit.image || imgs[0] || base.image || '',
-        imageSet: imgs.length ? imgs : (Array.isArray(base.imageSet) ? base.imageSet : []),
-        media: mergedMedia
-      };
-      const key = itemStableKey(merged);
-      if(key && imgs.length) itemImageEnrichCache.set(key, merged);
-      return merged;
+    function visibleCardsForImageEnrichment(slice){
+      const out = [];
+      const seen = new Set();
+
+      function add(it){
+        if(!it || typeof it !== 'object' || isDisplayGroupModule(it)) return;
+        const key = itemStableKey(it);
+        if(!key || seen.has(key)) return;
+        seen.add(key);
+        out.push(it);
+      }
+
+      (Array.isArray(slice) ? slice : []).forEach(entry => {
+        if(isDisplayGroupModule(entry)){
+          const visible = Array.isArray(entry.previewItems)
+            ? entry.previewItems
+            : (Array.isArray(entry.items) ? entry.items.slice(0, entry.previewLimit || PAGE_SIZE) : []);
+          visible.forEach(add);
+        }else{
+          add(entry);
+        }
+      });
+
+      return out;
+    }
+
+    function mediaOnlyDisplayCard(baseCard, hitCard, images){
+      const base = (baseCard && typeof baseCard === 'object') ? baseCard : {};
+      const hit = (hitCard && typeof hitCard === 'object') ? hitCard : {};
+      const first = images[0] || '';
+      return Object.assign({}, base, {
+        thumbnail: hit.thumbnail || hit.thumb || hit.image || hit.imageUrl || first || base.thumbnail || '',
+        thumb: hit.thumb || hit.thumbnail || hit.image || hit.imageUrl || first || base.thumb || '',
+        image: hit.image || hit.imageUrl || hit.thumbnail || first || base.image || '',
+        imageUrl: hit.imageUrl || hit.image || hit.thumbnail || first || base.imageUrl || '',
+        cardImage: hit.cardImage || hit.image || hit.thumbnail || first || base.cardImage || '',
+        poster: hit.poster || hit.videoPoster || first || base.poster || '',
+        videoPoster: hit.videoPoster || hit.poster || first || base.videoPoster || '',
+        videoThumbnail: hit.videoThumbnail || hit.thumbnail || first || base.videoThumbnail || '',
+        imageSet: images,
+        showThumbnail: true,
+        hasThumbnail: true
+      });
+    }
+
+    function mediaOnlyPreview(basePreview, hitPreview, images){
+      const base = (basePreview && typeof basePreview === 'object') ? basePreview : {};
+      const hit = (hitPreview && typeof hitPreview === 'object') ? hitPreview : {};
+      const first = images[0] || '';
+      return Object.assign({}, base, {
+        poster: hit.poster || hit.videoPoster || hit.thumbnail || hit.image || first || base.poster || '',
+        image: hit.image || hit.poster || hit.thumbnail || first || base.image || '',
+        thumbnail: hit.thumbnail || hit.thumb || hit.poster || hit.image || first || base.thumbnail || '',
+        thumb: hit.thumb || hit.thumbnail || hit.poster || first || base.thumb || '',
+        original: hit.original || hit.image || hit.poster || first || base.original || ''
+      });
     }
 
     function mergeEnrichedItems(baseItems, enrichedItems){
@@ -5150,68 +5181,57 @@ if (it.riskLabel === '⚠️ high-risk') {
         const key = itemStableKey(it);
         const hit = key ? byKey.get(key) : null;
         if(!hit) return it;
-        return mergeDisplayMediaFields(it, hit);
+
+        const imgs = dedupeImageVariantsClient(collectNaturalImages(hit));
+        if(!imgs.length) return it;
+
+        const baseMedia = (it && it.media && typeof it.media === 'object') ? it.media : {};
+        const hitMedia = (hit && hit.media && typeof hit.media === 'object') ? hit.media : {};
+        const basePreview = (baseMedia.preview && typeof baseMedia.preview === 'object') ? baseMedia.preview : {};
+        const hitPreview = (hitMedia.preview && typeof hitMedia.preview === 'object') ? hitMedia.preview : {};
+        const first = imgs[0] || '';
+
+        // Enrichment may add only visual fields.  The working page URL, category,
+        // title, body and click contract remain exactly those of the base card.
+        const merged = Object.assign({}, it, {
+          thumbnail: hit.thumbnail || hit.thumb || hit.image || hit.imageUrl || first || it.thumbnail || '',
+          thumb: hit.thumb || hit.thumbnail || hit.image || hit.imageUrl || first || it.thumb || '',
+          image: hit.image || hit.imageUrl || hit.thumbnail || first || it.image || '',
+          imageUrl: hit.imageUrl || hit.image || hit.thumbnail || first || it.imageUrl || '',
+          imageSet: imgs,
+          originalImage: hit.originalImage || hit.fullImage || hit.image || first || it.originalImage || '',
+          fullImage: hit.fullImage || hit.originalImage || hit.image || first || it.fullImage || '',
+          imageOriginal: hit.imageOriginal || hit.originalImage || hit.image || first || it.imageOriginal || '',
+          viewerImage: hit.viewerImage || hit.originalImage || hit.image || first || it.viewerImage || '',
+          openImageUrl: hit.openImageUrl || hit.originalImage || hit.image || first || it.openImageUrl || '',
+          contentUrl: hit.contentUrl || hit.originalImage || hit.image || first || it.contentUrl || '',
+          cardImage: hit.cardImage || hit.image || hit.thumbnail || first || it.cardImage || '',
+          displayCard: mediaOnlyDisplayCard(it.displayCard, hit.displayCard, imgs),
+          media: Object.assign({}, baseMedia, {
+            preview: mediaOnlyPreview(basePreview, hitPreview, imgs)
+          })
+        });
+
+        itemImageEnrichCache.set(key, merged);
+        return merged;
       });
     }
 
-    function visibleCardsForEnrich(slice){
-      const out = [];
-      const seen = new Set();
-      const push = (it) => {
-        if(!it || typeof it !== 'object') return;
-        if(isSyntheticProviderGuideCardClient(it)) return;
-        const key = itemStableKey(it);
-        if(key && seen.has(key)) return;
-        if(key) seen.add(key);
-        out.push(it);
-      };
-      const walk = (entry) => {
-        if(!entry) return;
-        if(Array.isArray(entry)) {
-          entry.forEach(walk);
-          return;
-        }
-        if(isDisplayGroupModule(entry) || (entry.group && Array.isArray(entry.items))) {
-          const preview = Array.isArray(entry.previewItems) && entry.previewItems.length
-            ? entry.previewItems
-            : (Array.isArray(entry.items)
-                ? entry.items.slice(0, Math.max(1, parseInt(entry.previewLimit, 10) || entry.items.length))
-                : []);
-          preview.forEach(push);
-          return;
-        }
-        push(entry);
-      };
-      walk(slice);
-      return out;
-    }
+    function applyEnrichedMediaToCaches(updatedByKey){
+      let changed = 0;
 
-    function replaceEnrichedItemAcrossCaches(item){
-      const key = itemStableKey(item);
-      if(!key) return false;
-      let changed = false;
-      if(Array.isArray(allItems) && allItems.length){
-        allItems = allItems.map(existing => {
-          if(itemStableKey(existing) !== key) return existing;
-          changed = true;
-          return mergeDisplayMediaFields(existing, item);
-        });
-      }
-      if(loadedServerPages && typeof loadedServerPages.forEach === 'function'){
-        loadedServerPages.forEach((list, pageNo) => {
-          if(!Array.isArray(list) || !list.length) return;
-          let localChanged = false;
-          const next = list.map(existing => {
-            if(itemStableKey(existing) !== key) return existing;
-            localChanged = true;
-            return mergeDisplayMediaFields(existing, item);
-          });
-          if(localChanged){
-            loadedServerPages.set(pageNo, next);
-            changed = true;
-          }
-        });
-      }
+      allItems = (Array.isArray(allItems) ? allItems : []).map(it => {
+        const hit = updatedByKey.get(itemStableKey(it));
+        if(!hit) return it;
+        changed += 1;
+        return hit;
+      });
+
+      loadedServerPages.forEach((items, serverPage) => {
+        if(!Array.isArray(items)) return;
+        loadedServerPages.set(serverPage, items.map(it => updatedByKey.get(itemStableKey(it)) || it));
+      });
+
       return changed;
     }
 
@@ -5219,24 +5239,29 @@ if (it.riskLabel === '⚠️ high-risk') {
       const q = (input.value || '').trim();
       if(!q || !Array.isArray(slice) || !slice.length) return;
 
-      const cacheKey = [q, activeType || 'all', page].join('::');
-      if(pageImageEnrichCache.has(cacheKey)) return;
-      pageImageEnrichCache.add(cacheKey);
-
-      const visibleCards = visibleCardsForEnrich(slice);
+      const visibleCards = visibleCardsForImageEnrichment(slice);
       const candidates = visibleCards
-        .map((it, idx) => ({ it, idx }))
+        .map(it => ({ it, key:itemStableKey(it) }))
         .filter(x => {
-          const key = itemStableKey(x.it);
-          if(key && itemImageEnrichCache.has(key)) return false;
+          if(!x.key || itemImageEnrichCache.has(x.key)) return false;
           if(collectNaturalImages(x.it).length) return false;
-          const url = String((x.it && (x.it.url || x.it.link)) || '').trim();
-          return /^https?:\/\//i.test(url);
+          const pageUrl = resolveOriginalPageUrlClient(x.it, '');
+          return /^https?:\/\//i.test(pageUrl) && !isDirectMediaAssetUrlClient(pageUrl);
         })
-        .slice(0, Math.max(PAGE_SIZE, 30));
+        .slice(0, PAGE_SIZE);
 
       if(!candidates.length) return;
 
+      const candidateKey = candidates.map(x => x.key).sort().join('|');
+      const cacheKey = [q, activeType || 'all', page, candidateKey].join('::');
+      if(pageImageEnrichCache.has(cacheKey)) return;
+
+      const attempts = pageImageEnrichAttempts.get(cacheKey) || 0;
+      if(attempts >= 3) return;
+      pageImageEnrichAttempts.set(cacheKey, attempts + 1);
+      pageImageEnrichCache.add(cacheKey);
+
+      let completed = false;
       try{
         const url =
           `/.netlify/functions/maru-search?action=enrich-images&q=${encodeURIComponent(q)}&type=${encodeURIComponent(activeType || 'all')}`;
@@ -5259,22 +5284,31 @@ if (it.riskLabel === '⚠️ high-risk') {
         if(!enriched.length) return;
 
         const updatedCandidates = mergeEnrichedItems(candidates.map(x => x.it), enriched);
-        let changed = false;
-
-        updatedCandidates.forEach((item) => {
-          if(collectNaturalImages(item).length){
-            if(replaceEnrichedItemAcrossCaches(item)) changed = true;
-          }
+        const updatedByKey = new Map();
+        updatedCandidates.forEach(item => {
+          const key = itemStableKey(item);
+          if(key && collectNaturalImages(item).length) updatedByKey.set(key, item);
         });
+
+        const changed = applyEnrichedMediaToCaches(updatedByKey);
+        completed = changed > 0;
 
         if(changed && page === currentPage){
           renderPage(page, true);
         }
       }catch(e){
         console.warn('page image enrichment skipped:', e);
+      }finally{
+        const usedAttempts = pageImageEnrichAttempts.get(cacheKey) || 0;
+        if(!completed && usedAttempts < 3){
+          pageImageEnrichCache.delete(cacheKey);
+          setTimeout(() => {
+            if((input.value || '').trim() !== q || page !== currentPage) return;
+            enrichRenderedPageImages(page, slice, startIndex);
+          }, 600 * usedAttempts);
+        }
       }
     }
-
 
 
     function stateKeyForGroup(page, group){
@@ -5605,9 +5639,6 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (normalizeSearchType(activeType) === 'image') {
         renderImageGalleryPage(slice);
         drawPager();
-        if(!skipEnrich){
-          enrichRenderedPageImages(page, slice, start);
-        }
         return;
       }
 
