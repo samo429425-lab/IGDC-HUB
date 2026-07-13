@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-596-probe-stable-fastpath-nanopin-125-130';
+const VERSION = 'A1.5.46-596-probe-stable-fastpath-nanopin-125-130-page-card-media-link-fix';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -958,29 +958,263 @@ function isDirectImageAssetUrlForSourceLink(v){
   const s = safeString(v).trim();
   if(!s) return false;
   const low = s.toLowerCase().split('#')[0];
-  if(/^data:image\//i.test(low)) return true;
-  if(/\.(?:jpe?g|png|gif|webp|avif|bmp|svg)(?:\?|$)/i.test(low)) return true;
-  return /(?:images?|img|photo|thumbnail|thumb|media)\.(?:googleusercontent|pstatic|naver|fbcdn|cdninstagram|twimg)\./i.test(low);
+  if(/^(?:data|blob):(?:image|video)\//i.test(low)) return true;
+  if(/\.(?:jpe?g|png|gif|webp|avif|bmp|svg|ico|mp4|webm|m3u8|mov|m4v)(?:\?|$)/i.test(low)) return true;
+  try{
+    const u = new URL(s);
+    const host = u.hostname.toLowerCase();
+    if(/(?:^|\.)(?:ytimg\.com|img\.youtube\.com|ggpht\.com|googleusercontent\.com|gstatic\.com|pstatic\.net|fbcdn\.net|cdninstagram\.com|twimg\.com|pinimg\.com|kakaocdn\.net|qpic\.cn|qlogo\.cn|wikimedia\.org|akamaized\.net)$/i.test(host)) return true;
+  }catch(e){}
+  return false;
+}
+
+function isLikelySearchUiMediaAssetUrl(v){
+  const s = safeString(v).trim();
+  if(!s) return false;
+  if(isDirectImageAssetUrlForSourceLink(s)) return true;
+  try{
+    const u = new URL(s);
+    const signal = (u.hostname + ' ' + u.pathname + ' ' + u.search).toLowerCase();
+    return /(?:^|[\/.?&=_-])(image|images|img|photo|photos|picture|pictures|thumb|thumbnail|poster|cover|og_image|media|snapshot)(?:[\/.?&=_-]|$)/i.test(signal);
+  }catch(e){
+    return false;
+  }
+}
+
+function searchUiYoutubeIdFromAny(v){
+  const s = safeString(v).trim();
+  if(!s) return '';
+  if(/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+  const m = s.match(/[?&]v=([A-Za-z0-9_-]{11})/i) ||
+    s.match(/youtu\.be\/([A-Za-z0-9_-]{11})/i) ||
+    s.match(/youtube\.com\/(?:embed|shorts|live)\/([A-Za-z0-9_-]{11})/i) ||
+    s.match(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi(?:_webp)?\/([A-Za-z0-9_-]{11})/i);
+  return m && m[1] ? m[1] : '';
+}
+
+function searchUiPageUrlForItem(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const dc = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+  const media = (it.media && typeof it.media === 'object') ? it.media : {};
+  const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+  const ytInputs = [
+    it.videoId, p.videoId, it.watchUrl, it.videoUrl, it.embedUrl,
+    preview.videoId, preview.watchUrl, preview.videoUrl, preview.embedUrl,
+    it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl,
+    it.url, it.link, it.href, it.thumbnail, it.image
+  ];
+  for(const v of ytInputs){
+    const id = searchUiYoutubeIdFromAny(v);
+    if(id) return 'https://www.youtube.com/watch?v=' + id;
+  }
+  const candidates = [
+    it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
+    dc.sourcePageUrl, dc.pageUrl, dc.contextLink, dc.openUrl, dc.url,
+    p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.originallink, p.openUrl,
+    preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.openUrl,
+    it.watchUrl, it.videoUrl, it.openUrl, it.url, it.link, it.href,
+    p.watchUrl, p.videoUrl, p.url, p.link
+  ];
+  for(const v of candidates){
+    const u = safeString(v).trim();
+    if(!u || /^javascript:|^(?:data|blob):/i.test(u)) continue;
+    if(!/^https?:\/\//i.test(u) && !u.startsWith('/')) continue;
+    if(isDirectImageAssetUrlForSourceLink(u)) continue;
+    return u;
+  }
+  return '';
 }
 
 function sourcePageUrlForImageItem(it){
+  return searchUiPageUrlForItem(it);
+}
+
+function canonicalSearchUiPageKey(v){
+  const raw = safeString(v).trim();
+  if(!raw) return '';
+  try{
+    const u = new URL(raw);
+    u.hash = '';
+    ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid','igshid','si','feature'].forEach(k => u.searchParams.delete(k));
+    let out = u.toString();
+    if(out.endsWith('/') && u.pathname !== '/') out = out.slice(0, -1);
+    return out.toLowerCase();
+  }catch(e){
+    return raw.split('#')[0].replace(/\/$/, '').toLowerCase();
+  }
+}
+
+function collectSearchUiMediaAssets(it, pageUrl){
   it = (it && typeof it === 'object') ? it : {};
   const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
   const dc = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
   const media = (it.media && typeof it.media === 'object') ? it.media : {};
   const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
   const candidates = [
+    it.originalImage, it.fullImage, it.imageOriginal, it.viewerImage, it.openImageUrl, it.contentUrl, it.cardImage,
+    it.thumbnail, it.thumb, it.image, it.imageUrl, it.image_url, it.og_image, it.ogImage, it.poster, it.videoPoster, it.videoThumbnail,
+    dc.originalImage, dc.fullImage, dc.thumbnail, dc.thumb, dc.image, dc.imageUrl, dc.poster, dc.videoPoster, dc.videoThumbnail,
+    p.originalImage, p.fullImage, p.imageOriginal, p.viewerImage, p.openImageUrl, p.contentUrl, p.cardImage,
+    p.thumbnail, p.thumb, p.image, p.imageUrl, p.image_url, p.og_image, p.ogImage, p.poster, p.videoPoster, p.videoThumbnail,
+    preview.original, preview.poster, preview.thumbnail, preview.thumb, preview.image
+  ].concat(Array.isArray(it.imageSet) ? it.imageSet : [])
+   .concat(Array.isArray(p.imageSet) ? p.imageSet : [])
+   .concat(Array.isArray(dc.imageSet) ? dc.imageSet : []);
+  const sourceText = safeString(firstNonEmpty(it.source, it.provider, p.source)).toLowerCase();
+  const typeText = safeString(firstNonEmpty(it.type, it.mediaType, p.type, p.mediaType)).toLowerCase();
+  if(sourceText.includes('image') || typeText === 'image'){
+    [it.url, it.link, p.url, p.link].forEach(v => { if(isDirectImageAssetUrlForSourceLink(v)) candidates.push(v); });
+  }
+  const pageKey = canonicalSearchUiPageKey(pageUrl);
+  const knownPageKeys = new Set([
     it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
     dc.sourcePageUrl, dc.pageUrl, dc.contextLink, dc.openUrl, dc.url,
-    p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.originallink, p.url, p.link,
+    p.sourcePageUrl, p.pageUrl, p.contextLink, p.originalPageUrl, p.originallink, p.openUrl,
     preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.openUrl,
-    it.url, it.link, it.href
-  ];
+    it.openUrl, it.url, it.link, it.href, p.url, p.link
+  ].map(v => safeString(v).trim()).filter(v => v && !isDirectImageAssetUrlForSourceLink(v)).map(canonicalSearchUiPageKey));
+  const out = [];
+  const seen = new Set();
   for(const v of candidates){
     const u = safeString(v).trim();
-    if(u && !isDirectImageAssetUrlForSourceLink(u)) return u;
+    const mediaKey = canonicalSearchUiPageKey(u);
+    if(!u || mediaKey === pageKey || knownPageKeys.has(mediaKey)) continue;
+    if(!/^https?:\/\//i.test(u) && !/^(?:data|blob):image\//i.test(u)) continue;
+    if(!isLikelySearchUiMediaAssetUrl(u) || !isMeaningfulImageForItem(u, it)) continue;
+    if(seen.has(u)) continue;
+    seen.add(u);
+    out.push(u);
+    if(out.length >= 6) break;
   }
-  return safeString(firstNonEmpty.apply(null, candidates)).trim();
+  return out;
+}
+
+function isSearchUiMediaOnlyItem(it){
+  it = (it && typeof it === 'object') ? it : {};
+  const p = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+  const source = safeString(firstNonEmpty(it.source, it.provider, p.source)).toLowerCase();
+  const type = safeString(firstNonEmpty(it.type, it.mediaType, p.type, p.mediaType)).toLowerCase();
+  const rawUrl = safeString(firstNonEmpty(it.url, it.link, it.href, p.url, p.link)).trim();
+  return type === 'image' || source.includes('image') || isDirectImageAssetUrlForSourceLink(rawUrl);
+}
+
+function longerSearchUiText(a, b){
+  const aa = stripInlineHtml(a);
+  const bb = stripInlineHtml(b);
+  return bb.length > aa.length ? bb : aa;
+}
+
+function mergeSearchUiPageCard(existing, incoming){
+  const pageUrl = searchUiPageUrlForItem(existing) || searchUiPageUrlForItem(incoming);
+  const pageImages = collectSearchUiMediaAssets(existing, pageUrl).concat(collectSearchUiMediaAssets(incoming, pageUrl));
+  const images = compactImages(pageImages).filter(x => canonicalSearchUiPageKey(x) !== canonicalSearchUiPageKey(pageUrl)).slice(0, 6);
+  const a = existing || {};
+  const b = incoming || {};
+  const aMediaOnly = isSearchUiMediaOnlyItem(a);
+  const bMediaOnly = isSearchUiMediaOnlyItem(b);
+  const primary = !aMediaOnly ? a : (!bMediaOnly ? b : a);
+  const secondary = primary === a ? b : a;
+  const merged = Object.assign({}, secondary, primary, {
+    id:firstNonEmpty(primary.id, secondary.id),
+    type:firstNonEmpty(primary.type, secondary.type),
+    mediaType:firstNonEmpty(primary.mediaType, secondary.mediaType),
+    searchCategory:firstNonEmpty(primary.searchCategory, secondary.searchCategory),
+    displayGroup:firstNonEmpty(primary.displayGroup, secondary.displayGroup),
+    url:pageUrl, link:pageUrl, pageUrl, sourcePageUrl:pageUrl, contextLink:pageUrl, openUrl:pageUrl,
+    title:safeString(firstNonEmpty(primary.title, secondary.title)).trim(),
+    summary:longerSearchUiText(a.summary || a.snippet || a.description, b.summary || b.snippet || b.description),
+    description:longerSearchUiText(a.description || a.summary || a.snippet, b.description || b.summary || b.snippet),
+    snippet:longerSearchUiText(a.snippet || a.summary || a.description, b.snippet || b.summary || b.description),
+    source:firstNonEmpty(primary.source, secondary.source),
+    thumbnail:images[0] || '', thumb:images[0] || '', image:images[0] || '', imageUrl:images[0] || '', imageSet:images,
+    originalImage:images[0] || '', fullImage:images[0] || '', viewerImage:images[0] || '', openImageUrl:images[0] || '', contentUrl:images[0] || '', cardImage:images[0] || ''
+  });
+  merged.payload = Object.assign({}, (a.payload && typeof a.payload === 'object') ? a.payload : {}, (b.payload && typeof b.payload === 'object') ? b.payload : {}, {
+    pageUrl, sourcePageUrl:pageUrl, contextLink:pageUrl,
+    thumbnail:images[0] || '', image:images[0] || '', imageSet:images
+  });
+  merged.displayCard = Object.assign({}, (a.displayCard && typeof a.displayCard === 'object') ? a.displayCard : {}, (b.displayCard && typeof b.displayCard === 'object') ? b.displayCard : {}, {
+    url:pageUrl, pageUrl, sourcePageUrl:pageUrl, contextLink:pageUrl,
+    thumbnail:images[0] || '', image:images[0] || '', imageUrl:images[0] || '', imageSet:images
+  });
+  const mediaA = (a.media && typeof a.media === 'object') ? a.media : {};
+  const mediaB = (b.media && typeof b.media === 'object') ? b.media : {};
+  const previewA = (mediaA.preview && typeof mediaA.preview === 'object') ? mediaA.preview : {};
+  const previewB = (mediaB.preview && typeof mediaB.preview === 'object') ? mediaB.preview : {};
+  if(images.length || Object.keys(mediaA).length || Object.keys(mediaB).length){
+    merged.media = Object.assign({}, mediaA, mediaB, {
+      preview:Object.assign({}, previewA, previewB, {
+        poster:firstNonEmpty(previewB.poster, previewA.poster, images[0]),
+        image:firstNonEmpty(previewB.image, previewA.image, images[0]),
+        thumbnail:firstNonEmpty(previewB.thumbnail, previewA.thumbnail, images[0]),
+        sourcePageUrl:pageUrl, pageUrl, contextLink:pageUrl
+      })
+    });
+  }
+  return merged;
+}
+
+function normalizeSearchUiPageCards(items, searchType){
+  const pageRows = [];
+  const mediaRows = [];
+  for(const raw of (Array.isArray(items) ? items : [])){
+    if(!raw || typeof raw !== 'object') continue;
+    const pageUrl = searchUiPageUrlForItem(raw);
+    if(!pageUrl) continue;
+    const images = collectSearchUiMediaAssets(raw, pageUrl);
+    const copy = Object.assign({}, raw, {
+      url:pageUrl, link:pageUrl, pageUrl, sourcePageUrl:pageUrl, contextLink:pageUrl, openUrl:pageUrl,
+      thumbnail:images[0] || '', thumb:images[0] || '', image:images[0] || '', imageUrl:images[0] || '', imageSet:images,
+      originalImage:images[0] || '', fullImage:images[0] || '', viewerImage:images[0] || '', openImageUrl:images[0] || '', contentUrl:images[0] || '', cardImage:images[0] || ''
+    });
+    copy.payload = Object.assign({}, (raw.payload && typeof raw.payload === 'object') ? raw.payload : {}, {
+      pageUrl, sourcePageUrl:pageUrl, contextLink:pageUrl,
+      thumbnail:images[0] || '', image:images[0] || '', imageSet:images
+    });
+    const host = domainOf(pageUrl).toLowerCase();
+    const source = safeString(firstNonEmpty(raw.source, raw.provider)).toLowerCase();
+    const ytId = searchUiYoutubeIdFromAny(firstNonEmpty(raw.videoId, raw.watchUrl, raw.videoUrl, raw.embedUrl, pageUrl));
+    if(ytId || host.includes('youtube.com') || host.includes('youtu.be')){
+      const watchUrl = ytId ? 'https://www.youtube.com/watch?v=' + ytId : pageUrl;
+      copy.url = copy.link = copy.pageUrl = copy.sourcePageUrl = copy.contextLink = copy.openUrl = watchUrl;
+      copy.videoId = ytId || raw.videoId;
+      copy.videoUrl = watchUrl;
+      copy.watchUrl = watchUrl;
+      copy.embedUrl = ytId ? 'https://www.youtube.com/embed/' + ytId : raw.embedUrl;
+      copy.type = 'video';
+      copy.mediaType = 'video';
+      copy.searchCategory = 'video';
+      copy.displayGroup = 'video';
+      copy.media = Object.assign({}, (raw.media && typeof raw.media === 'object') ? raw.media : {}, {
+        type:'video',
+        preview:Object.assign({}, raw.media && raw.media.preview || {}, {
+          poster:images[0] || '', image:images[0] || '', thumbnail:images[0] || '',
+          videoUrl:watchUrl, embedUrl:copy.embedUrl, pageUrl:watchUrl, sourcePageUrl:watchUrl, contextLink:watchUrl
+        })
+      });
+    }else if(/facebook\.com|instagram\.com|threads\.net|weixin\.qq\.com|wechat\.com/.test(host + ' ' + source)){
+      copy.searchCategory = 'sns';
+      copy.displayGroup = copy.displayGroup || 'social';
+    }
+    (isSearchUiMediaOnlyItem(raw) ? mediaRows : pageRows).push(copy);
+  }
+  const out = [];
+  const pos = new Map();
+  function add(row){
+    const key = canonicalSearchUiPageKey(searchUiPageUrlForItem(row));
+    if(!key) return;
+    if(!pos.has(key)){
+      pos.set(key, out.length);
+      out.push(row);
+      return;
+    }
+    const idx = pos.get(key);
+    out[idx] = mergeSearchUiPageCard(out[idx], row);
+  }
+  pageRows.forEach(add);
+  mediaRows.forEach(add);
+  return out;
 }
 
 function mediaProfileForItem(it){
@@ -4231,11 +4465,16 @@ async function naverImageSearch(q, limit, start){
     results: (Array.isArray(data.items) ? data.items : []).map(it => {
       const thumb = it.thumbnail || '';
       const imageUrl = it.link || thumb || '';
-      const context = it.originallink || imageUrl;
+      const contextCandidate = it.originallink || it.contextLink || '';
+      const context = contextCandidate && !isDirectImageAssetUrlForSourceLink(contextCandidate) ? contextCandidate : '';
+      if(!context) return null;
       return {
         title: stripHtml(it.title || q),
         link: context,
         url: context,
+        pageUrl: context,
+        sourcePageUrl: context,
+        contextLink: context,
         snippet: '',
         type: 'image',
         mediaType: 'image',
@@ -4255,11 +4494,13 @@ async function naverImageSearch(q, limit, start){
           source: 'naver_image',
           thumb,
           image: imageUrl || thumb,
+          pageUrl: context,
+          sourcePageUrl: context,
           contextLink: context,
           qualityMode: 'prefer-original'
         }
       };
-    })
+    }).filter(Boolean)
   };
 }
 
@@ -4377,22 +4618,45 @@ async function googleCseRequest(q, limit, start, opts){
     const pagemap = it.pagemap || {};
     const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
     const cseImg = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
-    const img = (cseImg && cseImg.src) || (cseThumb && cseThumb.src) || '';
+    const imageSearch = opts.searchType === 'image' || type === 'image';
+    const imageAsset = imageSearch ? safeString(it.link).trim() : safeString((cseImg && cseImg.src) || (cseThumb && cseThumb.src) || '').trim();
+    const contextLink = imageSearch ? safeString(it.image && it.image.contextLink).trim() : safeString(it.link).trim();
+    if(!contextLink || isDirectImageAssetUrlForSourceLink(contextLink)) return null;
+    const host = domainOf(contextLink).toLowerCase();
+    let resultType = type;
+    let resultMediaType = opts.mediaType || (type === 'sns_video' ? 'video' : 'article');
+    if(host.includes('youtube.com') || host.includes('youtu.be')){
+      resultType = 'video';
+      resultMediaType = 'video';
+    }else if(/facebook\.com|instagram\.com|threads\.net|weixin\.qq\.com|wechat\.com/.test(host)){
+      resultType = 'sns';
+      resultMediaType = 'article';
+    }
     return {
       title: it.title || '',
-      link: it.link || '',
-      url: it.link || '',
+      link: contextLink,
+      url: contextLink,
+      pageUrl: contextLink,
+      sourcePageUrl: contextLink,
+      contextLink,
       snippet: it.snippet || '',
-      type,
-      mediaType: opts.mediaType || (type === 'sns_video' ? 'video' : 'article'),
+      type: resultType,
+      mediaType: resultMediaType,
       source,
-      thumbnail: img,
-      thumb: img,
-      image: img,
-      imageSet: compactImages([img]),
-      payload: { source, thumb: img, image: img, cseQuery: q }
+      thumbnail: imageAsset,
+      thumb: imageAsset,
+      image: imageAsset,
+      imageUrl: imageAsset,
+      imageSet: compactImages([imageAsset]),
+      originalImage: imageAsset,
+      fullImage: imageAsset,
+      viewerImage: imageAsset,
+      openImageUrl: imageAsset,
+      contentUrl: imageAsset,
+      cardImage: imageAsset,
+      payload: { source, thumb:imageAsset, image:imageAsset, pageUrl:contextLink, sourcePageUrl:contextLink, contextLink, cseQuery:q }
     };
-  });
+  }).filter(Boolean);
 
   return {
     source,
@@ -4507,7 +4771,18 @@ async function googleImageSearch(q, limit, start){
   const res = await fetchWithTimeout(url, null, 3500);
   if(!res.ok) return null;
   const data = await res.json();
-  return { source: 'google_image', results: (data.items || []).map(it => ({ title: it.title || '', link: it.image && it.image.contextLink ? it.image.contextLink : it.link, url: it.image && it.image.contextLink ? it.image.contextLink : it.link, snippet: it.snippet || '', type: 'image', mediaType: 'image', source: 'google_image', thumbnail: it.link, thumb: it.link, image: it.link, imageUrl: it.link, imageSet: [it.link], originalImage: it.link, fullImage: it.link, viewerImage: it.link, openImageUrl: it.link, contentUrl: it.link, cardImage: it.link, payload: { source: 'google_image', thumb: it.link, image: it.link, originalImage: it.link, contextLink: it.image && it.image.contextLink } })) };
+  return { source:'google_image', results:(data.items || []).map(it => {
+    const context = safeString(it.image && it.image.contextLink).trim();
+    if(!context || isDirectImageAssetUrlForSourceLink(context)) return null;
+    const imageUrl = safeString(it.link).trim();
+    return {
+      title:it.title || '', link:context, url:context, pageUrl:context, sourcePageUrl:context, contextLink:context,
+      snippet:it.snippet || '', type:'image', mediaType:'image', source:'google_image',
+      thumbnail:imageUrl, thumb:imageUrl, image:imageUrl, imageUrl, imageSet:compactImages([imageUrl]),
+      originalImage:imageUrl, fullImage:imageUrl, viewerImage:imageUrl, openImageUrl:imageUrl, contentUrl:imageUrl, cardImage:imageUrl,
+      payload:{ source:'google_image', thumb:imageUrl, image:imageUrl, originalImage:imageUrl, pageUrl:context, sourcePageUrl:context, contextLink:context }
+    };
+  }).filter(Boolean) };
 }
 
 async function applyCorePipeline(query, items){
@@ -5207,7 +5482,9 @@ async function attachFastDisplayRichProbe(base, event, ctx){
   }
 
   const current = Array.isArray(base.items) ? base.items : [];
-  const merged = dedupeCanonicalItems([].concat(richItems, current));
+  const merged = searchUiGateway
+    ? normalizeSearchUiPageCards([].concat(current, richItems), searchType)
+    : dedupeCanonicalItems([].concat(richItems, current));
   base.items = merged;
   base.results = merged;
   base.meta = Object.assign({}, base.meta || {}, {
@@ -5572,6 +5849,14 @@ exports.handler = async function(event){
     const maruLocalAuthorityCards = buildKoreaLocalAuthorityCardsForSearch(q, base.region || base.route || 'KR');
     if(maruLocalAuthorityCards.length){
       base.items = dedupeCanonicalItems([].concat(maruLocalAuthorityCards, base.items || []));
+    }
+    if(searchUiGateway){
+      base.items = normalizeSearchUiPageCards(base.items || [], searchType);
+      base.results = base.items;
+      base.meta = Object.assign({}, base.meta || {}, {
+        searchUiPageCardContract:'page-url-primary; media-assets-preview-only; all-categories',
+        searchUiPageCardCount:base.items.length
+      });
     }
     if(searchUiGateway && fastDisplayFirstWindow && requestedSearchUiPage === 1 && Array.isArray(base.items) && base.items.length > SEARCH_UI_FIRST_RESPONSE_WINDOW){
       base.meta = Object.assign({}, base.meta || {}, {

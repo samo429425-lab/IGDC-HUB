@@ -77,7 +77,6 @@ ready(function () {
     let lastType = 'all';
     let lastSearchPayload = null;
     const pageImageEnrichCache = new Set();
-    const pageImageEnrichAttempts = new Map();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
 
@@ -2075,25 +2074,15 @@ function startContinuousIntake(q, type, seq){
   const seen = new Set();
 
   for (const it of Array.isArray(items) ? items : []) {
-    const rawUrl = String(it?.url || it?.link || '').trim();
-    const normUrl = rawUrl.toLowerCase();
-
-    const isPlaceholderUrl =
-      !rawUrl ||
-      rawUrl === '#' ||
-      rawUrl === '/' ||
-      normUrl === 'javascript:void(0)' ||
-      normUrl.startsWith('javascript:');
-
-    const key = (
-      !isPlaceholderUrl
-        ? rawUrl
-        : (String(it?.id || '').trim() ||
-           ((String(it?.title || '').trim()) + '|' + String(it?.source?.name || it?.source || '').trim()))
+    const pageUrl = resolveOriginalPageUrlClient(it, '');
+    const rawUrl = String(pageUrl || '').trim();
+    const normUrl = canonicalPageKeyClient(rawUrl);
+    const key = normUrl || String(
+      it?.id || it?.indexId || it?.originalId ||
+      ((String(it?.title || it?.name || '').trim()) + '|' + String(it?.source?.name || it?.source || '').trim())
     ).toLowerCase();
 
-    if (!key) continue;
-    if (seen.has(key)) continue;
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(it);
   }
@@ -2103,16 +2092,9 @@ function startContinuousIntake(q, type, seq){
 
 function searchDisplayKeyForItem(it){
   if(!it) return '';
-  const rawUrl = String(it.url || it.link || it.openUrl || '').trim();
-  const normUrl = rawUrl.toLowerCase();
-  const isPlaceholderUrl =
-    !rawUrl ||
-    rawUrl === '#' ||
-    rawUrl === '/' ||
-    normUrl === 'javascript:void(0)' ||
-    normUrl.startsWith('javascript:');
-
-  if(!isPlaceholderUrl) return normUrl;
+  const pageUrl = resolveOriginalPageUrlClient(it, '');
+  const pageKey = canonicalPageKeyClient(pageUrl);
+  if(pageKey) return pageKey;
   return String(
     it.id || it.indexId || it.originalId ||
     ((String(it.title || it.name || '').trim()) + '|' + String((it.source && (it.source.name || it.source.platform)) || it.source || it.provider || '').trim())
@@ -3207,8 +3189,8 @@ function displayGroupOfItem(it){
       if (source.includes('sports') || type === 'sports' || category === 'sports' || text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('배구')) return 'sports';
       if (source.includes('finance') || type === 'finance' || category === 'finance' || text.includes('금융') || text.includes('증권') || text.includes('주식') || text.includes('환율') || text.includes('코스피') || text.includes('나스닥')) return 'finance';
       if (source.includes('webtoon') || type === 'webtoon' || category === 'webtoon' || text.includes('웹툰') || text.includes('만화') || text.includes('comic') || text.includes('manga')) return 'webtoon';
-      if (mediaType === 'video' || type === 'video' || category === 'video' || source.includes('youtube') || source.includes('video') || host.includes('youtube.com') || host.includes('youtu.be') || text.includes('영상') || text.includes('유튜브')) return 'video';
       if (isVisualSearchCandidateClient(it) && (mediaType === 'image' || type === 'image' || category === 'image' || source.includes('image') || text.includes('사진') || text.includes('풍경') || text.includes('홍보'))) return 'image';
+      if (mediaType === 'video' || type === 'video' || category === 'video' || source.includes('youtube') || source.includes('video') || host.includes('youtube.com') || host.includes('youtu.be') || text.includes('영상') || text.includes('유튜브')) return 'video';
       if (isVisualSearchCandidateClient(it)) return 'image';
       if (host.includes('instagram.') || host.includes('facebook.') || host.includes('tiktok.') || host.includes('x.com') || host.includes('twitter.') || source.includes('sns') || source.includes('social') || type === 'sns' || category === 'sns') return 'social';
       return 'web';
@@ -3517,7 +3499,6 @@ function displayGroupOfItem(it){
               }
               body.appendChild(hiddenWrap);
               hiddenMounted = true;
-              enrichRenderedPageImages(page, hiddenSlice, 0);
             }
             if(hiddenWrap) hiddenWrap.style.display = '';
             more.textContent = `${label} ${uiText('collapse', 'Collapse')} ▴`;
@@ -4542,24 +4523,83 @@ function displayGroupOfItem(it){
       goToOriginalSourceSameTab(url);
     }
 
-    function displayUrlForImageItemClient(it, src){
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
-      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
-      const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+function isDirectMediaAssetUrlClient(v){
+      const s = String(v || '').trim();
+      if(!s) return false;
+      const low = s.toLowerCase().split('#')[0];
+      if(/^(?:data|blob):(?:image|video)\//i.test(low)) return true;
+      if(/\.(?:jpe?g|png|gif|webp|avif|bmp|svg|ico|mp4|webm|m3u8|mov|m4v)(?:\?|$)/i.test(low)) return true;
+      try{
+        const u = new URL(s, location.origin);
+        const host = u.hostname.toLowerCase();
+        if(/(?:^|\.)(?:ytimg\.com|img\.youtube\.com|ggpht\.com|googleusercontent\.com|gstatic\.com|pstatic\.net|fbcdn\.net|cdninstagram\.com|twimg\.com|pinimg\.com|kakaocdn\.net|qpic\.cn|qlogo\.cn|wikimedia\.org|akamaized\.net)$/i.test(host)) return true;
+      }catch(e){}
+      return false;
+    }
+
+    function youtubeIdFromClientAny(v){
+      const s = String(v || '').trim();
+      if(!s) return '';
+      if(/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+      const m = s.match(/[?&]v=([A-Za-z0-9_-]{11})/i) ||
+        s.match(/youtu\.be\/([A-Za-z0-9_-]{11})/i) ||
+        s.match(/youtube\.com\/(?:embed|shorts|live)\/([A-Za-z0-9_-]{11})/i) ||
+        s.match(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi(?:_webp)?\/([A-Za-z0-9_-]{11})/i);
+      return m && m[1] ? m[1] : '';
+    }
+
+    function canonicalPageKeyClient(v){
+      const raw = String(v || '').trim();
+      if(!raw) return '';
+      try{
+        const u = new URL(raw, location.origin);
+        u.hash = '';
+        ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid','igshid','si','feature'].forEach(k => u.searchParams.delete(k));
+        let out = u.toString();
+        if(out.endsWith('/') && u.pathname !== '/') out = out.slice(0, -1);
+        return out.toLowerCase();
+      }catch(e){
+        return raw.split('#')[0].replace(/\/$/, '').toLowerCase();
+      }
+    }
+
+    function resolveOriginalPageUrlClient(it, fallback){
+      it = (it && typeof it === 'object') ? it : {};
+      const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const media = (it.media && typeof it.media === 'object') ? it.media : {};
+      const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+      const youtubeInputs = [
+        it.videoId, payload.videoId, it.watchUrl, it.videoUrl, it.embedUrl,
+        preview.videoId, preview.watchUrl, preview.videoUrl, preview.embedUrl,
+        it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl,
+        it.url, it.link, it.href, it.thumbnail, it.image, fallback
+      ];
+      for(const v of youtubeInputs){
+        const id = youtubeIdFromClientAny(v);
+        if(id) return 'https://www.youtube.com/watch?v=' + id;
+      }
       const candidates = [
-        it && it.sourcePageUrl, it && it.pageUrl, it && it.contextLink, it && it.originalPageUrl,
+        it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
         displayCard.sourcePageUrl, displayCard.pageUrl, displayCard.contextLink, displayCard.openUrl, displayCard.url,
-        payload.sourcePageUrl, payload.pageUrl, payload.contextLink, payload.originalPageUrl, payload.originallink, payload.openUrl, payload.url, payload.link,
+        payload.sourcePageUrl, payload.pageUrl, payload.contextLink, payload.originalPageUrl, payload.originallink, payload.openUrl,
         preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.openUrl,
-        it && it.openUrl, it && it.url, it && it.link, it && it.href
-      ].map(v => String(v || '').trim()).filter(Boolean);
-      const isDirectImage = (v) => {
-        const low = String(v || '').trim().toLowerCase().split('#')[0];
-        return /^data:image\//.test(low) || /\.(?:jpe?g|png|gif|webp|avif|bmp|svg)(?:\?|$)/i.test(low);
-      };
-      const sourcePage = candidates.find(v => !isDirectImage(v));
-      return String(sourcePage || candidates[0] || src || '').trim();
+        it.watchUrl, it.videoUrl, it.openUrl, it.url, it.link, it.href,
+        payload.watchUrl, payload.videoUrl, payload.url, payload.link,
+        fallback
+      ];
+      for(const v of candidates){
+        const u = String(v || '').trim();
+        if(!u || /^javascript:|^(?:data|blob):/i.test(u)) continue;
+        if(!/^https?:\/\//i.test(u) && !u.startsWith('/')) continue;
+        if(isDirectMediaAssetUrlClient(u)) continue;
+        return u;
+      }
+      return '';
+    }
+
+    function displayUrlForImageItemClient(it, src){
+      return resolveOriginalPageUrlClient(it, '');
     }
 
     function normalizeImageVariantKeyClient(imageUrl){
@@ -4814,8 +4854,7 @@ function displayGroupOfItem(it){
 
     function renderItem(it, mountTarget){
       const rawUrl = it.url || it.link || '';
-      const imageLike = normalizeSearchType(activeType) === 'image' || displayGroupOfItem(it) === 'image' || String(it.type || it.mediaType || '').toLowerCase() === 'image';
-      const url = imageLike ? (displayUrlForImageItemClient(it, rawUrl) || rawUrl) : rawUrl;
+      const url = resolveOriginalPageUrlClient(it, rawUrl);
       const domain = domainOf(url);
 
       const card = document.createElement('div');
@@ -5037,13 +5076,6 @@ if (it.riskLabel === '⚠️ high-risk') {
           video.appendChild(s);
         }
 
-        videoWrap.style.cursor = url ? 'pointer' : '';
-        videoWrap.addEventListener('click', (e) => {
-          if(!url) return;
-          e.preventDefault();
-          e.stopPropagation();
-          openResultInsideSearchFrame(displayUrlForImageItemClient(it, url) || url, it);
-        });
         videoWrap.addEventListener('mouseenter', () => {
           if (hasPlayableSource) video.play().catch(()=>{});
         });
@@ -5068,43 +5100,9 @@ if (it.riskLabel === '⚠️ high-risk') {
 
 
     function itemStableKey(it){
-      const raw = String(
-        (it && (it.sourcePageUrl || it.pageUrl || it.contextLink || it.url || it.link || it.id || it.title)) || ''
-      ).trim();
-      if(!raw) return '';
-      try{
-        const u = new URL(raw, location.origin);
-        u.hash = '';
-        Array.from(u.searchParams.keys()).forEach(k => {
-          if(/^utm_/i.test(k) || /^(fbclid|gclid|dclid|msclkid|ref|ref_src)$/i.test(k)) u.searchParams.delete(k);
-        });
-        return u.toString().replace(/\/$/, '').toLowerCase();
-      }catch(e){
-        return raw.toLowerCase();
-      }
-    }
-
-    function visibleCardsForImageEnrichment(slice){
-      const out = [];
-      const seen = new Set();
-      function add(it){
-        if(!it || typeof it !== 'object' || isDisplayGroupModule(it)) return;
-        const key = itemStableKey(it);
-        if(!key || seen.has(key)) return;
-        seen.add(key);
-        out.push(it);
-      }
-      (Array.isArray(slice) ? slice : []).forEach(entry => {
-        if(isDisplayGroupModule(entry)){
-          const visible = Array.isArray(entry.previewItems)
-            ? entry.previewItems
-            : (Array.isArray(entry.items) ? entry.items.slice(0, entry.previewLimit || PAGE_SIZE) : []);
-          visible.forEach(add);
-        }else{
-          add(entry);
-        }
-      });
-      return out;
+      return String(
+        (it && (it.id || it.url || it.link || it.title)) || ''
+      ).trim().toLowerCase();
     }
 
     function mergeEnrichedItems(baseItems, enrichedItems){
@@ -5120,45 +5118,15 @@ if (it.riskLabel === '⚠️ high-risk') {
         const hit = key ? byKey.get(key) : null;
         if(!hit) return it;
 
-        const imgs = dedupeImageVariantsClient(collectNaturalImages(hit));
+        const imgs = collectNaturalImages(hit);
         if(!imgs.length) return it;
-
-        const baseMedia = (it && it.media && typeof it.media === 'object') ? it.media : {};
-        const hitMedia = (hit && hit.media && typeof hit.media === 'object') ? hit.media : {};
-        const basePreview = (baseMedia.preview && typeof baseMedia.preview === 'object') ? baseMedia.preview : {};
-        const hitPreview = (hitMedia.preview && typeof hitMedia.preview === 'object') ? hitMedia.preview : {};
-        const mergedMedia = Object.assign({}, baseMedia, hitMedia, {
-          preview: Object.assign({}, basePreview, hitPreview, {
-            poster: hitPreview.poster || imgs[0],
-            image: hitPreview.image || imgs[0],
-            thumbnail: hitPreview.thumbnail || imgs[0],
-            original: hitPreview.original || imgs[0]
-          })
-        });
 
         const merged = {
           ...it,
           thumbnail: hit.thumbnail || imgs[0] || it.thumbnail || '',
           thumb: hit.thumb || imgs[0] || it.thumb || '',
           image: hit.image || imgs[0] || it.image || '',
-          imageUrl: hit.imageUrl || imgs[0] || it.imageUrl || '',
-          imageSet: imgs,
-          originalImage: hit.originalImage || imgs[0] || it.originalImage || '',
-          fullImage: hit.fullImage || imgs[0] || it.fullImage || '',
-          imageOriginal: hit.imageOriginal || imgs[0] || it.imageOriginal || '',
-          viewerImage: hit.viewerImage || imgs[0] || it.viewerImage || '',
-          openImageUrl: hit.openImageUrl || imgs[0] || it.openImageUrl || '',
-          contentUrl: hit.contentUrl || imgs[0] || it.contentUrl || '',
-          cardImage: hit.cardImage || imgs[0] || it.cardImage || '',
-          media: mergedMedia,
-          displayCard: Object.assign({}, it.displayCard || {}, hit.displayCard || {}, {
-            thumbnail: (hit.displayCard && hit.displayCard.thumbnail) || imgs[0],
-            image: (hit.displayCard && hit.displayCard.image) || imgs[0],
-            imageUrl: (hit.displayCard && hit.displayCard.imageUrl) || imgs[0],
-            imageSet: imgs,
-            showThumbnail: true,
-            hasThumbnail: true
-          })
+          imageSet: imgs
         };
 
         itemImageEnrichCache.set(key, merged);
@@ -5170,29 +5138,23 @@ if (it.riskLabel === '⚠️ high-risk') {
       const q = (input.value || '').trim();
       if(!q || !Array.isArray(slice) || !slice.length) return;
 
-      const visibleCards = visibleCardsForImageEnrichment(slice);
-      const candidates = visibleCards
-        .map(it => ({ it, key:itemStableKey(it) }))
+      const cacheKey = [q, activeType || 'all', page].join('::');
+      if(pageImageEnrichCache.has(cacheKey)) return;
+      pageImageEnrichCache.add(cacheKey);
+
+      const candidates = slice
+        .map((it, idx) => ({ it, idx }))
         .filter(x => {
-          if(!x.key) return false;
-          if(itemImageEnrichCache.has(x.key)) return false;
+          const key = itemStableKey(x.it);
+          if(key && itemImageEnrichCache.has(key)) return false;
           if(collectNaturalImages(x.it).length) return false;
-          const url = String((x.it && (x.it.sourcePageUrl || x.it.pageUrl || x.it.contextLink || x.it.url || x.it.link)) || '').trim();
+          const url = String((x.it && (x.it.url || x.it.link)) || '').trim();
           return /^https?:\/\//i.test(url);
         })
         .slice(0, PAGE_SIZE);
 
       if(!candidates.length) return;
 
-      const candidateKey = candidates.map(x => x.key).sort().join('|');
-      const cacheKey = [q, activeType || 'all', page, candidateKey].join('::');
-      if(pageImageEnrichCache.has(cacheKey)) return;
-      const attempts = pageImageEnrichAttempts.get(cacheKey) || 0;
-      if(attempts >= 3) return;
-      pageImageEnrichAttempts.set(cacheKey, attempts + 1);
-      pageImageEnrichCache.add(cacheKey);
-
-      let completed = false;
       try{
         const url =
           `/.netlify/functions/maru-search?action=enrich-images&q=${encodeURIComponent(q)}&type=${encodeURIComponent(activeType || 'all')}`;
@@ -5215,41 +5177,21 @@ if (it.riskLabel === '⚠️ high-risk') {
         if(!enriched.length) return;
 
         const updatedCandidates = mergeEnrichedItems(candidates.map(x => x.it), enriched);
-        const updatedByKey = new Map();
-        updatedCandidates.forEach(item => {
-          const key = itemStableKey(item);
-          if(key && collectNaturalImages(item).length) updatedByKey.set(key, item);
+        let changed = false;
+
+        updatedCandidates.forEach((item, i) => {
+          const globalIdx = startIndex + candidates[i].idx;
+          if(globalIdx >= 0 && globalIdx < allItems.length && collectNaturalImages(item).length){
+            allItems[globalIdx] = item;
+            changed = true;
+          }
         });
 
-        let changed = 0;
-        allItems = allItems.map(it => {
-          const hit = updatedByKey.get(itemStableKey(it));
-          if(!hit) return it;
-          changed += 1;
-          return hit;
-        });
-
-        loadedServerPages.forEach((items, serverPage) => {
-          if(!Array.isArray(items)) return;
-          loadedServerPages.set(serverPage, items.map(it => updatedByKey.get(itemStableKey(it)) || it));
-        });
-
-        completed = changed > 0;
         if(changed && page === currentPage){
           renderPage(page, true);
         }
       }catch(e){
         console.warn('page image enrichment skipped:', e);
-      }finally{
-        const usedAttempts = pageImageEnrichAttempts.get(cacheKey) || 0;
-        if(!completed && usedAttempts < 3){
-          pageImageEnrichCache.delete(cacheKey);
-          const retryDelay = 550 * usedAttempts;
-          setTimeout(() => {
-            if((input.value || '').trim() !== q || page !== currentPage) return;
-            enrichRenderedPageImages(page, slice, startIndex);
-          }, retryDelay);
-        }
       }
     }
 
@@ -5426,9 +5368,9 @@ if (it.riskLabel === '⚠️ high-risk') {
       if(group === 'cafe' || group === 'community' || /cafe|카페|community|forum/.test(text)) return 'cafe';
       if(group === 'shopping' || /shopping|shop|commerce|product|쇼핑|상품|가격/.test(text)) return 'shopping';
       if(group === 'news' || /news|뉴스|신문|일보|press/.test(text)) return 'news';
-      if(group === 'video' || group === 'media' || /video|youtube|youtu\.be|ytimg\.com|영상|동영상/.test(text)) return 'video';
-      if(group === 'social' || /sns|social|instagram|facebook|tiktok|twitter|x\.com|wechat|weixin|위챗|소셜/.test(text)) return 'sns';
       if(group === 'image' || isVisualSearchCandidateClient(it) || /image|images|photo|picture|사진|포토|풍경|전경|갤러리|홍보/.test(raw + ' ' + text)) return 'image';
+      if(group === 'video' || group === 'media' || /video|youtube|youtu\.be|영상|동영상/.test(text)) return 'video';
+      if(group === 'social' || /sns|social|instagram|facebook|tiktok|twitter|x\.com|소셜/.test(text)) return 'sns';
       if(group === 'sports' || /sports|스포츠|축구|야구|농구/.test(text)) return 'sports';
       if(group === 'finance' || /finance|stock|market|증권|주식|금융|환율/.test(text)) return 'finance';
       if(group === 'webtoon' || /webtoon|웹툰|comic|manga/.test(text)) return 'webtoon';
@@ -5803,7 +5745,6 @@ async function runSearch(q, type = activeType){
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
-  pageImageEnrichAttempts.clear();
   itemImageEnrichCache.clear();
   expandedDisplayGroups.clear();
 
