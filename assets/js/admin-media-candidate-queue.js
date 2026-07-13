@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue Admin View v1.0.0
+/* IGDC Media Candidate Queue Admin View v1.0.1
  * Read-only media candidate verifier. It reuses the administrator session,
  * reads the private media candidate snapshot through a Netlify function, and
  * never promotes candidates to the public media snapshot.
@@ -11,12 +11,16 @@
   var text=function(v){return String(v==null?'':v).trim();};
   var lower=function(v){return text(v).toLowerCase();};
   var state=$('state'), notice=$('notice'), diagnosticCache=null, acceptedToken='', acceptedSession=null, resolvingSession=null, rowsCache=[];
-  var TOKEN_KEYS=['osauth.tokens.v2','osauth.tokens.v1','igdc.tokens','igdc_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token'];
+  var TOKEN_KEYS=['osauth.tokens.v2','osauth.tokens.v1','igdc.auth.tokens','igdc.tokens','igdc_auth_tokens','member_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token'];
 
   function cls(kind){return kind==='ok'?'ok':kind==='warn'?'warn':'';}
   function show(message,kind){notice.className='notice '+cls(kind);notice.textContent=message;notice.classList.remove('hidden');}
   function hideNotice(){notice.classList.add('hidden');notice.textContent='';}
-  function jwt(value){var token=text(value);return token.split('.').length===3&&token.length>32?token:'';}
+  function jwtFresh(token){
+    if(!token||token.split('.').length!==3||token.length<=32)return false;
+    try{var p=token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');p+='='.repeat((4-p.length%4)%4);var payload=JSON.parse(atob(p));return !payload.exp||Number(payload.exp)>Math.floor(Date.now()/1000);}catch(_e){return true;}
+  }
+  function jwt(value){var token=text(value);return jwtFresh(token)?token:'';}
   function parseJson(value){try{return JSON.parse(value);}catch(_e){return null;}}
   function pushToken(value,out,seen,depth){
     if(depth>4||value==null)return;
@@ -27,7 +31,7 @@
     }
     if(Array.isArray(value)){value.forEach(function(item){pushToken(item,out,seen,depth+1);});return;}
     if(typeof value==='object'){
-      ['id_token','idToken','access_token','accessToken','token','__raw','raw'].forEach(function(key){pushToken(value[key],out,seen,depth+1);});
+      ['id_token','idToken','id-token','access_token','accessToken','access-token','token','jwt','bearer','authorization','Authorization','__raw','raw'].forEach(function(key){pushToken(value[key],out,seen,depth+1);});
     }
   }
   function ownStorageTokens(source,out,seen){
@@ -53,7 +57,7 @@
     await Promise.all(tasks);return out;
   }
   async function request(action,token){
-    var response=await fetch(ENDPOINT+'?action='+encodeURIComponent(action),{headers:{Authorization:'Bearer '+token,Accept:'application/json'},credentials:'same-origin',cache:'no-store'});
+    var headers={Accept:'application/json'};if(token)headers.Authorization='Bearer '+token;var response=await fetch(ENDPOINT+'?action='+encodeURIComponent(action),{headers:headers,credentials:'same-origin',cache:'no-store'});
     var data=null;try{data=await response.json();}catch(_e){}
     if(!response.ok||!data||data.ok!==true){var error=new Error((data&&data.error)||('요청 실패: HTTP '+response.status));error.code=data&&data.code;error.status=response.status;throw error;}
     return data;
@@ -63,7 +67,7 @@
     if(!force&&acceptedToken)return acceptedSession;
     if(resolvingSession)return resolvingSession;
     resolvingSession=(async function(){
-      state.textContent='관리자 공통 세션을 확인하는 중입니다.';
+      state.textContent='관리자 공통 세션을 자동 승계하는 중입니다.';
       var candidates=await tokenCandidates();
       for(var i=0;i<candidates.length;i++){
         try{var data=await request('session',candidates[i]);acceptedToken=candidates[i];acceptedSession=data;state.textContent='관리자 공통 세션 확인: '+sessionLabel(data);return data;}catch(_e){}
@@ -73,7 +77,13 @@
     })();
     try{return await resolvingSession;}finally{resolvingSession=null;}
   }
-  async function api(action){await ensureSession(false);return request(action,acceptedToken);}
+  async function api(action){
+    await ensureSession(false);
+    try{return await request(action,acceptedToken);}catch(error){
+      if(Number(error&&error.status)===401){acceptedToken='';acceptedSession=null;await ensureSession(true);return request(action,acceptedToken);}
+      throw error;
+    }
+  }
 
   function card(title,value,sub,kind){return '<article class="card"><h2>'+esc(title)+'</h2><div class="num status-'+esc(kind||'info')+'">'+esc(value)+'</div><div class="small">'+esc(sub||'')+'</div></article>';}
   function renderSummary(summary){
@@ -156,9 +166,10 @@
     show('미디어 후보 점검 JSON 파일을 다운로드했습니다.','ok');
   }
   function authErrorMessage(error){
-    if(error&&error.status===401)return '관리자 로그인이 필요합니다. 관리자 화면에서 로그인 후 다시 열어주세요.';
-    if(error&&error.status===403)return '미디어 후보 대기열 조회 권한이 없습니다.';
-    return (error&&error.message)||'요청을 처리하지 못했습니다.';
+    var message=text(error&&error.message);
+    if(Number(error&&error.status)===401||/session|token|로그인/i.test(message))return '관리자 공통 세션을 아직 찾지 못했습니다. 관리자 화면에서 인증된 오너/관리자 세션을 자동 승계하며, 별도 로그인은 만들지 않습니다.';
+    if(Number(error&&error.status)===403)return '미디어 후보 대기열 조회 권한이 없습니다.';
+    return message||'요청을 처리하지 못했습니다.';
   }
   async function refresh(){
     hideNotice();var button=$('refreshBtn');button.disabled=true;
@@ -182,7 +193,9 @@
     $('downloadJsonBtn').addEventListener('click',downloadJson);
     $('returnBtn').addEventListener('click',returnToAdmin);
     ['searchInput','sectionFilter','riskFilter','statusFilter'].forEach(function(id){$(id).addEventListener('input',renderRows);$(id).addEventListener('change',renderRows);});
-    ensureSession(false).then(refresh).catch(function(error){show(authErrorMessage(error),'warn');state.textContent='관리자 세션 확인 실패';});
+    document.addEventListener('igdc:member-auth-ready',function(){acceptedToken='';acceptedSession=null;refresh();});
+    window.addEventListener('pageshow',function(){acceptedToken='';acceptedSession=null;refresh();});
+    refresh();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();

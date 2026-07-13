@@ -8,8 +8,10 @@
 const fs = require("fs");
 const path = require("path");
 const MediaAdminAuth = require("./lib/commerce-candidate-auth.v1");
+let MediaStore = null;
+try { MediaStore = require("./lib/media-candidate-store.v1"); } catch (_error) { MediaStore = null; }
 
-const VERSION = "media-candidate-review-api-v1.0.0-private-readonly";
+const VERSION = "media-candidate-review-api-v1.0.1-admin-session-supabase-fallback";
 const READ_ROLES = new Set(["owner", "admin", "site_manager", "site_manager_director", "director", "media_manager", "commerce_manager"]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -56,7 +58,42 @@ function readJsonFile(file) {
     return null;
   }
 }
-function candidateSnapshot(root) {
+function boolValue(value) {
+  if (value === true) return true;
+  if (value === false || value == null) return false;
+  return /^(1|true|yes|on)$/i.test(text(value));
+}
+async function supabaseCandidateSnapshot() {
+  if (!MediaStore || typeof MediaStore.selectCandidates !== "function") return null;
+  try {
+    MediaStore.config();
+    const rows = await MediaStore.selectCandidates("select=*&order=updated_at.desc&limit=1000");
+    return {
+      file: "supabase:" + (MediaStore.CANDIDATE_TABLE || "media_candidates"),
+      sourceMode: "supabase",
+      doc: {
+        version: "media.candidate-library.supabase.v1",
+        type: "media_candidate_library",
+        schema: "media_candidates.supabase.v1",
+        generatedAt: new Date().toISOString(),
+        renderPolicy: "private_review_only",
+        mediaTrendingPolicy: "manual_seed_excluded",
+        count: Array.isArray(rows) ? rows.length : 0,
+        items: Array.isArray(rows) ? rows : []
+      }
+    };
+  } catch (error) {
+    return {
+      file: "",
+      sourceMode: "supabase_unavailable",
+      storeError: { code: error && error.code || null, message: text(error && error.message || error) },
+      doc: null
+    };
+  }
+}
+async function candidateSnapshot(root) {
+  const stage = await supabaseCandidateSnapshot();
+  if (stage && stage.doc) return stage;
   const candidates = [
     path.join(__dirname, "data", "media.candidates.snapshot.json"),
     path.join(root, "netlify", "functions", "data", "media.candidates.snapshot.json"),
@@ -64,9 +101,9 @@ function candidateSnapshot(root) {
   ];
   for (const file of candidates) {
     const doc = readJsonFile(file);
-    if (doc) return { file, doc };
+    if (doc) return { file, sourceMode: "static_snapshot", storeError: stage && stage.storeError || null, doc };
   }
-  return { file: "", doc: { version: "media.candidate-library.empty", type: "media_candidate_library", count: 0, items: [] } };
+  return { file: "", sourceMode: stage && stage.sourceMode || "empty", storeError: stage && stage.storeError || null, doc: { version: "media.candidate-library.empty", type: "media_candidate_library", count: 0, items: [] } };
 }
 function publicSnapshotDigest(root) {
   const candidates = [
@@ -105,46 +142,55 @@ function hasText() {
 function isPromotable(row) {
   if (!row || row.candidateOnly === true || row.seedContent === true || row.sampleSlot === true) return false;
   const status = lower(row.verificationStatus || row.rights && row.rights.status);
-  if (!["verified", "approved", "rights_verified", "source_verified"].includes(status)) return false;
+  if (!["verified", "approved", "rights_verified", "source_verified", "approved_for_snapshot"].includes(status)) return false;
   if (!hasText(row.url, row.video, row.rights && row.rights.sourceUrl)) return false;
   if (!hasText(row.thumb, row.thumbnail, row.image, row.rights && row.rights.sourceUrl)) return false;
   return true;
 }
 function normalizeRow(row) {
   const rights = plain(row && row.rights);
+  const sourceUrl = text(row && (row.url || row.source_url || row.sourceUrl || row.page_url || row.pageUrl || row.link || row.href || row.embed_url || row.embedUrl || row.video_url || row.videoUrl));
+  const videoUrl = text(row && (row.video || row.video_url || row.videoUrl));
+  const embedUrl = text(row && (row.embedUrl || row.embed_url));
+  const thumbUrl = text(row && (row.thumb || row.thumbnail || row.image || row.thumb_url || row.thumbUrl));
+  const verificationStatus = text(row && (row.verificationStatus || row.verification_status)) || text(rights.status) || text(row && row.rights_status) || "verification_required";
+  const candidateOnly = row && (row.candidateOnly === true || row.candidate_only === true || boolValue(row.candidate_only));
+  const seedContent = row && (row.seedContent === true || row.seed_content === true || boolValue(row.seed_content));
   return {
-    slotId: row && row.slotId || null,
-    contentId: text(row && (row.contentId || row.id)),
-    id: text(row && (row.id || row.contentId)),
-    sectionKey: text(row && row.sectionKey),
+    slotId: row && (row.slotId || row.slot_id) || null,
+    contentId: text(row && (row.contentId || row.content_id || row.id)),
+    id: text(row && (row.id || row.contentId || row.content_id)),
+    sectionKey: text(row && (row.sectionKey || row.section_key || row.section || row.targetSection || row.category)),
     title: text(row && row.title),
-    provider: text(row && row.provider),
-    year: text(row && row.year),
+    provider: text(row && (row.provider || row.sourceProvider || row.source_host || row.publisher || row.channel)),
+    year: text(row && (row.year || row.release_year)),
     region: text(row && row.region),
-    qualityTarget: text(row && row.qualityTarget),
-    qualityPriority: text(row && row.qualityPriority),
-    riskLevel: text(row && row.riskLevel),
-    verificationStatus: text(row && row.verificationStatus) || text(rights.status) || "verification_required",
-    sanmaruSearchSeed: text(row && row.sanmaruSearchSeed),
-    url: text(row && row.url),
-    video: text(row && row.video),
-    thumb: text(row && (row.thumb || row.thumbnail || row.image)),
-    candidateOnly: row && row.candidateOnly === true,
-    seedContent: row && row.seedContent === true,
-    trendingEligible: row && row.trendingEligible === true,
-    replacementPolicy: text(row && row.replacementPolicy),
+    qualityTarget: text(row && (row.qualityTarget || row.quality_target || row.quality_hint || row.quality || row.resolution)),
+    qualityPriority: text(row && (row.qualityPriority || row.quality_priority || row.priority)),
+    riskLevel: text(row && (row.riskLevel || row.risk_level)),
+    reviewStatus: text(row && (row.reviewStatus || row.review_status)),
+    verificationStatus,
+    sanmaruSearchSeed: text(row && (row.sanmaruSearchSeed || row.sanmaru_query || row.searchSeed || row.query)),
+    url: sourceUrl,
+    video: videoUrl,
+    embedUrl,
+    thumb: thumbUrl,
+    candidateOnly,
+    seedContent,
+    trendingEligible: row && (row.trendingEligible === true || boolValue(row.trending_eligible)),
+    replacementPolicy: text(row && (row.replacementPolicy || row.replacement_policy)),
     rights: {
-      status: text(rights.status),
-      candidate: text(rights.candidate),
-      sourceHint: text(rights.sourceHint),
-      hostingModeCandidate: text(rights.hostingModeCandidate),
-      sourceUrl: text(rights.sourceUrl),
-      licenseUrl: text(rights.licenseUrl),
-      verifiedAt: rights.verifiedAt || null,
-      verifiedBy: text(rights.verifiedBy),
-      attribution: text(rights.attribution)
+      status: text(rights.status) || text(row && row.rights_status),
+      candidate: text(rights.candidate) || text(row && row.allowed_use),
+      sourceHint: text(rights.sourceHint) || text(row && row.source_host),
+      hostingModeCandidate: text(rights.hostingModeCandidate) || text(row && row.hosting_mode_candidate),
+      sourceUrl: text(rights.sourceUrl) || sourceUrl,
+      licenseUrl: text(rights.licenseUrl) || text(row && (row.license_url || row.licenseUrl)),
+      verifiedAt: rights.verifiedAt || row && (row.reviewed_at || row.approved_at) || null,
+      verifiedBy: text(rights.verifiedBy) || text(row && row.reviewed_by),
+      attribution: text(rights.attribution) || text(row && row.attribution)
     },
-    promotable: isPromotable(row)
+    promotable: isPromotable(Object.assign({}, row, { candidateOnly, seedContent, verificationStatus, url: sourceUrl, video: videoUrl, embedUrl, thumb: thumbUrl, rights: Object.assign({}, rights, { status: text(rights.status) || text(row && row.rights_status), sourceUrl: text(rights.sourceUrl) || sourceUrl }) }))
   };
 }
 function summaryDoc(doc, publicDigest) {
@@ -195,7 +241,9 @@ function diagnosticDoc(stage, publicDigest, member) {
     administrator: { roles: roles(member), access: "validated-media-candidate-read" },
     source: {
       candidateFileLoaded: !!(stage && stage.file),
-      candidateFile: stage && stage.file ? path.basename(stage.file) : "not_found",
+      candidateFile: stage && stage.file ? (String(stage.file).startsWith("supabase:") ? stage.file : path.basename(stage.file)) : "not_found",
+      candidateSourceMode: text(stage && stage.sourceMode),
+      supabaseStoreError: stage && stage.storeError || null,
       publicSnapshotChecked: !!(publicDigest && publicDigest.file),
       publicSnapshotSeededCandidates: publicDigest && publicDigest.seededInPublic || 0,
       publicSnapshotRealSlots: publicDigest && publicDigest.realSlots || 0
@@ -224,7 +272,7 @@ exports.handler = async function(event) {
     requireRead(member);
     const action = lower((event.queryStringParameters || {}).action || "summary");
     const root = process.cwd();
-    const stage = candidateSnapshot(root);
+    const stage = await candidateSnapshot(root);
     const publicDigest = publicSnapshotDigest(root);
     const doc = stage.doc || {};
     if (action === "session") return json(200, sessionDoc(member));
