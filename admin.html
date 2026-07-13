@@ -3307,7 +3307,7 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
       '<div class="igdc-admin-commerce-candidate-desc">생활필수·판매시장·수익권한·관리승인 후보를 비공개로 검토합니다.</div>'+
       '<button class="igdc-admin-commerce-candidate-btn" type="button">상품 후보·수익 점검 열기</button>'+
       '<div class="igdc-admin-commerce-candidate-mini">대기열·수익 점검 JSON 확인 · 공개 발행·결제 실행 없음</div>';
-    function open(ev){if(ev){ev.preventDefault();ev.stopPropagation();}captureMediaQueueAdminSession();window.location.href=pageUrl();return false;}
+    function open(ev){if(ev){ev.preventDefault();ev.stopPropagation();}window.location.href=pageUrl();return false;}
     var b=card.querySelector('button');if(b)b.addEventListener('click',open);
     card.addEventListener('click',function(ev){if(ev.target&&ev.target.tagName==='BUTTON')return;open(ev);});
     return card;

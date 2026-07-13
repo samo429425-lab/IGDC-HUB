@@ -34,9 +34,9 @@ function requireRole(member, scope){
   return values;
 }
 async function resolveCurrentAdmin(event){
-  // Use the queue's own signed Auth0/JWKS verifier. The prior reference to
-  // global-slot-console-auth pointed to a module that is not present in the
-  // deployed source package, which disconnected this read-only queue endpoint.
+  // Use the queue's existing signed Auth0/JWKS verifier. The shared console
+  // auth module referenced by the original source is not present in the full
+  // deployment package, so that reference disconnects this endpoint at load.
   const actor=await CommerceAuth.authenticateCommerceAdmin(event);
   return {memberId:text(actor&&actor.memberId),email:text(actor&&actor.email),name:text(actor&&actor.name),roles:Array.isArray(actor&&actor.roles)?actor.roles:[]};
 }
