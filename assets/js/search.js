@@ -1,6 +1,6 @@
 // IGDC Search.js — FULL SEARCH PIPELINE PATCH
 // PATCH: Sanmaru route-owned natural flow + page-lazy rendering + balanced vertical tabs
-// PATCH: search-owned proxy viewer + bounded 2,000 intake + real-content card media/body display + 30-language search UI labels
+// PATCH: search-owned proxy viewer + bounded 2,000 intake + all-card page-owned media/source linkage + 30-language search UI labels
 // - collector first
 // - collector search pipeline
 // - silent error prevention
@@ -43,15 +43,18 @@ ready(function () {
     const BLOCK_SIZE = 10;
     const MAX_PAGER_PAGES = 499;
     const INITIAL_PRELOAD_PAGES = 5;
-    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES; // 125 cards
+    const INITIAL_PRELOAD_TARGET = PAGE_SIZE * INITIAL_PRELOAD_PAGES; // 125 real cards
+    const INITIAL_SERVER_WINDOW_MAX = 130;
     const INITIAL_DOM_RENDER_TARGET = INITIAL_PRELOAD_TARGET;
-    const INITIAL_PROGRESSIVE_PAGER_PAGES = 10;
+    const INITIAL_PAGER_PAGES = 10;
+    const INITIAL_PROGRESSIVE_PAGER_PAGES = INITIAL_PAGER_PAGES;
     const MAX_PROGRESSIVE_PAGER_PAGES = 80;
     const MIN_SMOOTH_CANDIDATES = 120;
     const MAX_SMOOTH_CANDIDATES = PAGE_SIZE * MAX_PROGRESSIVE_PAGER_PAGES;
     const FETCH_LIMIT = MAX_SMOOTH_CANDIDATES;
     const INTAKE_CONCURRENCY = 5;
     const INTAKE_BURST_DELAY_MS = 8;
+    const SEARCH_FETCH_TIMEOUT_MS = 15000;
     const INTAKE_PAGE_RETRY_LIMIT = 4;
     const INTAKE_CONFIRMED_EMPTY_STOP = 12;
     // Search HTML should behave as an immediate receiver: once Sanmaru/MaruSearch
@@ -1940,6 +1943,9 @@ function startContinuousIntake(q, type, seq){
   authoritativeServerTotalItems = Math.max(authoritativeServerTotalItems || 0, target);
   updateProgressiveTotalFromPayload(lastSearchPayload || {}, Math.max(target, allItems.length || 0));
 
+  // Page 1 is requested separately by runSearch. Start the open intake faucet at
+  // page 2 immediately; once the first 125~130 cards arrive, partial page 6 is
+  // fetched again instead of being mistaken for a complete loaded page.
   let nextPage = allItems.length
     ? Math.max(2, Math.floor(allItems.length / PAGE_SIZE) + 1)
     : 2;
@@ -1992,6 +1998,8 @@ function startContinuousIntake(q, type, seq){
           else drawPager();
           status.textContent = statusResultsText(actualResultCountForStatus(), q, type, true);
 
+          // A partial page can be a temporarily incomplete provider packet. Give it
+          // one more chance later without blocking the following pages.
           if(pageSlice.length < PAGE_SIZE && allItems.length < target && allItems.length > beforeCount){
             const tried = retryCounts.get(page) || 0;
             if(tried < 1){
@@ -2023,7 +2031,7 @@ function startContinuousIntake(q, type, seq){
     }
     if(continuousIntakeActive && continuousIntakeSeq === token && runSearch._seq === seq){
       drawPager();
-      if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES) || stopForConfirmedEmptyTail){
+      if(allItems.length >= Math.min(target, MAX_SMOOTH_CANDIDATES) || stopForConfirmedEmptyTail) {
         status.textContent = statusResultsText(actualResultCountForStatus(), q, type);
       }
     }
@@ -2063,45 +2071,49 @@ function startContinuousIntake(q, type, seq){
 
    function dedupeItems(items){
   const out = [];
-  const seen = new Set();
+  const pos = new Map();
 
   for (const it of Array.isArray(items) ? items : []) {
-    const rawFallbackUrl = String(it?.url || it?.link || '').trim();
-    const rawUrl = String(displayUrlForImageItemClient(it, rawFallbackUrl) || rawFallbackUrl).trim();
-    const normUrl = rawUrl.toLowerCase();
-
-    const isPlaceholderUrl =
-      !rawUrl ||
-      rawUrl === '#' ||
-      rawUrl === '/' ||
-      normUrl === 'javascript:void(0)' ||
-      normUrl.startsWith('javascript:');
-
-    const key = (
-      !isPlaceholderUrl
-        ? rawUrl
-        : (String(it?.id || '').trim() ||
-           ((String(it?.title || '').trim()) + '|' + String(it?.source?.name || it?.source || '').trim()))
-    ).toLowerCase();
-
-    if (!key) continue;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(it);
+    if(!it) continue;
+    const key = searchDisplayKeyForItem(it);
+    if(!key) continue;
+    if(pos.has(key)){
+      const idx = pos.get(key);
+      out[idx] = mergeSearchCardItemsClient(out[idx], it);
+    }else{
+      pos.set(key, out.length);
+      out.push(it);
+    }
   }
 
   return out;
 }
 
+function firstNonEmptyClient(values){
+  for(const v of (Array.isArray(values) ? values : [])){
+    const s = String(v == null ? '' : v).trim();
+    if(s) return s;
+  }
+  return '';
+}
+
+function youtubeIdClientFromAny(v){
+  const raw = String(v || '').trim();
+  if(/^[A-Za-z0-9_-]{11}$/.test(raw)) return raw;
+  return extractYouTubeIdQuickClient(raw);
+}
+
 function searchDisplayKeyForItem(it){
   if(!it) return '';
-  const rawFallbackUrl = String(it.url || it.link || it.openUrl || '').trim();
-  const rawUrl = String(displayUrlForImageItemClient(it, rawFallbackUrl) || rawFallbackUrl).trim();
-  const normUrl = rawUrl.toLowerCase();
+  const rawCandidate = String(it.url || it.link || it.openUrl || '').trim();
+  const pageUrl = displayUrlForImageItemClient(it, rawCandidate) || rawCandidate;
+  const ytId = youtubeIdClientFromAny(pageUrl) || youtubeIdClientFromAny(it.videoId) || youtubeIdClientFromAny(it.thumbnail) || youtubeIdClientFromAny(it.image);
+  if(ytId) return 'youtube:' + ytId.toLowerCase();
+  const normUrl = normalizeCardPageKeyClient(pageUrl);
   const isPlaceholderUrl =
-    !rawUrl ||
-    rawUrl === '#' ||
-    rawUrl === '/' ||
+    !pageUrl ||
+    pageUrl === '#' ||
+    pageUrl === '/' ||
     normUrl === 'javascript:void(0)' ||
     normUrl.startsWith('javascript:');
 
@@ -2133,6 +2145,108 @@ function displayRichnessScore(it){
   return score;
 }
 
+function mergeSearchCardItemsClient(prev, next){
+  const a = (prev && typeof prev === 'object') ? prev : {};
+  const b = (next && typeof next === 'object') ? next : {};
+  const aScore = displayRichnessScore(a);
+  const bScore = displayRichnessScore(b);
+  const primary = bScore >= aScore ? b : a;
+  const secondary = primary === b ? a : b;
+  const merged = Object.assign({}, secondary, primary);
+  merged.payload = Object.assign({}, secondary.payload && typeof secondary.payload === 'object' ? secondary.payload : {}, primary.payload && typeof primary.payload === 'object' ? primary.payload : {});
+  merged.data = Object.assign({}, secondary.data && typeof secondary.data === 'object' ? secondary.data : {}, primary.data && typeof primary.data === 'object' ? primary.data : {});
+  merged.displayCard = Object.assign({}, secondary.displayCard && typeof secondary.displayCard === 'object' ? secondary.displayCard : {}, primary.displayCard && typeof primary.displayCard === 'object' ? primary.displayCard : {});
+
+  const pageUrl = displayUrlForImageItemClient(merged, merged.url || merged.link || '') || displayUrlForImageItemClient(primary, primary.url || primary.link || '') || displayUrlForImageItemClient(secondary, secondary.url || secondary.link || '');
+  if(pageUrl){
+    merged.url = pageUrl;
+    merged.link = pageUrl;
+    merged.openUrl = pageUrl;
+    merged.pageUrl = pageUrl;
+    merged.sourcePageUrl = pageUrl;
+    merged.contextLink = pageUrl;
+  }
+
+  const images = dedupeImageVariantsClient([].concat(collectNaturalImages(primary), collectNaturalImages(secondary))).slice(0, 6);
+  if(images.length){
+    merged.thumbnail = images[0];
+    merged.thumb = images[0];
+    merged.image = images[0];
+    merged.imageUrl = images[0];
+    merged.originalImage = images[0];
+    merged.fullImage = images[0];
+    merged.imageSet = images;
+    merged.cardImage = images[0];
+  }
+
+  let ytId = '';
+  for(const v of [merged.videoId, merged.watchUrl, merged.videoUrl, pageUrl, merged.thumbnail, merged.image]){
+    ytId = youtubeIdClientFromAny(v);
+    if(ytId) break;
+  }
+  const youtubeLike = !!ytId || isYoutubeLikeItemClient(merged);
+  if(youtubeLike && ytId){
+    const watch = 'https://www.youtube.com/watch?v=' + ytId;
+    merged.type = 'video';
+    merged.mediaType = 'video';
+    merged.videoId = ytId;
+    merged.videoUrl = watch;
+    merged.watchUrl = watch;
+    merged.embedUrl = 'https://www.youtube.com/embed/' + ytId;
+    merged.url = watch;
+    merged.link = watch;
+    merged.openUrl = watch;
+    merged.pageUrl = watch;
+    merged.sourcePageUrl = watch;
+    merged.contextLink = watch;
+  }else{
+    const pType = String(primary.type || '').toLowerCase();
+    const sType = String(secondary.type || '').toLowerCase();
+    if(pType === 'image' && sType && sType !== 'image'){
+      merged.type = secondary.type;
+      merged.mediaType = secondary.mediaType || 'article';
+    }
+  }
+
+  const mediaA = secondary.media && typeof secondary.media === 'object' ? secondary.media : {};
+  const mediaB = primary.media && typeof primary.media === 'object' ? primary.media : {};
+  const previewA = mediaA.preview && typeof mediaA.preview === 'object' ? mediaA.preview : {};
+  const previewB = mediaB.preview && typeof mediaB.preview === 'object' ? mediaB.preview : {};
+  const media = Object.assign({}, mediaA, mediaB);
+  const preview = Object.assign({}, previewA, previewB);
+  if(images[0]){
+    preview.poster = preview.poster || images[0];
+    preview.image = preview.image || images[0];
+    preview.thumbnail = preview.thumbnail || images[0];
+  }
+  if(youtubeLike){
+    media.type = 'video';
+    preview.videoUrl = merged.videoUrl || preview.videoUrl;
+    preview.embedUrl = merged.embedUrl || preview.embedUrl;
+  }else if(images[0] && !media.type){
+    media.type = 'image';
+  }
+  if(Object.keys(preview).length) media.preview = preview;
+  if(Object.keys(media).length) merged.media = media;
+
+  merged.displayCard = Object.assign({}, merged.displayCard || {}, {
+    url: merged.url || pageUrl || '',
+    openUrl: merged.openUrl || merged.url || pageUrl || '',
+    pageUrl: merged.pageUrl || merged.url || pageUrl || '',
+    sourcePageUrl: merged.sourcePageUrl || merged.pageUrl || merged.url || pageUrl || '',
+    contextLink: merged.contextLink || merged.sourcePageUrl || merged.pageUrl || merged.url || pageUrl || '',
+    thumbnail: images[0] || merged.displayCard.thumbnail || '',
+    image: images[0] || merged.displayCard.image || '',
+    imageUrl: images[0] || merged.displayCard.imageUrl || '',
+    imageSet: images,
+    showThumbnail: !!images.length,
+    hasThumbnail: !!images.length,
+    showVideoPreview: youtubeLike || String(merged.mediaType || '').toLowerCase() === 'video'
+  });
+  merged.clickTargetType = youtubeLike || String(merged.mediaType || '').toLowerCase() === 'video' ? 'video' : (pageUrl ? 'page' : (images.length ? 'image' : 'page'));
+  return merged;
+}
+
 function mergeItemsPreferDisplayRichness(baseItems, incomingItems){
   const out = [];
   const pos = new Map();
@@ -2146,11 +2260,7 @@ function mergeItemsPreferDisplayRichness(baseItems, incomingItems){
       return;
     }
     const idx = pos.get(key);
-    const prev = out[idx];
-    const merged = Object.assign({}, prev || {}, it || {});
-    const prevScore = displayRichnessScore(prev);
-    const nextScore = displayRichnessScore(it);
-    out[idx] = nextScore >= prevScore ? merged : Object.assign({}, it || {}, prev || {});
+    out[idx] = mergeSearchCardItemsClient(out[idx], it);
   }
   (Array.isArray(baseItems) ? baseItems : []).forEach(addOrMerge);
   (Array.isArray(incomingItems) ? incomingItems : []).forEach(addOrMerge);
@@ -2161,29 +2271,36 @@ async function fetchSearch(q, type = activeType, page = 1){
   const safeType = normalizeSearchType(type);
   signalSanmaruSearch(q, safeType, 'maru-search-fetch');
 
+  const requestedPage = Math.max(1, Number(page) || 1);
   const sp = new URLSearchParams();
+  sp.set('action', 'search-ui');
+  sp.set('gateway', 'search-ui');
+  sp.set('searchUi', '1');
   sp.set('q', q);
   sp.set('limit', String(adaptiveSearchTarget(q, safeType)));
   sp.set('type', safeType);
   sp.set('tab', safeType);
   sp.set('perPage', String(PAGE_SIZE));
   sp.set('visibleCardsPerPage', String(PAGE_SIZE));
-  sp.set('page', String(Math.max(1, Number(page) || 1)));
-  sp.set('visiblePage', String(Math.max(1, Number(page) || 1)));
+  sp.set('page', String(requestedPage));
+  sp.set('visiblePage', String(requestedPage));
+  sp.set('initialPreloadTarget', String(INITIAL_PRELOAD_TARGET));
+  sp.set('firstResponseWindow', String(INITIAL_SERVER_WINDOW_MAX));
+  sp.set('realContentFirst', '1');
+  sp.set('richContent', '1');
+  sp.set('requireSnippets', '1');
+  sp.set('realResultCards', '1');
   sp.set('pageWindowOnly', '1');
-  sp.set('residentFirst', '1');
-  sp.set('sanmaruFirst', '1');
-  sp.set('routeOwner', 'sanmaru');
   sp.set('naturalFlow', '1');
   sp.set('smoothIntake', '1');
   sp.set('noBlockingWide', '1');
-  sp.set('residentSwitch', '1');
-  sp.set('activateResident', '1');
   sp.set('handoff', isSearchPage ? 'search-html' : 'home');
   const url = `/.netlify/functions/maru-search?${sp.toString()}`;
 
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => { try { ctrl.abort(); } catch(e) {} }, SEARCH_FETCH_TIMEOUT_MS);
   try {
-    const r = await fetch(url, { cache: 'no-store' });
+    const r = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
     if (!r.ok) return { items: [], payload: null, pageItems: [], viewportSections: [] };
 
     const json = await r.json();
@@ -2193,8 +2310,10 @@ async function fetchSearch(q, type = activeType, page = 1){
 
     return normalizeSearchPayload(json);
   } catch (e) {
-    console.error('fetchSearch failed:', e);
+    if(e && e.name !== 'AbortError') console.error('fetchSearch failed:', e);
     return { items: [], payload: null, pageItems: [], viewportSections: [] };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -2918,6 +3037,7 @@ async function fetchInstantSearchPack(q, type = activeType){
 
       const out = [];
       const seen = new Set();
+      const pageKey = normalizeCardPageKeyClient(displayUrlForImageItemClient(it, (it && (it.url || it.link)) || ''));
 
       raw.forEach(v => {
         const s = String(v || '').trim();
@@ -2945,6 +3065,7 @@ async function fetchInstantSearchPack(q, type = activeType){
           key = (u.origin + u.pathname).toLowerCase();
         } catch(e) {}
 
+        if(pageKey && normalizeCardPageKeyClient(s) === pageKey) return;
         if (seen.has(key)) return;
 
         seen.add(key);
@@ -3717,9 +3838,17 @@ function displayGroupOfItem(it){
         url,
         it && it.url,
         it && it.link,
+        it && it.watchUrl,
         it && it.videoUrl,
+        it && it.embedUrl,
+        it && it.videoId,
+        it && it.thumbnail,
+        it && it.image,
         it && it.media && it.media.url,
-        it && it.media && it.media.videoUrl
+        it && it.media && it.media.videoUrl,
+        it && it.media && it.media.preview && it.media.preview.videoUrl,
+        it && it.media && it.media.preview && it.media.preview.embedUrl,
+        it && it.media && it.media.preview && it.media.preview.poster
       ].filter(Boolean);
 
       for (const u of candidates) {
@@ -4525,71 +4654,87 @@ function displayGroupOfItem(it){
       goToOriginalSourceSameTab(url);
     }
 
-    function isDirectMediaAssetUrlForCardLinkClient(v){
-      const s = String(v || '').trim();
+    function decodeCardUrlClient(v){
+      return String(v || '').replace(/&amp;/gi, '&').replace(/&#x26;/gi, '&').replace(/&#38;/gi, '&').trim();
+    }
+
+    function cardUrlHostClient(v){
+      try { return new URL(decodeCardUrlClient(v), location.origin).hostname.replace(/^www\./i, '').toLowerCase(); }
+      catch(e){ return ''; }
+    }
+
+    function isDirectMediaAssetUrlClient(v){
+      const s = decodeCardUrlClient(v);
       if(!s) return false;
       const low = s.toLowerCase().split('#')[0];
-      if(/^data:(?:image|video)\//i.test(low) || /^blob:/i.test(low)) return true;
-      if(/\.(?:jpe?g|png|gif|webp|avif|bmp|svg|ico|mp4|webm|mov|m4v|m3u8)(?:\?|$)/i.test(low)) return true;
-      if(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi\//i.test(low)) return true;
-      if(/(?:googleusercontent|gstatic|pstatic|kakaocdn|fbcdn|cdninstagram|twimg)\./i.test(low)) return true;
-      if(/(?:^|\/\/)(?:images?|img|photo|photos|thumbnail|thumb|media)\.[^/]+\//i.test(low)) return true;
-      if(/cloudfront\./i.test(low) && /(?:image|images|img|photo|photos|thumbnail|thumb|media|video|poster|cdn)/i.test(low)) return true;
+      if(/^(?:data|blob):(image|video)\//i.test(low)) return true;
+      if(/\.(?:jpe?g|png|gif|webp|avif|bmp|svg|ico|mp4|webm|m3u8|mov|m4v|ogg)(?:\?|$)/i.test(low)) return true;
+      const host = cardUrlHostClient(s);
+      if(/(?:^|\.)((?:i\.)?ytimg\.com|img\.youtube\.com|googleusercontent\.com|ggpht\.com|gstatic\.com|fbcdn\.net|cdninstagram\.com|twimg\.com|pstatic\.net|kakaocdn\.net|qpic\.cn|qlogo\.cn|wechatcdn\.com|wx\.qlogo\.cn|pinimg\.com|cloudfront\.net)$/i.test(host)) return true;
+      if(/(?:\/|[?&=_-])(image|images|img|photo|photos|picture|thumbnail|thumb|poster|cover|mmbiz)(?:\/|[?&=_-])/i.test(low)) return true;
+      if(/[?&](?:format|fm|ext|type)=(?:jpe?g|png|gif|webp|avif|mp4|webm)(?:&|$)/i.test(low)) return true;
       return false;
     }
 
-    function youtubeWatchUrlForCardLinkClient(it){
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
-      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
-      const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
-      const values = [
-        it && it.videoId, displayCard.videoId, payload.videoId, preview.videoId,
-        it && it.watchUrl, it && it.videoUrl, it && it.embedUrl,
-        displayCard.watchUrl, displayCard.videoUrl, displayCard.embedUrl,
-        payload.watchUrl, payload.videoUrl, payload.embedUrl,
-        preview.watchUrl, preview.videoUrl, preview.embedUrl,
-        it && it.url, it && it.link, it && it.openUrl,
-        displayCard.url, displayCard.openUrl,
-        payload.url, payload.link, payload.openUrl,
-        it && it.thumbnail, it && it.image, displayCard.thumbnail, displayCard.image,
-        preview.poster, preview.thumbnail, preview.image
-      ];
-      for(const v of values){
-        const raw = String(v || '').trim();
-        const id = /^[A-Za-z0-9_-]{11}$/.test(raw) ? raw : extractYouTubeIdQuickClient(raw);
-        if(id) return `https://www.youtube.com/watch?v=${id}`;
-      }
-      return '';
+    function normalizeCardPageKeyClient(v){
+      const raw = decodeCardUrlClient(v);
+      if(!raw) return '';
+      try{
+        const u = new URL(raw, location.origin);
+        u.hash = '';
+        Array.from(u.searchParams.keys()).forEach(k => {
+          if(/^utm_/i.test(k) || /^(fbclid|gclid|dclid|msclkid|ved|sa|source|ref|ref_src)$/i.test(k)) u.searchParams.delete(k);
+        });
+        u.hostname = u.hostname.toLowerCase();
+        if(u.pathname.length > 1) u.pathname = u.pathname.replace(/\/+$/, '');
+        return u.toString().replace(/\?$/, '').toLowerCase();
+      }catch(e){ return raw.split('#')[0].replace(/\/+$/, '').toLowerCase(); }
     }
 
     function displayUrlForImageItemClient(it, src){
-      const displayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
-      const payload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
-      const data = (it && it.data && typeof it.data === 'object') ? it.data : {};
-      const media = (it && it.media && typeof it.media === 'object') ? it.media : {};
-      const preview = (media && media.preview && typeof media.preview === 'object') ? media.preview : {};
+      it = (it && typeof it === 'object') ? it : {};
+      const displayCard = (it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+      const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
+      const data = (it.data && typeof it.data === 'object') ? it.data : {};
+      const media = (it.media && typeof it.media === 'object') ? it.media : {};
+      const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
+      const candidates = [
+        it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
+        displayCard.sourcePageUrl, displayCard.pageUrl, displayCard.contextLink, displayCard.originalPageUrl, displayCard.watchUrl, displayCard.videoUrl, displayCard.openUrl, displayCard.url,
+        payload.sourcePageUrl, payload.pageUrl, payload.contextLink, payload.originalPageUrl, payload.originallink, payload.watchUrl, payload.videoUrl, payload.openUrl, payload.url, payload.link,
+        data.sourcePageUrl, data.pageUrl, data.contextLink, data.originalPageUrl, data.originallink, data.watchUrl, data.videoUrl, data.url, data.link,
+        preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.watchUrl, preview.videoUrl, preview.openUrl,
+        it.watchUrl, it.videoUrl, it.openUrl, it.url, it.link, it.href
+      ].map(decodeCardUrlClient).filter(Boolean);
 
-      const youtubeWatch = youtubeWatchUrlForCardLinkClient(it);
-      if(youtubeWatch) return youtubeWatch;
+      const ytCandidates = candidates.concat([
+        it.videoId, displayCard.videoId, payload.videoId,
+        it.thumbnail, it.thumb, it.image, it.imageUrl,
+        preview.poster, preview.thumbnail, preview.image, src
+      ]);
+      const platformText = [it.platform, it.source, it.provider, it.channel, candidates.join(' '), it.thumbnail, it.image]
+        .map(v => String(v || '').toLowerCase()).join(' ');
+      if(/youtube|youtu\.be|ytimg\.com/.test(platformText)){
+        for(const v of ytCandidates){
+          const id = youtubeIdClientFromAny(v);
+          if(id) return 'https://www.youtube.com/watch?v=' + id;
+        }
+      }
 
-      const preferred = [
-        it && it.sourcePageUrl, it && it.pageUrl, it && it.contextLink, it && it.originalPageUrl, it && it.originallink,
-        displayCard.sourcePageUrl, displayCard.pageUrl, displayCard.contextLink, displayCard.originalPageUrl,
-        payload.sourcePageUrl, payload.pageUrl, payload.contextLink, payload.originalPageUrl, payload.originallink,
-        data.sourcePageUrl, data.pageUrl, data.contextLink, data.originalPageUrl, data.originallink,
-        preview.sourcePageUrl, preview.pageUrl, preview.contextLink, preview.originalPageUrl,
-        it && it.watchUrl, displayCard.watchUrl, payload.watchUrl, preview.watchUrl,
-        it && it.openUrl, displayCard.openUrl, payload.openUrl, preview.openUrl,
-        displayCard.url, payload.url, payload.link, data.url, data.link,
-        it && it.url, it && it.link, it && it.href
-      ].map(v => String(v || '').trim()).filter(Boolean);
-
-      const sourcePage = preferred.find(v => !isDirectMediaAssetUrlForCardLinkClient(v));
-      if(sourcePage) return sourcePage;
-
-      const fallback = String(src || preferred[0] || '').trim();
-      return fallback;
+      const pages = candidates.filter(v => /^https?:\/\//i.test(v) && !isDirectMediaAssetUrlClient(v));
+      if(/facebook|fb\.watch|fbcdn/.test(platformText)){
+        const fb = pages.find(v => /facebook\.com|fb\.watch/i.test(cardUrlHostClient(v) + ' ' + v));
+        if(fb) return fb;
+      }
+      if(/instagram|cdninstagram/.test(platformText)){
+        const ig = pages.find(v => /instagram\.com$/i.test(cardUrlHostClient(v)));
+        if(ig) return ig;
+      }
+      if(/wechat|weixin|mp\.weixin\.qq\.com|qpic\.cn|qlogo\.cn/.test(platformText)){
+        const wx = pages.find(v => /(?:^|\.)mp\.weixin\.qq\.com$|(?:^|\.)weixin\.qq\.com$/i.test(cardUrlHostClient(v)));
+        if(wx) return wx;
+      }
+      return String(pages[0] || '').trim();
     }
 
     function normalizeImageVariantKeyClient(imageUrl){
@@ -4844,8 +4989,6 @@ function displayGroupOfItem(it){
 
     function renderItem(it, mountTarget){
       const rawUrl = it.url || it.link || '';
-      // Every rich search card is a doorway to its source page. Media URLs stay
-      // in thumbnail/image/video fields and must never become the card click target.
       const url = displayUrlForImageItemClient(it, rawUrl) || rawUrl;
       const domain = domainOf(url);
 
@@ -5068,6 +5211,14 @@ if (it.riskLabel === '⚠️ high-risk') {
           video.appendChild(s);
         }
 
+        if(!hasPlayableSource){
+          videoWrap.style.cursor = 'pointer';
+          videoWrap.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openResultInsideSearchFrame(displayUrlForImageItemClient(it, url) || url, it);
+          });
+        }
         videoWrap.addEventListener('mouseenter', () => {
           if (hasPlayableSource) video.play().catch(()=>{});
         });
@@ -5092,9 +5243,8 @@ if (it.riskLabel === '⚠️ high-risk') {
 
 
     function itemStableKey(it){
-      return String(
-        (it && (it.id || it.url || it.link || it.title)) || ''
-      ).trim().toLowerCase();
+      if(!it) return '';
+      return searchDisplayKeyForItem(it) || String(it.id || it.title || '').trim().toLowerCase();
     }
 
     function mergeEnrichedItems(baseItems, enrichedItems){
@@ -5360,9 +5510,9 @@ if (it.riskLabel === '⚠️ high-risk') {
       if(group === 'cafe' || group === 'community' || /cafe|카페|community|forum/.test(text)) return 'cafe';
       if(group === 'shopping' || /shopping|shop|commerce|product|쇼핑|상품|가격/.test(text)) return 'shopping';
       if(group === 'news' || /news|뉴스|신문|일보|press/.test(text)) return 'news';
+      if(group === 'video' || group === 'media' || /video|youtube|youtu\.be|ytimg\.com|영상|동영상|\/videos?\/|\/watch\/?|\/reel\//.test(text)) return 'video';
+      if(group === 'social' || /sns|social|instagram|facebook|tiktok|twitter|x\.com|wechat|weixin|mp\.weixin\.qq\.com|위챗|소셜/.test(text)) return 'sns';
       if(group === 'image' || isVisualSearchCandidateClient(it) || /image|images|photo|picture|사진|포토|풍경|전경|갤러리|홍보/.test(raw + ' ' + text)) return 'image';
-      if(group === 'video' || group === 'media' || /video|youtube|youtu\.be|영상|동영상/.test(text)) return 'video';
-      if(group === 'social' || /sns|social|instagram|facebook|tiktok|twitter|x\.com|소셜/.test(text)) return 'sns';
       if(group === 'sports' || /sports|스포츠|축구|야구|농구/.test(text)) return 'sports';
       if(group === 'finance' || /finance|stock|market|증권|주식|금융|환율/.test(text)) return 'finance';
       if(group === 'webtoon' || /webtoon|웹툰|comic|manga/.test(text)) return 'webtoon';
@@ -5454,12 +5604,12 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (normalizeSearchType(activeType) === 'all') {
         const model = buildPortalPageModel();
         const portalCount = model && model.virtualCount ? model.virtualCount : buildClientVisibleStream(currentPage || 1).length;
-        const preloadFloor = lastQuery ? (INITIAL_PROGRESSIVE_PAGER_PAGES * PAGE_SIZE) : 0;
+        const preloadFloor = lastQuery ? (INITIAL_PAGER_PAGES * PAGE_SIZE) : 0;
         return Math.max(portalCount, allItems.length || 0, preloadFloor);
       }
       if (normalizeSearchType(activeType) !== 'all') return activeTabItemsFromPool(allItems).length;
-      if(serverPagedMode && serverTotalItems > 0) return Math.max(INITIAL_PROGRESSIVE_PAGER_PAGES * PAGE_SIZE, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
-      return Math.max(lastQuery ? (INITIAL_PROGRESSIVE_PAGER_PAGES * PAGE_SIZE) : 0, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
+      if(serverPagedMode && serverTotalItems > 0) return Math.max(INITIAL_PAGER_PAGES * PAGE_SIZE, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
+      return Math.max(lastQuery ? (INITIAL_PAGER_PAGES * PAGE_SIZE) : 0, allItems.length || 0, buildClientVisibleStream(currentPage || 1).length);
     }
 
     function frontPageSectionSource(){
@@ -5783,7 +5933,10 @@ async function runSearch(q, type = activeType){
       Math.max(INITIAL_PRELOAD_TARGET, incoming.length)
     );
     const windowItems = incoming.slice(0, initialWindow);
-    allItems = mergeItemsPreferDisplayRichness(allItems, windowItems).slice(0, MAX_SMOOTH_CANDIDATES);
+    allItems = (sourceName === 'maru-search-window'
+      ? mergeItemsPreferDisplayRichness(windowItems, allItems)
+      : mergeItemsPreferDisplayRichness(allItems, windowItems)
+    ).slice(0, MAX_SMOOTH_CANDIDATES);
     seedLoadedServerPagesFromItems(allItems, Math.min(allItems.length, Math.max(INITIAL_PRELOAD_TARGET, windowItems.length)));
     if(pageItems.length) loadedServerPages.set(1, pageItems.slice(0, PAGE_SIZE));
 
@@ -5810,42 +5963,28 @@ async function runSearch(q, type = activeType){
     return promise.then(pack => ({ kind, pack })).catch(error => ({ kind, error }));
   }
 
-  // Real-content first render: prefer Maru Search's provider-result window over
-  // Sanmaru's instant route lanes. Sanmaru instant still runs as a fallback/merge,
-  // but it should not be the first paint when it only contains title-only roads.
-  const instantPromise = wrapSupply(fetchInstantSearchPack(qq, activeType), 'sanmaru-instant');
+  // The result pipeline is single-gateway: search.js receives search cards only
+  // from maru-search. Sanmaru stays a warm/resident signal behind that gateway,
+  // but its direct instant packet is not merged into the browser result pool.
   const maruWindowPromise = wrapSupply(fetchSearch(qq, activeType, 1), 'maru-search-window');
+
+  // Open pages 2+ immediately instead of waiting for page 1 to finish. On a fast
+  // connection this fills the first 125~130 cards nearly at once; on a slow
+  // connection the workers keep retrying without replacing the page with blank UI.
+  startIntakeOnce('parallel-initial-intake');
 
   try{
     const first = await maruWindowPromise;
     if(runSearch._seq !== seq) return;
 
-    const firstCount = first && !first.error ? applySupplyPack(first.pack, first.kind) : 0;
-    if(!firstCount){
-      const second = await instantPromise;
-      if(runSearch._seq !== seq) return;
-      if(second && !second.error) applySupplyPack(second.pack, second.kind);
-    }
+    if(first && !first.error) applySupplyPack(first.pack, first.kind);
 
     if(!firstPaintDone){
       if(!results.children.length) renderSkeleton();
-      status.textContent = `${uiText('noQuickResults', 'No quick results')} "${qq}" · ${uiText('receiving', 'receiving...')}`;
+      status.textContent = `${uiText('receiving', 'receiving...')} "${qq}"...`;
     }
 
-    // Do not wait for Sanmaru/MaruSearch to finish all lanes. Start the faucet
-    // shortly after first paint, but let the page-1 300-window seed pages 1~12
-    // first when it arrives quickly.
     schedulePipeHandoff('first-paint-handoff', FIRST_PIPE_HANDOFF_MS);
-
-    maruWindowPromise.then(res => {
-      if(runSearch._seq !== seq || !res || res.error) return;
-      applySupplyPack(res.pack, res.kind);
-      startIntakeOnce('maru-page1-window-ready');
-    });
-    instantPromise.then(res => {
-      if(runSearch._seq !== seq || !res || res.error) return;
-      applySupplyPack(res.pack, res.kind);
-    });
   }catch(e){
     console.error(e);
     const fallbackPack = await fetchSearch(qq, activeType, 1);
@@ -5853,8 +5992,8 @@ async function runSearch(q, type = activeType){
     applySupplyPack(fallbackPack, 'fallback-maru-search');
     if(!firstPaintDone){
       if(!results.children.length) renderSkeleton();
-      clearPager();
-      status.textContent = `${uiText('noResults', 'No results')} "${qq}"`;
+      drawPager();
+      status.textContent = `${uiText('receiving', 'receiving...')} "${qq}"...`;
     }
     startIntakeOnce('fallback');
   }
