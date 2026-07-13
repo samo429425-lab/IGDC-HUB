@@ -77,7 +77,7 @@ const MARU_INFLIGHT_TTL_MS = 30 * 1000;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const OG_IMAGE_ENRICH_LIMIT = 36;
 const OG_IMAGE_ENRICH_CONCURRENCY = 6;
-const OG_IMAGE_ENRICH_TIMEOUT_MS = 1200;
+const OG_IMAGE_ENRICH_TIMEOUT_MS = 1600;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
 const MAX_SEARCH_BANK_PAGES_DEEP = 60;
@@ -4102,6 +4102,10 @@ function extractOgImageFromHtml(html, baseUrl){
     /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/ig,
     /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
     /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["'][^>]*>/ig,
+    /<meta[^>]+property=["']og:image:url["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:url["'][^>]*>/ig,
+    /<meta[^>]+name=["']twitter:image:src["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image:src["'][^>]*>/ig,
     /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
     /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/ig
   ];
@@ -4140,6 +4144,18 @@ function extractOgImageFromHtml(html, baseUrl){
   let pm;
   while((pm = posterRe.exec(text)) && candidates.length < 44){
     if(pm && pm[1]) pushOwnImageCandidate(candidates, pm[1], baseUrl, 'video-poster', 75);
+  }
+
+  // A page-owned embedded YouTube player has a deterministic public snapshot.
+  // Keep the result card linked to baseUrl; only use the derived image as its preview.
+  const youtubeEmbedRe = /(?:youtube\.com\/(?:embed|shorts|live)\/|youtu\.be\/)([A-Za-z0-9_-]{11})/ig;
+  let ym;
+  let youtubeSnapshots = 0;
+  while((ym = youtubeEmbedRe.exec(text)) && youtubeSnapshots < 4 && candidates.length < 48){
+    if(ym && ym[1]){
+      pushOwnImageCandidate(candidates, 'https://i.ytimg.com/vi/' + ym[1] + '/hqdefault.jpg', baseUrl, 'video-snapshot', 82);
+      youtubeSnapshots += 1;
+    }
   }
 
   // 5) First meaningful page images.

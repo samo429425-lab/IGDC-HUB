@@ -77,7 +77,7 @@ ready(function () {
     let lastType = 'all';
     let lastSearchPayload = null;
     const pageImageEnrichCache = new Set();
-    const pageImageEnrichAttempts = new Map();
+    const pageImageEnrichRetryCount = new Map();
     const itemImageEnrichCache = new Map();
     const expandedDisplayGroups = new Set();
 
@@ -3500,6 +3500,7 @@ function displayGroupOfItem(it){
               }
               body.appendChild(hiddenWrap);
               hiddenMounted = true;
+              enrichRenderedPageImages(page, hiddenSlice, 0);
             }
             if(hiddenWrap) hiddenWrap.style.display = '';
             more.textContent = `${label} ${uiText('collapse', 'Collapse')} ▴`;
@@ -4570,16 +4571,6 @@ function isDirectMediaAssetUrlClient(v){
       const payload = (it.payload && typeof it.payload === 'object') ? it.payload : {};
       const media = (it.media && typeof it.media === 'object') ? it.media : {};
       const preview = (media.preview && typeof media.preview === 'object') ? media.preview : {};
-      const youtubeInputs = [
-        it.videoId, payload.videoId, it.watchUrl, it.videoUrl, it.embedUrl,
-        preview.videoId, preview.watchUrl, preview.videoUrl, preview.embedUrl,
-        it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl,
-        it.url, it.link, it.href, it.thumbnail, it.image, fallback
-      ];
-      for(const v of youtubeInputs){
-        const id = youtubeIdFromClientAny(v);
-        if(id) return 'https://www.youtube.com/watch?v=' + id;
-      }
       const candidates = [
         it.sourcePageUrl, it.pageUrl, it.contextLink, it.originalPageUrl, it.originallink,
         displayCard.sourcePageUrl, displayCard.pageUrl, displayCard.contextLink, displayCard.openUrl, displayCard.url,
@@ -4589,14 +4580,39 @@ function isDirectMediaAssetUrlClient(v){
         payload.watchUrl, payload.videoUrl, payload.url, payload.link,
         fallback
       ];
+
+      let pageUrl = '';
       for(const v of candidates){
         const u = String(v || '').trim();
         if(!u || /^javascript:|^(?:data|blob):/i.test(u)) continue;
         if(!/^https?:\/\//i.test(u) && !u.startsWith('/')) continue;
         if(isDirectMediaAssetUrlClient(u)) continue;
-        return u;
+        pageUrl = u;
+        break;
       }
-      return '';
+
+      // Derive a YouTube watch URL only when the search result itself is a
+      // YouTube page. A normal article may contain a YouTube thumbnail, but that
+      // thumbnail must never replace the article's own click destination.
+      const pageHost = domainOf(pageUrl).toLowerCase();
+      const sourceSignal = String([
+        it.source, it.provider, it.type, it.mediaType, it.searchCategory,
+        displayCard.source, payload.source
+      ].filter(Boolean).join(' ')).toLowerCase();
+      const youtubePage = pageHost.includes('youtube.com') || pageHost.includes('youtu.be') || sourceSignal.includes('youtube');
+      if(youtubePage){
+        const youtubeInputs = [
+          it.videoId, payload.videoId, it.watchUrl, it.videoUrl, it.embedUrl,
+          preview.videoId, preview.watchUrl, preview.videoUrl, preview.embedUrl,
+          pageUrl, it.url, it.link, it.href, it.thumbnail, it.image, fallback
+        ];
+        for(const v of youtubeInputs){
+          const id = youtubeIdFromClientAny(v);
+          if(id) return 'https://www.youtube.com/watch?v=' + id;
+        }
+      }
+
+      return pageUrl;
     }
 
     function displayUrlForImageItemClient(it, src){
@@ -5101,72 +5117,15 @@ if (it.riskLabel === '⚠️ high-risk') {
 
 
     function itemStableKey(it){
-      it = (it && typeof it === 'object') ? it : {};
       const pageUrl = resolveOriginalPageUrlClient(it, '');
-      const pageKey = canonicalPageKeyClient(pageUrl);
-      if(pageKey) return pageKey;
-      return String(
-        it.id || it.indexId || it.originalId ||
-        ((String(it.title || it.name || '').trim()) + '|' + String((it.source && (it.source.name || it.source.platform)) || it.source || it.provider || '').trim())
-      ).trim().toLowerCase();
-    }
-
-    function visibleCardsForImageEnrichment(slice){
-      const out = [];
-      const seen = new Set();
-
-      function add(it){
-        if(!it || typeof it !== 'object' || isDisplayGroupModule(it)) return;
-        const key = itemStableKey(it);
-        if(!key || seen.has(key)) return;
-        seen.add(key);
-        out.push(it);
+      if(pageUrl){
+        const pageKey = canonicalPageKeyClient(pageUrl);
+        if(pageKey) return 'page:' + pageKey;
       }
-
-      (Array.isArray(slice) ? slice : []).forEach(entry => {
-        if(isDisplayGroupModule(entry)){
-          const visible = Array.isArray(entry.previewItems)
-            ? entry.previewItems
-            : (Array.isArray(entry.items) ? entry.items.slice(0, entry.previewLimit || PAGE_SIZE) : []);
-          visible.forEach(add);
-        }else{
-          add(entry);
-        }
-      });
-
-      return out;
-    }
-
-    function mediaOnlyDisplayCard(baseCard, hitCard, images){
-      const base = (baseCard && typeof baseCard === 'object') ? baseCard : {};
-      const hit = (hitCard && typeof hitCard === 'object') ? hitCard : {};
-      const first = images[0] || '';
-      return Object.assign({}, base, {
-        thumbnail: hit.thumbnail || hit.thumb || hit.image || hit.imageUrl || first || base.thumbnail || '',
-        thumb: hit.thumb || hit.thumbnail || hit.image || hit.imageUrl || first || base.thumb || '',
-        image: hit.image || hit.imageUrl || hit.thumbnail || first || base.image || '',
-        imageUrl: hit.imageUrl || hit.image || hit.thumbnail || first || base.imageUrl || '',
-        cardImage: hit.cardImage || hit.image || hit.thumbnail || first || base.cardImage || '',
-        poster: hit.poster || hit.videoPoster || first || base.poster || '',
-        videoPoster: hit.videoPoster || hit.poster || first || base.videoPoster || '',
-        videoThumbnail: hit.videoThumbnail || hit.thumbnail || first || base.videoThumbnail || '',
-        imageSet: images,
-        showThumbnail: true,
-        hasThumbnail: true
-      });
-    }
-
-    function mediaOnlyPreview(basePreview, hitPreview, images){
-      const base = (basePreview && typeof basePreview === 'object') ? basePreview : {};
-      const hit = (hitPreview && typeof hitPreview === 'object') ? hitPreview : {};
-      const first = images[0] || '';
-      return Object.assign({}, base, {
-        poster: hit.poster || hit.videoPoster || hit.thumbnail || hit.image || first || base.poster || '',
-        image: hit.image || hit.poster || hit.thumbnail || first || base.image || '',
-        thumbnail: hit.thumbnail || hit.thumb || hit.poster || hit.image || first || base.thumbnail || '',
-        thumb: hit.thumb || hit.thumbnail || hit.poster || first || base.thumb || '',
-        original: hit.original || hit.image || hit.poster || first || base.original || ''
-      });
+      const fallbackKey = String(
+        (it && (it.id || it.url || it.link || it.title)) || ''
+      ).trim().toLowerCase();
+      return fallbackKey ? 'item:' + fallbackKey : '';
     }
 
     function mergeEnrichedItems(baseItems, enrichedItems){
@@ -5182,33 +5141,52 @@ if (it.riskLabel === '⚠️ high-risk') {
         const hit = key ? byKey.get(key) : null;
         if(!hit) return it;
 
-        const imgs = dedupeImageVariantsClient(collectNaturalImages(hit));
+        const imgs = collectNaturalImages(hit);
         if(!imgs.length) return it;
-
-        const baseMedia = (it && it.media && typeof it.media === 'object') ? it.media : {};
-        const hitMedia = (hit && hit.media && typeof hit.media === 'object') ? hit.media : {};
-        const basePreview = (baseMedia.preview && typeof baseMedia.preview === 'object') ? baseMedia.preview : {};
-        const hitPreview = (hitMedia.preview && typeof hitMedia.preview === 'object') ? hitMedia.preview : {};
         const first = imgs[0] || '';
+        const baseDisplayCard = (it && it.displayCard && typeof it.displayCard === 'object') ? it.displayCard : {};
+        const basePayload = (it && it.payload && typeof it.payload === 'object') ? it.payload : {};
+        const baseMedia = (it && it.media && typeof it.media === 'object') ? it.media : {};
+        const basePreview = (baseMedia.preview && typeof baseMedia.preview === 'object') ? baseMedia.preview : {};
+        const hitMedia = (hit && hit.media && typeof hit.media === 'object') ? hit.media : {};
+        const hitPreview = (hitMedia.preview && typeof hitMedia.preview === 'object') ? hitMedia.preview : {};
 
-        // Enrichment may add only visual fields.  The working page URL, category,
-        // title, body and click contract remain exactly those of the base card.
+        // Preserve the original result page, title, body, category, rank and source.
+        // Only fill media presentation fields from the same result page.
         const merged = Object.assign({}, it, {
-          thumbnail: hit.thumbnail || hit.thumb || hit.image || hit.imageUrl || first || it.thumbnail || '',
-          thumb: hit.thumb || hit.thumbnail || hit.image || hit.imageUrl || first || it.thumb || '',
-          image: hit.image || hit.imageUrl || hit.thumbnail || first || it.image || '',
-          imageUrl: hit.imageUrl || hit.image || hit.thumbnail || first || it.imageUrl || '',
+          thumbnail: first || it.thumbnail || '',
+          thumb: first || it.thumb || '',
+          image: first || it.image || '',
+          imageUrl: first || it.imageUrl || '',
           imageSet: imgs,
-          originalImage: hit.originalImage || hit.fullImage || hit.image || first || it.originalImage || '',
-          fullImage: hit.fullImage || hit.originalImage || hit.image || first || it.fullImage || '',
-          imageOriginal: hit.imageOriginal || hit.originalImage || hit.image || first || it.imageOriginal || '',
-          viewerImage: hit.viewerImage || hit.originalImage || hit.image || first || it.viewerImage || '',
-          openImageUrl: hit.openImageUrl || hit.originalImage || hit.image || first || it.openImageUrl || '',
-          contentUrl: hit.contentUrl || hit.originalImage || hit.image || first || it.contentUrl || '',
-          cardImage: hit.cardImage || hit.image || hit.thumbnail || first || it.cardImage || '',
-          displayCard: mediaOnlyDisplayCard(it.displayCard, hit.displayCard, imgs),
-          media: Object.assign({}, baseMedia, {
-            preview: mediaOnlyPreview(basePreview, hitPreview, imgs)
+          originalImage: first || it.originalImage || '',
+          fullImage: first || it.fullImage || '',
+          viewerImage: first || it.viewerImage || '',
+          openImageUrl: first || it.openImageUrl || '',
+          contentUrl: first || it.contentUrl || '',
+          cardImage: first || it.cardImage || ''
+        });
+
+        merged.displayCard = Object.assign({}, baseDisplayCard, {
+          thumbnail: first || baseDisplayCard.thumbnail || '',
+          thumb: first || baseDisplayCard.thumb || '',
+          image: first || baseDisplayCard.image || '',
+          imageUrl: first || baseDisplayCard.imageUrl || '',
+          imageSet: imgs
+        });
+        merged.payload = Object.assign({}, basePayload, {
+          thumbnail: first || basePayload.thumbnail || '',
+          thumb: first || basePayload.thumb || '',
+          image: first || basePayload.image || '',
+          imageUrl: first || basePayload.imageUrl || '',
+          imageSet: imgs
+        });
+        merged.media = Object.assign({}, baseMedia, {
+          preview: Object.assign({}, basePreview, {
+            poster: hitPreview.poster || first || basePreview.poster || '',
+            thumbnail: hitPreview.thumbnail || first || basePreview.thumbnail || '',
+            image: hitPreview.image || first || basePreview.image || '',
+            original: hitPreview.original || first || basePreview.original || ''
           })
         });
 
@@ -5217,54 +5195,95 @@ if (it.riskLabel === '⚠️ high-risk') {
       });
     }
 
-    function applyEnrichedMediaToCaches(updatedByKey){
-      let changed = 0;
+    function mediaEnrichmentItemsFromVisibleSlice(slice){
+      const out = [];
+      const seen = new Set();
 
-      allItems = (Array.isArray(allItems) ? allItems : []).map(it => {
-        const hit = updatedByKey.get(itemStableKey(it));
-        if(!hit) return it;
-        changed += 1;
-        return hit;
+      function pushItem(it){
+        if(!it || typeof it !== 'object' || isDisplayGroupModule(it) || isSyntheticProviderGuideCardClient(it)) return;
+        const key = itemStableKey(it);
+        if(!key || seen.has(key)) return;
+        seen.add(key);
+        out.push(it);
+      }
+
+      (Array.isArray(slice) ? slice : []).forEach(entry => {
+        if(!isDisplayGroupModule(entry)){
+          pushItem(entry);
+          return;
+        }
+
+        const previewItems = Array.isArray(entry.previewItems) ? entry.previewItems : (Array.isArray(entry.items) ? entry.items : []);
+        const hiddenItems = Array.isArray(entry.hiddenItems) ? entry.hiddenItems : [];
+        const group = String(entry.group || '').toLowerCase();
+
+        // Match the cards that the category renderer can actually place on screen.
+        // Image/media lanes can display up to 12 tiles; other lanes use previewItems.
+        if(group === 'image' || group === 'media'){
+          const limit = Math.max(parseInt(entry.previewLimit, 10) || 0, 12);
+          [].concat(entry.items || [], previewItems, hiddenItems).slice(0, limit).forEach(pushItem);
+        }else{
+          previewItems.forEach(pushItem);
+        }
       });
 
-      loadedServerPages.forEach((items, serverPage) => {
-        if(!Array.isArray(items)) return;
-        loadedServerPages.set(serverPage, items.map(it => updatedByKey.get(itemStableKey(it)) || it));
-      });
-
-      return changed;
+      return out.slice(0, PAGE_SIZE);
     }
 
     async function enrichRenderedPageImages(page, slice, startIndex){
       const q = (input.value || '').trim();
       if(!q || !Array.isArray(slice) || !slice.length) return;
 
-      const visibleCards = visibleCardsForImageEnrichment(slice);
-      const candidates = visibleCards
-        .map(it => ({ it, key:itemStableKey(it) }))
-        .filter(x => {
-          if(!x.key || itemImageEnrichCache.has(x.key)) return false;
-          if(collectNaturalImages(x.it).length) return false;
-          const pageUrl = resolveOriginalPageUrlClient(x.it, '');
+      const visibleItems = mediaEnrichmentItemsFromVisibleSlice(slice);
+      if(!visibleItems.length) return;
+      const signature = visibleItems.map(itemStableKey).filter(Boolean).join('|').slice(0, 2400);
+      const cacheKey = [q, activeType || 'all', page, signature].join('::');
+      if(pageImageEnrichCache.has(cacheKey)) return;
+
+      const candidates = visibleItems
+        .filter(it => {
+          const key = itemStableKey(it);
+          if(key && itemImageEnrichCache.has(key)) return false;
+          if(collectNaturalImages(it).length) return false;
+          const pageUrl = resolveOriginalPageUrlClient(it, '');
           return /^https?:\/\//i.test(pageUrl) && !isDirectMediaAssetUrlClient(pageUrl);
         })
         .slice(0, PAGE_SIZE);
 
-      if(!candidates.length) return;
+      if(!candidates.length){
+        pageImageEnrichCache.add(cacheKey);
+        return;
+      }
 
-      const candidateKey = candidates.map(x => x.key).sort().join('|');
-      const cacheKey = [q, activeType || 'all', page, candidateKey].join('::');
-      if(pageImageEnrichCache.has(cacheKey)) return;
-
-      const attempts = pageImageEnrichAttempts.get(cacheKey) || 0;
-      if(attempts >= 3) return;
-      pageImageEnrichAttempts.set(cacheKey, attempts + 1);
       pageImageEnrichCache.add(cacheKey);
+      const attempt = pageImageEnrichRetryCount.get(cacheKey) || 0;
 
-      let completed = false;
+      function scheduleRetry(){
+        pageImageEnrichCache.delete(cacheKey);
+        const nextAttempt = attempt + 1;
+        pageImageEnrichRetryCount.set(cacheKey, nextAttempt);
+        if(nextAttempt <= 2 && page === currentPage){
+          setTimeout(() => enrichRenderedPageImages(page, slice, startIndex), 500 * nextAttempt);
+        }
+      }
+
       try{
         const url =
           `/.netlify/functions/maru-search?action=enrich-images&q=${encodeURIComponent(q)}&type=${encodeURIComponent(activeType || 'all')}`;
+
+        // The enrichment endpoint receives the original page URL explicitly.
+        // This is request-only normalization; the browser's stored card URL is never replaced.
+        const requestItems = candidates.map(it => {
+          const pageUrl = resolveOriginalPageUrlClient(it, '');
+          return Object.assign({}, it, {
+            url: pageUrl,
+            link: pageUrl,
+            pageUrl,
+            sourcePageUrl: pageUrl,
+            contextLink: pageUrl,
+            openUrl: pageUrl
+          });
+        });
 
         const res = await fetch(url, {
           method: 'POST',
@@ -5273,42 +5292,61 @@ if (it.riskLabel === '⚠️ high-risk') {
           body: JSON.stringify({
             q,
             type: activeType || 'all',
-            items: candidates.map(x => x.it)
+            items: requestItems
           })
         });
 
-        if(!res.ok) return;
+        if(!res.ok){
+          scheduleRetry();
+          return;
+        }
 
         const json = await res.json();
         const enriched = normalizeItems(json);
-        if(!enriched.length) return;
+        if(!enriched.length){
+          scheduleRetry();
+          return;
+        }
 
-        const updatedCandidates = mergeEnrichedItems(candidates.map(x => x.it), enriched);
+        const updatedCandidates = mergeEnrichedItems(candidates, enriched);
         const updatedByKey = new Map();
         updatedCandidates.forEach(item => {
           const key = itemStableKey(item);
           if(key && collectNaturalImages(item).length) updatedByKey.set(key, item);
         });
+        if(!updatedByKey.size){
+          scheduleRetry();
+          return;
+        }
 
-        const changed = applyEnrichedMediaToCaches(updatedByKey);
-        completed = changed > 0;
+        function applyMediaToList(list){
+          let changed = false;
+          const next = (Array.isArray(list) ? list : []).map(item => {
+            const hit = updatedByKey.get(itemStableKey(item));
+            if(!hit) return item;
+            changed = true;
+            return mergeEnrichedItems([item], [hit])[0];
+          });
+          return { next, changed };
+        }
 
-        if(changed && page === currentPage){
+        const allApplied = applyMediaToList(allItems);
+        if(allApplied.changed) allItems = allApplied.next;
+        loadedServerPages.forEach((pageItems, pageNo) => {
+          const applied = applyMediaToList(pageItems);
+          if(applied.changed) loadedServerPages.set(pageNo, applied.next);
+        });
+
+        pageImageEnrichRetryCount.delete(cacheKey);
+        if(allApplied.changed && page === currentPage){
           renderPage(page, true);
         }
       }catch(e){
-        console.warn('page image enrichment skipped:', e);
-      }finally{
-        const usedAttempts = pageImageEnrichAttempts.get(cacheKey) || 0;
-        if(!completed && usedAttempts < 3){
-          pageImageEnrichCache.delete(cacheKey);
-          setTimeout(() => {
-            if((input.value || '').trim() !== q || page !== currentPage) return;
-            enrichRenderedPageImages(page, slice, startIndex);
-          }, 600 * usedAttempts);
-        }
+        console.warn('page media enrichment skipped:', e);
+        scheduleRetry();
       }
     }
+
 
 
     function stateKeyForGroup(page, group){
@@ -5639,6 +5677,9 @@ if (it.riskLabel === '⚠️ high-risk') {
       if (normalizeSearchType(activeType) === 'image') {
         renderImageGalleryPage(slice);
         drawPager();
+        if(!skipEnrich){
+          enrichRenderedPageImages(page, slice, start);
+        }
         return;
       }
 
@@ -5859,6 +5900,7 @@ async function runSearch(q, type = activeType){
   lastQuery = qq;
   lastType = activeType;
   pageImageEnrichCache.clear();
+  pageImageEnrichRetryCount.clear();
   itemImageEnrichCache.clear();
   expandedDisplayGroups.clear();
 
