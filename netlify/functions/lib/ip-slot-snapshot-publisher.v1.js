@@ -19,6 +19,7 @@ const crypto = require("crypto");
 const Canonical = require("./canonical-snapshot-publisher.v1");
 const IpPolicy = require("./ip-slot-policy.v1");
 const MarketSaleScope = require("./market-sale-scope.v1");
+const SlotOverlay = require("./sample-slot-overlay.v1");
 
 const VERSION = "canonical-ip-slot-snapshot-publisher-v1.4.0-commerce-outbound-route";
 const MANIFEST_FILE = "ip-slot-manifest.json";
@@ -230,9 +231,10 @@ function setListForSection(sections, key, list) {
   else sections[key] = list;
 }
 function renderPage(template, page, items, scope) {
-  const doc = clearForPage(template, page);
+  const doc = clone(template);
   if (page === "home") {
-    const sections = doc.pages && doc.pages.home && doc.pages.home.sections;
+    const holder = doc.pages && doc.pages.home;
+    const sections = holder && holder.sections;
     if (!isObject(sections)) return null;
     const per = new Map();
     for (const item of items) {
@@ -241,19 +243,24 @@ function renderPage(template, page, items, scope) {
       if (!per.has(key)) per.set(key, []);
       per.get(key).push(cloneCard(item));
     }
-    for (const [key, cards] of per.entries()) setListForSection(sections, key, cards.sort((a, b) => a.slot - b.slot));
+    holder.sections = SlotOverlay.overlaySections(sections, per);
   } else if (page === "network" || page === "tour") {
-    const cards = items.map(cloneCard).sort((a, b) => a.slot - b.slot);
+    const section = page === "network" ? "network-right" : "tour";
+    const base = array(doc.items).length ? array(doc.items) : array(doc.slots);
+    const cards = SlotOverlay.overlayList(base, items.map(cloneCard), section, base.length || 100);
     doc.items = cards;
-    doc.slots = cards.slice();
+    doc.slots = clone(cards);
   } else if (page === "social") {
     const sections = doc.pages && doc.pages.social && doc.pages.social.sections;
     if (!isObject(sections) || !("rightPanel" in sections)) return null;
     if (items.some(item => item && item.placement && item.placement.section !== "rightPanel")) return null;
-    setListForSection(sections, "rightPanel", items.map(cloneCard).sort((a, b) => a.slot - b.slot));
+    const base = SlotOverlay.list(sections.rightPanel);
+    SlotOverlay.setList(sections, "rightPanel", SlotOverlay.overlayList(base, items.map(cloneCard), "rightPanel", base.length || 100));
   } else {
     return null;
   }
+  const allCards = outputCards(doc, page);
+  const sampleCount = allCards.filter(SlotOverlay.isSampleCard).length;
   doc.meta = Object.assign({}, doc.meta || {}, {
     ipSlotSnapshot: true,
     geoResolutionRequired: true,
@@ -265,6 +272,9 @@ function renderPage(template, page, items, scope) {
     source: "canonical-ip-slot-snapshot-publisher",
     generatedAt: new Date().toISOString(),
     cardCount: items.length,
+    realCardCount: items.length,
+    sampleCardCount: sampleCount,
+    sampleFallbackPreserved: true,
     noCrossCountryFallback: true,
     noGlobalFallback: true
   });
@@ -325,7 +335,15 @@ function verifyDistributionSnapshot(file, scope, releaseId) {
     else if (isObject(value) && Array.isArray(value.slots)) cards.push(...value.slots);
   }
   if (!cards.length) return { ok: false, reason: "DISTRIBUTION_SCOPE_EMPTY" };
+  let realCount = 0;
+  let sampleCount = 0;
   for (const card of cards) {
+    if (SlotOverlay.isSampleCard(card)) {
+      if (!SlotOverlay.safeSampleCard(card)) return { ok: false, reason: "DISTRIBUTION_SAMPLE_CARD_UNSAFE" };
+      sampleCount += 1;
+      continue;
+    }
+    realCount += 1;
     if (!canonicalCard(card)) return { ok: false, reason: "DISTRIBUTION_CARD_CANONICAL_ENVELOPE_INVALID" };
     if (card.canonicalPublication.releaseId !== releaseId) return { ok: false, reason: "DISTRIBUTION_CARD_RELEASE_MISMATCH" };
     const placement = card.placement;
@@ -338,7 +356,8 @@ function verifyDistributionSnapshot(file, scope, releaseId) {
     if (scope.region && candidateRegion !== scope.region && candidateRegion !== "NATIONWIDE") return { ok: false, reason: "DISTRIBUTION_CARD_SCOPE_REGION_MISMATCH" };
     if (!scope.region && candidateRegion !== "NATIONWIDE") return { ok: false, reason: "DISTRIBUTION_COUNTRY_SCOPE_NOT_NATIONWIDE" };
   }
-  return { ok: true, cardCount: cards.length };
+  if (!realCount) return { ok: false, reason: "DISTRIBUTION_SCOPE_HAS_NO_REAL_CARD" };
+  return { ok: true, cardCount: realCount, sampleCount };
 }
 function outputCards(doc, page) {
   const rows = [];
@@ -388,8 +407,14 @@ function validateScopedOutput(doc, output, manifest, policy) {
   if (meta.canonicalReleaseId && manifest && meta.canonicalReleaseId !== manifest.canonicalReleaseId) problems.push("IP_SLOT_SNAPSHOT_RELEASE_META_MISMATCH:" + output.path);
   const slotSeen = new Set();
   const cards = outputCards(doc, page);
+  let realCount = 0;
   if (!cards.length) problems.push("IP_SLOT_SNAPSHOT_EMPTY:" + output.path);
   for (const card of cards) {
+    if (SlotOverlay.isSampleCard(card)) {
+      if (!SlotOverlay.safeSampleCard(card)) problems.push("IP_SLOT_SAMPLE_CARD_UNSAFE:" + output.path + ":" + String(card && card.id || ""));
+      continue;
+    }
+    realCount += 1;
     if (!canonicalCard(card)) { problems.push("IP_SLOT_CARD_ENVELOPE_INVALID:" + output.path + ":" + String(card && card.id || "")); continue; }
     const placement = card.placement;
     if (card.canonicalPublication.releaseId !== (manifest && manifest.canonicalReleaseId)) problems.push("IP_SLOT_CARD_RELEASE_MISMATCH:" + output.path + ":" + String(card.id));
@@ -406,6 +431,7 @@ function validateScopedOutput(doc, output, manifest, policy) {
     if (!scope.ok) problems.push("IP_SLOT_CARD_MARKET_EVIDENCE_INVALID:" + output.path + ":" + String(card.id) + ":" + scope.reasons.join(","));
     if (!card.ipSlot || card.ipSlot.marketEvidenceDigest !== scope.evidenceDigest) problems.push("IP_SLOT_CARD_MARKET_EVIDENCE_DIGEST_MISMATCH:" + output.path + ":" + String(card.id));
   }
+  if (!realCount) problems.push("IP_SLOT_SNAPSHOT_HAS_NO_REAL_CARD:" + output.path);
   return problems;
 }
 
@@ -423,7 +449,7 @@ function registeredDistributionOutputs(root, releaseId) {
     const region = possibleRegion ? IpPolicy.normalizeRegion(possibleRegion, country) : "";
     const absolute = path.join(root, web.replace(/^\//, ""));
     const checked = verifyDistributionSnapshot(absolute, { country, region }, releaseId);
-    if (checked.ok) outputs.push({ page: "distribution", file: "distribution.snapshot.json", country, region: region || null, path: web, sha256: sha256(fs.readFileSync(absolute)), cardCount: checked.cardCount });
+    if (checked.ok) outputs.push({ page: "distribution", file: "distribution.snapshot.json", country, region: region || null, path: web, sha256: sha256(fs.readFileSync(absolute)), cardCount: checked.cardCount, sampleCount: checked.sampleCount || 0 });
   }
   return outputs;
 }
@@ -461,7 +487,7 @@ function publish(input) {
       const absolute = publicPath(root, scope.country, scope.region, ROUTES[page].file);
       const digest = atomicWrite(absolute, document);
       keep.add(path.resolve(absolute));
-      outputs.push({ page, file: ROUTES[page].file, country: scope.country, region: scope.region || null, path: webPath(root, absolute), sha256: digest, cardCount: selected.length });
+      outputs.push({ page, file: ROUTES[page].file, country: scope.country, region: scope.region || null, path: webPath(root, absolute), sha256: digest, cardCount: selected.length, sampleCount: outputCards(document, page).filter(SlotOverlay.isSampleCard).length });
     }
   }
   const distribution = registeredDistributionOutputs(root, releaseId);

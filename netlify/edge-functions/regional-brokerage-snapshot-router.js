@@ -86,6 +86,22 @@ function cardRows(doc, page) {
   }
   return rows;
 }
+
+function isSampleCard(card) {
+  if (!card || typeof card !== "object" || card.canonicalPublication) return false;
+  const type = String(card.type || "").toLowerCase();
+  const origin = String(card.audit && card.audit.origin || "").toLowerCase();
+  return card.sample === true || card.placeholder === true || card.isSample === true || type === "placeholder" || type === "sample" || origin === "placeholder_seed";
+}
+function safeSampleCard(card) {
+  return isSampleCard(card)
+    && String(card.url || "") === "#"
+    && String(card.link || "") === "#"
+    && card.realProduct === false
+    && card.monetization && card.monetization.enabled === false
+    && !card.externalProductUrl && !card.affiliateOutboundUrl && !card.externalOutboundUrl && !card.outboundRoute && !card.affiliate;
+}
+
 function text(value) { return value == null ? "" : String(value).trim(); }
 function stable(value) {
   if (value == null || typeof value !== "object") return JSON.stringify(value);
@@ -179,7 +195,13 @@ async function documentMatchesPublishedScope(doc, selected, manifest) {
   const cards = cardRows(doc, page);
   if (!cards.length) return false;
   const slots = new Set();
+  let realCount = 0;
   for (const card of cards) {
+    if (isSampleCard(card)) {
+      if (!safeSampleCard(card)) return false;
+      continue;
+    }
+    realCount += 1;
     const publication = card && card.canonicalPublication;
     const placement = card && card.placement;
     const ipSlot = card && card.ipSlot;
@@ -200,7 +222,7 @@ async function documentMatchesPublishedScope(doc, selected, manifest) {
     const digest = await evidenceDigest(record);
     if (record.evidenceDigest !== digest || scope.marketEvidenceDigest !== digest || ipSlot.marketEvidenceDigest !== digest) return false;
   }
-  return true;
+  return realCount > 0;
 }
 async function fetchPublishedSnapshot(url, request, relative) {
   try {

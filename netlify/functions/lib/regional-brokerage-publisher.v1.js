@@ -16,6 +16,7 @@ const Policy = require("./regional-brokerage-policy.core.v1");
 const Gate = require("./regional-brokerage-front-supply-gate.core.v1");
 const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const CanonicalPublisher = require("./canonical-snapshot-publisher.v1");
+const SlotOverlay = require("./sample-slot-overlay.v1");
 
 const SNAPSHOT_FILE = "distribution.snapshot.json";
 const REGISTRY_FILE = "regional-brokerage-outbound.json";
@@ -32,6 +33,144 @@ function httpUrl(v) { try { const u = new URL(String(v)); return u.protocol === 
 function rootOf(input) { return path.resolve(input && input.root || process.cwd()); }
 function firstExisting(paths) { return paths.find((p) => { try { return fs.existsSync(p) && fs.statSync(p).isFile(); } catch (_e) { return false; } }) || ""; }
 function unique(values) { const out = []; const seen = new Set(); for (const value of values || []) { const x = text(value); if (!x || seen.has(x)) continue; seen.add(x); out.push(x); } return out; }
+
+function lower(v) { return text(v).toLowerCase(); }
+function truthy(v) {
+  if (v === true) return true;
+  if (v === false || v == null) return false;
+  return !["", "0", "false", "no", "off", "disabled", "disable", "null", "undefined"].includes(lower(v));
+}
+
+/**
+ * Canonical publication stores responsibility evidence in a normalized market
+ * envelope. The older regional policy reader expects a few legacy top-level
+ * evidence fields. Build a non-mutating compatibility view so the already
+ * verified Canonical evidence is evaluated without weakening the gate.
+ */
+function policyCandidate(item) {
+  if (!item || typeof item !== "object") return item;
+  const out = clone(item);
+  const marketScope = out.marketScope && typeof out.marketScope === "object" ? out.marketScope : {};
+  const evidence = marketScope.marketEvidence && typeof marketScope.marketEvidence === "object" ? marketScope.marketEvidence : {};
+  const shipping = evidence.shipping && typeof evidence.shipping === "object" ? evidence.shipping : (out.shipping || {});
+  const returns = evidence.returns && typeof evidence.returns === "object" ? evidence.returns : (out.returns || {});
+  const support = evidence.support && typeof evidence.support === "object" ? evidence.support : (out.support || {});
+  const responsibility = evidence.sellerResponsibility && typeof evidence.sellerResponsibility === "object" ? evidence.sellerResponsibility : (out.sellerResponsibility || {});
+  const responsibilityVerified = truthy(responsibility.verified) && truthy(shipping.verified) && truthy(returns.verified) && truthy(support.verified);
+  const responsibilityEvidence = unique([
+    returns.evidenceUrl,
+    support.evidenceUrl,
+    responsibility.supportUrl,
+    responsibility.legalEntity,
+    marketScope.marketEvidenceDigest,
+    marketScope.evidenceDigest
+  ]);
+
+  if (responsibilityVerified && responsibilityEvidence.length) {
+    out.localResponsibilityEvidence = out.localResponsibilityEvidence || responsibilityEvidence.join(" | ");
+    out.returnPolicyUrl = out.returnPolicyUrl || text(returns.evidenceUrl);
+    out.customerSupportUrl = out.customerSupportUrl || text(support.evidenceUrl || responsibility.supportUrl);
+    out.seller = Object.assign({}, out.seller || {}, {
+      responsibilityEvidence: out.seller && out.seller.responsibilityEvidence || responsibilityEvidence.join(" | "),
+      customerSupportUrl: out.seller && out.seller.customerSupportUrl || text(support.evidenceUrl || responsibility.supportUrl)
+    });
+  }
+
+  out.distributionMarketCountry = out.distributionMarketCountry || text(marketScope.marketCountry);
+  if (!out.distributionMarketRegion && text(marketScope.marketRegion) && text(marketScope.marketRegion).toUpperCase() !== "NATIONWIDE") {
+    out.distributionMarketRegion = text(marketScope.marketRegion);
+  }
+  if (!Array.isArray(out.availabilityCountries) || !out.availabilityCountries.length) {
+    const country = text(marketScope.marketCountry);
+    if (country) out.availabilityCountries = [country];
+  }
+  if (text(marketScope.marketRegion).toUpperCase() === "NATIONWIDE") out.nationalAvailability = true;
+  return out;
+}
+
+function approvedRevenueMarketplaceCandidate(item) {
+  const publication = item && item.canonicalPublication || {};
+  const commerce = item && item.commerceCandidate || {};
+  const review = commerce.review || item && item.commerceReview || {};
+  const revenue = commerce.revenue || {};
+  const route = item && item.outboundRoute || {};
+  const contract = item && item.brokerageContract || {};
+  const state = lower(first(review.state, review.assignment, review.status, review.assignmentState));
+  const routeMode = lower(route.mode);
+  const contractId = first(route.contractId, revenue.contractId, contract.id, contract.contractId);
+  const approvedRoute = ["approved_manual_affiliate", "approved_direct_revenue"].includes(routeMode);
+  return publication.status === "published" && !!publication.releaseId && commerce.releaseEligible === true &&
+    ["approved", "pinned"].includes(state) && revenue.payable === true &&
+    revenue.disclosureReady === true && revenue.payoutBasisVerified === true &&
+    approvedRoute && !!contractId;
+}
+
+function marketplaceExceptionPolicy(policy, market) {
+  const copy = clone(policy || {});
+  copy.defaults = Object.assign({}, copy.defaults || {}, { excludeLargeMarketplacesFromDistribution: false });
+  copy.hubProfiles = Object.assign({}, copy.hubProfiles || {});
+  copy.hubProfiles.distribution = Object.assign({}, copy.hubProfiles.distribution || {}, { excludeLargeMarketplaces: false });
+  const code = Policy.normalizeCountry(market);
+  if (code) {
+    copy.markets = Object.assign({}, copy.markets || {});
+    const existing = copy.markets[code] || copy.markets[code.toLowerCase()] || copy.markets[code.toUpperCase()] || {};
+    const selected = clone(existing);
+    selected.excludeLargeMarketplacesFromDistribution = false;
+    selected.hubProfiles = Object.assign({}, selected.hubProfiles || {});
+    selected.hubProfiles.distribution = Object.assign({}, selected.hubProfiles.distribution || {}, { excludeLargeMarketplaces: false });
+    copy.markets[code] = selected;
+  }
+  return copy;
+}
+
+/**
+ * Large marketplaces remain excluded by default. A narrowly scoped exception
+ * is allowed only after Canonical publication plus the payable-revenue gate,
+ * operator approval, disclosure approval and a verified payout contract.
+ */
+function buildRegionalSelection(items, context) {
+  const prepared = (items || []).map(policyCandidate);
+  const base = Gate.buildSelection(prepared, context || {});
+  const promoted = [];
+  const held = [];
+  for (const entry of base.held || []) {
+    const reasons = Array.isArray(entry.decision && entry.decision.reasons) ? entry.decision.reasons : [];
+    const marketplaceOnly = reasons.length > 0 && reasons.every(reason => reason === "LARGE_MARKETPLACE_RESERVED_FOR_MARKET_HUB");
+    if (!marketplaceOnly || !approvedRevenueMarketplaceCandidate(entry.item)) {
+      held.push(entry);
+      continue;
+    }
+    const relaxed = Gate.buildSelection([entry.item], Object.assign({}, context || {}, {
+      policy: marketplaceExceptionPolicy(context && context.policy, context && context.targetMarket)
+    }));
+    if (relaxed.accepted && relaxed.accepted.length) promoted.push(relaxed.accepted[0]);
+    else held.push(relaxed.held && relaxed.held[0] || entry);
+  }
+  const accepted = (base.accepted || []).concat(promoted);
+  const heldByReason = {};
+  for (const entry of held) {
+    const reasons = Array.isArray(entry.decision && entry.decision.reasons) && entry.decision.reasons.length ? entry.decision.reasons : ["COUNTRY_POLICY_HOLD"];
+    for (const reason of reasons) heldByReason[reason] = (heldByReason[reason] || 0) + 1;
+  }
+  const acceptedByTier = {};
+  for (const entry of accepted) {
+    const tier = entry.decision && entry.decision.supplyTier || "unknown";
+    acceptedByTier[tier] = (acceptedByTier[tier] || 0) + 1;
+  }
+  return Object.assign({}, base, {
+    accepted,
+    held,
+    acceptedItems: accepted.map(entry => entry.item),
+    heldItems: held.map(entry => entry.item),
+    audit: Object.assign({}, base.audit || {}, {
+      acceptedCount: accepted.length,
+      heldCount: held.length,
+      acceptedByTier,
+      heldByReason,
+      approvedRevenueMarketplaceExceptions: promoted.length
+    })
+  });
+}
 
 function canonicalDistributionItem(item) {
   const publication = item && item.canonicalPublication;
@@ -138,7 +277,7 @@ function priorityItems(root, market, region, policy) {
     // snapshot. A country-wide listing can appear in each regional view.
     if (!region && scope.region) continue;
     if (region && scope.region && scope.region !== region) continue;
-    const selection = Gate.buildSelection([scope.item], { targetMarket: market, targetRegion: region || "", hub: "distribution", policy });
+    const selection = buildRegionalSelection([scope.item], { targetMarket: market, targetRegion: region || "", hub: "distribution", policy });
     if (selection.accepted.length) out.push(selection.accepted[0]);
   }
   return out;
@@ -147,13 +286,14 @@ function scopes(root, items, policy) {
   const result = new Map();
   function ensure(market) { if (!result.has(market)) result.set(market, new Set()); return result.get(market); }
   for (const item of items) {
-    const dist = Policy.distributionMarketEvidence(item);
-    const availability = Policy.availabilityEvidence(item);
-    const responsibility = Policy.localResponsibilityEvidence(item);
+    const prepared = policyCandidate(item);
+    const dist = Policy.distributionMarketEvidence(prepared);
+    const availability = Policy.availabilityEvidence(prepared);
+    const responsibility = Policy.localResponsibilityEvidence(prepared);
     if (!dist.country || dist.country === "GLOBAL" || !availability.countries.includes(dist.country) || !responsibility.present) continue;
     const regions = ensure(dist.country);
-    const sellerRegion = Policy.distributionRegionEvidence(item, dist.country).region;
-    const availabilityRegions = Policy.regionalAvailabilityEvidence(item, dist.country).regions || [];
+    const sellerRegion = Policy.distributionRegionEvidence(prepared, dist.country).region;
+    const availabilityRegions = Policy.regionalAvailabilityEvidence(prepared, dist.country).regions || [];
     if (sellerRegion) regions.add(sellerRegion);
     for (const region of availabilityRegions) regions.add(region);
   }
@@ -167,19 +307,17 @@ function scopes(root, items, policy) {
   }
   return result;
 }
-function emptyDistributionTemplate(template) {
+function distributionTemplateWithSamples(template) {
   const doc = clone(template);
   const sections = doc && doc.pages && doc.pages.distribution && doc.pages.distribution.sections;
   if (!sections || typeof sections !== "object") return null;
-  for (const [key, value] of Object.entries(sections)) {
-    if (Array.isArray(value)) sections[key] = [];
-    else if (value && Array.isArray(value.slots)) value.slots = [];
-  }
+  doc.pages.distribution.sections = SlotOverlay.overlaySections(sections, new Map());
   doc.meta = Object.assign({}, doc.meta || {}, {
     regionalBrokerageSnapshot: true,
     source: "verified-external-responsible-seller-referral",
     directSale: false,
-    globalCardsInherited: false
+    globalCardsInherited: false,
+    sampleFallbackPreserved: true
   });
   return doc;
 }
@@ -282,39 +420,56 @@ function outputPath(root, market, region) {
   return path.join(root, "data", "auto", market, ...(region ? [region] : []), SNAPSHOT_FILE);
 }
 function publishScope(root, template, allItems, market, region, policy, registry) {
-  const selection = Gate.buildSelection(allItems, { targetMarket: market, targetRegion: region || "", hub: "distribution", policy });
+  const selection = buildRegionalSelection(allItems, { targetMarket: market, targetRegion: region || "", hub: "distribution", policy });
   const priority = priorityItems(root, market, region, policy);
   const accepted = priority.concat(selection.accepted.filter((entry) => !priority.some((p) => p.id === entry.id)));
   if (!accepted.length) return { published: false, market, region: region || null, audit: selection.audit };
-  const doc = emptyDistributionTemplate(template);
+  const doc = distributionTemplateWithSamples(template);
   if (!doc) return { published: false, market, region: region || null, reason: "DISTRIBUTION_TEMPLATE_INVALID", audit: selection.audit };
   const sections = doc.pages.distribution.sections;
   const templateSections = template.pages.distribution.sections;
-  const seen = new Set();
+  const seenIds = new Set();
+  const seenSlots = new Set();
+  const realBySection = new Map();
   let written = 0;
   for (const entry of accepted) {
     const item = entry.item || entry;
     const decision = entry.decision || Gate.decisionForCandidate(item, selection, { hub: "distribution" });
     const card = makeCard(item, decision || {}, market, region, registry);
-    if (!card || seen.has(card.id)) continue;
-    seen.add(card.id);
+    if (!card || seenIds.has(card.id)) continue;
     const section = sectionFor(item, sections);
-    const list = listForSection(sections, section);
-    if (list.length >= slotCapacity(templateSections, section)) continue;
-    list.push(card);
-    written++;
+    const capacity = slotCapacity(templateSections, section);
+    const slot = SlotOverlay.slotOf(card, 0);
+    const slotKey = section + "|" + slot;
+    if (!slot || slot > capacity || seenSlots.has(slotKey)) continue;
+    seenIds.add(card.id);
+    seenSlots.add(slotKey);
+    card.section = section;
+    card.psom_key = section;
+    card.slot = slot;
+    card.slotId = slot;
+    card.bind = Object.assign({}, card.bind || {}, { page: "distribution", section, slot });
+    card.placement = Object.assign({}, card.placement || {}, { page: "distribution", section, slot });
+    if (!realBySection.has(section)) realBySection.set(section, []);
+    realBySection.get(section).push(card);
+    written += 1;
   }
   if (!written) return { published: false, market, region: region || null, audit: selection.audit };
+  doc.pages.distribution.sections = SlotOverlay.overlaySections(templateSections, realBySection);
+  const sampleCount = Object.values(doc.pages.distribution.sections).reduce((sum, value) => sum + SlotOverlay.list(value).filter(SlotOverlay.isSampleCard).length, 0);
   doc.meta = Object.assign({}, doc.meta || {}, {
     targetMarket: market,
     targetRegion: region || null,
     generatedAt: new Date().toISOString(),
     regionalBrokerageAccepted: written,
+    realCardCount: written,
+    sampleCardCount: sampleCount,
+    sampleFallbackPreserved: true,
     regionalBrokerageAudit: selection.audit
   });
   const output = outputPath(root, market, region);
   write(output, doc);
-  return { published: true, market, region: region || null, output: path.relative(root, output), written, audit: selection.audit };
+  return { published: true, market, region: region || null, output: path.relative(root, output), written, sampleCount, audit: selection.audit };
 }
 function pruneEmptyDirs(root, dir) {
   const autoRoot = path.join(root, "data", "auto");

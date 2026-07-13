@@ -36,11 +36,22 @@ function upstreamMirrorFiles() {
  * candidate set. Ordinary site/admin updates must preserve the committed
  * SearchBank and front Snapshot files exactly as they are.
  */
-function loadConfirmedUpstream() {
+function loadConfirmedUpstream(commerceRegistrySync) {
   const files = upstreamMirrorFiles();
   const mirrors = files.map(file => ({ path: path.relative(root, file).replace(/\\/g, "/"), present: fileExists(file) }));
+  const queueOnlyReady = !!(commerceRegistrySync && commerceRegistrySync.ok === true && Number(commerceRegistrySync.count || 0) > 0);
 
   if (mirrors.some(row => !row.present)) {
+    if (queueOnlyReady) {
+      return {
+        ok: true,
+        sourceMode: "approved-review-queue-only",
+        warning: "upstream-candidate-source-missing",
+        doc: { schema: "search-bank.upstream.review-queue-only.v1", generatedAt: new Date().toISOString(), items: [] },
+        candidateCount: 0,
+        mirrors
+      };
+    }
     return { ok: false, reason: "upstream-candidate-source-missing", mirrors };
   }
 
@@ -62,11 +73,22 @@ function loadConfirmedUpstream() {
   }
 
   if (parsed[0].doc.items.length === 0) {
+    if (queueOnlyReady) {
+      return {
+        ok: true,
+        sourceMode: "approved-review-queue-only",
+        warning: "upstream-candidate-source-empty",
+        doc: parsed[0].doc,
+        candidateCount: 0,
+        mirrors
+      };
+    }
     return { ok: false, reason: "upstream-candidate-source-empty", mirrors };
   }
 
   return {
     ok: true,
+    sourceMode: "mirrored-sanmaru-searchbank-upstream",
     doc: parsed[0].doc,
     candidateCount: parsed[0].doc.items.length,
     mirrors
@@ -151,7 +173,7 @@ async function main() {
 
   // Ordinary builds do not publish or regenerate Snapshot files. Publication
   // begins only after a real, mirrored upstream candidate source is present.
-  const upstream = loadConfirmedUpstream();
+  const upstream = loadConfirmedUpstream(commerceRegistrySync);
   if (!upstream.ok) {
     writePreservedBuild(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors });
     return;
@@ -204,7 +226,7 @@ async function main() {
     return;
   }
 
-  const publication = canonical.publish({ root, trigger: "netlify-build" });
+  const publication = canonical.publish({ root, trigger: "netlify-build", bank: upstream.doc, requireMirrorConsensus: false });
   if (publication.status !== "published") {
     throw new Error("Canonical Snapshot Publisher blocked build: " + JSON.stringify(publication.errors || publication));
   }
@@ -237,7 +259,7 @@ async function main() {
 
   process.stdout.write(JSON.stringify({
     commerceRegistrySync,
-    upstream: { candidateCount: upstream.candidateCount, mirrors: upstream.mirrors },
+    upstream: { candidateCount: upstream.candidateCount, sourceMode: upstream.sourceMode || null, warning: upstream.warning || null, mirrors: upstream.mirrors },
     intake: { releaseGate: intake.releaseGate, summary: intake.summary },
     publication,
     published,

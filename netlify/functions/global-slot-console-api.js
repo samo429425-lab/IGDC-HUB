@@ -3,6 +3,7 @@
 const { resolveUser, capability, requireCapability } = require('./lib/global-slot-console-auth');
 const sb = require('./lib/global-slot-console-supabase');
 const media = require('./lib/global-slot-console-media');
+const ReleaseDispatch = require('./lib/commerce-release-dispatch.v1');
 
 const HUBS = new Set(['home','distribution','network','media','social','tour','donation','literature_academic']);
 const STATES = new Set(['discovered','verified_candidate','revenue_ready','approval_pending','enrollable','hold','suppressed','retired','information_only']);
@@ -193,7 +194,11 @@ async function saveAssignment(actor, body) {
   if (!body.id) row.created_at = iso();
   const rows = await sb.insert('gslot_slot_assignments', row, 'resolution=merge-duplicates,return=representation');
   await audit(actor, body.id ? 'update_assignment' : 'create_assignment', 'assignment', assignmentId, { candidateId, hubKey, countryCode, slotKey, state, publicationStatus: pub });
-  return { ok: true, row: (rows || [row])[0] };
+  let releaseDispatch = null;
+  if ((state === 'approved' || state === 'pinned') && pub === 'ready') {
+    releaseDispatch = await ReleaseDispatch.dispatch({ candidateId, assignmentId, actorId: actor.sub });
+  }
+  return { ok: true, row: (rows || [row])[0], releaseDispatch };
 }
 async function decideAssignment(actor, body) {
   requireCapability(actor, 'approve');
@@ -203,7 +208,12 @@ async function decideAssignment(actor, body) {
   const patch = { state, publication_status: state === 'approved' || state === 'pinned' ? 'ready' : (state === 'suppressed' || state === 'retired' ? 'not_ready' : 'not_ready'), decision_note: clean(body.note, 3000) || null, updated_at: iso(), updated_by: actor.sub };
   const rows = await sb.update('gslot_slot_assignments', 'id=eq.' + encodeURIComponent(assignmentId), patch);
   await audit(actor, 'decide_assignment', 'assignment', assignmentId, patch);
-  return { ok: true, row: (rows || [])[0] || null };
+  const saved = (rows || [])[0] || null;
+  let releaseDispatch = null;
+  if (state === 'approved' || state === 'pinned') {
+    releaseDispatch = await ReleaseDispatch.dispatch({ candidateId: saved && saved.candidate_id, assignmentId, actorId: actor.sub });
+  }
+  return { ok: true, row: saved, releaseDispatch };
 }
 async function listPolicies() { const rows = await sb.select('gslot_policies', 'select=*&order=updated_at.desc&limit=200'); return { ok: true, rows: rows || [] }; }
 async function savePolicy(actor, body) {
