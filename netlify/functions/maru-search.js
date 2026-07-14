@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-598-search-card-media-persist-reliable-fetch-nanopin';
+const VERSION = 'A1.5.46-599-search-card-media-reader-nanopin';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -78,12 +78,6 @@ const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const OG_IMAGE_ENRICH_LIMIT = 36;
 const OG_IMAGE_ENRICH_CONCURRENCY = 10;
 const OG_IMAGE_ENRICH_TIMEOUT_MS = 2600;
-// Search UI cards must arrive with their own page media in the first response.
-// This bounded window replaces the former browser-side late hydration path.
-const SEARCH_UI_INITIAL_MEDIA_BUDGET_MS = 2400;
-const SEARCH_UI_INITIAL_MEDIA_TIMEOUT_MS = 1800;
-const SEARCH_UI_INITIAL_MEDIA_CONCURRENCY = 25;
-const OG_IMAGE_EMPTY_CACHE_TTL_MS = 45 * 1000;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
 const MAX_SEARCH_BANK_PAGES_DEEP = 60;
@@ -4051,16 +4045,6 @@ function decodeHtmlEntitiesLite(v){
     .replace(/&gt;/g, '>');
 }
 
-function decodeEmbeddedUrlLite(v){
-  return decodeHtmlEntitiesLite(v)
-    .replace(/\\\//g, '/')
-    .replace(/\\u0026/gi, '&')
-    .replace(/\\u003d/gi, '=')
-    .replace(/\\u002f/gi, '/')
-    .replace(/\\x26/gi, '&')
-    .replace(/\\x3d/gi, '=');
-}
-
 function attrValue(tag, name){
   const re = new RegExp(name + "\\s*=\\s*([\\\"'])(.*?)\\1", "i");
   const m = safeString(tag).match(re);
@@ -4110,7 +4094,7 @@ function isLikelyContentImageUrl(imageUrl){
 }
 
 function pushOwnImageCandidate(out, url, baseUrl, source, weight){
-  const u = absolutizeUrl(baseUrl, decodeEmbeddedUrlLite(url));
+  const u = absolutizeUrl(baseUrl, decodeHtmlEntitiesLite(url));
   if(!isLikelyContentImageUrl(u)) return;
   out.push({
     url: u,
@@ -4125,6 +4109,7 @@ function extractOgImageFromHtml(html, baseUrl){
   if(!text) return '';
 
   const candidates = [];
+  const low = value => safeString(value).toLowerCase();
 
   // 1) Explicit representative images selected by the page owner.
   const metaPatterns = [
@@ -4189,10 +4174,7 @@ function extractOgImageFromHtml(html, baseUrl){
       attrValue(tag, 'src') ||
       attrValue(tag, 'data-src') ||
       attrValue(tag, 'data-original') ||
-      attrValue(tag, 'data-original-src') ||
       attrValue(tag, 'data-lazy-src') ||
-      attrValue(tag, 'data-lazy') ||
-      attrValue(tag, 'data-ks-lazyload') ||
       attrValue(tag, 'data-url');
 
     if(!src) continue;
@@ -4213,25 +4195,6 @@ function extractOgImageFromHtml(html, baseUrl){
     if(hasAnyLooseTerm(cls + ' ' + alt, ['main','visual','hero','photo','image','대표','사진','갤러리'])) weight += 16;
 
     pushOwnImageCandidate(candidates, src, baseUrl, 'page-img', weight);
-  }
-
-  // CSS/lazy frameworks often keep the representative image in an inline
-  // background-image declaration rather than an <img> element.
-  const bgRe = /(?:background-image|background)\s*:\s*url\(\s*(['"]?)([^)'"]+)\1\s*\)/ig;
-  let bm;
-  let bgCount = 0;
-  while((bm = bgRe.exec(headAndTop)) && bgCount < 30 && candidates.length < 72){
-    bgCount += 1;
-    if(bm && bm[2]) pushOwnImageCandidate(candidates, bm[2], baseUrl, 'css-background', 52);
-  }
-
-  // Common JSON-LD/image-object forms not covered by the compact "image" regex.
-  const structuredImageRe = /"(?:contentUrl|url|thumbnailUrl|primaryImageOfPage)"\s*:\s*"([^"]+)"/ig;
-  let sim;
-  let structuredCount = 0;
-  while((sim = structuredImageRe.exec(text)) && structuredCount < 48 && candidates.length < 84){
-    structuredCount += 1;
-    if(sim && sim[1]) pushOwnImageCandidate(candidates, sim[1], baseUrl, 'structured-image', 64);
   }
 
   if(!candidates.length) return '';
@@ -4324,11 +4287,11 @@ function extractPageVideoMediaFromHtml(html, baseUrl){
   const posters = [];
 
   function pushUrl(v){
-    const u = absolutizeUrl(baseUrl, decodeEmbeddedUrlLite(v));
+    const u = absolutizeUrl(baseUrl, decodeHtmlEntitiesLite(v));
     if(u && /^https?:\/\//i.test(u)) candidates.push(u);
   }
   function pushPoster(v){
-    const u = absolutizeUrl(baseUrl, decodeEmbeddedUrlLite(v));
+    const u = absolutizeUrl(baseUrl, decodeHtmlEntitiesLite(v));
     if(u && isLikelyContentImageUrl(u)) posters.push(u);
   }
 
@@ -4366,24 +4329,7 @@ function extractPageVideoMediaFromHtml(html, baseUrl){
     if(!type || type.includes('video')) pushUrl(firstNonEmpty(attrValue(tag, 'src'), attrValue(tag, 'data-src')));
   }
 
-  // VideoObject / player JSON emitted by many news and portal pages.
-  const structuredVideoRe = /"(?:embedUrl|contentUrl|playerUrl|videoUrl|streamUrl)"\s*:\s*"([^"]+)"/ig;
-  let svm;
-  let structuredVideoCount = 0;
-  while((svm = structuredVideoRe.exec(text)) && structuredVideoCount < 30 && candidates.length < 52){
-    structuredVideoCount += 1;
-    if(svm && svm[1]) pushUrl(svm[1]);
-  }
-  const structuredPosterRe = /"(?:thumbnailUrl|poster|posterUrl)"\s*:\s*(?:"([^"]+)"|\[\s*"([^"]+)")/ig;
-  let spm;
-  let structuredPosterCount = 0;
-  while((spm = structuredPosterRe.exec(text)) && structuredPosterCount < 30){
-    structuredPosterCount += 1;
-    const v = spm && (spm[1] || spm[2]);
-    if(v) pushPoster(v);
-  }
-
-  const rawYoutube = decodeEmbeddedUrlLite(text).match(/(?:youtube(?:-nocookie)?\.com\/(?:embed|shorts|live)\/|youtu\.be\/|youtube\.com\/watch\?v=)([A-Za-z0-9_-]{11})/i);
+  const rawYoutube = text.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed|shorts|live)\/|youtu\.be\/|youtube\.com\/watch\?v=)([A-Za-z0-9_-]{11})/i);
   let videoId = rawYoutube && rawYoutube[1] ? rawYoutube[1] : '';
   if(!videoId){
     for(const u of candidates){
@@ -4453,18 +4399,13 @@ function hasUsefulOwnPageCardMedia(v){
   return !!(v && (v.image || (Array.isArray(v.imageSet) && v.imageSet.length) || v.hasVideo || v.summary));
 }
 
-async function fetchOwnPageCardMedia(url, opts){
+async function fetchOwnPageCardMedia(url){
   try{
-    opts = opts || {};
     globalThis.__MARU_PAGE_CARD_MEDIA_CACHE = globalThis.__MARU_PAGE_CARD_MEDIA_CACHE || new Map();
 
     const cacheKey = safeString(url).trim();
     const hit = globalThis.__MARU_PAGE_CARD_MEDIA_CACHE.get(cacheKey);
-    if(hit){
-      const ttl = hasUsefulOwnPageCardMedia(hit.v) ? OG_IMAGE_CACHE_TTL_MS : OG_IMAGE_EMPTY_CACHE_TTL_MS;
-      if(Date.now() - hit.t < ttl) return hit.v;
-    }
-    const fetchTimeoutMs = Math.max(700, Math.min(OG_IMAGE_ENRICH_TIMEOUT_MS, Number(opts.timeoutMs) || OG_IMAGE_ENRICH_TIMEOUT_MS));
+    if(hit && Date.now() - hit.t < OG_IMAGE_CACHE_TTL_MS) return hit.v;
 
     const candidates = ownPageFetchCandidates(cacheKey);
     let best = emptyOwnPageCardMedia();
@@ -4482,7 +4423,7 @@ async function fetchOwnPageCardMedia(url, opts){
             'Pragma': 'no-cache',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
           }
-        }, fetchTimeoutMs);
+        }, OG_IMAGE_ENRICH_TIMEOUT_MS);
       }catch(e){
         res = null;
       }
@@ -4623,16 +4564,13 @@ async function enrichOwnImages(items, opts){
   const max = Math.min(list.length, Number.isFinite(requestedMax) && requestedMax > 0 ? requestedMax : OG_IMAGE_ENRICH_LIMIT, OG_IMAGE_ENRICH_LIMIT);
   const trace = opts && Array.isArray(opts.trace) ? opts.trace : null;
   const timeLeft = opts && typeof opts.timeLeft === 'function' ? opts.timeLeft : (() => 9999);
-  const fetchTimeoutMs = opts && Number(opts.fetchTimeoutMs) > 0 ? Number(opts.fetchTimeoutMs) : OG_IMAGE_ENRICH_TIMEOUT_MS;
-  const minRemainingMs = opts && Number(opts.minRemainingMs) >= 0 ? Number(opts.minRemainingMs) : 1200;
-  const requestedConcurrency = opts && Number(opts.concurrency) > 0 ? Number(opts.concurrency) : OG_IMAGE_ENRICH_CONCURRENCY;
 
   let enriched = 0;
   let skipped = 0;
   let cursor = 0;
 
   async function worker(){
-    while(cursor < max && timeLeft() > minRemainingMs){
+    while(cursor < max && timeLeft() > 1200){
       const idx = cursor++;
       const it = list[idx];
       if(!it) { skipped += 1; continue; }
@@ -4645,7 +4583,7 @@ async function enrichOwnImages(items, opts){
       }
 
       const url = safeString(firstNonEmpty(it.url, it.link)).trim();
-      const pageMedia = await fetchOwnPageCardMedia(url, { timeoutMs:fetchTimeoutMs });
+      const pageMedia = await fetchOwnPageCardMedia(url);
       const merged = mergeOwnPageCardMediaIntoItem(it, pageMedia);
       list[idx] = merged;
 
@@ -4658,7 +4596,7 @@ async function enrichOwnImages(items, opts){
   }
 
   const workers = [];
-  const n = Math.min(Math.max(1, requestedConcurrency), max);
+  const n = Math.min(OG_IMAGE_ENRICH_CONCURRENCY, max);
   for(let i=0; i<n; i++) workers.push(worker());
   await Promise.allSettled(workers);
 
@@ -4674,62 +4612,6 @@ async function enrichOwnImages(items, opts){
   }
 
   return list;
-}
-
-function searchUiHydrationKey(it){
-  return canonicalSearchUiPageKey(searchUiPageUrlForItem(it));
-}
-
-async function hydrateSearchUiInitialMediaWindow(items, opts){
-  const list = Array.isArray(items) ? items.slice() : [];
-  opts = opts || {};
-  if(!list.length) return { items:list, meta:{ status:'empty', checked:0, changed:0, elapsedMs:0 } };
-
-  const page = Math.max(1, Number(opts.page) || 1);
-  const perPage = Math.max(1, Math.min(100, Number(opts.perPage) || 25));
-  const directPaged = !!opts.directPaged;
-  let start = directPaged ? 0 : Math.max(0, (page - 1) * perPage);
-  if(start >= list.length) start = 0;
-  const indices = [];
-  for(let i=start; i<list.length && indices.length<perPage; i++) indices.push(i);
-  if(!indices.length) return { items:list, meta:{ status:'empty-window', checked:0, changed:0, elapsedMs:0 } };
-
-  const sample = indices.map(i => list[i]);
-  const before = new Map(sample.map(it => [searchUiHydrationKey(it), collectSearchUiMediaAssets(it, searchUiPageUrlForItem(it)).join('|') + '|' + resultSummaryText(it)]));
-  const trace = [];
-  const started = nowMs();
-  const budgetMs = Math.max(900, Math.min(3200, Number(opts.budgetMs) || SEARCH_UI_INITIAL_MEDIA_BUDGET_MS));
-  const enriched = await enrichOwnImages(sample, {
-    maxItems:sample.length,
-    trace,
-    fetchTimeoutMs:Number(opts.fetchTimeoutMs) || SEARCH_UI_INITIAL_MEDIA_TIMEOUT_MS,
-    concurrency:Number(opts.concurrency) || SEARCH_UI_INITIAL_MEDIA_CONCURRENCY,
-    minRemainingMs:250,
-    timeLeft:() => Math.max(0, budgetMs - (nowMs() - started))
-  });
-
-  let changed = 0;
-  enriched.forEach((it, n) => {
-    const idx = indices[n];
-    if(idx === undefined) return;
-    const key = searchUiHydrationKey(it);
-    const after = collectSearchUiMediaAssets(it, searchUiPageUrlForItem(it)).join('|') + '|' + resultSummaryText(it);
-    if(after !== (before.get(key) || '')) changed += 1;
-    list[idx] = it;
-  });
-
-  return {
-    items:list,
-    meta:{
-      status:changed ? 'ok' : 'unchanged',
-      page, perPage, checked:sample.length, changed,
-      elapsedMs:nowMs() - started,
-      budgetMs,
-      mode:'first-response-own-page-summary-image-video-snapshot',
-      lateBrowserHydration:false,
-      trace
-    }
-  };
 }
 
 
@@ -4919,7 +4801,7 @@ async function naverGenericSearch(endpoint, q, limit, start, source, type){
       thumbnail: thumb,
       thumb,
       image: thumb,
-      imageSet: compactImages([thumb]),
+      imageSet: [],
       payload: {
         source,
         endpoint,
@@ -4989,31 +4871,15 @@ async function googleCseRequest(q, limit, start, opts){
   const type = opts.type || 'web';
   const results = items.map(it => {
     const pagemap = it.pagemap || {};
+    const cseThumb = Array.isArray(pagemap.cse_thumbnail) ? pagemap.cse_thumbnail[0] : null;
+    const cseImg = Array.isArray(pagemap.cse_image) ? pagemap.cse_image[0] : null;
     const imageSearch = opts.searchType === 'image' || type === 'image';
-    const pageMapImages = [];
-    function addPageMapImage(v){
-      const u = safeString(v).trim();
-      if(u) pageMapImages.push(u);
-    }
-    ['cse_image','cse_thumbnail','imageobject','videoobject','product','metatags'].forEach(k => {
-      const rows = Array.isArray(pagemap[k]) ? pagemap[k] : [];
-      rows.forEach(row => {
-        if(!row || typeof row !== 'object') return;
-        [row.src, row.url, row.contentUrl, row.thumbnailUrl, row.image, row.thumbnail, row['og:image'], row['og:image:secure_url'], row['twitter:image'], row['twitter:image:src']].forEach(addPageMapImage);
-      });
-    });
-    const imageAssets = compactImages((imageSearch ? [it.link] : []).concat(pageMapImages)).filter(u => isMeaningfulImageForItem(u, { source:opts.source || 'google', type, mediaType:opts.mediaType || 'article' }));
-    const imageAsset = imageAssets[0] || '';
+    const imageAsset = imageSearch ? safeString(it.link).trim() : safeString((cseImg && cseImg.src) || (cseThumb && cseThumb.src) || '').trim();
     const contextLink = imageSearch ? safeString(it.image && it.image.contextLink).trim() : safeString(it.link).trim();
     if(!contextLink || isDirectImageAssetUrlForSourceLink(contextLink)) return null;
     const host = domainOf(contextLink).toLowerCase();
     let resultType = type;
     let resultMediaType = opts.mediaType || (type === 'sns_video' ? 'video' : 'article');
-    const videoRows = Array.isArray(pagemap.videoobject) ? pagemap.videoobject : [];
-    const videoMeta = videoRows.find(v => v && typeof v === 'object') || {};
-    const providerVideoUrl = firstNonEmpty(videoMeta.embedUrl, videoMeta.contentUrl, videoMeta.url, videoMeta.playerUrl);
-    const providerVideoId = searchUiYoutubeIdFromAny(providerVideoUrl);
-    if(providerVideoUrl) resultMediaType = 'video';
     if(host.includes('youtube.com') || host.includes('youtu.be')){
       resultType = 'video';
       resultMediaType = 'video';
@@ -5036,19 +4902,14 @@ async function googleCseRequest(q, limit, start, opts){
       thumb: imageAsset,
       image: imageAsset,
       imageUrl: imageAsset,
-      imageSet: imageAssets.slice(0, 3),
+      imageSet: compactImages([imageAsset]),
       originalImage: imageAsset,
       fullImage: imageAsset,
       viewerImage: imageAsset,
       openImageUrl: imageAsset,
       contentUrl: imageAsset,
       cardImage: imageAsset,
-      videoId: providerVideoId || undefined,
-      videoUrl: providerVideoUrl || undefined,
-      watchUrl: providerVideoId ? 'https://www.youtube.com/watch?v=' + providerVideoId : (providerVideoUrl || undefined),
-      embedUrl: providerVideoId ? 'https://www.youtube.com/embed/' + providerVideoId : (videoMeta.embedUrl || undefined),
-      media: providerVideoUrl ? { type:'video', preview:{ poster:imageAsset, image:imageAsset, thumbnail:imageAsset, videoUrl:providerVideoUrl, embedUrl:providerVideoId ? 'https://www.youtube.com/embed/' + providerVideoId : videoMeta.embedUrl, pageUrl:contextLink, sourcePageUrl:contextLink, contextLink } } : undefined,
-      payload: { source, thumb:imageAsset, image:imageAsset, imageSet:imageAssets.slice(0,3), pageUrl:contextLink, sourcePageUrl:contextLink, contextLink, cseQuery:q, videoUrl:providerVideoUrl || undefined }
+      payload: { source, thumb:imageAsset, image:imageAsset, pageUrl:contextLink, sourcePageUrl:contextLink, contextLink, cseQuery:q }
     };
   }).filter(Boolean);
 
@@ -6359,23 +6220,6 @@ exports.handler = async function(event){
       base.items = base.items.slice(0, SEARCH_UI_FIRST_RESPONSE_WINDOW);
       base.results = base.items;
     }
-
-    // Search UI only: hydrate the requested visible page before the HTTP response.
-    // The front/slot/SearchBank supply routes never enter this branch.
-    if(searchUiGateway && !noMedia && !truthy(raw && (raw.noInitialCardMedia || raw.disableInitialCardMedia))){
-      const initialMediaPack = await hydrateSearchUiInitialMediaWindow(base.items || [], {
-        page:requestedSearchUiPage,
-        perPage:visibleNeed,
-        directPaged:fastRichPagedDirect,
-        budgetMs:SEARCH_UI_INITIAL_MEDIA_BUDGET_MS,
-        fetchTimeoutMs:SEARCH_UI_INITIAL_MEDIA_TIMEOUT_MS,
-        concurrency:SEARCH_UI_INITIAL_MEDIA_CONCURRENCY
-      });
-      base.items = initialMediaPack.items;
-      base.results = base.items;
-      base.meta = Object.assign({}, base.meta || {}, { searchUiInitialCardMedia:initialMediaPack.meta });
-    }
-
     base.items = (Array.isArray(base.items) ? base.items : []).map(compactResultItem);
     // Sanmaru must keep neutral/search data, not browser-specific display contracts.
     // Store the compact neutral candidate layer first, then decorate only the HTTP response for search.js.
