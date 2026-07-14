@@ -5682,7 +5682,10 @@ if (it.riskLabel === '⚠️ high-risk') {
 
       drawPager();
 
-      if(!skipEnrich){
+      // Media is hydrated by maru-search before the search response is rendered.
+      // Keep the old browser crawler available only as an explicit emergency flag;
+      // production search cards must not grow images several seconds after first paint.
+      if(!skipEnrich && window.__MARU_SEARCH_ENABLE_LATE_MEDIA_HYDRATION__ === true){
         enrichRenderedPageImages(page, slice);
       }
     }
