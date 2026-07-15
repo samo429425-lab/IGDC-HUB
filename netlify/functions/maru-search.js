@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-599-search-card-media-reader-nanopin';
+const VERSION = 'A1.5.46-597-search-insight-card-media-front-preserve-nanopin';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -76,8 +76,8 @@ const MARU_GATEWAY_CACHE_TTL_MS = 5 * 60 * 1000;
 const MARU_INFLIGHT_TTL_MS = 30 * 1000;
 const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const OG_IMAGE_ENRICH_LIMIT = 36;
-const OG_IMAGE_ENRICH_CONCURRENCY = 10;
-const OG_IMAGE_ENRICH_TIMEOUT_MS = 2600;
+const OG_IMAGE_ENRICH_CONCURRENCY = 8;
+const OG_IMAGE_ENRICH_TIMEOUT_MS = 1800;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
 const MAX_SEARCH_BANK_PAGES_DEEP = 60;
@@ -1468,8 +1468,7 @@ function compactResultItem(it){
     displayCard,
     sectionId: resolvedSectionId,
     sectionTitle: it.sectionTitle || (SEARCH_SECTION_META[resolvedSectionId] && SEARCH_SECTION_META[resolvedSectionId].title),
-    _category: it._category || classifySearchCategory(it),
-    _maruCardKey: it._maruCardKey || it.maruCardKey || undefined
+    _category: it._category || classifySearchCategory(it)
   };
 }
 
@@ -4369,36 +4368,6 @@ function emptyOwnPageCardMedia(){
   return { image:'', imageSet:[], summary:'', title:'', hasVideo:false, videoId:'', videoUrl:'', watchUrl:'', embedUrl:'', poster:'' };
 }
 
-function ownPageFetchCandidates(url){
-  const raw = safeString(url).trim();
-  const out = [];
-  const seen = new Set();
-  function push(v){
-    const s = safeString(v).trim();
-    if(!/^https?:\/\//i.test(s) || seen.has(s)) return;
-    seen.add(s);
-    out.push(s);
-  }
-  push(raw);
-
-  // Naver News serves equivalent desktop/mobile article URLs. Some edge nodes
-  // block one form while returning complete OpenGraph metadata from the other.
-  try{
-    const u = new URL(raw);
-    const host = u.hostname.toLowerCase();
-    const m = u.pathname.match(/\/(?:mnews\/)?article\/(\d+)\/(\d+)/i);
-    if(m && /(^|\.)n\.news\.naver\.com$|(^|\.)news\.naver\.com$/.test(host)){
-      push(`https://n.news.naver.com/mnews/article/${m[1]}/${m[2]}`);
-      push(`https://n.news.naver.com/article/${m[1]}/${m[2]}`);
-    }
-  }catch(e){}
-  return out.slice(0, 3);
-}
-
-function hasUsefulOwnPageCardMedia(v){
-  return !!(v && (v.image || (Array.isArray(v.imageSet) && v.imageSet.length) || v.hasVideo || v.summary));
-}
-
 async function fetchOwnPageCardMedia(url){
   try{
     globalThis.__MARU_PAGE_CARD_MEDIA_CACHE = globalThis.__MARU_PAGE_CARD_MEDIA_CACHE || new Map();
@@ -4407,52 +4376,42 @@ async function fetchOwnPageCardMedia(url){
     const hit = globalThis.__MARU_PAGE_CARD_MEDIA_CACHE.get(cacheKey);
     if(hit && Date.now() - hit.t < OG_IMAGE_CACHE_TTL_MS) return hit.v;
 
-    const candidates = ownPageFetchCandidates(cacheKey);
-    let best = emptyOwnPageCardMedia();
-
-    for(const targetUrl of candidates){
-      let res = null;
-      try{
-        res = await fetchWithTimeout(targetUrl, {
-          method: 'GET',
-          redirect: 'follow',
-          headers: {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
-          }
-        }, OG_IMAGE_ENRICH_TIMEOUT_MS);
-      }catch(e){
-        res = null;
+    const res = await fetchWithTimeout(cacheKey, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml',
+        'User-Agent': 'Mozilla/5.0 MaruSearchBot/1.0'
       }
-      if(!res || !res.ok) continue;
+    }, OG_IMAGE_ENRICH_TIMEOUT_MS);
 
-      const ctype = safeString(res.headers && res.headers.get && res.headers.get('content-type')).toLowerCase();
-      if(ctype && !ctype.includes('text/html') && !ctype.includes('application/xhtml')) continue;
-
-      const finalUrl = safeString(res.url || targetUrl).trim() || targetUrl;
-      const html = (await res.text()).slice(0, 360000);
-      const image = extractOgImageFromHtml(html, finalUrl);
-      const video = extractPageVideoMediaFromHtml(html, finalUrl);
-      const images = qualitySortImagesForItem([image, video.poster].filter(Boolean), {
-        type:'web', mediaType:video.hasVideo ? 'video' : 'article', url:finalUrl
-      }).slice(0, 3);
-      const value = Object.assign(emptyOwnPageCardMedia(), video, {
-        image: images[0] || image || video.poster || '',
-        imageSet: images,
-        summary: extractPageSummaryFromHtml(html),
-        title: extractPageTitleFromHtml(html)
-      });
-      if(hasUsefulOwnPageCardMedia(value)){
-        best = value;
-        break;
-      }
+    if(!res || !res.ok) {
+      const empty = emptyOwnPageCardMedia();
+      globalThis.__MARU_PAGE_CARD_MEDIA_CACHE.set(cacheKey, { t: Date.now(), v: empty });
+      return empty;
     }
 
-    globalThis.__MARU_PAGE_CARD_MEDIA_CACHE.set(cacheKey, { t: Date.now(), v: best });
-    return best;
+    const ctype = safeString(res.headers && res.headers.get && res.headers.get('content-type')).toLowerCase();
+    if(ctype && !ctype.includes('text/html') && !ctype.includes('application/xhtml')) {
+      const empty = emptyOwnPageCardMedia();
+      globalThis.__MARU_PAGE_CARD_MEDIA_CACHE.set(cacheKey, { t: Date.now(), v: empty });
+      return empty;
+    }
+
+    const html = (await res.text()).slice(0, 320000);
+    const image = extractOgImageFromHtml(html, cacheKey);
+    const video = extractPageVideoMediaFromHtml(html, cacheKey);
+    const images = qualitySortImagesForItem([image, video.poster].filter(Boolean), {
+      type:'web', mediaType:video.hasVideo ? 'video' : 'article', url:cacheKey
+    }).slice(0, 3);
+    const value = Object.assign(emptyOwnPageCardMedia(), video, {
+      image: images[0] || image || video.poster || '',
+      imageSet: images,
+      summary: extractPageSummaryFromHtml(html),
+      title: extractPageTitleFromHtml(html)
+    });
+
+    globalThis.__MARU_PAGE_CARD_MEDIA_CACHE.set(cacheKey, { t: Date.now(), v: value });
+    return value;
   }catch(e){
     return emptyOwnPageCardMedia();
   }
@@ -5871,15 +5830,13 @@ exports.handler = async function(event){
       const started = nowMs();
 
       const enriched = await enrichOwnImages(incoming, {
-        maxItems: 25,
         trace,
-        timeLeft: () => Math.max(0, 7800 - (nowMs() - started))
+        timeLeft: () => Math.max(0, 6500 - (nowMs() - started))
       });
 
-      // This action is a thin card-media hydration endpoint. Do not run the
-      // full display engine again here: re-grouping can change item keys/order
-      // and prevent the browser from merging the media back into its text card.
-      const items = enriched.map(compactResultItem);
+      let items = enriched.map(compactResultItem);
+      const displayPack = applySearchDisplayEngineToItems(items, q, raw || {}, { searchType, lang, action:'enrich-images' });
+      items = displayPack.items;
       return ok({
         status: 'ok',
         engine: 'maru-search',
@@ -5888,7 +5845,7 @@ exports.handler = async function(event){
         query: q,
         items,
         results: items,
-        displayPolicy: { mode:'thin-search-card-media-hydration', preservesOrder:true, preservesCardKey:true },
+        displayPolicy: displayPack.displayPolicy || null,
         meta: {
           count: items.length,
           imagePolicy: 'render-page-own-summary-image-video-snapshot',
