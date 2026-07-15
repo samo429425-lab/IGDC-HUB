@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.46-597-search-insight-card-media-front-preserve-nanopin';
+const VERSION = 'A1.5.47-598-search-general-card-media-coverage-nanopin';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -4118,6 +4118,10 @@ function extractOgImageFromHtml(html, baseUrl){
     /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/ig,
     /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
     /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["'][^>]*>/ig,
+    /<meta[^>]+property=["']og:image:url["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:url["'][^>]*>/ig,
+    /<meta[^>]+name=["']twitter:image:src["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image:src["'][^>]*>/ig,
     /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/ig,
     /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/ig
   ];
@@ -4173,7 +4177,10 @@ function extractOgImageFromHtml(html, baseUrl){
       attrValue(tag, 'src') ||
       attrValue(tag, 'data-src') ||
       attrValue(tag, 'data-original') ||
+      attrValue(tag, 'data-original-src') ||
       attrValue(tag, 'data-lazy-src') ||
+      attrValue(tag, 'data-lazy') ||
+      attrValue(tag, 'data-image') ||
       attrValue(tag, 'data-url');
 
     if(!src) continue;
@@ -4194,6 +4201,21 @@ function extractOgImageFromHtml(html, baseUrl){
     if(hasAnyLooseTerm(cls + ' ' + alt, ['main','visual','hero','photo','image','대표','사진','갤러리'])) weight += 16;
 
     pushOwnImageCandidate(candidates, src, baseUrl, 'page-img', weight);
+  }
+
+  // 6) Responsive <picture>/<source> images that may not repeat on <img>.
+  const pictureSourceRe = /<source\b[^>]*>/ig;
+  let psm;
+  let pictureChecked = 0;
+  while((psm = pictureSourceRe.exec(headAndTop)) && pictureChecked < 40 && candidates.length < 68){
+    pictureChecked += 1;
+    const tag = psm[0];
+    const type = low(attrValue(tag, 'type'));
+    const srcset = attrValue(tag, 'srcset') || attrValue(tag, 'data-srcset');
+    const src = bestFromSrcset(srcset) || attrValue(tag, 'src') || attrValue(tag, 'data-src');
+    if(type && !type.includes('image')) continue;
+    if(!type && !srcset && !/\.(?:jpe?g|png|webp|gif|avif|bmp|svg)(?:\?|#|$)/i.test(safeString(src))) continue;
+    if(src) pushOwnImageCandidate(candidates, src, baseUrl, 'picture-source', 48);
   }
 
   if(!candidates.length) return '';
@@ -4282,15 +4304,21 @@ function extractPageTitleFromHtml(html){
 
 function extractPageVideoMediaFromHtml(html, baseUrl){
   const text = safeString(html);
+  // Many JSON-LD/player blocks escape slashes. Normalize only for pattern
+  // recognition; the original page fetch count and timeout remain unchanged.
+  const searchable = text.replace(/\\u0026/gi, '&').replace(/\\\//g, '/');
   const candidates = [];
   const posters = [];
 
+  function decodeMediaValue(v){
+    return decodeHtmlEntitiesLite(safeString(v).replace(/\\u0026/gi, '&').replace(/\\\//g, '/'));
+  }
   function pushUrl(v){
-    const u = absolutizeUrl(baseUrl, decodeHtmlEntitiesLite(v));
+    const u = absolutizeUrl(baseUrl, decodeMediaValue(v));
     if(u && /^https?:\/\//i.test(u)) candidates.push(u);
   }
   function pushPoster(v){
-    const u = absolutizeUrl(baseUrl, decodeHtmlEntitiesLite(v));
+    const u = absolutizeUrl(baseUrl, decodeMediaValue(v));
     if(u && isLikelyContentImageUrl(u)) posters.push(u);
   }
 
@@ -4301,35 +4329,91 @@ function extractPageVideoMediaFromHtml(html, baseUrl){
     const key = safeString(firstNonEmpty(attrValue(tag, 'property'), attrValue(tag, 'name'), attrValue(tag, 'itemprop'))).toLowerCase();
     const content = attrValue(tag, 'content');
     if(['og:video','og:video:url','og:video:secure_url','twitter:player','player','embedurl'].includes(key)) pushUrl(content);
-    if(['og:video:image','thumbnailurl'].includes(key)) pushPoster(content);
+    if(['og:video:image','og:video:thumbnail','thumbnailurl','thumbnail'].includes(key)) pushPoster(content);
+  }
+
+  // JSON-LD VideoObject and player configuration fields. This reads the HTML
+  // already downloaded for the card and makes no additional provider request.
+  const jsonVideoUrlRe = /"(?:embedUrl|uploadUrl|playerUrl|videoUrl)"\s*:\s*"([^"]+)"/ig;
+  let jvm;
+  while((jvm = jsonVideoUrlRe.exec(searchable)) && candidates.length < 28){
+    if(jvm[1]) pushUrl(jvm[1]);
+  }
+  const jsonContentUrlRe = /"contentUrl"\s*:\s*"([^"]+)"/ig;
+  let jcm;
+  while((jcm = jsonContentUrlRe.exec(searchable)) && candidates.length < 30){
+    const value = safeString(jcm[1]);
+    if(/youtube|youtu\.be|vimeo|dailymotion|twitch|tv\.naver|tv\.kakao|video|player|\.(?:mp4|webm|m3u8|mov|m4v)(?:\?|#|$)/i.test(value)) pushUrl(value);
+  }
+  const jsonPosterRe = /"(?:thumbnailUrl|poster|videoThumbnail)"\s*:\s*(?:"([^"]+)"|\[\s*"([^"]+)")/ig;
+  let jpm;
+  while((jpm = jsonPosterRe.exec(searchable)) && posters.length < 16){
+    pushPoster(jpm[1] || jpm[2]);
   }
 
   const iframeRe = /<iframe\b[^>]*>/ig;
   let im;
-  while((im = iframeRe.exec(text)) && candidates.length < 28){
+  while((im = iframeRe.exec(text)) && candidates.length < 36){
     const tag = im[0];
-    const iframeUrl = firstNonEmpty(attrValue(tag, 'src'), attrValue(tag, 'data-src'), attrValue(tag, 'data-lazy-src'));
-    if(/youtube|youtu\.be|vimeo|dailymotion|twitch|video|player/i.test(safeString(iframeUrl))) pushUrl(iframeUrl);
+    const iframeUrl = firstNonEmpty(
+      attrValue(tag, 'src'),
+      attrValue(tag, 'data-src'),
+      attrValue(tag, 'data-lazy-src'),
+      attrValue(tag, 'data-video-src'),
+      attrValue(tag, 'data-player-src'),
+      attrValue(tag, 'data-embed-url'),
+      attrValue(tag, 'data-url')
+    );
+    if(/youtube|youtu\.be|vimeo|dailymotion|twitch|tv\.naver|serviceapi\.nmv\.naver|tv\.kakao|play-tv\.kakao|video|player/i.test(safeString(iframeUrl))) pushUrl(iframeUrl);
   }
 
   const videoRe = /<video\b[^>]*>/ig;
   let vm;
-  while((vm = videoRe.exec(text)) && candidates.length < 34){
+  while((vm = videoRe.exec(text)) && candidates.length < 42){
     const tag = vm[0];
-    pushUrl(firstNonEmpty(attrValue(tag, 'src'), attrValue(tag, 'data-src')));
-    pushPoster(attrValue(tag, 'poster'));
+    pushUrl(firstNonEmpty(
+      attrValue(tag, 'src'),
+      attrValue(tag, 'data-src'),
+      attrValue(tag, 'data-video-src'),
+      attrValue(tag, 'data-url')
+    ));
+    pushPoster(firstNonEmpty(attrValue(tag, 'poster'), attrValue(tag, 'data-poster')));
   }
 
   const sourceRe = /<source\b[^>]*>/ig;
   let sm;
-  while((sm = sourceRe.exec(text)) && candidates.length < 40){
+  while((sm = sourceRe.exec(text)) && candidates.length < 48){
     const tag = sm[0];
     const type = safeString(attrValue(tag, 'type')).toLowerCase();
     if(!type || type.includes('video')) pushUrl(firstNonEmpty(attrValue(tag, 'src'), attrValue(tag, 'data-src')));
   }
 
-  const rawYoutube = text.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed|shorts|live)\/|youtu\.be\/|youtube\.com\/watch\?v=)([A-Za-z0-9_-]{11})/i);
-  let videoId = rawYoutube && rawYoutube[1] ? rawYoutube[1] : '';
+  const embedRe = /<embed\b[^>]*>/ig;
+  let em;
+  while((em = embedRe.exec(text)) && candidates.length < 52){
+    const tag = em[0];
+    const src = firstNonEmpty(attrValue(tag, 'src'), attrValue(tag, 'data-src'));
+    if(/youtube|youtu\.be|vimeo|dailymotion|twitch|tv\.naver|tv\.kakao|video|player|\.(?:mp4|webm|m3u8|mov|m4v)(?:\?|#|$)/i.test(safeString(src))) pushUrl(src);
+  }
+
+  const objectRe = /<object\b[^>]*>/ig;
+  let om;
+  while((om = objectRe.exec(text)) && candidates.length < 56){
+    const tag = om[0];
+    const dataUrl = firstNonEmpty(attrValue(tag, 'data'), attrValue(tag, 'src'));
+    if(/youtube|youtu\.be|vimeo|dailymotion|twitch|tv\.naver|tv\.kakao|video|player/i.test(safeString(dataUrl))) pushUrl(dataUrl);
+  }
+
+  // Direct media URLs embedded in scripts/configuration objects.
+  const directVideoRe = /https?:\/\/[^\s"'<>\\]+?\.(?:mp4|webm|m3u8|mov|m4v)(?:\?[^\s"'<>\\]*)?/ig;
+  let dvm;
+  while((dvm = directVideoRe.exec(searchable)) && candidates.length < 60){
+    pushUrl(dvm[0]);
+  }
+
+  const rawYoutube = searchable.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed|shorts|live)\/|youtu\.be\/|youtube\.com\/watch\?v=)([A-Za-z0-9_-]{11})/i);
+  const dataYoutube = searchable.match(/(?:data-(?:video-id|youtube-id)|["'](?:videoId|youtubeId)["']?)\s*(?:=|:)\s*["']([A-Za-z0-9_-]{11})["']/i);
+  let videoId = rawYoutube && rawYoutube[1] ? rawYoutube[1] : (dataYoutube && dataYoutube[1] ? dataYoutube[1] : '');
   if(!videoId){
     for(const u of candidates){
       videoId = youtubeIdFromUrl(u);
@@ -4340,7 +4424,7 @@ function extractPageVideoMediaFromHtml(html, baseUrl){
   let embedUrl = '';
   let videoUrl = '';
   for(const u of candidates){
-    if(!embedUrl && /youtube(?:-nocookie)?\.com\/embed\/|player\.vimeo\.com\/video\/|dailymotion\.com\/embed\/video\//i.test(u)) embedUrl = u;
+    if(!embedUrl && /youtube(?:-nocookie)?\.com\/embed\/|player\.vimeo\.com\/video\/|dailymotion\.com\/embed\/video\/|serviceapi\.nmv\.naver|play-tv\.kakao/i.test(u)) embedUrl = u;
     if(!videoUrl && /\.(?:mp4|webm|m3u8|mov|m4v)(?:\?|#|$)/i.test(u)) videoUrl = u;
   }
   if(videoId){

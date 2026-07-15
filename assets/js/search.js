@@ -2950,11 +2950,18 @@ async function fetchInstantSearchPack(q, type = activeType){
         out.push(s);
       });
 
-      // YouTube result cards should expose a representative thumbnail when a
-      // full player is not appropriate or when the provider did not include an image.
+      // A real YouTube result uses one representative thumbnail. An ordinary
+      // article/tour/cafe page that merely embeds YouTube must retain both its own
+      // representative image and the embedded-video snapshot in the same card.
       if (isYoutubeLikeItemClient(it)) {
+        const pageUrl = String((it && (it.url || it.link || it.pageUrl || it.sourcePageUrl || it.contextLink)) || '').trim();
+        const ownsYoutubePage = /(?:^|\.)youtube\.com$|(?:^|\.)youtu\.be$/i.test((() => {
+          try { return new URL(pageUrl, location.origin).hostname; } catch(e) { return ''; }
+        })());
         const best = preferredYoutubeThumbClient(it) || out[0] || '';
-        return best ? [best] : [];
+        if(ownsYoutubePage) return best ? [best] : [];
+        const combined = dedupeImageVariantsClient(out.concat(best ? [best] : []));
+        return combined.slice(0, 3);
       }
 
       // Naver image API item is one image result; thumbnail/original often look duplicated.
@@ -5242,14 +5249,16 @@ if (it.riskLabel === '⚠️ high-risk') {
       if(!q || !Array.isArray(slice) || !slice.length) return;
 
       const cacheKey = [q, activeType || 'all', page].join('::');
-      if(pageImageEnrichCache.has(cacheKey) || pageImageEnrichInFlight.has(cacheKey)) return;
+      if(pageImageEnrichInFlight.has(cacheKey)) return;
 
       const visibleItems = richCardMediaCandidatesClient(slice);
       const candidates = visibleItems
         .filter(it => {
           const key = itemStableKey(it);
           const cached = key ? itemImageEnrichCache.get(key) : null;
-          if(cached && collectNaturalImages(cached).length && hasVideoSnapshotSignalClient(cached)) return false;
+          // Each visible result page is probed once. A page-wide completion flag
+          // would skip general-search cards that arrive after the first render.
+          if(cached) return false;
           const url = String((it && (it.url || it.link || it.pageUrl || it.sourcePageUrl)) || '').trim();
           if(!/^https?:\/\//i.test(url)) return false;
           // Probe when either the representative image or the embedded-video
@@ -5260,7 +5269,6 @@ if (it.riskLabel === '⚠️ high-risk') {
         .slice(0, PAGE_SIZE);
 
       if(!candidates.length){
-        pageImageEnrichCache.add(cacheKey);
         return;
       }
 
@@ -5288,6 +5296,14 @@ if (it.riskLabel === '⚠️ high-risk') {
         const enriched = normalizeItems(json);
         if(!enriched.length) return;
 
+        // Mark only the cards actually submitted to the deferred reader. This
+        // preserves speed while allowing newly received general-list cards to be
+        // enriched on a later render without re-reading earlier cards.
+        candidates.forEach(item => {
+          const key = itemStableKey(item);
+          if(key && !itemImageEnrichCache.has(key)) itemImageEnrichCache.set(key, item);
+        });
+
         const updatedCandidates = mergeEnrichedItems(candidates, enriched);
         const byKey = new Map();
         updatedCandidates.forEach(item => {
@@ -5309,7 +5325,6 @@ if (it.riskLabel === '⚠️ high-risk') {
           return merged;
         });
 
-        pageImageEnrichCache.add(cacheKey);
         if(changed && page === currentPage){
           renderPage(page, true);
         }
