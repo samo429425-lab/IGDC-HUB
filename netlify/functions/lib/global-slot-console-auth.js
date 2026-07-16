@@ -17,6 +17,7 @@ const ROLE_LEVEL = {
   special_member: 4,
   special_menber: 4,
   commerce_manager: 5,
+  media_manager: 5,
   site_manager: 12,
   coordinator_director: 13,
   site_manager_director: 14,
@@ -201,10 +202,13 @@ function capability(actor) {
   const director = admin || has('director') || has('site_manager_director') || has('coordinator_director');
   const siteManager = director || has('site_manager') || roles.some((role) => role.indexOf('site_manager_') === 0);
   const commerceManager = has('commerce_manager');
+  const mediaManager = has('media_manager');
   return {
     owner,
     read: siteManager || commerceManager,
     edit: siteManager || commerceManager,
+    mediaRead: siteManager || mediaManager,
+    mediaEdit: siteManager || mediaManager,
     approve: siteManager,
     policy: director
   };

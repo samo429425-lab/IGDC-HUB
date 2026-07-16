@@ -66,7 +66,7 @@ function session(actor) {
   // The handler has already verified the existing admin login and its server-side role.
   // Do not touch the management database here: DB availability must never look like a login failure.
   const caps = capability(actor);
-  if (!caps.read) { const e = new Error('글로벌 슬롯 관리 콘솔은 admin 이상 권한에서 열립니다.'); e.statusCode = 403; throw e; }
+  if (!caps.read && !caps.mediaRead) { const e = new Error('글로벌 슬롯 관리 콘솔은 관리자 또는 지정된 미디어 운영자 권한에서 열립니다.'); e.statusCode = 403; throw e; }
   return { ok: true, user: { id: actor.sub, email: actor.email, name: actor.name, role: actor.role, roles: actor.roles }, capabilities: caps };
 }
 
@@ -271,7 +271,17 @@ exports.handler = async function handler(event) {
     const body = method === 'GET' ? {} : parseBody(event);
     const action = clean(query.action || body.action || 'session', 80);
     const actor = await resolveUser(event);
-    requireCapability(actor, 'read');
+    const mediaAction = action.indexOf('media.') === 0;
+    if (action === 'session') {
+      const caps = capability(actor);
+      if (!caps.read && !caps.mediaRead) {
+        const denied = new Error('글로벌 슬롯 관리 콘솔 접근 권한이 없습니다.');
+        denied.statusCode = 403;
+        throw denied;
+      }
+    } else {
+      requireCapability(actor, mediaAction ? (method === 'GET' ? 'mediaRead' : 'mediaEdit') : 'read');
+    }
 
     // This isolated console deliberately has no front publication, build-hook, or Snapshot action.
     let out;
