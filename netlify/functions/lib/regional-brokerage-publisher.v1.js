@@ -17,6 +17,7 @@ const Gate = require("./regional-brokerage-front-supply-gate.core.v1");
 const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const CanonicalPublisher = require("./canonical-snapshot-publisher.v1");
 const SlotOverlay = require("./sample-slot-overlay.v1");
+const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
 const SNAPSHOT_FILE = "distribution.snapshot.json";
 const REGISTRY_FILE = "regional-brokerage-outbound.json";
@@ -468,7 +469,7 @@ function publishScope(root, template, allItems, market, region, policy, registry
     regionalBrokerageAudit: selection.audit
   });
   const output = outputPath(root, market, region);
-  write(output, doc);
+  write(output, PublicSnapshot.sanitizeDocument(doc));
   return { published: true, market, region: region || null, output: path.relative(root, output), written, sampleCount, audit: selection.audit };
 }
 function pruneEmptyDirs(root, dir) {

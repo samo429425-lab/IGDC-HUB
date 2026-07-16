@@ -23,6 +23,7 @@ const crypto = require("crypto");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
+const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
 const VERSION = "canonical-snapshot-publisher-v1.5.0-commerce-candidate-intake";
 const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.5-commerce-candidate-intake";
@@ -757,9 +758,10 @@ function snapshotForRollback(root, currentManifest) {
 
 function writePublicMirrors(root, document) {
   const writes = [];
+  const publicDocument = PublicSnapshot.sanitizeDocument(document);
   for (const file of publicPaths(root)) {
-    const digest = atomicWriteJson(file, document);
-    writes.push({ path: path.relative(root, file).replace(/\\/g, "/"), sha256: digest, count: document.items.length });
+    const digest = atomicWriteJson(file, publicDocument);
+    writes.push({ path: path.relative(root, file).replace(/\\/g, "/"), sha256: digest, count: publicDocument.items.length });
   }
   const hashes = new Set(writes.map(entry => entry.sha256));
   if (hashes.size !== 1) throw new Error("PUBLIC_MIRROR_WRITE_DIVERGENCE");

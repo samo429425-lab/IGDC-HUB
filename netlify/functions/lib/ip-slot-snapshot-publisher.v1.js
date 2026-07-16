@@ -20,6 +20,7 @@ const Canonical = require("./canonical-snapshot-publisher.v1");
 const IpPolicy = require("./ip-slot-policy.v1");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const SlotOverlay = require("./sample-slot-overlay.v1");
+const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
 const VERSION = "canonical-ip-slot-snapshot-publisher-v1.4.0-commerce-outbound-route";
 const MANIFEST_FILE = "ip-slot-manifest.json";
@@ -485,7 +486,7 @@ function publish(input) {
       const document = renderPage(templates[page], page, selected, scope);
       if (!document) { report.errors.push("IP_SLOT_RENDER_FAILED:" + page + ":" + scope.country + ":" + (scope.region || "NATIONWIDE")); continue; }
       const absolute = publicPath(root, scope.country, scope.region, ROUTES[page].file);
-      const digest = atomicWrite(absolute, document);
+      const digest = atomicWrite(absolute, PublicSnapshot.sanitizeDocument(document));
       keep.add(path.resolve(absolute));
       outputs.push({ page, file: ROUTES[page].file, country: scope.country, region: scope.region || null, path: webPath(root, absolute), sha256: digest, cardCount: selected.length, sampleCount: outputCards(document, page).filter(SlotOverlay.isSampleCard).length });
     }

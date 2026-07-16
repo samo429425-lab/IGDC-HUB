@@ -9,6 +9,7 @@
 const fs = require("fs");
 const path = require("path");
 const NonPgRevenue = require("./lib/nonpg-revenue-contract.core.v1");
+const PublicSnapshot = require("./lib/public-snapshot-sanitizer.v1");
 const crypto = require("crypto");
 
 const ROOT = process.cwd();
@@ -98,11 +99,12 @@ function readSnapshotJson(fileName) {
 function writeSnapshotJson(fileName, data) {
   const targets = existingSnapshotPaths(fileName);
   const writeTargets = targets.length ? targets : [snapshotPathCandidates(fileName)[0]];
+  const publicData = PublicSnapshot.sanitizeDocument(data);
   for (const target of writeTargets) {
     try {
       const dir = path.dirname(target);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      writeJson(target, data);
+      writeJson(target, publicData);
     } catch (e) {
       console.error("Snapshot write failed:", target, e && e.message);
     }

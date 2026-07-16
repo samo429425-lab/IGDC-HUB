@@ -30,6 +30,7 @@ const path = require("path");
 const crypto = require("crypto");
 const https = require("https");
 const http = require("http");
+const PublicSnapshot = require("./lib/public-snapshot-sanitizer.v1");
 
 let Core = null;
 try { Core = require("./core"); } catch (e) { Core = null; }
@@ -1999,6 +2000,7 @@ function dedup(items){
 
 function writeSearchBankSnapshots(bank){
   const cwd = process.cwd();
+  const publicBank = PublicSnapshot.sanitizeDocument(bank);
 
   const targets = uniquePaths([
     path.join(cwd,"data","search-bank.snapshot.json"),
@@ -2010,7 +2012,7 @@ function writeSearchBankSnapshots(bank){
   for(const p of targets){
     try{
       fs.mkdirSync(path.dirname(p), { recursive:true });
-      fs.writeFileSync(p, JSON.stringify(bank, null, 2), "utf8");
+      fs.writeFileSync(p, JSON.stringify(publicBank, null, 2), "utf8");
     }catch(e){}
   }
 }
