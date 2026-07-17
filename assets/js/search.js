@@ -5317,24 +5317,80 @@ if (it.riskLabel === '⚠️ high-risk') {
       }
     }
 
-    function scheduleSecondPageMediaPrefetch(q, type){
-      const scheduleKey = ['page-media-prefetch', q, type, 2].join('::');
-      if(pageImageEnrichCache.has(scheduleKey)) return;
-      pageImageEnrichCache.add(scheduleKey);
+    function scheduleContinuousPageMediaPrefetch(q, type){
+      // Search-card media follows the already-open Search.js intake in the
+      // background: page 2 starts first, then pages 3+ continue automatically
+      // as their 25-card slices arrive. This never changes the search intake,
+      // pager, SearchBank/front gateway, or the order of the received cards.
+      const scheduleKey = ['page-media-prefetch', q, type].join('::');
+      let state = scheduleContinuousPageMediaPrefetch._state;
 
-      setTimeout(() => {
+      if(!state || state.key !== scheduleKey){
+        if(state && state.timer) clearTimeout(state.timer);
+        state = {
+          key: scheduleKey,
+          nextPage: 2,
+          timer: null,
+          lastItemCount: Array.isArray(allItems) ? allItems.length : 0,
+          lastGrowthAt: Date.now()
+        };
+        scheduleContinuousPageMediaPrefetch._state = state;
+      }
+      if(state.timer) return;
+
+      const pump = () => {
+        state.timer = null;
+        if(scheduleContinuousPageMediaPrefetch._state !== state) return;
+
         const liveQ = String(lastQuery || (input && input.value) || '').trim();
         if(liveQ !== q || normalizeSearchType(activeType) !== normalizeSearchType(type)) return;
 
-        const secondPageSlice = visibleItemsForPage(2);
-        if(!Array.isArray(secondPageSlice) || !secondPageSlice.length){
-          // The open intake may not have delivered page 2 yet. Let the next
-          // normal render schedule it again without touching the intake flow.
-          pageImageEnrichCache.delete(scheduleKey);
+        const itemCount = Array.isArray(allItems) ? allItems.length : 0;
+        if(itemCount > state.lastItemCount){
+          state.lastItemCount = itemCount;
+          state.lastGrowthAt = Date.now();
+        }
+
+        let availablePages = Math.max(1, Math.ceil(itemCount / PAGE_SIZE));
+        if(normalizeSearchType(type) === 'all'){
+          const model = buildPortalPageModel();
+          if(model && model.pageCount) availablePages = Math.max(availablePages, model.pageCount);
+        }else{
+          availablePages = Math.max(1, Math.ceil(activeTabItemsFromPool(allItems).length / PAGE_SIZE));
+        }
+
+        if(state.nextPage <= availablePages){
+          // Page 2 keeps its original early priority. From page 3 onward, wait
+          // only until most requests from the preceding wave have returned;
+          // a few slow addresses therefore never hold the following pages back.
+          if(state.nextPage > 2 && pageImageEnrichInFlight.size > PAGE_SIZE){
+            state.timer = setTimeout(pump, 120);
+            return;
+          }
+
+          const page = state.nextPage;
+          const slice = visibleItemsForPage(page);
+          if(Array.isArray(slice) && slice.length){
+            enrichRenderedPageImages(page, slice, true);
+            pageImageEnrichCache.add(['page-media-prefetch', q, type, page].join('::'));
+          }
+          state.nextPage += 1;
+          state.timer = setTimeout(pump, page === 2 ? 120 : 160);
           return;
         }
-        enrichRenderedPageImages(2, secondPageSlice, true);
-      }, 120);
+
+        const expectedPages = Math.max(
+          availablePages,
+          Math.min(MAX_PROGRESSIVE_PAGER_PAGES, Number(progressivePagerPages) || availablePages)
+        );
+        if(state.nextPage <= expectedPages && Date.now() - state.lastGrowthAt < 60000){
+          // The search intake is still filling later pages. Keep watching without
+          // asking for or changing any search data itself.
+          state.timer = setTimeout(pump, 220);
+        }
+      };
+
+      state.timer = setTimeout(pump, 120);
     }
 
     async function enrichRenderedPageImages(page, slice, prefetchOnly = false){
@@ -5363,9 +5419,9 @@ if (it.riskLabel === '⚠️ high-risk') {
       // cannot hold back media that has already been found for another card.
       candidates.forEach(item => { enrichOneSearchCardMedia(page, q, type, item); });
 
-      // Page 1 has priority, but page 2 starts shortly afterwards rather than
-      // waiting for all 25 page-1 addresses to finish.
-      if(page === 1 && !prefetchOnly) scheduleSecondPageMediaPrefetch(q, type);
+      // Page 1 has priority; page 2 starts shortly afterwards and pages 3+
+      // keep following automatically in the background as Search.js receives them.
+      if(page === 1 && !prefetchOnly) scheduleContinuousPageMediaPrefetch(q, type);
     }
 
 
