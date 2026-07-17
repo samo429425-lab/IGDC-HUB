@@ -83,32 +83,148 @@
     return map;
   }
 
+  function cleanText(v){
+    return (v === null || v === undefined) ? '' : String(v).trim();
+  }
+
+  function isInvalidMediaValue(v){
+    const raw = cleanText(v);
+    if(!raw) return true;
+    const s = raw.toLowerCase();
+    if(s === '#' || s === 'about:blank') return true;
+    if(s === 'null' || s === 'undefined' || s === 'false') return true;
+    if(s === 'javascript:void(0)' || s === 'javascript:;' || s === 'javascript:void(0);') return true;
+    if(s === 'loading…' || s === 'loading...' || s === 'loading' || s === 'coming soon') return true;
+    if(s.indexOf('placeholder') >= 0 || s.indexOf('placehold.co') >= 0) return true;
+    if(s.indexOf('data:image/gif;base64,r0lgodlhaqabaiaaaaaaap') === 0) return true;
+    return false;
+  }
+
+  function firstValid(){
+    for(let i=0;i<arguments.length;i++){
+      const v = cleanText(arguments[i]);
+      if(!isInvalidMediaValue(v)) return v;
+    }
+    return '';
+  }
+
+  function isUnverifiedCandidate(item){
+    if(!item || typeof item !== 'object') return true;
+
+    if(item.candidateOnly === true || item.candidate_only === true) return true;
+    if(item.seedContent === true || item.seed_content === true) return true;
+
+    const rights = item.rights && typeof item.rights === 'object' ? item.rights : {};
+    const statusValues = [
+      item.verificationStatus, item.verification_status,
+      item.reviewStatus, item.review_status,
+      item.rightsStatus, item.rights_status,
+      item.allowedUse, item.allowed_use,
+      rights.status, rights.verificationStatus, rights.allowedUse
+    ].map(v => cleanText(v).toLowerCase()).filter(Boolean);
+
+    const blocked = new Set([
+      'verification_required',
+      'web_verification_required',
+      'pending',
+      'unverified',
+      'not_verified',
+      'hold',
+      'blocked',
+      'rejected',
+      'candidate',
+      'seed'
+    ]);
+
+    return statusValues.some(v => blocked.has(v));
+  }
+
+  function normalizeMediaItem(item){
+    if(!item || typeof item !== 'object') return null;
+
+    const title = firstValid(item.title, item.name, item.text);
+    const thumb = firstValid(item.thumbnail, item.thumb, item.image, item.imageUrl, item.thumbnailUrl, item.poster, item.posterUrl);
+    const source = firstValid(item.url, item.video, item.playUrl, item.embedUrl, item.sourceUrl, item.link, item.href);
+    const id = firstValid(item.id, item._id, item.contentId, item.videoId, item.slug);
+
+    if(!title) return null;
+    if(!id && !source) return null;
+    if(!thumb && !source) return null;
+    if(isUnverifiedCandidate(item)) return null;
+
+    const out = Object.assign({}, item);
+    out.title = title;
+    if(id && !out.id) out.id = id;
+    if(id && !out.contentId) out.contentId = id;
+    if(thumb) out.thumbnail = thumb;
+    if(source) out.url = source;
+    if(!out.provider) out.provider = firstValid(item.provider, item.sourceName, item.platform, item.channelTitle);
+    return out;
+  }
+
+  function filterRenderableItems(items){
+    if(!Array.isArray(items)) return [];
+    return items.map(normalizeMediaItem).filter(Boolean);
+  }
+
   function slotsToItems(section){
     const slots = section && Array.isArray(section.slots) ? section.slots : [];
-    return slots.map((slot)=>({
-      title: slot.title || '',
-      thumbnail: slot.thumb || '',
-      url: slot.url || slot.video || '',
-      video: slot.video || '',
-      provider: slot.provider || ''
-    }));
+    return filterRenderableItems(slots.map((slot)=>({
+      id: slot.id || slot.contentId || slot.videoId || slot.slug || '',
+      contentId: slot.contentId || slot.id || slot.videoId || slot.slug || '',
+      videoId: slot.videoId || '',
+      slug: slot.slug || '',
+      title: slot.title || slot.name || '',
+      thumbnail: slot.thumbnail || slot.thumb || slot.image || slot.imageUrl || slot.thumbnailUrl || slot.poster || slot.posterUrl || '',
+      thumb: slot.thumb || '',
+      url: slot.url || slot.video || slot.playUrl || slot.embedUrl || slot.sourceUrl || slot.link || slot.href || '',
+      video: slot.video || slot.playUrl || '',
+      embedUrl: slot.embedUrl || '',
+      provider: slot.provider || slot.sourceName || slot.platform || slot.channelTitle || '',
+      publishedAt: slot.publishedAt || slot.releaseDate || slot.createdAt || slot.date || '',
+      releaseDate: slot.releaseDate || '',
+      views: slot.views || slot.viewCount || 0,
+      viewCount: slot.viewCount || 0,
+      popularity: slot.popularity || slot.score || 0,
+      score: slot.score || 0,
+      rating: slot.rating || slot.voteAverage || 0,
+      voteAverage: slot.voteAverage || 0,
+      candidateOnly: slot.candidateOnly || slot.candidate_only || false,
+      candidate_only: slot.candidate_only || false,
+      seedContent: slot.seedContent || slot.seed_content || false,
+      seed_content: slot.seed_content || false,
+      verificationStatus: slot.verificationStatus || slot.verification_status || '',
+      verification_status: slot.verification_status || '',
+      reviewStatus: slot.reviewStatus || slot.review_status || '',
+      review_status: slot.review_status || '',
+      rightsStatus: slot.rightsStatus || slot.rights_status || '',
+      rights_status: slot.rights_status || '',
+      allowedUse: slot.allowedUse || slot.allowed_use || '',
+      allowed_use: slot.allowed_use || '',
+      rights: slot.rights || null
+    })));
   }
 
   function extractItems(section){
     if(!section) return [];
-    if(Array.isArray(section.items)) return section.items;
+    if(Array.isArray(section)) return filterRenderableItems(section);
+    if(Array.isArray(section.items)) return filterRenderableItems(section.items);
     if(Array.isArray(section.slots)) return slotsToItems(section);
     return [];
+  }
+
+  function hasSnapshotSection(sectionMap, key){
+    return !!(sectionMap && Object.prototype.hasOwnProperty.call(sectionMap, key));
   }
 
   async function loadFeedItems(key){
     const url = `/.netlify/functions/feed-media?key=${encodeURIComponent(key)}&limit=500`;
     try{
       const data = await fetchJson(url);
-      if(data && Array.isArray(data.items)) return data.items;
+      if(data && Array.isArray(data.items)) return filterRenderableItems(data.items);
       if(data && Array.isArray(data.sections)){
         const found = data.sections.find(s => s && canonKey(s.key) === key);
-        if(found && Array.isArray(found.items)) return found.items;
+        if(found && Array.isArray(found.items)) return filterRenderableItems(found.items);
       }
     }catch(e){ /* ignore */ }
     return [];
@@ -171,31 +287,25 @@
  function ensureContentId(item){
   if(!item) return '';
 
-  const hasRealContent =
-    !!(item.title || item.name || item.text || item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || item.url || item.video || item.link || item.href);
-
-  if(!hasRealContent) return '';
+  const title = firstValid(item.title, item.name, item.text);
+  const source = firstValid(item.url, item.video, item.playUrl, item.embedUrl, item.sourceUrl, item.link, item.href);
+  if(!title && !source) return '';
 
   return (
-    item.id ||
-    item._id ||
-    item.contentId ||
-    item.videoId ||
-    item.slug ||
-    (item.url ? btoa(item.url).replace(/=/g,'') : '')
+    firstValid(item.id, item._id, item.contentId, item.videoId, item.slug) ||
+    (source ? btoa(source).replace(/=/g,'') : '')
   );
 }
 
   function fillAnchor(a, item){
-    const title = (item && (item.title || item.name || item.text || '')) || '';
-    const thumb = (item && (item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || '')) || '';
-    const url = (item && (item.url || item.video || item.link || item.href || '#')) || '#';
+    const title = firstValid(item && item.title, item && item.name, item && item.text);
+    const thumb = firstValid(item && item.thumbnail, item && item.thumb, item && item.image, item && item.imageUrl, item && item.thumbnailUrl, item && item.poster, item && item.posterUrl);
 
-    
     const videoId = ensureContentId(item);
 
     if(videoId){
       a.href = `/media/watch.html?id=${encodeURIComponent(videoId)}`;
+      a.onclick = null;
       a.removeAttribute('target');
       a.removeAttribute('rel');
     }else{
@@ -213,14 +323,21 @@
       a.insertBefore(thumbBox, a.firstChild);
     }
 
+    if(thumb) thumbBox.classList.remove('ph');
+
     let img = q('img', thumbBox);
-    if(!img){
-      img = D.createElement('img');
-      thumbBox.appendChild(img);
+    if(thumb){
+      if(!img){
+        img = D.createElement('img');
+        thumbBox.appendChild(img);
+      }
+      img.alt = title || '';
+      img.loading = 'lazy';
+      img.src = thumb;
+    }else if(img){
+      img.removeAttribute('src');
+      img.alt = title || '';
     }
-    img.alt = title || '';
-    img.loading = 'lazy';
-    if(thumb) img.src = thumb;
 
     let metaBox = q('.meta', a);
     if(!metaBox){
@@ -260,11 +377,13 @@
       }
     }
 
-    // fallback feed (best-effort)
+    // fallback feed (best-effort). If a media snapshot is present but only has empty/sample slots, keep the existing hero.
+    if(sectionMap && Object.keys(sectionMap).length > 0) return;
+
     for(const k of keys){
       const items = await loadFeedItems(k);
       const first = items && items[0];
-      const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
+      const thumb = first && firstValid(first.thumbnail, first.thumb, first.image, first.imageUrl, first.thumbnailUrl, first.poster, first.posterUrl);
       if(thumb){
         heroImg.src = thumb;
         return;
@@ -401,7 +520,7 @@
       if(!key || key.indexOf('media-') !== 0) continue;
 
       let items = extractItems(sectionMap[key]);
-      if(!items || items.length === 0){
+      if((!items || items.length === 0) && !hasSnapshotSection(sectionMap, key)){
         items = await loadFeedItems(key);
       }
       applyLine(line, items);
