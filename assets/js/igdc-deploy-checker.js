@@ -61,6 +61,39 @@
     $('auditMode').addEventListener('change', function(){ setMode(this.value); });
     setMode(getMode());
   }
+  function getAdminReturnUrl(){
+    try{
+      var qs = new URLSearchParams(location.search || '');
+      var raw = qs.get('returnPath') || qs.get('returnUrl') || qs.get('adminReturn') || '/admin.html';
+      var u = new URL(raw, window.location.origin);
+      if (u.origin !== window.location.origin) return '/admin.html';
+      return u.pathname + u.search + u.hash;
+    }catch(e){
+      return '/admin.html';
+    }
+  }
+  function ensureAdminReturnButton(){
+    if($('igdcAdminReturnBtn')) return;
+    var run = $('runAuditBtn');
+    if(!run || !run.parentNode) return;
+    var btn = document.createElement('button');
+    btn.id = 'igdcAdminReturnBtn';
+    btn.type = 'button';
+    btn.className = 'secondary';
+    btn.textContent = '관리자 화면으로 가기';
+    btn.addEventListener('click', function(ev){
+      ev.preventDefault();
+      window.location.href = getAdminReturnUrl();
+      return false;
+    });
+    var htmlBtn = $('downloadHtmlBtn');
+    if(htmlBtn && htmlBtn.parentNode === run.parentNode){
+      htmlBtn.insertAdjacentElement('afterend', btn);
+    }else{
+      run.parentNode.appendChild(btn);
+    }
+  }
+
   function addFrontRuntimeChecks(report){
     report = report || {};
     report.frontRuntime = report.frontRuntime || {};
@@ -588,6 +621,7 @@
   }
   document.addEventListener('DOMContentLoaded', function(){
     ensureModeControls();
+    ensureAdminReturnButton();
     if($('runAuditBtn')) $('runAuditBtn').addEventListener('click', runAudit);
     if($('downloadJsonBtn')) $('downloadJsonBtn').addEventListener('click', function(){
       if(!lastReport) return;
