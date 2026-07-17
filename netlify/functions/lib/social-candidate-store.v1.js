@@ -1,0 +1,523 @@
+"use strict";
+
+/**
+ * Social Candidate Store v1
+ *
+ * Thin server-only adapter between broad Sanmaru/SearchBank discovery and
+ * reviewed Social Network candidates. It does not mutate public social.snapshot.json.
+ */
+const crypto = require("crypto");
+const Policy = require("./social-candidate-policy.v1");
+
+const VERSION = "social-candidate-store-v1.1.0-review-rotation-publish";
+const DEFAULT_TIMEOUT_MS = 12000;
+const CANDIDATE_TABLE = process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
+const RELEASE_TABLE = process.env.SOCIAL_SNAPSHOT_RELEASE_TABLE || "social_snapshot_releases";
+const READ_ROLES = new Set(["owner", "admin", "super_admin", "site_manager", "site_manager_director", "director", "social_manager", "media_manager", "commerce_manager"]);
+const WRITE_ROLES = new Set(["owner", "admin", "super_admin", "site_manager_director", "director", "social_manager"]);
+
+const {
+  text, compact, lowerText, lowerKey, array, plain, bool, clamp,
+  ALLOWED_SECTIONS, PLATFORM_BY_SECTION,
+  POOL_TARGET_PER_SECTION, POOL_MIN_PER_SECTION, POOL_MAX_PER_SECTION, ROTATION_LIMIT_PER_SECTION
+} = Policy;
+
+function stableStringify(value) {
+  if (value == null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map(stableStringify).join(",") + "]";
+  return "{" + Object.keys(value).sort().map((key) => JSON.stringify(key) + ":" + stableStringify(value[key])).join(",") + "}";
+}
+function sha256(value) { return crypto.createHash("sha256").update(typeof value === "string" ? value : stableStringify(value)).digest("hex"); }
+function shortHash(value) { return sha256(value).slice(0, 20); }
+function nowIso() { return new Date().toISOString(); }
+function unique(values) { return Array.from(new Set(array(values).map(text).filter(Boolean))); }
+function roleList(member) { return Array.from(new Set(array(member && member.roles).map(lowerKey).filter(Boolean))); }
+function requireRole(member, mode) {
+  const allowed = mode === "write" ? WRITE_ROLES : READ_ROLES;
+  const roles = roleList(member);
+  if (!roles.some((role) => allowed.has(role))) {
+    const error = new Error(mode === "write" ? "소셜 후보 변경 권한이 없습니다." : "소셜 후보 조회 권한이 없습니다.");
+    error.statusCode = 403;
+    error.code = "social_candidate_forbidden";
+    throw error;
+  }
+  return roles;
+}
+function jsonHeaders(extra) {
+  return Object.assign({
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "private, no-store, max-age=0",
+    "x-content-type-options": "nosniff",
+    "access-control-allow-headers": "Content-Type, Authorization, X-IGDC-Internal-Token, X-Sanmaru-Token",
+    "access-control-allow-methods": "GET,POST,OPTIONS"
+  }, extra || {});
+}
+function response(statusCode, body, headers) {
+  return { statusCode, headers: jsonHeaders(headers), body: statusCode === 204 ? "" : JSON.stringify(body) };
+}
+function parseBody(event) {
+  const raw = event && event.body || "";
+  if (!raw) return {};
+  try { return JSON.parse(event.isBase64Encoded ? Buffer.from(raw, "base64").toString("utf8") : raw); }
+  catch (_e) { const error = new Error("요청 JSON이 올바르지 않습니다."); error.statusCode = 400; error.code = "invalid_json_body"; throw error; }
+}
+function firstEnv(names) {
+  for (const name of names) { const value = text(process.env[name]); if (value) return { name, value }; }
+  return { name: null, value: "" };
+}
+function config() {
+  const urlRec = firstEnv(["SOCIAL_SUPABASE_URL", "IGDC_SOCIAL_SUPABASE_URL", "GSLOT_SUPABASE_URL", "SUPABASE_URL"]);
+  const keyRec = firstEnv(["SOCIAL_SUPABASE_SERVICE_ROLE_KEY", "SOCIAL_SUPABASE_SECRET_KEY", "IGDC_SOCIAL_SUPABASE_SERVICE_ROLE_KEY", "IGDC_SOCIAL_SUPABASE_SECRET_KEY", "GSLOT_SUPABASE_SECRET_KEY", "GSLOT_SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_KEY"]);
+  const url = text(urlRec.value).replace(/\/+$/g, "");
+  const key = text(keyRec.value);
+  if (!/^https:\/\/[^/]+$/i.test(url) || !key) {
+    const error = new Error("소셜 후보 Supabase 연결 환경변수가 없습니다. SOCIAL_SUPABASE_URL/SOCIAL_SUPABASE_SERVICE_ROLE_KEY 또는 기존 SUPABASE 서버 키를 설정하세요.");
+    error.statusCode = 503;
+    error.code = "social_supabase_config_missing";
+    throw error;
+  }
+  return { url, key, urlSource: urlRec.name, keySource: keyRec.name, candidateTable: CANDIDATE_TABLE, releaseTable: RELEASE_TABLE };
+}
+async function supabase(path, init) {
+  const cfg = config();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(2000, Math.min(30000, Number(process.env.SOCIAL_SUPABASE_TIMEOUT_MS || DEFAULT_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS)));
+  const headers = Object.assign({}, init && init.headers || {}, { apikey: cfg.key, Authorization: "Bearer " + cfg.key, "content-type": "application/json" });
+  try {
+    const res = await fetch(cfg.url + path, Object.assign({}, init || {}, { headers, signal: controller.signal }));
+    const raw = await res.text();
+    let body = null;
+    try { body = raw ? JSON.parse(raw) : null; } catch (_e) { body = raw || null; }
+    if (!res.ok) {
+      const error = new Error((body && body.message) || (body && body.error_description) || (body && body.error) || raw || ("Supabase HTTP " + res.status));
+      error.statusCode = res.status;
+      error.code = res.status === 404 ? "social_supabase_table_missing" : "social_supabase_http_error";
+      error.supabaseBody = body;
+      throw error;
+    }
+    return body;
+  } catch (error) {
+    if (error && error.name === "AbortError") { error.statusCode = 504; error.code = "social_supabase_timeout"; }
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+function rest(table, query) { return "/rest/v1/" + encodeURIComponent(table) + (query ? "?" + query : ""); }
+function encodeIn(values) { return "in.(" + values.map((v) => JSON.stringify(text(v))).join(",") + ")"; }
+async function selectCandidates(query) { return supabase(rest(CANDIDATE_TABLE, query || "select=*"), { method: "GET", headers: { Prefer: "count=exact" } }); }
+async function upsertCandidates(rows) {
+  if (!rows.length) return [];
+  return supabase(rest(CANDIDATE_TABLE, "on_conflict=id"), { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(rows) });
+}
+async function updateCandidates(ids, patch) {
+  const list = unique(ids);
+  if (!list.length) return [];
+  return supabase(rest(CANDIDATE_TABLE, "id=" + encodeIn(list)), { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(patch || {}) });
+}
+function idFor(input, normalized) {
+  const row = plain(input);
+  const raw = text(row.id || row.contentId || row.candidateId);
+  if (raw && !/^ph_/i.test(raw) && !/seed/i.test(raw)) return raw.toLowerCase().replace(/[^a-z0-9_.:-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 110);
+  return "social_" + shortHash({ section: normalized.sectionKey, platform: normalized.platform, title: normalized.title, sourceUrl: normalized.sourceUrl, creator: normalized.creatorName || normalized.creatorHandle });
+}
+function normalizeCandidate(input, actor) {
+  const row = plain(input);
+  const normalized = Policy.classifyCandidate(row);
+  const now = nowIso();
+  const by = compact(actor && (actor.email || actor.memberId) || "social-candidate-gateway", 200);
+  const scores = normalized.scores || {};
+  return {
+    id: idFor(row, normalized),
+    section_key: normalized.sectionKey,
+    platform: normalized.platform,
+    title: normalized.title,
+    creator_name: normalized.creatorName,
+    creator_handle: normalized.creatorHandle,
+    source_url: normalized.sourceUrl,
+    embed_url: normalized.embedUrl,
+    thumbnail_url: normalized.thumbnailUrl,
+    description: normalized.description,
+    language: normalized.language || "und",
+    region: normalized.region,
+    public_access: normalized.publicAccess,
+    login_required: normalized.loginRequired,
+    access_status: normalized.accessStatus,
+    display_mode: normalized.displayMode,
+    ad_control: normalized.adControl || "platform_controlled",
+    platform_account_dependent: true,
+    external_membership_controlled: true,
+    maru_membership_overrides_external_ads: false,
+    premium_benefit_platform_controlled: true,
+    safety_score: Math.round(scores.safety || 0),
+    quality_score: Math.round(scores.quality || 0),
+    engagement_score: Math.round(scores.engagement || 0),
+    revenue_score: Math.round(scores.revenue || 0),
+    locale_score: Math.round(scores.locale || 0),
+    trust_score: Math.round(scores.trust || 0),
+    rotation_score: Math.round(scores.rotation || 0),
+    risk_level: normalized.riskLevel || "medium",
+    review_status: lowerKey(row.review_status || row.reviewStatus) || "pending",
+    verification_status: lowerKey(row.verification_status || row.verificationStatus) || "web_verification_required",
+    candidate_only: row.candidate_only === false || row.candidateOnly === false ? false : true,
+    seed_content: normalized.seedContent || bool(row.seed_content || row.seedContent),
+    rotation_eligible: bool(row.rotation_eligible || row.rotationEligible),
+    evidence: {
+      source: "social_candidate_gateway",
+      policyVersion: Policy.VERSION,
+      sourceHost: Policy.hostOf(normalized.sourceUrl),
+      searchBankSection: text(row.section || row.sectionKey || plain(row.bind).section),
+      searchBankPsomKey: text(row.psom_key || row.psomKey || plain(row.bind).psom_key),
+      softRiskCount: normalized.softRiskCount || 0,
+      revenueHintCount: scores.revenueHintCount || 0,
+      membershipPolicy: {
+        externalMembershipControlled: true,
+        maruMembershipOverridesExternalAds: false,
+        premiumBenefitPlatformControlled: true,
+        adControl: "platform_controlled"
+      }
+    },
+    raw: row,
+    created_by: by,
+    updated_by: by,
+    created_at: row.created_at || row.createdAt || now,
+    updated_at: now
+  };
+}
+function validateCandidate(row) {
+  const reasons = [];
+  if (!row || typeof row !== "object") reasons.push("invalid_row");
+  if (!ALLOWED_SECTIONS.has(row.section_key)) reasons.push("section_not_allowed");
+  if (row.section_key && row.platform && PLATFORM_BY_SECTION[row.section_key] && PLATFORM_BY_SECTION[row.section_key] !== row.platform) reasons.push("platform_section_mismatch");
+  if (!row.title) reasons.push("title_required");
+  if (!row.source_url || Policy.isBadPlaceholderUrl(row.source_url)) reasons.push("source_url_required");
+  if (row.seed_content) reasons.push("seed_or_placeholder_preserved_not_imported");
+  if (row.risk_level === "blocked") reasons.push("safety_blocked");
+  return { ok: reasons.length === 0, reasons };
+}
+function candidatesFromSearchBankSnapshot(snapshot, actor, options) {
+  const opts = plain(options);
+  const items = Array.isArray(snapshot && snapshot.items) ? snapshot.items : [];
+  const accepted = [];
+  const rejected = [];
+  const ignored = [];
+  const cap = Math.max(1, Math.min(10000, Number(opts.limit || 10000) || 10000));
+  for (let index = 0; index < items.length && accepted.length < cap; index += 1) {
+    const item = items[index];
+    const row = normalizeCandidate(item, actor);
+    if (!row.section_key) { ignored.push({ index, reason: "not_social_section" }); continue; }
+    if (row.seed_content) {
+      ignored.push({
+        index,
+        id: row.id,
+        section: row.section_key,
+        platform: row.platform,
+        title: row.title,
+        reason: "seed_or_placeholder_preserved_in_searchbank_snapshot"
+      });
+      continue;
+    }
+    const check = validateCandidate(row);
+    if (check.ok) accepted.push(row);
+    else rejected.push({ index, id: row.id, section: row.section_key, platform: row.platform, title: row.title, reasons: check.reasons });
+  }
+  return { accepted, rejected, ignoredCount: ignored.length, total: items.length };
+}
+function isPromotable(row) {
+  return isApprovedForSnapshot(row);
+}
+function normalizeDbRow(row) {
+  const r = plain(row);
+  return {
+    id: text(r.id),
+    sectionKey: text(r.section_key || r.sectionKey),
+    platform: text(r.platform),
+    title: text(r.title),
+    creatorName: text(r.creator_name || r.creatorName),
+    creatorHandle: text(r.creator_handle || r.creatorHandle),
+    sourceUrl: text(r.source_url || r.sourceUrl),
+    embedUrl: text(r.embed_url || r.embedUrl),
+    thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl),
+    description: text(r.description),
+    language: text(r.language),
+    region: text(r.region),
+    displayMode: text(r.display_mode || r.displayMode),
+    adControl: text(r.ad_control || r.adControl),
+    publicAccess: r.public_access === true || r.publicAccess === true,
+    loginRequired: r.login_required === true || r.loginRequired === true,
+    accessStatus: text(r.access_status || r.accessStatus),
+    safetyScore: Number(r.safety_score || r.safetyScore || 0),
+    qualityScore: Number(r.quality_score || r.qualityScore || 0),
+    engagementScore: Number(r.engagement_score || r.engagementScore || 0),
+    revenueScore: Number(r.revenue_score || r.revenueScore || 0),
+    localeScore: Number(r.locale_score || r.localeScore || 0),
+    trustScore: Number(r.trust_score || r.trustScore || 0),
+    rotationScore: Number(r.rotation_score || r.rotationScore || 0),
+    riskLevel: text(r.risk_level || r.riskLevel),
+    reviewStatus: text(r.review_status || r.reviewStatus),
+    verificationStatus: text(r.verification_status || r.verificationStatus),
+    candidateOnly: r.candidate_only !== false && r.candidateOnly !== false,
+    seedContent: r.seed_content === true || r.seedContent === true,
+    rotationEligible: r.rotation_eligible === true || r.rotationEligible === true,
+    platformAccountDependent: r.platform_account_dependent !== false,
+    externalMembershipControlled: r.external_membership_controlled !== false,
+    premiumBenefitPlatformControlled: r.premium_benefit_platform_controlled !== false,
+    maruMembershipOverridesExternalAds: r.maru_membership_overrides_external_ads === true,
+    promotable: isPromotable(r)
+  };
+}
+function summaryDoc(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const bySection = {}, byRisk = {}, byReview = {}, byPlatform = {};
+  let promotable = 0, verificationRequired = 0;
+  list.forEach((row) => {
+    const r = normalizeDbRow(row);
+    bySection[r.sectionKey] = (bySection[r.sectionKey] || 0) + 1;
+    byRisk[r.riskLevel || "unknown"] = (byRisk[r.riskLevel || "unknown"] || 0) + 1;
+    byReview[r.reviewStatus || "unknown"] = (byReview[r.reviewStatus || "unknown"] || 0) + 1;
+    byPlatform[r.platform || "unknown"] = (byPlatform[r.platform || "unknown"] || 0) + 1;
+    if (r.promotable) promotable += 1;
+    if (r.verificationStatus && r.verificationStatus.indexOf("required") >= 0) verificationRequired += 1;
+  });
+  return {
+    version: VERSION,
+    policyVersion: Policy.VERSION,
+    generatedAt: nowIso(),
+    candidateCount: list.length,
+    promotableCount: promotable,
+    verificationRequired,
+    rotationPolicy: {
+      targetPerSection: POOL_TARGET_PER_SECTION,
+      minPerSection: POOL_MIN_PER_SECTION,
+      maxPerSection: POOL_MAX_PER_SECTION,
+      publicSlotsPerSection: ROTATION_LIMIT_PER_SECTION
+    },
+    bySection,
+    byRisk,
+    byReview,
+    byPlatform
+  };
+}
+
+
+async function insertRelease(row) {
+  return supabase(rest(RELEASE_TABLE), { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify([row]) });
+}
+function statusKey(value) { return lowerText(value).replace(/[\s-]+/g, "_").replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, ""); }
+function isApprovedForSnapshot(row) {
+  const r = plain(row);
+  const review = statusKey(r.review_status || r.reviewStatus);
+  const verify = statusKey(r.verification_status || r.verificationStatus);
+  const risk = statusKey(r.risk_level || r.riskLevel);
+  const section = lowerKey(r.section_key || r.sectionKey);
+  const access = statusKey(r.access_status || r.accessStatus);
+  const publicAccess = r.public_access === true || r.publicAccess === true;
+  const loginRequired = r.login_required === true || r.loginRequired === true;
+  const candidateOnly = r.candidate_only === true || r.candidateOnly === true;
+  const seedContent = r.seed_content === true || r.seedContent === true;
+  const approvedVerify = verify === "approved_for_snapshot" || verify === "verified" || verify === "approved";
+  const accessOk = publicAccess === true && loginRequired !== true && !/private|blocked|login_required/.test(access || "public");
+  return review === "approved" && approvedVerify && accessOk && !candidateOnly && !seedContent && risk !== "blocked" && risk !== "rejected" && ALLOWED_SECTIONS.has(section) && !!text(r.title) && !!text(r.source_url || r.sourceUrl);
+}
+function rowScore(row) {
+  const r = plain(row);
+  return Number(r.rotation_score || r.rotationScore || 0) * 2 +
+    Number(r.revenue_score || r.revenueScore || 0) * 1.6 +
+    Number(r.quality_score || r.qualityScore || 0) * 1.4 +
+    Number(r.engagement_score || r.engagementScore || 0) * 1.1 +
+    Number(r.trust_score || r.trustScore || 0) +
+    Number(r.safety_score || r.safetyScore || 0) +
+    Number(r.locale_score || r.localeScore || 0) * 0.7;
+}
+function dateValue(row) {
+  const r = plain(row);
+  const value = Date.parse(text(r.approved_at || r.approvedAt || r.reviewed_at || r.reviewedAt || r.updated_at || r.updatedAt || r.created_at || r.createdAt));
+  return Number.isFinite(value) ? value : 0;
+}
+function groupRowsBySection(rows) {
+  const out = {};
+  Policy.SECTION_KEYS.forEach((section) => { out[section] = []; });
+  array(rows).forEach((row) => {
+    const section = lowerKey(row.section_key || row.sectionKey);
+    if (ALLOWED_SECTIONS.has(section)) out[section].push(row);
+  });
+  return out;
+}
+function byRank(salt) {
+  return function(a, b) {
+    const d = rowScore(b) - rowScore(a);
+    if (d) return d;
+    const ah = shortHash({ id: a.id, section: a.section_key || a.sectionKey, salt });
+    const bh = shortHash({ id: b.id, section: b.section_key || b.sectionKey, salt });
+    return ah < bh ? -1 : ah > bh ? 1 : 0;
+  };
+}
+function uniqueRows(rows) {
+  const seen = new Set();
+  const out = [];
+  array(rows).forEach((row) => {
+    const id = text(row.id || row.candidateId || row.source_url || row.sourceUrl);
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    out.push(row);
+  });
+  return out;
+}
+function selectRotation(rows, options) {
+  const opts = plain(options);
+  const limit = Math.max(1, Math.min(200, Number(opts.limitPerSection || opts.publicSlotsPerSection || ROTATION_LIMIT_PER_SECTION) || ROTATION_LIMIT_PER_SECTION));
+  const stableCount = Math.min(limit, Math.round(limit * 0.70));
+  const refreshCount = Math.min(limit - stableCount, Math.round(limit * 0.20));
+  const testCount = Math.max(0, limit - stableCount - refreshCount);
+  const salt = text(opts.rotationSalt || opts.salt) || new Date().toISOString().slice(0, 10);
+  const groups = groupRowsBySection(array(rows).filter(isApprovedForSnapshot));
+  const selected = {};
+  const counts = {};
+  Object.keys(groups).forEach((section) => {
+    const ranked = groups[section].slice().sort(byRank(salt));
+    const stable = ranked.slice(0, stableCount);
+    const stableIds = new Set(stable.map((row) => text(row.id)));
+    const remaining = ranked.filter((row) => !stableIds.has(text(row.id)));
+    const refresh = remaining.slice().sort((a, b) => dateValue(b) - dateValue(a)).slice(0, refreshCount);
+    const used = new Set(stable.concat(refresh).map((row) => text(row.id)));
+    const test = remaining.filter((row) => !used.has(text(row.id))).sort((a, b) => {
+      const ah = shortHash({ id: a.id, salt, mode: "test" });
+      const bh = shortHash({ id: b.id, salt, mode: "test" });
+      return ah < bh ? -1 : ah > bh ? 1 : 0;
+    }).slice(0, testCount);
+    const merged = uniqueRows(stable.concat(refresh, test, ranked)).slice(0, limit);
+    selected[section] = merged;
+    counts[section] = { available: ranked.length, selected: merged.length, stable: Math.min(stable.length, merged.length), refresh: Math.min(refresh.length, Math.max(0, merged.length - stable.length)), test: Math.max(0, merged.length - stable.length - refresh.length) };
+  });
+  return { selected, counts, rotationSalt: salt, limitPerSection: limit, policy: { stablePercent: 70, refreshPercent: 20, testPercent: 10 } };
+}
+function publicSocialSlot(row, slotId, defaults) {
+  const base = plain(defaults);
+  const r = plain(row);
+  const sourceUrl = text(r.source_url || r.sourceUrl);
+  const thumb = text(r.thumbnail_url || r.thumbnailUrl || base.thumb || base.thumbnail || base.image || "");
+  const section = text(r.section_key || r.sectionKey);
+  const platform = text(r.platform || PLATFORM_BY_SECTION[section] || "social");
+  const now = nowIso();
+  return Object.assign({}, base, {
+    slotId: Number(slotId) || Number(base.slotId) || 1,
+    id: text(r.id) || ("social_" + shortHash({ section, platform, sourceUrl })),
+    contentId: text(r.id) || text(base.contentId),
+    type: "external_social",
+    title: text(r.title),
+    url: sourceUrl,
+    link: sourceUrl,
+    href: sourceUrl,
+    permalink: sourceUrl,
+    thumb: thumb || undefined,
+    thumbnail: thumb || undefined,
+    thumbnailUrl: thumb || undefined,
+    image: thumb || undefined,
+    description: text(r.description),
+    creator: text(r.creator_name || r.creatorName || r.creator_handle || r.creatorHandle),
+    creatorName: text(r.creator_name || r.creatorName),
+    creatorHandle: text(r.creator_handle || r.creatorHandle),
+    embedUrl: text(r.embed_url || r.embedUrl) || undefined,
+    displayMode: text(r.display_mode || r.displayMode || "link_card"),
+    source: Object.assign({}, plain(base.source), { platform, section_key: section, provider: "external_social_platform", url: sourceUrl }),
+    social: {
+      platform,
+      sectionKey: section,
+      adControl: text(r.ad_control || r.adControl || "platform_controlled"),
+      platformAccountDependent: r.platform_account_dependent !== false,
+      externalMembershipControlled: r.external_membership_controlled !== false,
+      premiumBenefitPlatformControlled: r.premium_benefit_platform_controlled !== false,
+      maruMembershipOverridesExternalAds: r.maru_membership_overrides_external_ads === true,
+      loginRequired: r.login_required === true,
+      publicAccess: r.public_access === true
+    },
+    signals: Object.assign({}, plain(base.signals), {
+      quality_score: Number(r.quality_score || 0),
+      trust_score: Number(r.trust_score || 0),
+      safety_score: Number(r.safety_score || 0),
+      revenue_score: Number(r.revenue_score || 0),
+      rotation_score: Number(r.rotation_score || 0)
+    }),
+    candidateOnly: false,
+    seedContent: false,
+    verificationStatus: text(r.verification_status || "approved_for_snapshot"),
+    audit: Object.assign({}, plain(base.audit), { origin: "social_candidates", candidate_id: text(r.id), approved_at: text(r.approved_at || r.approvedAt), generated_at: now }),
+    timestamps: Object.assign({}, plain(base.timestamps), { published: now, ingested: text(r.created_at || r.createdAt), updated: text(r.updated_at || r.updatedAt || now) })
+  });
+}
+function cloneJson(value) { return JSON.parse(JSON.stringify(value == null ? {} : value)); }
+function buildSnapshot(baseSnapshot, rows, options) {
+  const opts = plain(options);
+  const base = cloneJson(baseSnapshot || {});
+  if (!base.pages) base.pages = {};
+  if (!base.pages.social) base.pages.social = {};
+  if (!base.pages.social.sections) base.pages.social.sections = {};
+  const sections = base.pages.social.sections;
+  const rotation = selectRotation(rows, opts);
+  const filled = {};
+  Policy.SECTION_KEYS.forEach((sectionKey) => {
+    const current = Array.isArray(sections[sectionKey]) ? sections[sectionKey].slice() : [];
+    const capacity = Math.max(current.length, Number(opts.limitPerSection || opts.publicSlotsPerSection || ROTATION_LIMIT_PER_SECTION) || ROTATION_LIMIT_PER_SECTION);
+    const next = [];
+    for (let index = 0; index < capacity; index += 1) {
+      next.push(current[index] ? Object.assign({}, current[index]) : { id: "ph_" + sectionKey + "_" + String(index + 1).padStart(3, "0"), type: "placeholder", title: "Loading…", url: "#", source: { platform: "placeholder", section_key: sectionKey } });
+    }
+    const selected = rotation.selected[sectionKey] || [];
+    selected.slice(0, capacity).forEach((row, index) => { next[index] = publicSocialSlot(row, index + 1, next[index]); });
+    sections[sectionKey] = next;
+    filled[sectionKey] = selected.length;
+  });
+  base.version = "social.snapshot.generated.supabase.v1";
+  base.meta = Object.assign({}, plain(base.meta), {
+    generatedAt: nowIso(),
+    generatedBy: "social-snapshot-publish",
+    source: "supabase.social_candidates",
+    samplePreservePolicy: "Approved rotation candidates replace only their target slots; all remaining sample/placeholder slots are preserved.",
+    excludedSections: ["social-maru", "rightPanel"],
+    filled,
+    rotation: { salt: rotation.rotationSalt, counts: rotation.counts, policy: rotation.policy }
+  });
+  return base;
+}
+
+module.exports = {
+  VERSION,
+  CANDIDATE_TABLE,
+  RELEASE_TABLE,
+  READ_ROLES,
+  WRITE_ROLES,
+  POOL_TARGET_PER_SECTION,
+  POOL_MIN_PER_SECTION,
+  POOL_MAX_PER_SECTION,
+  ROTATION_LIMIT_PER_SECTION,
+  Policy,
+  text,
+  compact,
+  lowerText,
+  lowerKey,
+  array,
+  plain,
+  bool,
+  clamp,
+  response,
+  parseBody,
+  nowIso,
+  sha256,
+  shortHash,
+  config,
+  supabase,
+  rest,
+  insertRelease,
+  selectCandidates,
+  upsertCandidates,
+  updateCandidates,
+  requireRole,
+  normalizeCandidate,
+  validateCandidate,
+  candidatesFromSearchBankSnapshot,
+  normalizeDbRow,
+  isPromotable,
+  summaryDoc,
+  isApprovedForSnapshot,
+  selectRotation,
+  publicSocialSlot,
+  buildSnapshot
+};

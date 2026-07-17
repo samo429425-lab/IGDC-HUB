@@ -3243,7 +3243,7 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
     card.innerHTML='<div class="igdc-sc-card-header"><span class="igdc-admin-media-candidate-title">🎬 미디어 콘텐츠 후보 대기열</span><span class="igdc-sc-card-status">↗</span></div>'+
       '<div class="igdc-admin-media-candidate-desc">영상 후보·권리상태·화질·산마루 검색시드를 프론트 공개 전에 검토합니다.</div>'+
       '<button class="igdc-admin-media-candidate-btn" type="button">미디어 후보 점검 열기</button>'+
-      '<div class="igdc-admin-media-candidate-mini">읽기 전용 · JSON 다운로드 · 샘플 슬롯 미변경</div>';
+      '<div class="igdc-admin-media-candidate-mini">트리거 연결 · 후보 검토 · 샘플 슬롯 미변경</div>';
     function open(ev){if(ev){ev.preventDefault();ev.stopPropagation();}captureMediaQueueAdminSession();window.location.href=pageUrl();return false;}
     var b=card.querySelector('button');if(b)b.addEventListener('click',open);
     card.addEventListener('click',function(ev){if(ev.target&&ev.target.tagName==='BUTTON')return;open(ev);});
@@ -3267,6 +3267,129 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
     var insight=findCard(panel,/MARU\s*Global\s*Insight|마루\s*Global\s*Insight/i);
     if(media&&insight&&media.previousElementSibling!==insight)insight.insertAdjacentElement('afterend',media);
     if(media&&commerce&&commerce.previousElementSibling!==media)media.insertAdjacentElement('afterend',commerce);
+  }
+  function arm(){var tries=0,timer=setInterval(function(){tries+=1;if(install()){keepOrder();}if(tries>80)clearInterval(timer);},250);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){install();keepOrder();});else{install();keepOrder();}var panel=document.getElementById('igdc-site-control');if(panel&&window.MutationObserver){var o=new MutationObserver(function(){install();keepOrder();});o.observe(panel,{childList:true,subtree:true});}}
+  arm();
+})();
+</script>
+
+
+
+<!-- IGDC private social candidate queue launcher -->
+<style id="igdc-admin-social-candidate-link-style">
+  .igdc-admin-social-candidate-card { border-color:#b7a5ff !important; background:#f6f3ff !important; }
+  .igdc-admin-social-candidate-card:hover { border-color:#8368e8 !important; background:#eee9ff !important; }
+  .igdc-admin-social-candidate-card .igdc-admin-social-candidate-title { font-size:12px;font-weight:800;color:#4b36a8; }
+  .igdc-admin-social-candidate-card .igdc-admin-social-candidate-desc { font-size:11px;color:#5d5587;line-height:1.35;margin:3px 0 6px; }
+  .igdc-admin-social-candidate-card .igdc-admin-social-candidate-btn { width:100%;padding:5px 7px;font-size:11px;font-weight:800;border-radius:5px;border:1px solid #a999ef;background:linear-gradient(180deg,#ffffff 0%,#ece7ff 100%);color:#4b36a8;cursor:pointer; }
+  .igdc-admin-social-candidate-card .igdc-admin-social-candidate-btn:hover { background:#e3dcff; }
+  .igdc-admin-social-candidate-card .igdc-admin-social-candidate-mini { margin-top:4px;font-size:10px;color:#756c9b; }
+</style>
+<script id="igdc-admin-social-candidate-link-script">
+(function(){
+  if (window.__IGDC_ADMIN_SOCIAL_CANDIDATE_LINK_INSTALLED__) return;
+  window.__IGDC_ADMIN_SOCIAL_CANDIDATE_LINK_INSTALLED__ = true;
+  function text(value){return String(value==null?'':value).trim();}
+  function jwtFresh(token){
+    token=text(token);
+    if(!token||token.split('.').length!==3||token.length<=32)return false;
+    try{
+      var p=token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+      p+='='.repeat((4-p.length%4)%4);
+      var payload=JSON.parse(atob(p));
+      return !payload.exp||Number(payload.exp)>Math.floor(Date.now()/1000)+10;
+    }catch(_e){return true;}
+  }
+  function parseJson(value){try{return JSON.parse(value);}catch(_e){return null;}}
+  function pushToken(value,out,seen,depth){
+    if(depth>5||value==null)return;
+    if(typeof value==='string'){
+      var token=text(value);
+      if(jwtFresh(token)&&!seen[token]){seen[token]=true;out.push(token);return;}
+      var parsed=parseJson(value);if(parsed)pushToken(parsed,out,seen,depth+1);
+      return;
+    }
+    if(Array.isArray(value)){value.forEach(function(item){pushToken(item,out,seen,depth+1);});return;}
+    if(typeof value==='object'){
+      ['id_token','idToken','access_token','accessToken','token','jwt','bearer','authorization','Authorization','__raw','raw'].forEach(function(key){pushToken(value[key],out,seen,depth+1);});
+    }
+  }
+  function scanStore(store,out,seen){
+    if(!store)return;
+    ['igdc.socialCandidateQueue.adminBearer','osauth.tokens.v2','osauth.tokens.v1','igdc.auth.tokens','igdc.tokens','igdc_auth_tokens','member_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token','igdc_access_token','access_token'].forEach(function(key){try{pushToken(store.getItem(key),out,seen,0);}catch(_e){}});
+    try{
+      for(var i=0;i<Math.min(store.length||0,250);i++){
+        var k=store.key(i)||'';
+        if(/auth0|osauth|igdc|token/i.test(k))pushToken(store.getItem(k),out,seen,0);
+      }
+    }catch(_e){}
+  }
+  function collectAdminTokensFrom(candidate,out,seen){
+    try{if(candidate&&candidate.IGDCMemberAuth&&typeof candidate.IGDCMemberAuth.getIdToken==='function')pushToken(candidate.IGDCMemberAuth.getIdToken(),out,seen,0);}catch(_e){}
+    try{if(candidate&&candidate.osAuth&&typeof candidate.osAuth.getIdToken==='function')pushToken(candidate.osAuth.getIdToken(),out,seen,0);}catch(_e){}
+    try{if(candidate&&candidate.osAuth&&typeof candidate.osAuth.getIdTokenClaims==='function')pushToken(candidate.osAuth.getIdTokenClaims(),out,seen,0);}catch(_e){}
+    try{scanStore(candidate.localStorage,out,seen);scanStore(candidate.sessionStorage,out,seen);}catch(_e){}
+  }
+  function captureSocialQueueAdminSession(){
+    var out=[],seen={};
+    [window].forEach(function(w){collectAdminTokensFrom(w,out,seen);});
+    try{if(window.parent&&window.parent.location.origin===window.location.origin)collectAdminTokensFrom(window.parent,out,seen);}catch(_e){}
+    try{if(window.top&&window.top.location.origin===window.location.origin)collectAdminTokensFrom(window.top,out,seen);}catch(_e){}
+    if(out[0]){
+      try{sessionStorage.setItem('igdc.socialCandidateQueue.adminBearer',out[0]);}catch(_e){}
+      try{localStorage.setItem('igdc.socialCandidateQueue.adminBearer',out[0]);}catch(_e){}
+      return true;
+    }
+    return false;
+  }
+  function pageUrl(){
+    var u = new URL('/social-candidate-queue.html', window.location.origin);
+    u.searchParams.set('source', 'admin-right-panel');
+    u.searchParams.set('returnPath', window.location.pathname + window.location.search + window.location.hash);
+    u.searchParams.set('handoff', captureSocialQueueAdminSession() ? '1' : '0');
+    return u.pathname + u.search;
+  }
+  function findCard(panel, re){
+    var cards = Array.prototype.slice.call(panel.querySelectorAll('.igdc-sc-card'));
+    for (var i=0;i<cards.length;i++) if (re.test((cards[i].textContent||'').replace(/\s+/g,' '))) return cards[i];
+    return null;
+  }
+  function makeCard(){
+    var card=document.createElement('div');
+    card.id='igdc-admin-social-candidate-link-card';
+    card.className='igdc-sc-card igdc-admin-social-candidate-card';
+    card.setAttribute('data-igdc-admin-social-candidate-link','1');
+    card.innerHTML='<div class="igdc-sc-card-header"><span class="igdc-admin-social-candidate-title">🌐 소셜 콘텐츠 후보 대기열</span><span class="igdc-sc-card-status">↗</span></div>'+ 
+      '<div class="igdc-admin-social-candidate-desc">SNS 후보·플랫폼·공개접근·수익성·로테이션 풀을 프론트 공개 전에 검토합니다.</div>'+ 
+      '<button class="igdc-admin-social-candidate-btn" type="button">소셜 후보 점검 열기</button>'+ 
+      '<div class="igdc-admin-social-candidate-mini">트리거 연결 · 후보 검토 · 샘플 슬롯 미변경</div>';
+    function open(ev){if(ev){ev.preventDefault();ev.stopPropagation();}captureSocialQueueAdminSession();window.location.href=pageUrl();return false;}
+    var b=card.querySelector('button');if(b)b.addEventListener('click',open);
+    card.addEventListener('click',function(ev){if(ev.target&&ev.target.tagName==='BUTTON')return;open(ev);});
+    return card;
+  }
+  function install(){
+    var panel=document.getElementById('igdc-site-control');if(!panel)return false;
+    var current=document.getElementById('igdc-admin-social-candidate-link-card');if(current&&panel.contains(current))return true;
+    if(current&&current.parentNode)current.parentNode.removeChild(current);
+    var card=makeCard();
+    var media=document.getElementById('igdc-admin-media-candidate-link-card')||findCard(panel,/미디어\s*콘텐츠\s*후보|영상\s*후보/i);
+    var commerce=document.getElementById('igdc-admin-commerce-candidate-link-card')||findCard(panel,/상품\s*후보.*중개\s*수익|상품\s*후보.*수익\s*점검/i);
+    var insight=findCard(panel,/MARU\s*Global\s*Insight|마루\s*Global\s*Insight/i);
+    if(media&&media.parentNode){media.insertAdjacentElement('afterend',card);return true;}
+    if(commerce&&commerce.parentNode){commerce.parentNode.insertBefore(card,commerce);return true;}
+    if(insight&&insight.parentNode){insight.insertAdjacentElement('afterend',card);return true;}
+    (panel.querySelector('.igdc-sc-grid')||panel).appendChild(card);return true;
+  }
+  function keepOrder(){
+    var panel=document.getElementById('igdc-site-control');if(!panel)return;
+    var media=document.getElementById('igdc-admin-media-candidate-link-card');
+    var social=document.getElementById('igdc-admin-social-candidate-link-card');
+    var commerce=document.getElementById('igdc-admin-commerce-candidate-link-card');
+    var insight=findCard(panel,/MARU\s*Global\s*Insight|마루\s*Global\s*Insight/i);
+    if(social&&media&&social.previousElementSibling!==media)media.insertAdjacentElement('afterend',social);
+    if(!media&&social&&insight&&social.previousElementSibling!==insight)insight.insertAdjacentElement('afterend',social);
+    if(social&&commerce&&commerce.previousElementSibling!==social)social.insertAdjacentElement('afterend',commerce);
   }
   function arm(){var tries=0,timer=setInterval(function(){tries+=1;if(install()){keepOrder();}if(tries>80)clearInterval(timer);},250);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){install();keepOrder();});else{install();keepOrder();}var panel=document.getElementById('igdc-site-control');if(panel&&window.MutationObserver){var o=new MutationObserver(function(){install();keepOrder();});o.observe(panel,{childList:true,subtree:true});}}
   arm();

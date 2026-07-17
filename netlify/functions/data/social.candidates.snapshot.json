@@ -1,0 +1,21 @@
+{
+  "version": "social.candidate-library.fallback.v1",
+  "type": "social_candidate_library",
+  "schema": "social_candidates.fallback.v1",
+  "generatedAt": "2026-07-17T00:00:00.000Z",
+  "renderPolicy": "private_review_only",
+  "notes": "Fallback placeholder for Social Network candidate queue. Runtime should prefer Supabase social_candidates. No public social.snapshot.json mutation is performed by this file.",
+  "rotationPolicy": {
+    "targetPerSection": 300,
+    "minPerSection": 250,
+    "maxPerSection": 350,
+    "publicSlotsPerSection": 100
+  },
+  "externalMembershipPolicy": {
+    "externalMembershipControlled": true,
+    "maruMembershipOverridesExternalAds": false,
+    "premiumBenefitPlatformControlled": true,
+    "adControl": "platform_controlled"
+  },
+  "items": []
+}
