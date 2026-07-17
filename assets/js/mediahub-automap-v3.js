@@ -3,7 +3,7 @@
  * ------------------------------------------------------------
  * 목적:
  *  - MediaHub 메인 10섹션(data-psom-key="media-*")에 "미디어 콘텐츠"를 슬롯-우선(slot-first)으로 꽂는다.
- *  - 우선순위: /data/media.snapshot*.json 단일 경로(legacy feed-media fallback 기본 비활성)
+ *  - 우선순위: /data/media.snapshot*.json 단일 경로(feed-media legacy fallback 비활성)
  *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
  *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
  *  - 우측 패널 없음(처리하지 않음)
@@ -19,8 +19,8 @@
 
   const LIMIT = 50;
 
-  // Legacy fallback is intentionally disabled.
-  // Official media rendering path: media.snapshot.json -> mediahub automap -> front samples/real content.
+  // Legacy feed-media fallback is disabled.
+  // Keep the original snapshot -> automap -> front sample/real-content rendering process unchanged.
   const ENABLE_FEED_MEDIA_FALLBACK = false;
 
   const SNAPSHOT_URLS = [
@@ -87,118 +87,15 @@
     return map;
   }
 
-  function cleanText(v){
-    return (v === null || v === undefined) ? '' : String(v).trim();
-  }
-
-  function isInvalidMediaValue(v){
-    const raw = cleanText(v);
-    if(!raw) return true;
-    const s = raw.toLowerCase();
-    if(s === '#' || s === 'about:blank') return true;
-    if(s === 'null' || s === 'undefined' || s === 'false') return true;
-    if(s === 'javascript:void(0)' || s === 'javascript:;' || s === 'javascript:void(0);') return true;
-    if(s === 'loading…' || s === 'loading...' || s === 'loading' || s === 'coming soon') return true;
-    if(s.indexOf('placeholder') >= 0 || s.indexOf('placehold.co') >= 0) return true;
-    if(s.indexOf('data:image/gif;base64,r0lgodlhaqabaiaaaaaaap') === 0) return true;
-    return false;
-  }
-
-  function firstValid(){
-    for(let i=0;i<arguments.length;i++){
-      const v = cleanText(arguments[i]);
-      if(!isInvalidMediaValue(v)) return v;
-    }
-    return '';
-  }
-
-  function isBlockedMediaCandidate(item){
-    if(!item || typeof item !== 'object') return false;
-
-    if(item.candidateOnly === true || item.candidate_only === true) return true;
-    if(item.seedContent === true || item.seed_content === true) return true;
-
-    const rights = item.rights && typeof item.rights === 'object' ? item.rights : {};
-    const values = [
-      item.verificationStatus, item.verification_status,
-      item.reviewStatus, item.review_status,
-      item.rightsStatus, item.rights_status,
-      item.allowedUse, item.allowed_use,
-      rights.status, rights.verificationStatus, rights.allowedUse
-    ].map(v => cleanText(v).toLowerCase()).filter(Boolean);
-
-    const blocked = new Set([
-      'verification_required',
-      'web_verification_required',
-      'pending',
-      'unverified',
-      'not_verified',
-      'hold',
-      'blocked',
-      'rejected',
-      'candidate',
-      'seed'
-    ]);
-
-    return values.some(v => blocked.has(v));
-  }
-
-  function hasRenderableMediaContent(item){
-    if(!item || typeof item !== 'object') return false;
-    if(isBlockedMediaCandidate(item)) return false;
-
-    const title = firstValid(item.title, item.name, item.text);
-    const thumb = firstValid(item.thumbnail, item.thumb, item.image, item.imageUrl, item.thumbnailUrl, item.poster, item.posterUrl);
-    const source = firstValid(item.url, item.video, item.playUrl, item.embedUrl, item.sourceUrl, item.link, item.href);
-    const id = firstValid(item.id, item._id, item.contentId, item.videoId, item.slug);
-
-    // Empty snapshot sample slots such as {contentId:null,title:null,thumb:'#'} must remain sample slots.
-    if(!title) return false;
-    if(!id && !source && !thumb) return false;
-
-    return true;
-  }
-
-  function keepSampleSlot(a){
-    if(!a) return;
-    a.classList.add('media-card');
-    a.setAttribute('data-placeholder','true');
-    a.href = 'javascript:void(0)';
-    a.onclick = null;
-    a.removeAttribute('target');
-    a.removeAttribute('rel');
-
-    let thumbBox = q('.thumb', a);
-    if(!thumbBox){
-      thumbBox = D.createElement('div');
-      thumbBox.className = 'thumb ph';
-      a.insertBefore(thumbBox, a.firstChild);
-    }
-    thumbBox.classList.add('ph');
-
-    const img = q('img', thumbBox);
-    if(img) img.remove();
-
-    let metaBox = q('.meta', a);
-    if(!metaBox){
-      metaBox = D.createElement('div');
-      metaBox.className = 'meta';
-      a.appendChild(metaBox);
-    }
-    metaBox.textContent = 'Coming Soon';
-  }
-
   function slotsToItems(section){
     const slots = section && Array.isArray(section.slots) ? section.slots : [];
-    return slots.map((slot)=>{
-      const out = Object.assign({}, slot || {});
-      out.title = out.title || out.name || '';
-      out.thumbnail = out.thumbnail || out.thumb || out.image || out.imageUrl || out.thumbnailUrl || out.poster || out.posterUrl || '';
-      out.url = out.url || out.video || out.playUrl || out.embedUrl || out.sourceUrl || out.link || out.href || '';
-      out.video = out.video || out.playUrl || '';
-      out.provider = out.provider || out.sourceName || out.platform || out.channelTitle || '';
-      return out;
-    });
+    return slots.map((slot)=>({
+      title: slot.title || '',
+      thumbnail: slot.thumb || '',
+      url: slot.url || slot.video || '',
+      video: slot.video || '',
+      provider: slot.provider || ''
+    }));
   }
 
   function extractItems(section){
@@ -277,36 +174,38 @@
 
   
  function ensureContentId(item){
-  if(!hasRenderableMediaContent(item)) return '';
+  if(!item) return '';
 
-  const source = firstValid(item.url, item.video, item.playUrl, item.embedUrl, item.sourceUrl, item.link, item.href);
+  const hasRealContent =
+    !!(item.title || item.name || item.text || item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || item.url || item.video || item.link || item.href);
+
+  if(!hasRealContent) return '';
 
   return (
-    firstValid(item.id, item._id, item.contentId, item.videoId, item.slug) ||
-    (source ? btoa(source).replace(/=/g,'') : '')
+    item.id ||
+    item._id ||
+    item.contentId ||
+    item.videoId ||
+    item.slug ||
+    (item.url ? btoa(item.url).replace(/=/g,'') : '')
   );
 }
 
   function fillAnchor(a, item){
-    if(!hasRenderableMediaContent(item)){
-      keepSampleSlot(a);
-      return;
-    }
-
-    const title = firstValid(item && item.title, item && item.name, item && item.text);
-    const thumb = firstValid(item && item.thumbnail, item && item.thumb, item && item.image, item && item.imageUrl, item && item.thumbnailUrl, item && item.poster, item && item.posterUrl);
+    const title = (item && (item.title || item.name || item.text || '')) || '';
+    const thumb = (item && (item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || '')) || '';
+    const url = (item && (item.url || item.video || item.link || item.href || '#')) || '#';
 
     
     const videoId = ensureContentId(item);
 
     if(videoId){
       a.href = `/media/watch.html?id=${encodeURIComponent(videoId)}`;
-      a.onclick = null;
       a.removeAttribute('target');
       a.removeAttribute('rel');
     }else{
-      keepSampleSlot(a);
-      return;
+      a.href = "javascript:void(0)";
+      a.onclick = function(){ alert("콘텐츠 준비 중입니다."); };
     }
 
 
@@ -320,19 +219,13 @@
     }
 
     let img = q('img', thumbBox);
-    if(thumb){
-      thumbBox.classList.remove('ph');
-      if(!img){
-        img = D.createElement('img');
-        thumbBox.appendChild(img);
-      }
-      img.alt = title || '';
-      img.loading = 'lazy';
-      img.src = thumb;
-    }else if(img){
-      img.removeAttribute('src');
-      img.alt = title || '';
+    if(!img){
+      img = D.createElement('img');
+      thumbBox.appendChild(img);
     }
+    img.alt = title || '';
+    img.loading = 'lazy';
+    if(thumb) img.src = thumb;
 
     let metaBox = q('.meta', a);
     if(!metaBox){
@@ -361,22 +254,22 @@
     const keys = Array.isArray(heroRotateKeys) ? heroRotateKeys.map(canonKey) : [];
     if(keys.length === 0) return;
 
-    // snapshot first: empty/sample slots must not override the existing hero image.
+    // snapshot first
     for(const k of keys){
       const items = extractItems(sectionMap[k]);
-      const first = Array.isArray(items) ? items.find(hasRenderableMediaContent) : null;
-      const thumb = first && firstValid(first.thumbnail, first.thumb, first.image, first.imageUrl, first.thumbnailUrl, first.poster, first.posterUrl);
+      const first = items && items[0];
+      const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
       if(thumb){
         heroImg.src = thumb;
         return;
       }
     }
 
-    // legacy fallback feed (disabled by default)
+    // fallback feed (best-effort)
     for(const k of keys){
       const items = await loadFeedItems(k);
-      const first = Array.isArray(items) ? items.find(hasRenderableMediaContent) : null;
-      const thumb = first && firstValid(first.thumbnail, first.thumb, first.image, first.imageUrl, first.thumbnailUrl, first.poster, first.posterUrl);
+      const first = items && items[0];
+      const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
       if(thumb){
         heroImg.src = thumb;
         return;
