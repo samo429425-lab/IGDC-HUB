@@ -3,7 +3,7 @@
  * ------------------------------------------------------------
  * 목적:
  *  - MediaHub 메인 10섹션(data-psom-key="media-*")에 "미디어 콘텐츠"를 슬롯-우선(slot-first)으로 꽂는다.
- *  - 우선순위: /data/media.snapshot*.json -> /.netlify/functions/feed-media?key=... fallback
+ *  - 우선순위: /data/media.snapshot*.json 단일 경로(legacy feed-media fallback 기본 비활성)
  *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
  *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
  *  - 우측 패널 없음(처리하지 않음)
@@ -18,6 +18,10 @@
   const D = document;
 
   const LIMIT = 50;
+
+  // Legacy fallback is intentionally disabled.
+  // Official media rendering path: media.snapshot.json -> mediahub automap -> front samples/real content.
+  const ENABLE_FEED_MEDIA_FALLBACK = false;
 
   const SNAPSHOT_URLS = [
     '/data/media.snapshot.json',
@@ -108,14 +112,14 @@
     return '';
   }
 
-  function isUnverifiedCandidate(item){
-    if(!item || typeof item !== 'object') return true;
+  function isBlockedMediaCandidate(item){
+    if(!item || typeof item !== 'object') return false;
 
     if(item.candidateOnly === true || item.candidate_only === true) return true;
     if(item.seedContent === true || item.seed_content === true) return true;
 
     const rights = item.rights && typeof item.rights === 'object' ? item.rights : {};
-    const statusValues = [
+    const values = [
       item.verificationStatus, item.verification_status,
       item.reviewStatus, item.review_status,
       item.rightsStatus, item.rights_status,
@@ -136,95 +140,83 @@
       'seed'
     ]);
 
-    return statusValues.some(v => blocked.has(v));
+    return values.some(v => blocked.has(v));
   }
 
-  function normalizeMediaItem(item){
-    if(!item || typeof item !== 'object') return null;
+  function hasRenderableMediaContent(item){
+    if(!item || typeof item !== 'object') return false;
+    if(isBlockedMediaCandidate(item)) return false;
 
     const title = firstValid(item.title, item.name, item.text);
     const thumb = firstValid(item.thumbnail, item.thumb, item.image, item.imageUrl, item.thumbnailUrl, item.poster, item.posterUrl);
     const source = firstValid(item.url, item.video, item.playUrl, item.embedUrl, item.sourceUrl, item.link, item.href);
     const id = firstValid(item.id, item._id, item.contentId, item.videoId, item.slug);
 
-    if(!title) return null;
-    if(!id && !source) return null;
-    if(!thumb && !source) return null;
-    if(isUnverifiedCandidate(item)) return null;
+    // Empty snapshot sample slots such as {contentId:null,title:null,thumb:'#'} must remain sample slots.
+    if(!title) return false;
+    if(!id && !source && !thumb) return false;
 
-    const out = Object.assign({}, item);
-    out.title = title;
-    if(id && !out.id) out.id = id;
-    if(id && !out.contentId) out.contentId = id;
-    if(thumb) out.thumbnail = thumb;
-    if(source) out.url = source;
-    if(!out.provider) out.provider = firstValid(item.provider, item.sourceName, item.platform, item.channelTitle);
-    return out;
+    return true;
   }
 
-  function filterRenderableItems(items){
-    if(!Array.isArray(items)) return [];
-    return items.map(normalizeMediaItem).filter(Boolean);
+  function keepSampleSlot(a){
+    if(!a) return;
+    a.classList.add('media-card');
+    a.setAttribute('data-placeholder','true');
+    a.href = 'javascript:void(0)';
+    a.onclick = null;
+    a.removeAttribute('target');
+    a.removeAttribute('rel');
+
+    let thumbBox = q('.thumb', a);
+    if(!thumbBox){
+      thumbBox = D.createElement('div');
+      thumbBox.className = 'thumb ph';
+      a.insertBefore(thumbBox, a.firstChild);
+    }
+    thumbBox.classList.add('ph');
+
+    const img = q('img', thumbBox);
+    if(img) img.remove();
+
+    let metaBox = q('.meta', a);
+    if(!metaBox){
+      metaBox = D.createElement('div');
+      metaBox.className = 'meta';
+      a.appendChild(metaBox);
+    }
+    metaBox.textContent = 'Coming Soon';
   }
 
   function slotsToItems(section){
     const slots = section && Array.isArray(section.slots) ? section.slots : [];
-    return filterRenderableItems(slots.map((slot)=>({
-      id: slot.id || slot.contentId || slot.videoId || slot.slug || '',
-      contentId: slot.contentId || slot.id || slot.videoId || slot.slug || '',
-      videoId: slot.videoId || '',
-      slug: slot.slug || '',
-      title: slot.title || slot.name || '',
-      thumbnail: slot.thumbnail || slot.thumb || slot.image || slot.imageUrl || slot.thumbnailUrl || slot.poster || slot.posterUrl || '',
-      thumb: slot.thumb || '',
-      url: slot.url || slot.video || slot.playUrl || slot.embedUrl || slot.sourceUrl || slot.link || slot.href || '',
-      video: slot.video || slot.playUrl || '',
-      embedUrl: slot.embedUrl || '',
-      provider: slot.provider || slot.sourceName || slot.platform || slot.channelTitle || '',
-      publishedAt: slot.publishedAt || slot.releaseDate || slot.createdAt || slot.date || '',
-      releaseDate: slot.releaseDate || '',
-      views: slot.views || slot.viewCount || 0,
-      viewCount: slot.viewCount || 0,
-      popularity: slot.popularity || slot.score || 0,
-      score: slot.score || 0,
-      rating: slot.rating || slot.voteAverage || 0,
-      voteAverage: slot.voteAverage || 0,
-      candidateOnly: slot.candidateOnly || slot.candidate_only || false,
-      candidate_only: slot.candidate_only || false,
-      seedContent: slot.seedContent || slot.seed_content || false,
-      seed_content: slot.seed_content || false,
-      verificationStatus: slot.verificationStatus || slot.verification_status || '',
-      verification_status: slot.verification_status || '',
-      reviewStatus: slot.reviewStatus || slot.review_status || '',
-      review_status: slot.review_status || '',
-      rightsStatus: slot.rightsStatus || slot.rights_status || '',
-      rights_status: slot.rights_status || '',
-      allowedUse: slot.allowedUse || slot.allowed_use || '',
-      allowed_use: slot.allowed_use || '',
-      rights: slot.rights || null
-    })));
+    return slots.map((slot)=>{
+      const out = Object.assign({}, slot || {});
+      out.title = out.title || out.name || '';
+      out.thumbnail = out.thumbnail || out.thumb || out.image || out.imageUrl || out.thumbnailUrl || out.poster || out.posterUrl || '';
+      out.url = out.url || out.video || out.playUrl || out.embedUrl || out.sourceUrl || out.link || out.href || '';
+      out.video = out.video || out.playUrl || '';
+      out.provider = out.provider || out.sourceName || out.platform || out.channelTitle || '';
+      return out;
+    });
   }
 
   function extractItems(section){
     if(!section) return [];
-    if(Array.isArray(section)) return filterRenderableItems(section);
-    if(Array.isArray(section.items)) return filterRenderableItems(section.items);
+    if(Array.isArray(section.items)) return section.items;
     if(Array.isArray(section.slots)) return slotsToItems(section);
     return [];
   }
 
-  function hasSnapshotSection(sectionMap, key){
-    return !!(sectionMap && Object.prototype.hasOwnProperty.call(sectionMap, key));
-  }
-
   async function loadFeedItems(key){
+    if(!ENABLE_FEED_MEDIA_FALLBACK) return [];
     const url = `/.netlify/functions/feed-media?key=${encodeURIComponent(key)}&limit=500`;
     try{
       const data = await fetchJson(url);
-      if(data && Array.isArray(data.items)) return filterRenderableItems(data.items);
+      if(data && Array.isArray(data.items)) return data.items;
       if(data && Array.isArray(data.sections)){
         const found = data.sections.find(s => s && canonKey(s.key) === key);
-        if(found && Array.isArray(found.items)) return filterRenderableItems(found.items);
+        if(found && Array.isArray(found.items)) return found.items;
       }
     }catch(e){ /* ignore */ }
     return [];
@@ -285,11 +277,9 @@
 
   
  function ensureContentId(item){
-  if(!item) return '';
+  if(!hasRenderableMediaContent(item)) return '';
 
-  const title = firstValid(item.title, item.name, item.text);
   const source = firstValid(item.url, item.video, item.playUrl, item.embedUrl, item.sourceUrl, item.link, item.href);
-  if(!title && !source) return '';
 
   return (
     firstValid(item.id, item._id, item.contentId, item.videoId, item.slug) ||
@@ -298,9 +288,15 @@
 }
 
   function fillAnchor(a, item){
+    if(!hasRenderableMediaContent(item)){
+      keepSampleSlot(a);
+      return;
+    }
+
     const title = firstValid(item && item.title, item && item.name, item && item.text);
     const thumb = firstValid(item && item.thumbnail, item && item.thumb, item && item.image, item && item.imageUrl, item && item.thumbnailUrl, item && item.poster, item && item.posterUrl);
 
+    
     const videoId = ensureContentId(item);
 
     if(videoId){
@@ -309,8 +305,8 @@
       a.removeAttribute('target');
       a.removeAttribute('rel');
     }else{
-      a.href = "javascript:void(0)";
-      a.onclick = function(){ alert("콘텐츠 준비 중입니다."); };
+      keepSampleSlot(a);
+      return;
     }
 
 
@@ -323,10 +319,9 @@
       a.insertBefore(thumbBox, a.firstChild);
     }
 
-    if(thumb) thumbBox.classList.remove('ph');
-
     let img = q('img', thumbBox);
     if(thumb){
+      thumbBox.classList.remove('ph');
       if(!img){
         img = D.createElement('img');
         thumbBox.appendChild(img);
@@ -366,23 +361,21 @@
     const keys = Array.isArray(heroRotateKeys) ? heroRotateKeys.map(canonKey) : [];
     if(keys.length === 0) return;
 
-    // snapshot first
+    // snapshot first: empty/sample slots must not override the existing hero image.
     for(const k of keys){
       const items = extractItems(sectionMap[k]);
-      const first = items && items[0];
-      const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
+      const first = Array.isArray(items) ? items.find(hasRenderableMediaContent) : null;
+      const thumb = first && firstValid(first.thumbnail, first.thumb, first.image, first.imageUrl, first.thumbnailUrl, first.poster, first.posterUrl);
       if(thumb){
         heroImg.src = thumb;
         return;
       }
     }
 
-    // fallback feed (best-effort). If a media snapshot is present but only has empty/sample slots, keep the existing hero.
-    if(sectionMap && Object.keys(sectionMap).length > 0) return;
-
+    // legacy fallback feed (disabled by default)
     for(const k of keys){
       const items = await loadFeedItems(k);
-      const first = items && items[0];
+      const first = Array.isArray(items) ? items.find(hasRenderableMediaContent) : null;
       const thumb = first && firstValid(first.thumbnail, first.thumb, first.image, first.imageUrl, first.thumbnailUrl, first.poster, first.posterUrl);
       if(thumb){
         heroImg.src = thumb;
@@ -520,7 +513,7 @@
       if(!key || key.indexOf('media-') !== 0) continue;
 
       let items = extractItems(sectionMap[key]);
-      if((!items || items.length === 0) && !hasSnapshotSection(sectionMap, key)){
+      if(!items || items.length === 0){
         items = await loadFeedItems(key);
       }
       applyLine(line, items);
