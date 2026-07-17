@@ -223,7 +223,21 @@ function scanFunctionExports(root){
     'netlify/functions/maru-global-insight-engine.js',
     'netlify/functions/snapshot-engine.js',
     'netlify/functions/core.js',
-    'netlify/functions/lib/trustFilter.core.v1.js'
+    'netlify/functions/lib/trustFilter.core.v1.js',
+    'netlify/functions/media-candidate-review.js',
+    'netlify/functions/media-candidate-action.js',
+    'netlify/functions/media-snapshot-publish.js',
+    'netlify/functions/sanmaru-media-candidate-sync.js',
+    'netlify/functions/social-candidate-review.js',
+    'netlify/functions/social-candidate-action.js',
+    'netlify/functions/social-rotation-selector.js',
+    'netlify/functions/social-snapshot-publish.js',
+    'netlify/functions/sanmaru-social-candidate-gateway.js',
+    'netlify/functions/sanmaru-social-pipeline-trigger.js',
+    'netlify/functions/commerce-candidate-review.js',
+    'netlify/functions/product-go-live-audit.js',
+    'netlify/functions/regional-brokerage-autoselector.js',
+    'netlify/functions/regional-brokerage-snapshot.js'
   ];
   const checked = [], missing = [];
   for(const p of fnFiles){
@@ -583,6 +597,114 @@ function scanEngineDiagnosticReadiness(root){
   };
 }
 
+function scanCandidateSubsystems(root){
+  const groups = [
+    {
+      key:'media-candidates',
+      label:'Media candidate queue',
+      purpose:'media rights/review/publish candidate pipeline',
+      required:[
+        'netlify/functions/media-candidate-review.js',
+        'netlify/functions/media-candidate-action.js',
+        'netlify/functions/media-snapshot-publish.js',
+        'netlify/functions/lib/media-candidate-store.v1.js'
+      ],
+      optional:[
+        'netlify/functions/sanmaru-media-candidate-sync.js',
+        'netlify/functions/data/media.candidates.snapshot.json'
+      ]
+    },
+    {
+      key:'social-candidates',
+      label:'Social candidate queue',
+      purpose:'9 SNS candidate gateway/review/rotation/generated snapshot pipeline',
+      required:[
+        'netlify/functions/social-candidate-review.js',
+        'netlify/functions/social-candidate-action.js',
+        'netlify/functions/social-rotation-selector.js',
+        'netlify/functions/social-snapshot-publish.js',
+        'netlify/functions/sanmaru-social-candidate-gateway.js',
+        'netlify/functions/sanmaru-social-pipeline-trigger.js',
+        'netlify/functions/lib/social-candidate-store.v1.js',
+        'netlify/functions/lib/social-candidate-policy.v1.js'
+      ],
+      optional:[
+        'netlify/functions/sanmaru-social-collection-policy.js',
+        'netlify/functions/data/social.candidates.snapshot.json'
+      ]
+    },
+    {
+      key:'commerce-candidates',
+      label:'Commerce/product candidate queue',
+      purpose:'product/open-supply/regional brokerage readiness checks',
+      required:[
+        'netlify/functions/commerce-candidate-review.js',
+        'netlify/functions/product-go-live-audit.js'
+      ],
+      optional:[
+        'netlify/functions/regional-brokerage-autoselector.js',
+        'netlify/functions/regional-brokerage-snapshot.js',
+        'netlify/functions/lib/regional-brokerage-autoselection.core.v1.js',
+        'netlify/functions/lib/regional-brokerage-front-supply-gate.core.v1.js',
+        'netlify/functions/data/commerce-candidate-review-queue.v1.json',
+        'netlify/functions/data/regional-brokerage-policy.json'
+      ]
+    }
+  ];
+  function inspectFile(p){
+    const file = path.join(root, p);
+    const st = statFile(file);
+    const rec = { path:p, exists:st.exists, size:st.size || 0, kind:/\.json$/i.test(p)?'data':(/\.html$/i.test(p)?'page':(/\/lib\//.test(p)?'library':'function')) };
+    if(st.exists && !/\.json$/i.test(p)){
+      const txt = readText(file).text || '';
+      rec.hash = hashText(txt);
+      rec.version = ((txt.match(/VERSION\s*=\s*["']([^"']+)/) || [])[1]) || null;
+      rec.hasHandler = /exports\.handler|module\.exports\s*=\s*\{[^}]*handler|handler\s*=/.test(txt);
+      rec.hasRunEngine = /exports\.runEngine|runEngine\s*[:=]/.test(txt);
+      rec.hasFastProbeHint = /(audit|probe|health|diagnostic|readOnly|noWrite|dryRun)/i.test(txt);
+      rec.mentionsSupabase = /supabase|SUPABASE_/i.test(txt);
+      rec.mentionsSnapshot = /snapshot/i.test(txt);
+      rec.mentionsSearchBank = /search[-_ ]?bank/i.test(txt);
+    }
+    if(st.exists && /\.json$/i.test(p)){
+      const jr = readJsonRel(root,p);
+      rec.ok = jr.ok;
+      rec.hash = jr.hash;
+      rec.error = jr.error || null;
+    }
+    return rec;
+  }
+  const rows = groups.map(g => {
+    const required = g.required.map(inspectFile);
+    const optional = g.optional.map(inspectFile);
+    const missingRequired = required.filter(x => !x.exists).map(x => x.path);
+    const existingRequired = required.length - missingRequired.length;
+    const handlerMissing = required.filter(x => x.exists && x.kind === 'function' && !x.hasHandler).map(x => x.path);
+    const level = missingRequired.length ? 'warn' : (handlerMissing.length ? 'warn' : 'ok');
+    return Object.assign({}, g, {
+      required,
+      optional,
+      totalRequired:required.length,
+      existingRequired,
+      missingRequired,
+      handlerMissing,
+      optionalPresent:optional.filter(x=>x.exists).length,
+      level,
+      note: level === 'ok' ? 'candidate subsystem files present' : 'candidate subsystem is partially installed or needs deployment sync'
+    });
+  });
+  return {
+    source:'server-fs-static-v4.2',
+    totalGroups:rows.length,
+    okGroups:rows.filter(r => r.level === 'ok').length,
+    warnGroups:rows.filter(r => r.level === 'warn').length,
+    missingRequired:rows.reduce((a,r)=>a.concat(r.missingRequired.map(p=>({ group:r.key, path:p }))),[]),
+    handlerMissing:rows.reduce((a,r)=>a.concat(r.handlerMissing.map(p=>({ group:r.key, path:p }))),[]),
+    rows
+  };
+}
+
+
 function buildWarnings(report){
   const w = [];
   const mode = report.mode || 'pre-product';
@@ -607,6 +729,9 @@ function buildWarnings(report){
   if(report.productSupply && !report.productSupply.enabled && mode === 'production') w.push('Production mode: product supply gate is OFF.');
   if(report.serverSnapshots && report.serverSnapshots.okPages < report.serverSnapshots.totalPages) w.push('Server snapshot pages are missing or invalid. Check netlify/functions/data/*.snapshot.json.');
   if(mode === 'production' && report.serverSnapshots && report.serverSnapshots.pages && report.serverSnapshots.pages.some(p => p.analysis && p.analysis.statusCounts && p.analysis.statusCounts.fail)) w.push('Production mode: one or more server snapshot sections have blocking item issues.');
+  if(report.candidateSubsystems && report.candidateSubsystems.warnGroups){
+    w.push('Candidate subsystem static scan has ' + report.candidateSubsystems.warnGroups + ' partial group(s). This is a deployment-sync warning only.');
+  }
   return w;
 }
 function computeSummary(report){
@@ -647,7 +772,7 @@ function audit(event){
   const mode = getMode(event);
   const report = {
     ok:true,
-    auditVersion:'engine-diagnostic-v4.1-slot-precision',
+    auditVersion:'engine-diagnostic-v4.2-candidate-stability',
     mode,
     generatedAt:nowIso(),
     root,
@@ -661,7 +786,7 @@ function audit(event){
         PAYMENT_LIVE: low(process.env.PAYMENT_LIVE || 'false')
       }
     },
-    files:{}, functions:{}, searchBank:{}, frontend:{}, trust:{}, globalInsight:{}, payment:{}, snapshotCopies:{}, warnings:[]
+    files:{}, functions:{}, searchBank:{}, frontend:{}, trust:{}, globalInsight:{}, payment:{}, snapshotCopies:{}, candidateSubsystems:{}, warnings:[]
   };
   const importantFiles = [
     'index.html','home.html','distributionhub.html','socialnetwork.html','mediahub.html','tour.html','donation.html','networkhub.html','search.html','admin.html',
@@ -683,6 +808,7 @@ function audit(event){
   report.payment = scanPayment(root);
   report.engineTopology = scanEngineTopology(root);
   report.engineDiagnosticReadiness = scanEngineDiagnosticReadiness(root);
+  report.candidateSubsystems = scanCandidateSubsystems(root);
   report.snapshotCopies = scanSnapshotCopies(root);
   report.serverSnapshots = scanServerSnapshots(root, mode);
   report.warnings = buildWarnings(report);

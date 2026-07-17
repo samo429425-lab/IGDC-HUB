@@ -485,7 +485,7 @@
       if(warn.length) bottleneck = warn.map(function(r){ return r.key + ':' + r.bottleneck; }).join(', ');
     }
     var level = criticalFail.length ? 'fail' : (criticalWarn.length || counts.warn ? 'warn' : 'ok');
-    return { source:'browser-engine-diagnostic-v4.1-slot-precision', generatedAt:new Date().toISOString(), total:rows.length, counts:counts, level:level, bottleneck:bottleneck, rows:rows, pipeline:buildPipelineDiagnosis(rows) };
+    return { source:'browser-engine-diagnostic-v4.2-candidate-stability', generatedAt:new Date().toISOString(), total:rows.length, counts:counts, level:level, bottleneck:bottleneck, rows:rows, pipeline:buildPipelineDiagnosis(rows) };
   }
   function applyEngineDiagnosticsToReport(report){
     if(!report || !report.engineRuntime) return report;
@@ -507,6 +507,31 @@
     report.engineUpgradeHints = hints.slice(0, 40);
     return report;
   }
+  function candidateSubsystemHtml(subsystems){
+    if(!subsystems || !subsystems.rows) return '<div class="small">후보 대기열 보조 점검 결과 없음</div>';
+    var html = '<div class="audit-candidate-subsystems"><h2>후보 대기열·발행 보조 함수 상태표</h2>'+ 
+      '<div class="small">media/social/commerce 후보 계열 파일 존재·handler·probe hint만 정적 점검합니다. 실제 승인/발행/쓰기 작업은 실행하지 않습니다.</div>'+ 
+      '<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px"><thead><tr>'+['영역','상태','필수 파일','선택 파일','누락/주의','용도'].map(function(h){return '<th style="border:1px solid #ddd;padding:6px;text-align:left">'+escapeHtml(h)+'</th>';}).join('')+'</tr></thead><tbody>';
+    subsystems.rows.forEach(function(r){
+      var req = (r.required || []).map(function(x){ return (x.exists ? '✓ ' : '✕ ') + x.path + (x.hasHandler === false && x.kind === 'function' ? ' (handler 없음)' : ''); }).join('\n');
+      var opt = (r.optional || []).map(function(x){ return (x.exists ? '✓ ' : '· ') + x.path; }).join('\n');
+      var warn = [];
+      if(r.missingRequired && r.missingRequired.length) warn.push('누락 필수:\n- ' + r.missingRequired.join('\n- '));
+      if(r.handlerMissing && r.handlerMissing.length) warn.push('handler 확인 필요:\n- ' + r.handlerMissing.join('\n- '));
+      if(!warn.length) warn.push(r.note || '정상');
+      html += '<tr>'+[
+        r.label || r.key,
+        String(r.level || '').toUpperCase(),
+        req || '-',
+        opt || '-',
+        warn.join('\n\n'),
+        r.purpose || ''
+      ].map(function(v, idx){ return '<td class="'+(idx===1?statusClass(r.level):'')+'" style="border:1px solid #ddd;padding:6px;white-space:pre-wrap;vertical-align:top">'+escapeHtml(v)+'</td>'; }).join('')+'</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+
   function engineRuntimeHtml(engine){
     if(!engine || !engine.rows) return '<div class="small">엔진 런타임 점검 결과 없음</div>';
     var html = '<div class="audit-engine-runtime"><h2>엔진 정밀 런타임 상태표 v4</h2>'+ 
@@ -548,11 +573,14 @@
     lines.push('<tr><th>Missing script refs</th><td>'+count(report.frontend && report.frontend.missingScriptRefs)+'</td></tr>');
     lines.push('<tr><th>Suspicious api.netlify scripts</th><td>'+count(report.frontend && report.frontend.suspiciousApiNetlifyScripts)+'</td></tr>');
     lines.push('<tr><th>Function files missing</th><td>'+count(report.functions && report.functions.missing)+'</td></tr>');
+    lines.push('<tr><th>Candidate subsystems</th><td>'+escapeHtml(val(report,'candidateSubsystems.okGroups','-'))+' ok / '+escapeHtml(val(report,'candidateSubsystems.totalGroups','-'))+' groups</td></tr>');
     lines.push('<tr><th>Warnings</th><td>'+count(report.warnings)+'</td></tr>');
     lines.push('<tr><th>Public snapshot pages</th><td>'+escapeHtml(val(report,'publicSnapshots.okPages','-'))+' / '+escapeHtml(val(report,'publicSnapshots.totalPages','-'))+'</td></tr>');
     lines.push('<tr><th>Public snapshot sections</th><td>'+escapeHtml(val(report,'publicSnapshots.totalSections','-'))+' sections / '+escapeHtml(val(report,'publicSnapshots.totalItems','-'))+' items</td></tr>');
     lines.push('<tr><th>Engine runtime</th><td>'+escapeHtml(val(report,'engineRuntime.counts.ok','-'))+' ok / '+escapeHtml(val(report,'engineRuntime.counts.warn','-'))+' warn / '+escapeHtml(val(report,'engineRuntime.counts.fail','-'))+' fail</td></tr>');
     lines.push('</tbody></table>');
+    lines.push('<h2>Candidate Subsystem Table</h2>');
+    lines.push(candidateSubsystemHtml(report.candidateSubsystems));
     lines.push('<h2>Engine Runtime Table</h2>');
     lines.push(engineRuntimeHtml(report.engineRuntime));
     lines.push('<h2>Public Snapshot Section Table</h2>');
@@ -583,10 +611,12 @@
     card('Product Supply Gate', report.productSupply ? (report.productSupply.enabled ? 'ON' : 'OFF') : 'N/A', (report.productSupply && report.productSupply.enabled && mode === 'pre-product') ? 'warn':'ok', mode === 'pre-product' ? 'OFF is expected before real product upload' : 'ON is expected in production');
     card('Payment Line', val(report,'productSupply.flags.PAYMENT_LIVE','false'), mode === 'production' && val(report,'productSupply.flags.PAYMENT_LIVE','false') !== 'true' ? 'warn':'info', 'payment config files/readers are included in raw JSON');
     card('Public Snapshots', String(val(report,'publicSnapshots.okPages','-')) + '/' + String(val(report,'publicSnapshots.totalPages','-')) + ' pages', val(report,'publicSnapshots.okPages',0) === val(report,'publicSnapshots.totalPages',-1) ? 'ok':'warn', String(val(report,'publicSnapshots.totalSections','-')) + ' sections / ' + String(val(report,'publicSnapshots.totalItems','-')) + ' items');
+    var csWarn = Number(val(report,'candidateSubsystems.warnGroups',0) || 0);
+    card('Candidate Queues', String(val(report,'candidateSubsystems.okGroups','-')) + '/' + String(val(report,'candidateSubsystems.totalGroups','-')) + ' groups', csWarn ? 'warn':'ok', 'media/social/commerce helper files, missing required: ' + count(report.candidateSubsystems && report.candidateSubsystems.missingRequired));
     card('Engine Runtime', val(report,'engineRuntime.level','N/A').toString().toUpperCase(), val(report,'engineRuntime.level','info'), 'ok: ' + val(report,'engineRuntime.counts.ok','-') + ', warn: ' + val(report,'engineRuntime.counts.warn','-') + ', fail: ' + val(report,'engineRuntime.counts.fail','-') + ', bottleneck: ' + val(report,'engineRuntime.bottleneck','-'));
     card('Warnings', String(count(report.warnings)), count(report.warnings) ? 'warn':'ok', 'download JSON and send for full review');
     if($('summary')) $('summary').innerHTML = cards.join('');
-    ensureSnapshotDetailsHost().innerHTML = engineRuntimeHtml(report.engineRuntime) + snapshotTablesHtml(report.publicSnapshots);
+    ensureSnapshotDetailsHost().innerHTML = candidateSubsystemHtml(report.candidateSubsystems) + engineRuntimeHtml(report.engineRuntime) + snapshotTablesHtml(report.publicSnapshots);
   }
   async function runAudit(){
     var runBtn = $('runAuditBtn');

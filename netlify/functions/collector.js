@@ -599,6 +599,48 @@ try{
   return result;
 }
 
+
+/* --------------------------------------------------
+FAST AUDIT / HEALTH PROBE
+- Does not run collection/search/snapshot write path.
+- Used only by deploy checker and engine health diagnostics.
+-------------------------------------------------- */
+function isFastAuditProbe(event){
+  const q = event?.queryStringParameters || {};
+  const h = event?.headers || {};
+  const truth = v => ["1","true","yes","on"].includes(String(v || "").toLowerCase());
+  return !!(
+    (truth(q.audit) || truth(q.probe) || truth(q.health) || truth(q.ping)) &&
+    (truth(q.noWrite) || truth(q.dryRun) || truth(q.health) || truth(q.ping) || String(h["x-igdc-no-write"] || h["X-IGDC-No-Write"] || "").toLowerCase() === "1")
+  );
+}
+
+function collectorFastHealth(event){
+  const q = event?.queryStringParameters || {};
+  return {
+    ok:true,
+    status:"ok",
+    engine:"central-collector",
+    version:VERSION,
+    action:"fast-probe",
+    probeReady:true,
+    readOnly:true,
+    writes:false,
+    collection:false,
+    searchDispatch:false,
+    snapshotWrite:false,
+    query:String(q.q || q.query || "").slice(0,80),
+    limit:Number(q.limit || 0) || 0,
+    meta:{
+      timeoutMs:ENGINE_TIMEOUT,
+      cacheTtl:CACHE_TTL,
+      rateLimitWindow:RATE_LIMIT_WINDOW,
+      rateLimitMax:RATE_LIMIT_MAX
+    },
+    generatedAt:new Date().toISOString()
+  };
+}
+
 /* --------------------------------------------------
 HTTP RESPONSE
 -------------------------------------------------- */
@@ -624,6 +666,7 @@ NETLIFY HANDLER
 
 exports.handler = async function(event){
   try{
+    if(isFastAuditProbe(event)) return ok(collectorFastHealth(event));
     const result = await runCollector(event);
     return ok(result);
   }catch(err){
@@ -636,8 +679,10 @@ exports.handler = async function(event){
 };
 
 exports.runEngine = async function(event, params){
-  return await runCollector({
+  const syntheticEvent = {
     queryStringParameters: params || {},
     headers: event?.headers || {}
-  });
+  };
+  if(isFastAuditProbe(syntheticEvent)) return collectorFastHealth(syntheticEvent);
+  return await runCollector(syntheticEvent);
 };
