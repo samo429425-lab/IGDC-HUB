@@ -2650,7 +2650,7 @@ function reorderRow(rowId){
     const cells = Array.from(scroller.querySelectorAll('a, .shop-item, .thumb-item'));
     for(let i=0;i<cells.length && i<items.length;i++){
       const it = items[i], cell = cells[i];
-      if (cell.tagName === 'A') cell.removeAttribute('href'); if (it.url) { setAttribute('href', it.url); };
+      if (cell.tagName === 'A') cell.removeAttribute('href'); if (it.url) { cell.setAttribute('href', it.url); };
       let img = cell.querySelector('img');
       if(img){ img.src = it.img; img.alt = (it.brand ? (it.brand+' ') : '') + (it.title || ''); }
       else {

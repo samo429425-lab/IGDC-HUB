@@ -2091,11 +2091,11 @@ document.addEventListener('DOMContentLoaded', () => {
 <section aria-label="Our Site Links" class="our-sites-wrap">
 <div class="section-title-row ph-row"><h2 class="our-sites-title ph-title">Pergi ke Hab Platform</h2><div class="bc-row"><a class="bc-btn" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a><a class="bc-btn" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a><a class="bc-btn" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a><a class="bc-btn" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a></div></div>
 <div class="our-sites-grid">
-<a class="our-site-btn" href="networkhub.html">Hab Pasaran</a>
-<a class="our-site-btn" href="distributionhub.html">Hab Pengedaran</a>
-<a class="our-site-btn" href="socialnetwork.html">Hab Sosial</a>
-<a class="our-site-btn" href="mediahub.html">Hab Media</a>
-<a class="our-site-btn" href="tour.html">Perjalanan·Pelancongan</a>
+<a class="our-site-btn" href="networkhub_ms.html">Hab Pasaran</a>
+<a class="our-site-btn" href="distributionhub_ms.html">Hab Pengedaran</a>
+<a class="our-site-btn" href="socialnetwork_ms.html">Hab Sosial</a>
+<a class="our-site-btn" href="mediahub_ms.html">Hab Media</a>
+<a class="our-site-btn" href="tour_ms.html">Perjalanan·Pelancongan</a>
 <a class="our-site-btn"> </a>
 </div>
 </section>
@@ -2396,7 +2396,7 @@ window.addEventListener('DOMContentLoaded', initNewsRows);
     const cells = Array.from(scroller.querySelectorAll('a, .shop-item, .thumb-item'));
     for(let i=0;i<cells.length && i<items.length;i++){
       const it = items[i], cell = cells[i];
-      if (cell.tagName === 'A') cell.removeAttribute('href'); if (it.url) { setAttribute('href', it.url); };
+      if (cell.tagName === 'A') cell.removeAttribute('href'); if (it.url) { cell.setAttribute('href', it.url); };
       let img = cell.querySelector('img');
       if(img){ img.src = it.img; img.alt = (it.brand ? (it.brand+' ') : '') + (it.title || ''); }
       else {

@@ -2116,11 +2116,11 @@ document.addEventListener('DOMContentLoaded', () => {
 <section aria-label="Our Site Links" class="our-sites-wrap">
 <div class="section-title-row ph-row"><h2 class="our-sites-title ph-title">Nenda kwenye Kitovu cha Jukwaa</h2><div class="bc-row"><a class="bc-btn" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a><a class="bc-btn" href="https://opensea.io" rel="noopener" target="_blank">FunguaSea</a><a class="bc-btn" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a><a class="bc-btn" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a></div></div>
 <div class="our-sites-grid">
-<a class="our-site-btn" href="networkhub.html">Kitovu cha Soko</a>
-<a class="our-site-btn" href="distributionhub.html">Kitovu cha Usambazaji</a>
-<a class="our-site-btn" href="socialnetwork.html">Kitovu cha Kijamii</a>
-<a class="our-site-btn" href="mediahub.html">Kitovu cha Habari</a>
-<a class="our-site-btn" href="tour.html">Safari·Utalii</a>
+<a class="our-site-btn" href="networkhub_sw.html">Kitovu cha Soko</a>
+<a class="our-site-btn" href="distributionhub_sw.html">Kitovu cha Usambazaji</a>
+<a class="our-site-btn" href="socialnetwork_sw.html">Kitovu cha Kijamii</a>
+<a class="our-site-btn" href="mediahub_sw.html">Kitovu cha Habari</a>
+<a class="our-site-btn" href="tour_sw.html">Safari·Utalii</a>
 <a class="our-site-btn" >&nbsp;</a>
 </div>
 </section>
@@ -2393,7 +2393,7 @@ window.addEventListener("DOMContentLoaded", () => { try { initAds(); } catch(e) 
     const cells = Array.from(scroller.querySelectorAll('a, .shop-item, .thumb-item'));
     for(let i=0;i<cells.length && i<items.length;i++){
       const it = items[i], cell = cells[i];
-      if (cell.tagName === 'A') cell.removeAttribute('href'); if (it.url) { setAttribute('href', it.url); };
+      if (cell.tagName === 'A') cell.removeAttribute('href'); if (it.url) { cell.setAttribute('href', it.url); };
       let img = cell.querySelector('img');
       if(img){ img.src = it.img; img.alt = (it.brand ? (it.brand+' ') : '') + (it.title || ''); }
       else {
