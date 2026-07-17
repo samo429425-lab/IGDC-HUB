@@ -5240,42 +5240,28 @@ if (it.riskLabel === '⚠️ high-risk') {
       });
     }
 
-    async function enrichRenderedPageImages(page, slice){
-      // search.js is also present on the front search gateway.  Rich-card DOM and
-      // page crawling are strictly search.html-only so the front UI remains intact.
-      if(!isSearchPage) return;
+    function scheduleMediaCardPatchRender(page){
+      // Coalesce near-simultaneous media completions. The search pipeline and
+      // page calculation stay untouched; only the already-rendered page repaints.
+      if(page !== currentPage) return;
+      if(scheduleMediaCardPatchRender._timer) return;
+      scheduleMediaCardPatchRender._timer = setTimeout(() => {
+        scheduleMediaCardPatchRender._timer = null;
+        if(page === currentPage) renderPage(page, true);
+      }, 40);
+    }
 
-      const q = (input.value || '').trim();
-      if(!q || !Array.isArray(slice) || !slice.length) return;
+    async function enrichOneSearchCardMedia(page, q, type, item){
+      const key = itemStableKey(item);
+      if(!key || itemImageEnrichCache.has(key)) return;
 
-      const cacheKey = [q, activeType || 'all', page].join('::');
-      if(pageImageEnrichInFlight.has(cacheKey)) return;
+      const requestKey = ['card-media', q, type, key].join('::');
+      if(pageImageEnrichInFlight.has(requestKey)) return;
+      pageImageEnrichInFlight.add(requestKey);
 
-      const visibleItems = richCardMediaCandidatesClient(slice);
-      const candidates = visibleItems
-        .filter(it => {
-          const key = itemStableKey(it);
-          const cached = key ? itemImageEnrichCache.get(key) : null;
-          // Each visible result page is probed once. A page-wide completion flag
-          // would skip general-search cards that arrive after the first render.
-          if(cached) return false;
-          const url = String((it && (it.url || it.link || it.pageUrl || it.sourcePageUrl)) || '').trim();
-          if(!/^https?:\/\//i.test(url)) return false;
-          // Probe when either the representative image or the embedded-video
-          // snapshot is still missing. This keeps ordinary web results rich while
-          // image/video tabs remain ordinary filters over the same result pool.
-          return !collectNaturalImages(it).length || !hasVideoSnapshotSignalClient(it);
-        })
-        .slice(0, PAGE_SIZE);
-
-      if(!candidates.length){
-        return;
-      }
-
-      pageImageEnrichInFlight.add(cacheKey);
       try{
         const url =
-          `/.netlify/functions/maru-search?action=enrich-images&gateway=search-ui&searchUi=1&q=${encodeURIComponent(q)}&type=${encodeURIComponent(activeType || 'all')}`;
+          `/.netlify/functions/maru-search?action=enrich-images&gateway=search-ui&searchUi=1&q=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}`;
 
         const res = await fetch(url, {
           method: 'POST',
@@ -5283,39 +5269,30 @@ if (it.riskLabel === '⚠️ high-risk') {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             q,
-            type: activeType || 'all',
+            type,
             gateway: 'search-ui',
             searchUi: true,
-            items: candidates
+            singleCard: true,
+            items: [item]
           })
         });
 
         if(!res.ok) return;
-
         const json = await res.json();
+
+        // A previous query must never repaint the current search screen.
+        const liveQ = String(lastQuery || (input && input.value) || '').trim();
+        if(liveQ !== q || normalizeSearchType(activeType) !== normalizeSearchType(type)) return;
+
         const enriched = normalizeItems(json);
-        if(!enriched.length) return;
-
-        // Mark only the cards actually submitted to the deferred reader. This
-        // preserves speed while allowing newly received general-list cards to be
-        // enriched on a later render without re-reading earlier cards.
-        candidates.forEach(item => {
-          const key = itemStableKey(item);
-          if(key && !itemImageEnrichCache.has(key)) itemImageEnrichCache.set(key, item);
-        });
-
-        const updatedCandidates = mergeEnrichedItems(candidates, enriched);
-        const byKey = new Map();
-        updatedCandidates.forEach(item => {
-          const key = itemStableKey(item);
-          if(key) byKey.set(key, item);
-        });
+        const hit = enriched.find(row => itemStableKey(row) === key) || enriched[0] || null;
+        const cached = hit ? mergeRichCardMediaClient(item, hit) : item;
+        itemImageEnrichCache.set(key, cached);
+        if(!hit) return;
 
         let changed = false;
         allItems = (Array.isArray(allItems) ? allItems : []).map(original => {
-          const key = itemStableKey(original);
-          const hit = key ? byKey.get(key) : null;
-          if(!hit) return original;
+          if(itemStableKey(original) !== key) return original;
           const merged = mergeRichCardMediaClient(original, hit);
           const oldVisual = collectNaturalImages(original).join('|') + '|' + String(original.videoId || original.videoUrl || original.embedUrl || '');
           const newVisual = collectNaturalImages(merged).join('|') + '|' + String(merged.videoId || merged.videoUrl || merged.embedUrl || '');
@@ -5325,16 +5302,71 @@ if (it.riskLabel === '⚠️ high-risk') {
           return merged;
         });
 
-        if(changed && page === currentPage){
-          renderPage(page, true);
-        }
+        if(changed && page === currentPage) scheduleMediaCardPatchRender(page);
       }catch(e){
-        console.warn('page card media enrichment skipped:', e);
+        console.warn('single search-card media enrichment skipped:', e);
       }finally{
-        pageImageEnrichInFlight.delete(cacheKey);
+        // Do not immediately retry an address that completed without media or
+        // failed during this search. A stale previous query must not seed the
+        // current query's per-search cache.
+        const liveQ = String(lastQuery || (input && input.value) || '').trim();
+        if(liveQ === q && normalizeSearchType(activeType) === normalizeSearchType(type) && !itemImageEnrichCache.has(key)){
+          itemImageEnrichCache.set(key, item);
+        }
+        pageImageEnrichInFlight.delete(requestKey);
       }
     }
 
+    function scheduleSecondPageMediaPrefetch(q, type){
+      const scheduleKey = ['page-media-prefetch', q, type, 2].join('::');
+      if(pageImageEnrichCache.has(scheduleKey)) return;
+      pageImageEnrichCache.add(scheduleKey);
+
+      setTimeout(() => {
+        const liveQ = String(lastQuery || (input && input.value) || '').trim();
+        if(liveQ !== q || normalizeSearchType(activeType) !== normalizeSearchType(type)) return;
+
+        const secondPageSlice = visibleItemsForPage(2);
+        if(!Array.isArray(secondPageSlice) || !secondPageSlice.length){
+          // The open intake may not have delivered page 2 yet. Let the next
+          // normal render schedule it again without touching the intake flow.
+          pageImageEnrichCache.delete(scheduleKey);
+          return;
+        }
+        enrichRenderedPageImages(2, secondPageSlice, true);
+      }, 120);
+    }
+
+    async function enrichRenderedPageImages(page, slice, prefetchOnly = false){
+      // Rich-card crawling is strictly search.html/search-ui only. Front supply,
+      // SearchBank, slots, snapshots, and the front-page UI remain untouched.
+      if(!isSearchPage) return;
+
+      const q = (input.value || '').trim();
+      const type = activeType || 'all';
+      if(!q || !Array.isArray(slice) || !slice.length) return;
+
+      const visibleItems = richCardMediaCandidatesClient(slice);
+      const candidates = visibleItems
+        .filter(it => {
+          const key = itemStableKey(it);
+          if(!key || itemImageEnrichCache.has(key)) return false;
+          const requestKey = ['card-media', q, type, key].join('::');
+          if(pageImageEnrichInFlight.has(requestKey)) return false;
+          const url = String((it && (it.url || it.link || it.pageUrl || it.sourcePageUrl)) || '').trim();
+          if(!/^https?:\/\//i.test(url)) return false;
+          return !collectNaturalImages(it).length || !hasVideoSnapshotSignalClient(it);
+        })
+        .slice(0, PAGE_SIZE);
+
+      // Every card is an independent request. A slow or failed address therefore
+      // cannot hold back media that has already been found for another card.
+      candidates.forEach(item => { enrichOneSearchCardMedia(page, q, type, item); });
+
+      // Page 1 has priority, but page 2 starts shortly afterwards rather than
+      // waiting for all 25 page-1 addresses to finish.
+      if(page === 1 && !prefetchOnly) scheduleSecondPageMediaPrefetch(q, type);
+    }
 
 
     function stateKeyForGroup(page, group){

@@ -60,7 +60,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const VERSION = 'A1.5.47-598-search-general-card-media-coverage-nanopin';
+const VERSION = 'A1.5.48-599-search-ui-card-media-independent-nanopin';
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 12000;
 const MIN_RESULT_TARGET = 1500;
@@ -78,6 +78,7 @@ const DEFAULT_EXTERNAL_TRIGGER_MIN = 0;
 const OG_IMAGE_ENRICH_LIMIT = 36;
 const OG_IMAGE_ENRICH_CONCURRENCY = 8;
 const OG_IMAGE_ENRICH_TIMEOUT_MS = 1800;
+const SEARCH_UI_CARD_MEDIA_OBSERVE_MS = 6200;
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000;
 const MAX_SEARCH_BANK_PAGES_NORMAL = 30;
 const MAX_SEARCH_BANK_PAGES_DEEP = 60;
@@ -4452,7 +4453,7 @@ function emptyOwnPageCardMedia(){
   return { image:'', imageSet:[], summary:'', title:'', hasVideo:false, videoId:'', videoUrl:'', watchUrl:'', embedUrl:'', poster:'' };
 }
 
-async function fetchOwnPageCardMedia(url){
+async function fetchOwnPageCardMedia(url, opts){
   try{
     globalThis.__MARU_PAGE_CARD_MEDIA_CACHE = globalThis.__MARU_PAGE_CARD_MEDIA_CACHE || new Map();
 
@@ -4460,13 +4461,14 @@ async function fetchOwnPageCardMedia(url){
     const hit = globalThis.__MARU_PAGE_CARD_MEDIA_CACHE.get(cacheKey);
     if(hit && Date.now() - hit.t < OG_IMAGE_CACHE_TTL_MS) return hit.v;
 
+    const fetchTimeoutMs = clampInt(opts && opts.timeoutMs, OG_IMAGE_ENRICH_TIMEOUT_MS, 800, 7000);
     const res = await fetchWithTimeout(cacheKey, {
       method: 'GET',
       headers: {
         'Accept': 'text/html,application/xhtml+xml',
         'User-Agent': 'Mozilla/5.0 MaruSearchBot/1.0'
       }
-    }, OG_IMAGE_ENRICH_TIMEOUT_MS);
+    }, fetchTimeoutMs);
 
     if(!res || !res.ok) {
       const empty = emptyOwnPageCardMedia();
@@ -4607,6 +4609,7 @@ async function enrichOwnImages(items, opts){
   const max = Math.min(list.length, Number.isFinite(requestedMax) && requestedMax > 0 ? requestedMax : OG_IMAGE_ENRICH_LIMIT, OG_IMAGE_ENRICH_LIMIT);
   const trace = opts && Array.isArray(opts.trace) ? opts.trace : null;
   const timeLeft = opts && typeof opts.timeLeft === 'function' ? opts.timeLeft : (() => 9999);
+  const fetchTimeoutMs = clampInt(opts && opts.fetchTimeoutMs, OG_IMAGE_ENRICH_TIMEOUT_MS, 800, 7000);
 
   let enriched = 0;
   let skipped = 0;
@@ -4626,7 +4629,7 @@ async function enrichOwnImages(items, opts){
       }
 
       const url = safeString(firstNonEmpty(it.url, it.link)).trim();
-      const pageMedia = await fetchOwnPageCardMedia(url);
+      const pageMedia = await fetchOwnPageCardMedia(url, { timeoutMs: fetchTimeoutMs });
       const merged = mergeOwnPageCardMediaIntoItem(it, pageMedia);
       list[idx] = merged;
 
@@ -5912,10 +5915,15 @@ exports.handler = async function(event){
       const incoming = Array.isArray(payload.items) ? payload.items : [];
       const trace = [];
       const started = nowMs();
+      const gateway = safeString(firstNonEmpty(payload.gateway, raw && raw.gateway)).trim().toLowerCase();
+      const isolatedSearchUiCard = incoming.length === 1 && truthy(payload.singleCard) && gateway === 'search-ui' && (truthy(payload.searchUi) || truthy(raw && raw.searchUi));
+      const actionBudgetMs = isolatedSearchUiCard ? 7600 : 6500;
 
       const enriched = await enrichOwnImages(incoming, {
         trace,
-        timeLeft: () => Math.max(0, 6500 - (nowMs() - started))
+        maxItems: isolatedSearchUiCard ? 1 : undefined,
+        fetchTimeoutMs: isolatedSearchUiCard ? SEARCH_UI_CARD_MEDIA_OBSERVE_MS : OG_IMAGE_ENRICH_TIMEOUT_MS,
+        timeLeft: () => Math.max(0, actionBudgetMs - (nowMs() - started))
       });
 
       let items = enriched.map(compactResultItem);
@@ -5933,6 +5941,7 @@ exports.handler = async function(event){
         meta: {
           count: items.length,
           imagePolicy: 'render-page-own-summary-image-video-snapshot',
+          deliveryMode: isolatedSearchUiCard ? 'independent-search-ui-card' : 'batch',
           trace,
           elapsedMs: nowMs() - started
         }
