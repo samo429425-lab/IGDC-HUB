@@ -768,7 +768,6 @@ nav{transition:transform .1s ease;}
 <style id="igdc-auth-prehide">
 /* Prevent the admin menu from flashing before a fresh authenticated role is verified. */
 html:not([data-igdc-auth-ready="1"]) nav [data-role~="admin"] { display:none !important; }
-html:not([data-igdc-donation-ready="1"]) nav [data-igdc-donation-nav="1"] { display:none !important; }
 </style>
 </head>
 <body>
@@ -821,7 +820,7 @@ html:not([data-igdc-donation-ready="1"]) nav [data-igdc-donation-nav="1"] { disp
 <a onclick="loadPage(3)">📢 소셜 네트워크</a>
 <a onclick="loadPage(4)">🎬 미디어 허브</a>
 <a onclick="loadPage(5)">🧳 관광</a>
-<a data-igdc-donation-nav="1" onclick="loadPage(6)">💝 후원</a>
+<a onclick="loadPage(6)">💝 후원</a>
 <a data-role="admin" onclick="loadPage(7)">🛠 Admin</a>
 <a onclick="loadPage(8)">❓ 도움말</a>
 </nav>
@@ -3688,130 +3687,98 @@ function normLang(l){
 </script>
 <!-- /IGDC canonical auth bar and role gate v1 -->
 
-<!-- IGDC donation navigation auth/country gate v1 -->
-<script id="igdc-donation-nav-gate-v1">
-(function(){
-  'use strict';
-  if (window.__IGDC_DONATION_NAV_GATE_V1__) return;
-  window.__IGDC_DONATION_NAV_GATE_V1__ = true;
-
-  var CLAIM_BLOCKED = 'https://igdcglobal.com/donation_blocked';
-  var ROLE_KEYS = [
-    'https://igdcglobal.com/roles', 'https://os.auth/roles', 'https://os0.app/roles',
-    'https://example.com/roles', 'https://osu/roles', 'roles', 'role'
-  ];
-  var syncQueued = false;
-  var repeatTimer = 0;
-
-  function normalize(value){
-    return String(value == null ? '' : value)
-      .trim()
-      .toLowerCase()
-      .replace(/[\s.]+/g, '_');
+<style id="igdc-mobile-portrait-header-nanopin-v1">
+/* Mobile portrait header only: preserve desktop and landscape layouts. */
+@media (max-width: 768px) and (orientation: portrait) {
+  header {
+    position: relative !important;
+    box-sizing: border-box !important;
+    height: 134px !important;
+    min-height: 134px !important;
+    padding: 0 !important;
+    text-align: left !important;
   }
 
-  function getPayload(){
-    try {
-      if (window.IGDCMemberAuth && typeof window.IGDCMemberAuth.getIdTokenPayload === 'function') {
-        return window.IGDCMemberAuth.getIdTokenPayload() || null;
-      }
-    } catch (_) {}
-    try {
-      if (window.osAuth && typeof window.osAuth.getIdTokenPayload === 'function') {
-        return window.osAuth.getIdTokenPayload() || null;
-      }
-    } catch (_) {}
-    return null;
+  #mobileQnaLink {
+    top: 12px !important;
+    left: 12px !important;
   }
 
-  function isFresh(payload){
-    var exp = Number(payload && payload.exp || 0);
-    return !!(payload && exp && exp * 1000 > Date.now() + 15000);
+  #mainTitle {
+    position: absolute !important;
+    top: 14px !important;
+    left: 70px !important;
+    right: 12px !important;
+    margin: 0 !important;
+    font-size: clamp(18px, 5.5vw, 23px) !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: left !important;
   }
 
-  function getRoles(payload){
-    try {
-      if (window.IGDCMemberAuth && typeof window.IGDCMemberAuth.getRoles === 'function') {
-        return (window.IGDCMemberAuth.getRoles() || []).map(normalize).filter(Boolean);
-      }
-    } catch (_) {}
-    var roles = [];
-    ROLE_KEYS.forEach(function(key){
-      var value = payload && payload[key];
-      if (Array.isArray(value)) {
-        value.forEach(function(role){ roles.push(normalize(role)); });
-      } else if (typeof value === 'string') {
-        value.split(',').forEach(function(role){ roles.push(normalize(role)); });
-      }
-    });
-    return roles.filter(Boolean);
+  #subTitle {
+    display: none !important;
   }
 
-  function isOwnerOrAdmin(roles){
-    return roles.some(function(role){
-      return role === 'owner' || role.indexOf('owner_') === 0 ||
-             role === 'admin' || role.indexOf('admin_') === 0 ||
-             role === 'super_admin';
-    });
+  #osLoginBtn {
+    position: absolute !important;
+    top: 68px !important;
+    left: 12px !important;
+    width: 96px !important;
+    height: 34px !important;
+    padding: 0 8px !important;
+    box-sizing: border-box !important;
+    justify-content: center !important;
   }
 
-  function isBlocked(payload){
-    var value = payload && payload[CLAIM_BLOCKED];
-    return value === true || String(value).toLowerCase() === 'true';
+  #igtcRoleInline3 {
+    position: absolute !important;
+    top: 68px !important;
+    left: 112px !important;
+    width: 96px !important;
+    min-width: 96px !important;
+    max-width: 96px !important;
+    height: 34px !important;
+    padding: 0 8px !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 
-  function apply(){
-    syncQueued = false;
-    var link = document.querySelector('nav [data-igdc-donation-nav="1"]');
-    if (!link) return;
-
-    var payload = getPayload();
-    var authenticated = isFresh(payload);
-    var allowed = false;
-
-    if (authenticated) {
-      var roles = getRoles(payload);
-      allowed = isOwnerOrAdmin(roles) || !isBlocked(payload);
-    }
-
-    link.style.display = allowed ? '' : 'none';
-    link.setAttribute('aria-hidden', allowed ? 'false' : 'true');
-    document.documentElement.dataset.igdcDonationReady = '1';
+  #igtcRoleText3 {
+    display: block !important;
+    width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    text-align: center !important;
   }
 
-  function schedule(){
-    if (syncQueued) return;
-    syncQueued = true;
-    if (window.requestAnimationFrame) window.requestAnimationFrame(apply);
-    else setTimeout(apply, 0);
+  .language-select {
+    position: absolute !important;
+    top: 68px !important;
+    right: 12px !important;
+    left: auto !important;
+    width: clamp(96px, calc(100vw - 238px), 180px) !important;
+    height: 34px !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    padding: 4px 8px !important;
+    font-size: 14px !important;
   }
 
-  function arm(){
-    schedule();
-    document.addEventListener('osauth:ready', schedule, true);
-    document.addEventListener('osauth:done', schedule, true);
-    document.addEventListener('igdc:member-auth-ready', schedule, true);
-    window.addEventListener('pageshow', schedule);
-    window.addEventListener('storage', schedule);
-
-    var deadline = Date.now() + 30000;
-    repeatTimer = window.setInterval(function(){
-      schedule();
-      if (Date.now() > deadline) {
-        window.clearInterval(repeatTimer);
-        repeatTimer = 0;
-      }
-    }, 750);
+  #mo-wrap {
+    position: absolute !important;
+    top: 108px !important;
+    right: 12px !important;
+    left: auto !important;
+    width: clamp(96px, calc(100vw - 238px), 180px) !important;
+    text-align: center !important;
   }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', arm, { once:true });
-  } else {
-    arm();
-  }
-})();
-</script>
-<!-- /IGDC donation navigation auth/country gate v1 -->
+}
+</style>
 </body>
 
 
