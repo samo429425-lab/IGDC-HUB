@@ -41,6 +41,150 @@
 <!-- /Supabase inline injection -->
 
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
+<style id="igdc-donation-access-gate-prehide">
+html[data-igdc-donation-gate="pending"] body{visibility:hidden!important;}
+</style>
+<script>
+document.documentElement.setAttribute("data-igdc-donation-gate","pending");
+</script>
+<script src="/assets/js/igdc-member-auth.js"></script>
+<script id="igdc-donation-access-gate">
+(function(){
+  "use strict";
+
+  var BLOCK_CLAIM = "https://igdcglobal.com/donation_blocked";
+  var settled = false;
+  var attempts = 0;
+
+  function normalizeRole(value){
+    return String(value == null ? "" : value)
+      .trim()
+      .toLowerCase()
+      .replace(/[\s.]+/g, "_");
+  }
+
+  function getAuth(){
+    if (window.IGDCMemberAuth) return window.IGDCMemberAuth;
+    try{
+      if (window.parent && window.parent !== window && window.parent.IGDCMemberAuth) {
+        return window.parent.IGDCMemberAuth;
+      }
+    }catch(e){}
+    return null;
+  }
+
+  function isOwnerOrAdmin(roles){
+    return (roles || []).some(function(role){
+      var value = normalizeRole(role);
+      return value === "owner" ||
+             value.indexOf("owner_") === 0 ||
+             value === "admin" ||
+             value === "super_admin" ||
+             value.indexOf("admin_") === 0;
+    });
+  }
+
+  function allow(){
+    if (settled) return;
+    settled = true;
+    document.documentElement.setAttribute("data-igdc-donation-gate","allowed");
+  }
+
+  function deny(reason){
+    if (settled) return;
+    settled = true;
+
+    function render(){
+      var message =
+        reason === "country"
+          ? "현재 접속 국가에서는 후원 서비스를 이용할 수 없습니다."
+          : reason === "session"
+            ? "국가 확인이 포함된 새 로그인 세션이 필요합니다. 로그아웃 후 다시 로그인해 주십시오."
+            : "회원 로그인 후 이용할 수 있습니다.";
+
+      document.body.innerHTML =
+        '<main role="main" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#f2f2f2;font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">' +
+          '<section style="width:min(520px,100%);padding:28px;border:1px solid #dcdcdc;border-radius:12px;background:#fff;text-align:center;box-shadow:0 4px 18px rgba(0,0,0,.08);">' +
+            '<h1 style="margin:0 0 14px;color:#004080;font-size:1.35rem;">후원 서비스 접근 제한</h1>' +
+            '<p style="margin:0;color:#333;line-height:1.65;">' + message + '</p>' +
+          '</section>' +
+        '</main>';
+
+      document.documentElement.setAttribute("data-igdc-donation-gate","denied");
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", render, { once:true });
+    } else {
+      render();
+    }
+  }
+
+  function check(finalCheck){
+    if (settled) return true;
+
+    var auth = getAuth();
+    if (!auth ||
+        typeof auth.isAuthenticated !== "function" ||
+        !auth.isAuthenticated()) {
+      if (finalCheck) deny("login");
+      return false;
+    }
+
+    var roles = [];
+    try{
+      roles = typeof auth.getRoles === "function" ? auth.getRoles() : [];
+    }catch(e){}
+
+    if (isOwnerOrAdmin(roles)) {
+      allow();
+      return true;
+    }
+
+    var payload = null;
+    try{
+      payload = typeof auth.getIdTokenPayload === "function"
+        ? auth.getIdTokenPayload()
+        : null;
+    }catch(e){}
+
+    var hasClaim = !!(
+      payload &&
+      Object.prototype.hasOwnProperty.call(payload, BLOCK_CLAIM)
+    );
+
+    if (!hasClaim) {
+      if (finalCheck) deny("session");
+      return false;
+    }
+
+    var blocked =
+      payload[BLOCK_CLAIM] === true ||
+      String(payload[BLOCK_CLAIM]).toLowerCase() === "true";
+
+    if (blocked) deny("country");
+    else allow();
+
+    return true;
+  }
+
+  function start(){
+    if (check(false)) return;
+    if (attempts < 25) {
+      attempts += 1;
+      window.setTimeout(start, 100);
+      return;
+    }
+    check(true);
+  }
+
+  document.addEventListener("igdc:member-auth-ready", start);
+  document.addEventListener("osauth:ready", start);
+  document.addEventListener("osauth:done", start, true);
+  window.addEventListener("pageshow", start);
+  start();
+})();
+</script>
 <meta charset="utf-8"/>
 <title>Globaler Spenden-Hub - IGTC Global</title>
 <style>
@@ -3976,7 +4120,22 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
     window.addEventListener('scroll', onAnyScroll, {passive:true});
     document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
     document.addEventListener('wheel', e=>{ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
-    document.addEventListener('touchmove', ()=>notify(false), {passive:true,capture:true});
+    var igdcTouchStartX=0, igdcTouchStartY=0, igdcTouchHideSent=false;
+    document.addEventListener('touchstart', function(e){
+      var t=e.touches&&e.touches.length===1&&e.touches[0];
+      if(!t) return;
+      igdcTouchStartX=t.clientX; igdcTouchStartY=t.clientY; igdcTouchHideSent=false;
+    }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(e){
+      if(igdcTouchHideSent) return;
+      var t=e.touches&&e.touches.length===1&&e.touches[0];
+      if(!t) return;
+      var dx=t.clientX-igdcTouchStartX, dy=t.clientY-igdcTouchStartY;
+      if(dy<=-14 && Math.abs(dy)>Math.abs(dx)*1.15){
+        igdcTouchHideSent=true;
+        notify(false);
+      }
+    }, {passive:true,capture:true});
     setTimeout(()=>notify(atTop()),50);
   }catch(_){}
 })();
