@@ -590,35 +590,6 @@ a[id*="qna"]{
   margin: 10px 12px !important;
 }
 </style>
-
-<style id="igdc-qa-panel-position-final-v1">
-/* IGDC Q&A modal position final: keep button/function intact, lift the modal near the index nav bottom. */
-.igdc-qa-modal .igdc-qa-panel,
-.igdc-qa-panel{
-  top:18px !important;
-  bottom:auto !important;
-  max-height:calc(100dvh - 36px) !important;
-  overflow:hidden !important;
-}
-.igdc-qa-modal .igdc-qa-body,
-.igdc-qa-panel .igdc-qa-body{
-  max-height:calc(100dvh - 150px) !important;
-  overflow-y:auto !important;
-  -webkit-overflow-scrolling:touch !important;
-}
-@media (max-width:768px){
-  .igdc-qa-modal .igdc-qa-panel,
-  .igdc-qa-panel{
-    top:14px !important;
-    bottom:auto !important;
-    max-height:calc(100dvh - 28px) !important;
-  }
-  .igdc-qa-modal .igdc-qa-body,
-  .igdc-qa-panel .igdc-qa-body{
-    max-height:calc(100dvh - 132px) !important;
-  }
-}
-</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -929,7 +900,22 @@ a[id*="qna"]{
     window.addEventListener('scroll', onAnyScroll, {passive:true});
     document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
     document.addEventListener('wheel', e=>{ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
-    document.addEventListener('touchmove', ()=>notify(false), {passive:true,capture:true});
+    var igdcTouchStartX=0, igdcTouchStartY=0, igdcTouchHideSent=false;
+    document.addEventListener('touchstart', function(e){
+      var t=e.touches&&e.touches.length===1&&e.touches[0];
+      if(!t) return;
+      igdcTouchStartX=t.clientX; igdcTouchStartY=t.clientY; igdcTouchHideSent=false;
+    }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(e){
+      if(igdcTouchHideSent) return;
+      var t=e.touches&&e.touches.length===1&&e.touches[0];
+      if(!t) return;
+      var dx=t.clientX-igdcTouchStartX, dy=t.clientY-igdcTouchStartY;
+      if(dy<=-14 && Math.abs(dy)>Math.abs(dx)*1.15){
+        igdcTouchHideSent=true;
+        notify(false);
+      }
+    }, {passive:true,capture:true});
     setTimeout(()=>notify(atTop()),50);
   }catch(_){}
 })();
