@@ -1057,7 +1057,22 @@ html, body {
     window.addEventListener('scroll', onAnyScroll, {passive:true});
     document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
     document.addEventListener('wheel', e=>{ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
-    document.addEventListener('touchmove', ()=>notify(false), {passive:true,capture:true});
+    var igdcTouchStartX=0, igdcTouchStartY=0, igdcTouchHideSent=false;
+    document.addEventListener('touchstart', function(e){
+      var t=e.touches&&e.touches.length===1&&e.touches[0];
+      if(!t) return;
+      igdcTouchStartX=t.clientX; igdcTouchStartY=t.clientY; igdcTouchHideSent=false;
+    }, {passive:true,capture:true});
+    document.addEventListener('touchmove', function(e){
+      if(igdcTouchHideSent) return;
+      var t=e.touches&&e.touches.length===1&&e.touches[0];
+      if(!t) return;
+      var dx=t.clientX-igdcTouchStartX, dy=t.clientY-igdcTouchStartY;
+      if(dy<=-14 && Math.abs(dy)>Math.abs(dx)*1.15){
+        igdcTouchHideSent=true;
+        notify(false);
+      }
+    }, {passive:true,capture:true});
     setTimeout(()=>notify(atTop()),50);
   }catch(_){}
 })();
@@ -1583,7 +1598,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 
