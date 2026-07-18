@@ -771,62 +771,74 @@ html:not([data-igdc-auth-ready="1"]) nav [data-role~="admin"] { display:none !im
 html:not([data-igdc-donation-ready="1"]) nav [data-igdc-donation-nav="1"] { display:none !important; }
 </style>
 
-<style id="igdc-mobile-portrait-header-auth-nanopin-v2">
-/* Mobile portrait only. The original header height/padding remain untouched. */
+
+<style id="igdc-mobile-header-auth-nanopin-v3">
+/* Mobile only: normalize the login/role boxes without changing header height. */
+@media (max-width: 1023.98px) {
+  #osLoginBtn,
+  #igtcRoleInline3 {
+    box-sizing: border-box !important;
+    width: 104px !important;
+    min-width: 104px !important;
+    max-width: 104px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    max-height: 34px !important;
+    padding: 0 10px !important;
+    line-height: 30px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    overflow: hidden !important;
+  }
+
+  #igtcRoleText3 {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    text-align: center !important;
+  }
+}
+
+/* Portrait only: preserve the original header box and align the top row. */
 @media (max-width: 768px) and (orientation: portrait) {
   header h1#mainTitle {
     box-sizing: border-box !important;
     width: 100% !important;
-    padding-left: 50px !important;
-    padding-right: 150px !important;
+    height: 27px !important;
+    margin: 0 !important;
+    padding-left: 44px !important;
+    padding-right: 188px !important;
+    transform: none !important;
+    font-size: clamp(14px, 4vw, 16.5px) !important;
+    line-height: 27px !important;
+    letter-spacing: -0.25px !important;
     text-align: left !important;
     white-space: nowrap !important;
     overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    transform: scale(.86) !important;
-    transform-origin: left center !important;
+    text-overflow: clip !important;
   }
 
-  /* Hide the subtitle letters but retain its original line box and header height. */
+  /* Hide only the letters; retain the original line box and header height. */
   header p#subTitle {
     visibility: hidden !important;
   }
 
-  /* Only the login and role badge move: directly below the existing Q&A button. */
+  /* Login and role remain directly below Q&A; only their dimensions are normalized. */
   #osLoginBtn {
     position: absolute !important;
     top: 46px !important;
     left: 0 !important;
-    width: 104px !important;
-    height: 32px !important;
-    padding: 0 8px !important;
-    box-sizing: border-box !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
   }
 
   #igtcRoleInline3 {
     position: absolute !important;
     top: 46px !important;
     left: 104px !important;
-    width: 104px !important;
-    min-width: 104px !important;
-    max-width: 104px !important;
-    height: 32px !important;
-    padding: 0 8px !important;
-    box-sizing: border-box !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    overflow: hidden !important;
-  }
-
-  #igtcRoleText3 {
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-    text-align: center !important;
   }
 }
 </style>
