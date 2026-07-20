@@ -17,7 +17,7 @@ const SlotStore = require("./global-slot-console-supabase");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const RegionalSelector = require("../regional-brokerage-autoselector");
 
-const VERSION = "commerce-country-automation-v1.0.0-private-candidate-only";
+const VERSION = "commerce-country-automation-v1.0.1-private-candidate-only";
 const POLICY_PREFIX = "igdc_country_automation_";
 const SOURCE_REF = "commerce-country-ai-control";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -26,6 +26,10 @@ const DEFAULT_MAX_CANDIDATES = 20;
 const DEFAULT_SCOPES_PER_RUN = 12;
 const MAX_SCOPES_PER_RUN = 24;
 let REGISTRY_CACHE = null;
+let BUNDLED_COUNTRY_REGISTRY = null;
+let BUNDLED_SUBDIVISION_REGISTRY = null;
+try { BUNDLED_COUNTRY_REGISTRY = require("../data/country-region-registry.v1.json"); } catch (_error) {}
+try { BUNDLED_SUBDIVISION_REGISTRY = require("../data/country-subdivision-registry.v1.json"); } catch (_error) {}
 
 function text(value) { return value == null ? "" : String(value).trim(); }
 function lower(value) { return text(value).toLowerCase().replace(/[\s.]+/g, "_"); }
@@ -76,8 +80,10 @@ function readJson(name) {
 }
 function registry() {
   if (REGISTRY_CACHE) return REGISTRY_CACHE;
-  const countryDoc = readJson("country-region-registry.v1.json") || { regions: [], countries: [] };
-  const subdivisionDoc = readJson("country-subdivision-registry.v1.json") || { countries: [] };
+  const countryDoc = (BUNDLED_COUNTRY_REGISTRY && typeof BUNDLED_COUNTRY_REGISTRY === "object" ? BUNDLED_COUNTRY_REGISTRY : null)
+    || readJson("country-region-registry.v1.json") || { regions: [], countries: [] };
+  const subdivisionDoc = (BUNDLED_SUBDIVISION_REGISTRY && typeof BUNDLED_SUBDIVISION_REGISTRY === "object" ? BUNDLED_SUBDIVISION_REGISTRY : null)
+    || readJson("country-subdivision-registry.v1.json") || { countries: [] };
   const subdivisionMap = new Map();
   for (const row of array(subdivisionDoc.countries)) {
     const country = normalizeCountry(row && row.countryCode);
