@@ -11,7 +11,7 @@
  */
 
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
-const VERSION="regional-brokerage-autoselector-v1.2.0-country-multilingual-commerce-discovery";
+const VERSION="regional-brokerage-autoselector-v1.5.0-market-signal-weighted-supplier-discovery";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -44,6 +44,7 @@ const COUNTRY_COMMERCE_LOCALE_OVERRIDES=Object.freeze({
   UG:"en,sw",UZ:"uz,ru,en",ZA:"en,af,zu,xh,st,tn",ZW:"sn,en,nd"
 });
 const MAX_COUNTRY_LANGUAGE_PORTFOLIO=12;
+const CATEGORY_KEYS=Object.freeze(["local_products","manufacturer_brands","food_household_essentials","beauty_personal_care","fashion","electronics_accessories","home_appliances_living","baby_family_education","agriculture_fishery_forestry","travel_local_services"]);
 
 const LOCAL_QUERY_PACKS=Object.freeze({
   en:{commerce:"official online store products buy delivery returns customer service",categories:["producer cooperative local products","manufacturer brand products","food groceries household essentials","beauty personal care products","clothing shoes bags","electronics accessories","home kitchen appliances","baby family education products","agricultural fishery forestry products","local travel products booking"]},
@@ -78,13 +79,53 @@ const COMMERCE_TEXT_RX=/(shop|store|product|buy|price|cart|catalog|mall|shopping
 const NON_COMMERCE_TEXT_RX=/(\.pdf\b|\bpdf\b|report|research|study|journal|paper|proceedings|conference|symposium|whitepaper|statistics|policy brief|trade agreement|free trade agreement|trade barriers|news article|press release|working paper|annual report|보고서|연구|논문|학술|통계|협정|기사|보도자료|報告書|研究|論文|統計|協定|ニュース|报告|研究|论文|统计|协定|新闻|rapport|recherche|étude|journal|conférence|informe|investigación|estudio|revista|conferencia|relatório|pesquisa|estudo|conferência|bericht|forschung|studie|konferenz|отчет|исследование|доклад|конференция|تقرير|بحث|دراسة|مؤتمر)/i;
 const BLOCKED_DOCUMENT_EXT_RX=/\.(pdf|docx?|pptx?|xlsx?|odt|ods|odp|rtf|csv|zip|rar|7z)(?:$|[?#])/i;
 const BLOCKED_REFERENCE_HOST_RX=/(^|\.)(wikipedia\.org|wikimedia\.org|namu\.wiki|researchgate\.net|academia\.edu|semanticscholar\.org|sciencedirect\.com|springer\.com|jstor\.org)$/i;
+const SUPPLIER_ROLE_TERMS=Object.freeze({
+  en:"manufacturer producer cooperative responsible seller local distributor official store",
+  ko:"제조사 생산자 협동조합 책임 판매업체 지역 유통업체 공식 판매처",
+  ja:"メーカー 生産者 協同組合 責任販売事業者 地域流通業者 公式販売店",
+  "zh-Hans":"制造商 生产者 合作社 责任销售商 地方经销商 官方商店",
+  "zh-Hant":"製造商 生產者 合作社 責任銷售商 地區經銷商 官方商店",
+  es:"fabricante productor cooperativa vendedor responsable distribuidor local tienda oficial",
+  pt:"fabricante produtor cooperativa vendedor responsável distribuidor local loja oficial",
+  fr:"fabricant producteur coopérative vendeur responsable distributeur local boutique officielle",
+  de:"Hersteller Erzeuger Genossenschaft verantwortlicher Verkäufer lokaler Händler offizieller Shop",
+  it:"produttore cooperativa venditore responsabile distributore locale negozio ufficiale",
+  nl:"fabrikant producent coöperatie verantwoordelijke verkoper lokale distributeur officiële winkel",
+  ru:"производитель поставщик кооператив ответственный продавец местный дистрибьютор официальный магазин",
+  uk:"виробник постачальник кооператив відповідальний продавець місцевий дистриб'ютор офіційний магазин",
+  ar:"مصنع منتج تعاونية بائع مسؤول موزع محلي متجر رسمي",
+  hi:"निर्माता उत्पादक सहकारी जिम्मेदार विक्रेता स्थानीय वितरक आधिकारिक स्टोर",
+  bn:"প্রস্তুতকারক উৎপাদক সমবায় দায়িত্বশীল বিক্রেতা স্থানীয় পরিবেশক অফিসিয়াল স্টোর",
+  ur:"مینوفیکچرر پروڈیوسر کوآپریٹو ذمہ دار فروخت کنندہ مقامی ڈسٹری بیوٹر آفیشل اسٹور",
+  id:"produsen koperasi penjual bertanggung jawab distributor lokal toko resmi",
+  ms:"pengeluar koperasi penjual bertanggungjawab pengedar tempatan kedai rasmi",
+  vi:"nhà sản xuất hợp tác xã người bán chịu trách nhiệm nhà phân phối địa phương cửa hàng chính thức",
+  th:"ผู้ผลิต สหกรณ์ ผู้ขายที่รับผิดชอบ ผู้จัดจำหน่ายท้องถิ่น ร้านค้าอย่างเป็นทางการ",
+  tr:"üretici kooperatif sorumlu satıcı yerel distribütör resmi mağaza",
+  sw:"mtengenezaji mzalishaji ushirika muuzaji anayewajibika msambazaji wa eneo duka rasmi"
+});
+const SUPPLIER_TEXT_RX=/(manufacturer|producer|cooperative|supplier|authorized distributor|local distributor|responsible seller|official store|제조사|생산자|협동조합|책임 판매|지역 유통|공식 판매처|メーカー|生産者|協同組合|責任販売|地域流通|製造商|制造商|生產者|生产者|合作社|責任銷售|责任销售|經銷商|经销商|fabricante|productor|coopérative|producteur|hersteller|erzeuger|genossenschaft|produttore|producent|производитель|поставщик|кооператив|مصنع|منتج|تعاونية|निर्माता|उत्पादक|सहकारी|প্রস্তুতকারক|উৎপাদক|সমবায়|مینوفیکچرر|پروڈیوسر|کوآپریٹو|produsen|koperasi|pengeluar|nhà sản xuất|hợp tác xã|ผู้ผลิต|สหกรณ์|üretici|kooperatif|mtengenezaji|mzalishaji|ushirika)/i;
+const DIRECT_SALE_TEXT_RX=/(add to cart|buy now|checkout|shop now|online store|catalog|products|장바구니|바로구매|구매하기|온라인몰|상품목록|カート|購入|オンラインストア|购物车|立即购买|網上商店|网上商城|añadir al carrito|comprar ahora|cesta|loja online|acheter maintenant|panier|jetzt kaufen|warenkorb|acquista ora|carrello|winkelwagen|купить сейчас|корзина|اشتر الآن|سلة|अभी खरीदें|कार्ट|এখনই কিনুন|কার্ট|ابھی خریدیں|ٹوکری|beli sekarang|keranjang|mua ngay|giỏ hàng|ซื้อเลย|ตะกร้า|hemen al|sepet)/i;
+const PAYMENT_TEXT_RX=/(payment|pay by|credit card|debit card|visa|mastercard|paypal|결제|신용카드|카드결제|支払い|決済|付款|支付|pago|paiement|zahlung|pagamento|betaling|оплата|الدفع|भुगतान|পেমেন্ট|ادائیگی|pembayaran|thanh toán|ชำระเงิน|ödeme)/i;
+const LEGAL_IDENTITY_TEXT_RX=/(company registration|business registration|registered office|legal notice|terms and conditions|사업자등록|통신판매업|회사소개|법적 고지|特定商取引法|会社概要|企業信息|企业信息|工商信息|aviso legal|registro mercantil|mentions légales|impressum|registro imprese|bedrijfsgegevens|регистрац|реквизит|السجل التجاري|company profile)/i;
+const REFUND_TEXT_RX=/(refund(?:s| policy)?|money[- ]back|환불|退款|返金|reembolso|remboursement|erstattung|rimborso|terugbetaling|возврат средств|استرداد|रिफंड|রিফান্ড|ریفنڈ|pengembalian dana|hoàn tiền|คืนเงิน|para iade)/i;
+const EXCHANGE_TEXT_RX=/(exchange(?:s| policy)?|replacement|교환|交換|换货|換貨|cambio|échange|umtausch|sostituzione|omruilen|обмен|استبدال|विनिमय|বদল|تبدیلی|penukaran|đổi hàng|เปลี่ยนสินค้า|değişim)/i;
+const WARRANTY_TEXT_RX=/(warranty|guarantee|after[- ]sales|service center|repair service|보증|품질보증|AS센터|애프터서비스|保証|售后|售後|garantía|garantie|garantiebedingungen|garanzia|garantie|гарантия|ضمان|वारंटी|ওয়ারেন্টি|وارنٹی|garansi|bảo hành|รับประกัน|garanti)/i;
+const TRACKING_TEXT_RX=/(order tracking|track(?:ing)? number|shipment tracking|배송조회|운송장|배송 추적|追跡|配送追蹤|配送追踪|seguimiento del pedido|rastreamento|suivi de commande|sendungsverfolgung|tracciamento|track en trace|отслеживание|تتبع الشحنة|ऑर्डर ट्रैकिंग|অর্ডার ট্র্যাকিং|آرڈر ٹریکنگ|pelacakan pesanan|theo dõi đơn hàng|ติดตามคำสั่งซื้อ|sipariş takibi)/i;
+const DELIVERY_COMMITMENT_TEXT_RX=/(estimated delivery|delivery time|ships within|business days|영업일 이내|배송 예정|도착 예정|お届け予定|発送予定|预计送达|預計送達|plazo de entrega|prazo de entrega|délai de livraison|lieferzeit|tempi di consegna|levertijd|срок доставки|موعد التسليم|डिलीवरी समय|ডেলিভারি সময়|ترسیل کا وقت|waktu pengiriman|thời gian giao hàng|ระยะเวลาจัดส่ง|teslimat süresi)/i;
+const CONTACT_CHANNEL_TEXT_RX=/(mailto:|tel:|customer service|customer support|contact us|live chat|help desk|고객센터|문의하기|전화 상담|채팅 상담|お問い合わせ|客服|客戶服務|atención al cliente|service client|kundenservice|assistenza clienti|klantenservice|поддержка клиентов|خدمة العملاء|ग्राहक सेवा|কাস্টমার সেবা|کسٹمر سروس|layanan pelanggan|chăm sóc khách hàng|บริการลูกค้า|müşteri hizmetleri)/i;
+const TERMS_PRIVACY_TEXT_RX=/(privacy policy|terms of service|terms and conditions|consumer terms|개인정보처리방침|이용약관|구매약관|プライバシーポリシー|利用規約|隐私政策|隱私政策|服务条款|服務條款|política de privacidad|termos e condições|politique de confidentialité|conditions générales|datenschutz|allgemeine geschäftsbedingungen|informativa sulla privacy|algemene voorwaarden|политика конфиденциальности|شروط الاستخدام|سياسة الخصوصية|गोपनीयता नीति|শর্তাবলী|شرائط و ضوابط|kebijakan privasi|chính sách bảo mật|นโยบายความเป็นส่วนตัว|gizlilik politikası)/i;
+const AFFILIATE_TEXT_RX=/(affiliate|partner program|referral program|dealer program|wholesale inquiry|제휴|파트너스|추천인|도매문의|販売パートナー|提携|联盟计划|聯盟計畫|programa de afiliados|programme d'affiliation|partnerprogramm|programma di affiliazione|партнерская программа|برنامج الشركاء|सहबद्ध कार्यक्रम|অ্যাফিলিয়েট|افیلیئیٹ|program afiliasi|chương trình liên kết|โปรแกรมพันธมิตร|ortaklık programı)/i;
+const CATALOG_BREADTH_TEXT_RX=/(all categories|shop by category|product categories|catalog|collections|전체 카테고리|상품 카테고리|제품군|カテゴリー|商品一覧|全部分类|全部分類|categorías|catálogo|catégories|catalogue|kategorien|produktkatalog|categorie|collecties|каталог|الفئات|الكتالوج|श्रेणियाँ|ক্যাটাগরি|زمرہ جات|kategori produk|danh mục sản phẩm|หมวดหมู่สินค้า|ürün kategorileri)/i;
+const POLICY_LINK_TEXT_RX=/(return|refund|exchange|shipping|delivery|warranty|support|contact|terms|privacy|legal|반품|환불|교환|배송|보증|고객|문의|약관|개인정보|返品|返金|配送|保証|お問い合わせ|利用規約|退货|退款|配送|售后|客服|条款|隐私|devoluci|reembols|envío|entrega|garant|contact|privacidad|retour|rembourse|livraison|garantie|kundenservice|rückgabe|lieferung|datenschutz|resi|rimborso|spedizione|garanzia|возврат|доставка|гарантия|إرجاع|استرداد|توصيل|ضمان|वापसी|रिफंड|डिलीवरी|वारंटी|ফেরত|রিফান্ড|ডেলিভারি|واپسی|ریفنڈ|ترسیل|pengembalian|pengiriman|garansi|đổi trả|hoàn tiền|giao hàng|bảo hành|คืนสินค้า|คืนเงิน|จัดส่ง|รับประกัน|iade|teslimat|garanti)/i;
+const PRODUCT_DETAIL_URL_RX=/\/(?:product|products|item|items|goods|detail|p|dp)\/[A-Za-z0-9._~-]+(?:\/|$|[?#])/i;
 
 
 function text(v){return v==null?"":String(v).trim();}
 function lower(v){return text(v).toLowerCase();}
 function first(){for(const v of arguments){const t=text(v);if(t)return t;}return "";}
 function withTimeout(promise,ms){return new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Object.assign(new Error("timeout"),{code:"TIMEOUT"})),ms);Promise.resolve(promise).then(v=>{clearTimeout(t);resolve(v);},e=>{clearTimeout(t);reject(e);});});}
-function cacheKey(geo,mode){return [VERSION,geo.country,geo.region||"-",mode||"front"].join(":");}
+function cacheKey(geo,mode){const weights=CATEGORY_KEYS.map(key=>Number(geo&&geo.categoryWeights&&geo.categoryWeights[key])||0).join(",");return [VERSION,geo.country,geo.region||"-",mode||"front",text(geo&&geo.signalPlanVersion),weights].join(":");}
 function getCache(key){const row=CACHE.get(key);if(!row||Date.now()-row.at>(row.ttl||CACHE_TTL)){CACHE.delete(key);return null;}return row.value;}
 function setCache(key,value){CACHE.set(key,{at:Date.now(),ttl:value&&value.snapshot?CACHE_TTL:90000,value});if(CACHE.size>120){const firstKey=CACHE.keys().next().value;CACHE.delete(firstKey);}return value;}
 function extractItems(result){if(!result)return[];if(Array.isArray(result))return result;if(Array.isArray(result.items))return result.items;if(Array.isArray(result.results))return result.results;if(result.data&&Array.isArray(result.data.items))return result.data.items;return[];}
@@ -125,13 +166,20 @@ function languagePriorityPlan(geo,locales){
 function baseLocale(locale){return text(locale).split("-")[0].toLowerCase()||"en";}
 function googleLocale(locale){return GOOGLE_LOCALE_ALIASES[locale]||locale||"en";}
 function packForLocale(locale){return LOCAL_QUERY_PACKS[locale]||LOCAL_QUERY_PACKS[baseLocale(locale)]||null;}
+function supplierRoleTerms(locale){return SUPPLIER_ROLE_TERMS[locale]||SUPPLIER_ROLE_TERMS[baseLocale(locale)]||SUPPLIER_ROLE_TERMS.en;}
 function localCountryName(country,locale,fallback){
   try{const names=new Intl.DisplayNames([locale],{type:"region"});return text(names.of(country))||fallback||country;}catch(_e){return fallback||country;}
 }
 function queryCategories(geo){
-  const day=Math.floor(Date.now()/86400000);const size=LOCAL_QUERY_PACKS.en.categories.length;
+  const day=Math.floor(Date.now()/86400000),size=LOCAL_QUERY_PACKS.en.categories.length;
   const offset=stableOffset([geo.country,geo.region||"NATIONWIDE",day].join("|"),size);
-  return [offset,(offset+1)%size,(offset+2)%size];
+  const rotated=Array.from({length:size},(_,step)=>(offset+step)%size);
+  const weights=geo&&geo.categoryWeights&&typeof geo.categoryWeights==="object"?geo.categoryWeights:{};
+  const ranked=rotated.slice().sort((a,b)=>{const aw=Number(weights[CATEGORY_KEYS[a]])||0,bw=Number(weights[CATEGORY_KEYS[b]])||0;return bw-aw||rotated.indexOf(a)-rotated.indexOf(b);});
+  const positive=ranked.filter(index=>(Number(weights[CATEGORY_KEYS[index]])||0)>0);
+  const neutral=ranked.filter(index=>(Number(weights[CATEGORY_KEYS[index]])||0)>=0);
+  const chosen=[];for(const index of positive.concat(neutral,ranked)){if(!chosen.includes(index))chosen.push(index);if(chosen.length>=3)break;}
+  return chosen.length===3?chosen:[offset,(offset+1)%size,(offset+2)%size];
 }
 function parseOpenAiJson(raw){
   const value=text(raw);if(!value)return null;
@@ -160,7 +208,7 @@ async function openAiLocalizedQueries(geo,locale,indices,localName){
       method:"POST",signal:controller?controller.signal:undefined,
       headers:{"Content-Type":"application/json",Authorization:"Bearer "+key},
       body:JSON.stringify({model,temperature:0.05,response_format:{type:"json_object"},messages:[
-        {role:"system",content:"Create exactly three concise commerce search queries in the requested locale. Use the country's normal local shopping vocabulary. Each query must seek official manufacturers, producers, cooperatives, responsible local sellers, real products, delivery, returns, and customer service. Exclude reports, PDFs, news, research, wikis, marketplaces, and unrelated documents. Do not include or invent URLs. Return JSON only: {\"queries\":[\"...\",\"...\",\"...\"]}."},
+        {role:"system",content:"Create exactly three concise supplier-discovery search queries in the requested locale. Each query must seek real manufacturers, producers, cooperatives, responsible sellers, small or regional distributors, and official stores that conduct their own sales and clearly handle payment, delivery, returns, refunds, and customer support. Search for the responsible business, not individual product listings. Exclude reports, PDFs, news, research, wikis, major marketplaces, classifieds, and unrelated documents. Do not include or invent URLs. Return JSON only: {\"queries\":[\"...\",\"...\",\"...\"]}."},
         {role:"user",content:JSON.stringify({countryCode:geo.country,countryName:localName,region:geo.region||"NATIONWIDE",locale,categories})}
       ]})
     });
@@ -179,13 +227,13 @@ async function queriesForLocale(geo,locale,indices){
   const locality=[geo.region&&geo.region!=="NATIONWIDE"?geo.region:"",localName].filter(Boolean).join(" ");
   const pack=packForLocale(locale);
   if(pack){
-    return{locale,localName,origin:"static-local-pack",error:null,queries:indices.map(index=>`${locality} ${pack.categories[index%pack.categories.length]} ${pack.commerce}`.replace(/\s+/g," ").trim())};
+    return{locale,localName,origin:"static-local-pack",error:null,queries:indices.map(index=>`${locality} ${pack.categories[index%pack.categories.length]} ${supplierRoleTerms(locale)} ${pack.commerce}`.replace(/\s+/g," ").trim())};
   }
   const ai=await openAiLocalizedQueries(geo,locale,indices,localName);
   if(ai.queries.length)return{locale,localName,origin:ai.origin,error:null,queries:ai.queries.map(q=>`${locality} ${q}`.replace(/\s+/g," ").trim())};
   const english=LOCAL_QUERY_PACKS.en;const englishName=localCountryName(geo.country,"en",fallbackName);
   const englishLocality=[geo.region&&geo.region!=="NATIONWIDE"?geo.region:"",englishName].filter(Boolean).join(" ");
-  return{locale:"en",localName:englishName,origin:"english-language-fallback",error:ai.error,queries:indices.map(index=>`${englishLocality} ${english.categories[index]} ${english.commerce}`.replace(/\s+/g," ").trim())};
+  return{locale:"en",localName:englishName,origin:"english-language-fallback",error:ai.error,queries:indices.map(index=>`${englishLocality} ${english.categories[index]} ${supplierRoleTerms("en")} ${english.commerce}`.replace(/\s+/g," ").trim())};
 }
 async function discoveryQueryPlan(geo){
   const locales=localeList(geo.country);const indices=queryCategories(geo);
@@ -208,7 +256,7 @@ async function discoveryQueryPlan(geo){
     for(const bundle of bundles){addRow(bundle,round);if(rows.length>=MAX_PROVIDER_CALLS)break;}
     round+=1;
   }
-  return{rows:rows.slice(0,MAX_PROVIDER_CALLS),locales,selectedLocales:rows.map(row=>row.locale),primaryLocale:locales[0]||"en"};
+  return{rows:rows.slice(0,MAX_PROVIDER_CALLS),locales,selectedLocales:rows.map(row=>row.locale),primaryLocale:locales[0]||"en",categoryIndices:indices,categoryKeys:indices.map(index=>CATEGORY_KEYS[index]),categoryWeights:Object.assign({},geo.categoryWeights||{})};
 }
 function envFirst(){
   for(const name of arguments){const value=text(process.env[name]);if(value)return value;}
@@ -246,7 +294,7 @@ async function fetchJson(url,options,timeoutMs){
   }
   throw lastError||new Error("provider_error");
 }
-function googleKeys(){return{key:envFirst("GOOGLE_API_KEY","GOOGLE_SEARCH_API_KEY","GOOGLE_CUSTOM_SEARCH_API_KEY","GOOGLE_CLOUD_API_KEY"),cx:envFirst("GOOGLE_CSE_ID","GOOGLE_CX","GOOGLE_SEARCH_ENGINE_ID","GOOGLE_CUSTOM_SEARCH_ENGINE_ID","GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID")};}
+function googleKeys(){return{key:envFirst("GOOGLE_CUSTOM_SEARCH_API_KEY","GOOGLE_SEARCH_API_KEY","GOOGLE_API_KEY","GOOGLE_CLOUD_API_KEY"),cx:envFirst("GOOGLE_CSE_ID","GOOGLE_CX","GOOGLE_SEARCH_ENGINE_ID","GOOGLE_CUSTOM_SEARCH_ENGINE_ID","GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID")};}
 function naverKeys(){return{id:envFirst("NAVER_API_KEY","NAVER_CLIENT_ID","NAVER_SEARCH_CLIENT_ID","NAVER_OPENAPI_CLIENT_ID"),secret:envFirst("NAVER_CLIENT_SECRET","NAVER_API_SECRET","NAVER_SEARCH_CLIENT_SECRET","NAVER_OPENAPI_CLIENT_SECRET")};}
 function resultText(item){return [item&&item.title,item&&item.name,item&&item.summary,item&&item.snippet,item&&item.url,item&&item.link].map(text).join(" ");}
 function obviousNonCommerceReason(item){
@@ -254,6 +302,7 @@ function obviousNonCommerceReason(item){
   if(!u)return "invalid_url";
   if(BLOCKED_DOCUMENT_EXT_RX.test(u.pathname+u.search))return "document_file";
   if(BLOCKED_REFERENCE_HOST_RX.test(u.hostname))return "reference_or_research_host";
+  if(Core.isMarketplace(item,u.toString()))return "major_marketplace_or_aggregator";
   const hay=resultText(item);
   if(NON_COMMERCE_TEXT_RX.test(hay)&&!COMMERCE_TEXT_RX.test(hay))return "non_commerce_document";
   return "";
@@ -261,11 +310,13 @@ function obviousNonCommerceReason(item){
 function commerceHeuristicScore(item){
   const rawUrl=first(item&&item.url,item&&item.link);const u=safeHttpUrl(rawUrl);if(!u)return-100;
   const hay=resultText(item);let score=0;
-  if(COMMERCE_TEXT_RX.test(hay))score+=8;
-  if(/\/(shop|store|product|products|item|items|catalog|category|collection|collections|mall)(?:\/|$|[?#])/i.test(u.pathname+u.search))score+=8;
-  if(/(official|manufacturer|producer|cooperative|brand|authorized|공식|제조사|생산자|협동조합|メーカー|公式|官方|fabricante|producteur|hersteller|производитель|مصنع)/i.test(hay))score+=4;
-  if(/([$€£¥₩₹₽]|price|가격|価格|价格|precio|prix|preis|цена|سعر)/i.test(hay))score+=3;
-  if(obviousNonCommerceReason(item))score-=40;
+  if(SUPPLIER_TEXT_RX.test(hay))score+=14;
+  if(COMMERCE_TEXT_RX.test(hay))score+=5;
+  if(/\/(about|company|brand|manufacturer|producer|cooperative|wholesale|distribution|store|shop|catalog)(?:\/|$|[?#])/i.test(u.pathname+u.search))score+=7;
+  if(DIRECT_SALE_TEXT_RX.test(hay))score+=5;
+  if(PAYMENT_TEXT_RX.test(hay))score+=3;
+  if(PRODUCT_DETAIL_URL_RX.test(u.pathname+u.search))score-=8;
+  if(obviousNonCommerceReason(item))score-=50;
   return score;
 }
 function commerceFirst(items){return (items||[]).filter(item=>!obviousNonCommerceReason(item)).sort((a,b)=>commerceHeuristicScore(b)-commerceHeuristicScore(a));}
@@ -348,55 +399,149 @@ function htmlTextScore(value){
   const t=String(value||"");
   return{
     shipping:/(shipping|delivery|ship to|dispatch|배송|배달|출고|配達|配送|発送|送貨|送货|envío|entrega|livraison|expédition|lieferung|versand|spedizione|bezorging|доставка|توصيل|شحن|डिलीवरी|वितरण|ডেলিভারি|ترسیل|pengiriman|penghantaran|giao hàng|จัดส่ง|usafirishaji)/i.test(t),
-    returns:/(return(?:s| policy)?|refund(?:s| policy)?|exchange(?:s)?|반품|환불|교환|返品|返金|交換|退貨|退款|退货|devoluciones|reembolso|retours|remboursement|rückgabe|erstattung|resi|rimborso|retourneren|terugbetaling|возврат|обмен|إرجاع|استرداد|वापसी|रिफंड|ফেরত|ریفنڈ|pengembalian|pemulangan|đổi trả|hoàn tiền|คืนสินค้า|คืนเงิน|marejesho)/i.test(t),
-    service:/(customer service|customer support|contact us|support center|고객센터|고객 지원|문의|カスタマーサービス|お問い合わせ|客服|客戶服務|atención al cliente|servicio al cliente|service client|kundenservice|assistenza clienti|klantenservice|поддержка клиентов|خدمة العملاء|ग्राहक सेवा|কাস্টমার সেবা|کسٹمر سروس|layanan pelanggan|khidmat pelanggan|chăm sóc khách hàng|บริการลูกค้า|huduma kwa wateja)/i.test(t),
-    official:/(official|manufacturer|producer|cooperative|brand store|authorized distributor|공식|제조사|생산자|협동조합|농협|축협|수협|공판장|총판|公式|メーカー|生産者|協同組合|官方|製造商|制造商|生產者|生产者|合作社|oficial|fabricante|productor|cooperativa|officiel|fabricant|producteur|coopérative|offiziell|hersteller|erzeuger|genossenschaft|ufficiale|produttore|cooperativa|officieel|fabrikant|producent|coöperatie|официальный|производитель|кооператив|رسمي|مصنع|منتج|تعاونية|आधिकारिक|निर्माता|सहकारी|অফিসিয়াল|প্রস্তুতকারক|সমবায়|resmi|produsen|koperasi|rasmi|pengeluar|chính thức|nhà sản xuất|hợp tác xã|ทางการ|ผู้ผลิต|สหกรณ์|rasmi|mzalishaji|ushirika)/i.test(t)
+    returns:/(return(?:s| policy)?|exchange(?:s)?|반품|교환|返品|交換|退貨|退货|devoluciones|retours|rückgabe|resi|retourneren|возврат|обмен|إرجاع|वापसी|ফেরত|واپسی|pengembalian|pemulangan|đổi trả|คืนสินค้า|marejesho)/i.test(t),
+    refund:REFUND_TEXT_RX.test(t),
+    exchange:EXCHANGE_TEXT_RX.test(t),
+    warranty:WARRANTY_TEXT_RX.test(t),
+    tracking:TRACKING_TEXT_RX.test(t),
+    deliveryCommitment:DELIVERY_COMMITMENT_TEXT_RX.test(t),
+    service:/(customer service|customer support|contact us|support center|help desk|고객센터|고객 지원|문의|カスタマーサービス|お問い合わせ|客服|客戶服務|atención al cliente|servicio al cliente|service client|kundenservice|assistenza clienti|klantenservice|поддержка клиентов|خدمة العملاء|ग्राहक सेवा|কাস্টমার সেবা|کسٹمر سروس|layanan pelanggan|khidmat pelanggan|chăm sóc khách hàng|บริการลูกค้า|huduma kwa wateja)/i.test(t),
+    contactChannel:CONTACT_CHANNEL_TEXT_RX.test(t),
+    payment:PAYMENT_TEXT_RX.test(t),
+    securePayment:/(secure checkout|secure payment|ssl payment|3d secure|pci dss|안전결제|보안결제|安全な支払い|安全支付|pago seguro|paiement sécurisé|sichere zahlung|pagamento sicuro|veilige betaling|безопасная оплата|دفع آمن|सुरक्षित भुगतान|নিরাপদ পেমেন্ট|محفوظ ادائیگی|pembayaran aman|thanh toán an toàn|ชำระเงินปลอดภัย|güvenli ödeme)/i.test(t),
+    directSales:DIRECT_SALE_TEXT_RX.test(t),
+    legalIdentity:LEGAL_IDENTITY_TEXT_RX.test(t),
+    termsPrivacy:TERMS_PRIVACY_TEXT_RX.test(t),
+    affiliatePotential:AFFILIATE_TEXT_RX.test(t),
+    catalogBreadth:CATALOG_BREADTH_TEXT_RX.test(t),
+    supplierRole:SUPPLIER_TEXT_RX.test(t),
+    manufacturer:/(manufacturer|factory|제조사|제조업체|メーカー|製造商|制造商|fabricante|fabricant|hersteller|produttore|производитель|مصنع|निर्माता|প্রস্তুতকারক|مینوفیکچرر|produsen|pengeluar|nhà sản xuất|ผู้ผลิต|üretici|mtengenezaji)/i.test(t),
+    producer:/(producer|grower|farm|생산자|농장|양식장|生産者|農場|生產者|生产者|productor|producteur|erzeuger|produttore|производитель|منتج|उत्पादक|উৎপাদক|پروڈیوسر|produsen|nhà sản xuất|ผู้ผลิต|mzalishaji)/i.test(t),
+    cooperative:/(cooperative|co-op|협동조합|농협|축협|수협|協同組合|合作社|cooperativa|coopérative|genossenschaft|кооператив|تعاونية|सहकारी|সমবায়|کوآپریٹو|koperasi|hợp tác xã|สหกรณ์|kooperatif|ushirika)/i.test(t),
+    distributor:/(authorized distributor|local distributor|wholesale distributor|총판|공식 유통|지역 유통|대리점|卸売|販売代理店|經銷商|经销商|distribuidor|distributeur|händler|distributore|distributeur|дистрибьютор|موزع|वितरक|পরিবেশক|ڈسٹری بیوٹر|distributor|pengedar|nhà phân phối|ผู้จัดจำหน่าย|distribütör|msambazaji)/i.test(t),
+    retailer:/(responsible seller|official seller|official store|책임 판매|공식 판매처|직영몰|公式販売店|公式ストア|官方商店|vendedor responsable|boutique officielle|offizieller shop|negozio ufficiale|officiële winkel|официальный магазин|بائع مسؤول|متجر رسمي|जिम्मेदार विक्रेता|অফিসিয়াল স্টোর|ذمہ دار فروخت کنندہ|toko resmi|kedai rasmi|cửa hàng chính thức|ร้านค้าอย่างเป็นทางการ|sorumlu satıcı|duka rasmi)/i.test(t),
+    official:/(official|authorized|company profile|about us|공식|회사소개|법인|公式|会社概要|官方|企業信息|企业信息|oficial|officiel|offiziell|ufficiale|officieel|официальный|رسمي|आधिकारिक|অফিসিয়াল|آفیشل|resmi|rasmi|chính thức|ทางการ)/i.test(t)
   };
+}
+function policyPageUrls(html,baseUrl){
+  const base=safeHttpUrl(baseUrl);if(!base)return[];
+  const out=[],seen=new Set();const rx=/<a\b[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;let m;
+  while((m=rx.exec(String(html||"")))){
+    const label=stripHtml(m[2]);const href=text(m[1]);if(!POLICY_LINK_TEXT_RX.test(label+" "+href))continue;
+    let u;try{u=new URL(href,base.toString());}catch(_e){continue;}
+    if(!sameSite(base.toString(),u.toString())||!["http:","https:"].includes(u.protocol))continue;
+    u.hash="";const key=u.toString();if(seen.has(key)||key===base.toString())continue;seen.add(key);out.push(key);if(out.length>=4)break;
+  }
+  return out;
+}
+async function fetchPolicyText(url,controller){
+  try{
+    const response=await fetch(url,{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-BrokerageVerifier/1.2 (+https://igdcglobal.com)"}});
+    if(!response.ok)return"";const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return"";
+    const length=Number(response.headers.get("content-length")||0);if(length>250000)return"";return(await response.text()).slice(0,250000);
+  }catch(_e){return"";}
 }
 function flattenJsonLd(value,out){if(!value)return;if(Array.isArray(value)){value.forEach(v=>flattenJsonLd(v,out));return;}if(typeof value!=="object")return;out.push(value);if(Array.isArray(value["@graph"]))flattenJsonLd(value["@graph"],out);}
 function jsonLdEvidence(html,geo){
   const nodes=[];const rx=/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;let m;
   while((m=rx.exec(html))){try{flattenJsonLd(JSON.parse(m[1]),nodes);}catch(_e){}}
-  let org=false,product=false,matchCountry=false,matchRegion=false,detectedCountry="",detectedRegion="";
+  let org=false,product=false,offer=false,matchCountry=false,matchRegion=false,detectedCountry="",detectedRegion="",orgName="",orgUrl="",orgType="";
   for(const node of nodes){
     const type=Array.isArray(node["@type"])?node["@type"].join(" "):String(node["@type"]||"");
-    if(/Organization|LocalBusiness|Store|Farm|WholesaleStore|OnlineStore|Corporation/i.test(type))org=true;
-    if(/Product|Offer|ItemList/i.test(type))product=true;
+    if(/Organization|LocalBusiness|Store|Farm|WholesaleStore|OnlineStore|Corporation|Brand/i.test(type)){
+      org=true;orgType=orgType||type;orgName=orgName||text(node.name||node.legalName);orgUrl=orgUrl||text(node.url||node.sameAs&&node.sameAs[0]);
+    }
+    if(/Product|ItemList/i.test(type))product=true;
+    if(/Offer|AggregateOffer/i.test(type)||node.offers)offer=true;
     const address=node.address||{};
-    const country=Core.normalizeCountry(address.addressCountry||node.areaServed||node.countryOfOrigin||"");
+    const addressCountry=address&&typeof address.addressCountry==="object"?address.addressCountry.name||address.addressCountry.code:address.addressCountry;
+    const areaCountry=node.areaServed&&typeof node.areaServed==="object"?node.areaServed.name||node.areaServed.addressCountry:node.areaServed;
+    const country=Core.normalizeCountry(addressCountry||areaCountry||node.countryOfOrigin||"");
     const region=Core.normalizeRegion(address.addressRegion||node.areaServedRegion||"",country||geo.country);
     if(country){detectedCountry=detectedCountry||country;if(geo.country&&country===geo.country)matchCountry=true;}
     if(region){detectedRegion=detectedRegion||region;if(geo.region&&region===geo.region)matchRegion=true;}
   }
-  return{org,product,matchCountry,matchRegion,country:detectedCountry,region:detectedRegion};
+  return{org,product,offer,matchCountry,matchRegion,country:detectedCountry,region:detectedRegion,orgName,orgUrl,orgType};
+}
+function sameSite(left,right){
+  const a=safeHttpUrl(left),b=safeHttpUrl(right);if(!a||!b)return false;
+  const ah=a.hostname.toLowerCase().replace(/^www\./,""),bh=b.hostname.toLowerCase().replace(/^www\./,"");
+  return ah===bh||ah.endsWith("."+bh)||bh.endsWith("."+ah);
+}
+function supplierType(words,ld){
+  if(words.cooperative)return"cooperative";
+  if(words.producer||/Farm/i.test(ld.orgType||""))return"producer";
+  if(words.manufacturer)return"manufacturer";
+  if(words.distributor||/Wholesale/i.test(ld.orgType||""))return"regional_distributor";
+  if(words.retailer||/Store|LocalBusiness|OnlineStore/i.test(ld.orgType||""))return"responsible_seller";
+  return ld.org?"responsible_business":"unclassified";
+}
+function supplierLandingUrl(finalUrl,ld){
+  if(ld.orgUrl&&sameSite(finalUrl.toString(),ld.orgUrl)){const official=safeHttpUrl(ld.orgUrl);if(official)return official.toString();}
+  return finalUrl.origin+"/";
 }
 async function inspectCandidate(item,geo){
-  const url=Core.externalUrl(item);if(!url)return item;
-  const u=safeHttpUrl(url);if(!u)return item;
+  const discoveredUrl=Core.externalUrl(item);if(!discoveredUrl)return item;
+  const u=safeHttpUrl(discoveredUrl);if(!u)return item;
+  let timer=null;
   try{
-    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),PAGE_CHECK_TIMEOUT);
-    const response=await fetch(u.toString(),{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-BrokerageVerifier/1.0 (+https://igdc.example)"}});clearTimeout(timer);
+    const controller=new AbortController();timer=setTimeout(()=>controller.abort(),PAGE_CHECK_TIMEOUT);
+    const response=await fetch(u.toString(),{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-BrokerageVerifier/1.2 (+https://igdcglobal.com)"}});
     if(!response.ok)return item;
     const finalUrl=safeHttpUrl(response.url||u.toString());if(!finalUrl)return item;
     const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return item;
     const length=Number(response.headers.get("content-length")||0);if(length>550000)return item;
     const html=(await response.text()).slice(0,550000);
-    const words=htmlTextScore(html);const ld=jsonLdEvidence(html,geo);
-    const evidence=Object.assign({},item.brokerageVerification||{}, { automated:true, inspectedAt:new Date().toISOString(), official:words.official||ld.org, shipping:words.shipping, returns:words.returns, service:words.service, jsonLdOrganization:ld.org, jsonLdProduct:ld.product, inspectedUrl:finalUrl.toString() });
-    // Do not infer a seller's legal distribution market merely from the visitor's IP.
-    // Only retain a live candidate when its source already carries a market scope,
-    // or the official page exposes country/region metadata through JSON-LD.
+    const policyUrls=policyPageUrls(html,finalUrl.toString());
+    const policyPages=(await Promise.all(policyUrls.map(url=>fetchPolicyText(url,controller)))).filter(Boolean);
+    const combinedHtml=[html].concat(policyPages).join("\n");
+    const words=htmlTextScore(combinedHtml),ld=jsonLdEvidence(html,geo),marketplace=Core.isMarketplace(item,finalUrl.toString());
+    const responsibleEntity=(words.supplierRole||ld.org)&&(words.official||ld.org);
+    const directSales=words.directSales||ld.product||ld.offer;
+    const secureTransport=finalUrl.protocol==="https:";
+    const reviewEligible=!marketplace&&responsibleEntity&&directSales&&words.shipping&&(words.returns||words.refund)&&words.service&&(words.payment||words.legalIdentity||ld.org);
+    const trustEvidenceReady=reviewEligible&&words.payment&&words.refund&&words.legalIdentity&&words.contactChannel&&secureTransport;
     const detectedCountry=ld.country||Core.normalizeCountry(item.distributionMarketCountry||item.sellerMarketCountry||item.marketCountry||item.country||item.geo&&item.geo.country);
     const detectedRegion=ld.region||Core.normalizeRegion(item.distributionMarketRegion||item.sellerRegion||item.region||item.geo&&item.geo.state,detectedCountry);
-    const scope=Object.assign({},item,{
-      distributionMarketCountry:detectedCountry||undefined,
-      distributionMarketRegion:detectedRegion||undefined,
+    const officialUrl=supplierLandingUrl(finalUrl,ld),typeCode=supplierType(words,ld),now=new Date().toISOString();
+    const provisionalTrustScore=Math.max(0,Math.min(100,Math.round(
+      (words.official||ld.org?8:0)+(responsibleEntity?14:0)+(directSales?10:0)+(words.payment?8:0)+(secureTransport?5:0)+
+      (words.shipping?8:0)+(words.tracking?5:0)+(words.deliveryCommitment?4:0)+(words.returns?8:0)+(words.refund?8:0)+
+      (words.service?8:0)+(words.contactChannel?5:0)+(words.legalIdentity||ld.org?7:0)+(words.termsPrivacy?4:0)+(words.warranty?3:0)+
+      (detectedCountry&&detectedCountry===geo.country?3:0)-(marketplace?100:0)
+    )));
+    const evidence=Object.assign({},item.brokerageVerification||{}, {
+      automated:true,inspectedAt:now,discoveredFromUrl:discoveredUrl,inspectedUrl:finalUrl.toString(),supplierOfficialUrl:officialUrl,
+      official:words.official||ld.org,responsibleEntity,directSales,payment:words.payment,secureTransport,securePaymentSignal:words.securePayment,
+      shipping:words.shipping,tracking:words.tracking,deliveryCommitment:words.deliveryCommitment,returns:words.returns,refund:words.refund,exchange:words.exchange,
+      service:words.service,contactChannel:words.contactChannel,warranty:words.warranty,termsPrivacy:words.termsPrivacy,legalIdentity:words.legalIdentity||ld.org,
+      affiliatePotential:words.affiliatePotential,catalogBreadth:words.catalogBreadth,policyPagesInspected:policyPages.length,policyUrls:policyUrls.slice(0,4),
+      marketplace,majorPlatform:marketplace,jsonLdOrganization:ld.org,jsonLdProduct:ld.product,jsonLdOffer:ld.offer,supplierType:typeCode,
+      supplierReviewEligible:reviewEligible,trustEvidenceReady,provisionalTrustScore,
+      legalVerificationComplete:false,contractVerificationComplete:false,deliveryPerformanceVerified:false,returnRefundPerformanceVerified:false,supportPerformanceVerified:false,
+      privateQueueOnly:true,publicEligible:false
+    });
+    const profile={
+      name:ld.orgName||first(item&&item.supplierName,item&&item.organizationName,item&&item.title,item&&item.name),type:typeCode,officialUrl,
+      targetCountry:geo.country,targetRegion:geo.region||"NATIONWIDE",detectedCountry:detectedCountry||null,detectedRegion:detectedRegion||null,
+      directSales,handlesPayment:words.payment,handlesShipping:words.shipping,handlesReturns:words.returns,handlesRefunds:words.refund,handlesCustomerSupport:words.service,
+      offersTracking:words.tracking,statesDeliveryCommitment:words.deliveryCommitment,offersWarrantyOrAfterSales:words.warranty,
+      catalogBreadthSignal:words.catalogBreadth,affiliatePotential:words.affiliatePotential,
+      responsibleForTransaction:true,adminVerificationRequired:true,performanceVerificationRequired:true,productCatalogImportAllowed:false
+    };
+    return Object.assign({},item,{
+      title:profile.name||first(item&&item.title,item&&item.name),name:profile.name||first(item&&item.name,item&&item.title),url:officialUrl,link:officialUrl,supplierOfficialUrl:officialUrl,
+      distributionMarketCountry:detectedCountry||undefined,distributionMarketRegion:detectedRegion||undefined,
       availabilityCountries:item.availabilityCountries||item.shippingCountries||(detectedCountry?[detectedCountry]:undefined),
       availabilityRegions:item.availabilityRegions||item.shippingRegions||(detectedRegion?[detectedRegion]:undefined),
-      nationalAvailability:item.nationalAvailability===true||(!detectedRegion&&detectedCountry===geo.country&&ld.matchCountry)
+      nationalAvailability:item.nationalAvailability===true||(!detectedRegion&&detectedCountry===geo.country&&ld.matchCountry),
+      officialSource:evidence.official,sellerVerified:false,igdcSupplierCandidate:true,igdcProductCandidate:false,supplierProfile:profile,brokerageVerification:evidence,
+      shippingAvailable:words.shipping,shippingTrackingAvailable:words.tracking,deliveryCommitmentAvailable:words.deliveryCommitment,
+      returnPolicyAvailable:words.returns,refundPolicyAvailable:words.refund,customerServiceAvailable:words.service,paymentAvailable:words.payment,
+      sourceTrust:Math.max(Number(item.sourceTrust||0),provisionalTrustScore/100)
     });
-    return Object.assign({},scope,{url:finalUrl.toString(),officialSource:item.officialSource||evidence.official,sellerVerified:item.sellerVerified||false,brokerageVerification:evidence,shippingAvailable:item.shippingAvailable||evidence.shipping,returnPolicyAvailable:item.returnPolicyAvailable||evidence.returns,customerServiceAvailable:item.customerServiceAvailable||evidence.service,sourceTrust:Math.max(Number(item.sourceTrust||0), evidence.official&&evidence.shipping&&(evidence.returns||evidence.service)&&detectedCountry?0.65:0)});
   }catch(_e){return item;}
+  finally{if(timer)clearTimeout(timer);}
 }
 async function inspectLive(items,geo){
   const unique=[];const seen=new Set();
@@ -406,21 +551,27 @@ async function inspectLive(items,geo){
   return await Promise.all(unique.map(item=>inspectCandidate(item,geo)));
 }
 function privateReviewPool(rawItems,inspectedItems,geo,limit){
-  const inspected=new Map();for(const item of inspectedItems||[]){const url=Core.externalUrl(item);if(url)inspected.set(url,item);}
+  const inspected=new Map();
+  for(const item of inspectedItems||[]){
+    const original=text(item&&item.brokerageVerification&&item.brokerageVerification.discoveredFromUrl),official=Core.externalUrl(item);
+    if(original)inspected.set(original,item);if(official)inspected.set(official,item);
+  }
   const out=[];const seen=new Set();
   for(const raw of commerceFirst(rawItems||[])){
-    const url=Core.externalUrl(raw);if(!url||seen.has(url)||Core.isMarketplace(raw,url)||obviousNonCommerceReason(raw))continue;
-    const item=inspected.get(url)||raw;const title=first(item&&item.title,item&&item.name,item&&item.label);if(!title)continue;
-    const sourceText=lower([item&&item.source,item&&item.provider,item&&item.sourceType,item&&item.generatedBy].filter(Boolean).join(" "));
+    const originalUrl=Core.externalUrl(raw),item=inspected.get(originalUrl);if(!item)continue;
+    const evidence=item.brokerageVerification||{},officialUrl=Core.externalUrl(item),profile=item.supplierProfile||{};
+    if(!officialUrl||seen.has(officialUrl)||evidence.marketplace===true||evidence.supplierReviewEligible!==true)continue;
+    const sourceText=lower([item.source,item.provider,item.sourceType,item.generatedBy].filter(Boolean).join(" "));
     if(/sanmaru-route|sanmaru-opening|provider-page-window|provider-window|search-route-hint/.test(sourceText))continue;
-    const evidence=item&&item.brokerageVerification||{};
-    const commerceSignal=commerceHeuristicScore(item)>0||evidence.jsonLdProduct||evidence.jsonLdOrganization||evidence.shipping||evidence.returns||evidence.service;
-    if(!commerceSignal)continue;
-    seen.add(url);
+    const title=first(profile.name,item.title,item.name);if(!title)continue;
+    seen.add(officialUrl);
     out.push(Object.assign({},item,{
-      igdcPrivateReviewOnly:true,igdcCollectionStage:"country-local-language-commerce-discovery",
+      title,name:title,url:officialUrl,link:officialUrl,igdcPrivateReviewOnly:true,igdcSupplierCandidate:true,igdcProductCandidate:false,
+      igdcCollectionStage:"responsible-supplier-private-discovery",
       igdcCollectionScope:{country:geo.country,region:geo.region||"NATIONWIDE",collectedAt:new Date().toISOString(),locales:localeList(geo.country)},
-      brokerageVerification:Object.assign({},evidence,{privateQueueOnly:true,publicEligible:false,obviousNonCommerce:false})
+      brokerageVerification:Object.assign({},evidence,{privateQueueOnly:true,publicEligible:false,obviousNonCommerce:false}),
+      intermediaryContract:{igdcRole:"distribution_service_intermediary",sellerOfRecord:false,merchantOfRecord:false,inventoryCustody:false,checkoutOnIgdc:false,paymentProcessing:false,fulfillment:false,returnsHandling:false,afterSalesService:false,transactionAtSupplier:true},
+      productCatalogImportAllowed:false,productReferenceSelectionRequired:true
     }));
     if(out.length>=limit)break;
   }
@@ -438,19 +589,29 @@ function templateSnapshot(){
 async function runSelection(event,params){
   const requested=params||{};
   const explicitCountry=Core.normalizeCountry(requested.country||requested.targetCountry);
-  const geo=explicitCountry?{country:explicitCountry,region:Core.normalizeRegion(requested.region||requested.targetRegion,explicitCountry),city:"",countryName:Core.COUNTRY_NAMES[explicitCountry]||explicitCountry}:Core.parseGeo(event,requested);
+  const categoryWeights={};for(const key of CATEGORY_KEYS)categoryWeights[key]=Math.max(-20,Math.min(20,Number(requested.categoryWeights&&requested.categoryWeights[key])||0));
+  const geo=explicitCountry?{country:explicitCountry,region:Core.normalizeRegion(requested.region||requested.targetRegion,explicitCountry),city:"",countryName:Core.COUNTRY_NAMES[explicitCountry]||explicitCountry,categoryWeights,signalPlanVersion:text(requested.signalPlanVersion)}:Object.assign({},Core.parseGeo(event,requested),{categoryWeights,signalPlanVersion:text(requested.signalPlanVersion)});
   const privateCollection=requested.privateCollection===true||String(requested.privateCollection||"").toLowerCase()==="true";
   const privateLimit=Math.max(1,Math.min(50,Number(requested.privateLimit||requested.maxCandidates||20)||20));
-  const key=cacheKey(geo,privateCollection?"private":"front");const cached=getCache(key);if(cached)return Object.assign({},cached,{meta:Object.assign({},cached.meta||{},{cache:"hit"})});
-  const started=Date.now();const stored=Core.loadStoredCandidates();let selected=Core.selection(stored.items,geo);let discovery={items:[],trace:[]},checked=[],privateReviewItems=[];
+  const key=cacheKey(geo,privateCollection?"private-supplier":"front");const cached=getCache(key);if(cached)return Object.assign({},cached,{meta:Object.assign({},cached.meta||{},{cache:"hit"})});
+  const started=Date.now(),stored=Core.loadStoredCandidates();let selected=Core.selection(stored.items,geo),discovery={items:[],trace:[]},checked=[],privateReviewItems=[];
   if((privateCollection||selected.accepted.length<6)&&geo.country!=="GLOBAL"){
     discovery=await runSanmaruDiscovery(event,geo,privateLimit);
     checked=await inspectLive(discovery.items,geo);
-    selected=Core.selection(stored.items.concat(checked),geo);
     if(privateCollection)privateReviewItems=privateReviewPool(discovery.items,checked,geo,privateLimit);
+    else selected=Core.selection(stored.items.concat(checked),geo);
   }
-  const template=templateSnapshot();const snapshot=selected.accepted.length&&template?Core.buildSnapshot(template,selected.accepted,geo,{storedSources:stored.sources,discovery:discovery.trace,stats:selected.stats,elapsedMs:Date.now()-started}):null;
-  const result={status:"ok",engine:"regional-brokerage-autoselector",version:VERSION,geo:{country:geo.country,region:geo.region||null,precision:geo.region?"coarse-region":"country",source:explicitCountry?"explicit-scope":"request-ip"},items:selected.accepted.map(x=>x.item),privateReviewItems,snapshot,meta:{cache:"miss",countryLocales:localeList(geo.country),selection:selected.stats,rejections:selected.rejected.slice(0,80),discovery:discovery.trace,privateReview:{enabled:privateCollection,raw:discovery.items.length,inspected:checked.length,count:privateReviewItems.length,publicPublication:false},elapsedMs:Date.now()-started,hasSnapshot:!!snapshot}};
+  const template=templateSnapshot();
+  const snapshot=!privateCollection&&selected.accepted.length&&template?Core.buildSnapshot(template,selected.accepted,geo,{storedSources:stored.sources,discovery:discovery.trace,stats:selected.stats,elapsedMs:Date.now()-started}):null;
+  const result={
+    status:"ok",engine:"regional-brokerage-autoselector",version:VERSION,
+    geo:{country:geo.country,region:geo.region||null,precision:geo.region?"coarse-region":"country",source:explicitCountry?"explicit-scope":"request-ip"},
+    items:privateCollection?[]:selected.accepted.map(x=>x.item),privateReviewItems,snapshot,
+    meta:{cache:"miss",discoveryMode:privateCollection?"responsible-supplier":"front-supply",countryLocales:localeList(geo.country),selection:selected.stats,rejections:selected.rejected.slice(0,80),discovery:discovery.trace,
+      marketSignals:{applied:Object.values(categoryWeights).some(value=>value!==0),categoryWeights,signalPlanVersion:text(requested.signalPlanVersion),categoryKeys:queryCategories(geo).map(index=>CATEGORY_KEYS[index])},
+      privateReview:{enabled:privateCollection,entityKind:"supplier",raw:discovery.items.length,inspected:checked.length,count:privateReviewItems.length,productPageImport:false,publicPublication:false},
+      elapsedMs:Date.now()-started,hasSnapshot:!!snapshot}
+  };
   return setCache(key,result);
 }
 

@@ -3,27 +3,46 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>IGDC 국가별 상품 세팅 점검</title>
+  <title>IGDC 세계·권역·국가 책임 공급업체·중개망 점검</title>
   <style>
-    :root{color-scheme:dark;--bg:#07111e;--panel:#101d30;--panel2:#0b1728;--line:#29425f;--text:#e8f0fb;--muted:#9fb3cb;--blue:#55c8ff;--green:#5de6a0;--amber:#ffd070;--red:#ff8794;--violet:#bca7ff}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1500px;margin:0 auto;padding:24px 18px 76px}h1{font-size:27px;margin:0 0 7px}.lead{max-width:1150px;color:#b8c8da;line-height:1.65;margin:0}.topbar,.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:16px 0}.button,button{border:1px solid transparent;border-radius:9px;padding:9px 12px;font-weight:850;cursor:pointer;background:var(--blue);color:#05243a}.secondary{background:#dce6f1!important;color:#172033!important}.danger{background:#55242d!important;color:#ffdce1!important;border-color:#9f4757!important}.ghost{background:#12263d!important;color:#d8ecff!important;border-color:#355677!important}button:disabled{opacity:.5;cursor:not-allowed}.state{font-size:12px;color:var(--muted)}.panel{margin-top:13px;padding:15px;background:var(--panel);border:1px solid var(--line);border-radius:14px}.panel h2{font-size:17px;margin:0 0 9px}.panel-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}.panel-heading h2{margin:0}.panel-heading button{flex:0 0 auto}.panel h3{font-size:14px;margin:0 0 7px}.notice{padding:11px 12px;border-radius:9px;border-left:4px solid var(--blue);background:#0b2942;color:#d7efff;line-height:1.5}.notice.ok{border-left-color:#4ed18b;background:#0d2f22;color:#c9f7df}.notice.warn{border-left-color:#f2b349;background:#3b2a0a;color:#ffe8b4}.notice.fail{border-left-color:#e85c70;background:#3d1720;color:#ffd5dc}.hidden{display:none!important}.master{display:grid;grid-template-columns:minmax(260px,2fr) repeat(3,minmax(130px,1fr)) auto;gap:10px;align-items:end}.field label,.field>span{display:block;font-size:12px;color:#bed2e8;font-weight:800;margin-bottom:5px}.field select,.field input,.searchbox{width:100%;padding:9px 10px;border-radius:9px;border:1px solid #395676;background:#091525;color:#eaf3ff}.switchstate{font-size:24px;font-weight:950}.on{color:var(--green)}.off{color:var(--red)}.manual{color:var(--amber)}.inherit{color:var(--violet)}.region-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:9px}.region-card{background:var(--panel2);border:1px solid #2c4766;border-radius:11px;padding:11px}.region-card.active{border-color:var(--blue);background:#0d2940}.region-card .head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.region-card .name{font-weight:900}.region-card .meta{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.45}.region-card .region-settings{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(78px,.7fr);gap:7px;margin-top:8px}.region-card select{width:100%;padding:7px;border-radius:7px;background:#091525;color:#eaf3ff;border:1px solid #395676}.country-tools{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:9px;margin-bottom:10px}.country-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;max-height:500px;overflow:auto;padding-right:3px}.country-card,.subdivision-card{border:1px solid #2c4766;background:var(--panel2);border-radius:10px;padding:10px;color:var(--text);text-align:left;cursor:pointer}.country-card:hover,.country-card.active,.subdivision-card:hover,.subdivision-card.active{border-color:var(--blue);background:#0d2940}.country-card strong{display:flex;justify-content:space-between;gap:7px}.meta{font-size:11px;color:var(--muted);line-height:1.45;margin-top:5px}.pill{display:inline-block;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:900;background:#243953;color:#d5e7f8}.pill.good{background:#104e35;color:#c6f9dd}.pill.warn{background:#5b3b10;color:#ffe2a1}.pill.info{background:#173f61;color:#c9ebff}.pill.manual{background:#5a4315;color:#ffe7a6}.subdivision-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;max-height:360px;overflow:auto}.scope-layout{display:grid;grid-template-columns:minmax(270px,1.1fr) minmax(300px,1.5fr);gap:12px}.scope-card{background:var(--panel2);border:1px solid #2c4766;border-radius:11px;padding:12px}.scope-fields{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:9px}.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}.linkbtn{background:#12263d;color:#d8ecff;border:1px solid #355677;text-align:left}.linkbtn small{display:block;color:#9fb3cb;font-weight:500;margin-top:3px}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}.stat{background:var(--panel2);border:1px solid #2b4665;border-radius:11px;padding:12px}.stat h3{font-size:12px;color:#bdd6f2;margin:0 0 6px}.num{font-size:26px;font-weight:950}.small{font-size:12px;color:var(--muted);line-height:1.5}.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:11px;margin-top:9px}table{width:100%;border-collapse:collapse;font-size:12px;min-width:1050px}th,td{padding:8px;text-align:left;vertical-align:top;border-bottom:1px solid #293e5b}th{color:#b6d0ee;white-space:nowrap}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}.json{max-height:520px;overflow:auto;background:#050d18;border:1px solid #28405f;border-radius:10px;padding:12px;color:#cfe5ff;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.foot{font-size:12px;color:#8ea2ba;line-height:1.55;margin-top:14px}@media(max-width:900px){.master{grid-template-columns:1fr 1fr}.scope-layout{grid-template-columns:1fr}}@media(max-width:620px){.master,.scope-fields,.country-tools{grid-template-columns:1fr}.topbar button{flex:1 1 160px}}
+    :root{color-scheme:dark;--bg:#07111e;--panel:#101d30;--panel2:#0b1728;--line:#29425f;--text:#e8f0fb;--muted:#9fb3cb;--blue:#55c8ff;--green:#5de6a0;--amber:#ffd070;--red:#ff8794;--violet:#bca7ff}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1500px;margin:0 auto;padding:24px 18px 76px}h1{font-size:27px;margin:0 0 7px}.lead{max-width:1150px;color:#b8c8da;line-height:1.65;margin:0}.topbar,.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:16px 0}.button,button{border:1px solid transparent;border-radius:9px;padding:9px 12px;font-weight:850;cursor:pointer;background:var(--blue);color:#05243a}.secondary{background:#dce6f1!important;color:#172033!important}.danger{background:#55242d!important;color:#ffdce1!important;border-color:#9f4757!important}.ghost{background:#12263d!important;color:#d8ecff!important;border-color:#355677!important}button:disabled{opacity:.5;cursor:not-allowed}.state{font-size:12px;color:var(--muted)}.panel{margin-top:13px;padding:15px;background:var(--panel);border:1px solid var(--line);border-radius:14px}.panel h2{font-size:17px;margin:0 0 9px}.panel-heading{display:flex;align-items:center;justify-content:flex-start;gap:10px;margin-bottom:9px;flex-wrap:wrap}.panel-heading h2{margin:0}.panel-heading button{flex:0 0 auto}.panel h3{font-size:14px;margin:0 0 7px}.notice{padding:11px 12px;border-radius:9px;border-left:4px solid var(--blue);background:#0b2942;color:#d7efff;line-height:1.5}.notice.ok{border-left-color:#4ed18b;background:#0d2f22;color:#c9f7df}.notice.warn{border-left-color:#f2b349;background:#3b2a0a;color:#ffe8b4}.notice.fail{border-left-color:#e85c70;background:#3d1720;color:#ffd5dc}.hidden{display:none!important}.master{display:grid;grid-template-columns:minmax(260px,2fr) repeat(3,minmax(130px,1fr)) auto;gap:10px;align-items:end}.field label,.field>span{display:block;font-size:12px;color:#bed2e8;font-weight:800;margin-bottom:5px}.field select,.field input,.searchbox{width:100%;padding:9px 10px;border-radius:9px;border:1px solid #395676;background:#091525;color:#eaf3ff}.switchstate{font-size:24px;font-weight:950}.on{color:var(--green)}.off{color:var(--red)}.manual{color:var(--amber)}.inherit{color:var(--violet)}.region-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:9px}.region-card{background:var(--panel2);border:1px solid #2c4766;border-radius:11px;padding:11px}.region-card.active{border-color:var(--blue);background:#0d2940}.region-card .head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.region-card .name{font-weight:900}.region-card .meta{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.45}.region-card .region-settings{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(78px,.7fr);gap:7px;margin-top:8px}.region-card select{width:100%;padding:7px;border-radius:7px;background:#091525;color:#eaf3ff;border:1px solid #395676}.country-tools{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:9px;margin-bottom:10px}.country-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;max-height:500px;overflow:auto;padding-right:3px}.country-card,.subdivision-card{border:1px solid #2c4766;background:var(--panel2);border-radius:10px;padding:10px;color:var(--text);text-align:left;cursor:pointer}.country-card:hover,.country-card.active,.subdivision-card:hover,.subdivision-card.active{border-color:var(--blue);background:#0d2940}.country-card strong{display:flex;justify-content:space-between;gap:7px}.meta{font-size:11px;color:var(--muted);line-height:1.45;margin-top:5px}.pill{display:inline-block;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:900;background:#243953;color:#d5e7f8}.pill.good{background:#104e35;color:#c6f9dd}.pill.warn{background:#5b3b10;color:#ffe2a1}.pill.info{background:#173f61;color:#c9ebff}.pill.manual{background:#5a4315;color:#ffe7a6}.subdivision-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;max-height:360px;overflow:auto}.scope-layout{display:grid;grid-template-columns:minmax(270px,1.1fr) minmax(300px,1.5fr);gap:12px}.scope-card{background:var(--panel2);border:1px solid #2c4766;border-radius:11px;padding:12px}.scope-fields{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:9px}.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}.linkbtn{background:#12263d;color:#d8ecff;border:1px solid #355677;text-align:left}.linkbtn small{display:block;color:#9fb3cb;font-weight:500;margin-top:3px}.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}.stat{background:var(--panel2);border:1px solid #2b4665;border-radius:11px;padding:12px}.stat h3{font-size:12px;color:#bdd6f2;margin:0 0 6px}.num{font-size:26px;font-weight:950}.small{font-size:12px;color:var(--muted);line-height:1.5}.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:11px;margin-top:9px}table{width:100%;border-collapse:collapse;font-size:12px;min-width:1050px}th,td{padding:8px;text-align:left;vertical-align:top;border-bottom:1px solid #293e5b}th{color:#b6d0ee;white-space:nowrap}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}.json{max-height:520px;overflow:auto;background:#050d18;border:1px solid #28405f;border-radius:10px;padding:12px;color:#cfe5ff;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.signal-grid{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:10px}.signal-card{background:var(--panel2);border:1px solid #2c4766;border-radius:11px;padding:12px}.signal-card h3{font-size:15px;margin:0 0 6px}.signal-card button{margin-top:9px}.signal-summary{display:grid;grid-template-columns:minmax(260px,1.4fr) minmax(260px,1fr);gap:10px}.signal-list{display:grid;gap:8px}.signal-row{background:#091525;border:1px solid #29425f;border-radius:9px;padding:9px}.weight-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:7px}.weight-row{display:flex;justify-content:space-between;gap:9px;background:#091525;border:1px solid #29425f;border-radius:8px;padding:8px}.weight-up{color:var(--green);font-weight:900}.weight-down{color:var(--red);font-weight:900}.weight-zero{color:var(--muted);font-weight:900}.foot{font-size:12px;color:#8ea2ba;line-height:1.55;margin-top:14px}@media(max-width:900px){.master{grid-template-columns:1fr 1fr}.scope-layout,.signal-summary{grid-template-columns:1fr}.signal-grid{grid-template-columns:1fr}}@media(max-width:620px){.master,.scope-fields,.country-tools{grid-template-columns:1fr}.topbar button{flex:1 1 160px}}
   </style>
 </head>
 <body>
 <main>
-  <h1>국가별 상품 세팅 점검</h1>
-  <p class="lead">접속 IP를 기본값으로 권역→국가→대형국가 주·성·지역 범위를 선택합니다. 기존 검증 파이프라인과 점검 페이지는 이 범위를 공유하며, AI 자동화는 검증된 수집 결과를 비공개 후보 대기열에만 등록합니다.</p>
+  <h1>세계·권역·국가 책임 공급업체·중개망 점검</h1>
+  <p class="lead">전 세계의 거시·사건 흐름, 선택 권역의 수요·물류·문화·재난 상황, 국가·지역의 실제 판매 책임을 세 단계로 점검합니다. 세계·권역 AI는 품목군 탐색 비중만 제한적으로 조정하며, 최종 업체 추천은 직접 판매·결제·배송·반품·환불·고객지원과 신뢰 검증을 통과한 생산자·제조사·협동조합·지역 유통업체·책임 판매업체만 대상으로 합니다. IGDC는 유통 서비스 중개망으로만 작동합니다.</p>
   <div class="topbar">
     <button id="useGeoBtn" type="button">현재 접속 IP 적용</button>
     <button id="reloadBtn" type="button" class="secondary">전체 상태 새로고침</button>
     <button id="diagnosticBtn" type="button" class="secondary">통합 점검 JSON</button>
-    <button id="downloadBtn" type="button" class="secondary" disabled>JSON 다운로드</button>
     <button id="returnBtn" type="button" class="secondary">관리자 화면으로</button>
     <span id="state" class="state">관리자 공통 세션을 확인하는 중입니다.</span>
   </div>
   <div id="notice" class="notice hidden"></div>
 
+
   <section class="panel">
-    <h2>IP 범위와 전체 자동화</h2>
+    <h2>세계·권역·국가 3단계 AI 점검</h2>
+    <div class="small">세계는 오일쇼크·전쟁·재난·환율·공급망·기술·대형 공연·스포츠·축제 같은 방향 신호를 보고, 권역은 그 영향과 현지 수요·물류·규제·문화 상황을 해석합니다. 국가는 실제 책임 판매업체를 검증합니다. 세계·권역 결과는 관리자 반영 후에도 품목군 탐색 비중만 ±20% 안에서 조정하며 신뢰 게이트와 공개 조건은 바꾸지 못합니다.</div>
+    <div class="signal-grid" style="margin-top:10px">
+      <article class="signal-card"><h3>전 세계 흐름</h3><div class="small">개별 상품 전수검색이 아니라 향후 90일의 거시·사건·수요 방향을 점검합니다.</div><button id="globalSignalBtn" type="button">세계 흐름 AI 점검</button></article>
+      <article class="signal-card"><h3>선택 권역 상황</h3><div id="selectedRegionSignalName" class="small">권역을 선택하면 해당 권역의 특별 이슈와 수요 변화를 점검합니다.</div><button id="regionalSignalBtn" type="button">선택 권역 AI 점검</button></article>
+      <article class="signal-card"><h3>선택 국가·지역 실행</h3><div class="small">업체의 신원·직접 판매·결제·배송·반품·환불·고객지원과 신뢰도를 점검합니다.</div><button id="countryCheckJumpBtn" type="button" class="ghost">국가 업체 점검으로 이동</button></article>
+    </div>
+    <div id="activeSignalState" class="small" style="margin-top:10px">적용된 세계·권역 AI 가중치를 확인하는 중입니다.</div>
+  </section>
+
+  <section id="signalPanel" class="panel hidden">
+    <div class="panel-heading"><h2 id="signalTitle">세계·권역 AI 점검 결과</h2><button id="applySignalBtn" type="button" disabled>AI 권고 운영 반영</button></div>
+    <div class="signal-summary"><div class="scope-card"><h3>AI 판단</h3><div id="signalOverview" class="small"></div></div><div class="scope-card"><h3>근거·안전선</h3><div id="signalMeta" class="small"></div></div></div>
+    <h3 style="margin-top:12px">품목군 탐색 비중 권고</h3><div id="signalWeights" class="weight-grid"></div>
+    <h3 style="margin-top:12px">감지된 주요 신호</h3><div id="signalEvents" class="signal-list"></div>
+    <div class="small" style="margin-top:10px">반영해도 책임 공급업체 신뢰점수, 업체 승인, 상품 자동 반입, 공개 발행은 변경되지 않습니다. 다음 국가 업체 발굴부터 적용된 세계·권역 비중을 참고합니다.</div>
+  </section>
+
+  <section class="panel">
+    <h2>IP 범위와 책임 공급업체 발굴 자동화</h2>
     <div class="master">
       <div class="scope-card"><strong id="detectedScope">현재 IP 확인 중</strong><div class="small">VPN을 사용하면 배포 환경에서 해당 국가·지역 값으로 다시 판정됩니다. 북한(KP)은 운영 목록에서 제외됩니다.</div></div>
       <div class="field"><span>전체 마스터</span><div id="masterState" class="switchstate off">OFF</div></div>
@@ -31,7 +50,7 @@
       <div class="field"><label for="masterInterval">기본 주기</label><select id="masterInterval"><option value="1">1일</option><option value="2">2일</option><option value="3">3일</option><option value="7">7일</option><option value="14">14일</option><option value="30">30일</option></select></div>
       <button id="saveMasterBtn" type="button">마스터 저장</button>
     </div>
-    <div class="small" style="margin-top:9px">마스터가 OFF이면 정기 실행은 멈춥니다. 스케줄러는 매시간 실행 여부만 확인하고, 각 범위의 1~30일 주기가 도래한 경우에만 처리합니다.</div>
+    <div class="small" style="margin-top:9px">마스터가 OFF이면 정기 업체 발굴은 멈춥니다. 스케줄러는 매시간 실행 여부만 확인하고, 각 범위의 설정 주기가 도래한 경우에만 책임 공급업체 후보를 비공개로 점검합니다.</div>
   </section>
 
   <section class="panel">
@@ -51,22 +70,22 @@
     <div id="subdivisionGrid" class="subdivision-grid" style="margin-top:9px"></div>
   </section>
 
-  <section class="panel">
+  <section id="countryCheckPanel" class="panel">
     <h2>선택 범위 운영 설정</h2>
     <div class="scope-layout">
       <div class="scope-card">
         <h3 id="scopeTitle">범위를 선택하세요.</h3>
-        <div id="scopeMeta" class="small">권역과 국가를 선택하면 후보·배정·자동화 상태가 표시됩니다.</div>
+        <div id="scopeMeta" class="small">권역과 국가를 선택하면 책임 공급업체 후보와 기존 상품 중개 대기열 상태가 함께 표시됩니다.</div>
       </div>
       <div class="scope-card">
         <div class="scope-fields">
           <div class="field"><label for="scopeMode">범위 모드</label><select id="scopeMode"><option value="inherit">상위 설정 상속</option><option value="auto">AI 자동</option><option value="manual">수동 우선</option><option value="off">OFF</option></select></div>
           <div class="field"><label for="scopeInterval">점검 주기</label><select id="scopeInterval"><option value="1">1일</option><option value="2">2일</option><option value="3">3일</option><option value="7">7일</option><option value="14">14일</option><option value="30">30일</option></select></div>
-          <div class="field"><label for="maxCandidates">1회 최대 후보</label><select id="maxCandidates"><option value="10">10개</option><option value="20">20개</option><option value="30">30개</option><option value="50">50개</option></select></div>
+          <div class="field"><label for="maxCandidates">1회 최대 업체 후보</label><select id="maxCandidates"><option value="10">10개</option><option value="20">20개</option><option value="30">30개</option><option value="50">50개</option></select></div>
           <div id="expandField" class="field hidden"><label for="expandSubdivisions">하위 지역 자동화</label><select id="expandSubdivisions"><option value="false">전국 범위만</option><option value="true">주·성·지역 순환</option></select></div>
         </div>
-        <div class="actions"><button id="saveScopeBtn" type="button">범위 설정 저장</button><button id="previewRunBtn" type="button" class="ghost">AI 1회 미리보기</button><button id="runNowBtn" type="button">AI 1회 실행</button><button id="refreshScopeBtn" type="button" class="secondary">선택 범위 읽기</button></div>
-        <div class="small">수동 모드에서는 정기 자동화가 멈추며 관리자가 등록한 수동 고정 상품은 어떤 자동 실행도 덮어쓰지 않습니다.</div>
+        <div class="actions"><button id="saveScopeBtn" type="button">범위 설정 저장</button><button id="previewRunBtn" type="button" class="ghost">책임 공급업체 발굴 미리보기</button><button id="runNowBtn" type="button">책임 공급업체 발굴 실행</button><button id="refreshScopeBtn" type="button" class="secondary">선택 범위 읽기</button></div>
+        <div class="small">수동 모드에서는 정기 업체 발굴이 멈춥니다. 자동 실행은 기존 수동 고정 상품을 덮어쓰지 않으며, 발견된 업체의 상품을 자동으로 가져오거나 공개하지 않습니다.</div>
       </div>
     </div>
   </section>
@@ -88,15 +107,15 @@
   </section>
 
   <section id="aiPanel" class="panel hidden">
-    <h2>AI 자동화 비공개 후보</h2>
-    <div class="small">‘확인’은 비공개 후보를 수동 완성 대상으로 표시할 뿐이며, 공개 발행·결제·판매처 이동은 실행하지 않습니다.</div>
-    <div class="tablewrap"><table><thead><tr><th>후보</th><th>AI 판정</th><th>현재 상태</th><th>생성/갱신</th><th>관리자 판정</th></tr></thead><tbody id="aiRows"></tbody></table></div>
+    <h2>책임 공급업체 비공개 후보</h2>
+    <div class="small">AI가 확인된 증빙을 근거로 신뢰등급 1~10, 추천 순위, 강점·주의사항·다음 확인 항목을 제공합니다. ‘확인’은 업체 검증을 계속할 대상으로 표시할 뿐이며, AI 추천도 신뢰 게이트를 우회하지 않습니다. 사업체·판매 책임·결제·배송·반품·환불·고객지원 확인과 별도 상품 선별이 끝나기 전에는 공개하지 않습니다.</div>
+    <div class="tablewrap"><table><thead><tr><th>책임 공급업체</th><th>업체 유형</th><th>직접 판매·책임 증빙</th><th>AI 신뢰등급·추천</th><th>현재 상태</th><th>관리자 판정</th></tr></thead><tbody id="aiRows"></tbody></table></div>
   </section>
 
-  <section id="jsonPanel" class="panel hidden"><div class="panel-heading"><h2>점검·실행 JSON</h2><button id="downloadCurrentJsonBtn" type="button" class="secondary" disabled>현재 JSON 다운로드</button></div><pre id="jsonOutput" class="json"></pre></section>
-  <p class="foot">안전선: 후보 생성 → 비공개 대기열 → 관리자 확인 → 판매시장·배송·반품·지원·판매 책임·수익권 증빙 → Canonical 검증 → 별도 공개 게이트 순서입니다. AI 자동화는 이 순서를 건너뛸 수 없습니다.</p>
+  <section id="jsonPanel" class="panel hidden"><div class="panel-heading"><h2>점검·실행 JSON</h2><button id="downloadCurrentJsonBtn" type="button" class="secondary" disabled>전체 JSON 다운로드</button></div><pre id="jsonOutput" class="json"></pre></section>
+  <p class="foot">운영 흐름: 세계 방향 신호 → 권역 상황 신호 → 관리자 반영 품목군 가중치 → 국가·지역 책임 공급업체 발견 → 비공개 업체 후보 → 사업체와 직접 판매 책임 확인 → 결제·배송·반품·환불·고객지원 확인 → 해당 업체 상품 중 적합한 항목만 별도 선별 → Canonical·공개 게이트 순서입니다. IGDC는 판매자·결제 주체·재고 보유자·배송·반품·환불·AS 책임자가 되지 않습니다.</p>
 </main>
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-country-control.js?v=3"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=7"></script>
 </body>
 </html>
