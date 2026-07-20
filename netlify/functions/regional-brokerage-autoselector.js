@@ -11,7 +11,7 @@
  */
 
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
-const VERSION="regional-brokerage-autoselector-v1.0.0";
+const VERSION="regional-brokerage-autoselector-v1.0.1-private-country-intake";
 const CACHE_TTL=5*60*1000;
 const RESPONSE_TIMEOUT=8200;
 const DISCOVERY_TIMEOUT=6200;
@@ -23,18 +23,34 @@ function text(v){return v==null?"":String(v).trim();}
 function lower(v){return text(v).toLowerCase();}
 function first(){for(const v of arguments){const t=text(v);if(t)return t;}return "";}
 function withTimeout(promise,ms){return new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Object.assign(new Error("timeout"),{code:"TIMEOUT"})),ms);Promise.resolve(promise).then(v=>{clearTimeout(t);resolve(v);},e=>{clearTimeout(t);reject(e);});});}
-function cacheKey(geo){return [geo.country,geo.region||"-"].join(":");}
+function cacheKey(geo,mode){return [geo.country,geo.region||"-",mode||"front"].join(":");}
 function getCache(key){const row=CACHE.get(key);if(!row||Date.now()-row.at>(row.ttl||CACHE_TTL)){CACHE.delete(key);return null;}return row.value;}
 function setCache(key,value){CACHE.set(key,{at:Date.now(),ttl:value&&value.snapshot?CACHE_TTL:90000,value});if(CACHE.size>120){const firstKey=CACHE.keys().next().value;CACHE.delete(firstKey);}return value;}
 function extractItems(result){if(!result)return[];if(Array.isArray(result))return result;if(Array.isArray(result.items))return result.items;if(Array.isArray(result.results))return result.results;if(result.data&&Array.isArray(result.data.items))return result.data.items;return[];}
 
+function stableOffset(value,size){
+  let hash=0;for(const ch of String(value||""))hash=((hash<<5)-hash+ch.charCodeAt(0))|0;
+  return size?Math.abs(hash)%size:0;
+}
 function discoveryQueries(geo){
   const locality=[geo.region,geo.countryName].filter(Boolean).join(" ");
-  return [
-    `${locality} official producer cooperative online store shipping returns`,
-    `${locality} official manufacturer brand store local delivery customer service`,
-    `${locality} agricultural cooperative wholesale market official online shopping`
-  ].slice(0,MAX_LIVE_QUERIES);
+  const themes=[
+    "official producer cooperative online store shipping returns",
+    "official manufacturer brand store local delivery customer service",
+    "agricultural fishery forestry cooperative wholesale market official online shopping",
+    "official food grocery household essentials local seller delivery returns",
+    "official personal care beauty everyday products local store customer support",
+    "official basic apparel shoes bags local brand store shipping returns",
+    "official small electronics accessories authorized distributor delivery warranty support",
+    "official home appliance kitchen household brand store delivery returns",
+    "official family education baby child products local seller shipping support",
+    "official tourism travel products local provider booking support refund policy"
+  ];
+  const day=Math.floor(Date.now()/86400000);
+  const offset=stableOffset([geo.country,geo.region||"NATIONWIDE",day].join("|"),themes.length);
+  const out=[];
+  for(let i=0;i<MAX_LIVE_QUERIES;i++)out.push(`${locality} ${themes[(offset+i)%themes.length]}`);
+  return out;
 }
 async function runSanmaruDiscovery(event,geo){
   let Sanmaru=null;try{Sanmaru=require("./sanmaru_engine_v2");}catch(_e){}
@@ -109,6 +125,27 @@ async function inspectLive(items,geo){
   const settled=await Promise.all(unique.map(item=>inspectCandidate(item,geo)));
   return settled;
 }
+function privateReviewPool(rawItems,inspectedItems,geo,limit){
+  const inspected=new Map();
+  for(const item of inspectedItems||[]){const url=Core.externalUrl(item);if(url)inspected.set(url,item);}
+  const out=[];const seen=new Set();
+  for(const raw of rawItems||[]){
+    const url=Core.externalUrl(raw);if(!url||seen.has(url)||Core.isMarketplace(raw,url))continue;
+    const item=inspected.get(url)||raw;
+    const title=first(item&&item.title,item&&item.name,item&&item.label);if(!title)continue;
+    const sourceText=lower([item&&item.source,item&&item.provider,item&&item.sourceType,item&&item.generatedBy].filter(Boolean).join(" "));
+    if(/sanmaru-route|sanmaru-opening|provider-page-window|provider-window|search-route-hint/.test(sourceText))continue;
+    seen.add(url);
+    out.push(Object.assign({},item,{
+      igdcPrivateReviewOnly:true,
+      igdcCollectionStage:"country-discovery-unverified-market",
+      igdcCollectionScope:{country:geo.country,region:geo.region||"NATIONWIDE",collectedAt:new Date().toISOString()},
+      brokerageVerification:Object.assign({},item&&item.brokerageVerification||{},{privateQueueOnly:true,publicEligible:false})
+    }));
+    if(out.length>=limit)break;
+  }
+  return out;
+}
 
 function templateSnapshot(){
   const stored=Core.loadStoredCandidates();
@@ -119,15 +156,21 @@ function templateSnapshot(){
   return null;
 }
 async function runSelection(event,params){
-  const geo=Core.parseGeo(event,params||{});const key=cacheKey(geo);const cached=getCache(key);if(cached)return Object.assign({},cached,{meta:Object.assign({},cached.meta||{},{cache:"hit"})});
-  const started=Date.now();const stored=Core.loadStoredCandidates();let selected=Core.selection(stored.items,geo);let discovery={items:[],trace:[]};
-  if(selected.accepted.length<6 && geo.country!=="GLOBAL"){
+  const requested=params||{};
+  const explicitCountry=Core.normalizeCountry(requested.country||requested.targetCountry);
+  const geo=explicitCountry?{country:explicitCountry,region:Core.normalizeRegion(requested.region||requested.targetRegion,explicitCountry),city:"",countryName:Core.COUNTRY_NAMES[explicitCountry]||explicitCountry}:Core.parseGeo(event,requested);
+  const privateCollection=requested.privateCollection===true||String(requested.privateCollection||"").toLowerCase()==="true";
+  const privateLimit=Math.max(1,Math.min(50,Number(requested.privateLimit||requested.maxCandidates||20)||20));
+  const key=cacheKey(geo,privateCollection?"private":"front");const cached=getCache(key);if(cached)return Object.assign({},cached,{meta:Object.assign({},cached.meta||{},{cache:"hit"})});
+  const started=Date.now();const stored=Core.loadStoredCandidates();let selected=Core.selection(stored.items,geo);let discovery={items:[],trace:[]},checked=[],privateReviewItems=[];
+  if((privateCollection||selected.accepted.length<6)&&geo.country!=="GLOBAL"){
     discovery=await runSanmaruDiscovery(event,geo);
-    const checked=await inspectLive(discovery.items,geo);
+    checked=await inspectLive(discovery.items,geo);
     selected=Core.selection(stored.items.concat(checked),geo);
+    if(privateCollection)privateReviewItems=privateReviewPool(discovery.items,checked,geo,privateLimit);
   }
   const template=templateSnapshot();const snapshot=selected.accepted.length&&template?Core.buildSnapshot(template,selected.accepted,geo,{storedSources:stored.sources,discovery:discovery.trace,stats:selected.stats,elapsedMs:Date.now()-started}):null;
-  const result={status:"ok",engine:"regional-brokerage-autoselector",version:VERSION,geo:{country:geo.country,region:geo.region||null,precision:geo.region?"coarse-region":"country"},items:selected.accepted.map(x=>x.item),snapshot,meta:{cache:"miss",selection:selected.stats,rejections:selected.rejected.slice(0,80),discovery:discovery.trace,elapsedMs:Date.now()-started,hasSnapshot:!!snapshot}};
+  const result={status:"ok",engine:"regional-brokerage-autoselector",version:VERSION,geo:{country:geo.country,region:geo.region||null,precision:geo.region?"coarse-region":"country",source:explicitCountry?"explicit-scope":"request-ip"},items:selected.accepted.map(x=>x.item),privateReviewItems,snapshot,meta:{cache:"miss",selection:selected.stats,rejections:selected.rejected.slice(0,80),discovery:discovery.trace,privateReview:{enabled:privateCollection,raw:discovery.items.length,inspected:checked.length,count:privateReviewItems.length,publicPublication:false},elapsedMs:Date.now()-started,hasSnapshot:!!snapshot}};
   return setCache(key,result);
 }
 

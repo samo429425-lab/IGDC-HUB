@@ -17,7 +17,7 @@ const SlotStore = require("./global-slot-console-supabase");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const RegionalSelector = require("../regional-brokerage-autoselector");
 
-const VERSION = "commerce-country-automation-v1.0.1-private-candidate-only";
+const VERSION = "commerce-country-automation-v1.0.2-private-country-discovery";
 const POLICY_PREFIX = "igdc_country_automation_";
 const SOURCE_REF = "commerce-country-ai-control";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -242,7 +242,10 @@ function evidenceProjection(item) {
 function deterministicAssessment(items) {
   return items.map((item, index) => {
     const ev = evidenceProjection(item);
-    const score = Math.max(0, Math.min(100, Math.round((ev.official ? 25 : 0) + (ev.sellerVerified ? 25 : 0) + (ev.shipping ? 20 : 0) + (ev.returns ? 12 : 0) + (ev.service ? 10 : 0) + Math.min(8, ev.sourceTrust * 8))));
+    const rawScore = Math.max(0, Math.min(100, Math.round((ev.official ? 25 : 0) + (ev.sellerVerified ? 25 : 0) + (ev.shipping ? 20 : 0) + (ev.returns ? 12 : 0) + (ev.service ? 10 : 0) + Math.min(8, ev.sourceTrust * 8))));
+    const privateDiscovery = item && item.igdcPrivateReviewOnly === true;
+    const score = privateDiscovery ? Math.min(54, rawScore) : rawScore;
+    if (privateDiscovery) return { index, decision: "hold", score, reason: "국가별 외부 수집 후보입니다. 판매시장·배송·반품·고객지원·수익권 증빙을 관리자가 완성하기 전에는 비공개 보류 상태를 유지합니다." };
     return { index, decision: score >= 55 ? "candidate" : "hold", score, reason: score >= 55 ? "기존 검증 엔진의 공식성·배송·반품·고객지원 신호를 통과했습니다." : "검증 증빙이 부족하여 보류합니다." };
   });
 }
@@ -328,12 +331,13 @@ async function persistCandidate(item, assessment, scope, actorId, manualIds, man
   for (const row of manualRows.values()) { if (safeUrl(row && row.official_url) === url) return { status: "manual_preserved", candidateId: text(row.id) }; }
   const existingManual = await existingNonAiCandidateByUrl(url);
   if (existingManual) return { status: "existing_non_ai_preserved", candidateId: text(existingManual.id) };
-  const now = iso(); const payload = Object.assign({}, item, {
+  const now = iso(); const privateDiscovery = item && item.igdcPrivateReviewOnly === true;
+  const payload = Object.assign({}, item, {
     id: deterministicId, title, url, image: itemImage(item) || undefined,
     targetCountry: scope.country, targetRegion: scope.region,
-    commerceCandidate: Object.assign({}, plain(item && item.commerceCandidate), { sourceTier: "external_brokerage", origin: "ai-country-automation", submittedBy: text(actorId) || "scheduled-automation" }),
-    commerceReview: Object.assign({}, plain(item && item.commerceReview), { status: "pending", assignmentState: "draft", aiAutomation: true }),
-    aiAutomation: { schema: VERSION, country: scope.country, region: scope.region, provider: assessment.provider, model: assessment.model, decision: assessment.decision, score: assessment.score, reason: assessment.reason, generatedAt: now, publicPublication: false, paymentExecution: false }
+    commerceCandidate: Object.assign({}, plain(item && item.commerceCandidate), { sourceTier: "external_brokerage", origin: privateDiscovery ? "ai-country-private-discovery" : "ai-country-automation", submittedBy: text(actorId) || "scheduled-automation", privateDiscoveryOnly: privateDiscovery }),
+    commerceReview: Object.assign({}, plain(item && item.commerceReview), { status: "pending", assignmentState: "draft", aiAutomation: true, evidenceCompletionRequired: privateDiscovery }),
+    aiAutomation: { schema: VERSION, country: scope.country, region: scope.region, provider: assessment.provider, model: assessment.model, decision: assessment.decision, score: assessment.score, reason: assessment.reason, generatedAt: now, collectionStage: privateDiscovery ? "discovered_private_review" : "verified_selector_candidate", publicPublication: false, paymentExecution: false }
   });
   const existing = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload,created_at&limit=1&id=eq." + encodeURIComponent(deterministicId)))[0];
   if (existing && text(existing.source_ref) !== SOURCE_REF) return { status: "existing_non_ai_preserved", candidateId: deterministicId };
@@ -355,6 +359,18 @@ async function persistCandidate(item, assessment, scope, actorId, manualIds, man
   await SlotStore.insert("gslot_candidates", row, "return=representation");
   return { status: assessment.decision === "candidate" ? "created_candidate" : "created_hold", candidateId: deterministicId };
 }
+function mergeCandidateItems(primary, secondary, limit) {
+  const out = [], seen = new Set();
+  for (const item of array(primary).concat(array(secondary))) {
+    const url = itemUrl(item); const title = itemTitle(item);
+    if (!url || !title) continue;
+    const key = url.toLowerCase(); if (seen.has(key)) continue;
+    seen.add(key); out.push(item);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 async function updateRunState(scope, currentSetting, report, actorId) {
   const scopeType = scope.region && scope.region !== "NATIONWIDE" ? "subdivision" : "country";
   const input = { scopeType, countryCode: scope.country, subdivisionCode: scope.region, mode: currentSetting && currentSetting.mode || "inherit", intervalDays: currentSetting && currentSetting.intervalDays || DEFAULT_INTERVAL_DAYS, maxCandidates: currentSetting && currentSetting.maxCandidates || DEFAULT_MAX_CANDIDATES, expandSubdivisions: currentSetting && currentSetting.expandSubdivisions === true };
@@ -382,10 +398,14 @@ async function runScope(options) {
   const report = { ok: true, reportType: "igdc-country-commerce-automation-run", version: VERSION, runId, trigger: text(opts.trigger) || "manual", startedAt, scope, effective, safety: { privateCandidateQueueOnly: true, publicSnapshotPublication: false, checkout: false, payment: false, externalSellerNavigation: false, manualPinnedOverwrite: false, aiCannotInventUrls: true }, ai: { provider: "pending", model: null, error: null }, summary: { collected: 0, considered: 0, created: 0, updated: 0, held: 0, manualPreserved: 0, skipped: 0 }, candidates: [], trace: [], error: null };
   try {
     const manualIds = await manualPinnedIds(country, region); const manualRows = await candidateRowsByIds(manualIds);
-    const selection = await RegionalSelector.runSelection(opts.event || {}, { country, region: region === "NATIONWIDE" ? undefined : region });
-    const items = array(selection && selection.items).slice(0, effective.maxCandidates || DEFAULT_MAX_CANDIDATES);
-    report.summary.collected = Number(selection && selection.meta && selection.meta.selection && selection.meta.selection.input || items.length) || items.length;
+    const maxCandidates = effective.maxCandidates || DEFAULT_MAX_CANDIDATES;
+    const selection = await RegionalSelector.runSelection(opts.event || {}, { country, region: region === "NATIONWIDE" ? undefined : region, privateCollection: true, privateLimit: maxCandidates, maxCandidates });
+    const items = mergeCandidateItems(selection && selection.items, selection && selection.privateReviewItems, maxCandidates);
+    const selectionInput = Number(selection && selection.meta && selection.meta.selection && selection.meta.selection.received || 0);
+    const privateInput = Number(selection && selection.meta && selection.meta.privateReview && selection.meta.privateReview.raw || 0);
+    report.summary.collected = Math.max(items.length, selectionInput, privateInput);
     report.summary.considered = items.length; report.trace = array(selection && selection.meta && selection.meta.discovery).slice(0, 30);
+    report.collection = { selectorVersion: text(selection && selection.version) || null, targetSource: text(selection && selection.geo && selection.geo.source) || null, verifiedSelectorItems: array(selection && selection.items).length, privateReviewItems: array(selection && selection.privateReviewItems).length, publicPublication: false };
     const ai = await openAiAssessment(items, scope); report.ai = { provider: ai.provider, model: ai.model, error: ai.error || null };
     for (let index = 0; index < items.length; index += 1) {
       const assessment = Object.assign({ provider: ai.provider, model: ai.model }, ai.assessments[index] || deterministicAssessment([items[index]])[0]);
@@ -396,7 +416,7 @@ async function runScope(options) {
       else if (/hold/.test(result.status)) report.summary.held += 1;
       else if (/manual_preserved|existing_non_ai_preserved|operator_state_preserved/.test(result.status)) report.summary.manualPreserved += 1;
       else report.summary.skipped += 1;
-      report.candidates.push({ index, candidateId: result.candidateId || null, title: itemTitle(items[index]), url: itemUrl(items[index]), decision: assessment.decision, score: assessment.score, reason: assessment.reason, persistence: result.status });
+      report.candidates.push({ index, candidateId: result.candidateId || null, title: itemTitle(items[index]), url: itemUrl(items[index]), collectionStage: items[index] && items[index].igdcPrivateReviewOnly === true ? "discovered_private_review" : "verified_selector_candidate", decision: assessment.decision, score: assessment.score, reason: assessment.reason, persistence: result.status });
     }
   } catch (error) {
     report.ok = false; report.error = text(error && error.message); report.errorCode = text(error && error.code) || null;
