@@ -12,6 +12,20 @@
   var state=$('state'), notice=$('notice'), diagnosticCache=null, acceptedToken='', acceptedSession=null, resolvingSession=null;
   var TOKEN_KEYS=['osauth.tokens.v2','osauth.tokens.v1','igdc.tokens','igdc_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token'];
 
+  function scopeContext(){
+    var q=new URLSearchParams(location.search);
+    var country=text(q.get('country')).toUpperCase();
+    var region=text(q.get('region')||'ALL').toUpperCase();
+    return {country:country==='GLOBAL'?'GLOBAL':(/^[A-Z]{2}$/.test(country)?country:''),region:region||'ALL',source:country?'selected':'request-ip'};
+  }
+  var ACTIVE_SCOPE=scopeContext();
+  function updateScope(scope){
+    if(!scope)return;
+    if(scope.country&&/^[A-Z]{2}$/.test(String(scope.country))){ACTIVE_SCOPE={country:String(scope.country).toUpperCase(),region:String(scope.region||'NATIONWIDE').toUpperCase(),source:scope.source||'resolved'};try{localStorage.setItem('igdc_admin_country_scope_v1',JSON.stringify({country:ACTIVE_SCOPE.country,region:ACTIVE_SCOPE.region,updatedAt:new Date().toISOString(),source:'commerce-candidate-pipeline'}));}catch(_e){}}
+    else if(scope.source==='unresolved-ip')ACTIVE_SCOPE={country:'',region:'',source:'unresolved-ip'};
+  }
+  function scopeLabel(){return ACTIVE_SCOPE.country?((ACTIVE_SCOPE.country==='GLOBAL'?'전 세계':ACTIVE_SCOPE.country)+' / '+(ACTIVE_SCOPE.region||'ALL')):(ACTIVE_SCOPE.source==='unresolved-ip'?'IP 범위 미확인':'현재 접속 IP 자동 판정');}
+
   function cls(kind){return kind==='ok'?'ok':kind==='warn'?'warn':'';}
   function show(message,kind){notice.className='notice '+cls(kind);notice.textContent=message;notice.classList.remove('hidden');}
   function hideNotice(){notice.classList.add('hidden');notice.textContent='';}
@@ -75,7 +89,8 @@
     return out;
   }
   async function request(action,token){
-    var response=await fetch(ENDPOINT+'?action='+encodeURIComponent(action),{headers:{Authorization:'Bearer '+token,Accept:'application/json'},credentials:'same-origin',cache:'no-store'});
+    var u=new URL(ENDPOINT,location.origin);u.searchParams.set('action',action);if(action!=='session'&&ACTIVE_SCOPE.country){u.searchParams.set('country',ACTIVE_SCOPE.country);u.searchParams.set('region',ACTIVE_SCOPE.region||'ALL');}
+    var response=await fetch(u.pathname+u.search,{headers:{Authorization:'Bearer '+token,Accept:'application/json'},credentials:'same-origin',cache:'no-store'});
     var data=null;try{data=await response.json();}catch(_e){}
     if(!response.ok||!data||data.ok!==true){var error=new Error((data&&data.error)||('요청 실패: HTTP '+response.status));error.code=data&&data.code;error.status=response.status;throw error;}
     return data;
@@ -91,7 +106,7 @@
         try{
           var data=await request('session',candidates[i]);
           acceptedToken=candidates[i];acceptedSession=data;
-          state.textContent='관리자 공통 세션 확인: '+sessionLabel(data);
+          state.textContent='관리자 공통 세션 확인: '+sessionLabel(data)+(ACTIVE_SCOPE.country?' · 범위 '+ACTIVE_SCOPE.country+' / '+(ACTIVE_SCOPE.region||'ALL'):'');
           return data;
         }catch(_e){}
       }
@@ -119,7 +134,7 @@
   function renderSummary(summary){var s=summary.summary||{};var g=$('summaryGrid');g.innerHTML=''+gridCard('검토 후보',s.considered||0,'SearchBank·관리자 대기열 결합')+gridCard('발행 전 통과',s.eligibleForRelease||0,'공개 키는 별도 배포 환경에서만')+gridCard('현재 정식 발행',s.releasedToCanonical||0,'현재 실행 기준 Canonical 전달 수')+gridCard('검토 보류',s.held||0,'증빙·수익·승인 누락 포함');g.classList.remove('hidden');var gate=summary.releaseGate||{};var panel=$('policyPanel');var release=gate.enabled===true;panel.innerHTML='<h2>공개 전 안전 상태</h2><div class="notice '+(release?'ok':'warn')+'"><strong>'+esc(release?'발행 키가 배포 환경에서 확인됨':'현재는 비공개 대기열 상태')+'</strong><br>'+esc(release?'그래도 각 후보는 Canonical·IP·판매시장 검증을 다시 통과해야 합니다.':'현재 후보는 관리자 검토와 증빙 수집 단계에만 남으며, 프론트 상품 슬롯으로 자동 공개되지 않습니다.')+'</div><div class="small" style="margin-top:9px">릴리스 키 값과 비밀정보는 이 화면에 표시하지 않습니다. stage: '+esc(summary.generatedAt||'아직 생성되지 않음')+'</div>';panel.classList.remove('hidden');}
   function renderRows(candidates){var tbody=$('candidateRows');var list=Array.isArray(candidates)?candidates:[];if(!list.length){tbody.innerHTML='<tr><td colspan="9" class="empty">현재 표시할 비공개 후보가 없습니다. 기존 샘플·미검증 후보는 정상적으로 대기열에서 제외됩니다.</td></tr>';$('tablePanel').classList.remove('hidden');return;}tbody.innerHTML=list.map(function(c){var p=c.placement||{},r=c.revenue||{},v=c.review||{},rank=c.ranking||{};var reasons=Array.isArray(c.reasons)&&c.reasons.length?c.reasons.join('\n'):'-';return '<tr><td><strong class="mono">'+esc(c.candidateId||'-')+'</strong><br><span class="small">host: '+esc(c.destinationHost||'-')+'</span></td><td><span class="pill '+tierClass(c.sourceTier)+'">'+esc(labelTier(c.sourceTier))+'</span></td><td>'+statusPill(c)+'</td><td><span class="mono">'+esc((p.page||'-')+' / '+(p.section||'-')+(p.slot?' / '+p.slot:''))+'</span></td><td>'+esc((c.marketKeys||[]).join(', ')||'-')+'</td><td>'+esc(c.essentialClass||'-')+'</td><td><span class="mono">'+esc(r.type||'-')+'</span><br><span class="small">상태: '+esc(r.monetizationState||'-')+' · 계약: '+esc(r.contractId||'-')+' · 검토: '+esc(v.state||'-')+'</span><br><span class="small">경로: '+esc(r.outboundRoute&&r.outboundRoute.mode||'-')+'</span></td><td><strong>'+esc(number(rank.finalScore).toFixed(2))+'</strong><br><span class="small">생활 '+esc(rank.essentiality||0)+' · 신뢰 '+esc(rank.sellerTrust||0)+' · 수익 '+esc(rank.revenueCertainty||0)+'</span></td><td class="reason">'+esc(reasons).replace(/\n/g,'<br>')+'</td></tr>';}).join('');$('tablePanel').classList.remove('hidden');}
   function renderDiagnostic(doc){diagnosticCache=doc||null;var panel=$('diagnosticPanel'),pre=$('diagnosticJson');pre.textContent=JSON.stringify(doc||{},null,2);panel.classList.remove('hidden');$('downloadDiagnosticBtn').disabled=!diagnosticCache;}
-  async function refresh(){hideNotice();var button=$('refreshBtn');button.disabled=true;try{await ensureSession(false);var both=await Promise.all([api('summary'),api('candidates')]);renderSummary(both[0].summary||{});renderRows(both[1].candidates||[]);show('비공개 상품 후보 대기열을 새로 읽었습니다. 이 동작은 공개 발행·외부 판매처 이동·결제를 실행하지 않습니다.','ok');}catch(error){show(authErrorMessage(error),'warn');}finally{button.disabled=false;}}
+  async function refresh(){hideNotice();var button=$('refreshBtn');button.disabled=true;try{await ensureSession(false);var both=await Promise.all([api('summary'),api('candidates')]);updateScope(both[0].scope);state.textContent='관리자 공통 세션 확인 · 범위 '+scopeLabel();renderSummary(both[0].summary||{});renderRows(both[1].candidates||[]);show(scopeLabel()+' 비공개 상품 후보 대기열을 새로 읽었습니다. 이 동작은 공개 발행·외부 판매처 이동·결제를 실행하지 않습니다.','ok');}catch(error){show(authErrorMessage(error),'warn');}finally{button.disabled=false;}}
   async function diagnostic(){hideNotice();var button=$('diagnosticBtn');button.disabled=true;try{await ensureSession(false);var data=await api('diagnostic');renderDiagnostic(data);show('상품 후보·중개수익 전용 점검 JSON을 읽었습니다. 이 동작은 읽기 전용입니다.','ok');}catch(error){show(authErrorMessage(error),'warn');}finally{button.disabled=false;}}
   function safeFilePart(value){return text(value).toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80)||'commerce-candidate-queue';}
   function jsonFileName(doc){

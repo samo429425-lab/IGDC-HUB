@@ -2,6 +2,20 @@
   'use strict';
   var lastReport = null;
   var $ = function(id){ return document.getElementById(id); };
+  function initialScope(){
+    var q=new URLSearchParams(location.search);
+    var raw=String(q.get('country')||'').trim().toUpperCase();
+    var region=String(q.get('region')||'NATIONWIDE').trim().toUpperCase();
+    if(raw==='GLOBAL')return{country:'GLOBAL',region:'ALL',source:'administrator-global'};
+    return{country:/^[A-Z]{2}$/.test(raw)?raw:'',region:region||'NATIONWIDE',source:raw?'selected':'request-ip'};
+  }
+  var ACTIVE_SCOPE=initialScope();
+  function updateScope(scope){
+    if(!scope)return;
+    if(scope.country&&/^[A-Z]{2}$/.test(String(scope.country))){ACTIVE_SCOPE={country:String(scope.country).toUpperCase(),region:String(scope.region||'NATIONWIDE').toUpperCase(),source:scope.source||'resolved'};try{localStorage.setItem('igdc_admin_country_scope_v1',JSON.stringify({country:ACTIVE_SCOPE.country,region:ACTIVE_SCOPE.region,updatedAt:new Date().toISOString(),source:'product-go-live-audit'}));}catch(_e){}}
+    else if(scope.unresolved||scope.source==='unresolved-ip'||scope.source==='excluded-ip')ACTIVE_SCOPE={country:'',region:'',source:scope.source||'unresolved-ip'};
+  }
+  function scopeLabel(){return ACTIVE_SCOPE.country?((ACTIVE_SCOPE.country==='GLOBAL'?'전 세계':ACTIVE_SCOPE.country)+' / '+(ACTIVE_SCOPE.region||'ALL')):(ACTIVE_SCOPE.source==='unresolved-ip'||ACTIVE_SCOPE.source==='excluded-ip'?'IP 범위 미확인':'현재 접속 IP 자동 판정');}
   function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
   function text(v){ return v == null ? '' : String(v); }
   function statusClass(v){ v=String(v||'').toLowerCase(); if(/block|fail|error/.test(v)) return 'fail'; if(/not_ready|hold|warn|review_required|attention|required/.test(v)) return 'warn'; if(/ready|ok|pass/.test(v)) return 'ok'; return 'info'; }
@@ -12,7 +26,7 @@
   function card(title, number, note, cls){ return '<div class="card"><h2>'+esc(title)+'</h2><div class="num '+(cls||'info')+'">'+esc(number)+'</div><div class="small">'+esc(note||'')+'</div></div>'; }
   function boolMark(v){ return v ? '<span class="ok">준비</span>' : '<span class="warn">미설정</span>'; }
   function render(report){
-    lastReport=report;
+    lastReport=report;updateScope(report&&report.selectedScope);
     var s=report.summary||{}, gate=report.gate||{}, runtime=report.runtime||{}, ps=runtime.providerSettlement||{};
     $('summary').innerHTML=[
       card('실제 상품 후보',s.realProductCandidates||0,'샘플·시드 제외','info'),
@@ -27,13 +41,13 @@
 
     var gateClass=statusClass(gate.state);
     $('gatePanel').classList.remove('hidden');
-    $('gatePanel').innerHTML='<h2>개방 게이트</h2><div class="notice '+(gateClass==='ok'?'okbox':(gateClass==='warn'?'warnbox':''))+'"><strong class="'+gateClass+'">'+esc(gate.state||'unknown')+'</strong><br>'+esc(gate.reason||'')+'<br><span class="small">'+esc(gate.note||'')+'</span></div>';
+    $('gatePanel').innerHTML='<h2>개방 게이트 · '+esc(scopeLabel())+'</h2><div class="notice '+(gateClass==='ok'?'okbox':(gateClass==='warn'?'warnbox':''))+'"><strong class="'+gateClass+'">'+esc(gate.state||'unknown')+'</strong><br>'+esc(gate.reason||'')+'<br><span class="small">'+esc(gate.note||'')+'</span></div>';
 
     var snapRows=(report.snapshots||[]).map(function(row){
-      return '<tr><td>'+esc(row.key)+'</td><td>'+esc(row.totalItems||0)+'</td><td>'+esc(row.seedOrSample||0)+'</td><td>'+esc(row.realProductCandidates||0)+'</td><td>'+esc(row.readyAffiliate||0)+'</td><td>'+esc(row.readyDirectRevenue||0)+'</td><td>'+esc(row.revenueReviewRequired||0)+'</td><td>'+esc(row.readyExternalReferral||0)+'</td><td>'+esc(row.hold||0)+'</td><td>'+esc(row.block||0)+'</td><td class="'+(row.copies&&row.copies.synchronized?'ok':'warn')+'">'+(row.copies&&row.copies.synchronized?'동기화':'확인 필요')+'</td></tr>';
+      return '<tr><td>'+esc(row.key)+'</td><td>'+esc(row.sourceTotalItems||row.totalItems||0)+'</td><td>'+esc(row.totalItems||0)+'</td><td>'+esc(row.seedOrSample||0)+'</td><td>'+esc(row.realProductCandidates||0)+'</td><td>'+esc(row.readyAffiliate||0)+'</td><td>'+esc(row.readyDirectRevenue||0)+'</td><td>'+esc(row.revenueReviewRequired||0)+'</td><td>'+esc(row.readyExternalReferral||0)+'</td><td>'+esc(row.hold||0)+'</td><td>'+esc(row.block||0)+'</td><td class="'+(row.copies&&row.copies.synchronized?'ok':'warn')+'">'+(row.copies&&row.copies.synchronized?'동기화':'확인 필요')+'</td></tr>';
     }).join('');
     $('snapshotPanel').classList.remove('hidden');
-    $('snapshotPanel').innerHTML='<h2>스냅샷별 실상품 준비 상태</h2><div class="small">공개 데이터와 함수 배포본의 해시를 비교합니다. 외부 판매처에는 접속하지 않습니다.</div><table><thead><tr><th>스냅샷</th><th>전체</th><th>샘플</th><th>실상품</th><th>제휴</th><th>직접수익</th><th>수익검토</th><th>구형 외부추천</th><th>보류</th><th>차단</th><th>복제본</th></tr></thead><tbody>'+snapRows+'</tbody></table>';
+    $('snapshotPanel').innerHTML='<h2>스냅샷별 실상품 준비 상태</h2><div class="small">공개 데이터와 함수 배포본의 해시를 비교합니다. 외부 판매처에는 접속하지 않습니다.</div><table><thead><tr><th>스냅샷</th><th>원본 전체</th><th>선택 범위</th><th>샘플</th><th>실상품</th><th>제휴</th><th>직접수익</th><th>수익검토</th><th>구형 외부추천</th><th>보류</th><th>차단</th><th>복제본</th></tr></thead><tbody>'+snapRows+'</tbody></table>';
 
     var candidates=report.candidateRows||[];
     var candRows=candidates.length?candidates.map(function(row){
@@ -41,7 +55,7 @@
       var revenue=row.revenueQualification||{};
       var revenueText=(revenue.type||'미확인')+' / '+(revenue.payable?'지급 가능 검증':(revenue.potential?'검토 필요':'수익권 없음'));
       if(revenue.contractId) revenueText+=' / '+revenue.contractId;
-      return '<tr><td class="'+statusClass(row.status)+'"><strong>'+esc(row.status)+'</strong></td><td>'+esc(row.id||'')+'<br><span class="small">'+esc(row.title||'')+'</span></td><td>'+esc(row.page||'')+' / '+esc(row.section||'')+'</td><td>'+esc(row.sellerHost||'')+'<br><span class="small">'+esc(row.sellerUrlState||'')+'</span></td><td>'+esc(row.affiliate&&row.affiliate.providerId||'없음')+'<br><span class="small">'+esc(row.affiliate&&row.affiliate.status||'')+'</span></td><td>'+esc(revenueText)+'<br><span class="small">'+esc((revenue.verificationReasons||[]).join(', '))+'</span></td><td>'+esc(reasons)+'</td></tr>';
+      var scope=row.selectedScopeMatch||{};return '<tr><td class="'+statusClass(row.status)+'"><strong>'+esc(row.status)+'</strong><br><span class="small">'+esc(scope.mode||'global')+'</span></td><td>'+esc(row.id||'')+'<br><span class="small">'+esc(row.title||'')+'</span></td><td>'+esc(row.page||'')+' / '+esc(row.section||'')+'</td><td>'+esc(row.sellerHost||'')+'<br><span class="small">'+esc(row.sellerUrlState||'')+'</span></td><td>'+esc(row.affiliate&&row.affiliate.providerId||'없음')+'<br><span class="small">'+esc(row.affiliate&&row.affiliate.status||'')+'</span></td><td>'+esc(revenueText)+'<br><span class="small">'+esc((revenue.verificationReasons||[]).join(', '))+'</span></td><td>'+esc(reasons)+'</td></tr>';
     }).join(''):'<tr><td colspan="7" class="small">현재는 실상품 후보가 없습니다. 실제 공급이 아직 꺼져 있거나, 스냅샷이 샘플 상태인 경우 정상입니다.</td></tr>';
     $('candidatePanel').classList.remove('hidden');
     $('candidatePanel').innerHTML='<h2>실상품 후보 판정</h2><div class="small">승인된 제휴 계약 또는 검증된 직접 광고·중개·리드·협찬 계약만 수익 준비 후보로 계산합니다. 일반 외부 판매처와 트래픽 가치 후보는 수익권 검토 상태로 유지하며 확정 수수료로 처리하지 않습니다.</div><table><thead><tr><th>판정</th><th>상품</th><th>배치</th><th>판매처</th><th>제휴 계약</th><th>수익 자격</th><th>보류/정보</th></tr></thead><tbody>'+candRows+'</tbody></table>';
@@ -63,12 +77,12 @@
     var btn=$('runAuditBtn'); if(btn) btn.disabled=true;
     setStatus('실상품·신뢰·권역·제휴 계약·정산 수령 준비 상태를 읽는 중입니다…','info');
     try{
-      var url='/.netlify/functions/product-go-live-audit?mode='+encodeURIComponent(mode())+'&limit=120&ts='+Date.now();
-      var res=await fetch(url,{cache:'no-store',headers:{'accept':'application/json'}});
+      var u=new URL('/.netlify/functions/product-go-live-audit',location.origin);u.searchParams.set('mode',mode());u.searchParams.set('limit','120');u.searchParams.set('ts',String(Date.now()));if(ACTIVE_SCOPE.country){u.searchParams.set('country',ACTIVE_SCOPE.country);u.searchParams.set('region',ACTIVE_SCOPE.region||'NATIONWIDE');}
+      var res=await fetch(u.pathname+u.search,{cache:'no-store',headers:{'accept':'application/json'}});
       var body=await res.json().catch(function(){return null;});
       if(!res.ok || !body || body.ok!==true) throw new Error((body&&body.error)||('HTTP '+res.status));
       render(body);
-      setStatus('점검 완료 · '+(body.gate&&body.gate.state||'unknown'),' '+statusClass(body.status));
+      setStatus('점검 완료 · '+scopeLabel()+' · '+(body.gate&&body.gate.state||'unknown'),' '+statusClass(body.status));
     }catch(err){ setStatus('점검 실패: '+String(err&&err.message||err),'fail'); }
     finally{ if(btn) btn.disabled=false; }
   }
@@ -95,7 +109,7 @@
       });
       timer=setTimeout(function(){ finish({label:label,url:url,status:'warn',error:'load-timeout'}); },9000);
       document.body.appendChild(frame);
-      frame.src=url+(url.indexOf('?')>=0?'&':'?')+'igdc_readonly_audit=1&ts='+Date.now();
+      var target=new URL(url,location.origin);target.searchParams.set('igdc_readonly_audit','1');target.searchParams.set('ts',String(Date.now()));if(ACTIVE_SCOPE.country&&ACTIVE_SCOPE.country!=='GLOBAL'){target.searchParams.set('country',ACTIVE_SCOPE.country);target.searchParams.set('region',ACTIVE_SCOPE.region||'NATIONWIDE');}frame.src=target.pathname+target.search;
     });
   }
   async function runPageObservation(){
@@ -126,6 +140,7 @@
     $('downloadJsonBtn').addEventListener('click',function(){ if(lastReport) download('IGDC_PRODUCT_GO_LIVE_AUDIT_'+nowStamp()+'.json',JSON.stringify(lastReport,null,2),'application/json'); });
     $('downloadHtmlBtn').addEventListener('click',function(){ if(lastReport) download('IGDC_PRODUCT_GO_LIVE_AUDIT_'+nowStamp()+'.html',htmlSummary(),'text/html;charset=utf-8'); });
     $('returnBtn').addEventListener('click',returnToAdmin);
+    setStatus('점검 범위 · '+scopeLabel(),'info');
     runAudit();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();

@@ -17,8 +17,9 @@ const crypto = require("crypto");
 const Trust = require("./lib/trustFilter.core.v1");
 const NonPgRevenue = require("./lib/nonpg-revenue-contract.core.v1");
 const LedgerStore = require("./lib/revenue-ledger-supabase.v1");
+const MarketSaleScope = require("./lib/market-sale-scope.v1");
 
-const VERSION = "product-go-live-audit-v1.0.1-revenue-ledger-config-aligned";
+const VERSION = "product-go-live-audit-v1.1.0-country-region-scoped-readonly";
 const MAX_ROWS = 120;
 
 const SNAPSHOT_SPECS = [
@@ -51,6 +52,51 @@ function json(statusCode, body){ return { statusCode, headers:noStoreHeaders(), 
 function cleanMode(v){ return low(v) === "production" ? "production" : "pre-product"; }
 function safeLimit(v){ return Math.max(1, Math.min(MAX_ROWS, Math.floor(num(v, 60)) || 60)); }
 function getParam(event, name){ return event && event.queryStringParameters ? event.queryStringParameters[name] : undefined; }
+function headerMap(event){
+  const out = {};
+  for(const [key, value] of Object.entries(event && event.headers || {})) out[String(key).toLowerCase()] = value;
+  return out;
+}
+function readGeoObject(value){
+  const raw = text(value);
+  if(!raw) return {};
+  for(const candidate of [raw, (() => { try { return decodeURIComponent(raw); } catch(_error) { return ""; } })()]){
+    try { const parsed = JSON.parse(candidate); if(isObject(parsed)) return parsed; } catch(_error){}
+  }
+  return {};
+}
+let COUNTRY_CODE_CACHE = null;
+function supportedCountryCodes(){
+  if(COUNTRY_CODE_CACHE) return COUNTRY_CODE_CACHE;
+  const files = [
+    path.join(process.cwd(), "data", "country-region-registry.v1.json"),
+    path.join(__dirname, "..", "..", "data", "country-region-registry.v1.json"),
+    path.join(__dirname, "data", "country-region-registry.v1.json")
+  ];
+  let rows = [];
+  for(const file of files){
+    try { if(fs.existsSync(file)){ const doc=JSON.parse(fs.readFileSync(file,"utf8")); rows=asArray(doc&&doc.countries); break; } } catch(_error){}
+  }
+  COUNTRY_CODE_CACHE = new Set(rows.map((row)=>MarketSaleScope.normalizeCountry(row&&row.code)).filter((code)=>code&&code!=="KP"));
+  return COUNTRY_CODE_CACHE;
+}
+function geoScope(event){
+  const headers = headerMap(event);
+  const geo = Object.assign({}, isObject(event&&event.geo) ? event.geo : {}, readGeoObject(headers["x-nf-geo"]));
+  const countryObject = isObject(geo.country) ? geo.country : {};
+  const subdivision = isObject(geo.subdivision) ? geo.subdivision : {};
+  const rawDetected = text(first(
+    countryObject.code, countryObject.alpha2, typeof geo.country === "string" ? geo.country : "", geo.countryCode, geo.country_code,
+    headers["cf-ipcountry"], headers["x-country"], headers["x-vercel-ip-country"], headers["x-nf-country"]
+  )).toUpperCase();
+  const detected = MarketSaleScope.normalizeCountry(rawDetected);
+  if(!detected || detected === "KP" || !supportedCountryCodes().has(detected)) return { country:null, region:null, resolved:false, excluded:detected === "KP", detectedCountry:detected || rawDetected || null };
+  const region = MarketSaleScope.normalizeRegion(first(
+    subdivision.code, subdivision.iso_code, typeof geo.subdivision === "string" ? geo.subdivision : "", geo.subdivisionCode, geo.regionCode,
+    geo.stateCode, geo.provinceCode, geo.region, geo.state, headers["x-region"], headers["x-nf-subdivision"], headers["x-nf-region"], headers["x-vercel-ip-country-region"]
+  ), detected);
+  return { country:detected, region:region || "NATIONWIDE", resolved:true, excluded:false, detectedCountry:detected };
+}
 function nested(obj, parts){
   let current = obj;
   for(const part of parts){
@@ -107,6 +153,99 @@ function hasCountryOrRegion(item){
     shipping.country, delivery.country, seller.country
   );
 }
+function normalizeCountry(value){ return MarketSaleScope.normalizeCountry(value); }
+function normalizeRegion(value, country){ return MarketSaleScope.normalizeRegion(value, country); }
+function itemMarketScopes(item){
+  const scopes = [];
+  const seen = new Set();
+  function add(countryInput, regionInput){
+    const country = normalizeCountry(countryInput);
+    if(!country || country === "KP") return;
+    const region = normalizeRegion(regionInput || "NATIONWIDE", country) || "NATIONWIDE";
+    const key = country + "|" + region;
+    if(seen.has(key)) return;
+    seen.add(key);
+    scopes.push({ country, region });
+  }
+  try {
+    for(const record of MarketSaleScope.recordsFor(item)){
+      const country = normalizeCountry(record && record.country);
+      if(!country) continue;
+      for(const region of asArray(record && record.regions)) add(country, region);
+      if(record && record.nationwide === true) add(country, "NATIONWIDE");
+    }
+  } catch(_error){}
+  const marketScope = isObject(item && item.marketScope) ? item.marketScope : {};
+  add(marketScope.marketCountry, marketScope.marketRegion);
+  const supply = isObject(item && item.countrySupply) ? item.countrySupply : {};
+  const shipping = isObject(item && item.shipping) ? item.shipping : {};
+  const delivery = isObject(item && item.delivery) ? item.delivery : {};
+  const seller = isObject(item && item.seller) ? item.seller : {};
+  const directCountry = first(
+    item && item.targetCountry, item && item.countryCode, item && item.country,
+    item && item.marketCountry, item && item.distributionMarketCountry,
+    supply.targetMarket, supply.countryCode, supply.country,
+    shipping.country, delivery.country, seller.country
+  );
+  const directRegion = first(
+    item && item.targetRegion, item && item.regionCode, item && item.region,
+    item && item.distributionMarketRegion, supply.targetRegion, supply.regionCode, supply.region
+  );
+  add(directCountry, directRegion || "NATIONWIDE");
+  const countries = [];
+  for(const value of [
+    item && item.availabilityCountries,
+    item && item.availableCountries,
+    item && item.countryCodes,
+    supply.availabilityCountries,
+    supply.countryCodes,
+    shipping.countries,
+    delivery.countries
+  ]){
+    if(Array.isArray(value)) countries.push(...value);
+    else if(text(value)) countries.push(value);
+  }
+  const regions = [];
+  for(const value of [
+    item && item.availabilityRegions,
+    item && item.regionCodes,
+    supply.availabilityRegions,
+    supply.regionCodes,
+    shipping.regions,
+    delivery.regions
+  ]){
+    if(Array.isArray(value)) regions.push(...value);
+    else if(text(value)) regions.push(value);
+  }
+  for(const country of countries){
+    if(regions.length) for(const region of regions) add(country, region);
+    else add(country, "NATIONWIDE");
+  }
+  return scopes;
+}
+function selectedScope(countryInput, regionInput){
+  const rawCountry = text(countryInput).toUpperCase();
+  if(!rawCountry) return { country:null, region:"ALL", active:false, source:"explicit-global-default", fallback:"global-read", crossCountry:false };
+  if(rawCountry === "UNSCOPED") return { country:"UNSCOPED", region:"ALL", active:true, source:"administrator-unscoped", fallback:"unscoped-only", crossCountry:false };
+  const country = normalizeCountry(rawCountry);
+  if(!country || country === "KP" || !supportedCountryCodes().has(country)) return { country:null, region:null, active:true, unresolved:true, excluded:country === "KP", detectedCountry:country || rawCountry, source:country === "KP" ? "excluded-selection" : "invalid-selection", fallback:"empty", crossCountry:false };
+  const rawRegion = text(regionInput).toUpperCase();
+  const region = rawRegion === "ALL" ? "ALL" : (normalizeRegion(rawRegion || "NATIONWIDE", country) || "NATIONWIDE");
+  return { country, region, active:true, source:"administrator-selected", fallback:"exact-region-then-nationwide-within-same-country", crossCountry:false };
+}
+function scopeMatch(item, scope){
+  const scopes = itemMarketScopes(item);
+  if(scope && scope.unresolved === true) return { matched:false, mode:"unresolved_geo", country:null, region:null, itemScopes:scopes };
+  if(!scope || !scope.active) return { matched:true, mode:"global", country:null, region:"ALL", itemScopes:scopes };
+  if(scope.country === "UNSCOPED") return { matched:scopes.length === 0, mode:"unscoped", country:"UNSCOPED", region:"ALL", itemScopes:scopes };
+  const sameCountry = scopes.filter((row) => row.country === scope.country);
+  if(!sameCountry.length) return { matched:false, mode:"none", country:scope.country, region:scope.region, itemScopes:scopes };
+  if(scope.region === "ALL") return { matched:true, mode:"country", country:scope.country, region:"ALL", itemScopes:sameCountry };
+  if(scope.region === "NATIONWIDE") return { matched:sameCountry.some((row) => row.region === "NATIONWIDE"), mode:"nationwide", country:scope.country, region:"NATIONWIDE", itemScopes:sameCountry };
+  if(sameCountry.some((row) => row.region === scope.region)) return { matched:true, mode:"exact_region", country:scope.country, region:scope.region, itemScopes:sameCountry };
+  if(sameCountry.some((row) => row.region === "NATIONWIDE")) return { matched:true, mode:"nationwide_fallback", country:scope.country, region:scope.region, itemScopes:sameCountry };
+  return { matched:false, mode:"none", country:scope.country, region:scope.region, itemScopes:sameCountry };
+}
 function hasDeliverySignal(item){
   const shipping = isObject(item && item.shipping) ? item.shipping : {};
   const delivery = isObject(item && item.delivery) ? item.delivery : {};
@@ -155,7 +294,7 @@ function revenueQualification(item){
     verificationReasons:asArray(revenue.verificationReasons).slice(0,12)
   };
 }
-function publicItemRow(item, source, page, section){
+function publicItemRow(item, source, page, section, match){
   const sellerUrl = itemUrl(item);
   const trust = Trust.evaluateFrontEligibility(item, { frontSupply:true, commerce:true, strictFront:true, surface:"distribution" });
   const affiliate = NonPgRevenue.affiliateForItem(item);
@@ -166,7 +305,8 @@ function publicItemRow(item, source, page, section){
   const id = itemId(item);
   const title = itemTitle(item);
   const image = itemImage(item);
-  const regional = hasCountryOrRegion(item);
+  const marketScopes = itemMarketScopes(item);
+  const regional = marketScopes.length > 0 || hasCountryOrRegion(item);
   const delivery = hasDeliverySignal(item);
 
   if(!id) issues.push("missing-product-id");
@@ -207,6 +347,8 @@ function publicItemRow(item, source, page, section){
     sellerUrlState: isHttps(sellerUrl) ? "https" : (isFragmentOrEmpty(sellerUrl) ? "empty" : "invalid"),
     imageReady: !!image,
     countryOrRegion: regional,
+    selectedScopeMatch: match || null,
+    marketScopes,
     deliveryEvidence: delivery,
     frontEligibility: {
       eligible: !!trust.frontEligible,
@@ -328,21 +470,27 @@ function envReady(){
     }
   };
 }
-function summarize(mode, limit){
+function summarize(mode, limit, scopeInput){
   const loaded = SNAPSHOT_SPECS.map(loadSnapshot);
   const snapshotReports = [];
   const uniqueReal = new Map();
-  const counts = { allItems:0, seedOrSample:0, productSignals:0, realProductCandidates:0, readyAffiliate:0, readyDirectRevenue:0, revenueReviewRequired:0, readyExternalReferral:0, hold:0, block:0 };
+  const scope = scopeInput && scopeInput.active !== undefined ? scopeInput : selectedScope(scopeInput && scopeInput.country, scopeInput && scopeInput.region);
+  const counts = { sourceAllItems:0, allItems:0, seedOrSample:0, productSignals:0, realProductCandidates:0, readyAffiliate:0, readyDirectRevenue:0, revenueReviewRequired:0, readyExternalReferral:0, hold:0, block:0 };
 
   loaded.forEach(record => {
-    const rows = record.source && record.source.exists && record.source.json ? flattenSnapshot(record.source.json, record.spec) : [];
+    const sourceRows = record.source && record.source.exists && record.source.json ? flattenSnapshot(record.source.json, record.spec) : [];
+    const scopedRows = sourceRows.map((row) => ({ row, match:scopeMatch(row.item, scope) })).filter((entry) => entry.match.matched);
+    const rows = scopedRows.map((entry) => Object.assign({}, entry.row, { scopeMatch:entry.match }));
+    counts.sourceAllItems += sourceRows.length;
     const one = {
       key:record.spec.key,
       publicPath:record.spec.publicPath,
       available:!!(record.source && record.source.exists),
       parseError: record.source && record.source.error ? record.source.error : null,
       copies:record.copies,
+      sourceTotalItems:sourceRows.length,
       totalItems:rows.length,
+      selectedScope:scope,
       seedOrSample:0,
       productSignals:0,
       realProductCandidates:0,
@@ -358,7 +506,7 @@ function summarize(mode, limit){
       if(isPlaceholder(row.item)) { one.seedOrSample += 1; counts.seedOrSample += 1; return; }
       if(!isProductSignal(row.item)) return;
       one.productSignals += 1; counts.productSignals += 1;
-      const result = publicItemRow(row.item, record.spec.key, row.page, row.section);
+      const result = publicItemRow(row.item, record.spec.key, row.page, row.section, row.scopeMatch);
       const dedupe = candidateKey(row.item, record.spec.key);
       if(!uniqueReal.has(dedupe)) uniqueReal.set(dedupe, result);
       one.realProductCandidates += 1;
@@ -398,6 +546,8 @@ function summarize(mode, limit){
     status: gate === "ready_for_canary" ? "ok" : (gate === "hold" ? "warn" : "info"),
     version:VERSION,
     mode,
+    selectedScope:scope,
+    scopePolicy:{ exactRegionFirst:true, nationwideFallbackWithinSameCountry:true, crossCountryFallback:false, unresolvedScope:"empty" },
     noWrite:true,
     externalNavigation:false,
     providerCalls:false,
@@ -419,7 +569,14 @@ exports.handler = async function(event){
   try {
     const mode = cleanMode(getParam(event, "mode"));
     const limit = safeLimit(getParam(event, "limit"));
-    const report = summarize(mode, limit);
+    const requestedCountry = text(getParam(event, "country")).toUpperCase();
+    const geo = geoScope(event);
+    let scope;
+    if(requestedCountry === "GLOBAL") scope = { country:null, region:"ALL", active:false, source:"administrator-global", fallback:"global-read", crossCountry:false };
+    else if(requestedCountry) scope = selectedScope(requestedCountry, getParam(event, "region"));
+    else if(geo.resolved) scope = Object.assign(selectedScope(geo.country, geo.region), { source:"request-ip" });
+    else scope = { country:null, region:null, active:true, unresolved:true, source:geo.excluded?"excluded-ip":"unresolved-ip", fallback:"empty", crossCountry:false, excluded:geo.excluded, detectedCountry:geo.detectedCountry };
+    const report = summarize(mode, limit, scope);
     if(method === "HEAD") return { statusCode:200, headers:noStoreHeaders(), body:"" };
     return json(200, report);
   } catch(error){
@@ -427,4 +584,4 @@ exports.handler = async function(event){
   }
 };
 
-module.exports = { handler:exports.handler, VERSION, summarize };
+module.exports = { handler:exports.handler, VERSION, summarize, selectedScope, scopeMatch, itemMarketScopes, geoScope };

@@ -3042,6 +3042,28 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 })();
 </script>
 
+<!-- IGDC country/region/IP commerce control launcher: system audit -> country setup -> go-live audit -->
+<style id="igdc-admin-country-commerce-link-style">
+  .igdc-admin-country-commerce-card{border-color:#82b8e8!important;background:#f0f8ff!important}
+  .igdc-admin-country-commerce-card:hover{border-color:#4b94d2!important;background:#e4f2ff!important}
+  .igdc-admin-country-commerce-card .igdc-admin-country-commerce-title{font-size:12px;font-weight:800;color:#185c95}
+  .igdc-admin-country-commerce-card .igdc-admin-country-commerce-desc{font-size:11px;color:#3c6688;line-height:1.35;margin:3px 0 6px}
+  .igdc-admin-country-commerce-card .igdc-admin-country-commerce-btn{width:100%;padding:5px 7px;font-size:11px;font-weight:800;border-radius:5px;border:1px solid #7fb0dc;background:linear-gradient(180deg,#fbfdff 0%,#dbeeff 100%);color:#185c95;cursor:pointer}
+  .igdc-admin-country-commerce-card .igdc-admin-country-commerce-btn:hover{background:#cfe7ff}
+  .igdc-admin-country-commerce-card .igdc-admin-country-commerce-mini{margin-top:4px;font-size:10px;color:#5d7f9c}
+</style>
+<script id="igdc-admin-country-commerce-link-script">
+(function(){
+  if(window.__IGDC_ADMIN_COUNTRY_COMMERCE_LINK_INSTALLED__)return;
+  window.__IGDC_ADMIN_COUNTRY_COMMERCE_LINK_INSTALLED__=true;
+  function pageUrl(){var u=new URL('/commerce-country-control.html',window.location.origin);u.searchParams.set('source','admin-right-panel');u.searchParams.set('returnPath',window.location.pathname+window.location.search+window.location.hash);return u.pathname+u.search;}
+  function findCard(panel,re){var cards=Array.prototype.slice.call(panel.querySelectorAll('.igdc-sc-card'));for(var i=0;i<cards.length;i++){var t=(cards[i].textContent||'').replace(/\s+/g,' ');if(re.test(t))return cards[i];}return null;}
+  function makeCard(){var card=document.createElement('div');card.id='igdc-admin-country-commerce-link-card';card.className='igdc-sc-card igdc-admin-country-commerce-card';card.setAttribute('data-igdc-admin-country-commerce-link','1');card.innerHTML='<div class="igdc-sc-card-header"><span class="igdc-admin-country-commerce-title">🌐 국가별 상품 세팅 점검</span><span class="igdc-sc-card-status">↗</span></div><div class="igdc-admin-country-commerce-desc">권역→국가→대형국가 주·성·지역별 IP 상품 후보·배정·AI 자동화를 관제합니다.</div><button class="igdc-admin-country-commerce-btn" type="button">국가별 상품 관제 열기</button><div class="igdc-admin-country-commerce-mini">북한 제외 전 세계 국가·지역 코드 · 수동 고정 우선 · 비공개 후보만</div>';function open(ev){if(ev){ev.preventDefault();ev.stopPropagation();}window.location.href=pageUrl();return false;}var b=card.querySelector('button');if(b)b.addEventListener('click',open);card.addEventListener('click',function(ev){if(ev.target&&ev.target.tagName==='BUTTON')return;open(ev);});return card;}
+  function install(){var panel=document.getElementById('igdc-site-control');if(!panel)return false;var card=document.getElementById('igdc-admin-country-commerce-link-card');if(!card)card=makeCard();var engine=document.getElementById('igdc-admin-audit-link-card')||findCard(panel,/시스템\s*점검.*엔진\s*헬스|엔진\s*헬스체크/i);var goLive=document.getElementById('igdc-admin-product-go-live-link-card')||findCard(panel,/실상품\s*공급\s*개방\s*점검/i);if(goLive&&goLive.parentNode){if(card.nextElementSibling!==goLive)goLive.parentNode.insertBefore(card,goLive);return true;}if(engine&&engine.parentNode){if(engine.nextElementSibling!==card)engine.insertAdjacentElement('afterend',card);return true;}(panel.querySelector('.igdc-sc-grid')||panel).appendChild(card);return true;}
+  var tries=0,timer=setInterval(function(){tries++;if(install()||tries>100)clearInterval(timer);},200);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();var panel=document.getElementById('igdc-site-control');if(panel&&window.MutationObserver){var queued=false;new MutationObserver(function(){if(queued)return;queued=true;setTimeout(function(){queued=false;install();},0);}).observe(panel,{childList:true,subtree:true});}
+})();
+</script>
+
 <!-- 5-1. maru detached pane (FINAL) -->
 <script src="/assets/js/maru-detached-pane.js"></script>
 
@@ -3141,8 +3163,13 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 
     var card = makeCard();
     var engineAudit = document.getElementById('igdc-admin-audit-link-card') || findCard(panel, /시스템\s*점검.*엔진\s*헬스|엔진\s*헬스체크/i);
+    var countryControl = document.getElementById('igdc-admin-country-commerce-link-card') || findCard(panel, /국가별\s*상품\s*세팅\s*점검|국가.*지역.*IP.*상품/i);
     var insight = findCard(panel, /MARU\s*Global\s*Insight|마루\s*Global\s*Insight/i);
 
+    if (countryControl && countryControl.parentNode) {
+      countryControl.insertAdjacentElement('afterend', card);
+      return true;
+    }
     if (engineAudit && engineAudit.parentNode) {
       engineAudit.insertAdjacentElement('afterend', card);
       return true;

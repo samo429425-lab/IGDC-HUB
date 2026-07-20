@@ -1,0 +1,2127 @@
+{
+  "schema": "igdc-country-subdivision-registry.v1",
+  "version": "1.0.0",
+  "generatedAt": "2026-07-20T00:00:00Z",
+  "countries": [
+    {
+      "countryCode": "US",
+      "subdivisionType": "state",
+      "count": 57,
+      "subdivisions": [
+        {
+          "code": "AL",
+          "isoCode": "US-AL",
+          "nameEn": "Alabama",
+          "nameKo": "Alabama",
+          "type": "State"
+        },
+        {
+          "code": "AK",
+          "isoCode": "US-AK",
+          "nameEn": "Alaska",
+          "nameKo": "Alaska",
+          "type": "State"
+        },
+        {
+          "code": "AS",
+          "isoCode": "US-AS",
+          "nameEn": "American Samoa",
+          "nameKo": "American Samoa",
+          "type": "Outlying area"
+        },
+        {
+          "code": "AZ",
+          "isoCode": "US-AZ",
+          "nameEn": "Arizona",
+          "nameKo": "Arizona",
+          "type": "State"
+        },
+        {
+          "code": "AR",
+          "isoCode": "US-AR",
+          "nameEn": "Arkansas",
+          "nameKo": "Arkansas",
+          "type": "State"
+        },
+        {
+          "code": "CA",
+          "isoCode": "US-CA",
+          "nameEn": "California",
+          "nameKo": "California",
+          "type": "State"
+        },
+        {
+          "code": "CO",
+          "isoCode": "US-CO",
+          "nameEn": "Colorado",
+          "nameKo": "Colorado",
+          "type": "State"
+        },
+        {
+          "code": "CT",
+          "isoCode": "US-CT",
+          "nameEn": "Connecticut",
+          "nameKo": "Connecticut",
+          "type": "State"
+        },
+        {
+          "code": "DE",
+          "isoCode": "US-DE",
+          "nameEn": "Delaware",
+          "nameKo": "Delaware",
+          "type": "State"
+        },
+        {
+          "code": "DC",
+          "isoCode": "US-DC",
+          "nameEn": "District of Columbia",
+          "nameKo": "District of Columbia",
+          "type": "District"
+        },
+        {
+          "code": "FL",
+          "isoCode": "US-FL",
+          "nameEn": "Florida",
+          "nameKo": "Florida",
+          "type": "State"
+        },
+        {
+          "code": "GA",
+          "isoCode": "US-GA",
+          "nameEn": "Georgia",
+          "nameKo": "Georgia",
+          "type": "State"
+        },
+        {
+          "code": "GU",
+          "isoCode": "US-GU",
+          "nameEn": "Guam",
+          "nameKo": "Guam",
+          "type": "Outlying area"
+        },
+        {
+          "code": "HI",
+          "isoCode": "US-HI",
+          "nameEn": "Hawaii",
+          "nameKo": "Hawaii",
+          "type": "State"
+        },
+        {
+          "code": "ID",
+          "isoCode": "US-ID",
+          "nameEn": "Idaho",
+          "nameKo": "Idaho",
+          "type": "State"
+        },
+        {
+          "code": "IL",
+          "isoCode": "US-IL",
+          "nameEn": "Illinois",
+          "nameKo": "Illinois",
+          "type": "State"
+        },
+        {
+          "code": "IN",
+          "isoCode": "US-IN",
+          "nameEn": "Indiana",
+          "nameKo": "Indiana",
+          "type": "State"
+        },
+        {
+          "code": "IA",
+          "isoCode": "US-IA",
+          "nameEn": "Iowa",
+          "nameKo": "Iowa",
+          "type": "State"
+        },
+        {
+          "code": "KS",
+          "isoCode": "US-KS",
+          "nameEn": "Kansas",
+          "nameKo": "Kansas",
+          "type": "State"
+        },
+        {
+          "code": "KY",
+          "isoCode": "US-KY",
+          "nameEn": "Kentucky",
+          "nameKo": "Kentucky",
+          "type": "State"
+        },
+        {
+          "code": "LA",
+          "isoCode": "US-LA",
+          "nameEn": "Louisiana",
+          "nameKo": "Louisiana",
+          "type": "State"
+        },
+        {
+          "code": "ME",
+          "isoCode": "US-ME",
+          "nameEn": "Maine",
+          "nameKo": "Maine",
+          "type": "State"
+        },
+        {
+          "code": "MD",
+          "isoCode": "US-MD",
+          "nameEn": "Maryland",
+          "nameKo": "Maryland",
+          "type": "State"
+        },
+        {
+          "code": "MA",
+          "isoCode": "US-MA",
+          "nameEn": "Massachusetts",
+          "nameKo": "Massachusetts",
+          "type": "State"
+        },
+        {
+          "code": "MI",
+          "isoCode": "US-MI",
+          "nameEn": "Michigan",
+          "nameKo": "Michigan",
+          "type": "State"
+        },
+        {
+          "code": "MN",
+          "isoCode": "US-MN",
+          "nameEn": "Minnesota",
+          "nameKo": "Minnesota",
+          "type": "State"
+        },
+        {
+          "code": "MS",
+          "isoCode": "US-MS",
+          "nameEn": "Mississippi",
+          "nameKo": "Mississippi",
+          "type": "State"
+        },
+        {
+          "code": "MO",
+          "isoCode": "US-MO",
+          "nameEn": "Missouri",
+          "nameKo": "Missouri",
+          "type": "State"
+        },
+        {
+          "code": "MT",
+          "isoCode": "US-MT",
+          "nameEn": "Montana",
+          "nameKo": "Montana",
+          "type": "State"
+        },
+        {
+          "code": "NE",
+          "isoCode": "US-NE",
+          "nameEn": "Nebraska",
+          "nameKo": "Nebraska",
+          "type": "State"
+        },
+        {
+          "code": "NV",
+          "isoCode": "US-NV",
+          "nameEn": "Nevada",
+          "nameKo": "Nevada",
+          "type": "State"
+        },
+        {
+          "code": "NH",
+          "isoCode": "US-NH",
+          "nameEn": "New Hampshire",
+          "nameKo": "New Hampshire",
+          "type": "State"
+        },
+        {
+          "code": "NJ",
+          "isoCode": "US-NJ",
+          "nameEn": "New Jersey",
+          "nameKo": "New Jersey",
+          "type": "State"
+        },
+        {
+          "code": "NM",
+          "isoCode": "US-NM",
+          "nameEn": "New Mexico",
+          "nameKo": "New Mexico",
+          "type": "State"
+        },
+        {
+          "code": "NY",
+          "isoCode": "US-NY",
+          "nameEn": "New York",
+          "nameKo": "New York",
+          "type": "State"
+        },
+        {
+          "code": "NC",
+          "isoCode": "US-NC",
+          "nameEn": "North Carolina",
+          "nameKo": "North Carolina",
+          "type": "State"
+        },
+        {
+          "code": "ND",
+          "isoCode": "US-ND",
+          "nameEn": "North Dakota",
+          "nameKo": "North Dakota",
+          "type": "State"
+        },
+        {
+          "code": "MP",
+          "isoCode": "US-MP",
+          "nameEn": "Northern Mariana Islands",
+          "nameKo": "Northern Mariana Islands",
+          "type": "Outlying area"
+        },
+        {
+          "code": "OH",
+          "isoCode": "US-OH",
+          "nameEn": "Ohio",
+          "nameKo": "Ohio",
+          "type": "State"
+        },
+        {
+          "code": "OK",
+          "isoCode": "US-OK",
+          "nameEn": "Oklahoma",
+          "nameKo": "Oklahoma",
+          "type": "State"
+        },
+        {
+          "code": "OR",
+          "isoCode": "US-OR",
+          "nameEn": "Oregon",
+          "nameKo": "Oregon",
+          "type": "State"
+        },
+        {
+          "code": "PA",
+          "isoCode": "US-PA",
+          "nameEn": "Pennsylvania",
+          "nameKo": "Pennsylvania",
+          "type": "State"
+        },
+        {
+          "code": "PR",
+          "isoCode": "US-PR",
+          "nameEn": "Puerto Rico",
+          "nameKo": "Puerto Rico",
+          "type": "Outlying area"
+        },
+        {
+          "code": "RI",
+          "isoCode": "US-RI",
+          "nameEn": "Rhode Island",
+          "nameKo": "Rhode Island",
+          "type": "State"
+        },
+        {
+          "code": "SC",
+          "isoCode": "US-SC",
+          "nameEn": "South Carolina",
+          "nameKo": "South Carolina",
+          "type": "State"
+        },
+        {
+          "code": "SD",
+          "isoCode": "US-SD",
+          "nameEn": "South Dakota",
+          "nameKo": "South Dakota",
+          "type": "State"
+        },
+        {
+          "code": "TN",
+          "isoCode": "US-TN",
+          "nameEn": "Tennessee",
+          "nameKo": "Tennessee",
+          "type": "State"
+        },
+        {
+          "code": "TX",
+          "isoCode": "US-TX",
+          "nameEn": "Texas",
+          "nameKo": "Texas",
+          "type": "State"
+        },
+        {
+          "code": "UM",
+          "isoCode": "US-UM",
+          "nameEn": "United States Minor Outlying Islands",
+          "nameKo": "United States Minor Outlying Islands",
+          "type": "Outlying area"
+        },
+        {
+          "code": "UT",
+          "isoCode": "US-UT",
+          "nameEn": "Utah",
+          "nameKo": "Utah",
+          "type": "State"
+        },
+        {
+          "code": "VT",
+          "isoCode": "US-VT",
+          "nameEn": "Vermont",
+          "nameKo": "Vermont",
+          "type": "State"
+        },
+        {
+          "code": "VI",
+          "isoCode": "US-VI",
+          "nameEn": "Virgin Islands, U.S.",
+          "nameKo": "Virgin Islands, U.S.",
+          "type": "Outlying area"
+        },
+        {
+          "code": "VA",
+          "isoCode": "US-VA",
+          "nameEn": "Virginia",
+          "nameKo": "Virginia",
+          "type": "State"
+        },
+        {
+          "code": "WA",
+          "isoCode": "US-WA",
+          "nameEn": "Washington",
+          "nameKo": "Washington",
+          "type": "State"
+        },
+        {
+          "code": "WV",
+          "isoCode": "US-WV",
+          "nameEn": "West Virginia",
+          "nameKo": "West Virginia",
+          "type": "State"
+        },
+        {
+          "code": "WI",
+          "isoCode": "US-WI",
+          "nameEn": "Wisconsin",
+          "nameKo": "Wisconsin",
+          "type": "State"
+        },
+        {
+          "code": "WY",
+          "isoCode": "US-WY",
+          "nameEn": "Wyoming",
+          "nameKo": "Wyoming",
+          "type": "State"
+        }
+      ]
+    },
+    {
+      "countryCode": "CN",
+      "subdivisionType": "province_level",
+      "count": 34,
+      "subdivisions": [
+        {
+          "code": "AH",
+          "isoCode": "CN-AH",
+          "nameEn": "Anhui Sheng",
+          "nameKo": "Anhui Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "BJ",
+          "isoCode": "CN-BJ",
+          "nameEn": "Beijing Shi",
+          "nameKo": "Beijing Shi",
+          "type": "Municipality"
+        },
+        {
+          "code": "CQ",
+          "isoCode": "CN-CQ",
+          "nameEn": "Chongqing Shi",
+          "nameKo": "Chongqing Shi",
+          "type": "Municipality"
+        },
+        {
+          "code": "FJ",
+          "isoCode": "CN-FJ",
+          "nameEn": "Fujian Sheng",
+          "nameKo": "Fujian Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "GS",
+          "isoCode": "CN-GS",
+          "nameEn": "Gansu Sheng",
+          "nameKo": "Gansu Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "GD",
+          "isoCode": "CN-GD",
+          "nameEn": "Guangdong Sheng",
+          "nameKo": "Guangdong Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "GX",
+          "isoCode": "CN-GX",
+          "nameEn": "Guangxi Zhuangzu Zizhiqu",
+          "nameKo": "Guangxi Zhuangzu Zizhiqu",
+          "type": "Autonomous region"
+        },
+        {
+          "code": "GZ",
+          "isoCode": "CN-GZ",
+          "nameEn": "Guizhou Sheng",
+          "nameKo": "Guizhou Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "HI",
+          "isoCode": "CN-HI",
+          "nameEn": "Hainan Sheng",
+          "nameKo": "Hainan Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "HE",
+          "isoCode": "CN-HE",
+          "nameEn": "Hebei Sheng",
+          "nameKo": "Hebei Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "HL",
+          "isoCode": "CN-HL",
+          "nameEn": "Heilongjiang Sheng",
+          "nameKo": "Heilongjiang Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "HA",
+          "isoCode": "CN-HA",
+          "nameEn": "Henan Sheng",
+          "nameKo": "Henan Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "HK",
+          "isoCode": "CN-HK",
+          "nameEn": "Hong Kong SAR",
+          "nameKo": "Hong Kong SAR",
+          "type": "Special administrative region"
+        },
+        {
+          "code": "HB",
+          "isoCode": "CN-HB",
+          "nameEn": "Hubei Sheng",
+          "nameKo": "Hubei Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "HN",
+          "isoCode": "CN-HN",
+          "nameEn": "Hunan Sheng",
+          "nameKo": "Hunan Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "JS",
+          "isoCode": "CN-JS",
+          "nameEn": "Jiangsu Sheng",
+          "nameKo": "Jiangsu Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "JX",
+          "isoCode": "CN-JX",
+          "nameEn": "Jiangxi Sheng",
+          "nameKo": "Jiangxi Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "JL",
+          "isoCode": "CN-JL",
+          "nameEn": "Jilin Sheng",
+          "nameKo": "Jilin Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "LN",
+          "isoCode": "CN-LN",
+          "nameEn": "Liaoning Sheng",
+          "nameKo": "Liaoning Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "MO",
+          "isoCode": "CN-MO",
+          "nameEn": "Macao SAR",
+          "nameKo": "Macao SAR",
+          "type": "Special administrative region"
+        },
+        {
+          "code": "NM",
+          "isoCode": "CN-NM",
+          "nameEn": "Nei Mongol Zizhiqu",
+          "nameKo": "Nei Mongol Zizhiqu",
+          "type": "Autonomous region"
+        },
+        {
+          "code": "NX",
+          "isoCode": "CN-NX",
+          "nameEn": "Ningxia Huizu Zizhiqu",
+          "nameKo": "Ningxia Huizu Zizhiqu",
+          "type": "Autonomous region"
+        },
+        {
+          "code": "QH",
+          "isoCode": "CN-QH",
+          "nameEn": "Qinghai Sheng",
+          "nameKo": "Qinghai Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "SN",
+          "isoCode": "CN-SN",
+          "nameEn": "Shaanxi Sheng",
+          "nameKo": "Shaanxi Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "SD",
+          "isoCode": "CN-SD",
+          "nameEn": "Shandong Sheng",
+          "nameKo": "Shandong Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "SH",
+          "isoCode": "CN-SH",
+          "nameEn": "Shanghai Shi",
+          "nameKo": "Shanghai Shi",
+          "type": "Municipality"
+        },
+        {
+          "code": "SX",
+          "isoCode": "CN-SX",
+          "nameEn": "Shanxi Sheng",
+          "nameKo": "Shanxi Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "SC",
+          "isoCode": "CN-SC",
+          "nameEn": "Sichuan Sheng",
+          "nameKo": "Sichuan Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "TW",
+          "isoCode": "CN-TW",
+          "nameEn": "Taiwan Sheng",
+          "nameKo": "Taiwan Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "TJ",
+          "isoCode": "CN-TJ",
+          "nameEn": "Tianjin Shi",
+          "nameKo": "Tianjin Shi",
+          "type": "Municipality"
+        },
+        {
+          "code": "XJ",
+          "isoCode": "CN-XJ",
+          "nameEn": "Xinjiang Uygur Zizhiqu",
+          "nameKo": "Xinjiang Uygur Zizhiqu",
+          "type": "Autonomous region"
+        },
+        {
+          "code": "XZ",
+          "isoCode": "CN-XZ",
+          "nameEn": "Xizang Zizhiqu",
+          "nameKo": "Xizang Zizhiqu",
+          "type": "Autonomous region"
+        },
+        {
+          "code": "YN",
+          "isoCode": "CN-YN",
+          "nameEn": "Yunnan Sheng",
+          "nameKo": "Yunnan Sheng",
+          "type": "Province"
+        },
+        {
+          "code": "ZJ",
+          "isoCode": "CN-ZJ",
+          "nameEn": "Zhejiang Sheng",
+          "nameKo": "Zhejiang Sheng",
+          "type": "Province"
+        }
+      ]
+    },
+    {
+      "countryCode": "IN",
+      "subdivisionType": "state_union_territory",
+      "count": 36,
+      "subdivisions": [
+        {
+          "code": "AN",
+          "isoCode": "IN-AN",
+          "nameEn": "Andaman and Nicobar Islands",
+          "nameKo": "Andaman and Nicobar Islands",
+          "type": "Union territory"
+        },
+        {
+          "code": "AP",
+          "isoCode": "IN-AP",
+          "nameEn": "Andhra Pradesh",
+          "nameKo": "Andhra Pradesh",
+          "type": "State"
+        },
+        {
+          "code": "AR",
+          "isoCode": "IN-AR",
+          "nameEn": "Arunāchal Pradesh",
+          "nameKo": "Arunāchal Pradesh",
+          "type": "State"
+        },
+        {
+          "code": "AS",
+          "isoCode": "IN-AS",
+          "nameEn": "Assam",
+          "nameKo": "Assam",
+          "type": "State"
+        },
+        {
+          "code": "BR",
+          "isoCode": "IN-BR",
+          "nameEn": "Bihār",
+          "nameKo": "Bihār",
+          "type": "State"
+        },
+        {
+          "code": "CH",
+          "isoCode": "IN-CH",
+          "nameEn": "Chandīgarh",
+          "nameKo": "Chandīgarh",
+          "type": "Union territory"
+        },
+        {
+          "code": "CG",
+          "isoCode": "IN-CG",
+          "nameEn": "Chhattīsgarh",
+          "nameKo": "Chhattīsgarh",
+          "type": "State"
+        },
+        {
+          "code": "DL",
+          "isoCode": "IN-DL",
+          "nameEn": "Delhi",
+          "nameKo": "Delhi",
+          "type": "Union territory"
+        },
+        {
+          "code": "DH",
+          "isoCode": "IN-DH",
+          "nameEn": "Dādra and Nagar Haveli and Damān and Diu",
+          "nameKo": "Dādra and Nagar Haveli and Damān and Diu",
+          "type": "Union territory"
+        },
+        {
+          "code": "GA",
+          "isoCode": "IN-GA",
+          "nameEn": "Goa",
+          "nameKo": "Goa",
+          "type": "State"
+        },
+        {
+          "code": "GJ",
+          "isoCode": "IN-GJ",
+          "nameEn": "Gujarāt",
+          "nameKo": "Gujarāt",
+          "type": "State"
+        },
+        {
+          "code": "HR",
+          "isoCode": "IN-HR",
+          "nameEn": "Haryāna",
+          "nameKo": "Haryāna",
+          "type": "State"
+        },
+        {
+          "code": "HP",
+          "isoCode": "IN-HP",
+          "nameEn": "Himāchal Pradesh",
+          "nameKo": "Himāchal Pradesh",
+          "type": "State"
+        },
+        {
+          "code": "JK",
+          "isoCode": "IN-JK",
+          "nameEn": "Jammu and Kashmīr",
+          "nameKo": "Jammu and Kashmīr",
+          "type": "Union territory"
+        },
+        {
+          "code": "JH",
+          "isoCode": "IN-JH",
+          "nameEn": "Jhārkhand",
+          "nameKo": "Jhārkhand",
+          "type": "State"
+        },
+        {
+          "code": "KA",
+          "isoCode": "IN-KA",
+          "nameEn": "Karnātaka",
+          "nameKo": "Karnātaka",
+          "type": "State"
+        },
+        {
+          "code": "KL",
+          "isoCode": "IN-KL",
+          "nameEn": "Kerala",
+          "nameKo": "Kerala",
+          "type": "State"
+        },
+        {
+          "code": "LA",
+          "isoCode": "IN-LA",
+          "nameEn": "Ladākh",
+          "nameKo": "Ladākh",
+          "type": "Union territory"
+        },
+        {
+          "code": "LD",
+          "isoCode": "IN-LD",
+          "nameEn": "Lakshadweep",
+          "nameKo": "Lakshadweep",
+          "type": "Union territory"
+        },
+        {
+          "code": "MP",
+          "isoCode": "IN-MP",
+          "nameEn": "Madhya Pradesh",
+          "nameKo": "Madhya Pradesh",
+          "type": "State"
+        },
+        {
+          "code": "MH",
+          "isoCode": "IN-MH",
+          "nameEn": "Mahārāshtra",
+          "nameKo": "Mahārāshtra",
+          "type": "State"
+        },
+        {
+          "code": "MN",
+          "isoCode": "IN-MN",
+          "nameEn": "Manipur",
+          "nameKo": "Manipur",
+          "type": "State"
+        },
+        {
+          "code": "ML",
+          "isoCode": "IN-ML",
+          "nameEn": "Meghālaya",
+          "nameKo": "Meghālaya",
+          "type": "State"
+        },
+        {
+          "code": "MZ",
+          "isoCode": "IN-MZ",
+          "nameEn": "Mizoram",
+          "nameKo": "Mizoram",
+          "type": "State"
+        },
+        {
+          "code": "NL",
+          "isoCode": "IN-NL",
+          "nameEn": "Nāgāland",
+          "nameKo": "Nāgāland",
+          "type": "State"
+        },
+        {
+          "code": "OD",
+          "isoCode": "IN-OD",
+          "nameEn": "Odisha",
+          "nameKo": "Odisha",
+          "type": "State"
+        },
+        {
+          "code": "PY",
+          "isoCode": "IN-PY",
+          "nameEn": "Puducherry",
+          "nameKo": "Puducherry",
+          "type": "Union territory"
+        },
+        {
+          "code": "PB",
+          "isoCode": "IN-PB",
+          "nameEn": "Punjab",
+          "nameKo": "Punjab",
+          "type": "State"
+        },
+        {
+          "code": "RJ",
+          "isoCode": "IN-RJ",
+          "nameEn": "Rājasthān",
+          "nameKo": "Rājasthān",
+          "type": "State"
+        },
+        {
+          "code": "SK",
+          "isoCode": "IN-SK",
+          "nameEn": "Sikkim",
+          "nameKo": "Sikkim",
+          "type": "State"
+        },
+        {
+          "code": "TN",
+          "isoCode": "IN-TN",
+          "nameEn": "Tamil Nādu",
+          "nameKo": "Tamil Nādu",
+          "type": "State"
+        },
+        {
+          "code": "TS",
+          "isoCode": "IN-TS",
+          "nameEn": "Telangāna",
+          "nameKo": "Telangāna",
+          "type": "State"
+        },
+        {
+          "code": "TR",
+          "isoCode": "IN-TR",
+          "nameEn": "Tripura",
+          "nameKo": "Tripura",
+          "type": "State"
+        },
+        {
+          "code": "UP",
+          "isoCode": "IN-UP",
+          "nameEn": "Uttar Pradesh",
+          "nameKo": "Uttar Pradesh",
+          "type": "State"
+        },
+        {
+          "code": "UK",
+          "isoCode": "IN-UK",
+          "nameEn": "Uttarākhand",
+          "nameKo": "Uttarākhand",
+          "type": "State"
+        },
+        {
+          "code": "WB",
+          "isoCode": "IN-WB",
+          "nameEn": "West Bengal",
+          "nameKo": "West Bengal",
+          "type": "State"
+        }
+      ]
+    },
+    {
+      "countryCode": "RU",
+      "subdivisionType": "federal_subject",
+      "count": 83,
+      "subdivisions": [
+        {
+          "code": "AD",
+          "isoCode": "RU-AD",
+          "nameEn": "Adygeja, Respublika",
+          "nameKo": "Adygeja, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "AL",
+          "isoCode": "RU-AL",
+          "nameEn": "Altaj, Respublika",
+          "nameKo": "Altaj, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "ALT",
+          "isoCode": "RU-ALT",
+          "nameEn": "Altajskij kraj",
+          "nameKo": "Altajskij kraj",
+          "type": "Administrative territory"
+        },
+        {
+          "code": "AMU",
+          "isoCode": "RU-AMU",
+          "nameEn": "Amurskaja oblast'",
+          "nameKo": "Amurskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "ARK",
+          "isoCode": "RU-ARK",
+          "nameEn": "Arhangel'skaja oblast'",
+          "nameKo": "Arhangel'skaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "AST",
+          "isoCode": "RU-AST",
+          "nameEn": "Astrahanskaja oblast'",
+          "nameKo": "Astrahanskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "BA",
+          "isoCode": "RU-BA",
+          "nameEn": "Bashkortostan, Respublika",
+          "nameKo": "Bashkortostan, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "BEL",
+          "isoCode": "RU-BEL",
+          "nameEn": "Belgorodskaja oblast'",
+          "nameKo": "Belgorodskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "BRY",
+          "isoCode": "RU-BRY",
+          "nameEn": "Brjanskaja oblast'",
+          "nameKo": "Brjanskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "BU",
+          "isoCode": "RU-BU",
+          "nameEn": "Burjatija, Respublika",
+          "nameKo": "Burjatija, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "CE",
+          "isoCode": "RU-CE",
+          "nameEn": "Chechenskaya Respublika",
+          "nameKo": "Chechenskaya Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "CHE",
+          "isoCode": "RU-CHE",
+          "nameEn": "Chelyabinskaya oblast'",
+          "nameKo": "Chelyabinskaya oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "CHU",
+          "isoCode": "RU-CHU",
+          "nameEn": "Chukotskiy avtonomnyy okrug",
+          "nameKo": "Chukotskiy avtonomnyy okrug",
+          "type": "Autonomous district"
+        },
+        {
+          "code": "CU",
+          "isoCode": "RU-CU",
+          "nameEn": "Chuvashskaya Respublika",
+          "nameKo": "Chuvashskaya Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "DA",
+          "isoCode": "RU-DA",
+          "nameEn": "Dagestan, Respublika",
+          "nameKo": "Dagestan, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "YEV",
+          "isoCode": "RU-YEV",
+          "nameEn": "Evrejskaja avtonomnaja oblast'",
+          "nameKo": "Evrejskaja avtonomnaja oblast'",
+          "type": "Autonomous region"
+        },
+        {
+          "code": "KHA",
+          "isoCode": "RU-KHA",
+          "nameEn": "Habarovskij kraj",
+          "nameKo": "Habarovskij kraj",
+          "type": "Administrative territory"
+        },
+        {
+          "code": "KK",
+          "isoCode": "RU-KK",
+          "nameEn": "Hakasija, Respublika",
+          "nameKo": "Hakasija, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "KHM",
+          "isoCode": "RU-KHM",
+          "nameEn": "Hanty-Mansijskij avtonomnyj okrug",
+          "nameKo": "Hanty-Mansijskij avtonomnyj okrug",
+          "type": "Autonomous district"
+        },
+        {
+          "code": "IN",
+          "isoCode": "RU-IN",
+          "nameEn": "Ingushetiya, Respublika",
+          "nameKo": "Ingushetiya, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "IRK",
+          "isoCode": "RU-IRK",
+          "nameEn": "Irkutskaja oblast'",
+          "nameKo": "Irkutskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "IVA",
+          "isoCode": "RU-IVA",
+          "nameEn": "Ivanovskaja oblast'",
+          "nameKo": "Ivanovskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "YAN",
+          "isoCode": "RU-YAN",
+          "nameEn": "Jamalo-Neneckij avtonomnyj okrug",
+          "nameKo": "Jamalo-Neneckij avtonomnyj okrug",
+          "type": "Autonomous district"
+        },
+        {
+          "code": "YAR",
+          "isoCode": "RU-YAR",
+          "nameEn": "Jaroslavskaja oblast'",
+          "nameKo": "Jaroslavskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "KB",
+          "isoCode": "RU-KB",
+          "nameEn": "Kabardino-Balkarskaja Respublika",
+          "nameKo": "Kabardino-Balkarskaja Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "KGD",
+          "isoCode": "RU-KGD",
+          "nameEn": "Kaliningradskaja oblast'",
+          "nameKo": "Kaliningradskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "KL",
+          "isoCode": "RU-KL",
+          "nameEn": "Kalmykija, Respublika",
+          "nameKo": "Kalmykija, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "KLU",
+          "isoCode": "RU-KLU",
+          "nameEn": "Kaluzhskaya oblast'",
+          "nameKo": "Kaluzhskaya oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "KAM",
+          "isoCode": "RU-KAM",
+          "nameEn": "Kamchatskiy kray",
+          "nameKo": "Kamchatskiy kray",
+          "type": "Administrative territory"
+        },
+        {
+          "code": "KC",
+          "isoCode": "RU-KC",
+          "nameEn": "Karachayevo-Cherkesskaya Respublika",
+          "nameKo": "Karachayevo-Cherkesskaya Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "KR",
+          "isoCode": "RU-KR",
+          "nameEn": "Karelija, Respublika",
+          "nameKo": "Karelija, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "KEM",
+          "isoCode": "RU-KEM",
+          "nameEn": "Kemerovskaja oblast'",
+          "nameKo": "Kemerovskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "KIR",
+          "isoCode": "RU-KIR",
+          "nameEn": "Kirovskaja oblast'",
+          "nameKo": "Kirovskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "KO",
+          "isoCode": "RU-KO",
+          "nameEn": "Komi, Respublika",
+          "nameKo": "Komi, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "KOS",
+          "isoCode": "RU-KOS",
+          "nameEn": "Kostromskaja oblast'",
+          "nameKo": "Kostromskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "KDA",
+          "isoCode": "RU-KDA",
+          "nameEn": "Krasnodarskij kraj",
+          "nameKo": "Krasnodarskij kraj",
+          "type": "Administrative territory"
+        },
+        {
+          "code": "KYA",
+          "isoCode": "RU-KYA",
+          "nameEn": "Krasnojarskij kraj",
+          "nameKo": "Krasnojarskij kraj",
+          "type": "Administrative territory"
+        },
+        {
+          "code": "KGN",
+          "isoCode": "RU-KGN",
+          "nameEn": "Kurganskaja oblast'",
+          "nameKo": "Kurganskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "KRS",
+          "isoCode": "RU-KRS",
+          "nameEn": "Kurskaja oblast'",
+          "nameKo": "Kurskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "LEN",
+          "isoCode": "RU-LEN",
+          "nameEn": "Leningradskaja oblast'",
+          "nameKo": "Leningradskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "LIP",
+          "isoCode": "RU-LIP",
+          "nameEn": "Lipeckaja oblast'",
+          "nameKo": "Lipeckaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "MAG",
+          "isoCode": "RU-MAG",
+          "nameEn": "Magadanskaja oblast'",
+          "nameKo": "Magadanskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "ME",
+          "isoCode": "RU-ME",
+          "nameEn": "Marij Èl, Respublika",
+          "nameKo": "Marij Èl, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "MO",
+          "isoCode": "RU-MO",
+          "nameEn": "Mordovija, Respublika",
+          "nameKo": "Mordovija, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "MOS",
+          "isoCode": "RU-MOS",
+          "nameEn": "Moskovskaja oblast'",
+          "nameKo": "Moskovskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "MOW",
+          "isoCode": "RU-MOW",
+          "nameEn": "Moskva",
+          "nameKo": "Moskva",
+          "type": "Autonomous city"
+        },
+        {
+          "code": "MUR",
+          "isoCode": "RU-MUR",
+          "nameEn": "Murmanskaja oblast'",
+          "nameKo": "Murmanskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "NEN",
+          "isoCode": "RU-NEN",
+          "nameEn": "Neneckij avtonomnyj okrug",
+          "nameKo": "Neneckij avtonomnyj okrug",
+          "type": "Autonomous district"
+        },
+        {
+          "code": "NIZ",
+          "isoCode": "RU-NIZ",
+          "nameEn": "Nizhegorodskaya oblast'",
+          "nameKo": "Nizhegorodskaya oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "NGR",
+          "isoCode": "RU-NGR",
+          "nameEn": "Novgorodskaja oblast'",
+          "nameKo": "Novgorodskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "NVS",
+          "isoCode": "RU-NVS",
+          "nameEn": "Novosibirskaja oblast'",
+          "nameKo": "Novosibirskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "OMS",
+          "isoCode": "RU-OMS",
+          "nameEn": "Omskaja oblast'",
+          "nameKo": "Omskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "ORE",
+          "isoCode": "RU-ORE",
+          "nameEn": "Orenburgskaja oblast'",
+          "nameKo": "Orenburgskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "ORL",
+          "isoCode": "RU-ORL",
+          "nameEn": "Orlovskaja oblast'",
+          "nameKo": "Orlovskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "PNZ",
+          "isoCode": "RU-PNZ",
+          "nameEn": "Penzenskaja oblast'",
+          "nameKo": "Penzenskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "PER",
+          "isoCode": "RU-PER",
+          "nameEn": "Permskij kraj",
+          "nameKo": "Permskij kraj",
+          "type": "Administrative territory"
+        },
+        {
+          "code": "PRI",
+          "isoCode": "RU-PRI",
+          "nameEn": "Primorskij kraj",
+          "nameKo": "Primorskij kraj",
+          "type": "Administrative territory"
+        },
+        {
+          "code": "PSK",
+          "isoCode": "RU-PSK",
+          "nameEn": "Pskovskaja oblast'",
+          "nameKo": "Pskovskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "RYA",
+          "isoCode": "RU-RYA",
+          "nameEn": "Rjazanskaja oblast'",
+          "nameKo": "Rjazanskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "ROS",
+          "isoCode": "RU-ROS",
+          "nameEn": "Rostovskaja oblast'",
+          "nameKo": "Rostovskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "SA",
+          "isoCode": "RU-SA",
+          "nameEn": "Saha, Respublika",
+          "nameKo": "Saha, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "SAK",
+          "isoCode": "RU-SAK",
+          "nameEn": "Sahalinskaja oblast'",
+          "nameKo": "Sahalinskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "SAM",
+          "isoCode": "RU-SAM",
+          "nameEn": "Samarskaja oblast'",
+          "nameKo": "Samarskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "SPE",
+          "isoCode": "RU-SPE",
+          "nameEn": "Sankt-Peterburg",
+          "nameKo": "Sankt-Peterburg",
+          "type": "Autonomous city"
+        },
+        {
+          "code": "SAR",
+          "isoCode": "RU-SAR",
+          "nameEn": "Saratovskaja oblast'",
+          "nameKo": "Saratovskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "SE",
+          "isoCode": "RU-SE",
+          "nameEn": "Severnaja Osetija, Respublika",
+          "nameKo": "Severnaja Osetija, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "SMO",
+          "isoCode": "RU-SMO",
+          "nameEn": "Smolenskaja oblast'",
+          "nameKo": "Smolenskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "STA",
+          "isoCode": "RU-STA",
+          "nameEn": "Stavropol'skij kraj",
+          "nameKo": "Stavropol'skij kraj",
+          "type": "Administrative territory"
+        },
+        {
+          "code": "SVE",
+          "isoCode": "RU-SVE",
+          "nameEn": "Sverdlovskaja oblast'",
+          "nameKo": "Sverdlovskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "TAM",
+          "isoCode": "RU-TAM",
+          "nameEn": "Tambovskaja oblast'",
+          "nameKo": "Tambovskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "TA",
+          "isoCode": "RU-TA",
+          "nameEn": "Tatarstan, Respublika",
+          "nameKo": "Tatarstan, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "TYU",
+          "isoCode": "RU-TYU",
+          "nameEn": "Tjumenskaja oblast'",
+          "nameKo": "Tjumenskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "TOM",
+          "isoCode": "RU-TOM",
+          "nameEn": "Tomskaja oblast'",
+          "nameKo": "Tomskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "TUL",
+          "isoCode": "RU-TUL",
+          "nameEn": "Tul'skaja oblast'",
+          "nameKo": "Tul'skaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "TVE",
+          "isoCode": "RU-TVE",
+          "nameEn": "Tverskaja oblast'",
+          "nameKo": "Tverskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "TY",
+          "isoCode": "RU-TY",
+          "nameEn": "Tyva, Respublika",
+          "nameKo": "Tyva, Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "UD",
+          "isoCode": "RU-UD",
+          "nameEn": "Udmurtskaja Respublika",
+          "nameKo": "Udmurtskaja Respublika",
+          "type": "Republic"
+        },
+        {
+          "code": "ULY",
+          "isoCode": "RU-ULY",
+          "nameEn": "Ul'janovskaja oblast'",
+          "nameKo": "Ul'janovskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "VLA",
+          "isoCode": "RU-VLA",
+          "nameEn": "Vladimirskaja oblast'",
+          "nameKo": "Vladimirskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "VGG",
+          "isoCode": "RU-VGG",
+          "nameEn": "Volgogradskaja oblast'",
+          "nameKo": "Volgogradskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "VLG",
+          "isoCode": "RU-VLG",
+          "nameEn": "Vologodskaja oblast'",
+          "nameKo": "Vologodskaja oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "VOR",
+          "isoCode": "RU-VOR",
+          "nameEn": "Voronezhskaya oblast'",
+          "nameKo": "Voronezhskaya oblast'",
+          "type": "Administrative region"
+        },
+        {
+          "code": "ZAB",
+          "isoCode": "RU-ZAB",
+          "nameEn": "Zabajkal'skij kraj",
+          "nameKo": "Zabajkal'skij kraj",
+          "type": "Administrative territory"
+        }
+      ]
+    },
+    {
+      "countryCode": "BR",
+      "subdivisionType": "state_federal_district",
+      "count": 27,
+      "subdivisions": [
+        {
+          "code": "AC",
+          "isoCode": "BR-AC",
+          "nameEn": "Acre",
+          "nameKo": "Acre",
+          "type": "State"
+        },
+        {
+          "code": "AL",
+          "isoCode": "BR-AL",
+          "nameEn": "Alagoas",
+          "nameKo": "Alagoas",
+          "type": "State"
+        },
+        {
+          "code": "AP",
+          "isoCode": "BR-AP",
+          "nameEn": "Amapá",
+          "nameKo": "Amapá",
+          "type": "State"
+        },
+        {
+          "code": "AM",
+          "isoCode": "BR-AM",
+          "nameEn": "Amazonas",
+          "nameKo": "Amazonas",
+          "type": "State"
+        },
+        {
+          "code": "BA",
+          "isoCode": "BR-BA",
+          "nameEn": "Bahia",
+          "nameKo": "Bahia",
+          "type": "State"
+        },
+        {
+          "code": "CE",
+          "isoCode": "BR-CE",
+          "nameEn": "Ceará",
+          "nameKo": "Ceará",
+          "type": "State"
+        },
+        {
+          "code": "DF",
+          "isoCode": "BR-DF",
+          "nameEn": "Distrito Federal",
+          "nameKo": "Distrito Federal",
+          "type": "Federal district"
+        },
+        {
+          "code": "ES",
+          "isoCode": "BR-ES",
+          "nameEn": "Espírito Santo",
+          "nameKo": "Espírito Santo",
+          "type": "State"
+        },
+        {
+          "code": "GO",
+          "isoCode": "BR-GO",
+          "nameEn": "Goiás",
+          "nameKo": "Goiás",
+          "type": "State"
+        },
+        {
+          "code": "MA",
+          "isoCode": "BR-MA",
+          "nameEn": "Maranhão",
+          "nameKo": "Maranhão",
+          "type": "State"
+        },
+        {
+          "code": "MT",
+          "isoCode": "BR-MT",
+          "nameEn": "Mato Grosso",
+          "nameKo": "Mato Grosso",
+          "type": "State"
+        },
+        {
+          "code": "MS",
+          "isoCode": "BR-MS",
+          "nameEn": "Mato Grosso do Sul",
+          "nameKo": "Mato Grosso do Sul",
+          "type": "State"
+        },
+        {
+          "code": "MG",
+          "isoCode": "BR-MG",
+          "nameEn": "Minas Gerais",
+          "nameKo": "Minas Gerais",
+          "type": "State"
+        },
+        {
+          "code": "PR",
+          "isoCode": "BR-PR",
+          "nameEn": "Paraná",
+          "nameKo": "Paraná",
+          "type": "State"
+        },
+        {
+          "code": "PB",
+          "isoCode": "BR-PB",
+          "nameEn": "Paraíba",
+          "nameKo": "Paraíba",
+          "type": "State"
+        },
+        {
+          "code": "PA",
+          "isoCode": "BR-PA",
+          "nameEn": "Pará",
+          "nameKo": "Pará",
+          "type": "State"
+        },
+        {
+          "code": "PE",
+          "isoCode": "BR-PE",
+          "nameEn": "Pernambuco",
+          "nameKo": "Pernambuco",
+          "type": "State"
+        },
+        {
+          "code": "PI",
+          "isoCode": "BR-PI",
+          "nameEn": "Piauí",
+          "nameKo": "Piauí",
+          "type": "State"
+        },
+        {
+          "code": "RN",
+          "isoCode": "BR-RN",
+          "nameEn": "Rio Grande do Norte",
+          "nameKo": "Rio Grande do Norte",
+          "type": "State"
+        },
+        {
+          "code": "RS",
+          "isoCode": "BR-RS",
+          "nameEn": "Rio Grande do Sul",
+          "nameKo": "Rio Grande do Sul",
+          "type": "State"
+        },
+        {
+          "code": "RJ",
+          "isoCode": "BR-RJ",
+          "nameEn": "Rio de Janeiro",
+          "nameKo": "Rio de Janeiro",
+          "type": "State"
+        },
+        {
+          "code": "RO",
+          "isoCode": "BR-RO",
+          "nameEn": "Rondônia",
+          "nameKo": "Rondônia",
+          "type": "State"
+        },
+        {
+          "code": "RR",
+          "isoCode": "BR-RR",
+          "nameEn": "Roraima",
+          "nameKo": "Roraima",
+          "type": "State"
+        },
+        {
+          "code": "SC",
+          "isoCode": "BR-SC",
+          "nameEn": "Santa Catarina",
+          "nameKo": "Santa Catarina",
+          "type": "State"
+        },
+        {
+          "code": "SE",
+          "isoCode": "BR-SE",
+          "nameEn": "Sergipe",
+          "nameKo": "Sergipe",
+          "type": "State"
+        },
+        {
+          "code": "SP",
+          "isoCode": "BR-SP",
+          "nameEn": "São Paulo",
+          "nameKo": "São Paulo",
+          "type": "State"
+        },
+        {
+          "code": "TO",
+          "isoCode": "BR-TO",
+          "nameEn": "Tocantins",
+          "nameKo": "Tocantins",
+          "type": "State"
+        }
+      ]
+    },
+    {
+      "countryCode": "CA",
+      "subdivisionType": "province_territory",
+      "count": 13,
+      "subdivisions": [
+        {
+          "code": "AB",
+          "isoCode": "CA-AB",
+          "nameEn": "Alberta",
+          "nameKo": "Alberta",
+          "type": "Province"
+        },
+        {
+          "code": "BC",
+          "isoCode": "CA-BC",
+          "nameEn": "British Columbia",
+          "nameKo": "British Columbia",
+          "type": "Province"
+        },
+        {
+          "code": "MB",
+          "isoCode": "CA-MB",
+          "nameEn": "Manitoba",
+          "nameKo": "Manitoba",
+          "type": "Province"
+        },
+        {
+          "code": "NB",
+          "isoCode": "CA-NB",
+          "nameEn": "New Brunswick",
+          "nameKo": "New Brunswick",
+          "type": "Province"
+        },
+        {
+          "code": "NL",
+          "isoCode": "CA-NL",
+          "nameEn": "Newfoundland and Labrador",
+          "nameKo": "Newfoundland and Labrador",
+          "type": "Province"
+        },
+        {
+          "code": "NT",
+          "isoCode": "CA-NT",
+          "nameEn": "Northwest Territories",
+          "nameKo": "Northwest Territories",
+          "type": "Territory"
+        },
+        {
+          "code": "NS",
+          "isoCode": "CA-NS",
+          "nameEn": "Nova Scotia",
+          "nameKo": "Nova Scotia",
+          "type": "Province"
+        },
+        {
+          "code": "NU",
+          "isoCode": "CA-NU",
+          "nameEn": "Nunavut",
+          "nameKo": "Nunavut",
+          "type": "Territory"
+        },
+        {
+          "code": "ON",
+          "isoCode": "CA-ON",
+          "nameEn": "Ontario",
+          "nameKo": "Ontario",
+          "type": "Province"
+        },
+        {
+          "code": "PE",
+          "isoCode": "CA-PE",
+          "nameEn": "Prince Edward Island",
+          "nameKo": "Prince Edward Island",
+          "type": "Province"
+        },
+        {
+          "code": "QC",
+          "isoCode": "CA-QC",
+          "nameEn": "Quebec",
+          "nameKo": "Quebec",
+          "type": "Province"
+        },
+        {
+          "code": "SK",
+          "isoCode": "CA-SK",
+          "nameEn": "Saskatchewan",
+          "nameKo": "Saskatchewan",
+          "type": "Province"
+        },
+        {
+          "code": "YT",
+          "isoCode": "CA-YT",
+          "nameEn": "Yukon",
+          "nameKo": "Yukon",
+          "type": "Territory"
+        }
+      ]
+    },
+    {
+      "countryCode": "AU",
+      "subdivisionType": "state_territory",
+      "count": 8,
+      "subdivisions": [
+        {
+          "code": "ACT",
+          "isoCode": "AU-ACT",
+          "nameEn": "Australian Capital Territory",
+          "nameKo": "Australian Capital Territory",
+          "type": "Territory"
+        },
+        {
+          "code": "NSW",
+          "isoCode": "AU-NSW",
+          "nameEn": "New South Wales",
+          "nameKo": "New South Wales",
+          "type": "State"
+        },
+        {
+          "code": "NT",
+          "isoCode": "AU-NT",
+          "nameEn": "Northern Territory",
+          "nameKo": "Northern Territory",
+          "type": "Territory"
+        },
+        {
+          "code": "QLD",
+          "isoCode": "AU-QLD",
+          "nameEn": "Queensland",
+          "nameKo": "Queensland",
+          "type": "State"
+        },
+        {
+          "code": "SA",
+          "isoCode": "AU-SA",
+          "nameEn": "South Australia",
+          "nameKo": "South Australia",
+          "type": "State"
+        },
+        {
+          "code": "TAS",
+          "isoCode": "AU-TAS",
+          "nameEn": "Tasmania",
+          "nameKo": "Tasmania",
+          "type": "State"
+        },
+        {
+          "code": "VIC",
+          "isoCode": "AU-VIC",
+          "nameEn": "Victoria",
+          "nameKo": "Victoria",
+          "type": "State"
+        },
+        {
+          "code": "WA",
+          "isoCode": "AU-WA",
+          "nameEn": "Western Australia",
+          "nameKo": "Western Australia",
+          "type": "State"
+        }
+      ]
+    },
+    {
+      "countryCode": "MX",
+      "subdivisionType": "state_federal_entity",
+      "count": 32,
+      "subdivisions": [
+        {
+          "code": "AGU",
+          "isoCode": "MX-AGU",
+          "nameEn": "Aguascalientes",
+          "nameKo": "Aguascalientes",
+          "type": "State"
+        },
+        {
+          "code": "BCN",
+          "isoCode": "MX-BCN",
+          "nameEn": "Baja California",
+          "nameKo": "Baja California",
+          "type": "State"
+        },
+        {
+          "code": "BCS",
+          "isoCode": "MX-BCS",
+          "nameEn": "Baja California Sur",
+          "nameKo": "Baja California Sur",
+          "type": "State"
+        },
+        {
+          "code": "CAM",
+          "isoCode": "MX-CAM",
+          "nameEn": "Campeche",
+          "nameKo": "Campeche",
+          "type": "State"
+        },
+        {
+          "code": "CHP",
+          "isoCode": "MX-CHP",
+          "nameEn": "Chiapas",
+          "nameKo": "Chiapas",
+          "type": "State"
+        },
+        {
+          "code": "CHH",
+          "isoCode": "MX-CHH",
+          "nameEn": "Chihuahua",
+          "nameKo": "Chihuahua",
+          "type": "State"
+        },
+        {
+          "code": "CMX",
+          "isoCode": "MX-CMX",
+          "nameEn": "Ciudad de México",
+          "nameKo": "Ciudad de México",
+          "type": "Federal entity"
+        },
+        {
+          "code": "COA",
+          "isoCode": "MX-COA",
+          "nameEn": "Coahuila de Zaragoza",
+          "nameKo": "Coahuila de Zaragoza",
+          "type": "State"
+        },
+        {
+          "code": "COL",
+          "isoCode": "MX-COL",
+          "nameEn": "Colima",
+          "nameKo": "Colima",
+          "type": "State"
+        },
+        {
+          "code": "DUR",
+          "isoCode": "MX-DUR",
+          "nameEn": "Durango",
+          "nameKo": "Durango",
+          "type": "State"
+        },
+        {
+          "code": "GUA",
+          "isoCode": "MX-GUA",
+          "nameEn": "Guanajuato",
+          "nameKo": "Guanajuato",
+          "type": "State"
+        },
+        {
+          "code": "GRO",
+          "isoCode": "MX-GRO",
+          "nameEn": "Guerrero",
+          "nameKo": "Guerrero",
+          "type": "State"
+        },
+        {
+          "code": "HID",
+          "isoCode": "MX-HID",
+          "nameEn": "Hidalgo",
+          "nameKo": "Hidalgo",
+          "type": "State"
+        },
+        {
+          "code": "JAL",
+          "isoCode": "MX-JAL",
+          "nameEn": "Jalisco",
+          "nameKo": "Jalisco",
+          "type": "State"
+        },
+        {
+          "code": "MIC",
+          "isoCode": "MX-MIC",
+          "nameEn": "Michoacán de Ocampo",
+          "nameKo": "Michoacán de Ocampo",
+          "type": "State"
+        },
+        {
+          "code": "MOR",
+          "isoCode": "MX-MOR",
+          "nameEn": "Morelos",
+          "nameKo": "Morelos",
+          "type": "State"
+        },
+        {
+          "code": "MEX",
+          "isoCode": "MX-MEX",
+          "nameEn": "México",
+          "nameKo": "México",
+          "type": "State"
+        },
+        {
+          "code": "NAY",
+          "isoCode": "MX-NAY",
+          "nameEn": "Nayarit",
+          "nameKo": "Nayarit",
+          "type": "State"
+        },
+        {
+          "code": "NLE",
+          "isoCode": "MX-NLE",
+          "nameEn": "Nuevo León",
+          "nameKo": "Nuevo León",
+          "type": "State"
+        },
+        {
+          "code": "OAX",
+          "isoCode": "MX-OAX",
+          "nameEn": "Oaxaca",
+          "nameKo": "Oaxaca",
+          "type": "State"
+        },
+        {
+          "code": "PUE",
+          "isoCode": "MX-PUE",
+          "nameEn": "Puebla",
+          "nameKo": "Puebla",
+          "type": "State"
+        },
+        {
+          "code": "QUE",
+          "isoCode": "MX-QUE",
+          "nameEn": "Querétaro",
+          "nameKo": "Querétaro",
+          "type": "State"
+        },
+        {
+          "code": "ROO",
+          "isoCode": "MX-ROO",
+          "nameEn": "Quintana Roo",
+          "nameKo": "Quintana Roo",
+          "type": "State"
+        },
+        {
+          "code": "SLP",
+          "isoCode": "MX-SLP",
+          "nameEn": "San Luis Potosí",
+          "nameKo": "San Luis Potosí",
+          "type": "State"
+        },
+        {
+          "code": "SIN",
+          "isoCode": "MX-SIN",
+          "nameEn": "Sinaloa",
+          "nameKo": "Sinaloa",
+          "type": "State"
+        },
+        {
+          "code": "SON",
+          "isoCode": "MX-SON",
+          "nameEn": "Sonora",
+          "nameKo": "Sonora",
+          "type": "State"
+        },
+        {
+          "code": "TAB",
+          "isoCode": "MX-TAB",
+          "nameEn": "Tabasco",
+          "nameKo": "Tabasco",
+          "type": "State"
+        },
+        {
+          "code": "TAM",
+          "isoCode": "MX-TAM",
+          "nameEn": "Tamaulipas",
+          "nameKo": "Tamaulipas",
+          "type": "State"
+        },
+        {
+          "code": "TLA",
+          "isoCode": "MX-TLA",
+          "nameEn": "Tlaxcala",
+          "nameKo": "Tlaxcala",
+          "type": "State"
+        },
+        {
+          "code": "VER",
+          "isoCode": "MX-VER",
+          "nameEn": "Veracruz de Ignacio de la Llave",
+          "nameKo": "Veracruz de Ignacio de la Llave",
+          "type": "State"
+        },
+        {
+          "code": "YUC",
+          "isoCode": "MX-YUC",
+          "nameEn": "Yucatán",
+          "nameKo": "Yucatán",
+          "type": "State"
+        },
+        {
+          "code": "ZAC",
+          "isoCode": "MX-ZAC",
+          "nameEn": "Zacatecas",
+          "nameKo": "Zacatecas",
+          "type": "State"
+        }
+      ]
+    }
+  ],
+  "summary": [
+    {
+      "countryCode": "US",
+      "count": 57
+    },
+    {
+      "countryCode": "CN",
+      "count": 34
+    },
+    {
+      "countryCode": "IN",
+      "count": 36
+    },
+    {
+      "countryCode": "RU",
+      "count": 83
+    },
+    {
+      "countryCode": "BR",
+      "count": 27
+    },
+    {
+      "countryCode": "CA",
+      "count": 13
+    },
+    {
+      "countryCode": "AU",
+      "count": 8
+    },
+    {
+      "countryCode": "MX",
+      "count": 32
+    }
+  ]
+}

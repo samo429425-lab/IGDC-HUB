@@ -7,11 +7,14 @@
  * registry sync, market evidence and Canonical validation during a later build.
  */
 
+const fs = require("fs");
+const path = require("path");
 const CommerceIntake = require("./lib/commerce-candidate-intake.v1");
 const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
+const MarketSaleScope = require("./lib/market-sale-scope.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.2.0-private-queue-diagnostic";
+const VERSION = "commerce-candidate-review-api-v1.4.0-global-country-registry";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -42,6 +45,151 @@ async function resolveCurrentAdmin(event){
 function stage(root){return CommerceIntake.readStage(root)||{schema:"commerce-candidate-staging.snapshot.v1",summary:{considered:0},candidates:[]};}
 function summaryDoc(doc){return {version:VERSION,stageVersion:doc.version||null,generatedAt:doc.generatedAt||null,releaseGate:doc.releaseGate||null,summary:doc.summary||{},candidateCount:Array.isArray(doc.candidates)?doc.candidates.length:0};}
 function pageMap(hub){const h=lower(hub);return ({home:"home",distribution:"distribution",network:"network",tour:"tour",social:"social"})[h]||"";}
+
+function normalizeCountry(value){return MarketSaleScope.normalizeCountry(value);}
+function normalizeRegion(value,country){return MarketSaleScope.normalizeRegion(value,country);}
+function unique(values){return Array.from(new Set((Array.isArray(values)?values:[]).filter(Boolean)));}
+function candidateScopes(row){
+  const scopes=[];
+  function add(countryInput,regionInput){
+    const country=normalizeCountry(countryInput);if(!country||country==="GLOBAL")return;
+    const region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE";
+    scopes.push({country,region});
+  }
+  for(const key of Array.isArray(row&&row.marketKeys)?row.marketKeys:[]){
+    const value=text(key).toUpperCase();const match=value.match(/^([A-Z]{2})-(.+)$/);if(match)add(match[1],match[2]);
+  }
+  const placement=plain(row&&row.placement);add(placement.country,placement.region);
+  const marketScope=plain(row&&row.marketScope);add(marketScope.marketCountry,marketScope.marketRegion);
+  const supply=plain(row&&row.countrySupply);
+  const countries=[];
+  for(const value of [supply.country,supply.countryCode,supply.targetMarket,row&&row.targetCountry,row&&row.countryCode]){
+    const country=normalizeCountry(value);if(country)countries.push(country);
+  }
+  const regions=[];
+  for(const value of [supply.region,supply.regionCode,supply.targetRegion,row&&row.targetRegion])if(text(value))regions.push(value);
+  for(const country of countries){
+    if(regions.length)for(const region of regions)add(country,region);else add(country,"NATIONWIDE");
+  }
+  const seen=new Set();return scopes.filter(scope=>{const key=scope.country+"|"+scope.region;if(seen.has(key))return false;seen.add(key);return true;});
+}
+function scopeMatch(row,countryInput,regionInput){
+  const rawCountry=text(countryInput).toUpperCase();const country=normalizeCountry(rawCountry);const requested=text(regionInput).toUpperCase();
+  const allScopes=candidateScopes(row);
+  if(rawCountry==="UNSCOPED")return {matched:allScopes.length===0,mode:"unscoped",country:"UNSCOPED",region:"ALL"};
+  if(rawCountry==="UNRESOLVED")return {matched:false,mode:"unresolved_geo",country:"",region:""};
+  if(rawCountry==="GLOBAL")return {matched:true,mode:"all",country:"",region:"ALL"};
+  if(!country)return {matched:false,mode:rawCountry?"invalid_country":"unresolved_geo",country:"",region:""};
+  const scopes=allScopes.filter(scope=>scope.country===country);
+  if(!scopes.length)return {matched:false,mode:"none",country,region:requested||"ALL"};
+  if(!requested||requested==="ALL")return {matched:true,mode:"country",country,region:"ALL"};
+  const region=normalizeRegion(requested,country)||"NATIONWIDE";
+  if(region==="NATIONWIDE")return {matched:scopes.some(scope=>scope.region==="NATIONWIDE"),mode:"nationwide",country,region};
+  if(scopes.some(scope=>scope.region===region))return {matched:true,mode:"exact_region",country,region};
+  if(scopes.some(scope=>scope.region==="NATIONWIDE"))return {matched:true,mode:"nationwide_fallback",country,region};
+  return {matched:false,mode:"none",country,region};
+}
+function filteredStage(doc,countryInput,regionInput){
+  const rawCountry=text(countryInput).toUpperCase();const country=(rawCountry==="UNSCOPED"||rawCountry==="UNRESOLVED"||rawCountry==="GLOBAL")?rawCountry:normalizeCountry(rawCountry);const region=text(regionInput).toUpperCase()||"ALL";
+  const source=doc||{};const input=Array.isArray(source.candidates)?source.candidates:[];
+  const candidates=input.map(row=>{const match=scopeMatch(row,country,region);return match.matched?Object.assign({},row,{scopeMatch:match}):null;}).filter(Boolean);
+  const released=candidates.filter(row=>/released|published/i.test(text(row&&row.stageStatus))).length;
+  const eligible=candidates.filter(row=>row&&row.releaseEligible===true).length;
+  return Object.assign({},source,{
+    selectedScope:{country:(country==="UNRESOLVED"?null:(country==="GLOBAL"?null:(country||null))),region:(country==="UNRESOLVED"?null:(country==="GLOBAL"?"ALL":(country?(region||"ALL"):"ALL"))),source:country==="UNRESOLVED"?"unresolved-ip":(country==="GLOBAL"?"administrator-global":"selected-or-ip"),fallback:country==="UNRESOLVED"?"empty":"exact-region-then-nationwide-within-same-country",crossCountry:false},
+    candidates,
+    summary:Object.assign({},plain(source.summary),{considered:candidates.length,eligibleForRelease:eligible,releasedToCanonical:released,held:candidates.length-eligible})
+  });
+}
+function safeRows(result){return result&&result.status==="fulfilled"&&Array.isArray(result.value)?result.value:[];}
+
+let REGISTRY_CACHE=null;
+function readJsonCandidates(names){
+  for(const name of names){
+    for(const file of [path.join(process.cwd(),"data",name),path.join(__dirname,"..","..","data",name),path.join(__dirname,"data",name)]){
+      try{if(fs.existsSync(file))return JSON.parse(fs.readFileSync(file,"utf8"));}catch(_e){}
+    }
+  }
+  return null;
+}
+function countryRegistry(){
+  if(REGISTRY_CACHE)return REGISTRY_CACHE;
+  const countries=readJsonCandidates(["country-region-registry.v1.json"])||{regions:[],countries:[],policy:{}};
+  const subdivisions=readJsonCandidates(["country-subdivision-registry.v1.json"])||{countries:[]};
+  const subdivisionMap=new Map();
+  for(const row of Array.isArray(subdivisions.countries)?subdivisions.countries:[]){
+    const code=normalizeCountry(row&&row.countryCode);if(!code)continue;
+    subdivisionMap.set(code,(Array.isArray(row.subdivisions)?row.subdivisions:[]).map((item)=>({
+      code:normalizeRegion(item&&item.code,code),isoCode:text(item&&item.isoCode),nameKo:text(item&&item.nameKo)||text(item&&item.nameEn)||text(item&&item.code),nameEn:text(item&&item.nameEn)||text(item&&item.nameKo)||text(item&&item.code),type:text(item&&item.type)||text(row&&row.subdivisionType)
+    })).filter((item)=>item.code));
+  }
+  REGISTRY_CACHE={
+    schema:text(countries.schema),version:text(countries.version),policy:plain(countries.policy),
+    regions:Array.isArray(countries.regions)?countries.regions:[],
+    countries:(Array.isArray(countries.countries)?countries.countries:[]).filter((row)=>normalizeCountry(row&&row.code)&&normalizeCountry(row&&row.code)!=="KP"),
+    subdivisionMap
+  };
+  return REGISTRY_CACHE;
+}
+async function locationStatus(doc){
+  const registry=countryRegistry();
+  const allowedCountryCodes=new Set(registry.countries.map((row)=>normalizeCountry(row&&row.code)).filter(Boolean));
+  const settled=await Promise.allSettled([
+    SlotStore.select("gslot_countries","select=code,name,region_code,enabled,legal_source_id,updated_at&order=code.asc&limit=1000"),
+    SlotStore.select("gslot_candidate_availability","select=candidate_id,country_code,region_code,availability_state,updated_at&order=updated_at.desc&limit=5000"),
+    SlotStore.select("gslot_slot_assignments","select=candidate_id,country_code,region_code,state,publication_status,manual_pinned,updated_at&order=updated_at.desc&limit=5000")
+  ]);
+  const countryRows=safeRows(settled[0]),availability=safeRows(settled[1]),assignments=safeRows(settled[2]);
+  const map=new Map();
+  function ensure(codeInput,seed){
+    const code=normalizeCountry(codeInput);if(!code||code==="KP"||!allowedCountryCodes.has(code))return null;
+    if(!map.has(code))map.set(code,{code,nameKo:code,nameEn:code,worldRegion:null,enabled:true,requiresSubdivision:false,subdivisionType:null,subdivisions:[],observedRegions:new Set(),candidateIds:new Set(),eligibleIds:new Set(),heldIds:new Set(),availabilityIds:new Set(),assignmentIds:new Set(),manualPinnedIds:new Set(),lastUpdated:""});
+    const entry=map.get(code),src=plain(seed);
+    if(text(src.nameKo))entry.nameKo=text(src.nameKo);if(text(src.nameEn))entry.nameEn=text(src.nameEn);
+    if(text(src.name)&&entry.nameKo===code)entry.nameKo=text(src.name);
+    if(text(src.regionGroup||src.worldRegion||src.region_code))entry.worldRegion=text(src.regionGroup||src.worldRegion||src.region_code);
+    if(src.enabled===false)entry.enabled=false;
+    if(src.requiresSubdivision===true)entry.requiresSubdivision=true;
+    if(text(src.subdivisionType))entry.subdivisionType=text(src.subdivisionType);
+    return entry;
+  }
+  function touch(entry,stamp){const value=text(stamp);if(entry&&value&&value>entry.lastUpdated)entry.lastUpdated=value;}
+  for(const row of registry.countries){
+    const entry=ensure(row.code,row);
+    if(entry){entry.subdivisions=(registry.subdivisionMap.get(entry.code)||[]).slice();}
+  }
+  for(const row of countryRows){const entry=ensure(row.code,{nameKo:row.name,nameEn:row.name,regionGroup:row.region_code,enabled:row.enabled});touch(entry,row.updated_at);}
+  for(const row of Array.isArray(doc&&doc.candidates)?doc.candidates:[]){
+    const id=text(row&&row.candidateId)||text(row&&row.id)||"unknown";
+    for(const scope of candidateScopes(row)){const entry=ensure(scope.country,{});if(!entry)continue;entry.candidateIds.add(id);if(row&&row.releaseEligible===true)entry.eligibleIds.add(id);else entry.heldIds.add(id);if(scope.region&&scope.region!=="NATIONWIDE")entry.observedRegions.add(scope.region);}
+  }
+  for(const row of availability){const entry=ensure(row.country_code,{});if(!entry)continue;entry.availabilityIds.add(text(row.candidate_id));const region=normalizeRegion(row.region_code||"NATIONWIDE",entry.code);if(region&&region!=="NATIONWIDE")entry.observedRegions.add(region);touch(entry,row.updated_at);}
+  for(const row of assignments){const entry=ensure(row.country_code,{});if(!entry)continue;entry.assignmentIds.add(text(row.candidate_id));if(row.manual_pinned===true)entry.manualPinnedIds.add(text(row.candidate_id));const region=normalizeRegion(row.region_code||"NATIONWIDE",entry.code);if(region&&region!=="NATIONWIDE")entry.observedRegions.add(region);touch(entry,row.updated_at);}
+  const unscoped=(Array.isArray(doc&&doc.candidates)?doc.candidates:[]).filter((row)=>candidateScopes(row).length===0);
+  const countries=Array.from(map.values()).map((entry)=>({
+    code:entry.code,name:entry.nameKo,nameKo:entry.nameKo,nameEn:entry.nameEn,worldRegion:entry.worldRegion,enabled:entry.enabled,requiresSubdivision:entry.requiresSubdivision,subdivisionType:entry.subdivisionType,
+    candidateCount:entry.candidateIds.size,releaseEligible:entry.eligibleIds.size,held:entry.heldIds.size,availabilityCount:entry.availabilityIds.size,assignmentCount:entry.assignmentIds.size,manualPinnedCount:entry.manualPinnedIds.size,
+    regions:Array.from(new Set(entry.subdivisions.map((row)=>row.code).concat(Array.from(entry.observedRegions)))).sort(),subdivisions:entry.subdivisions,lastUpdated:entry.lastUpdated||null,
+    aiState:"inherit",status:entry.candidateIds.size?"candidate_data":((entry.availabilityIds.size||entry.assignmentIds.size)?"registry_only":"ready_empty")
+  })).sort((a,b)=>{const ao=(registry.regions.find((r)=>r.id===a.worldRegion)||{}).order||999;const bo=(registry.regions.find((r)=>r.id===b.worldRegion)||{}).order||999;return ao-bo||a.nameKo.localeCompare(b.nameKo,"ko")||a.code.localeCompare(b.code);});
+  if(unscoped.length)countries.unshift({code:"UNSCOPED",name:"국가 미지정 후보",nameKo:"국가 미지정 후보",nameEn:"Unscoped candidates",worldRegion:null,enabled:true,requiresSubdivision:false,candidateCount:unscoped.length,releaseEligible:unscoped.filter((row)=>row&&row.releaseEligible===true).length,held:unscoped.filter((row)=>row&&row.releaseEligible!==true).length,availabilityCount:0,assignmentCount:0,manualPinnedCount:0,regions:[],subdivisions:[],lastUpdated:null,aiState:"manual",status:"unscoped_requires_assignment"});
+  return {ok:true,version:VERSION,mode:"country-region-ip-control",registry:{schema:registry.schema,version:registry.version,countryCount:countries.filter((row)=>row.code!=="UNSCOPED").length,regions:registry.regions,excludedCountryCodes:["KP"]},countries,database:{countriesAvailable:settled[0].status==="fulfilled",availabilityAvailable:settled[1].status==="fulfilled",assignmentsAvailable:settled[2].status==="fulfilled"},policy:{countryRequired:true,regionOptional:true,regionFallback:"same-country-nationwide",crossCountryFallback:false,unresolvedGeo:"empty",unscopedCandidates:"hold-until-country-assigned",manualPinnedPrecedence:true}};
+}
+
+function readGeoObject(value){
+  const raw=text(value);if(!raw)return {};
+  for(const candidate of [raw,(()=>{try{return decodeURIComponent(raw);}catch(_e){return "";}})()]){try{const parsed=JSON.parse(candidate);if(isObject(parsed))return parsed;}catch(_e){}}
+  return {};
+}
+function geoProbe(event){
+  const headers={};for(const [key,value] of Object.entries(event&&event.headers||{}))headers[String(key).toLowerCase()]=value;
+  const geo=Object.assign({},plain(event&&event.geo),readGeoObject(headers["x-nf-geo"]));const countryObject=plain(geo.country);const subdivision=plain(geo.subdivision);
+  const rawDetected=text(first(countryObject.code,countryObject.alpha2,typeof geo.country==="string"?geo.country:"",geo.countryCode,geo.country_code,headers["cf-ipcountry"],headers["x-country"],headers["x-vercel-ip-country"],headers["x-nf-country"])).toUpperCase();
+  const detected=normalizeCountry(rawDetected);const excluded=detected==="KP";
+  const registry=countryRegistry();const row=!excluded&&registry.countries.find((item)=>normalizeCountry(item&&item.code)===detected);const country=row?detected:"";
+  const region=country?normalizeRegion(first(subdivision.code,subdivision.iso_code,typeof geo.subdivision==="string"?geo.subdivision:"",geo.subdivisionCode,geo.regionCode,geo.stateCode,geo.provinceCode,geo.region,geo.state,headers["x-region"],headers["x-nf-subdivision"],headers["x-nf-region"],headers["x-vercel-ip-country-region"]),country):"";
+  return {ok:true,version:VERSION,country:country||null,region:region||null,worldRegion:row&&row.regionGroup||null,resolved:!!country,excluded,detectedCountry:detected||rawDetected||null,scope:country+(region?"-"+region:""),policy:{exactRegionFirst:true,nationwideFallbackWithinSameCountry:true,crossCountryFallback:false,unresolvedGeo:"empty",excludedCountryCodes:["KP"]}};
+}
 
 function countBy(rows, selector){
   const out={};
@@ -91,6 +239,8 @@ function diagnosticDoc(doc, member){
     generatedAt:new Date().toISOString(),
     mode:gate.enabled===true?"private-review-release-gate-armed":"pre-product-private-review",
     safety:{readOnly:true,writes:false,publicSnapshotPublication:false,externalNavigation:false,providerCalls:false,secretsExcluded:true},
+    selectedScope:plain(stage.selectedScope),
+    ipPolicy:{countryRequired:true,regionOptional:true,exactRegionThenNationwide:true,crossCountryFallback:false,unresolvedGeo:"empty"},
     administrator:{roles:roles(member),access:"validated-private-queue-read"},
     queue:{
       schema:text(stage.schema),stageVersion:text(stage.version),stageGeneratedAt:text(stage.generatedAt),
@@ -211,10 +361,16 @@ exports.handler=async function(event){
     const member=await resolveCurrentAdmin(event);
     const body=method==="GET"?{}:parse(event);const action=lower((event.queryStringParameters||{}).action||body.action||"summary");
     if(method==="GET"){
-      requireRole(member,"read");const doc=stage(process.cwd());
+      requireRole(member,"read");const raw=stage(process.cwd());const query=event.queryStringParameters||{};
       if(action==="session")return json(200,sessionDoc(member));
-      if(action==="summary")return json(200,{ok:true,summary:summaryDoc(doc)});
-      if(action==="candidates")return json(200,{ok:true,summary:summaryDoc(doc),candidates:(doc.candidates||[]).slice(0,500)});
+      if(action==="geo")return json(200,geoProbe(event));
+      if(action==="locations")return json(200,await locationStatus(raw));
+      const probe=geoProbe(event);const requested=text(query.country).toUpperCase();
+      const scopeCountry=requested||(probe.resolved?probe.country:"UNRESOLVED");
+      const scopeRegion=text(query.region)||(probe.resolved?(probe.region||"NATIONWIDE"):"");
+      const doc=filteredStage(raw,scopeCountry,scopeRegion);
+      if(action==="summary")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc)});
+      if(action==="candidates")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc),candidates:(doc.candidates||[]).slice(0,500)});
       if(action==="diagnostic")return json(200,diagnosticDoc(doc,member));
       return json(404,{ok:false,error:"지원하지 않는 조회 요청입니다."});
     }
