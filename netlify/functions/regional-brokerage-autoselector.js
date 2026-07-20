@@ -11,12 +11,19 @@
  */
 
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
-const VERSION="regional-brokerage-autoselector-v1.0.1-private-country-intake";
+const VERSION="regional-brokerage-autoselector-v1.0.4-quality-first-country-provider-intake";
 const CACHE_TTL=5*60*1000;
-const RESPONSE_TIMEOUT=8200;
-const DISCOVERY_TIMEOUT=6200;
+function envInt(name,fallback,min,max){
+  const value=Number(process.env[name]);
+  return Number.isFinite(value)?Math.max(min,Math.min(max,Math.round(value))):fallback;
+}
+// Quality-first defaults. Optional environment overrides exist, but no setup is required.
+const DISCOVERY_TIMEOUT=envInt("IGDC_COUNTRY_DISCOVERY_TIMEOUT_MS",20000,8000,45000);
+const PROVIDER_FETCH_TIMEOUT=envInt("IGDC_COUNTRY_PROVIDER_TIMEOUT_MS",20000,8000,45000);
+const PAGE_CHECK_TIMEOUT=envInt("IGDC_COUNTRY_PAGE_CHECK_TIMEOUT_MS",8000,3000,20000);
 const MAX_LIVE_QUERIES=3;
-const MAX_PAGE_CHECKS=8;
+const MAX_PROVIDER_CALLS=envInt("IGDC_COUNTRY_PROVIDER_CALLS",4,2,6);
+const MAX_PAGE_CHECKS=envInt("IGDC_COUNTRY_PAGE_CHECKS",10,4,16);
 const CACHE=globalThis.__IGDC_REGIONAL_BROKERAGE_CACHE__||(globalThis.__IGDC_REGIONAL_BROKERAGE_CACHE__=new Map());
 
 function text(v){return v==null?"":String(v).trim();}
@@ -52,22 +59,106 @@ function discoveryQueries(geo){
   for(let i=0;i<MAX_LIVE_QUERIES;i++)out.push(`${locality} ${themes[(offset+i)%themes.length]}`);
   return out;
 }
-async function runSanmaruDiscovery(event,geo){
+function envFirst(){
+  for(const name of arguments){const value=text(process.env[name]);if(value)return value;}
+  return "";
+}
+function stripHtml(value){return text(value).replace(/<[^>]*>/g," ").replace(/&nbsp;|&#160;/gi," ").replace(/&amp;/gi,"&").replace(/&lt;/gi,"<").replace(/&gt;/gi,">").replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/\s+/g," ").trim();}
+function providerErrorCode(error){
+  const code=lower(error&&error.code||error&&error.name||error&&error.message||"provider_error");
+  if(/abort|timeout/.test(code))return "timeout";
+  const http=code.match(/http[_-]?(\d{3})/);if(http)return "http_"+http[1];
+  return code.slice(0,80)||"provider_error";
+}
+function retryableProviderError(error){
+  const code=lower(error&&error.code||error&&error.name||error&&error.message||"");
+  return /abort|timeout|http[_-]?(408|409|425|429|5\d\d)/.test(code);
+}
+function delay(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
+async function fetchJson(url,options,timeoutMs){
+  const wait=Math.max(3000,timeoutMs||PROVIDER_FETCH_TIMEOUT);
+  let lastError=null;
+  for(let attempt=0;attempt<2;attempt+=1){
+    const controller=typeof AbortController!=="undefined"?new AbortController():null;
+    const timer=controller?setTimeout(()=>controller.abort(),wait):null;
+    try{
+      const response=await fetch(url,Object.assign({},options||{},{signal:controller?controller.signal:undefined}));
+      if(!response||!response.ok){const error=new Error("HTTP_"+(response&&response.status||0));error.code="HTTP_"+(response&&response.status||0);throw error;}
+      return await response.json();
+    }catch(error){
+      lastError=error;
+      if(attempt===0&&retryableProviderError(error)){await delay(500);continue;}
+      throw error;
+    }finally{if(timer)clearTimeout(timer);}
+  }
+  throw lastError||new Error("provider_error");
+}
+function googleKeys(){return{key:envFirst("GOOGLE_API_KEY","GOOGLE_SEARCH_API_KEY","GOOGLE_CUSTOM_SEARCH_API_KEY","GOOGLE_CLOUD_API_KEY"),cx:envFirst("GOOGLE_CSE_ID","GOOGLE_CX","GOOGLE_SEARCH_ENGINE_ID","GOOGLE_CUSTOM_SEARCH_ENGINE_ID","GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID")};}
+function naverKeys(){return{id:envFirst("NAVER_API_KEY","NAVER_CLIENT_ID","NAVER_SEARCH_CLIENT_ID","NAVER_OPENAPI_CLIENT_ID"),secret:envFirst("NAVER_CLIENT_SECRET","NAVER_API_SECRET","NAVER_SEARCH_CLIENT_SECRET","NAVER_OPENAPI_CLIENT_SECRET")};}
+async function googleCountrySearch(query,geo,limit){
+  const keys=googleKeys();if(!keys.key||!keys.cx)return{provider:"google",query,status:"not_configured",items:[]};
+  const params=new URLSearchParams({key:keys.key,cx:keys.cx,q:query,num:String(Math.max(1,Math.min(10,limit||10))),start:"1",safe:"active",filter:"1"});
+  if(/^[A-Z]{2}$/.test(geo.country||"")){params.set("gl",geo.country.toLowerCase());params.set("cr","country"+geo.country);}
+  params.set("hl",geo.country==="KR"?"ko":"en");
+  try{
+    const data=await fetchJson("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,PROVIDER_FETCH_TIMEOUT);
+    const items=(Array.isArray(data.items)?data.items:[]).map(row=>{
+      const map=row&&row.pagemap||{};const thumb=first(map.cse_image&&map.cse_image[0]&&map.cse_image[0].src,map.cse_thumbnail&&map.cse_thumbnail[0]&&map.cse_thumbnail[0].src);
+      return{title:stripHtml(row&&row.title),url:text(row&&row.link),link:text(row&&row.link),summary:stripHtml(row&&row.snippet),snippet:stripHtml(row&&row.snippet),source:"google_country_discovery",provider:"google",type:"web",thumbnail:thumb,image:thumb,payload:{source:"google",country:geo.country,query}};
+    }).filter(row=>row.title&&row.url);
+    return{provider:"google",query,status:items.length?"ok":"empty",items};
+  }catch(error){return{provider:"google",query,status:providerErrorCode(error),items:[]};}
+}
+async function naverCountrySearch(query,geo,limit){
+  const keys=naverKeys();if(!keys.id||!keys.secret)return{provider:"naver",query,status:"not_configured",items:[]};
+  const params=new URLSearchParams({query,display:String(Math.max(1,Math.min(100,limit||20))),start:"1"});
+  try{
+    const data=await fetchJson("https://openapi.naver.com/v1/search/webkr.json?"+params.toString(),{headers:{"X-Naver-Client-Id":keys.id,"X-Naver-Client-Secret":keys.secret}},PROVIDER_FETCH_TIMEOUT);
+    const items=(Array.isArray(data.items)?data.items:[]).map(row=>({title:stripHtml(row&&row.title),url:text(row&&row.link),link:text(row&&row.link),summary:stripHtml(row&&row.description),snippet:stripHtml(row&&row.description),source:"naver_country_discovery",provider:"naver",type:"web",payload:{source:"naver",country:geo.country,query}})).filter(row=>row.title&&row.url);
+    return{provider:"naver",query,status:items.length?"ok":"empty",items};
+  }catch(error){return{provider:"naver",query,status:providerErrorCode(error),items:[]};}
+}
+async function runDirectProviderDiscovery(geo,targetLimit){
+  const queries=discoveryQueries(geo);const tasks=[];const limit=Math.max(1,Math.min(50,Number(targetLimit||20)||20));
+  function add(task){if(tasks.length<MAX_PROVIDER_CALLS)tasks.push(task);}
+  if(geo.country==="KR"){
+    add(naverCountrySearch(queries[0],geo,Math.min(20,limit)));
+    add(googleCountrySearch(queries[0],geo,Math.min(10,limit)));
+    if(limit>10){
+      add(naverCountrySearch(queries[1]||queries[0],geo,Math.min(20,limit)));
+      add(googleCountrySearch(queries[2]||queries[1]||queries[0],geo,Math.min(10,limit)));
+    }
+  }else{
+    add(googleCountrySearch(queries[0],geo,Math.min(10,limit)));
+    if(limit>10)add(googleCountrySearch(queries[1]||queries[0],geo,Math.min(10,limit)));
+    if(limit>20)add(googleCountrySearch(queries[2]||queries[0],geo,Math.min(10,limit)));
+  }
+  if(!tasks.length)return{items:[],trace:[{source:"country-provider",status:"not_configured",count:0,timeoutMs:PROVIDER_FETCH_TIMEOUT}]};
+  const settled=await Promise.all(tasks);
+  return{items:settled.flatMap(row=>row.items||[]),trace:settled.map(row=>({source:row.provider,query:row.query,status:row.status,count:(row.items||[]).length,timeoutMs:PROVIDER_FETCH_TIMEOUT}))};
+}
+async function runSanmaruDiscovery(event,geo,targetLimit){
   let Sanmaru=null;try{Sanmaru=require("./sanmaru_engine_v2");}catch(_e){}
-  if(!Sanmaru||typeof Sanmaru.runEngine!=="function")return{items:[],trace:[{source:"sanmaru",status:"unavailable"}]};
+  const providerPromise=runDirectProviderDiscovery(geo,targetLimit);
+  if(!Sanmaru||typeof Sanmaru.runEngine!=="function"){
+    const provider=await providerPromise;
+    return{items:provider.items,trace:[{source:"sanmaru",status:"unavailable",count:0}].concat(provider.trace)};
+  }
   const tasks=discoveryQueries(geo).map(async q=>{
     try{
       const result=await withTimeout(Sanmaru.runEngine(event||{}, {
         q,query:q,country:geo.country,region:geo.region||undefined,limit:18,candidatePool:36,
-        type:"site",external:"force",directExternal:"1",noMedia:"1",deep:"0",
+        type:"site",external:"off",directExternal:"0",noExternal:"1",noMedia:"1",deep:"0",timeoutMs:Math.max(8000,DISCOVERY_TIMEOUT-1500),
+        skipMaruSearch:"1",noMaruSearch:"1",skipCollector:"1",noCollector:"1",skipPlanetary:"1",noPlanetary:"1",
         from:"regional-brokerage-autoselector",source:"regional-brokerage-autoselector",
         regionalBrokerageSupply:"1",noAnalytics:"1",noRevenue:"1",readOnly:"1",noWrite:"1",noSync:"1",writeMode:"readonly"
       }),DISCOVERY_TIMEOUT);
-      return {q,items:extractItems(result),status:"ok"};
-    }catch(e){return{q,items:[],status:lower(e&&e.code||e&&e.message||"error")};}
+      const items=extractItems(result);
+      return {q,items,status:items.length?"ok":"empty"};
+    }catch(e){return{q,items:[],status:providerErrorCode(e)};}
   });
-  const settled=await Promise.all(tasks);
-  return {items:settled.flatMap(x=>x.items||[]),trace:settled.map(x=>({query:x.q,status:x.status,count:(x.items||[]).length}))};
+  const [settled,provider]=await Promise.all([Promise.all(tasks),providerPromise]);
+  return {items:settled.flatMap(x=>x.items||[]).concat(provider.items||[]),trace:settled.map(x=>({source:"sanmaru",query:x.q,status:x.status,count:(x.items||[]).length,timeoutMs:DISCOVERY_TIMEOUT})).concat(provider.trace||[])};
 }
 
 function safeHttpUrl(raw){
@@ -95,7 +186,7 @@ async function inspectCandidate(item,geo){
   const url=Core.externalUrl(item);if(!url)return item;
   const u=safeHttpUrl(url);if(!u)return item;
   try{
-    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),1900);
+    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),PAGE_CHECK_TIMEOUT);
     const response=await fetch(u.toString(),{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-BrokerageVerifier/1.0 (+https://igdc.example)"}});clearTimeout(timer);
     if(!response.ok)return item;
     const finalUrl=safeHttpUrl(response.url||u.toString());if(!finalUrl)return item;
@@ -164,7 +255,7 @@ async function runSelection(event,params){
   const key=cacheKey(geo,privateCollection?"private":"front");const cached=getCache(key);if(cached)return Object.assign({},cached,{meta:Object.assign({},cached.meta||{},{cache:"hit"})});
   const started=Date.now();const stored=Core.loadStoredCandidates();let selected=Core.selection(stored.items,geo);let discovery={items:[],trace:[]},checked=[],privateReviewItems=[];
   if((privateCollection||selected.accepted.length<6)&&geo.country!=="GLOBAL"){
-    discovery=await runSanmaruDiscovery(event,geo);
+    discovery=await runSanmaruDiscovery(event,geo,privateLimit);
     checked=await inspectLive(discovery.items,geo);
     selected=Core.selection(stored.items.concat(checked),geo);
     if(privateCollection)privateReviewItems=privateReviewPool(discovery.items,checked,geo,privateLimit);
