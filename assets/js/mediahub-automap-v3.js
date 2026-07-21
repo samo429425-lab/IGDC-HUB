@@ -211,6 +211,29 @@
 
     if(item && item.provider) a.dataset.provider = item.provider;
 
+    // Media playback handoff contract. Keep the card renderer slot-first, but
+    // carry the normalized media fields needed by the existing inline player.
+    // No seller/product pipeline fields are touched here.
+    if(title) a.dataset.mediaTitle = title;
+    if(videoId){
+      a.dataset.igdcContentId = String(videoId);
+      a.dataset.contentId = String(videoId);
+    }
+    if(item){
+      const directUrl = /\.(mp4|webm|ogv|ogg|m4v)(?:[?#].*)?$/i.test(String(item.url || '')) || /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/)/i.test(String(item.url || '')) ? item.url : '';
+      const mediaSource = item.video || item.streamUrl || item.mediaUrl || item.playbackUrl || item.sourceUrl || directUrl || '';
+      if(mediaSource) a.dataset.mediaSource = String(mediaSource);
+      const captions = item.captions || item.subtitleTracks || item.subtitles;
+      if(Array.isArray(captions) && captions.length){
+        try { a.dataset.captions = JSON.stringify(captions); } catch(_e){}
+      }
+      // Native-player launch URLs are accepted only when the verified catalog
+      // explicitly supplies them. The website never fabricates an app scheme.
+      if(item.windowsPlayerUrl) a.dataset.windowsPlayerUrl = String(item.windowsPlayerUrl);
+      if(item.androidPlayerUrl) a.dataset.androidPlayerUrl = String(item.androidPlayerUrl);
+      if(item.maruAppUrl) a.dataset.maruAppUrl = String(item.maruAppUrl);
+    }
+
     let thumbBox = q('.thumb', a);
     if(!thumbBox){
       thumbBox = D.createElement('div');
