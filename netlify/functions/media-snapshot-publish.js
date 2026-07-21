@@ -8,13 +8,13 @@
 const fs = require("fs");
 const path = require("path");
 const MediaStore = require("./lib/media-candidate-store.v1");
-const AdminAuth = require("./lib/commerce-candidate-auth.v1");
+const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "media-snapshot-publish-v1.0.0-approved-only";
+const VERSION = "media-snapshot-publish-v1.0.1-shared-admin-auth";
 
-async function actorFor(event){
-  const actor = await AdminAuth.authenticateCommerceAdmin(event);
-  MediaStore.requireRole(actor,"write");
+async function actorFor(event, storeRelease){
+  const actor = await SharedAdminAuth.resolveUser(event);
+  SharedAdminAuth.requireCapability(actor, storeRelease ? "approve" : "mediaRead");
   return actor;
 }
 function readJson(file){try{return JSON.parse(fs.readFileSync(file,"utf8"));}catch(_e){return null;}}
@@ -38,8 +38,9 @@ exports.handler = async function(event){
   if(event && event.httpMethod === "OPTIONS") return MediaStore.response(204,{});
   try{
     if(!["GET","POST"].includes(event.httpMethod)) return MediaStore.response(405,{ok:false,error:"method_not_allowed"});
-    const actor=await actorFor(event);
     const params=Object.assign({}, event.queryStringParameters || {}, event.httpMethod === "POST" ? MediaStore.parseBody(event) : {});
+    const storeRelease = params.storeRelease === true || params.storeRelease === "true";
+    const actor=await actorFor(event, storeRelease);
     const rows=await MediaStore.selectCandidates(queryApproved(params.limit));
     const base=baseSnapshot();
     const snapshot=MediaStore.buildSnapshot(base.doc, Array.isArray(rows)?rows:[], {capacityPerSection: Number(params.capacityPerSection)||90});
@@ -49,13 +50,13 @@ exports.handler = async function(event){
       release_id:"media_snapshot_"+MediaStore.shortHash({hash,at:MediaStore.nowIso()}),
       snapshot_hash:hash,
       snapshot,
-      status: params.storeRelease === true || params.storeRelease === "true" ? "stored" : "preview",
+      status: storeRelease ? "stored" : "preview",
       counts:{approvedRows:Array.isArray(rows)?rows.length:0,eligibleRows:eligible,sections:snapshot.meta&&snapshot.meta.filled||{}},
       created_by:MediaStore.compact(actor.email || actor.memberId || "admin",200),
       created_at:MediaStore.nowIso()
     };
     let stored=null;
-    if(params.storeRelease === true || params.storeRelease === "true") stored=await MediaStore.insertRelease(release);
+    if(storeRelease) stored=await MediaStore.insertRelease(release);
     if(params.download === "1" || params.download === true || params.format === "snapshot"){
       return {statusCode:200,headers:{"content-type":"application/json; charset=utf-8","cache-control":"private, no-store, max-age=0","content-disposition":"attachment; filename=media.snapshot.generated.json"},body:JSON.stringify(snapshot,null,2)+"\n"};
     }

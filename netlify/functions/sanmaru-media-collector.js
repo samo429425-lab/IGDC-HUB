@@ -8,9 +8,9 @@
  * It never writes data/media.snapshot.json and never publishes to the Media Hub.
  */
 const MediaStore = require("./lib/media-candidate-store.v1");
-const AdminAuth = require("./lib/commerce-candidate-auth.v1");
+const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "sanmaru-media-collector-v1.0.0-public-archive-candidate-only";
+const VERSION = "sanmaru-media-collector-v1.0.1-shared-admin-auth";
 const IA_SEARCH = "https://archive.org/advancedsearch.php";
 const IA_METADATA = "https://archive.org/metadata/";
 const MAX_RESULTS = 30;
@@ -63,8 +63,8 @@ function internalAuthorized(event){
 }
 async function actorFor(event){
   if(internalAuthorized(event))return{memberId:"sanmaru-media-collector",email:"sanmaru-media-collector",roles:["media_manager"],mode:"internal"};
-  const actor=await AdminAuth.authenticateCommerceAdmin(event);
-  MediaStore.requireRole(actor,"write");
+  const actor=await SharedAdminAuth.resolveUser(event);
+  SharedAdminAuth.requireCapability(actor,"mediaEdit");
   return Object.assign({},actor,{mode:"admin"});
 }
 function number(value,fallback,min,max){

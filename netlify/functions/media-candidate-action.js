@@ -5,14 +5,14 @@
  * Actions update review state only. They do not publish to data/media.snapshot.json.
  */
 const MediaStore = require("./lib/media-candidate-store.v1");
-const AdminAuth = require("./lib/commerce-candidate-auth.v1");
+const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "media-candidate-action-v1.0.0-supabase-review";
+const VERSION = "media-candidate-action-v1.0.1-shared-admin-auth";
 const ACTIONS = new Set(["approve","hold","block","reject","reset"]);
 
-async function actorFor(event){
-  const actor = await AdminAuth.authenticateCommerceAdmin(event);
-  MediaStore.requireRole(actor,"write");
+async function actorFor(event, action){
+  const actor = await SharedAdminAuth.resolveUser(event);
+  SharedAdminAuth.requireCapability(actor, action === "approve" ? "approve" : "mediaEdit");
   return actor;
 }
 function idsFrom(body){
@@ -39,10 +39,10 @@ exports.handler = async function(event){
   if(event && event.httpMethod === "OPTIONS") return MediaStore.response(204,{});
   try{
     if(event.httpMethod !== "POST") return MediaStore.response(405,{ok:false,error:"method_not_allowed"});
-    const actor=await actorFor(event);
     const body=MediaStore.parseBody(event);
     const action=MediaStore.lower(body.action);
     if(!ACTIONS.has(action)) return MediaStore.response(400,{ok:false,error:"invalid_action",allowed:Array.from(ACTIONS)});
+    const actor=await actorFor(event, action);
     const ids=idsFrom(body);
     if(!ids.length) return MediaStore.response(400,{ok:false,error:"candidate_ids_required"});
     const patch=patchFor(action,body,actor);
