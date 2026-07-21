@@ -31,14 +31,14 @@ function catalog(state){
   const reg=Automation.registry();
   return {ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,marketSignalPolicy:MarketSignals.POLICY,registry:{schema:reg.schema,version:reg.version,regions:reg.regions,excludedCountryCodes:["KP"],countryCount:reg.countries.length},countries:reg.countries.map((country)=>({
     code:country.code,nameKo:country.nameKo,nameEn:country.nameEn,regionGroup:country.regionGroup,enabled:country.enabled!==false,requiresSubdivision:country.requiresSubdivision===true,subdivisionType:country.subdivisionType||null,subdivisions:country.subdivisions||[],effective:Automation.effectiveSetting(state,country.code,"")
-  })),settings:state.settings,storage:{available:state.storageAvailable,error:state.storageError||null},master:state.master};
+  })),settings:state.settings,storage:{available:state.storageAvailable,error:state.storageError||null},master:state.master,operatingStatus:Automation.operatingStatus(state)};
 }
 
 exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();if(method==="OPTIONS")return json(204,{});
     const body=method==="GET"?{}:parse(event),query=event&&event.queryStringParameters||{},action=lower(query.action||body.action||"catalog");
-    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","setting_save","candidate_action"].includes(action);requireRole(actor,write);
+    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","setting_save","candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
     const actorId=text(actor&&actor.sub);
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
@@ -63,6 +63,7 @@ exports.handler=async function(event){
     }
     if(method!=="POST")return json(405,{ok:false,error:"method_not_allowed"});
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
+    if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset));
     if(action==="global_signal_check")return json(200,await MarketSignals.runSignalCheck({event,scopeType:"global"}));
     if(action==="regional_signal_check"){
       const regionGroup=text(body.regionGroup),region=Automation.regionRow(regionGroup);if(!region){const error=new Error("선택 권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}

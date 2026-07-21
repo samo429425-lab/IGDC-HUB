@@ -19,7 +19,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 
-const VERSION = "commerce-country-automation-v1.4.0-global-region-country-signal-control";
+const VERSION = "commerce-country-automation-v1.5.2-global-control-only";
 const POLICY_PREFIX = "igdc_country_automation_";
 const SOURCE_REF = "commerce-country-supplier-discovery";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -235,6 +235,92 @@ async function saveSetting(actorId, input) {
   if (!existing) row.created_at = iso();
   const saved = await SlotStore.insert("gslot_policies", row, "resolution=merge-duplicates,return=representation");
   return rowToSetting(array(saved)[0] || row);
+}
+
+function operatingStatus(stateInput) {
+  const state = stateInput || { master: { mode: "off" }, map: new Map(), settings: [] };
+  const masterMode = state.master && state.master.mode || "off";
+  const profile = masterMode === "auto" ? "global_auto" : masterMode === "off" ? "global_pause" : "custom";
+  let autoCountries = 0;
+  if (masterMode === "auto") {
+    for (const country of registry().countries) {
+      if (effectiveSetting(state, country.code, "").mode === "auto") autoCountries += 1;
+    }
+  }
+  return {
+    profile,
+    masterMode,
+    supportedCountryCount: registry().countries.length,
+    autoCountryCount: autoCountries,
+    schedule: "hourly-due-check",
+    scopesPerSchedulerRun: Math.round(clamp(process.env.IGDC_COUNTRY_AUTOMATION_SCOPES_PER_RUN, 1, MAX_SCOPES_PER_RUN, DEFAULT_SCOPES_PER_RUN)),
+    childOverrides: state.settings.filter((row) => row && row.scopeType !== "master" && row.mode && row.mode !== "inherit").length
+  };
+}
+
+async function resetScopedOverrides(actorId, rowsInput) {
+  const actor = text(actorId) || "administrator";
+  const rows = array(rowsInput);
+  const now = iso();
+  const updates = [];
+  for (const row of rows) {
+    const setting = rowToSetting(row);
+    if (!setting.id || setting.scopeType === "master") continue;
+    const oldRule = plain(row && row.rule);
+    const rule = Object.assign({}, oldRule, {
+      mode: "inherit",
+      enabled: true,
+      schema: VERSION,
+      updatedBy: actor,
+      updatedAt: now
+    });
+    updates.push({
+      id: setting.id,
+      name: text(row && row.name) || "국가·권역 자동화 범위 설정",
+      scope_hub: "country-commerce-control",
+      scope_country: row && row.scope_country || setting.countryCode,
+      scope_region: row && row.scope_region || (setting.scopeType === "subdivision" ? setting.subdivisionCode : null),
+      enabled: true,
+      rule,
+      updated_at: now,
+      updated_by: actor,
+      created_at: text(row && row.created_at) || now
+    });
+  }
+  if (updates.length) await SlotStore.insert("gslot_policies", updates, "resolution=merge-duplicates,return=minimal");
+  return updates.length;
+}
+
+async function applyOperatingPreset(actorId, presetInput) {
+  const preset = lower(presetInput);
+  if (!["global_auto", "global_pause"].includes(preset)) {
+    const error = new Error("지원하지 않는 운영 전환 설정입니다."); error.statusCode = 400; throw error;
+  }
+  const rows = await policyRows();
+  const clearedOverrides = preset === "global_auto" ? await resetScopedOverrides(actorId, rows) : 0;
+  const masterMode = preset === "global_auto" ? "auto" : "off";
+  await saveSetting(actorId, { scopeType: "master", mode: masterMode, intervalDays: DEFAULT_INTERVAL_DAYS, maxCandidates: DEFAULT_MAX_CANDIDATES });
+  const state = await configState();
+  return {
+    ok: true,
+    reportType: "igdc-country-automation-operating-preset",
+    version: VERSION,
+    appliedAt: iso(),
+    appliedBy: text(actorId) || "administrator",
+    preset,
+    clearedScopedOverrides: clearedOverrides,
+    operatingStatus: operatingStatus(state),
+    safeguards: {
+      supportedCountriesOnly: true,
+      excludedCountryCodes: ["KP"],
+      privateSupplierQueueOnly: true,
+      productAutomaticImport: false,
+      publicAutomaticPublication: false,
+      paymentAutomaticExecution: false,
+      countryManagerOverridesCanBeAddedLater: true,
+      pausePreservesScopedSettings: true
+    }
+  };
 }
 
 function itemUrl(item) { return safeUrl(first(item && item.supplierOfficialUrl, item && item.supplierProfile && item.supplierProfile.officialUrl, item && item.url, item && item.href, item && item.link && item.link.url)); }
@@ -867,7 +953,8 @@ function due(lastRunAt, intervalDays) {
   return Date.now() - stamp >= Math.max(1, Number(intervalDays) || DEFAULT_INTERVAL_DAYS) * 86400000;
 }
 async function dueScopes(limitInput) {
-  const state = await configState(); if (state.master.mode !== "auto") return { state, scopes: [] };
+  const state = await configState();
+  if (state.master.mode !== "auto") return { state, scopes: [], dueCount: 0 };
   const scopes = [];
   for (const country of registry().countries) {
     const countryEffective = effectiveSetting(state, country.code, "");
@@ -896,7 +983,7 @@ function diagnostic(state) {
   return {
     ok: true, reportType: "igdc-country-responsible-supplier-control-diagnostic", version: VERSION, generatedAt: iso(),
     registry: { schema: reg.schema, version: reg.version, countryCount: reg.countries.length, regionGroupCount: reg.regions.length, largeCountryCount: reg.countries.filter((row) => row.requiresSubdivision).length, subdivisionCount: Array.from(reg.subdivisionMap.values()).reduce((sum, rows) => sum + rows.length, 0), excludedCountryCodes: ["KP"] },
-    configuration: { storageAvailable: state.storageAvailable, storageError: state.storageError, masterMode: state.master.mode, savedSettingCount: state.settings.length, openAiConfigured: !!text(process.env.OPENAI_API_KEY || process.env.OPENAI_KEY), schedule: "hourly-due-check", defaultIntervalDays: DEFAULT_INTERVAL_DAYS, defaultScopesPerRun: DEFAULT_SCOPES_PER_RUN, maxScopesPerRun: MAX_SCOPES_PER_RUN },
+    configuration: { storageAvailable: state.storageAvailable, storageError: state.storageError, masterMode: state.master.mode, savedSettingCount: state.settings.length, operatingStatus: operatingStatus(state), openAiConfigured: !!text(process.env.OPENAI_API_KEY || process.env.OPENAI_KEY), schedule: "hourly-due-check", defaultIntervalDays: DEFAULT_INTERVAL_DAYS, defaultScopesPerRun: DEFAULT_SCOPES_PER_RUN, maxScopesPerRun: MAX_SCOPES_PER_RUN },
     trustPolicy: TRUST_POLICY,
     aiTrustRanking: AI_TRUST_SCALE,
     marketSignalIntelligence: { version: MarketSignals.VERSION, policy: MarketSignals.POLICY },
@@ -907,5 +994,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, runScope, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, diagnostic
 };
