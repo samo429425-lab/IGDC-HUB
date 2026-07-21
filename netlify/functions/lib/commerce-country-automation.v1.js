@@ -20,7 +20,7 @@ const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 
-const VERSION = "commerce-country-automation-v1.7.0-searchbank-psom-research-bridge";
+const VERSION = "commerce-country-automation-v1.7.1-guided-research-json-restore";
 const POLICY_PREFIX = "igdc_country_automation_";
 const SOURCE_REF = "commerce-country-supplier-discovery";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -792,7 +792,7 @@ async function updateRunState(scope, currentSetting, report, actorId) {
   const sanitized = sanitizeSetting(input); const id = settingId(scopeType, sanitized);
   const existingRows = await policyRows(); const existing = existingRows.find((row) => text(row.id) === id);
   const oldRule = plain(existing && existing.rule);
-  const summary = { runId: report.runId, trigger: report.trigger, startedAt: report.startedAt, finishedAt: report.finishedAt, collected: report.summary.collected, considered: report.summary.considered, created: report.summary.created, updated: report.summary.updated, held: report.summary.held, manualPreserved: report.summary.manualPreserved, provider: report.ai.provider, error: report.error || null };
+  const summary = { runId: report.runId, trigger: report.trigger, startedAt: report.startedAt, finishedAt: report.finishedAt, collected: report.summary.collected, considered: report.summary.considered, researchCandidates: report.summary.researchCandidates, evidenceReady: report.summary.evidenceReady, ranked: report.summary.ranked, created: report.summary.created, updated: report.summary.updated, held: report.summary.held, manualPreserved: report.summary.manualPreserved, provider: report.ai.provider, error: report.error || null };
   const rule = Object.assign({}, oldRule, sanitized, { schema: VERSION, lastRunAt: report.finishedAt, lastRunSummary: summary, updatedAt: report.finishedAt, updatedBy: text(actorId) || "scheduled-automation" });
   const row = { id, name: scopeType === "country" ? "국가 책임 공급업체 발굴 자동화" : "주·성·지역 책임 공급업체 발굴 자동화", scope_hub: "country-commerce-control", scope_country: scope.country, scope_region: scopeType === "subdivision" ? scope.region : null, enabled: sanitized.mode !== "off", rule, updated_at: report.finishedAt, updated_by: text(actorId) || "scheduled-automation" };
   if (!existing) row.created_at = report.finishedAt;

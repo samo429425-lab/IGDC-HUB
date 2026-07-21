@@ -13,7 +13,7 @@
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v1.7.0-searchbank-psom-research-bridge";
+const VERSION="regional-brokerage-autoselector-v1.7.1-guided-research-queue-json-restore";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -337,6 +337,18 @@ function commerceHeuristicScore(item){
   return score;
 }
 function commerceFirst(items){return (items||[]).filter(item=>!obviousNonCommerceReason(item)).sort((a,b)=>commerceHeuristicScore(b)-commerceHeuristicScore(a));}
+function guidedResearchResult(item){
+  const payload=plain(item&&item.payload),origin=lower([payload.queryOrigin,payload.source,item&&item.source,item&&item.provider,item&&item.generatedBy].filter(Boolean).join(" "));
+  return /searchbank-psom-policy-plan|country_discovery|searchbank_snapshot|administrator-policy|sanmaru/.test(origin);
+}
+function researchFirst(items){
+  return (items||[]).filter(item=>{
+    const reason=obviousNonCommerceReason(item);
+    if(!reason)return true;
+    if(!guidedResearchResult(item))return false;
+    return !["invalid_url","document_file","reference_or_research_host","major_marketplace_or_aggregator"].includes(reason);
+  }).sort((a,b)=>commerceHeuristicScore(b)-commerceHeuristicScore(a));
+}
 async function googleCountrySearch(planRow,geo,limit){
   const query=planRow&&planRow.query||text(planRow);const locale=planRow&&planRow.locale||"en";
   const keys=googleKeys();if(!keys.key||!keys.cx)return{provider:"google",query,locale,status:"not_configured",detail:"GOOGLE_API_KEY_or_GOOGLE_CSE_ID_missing",items:[]};
@@ -352,7 +364,7 @@ async function googleCountrySearch(planRow,geo,limit){
       if(providerErrorCode(error)==="http_400"&&params.has("lr")){params.delete("lr");data=await fetchJson("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,PROVIDER_FETCH_TIMEOUT);}
       else throw error;
     }
-    const items=commerceFirst((Array.isArray(data.items)?data.items:[]).map(row=>{
+    const items=researchFirst((Array.isArray(data.items)?data.items:[]).map(row=>{
       const map=row&&row.pagemap||{};const thumb=first(map.cse_image&&map.cse_image[0]&&map.cse_image[0].src,map.cse_thumbnail&&map.cse_thumbnail[0]&&map.cse_thumbnail[0].src);
       return{title:stripHtml(row&&row.title),url:text(row&&row.link),link:text(row&&row.link),summary:stripHtml(row&&row.snippet),snippet:stripHtml(row&&row.snippet),source:"google_country_discovery",provider:"google",type:"web",thumbnail:thumb,image:thumb,payload:{source:"google",country:geo.country,query,queryLocale:locale,queryOrigin:planRow&&planRow.origin||"unknown"}};
     }).filter(row=>row.title&&row.url));
@@ -365,7 +377,7 @@ async function naverCountrySearch(planRow,geo,limit){
   const params=new URLSearchParams({query,display:String(Math.max(1,Math.min(100,limit||20))),start:"1"});
   try{
     const data=await fetchJson("https://openapi.naver.com/v1/search/webkr.json?"+params.toString(),{headers:{"X-Naver-Client-Id":keys.id,"X-Naver-Client-Secret":keys.secret}},PROVIDER_FETCH_TIMEOUT);
-    const items=commerceFirst((Array.isArray(data.items)?data.items:[]).map(row=>({title:stripHtml(row&&row.title),url:text(row&&row.link),link:text(row&&row.link),summary:stripHtml(row&&row.description),snippet:stripHtml(row&&row.description),source:"naver_country_discovery",provider:"naver",type:"web",payload:{source:"naver",country:geo.country,query,queryLocale:locale,queryOrigin:planRow&&planRow.origin||"unknown"}})).filter(row=>row.title&&row.url));
+    const items=researchFirst((Array.isArray(data.items)?data.items:[]).map(row=>({title:stripHtml(row&&row.title),url:text(row&&row.link),link:text(row&&row.link),summary:stripHtml(row&&row.description),snippet:stripHtml(row&&row.description),source:"naver_country_discovery",provider:"naver",type:"web",payload:{source:"naver",country:geo.country,query,queryLocale:locale,queryOrigin:planRow&&planRow.origin||"unknown"}})).filter(row=>row.title&&row.url));
     return{provider:"naver",query,locale,status:items.length?"ok":"empty",detail:null,items};
   }catch(error){return{provider:"naver",query,locale,status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
 }
@@ -384,7 +396,7 @@ async function runDirectProviderDiscovery(geo,targetLimit,queryPlan){
   }
   if(!tasks.length)return{items:[],trace:[{source:"country-provider",status:"not_configured",count:0,timeoutMs:PROVIDER_FETCH_TIMEOUT,locales:queryPlan&&queryPlan.locales||[]}]} ;
   const settled=await Promise.all(tasks);
-  return{items:commerceFirst(settled.flatMap(row=>row.items||[])),trace:settled.map(row=>({source:row.provider,query:row.query,queryLocale:row.locale,queryOrigin:rows.find(plan=>plan.query===row.query&&plan.locale===row.locale)&&rows.find(plan=>plan.query===row.query&&plan.locale===row.locale).origin||"unknown",status:row.status,detail:row.detail||null,count:(row.items||[]).length,timeoutMs:PROVIDER_FETCH_TIMEOUT}))};
+  return{items:researchFirst(settled.flatMap(row=>row.items||[])),trace:settled.map(row=>({source:row.provider,query:row.query,queryLocale:row.locale,queryOrigin:rows.find(plan=>plan.query===row.query&&plan.locale===row.locale)&&rows.find(plan=>plan.query===row.query&&plan.locale===row.locale).origin||"unknown",status:row.status,detail:row.detail||null,count:(row.items||[]).length,timeoutMs:PROVIDER_FETCH_TIMEOUT}))};
 }
 async function runSanmaruDiscovery(event,geo,targetLimit){
   const queryPlan=await discoveryQueryPlan(geo);let Sanmaru=null;try{Sanmaru=require("./sanmaru_engine_v2");}catch(_e){}
@@ -392,7 +404,7 @@ async function runSanmaruDiscovery(event,geo,targetLimit){
   const snapshotSeeds=array(queryPlan&&queryPlan.snapshotSeeds);
   const researchTrace={source:"searchbank-psom-policy-plan",status:"ok",count:snapshotSeeds.length,queries:array(queryPlan&&queryPlan.rows).length,version:text(queryPlan&&queryPlan.researchPlanVersion)||null,detail:plain(queryPlan&&queryPlan.researchDiagnostics)};
   if(!Sanmaru||typeof Sanmaru.runEngine!=="function"){
-    const provider=await providerPromise,seeds=manualPolicySeeds(geo),items=commerceFirst(seeds.concat(snapshotSeeds,provider.items||[])).filter(item=>!blockedByAdministratorPolicy(item,geo));
+    const provider=await providerPromise,seeds=manualPolicySeeds(geo),items=researchFirst(seeds.concat(snapshotSeeds,provider.items||[])).filter(item=>!blockedByAdministratorPolicy(item,geo));
     return{items,trace:[{source:"administrator-policy",status:seeds.length?"seeded":"empty",count:seeds.length},researchTrace,{source:"sanmaru",status:"unavailable",count:0,locales:queryPlan.locales,selectedLocales:queryPlan.selectedLocales,primaryLocale:queryPlan.primaryLocale}].concat(provider.trace)};
   }
   const tasks=queryPlan.rows.slice(0,MAX_LIVE_QUERIES).map(async row=>{
@@ -404,11 +416,11 @@ async function runSanmaruDiscovery(event,geo,targetLimit){
         from:"regional-brokerage-autoselector",source:"regional-brokerage-autoselector",
         regionalBrokerageSupply:"1",noAnalytics:"1",noRevenue:"1",readOnly:"1",noWrite:"1",noSync:"1",writeMode:"readonly"
       }),DISCOVERY_TIMEOUT);
-      const items=commerceFirst(extractItems(result));return{row,items,status:items.length?"ok":"empty"};
+      const items=researchFirst(extractItems(result));return{row,items,status:items.length?"ok":"empty"};
     }catch(error){return{row,items:[],status:providerErrorCode(error),detail:providerErrorDetail(error)};}
   });
   const [settled,provider]=await Promise.all([Promise.all(tasks),providerPromise]),seeds=manualPolicySeeds(geo);
-  const items=commerceFirst(seeds.concat(snapshotSeeds,settled.flatMap(x=>x.items||[]),provider.items||[])).filter(item=>!blockedByAdministratorPolicy(item,geo));
+  const items=researchFirst(seeds.concat(snapshotSeeds,settled.flatMap(x=>x.items||[]),provider.items||[])).filter(item=>!blockedByAdministratorPolicy(item,geo));
   return{items,trace:[{source:"administrator-policy",status:seeds.length?"seeded":"empty",count:seeds.length,blockedTargets:policyHints(geo&&geo.policyHints).manualBlockedTargets.length},researchTrace].concat(settled.map(x=>({source:"sanmaru",query:x.row.query,queryLocale:x.row.locale,queryOrigin:x.row.origin,status:x.status,detail:x.detail||x.row.localizationError||null,count:(x.items||[]).length,timeoutMs:DISCOVERY_TIMEOUT})),provider.trace||[])};
 }
 
@@ -513,7 +525,7 @@ function researchCandidateShell(item,geo,status,error){
   const originalUrl=Core.externalUrl(item),u=safeHttpUrl(originalUrl);if(!u)return item;
   const marketplace=Core.isMarketplace(item,u.toString());const hay=resultText(item);
   const supplierSignal=SUPPLIER_TEXT_RX.test(hay);const commerceSignal=COMMERCE_TEXT_RX.test(hay)||commerceHeuristicScore(item)>=5;
-  const researchEligible=!marketplace&&!obviousNonCommerceReason(item)&&(supplierSignal||commerceSignal);
+  const researchEligible=!marketplace&&!obviousNonCommerceReason(item)&&(supplierSignal||commerceSignal||guidedResearchResult(item));
   const secureTransport=u.protocol==="https:";const detectedCountry=Core.normalizeCountry(item&&item.distributionMarketCountry||item&&item.sellerMarketCountry||item&&item.marketCountry||item&&item.country||item&&item.geo&&item.geo.country);
   const detectedRegion=Core.normalizeRegion(item&&item.distributionMarketRegion||item&&item.sellerRegion||item&&item.region||item&&item.geo&&item.geo.state,detectedCountry||geo.country);
   const evidence=Object.assign({},item&&item.brokerageVerification||{}, {
@@ -521,7 +533,7 @@ function researchCandidateShell(item,geo,status,error){
     official:/official|공식|직영|본사|회사소개|사업자/i.test(hay),responsibleEntity:supplierSignal,directSales:commerceSignal,payment:false,secureTransport,
     shipping:/배송|택배|delivery|shipping|출고/i.test(hay),returns:/반품|교환|return|exchange/i.test(hay),refund:/환불|refund/i.test(hay),
     service:/고객센터|문의|customer service|support|contact/i.test(hay),contactChannel:/전화|이메일|문의|contact|고객센터/i.test(hay),legalIdentity:/사업자|법인|회사|corporation|company/i.test(hay),
-    marketplace,majorPlatform:marketplace,supplierType:supplierSignal?"research_supplier":"unclassified",
+    marketplace,majorPlatform:marketplace,supplierType:supplierSignal?"research_supplier":(guidedResearchResult(item)?"query_guided_research":"unclassified"),
     supplierReviewEligible:false,supplierResearchEligible:researchEligible,trustEvidenceReady:false,provisionalTrustScore:researchEligible?Math.max(20,Math.min(55,commerceHeuristicScore(item)+28)):0,
     researchStatus:text(status)||"page_check_pending",researchError:text(error).slice(0,180)||null,policyPagesInspected:0,policyUrls:[],
     legalVerificationComplete:false,contractVerificationComplete:false,deliveryPerformanceVerified:false,returnRefundPerformanceVerified:false,supportPerformanceVerified:false,
@@ -602,7 +614,7 @@ async function inspectCandidate(item,geo){
 }
 async function inspectLive(items,geo){
   const unique=[];const seen=new Set();
-  for(const item of commerceFirst(items||[])){
+  for(const item of researchFirst(items||[])){
     const url=Core.externalUrl(item);if(!url||seen.has(url))continue;seen.add(url);unique.push(item);if(unique.length>=MAX_PAGE_CHECKS)break;
   }
   return await Promise.all(unique.map(item=>inspectCandidate(item,geo)));
@@ -614,7 +626,7 @@ function privateReviewPool(rawItems,inspectedItems,geo,limit){
     if(original)inspected.set(original,item);if(official)inspected.set(official,item);
   }
   const out=[];const seen=new Set();
-  for(const raw of commerceFirst(rawItems||[])){
+  for(const raw of researchFirst(rawItems||[])){
     const originalUrl=Core.externalUrl(raw),item=inspected.get(originalUrl)||researchCandidateShell(raw,geo,"page_check_pending",null);
     const evidence=item&&item.brokerageVerification||{},officialUrl=Core.externalUrl(item),profile=item&&item.supplierProfile||{};
     if(!officialUrl||seen.has(officialUrl)||evidence.marketplace===true||(evidence.supplierReviewEligible!==true&&evidence.supplierResearchEligible!==true))continue;
@@ -668,7 +680,7 @@ async function runSelection(event,params){
     meta:{cache:"miss",discoveryMode:privateCollection?"responsible-supplier":"front-supply",countryLocales:localeList(geo.country),selection:selected.stats,rejections:selected.rejected.slice(0,80),discovery:discovery.trace,
       marketSignals:{applied:Object.values(categoryWeights).some(value=>value!==0),categoryWeights,signalPlanVersion:text(requested.signalPlanVersion),categoryKeys:queryCategories(geo).map(index=>CATEGORY_KEYS[index])},
       administratorPolicy:{applied:adminPolicyHints.priorityDirections.length>0||adminPolicyHints.avoidDirections.length>0||adminPolicyHints.manualPriorityTargets.length>0||adminPolicyHints.manualBlockedTargets.length>0,priorityDirections:adminPolicyHints.priorityDirections,avoidDirections:adminPolicyHints.avoidDirections,manualPriorityTargets:adminPolicyHints.manualPriorityTargets,manualBlockedTargets:adminPolicyHints.manualBlockedTargets,manualPrecedence:true},
-      privateReview:{enabled:privateCollection,entityKind:"supplier",raw:discovery.items.length,inspected:checked.length,count:privateReviewItems.length,productPageImport:false,publicPublication:false},
+      privateReview:{enabled:privateCollection,entityKind:"supplier",raw:discovery.items.length,inspected:checked.length,count:privateReviewItems.length,researchEligible:privateReviewItems.filter(item=>plain(item&&item.brokerageVerification).supplierResearchEligible===true).length,evidenceReady:privateReviewItems.filter(item=>plain(item&&item.brokerageVerification).supplierReviewEligible===true).length,productPageImport:false,publicPublication:false},
       elapsedMs:Date.now()-started,hasSnapshot:!!snapshot}
   };
   return setCache(key,result);

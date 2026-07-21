@@ -17,7 +17,7 @@
   <div class="topbar">
     <button id="useGeoBtn" type="button">현재 접속 IP 적용</button>
     <button id="reloadBtn" type="button" class="secondary">전체 상태 새로고침</button>
-    <button id="diagnosticBtn" type="button" class="secondary">통합 점검 JSON</button>
+    <button id="diagnosticBtn" type="button" class="secondary">통합 점검 JSON</button><button id="diagnosticDownloadBtn" type="button" class="secondary" disabled>통합 JSON 다운로드</button>
     <button id="returnBtn" type="button" class="secondary">관리자 화면으로</button>
     <span id="state" class="state">관리자 공통 세션을 확인하는 중입니다.</span>
   </div>
@@ -40,15 +40,15 @@
     <h2>세계·권역·국가 3단계 AI 점검</h2>
     <div class="small">세계는 오일쇼크·전쟁·재난·환율·공급망·기술·대형 공연·스포츠·축제 같은 방향 신호를 보고, 권역은 그 영향과 현지 수요·물류·규제·문화 상황을 해석합니다. 국가는 실제 책임 판매업체를 검증합니다. 세계·권역 결과는 관리자 반영 후에도 품목군 탐색 비중만 ±20% 안에서 조정하며 신뢰 게이트와 공개 조건은 바꾸지 못합니다.</div>
     <div class="signal-grid" style="margin-top:10px">
-      <article class="signal-card"><h3>전 세계 흐름</h3><div class="small">개별 상품 전수검색이 아니라 향후 90일의 거시·사건·수요 방향을 점검합니다.</div><button id="globalSignalBtn" type="button">세계 흐름 AI 점검</button></article>
-      <article class="signal-card"><h3>선택 권역 상황</h3><div id="selectedRegionSignalName" class="small">권역을 선택하면 해당 권역의 특별 이슈와 수요 변화를 점검합니다.</div><div class="compact-actions"><button id="regionalSignalBtn" type="button">선택 권역 AI 점검</button><button id="regionalPolicyBtn" type="button" class="ghost">권역 정책 입안·AI 협의</button></div><div id="regionalPolicyState" class="policy-state">권역을 선택하면 저장 정책을 확인할 수 있습니다.</div></article>
+      <article class="signal-card"><h3>전 세계 흐름</h3><div class="small">개별 상품 전수검색이 아니라 향후 90일의 거시·사건·수요 방향을 점검합니다.</div><div class="compact-actions"><button id="globalSignalBtn" type="button">세계 흐름 AI 점검</button><button id="globalSignalDownloadBtn" type="button" class="secondary" disabled>세계 JSON 다운로드</button></div></article>
+      <article class="signal-card"><h3>선택 권역 상황</h3><div id="selectedRegionSignalName" class="small">권역을 선택하면 해당 권역의 특별 이슈와 수요 변화를 점검합니다.</div><div class="compact-actions"><button id="regionalSignalBtn" type="button">선택 권역 AI 점검</button><button id="regionalSignalDownloadBtn" type="button" class="secondary" disabled>권역 JSON 다운로드</button><button id="regionalPolicyBtn" type="button" class="ghost">권역 정책 입안·AI 협의</button></div><div id="regionalPolicyState" class="policy-state">권역을 선택하면 저장 정책을 확인할 수 있습니다.</div></article>
       <article class="signal-card"><h3>선택 국가·지역 실행</h3><div class="small">업체의 신원·직접 판매·결제·배송·반품·환불·고객지원과 신뢰도를 점검합니다.</div><button id="countryCheckJumpBtn" type="button" class="ghost">국가 업체 점검으로 이동</button></article>
     </div>
     <div id="activeSignalState" class="small" style="margin-top:10px">적용된 세계·권역 AI 가중치를 확인하는 중입니다.</div>
   </section>
 
   <section id="signalPanel" class="panel hidden">
-    <div class="panel-heading"><h2 id="signalTitle">세계·권역 AI 점검 결과</h2><button id="applySignalBtn" type="button" disabled>AI 권고 운영 반영</button></div>
+    <div class="panel-heading"><h2 id="signalTitle">세계·권역 AI 점검 결과</h2><button id="applySignalBtn" type="button" disabled>AI 권고 운영 반영</button><button id="downloadSignalJsonBtn" type="button" class="secondary" disabled>현재 점검 JSON 다운로드</button></div>
     <div class="signal-summary"><div class="scope-card"><h3>AI 판단</h3><div id="signalOverview" class="small"></div></div><div class="scope-card"><h3>근거·안전선</h3><div id="signalMeta" class="small"></div></div></div>
     <h3 style="margin-top:12px">품목군 탐색 비중 권고</h3><div id="signalWeights" class="weight-grid"></div>
     <h3 style="margin-top:12px">감지된 주요 신호</h3><div id="signalEvents" class="signal-list"></div>
@@ -98,7 +98,7 @@
           <div class="field"><label for="maxCandidates">1회 최대 업체 후보</label><select id="maxCandidates"><option value="10">10개</option><option value="20">20개</option><option value="30">30개</option><option value="50">50개</option></select></div>
           <div id="expandField" class="field hidden"><label for="expandSubdivisions">하위 지역 자동화</label><select id="expandSubdivisions"><option value="false">전국 범위만</option><option value="true">주·성·지역 순환</option></select></div>
         </div>
-        <div class="actions"><button id="saveScopeBtn" type="button">범위 설정 저장</button><button id="countryPolicyBtn" type="button" class="ghost">국가 정책 입안·AI 협의</button><button id="previewRunBtn" type="button" class="ghost">책임 공급업체 발굴 미리보기</button><button id="runNowBtn" type="button">책임 공급업체 발굴 실행</button><button id="refreshScopeBtn" type="button" class="secondary">선택 범위 읽기</button></div><div id="countryPolicyState" class="policy-state">선택 국가의 관리자 수동 우선 정책을 확인할 수 있습니다.</div>
+        <div class="actions"><button id="saveScopeBtn" type="button">범위 설정 저장</button><button id="countryPolicyBtn" type="button" class="ghost">국가 정책 입안·AI 협의</button><button id="previewRunBtn" type="button" class="ghost">책임 공급업체 발굴 미리보기</button><button id="runNowBtn" type="button">책임 공급업체 발굴 실행</button><button id="refreshScopeBtn" type="button" class="secondary">선택 범위 읽기</button><button id="countryRunDownloadBtn" type="button" class="secondary" disabled>국가 실행 JSON 다운로드</button></div><div id="countryPolicyState" class="policy-state">선택 국가의 관리자 수동 우선 정책을 확인할 수 있습니다.</div>
         <div class="small">수동 모드에서는 정기 업체 발굴이 멈춥니다. 자동 실행은 기존 수동 고정 상품을 덮어쓰지 않으며, 발견된 업체의 상품을 자동으로 가져오거나 공개하지 않습니다.</div>
       </div>
     </div>
@@ -110,7 +110,7 @@
   </section>
 
   <section id="summaryPanel" class="panel hidden">
-    <h2 id="summaryTitle">선택 범위 현황</h2>
+    <div class="panel-heading"><h2 id="summaryTitle">선택 범위 현황</h2><span id="summarySource" class="small">저장 원장 기준</span></div>
     <div id="summaryGrid" class="summary-grid"></div>
   </section>
 
@@ -192,7 +192,7 @@
 </div>
 
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-country-control.js?v=13"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=14"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=2"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=1"></script>
 </body>
