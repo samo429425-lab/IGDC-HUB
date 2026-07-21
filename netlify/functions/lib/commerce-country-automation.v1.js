@@ -18,8 +18,9 @@ const SlotStore = require("./global-slot-console-supabase");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
+const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 
-const VERSION = "commerce-country-automation-v1.5.2-global-control-only";
+const VERSION = "commerce-country-automation-v1.6.0-policy-discussion-priority";
 const POLICY_PREFIX = "igdc_country_automation_";
 const SOURCE_REF = "commerce-country-supplier-discovery";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -815,6 +816,10 @@ async function runScope(options) {
     try { marketSignalStatus = await MarketSignals.signalStatus(scope.regionGroup); }
     catch (signalError) { marketSignalStatus = { ok: false, error: text(signalError && signalError.message), effective: { active: false, categoryWeights: {} } }; }
     const marketSignalPlan = plain(marketSignalStatus && marketSignalStatus.effective);
+    let policyControl = null;
+    try { policyControl = await PolicyDiscussion.effectivePolicy({ scopeType: "country", regionGroup: scope.regionGroup, countryCode: country, subdivisionCode: region }); }
+    catch (policyError) { policyControl = { ok: false, active: false, error: text(policyError && policyError.message), categoryWeights: {}, priorityDirections: [], avoidDirections: [], manualPriorityTargets: [], manualBlockedTargets: [], sources: [] }; }
+    const effectiveCategoryWeights = PolicyDiscussion.mergeWithAutomaticWeights(plain(marketSignalPlan.categoryWeights), policyControl);
     report.marketSignals = {
       version: MarketSignals.VERSION,
       policy: MarketSignals.POLICY,
@@ -826,17 +831,30 @@ async function runScope(options) {
       storageError: text(marketSignalStatus && marketSignalStatus.storage && marketSignalStatus.storage.error || marketSignalStatus && marketSignalStatus.error) || null,
       safety: plain(marketSignalPlan.safety)
     };
+    report.policyControl = {
+      version: PolicyDiscussion.VERSION, active: policyControl && policyControl.active === true,
+      precedence: array(policyControl && policyControl.precedence), sources: array(policyControl && policyControl.sources),
+      categoryWeights: plain(policyControl && policyControl.categoryWeights), effectiveCategoryWeights,
+      priorityDirections: array(policyControl && policyControl.priorityDirections), avoidDirections: array(policyControl && policyControl.avoidDirections),
+      manualPriorityTargets: array(policyControl && policyControl.manualPriorityTargets), manualBlockedTargets: array(policyControl && policyControl.manualBlockedTargets),
+      finalDecision: text(policyControl && policyControl.finalDecision) || null, error: text(policyControl && policyControl.error) || null, safety: plain(policyControl && policyControl.safety)
+    };
     const selection = await RegionalSelector.runSelection(opts.event || {}, {
       country, region: region === "NATIONWIDE" ? undefined : region, privateCollection: true, privateLimit: maxCandidates, maxCandidates,
-      categoryWeights: plain(marketSignalPlan.categoryWeights),
-      signalPlanVersion: array(marketSignalPlan.sourcePlans).map((row) => [row.type, row.id, row.validUntil, row.decay].join(":" )).join("|")
+      categoryWeights: effectiveCategoryWeights,
+      policyHints: {
+        priorityDirections: array(policyControl && policyControl.priorityDirections), avoidDirections: array(policyControl && policyControl.avoidDirections),
+        manualPriorityTargets: array(policyControl && policyControl.manualPriorityTargets), manualBlockedTargets: array(policyControl && policyControl.manualBlockedTargets),
+        finalDecision: text(policyControl && policyControl.finalDecision)
+      },
+      signalPlanVersion: array(marketSignalPlan.sourcePlans).map((row) => [row.type, row.id, row.validUntil, row.decay].join(":" )).join("|") + "|policy:" + array(policyControl && policyControl.sources).map((row) => [row.type,row.id,row.validUntil].join(":" )).join("|")
     });
     const items = mergeCandidateItems(selection && selection.items, selection && selection.privateReviewItems, maxCandidates);
     const selectionInput = array(selection && selection.items).length;
     const privateInput = Number(selection && selection.meta && selection.meta.privateReview && selection.meta.privateReview.raw || 0);
     report.summary.collected = Math.max(items.length, selectionInput, privateInput);
     report.summary.considered = items.length; report.trace = array(selection && selection.meta && selection.meta.discovery).slice(0, 30);
-    report.collection = { selectorVersion: text(selection && selection.version) || null, targetSource: text(selection && selection.geo && selection.geo.source) || null, discoveryMode: "responsible_supplier", rankingMode: "trust_first_revenue_tiebreak_only", entityKind: "supplier", legacyProductSelectorItemsIgnored: array(selection && selection.items).length, privateSupplierReviewItems: array(selection && selection.privateReviewItems).length, marketSignalPlanApplied: report.marketSignals && report.marketSignals.active === true, categoryWeights: plain(report.marketSignals && report.marketSignals.categoryWeights), priorityCategories: array(report.marketSignals && report.marketSignals.priorityCategories), productPageImport: false, publicPublication: false };
+    report.collection = { selectorVersion: text(selection && selection.version) || null, targetSource: text(selection && selection.geo && selection.geo.source) || null, discoveryMode: "responsible_supplier", rankingMode: "trust_first_revenue_tiebreak_only", entityKind: "supplier", legacyProductSelectorItemsIgnored: array(selection && selection.items).length, privateSupplierReviewItems: array(selection && selection.privateReviewItems).length, marketSignalPlanApplied: report.marketSignals && report.marketSignals.active === true, administratorPolicyApplied: report.policyControl && report.policyControl.active === true, categoryWeights: plain(report.policyControl && report.policyControl.effectiveCategoryWeights || report.marketSignals && report.marketSignals.categoryWeights), priorityCategories: array(report.marketSignals && report.marketSignals.priorityCategories), policyPriorityTargets: array(report.policyControl && report.policyControl.manualPriorityTargets), policyBlockedTargets: array(report.policyControl && report.policyControl.manualBlockedTargets), productPageImport: false, publicPublication: false };
     const ai = await openAiAssessment(items, scope); report.ai = { provider: ai.provider, model: ai.model, error: ai.error || null, trustScale: AI_TRUST_SCALE, recommendationRule: "AI recommendation is advisory and cannot bypass the hard trust or operating-performance gates." };
     const ranked = items.map((item, index) => ({
       item, originalIndex: index,
@@ -987,6 +1005,7 @@ function diagnostic(state) {
     trustPolicy: TRUST_POLICY,
     aiTrustRanking: AI_TRUST_SCALE,
     marketSignalIntelligence: { version: MarketSignals.VERSION, policy: MarketSignals.POLICY },
+    administratorPolicyDiscussion: { version: PolicyDiscussion.VERSION, precedence: ["country_manual", "regional_manual", "global_manual", "automatic_ai"] },
     safety: { privateQueueOnly: true, entityKind: "supplier", igdcRole: "distribution_service_intermediary", trustBeforeRevenue: true, revenueTieBreakOnly: true, sellerOfRecord: false, merchantOfRecord: false, inventoryCustody: false, productImport: false, publicSnapshotPublication: false, automaticCheckout: false, automaticPayment: false, deliveryResponsibility: false, returnsResponsibility: false, refundResponsibility: false, afterSalesResponsibility: false, crossCountryFallback: false, unresolvedGeo: "empty", manualPinnedPrecedence: true, aiCannotInventUrls: true },
     pipeline: ["global direction signals", "regional situation signals", "administrator-applied bounded category weights", "IP/administrator country scope", "large-country subdivision", "responsible manufacturer/producer/cooperative/seller discovery", "same-domain policy-page evidence inspection", "trust-first hard gate", "private supplier ranking", "legal and contract verification", "delivery/return-refund/support performance verification", "administrator supplier certification", "separate selective product-reference stage", "Canonical/release gate"]
   };

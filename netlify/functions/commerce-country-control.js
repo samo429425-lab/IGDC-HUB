@@ -3,6 +3,7 @@
 const AdminSession = require("./lib/global-slot-console-auth");
 const Automation = require("./lib/commerce-country-automation.v1");
 const MarketSignals = require("./lib/commerce-market-signal-intelligence.v1");
+const PolicyDiscussion = require("./lib/commerce-policy-discussion.v1");
 
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
@@ -27,9 +28,26 @@ function normalizeGeo(event){
   if(country){const MarketSaleScope=require("./lib/market-sale-scope.v1");region=MarketSaleScope.normalizeRegion(rawRegion,country);}
   return {ok:true,version:Automation.VERSION,country:country||null,region:region||null,worldRegion:detected&&detected.regionGroup||null,resolved:!!country,excluded:excluded,detectedCountry:rawCountry||null,policy:{exactRegionFirst:true,nationwideFallbackWithinSameCountry:true,crossCountryFallback:false,unresolvedGeo:"empty",manualPinnedPrecedence:true,trustBeforeRevenue:true,revenueTieBreakOnly:true}};
 }
+
+function policyScopeFromInput(raw){
+  const input=plain(raw),scopeType=lower(input.scopeType||input.type||"global");
+  if(scopeType==="global")return{scopeType:"global",scopeLabel:"전 세계 통합"};
+  if(scopeType==="regional"){
+    const regionGroup=text(input.regionGroup),region=Automation.regionRow(regionGroup);if(!region){const error=new Error("선택 권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}
+    return{scopeType:"regional",regionGroup,scopeLabel:(region.nameKo||region.nameEn||regionGroup)+" 권역"};
+  }
+  if(scopeType==="country"){
+    const countryCode=text(input.countryCode||input.country).toUpperCase(),country=Automation.countryRow(countryCode);if(!country){const error=new Error("지원되는 국가 정책 범위를 찾을 수 없습니다.");error.statusCode=400;throw error;}
+    const subdivisionCode=text(input.subdivisionCode||input.regionCode||input.region||"NATIONWIDE").toUpperCase()||"NATIONWIDE";
+    if(subdivisionCode!=="NATIONWIDE"){const valid=Array.isArray(country.subdivisions)&&country.subdivisions.some((item)=>text(item&&item.code).toUpperCase()===subdivisionCode);if(!valid){const error=new Error("선택 국가의 공식 주·성·지역 정책 범위를 찾을 수 없습니다.");error.statusCode=400;throw error;}}
+    return{scopeType:"country",regionGroup:country.regionGroup,countryCode,subdivisionCode,scopeLabel:(country.nameKo||country.nameEn||countryCode)+" · "+countryCode+" / "+(subdivisionCode==="NATIONWIDE"?"전국":subdivisionCode)};
+  }
+  const error=new Error("정책 협의 범위가 올바르지 않습니다.");error.statusCode=400;throw error;
+}
+
 function catalog(state){
   const reg=Automation.registry();
-  return {ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,marketSignalPolicy:MarketSignals.POLICY,registry:{schema:reg.schema,version:reg.version,regions:reg.regions,excludedCountryCodes:["KP"],countryCount:reg.countries.length},countries:reg.countries.map((country)=>({
+  return {ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,marketSignalPolicy:MarketSignals.POLICY,policyDiscussionVersion:PolicyDiscussion.VERSION,registry:{schema:reg.schema,version:reg.version,regions:reg.regions,excludedCountryCodes:["KP"],countryCount:reg.countries.length},countries:reg.countries.map((country)=>({
     code:country.code,nameKo:country.nameKo,nameEn:country.nameEn,regionGroup:country.regionGroup,enabled:country.enabled!==false,requiresSubdivision:country.requiresSubdivision===true,subdivisionType:country.subdivisionType||null,subdivisions:country.subdivisions||[],effective:Automation.effectiveSetting(state,country.code,"")
   })),settings:state.settings,storage:{available:state.storageAvailable,error:state.storageError||null},master:state.master,operatingStatus:Automation.operatingStatus(state)};
 }
@@ -50,6 +68,14 @@ exports.handler=async function(event){
       const regionGroup=text(query.regionGroup||body.regionGroup);
       if(regionGroup&&!Automation.regionRow(regionGroup)){const error=new Error("권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}
       return json(200,await MarketSignals.signalStatus(regionGroup));
+    }
+    if(action==="policy_workspace"){
+      const scope=policyScopeFromInput(Object.assign({},query,body));
+      return json(200,await PolicyDiscussion.getWorkspace(scope));
+    }
+    if(action==="policy_effective"){
+      const scope=policyScopeFromInput(Object.assign({scopeType:"country"},query,body));
+      return json(200,await PolicyDiscussion.effectivePolicy(scope));
     }
     if(action==="scope"){
       const countryCode=text(query.country||body.countryCode).toUpperCase(),region=text(query.region||body.subdivisionCode||body.regionCode||"NATIONWIDE").toUpperCase()||"NATIONWIDE";
@@ -73,6 +99,14 @@ exports.handler=async function(event){
     if(action==="market_signal_apply"){
       const report=plain(body.report||body);if(report&&report.scope&&report.scope.type==="regional"&&!Automation.regionRow(report.scope.regionGroup)){const error=new Error("점검 결과의 권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}
       return json(200,await MarketSignals.applySignalPlan(actorId,report));
+    }
+    if(action==="policy_ai_discuss"){
+      const scope=policyScopeFromInput(body.scope||body);
+      return json(200,await PolicyDiscussion.discuss(actorId,Object.assign({},body,{scope})));
+    }
+    if(action==="policy_decision_save"){
+      const scope=policyScopeFromInput(body.scope||body);
+      return json(200,await PolicyDiscussion.saveDecision(actorId,Object.assign({},body,{scope})));
     }
     if(action==="run_now")return json(200,await Automation.runScope({event,countryCode:body.countryCode,subdivisionCode:body.subdivisionCode||body.regionCode||"NATIONWIDE",actorId,trigger:"administrator-supplier-discovery",force:body.force===true,dryRun:body.dryRun===true}));
     if(action==="candidate_action")return json(200,await Automation.candidateAction(actorId,body));
