@@ -20,7 +20,7 @@ const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 
-const VERSION = "commerce-country-automation-v1.7.1-guided-research-json-restore";
+const VERSION = "commerce-country-automation-v1.7.2-gslot-schema-compatible-persistence";
 const POLICY_PREFIX = "igdc_country_automation_";
 const SOURCE_REF = "commerce-country-supplier-discovery";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -764,13 +764,13 @@ async function persistCandidate(item, assessment, scope, actorId, manualIds, man
     thumbnail_url: itemImage(item) || null,
     description: first(item && item.description, item && item.summary).slice(0, 2000) || null,
     owner_note: "신뢰 우선 책임 공급업체 소개 후보입니다. IGDC는 중개망이며 판매·결제·배송·반품·환불·AS 책임을 인수하지 않습니다. 법인·계약·배송 실적·반품환불 처리·고객지원 실적을 인증하고, 해당 업체 상품도 별도 선별하기 전에는 공개하지 않습니다.",
-    source_payload: payload, updated_at: now, updated_by: text(actorId) || "scheduled-automation"
+    source_payload: payload, updated_at: now
   };
   if (existing) {
     await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(deterministicId), row);
     return { status: assessment.decision === "candidate" ? "updated_candidate" : "updated_hold", candidateId: deterministicId };
   }
-  row.created_at = now; row.created_by = text(actorId) || "scheduled-automation";
+  row.created_at = now;
   await SlotStore.insert("gslot_candidates", row, "return=representation");
   return { status: assessment.decision === "candidate" ? "created_candidate" : "created_hold", candidateId: deterministicId };
 }
@@ -813,7 +813,7 @@ async function runScope(options) {
   const report = { ok: true, reportType: "igdc-country-responsible-supplier-discovery-run", version: VERSION, runId, trigger: text(opts.trigger) || "manual", startedAt, scope, effective,
     trustPolicy: TRUST_POLICY,
     safety: { privateCandidateQueueOnly: true, entityKind: "supplier", igdcRole: "distribution_service_intermediary", trustBeforeRevenue: true, revenueTieBreakOnly: true, sellerOfRecord: false, merchantOfRecord: false, inventoryCustody: false, productImport: false, publicSnapshotPublication: false, checkout: false, payment: false, deliveryResponsibility: false, returnsResponsibility: false, refundResponsibility: false, afterSalesResponsibility: false, manualPinnedOverwrite: false, aiCannotInventUrls: true },
-    ai: { provider: "pending", model: null, error: null, trustScale: AI_TRUST_SCALE }, summary: { collected: 0, considered: 0, researchCandidates: 0, evidenceReady: 0, ranked: 0, trustGatePassed: 0, approvalReady: 0, previewed: 0, created: 0, updated: 0, held: 0, manualPreserved: 0, skipped: 0 }, candidates: [], trace: [], error: null };
+    ai: { provider: "pending", model: null, error: null, trustScale: AI_TRUST_SCALE }, summary: { collected: 0, considered: 0, researchCandidates: 0, evidenceReady: 0, ranked: 0, trustGatePassed: 0, approvalReady: 0, previewed: 0, created: 0, updated: 0, held: 0, manualPreserved: 0, skipped: 0, persistenceFailed: 0 }, candidates: [], trace: [], persistenceErrors: [], error: null };
   try {
     const manualIds = await manualPinnedIds(country, region); const manualRows = await candidateRowsByIds(manualIds);
     const maxCandidates = effective.maxCandidates || DEFAULT_MAX_CANDIDATES;
@@ -880,8 +880,17 @@ async function runScope(options) {
       const assessment = Object.assign({}, entry.assessment, { rank });
       if (assessment.hardGatePassed === true) report.summary.trustGatePassed += 1;
       if (assessment.approvalReady === true) report.summary.approvalReady += 1;
-      let result = { status: "preview", candidateId: null };
-      if (opts.dryRun !== true) result = await persistCandidate(item, assessment, scope, opts.actorId, manualIds, manualRows);
+      let result = { status: "preview", candidateId: null, error: null };
+      if (opts.dryRun !== true) {
+        try {
+          result = await persistCandidate(item, assessment, scope, opts.actorId, manualIds, manualRows);
+        } catch (persistenceError) {
+          const message = text(persistenceError && persistenceError.message) || "후보 저장 중 알 수 없는 오류가 발생했습니다.";
+          result = { status: "storage_error", candidateId: null, error: message };
+          report.summary.persistenceFailed += 1;
+          report.persistenceErrors.push({ rank, title: itemTitle(item), url: itemUrl(item), error: message });
+        }
+      }
       if (/created_candidate/.test(result.status)) report.summary.created += 1;
       else if (/updated_candidate/.test(result.status)) report.summary.updated += 1;
       else if (/hold/.test(result.status)) report.summary.held += 1;
@@ -912,8 +921,11 @@ async function runScope(options) {
         hardGatePassed: assessment.hardGatePassed === true, approvalReady: assessment.approvalReady === true,
         evidence: evidenceProjection(item),
         missingEvidence: array(assessment.missingEvidence), performanceMissing: array(assessment.performanceMissing),
-        reason: assessment.reason, persistence: result.status
+        reason: assessment.reason, persistence: result.status, persistenceError: result.error || null
       });
+    }
+    if (report.persistenceErrors.length) {
+      report.storageWarning = report.summary.persistenceFailed + "개 후보 저장이 실패했지만 리서치·AI 평가 결과는 응답과 JSON에 보존했습니다.";
     }
   } catch (error) {
     report.ok = false; report.error = text(error && error.message); report.errorCode = text(error && error.code) || null;
@@ -971,7 +983,7 @@ async function candidateAction(actorId, input) {
   const note = action === "accept_for_completion"
     ? "관리자가 책임 공급업체 후보를 확인했습니다. 사업체·판매 책임·결제·배송·반품·환불·고객지원과 중개 조건을 완성한 뒤, 해당 업체 상품 중 적합한 항목만 별도 선별해야 합니다."
     : (action === "reject" ? "책임 공급업체 후보를 관리자 검토에서 제외했습니다. 자동화가 다시 승격하지 않습니다." : "책임 공급업체 후보를 관리자 검토에서 보류했습니다.");
-  await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(id), { status, source_payload: payload, owner_note: note, updated_at: iso(), updated_by: text(actorId) });
+  await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(id), { status, source_payload: payload, owner_note: note, updated_at: iso() });
   return { ok: true, candidateId: id, entityKind: "supplier", decision: action, status, nextGate: action === "accept_for_completion" ? "legal_contract_and_operating_performance_verification" : null, trustPolicy: TRUST_POLICY.schema, productImport: false, publicPublication: false };
 }
 function due(lastRunAt, intervalDays) {
