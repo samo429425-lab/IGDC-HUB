@@ -56,7 +56,7 @@ exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();if(method==="OPTIONS")return json(204,{});
     const body=method==="GET"?{}:parse(event),query=event&&event.queryStringParameters||{},action=lower(query.action||body.action||"catalog");
-    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","commit_preview","setting_save","candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
+    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","commit_preview","setting_save","candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
     const actorId=text(actor&&actor.sub);
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
@@ -77,6 +77,7 @@ exports.handler=async function(event){
       const scope=policyScopeFromInput(Object.assign({scopeType:"country"},query,body));
       return json(200,await PolicyDiscussion.effectivePolicy(scope));
     }
+    if(action==="research_status")return json(200,await Automation.researchJobStatus({countryCode:query.country||body.countryCode,subdivisionCode:query.region||body.subdivisionCode||body.regionCode||"NATIONWIDE"}));
     if(action==="scope"){
       const countryCode=text(query.country||body.countryCode).toUpperCase(),region=text(query.region||body.subdivisionCode||body.regionCode||"NATIONWIDE").toUpperCase()||"NATIONWIDE";
       const country=Automation.countryRow(countryCode);
@@ -88,6 +89,9 @@ exports.handler=async function(event){
       return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,marketSignalPolicy:MarketSignals.POLICY,country,effective:Automation.effectiveSetting(state,countryCode,region==="NATIONWIDE"?"":region),marketSignals:await MarketSignals.signalStatus(country.regionGroup),candidates:await Automation.listAutomationCandidates(countryCode,region)});
     }
     if(method!=="POST")return json(405,{ok:false,error:"method_not_allowed"});
+    if(action==="research_begin")return json(200,await Automation.beginResearchJob(actorId,body,event));
+    if(action==="research_step")return json(200,await Automation.advanceResearchJob(actorId,body,event));
+    if(action==="research_commit")return json(200,await Automation.commitResearchJob(actorId,body));
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
     if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset));
     if(action==="global_signal_check")return json(200,await MarketSignals.runSignalCheck({event,scopeType:"global"}));

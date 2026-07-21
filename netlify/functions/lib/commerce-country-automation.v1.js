@@ -20,8 +20,10 @@ const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 
-const VERSION = "commerce-country-automation-v1.8.0-two-stage-preview-commit";
+const VERSION = "commerce-country-automation-v1.9.0-persisted-staged-research";
 const POLICY_PREFIX = "igdc_country_automation_";
+const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
+const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
 const SOURCE_REF = "commerce-country-supplier-discovery";
 const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_INTERVAL_DAYS = 7;
@@ -564,12 +566,12 @@ function parseOpenAiJson(raw) {
   if (start >= 0 && end > start) { try { return JSON.parse(value.slice(start, end + 1)); } catch (_error) {} }
   return null;
 }
-async function openAiAssessment(items, scope) {
+async function openAiAssessment(items, scope, timeoutMs) {
   const key = text(process.env.OPENAI_API_KEY || process.env.OPENAI_KEY);
   if (!key || !items.length) return { provider: key ? "not_needed" : "not_configured", model: null, assessments: deterministicAssessment(items), error: key ? null : "OPENAI_API_KEY_missing" };
   const modelName = text(process.env.IGDC_COUNTRY_AUTOMATION_MODEL || process.env.OPENAI_MODEL || DEFAULT_MODEL);
   const payloadItems = items.map((item, index) => ({ index, title: itemTitle(item), url: itemUrl(item), host: hostOf(itemUrl(item)), evidence: evidenceProjection(item) }));
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 24000);
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), Math.max(8000, Math.min(24000, Number(timeoutMs) || 24000)));
   try {
     const response = await fetch((text(process.env.OPENAI_BASE_URL) || "https://api.openai.com/v1").replace(/\/+$/, "") + "/chat/completions", {
       method: "POST", signal: controller.signal,
@@ -1109,6 +1111,138 @@ async function updateRunState(scope, currentSetting, report, actorId) {
   if (!existing) row.created_at = report.finishedAt;
   await SlotStore.insert("gslot_policies", row, "resolution=merge-duplicates,return=representation");
 }
+
+function researchScope(input) {
+  const raw = plain(input); const country = normalizeCountry(raw.countryCode || raw.country); const countryInfo = countryRow(country);
+  if (!countryInfo || country === "KP") { const error = new Error("지원되는 국가 범위가 아닙니다."); error.statusCode = 400; throw error; }
+  const region = normalizeRegion(raw.subdivisionCode || raw.regionCode || raw.region || "NATIONWIDE", country) || "NATIONWIDE";
+  if (region !== "NATIONWIDE" && !array(countryInfo.subdivisions).some((item) => item.code === region)) { const error = new Error("선택 국가의 공식 주·성·지역 범위가 아닙니다."); error.statusCode = 400; throw error; }
+  return { country, region, regionGroup: countryInfo.regionGroup, countryName: countryInfo.nameKo || countryInfo.nameEn || country };
+}
+function researchJobId(scope) { return RESEARCH_JOB_PREFIX + lower(scope.country) + "_" + lower(scope.region || "NATIONWIDE").replace(/[^a-z0-9_-]/g, "_"); }
+async function researchJobRule(scope) {
+  const id = researchJobId(scope); const rows = await SlotStore.select("gslot_policies", "select=id,name,scope_hub,scope_country,scope_region,enabled,rule,updated_at,updated_by&id=eq." + encodeURIComponent(id) + "&limit=1");
+  const row = array(rows)[0]; return row ? Object.assign({}, plain(row.rule)) : null;
+}
+async function saveResearchJob(job, actorId) {
+  const now = iso(); job.updatedAt = now;
+  const row = { id: researchJobId(job.scope), name: "국가 책임 공급업체 단계별 리서치 작업", scope_hub: "country-supplier-research-job", scope_country: job.scope.country, scope_region: job.scope.region === "NATIONWIDE" ? null : job.scope.region, enabled: !["complete","committed","cancelled"].includes(job.status), rule: job, updated_at: now, updated_by: text(actorId) || "country-research-orchestrator" };
+  if (!job.createdAt) { job.createdAt = now; row.created_at = now; }
+  await SlotStore.insert("gslot_policies", row, "resolution=merge-duplicates,return=representation");
+  return job;
+}
+function researchCandidateUrl(item) { try { const value = first(item && item.supplierOfficialUrl, item && item.url, item && item.href, item && item.link && item.link.url, item && item.link); const url = new URL(text(value)); if (!["https:","http:"].includes(url.protocol) || url.username || url.password || !url.hostname) return ""; url.hash = ""; return url.toString(); } catch (_error) { return ""; } }
+function mergeResearchItems(existing, incoming, max) {
+  const out = [], seen = new Set();
+  for (const item of array(existing).concat(array(incoming))) { const url = researchCandidateUrl(item); const title = itemTitle(item); if (!url || !title) continue; const key = url.toLowerCase(); if (seen.has(key)) continue; seen.add(key); out.push(item); if (out.length >= (max || 240)) break; }
+  return out;
+}
+function retryableResearchStatus(status) { return /timeout|abort|aborted|network|http_(408|409|425|429|5\d\d)/i.test(text(status)); }
+function stagedCandidateRow(entry, rank) {
+  const item = entry.item, assessment = Object.assign({}, entry.assessment, { rank });
+  return {
+    rank, originalIndex: entry.originalIndex, candidateId: null, entityKind: "supplier",
+    supplierType: text(item && item.supplierProfile && item.supplierProfile.type) || "unclassified",
+    title: itemTitle(item), url: researchCandidateUrl(item), collectionStage: "responsible_supplier_persisted_research",
+    productImport: false, transactionAtSupplier: true, decision: assessment.decision,
+    score: assessment.trustScore || assessment.score, trustScore: assessment.trustScore || assessment.score,
+    commercialScore: assessment.commercialScore || 0, trustTier: assessment.trustTier,
+    rating10: Number(assessment.rating10 || trustRating10(assessment.trustScore || assessment.score)),
+    recommendation: text(assessment.recommendation) || policyRecommendation(assessment),
+    recommendationLabel: text(assessment.recommendationLabel) || recommendationLabel(assessment.recommendation),
+    assessmentConfidence: Number(assessment.assessmentConfidence || 0), assessmentMode: text(assessment.assessmentMode) || "deterministic_fallback",
+    aiSummary: text(assessment.aiSummary), strengths: clampList(assessment.strengths, 5, 180), concerns: clampList(assessment.concerns, 5, 180), nextChecks: clampList(assessment.nextChecks, 5, 180),
+    aiAssessment: { scale: "1_to_10", rating10: Number(assessment.rating10 || trustRating10(assessment.trustScore || assessment.score)), rank, recommendation: text(assessment.recommendation) || policyRecommendation(assessment), recommendationLabel: text(assessment.recommendationLabel) || recommendationLabel(assessment.recommendation), confidence: Number(assessment.assessmentConfidence || 0), mode: text(assessment.assessmentMode) || "deterministic_fallback", summary: text(assessment.aiSummary), strengths: clampList(assessment.strengths, 5, 180), concerns: clampList(assessment.concerns, 5, 180), nextChecks: clampList(assessment.nextChecks, 5, 180) },
+    hardGatePassed: assessment.hardGatePassed === true, approvalReady: assessment.approvalReady === true,
+    evidence: evidenceProjection(item), missingEvidence: array(assessment.missingEvidence), performanceMissing: array(assessment.performanceMissing), reason: assessment.reason,
+    persistence: "research_preview", persistenceError: null, sourceRunId: null
+  };
+}
+function researchProgress(job) {
+  const searchTotal = array(job.searchTasks).length, searchDone = Math.min(searchTotal, Number(job.searchCursor || 0));
+  const inspectTotal = array(job.inspectionPool).length, inspectDone = Math.min(inspectTotal, Number(job.inspectCursor || 0));
+  const rankTotal = array(job.rankQueue).length, rankDone = Math.min(rankTotal, Number(job.rankCursor || 0));
+  return { stage: job.status, search: { done: searchDone, total: searchTotal }, inspection: { done: inspectDone, total: inspectTotal }, ranking: { done: rankDone, total: rankTotal }, resumable: !["complete","committed","cancelled"].includes(job.status) };
+}
+function publicResearchJob(job) {
+  if (!job) return { ok: true, reportType: "igdc-country-responsible-supplier-research-status", version: VERSION, status: "not_started", candidates: [] };
+  const candidates = array(job.candidates);
+  return {
+    ok: true, reportType: "igdc-country-responsible-supplier-persisted-research", version: VERSION, jobId: job.jobId, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null,
+    scope: job.scope, effective: job.effective, trustPolicy: TRUST_POLICY,
+    safety: { persistedWorkspaceOnly: true, privateCandidateQueueOnly: true, noSingleRequestDeadlineRace: true, restartSafe: true, productImport: false, publicPublication: false, payment: false, manualPinnedOverwrite: false },
+    researchPlan: { version: job.researchPlanVersion || null, queryCount: array(job.planRows).length, taskCount: array(job.searchTasks).length, diagnostics: plain(job.planDiagnostics) },
+    progress: researchProgress(job),
+    summary: { collected: array(job.rawCandidates).length, considered: array(job.inspectionPool).length, inspected: array(job.inspectedCandidates).length, researchCandidates: array(job.reviewPool).length, evidenceReady: array(job.reviewPool).filter((item) => plain(item && item.brokerageVerification).supplierReviewEligible === true).length, ranked: candidates.length, trustGatePassed: candidates.filter((row) => row.hardGatePassed === true).length, approvalReady: candidates.filter((row) => row.approvalReady === true).length, previewed: candidates.length, created: 0, updated: 0, held: 0, manualPreserved: 0, skipped: 0, persistenceFailed: 0 },
+    candidates, trace: array(job.trace).slice(-120), errors: array(job.errors).slice(-30), lastError: job.lastError || null, commit: plain(job.commit)
+  };
+}
+async function researchContext(scope) {
+  let marketSignalStatus = null; try { marketSignalStatus = await MarketSignals.signalStatus(scope.regionGroup); } catch (error) { marketSignalStatus = { effective: { active: false, categoryWeights: {} }, error: text(error && error.message) }; }
+  const marketSignalPlan = plain(marketSignalStatus && marketSignalStatus.effective);
+  let policyControl = null; try { policyControl = await PolicyDiscussion.effectivePolicy({ scopeType: "country", regionGroup: scope.regionGroup, countryCode: scope.country, subdivisionCode: scope.region }); } catch (error) { policyControl = { active: false, categoryWeights: {}, priorityDirections: [], avoidDirections: [], manualPriorityTargets: [], manualBlockedTargets: [], sources: [], error: text(error && error.message) }; }
+  return { marketSignalPlan, policyControl, effectiveCategoryWeights: PolicyDiscussion.mergeWithAutomaticWeights(plain(marketSignalPlan.categoryWeights), policyControl) };
+}
+async function beginResearchJob(actorId, input, event) {
+  const raw = plain(input), scope = researchScope(raw), state = await configState(), effective = effectiveSetting(state, scope.country, scope.region === "NATIONWIDE" ? "" : scope.region);
+  const existing = await researchJobRule(scope);
+  if (existing && existing.schema === RESEARCH_JOB_SCHEMA && raw.restart !== true && !["cancelled","failed"].includes(existing.status)) return publicResearchJob(existing);
+  const context = await researchContext(scope);
+  const selectorInput = { country: scope.country, region: scope.region === "NATIONWIDE" ? undefined : scope.region, categoryWeights: context.effectiveCategoryWeights, policyHints: { priorityDirections: array(context.policyControl && context.policyControl.priorityDirections), avoidDirections: array(context.policyControl && context.policyControl.avoidDirections), manualPriorityTargets: array(context.policyControl && context.policyControl.manualPriorityTargets), manualBlockedTargets: array(context.policyControl && context.policyControl.manualBlockedTargets), finalDecision: text(context.policyControl && context.policyControl.finalDecision) }, signalPlanVersion: "persisted-staged-research" };
+  const plan = RegionalSelector.createSupplierResearchPlan(selectorInput), now = iso();
+  const job = { schema: RESEARCH_JOB_SCHEMA, version: VERSION, jobId: "country_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: array(plan.tasks).length ? "searching" : "inspecting", startedAt: now, createdAt: now, scope, effective, selectorInput, researchPlanVersion: plan.researchPlanVersion || plan.version || null, planRows: array(plan.rows), planDiagnostics: plain(plan.diagnostics), searchTasks: array(plan.tasks), searchCursor: 0, rawCandidates: mergeResearchItems([], plan.seeds, 240), inspectionPool: [], inspectCursor: 0, inspectedCandidates: [], reviewPool: [], rankQueue: [], rankCursor: 0, rankAttempt: 0, rankedEntries: [], candidates: [], trace: [{ source: "research-job", status: "started", at: now, queries: array(plan.rows).length, tasks: array(plan.tasks).length, snapshotSeeds: array(plan.seeds).length }], errors: [], lastError: null, marketSignals: { active: context.marketSignalPlan.active === true, categoryWeights: plain(context.marketSignalPlan.categoryWeights) }, policyControl: { active: context.policyControl && context.policyControl.active === true, categoryWeights: plain(context.policyControl && context.policyControl.categoryWeights), priorityDirections: array(context.policyControl && context.policyControl.priorityDirections), avoidDirections: array(context.policyControl && context.policyControl.avoidDirections), manualPriorityTargets: array(context.policyControl && context.policyControl.manualPriorityTargets), manualBlockedTargets: array(context.policyControl && context.policyControl.manualBlockedTargets) } };
+  if (!job.searchTasks.length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.max(40, effective.maxCandidates * 3) })); job.status = "inspecting"; }
+  await saveResearchJob(job, actorId); return publicResearchJob(job);
+}
+async function researchJobStatus(input) { const scope = researchScope(input); return publicResearchJob(await researchJobRule(scope)); }
+async function advanceResearchJob(actorId, input, event) {
+  const scope = researchScope(input), job = await researchJobRule(scope); if (!job || job.schema !== RESEARCH_JOB_SCHEMA) { const error = new Error("진행 중인 국가 책임 공급업체 리서치 작업이 없습니다."); error.statusCode = 404; throw error; }
+  if (["complete","committed"].includes(job.status)) return publicResearchJob(job);
+  const selectorInput = Object.assign({}, plain(job.selectorInput), { country: scope.country, region: scope.region === "NATIONWIDE" ? undefined : scope.region });
+  try {
+    if (job.status === "searching") {
+      const task = array(job.searchTasks)[Number(job.searchCursor || 0)];
+      if (!task) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.max(40, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 3) })); job.status = "inspecting"; job.inspectCursor = 0; }
+      else {
+        const result = await RegionalSelector.searchSupplierResearchStep(event || {}, Object.assign({}, selectorInput, { task, limit: Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) }));
+        job.rawCandidates = mergeResearchItems(job.rawCandidates, result.items, 240); job.trace = array(job.trace).concat([Object.assign({ at: iso(), attempt: Number(task.attempt || 0) }, plain(result.trace))]); job.searchCursor = Number(job.searchCursor || 0) + 1;
+        if (retryableResearchStatus(result.status) && Number(task.attempt || 0) < 1) job.searchTasks.push(Object.assign({}, task, { attempt: Number(task.attempt || 0) + 1, retryOf: Number(job.searchCursor || 0) - 1 }));
+        if (job.searchCursor >= array(job.searchTasks).length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.max(40, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 3) })); job.status = "inspecting"; job.inspectCursor = 0; }
+      }
+    } else if (job.status === "inspecting") {
+      const batch = array(job.inspectionPool).slice(Number(job.inspectCursor || 0), Number(job.inspectCursor || 0) + 3);
+      if (!batch.length) {
+        job.reviewPool = RegionalSelector.buildSupplierReviewPool(job.rawCandidates, job.inspectedCandidates, Object.assign({}, selectorInput, { limit: Math.min(50, Math.max(Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 2, 20)) }));
+        const scored = deterministicAssessment(job.reviewPool).map((assessment, index) => ({ item: job.reviewPool[index], assessment, originalIndex: index })).sort((a,b) => Number(b.assessment.hardGatePassed === true)-Number(a.assessment.hardGatePassed === true) || Number(b.assessment.trustScore||0)-Number(a.assessment.trustScore||0) || Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0));
+        job.rankQueue = scored.slice(0, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES)).map((row) => row.item); job.status = "ranking"; job.rankCursor = 0; job.rankAttempt = 0;
+      } else {
+        const inspected = await RegionalSelector.inspectSupplierResearchStep(batch, selectorInput); job.inspectedCandidates = mergeResearchItems(job.inspectedCandidates, inspected.items, 120); job.inspectCursor = Number(job.inspectCursor || 0) + batch.length; job.trace = array(job.trace).concat([{ source: "page-evidence-inspection", status: "ok", at: iso(), count: array(inspected.items).length, done: job.inspectCursor, total: array(job.inspectionPool).length }]);
+        if (job.inspectCursor >= array(job.inspectionPool).length) { job.reviewPool = RegionalSelector.buildSupplierReviewPool(job.rawCandidates, job.inspectedCandidates, Object.assign({}, selectorInput, { limit: Math.min(50, Math.max(Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 2, 20)) })); const scored = deterministicAssessment(job.reviewPool).map((assessment, index) => ({ item: job.reviewPool[index], assessment, originalIndex: index })).sort((a,b) => Number(b.assessment.hardGatePassed === true)-Number(a.assessment.hardGatePassed === true) || Number(b.assessment.trustScore||0)-Number(a.assessment.trustScore||0) || Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0)); job.rankQueue = scored.slice(0, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES)).map((row) => row.item); job.status = "ranking"; job.rankCursor = 0; job.rankAttempt = 0; }
+      }
+    } else if (job.status === "ranking") {
+      const start = Number(job.rankCursor || 0), batch = array(job.rankQueue).slice(start, start + 3);
+      if (!batch.length) job.status = "complete";
+      else {
+        const ai = await openAiAssessment(batch, scope, 22000);
+        if (ai.error && retryableResearchStatus(ai.error) && Number(job.rankAttempt || 0) < 1) { job.rankAttempt = Number(job.rankAttempt || 0) + 1; job.trace = array(job.trace).concat([{ source: "openai-ranking", status: "retry_scheduled", at: iso(), batchStart: start, error: ai.error }]); }
+        else { for (let index = 0; index < batch.length; index += 1) job.rankedEntries.push({ item: batch[index], originalIndex: start + index, assessment: Object.assign({ provider: ai.provider, model: ai.model }, ai.assessments[index] || deterministicAssessment([batch[index]])[0]) }); job.rankCursor = start + batch.length; job.rankAttempt = 0; job.trace = array(job.trace).concat([{ source: "openai-ranking", status: ai.error ? "deterministic_fallback_after_retry" : "ok", at: iso(), batchStart: start, count: batch.length, error: ai.error || null }]); if (job.rankCursor >= array(job.rankQueue).length) job.status = "complete"; }
+      }
+      if (job.status === "complete") { const ranked = array(job.rankedEntries).sort((a,b) => Number(b.assessment.approvalReady === true)-Number(a.assessment.approvalReady === true) || Number(b.assessment.hardGatePassed === true)-Number(a.assessment.hardGatePassed === true) || Number(b.assessment.trustScore||b.assessment.score||0)-Number(a.assessment.trustScore||a.assessment.score||0) || Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0) || itemTitle(a.item).localeCompare(itemTitle(b.item))); job.candidates = ranked.map((entry,index) => stagedCandidateRow(entry,index+1)); job.finishedAt = iso(); }
+    }
+    job.lastError = null; await saveResearchJob(job, actorId); return publicResearchJob(job);
+  } catch (error) {
+    job.lastError = { at: iso(), stage: job.status, message: text(error && error.message), code: text(error && error.code) || null }; job.errors = array(job.errors).concat([job.lastError]);
+    try { await saveResearchJob(job, actorId); } catch (_saveError) {}
+    throw error;
+  }
+}
+async function commitResearchJob(actorId, input) {
+  const scope = researchScope(input), job = await researchJobRule(scope); if (!job || !["complete","committed"].includes(job.status) || !array(job.candidates).length) { const error = new Error("실행 가능한 완료 리서치 결과가 없습니다. 단계별 검색·증빙·AI 평가를 먼저 완료하세요."); error.statusCode = 409; throw error; }
+  if (job.status === "committed" && job.commit && job.commit.result) return job.commit.result;
+  const result = await commitPreviewCandidates(actorId, { countryCode: scope.country, subdivisionCode: scope.region, candidates: job.candidates, sourceRunId: job.jobId, sourceStartedAt: job.startedAt });
+  job.status = "committed"; job.commit = { committedAt: iso(), committedBy: text(actorId), result }; await saveResearchJob(job, actorId); return result;
+}
+
 async function runScope(options) {
   const opts = plain(options); const country = normalizeCountry(opts.countryCode || opts.country); const countryInfo = countryRow(country);
   if (!countryInfo || country === "KP") { const error = new Error("지원되는 국가 범위가 아닙니다."); error.statusCode = 400; throw error; }
@@ -1343,5 +1477,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, commitResearchJob, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, diagnostic
 };

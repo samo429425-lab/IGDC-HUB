@@ -13,7 +13,7 @@
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v1.7.1-guided-research-queue-json-restore";
+const VERSION="regional-brokerage-autoselector-v1.8.0-persisted-staged-research";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -321,6 +321,8 @@ function obviousNonCommerceReason(item){
   if(BLOCKED_REFERENCE_HOST_RX.test(u.hostname))return "reference_or_research_host";
   if(Core.isMarketplace(item,u.toString()))return "major_marketplace_or_aggregator";
   const hay=resultText(item);
+  if(/\/(?:attachment|tag|author|category|archives?)\//i.test(u.pathname)||/wp-auto-importer|featured-image|첨부파일|꿈\s*해몽|fortune|horoscope/i.test(hay))return "blog_attachment_or_generated_page";
+  if(/\/(?:blog|news|article|post|board|bbs)\//i.test(u.pathname)&&!SUPPLIER_TEXT_RX.test(hay)&&!COMMERCE_TEXT_RX.test(hay))return "article_or_blog_page";
   if(NON_COMMERCE_TEXT_RX.test(hay)&&!COMMERCE_TEXT_RX.test(hay))return "non_commerce_document";
   return "";
 }
@@ -686,4 +688,55 @@ async function runSelection(event,params){
   return setCache(key,result);
 }
 
-module.exports={VERSION,runSelection};
+// Persisted staged supplier research helpers. Each network lane is executed in a
+// separate request so a thorough search can continue for minutes without forcing
+// any single Netlify request to race the platform timeout.
+function stagedGeo(params){
+  const requested=params||{};
+  const country=Core.normalizeCountry(requested.country||requested.targetCountry);
+  const categoryWeights={};for(const key of CATEGORY_KEYS)categoryWeights[key]=Math.max(-20,Math.min(20,Number(requested.categoryWeights&&requested.categoryWeights[key])||0));
+  return {country,region:Core.normalizeRegion(requested.region||requested.targetRegion,country),city:"",countryName:Core.COUNTRY_NAMES[country]||country,categoryWeights,signalPlanVersion:text(requested.signalPlanVersion),policyHints:policyHints(requested.policyHints)};
+}
+function compactResearchItem(item){
+  const u=Core.externalUrl(item);if(!u)return null;
+  return {title:first(item&&item.title,item&&item.name),name:first(item&&item.name,item&&item.title),url:u,link:u,summary:text(item&&item.summary).slice(0,1200),snippet:text(item&&item.snippet).slice(0,1200),source:text(item&&item.source),provider:text(item&&item.provider),type:text(item&&item.type)||"web",thumbnail:first(item&&item.thumbnail,item&&item.image),image:first(item&&item.image,item&&item.thumbnail),sourceTrust:Number(item&&item.sourceTrust||0),payload:Object.assign({},plain(item&&item.payload))};
+}
+function createSupplierResearchPlan(params){
+  const geo=stagedGeo(params);if(!geo.country)return{geo,rows:[],tasks:[],seeds:[],diagnostics:{error:"country_missing"}};
+  const locales=localeList(geo.country);let plan={rows:[],seeds:[],diagnostics:null,version:null};
+  if(SupplierResearchPlan&&typeof SupplierResearchPlan.buildPlan==="function")plan=SupplierResearchPlan.buildPlan({geo,locales,maxQueries:12,seedLimit:20});
+  const rows=[];const seen=new Set();for(const row of array(plan.rows)){const q=text(row&&row.query).replace(/\s+/g," ");if(!q||seen.has(q.toLowerCase()))continue;seen.add(q.toLowerCase());rows.push({query:q,locale:text(row&&row.locale)||locales[0]||"en",origin:text(row&&row.origin)||"searchbank-psom-policy-plan",localName:text(row&&row.localName)||geo.countryName||geo.country});}
+  const tasks=[];rows.forEach((row,index)=>{if(geo.country==="KR")tasks.push({lane:"naver",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,attempt:0});else tasks.push({lane:"google",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,attempt:0});tasks.push({lane:"sanmaru",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,attempt:0});});
+  if(geo.country==="KR")rows.slice(0,4).forEach((row,index)=>tasks.push({lane:"google",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,attempt:0}));
+  const seeds=array(plan.seeds).concat(manualPolicySeeds(geo)).map(compactResearchItem).filter(Boolean);
+  return{version:VERSION,researchPlanVersion:text(plan.version),geo,locales,rows,tasks,seeds,diagnostics:plain(plan.diagnostics)};
+}
+async function fetchJsonStaged(url,options,timeoutMs){
+  const controller=typeof AbortController!=="undefined"?new AbortController():null;const timer=controller?setTimeout(()=>controller.abort(),Math.max(5000,timeoutMs||18000)):null;
+  try{const response=await fetch(url,Object.assign({},options||{},{signal:controller?controller.signal:undefined}));const raw=await response.text();let body={};try{body=raw?JSON.parse(raw):{};}catch(_e){body={raw:raw.slice(0,500)};}if(!response.ok){const error=new Error("HTTP_"+response.status);error.code="HTTP_"+response.status;error.detail=text(body&&body.error&&body.error.message||body&&body.message||body&&body.error_description||body&&body.raw).slice(0,240);throw error;}return body;}finally{if(timer)clearTimeout(timer);}
+}
+async function stagedNaver(row,geo,limit){
+  const keys=naverKeys();if(!keys.id||!keys.secret)return{provider:"naver",status:"not_configured",detail:"NAVER_API_KEY_or_NAVER_CLIENT_SECRET_missing",items:[]};
+  const params=new URLSearchParams({query:row.query,display:String(Math.max(1,Math.min(100,limit||20))),start:"1"});
+  try{const data=await fetchJsonStaged("https://openapi.naver.com/v1/search/webkr.json?"+params.toString(),{headers:{"X-Naver-Client-Id":keys.id,"X-Naver-Client-Secret":keys.secret}},18000);const items=researchFirst(array(data.items).map(x=>({title:stripHtml(x&&x.title),url:text(x&&x.link),link:text(x&&x.link),summary:stripHtml(x&&x.description),snippet:stripHtml(x&&x.description),source:"naver_country_discovery",provider:"naver",type:"web",payload:{source:"naver",country:geo.country,query:row.query,queryLocale:row.locale,queryOrigin:row.origin}})).filter(x=>x.title&&x.url));return{provider:"naver",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"naver",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
+}
+async function stagedGoogle(row,geo,limit){
+  const keys=googleKeys();if(!keys.key||!keys.cx)return{provider:"google",status:"not_configured",detail:"GOOGLE_API_KEY_or_GOOGLE_CSE_ID_missing",items:[]};
+  const lang=googleLocale(row.locale||"en"),params=new URLSearchParams({key:keys.key,cx:keys.cx,q:(row.query+" -filetype:pdf -filetype:doc -filetype:ppt -filetype:xls -wikipedia -wiki -report -research -news").slice(0,900),num:String(Math.max(1,Math.min(10,limit||10))),start:"1",safe:"active",filter:"1",hl:lang});if(/^[A-Z]{2}$/.test(geo.country||"")){params.set("gl",geo.country.toLowerCase());params.set("cr","country"+geo.country);}
+  try{const data=await fetchJsonStaged("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,18000);const items=researchFirst(array(data.items).map(x=>{const map=x&&x.pagemap||{},thumb=first(map.cse_image&&map.cse_image[0]&&map.cse_image[0].src,map.cse_thumbnail&&map.cse_thumbnail[0]&&map.cse_thumbnail[0].src);return{title:stripHtml(x&&x.title),url:text(x&&x.link),link:text(x&&x.link),summary:stripHtml(x&&x.snippet),snippet:stripHtml(x&&x.snippet),source:"google_country_discovery",provider:"google",type:"web",thumbnail:thumb,image:thumb,payload:{source:"google",country:geo.country,query:row.query,queryLocale:row.locale,queryOrigin:row.origin}};}).filter(x=>x.title&&x.url));return{provider:"google",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"google",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
+}
+async function stagedSanmaru(event,row,geo,limit){
+  let Sanmaru=null;try{Sanmaru=require("./sanmaru_engine_v2");}catch(_e){}if(!Sanmaru||typeof Sanmaru.runEngine!=="function")return{provider:"sanmaru",status:"unavailable",detail:null,items:[]};
+  try{const result=await withTimeout(Sanmaru.runEngine(event||{},{q:row.query,query:row.query,country:geo.country,region:geo.region||undefined,limit:Math.min(20,limit||18),candidatePool:48,language:row.locale,locale:row.locale,type:"site",channel:"commerce",entity:"supplier",external:"off",directExternal:"0",noExternal:"1",noMedia:"1",deep:"0",timeoutMs:18000,from:"regional-brokerage-autoselector-staged",source:"regional-brokerage-autoselector-staged",regionalBrokerageSupply:"1",noAnalytics:"1",noRevenue:"1",readOnly:"1",noWrite:"1",noSync:"1",writeMode:"readonly"}),19000);const items=researchFirst(extractItems(result));return{provider:"sanmaru",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"sanmaru",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
+}
+async function searchSupplierResearchStep(event,params){
+  const geo=stagedGeo(params),task=plain(params&&params.task),row={query:text(task.query),locale:text(task.locale)||"en",origin:text(task.origin)||"searchbank-psom-policy-plan"};let result;if(task.lane==="naver")result=await stagedNaver(row,geo,Math.max(20,Number(params&&params.limit)||20));else if(task.lane==="google")result=await stagedGoogle(row,geo,Math.min(10,Number(params&&params.limit)||10));else result=await stagedSanmaru(event,row,geo,Math.max(18,Number(params&&params.limit)||18));const items=researchFirst(result.items||[]).filter(item=>!blockedByAdministratorPolicy(item,geo)).map(compactResearchItem).filter(Boolean);return{ok:true,version:VERSION,task:Object.assign({},task),status:result.status,detail:result.detail||null,items,trace:{source:result.provider,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,status:result.status,detail:result.detail||null,count:items.length,timeoutMs:19000}};
+}
+function prepareSupplierInspectionPool(rawItems,params){
+  const geo=stagedGeo(params),limit=Math.max(10,Math.min(100,Number(params&&params.limit)||60)),out=[],seen=new Set(),hostCounts=new Map();
+  for(const item of researchFirst(rawItems||[])){const url=Core.externalUrl(item);if(!url||seen.has(url)||blockedByAdministratorPolicy(item,geo))continue;let host="";try{host=new URL(url).hostname.toLowerCase();}catch(_e){}const count=hostCounts.get(host)||0;if(count>=3)continue;seen.add(url);hostCounts.set(host,count+1);out.push(compactResearchItem(item));if(out.length>=limit)break;}return out.filter(Boolean);
+}
+async function inspectSupplierResearchStep(rawItems,params){const geo=stagedGeo(params),items=array(rawItems).slice(0,3);const inspected=await Promise.all(items.map(item=>inspectCandidate(item,geo)));return{ok:true,version:VERSION,items:inspected};}
+function buildSupplierReviewPool(rawItems,inspectedItems,params){const geo=stagedGeo(params),limit=Math.max(1,Math.min(50,Number(params&&params.limit)||20));return privateReviewPool(rawItems,inspectedItems,geo,limit);}
+
+module.exports={VERSION,runSelection,createSupplierResearchPlan,searchSupplierResearchStep,prepareSupplierInspectionPool,inspectSupplierResearchStep,buildSupplierReviewPool};

@@ -98,8 +98,8 @@
           <div class="field"><label for="maxCandidates">1회 최대 업체 후보</label><select id="maxCandidates"><option value="10">10개</option><option value="20">20개</option><option value="30">30개</option><option value="50">50개</option></select></div>
           <div id="expandField" class="field hidden"><label for="expandSubdivisions">하위 지역 자동화</label><select id="expandSubdivisions"><option value="false">전국 범위만</option><option value="true">주·성·지역 순환</option></select></div>
         </div>
-        <div class="actions"><button id="saveScopeBtn" type="button">범위 설정 저장</button><button id="countryPolicyBtn" type="button" class="ghost">국가 정책 입안·AI 협의</button><button id="previewRunBtn" type="button" class="ghost">책임 공급업체 검색</button><button id="refreshScopeBtn" type="button" class="secondary">선택 범위 읽기</button><button id="countryRunDownloadBtn" type="button" class="secondary" disabled>국가 실행 JSON 다운로드</button><button id="runNowBtn" type="button" disabled>검색 결과 실행</button></div><div id="countryPolicyState" class="policy-state">선택 국가의 관리자 수동 우선 정책을 확인할 수 있습니다.</div>
-        <div class="small">먼저 책임 공급업체 검색으로 후보 목록을 확인한 뒤, 국가 실행 JSON 다운로드 옆의 검색 결과 실행을 눌러 비공개 후보 원장에 저장합니다. 수동 모드에서는 정기 업체 발굴이 멈추며, 기존 수동 고정 상품·상품 자동 반입·자동 공개는 그대로 보호됩니다.</div>
+        <div class="actions"><button id="saveScopeBtn" type="button">범위 설정 저장</button><button id="countryPolicyBtn" type="button" class="ghost">국가 정책 입안·AI 협의</button><button id="previewRunBtn" type="button" class="ghost">책임 공급업체 단계별 검색</button><button id="researchPauseBtn" type="button" class="secondary" disabled>진행 일시정지</button><button id="refreshScopeBtn" type="button" class="secondary">선택 범위 읽기</button><button id="countryRunDownloadBtn" type="button" class="secondary" disabled>국가 실행 JSON 다운로드</button><button id="runNowBtn" type="button" disabled>검색 결과 실행</button></div><div id="countryPolicyState" class="policy-state">선택 국가의 관리자 수동 우선 정책을 확인할 수 있습니다.</div><div id="countryResearchProgress" class="policy-state">단계별 검색은 검색어·검색 경로·업체 페이지 증빙·AI 평가를 여러 요청으로 나누어 진행하며, 중간 결과를 관리 DB에 보존합니다.</div>
+        <div class="small">검색 시간을 억지로 줄이지 않습니다. 모든 계획 검색을 순차적으로 수행하고, 업체 페이지 증빙과 AI 평가를 별도 단계로 완료한 뒤 국가 실행 JSON 다운로드 옆의 검색 결과 실행을 눌러 비공개 후보 원장에 저장합니다. 중간에 창을 닫거나 일시정지해도 같은 범위에서 이어서 진행합니다.</div>
       </div>
     </div>
   </section>
@@ -192,7 +192,7 @@
 </div>
 
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-country-control.js?v=14"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=15"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=2"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=1"></script>
 </body>
