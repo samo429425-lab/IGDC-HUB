@@ -20,7 +20,7 @@ const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 
-const VERSION = "commerce-country-automation-v1.7.2-gslot-schema-compatible-persistence";
+const VERSION = "commerce-country-automation-v1.8.0-two-stage-preview-commit";
 const POLICY_PREFIX = "igdc_country_automation_";
 const SOURCE_REF = "commerce-country-supplier-discovery";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -774,6 +774,317 @@ async function persistCandidate(item, assessment, scope, actorId, manualIds, man
   await SlotStore.insert("gslot_candidates", row, "return=representation");
   return { status: assessment.decision === "candidate" ? "created_candidate" : "created_hold", candidateId: deterministicId };
 }
+
+async function persistCandidateBatch(entriesInput, scope, actorId, manualIds, manualRows) {
+  const entries = array(entriesInput);
+  const results = new Array(entries.length);
+  let cursor = 0;
+  const workerCount = Math.max(1, Math.min(4, entries.length));
+  async function worker() {
+    while (true) {
+      const index = cursor++;
+      if (index >= entries.length) return;
+      const entry = plain(entries[index]);
+      try {
+        results[index] = await persistCandidate(entry.item, entry.assessment, scope, actorId, manualIds, manualRows);
+      } catch (error) {
+        results[index] = {
+          status: "storage_error",
+          candidateId: null,
+          error: text(error && error.message) || "후보 저장 중 알 수 없는 오류가 발생했습니다."
+        };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+
+function previewCandidateToItem(rowInput, scope) {
+  const row = plain(rowInput);
+  const ev = plain(row.evidence);
+  const url = safeUrl(row.url);
+  const title = text(row.title || row.name).slice(0, 500);
+  if (!url || !title) return null;
+  const supplierType = text(row.supplierType || ev.supplierType) || "unclassified";
+  return {
+    title,
+    url,
+    supplierOfficialUrl: url,
+    description: text(row.aiSummary || plain(row.aiAssessment).summary || row.reason).slice(0, 2000) || null,
+    targetCountry: scope.country,
+    targetRegion: scope.region,
+    sourceTrust: Number(ev.sourceTrust || 0),
+    igdcPrivateReviewOnly: true,
+    productCatalogImportAllowed: false,
+    supplierProfile: {
+      name: title,
+      type: supplierType,
+      officialUrl: url,
+      targetCountry: scope.country,
+      targetRegion: scope.region,
+      detectedCountry: ev.countryMatch === true ? scope.country : null,
+      detectedRegion: ev.countryMatch === true ? scope.region : null,
+      directSales: ev.directSales === true,
+      handlesPayment: ev.payment === true,
+      handlesShipping: ev.shipping === true,
+      handlesReturns: ev.returns === true,
+      handlesRefunds: ev.refund === true,
+      handlesCustomerSupport: ev.service === true,
+      offersTracking: ev.tracking === true,
+      statesDeliveryCommitment: ev.deliveryCommitment === true,
+      offersWarrantyOrAfterSales: ev.warranty === true,
+      affiliatePotential: ev.affiliatePotential === true,
+      catalogBreadthSignal: ev.catalogBreadth === true
+    },
+    brokerageVerification: {
+      supplierType,
+      official: ev.official === true,
+      responsibleEntity: ev.responsibleEntity === true,
+      directSales: ev.directSales === true,
+      payment: ev.payment === true,
+      secureTransport: ev.secureTransport !== false,
+      securePaymentSignal: ev.securePaymentSignal === true,
+      shipping: ev.shipping === true,
+      tracking: ev.tracking === true,
+      deliveryCommitment: ev.deliveryCommitment === true,
+      returns: ev.returns === true,
+      refund: ev.refund === true,
+      exchange: ev.exchange === true,
+      service: ev.service === true,
+      contactChannel: ev.contactChannel === true,
+      warranty: ev.warranty === true,
+      legalIdentity: ev.legalIdentity === true,
+      termsPrivacy: ev.termsPrivacy === true,
+      marketplace: ev.marketplace === true,
+      affiliatePotential: ev.affiliatePotential === true,
+      catalogBreadth: ev.catalogBreadth === true,
+      provisionalTrustScore: Math.max(0, Math.min(100, Number(ev.sourceTrust || 0) * 100)),
+      policyPagesInspected: Math.max(0, Number(ev.policyPagesInspected || 0)),
+      legalVerificationComplete: ev.legalVerificationComplete === true,
+      contractVerificationComplete: ev.contractVerificationComplete === true,
+      deliveryPerformanceVerified: ev.deliveryPerformanceVerified === true,
+      returnRefundPerformanceVerified: ev.returnRefundPerformanceVerified === true,
+      supportPerformanceVerified: ev.supportPerformanceVerified === true,
+      supplierResearchEligible: true,
+      supplierReviewEligible: ev.supplierReviewEligible === true,
+      researchStatus: text(ev.researchStatus) || "preview_confirmed",
+      researchError: text(ev.researchError) || null,
+      researchMissingEvidence: array(ev.researchMissingEvidence)
+    },
+    previewAiAssessment: {
+      sourceRunId: text(row.sourceRunId) || null,
+      rating10: Number(row.rating10 || plain(row.aiAssessment).rating10 || 0),
+      recommendation: text(row.recommendation || plain(row.aiAssessment).recommendation) || null,
+      recommendationLabel: text(row.recommendationLabel || plain(row.aiAssessment).recommendationLabel) || null,
+      confidence: Number(row.assessmentConfidence || plain(row.aiAssessment).confidence || 0),
+      summary: text(row.aiSummary || plain(row.aiAssessment).summary).slice(0, 500) || null,
+      strengths: clampList(row.strengths || plain(row.aiAssessment).strengths, 5, 180),
+      concerns: clampList(row.concerns || plain(row.aiAssessment).concerns, 5, 180),
+      nextChecks: clampList(row.nextChecks || plain(row.aiAssessment).nextChecks, 5, 180)
+    }
+  };
+}
+
+function previewCandidateAssessment(rowInput, item, rank) {
+  const row = plain(rowInput);
+  const base = deterministicAssessment([item])[0];
+  const requestedScore = Number(row.trustScore != null ? row.trustScore : row.score);
+  const trustScore = Number.isFinite(requestedScore) ? Math.min(base.trustScore, Math.max(0, Math.min(100, requestedScore))) : base.trustScore;
+  const hardGatePassed = base.hardGatePassed === true && trustScore >= TRUST_POLICY.minimumTrustScore;
+  const performanceGatePassed = base.performanceGatePassed === true;
+  const approvalReady = hardGatePassed && performanceGatePassed;
+  const conservative = conservativeRecommendation(policyRecommendation(Object.assign({}, base, { trustScore, score: trustScore, hardGatePassed, approvalReady })), text(row.recommendation));
+  const aiRow = plain(row.aiAssessment);
+  return Object.assign({}, base, {
+    provider: "administrator-preview-commit",
+    model: null,
+    rank,
+    decision: "hold",
+    score: trustScore,
+    trustScore,
+    commercialScore: Math.min(base.commercialScore, Math.max(0, Number(row.commercialScore || 0))),
+    trustTier: trustTier(trustScore, hardGatePassed, approvalReady),
+    hardGatePassed,
+    performanceGatePassed,
+    approvalReady,
+    rating10: trustRating10(trustScore),
+    recommendation: conservative,
+    recommendationLabel: recommendationLabel(conservative),
+    assessmentConfidence: Math.min(base.assessmentConfidence, Math.max(0, Number(row.assessmentConfidence || aiRow.confidence || base.assessmentConfidence))),
+    assessmentMode: "preview_commit_conservative",
+    aiSummary: text(row.aiSummary || aiRow.summary || base.aiSummary).slice(0, 500),
+    strengths: clampList(row.strengths || aiRow.strengths || base.strengths, 5, 180),
+    concerns: clampList(row.concerns || aiRow.concerns || base.concerns, 5, 180),
+    nextChecks: clampList(row.nextChecks || aiRow.nextChecks || base.nextChecks, 5, 180),
+    reason: text(base.reason)
+  });
+}
+
+async function commitPreviewCandidates(actorId, input) {
+  const raw = plain(input);
+  const country = normalizeCountry(raw.countryCode || raw.country);
+  const countryInfo = countryRow(country);
+  if (!countryInfo || country === "KP") {
+    const error = new Error("지원되는 국가 범위가 아닙니다.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const region = normalizeRegion(raw.subdivisionCode || raw.regionCode || raw.region || "NATIONWIDE", country) || "NATIONWIDE";
+  if (region !== "NATIONWIDE") {
+    const valid = array(countryInfo.subdivisions).some((item) => item.code === region);
+    if (!valid) {
+      const error = new Error("선택 국가의 공식 주·성·지역 범위가 아닙니다.");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+  const sourceCandidates = array(raw.candidates).slice(0, 50);
+  if (!sourceCandidates.length) {
+    const error = new Error("실행할 검색 후보가 없습니다. 먼저 책임 공급업체 검색을 완료하세요.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const scope = { country, region, regionGroup: countryInfo.regionGroup, countryName: countryInfo.nameKo || countryInfo.nameEn || country };
+  const startedAt = iso();
+  const report = {
+    ok: true,
+    reportType: "igdc-country-responsible-supplier-preview-commit",
+    version: VERSION,
+    runId: "country_commit_" + sha256(startedAt + "|" + country + "|" + region + "|" + Math.random()).slice(0, 20),
+    sourceRunId: text(raw.sourceRunId) || null,
+    trigger: "administrator-preview-commit",
+    startedAt,
+    scope,
+    trustPolicy: TRUST_POLICY,
+    safety: {
+      privateCandidateQueueOnly: true,
+      entityKind: "supplier",
+      sourcePreviewRequired: true,
+      trustBeforeRevenue: true,
+      productImport: false,
+      publicSnapshotPublication: false,
+      checkout: false,
+      payment: false,
+      manualPinnedOverwrite: false
+    },
+    ai: { provider: "administrator-preview-commit", model: null, error: null, trustScale: AI_TRUST_SCALE },
+    summary: {
+      collected: sourceCandidates.length,
+      considered: 0,
+      researchCandidates: 0,
+      evidenceReady: 0,
+      ranked: 0,
+      trustGatePassed: 0,
+      approvalReady: 0,
+      previewed: 0,
+      created: 0,
+      updated: 0,
+      held: 0,
+      manualPreserved: 0,
+      skipped: 0,
+      persistenceFailed: 0
+    },
+    candidates: [],
+    persistenceErrors: [],
+    error: null
+  };
+  const entries = [];
+  for (let index = 0; index < sourceCandidates.length; index += 1) {
+    const source = plain(sourceCandidates[index]);
+    const item = previewCandidateToItem(source, scope);
+    if (!item) {
+      report.summary.skipped += 1;
+      continue;
+    }
+    const assessment = previewCandidateAssessment(source, item, entries.length + 1);
+    entries.push({ item, assessment, source });
+  }
+  report.summary.considered = entries.length;
+  report.summary.researchCandidates = entries.length;
+  report.summary.evidenceReady = entries.filter((entry) => plain(entry.item.brokerageVerification).supplierReviewEligible === true).length;
+  report.summary.ranked = entries.length;
+  report.summary.trustGatePassed = entries.filter((entry) => entry.assessment.hardGatePassed === true).length;
+  report.summary.approvalReady = entries.filter((entry) => entry.assessment.approvalReady === true).length;
+  const manualIds = await manualPinnedIds(country, region);
+  const manualRows = await candidateRowsByIds(manualIds);
+  const results = await persistCandidateBatch(entries, scope, actorId, manualIds, manualRows);
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    const assessment = entry.assessment;
+    const result = results[index] || { status: "storage_error", candidateId: null, error: "후보 저장 결과가 없습니다." };
+    if (/created_candidate/.test(result.status)) report.summary.created += 1;
+    else if (/updated_candidate/.test(result.status)) report.summary.updated += 1;
+    else if (/hold/.test(result.status)) report.summary.held += 1;
+    else if (/manual_preserved|existing_non_ai_preserved|operator_state_preserved/.test(result.status)) report.summary.manualPreserved += 1;
+    else report.summary.skipped += 1;
+    if (result.error) {
+      report.summary.persistenceFailed += 1;
+      report.persistenceErrors.push({ rank: index + 1, title: itemTitle(entry.item), url: itemUrl(entry.item), error: result.error });
+    }
+    report.candidates.push({
+      rank: index + 1,
+      candidateId: result.candidateId || null,
+      entityKind: "supplier",
+      supplierType: text(entry.item.supplierProfile && entry.item.supplierProfile.type) || "unclassified",
+      title: itemTitle(entry.item),
+      url: itemUrl(entry.item),
+      collectionStage: "responsible_supplier_preview_commit",
+      productImport: false,
+      transactionAtSupplier: true,
+      decision: assessment.decision,
+      score: assessment.trustScore,
+      trustScore: assessment.trustScore,
+      commercialScore: assessment.commercialScore || 0,
+      trustTier: assessment.trustTier,
+      rating10: assessment.rating10,
+      recommendation: assessment.recommendation,
+      recommendationLabel: assessment.recommendationLabel,
+      assessmentConfidence: assessment.assessmentConfidence,
+      assessmentMode: assessment.assessmentMode,
+      aiSummary: assessment.aiSummary,
+      strengths: assessment.strengths,
+      concerns: assessment.concerns,
+      nextChecks: assessment.nextChecks,
+      aiAssessment: {
+        scale: "1_to_10",
+        rating10: assessment.rating10,
+        rank: index + 1,
+        recommendation: assessment.recommendation,
+        recommendationLabel: assessment.recommendationLabel,
+        confidence: assessment.assessmentConfidence,
+        mode: assessment.assessmentMode,
+        summary: assessment.aiSummary,
+        strengths: assessment.strengths,
+        concerns: assessment.concerns,
+        nextChecks: assessment.nextChecks
+      },
+      hardGatePassed: assessment.hardGatePassed === true,
+      approvalReady: assessment.approvalReady === true,
+      evidence: evidenceProjection(entry.item),
+      missingEvidence: array(assessment.missingEvidence),
+      performanceMissing: array(assessment.performanceMissing),
+      reason: assessment.reason,
+      persistence: result.status,
+      persistenceError: result.error || null
+    });
+  }
+  if (report.persistenceErrors.length) {
+    report.ok = report.summary.created + report.summary.updated + report.summary.held + report.summary.manualPreserved > 0;
+    report.storageWarning = report.summary.persistenceFailed + "개 후보 저장이 실패했습니다. 오류는 이 JSON에 보존했습니다.";
+  }
+  report.finishedAt = iso();
+  report.durationMs = Math.max(0, Date.parse(report.finishedAt) - Date.parse(report.startedAt));
+  try {
+    const state = await configState();
+    const currentSetting = specificSetting(state, region === "NATIONWIDE" ? "country" : "subdivision", { countryCode: country, subdivisionCode: region });
+    await updateRunState(scope, currentSetting, report, actorId);
+  } catch (error) {
+    report.runStateWarning = text(error && error.message);
+  }
+  return report;
+}
+
 function mergeCandidateItems(primary, secondary, limit) {
   const out = [], seen = new Set();
   for (const item of array(primary).concat(array(secondary))) {
@@ -875,21 +1186,20 @@ async function runScope(options) {
       itemTitle(left.item).localeCompare(itemTitle(right.item))
     );
     report.summary.ranked = ranked.length;
+    const persistenceEntries = ranked.map((entry, position) => ({
+      item: entry.item,
+      assessment: Object.assign({}, entry.assessment, { rank: position + 1 })
+    }));
+    const persistenceResults = opts.dryRun === true ? [] : await persistCandidateBatch(persistenceEntries, scope, opts.actorId, manualIds, manualRows);
     for (let position = 0; position < ranked.length; position += 1) {
       const rank = position + 1, entry = ranked[position], item = entry.item;
       const assessment = Object.assign({}, entry.assessment, { rank });
       if (assessment.hardGatePassed === true) report.summary.trustGatePassed += 1;
       if (assessment.approvalReady === true) report.summary.approvalReady += 1;
-      let result = { status: "preview", candidateId: null, error: null };
-      if (opts.dryRun !== true) {
-        try {
-          result = await persistCandidate(item, assessment, scope, opts.actorId, manualIds, manualRows);
-        } catch (persistenceError) {
-          const message = text(persistenceError && persistenceError.message) || "후보 저장 중 알 수 없는 오류가 발생했습니다.";
-          result = { status: "storage_error", candidateId: null, error: message };
-          report.summary.persistenceFailed += 1;
-          report.persistenceErrors.push({ rank, title: itemTitle(item), url: itemUrl(item), error: message });
-        }
+      const result = opts.dryRun === true ? { status: "preview", candidateId: null, error: null } : (persistenceResults[position] || { status: "storage_error", candidateId: null, error: "후보 저장 결과가 없습니다." });
+      if (result.error) {
+        report.summary.persistenceFailed += 1;
+        report.persistenceErrors.push({ rank, title: itemTitle(item), url: itemUrl(item), error: result.error });
       }
       if (/created_candidate/.test(result.status)) report.summary.created += 1;
       else if (/updated_candidate/.test(result.status)) report.summary.updated += 1;
@@ -1033,5 +1343,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, diagnostic
 };

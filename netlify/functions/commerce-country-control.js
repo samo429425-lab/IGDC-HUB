@@ -56,7 +56,7 @@ exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();if(method==="OPTIONS")return json(204,{});
     const body=method==="GET"?{}:parse(event),query=event&&event.queryStringParameters||{},action=lower(query.action||body.action||"catalog");
-    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","setting_save","candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
+    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","commit_preview","setting_save","candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
     const actorId=text(actor&&actor.sub);
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
@@ -109,6 +109,7 @@ exports.handler=async function(event){
       return json(200,await PolicyDiscussion.saveDecision(actorId,Object.assign({},body,{scope})));
     }
     if(action==="run_now")return json(200,await Automation.runScope({event,countryCode:body.countryCode,subdivisionCode:body.subdivisionCode||body.regionCode||"NATIONWIDE",actorId,trigger:"administrator-supplier-discovery",force:body.force===true,dryRun:body.dryRun===true}));
+    if(action==="commit_preview")return json(200,await Automation.commitPreviewCandidates(actorId,body));
     if(action==="candidate_action")return json(200,await Automation.candidateAction(actorId,body));
     return json(404,{ok:false,error:"지원하지 않는 국가·지역 관제 요청입니다."});
   }catch(error){return json(error&&error.statusCode||500,{ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null});}
