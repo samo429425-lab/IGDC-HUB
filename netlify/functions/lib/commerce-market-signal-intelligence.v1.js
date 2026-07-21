@@ -13,7 +13,9 @@
 
 const SlotStore = require("./global-slot-console-supabase");
 
-const VERSION = "commerce-market-signal-intelligence-v1.0.0";
+const VERSION = "commerce-market-signal-intelligence-v1.1.0-persisted-staged-signal";
+const SIGNAL_JOB_SCHEMA = "igdc-market-signal-persisted-research.v1";
+const SIGNAL_JOB_PREFIX = "igdc_market_signal_job_";
 const POLICY_PREFIX = "igdc_market_signal_";
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CATEGORY_KEYS = Object.freeze([
@@ -104,18 +106,42 @@ function querySet(scopeType,context){
   ];
 }
 async function withTimeout(promise,ms){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error("market_signal_timeout")),ms);Promise.resolve(promise).then(value=>{clearTimeout(timer);resolve(value);},error=>{clearTimeout(timer);reject(error);});});}
-async function collectEvidence(event,scopeType,context){
+async function runInsightQuery(event,scopeType,context,query){
   let Insight=null;try{Insight=require("../maru-global-insight-engine");}catch(_e){}
-  if(!Insight||typeof Insight.runGlobalInsight!=="function")return{provider:"unavailable",queries:querySet(scopeType,context),results:[],evidence:[],trace:[{status:"unavailable",error:"MARU_GLOBAL_INSIGHT_UNAVAILABLE"}]};
-  const queries=querySet(scopeType,context),tasks=queries.map(async(query)=>{
-    try{
-      const result=await withTimeout(Insight.runGlobalInsight({q:query,mode:"global-insight",limit:12,scope:scopeType,target:scopeType==="regional"?context.regionNameEn||context.regionNameKo||context.regionGroup:"global",region:scopeType==="regional"?context.regionGroup:undefined,external:"on",useExternal:true,useLive:true,noAnalytics:true,noRevenue:true},event||{}),22000);
-      return{ok:result&&result.status==="ok",query,result};
-    }catch(error){return{ok:false,query,error:clean(error&&error.message||error,180)};}
-  });
-  const settled=await Promise.all(tasks),results=settled.filter(row=>row.ok&&row.result).map(row=>row.result),evidence=evidenceItems(results);
+  if(!Insight||typeof Insight.runGlobalInsight!=="function")return{ok:false,query,error:"MARU_GLOBAL_INSIGHT_UNAVAILABLE",result:null};
+  try{
+    const result=await withTimeout(Insight.runGlobalInsight({q:query,mode:"global-insight",limit:12,scope:scopeType,target:scopeType==="regional"?context.regionNameEn||context.regionNameKo||context.regionGroup:"global",region:scopeType==="regional"?context.regionGroup:undefined,external:"on",useExternal:true,useLive:true,noAnalytics:true,noRevenue:true},event||{}),22000);
+    return{ok:result&&result.status==="ok",query,result,error:result&&result.status!=="ok"?clean(result.error||result.message||result.status,180):null};
+  }catch(error){return{ok:false,query,error:clean(error&&error.message||error,180),result:null};}
+}
+async function collectEvidence(event,scopeType,context){
+  const queries=querySet(scopeType,context),settled=await Promise.all(queries.map(query=>runInsightQuery(event,scopeType,context,query))),results=settled.filter(row=>row.ok&&row.result).map(row=>row.result),evidence=evidenceItems(results);
   return{provider:"maru-global-insight",queries,results,evidence,trace:settled.map(row=>({query:row.query,status:row.ok?"ok":"error",count:row.result&&array(row.result.items).length||0,error:row.error||null}))};
 }
+function mergeEvidence(existing,incoming){
+  const out=[],seen=new Set();
+  for(const row of array(existing).concat(array(incoming))){const title=clean(row&&row.title,180),url=safeUrl(row&&row.url),summary=clean(row&&row.summary,420);if(!title||(!url&&!summary))continue;const key=(url||title).toLowerCase();if(seen.has(key))continue;seen.add(key);out.push({index:out.length,title,url:url||null,summary,source:clean(row&&row.source,100)||null,publishedAt:clean(row&&row.publishedAt,64)||null});if(out.length>=24)break;}
+  return out;
+}
+function signalJobScope(options){
+  const opts=plain(options),scopeType=opts.scopeType==="regional"?"regional":"global",context=scopeType==="regional"?{regionGroup:clean(opts.regionGroup,80),regionNameKo:clean(opts.regionNameKo,120),regionNameEn:clean(opts.regionNameEn,120),countryCodes:cleanList(opts.countryCodes,80,3)}:{scope:"global"};
+  if(scopeType==="regional"&&!context.regionGroup){const error=new Error("권역 코드가 필요합니다.");error.statusCode=400;throw error;}
+  return{scopeType,context};
+}
+function signalJobId(scopeType,regionGroup){return SIGNAL_JOB_PREFIX+(scopeType==="regional"?"region_"+lower(regionGroup).replace(/[^a-z0-9_-]/g,""):"global");}
+async function signalJobRule(scopeType,regionGroup){const rows=await SlotStore.select("gslot_policies","select=id,name,scope_hub,scope_country,scope_region,enabled,rule,updated_at,updated_by&id=eq."+encodeURIComponent(signalJobId(scopeType,regionGroup))+"&limit=1");const row=array(rows)[0];return row?Object.assign({},plain(row.rule)):null;}
+async function saveSignalJob(job,actorId){const now=iso();job.updatedAt=now;const regionGroup=job.scopeType==="regional"?job.context.regionGroup:null,row={id:signalJobId(job.scopeType,regionGroup),name:job.scopeType==="regional"?"권역 흐름 단계별 AI 점검 작업":"전 세계 흐름 단계별 AI 점검 작업",scope_hub:"country-market-signal-research-job",scope_country:null,scope_region:regionGroup,enabled:job.status!=="complete",rule:job,updated_at:now,updated_by:text(actorId)||"market-signal-research-orchestrator"};if(!job.createdAt){job.createdAt=now;row.created_at=now;}await SlotStore.insert("gslot_policies",row,"resolution=merge-duplicates,return=representation");return job;}
+function signalJobProgress(job){const total=array(job.queries).length,done=Math.min(total,Number(job.queryCursor||0));return{stage:job.status,collection:{done,total},analysis:{done:job.status==="complete"?1:0,total:1},resumable:job.status!=="complete"};}
+function publicSignalJob(job){
+  if(!job)return{ok:true,reportType:"igdc-market-signal-persisted-research-status",version:VERSION,status:"not_started",progress:{collection:{done:0,total:0},analysis:{done:0,total:1},resumable:false},scope:{type:"global"},evidence:{count:0,items:[]},report:null};
+  return{ok:true,reportType:job.scopeType==="regional"?"igdc-regional-market-signal-persisted-research":"igdc-global-market-signal-persisted-research",version:VERSION,jobId:job.jobId,status:job.status,startedAt:job.startedAt,finishedAt:job.finishedAt||null,updatedAt:job.updatedAt||null,scope:{type:job.scopeType,regionGroup:job.context.regionGroup||null,regionNameKo:job.context.regionNameKo||null,regionNameEn:job.context.regionNameEn||null},progress:signalJobProgress(job),evidence:{count:array(job.evidence).length,minimumRequired:POLICY.evidenceMinimum,items:publicEvidence(array(job.evidence)),trace:array(job.trace).slice(-40),queries:array(job.queries),provider:"maru-global-insight"},report:job.report||null,lastError:job.lastError||null,safety:{persistedWorkspaceOnly:true,noSingleRequestDeadlineRace:true,restartSafe:true,trustGateChanged:false,productImport:false,publicPublication:false}};
+}
+async function beginSignalJob(actorId,options){
+  const raw=plain(options),scope=signalJobScope(raw),existing=await signalJobRule(scope.scopeType,scope.context.regionGroup);
+  if(existing&&existing.schema===SIGNAL_JOB_SCHEMA&&raw.restart!==true&&!['failed','cancelled'].includes(existing.status))return publicSignalJob(existing);
+  const now=iso(),queries=querySet(scope.scopeType,scope.context),job={schema:SIGNAL_JOB_SCHEMA,version:VERSION,jobId:"market_signal_"+scope.scopeType+"_"+Math.random().toString(36).slice(2,14),scopeType:scope.scopeType,context:scope.context,status:queries.length?"collecting":"analyzing",queries,queryCursor:0,evidence:[],trace:[{at:now,source:"market-signal-job",status:"started",queries:queries.length}],errors:[],lastError:null,startedAt:now,finishedAt:null,report:null};await saveSignalJob(job,actorId);return publicSignalJob(job);
+}
+async function signalJobStatus(options){const scope=signalJobScope(options);return publicSignalJob(await signalJobRule(scope.scopeType,scope.context.regionGroup));}
 function sanitizeSignals(value,evidenceCount){
   const out=[];
   for(const raw of array(value)){
@@ -161,23 +187,26 @@ async function synthesize(scopeType,context,evidence){
   finally{if(timer)clearTimeout(timer);}
 }
 function publicEvidence(evidence){return evidence.map(row=>({index:row.index,title:row.title,url:row.url,summary:row.summary,source:row.source,publishedAt:row.publishedAt}));}
-async function runSignalCheck(options){
-  const opts=plain(options),scopeType=opts.scopeType==="regional"?"regional":"global",context=scopeType==="regional"?{
-    regionGroup:clean(opts.regionGroup,80),regionNameKo:clean(opts.regionNameKo,120),regionNameEn:clean(opts.regionNameEn,120),countryCodes:cleanList(opts.countryCodes,80,3)
-  }:{scope:"global"};
-  if(scopeType==="regional"&&!context.regionGroup){const error=new Error("권역 코드가 필요합니다.");error.statusCode=400;throw error;}
-  const startedAt=iso(),collection=await collectEvidence(opts.event,scopeType,context),analysis=await synthesize(scopeType,context,collection.evidence);
-  const evidenceCount=collection.evidence.length,eligibleForApply=analysis.provider==="openai"&&analysis.confidence>=POLICY.confidenceMinimum&&evidenceCount>=POLICY.evidenceMinimum&&analysis.signals.length>0&&nonZeroWeights(analysis.categoryWeights).length>0;
-  const expiresInDays=Math.round(clamp(analysis.expiresInDays,1,30,POLICY.defaultValidityDays[scopeType]));
-  const report={
-    ok:true,reportType:scopeType==="global"?"igdc-global-market-signal-check":"igdc-regional-market-signal-check",version:VERSION,startedAt,finishedAt:iso(),scope:{type:scopeType,regionGroup:context.regionGroup||null,regionNameKo:context.regionNameKo||null,regionNameEn:context.regionNameEn||null},
-    purpose:scopeType==="global"?POLICY.globalPurpose:POLICY.regionalPurpose,policy:POLICY,ai:{provider:analysis.provider,model:analysis.model,error:analysis.error||null,confidence:analysis.confidence},
-    overview:analysis.overview,signals:analysis.signals,categoryWeights:analysis.categoryWeights,categoryLabels:CATEGORY_LABELS,crossHubRecommendations:analysis.crossHubRecommendations,riskControls:analysis.riskControls,
-    evidence:{count:evidenceCount,minimumRequired:POLICY.evidenceMinimum,items:publicEvidence(collection.evidence),trace:collection.trace,queries:collection.queries,provider:collection.provider},
-    apply:{eligible:eligibleForApply,administratorApplyRequired:true,reason:eligibleForApply?"AI 근거·확신도 기준을 통과했습니다.":"증거 수, AI 확신도, 신호 또는 가중치 기준이 부족합니다.",validFrom:startedAt,validUntil:addDays(new Date(startedAt),expiresInDays).toISOString(),trustGateChanged:false,productImport:false,publicPublication:false}
-  };
-  report.durationMs=Math.max(0,Date.parse(report.finishedAt)-Date.parse(report.startedAt));return report;
+function buildSignalReport(scopeType,context,startedAt,collection,analysis){
+  const evidenceCount=array(collection&&collection.evidence).length,eligibleForApply=analysis.provider==="openai"&&analysis.confidence>=POLICY.confidenceMinimum&&evidenceCount>=POLICY.evidenceMinimum&&analysis.signals.length>0&&nonZeroWeights(analysis.categoryWeights).length>0;
+  const expiresInDays=Math.round(clamp(analysis.expiresInDays,1,30,POLICY.defaultValidityDays[scopeType])),finishedAt=iso();
+  const report={ok:true,reportType:scopeType==="global"?"igdc-global-market-signal-check":"igdc-regional-market-signal-check",version:VERSION,startedAt,finishedAt,scope:{type:scopeType,regionGroup:context.regionGroup||null,regionNameKo:context.regionNameKo||null,regionNameEn:context.regionNameEn||null},purpose:scopeType==="global"?POLICY.globalPurpose:POLICY.regionalPurpose,policy:POLICY,ai:{provider:analysis.provider,model:analysis.model,error:analysis.error||null,confidence:analysis.confidence},overview:analysis.overview,signals:analysis.signals,categoryWeights:analysis.categoryWeights,categoryLabels:CATEGORY_LABELS,crossHubRecommendations:analysis.crossHubRecommendations,riskControls:analysis.riskControls,evidence:{count:evidenceCount,minimumRequired:POLICY.evidenceMinimum,items:publicEvidence(array(collection&&collection.evidence)),trace:array(collection&&collection.trace),queries:array(collection&&collection.queries),provider:collection&&collection.provider||"maru-global-insight"},apply:{eligible:eligibleForApply,administratorApplyRequired:true,reason:eligibleForApply?"AI 근거·확신도 기준을 통과했습니다.":"증거 수, AI 확신도, 신호 또는 가중치 기준이 부족합니다.",validFrom:startedAt,validUntil:addDays(new Date(startedAt),expiresInDays).toISOString(),trustGateChanged:false,productImport:false,publicPublication:false}};
+  report.durationMs=Math.max(0,Date.parse(finishedAt)-Date.parse(startedAt));return report;
 }
+async function advanceSignalJob(actorId,options){
+  const raw=plain(options),scope=signalJobScope(raw),job=await signalJobRule(scope.scopeType,scope.context.regionGroup);if(!job||job.schema!==SIGNAL_JOB_SCHEMA){const error=new Error("진행 중인 세계·권역 단계별 AI 점검 작업이 없습니다.");error.statusCode=404;throw error;}if(job.status==="complete")return publicSignalJob(job);
+  try{
+    if(job.status==="collecting"){
+      const query=array(job.queries)[Number(job.queryCursor||0)];
+      if(!query)job.status="analyzing";
+      else{const row=await runInsightQuery(raw.event||{},job.scopeType,job.context,query),items=row.ok&&row.result?evidenceItems([row.result]):[];job.evidence=mergeEvidence(job.evidence,items);job.trace=array(job.trace).concat([{at:iso(),source:"maru-global-insight",query,status:row.ok?"ok":"error",count:items.length,error:row.error||null}]);job.queryCursor=Number(job.queryCursor||0)+1;if(job.queryCursor>=array(job.queries).length)job.status="analyzing";}
+    }else if(job.status==="analyzing"){
+      const analysis=await synthesize(job.scopeType,job.context,array(job.evidence)),collection={provider:"maru-global-insight",queries:array(job.queries),evidence:array(job.evidence),trace:array(job.trace)};job.report=buildSignalReport(job.scopeType,job.context,job.startedAt,collection,analysis);job.status="complete";job.finishedAt=job.report.finishedAt;
+    }
+    job.lastError=null;await saveSignalJob(job,actorId);return publicSignalJob(job);
+  }catch(error){job.lastError={at:iso(),stage:job.status,message:clean(error&&error.message||error,180),code:text(error&&error.code)||null};job.errors=array(job.errors).concat([job.lastError]);try{await saveSignalJob(job,actorId);}catch(_saveError){}throw error;}
+}
+async function runSignalCheck(options){const opts=plain(options),scope=signalJobScope(opts),startedAt=iso(),collection=await collectEvidence(opts.event,scope.scopeType,scope.context),analysis=await synthesize(scope.scopeType,scope.context,collection.evidence);return buildSignalReport(scope.scopeType,scope.context,startedAt,collection,analysis);}
 function sanitizeReportForStorage(input){
   const raw=plain(input),scope=plain(raw.scope),scopeType=scope.type==="regional"?"regional":"global";
   const ai=plain(raw.ai),evidence=plain(raw.evidence),apply=plain(raw.apply),signals=sanitizeSignals(raw.signals,Math.max(0,Number(evidence.count||array(evidence.items).length)));
@@ -215,4 +244,4 @@ function mergePlans(globalPlan,regionalPlan){
   return{active:!!(g||r),generatedAt:iso(),categoryWeights:weights,priorityCategories:priorities,sourcePlans:[g&&{type:"global",id:g.id,confidence:g.confidence,decay:g.decay,validUntil:g.validUntil},r&&{type:"regional",id:r.id,confidence:r.confidence,decay:r.decay,validUntil:r.validUntil}].filter(Boolean),safety:{advisorySupplierDiscoveryOnly:true,trustGateChanged:false,supplierApproval:false,productImport:false,publicPublication:false}};
 }
 
-module.exports={VERSION,POLICY,CATEGORY_KEYS,CATEGORY_LABELS,runSignalCheck,applySignalPlan,signalStatus,mergePlans};
+module.exports={VERSION,POLICY,CATEGORY_KEYS,CATEGORY_LABELS,runSignalCheck,beginSignalJob,advanceSignalJob,signalJobStatus,applySignalPlan,signalStatus,mergePlans};

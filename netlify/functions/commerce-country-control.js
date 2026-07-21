@@ -70,6 +70,11 @@ exports.handler=async function(event){
       if(regionGroup&&!Automation.regionRow(regionGroup)){const error=new Error("권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}
       return json(200,await MarketSignals.signalStatus(regionGroup));
     }
+    if(action==="signal_research_status"){
+      const scopeType=lower(query.scopeType||body.scopeType||"global"),regionGroup=text(query.regionGroup||body.regionGroup);
+      if(scopeType==="regional"&&!Automation.regionRow(regionGroup)){const error=new Error("권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}
+      return json(200,await MarketSignals.signalJobStatus({scopeType,regionGroup}));
+    }
     if(action==="policy_workspace"){
       const scope=policyScopeFromInput(Object.assign({},query,body));
       return json(200,await PolicyDiscussion.getWorkspace(scope));
@@ -99,11 +104,17 @@ exports.handler=async function(event){
     if(action==="product_candidate_action")return json(200,await Automation.productCandidateAction(actorId,body));
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
     if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset));
-    if(action==="global_signal_check")return json(200,await MarketSignals.runSignalCheck({event,scopeType:"global"}));
+    if(action==="signal_research_begin"||action==="signal_research_step"){
+      const scopeType=lower(body.scopeType||"global"),regionGroup=text(body.regionGroup),region=scopeType==="regional"?Automation.regionRow(regionGroup):null;
+      if(scopeType==="regional"&&!region){const error=new Error("선택 권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}
+      const options={event,scopeType,regionGroup,regionNameKo:region&&region.nameKo,regionNameEn:region&&region.nameEn,countryCodes:region?Automation.registry().countries.filter((row)=>row.regionGroup===regionGroup).map((row)=>row.code):[],restart:body.restart===true};
+      return json(200,action==="signal_research_begin"?await MarketSignals.beginSignalJob(actorId,options):await MarketSignals.advanceSignalJob(actorId,options));
+    }
+    if(action==="global_signal_check")return json(200,await MarketSignals.beginSignalJob(actorId,{scopeType:"global",restart:body.restart===true}));
     if(action==="regional_signal_check"){
       const regionGroup=text(body.regionGroup),region=Automation.regionRow(regionGroup);if(!region){const error=new Error("선택 권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}
       const countryCodes=Automation.registry().countries.filter((row)=>row.regionGroup===regionGroup).map((row)=>row.code);
-      return json(200,await MarketSignals.runSignalCheck({event,scopeType:"regional",regionGroup,regionNameKo:region.nameKo,regionNameEn:region.nameEn,countryCodes}));
+      return json(200,await MarketSignals.beginSignalJob(actorId,{scopeType:"regional",regionGroup,regionNameKo:region.nameKo,regionNameEn:region.nameEn,countryCodes,restart:body.restart===true}));
     }
     if(action==="market_signal_apply"){
       const report=plain(body.report||body);if(report&&report.scope&&report.scope.type==="regional"&&!Automation.regionRow(report.scope.regionGroup)){const error=new Error("점검 결과의 권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}

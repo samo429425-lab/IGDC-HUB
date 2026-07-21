@@ -41,8 +41,8 @@
     <h2>세계·권역·국가 3단계 AI 점검</h2>
     <div class="small">세계는 오일쇼크·전쟁·재난·환율·공급망·기술·대형 공연·스포츠·축제 같은 방향 신호를 보고, 권역은 그 영향과 현지 수요·물류·규제·문화 상황을 해석합니다. 국가는 실제 책임 판매업체를 검증합니다. 세계·권역 결과는 관리자 반영 후에도 품목군 탐색 비중만 ±20% 안에서 조정하며 신뢰 게이트와 공개 조건은 바꾸지 못합니다.</div>
     <div class="signal-grid" style="margin-top:10px">
-      <article class="signal-card"><h3>전 세계 흐름</h3><div class="small">개별 상품 전수검색이 아니라 향후 90일의 거시·사건·수요 방향을 점검합니다.</div><div class="compact-actions"><button id="globalSignalBtn" type="button">세계 흐름 AI 점검</button><button id="globalSignalDownloadBtn" type="button" class="secondary" disabled>세계 JSON 다운로드</button></div></article>
-      <article class="signal-card"><h3>선택 권역 상황</h3><div id="selectedRegionSignalName" class="small">권역을 선택하면 해당 권역의 특별 이슈와 수요 변화를 점검합니다.</div><div class="compact-actions"><button id="regionalSignalBtn" type="button">선택 권역 AI 점검</button><button id="regionalSignalDownloadBtn" type="button" class="secondary" disabled>권역 JSON 다운로드</button><button id="regionalPolicyBtn" type="button" class="ghost">권역 정책 입안·AI 협의</button></div><div id="regionalPolicyState" class="policy-state">권역을 선택하면 저장 정책을 확인할 수 있습니다.</div></article>
+      <article class="signal-card"><h3>전 세계 흐름</h3><div class="small">개별 상품 전수검색이 아니라 향후 90일의 거시·사건·수요 방향을 점검합니다.</div><div class="compact-actions"><button id="globalSignalBtn" type="button">세계 흐름 AI 점검</button><button id="globalSignalDownloadBtn" type="button" class="secondary" disabled>세계 JSON 다운로드</button></div><div id="globalSignalProgress" class="policy-state">출처 수집과 AI 분석을 단계별로 저장하므로 504가 나도 완료 지점부터 재개합니다.</div></article>
+      <article class="signal-card"><h3>선택 권역 상황</h3><div id="selectedRegionSignalName" class="small">권역을 선택하면 해당 권역의 특별 이슈와 수요 변화를 점검합니다.</div><div class="compact-actions"><button id="regionalSignalBtn" type="button">선택 권역 AI 점검</button><button id="regionalSignalDownloadBtn" type="button" class="secondary" disabled>권역 JSON 다운로드</button><button id="regionalPolicyBtn" type="button" class="ghost">권역 정책 입안·AI 협의</button></div><div id="regionalSignalProgress" class="policy-state">권역 근거 수집과 AI 분석을 별도 단계로 진행합니다.</div><div id="regionalPolicyState" class="policy-state">권역을 선택하면 저장 정책을 확인할 수 있습니다.</div></article>
       <article class="signal-card"><h3>선택 국가·지역 실행</h3><div class="small">업체의 신원·직접 판매·결제·배송·반품·환불·고객지원과 신뢰도를 점검합니다.</div><button id="countryCheckJumpBtn" type="button" class="ghost">국가 업체 점검으로 이동</button></article>
     </div>
     <div id="activeSignalState" class="small" style="margin-top:10px">적용된 세계·권역 AI 가중치를 확인하는 중입니다.</div>
@@ -129,7 +129,7 @@
 
   <section id="productResearchPanel" class="panel">
     <div class="panel-heading"><h2>공식 상품 이미지·원본 링크 리서치</h2></div>
-    <div class="small">완료된 책임 공급업체 후보의 공식 사이트에서 실제 상품 페이지를 찾아 상품 이미지, 상품명, 상품 원본 페이지, 이미지 원본, 업체 사이트를 함께 표시합니다. 회사 로고는 상품 이미지로 대체하지 않으며, 관리자 확인 전에는 슬롯이나 공개 페이지에 반영하지 않습니다.</div>
+    <div class="small">완료된 책임 공급업체 후보 중 공식 판매 사이트·직접 판매·법적 신원 증빙을 갖춘 출처에서 실제 상품 페이지를 찾아 상품 이미지, 상품명, 상품 원본 페이지, 이미지 원본, 업체 사이트를 함께 표시합니다. 공급업체 리서치가 끝나면 이 단계가 자동으로 이어집니다. 회사 로고는 상품 이미지로 대체하지 않으며, 관리자 확인 전에는 슬롯이나 공개 페이지에 반영하지 않습니다.</div>
     <div class="operation-actions">
       <button id="productResearchBtn" type="button" class="ghost" disabled>공식 상품 목록 리서치</button>
       <button id="productResearchPauseBtn" type="button" class="secondary" disabled>상품 조사 일시정지</button>
@@ -206,7 +206,7 @@
 </div>
 
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-country-control.js?v=17"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=18"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=2"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=1"></script>
 </body>

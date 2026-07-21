@@ -13,7 +13,7 @@
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v1.9.0-product-reference-research";
+const VERSION="regional-brokerage-autoselector-v2.0.0-product-image-link-research";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -793,6 +793,11 @@ function isProductImageUrl(url){
   if(/(?:^|[\/_\-.])(logo|favicon|icon|sprite|avatar|profile|banner|header|footer|brandmark|placeholder|no[-_]?image)(?:[\/_\-.]|$)/i.test(low))return false;
   return true;
 }
+function imageAttrFromHtml(fragment,baseUrl){
+  const source=String(fragment||""),patterns=[/(?:data-original|data-lazy-src|data-src|src)\s*=\s*["']([^"']+)["']/i,/(?:data-srcset|srcset)\s*=\s*["']([^"']+)["']/i];
+  for(const rx of patterns){const match=source.match(rx);if(!match||!match[1])continue;const firstCandidate=String(match[1]).split(",")[0].trim().split(/\s+/)[0],url=absoluteHttpUrl(baseUrl,firstCandidate);if(url&&isProductImageUrl(url))return url;}
+  return"";
+}
 function productOffer(node){
   const offers=array(node&&node.offers);if(!offers.length&&node&&node.offers)offers.push(node.offers);
   const offer=plain(offers[0]);return{price:first(offer.price,offer.lowPrice,offer.highPrice),priceCurrency:first(offer.priceCurrency),availability:first(offer.availability),sellerName:first(plain(offer.seller).name,plain(node&&node.seller).name)};
@@ -811,10 +816,10 @@ function productRowsFromHtml(html,pageUrl,supplier,max){
   while((match=anchorRx.exec(String(html||"")))&&out.length<(max||60)){
     const href=absoluteHttpUrl(pageUrl,match[1]);if(!href||!/(?:\/product(?:s)?\/|\/goods(?:\/|\?|$)|\/item(?:\/|\?|$)|\/shop\/|\/detail(?:\/|\?|$)|product_no=|goodsno=|itemid=|productid=)/i.test(href))continue;
     const inner=match[2],label=stripHtml(inner).replace(/\s+/g," ").trim();if(!label||label.length<2||label.length>220||/^(상품|제품|보기|상세|더보기|구매|shop|view|detail)$/i.test(label))continue;
-    const img=inner.match(/<img\b[^>]*(?:data-src|data-original|src)\s*=\s*["']([^"']+)["'][^>]*>/i);const imageUrl=img?absoluteHttpUrl(href,img[1]):"";
+    const imageUrl=imageAttrFromHtml(inner,href);
     add({productName:label,productUrl:href,imageUrl,imageSource:imageUrl?"product_anchor_image":"",jsonLdProduct:false,offerPresent:false});
   }
-  const pageType=metaContent(html,["og:type"]),ogTitle=metaContent(html,["og:title","twitter:title"]),ogImage=absoluteHttpUrl(pageUrl,metaContent(html,["og:image:secure_url","og:image","twitter:image"]));
+  const pageType=metaContent(html,["og:type"]),ogTitle=metaContent(html,["og:title","twitter:title"]),itemPropImage=((String(html).match(/<(?:meta|link)\b[^>]*itemprop\s*=\s*["']image["'][^>]*(?:content|href)\s*=\s*["']([^"']+)["'][^>]*>/i)||[])[1]||""),ogImage=absoluteHttpUrl(pageUrl,metaContent(html,["og:image:secure_url","og:image","twitter:image"])||itemPropImage);
   if(/product/i.test(pageType)||(/(?:\/product(?:s)?\/|\/goods(?:\/|\?|$)|\/item(?:\/|\?|$)|product_no=|goodsno=|itemid=)/i.test(pageUrl)&&ogTitle))add({productName:ogTitle||stripHtml((String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]),productUrl:canonicalPageUrl(html,pageUrl),imageUrl:ogImage,imageSource:ogImage?"open_graph":"",jsonLdProduct:false,offerPresent:false});
   return out.slice(0,max||60);
 }
@@ -823,7 +828,7 @@ function catalogPageUrls(html,baseUrl){
   while((m=rx.exec(String(html||"")))){
     const label=stripHtml(m[2]).replace(/\s+/g," ").trim(),href=absoluteHttpUrl(baseUrl,m[1]);if(!href||!sameSite(baseUrl,href))continue;
     if(!/(상품|제품|쇼핑|스토어|공식몰|카탈로그|product|products|shop|store|catalog|collection)/i.test(label+" "+href))continue;
-    if(seen.has(href)||href===baseUrl)continue;seen.add(href);out.push(href);if(out.length>=2)break;
+    if(seen.has(href)||href===baseUrl)continue;seen.add(href);out.push(href);if(out.length>=4)break;
   }
   return out;
 }
