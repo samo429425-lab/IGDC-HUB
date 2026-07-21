@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue Admin View v1.1.0
+/* IGDC Media Candidate Queue Admin View v1.2.0
  * Controlled media collection -> private candidate queue -> administrator review
  * -> approved snapshot release. No collection result is automatically public.
  */
@@ -115,9 +115,22 @@
   async function refresh(){hideNotice();var button=$('refreshBtn');button.disabled=true;try{var data=await readRequest('candidates');rowsCache=data.candidates||[];renderSummary(data.summary||{});setupFilters(data.summary||{});renderRows();show('미디어 후보 대기열을 읽었습니다. 수집 후보는 승인 전 공개되지 않습니다.','ok');}catch(error){show(errorMessage(error),'warn');}finally{button.disabled=false;}}
   async function diagnostic(){hideNotice();var button=$('diagnosticBtn');button.disabled=true;try{var data=await readRequest('diagnostic');renderDiagnostic(data);if(data.queue&&Array.isArray(data.queue.rows)){rowsCache=data.queue.rows;renderSummary(data.summary||{});setupFilters(data.summary||{});renderRows();}show('미디어 후보 점검 JSON을 읽었습니다.','ok');}catch(error){show(errorMessage(error),'warn');}finally{button.disabled=false;}}
   async function collect(){
-    hideNotice();var button=$('collectBtn');button.disabled=true;$('collectorState').textContent='공개 원본 영상 후보를 수집 중입니다.';
-    try{var data=await postJson(COLLECTOR,{source:'internet_archive',section:$('collectorSection').value,limit:Number($('collectorLimit').value)||12});$('collectorState').textContent='검색 '+data.searched+' · 저장 '+data.saved+' · 제외 '+data.rejectedCount;show('원본 전체 영상 후보 '+data.saved+'개를 예비 대기열에 등록했습니다. 자동 공개되지는 않습니다.','ok');await refresh();}
+    hideNotice();var button=$('collectBtn');button.disabled=true;$('collectorState').textContent='2000년 이후 1080p 원본 후보를 수집 중입니다.';
+    try{var data=await postJson(COLLECTOR,{source:'internet_archive',section:$('collectorSection').value,limit:Number($('collectorLimit').value)||12});$('collectorState').textContent='검색 '+data.searched+' · 저장 '+data.saved+' · 제외 '+data.rejectedCount;show('2000년 이후 1080p 이상 원본 전체 영상 후보 '+data.saved+'개를 예비 대기열에 등록했습니다. 자동 공개되지는 않습니다.','ok');await refresh();}
     catch(error){$('collectorState').textContent='수집 실패';show(errorMessage(error),'warn');}finally{button.disabled=false;}
+  }
+  async function collectAdminException(){
+    hideNotice();
+    var identifier=text($('adminArchiveIdentifier').value), reason=text($('adminOverrideReason').value);
+    if(!identifier){show('관리자가 지정할 Internet Archive 식별자 또는 원본 주소를 입력해 주세요.','warn');return;}
+    if(!reason){show('오래된 작품을 예외 지정하는 사유를 입력해 주세요.','warn');return;}
+    var button=$('collectAdminExceptionBtn');button.disabled=true;$('collectorState').textContent='관리자 지정 영상을 확인 중입니다.';
+    try{
+      var data=await postJson(COLLECTOR,{source:'internet_archive',section:$('collectorSection').value,identifier:identifier,adminException:true,overrideReason:reason,limit:1});
+      $('collectorState').textContent='관리자 지정 저장 '+data.saved+' · 제외 '+data.rejectedCount;
+      if(data.saved>0){$('adminArchiveIdentifier').value='';$('adminOverrideReason').value='';show('관리자 지정 영상을 우선 예비 후보로 등록했습니다. 연도만 예외이며 1080p·전체 영상·권리 검토 기준은 유지됩니다.','ok');await refresh();}
+      else{show('지정 영상이 1080p·전체 영상·예고편 제외 기준을 통과하지 못했습니다.','warn');}
+    }catch(error){$('collectorState').textContent='관리자 지정 수집 실패';show(errorMessage(error),'warn');}finally{button.disabled=false;}
   }
   async function reviewAction(action){
     var ids=selectedIds();if(!ids.length){show('처리할 후보를 먼저 선택해 주세요.','warn');return;}
@@ -139,7 +152,7 @@
   function returnToAdmin(){var params=new URLSearchParams(window.location.search);var raw=params.get('returnPath')||'/admin.html';if(!/^\//.test(raw))raw='/admin.html';window.location.href=raw;}
   function bind(){
     $('refreshBtn').addEventListener('click',refresh);$('diagnosticBtn').addEventListener('click',diagnostic);$('downloadJsonBtn').addEventListener('click',downloadJson);$('downloadCandidateListBtn').addEventListener('click',downloadCandidateList);$('returnBtn').addEventListener('click',returnToAdmin);
-    $('collectBtn').addEventListener('click',collect);$('approveBtn').addEventListener('click',function(){reviewAction('approve');});$('holdBtn').addEventListener('click',function(){reviewAction('hold');});$('resetBtn').addEventListener('click',function(){reviewAction('reset');});$('rejectBtn').addEventListener('click',function(){reviewAction('reject');});$('blockBtn').addEventListener('click',function(){reviewAction('block');});
+    $('collectBtn').addEventListener('click',collect);$('collectAdminExceptionBtn').addEventListener('click',collectAdminException);$('approveBtn').addEventListener('click',function(){reviewAction('approve');});$('holdBtn').addEventListener('click',function(){reviewAction('hold');});$('resetBtn').addEventListener('click',function(){reviewAction('reset');});$('rejectBtn').addEventListener('click',function(){reviewAction('reject');});$('blockBtn').addEventListener('click',function(){reviewAction('block');});
     $('publishPreviewBtn').addEventListener('click',function(){publishPreview(false);});$('storeReleaseBtn').addEventListener('click',function(){publishPreview(true);});$('downloadSnapshotBtn').addEventListener('click',downloadSnapshot);
     $('selectAllRows').addEventListener('change',function(){var checked=this.checked;Array.prototype.forEach.call(document.querySelectorAll('.rowcheck'),function(el){el.checked=checked;});});
     ['searchInput','sectionFilter','riskFilter','statusFilter'].forEach(function(id){$(id).addEventListener('input',renderRows);$(id).addEventListener('change',renderRows);});

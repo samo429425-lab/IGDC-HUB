@@ -10,12 +10,15 @@
 const MediaStore = require("./lib/media-candidate-store.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "sanmaru-media-collector-v1.0.1-shared-admin-auth";
+const VERSION = "sanmaru-media-collector-v1.1.0-modern-1080-admin-exception";
 const IA_SEARCH = "https://archive.org/advancedsearch.php";
 const IA_METADATA = "https://archive.org/metadata/";
 const MAX_RESULTS = 30;
 const DEFAULT_RESULTS = 12;
 const REQUEST_TIMEOUT_MS = 15000;
+const DEFAULT_MIN_YEAR = 2000;
+const MIN_VIDEO_HEIGHT = 1080;
+const MIN_VIDEO_WIDTH = 1920;
 const EXCLUDED_TITLE = /\b(trailer|teaser|promo|preview|clip|excerpt|sample|highlight|commercial|advertisement|featurette|behind\s+the\s+scenes)\b/i;
 const VIDEO_EXT = /\.(mp4|webm|ogv|m4v)$/i;
 const SUBTITLE_EXT = /\.(vtt|srt|ass|ssa)$/i;
@@ -91,6 +94,10 @@ function fullLengthMinimum(section){
   return 1200;
 }
 function safeIdentifier(value){return MediaStore.text(value).replace(/[^A-Za-z0-9_.-]/g,"");}
+function videoDimensions(file){
+  const width=Number(file&&file.width||0), height=Number(file&&file.height||0);
+  return {width,height,meets1080:(height>=MIN_VIDEO_HEIGHT)||(width>=MIN_VIDEO_WIDTH && height>=1000)};
+}
 function originalFile(files,section){
   const min=fullLengthMinimum(section);
   const candidates=array(files).filter((file)=>{
@@ -99,12 +106,14 @@ function originalFile(files,section){
     if(!VIDEO_EXT.test(name)||EXCLUDED_TITLE.test(name))return false;
     if(source && source!=="original" && source!=="derivative")return false;
     const size=Number(file&&file.size||0);
-    return size>=5*1024*1024;
+    if(size<5*1024*1024)return false;
+    return videoDimensions(file).meets1080;
   }).sort((a,b)=>{
     const ao=MediaStore.lower(a&&a.source)==="original"?1:0, bo=MediaStore.lower(b&&b.source)==="original"?1:0;
     if(ao!==bo)return bo-ao;
-    const ah=Number(a&&a.height||0), bh=Number(b&&b.height||0);
-    if(ah!==bh)return bh-ah;
+    const ad=videoDimensions(a), bd=videoDimensions(b);
+    if(ad.height!==bd.height)return bd.height-ad.height;
+    if(ad.width!==bd.width)return bd.width-ad.width;
     return Number(b&&b.size||0)-Number(a&&a.size||0);
   });
   const selected=candidates.find((file)=>durationSeconds(file&&file.length)>=min) || candidates[0] || null;
@@ -112,6 +121,11 @@ function originalFile(files,section){
   const duration=durationSeconds(selected.length);
   if(duration && duration<min)return null;
   return selected;
+}
+function normalizedYear(value){
+  const raw=Array.isArray(value)?value[0]:value;
+  const match=MediaStore.text(raw).match(/(?:18|19|20|21)\d{2}/);
+  return match?Number(match[0]):0;
 }
 function subtitleTracks(identifier,files){
   return array(files).filter((file)=>SUBTITLE_EXT.test(MediaStore.text(file&&file.name))).slice(0,30).map((file)=>({
@@ -136,7 +150,7 @@ function sectionFromInput(value){
 }
 function searchUrl(section,limit,page){
   const params=new URLSearchParams();
-  params.set("q",SECTION_QUERIES[section]);
+  params.set("q","("+SECTION_QUERIES[section]+") AND year:["+DEFAULT_MIN_YEAR+" TO 9999]");
   ["identifier","title","creator","year","description","subject","collection","licenseurl","rights","downloads","date","language"].forEach((field)=>params.append("fl[]",field));
   params.append("sort[]","downloads desc");
   params.append("sort[]","date desc");
@@ -151,23 +165,26 @@ async function mapLimit(items,limit,worker){
   await Promise.all(Array.from({length:Math.min(limit,items.length)},run));
   return results;
 }
-async function inspectInternetArchive(doc,section){
+async function inspectInternetArchive(doc,section,options){
+  options=options||{};
   const identifier=safeIdentifier(doc&&doc.identifier);
   if(!identifier)return{rejected:"identifier_missing"};
   const title=MediaStore.compact(doc&&doc.title,240);
   if(!title || EXCLUDED_TITLE.test(title))return{rejected:"trailer_teaser_clip_excluded",identifier,title};
   const detail=await fetchJson(IA_METADATA+encodeURIComponent(identifier));
   const metadata=detail&&detail.metadata||{};
+  const year=normalizedYear(metadata.year||doc.year||metadata.date||doc.date);
+  if(!options.adminException && (!year || year<DEFAULT_MIN_YEAR))return{rejected:year?"release_year_before_2000":"release_year_unknown",identifier,title,year:year||null};
   const finalTitle=MediaStore.compact(metadata.title||title,240);
   if(!finalTitle || EXCLUDED_TITLE.test(finalTitle))return{rejected:"trailer_teaser_clip_excluded",identifier,title:finalTitle};
   const video=originalFile(detail&&detail.files,section);
-  if(!video)return{rejected:"full_length_video_file_not_found",identifier,title:finalTitle};
+  if(!video)return{rejected:"full_length_1080p_video_file_not_found",identifier,title:finalTitle,year:year||null};
   const evidence=licenseEvidence(metadata);
   const sourceUrl="https://archive.org/details/"+encodeURIComponent(identifier);
   const videoUrl="https://archive.org/download/"+encodeURIComponent(identifier)+"/"+encodeURIComponent(video.name);
   const captions=subtitleTracks(identifier,detail&&detail.files);
   const height=Number(video.height||0), width=Number(video.width||0);
-  const quality=height?String(height)+"p":(width>=1920?"1080p":width>=1280?"720p":"source-quality-review");
+  const quality=height?String(height)+"p":(width>=MIN_VIDEO_WIDTH?"1080p":"below-1080p");
   const candidate={
     id:"ia:"+identifier,
     contentId:"ia:"+identifier,
@@ -183,12 +200,12 @@ async function inspectInternetArchive(doc,section){
     verification_status:"web_verification_required",
     review_status:"pending",
     risk_level:evidence.safeSignal?"rights_review":"unverified",
-    priority:evidence.safeSignal?"A2":"B2",
+    priority:options.adminException?"ADMIN_EXCEPTION_A1":(evidence.safeSignal?"A2":"B2"),
     candidateOnly:true,
     seedContent:true,
     sanmaru_query:SECTION_QUERIES[section],
-    notes:"Full-length archive candidate. Trailer/teaser/clip excluded. Administrator must verify title, source file, rights evidence, playback and subtitles before approval.",
-    year:metadata.year||doc.year||null,
+    notes:options.adminException?("Administrator-designated historical exception. Reason: "+MediaStore.compact(options.overrideReason||"administrator selected",500)+". 1080p/full-length/rights review still required."):"Modern 1080p full-length archive candidate. Trailer/teaser/clip excluded. Administrator must verify title, source file, rights evidence, playback and subtitles before approval.",
+    year:year||metadata.year||doc.year||null,
     language:stringList(metadata.language||doc.language),
     durationSeconds:durationSeconds(video.length),
     captions,
@@ -199,14 +216,20 @@ async function inspectInternetArchive(doc,section){
       sourceHint:"archive.org metadata",
       candidate:evidence.rightsText||"Public-domain/CC evidence requires administrator verification"
     },
-    sourceMetadata:{identifier,collection:stringList(metadata.collection||doc.collection),subject:stringList(metadata.subject||doc.subject),creator:stringList(metadata.creator||doc.creator),videoFile:video.name,videoFormat:video.format||null,videoSize:Number(video.size||0),width:width||null,height:height||null,subtitleCount:captions.length}
+    sourceMetadata:{identifier,adminException:!!options.adminException,overrideReason:MediaStore.compact(options.overrideReason||"",500),minimumYear:DEFAULT_MIN_YEAR,minimumHeight:MIN_VIDEO_HEIGHT,collection:stringList(metadata.collection||doc.collection),subject:stringList(metadata.subject||doc.subject),creator:stringList(metadata.creator||doc.creator),videoFile:video.name,videoFormat:video.format||null,videoSize:Number(video.size||0),width:width||null,height:height||null,subtitleCount:captions.length}
   };
   return{candidate};
 }
-async function collectInternetArchive(section,limit,page){
-  const search=await fetchJson(searchUrl(section,limit,page));
-  const docs=search&&search.response&&Array.isArray(search.response.docs)?search.response.docs:[];
-  const inspected=await mapLimit(docs,3,(doc)=>inspectInternetArchive(doc,section));
+async function collectInternetArchive(section,limit,page,options){
+  options=options||{};
+  let docs=[];
+  if(options.identifier){
+    docs=[{identifier:options.identifier,title:options.identifier}];
+  }else{
+    const search=await fetchJson(searchUrl(section,limit,page));
+    docs=search&&search.response&&Array.isArray(search.response.docs)?search.response.docs:[];
+  }
+  const inspected=await mapLimit(docs,3,(doc)=>inspectInternetArchive(doc,section,options));
   const candidates=[],rejected=[];
   inspected.forEach((entry,index)=>{
     if(entry&&entry.candidate)candidates.push(entry.candidate);
@@ -218,7 +241,7 @@ exports.handler=async function(event){
   if(event&&event.httpMethod==="OPTIONS")return MediaStore.response(204,{});
   try{
     if(event.httpMethod==="GET"){
-      return MediaStore.response(200,{ok:true,version:VERSION,mode:"ready",sources:SOURCE_POLICIES,sections:Object.keys(SECTION_QUERIES),maxResults:MAX_RESULTS,policy:{candidateOnly:true,autoPublish:false,trailerExcluded:true,fullLengthRequired:true,rightsReviewRequired:true}});
+      return MediaStore.response(200,{ok:true,version:VERSION,mode:"ready",sources:SOURCE_POLICIES,sections:Object.keys(SECTION_QUERIES),maxResults:MAX_RESULTS,policy:{candidateOnly:true,autoPublish:false,trailerExcluded:true,fullLengthRequired:true,rightsReviewRequired:true,minimumYear:DEFAULT_MIN_YEAR,minimumHeight:MIN_VIDEO_HEIGHT,adminHistoricalException:true}});
     }
     if(event.httpMethod!=="POST")return MediaStore.response(405,{ok:false,error:"method_not_allowed"});
     const actor=await actorFor(event);
@@ -228,7 +251,16 @@ exports.handler=async function(event){
     const section=sectionFromInput(body.section||body.sectionKey);
     const limit=number(body.limit,DEFAULT_RESULTS,1,MAX_RESULTS);
     const page=number(body.page,1,1,1000);
-    const collected=await collectInternetArchive(section,limit,page);
+    const rawIdentifier=MediaStore.text(body.identifier||body.archiveIdentifier||body.sourceUrl);
+    const identifier=rawIdentifier?(safeIdentifier(rawIdentifier.match(/archive\.org\/(?:details|download)\/([^/?#]+)/i)?.[1]||rawIdentifier)):"";
+    const adminException=body.adminException===true||body.adminException==="true";
+    const overrideReason=MediaStore.compact(body.overrideReason||body.reason||"",500);
+    if(adminException){
+      if(actor.mode!=="admin"){const error=new Error("관리자 지정 예외 수집은 관리자 로그인에서만 실행할 수 있습니다.");error.statusCode=403;error.code="admin_exception_requires_admin";throw error;}
+      if(!identifier){const error=new Error("관리자 지정 예외 수집에는 Internet Archive 식별자 또는 원본 주소가 필요합니다.");error.statusCode=400;error.code="admin_exception_identifier_required";throw error;}
+      if(!overrideReason){const error=new Error("관리자 지정 예외 사유를 입력해야 합니다.");error.statusCode=400;error.code="admin_exception_reason_required";throw error;}
+    }
+    const collected=await collectInternetArchive(section,adminException?1:limit,page,{identifier:adminException?identifier:"",adminException,overrideReason});
     const normalized=[],validationRejected=[];
     collected.candidates.forEach((candidate,index)=>{
       const row=MediaStore.normalizeCandidate(candidate,actor);
@@ -236,7 +268,7 @@ exports.handler=async function(event){
       if(check.ok)normalized.push(row);else validationRejected.push({index,id:row.id,title:row.title,reasons:check.reasons});
     });
     const saved=await MediaStore.upsertCandidates(normalized);
-    return MediaStore.response(200,{ok:true,version:VERSION,source,section,page,requested:limit,searched:collected.searched,accepted:normalized.length,saved:Array.isArray(saved)?saved.length:normalized.length,rejectedCount:collected.rejected.length+validationRejected.length,rejected:collected.rejected.concat(validationRejected),policy:{candidateOnly:true,seedContent:true,autoPublish:false,trailerExcluded:true,fullLengthRequired:true,rightsReviewRequired:true},items:saved});
+    return MediaStore.response(200,{ok:true,version:VERSION,source,section,page,requested:limit,searched:collected.searched,accepted:normalized.length,saved:Array.isArray(saved)?saved.length:normalized.length,rejectedCount:collected.rejected.length+validationRejected.length,rejected:collected.rejected.concat(validationRejected),policy:{candidateOnly:true,seedContent:true,autoPublish:false,trailerExcluded:true,fullLengthRequired:true,rightsReviewRequired:true,minimumYear:DEFAULT_MIN_YEAR,minimumHeight:MIN_VIDEO_HEIGHT,adminException:adminException},items:saved});
   }catch(error){
     return MediaStore.response(error.statusCode||500,{ok:false,version:VERSION,error:error.code||"sanmaru_media_collector_failed",message:error.message||String(error)});
   }
