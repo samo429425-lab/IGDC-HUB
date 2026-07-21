@@ -11,7 +11,9 @@
  */
 
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
-const VERSION="regional-brokerage-autoselector-v1.6.0-admin-policy-guided-supplier-discovery";
+let SupplierResearchPlan=null;
+try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
+const VERSION="regional-brokerage-autoselector-v1.7.0-searchbank-psom-research-bridge";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -21,9 +23,9 @@ function envInt(name,fallback,min,max){
 const DISCOVERY_TIMEOUT=envInt("IGDC_COUNTRY_DISCOVERY_TIMEOUT_MS",20000,8000,45000);
 const PROVIDER_FETCH_TIMEOUT=envInt("IGDC_COUNTRY_PROVIDER_TIMEOUT_MS",20000,8000,45000);
 const PAGE_CHECK_TIMEOUT=envInt("IGDC_COUNTRY_PAGE_CHECK_TIMEOUT_MS",8000,3000,20000);
-const MAX_LIVE_QUERIES=envInt("IGDC_COUNTRY_SANMARU_QUERIES",4,2,6);
-const MAX_PROVIDER_CALLS=envInt("IGDC_COUNTRY_PROVIDER_CALLS",4,2,6);
-const MAX_PAGE_CHECKS=envInt("IGDC_COUNTRY_PAGE_CHECKS",10,4,16);
+const MAX_LIVE_QUERIES=envInt("IGDC_COUNTRY_SANMARU_QUERIES",6,2,8);
+const MAX_PROVIDER_CALLS=envInt("IGDC_COUNTRY_PROVIDER_CALLS",6,2,8);
+const MAX_PAGE_CHECKS=envInt("IGDC_COUNTRY_PAGE_CHECKS",14,4,20);
 const CACHE=globalThis.__IGDC_REGIONAL_BROKERAGE_CACHE__||(globalThis.__IGDC_REGIONAL_BROKERAGE_CACHE__=new Map());
 const COUNTRY_LOCALES=Object.freeze({AD:"ca",AE:"ar,en",AF:"fa,ps",AG:"en",AI:"en",AL:"sq",AM:"hy,ru",AO:"pt",AQ:"en",AR:"es",AS:"sm,en",AT:"de",AU:"en",AW:"nl,pap",AX:"sv",AZ:"az,ru",BA:"bs,sr",BB:"en",BD:"bn",BE:"nl,fr",BF:"fr",BG:"bg",BH:"ar,en",BI:"rn,fr",BJ:"fr",BL:"fr",BM:"en",BN:"ms,en",BO:"es,qu",BQ:"nl",BR:"pt",BS:"en",BT:"dz",BV:"no",BW:"en,tn",BY:"be,ru",BZ:"en",CA:"en,fr",CC:"en",CD:"fr",CF:"sg,fr",CG:"fr",CH:"de,fr",CI:"fr",CK:"en",CL:"es",CM:"fr,en",CN:"zh-Hans",CO:"es",CR:"es",CU:"es",CV:"pt",CW:"pap,nl",CX:"en",CY:"el,tr",CZ:"cs",DE:"de",DJ:"fr,ar",DK:"da",DM:"en",DO:"es",DZ:"ar,fr",EC:"es,qu",EE:"et,ru",EG:"ar,en",EH:"ar",ER:"ti,en",ES:"es,ca",ET:"am,en",FI:"fi,sv",FJ:"en,fj",FK:"en",FM:"en",FO:"fo",FR:"fr",GA:"fr",GB:"en",GD:"en",GE:"ka,en",GF:"fr",GG:"en",GH:"en",GI:"en",GL:"kl",GM:"en",GN:"fr",GP:"fr",GQ:"es,fr",GR:"el",GS:"en",GT:"es",GU:"en,ch",GW:"pt",GY:"en",HK:"zh-Hant,en",HM:"en",HN:"es",HR:"hr",HT:"ht,fr",HU:"hu",ID:"id",IE:"en,ga",IL:"he,ar",IM:"en,gv",IN:"hi,en",IO:"en",IQ:"ar",IR:"fa",IS:"is",IT:"it",JE:"en",JM:"en",JO:"ar,en",JP:"ja",KE:"sw,en",KG:"ky,ru",KH:"km",KI:"en,gil",KM:"ar,zdj",KN:"en",KR:"ko",KW:"ar,en",KY:"en",KZ:"kk,ru",LA:"lo",LB:"ar,fr",LC:"en",LI:"de,gsw",LK:"si,ta",LR:"en",LS:"st,en",LT:"lt,ru",LU:"fr,de",LV:"lv,ru",LY:"ar",MA:"ar,fr",MC:"fr",MD:"ro,ru",ME:"sr",MF:"fr",MG:"mg,fr",MH:"en,mh",MK:"mk",ML:"fr",MM:"my",MN:"mn",MO:"zh-Hant,pt",MP:"en",MQ:"fr",MR:"ar",MS:"en",MT:"mt,en",MU:"en,fr",MV:"dv",MW:"en,ny",MX:"es",MY:"ms,en",MZ:"pt",NA:"en",NC:"fr",NE:"fr",NF:"en",NG:"en",NI:"es",NL:"nl",NO:"nb",NP:"ne",NR:"en,na",NU:"en,niu",NZ:"en,mi",OM:"ar,en",PA:"es",PE:"es,qu",PF:"fr,ty",PG:"en,tpi",PH:"fil,en",PK:"ur,en",PL:"pl",PM:"fr",PN:"en",PR:"es,en",PS:"ar",PT:"pt",PW:"pau,en",PY:"es,gn",QA:"ar,en",RE:"fr",RO:"ro",RS:"sr",RU:"ru",RW:"rw,en",SA:"ar,en",SB:"en",SC:"en,fr",SD:"ar,en",SE:"sv",SG:"en,zh-Hans",SH:"en",SI:"sl",SJ:"nb",SK:"sk",SL:"en",SM:"it",SN:"wo,fr",SO:"so,ar",SR:"nl",SS:"en",ST:"pt",SV:"es",SX:"en,nl",SY:"ar",SZ:"en,ss",TC:"en",TD:"ar,fr",TF:"fr",TG:"fr",TH:"th",TJ:"tg,ru",TK:"tkl,en",TL:"pt,tet",TM:"tk,ru",TN:"ar,fr",TO:"to,en",TR:"tr",TT:"en",TV:"tvl,en",TW:"zh-Hant",TZ:"sw,en",UA:"uk",UG:"en,sw",UM:"en",US:"en",UY:"es",UZ:"uz,ru",VA:"it",VC:"en",VE:"es",VG:"en",VI:"en",VN:"vi",VU:"bi,en",WF:"fr",WS:"sm,en",XK:"sq,sr",YE:"ar",YT:"fr",ZA:"en,af",ZM:"en",ZW:"sn,en"});
 
@@ -123,6 +125,8 @@ const PRODUCT_DETAIL_URL_RX=/\/(?:product|products|item|items|goods|detail|p|dp)
 
 function text(v){return v==null?"":String(v).trim();}
 function lower(v){return text(v).toLowerCase();}
+function array(v){return Array.isArray(v)?v:[];}
+function plain(v){return v&&typeof v==="object"&&!Array.isArray(v)?v:{};}
 function first(){for(const v of arguments){const t=text(v);if(t)return t;}return "";}
 function withTimeout(promise,ms){return new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Object.assign(new Error("timeout"),{code:"TIMEOUT"})),ms);Promise.resolve(promise).then(v=>{clearTimeout(t);resolve(v);},e=>{clearTimeout(t);reject(e);});});}
 function policyList(value,limit){const out=[];for(const raw of Array.isArray(value)?value:[]){const item=text(raw).replace(/\s+/g," ").slice(0,260);if(item&&!out.some(row=>row.toLowerCase()===item.toLowerCase()))out.push(item);if(out.length>=(limit||30))break;}return out;}
@@ -244,28 +248,32 @@ function blockedByAdministratorPolicy(item,geo){const hints=policyHints(geo&&geo
 async function discoveryQueryPlan(geo){
   const locales=localeList(geo.country);const indices=queryCategories(geo);
   const selectedLocales=languagePriorityPlan(geo,locales);
+  let researchPlan={rows:[],seeds:[],diagnostics:null,version:null};
+  if(SupplierResearchPlan&&typeof SupplierResearchPlan.buildPlan==="function"){
+    try{researchPlan=SupplierResearchPlan.buildPlan({geo,locales,maxQueries:MAX_PROVIDER_CALLS,seedLimit:Math.min(20,MAX_PAGE_CHECKS)});}catch(_e){researchPlan={rows:[],seeds:[],diagnostics:{error:"research_plan_failed"},version:SupplierResearchPlan.VERSION||null};}
+  }
   const bundles=await Promise.all(selectedLocales.map((locale,position)=>{
     const rotated=[indices[position%indices.length],indices[(position+1)%indices.length],indices[(position+2)%indices.length]];
     return queriesForLocale(geo,locale,rotated);
   }));
-  const rows=[];const seen=new Set();
+  const fallbackRows=[];const seen=new Set();
   const addRow=(bundle,queryIndex)=>{
     if(!bundle)return;const query=bundle.queries[queryIndex]||bundle.queries[0];if(!query)return;
     const key=bundle.locale.toLowerCase()+"|"+query.toLowerCase();if(seen.has(key))return;seen.add(key);
-    rows.push({query,locale:bundle.locale,origin:bundle.origin,localName:bundle.localName,localizationError:bundle.error||null});
+    fallbackRows.push({query,locale:bundle.locale,origin:bundle.origin,localName:bundle.localName,localizationError:bundle.error||null});
   };
-  // First pass gives each selected market language one real commerce query.
   bundles.forEach(bundle=>addRow(bundle,0));
-  // Remaining provider capacity returns to the primary and bridge languages.
   let round=1;
-  while(rows.length<MAX_PROVIDER_CALLS&&round<4){
-    for(const bundle of bundles){addRow(bundle,round);if(rows.length>=MAX_PROVIDER_CALLS)break;}
+  while(fallbackRows.length<MAX_PROVIDER_CALLS&&round<4){
+    for(const bundle of bundles){addRow(bundle,round);if(fallbackRows.length>=MAX_PROVIDER_CALLS)break;}
     round+=1;
   }
+  const guidedRows=array(researchPlan&&researchPlan.rows).map(row=>({query:text(row&&row.query),locale:text(row&&row.locale)||locales[0]||"en",origin:text(row&&row.origin)||"searchbank-psom-policy-plan",localName:text(row&&row.localName)||geo.countryName||geo.country,localizationError:text(row&&row.localizationError)||null})).filter(row=>row.query);
+  const rows=geo.country==="KR"?guidedRows.concat(fallbackRows):guidedRows.slice(0,2).concat(fallbackRows,guidedRows.slice(2));
   const hints=policyHints(geo&&geo.policyHints),primaryBundle=bundles[0],priorityText=hints.manualPriorityTargets.filter(value=>!safePolicyTargetUrl(value)).concat(hints.priorityDirections).slice(0,3).join(" ");
-  if(priorityText&&primaryBundle){const baseQuery=primaryBundle.queries[0]||"";const policyQuery=(baseQuery+" "+priorityText).replace(/\s+/g," ").slice(0,900);rows.unshift({query:policyQuery,locale:primaryBundle.locale,origin:"administrator-policy-priority",localName:primaryBundle.localName,localizationError:null});}
+  if(priorityText){const baseQuery=(guidedRows[0]&&guidedRows[0].query)||(primaryBundle&&primaryBundle.queries[0])||"";const policyQuery=(baseQuery+" "+priorityText).replace(/\s+/g," ").slice(0,900);rows.unshift({query:policyQuery,locale:(guidedRows[0]&&guidedRows[0].locale)||(primaryBundle&&primaryBundle.locale)||locales[0]||"en",origin:"administrator-policy-priority",localName:(guidedRows[0]&&guidedRows[0].localName)||(primaryBundle&&primaryBundle.localName)||geo.countryName||geo.country,localizationError:null});}
   const uniqueRows=[],rowSeen=new Set();for(const row of rows){const key=(row.locale+"|"+row.query).toLowerCase();if(rowSeen.has(key))continue;rowSeen.add(key);uniqueRows.push(row);if(uniqueRows.length>=MAX_PROVIDER_CALLS)break;}
-  return{rows:uniqueRows,locales,selectedLocales:uniqueRows.map(row=>row.locale),primaryLocale:locales[0]||"en",categoryIndices:indices,categoryKeys:indices.map(index=>CATEGORY_KEYS[index]),categoryWeights:Object.assign({},geo.categoryWeights||{}),administratorPolicy:{active:!!(priorityText||hints.manualBlockedTargets.length),priorityTargets:hints.manualPriorityTargets,blockedTargets:hints.manualBlockedTargets,priorityDirections:hints.priorityDirections,avoidDirections:hints.avoidDirections}};
+  return{rows:uniqueRows,locales,selectedLocales:uniqueRows.map(row=>row.locale),primaryLocale:locales[0]||"en",categoryIndices:indices,categoryKeys:indices.map(index=>CATEGORY_KEYS[index]),categoryWeights:Object.assign({},geo.categoryWeights||{}),snapshotSeeds:array(researchPlan&&researchPlan.seeds),researchPlanVersion:text(researchPlan&&researchPlan.version)||null,researchDiagnostics:plain(researchPlan&&researchPlan.diagnostics),administratorPolicy:{active:!!(priorityText||hints.manualBlockedTargets.length),priorityTargets:hints.manualPriorityTargets,blockedTargets:hints.manualBlockedTargets,priorityDirections:hints.priorityDirections,avoidDirections:hints.avoidDirections}};
 }
 function envFirst(){
   for(const name of arguments){const value=text(process.env[name]);if(value)return value;}
@@ -366,10 +374,11 @@ async function runDirectProviderDiscovery(geo,targetLimit,queryPlan){
   function add(task){if(tasks.length<MAX_PROVIDER_CALLS)tasks.push(task);}
   if(geo.country==="KR"){
     const koreanRows=rows.filter(row=>baseLocale(row&&row.locale)==="ko");
-    const localPrimary=koreanRows[0]||rows[0];const localSecondary=koreanRows[1]||localPrimary;
-    const bridgeRow=rows.find(row=>baseLocale(row&&row.locale)==="en")||rows[1]||localPrimary;
-    add(naverCountrySearch(localPrimary,geo,Math.min(20,limit)));add(googleCountrySearch(localPrimary,geo,Math.min(10,limit)));
-    if(limit>10){add(naverCountrySearch(localSecondary,geo,Math.min(20,limit)));add(googleCountrySearch(bridgeRow,geo,Math.min(10,limit)));}
+    const bridgeRows=rows.filter(row=>baseLocale(row&&row.locale)!=="ko");
+    const naverRows=(koreanRows.length?koreanRows:rows).slice(0,Math.min(4,MAX_PROVIDER_CALLS));
+    for(const row of naverRows)add(naverCountrySearch(row,geo,Math.min(20,Math.max(limit,20))));
+    const googleRows=(koreanRows.slice(0,1).concat(bridgeRows.slice(0,1))).filter(Boolean);
+    for(const row of googleRows)add(googleCountrySearch(row,geo,Math.min(10,limit)));
   }else{
     for(let index=0;index<rows.length&&tasks.length<MAX_PROVIDER_CALLS;index+=1)add(googleCountrySearch(rows[index],geo,Math.min(10,limit)));
   }
@@ -380,17 +389,18 @@ async function runDirectProviderDiscovery(geo,targetLimit,queryPlan){
 async function runSanmaruDiscovery(event,geo,targetLimit){
   const queryPlan=await discoveryQueryPlan(geo);let Sanmaru=null;try{Sanmaru=require("./sanmaru_engine_v2");}catch(_e){}
   const providerPromise=runDirectProviderDiscovery(geo,targetLimit,queryPlan);
+  const snapshotSeeds=array(queryPlan&&queryPlan.snapshotSeeds);
+  const researchTrace={source:"searchbank-psom-policy-plan",status:"ok",count:snapshotSeeds.length,queries:array(queryPlan&&queryPlan.rows).length,version:text(queryPlan&&queryPlan.researchPlanVersion)||null,detail:plain(queryPlan&&queryPlan.researchDiagnostics)};
   if(!Sanmaru||typeof Sanmaru.runEngine!=="function"){
-    const provider=await providerPromise,seeds=manualPolicySeeds(geo),items=commerceFirst(seeds.concat(provider.items||[])).filter(item=>!blockedByAdministratorPolicy(item,geo));
-    return{items,trace:[{source:"administrator-policy",status:seeds.length?"seeded":"empty",count:seeds.length},{source:"sanmaru",status:"unavailable",count:0,locales:queryPlan.locales,selectedLocales:queryPlan.selectedLocales,primaryLocale:queryPlan.primaryLocale}].concat(provider.trace)};
+    const provider=await providerPromise,seeds=manualPolicySeeds(geo),items=commerceFirst(seeds.concat(snapshotSeeds,provider.items||[])).filter(item=>!blockedByAdministratorPolicy(item,geo));
+    return{items,trace:[{source:"administrator-policy",status:seeds.length?"seeded":"empty",count:seeds.length},researchTrace,{source:"sanmaru",status:"unavailable",count:0,locales:queryPlan.locales,selectedLocales:queryPlan.selectedLocales,primaryLocale:queryPlan.primaryLocale}].concat(provider.trace)};
   }
   const tasks=queryPlan.rows.slice(0,MAX_LIVE_QUERIES).map(async row=>{
     const q=row.query;
     try{
       const result=await withTimeout(Sanmaru.runEngine(event||{}, {
-        q,query:q,country:geo.country,region:geo.region||undefined,limit:18,candidatePool:36,language:row.locale,locale:row.locale,
-        type:"site",external:"off",directExternal:"0",noExternal:"1",noMedia:"1",deep:"0",timeoutMs:Math.max(8000,DISCOVERY_TIMEOUT-1500),
-        skipMaruSearch:"1",noMaruSearch:"1",skipCollector:"1",noCollector:"1",skipPlanetary:"1",noPlanetary:"1",
+        q,query:q,country:geo.country,region:geo.region||undefined,limit:18,candidatePool:48,language:row.locale,locale:row.locale,
+        type:"site",channel:"commerce",entity:"supplier",external:"off",directExternal:"0",noExternal:"1",noMedia:"1",deep:"0",timeoutMs:Math.max(8000,DISCOVERY_TIMEOUT-1500),
         from:"regional-brokerage-autoselector",source:"regional-brokerage-autoselector",
         regionalBrokerageSupply:"1",noAnalytics:"1",noRevenue:"1",readOnly:"1",noWrite:"1",noSync:"1",writeMode:"readonly"
       }),DISCOVERY_TIMEOUT);
@@ -398,8 +408,8 @@ async function runSanmaruDiscovery(event,geo,targetLimit){
     }catch(error){return{row,items:[],status:providerErrorCode(error),detail:providerErrorDetail(error)};}
   });
   const [settled,provider]=await Promise.all([Promise.all(tasks),providerPromise]),seeds=manualPolicySeeds(geo);
-  const items=commerceFirst(seeds.concat(settled.flatMap(x=>x.items||[]),provider.items||[])).filter(item=>!blockedByAdministratorPolicy(item,geo));
-  return{items,trace:[{source:"administrator-policy",status:seeds.length?"seeded":"empty",count:seeds.length,blockedTargets:policyHints(geo&&geo.policyHints).manualBlockedTargets.length}].concat(settled.map(x=>({source:"sanmaru",query:x.row.query,queryLocale:x.row.locale,queryOrigin:x.row.origin,status:x.status,detail:x.detail||x.row.localizationError||null,count:(x.items||[]).length,timeoutMs:DISCOVERY_TIMEOUT})),provider.trace||[])};
+  const items=commerceFirst(seeds.concat(snapshotSeeds,settled.flatMap(x=>x.items||[]),provider.items||[])).filter(item=>!blockedByAdministratorPolicy(item,geo));
+  return{items,trace:[{source:"administrator-policy",status:seeds.length?"seeded":"empty",count:seeds.length,blockedTargets:policyHints(geo&&geo.policyHints).manualBlockedTargets.length},researchTrace].concat(settled.map(x=>({source:"sanmaru",query:x.row.query,queryLocale:x.row.locale,queryOrigin:x.row.origin,status:x.status,detail:x.detail||x.row.localizationError||null,count:(x.items||[]).length,timeoutMs:DISCOVERY_TIMEOUT})),provider.trace||[])};
 }
 
 function safeHttpUrl(raw){
@@ -490,17 +500,49 @@ function supplierLandingUrl(finalUrl,ld){
   if(ld.orgUrl&&sameSite(finalUrl.toString(),ld.orgUrl)){const official=safeHttpUrl(ld.orgUrl);if(official)return official.toString();}
   return finalUrl.origin+"/";
 }
+function researchMissingEvidence(evidence){
+  const ev=plain(evidence);const required=[
+    ["official_business",ev.official],["responsible_entity",ev.responsibleEntity],["direct_sales",ev.directSales],
+    ["supplier_payment",ev.payment],["secure_transport",ev.secureTransport],["shipping_policy",ev.shipping],
+    ["return_policy",ev.returns],["refund_policy",ev.refund],["customer_support",ev.service],
+    ["contact_channel",ev.contactChannel],["legal_identity",ev.legalIdentity]
+  ];
+  return required.filter(row=>row[1]!==true).map(row=>row[0]);
+}
+function researchCandidateShell(item,geo,status,error){
+  const originalUrl=Core.externalUrl(item),u=safeHttpUrl(originalUrl);if(!u)return item;
+  const marketplace=Core.isMarketplace(item,u.toString());const hay=resultText(item);
+  const supplierSignal=SUPPLIER_TEXT_RX.test(hay);const commerceSignal=COMMERCE_TEXT_RX.test(hay)||commerceHeuristicScore(item)>=5;
+  const researchEligible=!marketplace&&!obviousNonCommerceReason(item)&&(supplierSignal||commerceSignal);
+  const secureTransport=u.protocol==="https:";const detectedCountry=Core.normalizeCountry(item&&item.distributionMarketCountry||item&&item.sellerMarketCountry||item&&item.marketCountry||item&&item.country||item&&item.geo&&item.geo.country);
+  const detectedRegion=Core.normalizeRegion(item&&item.distributionMarketRegion||item&&item.sellerRegion||item&&item.region||item&&item.geo&&item.geo.state,detectedCountry||geo.country);
+  const evidence=Object.assign({},item&&item.brokerageVerification||{}, {
+    automated:true,inspectedAt:new Date().toISOString(),discoveredFromUrl:originalUrl,inspectedUrl:null,supplierOfficialUrl:u.toString(),
+    official:/official|공식|직영|본사|회사소개|사업자/i.test(hay),responsibleEntity:supplierSignal,directSales:commerceSignal,payment:false,secureTransport,
+    shipping:/배송|택배|delivery|shipping|출고/i.test(hay),returns:/반품|교환|return|exchange/i.test(hay),refund:/환불|refund/i.test(hay),
+    service:/고객센터|문의|customer service|support|contact/i.test(hay),contactChannel:/전화|이메일|문의|contact|고객센터/i.test(hay),legalIdentity:/사업자|법인|회사|corporation|company/i.test(hay),
+    marketplace,majorPlatform:marketplace,supplierType:supplierSignal?"research_supplier":"unclassified",
+    supplierReviewEligible:false,supplierResearchEligible:researchEligible,trustEvidenceReady:false,provisionalTrustScore:researchEligible?Math.max(20,Math.min(55,commerceHeuristicScore(item)+28)):0,
+    researchStatus:text(status)||"page_check_pending",researchError:text(error).slice(0,180)||null,policyPagesInspected:0,policyUrls:[],
+    legalVerificationComplete:false,contractVerificationComplete:false,deliveryPerformanceVerified:false,returnRefundPerformanceVerified:false,supportPerformanceVerified:false,
+    privateQueueOnly:true,publicEligible:false
+  });
+  evidence.researchMissingEvidence=researchMissingEvidence(evidence);
+  const title=first(item&&item.supplierName,item&&item.organizationName,item&&item.title,item&&item.name,u.hostname.replace(/^www\./,""));
+  const profile={name:title,type:evidence.supplierType,officialUrl:u.toString(),targetCountry:geo.country,targetRegion:geo.region||"NATIONWIDE",detectedCountry:detectedCountry||null,detectedRegion:detectedRegion||null,directSales:evidence.directSales,handlesPayment:false,handlesShipping:evidence.shipping,handlesReturns:evidence.returns,handlesRefunds:evidence.refund,handlesCustomerSupport:evidence.service,responsibleForTransaction:true,adminVerificationRequired:true,performanceVerificationRequired:true,productCatalogImportAllowed:false,researchStatus:evidence.researchStatus};
+  return Object.assign({},item,{title,name:title,url:u.toString(),link:u.toString(),supplierOfficialUrl:u.toString(),distributionMarketCountry:detectedCountry||undefined,distributionMarketRegion:detectedRegion||undefined,officialSource:evidence.official,sellerVerified:false,igdcSupplierCandidate:true,igdcProductCandidate:false,supplierProfile:profile,brokerageVerification:evidence,sourceTrust:Math.max(Number(item&&item.sourceTrust||0),Number(evidence.provisionalTrustScore||0)/100)});
+}
 async function inspectCandidate(item,geo){
   const discoveredUrl=Core.externalUrl(item);if(!discoveredUrl)return item;
   const u=safeHttpUrl(discoveredUrl);if(!u)return item;
   let timer=null;
   try{
     const controller=new AbortController();timer=setTimeout(()=>controller.abort(),PAGE_CHECK_TIMEOUT);
-    const response=await fetch(u.toString(),{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-BrokerageVerifier/1.2 (+https://igdcglobal.com)"}});
-    if(!response.ok)return item;
-    const finalUrl=safeHttpUrl(response.url||u.toString());if(!finalUrl)return item;
-    const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return item;
-    const length=Number(response.headers.get("content-length")||0);if(length>550000)return item;
+    const response=await fetch(u.toString(),{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-BrokerageVerifier/1.3 (+https://igdcglobal.com)"}});
+    if(!response.ok)return researchCandidateShell(item,geo,"page_http_"+response.status,null);
+    const finalUrl=safeHttpUrl(response.url||u.toString());if(!finalUrl)return researchCandidateShell(item,geo,"redirect_url_invalid",null);
+    const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return researchCandidateShell(item,geo,"non_html_page",type);
+    const length=Number(response.headers.get("content-length")||0);if(length>550000)return researchCandidateShell(item,geo,"page_too_large",String(length));
     const html=(await response.text()).slice(0,550000);
     const policyUrls=policyPageUrls(html,finalUrl.toString());
     const policyPages=(await Promise.all(policyUrls.map(url=>fetchPolicyText(url,controller)))).filter(Boolean);
@@ -509,7 +551,9 @@ async function inspectCandidate(item,geo){
     const responsibleEntity=(words.supplierRole||ld.org)&&(words.official||ld.org);
     const directSales=words.directSales||ld.product||ld.offer;
     const secureTransport=finalUrl.protocol==="https:";
-    const reviewEligible=!marketplace&&responsibleEntity&&directSales&&words.shipping&&(words.returns||words.refund)&&words.service&&(words.payment||words.legalIdentity||ld.org);
+    const searchText=resultText(item);
+    const researchEligible=!marketplace&&!obviousNonCommerceReason(item)&&((responsibleEntity||words.supplierRole||ld.org||SUPPLIER_TEXT_RX.test(searchText))&&(directSales||COMMERCE_TEXT_RX.test(combinedHtml)||COMMERCE_TEXT_RX.test(searchText)));
+    const reviewEligible=researchEligible&&responsibleEntity&&directSales&&words.shipping&&(words.returns||words.refund)&&words.service&&(words.payment||words.legalIdentity||ld.org);
     const trustEvidenceReady=reviewEligible&&words.payment&&words.refund&&words.legalIdentity&&words.contactChannel&&secureTransport;
     const detectedCountry=ld.country||Core.normalizeCountry(item.distributionMarketCountry||item.sellerMarketCountry||item.marketCountry||item.country||item.geo&&item.geo.country);
     const detectedRegion=ld.region||Core.normalizeRegion(item.distributionMarketRegion||item.sellerRegion||item.region||item.geo&&item.geo.state,detectedCountry);
@@ -527,17 +571,20 @@ async function inspectCandidate(item,geo){
       service:words.service,contactChannel:words.contactChannel,warranty:words.warranty,termsPrivacy:words.termsPrivacy,legalIdentity:words.legalIdentity||ld.org,
       affiliatePotential:words.affiliatePotential,catalogBreadth:words.catalogBreadth,policyPagesInspected:policyPages.length,policyUrls:policyUrls.slice(0,4),
       marketplace,majorPlatform:marketplace,jsonLdOrganization:ld.org,jsonLdProduct:ld.product,jsonLdOffer:ld.offer,supplierType:typeCode,
-      supplierReviewEligible:reviewEligible,trustEvidenceReady,provisionalTrustScore,
+      supplierReviewEligible:reviewEligible,supplierResearchEligible:researchEligible,trustEvidenceReady,provisionalTrustScore,
+      researchStatus:reviewEligible?"evidence_ready_for_review":"evidence_incomplete",researchError:null,
       legalVerificationComplete:false,contractVerificationComplete:false,deliveryPerformanceVerified:false,returnRefundPerformanceVerified:false,supportPerformanceVerified:false,
       privateQueueOnly:true,publicEligible:false
     });
+    evidence.researchMissingEvidence=researchMissingEvidence(evidence);
     const profile={
       name:ld.orgName||first(item&&item.supplierName,item&&item.organizationName,item&&item.title,item&&item.name),type:typeCode,officialUrl,
       targetCountry:geo.country,targetRegion:geo.region||"NATIONWIDE",detectedCountry:detectedCountry||null,detectedRegion:detectedRegion||null,
       directSales,handlesPayment:words.payment,handlesShipping:words.shipping,handlesReturns:words.returns,handlesRefunds:words.refund,handlesCustomerSupport:words.service,
       offersTracking:words.tracking,statesDeliveryCommitment:words.deliveryCommitment,offersWarrantyOrAfterSales:words.warranty,
       catalogBreadthSignal:words.catalogBreadth,affiliatePotential:words.affiliatePotential,
-      responsibleForTransaction:true,adminVerificationRequired:true,performanceVerificationRequired:true,productCatalogImportAllowed:false
+      responsibleForTransaction:true,adminVerificationRequired:true,performanceVerificationRequired:true,productCatalogImportAllowed:false,
+      researchStatus:evidence.researchStatus,researchMissingEvidence:evidence.researchMissingEvidence
     };
     return Object.assign({},item,{
       title:profile.name||first(item&&item.title,item&&item.name),name:profile.name||first(item&&item.name,item&&item.title),url:officialUrl,link:officialUrl,supplierOfficialUrl:officialUrl,
@@ -550,7 +597,7 @@ async function inspectCandidate(item,geo){
       returnPolicyAvailable:words.returns,refundPolicyAvailable:words.refund,customerServiceAvailable:words.service,paymentAvailable:words.payment,
       sourceTrust:Math.max(Number(item.sourceTrust||0),provisionalTrustScore/100)
     });
-  }catch(_e){return item;}
+  }catch(_e){return researchCandidateShell(item,geo,"page_check_failed",_e&&(_e.code||_e.name||_e.message));}
   finally{if(timer)clearTimeout(timer);}
 }
 async function inspectLive(items,geo){
@@ -568,9 +615,9 @@ function privateReviewPool(rawItems,inspectedItems,geo,limit){
   }
   const out=[];const seen=new Set();
   for(const raw of commerceFirst(rawItems||[])){
-    const originalUrl=Core.externalUrl(raw),item=inspected.get(originalUrl);if(!item)continue;
-    const evidence=item.brokerageVerification||{},officialUrl=Core.externalUrl(item),profile=item.supplierProfile||{};
-    if(!officialUrl||seen.has(officialUrl)||evidence.marketplace===true||evidence.supplierReviewEligible!==true)continue;
+    const originalUrl=Core.externalUrl(raw),item=inspected.get(originalUrl)||researchCandidateShell(raw,geo,"page_check_pending",null);
+    const evidence=item&&item.brokerageVerification||{},officialUrl=Core.externalUrl(item),profile=item&&item.supplierProfile||{};
+    if(!officialUrl||seen.has(officialUrl)||evidence.marketplace===true||(evidence.supplierReviewEligible!==true&&evidence.supplierResearchEligible!==true))continue;
     const sourceText=lower([item.source,item.provider,item.sourceType,item.generatedBy].filter(Boolean).join(" "));
     if(/sanmaru-route|sanmaru-opening|provider-page-window|provider-window|search-route-hint/.test(sourceText))continue;
     const title=first(profile.name,item.title,item.name);if(!title)continue;
@@ -579,7 +626,7 @@ function privateReviewPool(rawItems,inspectedItems,geo,limit){
       title,name:title,url:officialUrl,link:officialUrl,igdcPrivateReviewOnly:true,igdcSupplierCandidate:true,igdcProductCandidate:false,
       igdcCollectionStage:"responsible-supplier-private-discovery",
       igdcCollectionScope:{country:geo.country,region:geo.region||"NATIONWIDE",collectedAt:new Date().toISOString(),locales:localeList(geo.country)},
-      brokerageVerification:Object.assign({},evidence,{privateQueueOnly:true,publicEligible:false,obviousNonCommerce:false}),
+      brokerageVerification:Object.assign({},evidence,{privateQueueOnly:true,publicEligible:false,obviousNonCommerce:false,researchMissingEvidence:array(evidence.researchMissingEvidence).length?array(evidence.researchMissingEvidence):researchMissingEvidence(evidence)}),
       intermediaryContract:{igdcRole:"distribution_service_intermediary",sellerOfRecord:false,merchantOfRecord:false,inventoryCustody:false,checkoutOnIgdc:false,paymentProcessing:false,fulfillment:false,returnsHandling:false,afterSalesService:false,transactionAtSupplier:true},
       productCatalogImportAllowed:false,productReferenceSelectionRequired:true
     }));

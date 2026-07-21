@@ -20,7 +20,7 @@ const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 
-const VERSION = "commerce-country-automation-v1.6.0-policy-discussion-priority";
+const VERSION = "commerce-country-automation-v1.7.0-searchbank-psom-research-bridge";
 const POLICY_PREFIX = "igdc_country_automation_";
 const SOURCE_REF = "commerce-country-supplier-discovery";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -365,7 +365,12 @@ function evidenceProjection(item) {
     contractVerificationComplete: evidence.contractVerificationComplete === true,
     deliveryPerformanceVerified: evidence.deliveryPerformanceVerified === true,
     returnRefundPerformanceVerified: evidence.returnRefundPerformanceVerified === true,
-    supportPerformanceVerified: evidence.supportPerformanceVerified === true
+    supportPerformanceVerified: evidence.supportPerformanceVerified === true,
+    supplierResearchEligible: evidence.supplierResearchEligible === true,
+    supplierReviewEligible: evidence.supplierReviewEligible === true,
+    researchStatus: text(evidence.researchStatus) || null,
+    researchError: text(evidence.researchError) || null,
+    researchMissingEvidence: array(evidence.researchMissingEvidence)
   };
 }
 function trustTier(score, hardGatePassed, approvalReady) {
@@ -808,7 +813,7 @@ async function runScope(options) {
   const report = { ok: true, reportType: "igdc-country-responsible-supplier-discovery-run", version: VERSION, runId, trigger: text(opts.trigger) || "manual", startedAt, scope, effective,
     trustPolicy: TRUST_POLICY,
     safety: { privateCandidateQueueOnly: true, entityKind: "supplier", igdcRole: "distribution_service_intermediary", trustBeforeRevenue: true, revenueTieBreakOnly: true, sellerOfRecord: false, merchantOfRecord: false, inventoryCustody: false, productImport: false, publicSnapshotPublication: false, checkout: false, payment: false, deliveryResponsibility: false, returnsResponsibility: false, refundResponsibility: false, afterSalesResponsibility: false, manualPinnedOverwrite: false, aiCannotInventUrls: true },
-    ai: { provider: "pending", model: null, error: null, trustScale: AI_TRUST_SCALE }, summary: { collected: 0, considered: 0, ranked: 0, trustGatePassed: 0, approvalReady: 0, previewed: 0, created: 0, updated: 0, held: 0, manualPreserved: 0, skipped: 0 }, candidates: [], trace: [], error: null };
+    ai: { provider: "pending", model: null, error: null, trustScale: AI_TRUST_SCALE }, summary: { collected: 0, considered: 0, researchCandidates: 0, evidenceReady: 0, ranked: 0, trustGatePassed: 0, approvalReady: 0, previewed: 0, created: 0, updated: 0, held: 0, manualPreserved: 0, skipped: 0 }, candidates: [], trace: [], error: null };
   try {
     const manualIds = await manualPinnedIds(country, region); const manualRows = await candidateRowsByIds(manualIds);
     const maxCandidates = effective.maxCandidates || DEFAULT_MAX_CANDIDATES;
@@ -853,7 +858,10 @@ async function runScope(options) {
     const selectionInput = array(selection && selection.items).length;
     const privateInput = Number(selection && selection.meta && selection.meta.privateReview && selection.meta.privateReview.raw || 0);
     report.summary.collected = Math.max(items.length, selectionInput, privateInput);
-    report.summary.considered = items.length; report.trace = array(selection && selection.meta && selection.meta.discovery).slice(0, 30);
+    report.summary.considered = items.length;
+    report.summary.researchCandidates = items.filter((item) => plain(item && item.brokerageVerification).supplierResearchEligible === true).length;
+    report.summary.evidenceReady = items.filter((item) => plain(item && item.brokerageVerification).supplierReviewEligible === true).length;
+    report.trace = array(selection && selection.meta && selection.meta.discovery).slice(0, 30);
     report.collection = { selectorVersion: text(selection && selection.version) || null, targetSource: text(selection && selection.geo && selection.geo.source) || null, discoveryMode: "responsible_supplier", rankingMode: "trust_first_revenue_tiebreak_only", entityKind: "supplier", legacyProductSelectorItemsIgnored: array(selection && selection.items).length, privateSupplierReviewItems: array(selection && selection.privateReviewItems).length, marketSignalPlanApplied: report.marketSignals && report.marketSignals.active === true, administratorPolicyApplied: report.policyControl && report.policyControl.active === true, categoryWeights: plain(report.policyControl && report.policyControl.effectiveCategoryWeights || report.marketSignals && report.marketSignals.categoryWeights), priorityCategories: array(report.marketSignals && report.marketSignals.priorityCategories), policyPriorityTargets: array(report.policyControl && report.policyControl.manualPriorityTargets), policyBlockedTargets: array(report.policyControl && report.policyControl.manualBlockedTargets), productPageImport: false, publicPublication: false };
     const ai = await openAiAssessment(items, scope); report.ai = { provider: ai.provider, model: ai.model, error: ai.error || null, trustScale: AI_TRUST_SCALE, recommendationRule: "AI recommendation is advisory and cannot bypass the hard trust or operating-performance gates." };
     const ranked = items.map((item, index) => ({
