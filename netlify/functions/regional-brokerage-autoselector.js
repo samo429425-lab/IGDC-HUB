@@ -13,7 +13,7 @@
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.0.0-product-image-link-research";
+const VERSION="regional-brokerage-autoselector-v2.1.0-product-image-video-review";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -748,7 +748,8 @@ function decodeHtmlValue(value){
   return String(value||"").replace(/&amp;/gi,"&").replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/&lt;/gi,"<").replace(/&gt;/gi,">").trim();
 }
 function absoluteHttpUrl(baseUrl,raw){
-  try{const u=new URL(decodeHtmlValue(raw),baseUrl);if(!["http:","https:"].includes(u.protocol)||u.username||u.password||!u.hostname)return"";u.hash="";return u.toString();}catch(_e){return"";}
+  const value=decodeHtmlValue(raw);if(!value)return"";
+  try{const u=new URL(value,baseUrl);if(!["http:","https:"].includes(u.protocol)||u.username||u.password||!u.hostname)return"";u.hash="";return u.toString();}catch(_e){return"";}
 }
 function metaContent(html,names){
   const source=String(html||"");
@@ -798,6 +799,24 @@ function imageAttrFromHtml(fragment,baseUrl){
   for(const rx of patterns){const match=source.match(rx);if(!match||!match[1])continue;const firstCandidate=String(match[1]).split(",")[0].trim().split(/\s+/)[0],url=absoluteHttpUrl(baseUrl,firstCandidate);if(url&&isProductImageUrl(url))return url;}
   return"";
 }
+function isDirectProductVideoUrl(url){return /\.(?:mp4|webm|ogv|ogg)(?:$|[?#])/i.test(text(url));}
+function isTrustedVideoPage(url){try{const u=new URL(url),host=lower(u.hostname);return host==="youtu.be"||host.endsWith("youtube.com")||host.endsWith("youtube-nocookie.com")||host==="vimeo.com"||host.endsWith(".vimeo.com");}catch(_e){return false;}}
+function videoInfoFromValue(value,baseUrl){
+  const queue=array(value);if(!queue.length&&value!=null)queue.push(value);const out={videoUrl:"",videoContentUrl:"",videoEmbedUrl:"",videoThumbnailUrl:"",videoSource:""};
+  for(const row of queue){
+    if(typeof row==="string"){const url=absoluteHttpUrl(baseUrl,row);if(url&&!out.videoUrl){out.videoUrl=url;if(isDirectProductVideoUrl(url))out.videoContentUrl=url;else if(isTrustedVideoPage(url))out.videoEmbedUrl=url;out.videoSource="json_ld_video";}continue;}
+    const node=plain(row),content=absoluteHttpUrl(baseUrl,first(node.contentUrl,node.url,node["@id"])),embed=absoluteHttpUrl(baseUrl,node.embedUrl),thumb=imageFromValue(first(node.thumbnailUrl,node.thumbnail),baseUrl);
+    if(content&&!out.videoContentUrl)out.videoContentUrl=content;if(embed&&!out.videoEmbedUrl)out.videoEmbedUrl=embed;if(thumb&&!out.videoThumbnailUrl)out.videoThumbnailUrl=thumb;if(!out.videoUrl)out.videoUrl=content||embed;if(out.videoUrl&&!out.videoSource)out.videoSource="json_ld_video";
+  }
+  return out;
+}
+function videoInfoFromHtml(html,pageUrl){
+  const source=String(html||""),metaVideo=absoluteHttpUrl(pageUrl,metaContent(source,["og:video:secure_url","og:video:url","og:video","twitter:player"])),poster=absoluteHttpUrl(pageUrl,metaContent(source,["og:video:thumbnail","og:image:secure_url","og:image","twitter:image"]));
+  const videoTag=source.match(/<video\b[^>]*(?:src\s*=\s*["']([^"']+)["'])?[^>]*>([\s\S]*?)<\/video>/i),videoOpen=source.match(/<video\b[^>]*>/i),sourceTag=source.match(/<(?:source)\b[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/i),iframe=source.match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/i),posterAttr=videoOpen&&videoOpen[0].match(/poster\s*=\s*["']([^"']+)["']/i);
+  const direct=absoluteHttpUrl(pageUrl,first(videoTag&&videoTag[1],sourceTag&&sourceTag[1])),iframeUrl=absoluteHttpUrl(pageUrl,iframe&&iframe[1]);
+  const trustedIframe=isTrustedVideoPage(iframeUrl)?iframeUrl:"",videoUrl=direct||metaVideo||trustedIframe;
+  return{videoUrl,videoContentUrl:isDirectProductVideoUrl(direct||metaVideo)?(direct||metaVideo):"",videoEmbedUrl:trustedIframe||(!isDirectProductVideoUrl(metaVideo)&&isTrustedVideoPage(metaVideo)?metaVideo:""),videoThumbnailUrl:absoluteHttpUrl(pageUrl,posterAttr&&posterAttr[1])||poster,videoSource:direct?"html_video":trustedIframe?"trusted_video_embed":metaVideo?"open_graph_video":""};
+}
 function productOffer(node){
   const offers=array(node&&node.offers);if(!offers.length&&node&&node.offers)offers.push(node.offers);
   const offer=plain(offers[0]);return{price:first(offer.price,offer.lowPrice,offer.highPrice),priceCurrency:first(offer.priceCurrency),availability:first(offer.availability),sellerName:first(plain(offer.seller).name,plain(node&&node.seller).name)};
@@ -805,12 +824,12 @@ function productOffer(node){
 function productIdSeed(url,name){let h=0;const value=String(url||"")+"|"+String(name||"");for(let i=0;i<value.length;i++)h=((h<<5)-h+value.charCodeAt(i))|0;return"product_ref_"+Math.abs(h).toString(36)+"_"+value.length.toString(36);}
 function productRowsFromHtml(html,pageUrl,supplier,max){
   const out=[],seen=new Set(),supplierSiteUrl=absoluteHttpUrl(pageUrl,first(supplier&&supplier.supplierSiteUrl,supplier&&supplier.url,pageUrl)),supplierName=first(supplier&&supplier.supplierName,supplier&&supplier.title,supplier&&supplier.name);
-  const add=(row)=>{const productUrl=absoluteHttpUrl(pageUrl,row&&row.productUrl);const productName=stripHtml(first(row&&row.productName,row&&row.title));if(!productUrl||!productName||seen.has(productUrl.toLowerCase()))return;if(supplierSiteUrl&&!sameSite(supplierSiteUrl,productUrl))return;seen.add(productUrl.toLowerCase());const imageUrl=absoluteHttpUrl(productUrl,row&&row.imageUrl);out.push({id:productIdSeed(productUrl,productName),entityKind:"product_reference",productName,title:productName,productUrl,url:productUrl,imageUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageOriginalUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageSource:text(row&&row.imageSource)||"unresolved",supplierName:supplierName||text(row&&row.supplierName),supplierSiteUrl,sourcePageUrl:pageUrl,price:text(row&&row.price),priceCurrency:text(row&&row.priceCurrency),availability:text(row&&row.availability),jsonLdProduct:row&&row.jsonLdProduct===true,offerPresent:row&&row.offerPresent===true,productPageLive:true,sameSupplierSite:true,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});};
+  const add=(row)=>{const productUrl=absoluteHttpUrl(pageUrl,row&&row.productUrl);const productName=stripHtml(first(row&&row.productName,row&&row.title));if(!productUrl||!productName||seen.has(productUrl.toLowerCase()))return;if(supplierSiteUrl&&!sameSite(supplierSiteUrl,productUrl))return;seen.add(productUrl.toLowerCase());const imageUrl=absoluteHttpUrl(productUrl,row&&row.imageUrl),videoUrl=absoluteHttpUrl(productUrl,first(row&&row.videoUrl,row&&row.videoContentUrl,row&&row.videoEmbedUrl)),videoContentUrl=absoluteHttpUrl(productUrl,row&&row.videoContentUrl),videoEmbedUrl=absoluteHttpUrl(productUrl,row&&row.videoEmbedUrl),videoThumbnailUrl=absoluteHttpUrl(productUrl,row&&row.videoThumbnailUrl);out.push({id:productIdSeed(productUrl,productName),entityKind:"product_reference",productName,title:productName,productUrl,url:productUrl,imageUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageOriginalUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageSource:text(row&&row.imageSource)||"unresolved",videoUrl,videoContentUrl,videoEmbedUrl,videoThumbnailUrl:isProductImageUrl(videoThumbnailUrl)?videoThumbnailUrl:"",videoSource:text(row&&row.videoSource)||"unresolved",supplierName:supplierName||text(row&&row.supplierName),supplierSiteUrl,sourcePageUrl:pageUrl,price:text(row&&row.price),priceCurrency:text(row&&row.priceCurrency),availability:text(row&&row.availability),jsonLdProduct:row&&row.jsonLdProduct===true,offerPresent:row&&row.offerPresent===true,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});};
   const nodes=jsonLdNodesDeep(html);
   for(const node of nodes){
     if(!/\bProduct\b/i.test(nodeType(node)))continue;
-    const offer=productOffer(node),productUrl=absoluteHttpUrl(pageUrl,first(node.url,node["@id"],plain(node.mainEntityOfPage)["@id"],canonicalPageUrl(html,pageUrl))),imageUrl=imageFromValue(node.image,productUrl||pageUrl);
-    add({productName:first(node.name,node.headline),productUrl,imageUrl,imageSource:imageUrl?"json_ld_product":"",price:offer.price,priceCurrency:offer.priceCurrency,availability:offer.availability,supplierName:offer.sellerName,jsonLdProduct:true,offerPresent:!!(node.offers||offer.price)});
+    const offer=productOffer(node),productUrl=absoluteHttpUrl(pageUrl,first(node.url,node["@id"],plain(node.mainEntityOfPage)["@id"],canonicalPageUrl(html,pageUrl))),imageUrl=imageFromValue(node.image,productUrl||pageUrl),video=videoInfoFromValue(node.video,productUrl||pageUrl);
+    add({productName:first(node.name,node.headline),productUrl,imageUrl,imageSource:imageUrl?"json_ld_product":"",videoUrl:video.videoUrl,videoContentUrl:video.videoContentUrl,videoEmbedUrl:video.videoEmbedUrl,videoThumbnailUrl:video.videoThumbnailUrl,videoSource:video.videoSource,price:offer.price,priceCurrency:offer.priceCurrency,availability:offer.availability,supplierName:offer.sellerName,jsonLdProduct:true,offerPresent:!!(node.offers||offer.price)});
   }
   const anchorRx=/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;let match;
   while((match=anchorRx.exec(String(html||"")))&&out.length<(max||60)){
@@ -819,8 +838,8 @@ function productRowsFromHtml(html,pageUrl,supplier,max){
     const imageUrl=imageAttrFromHtml(inner,href);
     add({productName:label,productUrl:href,imageUrl,imageSource:imageUrl?"product_anchor_image":"",jsonLdProduct:false,offerPresent:false});
   }
-  const pageType=metaContent(html,["og:type"]),ogTitle=metaContent(html,["og:title","twitter:title"]),itemPropImage=((String(html).match(/<(?:meta|link)\b[^>]*itemprop\s*=\s*["']image["'][^>]*(?:content|href)\s*=\s*["']([^"']+)["'][^>]*>/i)||[])[1]||""),ogImage=absoluteHttpUrl(pageUrl,metaContent(html,["og:image:secure_url","og:image","twitter:image"])||itemPropImage);
-  if(/product/i.test(pageType)||(/(?:\/product(?:s)?\/|\/goods(?:\/|\?|$)|\/item(?:\/|\?|$)|product_no=|goodsno=|itemid=)/i.test(pageUrl)&&ogTitle))add({productName:ogTitle||stripHtml((String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]),productUrl:canonicalPageUrl(html,pageUrl),imageUrl:ogImage,imageSource:ogImage?"open_graph":"",jsonLdProduct:false,offerPresent:false});
+  const pageType=metaContent(html,["og:type"]),ogTitle=metaContent(html,["og:title","twitter:title"]),itemPropImage=((String(html).match(/<(?:meta|link)\b[^>]*itemprop\s*=\s*["']image["'][^>]*(?:content|href)\s*=\s*["']([^"']+)["'][^>]*>/i)||[])[1]||""),ogImage=absoluteHttpUrl(pageUrl,metaContent(html,["og:image:secure_url","og:image","twitter:image"])||itemPropImage),pageVideo=videoInfoFromHtml(html,pageUrl);
+  if(/product/i.test(pageType)||(/(?:\/product(?:s)?\/|\/goods(?:\/|\?|$)|\/item(?:\/|\?|$)|product_no=|goodsno=|itemid=)/i.test(pageUrl)&&ogTitle))add({productName:ogTitle||stripHtml((String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]),productUrl:canonicalPageUrl(html,pageUrl),imageUrl:ogImage,imageSource:ogImage?"open_graph":"",videoUrl:pageVideo.videoUrl,videoContentUrl:pageVideo.videoContentUrl,videoEmbedUrl:pageVideo.videoEmbedUrl,videoThumbnailUrl:pageVideo.videoThumbnailUrl,videoSource:pageVideo.videoSource,jsonLdProduct:false,offerPresent:false});
   return out.slice(0,max||60);
 }
 function catalogPageUrls(html,baseUrl){
@@ -838,23 +857,26 @@ async function fetchProductHtml(url,controller){
 async function discoverSupplierProductsStep(supplier,params){
   const source=plain(supplier),supplierSiteUrl=absoluteHttpUrl(first(source.url,source.supplierSiteUrl),first(source.url,source.supplierSiteUrl));if(!supplierSiteUrl)return{ok:true,items:[],trace:{source:"supplier-product-discovery",status:"supplier_url_missing",count:0}};
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),19000);try{
-    const root=await fetchProductHtml(supplierSiteUrl,controller);if(!root.ok)return{ok:true,items:[],trace:{source:"supplier-product-discovery",status:root.status,detail:root.detail||null,supplierSiteUrl,count:0}};
-    const supplierInfo={supplierName:first(source.title,source.name,source.supplierName),supplierSiteUrl};let items=productRowsFromHtml(root.html,root.url,supplierInfo,50),extraUrls=catalogPageUrls(root.html,root.url);
-    const extras=await Promise.all(extraUrls.map(url=>fetchProductHtml(url,controller)));for(const page of extras)if(page.ok)items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,50));
+    const initialUrls=[supplierSiteUrl],candidateUrl=absoluteHttpUrl(supplierSiteUrl,source.sourceCandidateUrl);if(candidateUrl&&sameSite(supplierSiteUrl,candidateUrl)&&candidateUrl!==supplierSiteUrl)initialUrls.push(candidateUrl);
+    const initialPages=await Promise.all(initialUrls.map(url=>fetchProductHtml(url,controller))),validInitial=initialPages.filter(page=>page.ok);if(!validInitial.length){const firstFailure=initialPages[0]||{};return{ok:true,items:[],trace:{source:"supplier-product-discovery",status:firstFailure.status||"unavailable",detail:firstFailure.detail||null,supplierSiteUrl,count:0}};}
+    const supplierInfo={supplierName:first(source.title,source.name,source.supplierName),supplierSiteUrl};let items=[],extraUrls=[];
+    for(const page of validInitial){items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,50));extraUrls=extraUrls.concat(catalogPageUrls(page.html,page.url));}
+    const uniqueExtras=[];for(const url of extraUrls){if(!url||initialUrls.includes(url)||uniqueExtras.includes(url))continue;uniqueExtras.push(url);if(uniqueExtras.length>=5)break;}
+    const extras=await Promise.all(uniqueExtras.map(url=>fetchProductHtml(url,controller)));for(const page of extras)if(page.ok)items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,50));
     const dedup=[],seen=new Set();for(const row of items){const key=text(row.productUrl).toLowerCase();if(!key||seen.has(key))continue;seen.add(key);dedup.push(row);if(dedup.length>=Math.max(10,Math.min(80,Number(params&&params.limit)||50)))break;}
-    return{ok:true,items:dedup,trace:{source:"supplier-product-discovery",status:"ok",supplierName:supplierInfo.supplierName,supplierSiteUrl,catalogPagesChecked:1+extras.filter(x=>x.ok).length,count:dedup.length}};
+    return{ok:true,items:dedup,trace:{source:"supplier-product-discovery",status:"ok",supplierName:supplierInfo.supplierName,supplierSiteUrl,sourceCandidateChecked:initialUrls.length>1,catalogPagesChecked:validInitial.length+extras.filter(x=>x.ok).length,count:dedup.length}};
   }finally{clearTimeout(timer);}
 }
 function prepareProductInspectionPool(rawItems,params){
   const limit=Math.max(20,Math.min(300,Number(params&&params.limit)||120)),out=[],seen=new Set();for(const item of array(rawItems)){const url=absoluteHttpUrl(item&&item.productUrl,item&&item.productUrl);if(!url||seen.has(url.toLowerCase()))continue;seen.add(url.toLowerCase());out.push(item);if(out.length>=limit)break;}return out;
 }
 async function inspectProductCandidate(item){
-  const row=plain(item),productUrl=absoluteHttpUrl(row.productUrl,row.productUrl),supplierSiteUrl=absoluteHttpUrl(row.supplierSiteUrl,row.supplierSiteUrl);if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false});
+  const row=plain(item),productUrl=absoluteHttpUrl(row.productUrl,row.productUrl),supplierSiteUrl=absoluteHttpUrl(row.supplierSiteUrl,row.supplierSiteUrl);if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false,inspectionComplete:true});
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),14000);try{
-    const page=await fetchProductHtml(productUrl,controller);if(!page.ok)return Object.assign({},row,{researchStatus:page.status,productPageLive:false,inspectedAt:new Date().toISOString()});
-    const parsed=productRowsFromHtml(page.html,page.url,{supplierName:row.supplierName,supplierSiteUrl:supplierSiteUrl||row.supplierSiteUrl},20),exact=parsed.find(x=>text(x.productUrl).toLowerCase()===text(canonicalPageUrl(page.html,page.url)).toLowerCase())||parsed[0]||{};
+    const page=await fetchProductHtml(productUrl,controller);if(!page.ok)return Object.assign({},row,{researchStatus:page.status,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString()});
+    const parsed=productRowsFromHtml(page.html,page.url,{supplierName:row.supplierName,supplierSiteUrl:supplierSiteUrl||row.supplierSiteUrl},20),exact=parsed.find(x=>text(x.productUrl).toLowerCase()===text(canonicalPageUrl(page.html,page.url)).toLowerCase())||parsed[0]||{},pageVideo=videoInfoFromHtml(page.html,page.url);
     const name=first(exact.productName,row.productName),image=first(exact.imageUrl,row.imageUrl),same=supplierSiteUrl?sameSite(supplierSiteUrl,page.url):true,ready=!!name&&!!image&&same;
-    return Object.assign({},row,exact,{id:row.id||exact.id||productIdSeed(productUrl,name),productName:name,title:name,productUrl:canonicalPageUrl(page.html,page.url),url:canonicalPageUrl(page.html,page.url),imageUrl:isProductImageUrl(image)?image:"",imageOriginalUrl:isProductImageUrl(image)?image:"",supplierSiteUrl:supplierSiteUrl||exact.supplierSiteUrl,productPageLive:true,sameSupplierSite:same,inspectedAt:new Date().toISOString(),researchStatus:ready?"ready_for_admin_review":"needs_manual_review",slotDecision:text(row.slotDecision)||"undecided",publicPublication:false,automaticImport:false});
+    return Object.assign({},row,exact,{id:row.id||exact.id||productIdSeed(productUrl,name),productName:name,title:name,productUrl:canonicalPageUrl(page.html,page.url),url:canonicalPageUrl(page.html,page.url),imageUrl:isProductImageUrl(image)?image:"",imageOriginalUrl:isProductImageUrl(image)?image:"",videoUrl:first(exact.videoUrl,pageVideo.videoUrl,row.videoUrl),videoContentUrl:first(exact.videoContentUrl,pageVideo.videoContentUrl,row.videoContentUrl),videoEmbedUrl:first(exact.videoEmbedUrl,pageVideo.videoEmbedUrl,row.videoEmbedUrl),videoThumbnailUrl:first(exact.videoThumbnailUrl,pageVideo.videoThumbnailUrl,row.videoThumbnailUrl),videoSource:first(exact.videoSource,pageVideo.videoSource,row.videoSource),supplierSiteUrl:supplierSiteUrl||exact.supplierSiteUrl,productPageLive:true,sameSupplierSite:same,inspectionComplete:true,inspectedAt:new Date().toISOString(),researchStatus:ready?"ready_for_admin_review":"needs_manual_review",slotDecision:text(row.slotDecision)||"undecided",publicPublication:false,automaticImport:false});
   }finally{clearTimeout(timer);}
 }
 async function inspectProductResearchStep(rawItems){const items=array(rawItems).slice(0,2),settled=await Promise.all(items.map(inspectProductCandidate));return{ok:true,version:VERSION,items:settled};}

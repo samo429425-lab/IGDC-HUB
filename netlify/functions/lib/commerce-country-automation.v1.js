@@ -20,7 +20,7 @@ const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 
-const VERSION = "commerce-country-automation-v2.1.0-staged-signal-auto-product-review";
+const VERSION = "commerce-country-automation-v2.2.0-review-navigation-product-media";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1259,12 +1259,36 @@ async function saveProductJob(job, actorId) {
 }
 function productUrl(item) { return safeUrl(first(item && item.productUrl, item && item.url)); }
 function productImageUrl(item) { return safeUrl(first(item && item.imageUrl, item && item.imageOriginalUrl)); }
+function productVideoUrl(item) { return safeUrl(first(item && item.videoUrl, item && item.videoContentUrl, item && item.videoEmbedUrl)); }
+function productVideoThumbnailUrl(item) { return safeUrl(first(item && item.videoThumbnailUrl, item && item.videoPosterUrl)); }
 function mergeProductRows(existing, incoming, max) {
   const out = [], map = new Map();
   for (const row of array(existing).concat(array(incoming))) {
     const url = productUrl(row); if (!url) continue; const key = url.toLowerCase();
-    if (map.has(key)) { const index = map.get(key), previous = out[index]; out[index] = Object.assign({}, previous, row, { slotDecision: text(previous.slotDecision) && previous.slotDecision !== "undecided" ? previous.slotDecision : text(row.slotDecision) || "undecided", decisionAt: previous.decisionAt || row.decisionAt || null, decisionBy: previous.decisionBy || row.decisionBy || null }); }
-    else { map.set(key, out.length); out.push(Object.assign({}, row, { id: text(row.id) || "product_ref_" + sha256(url).slice(0, 22), productUrl: url, url, imageUrl: productImageUrl(row), imageOriginalUrl: productImageUrl(row), slotDecision: text(row.slotDecision) || "undecided", publicPublication: false, automaticImport: false })); }
+    const normalized = Object.assign({}, row, {
+      id: text(row && row.id) || "product_ref_" + sha256(url).slice(0, 22),
+      productUrl: url,
+      url,
+      imageUrl: productImageUrl(row),
+      imageOriginalUrl: productImageUrl(row),
+      videoUrl: productVideoUrl(row),
+      videoContentUrl: safeUrl(first(row && row.videoContentUrl, row && row.videoUrl)),
+      videoEmbedUrl: safeUrl(row && row.videoEmbedUrl),
+      videoThumbnailUrl: productVideoThumbnailUrl(row),
+      slotDecision: text(row && row.slotDecision) || "undecided",
+      inspectionComplete: row && row.inspectionComplete === true,
+      publicPublication: false,
+      automaticImport: false
+    });
+    if (map.has(key)) {
+      const index = map.get(key), previous = out[index];
+      out[index] = Object.assign({}, previous, normalized, {
+        slotDecision: text(previous.slotDecision) && previous.slotDecision !== "undecided" ? previous.slotDecision : normalized.slotDecision,
+        decisionAt: previous.decisionAt || normalized.decisionAt || null,
+        decisionBy: previous.decisionBy || normalized.decisionBy || null,
+        inspectionComplete: previous.inspectionComplete === true || normalized.inspectionComplete === true
+      });
+    } else { map.set(key, out.length); out.push(normalized); }
     if (out.length >= (max || 300)) break;
   }
   return out;
@@ -1276,13 +1300,25 @@ function productProgress(job) {
 }
 function publicProductJob(job) {
   if (!job) return { ok: true, reportType: "igdc-country-product-reference-research-status", version: VERSION, status: "not_started", products: [] };
-  const products = array(job.products);
+  const inspectedProducts = array(job.products), visibleProducts = mergeProductRows(job.rawProducts, inspectedProducts, 300);
   return {
     ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, jobId: job.jobId, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
-    safety: { reviewOnly: true, actualProductImagesOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, copiesThirdPartyImages: false, externalLinksOpenForAdministratorReview: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false },
+    safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false },
     progress: productProgress(job),
-    summary: { suppliers: array(job.supplierSources).length, suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)), discovered: array(job.rawProducts).length, inspected: products.length, withImage: products.filter((row) => !!productImageUrl(row)).length, readyForAdminReview: products.filter((row) => row.researchStatus === "ready_for_admin_review").length, slotCandidates: products.filter((row) => row.slotDecision === "slot_candidate").length, held: products.filter((row) => row.slotDecision === "hold").length, rejected: products.filter((row) => row.slotDecision === "reject").length },
-    products, trace: array(job.trace).slice(-120), errors: array(job.errors).slice(-30), lastError: job.lastError || null
+    summary: {
+      suppliers: array(job.supplierSources).length,
+      suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
+      discovered: array(job.rawProducts).length,
+      inspected: inspectedProducts.length,
+      withImage: visibleProducts.filter((row) => !!productImageUrl(row)).length,
+      withVideo: visibleProducts.filter((row) => !!productVideoUrl(row)).length,
+      readyForAdminReview: visibleProducts.filter((row) => row.researchStatus === "ready_for_admin_review").length,
+      slotCandidates: visibleProducts.filter((row) => row.slotDecision === "slot_candidate").length,
+      held: visibleProducts.filter((row) => row.slotDecision === "hold").length,
+      rejected: visibleProducts.filter((row) => row.slotDecision === "reject").length
+    },
+    products: visibleProducts,
+    trace: array(job.trace).slice(-120), errors: array(job.errors).slice(-30), lastError: job.lastError || null
   };
 }
 function productSupplierSource(row) {
@@ -1337,8 +1373,12 @@ async function advanceProductResearchJob(actorId, input) {
 async function productCandidateAction(actorId, input) {
   const scope = researchScope(input), job = await productJobRule(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","undecided"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
-  const index = array(job.products).findIndex((row) => text(row && row.id) === id); if (index < 0) { const error = new Error("선택한 상품 후보를 찾을 수 없습니다."); error.statusCode = 404; throw error; }
-  job.products[index] = Object.assign({}, job.products[index], { slotDecision: decision, decisionAt: iso(), decisionBy: text(actorId) || "administrator", publicPublication: false, automaticImport: false }); await saveProductJob(job, actorId); return publicProductJob(job);
+  const index = array(job.products).findIndex((row) => text(row && row.id) === id); if (index < 0) { const error = new Error("상세페이지 검증을 마친 상품 후보를 찾을 수 없습니다. 발견 단계 상품은 검증 완료 후 판정할 수 있습니다."); error.statusCode = 404; throw error; }
+  const current = plain(job.products[index]);
+  if (decision === "slot_candidate" && !(current.researchStatus === "ready_for_admin_review" && current.inspectionComplete === true && productUrl(current) && productImageUrl(current))) {
+    const error = new Error("상품 상세페이지·실제 상품 이미지·원본 링크 검증을 마친 후보만 슬롯 후보로 지정할 수 있습니다."); error.statusCode = 409; throw error;
+  }
+  job.products[index] = Object.assign({}, current, { slotDecision: decision, decisionAt: iso(), decisionBy: text(actorId) || "administrator", publicPublication: false, automaticImport: false }); await saveProductJob(job, actorId); return publicProductJob(job);
 }
 
 async function runScope(options) {
