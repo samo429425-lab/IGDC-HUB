@@ -13,7 +13,7 @@
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.1.0-product-image-video-review";
+const VERSION="regional-brokerage-autoselector-v2.2.0-detail-product-thumbnail-priority";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -795,9 +795,60 @@ function isProductImageUrl(url){
   return true;
 }
 function imageAttrFromHtml(fragment,baseUrl){
-  const source=String(fragment||""),patterns=[/(?:data-original|data-lazy-src|data-src|src)\s*=\s*["']([^"']+)["']/i,/(?:data-srcset|srcset)\s*=\s*["']([^"']+)["']/i];
-  for(const rx of patterns){const match=source.match(rx);if(!match||!match[1])continue;const firstCandidate=String(match[1]).split(",")[0].trim().split(/\s+/)[0],url=absoluteHttpUrl(baseUrl,firstCandidate);if(url&&isProductImageUrl(url))return url;}
+  const source=String(fragment||""),patterns=[
+    /(?:data-original|data-lazy-src|data-lazy|data-echo|data-image|data-thumb|data-src|src)\s*=\s*["']([^"']+)["']/i,
+    /(?:data-srcset|srcset)\s*=\s*["']([^"']+)["']/i,
+    /(?:background-image\s*:\s*url\(|data-background(?:-image)?\s*=\s*["']?)(["']?)([^"')\s]+)\1/i
+  ];
+  for(const rx of patterns){
+    const match=source.match(rx);if(!match)continue;
+    const raw=match[2]||match[1];if(!raw||/^data:/i.test(raw))continue;
+    const firstCandidate=String(raw).split(",")[0].trim().split(/\s+/)[0],url=absoluteHttpUrl(baseUrl,firstCandidate);
+    if(url&&isProductImageUrl(url))return url;
+  }
   return"";
+}
+function isProductDetailUrl(url){
+  try{
+    const u=new URL(url),path=lower(u.pathname),query=lower(u.search);
+    if(/[?&](?:goodsno|product_no|productno|itemid|item_id|productid|product_id|sku)=[^&#]+/i.test(query))return true;
+    if(/(?:goods_view|product_view|item_view|product_detail|goods_detail)\.php/i.test(path))return true;
+    if(/(?:goods_list|product_list|products_list|item_list|category|categories|catalog|collection|collections)(?:[._/\-]|$)/i.test(path))return false;
+    if(/\/goods\/goods_view\.php$/i.test(path))return true;
+    if(/\/(?:product|products|item|detail|goods|p)\/[^/?#]{2,}/i.test(path))return true;
+    return false;
+  }catch(_e){return false;}
+}
+function meaningfulProductName(value){
+  const name=stripHtml(value).replace(/\s+/g," ").trim();
+  if(!name||name.length<2||name.length>220)return"";
+  if(/^(?:상품|제품|상품목록|제품목록|제품별|브랜드별|카테고리|전체상품|전체보기|보기|상세|더보기|구매|shop|store|view|detail|list)$/i.test(name))return"";
+  if(/^(?:new|best|sale|event|기획전|이벤트|추천상품)$/i.test(name))return"";
+  return name;
+}
+function nearbyProductName(fragment,inner){
+  const direct=meaningfulProductName(inner);if(direct)return direct;
+  const source=String(fragment||""),imgAlt=source.match(/<img\b[^>]*(?:alt|title)\s*=\s*["']([^"']+)["'][^>]*>/i);
+  const alt=meaningfulProductName(imgAlt&&imgAlt[1]);if(alt)return alt;
+  const patterns=[
+    /<(?:strong|em|span|div|p)\b[^>]*class\s*=\s*["'][^"']*(?:item[_-]?name|goods[_-]?name|prd[_-]?name|product[_-]?name|name)[^"']*["'][^>]*>([\s\S]{1,500}?)<\/(?:strong|em|span|div|p)>/i,
+    /(?:data-goods-name|data-product-name|title)\s*=\s*["']([^"']+)["']/i
+  ];
+  for(const rx of patterns){const m=source.match(rx),name=meaningfulProductName(m&&m[1]);if(name)return name;}
+  return"";
+}
+function productBlockContext(source,start,end){
+  const html=String(source||""),liStart=html.lastIndexOf("<li",start),liEnd=html.indexOf("</li>",end);
+  if(liStart>=0&&liEnd>liStart&&liEnd-liStart<14000)return html.slice(liStart,liEnd+5);
+  return html.slice(Math.max(0,start-700),Math.min(html.length,end+1000));
+}
+function productPriorityInfo(value){
+  const hay=lower(value),labels=[];
+  if(/(?:버섯|표고|느타리|목이|송이|고사리|산채|임산물|밤|대추|호두|잣|꿀|약초)/i.test(hay))labels.push("버섯·임산물");
+  if(/(?:쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|과일|채소|농산물|한우|돼지고기|닭고기|계란|우유|축산물|수산물|건어물|김|미역|젓갈|전복|굴|새우)/i.test(hay))labels.push("농·축·수산물");
+  if(/(?:식품|식료품|김치|장류|반찬|떡|한과|생필품|생활용품|세제|위생용품|주방용품)/i.test(hay))labels.push("식품·생활필수품");
+  if(/(?:농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|로컬푸드|생산자|농장|어촌|산촌)/i.test(hay))labels.push("생산자·조합");
+  return{score:labels.length*40,label:labels[0]||""};
 }
 function isDirectProductVideoUrl(url){return /\.(?:mp4|webm|ogv|ogg)(?:$|[?#])/i.test(text(url));}
 function isTrustedVideoPage(url){try{const u=new URL(url),host=lower(u.hostname);return host==="youtu.be"||host.endsWith("youtube.com")||host.endsWith("youtube-nocookie.com")||host==="vimeo.com"||host.endsWith(".vimeo.com");}catch(_e){return false;}}
@@ -824,35 +875,37 @@ function productOffer(node){
 function productIdSeed(url,name){let h=0;const value=String(url||"")+"|"+String(name||"");for(let i=0;i<value.length;i++)h=((h<<5)-h+value.charCodeAt(i))|0;return"product_ref_"+Math.abs(h).toString(36)+"_"+value.length.toString(36);}
 function productRowsFromHtml(html,pageUrl,supplier,max){
   const out=[],seen=new Set(),supplierSiteUrl=absoluteHttpUrl(pageUrl,first(supplier&&supplier.supplierSiteUrl,supplier&&supplier.url,pageUrl)),supplierName=first(supplier&&supplier.supplierName,supplier&&supplier.title,supplier&&supplier.name);
-  const add=(row)=>{const productUrl=absoluteHttpUrl(pageUrl,row&&row.productUrl);const productName=stripHtml(first(row&&row.productName,row&&row.title));if(!productUrl||!productName||seen.has(productUrl.toLowerCase()))return;if(supplierSiteUrl&&!sameSite(supplierSiteUrl,productUrl))return;seen.add(productUrl.toLowerCase());const imageUrl=absoluteHttpUrl(productUrl,row&&row.imageUrl),videoUrl=absoluteHttpUrl(productUrl,first(row&&row.videoUrl,row&&row.videoContentUrl,row&&row.videoEmbedUrl)),videoContentUrl=absoluteHttpUrl(productUrl,row&&row.videoContentUrl),videoEmbedUrl=absoluteHttpUrl(productUrl,row&&row.videoEmbedUrl),videoThumbnailUrl=absoluteHttpUrl(productUrl,row&&row.videoThumbnailUrl);out.push({id:productIdSeed(productUrl,productName),entityKind:"product_reference",productName,title:productName,productUrl,url:productUrl,imageUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageOriginalUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageSource:text(row&&row.imageSource)||"unresolved",videoUrl,videoContentUrl,videoEmbedUrl,videoThumbnailUrl:isProductImageUrl(videoThumbnailUrl)?videoThumbnailUrl:"",videoSource:text(row&&row.videoSource)||"unresolved",supplierName:supplierName||text(row&&row.supplierName),supplierSiteUrl,sourcePageUrl:pageUrl,price:text(row&&row.price),priceCurrency:text(row&&row.priceCurrency),availability:text(row&&row.availability),jsonLdProduct:row&&row.jsonLdProduct===true,offerPresent:row&&row.offerPresent===true,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});};
+  const add=(row)=>{const productUrl=absoluteHttpUrl(pageUrl,row&&row.productUrl);const productName=stripHtml(first(row&&row.productName,row&&row.title));if(!productUrl||!productName||seen.has(productUrl.toLowerCase()))return;if(supplierSiteUrl&&!sameSite(supplierSiteUrl,productUrl))return;seen.add(productUrl.toLowerCase());const imageUrl=absoluteHttpUrl(productUrl,row&&row.imageUrl),videoUrl=absoluteHttpUrl(productUrl,first(row&&row.videoUrl,row&&row.videoContentUrl,row&&row.videoEmbedUrl)),videoContentUrl=absoluteHttpUrl(productUrl,row&&row.videoContentUrl),videoEmbedUrl=absoluteHttpUrl(productUrl,row&&row.videoEmbedUrl),videoThumbnailUrl=absoluteHttpUrl(productUrl,row&&row.videoThumbnailUrl);const priority=productPriorityInfo(productName+" "+(supplierName||text(row&&row.supplierName))+" "+productUrl);out.push({id:productIdSeed(productUrl,productName),entityKind:"product_reference",productName,title:productName,productUrl,url:productUrl,imageUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageOriginalUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageSource:text(row&&row.imageSource)||"unresolved",videoUrl,videoContentUrl,videoEmbedUrl,videoThumbnailUrl:isProductImageUrl(videoThumbnailUrl)?videoThumbnailUrl:"",videoSource:text(row&&row.videoSource)||"unresolved",supplierName:supplierName||text(row&&row.supplierName),supplierSiteUrl,sourcePageUrl:pageUrl,price:text(row&&row.price),priceCurrency:text(row&&row.priceCurrency),availability:text(row&&row.availability),jsonLdProduct:row&&row.jsonLdProduct===true,offerPresent:row&&row.offerPresent===true,priorityScore:Math.max(Number(row&&row.priorityScore)||0,priority.score),priorityLabel:text(row&&row.priorityLabel)||priority.label,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});};
   const nodes=jsonLdNodesDeep(html);
   for(const node of nodes){
     if(!/\bProduct\b/i.test(nodeType(node)))continue;
-    const offer=productOffer(node),productUrl=absoluteHttpUrl(pageUrl,first(node.url,node["@id"],plain(node.mainEntityOfPage)["@id"],canonicalPageUrl(html,pageUrl))),imageUrl=imageFromValue(node.image,productUrl||pageUrl),video=videoInfoFromValue(node.video,productUrl||pageUrl);
-    add({productName:first(node.name,node.headline),productUrl,imageUrl,imageSource:imageUrl?"json_ld_product":"",videoUrl:video.videoUrl,videoContentUrl:video.videoContentUrl,videoEmbedUrl:video.videoEmbedUrl,videoThumbnailUrl:video.videoThumbnailUrl,videoSource:video.videoSource,price:offer.price,priceCurrency:offer.priceCurrency,availability:offer.availability,supplierName:offer.sellerName,jsonLdProduct:true,offerPresent:!!(node.offers||offer.price)});
+    const explicit=first(node.url,node["@id"],plain(node.mainEntityOfPage)["@id"]),resolved=absoluteHttpUrl(pageUrl,explicit),productUrl=resolved||(isProductDetailUrl(pageUrl)?canonicalPageUrl(html,pageUrl):"");
+    if(!productUrl)continue;
+    const offer=productOffer(node),imageUrl=imageFromValue(node.image,productUrl||pageUrl),video=videoInfoFromValue(node.video,productUrl||pageUrl),priority=productPriorityInfo(first(node.name,node.headline)+" "+supplierName);
+    add({productName:first(node.name,node.headline),productUrl,imageUrl,imageSource:imageUrl?"json_ld_product":"",videoUrl:video.videoUrl,videoContentUrl:video.videoContentUrl,videoEmbedUrl:video.videoEmbedUrl,videoThumbnailUrl:video.videoThumbnailUrl,videoSource:video.videoSource,price:offer.price,priceCurrency:offer.priceCurrency,availability:offer.availability,supplierName:offer.sellerName,jsonLdProduct:true,offerPresent:!!(node.offers||offer.price),priorityScore:priority.score,priorityLabel:priority.label});
   }
-  const anchorRx=/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;let match;
-  while((match=anchorRx.exec(String(html||"")))&&out.length<(max||60)){
-    const href=absoluteHttpUrl(pageUrl,match[1]);if(!href||!/(?:\/product(?:s)?\/|\/goods(?:\/|\?|$)|\/item(?:\/|\?|$)|\/shop\/|\/detail(?:\/|\?|$)|product_no=|goodsno=|itemid=|productid=)/i.test(href))continue;
-    const inner=match[2],label=stripHtml(inner).replace(/\s+/g," ").trim();if(!label||label.length<2||label.length>220||/^(상품|제품|보기|상세|더보기|구매|shop|view|detail)$/i.test(label))continue;
-    const imageUrl=imageAttrFromHtml(inner,href);
-    add({productName:label,productUrl:href,imageUrl,imageSource:imageUrl?"product_anchor_image":"",jsonLdProduct:false,offerPresent:false});
+  const sourceHtml=String(html||""),anchorRx=/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;let match;
+  while((match=anchorRx.exec(sourceHtml))&&out.length<(max||60)){
+    const href=absoluteHttpUrl(pageUrl,match[1]);if(!href||!isProductDetailUrl(href))continue;
+    const inner=match[2],context=productBlockContext(sourceHtml,match.index,anchorRx.lastIndex),label=nearbyProductName(context,inner);if(!label)continue;
+    const imageUrl=imageAttrFromHtml(inner,href)||imageAttrFromHtml(context,href),priority=productPriorityInfo(label+" "+supplierName+" "+href);
+    add({productName:label,productUrl:href,imageUrl,imageSource:imageUrl?"product_list_context":"",jsonLdProduct:false,offerPresent:false,priorityScore:priority.score,priorityLabel:priority.label});
   }
   const pageType=metaContent(html,["og:type"]),ogTitle=metaContent(html,["og:title","twitter:title"]),itemPropImage=((String(html).match(/<(?:meta|link)\b[^>]*itemprop\s*=\s*["']image["'][^>]*(?:content|href)\s*=\s*["']([^"']+)["'][^>]*>/i)||[])[1]||""),ogImage=absoluteHttpUrl(pageUrl,metaContent(html,["og:image:secure_url","og:image","twitter:image"])||itemPropImage),pageVideo=videoInfoFromHtml(html,pageUrl);
-  if(/product/i.test(pageType)||(/(?:\/product(?:s)?\/|\/goods(?:\/|\?|$)|\/item(?:\/|\?|$)|product_no=|goodsno=|itemid=)/i.test(pageUrl)&&ogTitle))add({productName:ogTitle||stripHtml((String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]),productUrl:canonicalPageUrl(html,pageUrl),imageUrl:ogImage,imageSource:ogImage?"open_graph":"",videoUrl:pageVideo.videoUrl,videoContentUrl:pageVideo.videoContentUrl,videoEmbedUrl:pageVideo.videoEmbedUrl,videoThumbnailUrl:pageVideo.videoThumbnailUrl,videoSource:pageVideo.videoSource,jsonLdProduct:false,offerPresent:false});
+  if(/product/i.test(pageType)||isProductDetailUrl(pageUrl)){const pageName=ogTitle||stripHtml((String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]),priority=productPriorityInfo(pageName+" "+supplierName+" "+pageUrl);add({productName:pageName,productUrl:canonicalPageUrl(html,pageUrl),imageUrl:ogImage,imageSource:ogImage?"open_graph":"",videoUrl:pageVideo.videoUrl,videoContentUrl:pageVideo.videoContentUrl,videoEmbedUrl:pageVideo.videoEmbedUrl,videoThumbnailUrl:pageVideo.videoThumbnailUrl,videoSource:pageVideo.videoSource,jsonLdProduct:false,offerPresent:false,priorityScore:priority.score,priorityLabel:priority.label});}
   return out.slice(0,max||60);
 }
 function catalogPageUrls(html,baseUrl){
   const out=[],seen=new Set(),rx=/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;let m;
   while((m=rx.exec(String(html||"")))){
     const label=stripHtml(m[2]).replace(/\s+/g," ").trim(),href=absoluteHttpUrl(baseUrl,m[1]);if(!href||!sameSite(baseUrl,href))continue;
-    if(!/(상품|제품|쇼핑|스토어|공식몰|카탈로그|product|products|shop|store|catalog|collection)/i.test(label+" "+href))continue;
-    if(seen.has(href)||href===baseUrl)continue;seen.add(href);out.push(href);if(out.length>=4)break;
+    if(!/(상품|제품|쇼핑|스토어|공식몰|카탈로그|농산물|축산물|수산물|임산물|버섯|식품|생필품|생활용품|로컬푸드|product|products|shop|store|catalog|collection)/i.test(label+" "+href))continue;
+    if(seen.has(href)||href===baseUrl)continue;seen.add(href);out.push(href);if(out.length>=6)break;
   }
   return out;
 }
 async function fetchProductHtml(url,controller){
-  try{const response=await fetch(url,{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-ProductReferenceResearch/1.0 (+https://igdcglobal.com)"}});if(!response.ok)return{ok:false,status:"http_"+response.status,url,html:""};const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return{ok:false,status:"non_html",url:response.url||url,html:""};const length=Number(response.headers.get("content-length")||0);if(length>800000)return{ok:false,status:"page_too_large",url:response.url||url,html:""};return{ok:true,status:"ok",url:response.url||url,html:(await response.text()).slice(0,800000)};}catch(error){return{ok:false,status:providerErrorCode(error),url,html:"",detail:providerErrorDetail(error)};}
+  try{const response=await fetch(url,{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-ProductReferenceResearch/1.0 (+https://igdcglobal.com)"}});if(!response.ok)return{ok:false,status:"http_"+response.status,url,html:""};const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return{ok:false,status:"non_html",url:response.url||url,html:""};const length=Number(response.headers.get("content-length")||0);if(length>1800000)return{ok:false,status:"page_too_large",url:response.url||url,html:""};return{ok:true,status:"ok",url:response.url||url,html:(await response.text()).slice(0,1400000)};}catch(error){return{ok:false,status:providerErrorCode(error),url,html:"",detail:providerErrorDetail(error)};}
 }
 async function discoverSupplierProductsStep(supplier,params){
   const source=plain(supplier),supplierSiteUrl=absoluteHttpUrl(first(source.url,source.supplierSiteUrl),first(source.url,source.supplierSiteUrl));if(!supplierSiteUrl)return{ok:true,items:[],trace:{source:"supplier-product-discovery",status:"supplier_url_missing",count:0}};
@@ -868,7 +921,8 @@ async function discoverSupplierProductsStep(supplier,params){
   }finally{clearTimeout(timer);}
 }
 function prepareProductInspectionPool(rawItems,params){
-  const limit=Math.max(20,Math.min(300,Number(params&&params.limit)||120)),out=[],seen=new Set();for(const item of array(rawItems)){const url=absoluteHttpUrl(item&&item.productUrl,item&&item.productUrl);if(!url||seen.has(url.toLowerCase()))continue;seen.add(url.toLowerCase());out.push(item);if(out.length>=limit)break;}return out;
+  const limit=Math.max(20,Math.min(300,Number(params&&params.limit)||120)),ranked=array(rawItems).slice().sort((a,b)=>Number(!!b.imageUrl)-Number(!!a.imageUrl)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||text(a.productName).localeCompare(text(b.productName))),out=[],seen=new Set();
+  for(const item of ranked){const url=absoluteHttpUrl(item&&item.productUrl,item&&item.productUrl);if(!url||seen.has(url.toLowerCase())||!isProductDetailUrl(url))continue;seen.add(url.toLowerCase());out.push(item);if(out.length>=limit)break;}return out;
 }
 async function inspectProductCandidate(item){
   const row=plain(item),productUrl=absoluteHttpUrl(row.productUrl,row.productUrl),supplierSiteUrl=absoluteHttpUrl(row.supplierSiteUrl,row.supplierSiteUrl);if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false,inspectionComplete:true});

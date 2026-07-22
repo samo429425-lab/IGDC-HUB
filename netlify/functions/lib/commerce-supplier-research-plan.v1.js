@@ -10,7 +10,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const VERSION = "commerce-supplier-research-plan-v1.0.0-searchbank-psom-policy-bridge";
+const VERSION = "commerce-supplier-research-plan-v1.1.0-essentials-agri-cooperative-priority";
 
 function text(value){ return String(value == null ? "" : value).trim(); }
 function lower(value){ return text(value).toLowerCase(); }
@@ -56,6 +56,8 @@ function words(value){
 }
 
 const KR_FOUNDATION_QUERIES = Object.freeze([
+  "대한민국 생활필수품 식료품 농수축임산물 생산자 농협 축협 수협 산림조합 협동조합 공식몰 직거래 배송 반품 환불 고객센터",
+  "대한민국 표고버섯 느타리버섯 목이버섯 버섯 재배 농가 산림조합 영농조합법인 공식몰 직거래 택배",
   "대한민국 농협 축협 수협 산림조합 협동조합 로컬푸드 직매장 공식몰 직거래 배송 반품 고객센터",
   "대한민국 사과 농장 참외 농장 토마토 농장 딸기 농장 버섯 재배 고사리 농가 영농조합법인 직거래 택배",
   "대한민국 농업회사법인 식품 제조업체 가공식품 공장 생산자 공식 온라인몰 배송 반품 환불 고객센터",

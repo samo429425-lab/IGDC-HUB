@@ -20,7 +20,7 @@ const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 
-const VERSION = "commerce-country-automation-v2.2.0-review-navigation-product-media";
+const VERSION = "commerce-country-automation-v2.3.0-stateful-product-thumbnails-priority";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1261,6 +1261,25 @@ function productUrl(item) { return safeUrl(first(item && item.productUrl, item &
 function productImageUrl(item) { return safeUrl(first(item && item.imageUrl, item && item.imageOriginalUrl)); }
 function productVideoUrl(item) { return safeUrl(first(item && item.videoUrl, item && item.videoContentUrl, item && item.videoEmbedUrl)); }
 function productVideoThumbnailUrl(item) { return safeUrl(first(item && item.videoThumbnailUrl, item && item.videoPosterUrl)); }
+function isSpecificProductUrl(value) {
+  const url = safeUrl(value); if (!url) return false;
+  try {
+    const parsed = new URL(url), pathName = lower(parsed.pathname), query = lower(parsed.search);
+    if (/[?&](goodsno|product_no|productno|itemid|item_id|productid|product_id|sku)=[^&#]+/i.test(query)) return true;
+    if (/(goods_view|product_view|item_view|product_detail|goods_detail)\.php/i.test(pathName)) return true;
+    if (/(goods_list|product_list|products_list|item_list|category|categories|catalog|collection|collections)([._/\-]|$)/i.test(pathName)) return false;
+    if (/\/goods\/goods_view\.php$/i.test(pathName)) return true;
+    return /\/(product|products|item|detail|goods|p)\/[^/?#]{2,}/i.test(pathName);
+  } catch (_error) { return false; }
+}
+function merchandisePriority(value) {
+  const hay = lower(value), labels = [];
+  if (/(버섯|표고|느타리|목이|송이|고사리|산채|임산물|밤|대추|호두|잣|꿀|약초)/i.test(hay)) labels.push("버섯·임산물");
+  if (/(쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|과일|채소|농산물|한우|돼지고기|닭고기|계란|우유|축산물|수산물|건어물|김|미역|젓갈|전복|굴|새우)/i.test(hay)) labels.push("농·축·수산물");
+  if (/(식품|식료품|김치|장류|반찬|떡|한과|생필품|생활용품|세제|위생용품|주방용품)/i.test(hay)) labels.push("식품·생활필수품");
+  if (/(농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|로컬푸드|생산자|농장|어촌|산촌)/i.test(hay)) labels.push("생산자·조합");
+  return { score: labels.length * 40, label: labels[0] || "" };
+}
 function mergeProductRows(existing, incoming, max) {
   const out = [], map = new Map();
   for (const row of array(existing).concat(array(incoming))) {
@@ -1275,6 +1294,8 @@ function mergeProductRows(existing, incoming, max) {
       videoContentUrl: safeUrl(first(row && row.videoContentUrl, row && row.videoUrl)),
       videoEmbedUrl: safeUrl(row && row.videoEmbedUrl),
       videoThumbnailUrl: productVideoThumbnailUrl(row),
+      priorityScore: Math.max(Number(row && row.priorityScore) || 0, merchandisePriority(text(row && row.productName) + " " + text(row && row.supplierName) + " " + url).score),
+      priorityLabel: text(row && row.priorityLabel) || merchandisePriority(text(row && row.productName) + " " + text(row && row.supplierName) + " " + url).label,
       slotDecision: text(row && row.slotDecision) || "undecided",
       inspectionComplete: row && row.inspectionComplete === true,
       publicPublication: false,
@@ -1300,16 +1321,24 @@ function productProgress(job) {
 }
 function publicProductJob(job) {
   if (!job) return { ok: true, reportType: "igdc-country-product-reference-research-status", version: VERSION, status: "not_started", products: [] };
-  const inspectedProducts = array(job.products), visibleProducts = mergeProductRows(job.rawProducts, inspectedProducts, 300);
+  const inspectedProducts = array(job.products), mergedProducts = mergeProductRows(job.rawProducts, inspectedProducts, 300);
+  const visibleProducts = mergedProducts.filter((row) => row && (row.jsonLdProduct === true || isSpecificProductUrl(productUrl(row)))).sort((a,b) =>
+    Number(!!productImageUrl(b)) - Number(!!productImageUrl(a)) ||
+    Number(b.priorityScore || 0) - Number(a.priorityScore || 0) ||
+    Number(b.inspectionComplete === true) - Number(a.inspectionComplete === true) ||
+    text(a.productName || a.title).localeCompare(text(b.productName || b.title))
+  );
   return {
-    ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, jobId: job.jobId, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
+    ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, jobVersion: text(job.version), needsRefresh: text(job.version) !== VERSION, jobId: job.jobId, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
     safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false },
     progress: productProgress(job),
     summary: {
       suppliers: array(job.supplierSources).length,
       suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
-      discovered: array(job.rawProducts).length,
-      inspected: inspectedProducts.length,
+      discovered: visibleProducts.length,
+      discoveredRaw: array(job.rawProducts).length,
+      discardedCategoryOrListPages: Math.max(0, mergedProducts.length - visibleProducts.length),
+      inspected: inspectedProducts.filter((row) => row && (row.jsonLdProduct === true || isSpecificProductUrl(productUrl(row)))).length,
       withImage: visibleProducts.filter((row) => !!productImageUrl(row)).length,
       withVideo: visibleProducts.filter((row) => !!productVideoUrl(row)).length,
       readyForAdminReview: visibleProducts.filter((row) => row.researchStatus === "ready_for_admin_review").length,
@@ -1333,17 +1362,19 @@ function productSupplierSource(row) {
   const strict=evidence.supplierReviewEligible===true||(evidence.official===true&&evidence.responsibleEntity===true&&evidence.directSales===true&&evidence.legalIdentity===true&&evidence.contactChannel===true&&evidence.marketplace!==true);
   if(!strict)return null;
   parsed.pathname="/";parsed.search="";parsed.hash="";
-  return{supplierId:text(row&&[row.id,row.candidateId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl:parsed.toString(),url:parsed.toString(),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),approvalReady:row&&row.approvalReady===true,sourceCandidateUrl:url,evidenceReady:evidence.supplierReviewEligible===true};
+  const priority=merchandisePriority(title+" "+url+" "+parsed.hostname);
+  return{supplierId:text(row&&[row.id,row.candidateId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl:parsed.toString(),url:parsed.toString(),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),approvalReady:row&&row.approvalReady===true,sourceCandidateUrl:url,evidenceReady:evidence.supplierReviewEligible===true,priorityScore:priority.score,priorityLabel:priority.label};
 }
 async function beginProductResearchJob(actorId, input) {
   const raw = plain(input), scope = researchScope(raw), existing = await productJobRule(scope);
   if (existing && existing.schema === PRODUCT_JOB_SCHEMA && raw.restart !== true && !["cancelled","failed"].includes(existing.status)) return publicProductJob(existing);
   const supplierJob = await researchJobRule(scope);
   if (!supplierJob || !["complete","committed"].includes(supplierJob.status) || !array(supplierJob.candidates).length) { const error = new Error("책임 공급업체 단계별 리서치를 먼저 완료해야 공식 상품 목록을 조사할 수 있습니다."); error.statusCode = 409; throw error; }
-  const supplierSources = []; const seenSupplierSites = new Set();
-  for (const row of array(supplierJob.candidates)) { const source=productSupplierSource(row); if(!source)continue; const key=lower(source.supplierSiteUrl); if(seenSupplierSites.has(key))continue; seenSupplierSites.add(key); supplierSources.push(source); if(supplierSources.length>=12)break; }
+  const sourcePool = []; const seenSupplierSites = new Set();
+  for (const row of array(supplierJob.candidates)) { const source=productSupplierSource(row); if(!source)continue; const key=lower(source.supplierSiteUrl); if(seenSupplierSites.has(key))continue; seenSupplierSites.add(key); sourcePool.push(source); }
+  const supplierSources = sourcePool.sort((a,b)=>Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,12);
   if(!supplierSources.length){const error=new Error("완료된 공급업체 후보 중 공식 판매 사이트·법적 신원·직접 판매 증빙을 갖춘 상품 조사 출처가 없습니다. 공급업체 후보의 잡음과 증빙 상태를 먼저 정리하세요.");error.statusCode=409;throw error;}
-  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, discoveryCursor: 0, rawProducts: [], inspectionPool: [], inspectCursor: 0, products: [], trace: [{ at: now, source: "product-research-job", status: "started", suppliers: supplierSources.length, sourcePolicy: "official_direct_sales_legal_identity_only" }], errors: [], lastError: null };
+  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, discoveryCursor: 0, rawProducts: [], inspectionPool: [], inspectCursor: 0, products: [], trace: [{ at: now, source: "product-research-job", status: "started", suppliers: supplierSources.length, sourcePolicy: "official_direct_sales_legal_identity_only; essentials_agriculture_cooperative_priority" }], errors: [], lastError: null };
   await saveProductJob(job, actorId); return publicProductJob(job);
 }
 async function productResearchJobStatus(input) { return publicProductJob(await productJobRule(researchScope(input))); }
