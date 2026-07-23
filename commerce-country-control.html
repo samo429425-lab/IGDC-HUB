@@ -39,7 +39,9 @@
     .product-actions button{padding:8px 10px;font-size:12px}
     .product-verification-note{font-size:12px;line-height:1.55;color:#ffdca1}
     @media(max-width:620px){.product-grid{grid-template-columns:1fr}#aiPanel table{font-size:13px}}
-  </style>
+  
+    .scope-audit-panel{border-color:#3e6388;background:linear-gradient(180deg,#10233a 0%,#0d1b2d 100%)}.scope-audit-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.scope-audit-title{margin:0;font-size:18px}.scope-audit-actions{display:flex;gap:8px;flex-wrap:wrap}.scope-audit-status{margin-top:10px;padding:10px 12px;border:1px solid #355677;border-radius:9px;background:#091525;color:#cfe5ff;line-height:1.55}.scope-audit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:9px;margin-top:10px}.scope-audit-detail{margin-top:10px;background:#091525;border:1px solid #29425f;border-radius:10px;padding:11px;line-height:1.55}.scope-audit-detail ul{margin:7px 0 0;padding-left:20px}.scope-audit-table{margin-top:10px;overflow:auto;border:1px solid #29425f;border-radius:10px}.scope-audit-table table{min-width:780px}.scope-audit-empty{padding:14px;color:#9fb3cb}.linkbtn.active{border-color:var(--blue);background:#0d3555}.review-return-note{margin-top:9px;padding:9px 11px;border:1px solid #355677;border-radius:9px;background:#0a2136;color:#c9e7ff;font-size:12px;line-height:1.5}.supplier-primary-link,.supplier-review-link,.supplier-url{font-size:14px!important;line-height:1.55}.supplier-primary-link{font-weight:900;color:#9edcff}.supplier-review-link{display:inline-block;margin-top:5px;padding:5px 8px;border:1px solid #3d668f;border-radius:7px;background:#122a43;color:#d8ecff;text-decoration:none}.supplier-url{display:inline-block;margin-top:5px;color:#b9d4ee;word-break:break-all}.tablewrap td .small{font-size:13px;line-height:1.6}.tablewrap .pill{font-size:11px;padding:3px 8px}
+</style>
 </head>
 <body>
 <main>
@@ -138,8 +140,20 @@
   </section>
 
   <section class="panel">
-    <h2>선택 범위에 귀속되는 기존 점검 페이지</h2>
-    <div id="scopeLinks" class="links"></div>
+    <h2>선택 범위 통합 점검</h2>
+    <div class="small">별도 페이지로 이동하지 않고 현재 국가·권역 관제 안에서 상품 후보 대기열과 실상품 공개 준비 상태를 일관되게 확인합니다.</div>
+    <div id="scopeLinks" class="links" style="margin-top:10px"></div>
+  </section>
+
+  <section id="scopeAuditPanel" class="panel scope-audit-panel hidden" aria-live="polite">
+    <div class="scope-audit-head">
+      <div><h2 id="scopeAuditTitle" class="scope-audit-title">선택 범위 점검</h2><div id="scopeAuditScope" class="small"></div></div>
+      <div class="scope-audit-actions"><button id="scopeAuditRefreshBtn" type="button" class="ghost">현재 범위 다시 점검</button><button id="scopeAuditDownloadBtn" type="button" class="secondary" disabled>점검 JSON 다운로드</button><button id="scopeAuditCloseBtn" type="button" class="secondary">닫기</button></div>
+    </div>
+    <div id="scopeAuditStatus" class="scope-audit-status">점검 버튼을 누르면 현재 범위의 저장 원장을 읽습니다.</div>
+    <div id="scopeAuditGrid" class="scope-audit-grid"></div>
+    <div id="scopeAuditDetail" class="scope-audit-detail hidden"></div>
+    <div id="scopeAuditRows" class="scope-audit-table hidden"></div>
   </section>
 
   <section id="summaryPanel" class="panel hidden">
@@ -156,14 +170,14 @@
   <section id="aiPanel" class="panel hidden">
     <h2>책임 공급업체 비공개 후보</h2>
     <div class="small">AI가 확인된 증빙을 근거로 신뢰등급 1~10, 추천 순위, 강점·주의사항·다음 확인 항목을 제공합니다. ‘확인’은 업체 검증을 계속할 대상으로 표시할 뿐이며, AI 추천도 신뢰 게이트를 우회하지 않습니다. 사업체·판매 책임·결제·배송·반품·환불·고객지원 확인과 별도 상품 선별이 끝나기 전에는 공개하지 않습니다.</div>
-    <div class="review-return-note">업체명·원본 주소·원본 사이트 링크는 현재 탭에서 엽니다. 외부 페이지를 확인한 뒤 브라우저 좌상단의 뒤로가기를 누르면 이 관리자 목록과 기존 스크롤 위치로 돌아옵니다.</div>
+    <div class="review-return-note">업체명·원본 주소·원본 사이트 링크는 브라우저 최상위 현재 탭에서 엽니다. 외부 페이지를 확인한 뒤 브라우저 좌상단의 뒤로가기를 누르면 이 관리자 목록과 기존 스크롤 위치로 돌아옵니다.</div>
     <div class="tablewrap"><table><thead><tr><th>책임 공급업체</th><th>업체 유형</th><th>직접 판매·책임 증빙</th><th>AI 신뢰등급·추천</th><th>현재 상태</th><th>관리자 판정</th></tr></thead><tbody id="aiRows"></tbody></table></div>
   </section>
 
   <section id="productResearchPanel" class="panel">
     <div class="panel-heading"><h2>공식 상품 이미지·원본 링크 리서치</h2></div>
     <div class="small">완료된 책임 공급업체 후보 중 공식 판매 사이트·직접 판매·법적 신원 증빙을 갖춘 출처에서 실제 상품 상세페이지를 찾아 상품 이미지, 상품명, 상품 원본 페이지, 이미지 원본, 상품 영상(확인 가능한 경우), 업체 사이트를 함께 표시합니다. 식품·생활필수품과 농·축·수·임산물, 버섯·산림조합·생산자·협동조합 상품을 먼저 점검하되 다른 신뢰 상품을 제외하지 않습니다. 카테고리 페이지는 상품으로 오인하지 않으며, 상세페이지 검증을 마친 상품만 슬롯 후보로 지정할 수 있습니다. 회사 로고는 상품 이미지로 대체하지 않고 관리자 확인 전에는 슬롯이나 공개 페이지에 반영하지 않습니다.</div>
-    <div class="review-return-note">상품 이미지·영상·원본 페이지·업체 사이트 링크는 현재 탭에서 엽니다. 확인 후 브라우저 좌상단의 뒤로가기를 누르면 기존 검색·조사 상태를 다시 시작하지 않고, 보던 상품 카드와 스크롤 위치로 복귀합니다.</div>
+    <div class="review-return-note">상품 이미지·영상·원본 페이지·업체 사이트 링크는 브라우저 최상위 현재 탭에서 엽니다. 확인 후 브라우저 좌상단의 뒤로가기를 누르면 기존 검색·조사 상태를 다시 시작하지 않고, 보던 상품 카드와 스크롤 위치로 복귀합니다.</div>
     <div class="operation-actions">
       <button id="productResearchBtn" type="button" class="ghost" disabled>공식 상품 목록 리서치</button>
       <button id="productResearchPauseBtn" type="button" class="secondary" disabled>상품 조사 일시정지</button>
@@ -240,7 +254,7 @@
 </div>
 
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-country-control.js?v=21"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=23"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=2"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=1"></script>
 </body>

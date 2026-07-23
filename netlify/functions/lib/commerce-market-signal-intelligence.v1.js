@@ -13,7 +13,7 @@
 
 const SlotStore = require("./global-slot-console-supabase");
 
-const VERSION = "commerce-market-signal-intelligence-v1.2.0-explicit-apply-criteria";
+const VERSION = "commerce-market-signal-intelligence-v1.3.0-versioned-evidence-gate";
 const SIGNAL_JOB_SCHEMA = "igdc-market-signal-persisted-research.v1";
 const SIGNAL_JOB_PREFIX = "igdc_market_signal_job_";
 const POLICY_PREFIX = "igdc_market_signal_";
@@ -138,7 +138,7 @@ function publicSignalJob(job){
 }
 async function beginSignalJob(actorId,options){
   const raw=plain(options),scope=signalJobScope(raw),existing=await signalJobRule(scope.scopeType,scope.context.regionGroup);
-  if(existing&&existing.schema===SIGNAL_JOB_SCHEMA&&raw.restart!==true&&!['failed','cancelled'].includes(existing.status))return publicSignalJob(existing);
+  if(existing&&existing.schema===SIGNAL_JOB_SCHEMA&&existing.version===VERSION&&raw.restart!==true&&!['failed','cancelled'].includes(existing.status))return publicSignalJob(existing);
   const now=iso(),queries=querySet(scope.scopeType,scope.context),job={schema:SIGNAL_JOB_SCHEMA,version:VERSION,jobId:"market_signal_"+scope.scopeType+"_"+Math.random().toString(36).slice(2,14),scopeType:scope.scopeType,context:scope.context,status:queries.length?"collecting":"analyzing",queries,queryCursor:0,evidence:[],trace:[{at:now,source:"market-signal-job",status:"started",queries:queries.length}],errors:[],lastError:null,startedAt:now,finishedAt:null,report:null};await saveSignalJob(job,actorId);return publicSignalJob(job);
 }
 async function signalJobStatus(options){const scope=signalJobScope(options);return publicSignalJob(await signalJobRule(scope.scopeType,scope.context.regionGroup));}

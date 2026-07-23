@@ -20,7 +20,7 @@ const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 
-const VERSION = "commerce-country-automation-v2.3.0-stateful-product-thumbnails-priority";
+const VERSION = "commerce-country-automation-v2.4.0-consistent-control-product-detail-discovery";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1265,11 +1265,11 @@ function isSpecificProductUrl(value) {
   const url = safeUrl(value); if (!url) return false;
   try {
     const parsed = new URL(url), pathName = lower(parsed.pathname), query = lower(parsed.search);
-    if (/[?&](goodsno|product_no|productno|itemid|item_id|productid|product_id|sku)=[^&#]+/i.test(query)) return true;
-    if (/(goods_view|product_view|item_view|product_detail|goods_detail)\.php/i.test(pathName)) return true;
+    if (/[?&](goodsno|goods_no|goodsid|goods_id|goodscd|product_no|productno|productid|product_id|productseq|product_seq|prdno|prd_no|itemid|item_id|itemno|item_no|sku|branduid|uid)=[^&#]+/i.test(query)) return true;
+    if (/(goods_view|product_view|item_view|product_detail|goods_detail|goodsdetail|productdetail|shopdetail)\.(?:php|html?)/i.test(pathName)) return true;
     if (/(goods_list|product_list|products_list|item_list|category|categories|catalog|collection|collections)([._/\-]|$)/i.test(pathName)) return false;
-    if (/\/goods\/goods_view\.php$/i.test(pathName)) return true;
-    return /\/(product|products|item|detail|goods|p)\/[^/?#]{2,}/i.test(pathName);
+    if (/\/(?:dp\/prod|goods\/view|product\/detail|products?\/[^/?#]{2,}|items?\/[^/?#]{2,}|detail\/[^/?#]{2,}|goods\/[^/?#]{2,}|prd\/[^/?#]{2,}|p\/[^/?#]{2,})/i.test(pathName)) return true;
+    return false;
   } catch (_error) { return false; }
 }
 function merchandisePriority(value) {
@@ -1277,6 +1277,7 @@ function merchandisePriority(value) {
   if (/(버섯|표고|느타리|목이|송이|고사리|산채|임산물|밤|대추|호두|잣|꿀|약초)/i.test(hay)) labels.push("버섯·임산물");
   if (/(쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|과일|채소|농산물|한우|돼지고기|닭고기|계란|우유|축산물|수산물|건어물|김|미역|젓갈|전복|굴|새우)/i.test(hay)) labels.push("농·축·수산물");
   if (/(식품|식료품|김치|장류|반찬|떡|한과|생필품|생활용품|세제|위생용품|주방용품)/i.test(hay)) labels.push("식품·생활필수품");
+  if (/(화장품|뷰티|스킨케어|세럼|크림|로션|선크림|샴푸|린스|클렌징|마스크팩|메이크업|향수|personal care|beauty|cosmetic|skincare)/i.test(hay)) labels.push("뷰티·개인용품");
   if (/(농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|로컬푸드|생산자|농장|어촌|산촌)/i.test(hay)) labels.push("생산자·조합");
   return { score: labels.length * 40, label: labels[0] || "" };
 }
@@ -1367,7 +1368,7 @@ function productSupplierSource(row) {
 }
 async function beginProductResearchJob(actorId, input) {
   const raw = plain(input), scope = researchScope(raw), existing = await productJobRule(scope);
-  if (existing && existing.schema === PRODUCT_JOB_SCHEMA && raw.restart !== true && !["cancelled","failed"].includes(existing.status)) return publicProductJob(existing);
+  if (existing && existing.schema === PRODUCT_JOB_SCHEMA && existing.version === VERSION && raw.restart !== true && !["cancelled","failed"].includes(existing.status)) return publicProductJob(existing);
   const supplierJob = await researchJobRule(scope);
   if (!supplierJob || !["complete","committed"].includes(supplierJob.status) || !array(supplierJob.candidates).length) { const error = new Error("책임 공급업체 단계별 리서치를 먼저 완료해야 공식 상품 목록을 조사할 수 있습니다."); error.statusCode = 409; throw error; }
   const sourcePool = []; const seenSupplierSites = new Set();
