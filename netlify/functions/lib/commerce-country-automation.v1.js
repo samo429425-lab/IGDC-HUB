@@ -19,14 +19,16 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
+const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-country-automation-v2.4.0-consistent-control-product-detail-discovery";
+const VERSION = "commerce-country-automation-v2.5.0-risk-first-product-ranking-section-dedupe";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
 const PRODUCT_JOB_PREFIX = "igdc_product_research_job_";
 const PRODUCT_JOB_SCHEMA = "igdc-country-product-reference-research-job.v1";
 const SOURCE_REF = "commerce-country-supplier-discovery";
+const PRODUCT_SOURCE_REF = "country-product-ranking-review";
 const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_INTERVAL_DAYS = 7;
 const DEFAULT_MAX_CANDIDATES = 20;
@@ -1257,21 +1259,11 @@ async function saveProductJob(job, actorId) {
   if (!job.createdAt) { job.createdAt = now; row.created_at = now; }
   await SlotStore.insert("gslot_policies", row, "resolution=merge-duplicates,return=representation"); return job;
 }
-function productUrl(item) { return safeUrl(first(item && item.productUrl, item && item.url)); }
-function productImageUrl(item) { return safeUrl(first(item && item.imageUrl, item && item.imageOriginalUrl)); }
+function productUrl(item) { return ProductRanking.canonicalProductUrl(first(item && item.productUrl, item && item.url)); }
+function productImageUrl(item) { return ProductRanking.safeProductImageUrl(first(item && item.imageUrl, item && item.imageOriginalUrl)); }
 function productVideoUrl(item) { return safeUrl(first(item && item.videoUrl, item && item.videoContentUrl, item && item.videoEmbedUrl)); }
 function productVideoThumbnailUrl(item) { return safeUrl(first(item && item.videoThumbnailUrl, item && item.videoPosterUrl)); }
-function isSpecificProductUrl(value) {
-  const url = safeUrl(value); if (!url) return false;
-  try {
-    const parsed = new URL(url), pathName = lower(parsed.pathname), query = lower(parsed.search);
-    if (/[?&](goodsno|goods_no|goodsid|goods_id|goodscd|product_no|productno|productid|product_id|productseq|product_seq|prdno|prd_no|itemid|item_id|itemno|item_no|sku|branduid|uid)=[^&#]+/i.test(query)) return true;
-    if (/(goods_view|product_view|item_view|product_detail|goods_detail|goodsdetail|productdetail|shopdetail)\.(?:php|html?)/i.test(pathName)) return true;
-    if (/(goods_list|product_list|products_list|item_list|category|categories|catalog|collection|collections)([._/\-]|$)/i.test(pathName)) return false;
-    if (/\/(?:dp\/prod|goods\/view|product\/detail|products?\/[^/?#]{2,}|items?\/[^/?#]{2,}|detail\/[^/?#]{2,}|goods\/[^/?#]{2,}|prd\/[^/?#]{2,}|p\/[^/?#]{2,})/i.test(pathName)) return true;
-    return false;
-  } catch (_error) { return false; }
-}
+function isSpecificProductUrl(value) { return ProductRanking.isSpecificProductUrl(value); }
 function merchandisePriority(value) {
   const hay = lower(value), labels = [];
   if (/(버섯|표고|느타리|목이|송이|고사리|산채|임산물|밤|대추|호두|잣|꿀|약초)/i.test(hay)) labels.push("버섯·임산물");
@@ -1282,75 +1274,53 @@ function merchandisePriority(value) {
   return { score: labels.length * 40, label: labels[0] || "" };
 }
 function mergeProductRows(existing, incoming, max) {
-  const out = [], map = new Map();
-  for (const row of array(existing).concat(array(incoming))) {
-    const url = productUrl(row); if (!url) continue; const key = url.toLowerCase();
-    const normalized = Object.assign({}, row, {
-      id: text(row && row.id) || "product_ref_" + sha256(url).slice(0, 22),
-      productUrl: url,
-      url,
-      imageUrl: productImageUrl(row),
-      imageOriginalUrl: productImageUrl(row),
-      videoUrl: productVideoUrl(row),
-      videoContentUrl: safeUrl(first(row && row.videoContentUrl, row && row.videoUrl)),
-      videoEmbedUrl: safeUrl(row && row.videoEmbedUrl),
-      videoThumbnailUrl: productVideoThumbnailUrl(row),
-      priorityScore: Math.max(Number(row && row.priorityScore) || 0, merchandisePriority(text(row && row.productName) + " " + text(row && row.supplierName) + " " + url).score),
-      priorityLabel: text(row && row.priorityLabel) || merchandisePriority(text(row && row.productName) + " " + text(row && row.supplierName) + " " + url).label,
-      slotDecision: text(row && row.slotDecision) || "undecided",
-      inspectionComplete: row && row.inspectionComplete === true,
-      publicPublication: false,
-      automaticImport: false
-    });
-    if (map.has(key)) {
-      const index = map.get(key), previous = out[index];
-      out[index] = Object.assign({}, previous, normalized, {
-        slotDecision: text(previous.slotDecision) && previous.slotDecision !== "undecided" ? previous.slotDecision : normalized.slotDecision,
-        decisionAt: previous.decisionAt || normalized.decisionAt || null,
-        decisionBy: previous.decisionBy || normalized.decisionBy || null,
-        inspectionComplete: previous.inspectionComplete === true || normalized.inspectionComplete === true
-      });
-    } else { map.set(key, out.length); out.push(normalized); }
-    if (out.length >= (max || 300)) break;
-  }
-  return out;
+  return ProductRanking.mergeProductRows(existing, incoming, { limit: max || 300 });
 }
+
 function productProgress(job) {
   const supplierTotal = array(job.supplierSources).length, supplierDone = Math.min(supplierTotal, Number(job.discoveryCursor || 0));
   const inspectTotal = array(job.inspectionPool).length, inspectDone = Math.min(inspectTotal, Number(job.inspectCursor || 0));
   return { stage: job.status, discovery: { done: supplierDone, total: supplierTotal }, inspection: { done: inspectDone, total: inspectTotal }, resumable: !["complete","cancelled"].includes(job.status) };
 }
 function publicProductJob(job) {
-  if (!job) return { ok: true, reportType: "igdc-country-product-reference-research-status", version: VERSION, status: "not_started", products: [] };
-  const inspectedProducts = array(job.products), mergedProducts = mergeProductRows(job.rawProducts, inspectedProducts, 300);
-  const visibleProducts = mergedProducts.filter((row) => row && (row.jsonLdProduct === true || isSpecificProductUrl(productUrl(row)))).sort((a,b) =>
-    Number(!!productImageUrl(b)) - Number(!!productImageUrl(a)) ||
-    Number(b.priorityScore || 0) - Number(a.priorityScore || 0) ||
-    Number(b.inspectionComplete === true) - Number(a.inspectionComplete === true) ||
-    text(a.productName || a.title).localeCompare(text(b.productName || b.title))
-  );
+  if (!job) return { ok: true, reportType: "igdc-country-product-reference-research-status", version: VERSION, rankingVersion: ProductRanking.VERSION, status: "not_started", products: [] };
+  const sourceProducts = array(job.rawProducts).concat(array(job.products));
+  const portfolio = ProductRanking.buildPortfolio(sourceProducts, plain(job.rankingContext));
+  const allRankedProducts = array(portfolio.products);
+  const visibleProducts = allRankedProducts.filter((row) => ProductRanking.isReviewableProduct(row));
   return {
-    ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, jobVersion: text(job.version), needsRefresh: text(job.version) !== VERSION, jobId: job.jobId, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
-    safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false },
+    ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, rankingVersion: ProductRanking.VERSION, rankingPolicy: ProductRanking.POLICY, jobVersion: text(job.version), needsRefresh: text(job.version) !== VERSION, jobId: job.jobId, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
+    safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false, riskGateBeforeRevenueRanking: true, sponsorRequiresApprovedContract: true, sectionAssignmentsAreProposalsOnly: true },
+    rankingContext: plain(job.rankingContext),
     progress: productProgress(job),
     summary: {
       suppliers: array(job.supplierSources).length,
       suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
       discovered: visibleProducts.length,
       discoveredRaw: array(job.rawProducts).length,
-      discardedCategoryOrListPages: Math.max(0, mergedProducts.length - visibleProducts.length),
-      inspected: inspectedProducts.filter((row) => row && (row.jsonLdProduct === true || isSpecificProductUrl(productUrl(row)))).length,
+      discardedCategoryOrListPages: Math.max(0, allRankedProducts.length - visibleProducts.length),
+      exactDuplicatesRemoved: Number(portfolio.summary && portfolio.summary.exactDuplicatesRemoved || 0),
+      inspected: visibleProducts.filter((row) => row.inspectionComplete === true).length,
       withImage: visibleProducts.filter((row) => !!productImageUrl(row)).length,
       withVideo: visibleProducts.filter((row) => !!productVideoUrl(row)).length,
       readyForAdminReview: visibleProducts.filter((row) => row.researchStatus === "ready_for_admin_review").length,
+      rankingEligible: visibleProducts.filter((row) => row.rankingEligible === true).length,
+      riskHeld: visibleProducts.filter((row) => row.rankingEligible !== true).length,
+      supplierEvidenceReady: visibleProducts.filter((row) => row.supplierAssessment && row.supplierAssessment.evidenceReady === true).length,
+      contractReady: visibleProducts.filter((row) => row.commercialAssessment && row.commercialAssessment.contractReady === true).length,
+      releaseReady: visibleProducts.filter((row) => row.releaseReadiness && row.releaseReadiness.releaseEligible === true).length,
+      proposedPlacementProducts: visibleProducts.filter((row) => array(row.sectionAssignments).length > 0).length,
       slotCandidates: visibleProducts.filter((row) => row.slotDecision === "slot_candidate").length,
       held: visibleProducts.filter((row) => row.slotDecision === "hold").length,
-      rejected: visibleProducts.filter((row) => row.slotDecision === "reject").length
+      rejected: visibleProducts.filter((row) => row.slotDecision === "reject").length,
+      sectionCounts: plain(portfolio.summary && portfolio.summary.sectionCounts)
     },
     products: visibleProducts,
+    sectionQueues: plain(portfolio.sectionQueues),
     trace: array(job.trace).slice(-120), errors: array(job.errors).slice(-30), lastError: job.lastError || null
   };
 }
+
 function productSupplierSource(row) {
   const url=researchCandidateUrl(row),evidence=plain(row&&row.evidence),title=text(row&&row.title),recommendation=lower(row&&row.recommendation),decision=lower(row&&row.decision);
   if(!url||recommendation==="exclude"||decision==="reject")return null;
@@ -1364,7 +1334,25 @@ function productSupplierSource(row) {
   if(!strict)return null;
   parsed.pathname="/";parsed.search="";parsed.hash="";
   const priority=merchandisePriority(title+" "+url+" "+parsed.hostname);
-  return{supplierId:text(row&&[row.id,row.candidateId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl:parsed.toString(),url:parsed.toString(),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),approvalReady:row&&row.approvalReady===true,sourceCandidateUrl:url,evidenceReady:evidence.supplierReviewEligible===true,priorityScore:priority.score,priorityLabel:priority.label};
+  return{supplierId:text(row&&[row.id,row.candidateId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl:parsed.toString(),url:parsed.toString(),supplierType:text(row&&row.supplierType||evidence.supplierType),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),approvalReady:row&&row.approvalReady===true,sourceCandidateUrl:url,evidenceReady:evidence.supplierReviewEligible===true,priorityScore:priority.score,priorityLabel:priority.label};
+}
+async function productRankingContext(scope) {
+  let signalStatus = null, policyControl = null;
+  try { signalStatus = await MarketSignals.signalStatus(scope.regionGroup); }
+  catch (error) { signalStatus = { ok: false, error: text(error && error.message), effective: { active: false, categoryWeights: {} } }; }
+  try { policyControl = await PolicyDiscussion.effectivePolicy({ scopeType: "country", regionGroup: scope.regionGroup, countryCode: scope.country, subdivisionCode: scope.region }); }
+  catch (error) { policyControl = { ok: false, active: false, error: text(error && error.message), categoryWeights: {}, sources: [] }; }
+  const marketPlan = plain(signalStatus && signalStatus.effective);
+  const categoryWeights = PolicyDiscussion.mergeWithAutomaticWeights(plain(marketPlan.categoryWeights), policyControl);
+  return {
+    generatedAt: iso(),
+    categoryWeights,
+    marketSignalActive: marketPlan.active === true,
+    marketSignalSources: array(marketPlan.sourcePlans),
+    administratorPolicyActive: policyControl && policyControl.active === true,
+    administratorPolicySources: array(policyControl && policyControl.sources),
+    safety: { advisoryWeightsOnly: true, riskGateChanged: false, supplierApprovalChanged: false, productImport: false, publicPublication: false }
+  };
 }
 async function beginProductResearchJob(actorId, input) {
   const raw = plain(input), scope = researchScope(raw), existing = await productJobRule(scope);
@@ -1375,9 +1363,11 @@ async function beginProductResearchJob(actorId, input) {
   for (const row of array(supplierJob.candidates)) { const source=productSupplierSource(row); if(!source)continue; const key=lower(source.supplierSiteUrl); if(seenSupplierSites.has(key))continue; seenSupplierSites.add(key); sourcePool.push(source); }
   const supplierSources = sourcePool.sort((a,b)=>Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,12);
   if(!supplierSources.length){const error=new Error("완료된 공급업체 후보 중 공식 판매 사이트·법적 신원·직접 판매 증빙을 갖춘 상품 조사 출처가 없습니다. 공급업체 후보의 잡음과 증빙 상태를 먼저 정리하세요.");error.statusCode=409;throw error;}
-  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, discoveryCursor: 0, rawProducts: [], inspectionPool: [], inspectCursor: 0, products: [], trace: [{ at: now, source: "product-research-job", status: "started", suppliers: supplierSources.length, sourcePolicy: "official_direct_sales_legal_identity_only; essentials_agriculture_cooperative_priority" }], errors: [], lastError: null };
+  const rankingContext = await productRankingContext(scope);
+  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, rankingContext, discoveryCursor: 0, rawProducts: [], inspectionPool: [], inspectCursor: 0, products: [], trace: [{ at: now, source: "product-research-job", status: "started", suppliers: supplierSources.length, sourcePolicy: "official_direct_sales_legal_identity_only; risk_gate_before_revenue_ranking; supplier_aware_exact_dedupe; section_proposal_only" }], errors: [], lastError: null };
   await saveProductJob(job, actorId); return publicProductJob(job);
 }
+
 async function productResearchJobStatus(input) { return publicProductJob(await productJobRule(researchScope(input))); }
 async function advanceProductResearchJob(actorId, input) {
   const scope = researchScope(input), job = await productJobRule(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("진행 중인 공식 상품 리서치 작업이 없습니다."); error.statusCode = 404; throw error; }
@@ -1402,15 +1392,82 @@ async function advanceProductResearchJob(actorId, input) {
     job.lastError = null; await saveProductJob(job, actorId); return publicProductJob(job);
   } catch (error) { job.lastError = { at: iso(), stage: job.status, message: text(error && error.message), code: text(error && error.code) || null }; job.errors = array(job.errors).concat([job.lastError]); try { await saveProductJob(job, actorId); } catch (_saveError) {} throw error; }
 }
+async function syncProductCandidateQueue(actorId, scope, product, decision) {
+  const candidateId = "country_product_" + sha256(scope.country + "|" + scope.region + "|" + text(product.productIdentity)).slice(0, 24);
+  const existing = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
+  if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, currentStatus: text(existing.status) };
+  if (decision !== "slot_candidate") {
+    if (!existing) return { status: "no_private_candidate_created", candidateId: null };
+    const status = decision === "reject" ? "suppressed" : "hold";
+    const sourcePayload = Object.assign({}, plain(existing.source_payload), { slotDecision: decision, review: Object.assign({}, plain(existing.source_payload && existing.source_payload.review), { state: status, decidedAt: iso(), decidedBy: text(actorId) || "administrator" }) });
+    await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: sourcePayload, updated_at: iso() });
+    return { status: "private_candidate_" + status, candidateId };
+  }
+  const placement = plain(product.primaryPlacement || array(product.sectionAssignments)[0]);
+  const productUrlValue = productUrl(product), imageUrlValue = productImageUrl(product);
+  const payload = {
+    id: candidateId,
+    entityKind: "product_reference",
+    title: first(product.productName, product.title),
+    url: productUrlValue,
+    externalProductUrl: productUrlValue,
+    image: imageUrlValue,
+    thumb: imageUrlValue,
+    page: text(placement.page),
+    channel: text(placement.page),
+    section: text(placement.sectionKey),
+    psom_key: text(placement.sectionKey),
+    placement: { page: text(placement.page), section: text(placement.sectionKey), country: scope.country, region: scope.region, proposalOnly: true },
+    proposedPlacements: array(product.sectionAssignments),
+    marketKeys: [scope.country + "-" + scope.region],
+    marketScope: { marketCountry: scope.country, marketRegion: scope.region },
+    countrySupply: { country: scope.country, region: scope.region, localOnly: true, crossCountryFallback: false },
+    supplier: { id: text(product.supplierId), name: text(product.supplierName), officialUrl: text(product.supplierSiteUrl), type: text(product.supplierType), trustScore: Number(product.supplierTrustScore) || 0, evidenceReady: product.supplierEvidenceReady === true },
+    productRanking: { version: ProductRanking.VERSION, rank: Number(product.rank) || null, score: Number(product.rankingScore) || 0, category: text(product.productCategory), categoryTags: array(product.productCategoryTags), duplicateGroupKey: text(product.duplicateGroupKey), duplicateCount: Number(product.duplicateCount) || 1 },
+    supplierAssessment: plain(product.supplierAssessment),
+    riskAssessment: plain(product.riskAssessment),
+    commercialAssessment: plain(product.commercialAssessment),
+    releaseReadiness: plain(product.releaseReadiness),
+    revenue: { type: text(product.commercialAssessment && product.commercialAssessment.revenueType) || "commercial_candidate", monetizationState: text(product.commercialAssessment && product.commercialAssessment.monetizationState) || "contract_required", contractId: null },
+    commerceCandidate: { sourceTier: "risk_ranked_official_supplier_product", origin: PRODUCT_SOURCE_REF, administratorReviewRequired: true, riskGatePassed: product.riskAssessment && product.riskAssessment.gatePassed === true, automaticPublication: false },
+    review: { state: "pending", submittedAt: iso(), submittedBy: text(actorId) || "administrator" },
+    slotDecision: "slot_candidate",
+    publicPublication: false,
+    automaticImport: false,
+    checkout: false,
+    payment: false
+  };
+  const row = { id: candidateId, kind: "product", title: payload.title, official_url: productUrlValue, status: "approval_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: imageUrlValue, description: "Risk-gated, revenue-ranked product candidate. Proposed section assignment remains private until administrator approval, market evidence and revenue rights are recorded.", owner_note: "Auto-researched product reference; no publication, payment or seller responsibility transfer.", source_payload: payload, updated_at: iso(), updated_by: text(actorId) || "administrator" };
+  if (existing) {
+    await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), row);
+    return { status: "private_candidate_updated", candidateId, placement: payload.placement };
+  }
+  row.created_at = iso(); row.created_by = text(actorId) || "administrator";
+  await SlotStore.insert("gslot_candidates", row, "return=representation");
+  return { status: "private_candidate_created", candidateId, placement: payload.placement };
+}
 async function productCandidateAction(actorId, input) {
   const scope = researchScope(input), job = await productJobRule(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","undecided"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
-  const index = array(job.products).findIndex((row) => text(row && row.id) === id); if (index < 0) { const error = new Error("상세페이지 검증을 마친 상품 후보를 찾을 수 없습니다. 발견 단계 상품은 검증 완료 후 판정할 수 있습니다."); error.statusCode = 404; throw error; }
-  const current = plain(job.products[index]);
-  if (decision === "slot_candidate" && !(current.researchStatus === "ready_for_admin_review" && current.inspectionComplete === true && productUrl(current) && productImageUrl(current))) {
-    const error = new Error("상품 상세페이지·실제 상품 이미지·원본 링크 검증을 마친 후보만 슬롯 후보로 지정할 수 있습니다."); error.statusCode = 409; throw error;
+  const portfolio = ProductRanking.buildPortfolio(array(job.rawProducts).concat(array(job.products)), plain(job.rankingContext));
+  const evaluated = array(portfolio.products).find((row) => text(row && row.id) === id);
+  if (!evaluated) { const error = new Error("상품 후보를 찾을 수 없습니다. 최신 상품 리서치 상태를 다시 읽어 주세요."); error.statusCode = 404; throw error; }
+  const identity = text(evaluated.productIdentity);
+  const index = array(job.products).findIndex((row) => text(row && row.id) === id || ProductRanking.productIdentity(row) === identity);
+  if (index < 0) { const error = new Error("상세페이지 검증을 마친 상품 후보를 찾을 수 없습니다. 발견 단계 상품은 검증 완료 후 판정할 수 있습니다."); error.statusCode = 404; throw error; }
+  if (decision === "slot_candidate") {
+    const risk = plain(evaluated.riskAssessment);
+    if (risk.gatePassed !== true || !array(evaluated.sectionAssignments).length) {
+      const reasons = array(risk.blockers).join(", ") || "섹션 배정 조건 미충족";
+      const error = new Error("위험 차단 게이트와 섹션 분류를 모두 통과한 상품만 슬롯 후보로 지정할 수 있습니다. 차단 사유: " + reasons); error.statusCode = 409; throw error;
+    }
   }
-  job.products[index] = Object.assign({}, current, { slotDecision: decision, decisionAt: iso(), decisionBy: text(actorId) || "administrator", publicPublication: false, automaticImport: false }); await saveProductJob(job, actorId); return publicProductJob(job);
+  const current = plain(job.products[index]);
+  job.products[index] = Object.assign({}, current, evaluated, { slotDecision: decision, decisionAt: iso(), decisionBy: text(actorId) || "administrator", publicPublication: false, automaticImport: false });
+  job.products = mergeProductRows([], job.products, 300);
+  const queueSync = decision === "undecided" ? { status: "no_queue_change", candidateId: null } : await syncProductCandidateQueue(actorId, scope, job.products.find((row) => ProductRanking.productIdentity(row) === identity) || evaluated, decision);
+  await saveProductJob(job, actorId);
+  const result = publicProductJob(job); result.candidateQueue = queueSync; return result;
 }
 
 async function runScope(options) {
