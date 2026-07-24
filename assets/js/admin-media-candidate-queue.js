@@ -1,162 +1,38 @@
-/* IGDC Media Candidate Queue Admin View v1.2.0
- * Controlled media collection -> private candidate queue -> administrator review
- * -> approved snapshot release. No collection result is automatically public.
- */
-(function(){
-  'use strict';
-  var ENDPOINT='/.netlify/functions/media-candidate-review';
-  var COLLECTOR='/.netlify/functions/sanmaru-media-collector';
-  var ACTION='/.netlify/functions/media-candidate-action';
-  var PUBLISH='/.netlify/functions/media-snapshot-publish';
-  var $=function(id){return document.getElementById(id);};
-  var esc=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(ch){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];});};
-  var text=function(v){return String(v==null?'':v).trim();};
-  var lower=function(v){return text(v).toLowerCase();};
-  var state=$('state'), notice=$('notice'), diagnosticCache=null, rowsCache=[];
-
-  function cls(kind){return kind==='ok'?'ok':kind==='warn'?'warn':'';}
-  function show(message,kind){notice.className='notice '+cls(kind);notice.textContent=message;notice.classList.remove('hidden');}
-  function hideNotice(){notice.classList.add('hidden');notice.textContent='';}
-  function authHeaders(json){
-    var headers={Accept:'application/json'};
-    if(json)headers['Content-Type']='application/json';
-    try{
-      var token=sessionStorage.getItem('igdc.mediaCandidateQueue.adminBearer')||localStorage.getItem('igdc.mediaCandidateQueue.adminBearer')||'';
-      if(token&&String(token).split('.').length===3)headers.Authorization='Bearer '+token;
-    }catch(_e){}
-    return headers;
-  }
-  async function readRequest(action){
-    state.textContent='미디어 후보 대기열을 읽는 중입니다.';
-    var response=await fetch(ENDPOINT+'?action='+encodeURIComponent(action),{headers:authHeaders(false),credentials:'same-origin',cache:'no-store'});
-    var data=null;try{data=await response.json();}catch(_e){}
-    if(!response.ok||!data||data.ok!==true){var error=new Error((data&&(data.message||data.error))||('요청 실패: HTTP '+response.status));error.code=data&&data.code;error.status=response.status;throw error;}
-    var mode=(data.source&&data.source.candidateSourceMode)||data.mode||'read_only';
-    state.textContent='관리 연결 확인: '+mode;
-    return data;
-  }
-  async function postJson(url,body){
-    var response=await fetch(url,{method:'POST',headers:authHeaders(true),credentials:'same-origin',cache:'no-store',body:JSON.stringify(body||{})});
-    var data=null;try{data=await response.json();}catch(_e){}
-    if(!response.ok||!data||data.ok!==true){var error=new Error((data&&(data.message||data.error))||('요청 실패: HTTP '+response.status));error.code=data&&data.error;error.status=response.status;throw error;}
-    return data;
-  }
-
-  function card(title,value,sub,kind){return '<article class="card"><h2>'+esc(title)+'</h2><div class="num status-'+esc(kind||'info')+'">'+esc(value)+'</div><div class="small">'+esc(sub||'')+'</div></article>';}
-  function renderSummary(summary){
-    var s=summary||{};
-    $('summaryGrid').innerHTML=[
-      card('후보 영상',s.candidateCount||0,'2~10번 섹션 후보','info'),
-      card('프론트 승격 가능',s.promotableCount||0,'검증 완료 후보만 계산','ok'),
-      card('검증 대기',s.verificationRequired||0,'원본·권리·소스 확인 필요','warn'),
-      card('최신 섹션 수동후보',s.trendingManualCandidates||0,'0이어야 정상','info'),
-      card('공개 스냅샷 영향',s.publicSnapshotMutation||'없음','승인 전 자동 공개 없음','ok')
-    ].join('');
-    $('summaryGrid').classList.remove('hidden');
-  }
-  function sortedKeys(map){return Object.keys(map||{}).sort();}
-  function fillSelect(id,values,label){var el=$(id);if(!el)return;var current=el.value;el.innerHTML='<option value="">'+esc(label)+'</option>'+values.map(function(v){return '<option value="'+esc(v)+'">'+esc(v)+'</option>';}).join('');if(values.indexOf(current)>=0)el.value=current;}
-  function setupFilters(summary){fillSelect('sectionFilter',sortedKeys(summary&&summary.bySection),'전체 섹션');fillSelect('riskFilter',sortedKeys(summary&&summary.byRisk),'전체 위험도');fillSelect('statusFilter',sortedKeys(summary&&summary.byVerificationStatus),'전체 검증상태');$('filterPanel').classList.remove('hidden');}
-  function pill(value,kind){return '<span class="pill '+esc(kind||'')+'">'+esc(value||'-')+'</span>';}
-  function safeMediaUrl(row){
-    var raw=text(row&&(row.video||row.url||(row.rights&&row.rights.sourceUrl)));
-    if(!raw||!/^https?:\/\//i.test(raw))return '';
-    return raw;
-  }
-  function hasSource(row){return !!(text(row.url)||text(row.video)||text(row.thumb)||text(row.rights&&row.rights.sourceUrl)||text(row.rights&&row.rights.licenseUrl));}
-  function sourceState(row){var parts=[];if(text(row.url)||text(row.video))parts.push('영상URL 후보 있음');if(text(row.thumb))parts.push('썸네일 있음');if(text(row.rights&&row.rights.sourceUrl))parts.push('원출처 있음');if(text(row.rights&&row.rights.licenseUrl))parts.push('라이선스URL 있음');if(!parts.length)parts.push('URL 미검증');return parts.join(' · ');}
-  function visibleRows(){
-    var q=lower($('searchInput').value),section=text($('sectionFilter').value),risk=text($('riskFilter').value),status=text($('statusFilter').value);
-    return rowsCache.filter(function(row){
-      if(section&&text(row.sectionKey)!==section)return false;if(risk&&text(row.riskLevel)!==risk)return false;if(status&&text(row.verificationStatus)!==status)return false;if(!q)return true;
-      var hay=[row.title,row.provider,row.sectionKey,row.region,row.year,row.qualityTarget,row.riskLevel,row.verificationStatus,row.sanmaruSearchSeed,row.rights&&row.rights.sourceHint,row.rights&&row.rights.candidate].map(text).join(' ').toLowerCase();
-      return hay.indexOf(q)>=0;
-    });
-  }
-  function renderRows(){
-    var rows=visibleRows();$('filterState').textContent='표시 '+rows.length+'개 / 전체 '+rowsCache.length+'개';
-    $('candidateRows').innerHTML=rows.length?rows.map(function(row,index){
-      var stateClass=(row.promotable===true)?'safe':(hasSource(row)?'risk':'hold');var id=text(row.contentId||row.id);var previewUrl=safeMediaUrl(row);
-      var title=esc(row.title||'(제목 없음)');
-      var titleHtml=previewUrl?'<a href="'+esc(previewUrl)+'" target="_blank" rel="noopener noreferrer" title="새 창에서 원본 영상 확인">'+title+'</a>':title;
-      var previewHtml=previewUrl?'<a class="candidate-preview" href="'+esc(previewUrl)+'" target="_blank" rel="noopener noreferrer">영상 미리보기</a>':'';
-      return '<tr><td class="seq">'+(index+1)+'</td><td><input class="rowcheck" type="checkbox" data-candidate-id="'+esc(id)+'" aria-label="'+esc(row.title||id)+' 선택" /></td>'+ 
-        '<td>'+pill(row.sectionKey,'section')+'<div class="small">slot '+esc(row.slotId||'')+'</div></td>'+ 
-        '<td><strong class="candidate-title">'+titleHtml+'</strong>'+previewHtml+'<div class="mono small">'+esc(id)+'</div></td>'+ 
-        '<td class="nowrap">'+esc(row.year||'-')+'<div class="small">'+esc(row.region||'-')+'</div></td>'+ 
-        '<td>'+esc(row.provider||'-')+'<div class="small">'+esc(row.rights&&row.rights.sourceHint||'')+'</div></td>'+ 
-        '<td>'+esc(row.qualityTarget||'-')+'<div class="small">'+esc(row.qualityPriority||'')+'</div></td>'+ 
-        '<td>'+pill(row.verificationStatus||'verification_required',stateClass)+'<div class="small">'+esc(row.rights&&row.rights.status||'')+' · '+esc(row.riskLevel||'')+'</div></td>'+ 
-        '<td class="reason">'+esc(sourceState(row))+'</td>'+ 
-        '<td class="seed">'+esc(row.sanmaruSearchSeed||'')+'</td></tr>';
-    }).join(''):'<tr><td colspan="10" class="empty">조건에 맞는 미디어 후보가 없습니다.</td></tr>';
-    $('tablePanel').classList.remove('hidden');$('selectAllRows').checked=false;
-  }
-  function selectedIds(){return Array.prototype.slice.call(document.querySelectorAll('.rowcheck:checked')).map(function(el){return text(el.getAttribute('data-candidate-id'));}).filter(Boolean);}
-  function renderDiagnostic(data){diagnosticCache=data;$('diagnosticJson').textContent=JSON.stringify(data,null,2);$('diagnosticPanel').classList.remove('hidden');$('downloadJsonBtn').disabled=false;}
-  function downloadJson(){if(!diagnosticCache){show('먼저 미디어 점검 JSON을 읽어 주세요.','warn');return;}downloadBlob(JSON.stringify(diagnosticCache,null,2)+'\n','igdc-media-candidate-queue-diagnostic-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.json');show('미디어 후보 점검 JSON 파일을 다운로드했습니다.','ok');}
-  function downloadCandidateList(){
-    var rows=visibleRows();
-    var payload={
-      ok:true,
-      reportType:'igdc-media-candidate-visible-list',
-      generatedAt:new Date().toISOString(),
-      displayedCount:rows.length,
-      totalCandidateCount:rowsCache.length,
-      filters:{search:text($('searchInput').value),section:text($('sectionFilter').value),risk:text($('riskFilter').value),verificationStatus:text($('statusFilter').value)},
-      rows:rows.map(function(row,index){return Object.assign({sequence:index+1,previewUrl:safeMediaUrl(row)},row);})
-    };
-    downloadBlob(JSON.stringify(payload,null,2)+'\n','igdc-media-candidate-visible-list-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.json');
-    show('현재 화면의 영상 후보 목록 JSON을 다운로드했습니다.','ok');
-  }
-  function downloadBlob(content,name){var blob=new Blob([content],{type:'application/json;charset=utf-8'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},300);}
-  function errorMessage(error){var message=text(error&&error.message);if(Number(error&&error.status)===404)return '필요한 미디어 관리 함수가 아직 배포되지 않았습니다.';if(Number(error&&error.status)===401||Number(error&&error.status)===403)return message||'관리자 인증 또는 변경 권한을 확인해야 합니다.';return message||'요청을 처리하지 못했습니다.';}
-
-  async function refresh(){hideNotice();var button=$('refreshBtn');button.disabled=true;try{var data=await readRequest('candidates');rowsCache=data.candidates||[];renderSummary(data.summary||{});setupFilters(data.summary||{});renderRows();show('미디어 후보 대기열을 읽었습니다. 수집 후보는 승인 전 공개되지 않습니다.','ok');}catch(error){show(errorMessage(error),'warn');}finally{button.disabled=false;}}
-  async function diagnostic(){hideNotice();var button=$('diagnosticBtn');button.disabled=true;try{var data=await readRequest('diagnostic');renderDiagnostic(data);if(data.queue&&Array.isArray(data.queue.rows)){rowsCache=data.queue.rows;renderSummary(data.summary||{});setupFilters(data.summary||{});renderRows();}show('미디어 후보 점검 JSON을 읽었습니다.','ok');}catch(error){show(errorMessage(error),'warn');}finally{button.disabled=false;}}
-  async function collect(){
-    hideNotice();var button=$('collectBtn');button.disabled=true;$('collectorState').textContent='2000년 이후 1080p 원본 후보를 수집 중입니다.';
-    try{var data=await postJson(COLLECTOR,{source:'internet_archive',section:$('collectorSection').value,limit:Number($('collectorLimit').value)||12});$('collectorState').textContent='검색 '+data.searched+' · 저장 '+data.saved+' · 제외 '+data.rejectedCount;show('2000년 이후 1080p 이상 원본 전체 영상 후보 '+data.saved+'개를 예비 대기열에 등록했습니다. 자동 공개되지는 않습니다.','ok');await refresh();}
-    catch(error){$('collectorState').textContent='수집 실패';show(errorMessage(error),'warn');}finally{button.disabled=false;}
-  }
-  async function collectAdminException(){
-    hideNotice();
-    var identifier=text($('adminArchiveIdentifier').value), reason=text($('adminOverrideReason').value);
-    if(!identifier){show('관리자가 지정할 Internet Archive 식별자 또는 원본 주소를 입력해 주세요.','warn');return;}
-    if(!reason){show('오래된 작품을 예외 지정하는 사유를 입력해 주세요.','warn');return;}
-    var button=$('collectAdminExceptionBtn');button.disabled=true;$('collectorState').textContent='관리자 지정 영상을 확인 중입니다.';
-    try{
-      var data=await postJson(COLLECTOR,{source:'internet_archive',section:$('collectorSection').value,identifier:identifier,adminException:true,overrideReason:reason,limit:1});
-      $('collectorState').textContent='관리자 지정 저장 '+data.saved+' · 제외 '+data.rejectedCount;
-      if(data.saved>0){$('adminArchiveIdentifier').value='';$('adminOverrideReason').value='';show('관리자 지정 영상을 우선 예비 후보로 등록했습니다. 연도만 예외이며 1080p·전체 영상·권리 검토 기준은 유지됩니다.','ok');await refresh();}
-      else{show('지정 영상이 1080p·전체 영상·예고편 제외 기준을 통과하지 못했습니다.','warn');}
-    }catch(error){$('collectorState').textContent='관리자 지정 수집 실패';show(errorMessage(error),'warn');}finally{button.disabled=false;}
-  }
-  async function reviewAction(action){
-    var ids=selectedIds();if(!ids.length){show('처리할 후보를 먼저 선택해 주세요.','warn');return;}
-    if(action==='approve'&&!$('rightsConfirm').checked){show('승인 전에 원본·권리·재생·자막 확인 체크가 필요합니다.','warn');return;}
-    var labels={approve:'승인',hold:'보류',reset:'재검토',reject:'반려',block:'차단'};
-    var note=window.prompt(labels[action]+' 사유 또는 확인 메모를 입력해 주세요.','')||'';
-    try{var data=await postJson(ACTION,{action:action,ids:ids,note:note,confirmRightsSafe:action==='approve'});show(labels[action]+' 처리 '+data.updated+'건을 완료했습니다.','ok');$('rightsConfirm').checked=false;await refresh();}catch(error){show(errorMessage(error),'warn');}
-  }
-  async function publishPreview(store){
-    var button=store?$('storeReleaseBtn'):$('publishPreviewBtn');button.disabled=true;
-    try{var data=await postJson(PUBLISH,{storeRelease:!!store,includeSnapshot:store?'0':'1'});var message='승격 가능 '+data.eligibleRows+'건 · 해시 '+text(data.hash).slice(0,16);if(store)message+=' · 릴리스 저장 완료';show(message,'ok');if(!store&&data.snapshot){diagnosticCache=data;$('diagnosticJson').textContent=JSON.stringify(data,null,2);$('diagnosticPanel').classList.remove('hidden');$('downloadJsonBtn').disabled=false;}}
-    catch(error){show(errorMessage(error),'warn');}finally{button.disabled=false;}
-  }
-  async function downloadSnapshot(){
-    var button=$('downloadSnapshotBtn');button.disabled=true;
-    try{var response=await fetch(PUBLISH+'?download=1',{headers:authHeaders(false),credentials:'same-origin',cache:'no-store'});var content=await response.text();if(!response.ok)throw Object.assign(new Error(content||('HTTP '+response.status)),{status:response.status});downloadBlob(content,'media.snapshot.generated.json');show('승인된 후보로 생성한 미디어 스냅샷을 다운로드했습니다.','ok');}
-    catch(error){show(errorMessage(error),'warn');}finally{button.disabled=false;}
-  }
-  function returnToAdmin(){var params=new URLSearchParams(window.location.search);var raw=params.get('returnPath')||'/admin.html';if(!/^\//.test(raw))raw='/admin.html';window.location.href=raw;}
-  function bind(){
-    $('refreshBtn').addEventListener('click',refresh);$('diagnosticBtn').addEventListener('click',diagnostic);$('downloadJsonBtn').addEventListener('click',downloadJson);$('downloadCandidateListBtn').addEventListener('click',downloadCandidateList);$('returnBtn').addEventListener('click',returnToAdmin);
-    $('collectBtn').addEventListener('click',collect);$('collectAdminExceptionBtn').addEventListener('click',collectAdminException);$('approveBtn').addEventListener('click',function(){reviewAction('approve');});$('holdBtn').addEventListener('click',function(){reviewAction('hold');});$('resetBtn').addEventListener('click',function(){reviewAction('reset');});$('rejectBtn').addEventListener('click',function(){reviewAction('reject');});$('blockBtn').addEventListener('click',function(){reviewAction('block');});
-    $('publishPreviewBtn').addEventListener('click',function(){publishPreview(false);});$('storeReleaseBtn').addEventListener('click',function(){publishPreview(true);});$('downloadSnapshotBtn').addEventListener('click',downloadSnapshot);
-    $('selectAllRows').addEventListener('change',function(){var checked=this.checked;Array.prototype.forEach.call(document.querySelectorAll('.rowcheck'),function(el){el.checked=checked;});});
-    ['searchInput','sectionFilter','riskFilter','statusFilter'].forEach(function(id){$(id).addEventListener('input',renderRows);$(id).addEventListener('change',renderRows);});
-    window.addEventListener('pageshow',refresh);refresh();
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
+/* IGDC Media Candidate Queue v2.0 - ranked, sectioned, removable, MARU-style preview */
+(function(){'use strict';
+var END='/.netlify/functions/media-candidate-review',COL='/.netlify/functions/sanmaru-media-collector',ACT='/.netlify/functions/media-candidate-action',PUB='/.netlify/functions/media-snapshot-publish';
+var $=function(id){return document.getElementById(id);},text=function(v){return String(v==null?'':v).trim();},lower=function(v){return text(v).toLowerCase();},esc=function(v){return text(v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});};
+var rowsCache=[],diagnosticCache=null,notice=$('notice'),state=$('state'),currentPreview=null;
+function token(){try{return sessionStorage.getItem('igdc.mediaCandidateQueue.adminBearer')||localStorage.getItem('igdc.mediaCandidateQueue.adminBearer')||'';}catch(_e){return'';}}
+function headers(json){var h={Accept:'application/json'};var t=token();if(t&&t.split('.').length===3)h.Authorization='Bearer '+t;if(json)h['Content-Type']='application/json';return h;}
+async function get(url){var r=await fetch(url,{headers:headers(false),credentials:'same-origin',cache:'no-store'}),d=null;try{d=await r.json();}catch(_e){}if(!r.ok||!d||d.ok!==true){var e=new Error(d&&d.message||d&&d.error||'HTTP '+r.status);e.status=r.status;throw e;}return d;}
+async function post(url,body){var r=await fetch(url,{method:'POST',headers:headers(true),credentials:'same-origin',body:JSON.stringify(body)}),d=null;try{d=await r.json();}catch(_e){}if(!r.ok||!d||d.ok!==true){var e=new Error(d&&d.message||d&&d.error||'HTTP '+r.status);e.status=r.status;throw e;}return d;}
+function show(m,k){notice.className='notice '+(k==='warn'?'warn':'');notice.textContent=m;notice.classList.remove('hidden');}
+function hide(){notice.classList.add('hidden');notice.textContent='';}
+function card(t,v,s){return '<article class="card"><h2>'+esc(t)+'</h2><div class="num">'+esc(v)+'</div><div class="small">'+esc(s||'')+'</div></article>';}
+function renderSummary(s){s=s||{};$('summaryGrid').innerHTML=[card('후보 영상',s.candidateCount||0,'전체 대기열'),card('승격 가능',s.promotableCount||0,'승인 완료'),card('검증 대기',s.verificationRequired||0,'권리·재생 확인 필요'),card('섹션 수',Object.keys(s.bySection||{}).length,'2~10번 섹션')].join('');$('summaryGrid').classList.remove('hidden');}
+function fillSelect(id,vals,label){var el=$(id),cur=el.value;el.innerHTML='<option value="">'+esc(label)+'</option>'+vals.map(function(v){return '<option value="'+esc(v)+'">'+esc(v)+'</option>';}).join('');if(vals.indexOf(cur)>=0)el.value=cur;}
+function setupFilters(s){fillSelect('sectionFilter',Object.keys(s.bySection||{}).sort(),'전체 섹션');fillSelect('riskFilter',Object.keys(s.byRisk||{}).sort(),'전체 위험도');fillSelect('statusFilter',Object.keys(s.byVerificationStatus||{}).sort(),'전체 검증상태');$('filterPanel').classList.remove('hidden');}
+function qualityValue(v){var m=text(v).match(/(\d{3,4})p/i);return m?Number(m[1]):0;}
+function rowRank(r){return Number(r.rankingScore||String(r.qualityPriority||'').match(/(\d+)/)?.[1]||0);}
+function visibleRows(){var q=lower($('searchInput').value),sec=text($('sectionFilter').value),risk=text($('riskFilter').value),st=text($('statusFilter').value),sort=$('sortSelect').value;var a=rowsCache.filter(function(r){if(sec&&text(r.sectionKey)!==sec)return false;if(risk&&text(r.riskLevel)!==risk)return false;if(st&&text(r.verificationStatus)!==st)return false;if(!q)return true;return [r.title,r.provider,r.sectionKey,r.year,r.qualityTarget,r.rankingTier,r.ageRating,(r.subtitleLanguages||[]).join(' ')].map(text).join(' ').toLowerCase().indexOf(q)>=0;});a.sort(function(x,y){if(sort==='quality')return qualityValue(y.qualityTarget)-qualityValue(x.qualityTarget)||rowRank(y)-rowRank(x);if(sort==='year')return Number(y.year||0)-Number(x.year||0)||rowRank(y)-rowRank(x);if(sort==='subtitle')return Number(y.subtitleCount||0)-Number(x.subtitleCount||0)||rowRank(y)-rowRank(x);if(sort==='title')return text(x.title).localeCompare(text(y.title));return rowRank(y)-rowRank(x)||qualityValue(y.qualityTarget)-qualityValue(x.qualityTarget)||Number(y.year||0)-Number(x.year||0);});return a;}
+function pill(v,c){return '<span class="pill '+(c||'')+'">'+esc(v||'-')+'</span>';}
+function rowHtml(r,i){var id=text(r.contentId||r.id),langs=Array.isArray(r.subtitleLanguages)?r.subtitleLanguages:[],warn=Array.isArray(r.contentWarnings)?r.contentWarnings:[];return '<tr><td class="seq">'+(i+1)+'</td><td><input class="rowcheck" type="checkbox" data-candidate-id="'+esc(id)+'"></td><td>'+pill(r.sectionKey,'section')+'<div class="small">분류 '+esc(r.classificationConfidence||0)+'%</div></td><td>'+pill((r.rankingTier||'-')+' '+rowRank(r),'rank')+'<div class="small">'+esc((r.rankingSignals||[]).join(' · '))+'</div></td><td><strong class="candidate-title"><button type="button" class="previewBtn" data-candidate-id="'+esc(id)+'">'+esc(r.title||'(제목 없음)')+'</button></strong><div class="mono small">'+esc(id)+'</div></td><td class="nowrap">'+esc(r.year||'-')+'</td><td>'+esc(r.provider||'-')+'<div class="small">'+esc(r.rights&&r.rights.sourceHint||'')+'</div></td><td>'+esc(r.qualityTarget||'-')+'</td><td>'+esc(r.subtitleCount||0)+'개<div class="small">'+esc(langs.join(' · '))+'</div></td><td>'+esc(r.ageRating||'-')+'<div class="small">'+esc(warn.join(' · '))+'</div></td><td>'+esc(r.verificationStatus||'-')+'<div class="small">'+esc(r.rights&&r.rights.status||'')+'</div></td></tr>';}
+function renderRows(){var rows=visibleRows(),group=$('groupBySection').checked,html='',seq=0,last='';rows.forEach(function(r){if(group&&r.sectionKey!==last){last=r.sectionKey;html+='<tr class="group-row"><td colspan="11">'+esc(last)+' · '+rows.filter(function(x){return x.sectionKey===last;}).length+'개</td></tr>';}html+=rowHtml(r,seq++);});$('candidateRows').innerHTML=html||'<tr><td colspan="11" class="small">조건에 맞는 후보가 없습니다.</td></tr>';$('filterState').textContent='표시 '+rows.length+'개 / 전체 '+rowsCache.length+'개';$('tablePanel').classList.remove('hidden');$('selectAllRows').checked=false;}
+function selectedIds(){return Array.from(document.querySelectorAll('.rowcheck:checked')).map(function(e){return text(e.dataset.candidateId);}).filter(Boolean);}
+function currentVisibleIds(){return visibleRows().map(function(r){return text(r.contentId||r.id);}).filter(Boolean);}
+function download(content,name){var b=new Blob([content],{type:'application/json;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},300);}
+async function refresh(){hide();$('refreshBtn').disabled=true;try{state.textContent='후보 대기열 읽는 중';var d=await get(END+'?action=candidates');rowsCache=d.candidates||[];renderSummary(d.summary||{});setupFilters(d.summary||{});renderRows();state.textContent='연결 정상';show('섹션·랭킹·품질 기준으로 후보 대기열을 읽었습니다.','ok');}catch(e){show(e.message,'warn');}finally{$('refreshBtn').disabled=false;}}
+async function diagnostic(){try{var d=await get(END+'?action=diagnostic');diagnosticCache=d;$('diagnosticJson').textContent=JSON.stringify(d,null,2);$('diagnosticPanel').classList.remove('hidden');$('downloadJsonBtn').disabled=false;}catch(e){show(e.message,'warn');}}
+async function collect(admin){var body={source:'internet_archive',section:$('collectorSection').value,limit:Number($('collectorLimit').value)||12};if(admin){body.identifier=text($('adminArchiveIdentifier').value);body.adminException=true;body.overrideReason=text($('adminOverrideReason').value);if(!body.identifier||!body.overrideReason){show('관리자 지정 주소와 사유가 필요합니다.','warn');return;}}$('collectBtn').disabled=true;$('collectAdminExceptionBtn').disabled=true;try{$('collectorState').textContent='종합랭킹 후보 선별 중';var d=await post(COL,body);$('collectorState').textContent='검색 '+d.searched+' · 기준통과 '+d.qualified+' · 저장 '+d.saved;show('낮은 랭킹·저품질·위험 후보를 제외하고 상위 후보만 저장했습니다.','ok');await refresh();}catch(e){$('collectorState').textContent='수집 실패';show(e.message,'warn');}finally{$('collectBtn').disabled=false;$('collectAdminExceptionBtn').disabled=false;}}
+async function action(a,ids){if(!ids.length){show('처리할 후보를 선택해 주세요.','warn');return;}if(a==='approve'&&!$('rightsConfirm').checked){show('승인 전 확인 체크가 필요합니다.','warn');return;}var labels={approve:'승인',hold:'보류',reset:'재검토',reject:'반려',block:'차단'};var note=window.prompt((labels[a]||a)+' 메모','')||'';try{var d=await post(ACT,{action:a,ids:ids,note:note,confirmRightsSafe:a==='approve'});show((labels[a]||a)+' 처리 '+(d.updated||0)+'건 완료','ok');$('rightsConfirm').checked=false;await refresh();}catch(e){show(e.message,'warn');}}
+async function remove(ids,allVisible){if(!ids.length){show('삭제할 후보가 없습니다.','warn');return;}var msg=allVisible?'현재 필터에 보이는 '+ids.length+'개 후보를 목록에서 모두 삭제할까요? 원본 영상은 삭제되지 않습니다.':'선택한 '+ids.length+'개 후보를 목록에서 삭제할까요? 원본 영상은 삭제되지 않습니다.';if(!window.confirm(msg))return;try{var d=await post(ACT,{action:'delete',ids:ids,confirmQueueDelete:true});show('후보 목록에서 '+(d.deleted||0)+'건을 삭제했습니다. 다음 수집 때 다시 불러올 수 있습니다.','ok');await refresh();}catch(e){show(e.message,'warn');}}
+async function publish(store){try{var d=await post(PUB,{storeRelease:!!store,includeSnapshot:store?'0':'1'});show('승격 가능 '+d.eligibleRows+'건'+(store?' · 릴리스 저장 완료':''),'ok');if(!store&&d.snapshot){diagnosticCache=d;$('diagnosticJson').textContent=JSON.stringify(d,null,2);$('diagnosticPanel').classList.remove('hidden');}}catch(e){show(e.message,'warn');}}
+function openPreview(id){var r=rowsCache.find(function(x){return text(x.contentId||x.id)===id;});if(!r)return;currentPreview=r;var v=$('previewVideo');v.pause();v.innerHTML='';v.src=text(r.video||r.embedUrl||r.url);$('previewTitle').textContent=r.title||'';$('previewMeta').textContent=[r.sectionKey,'랭킹 '+rowRank(r),r.qualityTarget,r.year,r.ageRating].filter(Boolean).join(' · ');$('sourceOpen').href=text(r.url||r.rights&&r.rights.sourceUrl||r.video);var s=$('subtitleSelect');s.innerHTML='<option value="">자막 없음</option>';var caps=Array.isArray(r.captions)?r.captions:[];caps.forEach(function(c,i){var o=document.createElement('option');o.value=String(i);o.textContent=(c.language||'und')+' · '+(c.label||('자막 '+(i+1)));s.appendChild(o);});$('previewModal').classList.remove('hidden');v.load();}
+function applySubtitle(index){var v=$('previewVideo');Array.from(v.querySelectorAll('track')).forEach(function(t){t.remove();});if(index==='')return;var c=(currentPreview&&currentPreview.captions||[])[Number(index)];if(!c)return;var tr=document.createElement('track');tr.kind='subtitles';tr.label=c.label||c.language||'subtitle';tr.srclang=c.language||'en';tr.src=c.src;tr.default=true;v.appendChild(tr);setTimeout(function(){Array.from(v.textTracks||[]).forEach(function(t){t.mode='showing';});},100);}
+function closePreview(){var v=$('previewVideo');v.pause();v.removeAttribute('src');v.load();$('previewModal').classList.add('hidden');currentPreview=null;}
+function bind(){
+$('refreshBtn').onclick=refresh;$('diagnosticBtn').onclick=diagnostic;$('downloadJsonBtn').onclick=function(){if(diagnosticCache)download(JSON.stringify(diagnosticCache,null,2)+'\n','igdc-media-candidate-diagnostic.json');};$('downloadCandidateListBtn').onclick=function(){var r=visibleRows();download(JSON.stringify({ok:true,generatedAt:new Date().toISOString(),count:r.length,rows:r},null,2)+'\n','igdc-media-candidate-visible-list.json');};$('returnBtn').onclick=function(){location.href='/admin.html';};$('collectBtn').onclick=function(){collect(false);};$('collectAdminExceptionBtn').onclick=function(){collect(true);};$('approveBtn').onclick=function(){action('approve',selectedIds());};$('holdBtn').onclick=function(){action('hold',selectedIds());};$('resetBtn').onclick=function(){action('reset',selectedIds());};$('rejectBtn').onclick=function(){action('reject',selectedIds());};$('blockBtn').onclick=function(){action('block',selectedIds());};$('deleteBtn').onclick=function(){remove(selectedIds(),false);};$('deleteVisibleBtn').onclick=function(){remove(currentVisibleIds(),true);};$('publishPreviewBtn').onclick=function(){publish(false);};$('storeReleaseBtn').onclick=function(){publish(true);};$('downloadSnapshotBtn').onclick=async function(){try{var r=await fetch(PUB+'?download=1',{headers:headers(false),credentials:'same-origin'}),t=await r.text();if(!r.ok)throw new Error(t||'다운로드 실패');download(t,'media.snapshot.generated.json');}catch(e){show(e.message,'warn');}};
+['searchInput','sectionFilter','riskFilter','statusFilter','sortSelect','groupBySection'].forEach(function(id){$(id).addEventListener('input',renderRows);$(id).addEventListener('change',renderRows);});$('selectAllRows').onchange=function(){var c=this.checked;document.querySelectorAll('.rowcheck').forEach(function(e){e.checked=c;});};$('candidateRows').addEventListener('click',function(e){var b=e.target.closest('.previewBtn');if(b)openPreview(text(b.dataset.candidateId));});$('previewClose').onclick=closePreview;$('previewModal').addEventListener('click',function(e){if(e.target===this)closePreview();});$('playToggle').onclick=function(){var v=$('previewVideo');if(v.paused){v.play();this.textContent='일시정지';}else{v.pause();this.textContent='재생';}};$('back10').onclick=function(){var v=$('previewVideo');v.currentTime=Math.max(0,v.currentTime-10);};$('forward10').onclick=function(){var v=$('previewVideo');v.currentTime=Math.min(v.duration||Infinity,v.currentTime+10);};$('muteToggle').onclick=function(){var v=$('previewVideo');v.muted=!v.muted;this.textContent=v.muted?'음소거 해제':'음소거';};$('fitToggle').onclick=function(){var v=$('previewVideo');v.style.objectFit=v.style.objectFit==='cover'?'contain':'cover';this.textContent=v.style.objectFit==='cover'?'맞춤':'채움';};$('subtitleSelect').onchange=function(){applySubtitle(this.value);};$('subtitleToggle').onclick=function(){var tracks=$('previewVideo').textTracks;if(!tracks||!tracks.length)return;var show=tracks[0].mode!=='showing';Array.from(tracks).forEach(function(t){t.mode=show?'showing':'disabled';});this.textContent=show?'자막 끄기':'자막 켜기';};$('fullscreenBtn').onclick=function(){var el=document.querySelector('.player-shell');if(document.fullscreenElement)document.exitFullscreen();else if(el.requestFullscreen)el.requestFullscreen();};document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!$('previewModal').classList.contains('hidden'))closePreview();});refresh();}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();

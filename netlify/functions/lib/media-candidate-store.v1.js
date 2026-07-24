@@ -123,6 +123,11 @@ async function updateCandidates(ids, patch){
   if(!list.length) return [];
   return supabase(rest(CANDIDATE_TABLE,"id="+encodeIn(list)), {method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify(patch||{})});
 }
+async function deleteCandidates(ids){
+  const list=Array.from(new Set(array(ids).map(text).filter(Boolean)));
+  if(!list.length) return [];
+  return supabase(rest(CANDIDATE_TABLE,"id="+encodeIn(list)), {method:"DELETE",headers:{Prefer:"return=representation"}});
+}
 async function insertRelease(row){return supabase(rest(RELEASE_TABLE), {method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify([row])});}
 function normalizeCandidate(input, actor){
   const row=plain(input);
@@ -261,6 +266,6 @@ function buildSnapshot(baseSnapshot, rows, opts){
 module.exports={
   VERSION, CANDIDATE_TABLE, RELEASE_TABLE, ALLOWED_SECTIONS,
   text, lower, compact, bool, plain, array, nowIso, sha256, shortHash, normalizeUrl, hostOf, normalizeSection, roleList, requireRole,
-  response, parseBody, config, supabase, rest, encodeEq, encodeIn, selectCandidates, upsertCandidates, updateCandidates, insertRelease,
+  response, parseBody, config, supabase, rest, encodeEq, encodeIn, selectCandidates, upsertCandidates, updateCandidates, deleteCandidates, insertRelease,
   normalizeCandidate, validateCandidate, snapshotEligible, publicSlot, buildSnapshot
 };

@@ -153,6 +153,7 @@ function isPromotable(row) {
 }
 function normalizeRow(row) {
   const rights = plain(row && row.rights);
+  const raw = plain(row && row.raw);
   const sourceUrl = text(row && (row.url || row.source_url || row.sourceUrl || row.page_url || row.pageUrl || row.link || row.href || row.embed_url || row.embedUrl || row.video_url || row.videoUrl));
   const videoUrl = text(row && (row.video || row.video_url || row.videoUrl));
   const embedUrl = text(row && (row.embedUrl || row.embed_url));
@@ -183,6 +184,19 @@ function normalizeRow(row) {
     seedContent,
     trendingEligible: row && (row.trendingEligible === true || boolValue(row.trending_eligible)),
     replacementPolicy: text(row && (row.replacementPolicy || row.replacement_policy)),
+    rankingScore: Number(row && (row.rankingScore || row.ranking_score) || raw.rankingScore || 0),
+    rankingTier: text(row && (row.rankingTier || row.ranking_tier) || raw.rankingTier || row && row.priority),
+    rankingSignals: Array.isArray(raw.rankingSignals) ? raw.rankingSignals : [],
+    subtitleLanguages: Array.isArray(raw.subtitleLanguages) ? raw.subtitleLanguages : [],
+    subtitleCount: Number(raw.subtitleCount || Array.isArray(raw.captions) && raw.captions.length || 0),
+    captions: Array.isArray(raw.captions) ? raw.captions : [],
+    ageRating: text(raw.ageRating || ""),
+    contentWarnings: Array.isArray(raw.contentWarnings) ? raw.contentWarnings : [],
+    classificationConfidence: Number(raw.classificationConfidence || 0),
+    requestedSection: text(raw.requestedSection || ""),
+    classifiedSection: text(raw.classifiedSection || row && (row.sectionKey || row.section_key) || ""),
+    durationSeconds: Number(raw.durationSeconds || 0),
+    sourceMetadata: plain(raw.sourceMetadata),
     rights: {
       status: text(rights.status) || text(row && row.rights_status),
       candidate: text(rights.candidate) || text(row && row.allowed_use),
