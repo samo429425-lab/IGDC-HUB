@@ -12,7 +12,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "commerce-product-ranking-v1.3.1-product-visibility-regression-repair";
+const VERSION = "commerce-product-ranking-v1.4.0-psom-policy-review-queue-proposals";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -70,6 +70,7 @@ function text(value) { return value == null ? "" : String(value).trim(); }
 function lower(value) { return text(value).toLowerCase(); }
 function plain(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function array(value) { return Array.isArray(value) ? value : []; }
+function bool(value) { return value === true || ["1","true","yes","on","approved","verified","active","enabled","ready"].includes(lower(value)); }
 function clamp(value, min, max, fallback) {
   const n = Number(value);
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
@@ -424,52 +425,101 @@ function commercialAssessment(rowInput, category, risk, contextInput) {
   };
 }
 
-function proposedSections(rowInput, category, risk, commercial) {
-  if (!risk.gatePassed) return [];
-  const row = plain(rowInput), out = [];
-  const add = (page, sectionKey, score, reason) => {
+function proposedSections(rowInput, category, risk, commercial, supplierInput) {
+  const row = plain(rowInput), out = [], evidence = plain(row.evidence), supplier = plain(supplierInput);
+  const hay = lower([row.productName, row.title, row.supplierName, row.supplierType, row.description, row.summary, category.tags.join(" ")].join(" "));
+  const has = function(names){
+    return array(names).some(function(name){
+      const direct = row[name];
+      const nested = evidence[name];
+      if(bool(direct) || bool(nested)) return true;
+      if(text(direct) || text(nested)) return true;
+      return false;
+    });
+  };
+  const evidenceGaps = function(required){ return array(required).filter(function(name){ return !has([name]); }); };
+  const add = function(page, sectionKey, score, reason, role, required){
     if (!FRONT_SECTION_KEYS[page] || !FRONT_SECTION_KEYS[page].includes(sectionKey)) return;
-    if (out.some((item) => item.page === page)) return;
-    out.push({ key: page + "|" + sectionKey, page, sectionKey, score: Math.round(clamp(score, 0, 100, 0)), reason, proposalOnly: true });
+    if (out.some(function(item){ return item.page === page; })) return;
+    const requiredEvidence = array(required);
+    const gaps = evidenceGaps(requiredEvidence);
+    out.push({
+      key: page + "|" + sectionKey,
+      page,
+      sectionKey,
+      score: Math.round(clamp(score, 0, 100, 0)),
+      reason,
+      policyRole: role,
+      requiredEvidence,
+      evidenceGaps: gaps,
+      approvalEligible: risk.gatePassed === true && gaps.length === 0,
+      proposalOnly: true,
+      publicPublication: false
+    });
   };
 
-  const inspectedRecently = !!row.inspectedAt && Number.isFinite(Date.parse(row.inspectedAt)) && Date.now() - Date.parse(row.inspectedAt) <= 14 * 86400000;
-  let distributionSection = "distribution-others";
-  if (commercial.sponsorReady) distributionSection = "distribution-sponsor";
-  else if (commercial.promotional && commercial.potentialScore >= 70) distributionSection = "distribution-special";
-  else if (commercial.potentialScore >= 84) distributionSection = "distribution-recommend";
-  else if (commercial.marketSignalWeight >= 5 && commercial.potentialScore >= 68) distributionSection = "distribution-trending";
-  else if (inspectedRecently) distributionSection = "distribution-new";
-  else if (commercial.visual && commercial.potentialScore >= 70) distributionSection = "distribution-right";
-  add("distribution", distributionSection, commercial.potentialScore, "위험 게이트 통과 후 수익 가능성·시장 신호·상품 특성에 따른 단일 유통 섹션 제안");
+  const cooperative = /(농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|생산자|producer|cooperative)/i.test(hay);
+  const manufacturer = /(제조사|제조업체|공식몰|본사|manufacturer|official store|brand)/i.test(hay) || category.tags.includes("manufacturer_brands");
+  const marketplace = /(마켓|시장|유통|도매|총판|marketplace|market|distributor|wholesale)/i.test(hay);
+  const localOrigin = cooperative || category.tags.includes("local_products") || category.tags.includes("agriculture_fishery_forestry");
+  const essential = category.primary === "food_household_essentials" || category.primary === "agriculture_fishery_forestry";
+  const travel = category.primary === "travel_local_services" || /(관광|숙박|호텔|리조트|체험|투어|여행|ticket|tour|travel|hotel|resort|experience)/i.test(hay);
+  const localService = travel || /(지역서비스|방문서비스|예약|상담|local service)/i.test(hay);
+  const highTrust = risk.gatePassed === true && supplier.approvalReady === true && Number(supplier.trustScore || 0) >= 82;
+  const highestTrust = highTrust && Number(supplier.trustScore || 0) >= 90 && Number(commercial.potentialScore || 0) >= 78;
+  const recentDiscovery = !!row.inspectedAt && Number.isFinite(Date.parse(row.inspectedAt)) && Date.now() - Date.parse(row.inspectedAt) <= 45 * 86400000;
+  const sponsorEvidence = commercial.sponsorReady === true || has(["sponsorDisclosure","sponsorContractVerified","sponsorEvidence"]);
+  const trendEvidence = has(["trendEvidence","marketDemandEvidence","verifiedDemandEvidence"]);
+  const newnessEvidence = has(["newnessEvidence","newListingEvidence","verifiedNewness"]);
+  const specialEvidence = has(["specialEvidence","certificationEvidence","producerSpecialEvidence"]);
+  const travelOperatorEvidence = has(["travelOperatorEvidence","operatorLicenseEvidence","tourOperatorVerified"]);
+  const responsibilityEvidence = has(["marketResponsibilityEvidence","sellerResponsibilityEvidence","localResponsibilityEvidence"]) || (row.supplierEvidenceReady === true && supplier.reviewEligible === true);
+  const socialMarketEvidence = has(["marketEvidenceReady","sameMarketEvidence","socialMarketEvidence"]);
 
-  const homeMainMap = {
-    food_household_essentials: "home_1",
-    agriculture_fishery_forestry: "home_1",
-    beauty_personal_care: "home_2",
-    fashion: "home_2",
-    electronics_accessories: "home_3",
-    home_appliances_living: "home_3",
-    baby_family_education: "home_4",
-    travel_local_services: "home_4",
-    local_products: "home_5",
-    manufacturer_brands: "home_5"
-  };
-  let homeSection = homeMainMap[category.primary] || "home_5";
-  if (commercial.visual && commercial.potentialScore >= 84) homeSection = "home_right_top";
-  else if ((category.tags.includes("local_products") || category.tags.includes("agriculture_fishery_forestry")) && commercial.potentialScore >= 72) homeSection = "home_right_middle";
-  else if (category.tags.includes("manufacturer_brands") && commercial.potentialScore >= 78) homeSection = "home_right_bottom";
-  add("home", homeSection, commercial.potentialScore - 2, "홈 8개 실제 렌더러 중 상품당 단일 섹션 제안");
+  // HOME 8: exact PSOM role classification.  Incomplete candidates still receive
+  // a private proposal, but approvalEligible remains false until required proof
+  // and the common risk gate are complete.
+  if (highestTrust) {
+    add("home", "home_right_top", commercial.potentialScore, "최고 신뢰·검증 완료 상품", "highest_trust_featured", []);
+  } else if (localOrigin && responsibilityEvidence && Number(supplier.trustScore || 0) >= 70) {
+    add("home", "home_right_middle", commercial.potentialScore - 1, "현지 가치와 판매자 책임 근거가 확인된 상품", "local_value_and_responsibility", responsibilityEvidence ? [] : ["marketResponsibilityEvidence"]);
+  } else if (newnessEvidence && risk.gatePassed === true) {
+    add("home", "home_right_bottom", commercial.potentialScore - 2, "신규 검증 지역 발견 상품", "new_local_discovery", newnessEvidence ? [] : ["newnessEvidence"]);
+  } else if (cooperative || localOrigin) {
+    add("home", "home_3", commercial.potentialScore - 1, "생산자·조합·지역 원산지 상품", "producer_cooperative_or_local_origin", []);
+  } else if (essential) {
+    add("home", "home_2", commercial.potentialScore - 1, "현지 생활필수 공급 상품", "essential_local_supply", []);
+  } else if (localService || marketplace) {
+    add("home", "home_4", commercial.potentialScore - 2, "현지 서비스 또는 검증 마켓 상품", "local_service_or_market", []);
+  } else if (recentDiscovery || risk.gatePassed !== true) {
+    add("home", "home_5", commercial.potentialScore - 3, "새로 발견되어 검증을 기다리는 상품", "newly_verified_discovery", []);
+  } else {
+    add("home", "home_1", commercial.potentialScore, "검증된 대표 현지 상품", "featured_local_verified", []);
+  }
 
-  const hay = lower([row.productName, row.supplierName, row.supplierType, category.tags.join(" ")].join(" "));
-  if (/(manufacturer|producer|cooperative|제조|생산자|협동조합|농협|수협|산림조합|영농조합)/i.test(hay)) add("network", "network-right", commercial.potentialScore - 5, "제조·생산·조합형 공급 네트워크 적합");
-  const localTourLink = (category.tags.includes("local_products") || category.tags.includes("agriculture_fishery_forestry")) && /(지역특산|특산품|기념품|체험|관광|숙박|tour|travel|experience)/i.test(hay);
-  if (category.primary === "travel_local_services" || localTourLink) add("tour", "tour", commercial.potentialScore - 8, "관광·지역 체험·특산 연계 적합");
-  if (commercial.visual || commercial.promotional) add("social", "rightPanel", commercial.potentialScore - 6, "시각·화제성이 높은 소셜 우측 후보");
+  // DISTRIBUTION 7: evidence-specific sections are never inferred merely from
+  // inspection time or score.  Missing evidence is shown in the private queue.
+  let distributionSection = "distribution-others", distributionRole = "verified_long_tail_offer", distributionRequired = [];
+  if (sponsorEvidence) { distributionSection = "distribution-sponsor"; distributionRole = "disclosed_sponsored_offer"; distributionRequired = sponsorEvidence ? [] : ["sponsorDisclosure"]; }
+  else if (trendEvidence) { distributionSection = "distribution-trending"; distributionRole = "verified_market_demand"; distributionRequired = trendEvidence ? [] : ["trendEvidence"]; }
+  else if (newnessEvidence) { distributionSection = "distribution-new"; distributionRole = "recently_verified_listing"; distributionRequired = newnessEvidence ? [] : ["newnessEvidence"]; }
+  else if (specialEvidence || (cooperative && has(["certificationEvidence"]))) { distributionSection = "distribution-special"; distributionRole = "certified_or_producer_special"; distributionRequired = specialEvidence ? [] : ["specialEvidence"]; }
+  else if (highestTrust) { distributionSection = "distribution-right"; distributionRole = "curated_high_confidence_offer"; }
+  else if (risk.gatePassed === true && Number(commercial.potentialScore || 0) >= 72) { distributionSection = "distribution-recommend"; distributionRole = "verified_recommended_offer"; }
+  add("distribution", distributionSection, commercial.potentialScore, "유통 섹션 정책과 실제 증빙 상태에 따른 단일 제안", distributionRole, distributionRequired);
 
-  const pageOrder = { distribution: 0, home: 1, network: 2, tour: 3, social: 4 };
-  const orderOf = (page) => Object.prototype.hasOwnProperty.call(pageOrder, page) ? pageOrder[page] : 99;
-  return out.sort((a, b) => orderOf(a.page) - orderOf(b.page) || b.score - a.score || a.sectionKey.localeCompare(b.sectionKey));
+  if (manufacturer || cooperative || marketplace) {
+    add("network", "network-right", commercial.potentialScore - 5, "제조·생산·조합·마켓 공급망 연결 상품", "market_hub_verified_offer", []);
+  }
+  if (travel || (localOrigin && /(특산품|기념품|체험)/i.test(hay))) {
+    add("tour", "tour", commercial.potentialScore - 8, "여행·관광·지역 체험 또는 여행 연계 상품", "local_travel_or_tourism_offer", travelOperatorEvidence ? [] : ["travelOperatorEvidence"]);
+  }
+  if (commercial.visual || commercial.promotional || localOrigin) {
+    add("social", "rightPanel", commercial.potentialScore - 6, "소셜 맥락에 적합한 시각·지역·프로모션 상품", "social_context_market_offer", socialMarketEvidence ? [] : ["socialMarketEvidence"]);
+  }
+
+  const pageOrder = { home: 0, distribution: 1, network: 2, tour: 3, social: 4 };
+  return out.sort(function(a, b){ return pageOrder[a.page] - pageOrder[b.page] || b.score - a.score || a.sectionKey.localeCompare(b.sectionKey); });
 }
 
 function releaseReadiness(rowInput, risk, commercial, supplier) {
@@ -499,7 +549,7 @@ function evaluateProduct(rowInput, contextInput) {
   const commercial = commercialAssessment(row, category, risk, contextInput);
   commercial.rankingEligible = risk.gatePassed;
   if (!risk.gatePassed) commercial.potentialScore = Math.min(Number(commercial.potentialScore) || 0, 39);
-  const identity = productIdentity(row), family = productFamilyKey(row), displayFamily = displayFamilyKey(row), sections = proposedSections(row, category, risk, commercial), release = releaseReadiness(row, risk, commercial, supplier);
+  const identity = productIdentity(row), family = productFamilyKey(row), displayFamily = displayFamilyKey(row), sections = proposedSections(row, category, risk, commercial, supplier), release = releaseReadiness(row, risk, commercial, supplier);
   return Object.assign({}, row, {
     productUrl: canonicalProductUrl(first(row.productUrl, row.url)) || first(row.productUrl, row.url),
     url: canonicalProductUrl(first(row.productUrl, row.url)) || first(row.productUrl, row.url),
@@ -517,7 +567,7 @@ function evaluateProduct(rowInput, contextInput) {
     releaseReadiness: release,
     rankingEligible: risk.gatePassed,
     rankingScore: commercial.potentialScore,
-    recommendedDecision: risk.gatePassed ? "review_for_slot" : (risk.blockers.some((reason) => /api_or_static|list_or_campaign|generic_or_unresolved|supplier_rejected_or_excluded/.test(reason)) ? "reject" : "hold"),
+    recommendedDecision: risk.gatePassed ? "review_for_slot" : (risk.blockers.some((reason) => /api_or_static|list_or_campaign|template_or_placeholder|supplier_rejected_or_excluded/.test(reason)) ? "reject" : "hold"),
     sectionAssignments: sections,
     primaryPlacement: sections[0] || null,
     publicPublication: false,
@@ -621,7 +671,7 @@ function arrangeDiverse(rowsInput) {
 function buildSectionQueues(rankedInput) {
   const queues = {};
   for (const product of array(rankedInput).filter((row) => row.rankingEligible === true)) {
-    for (const assignment of array(product.sectionAssignments)) {
+    for (const assignment of array(product.sectionAssignments).filter((item) => item && item.approvalEligible === true)) {
       const key = assignment.page + ":" + assignment.sectionKey;
       if (!queues[key]) queues[key] = [];
       queues[key].push(Object.assign({}, product, { targetAssignment: assignment }));

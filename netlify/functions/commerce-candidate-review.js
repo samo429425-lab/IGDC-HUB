@@ -15,13 +15,28 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.6.0-ordered-private-lifecycle";
+const VERSION = "commerce-candidate-review-api-v1.7.0-private-review-psom-policy-gates";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
+const SLOT_KEYS = Object.freeze({
+  home:new Set(["home_1","home_2","home_3","home_4","home_5","home_right_top","home_right_middle","home_right_bottom"]),
+  distribution:new Set(["distribution-recommend","distribution-sponsor","distribution-trending","distribution-new","distribution-special","distribution-others","distribution-right"]),
+  network:new Set(["network-right"]),
+  social:new Set(["rightPanel"]),
+  tour:new Set(["tour"])
+});
+const SLOT_EVIDENCE_RULES = Object.freeze({
+  "distribution-trending":["trend","market_demand","verified_demand"],
+  "distribution-new":["newness","new_listing","new_product"],
+  "distribution-special":["certification","producer_special","special_product"],
+  "home_right_bottom":["newness","new_listing","new_product"],
+  "tour":["travel_operator","operator_license","tourism_license"]
+});
 
 function text(v){return v==null?"":String(v).trim();}
 function lower(v){return text(v).toLowerCase().replace(/\s+/g,"_");}
+function bool(v){return v===true||["1","true","yes","on","approved","verified","active","enabled","ready"].includes(lower(v));}
 function isObject(v){return !!v&&typeof v==="object"&&!Array.isArray(v);}
 function plain(v){return isObject(v)?v:{};}
 function safeUrl(v){try{const u=new URL(text(v));return u.protocol==="https:"?u.toString():"";}catch(_e){return "";}}
@@ -143,12 +158,18 @@ function filteredStage(doc,countryInput,regionInput){
   const candidates=input.map(row=>{const match=scopeMatch(row,country,region);return match.matched?Object.assign({},row,{scopeMatch:match}):null;}).filter(Boolean);
   const released=candidates.filter(row=>/released|published/i.test(text(row&&row.stageStatus))).length;
   const eligible=candidates.filter(row=>row&&row.releaseEligible===true).length;
-  const liveResearchQueue=candidates.filter((row)=>text(row&&row.pipelineSource)==="live_product_research_db").length;
+  const liveRows=candidates.filter((row)=>text(row&&row.pipelineSource)==="live_product_research_db");
+  const liveResearchQueue=liveRows.length;
   const stagedReleaseQueue=candidates.length-liveResearchQueue;
+  const researchPromotionEligible=liveRows.filter((row)=>plain(row&&row.researchReadiness).promotionEligible===true).length;
+  const researchNeedsCompletion=liveRows.filter((row)=>plain(row&&row.researchReadiness).queueEligible===true&&plain(row&&row.researchReadiness).promotionEligible!==true).length;
+  const proposedSectionCandidates=liveRows.filter((row)=>Array.isArray(row&&row.proposedPlacements)&&row.proposedPlacements.length>0).length;
+  const proposedSectionCounts={};
+  for(const row of liveRows){for(const placement of Array.isArray(row&&row.proposedPlacements)?row.proposedPlacements:[]){const key=text(placement&&placement.page)+":"+text(placement&&(placement.sectionKey||placement.section));if(key!==":")proposedSectionCounts[key]=(proposedSectionCounts[key]||0)+1;}}
   return Object.assign({},source,{
     selectedScope:{country:(country==="UNRESOLVED"?null:(country==="GLOBAL"?null:(country||null))),region:(country==="UNRESOLVED"?null:(country==="GLOBAL"?"ALL":(country?(region||"ALL"):"ALL"))),source:country==="UNRESOLVED"?"unresolved-ip":(country==="GLOBAL"?"administrator-global":"selected-or-ip"),fallback:country==="UNRESOLVED"?"empty":"exact-region-then-nationwide-within-same-country",crossCountry:false},
     candidates,
-    summary:Object.assign({},plain(source.summary),{considered:candidates.length,eligibleForRelease:eligible,releasedToCanonical:released,held:candidates.length-eligible,liveResearchQueue,stagedReleaseQueue}),
+    summary:Object.assign({},plain(source.summary),{considered:candidates.length,eligibleForRelease:eligible,releasedToCanonical:released,held:candidates.length-eligible,liveResearchQueue,stagedReleaseQueue,researchPromotionEligible,researchNeedsCompletion,proposedSectionCandidates,proposedSectionCounts}),
     source:Object.assign({},plain(source.source),{liveResearchQueueCount:liveResearchQueue,stagedReleaseQueueCount:stagedReleaseQueue})
   });
 }
@@ -264,7 +285,7 @@ function candidateDigestRows(rows){
     candidateId:text(row&&row.candidateId), title:text(row&&row.title), sourceTier:text(row&&row.sourceTier), origin:text(row&&row.origin),
     stageStatus:text(row&&row.stageStatus), releaseEligible:row&&row.releaseEligible===true,
     productCard:{title:text(row&&row.productCard&&row.productCard.title),priceDisplay:text(row&&row.productCard&&row.productCard.priceDisplay),supplierName:text(row&&row.productCard&&row.productCard.supplierName),checkoutMode:text(row&&row.productCard&&row.productCard.checkoutMode)},
-    placement:plain(row&&row.placement), marketKeys:Array.isArray(row&&row.marketKeys)?row.marketKeys.slice(0,30):[],
+    placement:plain(row&&row.placement), proposedPlacements:Array.isArray(row&&row.proposedPlacements)?row.proposedPlacements.slice(0,20):[], researchReadiness:plain(row&&row.researchReadiness), marketKeys:Array.isArray(row&&row.marketKeys)?row.marketKeys.slice(0,30):[],
     revenue:{type:text(row&&row.revenue&&row.revenue.type),monetizationState:text(row&&row.revenue&&row.revenue.monetizationState),contractId:text(row&&row.revenue&&row.revenue.contractId)},
     review:{state:text(row&&row.review&&row.review.state),nextGate:text(row&&row.review&&row.review.nextGate)}, reasons:Array.isArray(row&&row.reasons)?row.reasons.slice(0,30):[]
   }));
@@ -380,6 +401,11 @@ async function selectProductCandidate(member, body){
   const rows=await SlotStore.select("gslot_candidates","select=id,kind,status,source_ref,source_payload&id=eq."+encodeURIComponent(id)+"&limit=1");
   const row=Array.isArray(rows)&&rows[0];
   if(!row||lower(row.kind)!=="product"){const err=new Error("상품 후보를 찾을 수 없습니다.");err.statusCode=404;throw err;}
+  const source=plain(row.source_payload), readiness=ProductPipeline.researchReadiness(source), risk=plain(source.riskAssessment);
+  if(readiness.promotionEligible!==true || risk.gatePassed!==true){
+    const gaps=[].concat(readiness.blockers||[],readiness.reviewGaps||[],risk.blockers||[]).filter(Boolean);
+    const err=new Error("이 상품은 비공개 대기열에서 확인할 수 있지만 아직 승인 절차로 승격할 수 없습니다. 보완 사항: "+(Array.from(new Set(gaps)).join(", ")||"상품·공급업체 검증 미완료"));err.statusCode=409;err.code="PRODUCT_REVIEW_GAPS";throw err;
+  }
   const now=new Date().toISOString();
   const payload=await patchSourcePayload(id,function(source){
     source.slotDecision="slot_candidate";
@@ -437,6 +463,24 @@ async function recordRevenue(member, body){
   return {ok:true,candidateId:id,revenue:(rows||[])[0]||null,note};
 }
 
+function normalizedEvidenceTypes(relations){
+  return (relations&&Array.isArray(relations.evidence)?relations.evidence:[]).filter((row)=>row&&row.verified===true).map((row)=>lower(row.evidence_type));
+}
+function validateAssignmentPolicy(state, hub, section){
+  const page=pageMap(hub), allowed=SLOT_KEYS[page];
+  if(!page||!allowed||!allowed.has(section)){const err=new Error("실제 PSOM에 등록된 허브·섹션 키가 아닙니다.");err.statusCode=400;err.code="INVALID_PSOM_SECTION";throw err;}
+  const types=normalizedEvidenceTypes(state&&state.relations);
+  const required=SLOT_EVIDENCE_RULES[section]||[];
+  if(required.length&&!required.some((needle)=>types.some((type)=>type.includes(needle)))){
+    const err=new Error("선택한 섹션에는 전용 검증 증빙이 필요합니다. 필요한 증빙 유형: "+required.join(", "));err.statusCode=409;err.code="SECTION_EVIDENCE_REQUIRED";throw err;
+  }
+  if(section==="distribution-sponsor"){
+    const sponsor=(state&&state.relations&&Array.isArray(state.relations.revenues)?state.relations.revenues:[]).some((row)=>lower(row&&row.revenue_type)==="sponsor"&&lower(row&&row.status)==="approved");
+    if(!sponsor){const err=new Error("스폰서 섹션은 승인된 sponsor 수익 계약과 고지 정보가 필요합니다.");err.statusCode=409;err.code="SPONSOR_CONTRACT_REQUIRED";throw err;}
+  }
+  return page;
+}
+
 async function decide(member, body){
   requireRole(member,"approve");
   const id=text(body.candidateId);const decision=lower(body.decision);if(!id||!["approved","hold","rejected"].includes(decision)){const err=new Error("후보 ID와 approved/hold/rejected 판정이 필요합니다.");err.statusCode=400;throw err;}
@@ -446,9 +490,10 @@ async function decide(member, body){
     await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:decision==="rejected"?"suppressed":"hold",owner_note:text(body.note).slice(0,3000)||null,updated_at:now,updated_by:member.memberId});
     return {ok:true,candidateId:id,status:decision};
   }
-  requireLifecycleStage(await candidateLifecycle(id),["slot_assignment_pending"],"시장·검증 증빙·승인 수익 경로를 먼저 완료해야 PSOM 배정을 승인할 수 있습니다.");
-  const assignment=plain(body.assignment);const hub=lower(assignment.hubKey);const page=pageMap(hub);const section=text(assignment.slotKey);const country=text(assignment.countryCode).toUpperCase();
-  if(!page||!section||!/^[A-Z]{2}$/.test(country)){const err=new Error("승인에는 허브·PSOM 슬롯 키·ISO 2자리 판매국이 필요합니다.");err.statusCode=400;throw err;}
+  const lifecycleState=requireLifecycleStage(await candidateLifecycle(id),["slot_assignment_pending"],"시장·검증 증빙·승인 수익 경로를 먼저 완료해야 PSOM 배정을 승인할 수 있습니다.");
+  const assignment=plain(body.assignment);const hub=lower(assignment.hubKey);const section=text(assignment.slotKey);const country=text(assignment.countryCode).toUpperCase();
+  const page=validateAssignmentPolicy(lifecycleState,hub,section);
+  if(!section||!/^[A-Z]{2}$/.test(country)){const err=new Error("승인에는 허브·PSOM 슬롯 키·ISO 2자리 판매국이 필요합니다.");err.statusCode=400;throw err;}
   // Approval alone does not make a candidate public. Registry sync will export
   // it only when availability, revenue right and evidence records exist.
   const approvedAt=new Date().toISOString();

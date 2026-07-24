@@ -10,7 +10,7 @@
 
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-product-pipeline-state-v1.1.0-private-lifecycle-operations";
+const VERSION = "commerce-product-pipeline-state-v1.2.0-private-review-before-release-gates";
 const SOURCE_REF = "country-product-ranking-review";
 const STAGES = Object.freeze([
   "research_discovered",
@@ -46,13 +46,14 @@ function priceDisplay(product){
 }
 
 function productCard(productInput){
-  const product=plain(productInput), title=first(product.productName,product.title), image=safeHttpsUrl(first(product.imageUrl,product.imageOriginalUrl,product.image,product.thumb));
+  const product=plain(productInput), rawTitle=first(product.productName,product.title), title=ProductRanking.isGenericProductName(rawTitle)?"상품명 확인 중":rawTitle, image=safeHttpsUrl(first(product.imageUrl,product.imageOriginalUrl,product.image,product.thumb));
   const checkoutUrl=safeHttpsUrl(first(product.externalProductUrl,product.productUrl,product.url));
   const supplierUrl=safeHttpsUrl(first(product.supplierSiteUrl,product.supplierOfficialUrl,plain(product.supplier).officialUrl));
   const supplierName=first(product.supplierName,plain(product.supplier).name);
   return {
     schema:"igdc-external-seller-product-card.v1",
     title,
+    sourceTitle:rawTitle||null,
     image,
     price:text(product.price)||null,
     priceCurrency:text(product.priceCurrency)||null,
@@ -76,27 +77,40 @@ function productCard(productInput){
 
 function researchReadiness(productInput){
   const product=plain(productInput), card=productCard(product), risk=plain(product.riskAssessment), supplier=plain(product.supplierAssessment);
-  const blockers=[], warnings=[];
-  if(!ProductRanking.isReviewableProduct(product)) blockers.push("product_reference_not_reviewable");
-  if(ProductRanking.isGenericProductName(card.title)) blockers.push("product_title_missing_or_generic");
-  if(!card.image) blockers.push("product_image_missing");
-  if(!card.checkoutUrl) blockers.push("product_checkout_url_missing");
-  if(!card.supplierName) blockers.push("supplier_name_missing");
-  if(!card.supplierUrl) blockers.push("supplier_official_url_missing");
-  if(risk.gatePassed !== true) blockers.push("risk_gate_not_passed");
-  if(!(product.supplierEvidenceReady === true || supplier.evidenceReady === true)) blockers.push("supplier_evidence_not_ready");
+  const hardBlockers=[], reviewGaps=[], warnings=[];
+
+  // A private review queue must be broader than the publication gate.  Keep a
+  // candidate visible when it is a real, same-site product detail page even if
+  // title, price, image, supplier approval or revenue evidence still need work.
+  // Only malformed/template/static/list pages and explicitly dead pages are
+  // rejected before the administrator can inspect them.
+  if(!card.checkoutUrl || !ProductRanking.isSpecificProductUrl(card.checkoutUrl)) hardBlockers.push("specific_product_detail_url_missing");
+  if(ProductRanking.isTemplateOrPlaceholderUrl(card.checkoutUrl)) hardBlockers.push("template_or_placeholder_url");
+  if(product.productPageLive === false) hardBlockers.push("product_page_unavailable");
+  if(!card.supplierName && !card.supplierUrl) hardBlockers.push("supplier_identity_missing");
+
+  if(ProductRanking.isGenericProductName(card.title)) reviewGaps.push("product_title_missing_or_generic");
+  if(!card.image) reviewGaps.push("product_image_missing");
+  if(!card.supplierName) reviewGaps.push("supplier_name_missing");
+  if(!card.supplierUrl) reviewGaps.push("supplier_official_url_missing");
+  if(risk.gatePassed !== true) reviewGaps.push("risk_gate_not_passed");
+  if(!(product.supplierEvidenceReady === true || supplier.evidenceReady === true)) reviewGaps.push("supplier_evidence_not_ready");
   if(!card.price) warnings.push("price_to_be_confirmed_at_seller");
   if(!card.availability) warnings.push("availability_to_be_confirmed_at_seller");
   if(!(product.offerPresent === true)) warnings.push("structured_offer_not_confirmed");
-  const queueEligible=blockers.length === 0;
+
+  const queueEligible=hardBlockers.length === 0;
+  const promotionEligible=queueEligible && reviewGaps.length === 0;
   return {
     version:VERSION,
     queueEligible,
-    stage:queueEligible?"research_review_ready":"research_discovered",
-    blockers:unique(blockers),
+    promotionEligible,
+    stage:queueEligible?(promotionEligible?"research_review_ready":"private_research_queue"):"research_discovered",
+    blockers:unique(hardBlockers),
+    reviewGaps:unique(reviewGaps),
     warnings:unique(warnings),
     productCard:card,
-    nextGate:queueEligible?"private_research_queue":"complete_product_and_supplier_evidence"
+    nextGate:queueEligible?(promotionEligible?"administrator_product_selection":"administrator_review_and_data_completion"):"discard_invalid_product_reference"
   };
 }
 
@@ -157,7 +171,8 @@ function registryState(candidateInput, relationsInput){
 
 function liveQueueRow(candidateInput, relationsInput){
   const candidate=plain(candidateInput), payload=plain(candidate.source_payload), lifecycle=registryState(candidate,relationsInput), card=plain(payload.productCard&&payload.productCard.schema?payload.productCard:productCard(payload));
-  const placement=plain(payload.placement), ranking=plain(payload.productRanking), revenue=plain(payload.revenue);
+  const placement=plain(payload.placement), ranking=plain(payload.productRanking), revenue=plain(payload.revenue), readiness=plain(payload.researchReadiness);
+  const qualityReasons=unique(array(readiness.blockers).concat(array(readiness.reviewGaps),array(readiness.warnings)));
   return {
     candidateId:text(candidate.id),
     pipelineSource:"live_product_research_db",
@@ -169,7 +184,9 @@ function liveQueueRow(candidateInput, relationsInput){
     origin:first(plain(payload.commerceCandidate).origin,candidate.source_ref,SOURCE_REF),
     stageStatus:lifecycle.stage,
     releaseEligible:false,
-    reasons:lifecycle.reasons,
+    reasons:unique(array(lifecycle.reasons).concat(qualityReasons)),
+    researchReadiness:readiness,
+    proposedPlacements:array(payload.proposedPlacements),
     essentialClass:first(ranking.category,payload.productCategory),
     placement:{page:first(placement.page,payload.page),section:first(placement.section,payload.section),slot:first(placement.slot,payload.slot),country:first(placement.country,plain(payload.marketScope).marketCountry),region:first(placement.region,plain(payload.marketScope).marketRegion)},
     marketKeys:array(payload.marketKeys),

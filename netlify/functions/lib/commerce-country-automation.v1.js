@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v2.7.1-product-visibility-regression-repair";
+const VERSION = "commerce-country-automation-v2.8.0-private-review-queue-psom-linkage";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1335,7 +1335,8 @@ function publicProductJob(job) {
       held: visibleProducts.filter((row) => row.slotDecision === "hold").length,
       rejected: visibleProducts.filter((row) => row.slotDecision === "reject").length,
       sectionCounts: plain(portfolio.summary && portfolio.summary.sectionCounts),
-      privateResearchQueueEligible: visibleProducts.filter((row) => row.familyRepresentative !== false && ProductPipeline.researchReadiness(row).queueEligible === true).length,
+      privateResearchQueueEligible: visibleProducts.filter((row) => ProductPipeline.researchReadiness(row).queueEligible === true).length,
+      privateResearchQueueNeedsCompletion: visibleProducts.filter((row) => { const state = ProductPipeline.researchReadiness(row); return state.queueEligible === true && state.promotionEligible !== true; }).length,
       privateResearchQueueStaged: Number(job.stageSummary && (Number(job.stageSummary.created || 0) + Number(job.stageSummary.updated || 0) + Number(job.stageSummary.preserved || 0)) || 0)
     },
     pipeline: { version: ProductPipeline.VERSION, automaticPrivateResearchStaging: true, automaticPublicPublication: false, stageSummary: plain(job.stageSummary), nextGate: job.status === "complete" ? "administrator_product_selection_and_commerce_evidence" : text(job.status) },
@@ -1388,7 +1389,7 @@ async function beginProductResearchJob(actorId, input) {
   const supplierSources = sourcePool.sort((a,b)=>Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,PRODUCT_SUPPLIER_LIMIT);
   if(!supplierSources.length){const error=new Error("완료된 공급업체 후보 중 공식 판매 사이트·법적 신원·직접 판매 증빙을 갖춘 상품 조사 출처가 없습니다. 공급업체 후보의 잡음과 증빙 상태를 먼저 정리하세요.");error.statusCode=409;throw error;}
   const rankingContext = await productRankingContext(scope);
-  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, rankingContext, discoveryCursor: 0, rawProducts: [], inspectionPool: [], inspectCursor: 0, products: [], stagePool: [], stageCursor: 0, stageSummary: { eligible: 0, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 }, trace: [{ at: now, source: "product-research-job", status: "started", suppliers: supplierSources.length, sourcePolicy: "official_direct_sales_legal_identity_only; risk_gate_before_revenue_ranking; supplier_aware_exact_dedupe; automatic_private_research_queue; section_proposal_only" }], errors: [], lastError: null };
+  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, rankingContext, discoveryCursor: 0, rawProducts: [], inspectionPool: [], inspectCursor: 0, products: [], stagePool: [], stageCursor: 0, stageSummary: { eligible: 0, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 }, trace: [{ at: now, source: "product-research-job", status: "started", suppliers: supplierSources.length, sourcePolicy: "official_direct_sales_legal_identity_only; broad_private_review_queue_before_release_gates; supplier_aware_exact_dedupe; psom_policy_proposals; administrator_approval_before_publication" }], errors: [], lastError: null };
   await saveProductJob(job, actorId); return publicProductJob(job);
 }
 
@@ -1409,13 +1410,13 @@ async function advanceProductResearchJob(actorId, input) {
       const batch = array(job.inspectionPool).slice(Number(job.inspectCursor || 0), Number(job.inspectCursor || 0) + 4);
       if (!batch.length) {
         const portfolio = ProductRanking.buildPortfolio(array(job.rawProducts).concat(array(job.products)), plain(job.rankingContext));
-        job.stagePool = array(portfolio.products).filter((row) => row.familyRepresentative !== false && row.researchStatus === "ready_for_admin_review" && ProductPipeline.researchReadiness(row).queueEligible === true).slice(0, PRODUCT_PORTFOLIO_LIMIT);
+        job.stagePool = array(portfolio.products).filter((row) => ProductPipeline.researchReadiness(row).queueEligible === true).slice(0, PRODUCT_PORTFOLIO_LIMIT);
         job.stageCursor = 0; job.stageSummary = { eligible: job.stagePool.length, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 }; job.status = "staging";
       } else {
         const result = await RegionalSelector.inspectProductResearchStep(batch, { country: scope.country, region: scope.region }); job.products = mergeProductRows(job.products, result.items, PRODUCT_PORTFOLIO_LIMIT); job.inspectCursor = Number(job.inspectCursor || 0) + batch.length; job.trace = array(job.trace).concat([{ at: iso(), source: "product-page-inspection", status: "ok", count: array(result.items).length, done: job.inspectCursor, total: array(job.inspectionPool).length }]);
         if (job.inspectCursor >= array(job.inspectionPool).length) {
           const portfolio = ProductRanking.buildPortfolio(array(job.rawProducts).concat(array(job.products)), plain(job.rankingContext));
-          job.stagePool = array(portfolio.products).filter((row) => row.familyRepresentative !== false && row.researchStatus === "ready_for_admin_review" && ProductPipeline.researchReadiness(row).queueEligible === true).slice(0, PRODUCT_PORTFOLIO_LIMIT);
+          job.stagePool = array(portfolio.products).filter((row) => ProductPipeline.researchReadiness(row).queueEligible === true).slice(0, PRODUCT_PORTFOLIO_LIMIT);
           job.stageCursor = 0; job.stageSummary = { eligible: job.stagePool.length, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 }; job.status = "staging";
         }
       }
@@ -1446,7 +1447,7 @@ function productCandidatePayload(actorId, scope, product, decision) {
   const productUrlValue = productUrl(product), imageUrlValue = productImageUrl(product), readiness = ProductPipeline.researchReadiness(product), card = ProductPipeline.productCard(product);
   const selected = decision === "slot_candidate";
   return {
-    id: productCandidateId(scope, product), entityKind: "product_reference", title: first(product.productName, product.title), url: productUrlValue, externalProductUrl: productUrlValue, image: imageUrlValue, thumb: imageUrlValue,
+    id: productCandidateId(scope, product), entityKind: "product_reference", title: card.title, sourceTitle: card.sourceTitle, url: productUrlValue, externalProductUrl: productUrlValue, image: imageUrlValue, thumb: imageUrlValue,
     price: text(product.price), priceCurrency: text(product.priceCurrency), availability: text(product.availability), productCard: card,
     page: text(placement.page), channel: text(placement.page), section: text(placement.sectionKey), psom_key: text(placement.sectionKey),
     placement: { page: text(placement.page), section: text(placement.sectionKey), country: scope.country, region: scope.region, proposalOnly: true }, proposedPlacements: array(product.sectionAssignments),
@@ -1506,9 +1507,11 @@ async function productCandidateAction(actorId, input) {
   if (index < 0) { const error = new Error("상세페이지 검증을 마친 상품 후보를 찾을 수 없습니다. 발견 단계 상품은 검증 완료 후 판정할 수 있습니다."); error.statusCode = 404; throw error; }
   if (decision === "slot_candidate") {
     const risk = plain(evaluated.riskAssessment);
-    if (risk.gatePassed !== true || !array(evaluated.sectionAssignments).length) {
-      const reasons = array(risk.blockers).join(", ") || "섹션 배정 조건 미충족";
-      const error = new Error("위험 차단 게이트와 섹션 분류를 모두 통과한 상품만 슬롯 후보로 지정할 수 있습니다. 차단 사유: " + reasons); error.statusCode = 409; throw error;
+    const eligibleAssignments = array(evaluated.sectionAssignments).filter((row) => row && row.approvalEligible === true);
+    const readiness = ProductPipeline.researchReadiness(evaluated);
+    if (risk.gatePassed !== true || readiness.promotionEligible !== true || !eligibleAssignments.length) {
+      const reasons = array(risk.blockers).concat(array(readiness.reviewGaps), array(evaluated.sectionAssignments).flatMap((row) => array(row && row.evidenceGaps))).filter(Boolean).join(", ") || "섹션 배정 조건 미충족";
+      const error = new Error("비공개 대기열 확인은 가능하지만, 상품 정보·위험 게이트·섹션 증빙을 모두 통과한 상품만 승인 절차로 승격할 수 있습니다. 보완 사항: " + reasons); error.statusCode = 409; throw error;
     }
   }
   const current = plain(job.products[index]);

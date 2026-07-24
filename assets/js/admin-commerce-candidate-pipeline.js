@@ -1,4 +1,4 @@
-/* IGDC Commerce Candidate Pipeline Admin View v1.6.0
+/* IGDC Commerce Candidate Pipeline Admin View v1.7.0
  * Ordered private research/staging workflow and commerce queue diagnostic.
  * It reuses the existing administrator session.  No second commerce login,
  * provider call, seller navigation, publication, payment, or browser secret.
@@ -130,20 +130,47 @@
   }
   function labelTier(v){var x=text(v);return x==='approved_commerce_member'?'직접등록 승인':x==='managed_sponsor'?'관리 스폰서':x==='external_brokerage'?'외부중개/연결':x==='risk_ranked_official_supplier_product'?'공식 공급처 상품 리서치':x||'미분류';}
   function tierClass(v){return v==='approved_commerce_member'?'direct':v==='managed_sponsor'?'sponsor':'external';}
-  function stageLabel(v){var x=text(v);return ({administrator_selection_pending:'관리자 상품 선택',market_evidence_pending:'시장·배송 근거',trust_evidence_pending:'검증 증빙',revenue_route_pending:'수익 경로',slot_assignment_pending:'PSOM 배정',registry_sync_ready:'원장 동기화 준비',staged_release_review:'공급 개방 점검',canonical_canary_ready:'수동 카나리 준비',held:'보류',rejected:'제외'})[x]||x||'검토 대기';}
+  function stageLabel(v){var x=text(v);return ({private_research_queue:'비공개 리서치 대기열',research_review_ready:'승인 검토 가능',research_discovered:'리서치 발견',administrator_selection_pending:'관리자 상품 선택',market_evidence_pending:'시장·배송 근거',trust_evidence_pending:'검증 증빙',revenue_route_pending:'수익 경로',slot_assignment_pending:'PSOM 배정',registry_sync_ready:'원장 동기화 준비',staged_release_review:'공급 개방 점검',canonical_canary_ready:'수동 카나리 준비',held:'보류',rejected:'제외'})[x]||x||'검토 대기';}
   function statusPill(c){return c.releaseEligible?'<span class="pill release">발행 전 통과</span>':'<span class="pill hold">'+esc(stageLabel(c.stageStatus))+'</span>';}
   function number(v){var n=Number(v);return Number.isFinite(n)?n:0;}
   function gridCard(title,value,small){return '<article class="card"><h2>'+esc(title)+'</h2><div class="num">'+esc(value)+'</div><div class="small">'+esc(small||'')+'</div></article>';}
-  function renderSummary(summary){var s=summary.summary||{};var g=$('summaryGrid');g.innerHTML=''+gridCard('전체 비공개 후보',s.considered||0,'상품 리서치·정식 스테이징 결합')+gridCard('상품 리서치 대기열',s.liveResearchQueue||0,'관리자 선택과 증빙 등록 전')+gridCard('공급 개방 스테이지',s.stagedReleaseQueue||0,'원장 동기화·후보 인테이크 완료')+gridCard('발행 전 통과',s.eligibleForRelease||0,'공개 키는 별도 배포 환경에서만');g.classList.remove('hidden');var gate=summary.releaseGate||{};var panel=$('policyPanel');var release=gate.enabled===true;panel.innerHTML='<h2>공개 전 안전 상태</h2><div class="notice '+(release?'ok':'warn')+'"><strong>'+esc(release?'발행 키가 배포 환경에서 확인됨':'현재는 비공개 대기열 상태')+'</strong><br>'+esc(release?'그래도 각 후보는 Canonical·IP·판매시장 검증을 다시 통과해야 합니다.':'상품 리서치 완료 직후에는 연구 대기열에 들어오며, 관리자 선택→시장 근거→검증 증빙→수익 경로→PSOM 배정→원장 동기화 순서가 끝나야 공급 개방 점검으로 승격됩니다.')+'</div><div class="small" style="margin-top:9px">자동 공개·IGDC 결제는 실행하지 않습니다. stage: '+esc(summary.generatedAt||'아직 생성되지 않음')+'</div>';panel.classList.remove('hidden');}
+  function renderSummary(summary){var s=summary.summary||{};var g=$('summaryGrid');g.innerHTML=''+gridCard('전체 비공개 후보',s.considered||0,'상품 리서치·정식 스테이징 결합')+gridCard('상품 리서치 대기열',s.liveResearchQueue||0,'보완 필요 '+number(s.researchNeedsCompletion)+'건')+gridCard('승인 절차 진행 가능',s.researchPromotionEligible||0,'상품·공급업체 위험 게이트 통과')+gridCard('공급 개방 스테이지',s.stagedReleaseQueue||0,'원장 동기화·후보 인테이크 완료')+gridCard('발행 전 통과',s.eligibleForRelease||0,'공개 키는 별도 배포 환경에서만');g.classList.remove('hidden');var gate=summary.releaseGate||{};var panel=$('policyPanel');var release=gate.enabled===true;panel.innerHTML='<h2>공개 전 안전 상태</h2><div class="notice '+(release?'ok':'warn')+'"><strong>'+esc(release?'발행 키가 배포 환경에서 확인됨':'현재는 비공개 대기열 상태')+'</strong><br>'+esc(release?'그래도 각 후보는 Canonical·IP·판매시장 검증을 다시 통과해야 합니다.':'상품 리서치 완료 직후에는 정보 보완 후보도 비공개 대기열에 나타납니다. 관리자 선택→시장 근거→검증 증빙→수익 경로→PSOM 배정→원장 동기화 순서가 끝나야 공급 개방 점검으로 승격됩니다.')+'</div><div class="small" style="margin-top:9px">자동 공개·IGDC 결제는 실행하지 않습니다. 섹션 제안 후보: '+esc(number(s.proposedSectionCandidates))+'건 · stage: '+esc(summary.generatedAt||'아직 생성되지 않음')+'</div>';panel.classList.remove('hidden');}
+  function proposalHtml(c,p){
+    var proposals=Array.isArray(c&&c.proposedPlacements)?c.proposedPlacements:[];
+    if(!proposals.length&&p&&(p.page||p.section))proposals=[{page:p.page,section:p.section,approvalEligible:c&&c.releaseEligible===true}];
+    if(!proposals.length)return '<span class="small">추천 배정 없음</span>';
+    return proposals.slice(0,8).map(function(row){
+      var page=text(row&&row.page)||'-',section=text(row&&(row.sectionKey||row.section))||'-';
+      var ok=row&&row.approvalEligible===true;
+      var gaps=Array.isArray(row&&row.evidenceGaps)?row.evidenceGaps:[];
+      return '<div class="placement-line"><span class="pill '+(ok?'release':'hold')+'">'+esc(page+' / '+section)+'</span>'+(gaps.length?'<span class="small"> 보완: '+esc(gaps.join(', '))+'</span>':'')+'</div>';
+    }).join('');
+  }
+  function reviewLink(url,label){
+    var value=text(url);
+    if(!/^https:\/\//i.test(value))return '';
+    return '<a class="review-link" href="'+esc(value)+'" target="_blank" rel="noopener">'+esc(label)+'</a>';
+  }
+  function readinessReasons(c){
+    var ready=c&&c.researchReadiness||{};
+    var rows=[];
+    [['차단',ready.blockers],['확인 필요',ready.reviewGaps],['참고',ready.warnings],['현재 상태',c&&c.reasons]].forEach(function(pair){
+      var list=Array.isArray(pair[1])?pair[1]:[];
+      list.forEach(function(value){rows.push(pair[0]+': '+text(value));});
+    });
+    return rows.length?rows.join('\n'):'-';
+  }
   function renderRows(candidates){
     var tbody=$('candidateRows'),list=Array.isArray(candidates)?candidates:[];candidateStore={};
     list.forEach(function(row){if(row&&row.candidateId)candidateStore[row.candidateId]=row;});
-    if(!list.length){tbody.innerHTML='<tr><td colspan="10" class="empty">현재 표시할 비공개 후보가 없습니다. 상품 리서치 완료 후 위험 게이트를 통과한 후보는 이 화면의 연구 대기열에 먼저 나타납니다.</td></tr>';$('tablePanel').classList.remove('hidden');$('candidateActionPanel').classList.add('hidden');return;}
+    if(!list.length){tbody.innerHTML='<tr><td colspan="10" class="empty">현재 표시할 비공개 후보가 없습니다. 상품 상세 URL과 공급업체 식별이 가능한 리서치 후보는 정보 보완 상태라도 이 대기열에 먼저 나타나야 합니다.</td></tr>';$('tablePanel').classList.remove('hidden');$('candidateActionPanel').classList.add('hidden');return;}
     tbody.innerHTML=list.map(function(c){
-      var p=c.placement||{},r=c.revenue||{},v=c.review||{},rank=c.ranking||{},card=c.productCard||{},supplier=c.supplier||{};
-      var reasons=Array.isArray(c.reasons)&&c.reasons.length?c.reasons.join('\n'):'-';
+      var p=c.placement||{},r=c.revenue||{},v=c.review||{},rank=c.ranking||{},card=c.productCard||{},supplier=c.supplier||{},ready=c.researchReadiness||{};
+      var reasons=readinessReasons(c);
       var image=card.image?'<img src="'+esc(card.image)+'" alt="" style="width:70px;height:70px;object-fit:cover;border-radius:8px;float:left;margin:0 9px 6px 0">':'';
-      return '<tr><td>'+image+'<strong>'+esc(card.title||c.title||'-')+'</strong><br><span class="small">'+esc(card.priceDisplay||'판매처에서 현재 가격 확인')+' · '+esc(card.supplierName||supplier.name||'-')+'</span><br><span class="small mono">'+esc(c.candidateId||'-')+'</span><div style="clear:both"></div></td><td><span class="pill '+tierClass(c.sourceTier)+'">'+esc(labelTier(c.sourceTier))+'</span></td><td>'+statusPill(c)+'<br><span class="small">다음: '+esc(v.nextGate||'-')+'</span></td><td><span class="mono">'+esc((p.page||'-')+' / '+(p.section||'-')+(p.slot?' / '+p.slot:''))+'</span></td><td>'+esc((c.marketKeys||[]).join(', ')||'-')+'</td><td>'+esc(c.essentialClass||'-')+'</td><td><span class="mono">'+esc(r.type||'-')+'</span><br><span class="small">상태: '+esc(r.monetizationState||'-')+' · 계약: '+esc(r.contractId||'-')+' · 검토: '+esc(v.state||'-')+'</span><br><span class="small">결제: 외부 판매처</span></td><td><strong>'+esc(number(rank.finalScore).toFixed(2))+'</strong><br><span class="small">생활 '+esc(rank.essentiality||0)+' · 신뢰 '+esc(rank.sellerTrust||0)+' · 수익 '+esc(rank.revenueCertainty||0)+'</span></td><td class="reason">'+esc(reasons).replace(/\n/g,'<br>')+'</td><td><button type="button" class="manage-btn" data-manage-candidate="'+esc(c.candidateId||'')+'">다음 단계 관리</button></td></tr>';
+      var links=[reviewLink(card.checkoutUrl,'상품 페이지'),reviewLink(card.supplierUrl||supplier.officialUrl,'공급업체 사이트'),reviewLink(card.image,'이미지 원본')].filter(Boolean).join(' · ');
+      var readiness=ready.promotionEligible===true?'<span class="pill release">승인 진행 가능</span>':'<span class="pill hold">정보 보완 필요</span>';
+      return '<tr><td>'+image+'<strong>'+esc(card.title||c.title||'-')+'</strong><br><span class="small">'+esc(card.priceDisplay||'판매처에서 현재 가격 확인')+' · '+esc(card.supplierName||supplier.name||'-')+'</span>'+(links?'<br><span class="small">'+links+'</span>':'')+'<br><span class="small mono">'+esc(c.candidateId||'-')+'</span><div style="clear:both"></div></td><td><span class="pill '+tierClass(c.sourceTier)+'">'+esc(labelTier(c.sourceTier))+'</span></td><td>'+statusPill(c)+'<br>'+readiness+'<br><span class="small">다음: '+esc(v.nextGate||ready.nextGate||'-')+'</span></td><td>'+proposalHtml(c,p)+'</td><td>'+esc((c.marketKeys||[]).join(', ')||'-')+'</td><td>'+esc(c.essentialClass||'-')+'</td><td><span class="mono">'+esc(r.type||'-')+'</span><br><span class="small">상태: '+esc(r.monetizationState||'-')+' · 계약: '+esc(r.contractId||'-')+' · 검토: '+esc(v.state||'-')+'</span><br><span class="small">결제: 외부 판매처</span></td><td><strong>'+esc(number(rank.finalScore).toFixed(2))+'</strong><br><span class="small">생활 '+esc(rank.essentiality||0)+' · 신뢰 '+esc(rank.sellerTrust||0)+' · 수익 '+esc(rank.revenueCertainty||0)+'</span></td><td class="reason">'+esc(reasons).replace(/\n/g,'<br>')+'</td><td><button type="button" class="manage-btn" data-manage-candidate="'+esc(c.candidateId||'')+'">다음 단계 관리</button></td></tr>';
     }).join('');
     $('tablePanel').classList.remove('hidden');
     Array.prototype.forEach.call(tbody.querySelectorAll('[data-manage-candidate]'),function(button){button.addEventListener('click',function(){selectCandidate(button.getAttribute('data-manage-candidate'));});});
@@ -153,9 +180,12 @@
   function selectedCandidate(){return candidateStore[selectedCandidateId]||null;}
   function selectCandidate(id){
     var row=candidateStore[id];if(!row)return;selectedCandidateId=id;
-    var p=row.placement||{},card=row.productCard||{},review=row.review||{};
+    var p=row.placement||{},card=row.productCard||{},review=row.review||{},ready=row.researchReadiness||{};
     $('candidateActionPanel').classList.remove('hidden');
-    $('selectedCandidateMeta').innerHTML='<strong>'+esc(card.title||row.title||id)+'</strong><br>현재 단계: '+esc(stageLabel(row.stageStatus))+' · 다음 게이트: '+esc(review.nextGate||'-')+'<br><span class="small">외부 판매처 결제 구조이며, 이 관리 작업은 IGDC 공개·결제·배송 책임을 생성하지 않습니다.</span>';
+    var gaps=[].concat(Array.isArray(ready.blockers)?ready.blockers:[],Array.isArray(ready.reviewGaps)?ready.reviewGaps:[]);
+    $('selectedCandidateMeta').innerHTML='<strong>'+esc(card.title||row.title||id)+'</strong><br>현재 단계: '+esc(stageLabel(row.stageStatus))+' · 다음 게이트: '+esc(review.nextGate||ready.nextGate||'-')+'<br><span class="small">추천 배정: '+esc((Array.isArray(row.proposedPlacements)?row.proposedPlacements:[]).map(function(x){return text(x.page)+'/'+text(x.sectionKey||x.section);}).filter(Boolean).join(', ')||'없음')+'</span>'+(gaps.length?'<br><span class="small">승인 전 보완: '+esc(gaps.join(', '))+'</span>':'')+'<br><span class="small">외부 판매처 결제 구조이며, 이 관리 작업은 IGDC 공개·결제·배송 책임을 생성하지 않습니다.</span>';
+    $('selectProductBtn').disabled=ready.promotionEligible!==true;
+    $('selectProductBtn').title=ready.promotionEligible===true?'관리자 승인 절차를 시작합니다.':'상품명·이미지·공급업체·위험 검증을 먼저 보완해야 합니다.';
     setValue('marketCountry',p.country||ACTIVE_SCOPE.country||'');setValue('marketRegion',p.region||ACTIVE_SCOPE.region||'NATIONWIDE');
     setValue('assignCountry',p.country||ACTIVE_SCOPE.country||'');setValue('assignRegion',p.region||ACTIVE_SCOPE.region||'NATIONWIDE');setValue('assignHub',p.page||'distribution');setValue('assignSlot',p.section||p.slot||'');
     $('candidateActionPanel').scrollIntoView({behavior:'smooth',block:'start'});
