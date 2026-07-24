@@ -18,8 +18,9 @@ const Trust = require("./lib/trustFilter.core.v1");
 const NonPgRevenue = require("./lib/nonpg-revenue-contract.core.v1");
 const LedgerStore = require("./lib/revenue-ledger-supabase.v1");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
+const CommerceIntake = require("./lib/commerce-candidate-intake.v1");
 
-const VERSION = "product-go-live-audit-v1.1.0-country-region-scoped-readonly";
+const VERSION = "product-go-live-audit-v1.2.0-private-stage-pipeline-aware";
 const MAX_ROWS = 120;
 
 const SNAPSHOT_SPECS = [
@@ -438,6 +439,60 @@ function loadSnapshot(spec){
     }
   };
 }
+function privateStageScopeMatch(row, scope){
+  if(!scope || scope.active === false) return {matched:true,mode:"global"};
+  if(scope.unresolved || !scope.country) return {matched:false,mode:"unresolved"};
+  const scopes=[];
+  const seen=new Set();
+  function add(countryInput,regionInput){
+    const country=normalizeCountry(countryInput);if(!country)return;
+    const region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE";
+    const key=country+"|"+region;if(seen.has(key))return;seen.add(key);scopes.push({country,region});
+  }
+  for(const key of asArray(row&&row.marketKeys)){
+    const match=text(key).toUpperCase().match(/^([A-Z]{2})-(.+)$/);if(match)add(match[1],match[2]);
+  }
+  const placement=isObject(row&&row.placement)?row.placement:{};add(placement.country,placement.region);
+  const marketScope=isObject(row&&row.marketScope)?row.marketScope:{};add(marketScope.marketCountry,marketScope.marketRegion);
+  const supply=isObject(row&&row.countrySupply)?row.countrySupply:{};add(first(supply.country,supply.countryCode),first(supply.region,supply.regionCode));
+  const sameCountry=scopes.filter((entry)=>entry.country===scope.country);
+  if(!sameCountry.length)return {matched:false,mode:"none"};
+  const requested=normalizeRegion(scope.region||"NATIONWIDE",scope.country)||"NATIONWIDE";
+  if(requested==="NATIONWIDE")return {matched:sameCountry.some((entry)=>entry.region==="NATIONWIDE"),mode:"nationwide"};
+  if(sameCountry.some((entry)=>entry.region===requested))return {matched:true,mode:"exact_region"};
+  if(sameCountry.some((entry)=>entry.region==="NATIONWIDE"))return {matched:true,mode:"nationwide_fallback"};
+  return {matched:false,mode:"none"};
+}
+function countStage(rows){
+  const out={};for(const row of asArray(rows)){const key=text(row&&row.stageStatus)||"unknown";out[key]=(out[key]||0)+1;}return out;
+}
+function privateStageStatus(root, scope){
+  let doc=null;try{doc=CommerceIntake.readStage(root);}catch(_error){doc=null;}
+  const all=asArray(doc&&doc.candidates);
+  const rows=all.filter((row)=>privateStageScopeMatch(row,scope).matched);
+  const eligible=rows.filter((row)=>row&&row.releaseEligible===true).length;
+  const held=rows.length-eligible;
+  let nextGate="product_research_and_private_queue";
+  if(rows.length&&eligible===0)nextGate="complete_evidence_revenue_assignment_and_registry_sync";
+  if(eligible>0)nextGate="canonical_snapshot_build_and_manual_canary";
+  return {
+    available:!!doc,
+    schema:text(doc&&doc.schema)||null,
+    version:text(doc&&doc.version)||null,
+    generatedAt:text(doc&&doc.generatedAt)||null,
+    totalAll:all.length,
+    selectedScope:scope,
+    totalCandidates:rows.length,
+    eligibleForRelease:eligible,
+    held,
+    byStageStatus:countStage(rows),
+    releaseGate:isObject(doc&&doc.releaseGate)?doc.releaseGate:{},
+    nextGate,
+    automaticPublication:false,
+    paymentExecution:false
+  };
+}
+
 function envReady(){
   let partnerCount = 0;
   let partnerConfigValid = false;
@@ -532,10 +587,16 @@ function summarize(mode, limit, scopeInput){
   });
 
   const runtime = envReady();
+  const privateStage = privateStageStatus(process.cwd(), scope);
+  counts.privateStageCandidates = privateStage.totalCandidates;
+  counts.privateStageReleaseEligible = privateStage.eligibleForRelease;
+  counts.privateStageHeld = privateStage.held;
   const copiesOk = snapshotReports.every(x => x.available && x.copies.synchronized);
   const realReady = counts.readyAffiliate + counts.readyDirectRevenue;
   let gate = "not_ready";
   let gateReason = "no-real-product-candidate";
+  if(counts.realProductCandidates === 0 && privateStage.totalCandidates > 0 && privateStage.eligibleForRelease === 0){ gate = "hold"; gateReason = "private-stage-awaiting-evidence-revenue-assignment-or-registry-sync"; }
+  if(counts.realProductCandidates === 0 && privateStage.eligibleForRelease > 0){ gate = "hold"; gateReason = "private-stage-awaiting-canonical-snapshot-build"; }
   if(counts.realProductCandidates > 0 && realReady === 0) { gate = "hold"; gateReason = "real-products-require-front-readiness"; }
   if(realReady > 0 && !copiesOk) { gate = "hold"; gateReason = "snapshot-copies-not-synchronized"; }
   if(realReady > 0 && copiesOk) { gate = "ready_for_canary"; gateReason = "use-one-approved-candidate-manual-review"; }
@@ -552,10 +613,18 @@ function summarize(mode, limit, scopeInput){
     externalNavigation:false,
     providerCalls:false,
     generatedAt:new Date().toISOString(),
-    gate:{ state:gate, reason:gateReason, note:"This audit never opens seller links or enables supply. It only identifies candidates that are safe for one manual canary review." },
+    gate:{ state:gate, reason:gateReason, note:"This audit never opens seller links or enables supply. It reads the private staged-candidate state and public snapshot readiness, then identifies candidates that are safe for one manual canary review." },
     summary:counts,
     statusCounts,
     runtime,
+    pipeline:{
+      researchQueue:"authenticated-live-db",
+      privateCandidateStage:privateStage,
+      promotionOrder:["product_research","administrator_selection","market_evidence","verified_evidence","approved_revenue_route","psom_assignment","registry_sync","private_candidate_intake","canonical_canary","front_snapshot"],
+      automaticPublication:false,
+      igdcCheckout:false,
+      externalSellerCheckout:true
+    },
     snapshots:snapshotReports,
     candidateRows:realRows.slice(0, limit),
     candidateRowsTruncated:Math.max(0, realRows.length - limit)
@@ -584,4 +653,4 @@ exports.handler = async function(event){
   }
 };
 
-module.exports = { handler:exports.handler, VERSION, summarize, selectedScope, scopeMatch, itemMarketScopes, geoScope };
+module.exports = { handler:exports.handler, VERSION, summarize, selectedScope, scopeMatch, itemMarketScopes, geoScope, privateStageStatus, privateStageScopeMatch };

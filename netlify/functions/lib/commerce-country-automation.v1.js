@@ -20,8 +20,9 @@ const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
+const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v2.5.0-risk-first-product-ranking-section-dedupe";
+const VERSION = "commerce-country-automation-v2.7.0-commerce-mesh-lifecycle";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -34,6 +35,12 @@ const DEFAULT_INTERVAL_DAYS = 7;
 const DEFAULT_MAX_CANDIDATES = 20;
 const DEFAULT_SCOPES_PER_RUN = 12;
 const MAX_SCOPES_PER_RUN = 24;
+const PRODUCT_PORTFOLIO_LIMIT = 1200;
+const PRODUCT_STAGE_BATCH = 12;
+const PRODUCT_SUPPLIER_LIMIT = 80;
+const SUPPLIER_RAW_LIMIT = 800;
+const SUPPLIER_INSPECTION_LIMIT = 100;
+const SUPPLIER_REVIEW_LIMIT = 100;
 const TRUST_POLICY = Object.freeze({
   schema: "igdc-responsible-supplier-trust-policy.v1",
   principle: "trust_before_revenue",
@@ -337,6 +344,7 @@ function hostOf(url) { try { return new URL(url).hostname.toLowerCase().replace(
 function evidenceProjection(item) {
   const evidence = plain(item && item.brokerageVerification);
   const profile = plain(item && item.supplierProfile);
+  const sourcePayload = plain(item && item.payload);
   const officialUrl = itemUrl(item);
   const detectedCountry = normalizeCountry(first(profile.detectedCountry, item && item.distributionMarketCountry, item && item.sellerMarketCountry));
   const targetCountry = normalizeCountry(first(profile.targetCountry, item && item.targetCountry));
@@ -376,7 +384,10 @@ function evidenceProjection(item) {
     supplierReviewEligible: evidence.supplierReviewEligible === true,
     researchStatus: text(evidence.researchStatus) || null,
     researchError: text(evidence.researchError) || null,
-    researchMissingEvidence: array(evidence.researchMissingEvidence)
+    researchMissingEvidence: array(evidence.researchMissingEvidence),
+    supplyLane: first(sourcePayload.supplyLane, evidence.supplyLane) || "general",
+    discoverySource: first(sourcePayload.source, item && item.source, item && item.provider) || null,
+    officialDirectoryUrl: first(sourcePayload.directoryUrl) || null
   };
 }
 function trustTier(score, hardGatePassed, approvalReady) {
@@ -1194,8 +1205,8 @@ async function beginResearchJob(actorId, input, event) {
   const context = await researchContext(scope);
   const selectorInput = { country: scope.country, region: scope.region === "NATIONWIDE" ? undefined : scope.region, categoryWeights: context.effectiveCategoryWeights, policyHints: { priorityDirections: array(context.policyControl && context.policyControl.priorityDirections), avoidDirections: array(context.policyControl && context.policyControl.avoidDirections), manualPriorityTargets: array(context.policyControl && context.policyControl.manualPriorityTargets), manualBlockedTargets: array(context.policyControl && context.policyControl.manualBlockedTargets), finalDecision: text(context.policyControl && context.policyControl.finalDecision) }, signalPlanVersion: "persisted-staged-research" };
   const plan = RegionalSelector.createSupplierResearchPlan(selectorInput), now = iso();
-  const job = { schema: RESEARCH_JOB_SCHEMA, version: VERSION, jobId: "country_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: array(plan.tasks).length ? "searching" : "inspecting", startedAt: now, createdAt: now, scope, effective, selectorInput, researchPlanVersion: plan.researchPlanVersion || plan.version || null, planRows: array(plan.rows), planDiagnostics: plain(plan.diagnostics), searchTasks: array(plan.tasks), searchCursor: 0, rawCandidates: mergeResearchItems([], plan.seeds, 240), inspectionPool: [], inspectCursor: 0, inspectedCandidates: [], reviewPool: [], rankQueue: [], rankCursor: 0, rankAttempt: 0, rankedEntries: [], candidates: [], trace: [{ source: "research-job", status: "started", at: now, queries: array(plan.rows).length, tasks: array(plan.tasks).length, snapshotSeeds: array(plan.seeds).length }], errors: [], lastError: null, marketSignals: { active: context.marketSignalPlan.active === true, categoryWeights: plain(context.marketSignalPlan.categoryWeights) }, policyControl: { active: context.policyControl && context.policyControl.active === true, categoryWeights: plain(context.policyControl && context.policyControl.categoryWeights), priorityDirections: array(context.policyControl && context.policyControl.priorityDirections), avoidDirections: array(context.policyControl && context.policyControl.avoidDirections), manualPriorityTargets: array(context.policyControl && context.policyControl.manualPriorityTargets), manualBlockedTargets: array(context.policyControl && context.policyControl.manualBlockedTargets) } };
-  if (!job.searchTasks.length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.max(40, effective.maxCandidates * 3) })); job.status = "inspecting"; }
+  const job = { schema: RESEARCH_JOB_SCHEMA, version: VERSION, jobId: "country_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: array(plan.tasks).length ? "searching" : "inspecting", startedAt: now, createdAt: now, scope, effective, selectorInput, researchPlanVersion: plan.researchPlanVersion || plan.version || null, planRows: array(plan.rows), planDiagnostics: plain(plan.diagnostics), searchTasks: array(plan.tasks), searchCursor: 0, rawCandidates: mergeResearchItems([], plan.seeds, SUPPLIER_RAW_LIMIT), inspectionPool: [], inspectCursor: 0, inspectedCandidates: [], reviewPool: [], rankQueue: [], rankCursor: 0, rankAttempt: 0, rankedEntries: [], candidates: [], trace: [{ source: "research-job", status: "started", at: now, queries: array(plan.rows).length, tasks: array(plan.tasks).length, snapshotSeeds: array(plan.seeds).length }], errors: [], lastError: null, marketSignals: { active: context.marketSignalPlan.active === true, categoryWeights: plain(context.marketSignalPlan.categoryWeights) }, policyControl: { active: context.policyControl && context.policyControl.active === true, categoryWeights: plain(context.policyControl && context.policyControl.categoryWeights), priorityDirections: array(context.policyControl && context.policyControl.priorityDirections), avoidDirections: array(context.policyControl && context.policyControl.avoidDirections), manualPriorityTargets: array(context.policyControl && context.policyControl.manualPriorityTargets), manualBlockedTargets: array(context.policyControl && context.policyControl.manualBlockedTargets) } };
+  if (!job.searchTasks.length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, effective.maxCandidates * 4)) })); job.status = "inspecting"; }
   await saveResearchJob(job, actorId); return publicResearchJob(job);
 }
 async function researchJobStatus(input) { const scope = researchScope(input); return publicResearchJob(await researchJobRule(scope)); }
@@ -1206,22 +1217,22 @@ async function advanceResearchJob(actorId, input, event) {
   try {
     if (job.status === "searching") {
       const task = array(job.searchTasks)[Number(job.searchCursor || 0)];
-      if (!task) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.max(40, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 3) })); job.status = "inspecting"; job.inspectCursor = 0; }
+      if (!task) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 4)) })); job.status = "inspecting"; job.inspectCursor = 0; }
       else {
         const result = await RegionalSelector.searchSupplierResearchStep(event || {}, Object.assign({}, selectorInput, { task, limit: Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) }));
-        job.rawCandidates = mergeResearchItems(job.rawCandidates, result.items, 240); job.trace = array(job.trace).concat([Object.assign({ at: iso(), attempt: Number(task.attempt || 0) }, plain(result.trace))]); job.searchCursor = Number(job.searchCursor || 0) + 1;
+        job.rawCandidates = mergeResearchItems(job.rawCandidates, result.items, SUPPLIER_RAW_LIMIT); job.trace = array(job.trace).concat([Object.assign({ at: iso(), attempt: Number(task.attempt || 0) }, plain(result.trace))]); job.searchCursor = Number(job.searchCursor || 0) + 1;
         if (retryableResearchStatus(result.status) && Number(task.attempt || 0) < 1) job.searchTasks.push(Object.assign({}, task, { attempt: Number(task.attempt || 0) + 1, retryOf: Number(job.searchCursor || 0) - 1 }));
-        if (job.searchCursor >= array(job.searchTasks).length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.max(40, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 3) })); job.status = "inspecting"; job.inspectCursor = 0; }
+        if (job.searchCursor >= array(job.searchTasks).length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 4)) })); job.status = "inspecting"; job.inspectCursor = 0; }
       }
     } else if (job.status === "inspecting") {
       const batch = array(job.inspectionPool).slice(Number(job.inspectCursor || 0), Number(job.inspectCursor || 0) + 3);
       if (!batch.length) {
-        job.reviewPool = RegionalSelector.buildSupplierReviewPool(job.rawCandidates, job.inspectedCandidates, Object.assign({}, selectorInput, { limit: Math.min(50, Math.max(Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 2, 20)) }));
+        job.reviewPool = RegionalSelector.buildSupplierReviewPool(job.rawCandidates, job.inspectedCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_REVIEW_LIMIT, Math.max(Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 3, 60)) }));
         const scored = deterministicAssessment(job.reviewPool).map((assessment, index) => ({ item: job.reviewPool[index], assessment, originalIndex: index })).sort((a,b) => Number(b.assessment.hardGatePassed === true)-Number(a.assessment.hardGatePassed === true) || Number(b.assessment.trustScore||0)-Number(a.assessment.trustScore||0) || Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0));
         job.rankQueue = scored.slice(0, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES)).map((row) => row.item); job.status = "ranking"; job.rankCursor = 0; job.rankAttempt = 0;
       } else {
-        const inspected = await RegionalSelector.inspectSupplierResearchStep(batch, selectorInput); job.inspectedCandidates = mergeResearchItems(job.inspectedCandidates, inspected.items, 120); job.inspectCursor = Number(job.inspectCursor || 0) + batch.length; job.trace = array(job.trace).concat([{ source: "page-evidence-inspection", status: "ok", at: iso(), count: array(inspected.items).length, done: job.inspectCursor, total: array(job.inspectionPool).length }]);
-        if (job.inspectCursor >= array(job.inspectionPool).length) { job.reviewPool = RegionalSelector.buildSupplierReviewPool(job.rawCandidates, job.inspectedCandidates, Object.assign({}, selectorInput, { limit: Math.min(50, Math.max(Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 2, 20)) })); const scored = deterministicAssessment(job.reviewPool).map((assessment, index) => ({ item: job.reviewPool[index], assessment, originalIndex: index })).sort((a,b) => Number(b.assessment.hardGatePassed === true)-Number(a.assessment.hardGatePassed === true) || Number(b.assessment.trustScore||0)-Number(a.assessment.trustScore||0) || Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0)); job.rankQueue = scored.slice(0, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES)).map((row) => row.item); job.status = "ranking"; job.rankCursor = 0; job.rankAttempt = 0; }
+        const inspected = await RegionalSelector.inspectSupplierResearchStep(batch, selectorInput); job.inspectedCandidates = mergeResearchItems(job.inspectedCandidates, inspected.items, 300); job.inspectCursor = Number(job.inspectCursor || 0) + batch.length; job.trace = array(job.trace).concat([{ source: "page-evidence-inspection", status: "ok", at: iso(), count: array(inspected.items).length, done: job.inspectCursor, total: array(job.inspectionPool).length }]);
+        if (job.inspectCursor >= array(job.inspectionPool).length) { job.reviewPool = RegionalSelector.buildSupplierReviewPool(job.rawCandidates, job.inspectedCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_REVIEW_LIMIT, Math.max(Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 3, 60)) })); const scored = deterministicAssessment(job.reviewPool).map((assessment, index) => ({ item: job.reviewPool[index], assessment, originalIndex: index })).sort((a,b) => Number(b.assessment.hardGatePassed === true)-Number(a.assessment.hardGatePassed === true) || Number(b.assessment.trustScore||0)-Number(a.assessment.trustScore||0) || Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0)); job.rankQueue = scored.slice(0, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES)).map((row) => row.item); job.status = "ranking"; job.rankCursor = 0; job.rankAttempt = 0; }
       }
     } else if (job.status === "ranking") {
       const start = Number(job.rankCursor || 0), batch = array(job.rankQueue).slice(start, start + 3);
@@ -1270,6 +1281,8 @@ function merchandisePriority(value) {
   if (/(쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|과일|채소|농산물|한우|돼지고기|닭고기|계란|우유|축산물|수산물|건어물|김|미역|젓갈|전복|굴|새우)/i.test(hay)) labels.push("농·축·수산물");
   if (/(식품|식료품|김치|장류|반찬|떡|한과|생필품|생활용품|세제|위생용품|주방용품)/i.test(hay)) labels.push("식품·생활필수품");
   if (/(화장품|뷰티|스킨케어|세럼|크림|로션|선크림|샴푸|린스|클렌징|마스크팩|메이크업|향수|personal care|beauty|cosmetic|skincare)/i.test(hay)) labels.push("뷰티·개인용품");
+  if (/(공구|산업용품|기계|부품|금속|철강|플라스틱|고무|목재|포장재|전기자재|전자부품|자동차부품|건축자재|설비|안전용품|industrial|machinery|machine|tool|component|parts|metal|steel|plastic|rubber|packaging|electrical|hardware)/i.test(hay)) labels.push("공업·산업재");
+  if (/(의류|섬유|패션|신발|가방|완구|교육용품|문구|유아용품|가구|조명|침구|apparel|textile|fashion|footwear|toy|stationery|furniture|lighting|bedding)/i.test(hay)) labels.push("소비재·제조상품");
   if (/(농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|로컬푸드|생산자|농장|어촌|산촌)/i.test(hay)) labels.push("생산자·조합");
   return { score: labels.length * 40, label: labels[0] || "" };
 }
@@ -1280,14 +1293,15 @@ function mergeProductRows(existing, incoming, max) {
 function productProgress(job) {
   const supplierTotal = array(job.supplierSources).length, supplierDone = Math.min(supplierTotal, Number(job.discoveryCursor || 0));
   const inspectTotal = array(job.inspectionPool).length, inspectDone = Math.min(inspectTotal, Number(job.inspectCursor || 0));
-  return { stage: job.status, discovery: { done: supplierDone, total: supplierTotal }, inspection: { done: inspectDone, total: inspectTotal }, resumable: !["complete","cancelled"].includes(job.status) };
+  const stageTotal = array(job.stagePool).length, stageDone = Math.min(stageTotal, Number(job.stageCursor || 0));
+  return { stage: job.status, discovery: { done: supplierDone, total: supplierTotal }, inspection: { done: inspectDone, total: inspectTotal }, privateQueue: { done: stageDone, total: stageTotal, summary: plain(job.stageSummary) }, resumable: !["complete","cancelled"].includes(job.status) };
 }
 function publicProductJob(job) {
   if (!job) return { ok: true, reportType: "igdc-country-product-reference-research-status", version: VERSION, rankingVersion: ProductRanking.VERSION, status: "not_started", products: [] };
   const sourceProducts = array(job.rawProducts).concat(array(job.products));
   const portfolio = ProductRanking.buildPortfolio(sourceProducts, plain(job.rankingContext));
   const allRankedProducts = array(portfolio.products);
-  const visibleProducts = allRankedProducts.filter((row) => ProductRanking.isReviewableProduct(row));
+  const visibleProducts = allRankedProducts.filter((row) => row.familyRepresentative !== false && ProductRanking.isReviewableProduct(row));
   return {
     ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, rankingVersion: ProductRanking.VERSION, rankingPolicy: ProductRanking.POLICY, jobVersion: text(job.version), needsRefresh: text(job.version) !== VERSION, jobId: job.jobId, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
     safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false, riskGateBeforeRevenueRanking: true, sponsorRequiresApprovedContract: true, sectionAssignmentsAreProposalsOnly: true },
@@ -1298,8 +1312,10 @@ function publicProductJob(job) {
       suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
       discovered: visibleProducts.length,
       discoveredRaw: array(job.rawProducts).length,
-      discardedCategoryOrListPages: Math.max(0, allRankedProducts.length - visibleProducts.length),
+      discardedCategoryOrListPages: allRankedProducts.filter((row) => !ProductRanking.isReviewableProduct(row)).length,
       exactDuplicatesRemoved: Number(portfolio.summary && portfolio.summary.exactDuplicatesRemoved || 0),
+      familyRepresentatives: Number(portfolio.summary && portfolio.summary.familyRepresentatives || 0),
+      familyVariantsSuppressed: Number(portfolio.summary && portfolio.summary.familyVariantsSuppressed || 0),
       inspected: visibleProducts.filter((row) => row.inspectionComplete === true).length,
       withImage: visibleProducts.filter((row) => !!productImageUrl(row)).length,
       withVideo: visibleProducts.filter((row) => !!productVideoUrl(row)).length,
@@ -1313,8 +1329,11 @@ function publicProductJob(job) {
       slotCandidates: visibleProducts.filter((row) => row.slotDecision === "slot_candidate").length,
       held: visibleProducts.filter((row) => row.slotDecision === "hold").length,
       rejected: visibleProducts.filter((row) => row.slotDecision === "reject").length,
-      sectionCounts: plain(portfolio.summary && portfolio.summary.sectionCounts)
+      sectionCounts: plain(portfolio.summary && portfolio.summary.sectionCounts),
+      privateResearchQueueEligible: visibleProducts.filter((row) => row.familyRepresentative !== false && ProductPipeline.researchReadiness(row).queueEligible === true).length,
+      privateResearchQueueStaged: Number(job.stageSummary && (Number(job.stageSummary.created || 0) + Number(job.stageSummary.updated || 0) + Number(job.stageSummary.preserved || 0)) || 0)
     },
+    pipeline: { version: ProductPipeline.VERSION, automaticPrivateResearchStaging: true, automaticPublicPublication: false, stageSummary: plain(job.stageSummary), nextGate: job.status === "complete" ? "administrator_product_selection_and_commerce_evidence" : text(job.status) },
     products: visibleProducts,
     sectionQueues: plain(portfolio.sectionQueues),
     trace: array(job.trace).slice(-120), errors: array(job.errors).slice(-30), lastError: job.lastError || null
@@ -1334,7 +1353,7 @@ function productSupplierSource(row) {
   if(!strict)return null;
   parsed.pathname="/";parsed.search="";parsed.hash="";
   const priority=merchandisePriority(title+" "+url+" "+parsed.hostname);
-  return{supplierId:text(row&&[row.id,row.candidateId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl:parsed.toString(),url:parsed.toString(),supplierType:text(row&&row.supplierType||evidence.supplierType),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),approvalReady:row&&row.approvalReady===true,sourceCandidateUrl:url,evidenceReady:evidence.supplierReviewEligible===true,priorityScore:priority.score,priorityLabel:priority.label};
+  return{supplierId:text(row&&[row.id,row.candidateId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl:parsed.toString(),url:parsed.toString(),supplierType:text(row&&row.supplierType||evidence.supplierType),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),approvalReady:row&&row.approvalReady===true,sourceCandidateUrl:url,evidenceReady:evidence.supplierReviewEligible===true,supplyLane:text(evidence.supplyLane)||"general",discoverySource:text(evidence.discoverySource),officialDirectoryUrl:text(evidence.officialDirectoryUrl),priorityScore:priority.score,priorityLabel:priority.label};
 }
 async function productRankingContext(scope) {
   let signalStatus = null, policyControl = null;
@@ -1361,10 +1380,10 @@ async function beginProductResearchJob(actorId, input) {
   if (!supplierJob || !["complete","committed"].includes(supplierJob.status) || !array(supplierJob.candidates).length) { const error = new Error("책임 공급업체 단계별 리서치를 먼저 완료해야 공식 상품 목록을 조사할 수 있습니다."); error.statusCode = 409; throw error; }
   const sourcePool = []; const seenSupplierSites = new Set();
   for (const row of array(supplierJob.candidates)) { const source=productSupplierSource(row); if(!source)continue; const key=lower(source.supplierSiteUrl); if(seenSupplierSites.has(key))continue; seenSupplierSites.add(key); sourcePool.push(source); }
-  const supplierSources = sourcePool.sort((a,b)=>Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,12);
+  const supplierSources = sourcePool.sort((a,b)=>Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,PRODUCT_SUPPLIER_LIMIT);
   if(!supplierSources.length){const error=new Error("완료된 공급업체 후보 중 공식 판매 사이트·법적 신원·직접 판매 증빙을 갖춘 상품 조사 출처가 없습니다. 공급업체 후보의 잡음과 증빙 상태를 먼저 정리하세요.");error.statusCode=409;throw error;}
   const rankingContext = await productRankingContext(scope);
-  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, rankingContext, discoveryCursor: 0, rawProducts: [], inspectionPool: [], inspectCursor: 0, products: [], trace: [{ at: now, source: "product-research-job", status: "started", suppliers: supplierSources.length, sourcePolicy: "official_direct_sales_legal_identity_only; risk_gate_before_revenue_ranking; supplier_aware_exact_dedupe; section_proposal_only" }], errors: [], lastError: null };
+  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, rankingContext, discoveryCursor: 0, rawProducts: [], inspectionPool: [], inspectCursor: 0, products: [], stagePool: [], stageCursor: 0, stageSummary: { eligible: 0, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 }, trace: [{ at: now, source: "product-research-job", status: "started", suppliers: supplierSources.length, sourcePolicy: "official_direct_sales_legal_identity_only; risk_gate_before_revenue_ranking; supplier_aware_exact_dedupe; automatic_private_research_queue; section_proposal_only" }], errors: [], lastError: null };
   await saveProductJob(job, actorId); return publicProductJob(job);
 }
 
@@ -1375,25 +1394,82 @@ async function advanceProductResearchJob(actorId, input) {
   try {
     if (job.status === "discovering") {
       const source = array(job.supplierSources)[Number(job.discoveryCursor || 0)];
-      if (!source) { job.inspectionPool = RegionalSelector.prepareProductInspectionPool(job.rawProducts, { limit: Math.max(60, Math.min(300, array(job.supplierSources).length * 20)) }); job.status = "inspecting"; job.inspectCursor = 0; }
+      if (!source) { job.inspectionPool = RegionalSelector.prepareProductInspectionPool(job.rawProducts, { limit: Math.max(120, Math.min(PRODUCT_PORTFOLIO_LIMIT, array(job.supplierSources).length * 40)) }); job.status = "inspecting"; job.inspectCursor = 0; }
       else {
-        const result = await RegionalSelector.discoverSupplierProductsStep(source, { country: scope.country, region: scope.region, limit: 60 });
-        job.rawProducts = mergeProductRows(job.rawProducts, result.items, 300); job.discoveryCursor = Number(job.discoveryCursor || 0) + 1; job.trace = array(job.trace).concat([Object.assign({ at: iso(), supplierIndex: job.discoveryCursor - 1 }, plain(result.trace))]);
-        if (job.discoveryCursor >= array(job.supplierSources).length) { job.inspectionPool = RegionalSelector.prepareProductInspectionPool(job.rawProducts, { limit: Math.max(60, Math.min(300, array(job.supplierSources).length * 20)) }); job.status = "inspecting"; job.inspectCursor = 0; }
+        const result = await RegionalSelector.discoverSupplierProductsStep(source, { country: scope.country, region: scope.region, limit: 100 });
+        job.rawProducts = mergeProductRows(job.rawProducts, result.items, PRODUCT_PORTFOLIO_LIMIT); job.discoveryCursor = Number(job.discoveryCursor || 0) + 1; job.trace = array(job.trace).concat([Object.assign({ at: iso(), supplierIndex: job.discoveryCursor - 1 }, plain(result.trace))]);
+        if (job.discoveryCursor >= array(job.supplierSources).length) { job.inspectionPool = RegionalSelector.prepareProductInspectionPool(job.rawProducts, { limit: Math.max(120, Math.min(PRODUCT_PORTFOLIO_LIMIT, array(job.supplierSources).length * 40)) }); job.status = "inspecting"; job.inspectCursor = 0; }
       }
     } else if (job.status === "inspecting") {
-      const batch = array(job.inspectionPool).slice(Number(job.inspectCursor || 0), Number(job.inspectCursor || 0) + 2);
+      const batch = array(job.inspectionPool).slice(Number(job.inspectCursor || 0), Number(job.inspectCursor || 0) + 4);
+      if (!batch.length) {
+        const portfolio = ProductRanking.buildPortfolio(array(job.rawProducts).concat(array(job.products)), plain(job.rankingContext));
+        job.stagePool = array(portfolio.products).filter((row) => row.familyRepresentative !== false && row.researchStatus === "ready_for_admin_review" && ProductPipeline.researchReadiness(row).queueEligible === true).slice(0, PRODUCT_PORTFOLIO_LIMIT);
+        job.stageCursor = 0; job.stageSummary = { eligible: job.stagePool.length, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 }; job.status = "staging";
+      } else {
+        const result = await RegionalSelector.inspectProductResearchStep(batch, { country: scope.country, region: scope.region }); job.products = mergeProductRows(job.products, result.items, PRODUCT_PORTFOLIO_LIMIT); job.inspectCursor = Number(job.inspectCursor || 0) + batch.length; job.trace = array(job.trace).concat([{ at: iso(), source: "product-page-inspection", status: "ok", count: array(result.items).length, done: job.inspectCursor, total: array(job.inspectionPool).length }]);
+        if (job.inspectCursor >= array(job.inspectionPool).length) {
+          const portfolio = ProductRanking.buildPortfolio(array(job.rawProducts).concat(array(job.products)), plain(job.rankingContext));
+          job.stagePool = array(portfolio.products).filter((row) => row.familyRepresentative !== false && row.researchStatus === "ready_for_admin_review" && ProductPipeline.researchReadiness(row).queueEligible === true).slice(0, PRODUCT_PORTFOLIO_LIMIT);
+          job.stageCursor = 0; job.stageSummary = { eligible: job.stagePool.length, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 }; job.status = "staging";
+        }
+      }
+    } else if (job.status === "staging") {
+      const batch = array(job.stagePool).slice(Number(job.stageCursor || 0), Number(job.stageCursor || 0) + PRODUCT_STAGE_BATCH);
       if (!batch.length) { job.status = "complete"; job.finishedAt = iso(); }
       else {
-        const result = await RegionalSelector.inspectProductResearchStep(batch, { country: scope.country, region: scope.region }); job.products = mergeProductRows(job.products, result.items, 300); job.inspectCursor = Number(job.inspectCursor || 0) + batch.length; job.trace = array(job.trace).concat([{ at: iso(), source: "product-page-inspection", status: "ok", count: array(result.items).length, done: job.inspectCursor, total: array(job.inspectionPool).length }]);
-        if (job.inspectCursor >= array(job.inspectionPool).length) { job.status = "complete"; job.finishedAt = iso(); }
+        const settled = await Promise.allSettled(batch.map((product) => syncProductResearchPreview(actorId, scope, product)));
+        for (const result of settled) {
+          if (result.status !== "fulfilled") { job.stageSummary.failed += 1; job.errors = array(job.errors).concat([{ at: iso(), stage: "staging", message: text(result.reason && result.reason.message || result.reason) }]); continue; }
+          const state = text(result.value && result.value.status);
+          if (/created/.test(state)) job.stageSummary.created += 1;
+          else if (/updated/.test(state)) job.stageSummary.updated += 1;
+          else if (/preserved/.test(state)) job.stageSummary.preserved += 1;
+          else job.stageSummary.skipped += 1;
+        }
+        job.stageCursor = Number(job.stageCursor || 0) + batch.length;
+        job.trace = array(job.trace).concat([{ at: iso(), source: "private-product-research-queue", status: "ok", count: batch.length, done: job.stageCursor, total: array(job.stagePool).length }]);
+        if (job.stageCursor >= array(job.stagePool).length) { job.status = "complete"; job.finishedAt = iso(); }
       }
     }
     job.lastError = null; await saveProductJob(job, actorId); return publicProductJob(job);
   } catch (error) { job.lastError = { at: iso(), stage: job.status, message: text(error && error.message), code: text(error && error.code) || null }; job.errors = array(job.errors).concat([job.lastError]); try { await saveProductJob(job, actorId); } catch (_saveError) {} throw error; }
 }
+function productCandidateId(scope, product) { return "country_product_" + sha256(scope.country + "|" + scope.region + "|" + text(product.productIdentity)).slice(0, 24); }
+function productCandidatePayload(actorId, scope, product, decision) {
+  const placement = plain(product.primaryPlacement || array(product.sectionAssignments)[0]);
+  const productUrlValue = productUrl(product), imageUrlValue = productImageUrl(product), readiness = ProductPipeline.researchReadiness(product), card = ProductPipeline.productCard(product);
+  const selected = decision === "slot_candidate";
+  return {
+    id: productCandidateId(scope, product), entityKind: "product_reference", title: first(product.productName, product.title), url: productUrlValue, externalProductUrl: productUrlValue, image: imageUrlValue, thumb: imageUrlValue,
+    price: text(product.price), priceCurrency: text(product.priceCurrency), availability: text(product.availability), productCard: card,
+    page: text(placement.page), channel: text(placement.page), section: text(placement.sectionKey), psom_key: text(placement.sectionKey),
+    placement: { page: text(placement.page), section: text(placement.sectionKey), country: scope.country, region: scope.region, proposalOnly: true }, proposedPlacements: array(product.sectionAssignments),
+    marketKeys: [scope.country + "-" + scope.region], marketScope: { marketCountry: scope.country, marketRegion: scope.region }, countrySupply: { country: scope.country, region: scope.region, localOnly: true, crossCountryFallback: false },
+    supplier: { id: text(product.supplierId), name: text(product.supplierName), officialUrl: text(product.supplierSiteUrl), type: text(product.supplierType), trustScore: Number(product.supplierTrustScore) || 0, evidenceReady: product.supplierEvidenceReady === true },
+    productRanking: { version: ProductRanking.VERSION, rank: Number(product.rank) || null, score: Number(product.rankingScore) || 0, category: text(product.productCategory), categoryTags: array(product.productCategoryTags), duplicateGroupKey: text(product.duplicateGroupKey), familyKey: text(product.productFamilyKey), familyRepresentative: product.familyRepresentative !== false, familyVariantCount: Number(product.familyVariantCount) || 0, duplicateCount: Number(product.duplicateCount) || 1 },
+    supplierAssessment: plain(product.supplierAssessment), riskAssessment: plain(product.riskAssessment), commercialAssessment: plain(product.commercialAssessment), releaseReadiness: plain(product.releaseReadiness), researchReadiness: readiness,
+    revenue: { type: text(product.commercialAssessment && product.commercialAssessment.revenueType) || "commercial_candidate", monetizationState: text(product.commercialAssessment && product.commercialAssessment.monetizationState) || "contract_required", contractId: null },
+    commerceCandidate: { sourceTier: "risk_ranked_official_supplier_product", origin: PRODUCT_SOURCE_REF, administratorReviewRequired: true, riskGatePassed: product.riskAssessment && product.riskAssessment.gatePassed === true, automaticPrivateResearchStaging: true, automaticPublication: false },
+    connectionAdapter: { schema: "igdc-commerce-connection-adapter.v1", supplyLane: text(product.supplyLane) || "general", discoveryMode: text(product.discoverySource) || "official_public_page", currentIntegrationMode: "public_page_product_reference", supportedUpgradeModes: ["structured_data", "sitemap", "manual_product_feed", "supplier_self_registration", "affiliate_deeplink", "affiliate_api"], apiKeyRequiredNow: false, externalSellerCheckout: true },
+    pipeline: { version: ProductPipeline.VERSION, stage: selected ? "administrator_selection_pending" : "private_research_queue", nextGate: selected ? "market_evidence_and_revenue_route" : "administrator_product_selection", promotedAt: iso(), promotedBy: text(actorId) || "product-research-orchestrator" },
+    review: { state: selected ? "pending" : "research_pending", submittedAt: iso(), submittedBy: text(actorId) || "product-research-orchestrator" },
+    slotDecision: selected ? "slot_candidate" : "undecided", publicPublication: false, automaticImport: false, checkout: false, payment: false
+  };
+}
+async function syncProductResearchPreview(actorId, scope, product) {
+  const readiness = ProductPipeline.researchReadiness(product); if (!readiness.queueEligible) return { status: "research_preview_skipped", candidateId: null, blockers: readiness.blockers };
+  const candidateId = productCandidateId(scope, product), existing = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
+  if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, currentStatus: text(existing.status) };
+  if (existing && !["research_pending"].includes(lower(existing.status))) return { status: "operator_state_preserved", candidateId, currentStatus: text(existing.status) };
+  const payload = productCandidatePayload(actorId, scope, product, "research_pending");
+  const row = { id: candidateId, kind: "product", title: payload.title, official_url: payload.externalProductUrl, status: "research_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: payload.image, description: "Private researched external-seller product card. Administrator selection, market evidence, revenue route and slot assignment remain pending.", owner_note: "Automatically placed in the private research queue only; no publication, checkout or payment.", source_payload: payload, updated_at: iso(), updated_by: text(actorId) || "product-research-orchestrator" };
+  if (existing) { await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), row); return { status: "research_preview_updated", candidateId }; }
+  row.created_at = iso(); row.created_by = text(actorId) || "product-research-orchestrator"; await SlotStore.insert("gslot_candidates", row, "return=representation"); return { status: "research_preview_created", candidateId };
+}
+
 async function syncProductCandidateQueue(actorId, scope, product, decision) {
-  const candidateId = "country_product_" + sha256(scope.country + "|" + scope.region + "|" + text(product.productIdentity)).slice(0, 24);
+  const candidateId = productCandidateId(scope, product);
   const existing = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
   if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, currentStatus: text(existing.status) };
   if (decision !== "slot_candidate") {
@@ -1403,41 +1479,9 @@ async function syncProductCandidateQueue(actorId, scope, product, decision) {
     await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: sourcePayload, updated_at: iso() });
     return { status: "private_candidate_" + status, candidateId };
   }
-  const placement = plain(product.primaryPlacement || array(product.sectionAssignments)[0]);
-  const productUrlValue = productUrl(product), imageUrlValue = productImageUrl(product);
-  const payload = {
-    id: candidateId,
-    entityKind: "product_reference",
-    title: first(product.productName, product.title),
-    url: productUrlValue,
-    externalProductUrl: productUrlValue,
-    image: imageUrlValue,
-    thumb: imageUrlValue,
-    page: text(placement.page),
-    channel: text(placement.page),
-    section: text(placement.sectionKey),
-    psom_key: text(placement.sectionKey),
-    placement: { page: text(placement.page), section: text(placement.sectionKey), country: scope.country, region: scope.region, proposalOnly: true },
-    proposedPlacements: array(product.sectionAssignments),
-    marketKeys: [scope.country + "-" + scope.region],
-    marketScope: { marketCountry: scope.country, marketRegion: scope.region },
-    countrySupply: { country: scope.country, region: scope.region, localOnly: true, crossCountryFallback: false },
-    supplier: { id: text(product.supplierId), name: text(product.supplierName), officialUrl: text(product.supplierSiteUrl), type: text(product.supplierType), trustScore: Number(product.supplierTrustScore) || 0, evidenceReady: product.supplierEvidenceReady === true },
-    productRanking: { version: ProductRanking.VERSION, rank: Number(product.rank) || null, score: Number(product.rankingScore) || 0, category: text(product.productCategory), categoryTags: array(product.productCategoryTags), duplicateGroupKey: text(product.duplicateGroupKey), duplicateCount: Number(product.duplicateCount) || 1 },
-    supplierAssessment: plain(product.supplierAssessment),
-    riskAssessment: plain(product.riskAssessment),
-    commercialAssessment: plain(product.commercialAssessment),
-    releaseReadiness: plain(product.releaseReadiness),
-    revenue: { type: text(product.commercialAssessment && product.commercialAssessment.revenueType) || "commercial_candidate", monetizationState: text(product.commercialAssessment && product.commercialAssessment.monetizationState) || "contract_required", contractId: null },
-    commerceCandidate: { sourceTier: "risk_ranked_official_supplier_product", origin: PRODUCT_SOURCE_REF, administratorReviewRequired: true, riskGatePassed: product.riskAssessment && product.riskAssessment.gatePassed === true, automaticPublication: false },
-    review: { state: "pending", submittedAt: iso(), submittedBy: text(actorId) || "administrator" },
-    slotDecision: "slot_candidate",
-    publicPublication: false,
-    automaticImport: false,
-    checkout: false,
-    payment: false
-  };
-  const row = { id: candidateId, kind: "product", title: payload.title, official_url: productUrlValue, status: "approval_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: imageUrlValue, description: "Risk-gated, revenue-ranked product candidate. Proposed section assignment remains private until administrator approval, market evidence and revenue rights are recorded.", owner_note: "Auto-researched product reference; no publication, payment or seller responsibility transfer.", source_payload: payload, updated_at: iso(), updated_by: text(actorId) || "administrator" };
+  const payload = productCandidatePayload(actorId, scope, product, "slot_candidate");
+  const productUrlValue = payload.externalProductUrl, imageUrlValue = payload.image;
+  const row = { id: candidateId, kind: "product", title: payload.title, official_url: productUrlValue, status: "approval_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: imageUrlValue, description: "Risk-gated external-seller product candidate with a complete private product-card contract. It remains private until administrator approval, market evidence, revenue rights, slot assignment and Canonical validation are complete.", owner_note: "Auto-researched product reference; no publication, payment or seller responsibility transfer.", source_payload: payload, updated_at: iso(), updated_by: text(actorId) || "administrator" };
   if (existing) {
     await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), row);
     return { status: "private_candidate_updated", candidateId, placement: payload.placement };
@@ -1464,7 +1508,7 @@ async function productCandidateAction(actorId, input) {
   }
   const current = plain(job.products[index]);
   job.products[index] = Object.assign({}, current, evaluated, { slotDecision: decision, decisionAt: iso(), decisionBy: text(actorId) || "administrator", publicPublication: false, automaticImport: false });
-  job.products = mergeProductRows([], job.products, 300);
+  job.products = mergeProductRows([], job.products, PRODUCT_PORTFOLIO_LIMIT);
   const queueSync = decision === "undecided" ? { status: "no_queue_change", candidateId: null } : await syncProductCandidateQueue(actorId, scope, job.products.find((row) => ProductRanking.productIdentity(row) === identity) || evaluated, decision);
   await saveProductJob(job, actorId);
   const result = publicProductJob(job); result.candidateQueue = queueSync; return result;
@@ -1708,7 +1752,7 @@ function diagnostic(state) {
     marketSignalIntelligence: { version: MarketSignals.VERSION, policy: MarketSignals.POLICY },
     administratorPolicyDiscussion: { version: PolicyDiscussion.VERSION, precedence: ["country_manual", "regional_manual", "global_manual", "automatic_ai"] },
     safety: { privateQueueOnly: true, entityKind: "supplier", igdcRole: "distribution_service_intermediary", trustBeforeRevenue: true, revenueTieBreakOnly: true, sellerOfRecord: false, merchantOfRecord: false, inventoryCustody: false, productImport: false, publicSnapshotPublication: false, automaticCheckout: false, automaticPayment: false, deliveryResponsibility: false, returnsResponsibility: false, refundResponsibility: false, afterSalesResponsibility: false, crossCountryFallback: false, unresolvedGeo: "empty", manualPinnedPrecedence: true, aiCannotInventUrls: true },
-    pipeline: ["global direction signals", "regional situation signals", "administrator-applied bounded category weights", "IP/administrator country scope", "large-country subdivision", "responsible manufacturer/producer/cooperative/seller discovery", "same-domain policy-page evidence inspection", "trust-first hard gate", "private supplier ranking", "legal and contract verification", "delivery/return-refund/support performance verification", "administrator supplier certification", "separate selective product-reference stage", "Canonical/release gate"]
+    pipeline: ["global direction signals", "regional situation signals", "administrator-applied bounded category weights", "IP/administrator country scope", "large-country subdivision", "responsible manufacturer/producer/cooperative/seller discovery", "same-domain policy-page evidence inspection", "trust-first hard gate", "private supplier ranking", "legal and contract verification", "delivery/return-refund/support performance verification", "administrator supplier certification", "separate selective product-reference stage", "automatic private product research queue", "administrator selection", "market/evidence/revenue/slot gates", "registry sync", "Canonical/release gate"]
   };
 }
 

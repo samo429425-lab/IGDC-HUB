@@ -179,16 +179,18 @@ async function main() {
     return;
   }
 
-  // Check the same release-ready candidate set that Canonical Publisher will
-  // receive. A non-empty source alone is not enough: the candidates must also
-  // pass the existing verification/release contract before anything is written.
+  // Build and persist the private candidate stage on every qualified build.
+  // This makes the ordered research/revenue/assignment pipeline visible to the
+  // candidate queue and go-live audit even while the public release key is off.
+  // The intake writer touches only private staging/audit files; Canonical and
+  // front snapshots remain blocked by the independent release gate below.
   let intake;
   try {
     intake = commerceIntake.build({
       root,
       items: upstream.doc.items,
-      trigger: "netlify-build-preflight",
-      write: false
+      trigger: "netlify-build-private-candidate-stage",
+      write: true
     });
   } catch (error) {
     writePreservedBuild("candidate-intake-preflight-failed", {

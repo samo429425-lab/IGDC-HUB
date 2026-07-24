@@ -10,7 +10,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const VERSION = "commerce-supplier-research-plan-v1.1.0-essentials-agri-cooperative-priority";
+const VERSION = "commerce-supplier-research-plan-v1.3.0-country-lane-balanced-mesh";
 
 function text(value){ return String(value == null ? "" : value).trim(); }
 function lower(value){ return text(value).toLowerCase(); }
@@ -59,11 +59,19 @@ const KR_FOUNDATION_QUERIES = Object.freeze([
   "대한민국 생활필수품 식료품 농수축임산물 생산자 농협 축협 수협 산림조합 협동조합 공식몰 직거래 배송 반품 환불 고객센터",
   "대한민국 표고버섯 느타리버섯 목이버섯 버섯 재배 농가 산림조합 영농조합법인 공식몰 직거래 택배",
   "대한민국 농협 축협 수협 산림조합 협동조합 로컬푸드 직매장 공식몰 직거래 배송 반품 고객센터",
+  "대한민국 지역농협 지역축협 지역수협 산림조합 온라인 쇼핑몰 특산품 농산물 수산물 임산물",
   "대한민국 사과 농장 참외 농장 토마토 농장 딸기 농장 버섯 재배 고사리 농가 영농조합법인 직거래 택배",
   "대한민국 농업회사법인 식품 제조업체 가공식품 공장 생산자 공식 온라인몰 배송 반품 환불 고객센터",
+  "대한민국 전통시장 상인회 지역특산품 공동몰 로컬푸드 생산자 공동판매 온라인 주문 배송 반품",
   "대한민국 화장품 제조사 브랜드 본사 책임판매업자 공식몰 제품 구매 배송 반품 환불 고객센터",
   "대한민국 지역 유통업체 도매 총판 공판장 소규모 유통업체 공식 판매처 온라인 주문 배송 반품",
-  "대한민국 생활용품 주방용품 가전 전자제품 제조사 생산업체 직영몰 공식 판매처 배송 반품 고객지원"
+  "대한민국 생활용품 주방용품 가구 침구 제조사 생산업체 직영몰 공식 판매처 배송 반품 고객지원",
+  "대한민국 전자제품 소형가전 부품 공구 산업용품 제조사 공장 직영몰 온라인 주문 배송 반품",
+  "대한민국 기계 금속 플라스틱 목재 포장재 사무용품 제조업체 자체 쇼핑몰 제품 카탈로그 구매",
+  "대한민국 의류 신발 가방 섬유 봉제 제조사 브랜드 직영몰 공식 온라인 판매처",
+  "대한민국 유아용품 교육용품 문구 완구 제조사 공식몰 배송 반품 고객지원",
+  "대한민국 사회적기업 마을기업 협동조합 자활기업 생산품 공식몰 온라인 판매 배송 반품",
+  "대한민국 지자체 농업기술센터 생산자 명단 지역 기업 제품 공식 판매몰"
 ]);
 
 const KR_PRODUCT_CLUSTERS = Object.freeze([
@@ -74,6 +82,18 @@ const KR_PRODUCT_CLUSTERS = Object.freeze([
   "화장품 스킨케어 헤어케어 바디케어 미용용품", "생활용품 세제 위생용품 주방용품",
   "의류 신발 가방 패션잡화", "가구 침구 인테리어 생활가전",
   "전자제품 액세서리 소형가전", "유아용품 교육용품 문구 완구"
+]);
+
+
+const GENERIC_SUPPLY_LANES = Object.freeze([
+  {id:"agri_cooperative",query:"agricultural fishery forestry cooperative producer farm direct official online store shipping returns"},
+  {id:"food_essentials",query:"food manufacturer grocery household essentials responsible seller official shop delivery refund support"},
+  {id:"industrial_manufacturing",query:"industrial goods tools parts machinery manufacturer factory direct sales official product catalog online order"},
+  {id:"consumer_manufacturing",query:"home living kitchen electronics cosmetics apparel manufacturer brand owner official online store"},
+  {id:"regional_market",query:"regional market local products traditional market producer collective official ecommerce delivery returns"},
+  {id:"small_business",query:"small business social enterprise cooperative maker official store payment shipping customer service"},
+  {id:"wholesale_distribution",query:"regional distributor wholesaler authorized dealer official online ordering delivery returns support"},
+  {id:"public_directory_bridge",query:"official producer directory cooperative member directory local manufacturers marketplace vendor list"}
 ]);
 
 const KR_ENTITY_CLUSTERS = Object.freeze([
@@ -139,15 +159,20 @@ function bankTaxonomy(bank){
 
 function genericRows(geo, locales, sourceTerms, maxQueries){
   const country=first(geo && geo.countryName, geo && geo.country, "target country");
-  const local=locales[0] || "en";
-  const sectors=unique(sourceTerms.filter(term=>term.length<80),16);
-  const base=[
-    `${country} manufacturer producer cooperative responsible seller official online store shipping returns customer service`,
-    `${country} agricultural producer food manufacturer local distributor direct sales official store delivery refund support`,
-    `${country} small business regional distributor brand owner official shop product catalog payment shipping returns`
-  ];
-  if(sectors.length) base.push(`${country} ${sectors.slice(0,8).join(" ")} manufacturer producer supplier official store`);
-  return unique(base,maxQueries).map(query=>({query,locale:local,origin:"searchbank-psom-policy-plan",localName:country,localizationError:null}));
+  const localeRows=unique(locales && locales.length ? locales : ["en"],4);
+  const sectors=unique(sourceTerms.filter(term=>term.length<80),20);
+  const rows=[];
+  for(const lane of GENERIC_SUPPLY_LANES){
+    const variants=[lane.query,`${lane.query} official ecommerce catalog contact customer service`];
+    for(let index=0;index<variants.length;index+=1){
+      const locale=localeRows[index%localeRows.length]||"en";
+      rows.push({query:`${country} ${variants[index]}`,locale,origin:`country-supply-lane:${lane.id}`,lane:lane.id,localName:country,localizationError:null});
+      if(rows.length>=maxQueries)break;
+    }
+    if(rows.length>=maxQueries)break;
+  }
+  if(rows.length<maxQueries && sectors.length) rows.push({query:`${country} ${sectors.slice(0,10).join(" ")} manufacturer producer supplier official store`,locale:localeRows[0]||"en",origin:"searchbank-psom-policy-plan",lane:"taxonomy_bridge",localName:country,localizationError:null});
+  return rows.slice(0,maxQueries);
 }
 
 function krRows(geo, sourceTerms, maxQueries){
@@ -162,7 +187,17 @@ function krRows(geo, sourceTerms, maxQueries){
   }
   const sourceHint=unique(sourceTerms.filter(term=>/[가-힣]/.test(term)&&term.length<=24),10).join(" ");
   if(sourceHint) dynamic.push(`대한민국 ${sourceHint} 생산자 제조사 협동조합 책임 판매업체 공식 판매처`);
-  return unique(KR_FOUNDATION_QUERIES.concat(dynamic),maxQueries).map(query=>({query,locale:"ko",origin:"searchbank-psom-policy-plan",localName:"대한민국",localizationError:null}));
+  function laneFor(query,index){
+    if(/지자체|농업기술센터|생산자 명단|기업 제품/.test(query)) return "public_directory_bridge";
+    if(/기계|금속|플라스틱|목재|포장재|공구|산업용품|전자제품|부품/.test(query)) return "industrial_manufacturing";
+    if(/전통시장|지역특산품|공동몰/.test(query)) return "regional_market";
+    if(/지역 유통업체|도매|총판|공판장/.test(query)) return "wholesale_distribution";
+    if(/사회적기업|마을기업|자활기업/.test(query)) return "small_business";
+    if(/화장품|생활용품|가구|침구|의류|신발|가방|유아용품|교육용품|문구|완구/.test(query)) return "consumer_manufacturing";
+    if(/농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|농장|농가|수산물|임산물/.test(query)) return "agri_cooperative";
+    return index<KR_FOUNDATION_QUERIES.length?"food_essentials":"kr_rotating";
+  }
+  return unique(KR_FOUNDATION_QUERIES.concat(dynamic),maxQueries).map((query,index)=>{const lane=laneFor(query,index);return{query,locale:"ko",origin:`country-supply-lane:${lane}`,lane,localName:"대한민국",localizationError:null};});
 }
 
 function snapshotSeeds(bank, geo, rows, limit){
@@ -203,7 +238,7 @@ function buildPlan(input){
   const raw=input && typeof input==="object" ? input : {};
   const geo=raw.geo && typeof raw.geo==="object" ? raw.geo : raw;
   const locales=unique(raw.locales && raw.locales.length ? raw.locales : [geo.country==="KR"?"ko":"en"],12);
-  const maxQueries=Math.max(3,Math.min(12,Number(raw.maxQueries)||6));
+  const maxQueries=Math.max(3,Math.min(24,Number(raw.maxQueries)||12));
   const sources=loadSources();
   const bank=bankTaxonomy(sources.bank);
   const terms=unique([].concat(psomTerms(sources.psom),commercePolicyTerms(sources.commerce),bank.tags,bank.categories,bank.producers),240);
@@ -216,7 +251,7 @@ function buildPlan(input){
       psomTerms:psomTerms(sources.psom).length,
       commercePolicyTerms:commercePolicyTerms(sources.commerce).length,
       searchBank:{items:bank.itemCount,external:bank.externalCount,commerceLike:bank.commerceCount,tags:bank.tags.length,categories:bank.categories.length,producers:bank.producers.length},
-      generatedQueries:rows.length,snapshotSeeds:seeds.length
+      generatedQueries:rows.length,supplyLanes:unique(rows.map(row=>row&&row.lane),40),snapshotSeeds:seeds.length
     }
   };
 }

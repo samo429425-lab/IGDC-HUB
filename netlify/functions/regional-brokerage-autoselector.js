@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.4.0-product-quality-dedupe-ranking-hook";
+const VERSION="regional-brokerage-autoselector-v2.6.0-commerce-mesh-source-expansion";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -705,10 +705,10 @@ function compactResearchItem(item){
 function createSupplierResearchPlan(params){
   const geo=stagedGeo(params);if(!geo.country)return{geo,rows:[],tasks:[],seeds:[],diagnostics:{error:"country_missing"}};
   const locales=localeList(geo.country);let plan={rows:[],seeds:[],diagnostics:null,version:null};
-  if(SupplierResearchPlan&&typeof SupplierResearchPlan.buildPlan==="function")plan=SupplierResearchPlan.buildPlan({geo,locales,maxQueries:12,seedLimit:20});
-  const rows=[];const seen=new Set();for(const row of array(plan.rows)){const q=text(row&&row.query).replace(/\s+/g," ");if(!q||seen.has(q.toLowerCase()))continue;seen.add(q.toLowerCase());rows.push({query:q,locale:text(row&&row.locale)||locales[0]||"en",origin:text(row&&row.origin)||"searchbank-psom-policy-plan",localName:text(row&&row.localName)||geo.countryName||geo.country});}
-  const tasks=[];rows.forEach((row,index)=>{if(geo.country==="KR")tasks.push({lane:"naver",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,attempt:0});else tasks.push({lane:"google",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,attempt:0});tasks.push({lane:"sanmaru",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,attempt:0});});
-  if(geo.country==="KR")rows.slice(0,4).forEach((row,index)=>tasks.push({lane:"google",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,attempt:0}));
+  if(SupplierResearchPlan&&typeof SupplierResearchPlan.buildPlan==="function")plan=SupplierResearchPlan.buildPlan({geo,locales,maxQueries:24,seedLimit:40});
+  const rows=[];const seen=new Set();for(const row of array(plan.rows)){const q=text(row&&row.query).replace(/\s+/g," ");if(!q||seen.has(q.toLowerCase()))continue;seen.add(q.toLowerCase());rows.push({query:q,locale:text(row&&row.locale)||locales[0]||"en",origin:text(row&&row.origin)||"searchbank-psom-policy-plan",lane:text(row&&row.lane)||"general",localName:text(row&&row.localName)||geo.countryName||geo.country});}
+  const tasks=[];rows.forEach((row,index)=>{if(geo.country==="KR")tasks.push({lane:"naver",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0});else tasks.push({lane:"google",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0});tasks.push({lane:"sanmaru",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0});});
+  if(geo.country==="KR")rows.slice(0,8).forEach((row,index)=>tasks.push({lane:"google",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0}));
   const seeds=array(plan.seeds).concat(manualPolicySeeds(geo)).map(compactResearchItem).filter(Boolean);
   return{version:VERSION,researchPlanVersion:text(plan.version),geo,locales,rows,tasks,seeds,diagnostics:plain(plan.diagnostics)};
 }
@@ -719,26 +719,59 @@ async function fetchJsonStaged(url,options,timeoutMs){
 async function stagedNaver(row,geo,limit){
   const keys=naverKeys();if(!keys.id||!keys.secret)return{provider:"naver",status:"not_configured",detail:"NAVER_API_KEY_or_NAVER_CLIENT_SECRET_missing",items:[]};
   const params=new URLSearchParams({query:row.query,display:String(Math.max(1,Math.min(100,limit||20))),start:"1"});
-  try{const data=await fetchJsonStaged("https://openapi.naver.com/v1/search/webkr.json?"+params.toString(),{headers:{"X-Naver-Client-Id":keys.id,"X-Naver-Client-Secret":keys.secret}},18000);const items=researchFirst(array(data.items).map(x=>({title:stripHtml(x&&x.title),url:text(x&&x.link),link:text(x&&x.link),summary:stripHtml(x&&x.description),snippet:stripHtml(x&&x.description),source:"naver_country_discovery",provider:"naver",type:"web",payload:{source:"naver",country:geo.country,query:row.query,queryLocale:row.locale,queryOrigin:row.origin}})).filter(x=>x.title&&x.url));return{provider:"naver",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"naver",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
+  try{const data=await fetchJsonStaged("https://openapi.naver.com/v1/search/webkr.json?"+params.toString(),{headers:{"X-Naver-Client-Id":keys.id,"X-Naver-Client-Secret":keys.secret}},18000);const items=researchFirst(array(data.items).map(x=>({title:stripHtml(x&&x.title),url:text(x&&x.link),link:text(x&&x.link),summary:stripHtml(x&&x.description),snippet:stripHtml(x&&x.description),source:"naver_country_discovery",provider:"naver",type:"web",payload:{source:"naver",country:geo.country,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane||"general"}})).filter(x=>x.title&&x.url));return{provider:"naver",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"naver",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
 }
 async function stagedGoogle(row,geo,limit){
   const keys=googleKeys();if(!keys.key||!keys.cx)return{provider:"google",status:"not_configured",detail:"GOOGLE_API_KEY_or_GOOGLE_CSE_ID_missing",items:[]};
   const lang=googleLocale(row.locale||"en"),params=new URLSearchParams({key:keys.key,cx:keys.cx,q:(row.query+" -filetype:pdf -filetype:doc -filetype:ppt -filetype:xls -wikipedia -wiki -report -research -news").slice(0,900),num:String(Math.max(1,Math.min(10,limit||10))),start:"1",safe:"active",filter:"1",hl:lang});if(/^[A-Z]{2}$/.test(geo.country||"")){params.set("gl",geo.country.toLowerCase());params.set("cr","country"+geo.country);}
-  try{const data=await fetchJsonStaged("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,18000);const items=researchFirst(array(data.items).map(x=>{const map=x&&x.pagemap||{},thumb=first(map.cse_image&&map.cse_image[0]&&map.cse_image[0].src,map.cse_thumbnail&&map.cse_thumbnail[0]&&map.cse_thumbnail[0].src);return{title:stripHtml(x&&x.title),url:text(x&&x.link),link:text(x&&x.link),summary:stripHtml(x&&x.snippet),snippet:stripHtml(x&&x.snippet),source:"google_country_discovery",provider:"google",type:"web",thumbnail:thumb,image:thumb,payload:{source:"google",country:geo.country,query:row.query,queryLocale:row.locale,queryOrigin:row.origin}};}).filter(x=>x.title&&x.url));return{provider:"google",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"google",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
+  try{const data=await fetchJsonStaged("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,18000);const items=researchFirst(array(data.items).map(x=>{const map=x&&x.pagemap||{},thumb=first(map.cse_image&&map.cse_image[0]&&map.cse_image[0].src,map.cse_thumbnail&&map.cse_thumbnail[0]&&map.cse_thumbnail[0].src);return{title:stripHtml(x&&x.title),url:text(x&&x.link),link:text(x&&x.link),summary:stripHtml(x&&x.snippet),snippet:stripHtml(x&&x.snippet),source:"google_country_discovery",provider:"google",type:"web",thumbnail:thumb,image:thumb,payload:{source:"google",country:geo.country,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane||"general"}};}).filter(x=>x.title&&x.url));return{provider:"google",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"google",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
 }
 async function stagedSanmaru(event,row,geo,limit){
   let Sanmaru=null;try{Sanmaru=require("./sanmaru_engine_v2");}catch(_e){}if(!Sanmaru||typeof Sanmaru.runEngine!=="function")return{provider:"sanmaru",status:"unavailable",detail:null,items:[]};
   try{const result=await withTimeout(Sanmaru.runEngine(event||{},{q:row.query,query:row.query,country:geo.country,region:geo.region||undefined,limit:Math.min(20,limit||18),candidatePool:48,language:row.locale,locale:row.locale,type:"site",channel:"commerce",entity:"supplier",external:"off",directExternal:"0",noExternal:"1",noMedia:"1",deep:"0",timeoutMs:18000,from:"regional-brokerage-autoselector-staged",source:"regional-brokerage-autoselector-staged",regionalBrokerageSupply:"1",noAnalytics:"1",noRevenue:"1",readOnly:"1",noWrite:"1",noSync:"1",writeMode:"readonly"}),19000);const items=researchFirst(extractItems(result));return{provider:"sanmaru",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"sanmaru",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
 }
+function directoryBridgeCandidate(label,url,sourceUrl,geo,row){
+  const clean=stripHtml(label).replace(/\s+/g," ").trim();
+  if(!clean||clean.length<2||clean.length>180)return null;
+  const u=safeHttpUrl(url);if(!u)return null;
+  const host=lower(u.hostname);
+  if(/(?:facebook|instagram|youtube|youtu\.be|twitter|x\.com|pinterest|tiktok|linkedin|naver\.com|daum\.net|google\.|kakao\.|blog\.|news\.)/i.test(host))return null;
+  if(/\.(?:pdf|hwp|hwpx|docx?|xlsx?|pptx?|zip)(?:$|[?#])/i.test(u.toString()))return null;
+  const hay=lower(clean+" "+u.pathname);
+  if(!/(?:농장|농원|농협|축협|수협|산림조합|영농조합|협동조합|농업회사|생산자|제조|공장|기업|회사|공식몰|쇼핑몰|직매장|로컬푸드|farm|grower|producer|manufacturer|factory|cooperative|company|official\s*(?:shop|store)|online\s*(?:shop|store)|direct\s*sale)/i.test(hay))return null;
+  return compactResearchItem({title:clean,name:clean,url:u.toString(),link:u.toString(),source:"official_directory_bridge",provider:"directory-bridge",type:"site",summary:"Official directory outbound supplier candidate",payload:{source:"official_directory_bridge",directoryUrl:sourceUrl,country:geo.country,region:geo.region||"NATIONWIDE",query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane||"public_directory_bridge"}});
+}
+async function bridgeOfficialDirectory(item,geo,row,max){
+  const sourceUrl=Core.externalUrl(item),source=safeHttpUrl(sourceUrl);if(!source)return[];
+  const controller=typeof AbortController!=="undefined"?new AbortController():null,timer=controller?setTimeout(()=>controller.abort(),8000):null;
+  try{
+    const response=await fetch(source.toString(),{redirect:"follow",signal:controller?controller.signal:undefined,headers:{"user-agent":"IGDC-MARU-OfficialDirectoryBridge/1.0 (+https://igdcglobal.com)",accept:"text/html,application/xhtml+xml;q=0.9,*/*;q=0.1"}});
+    if(!response.ok)return[];const type=text(response.headers.get("content-type"));if(!/text\/html|application\/xhtml\+xml/i.test(type))return[];
+    const length=Number(response.headers.get("content-length")||0);if(length>450000)return[];
+    const html=(await response.text()).slice(0,450000),base=response.url||source.toString(),out=[],seen=new Set(),rx=/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;let match;
+    while((match=rx.exec(html))){
+      const target=absoluteHttpUrl(base,match[1]);if(!target||sameSite(base,target))continue;
+      const candidate=directoryBridgeCandidate(match[2],target,base,geo,row);if(!candidate)continue;
+      const key=lower(candidate.url);if(seen.has(key))continue;seen.add(key);out.push(candidate);if(out.length>=Math.max(3,Math.min(16,Number(max)||10)))break;
+    }
+    return out;
+  }catch(_error){return[];}finally{if(timer)clearTimeout(timer);}
+}
+
 async function searchSupplierResearchStep(event,params){
-  const geo=stagedGeo(params),task=plain(params&&params.task),row={query:text(task.query),locale:text(task.locale)||"en",origin:text(task.origin)||"searchbank-psom-policy-plan"};let result;if(task.lane==="naver")result=await stagedNaver(row,geo,Math.max(20,Number(params&&params.limit)||20));else if(task.lane==="google")result=await stagedGoogle(row,geo,Math.min(10,Number(params&&params.limit)||10));else result=await stagedSanmaru(event,row,geo,Math.max(18,Number(params&&params.limit)||18));const items=researchFirst(result.items||[]).filter(item=>!blockedByAdministratorPolicy(item,geo)).map(compactResearchItem).filter(Boolean);return{ok:true,version:VERSION,task:Object.assign({},task),status:result.status,detail:result.detail||null,items,trace:{source:result.provider,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,status:result.status,detail:result.detail||null,count:items.length,timeoutMs:19000}};
+  const geo=stagedGeo(params),task=plain(params&&params.task),row={query:text(task.query),locale:text(task.locale)||"en",origin:text(task.origin)||"searchbank-psom-policy-plan",supplyLane:text(task.supplyLane)||"general"};
+  let result;if(task.lane==="naver")result=await stagedNaver(row,geo,Math.max(20,Number(params&&params.limit)||20));else if(task.lane==="google")result=await stagedGoogle(row,geo,Math.min(10,Number(params&&params.limit)||10));else result=await stagedSanmaru(event,row,geo,Math.max(18,Number(params&&params.limit)||18));
+  let items=researchFirst(result.items||[]).filter(item=>!blockedByAdministratorPolicy(item,geo)).map((item)=>{const compact=compactResearchItem(item);if(compact){compact.payload=Object.assign({},plain(compact.payload),{supplyLane:row.supplyLane});}return compact;}).filter(Boolean);
+  let bridged=[];
+  if(row.supplyLane==="public_directory_bridge"&&items.length){bridged=await bridgeOfficialDirectory(items[0],geo,row,12);items=items.concat(bridged);}
+  return{ok:true,version:VERSION,task:Object.assign({},task),status:result.status,detail:result.detail||null,items,trace:{source:result.provider,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane,status:result.status,detail:result.detail||null,count:items.length,directoryBridgeCount:bridged.length,timeoutMs:19000}};
 }
 function prepareSupplierInspectionPool(rawItems,params){
   const geo=stagedGeo(params),limit=Math.max(10,Math.min(100,Number(params&&params.limit)||60)),out=[],seen=new Set(),hostCounts=new Map();
   for(const item of researchFirst(rawItems||[])){const url=Core.externalUrl(item);if(!url||seen.has(url)||blockedByAdministratorPolicy(item,geo))continue;let host="";try{host=new URL(url).hostname.toLowerCase();}catch(_e){}const count=hostCounts.get(host)||0;if(count>=3)continue;seen.add(url);hostCounts.set(host,count+1);out.push(compactResearchItem(item));if(out.length>=limit)break;}return out.filter(Boolean);
 }
 async function inspectSupplierResearchStep(rawItems,params){const geo=stagedGeo(params),items=array(rawItems).slice(0,3);const inspected=await Promise.all(items.map(item=>inspectCandidate(item,geo)));return{ok:true,version:VERSION,items:inspected};}
-function buildSupplierReviewPool(rawItems,inspectedItems,params){const geo=stagedGeo(params),limit=Math.max(1,Math.min(50,Number(params&&params.limit)||20));return privateReviewPool(rawItems,inspectedItems,geo,limit);}
+function buildSupplierReviewPool(rawItems,inspectedItems,params){const geo=stagedGeo(params),limit=Math.max(1,Math.min(100,Number(params&&params.limit)||40));return privateReviewPool(rawItems,inspectedItems,geo,limit);}
 
 
 
@@ -815,7 +848,7 @@ function isProductDetailUrl(url){return ProductRanking.isSpecificProductUrl(url)
 function meaningfulProductName(value){
   const name=stripHtml(value).replace(/\s+/g," ").trim();
   if(!name||name.length<2||name.length>220)return"";
-  if(/^(?:상품|제품|상품목록|제품목록|제품별|브랜드별|카테고리|전체상품|전체보기|보기|상세|더보기|구매|shop|store|view|detail|list)$/i.test(name))return"";
+  if(/^(?:상품|제품|상품목록|제품목록|제품별|브랜드별|카테고리|전체상품|전체보기|보기|상세|더보기|구매|결과|검색|검색결과|로그인|로그아웃|회원가입|마이페이지|장바구니|주문조회|상품\s*삭제|최근\s*검색어\s*전체삭제|전체삭제|품절|shop|store|view|detail|list|result|results|login|logout|cart|search)$/i.test(name))return"";
   if(/^(?:new|best|sale|event|기획전|이벤트|추천상품)$/i.test(name))return"";
   return name;
 }
@@ -863,6 +896,8 @@ function productPriorityInfo(value){
   if(/(?:쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|과일|채소|농산물|한우|돼지고기|닭고기|계란|우유|축산물|수산물|건어물|김|미역|젓갈|전복|굴|새우)/i.test(hay))labels.push("농·축·수산물");
   if(/(?:식품|식료품|김치|장류|반찬|떡|한과|생필품|생활용품|세제|위생용품|주방용품)/i.test(hay))labels.push("식품·생활필수품");
   if(/(?:화장품|뷰티|스킨케어|세럼|크림|로션|선크림|샴푸|린스|클렌징|마스크팩|메이크업|향수|personal care|beauty|cosmetic|skincare)/i.test(hay))labels.push("뷰티·개인용품");
+  if(/(?:공구|산업용품|기계|부품|금속|철강|플라스틱|고무|목재|포장재|전기자재|전자부품|자동차부품|건축자재|설비|안전용품|industrial|machinery|machine|tool|component|parts|metal|steel|plastic|rubber|packaging|electrical|hardware)/i.test(hay))labels.push("공업·산업재");
+  if(/(?:의류|섬유|패션|신발|가방|완구|교육용품|문구|유아용품|가구|조명|침구|apparel|textile|fashion|footwear|toy|stationery|furniture|lighting|bedding)/i.test(hay))labels.push("소비재·제조상품");
   if(/(?:농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|로컬푸드|생산자|농장|어촌|산촌)/i.test(hay))labels.push("생산자·조합");
   return{score:labels.length*40,label:labels[0]||""};
 }
@@ -884,9 +919,36 @@ function videoInfoFromHtml(html,pageUrl){
   const trustedIframe=isTrustedVideoPage(iframeUrl)?iframeUrl:"",videoUrl=direct||metaVideo||trustedIframe;
   return{videoUrl,videoContentUrl:isDirectProductVideoUrl(direct||metaVideo)?(direct||metaVideo):"",videoEmbedUrl:trustedIframe||(!isDirectProductVideoUrl(metaVideo)&&isTrustedVideoPage(metaVideo)?metaVideo:""),videoThumbnailUrl:absoluteHttpUrl(pageUrl,posterAttr&&posterAttr[1])||poster,videoSource:direct?"html_video":trustedIframe?"trusted_video_embed":metaVideo?"open_graph_video":""};
 }
+
+function normalizedPrice(value){
+  const raw=stripHtml(value).replace(/\s+/g," ").trim();if(!raw)return"";
+  const match=raw.match(/(?:₩|KRW|원|USD|US\$|\$|EUR|€|JPY|¥|CNY|RMB|GBP|£)?\s*([0-9]{1,3}(?:[,.][0-9]{3})+(?:[.][0-9]+)?|[0-9]{2,}(?:[.][0-9]+)?)/i);
+  if(!match)return"";const number=match[1].replace(/,/g,"");if(!Number.isFinite(Number(number))||Number(number)<=0)return"";return number;
+}
+function currencyFromText(value){
+  const raw=text(value);if(/(?:₩|KRW|원)/i.test(raw))return"KRW";if(/(?:USD|US\$|\$)/i.test(raw))return"USD";if(/(?:EUR|€)/i.test(raw))return"EUR";if(/(?:JPY|¥)/i.test(raw))return"JPY";if(/(?:CNY|RMB)/i.test(raw))return"CNY";if(/(?:GBP|£)/i.test(raw))return"GBP";return"";
+}
+function priceInfoFromHtml(html){
+  const source=String(html||""),metaAmount=metaContent(source,["product:price:amount","og:price:amount","twitter:data1"]),metaCurrency=metaContent(source,["product:price:currency","og:price:currency"]);
+  const patterns=[
+    /<(?:meta|input)\b[^>]*(?:itemprop|name|property)\s*=\s*["'](?:price|sale_price|product:price:amount)["'][^>]*(?:content|value)\s*=\s*["']([^"']+)["'][^>]*>/i,
+    /(?:data-price|data-sale-price|data-product-price|data-goods-price)\s*=\s*["']([^"']+)["']/i,
+    /<(?:strong|span|div|em)\b[^>]*class\s*=\s*["'][^"']*(?:price|sale_price|goods_price|product-price)[^"']*["'][^>]*>([\s\S]{1,240}?)<\/(?:strong|span|div|em)>/i
+  ];
+  let raw=metaAmount;for(const rx of patterns){if(raw)break;const m=source.match(rx);if(m)raw=stripHtml(m[1]);}
+  return{price:normalizedPrice(raw),priceCurrency:text(metaCurrency).toUpperCase()||currencyFromText(raw)};
+}
+function availabilityFromHtml(html){
+  const source=String(html||""),meta=metaContent(source,["product:availability","og:availability"]);if(meta)return meta;
+  const item=source.match(/(?:itemprop|property)\s*=\s*["']availability["'][^>]*(?:content|href)\s*=\s*["']([^"']+)["']/i);if(item)return decodeHtmlValue(item[1]);
+  if(/(?:품절|sold\s*out|out\s*of\s*stock)/i.test(stripHtml(source.slice(0,180000))))return"OutOfStock";
+  if(/(?:구매하기|장바구니|바로구매|add\s*to\s*cart|buy\s*now)/i.test(source))return"InStock";
+  return"";
+}
+
 function productOffer(node){
   const offers=array(node&&node.offers);if(!offers.length&&node&&node.offers)offers.push(node.offers);
-  const offer=plain(offers[0]);return{price:first(offer.price,offer.lowPrice,offer.highPrice),priceCurrency:first(offer.priceCurrency),availability:first(offer.availability),sellerName:first(plain(offer.seller).name,plain(node&&node.seller).name)};
+  const offer=plain(offers[0]);return{price:normalizedPrice(first(offer.price,offer.lowPrice,offer.highPrice)),priceCurrency:first(offer.priceCurrency),availability:first(offer.availability),sellerName:first(plain(offer.seller).name,plain(node&&node.seller).name)};
 }
 function productIdSeed(url,name){let h=0;const value=String(url||"")+"|"+String(name||"");for(let i=0;i<value.length;i++)h=((h<<5)-h+value.charCodeAt(i))|0;return"product_ref_"+Math.abs(h).toString(36)+"_"+value.length.toString(36);}
 function productRowsFromHtml(html,pageUrl,supplier,max){
@@ -899,7 +961,10 @@ function productRowsFromHtml(html,pageUrl,supplier,max){
     supplierTrustScore:Number(supplier&&supplier.trustScore)||0,
     supplierDecision:text(supplier&&supplier.supplierDecision),
     supplierApprovalReady:supplier&&supplier.approvalReady===true,
-    supplierEvidenceReady:supplier&&supplier.evidenceReady===true
+    supplierEvidenceReady:supplier&&supplier.evidenceReady===true,
+    supplyLane:text(supplier&&supplier.supplyLane)||"general",
+    discoverySource:text(supplier&&supplier.discoverySource)||"official_public_page",
+    officialDirectoryUrl:text(supplier&&supplier.officialDirectoryUrl)
   };
   const add=(row)=>{
     const resolved=absoluteHttpUrl(pageUrl,row&&row.productUrl),productUrl=ProductRanking.canonicalProductUrl(resolved),productName=stripHtml(first(row&&row.productName,row&&row.title));
@@ -929,8 +994,8 @@ function productRowsFromHtml(html,pageUrl,supplier,max){
     if(out.length>=(max||60))break;const context=productBlockContext(sourceHtml,found.index,found.end),label=nearbyProductName(context,"")||"상품명 확인 중",imageUrl=imageAttrFromHtml(context,found.url),priority=productPriorityInfo(label+" "+supplierName+" "+found.url);
     add({productName:label,productUrl:found.url,imageUrl,imageSource:imageUrl?"embedded_product_context":"",jsonLdProduct:false,offerPresent:false,priorityScore:priority.score,priorityLabel:priority.label,provisionalName:label==="상품명 확인 중"});
   }
-  const pageType=metaContent(html,["og:type"]),ogTitle=metaContent(html,["og:title","twitter:title"]),itemPropImage=((String(html).match(/<(?:meta|link)\b[^>]*itemprop\s*=\s*["']image["'][^>]*(?:content|href)\s*=\s*["']([^"']+)["'][^>]*>/i)||[])[1]||""),ogImage=absoluteHttpUrl(pageUrl,metaContent(html,["og:image:secure_url","og:image","twitter:image"])||itemPropImage),pageVideo=videoInfoFromHtml(html,pageUrl);
-  if(/product/i.test(pageType)||isProductDetailUrl(pageUrl)){const pageName=ogTitle||stripHtml((String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]),priority=productPriorityInfo(pageName+" "+supplierName+" "+pageUrl);add({productName:pageName,productUrl:canonicalPageUrl(html,pageUrl),imageUrl:ogImage,imageSource:ogImage?"open_graph":"",videoUrl:pageVideo.videoUrl,videoContentUrl:pageVideo.videoContentUrl,videoEmbedUrl:pageVideo.videoEmbedUrl,videoThumbnailUrl:pageVideo.videoThumbnailUrl,videoSource:pageVideo.videoSource,jsonLdProduct:false,offerPresent:false,priorityScore:priority.score,priorityLabel:priority.label});}
+  const pageType=metaContent(html,["og:type"]),ogTitle=metaContent(html,["og:title","twitter:title"]),itemPropImage=((String(html).match(/<(?:meta|link)\b[^>]*itemprop\s*=\s*["']image["'][^>]*(?:content|href)\s*=\s*["']([^"']+)["'][^>]*>/i)||[])[1]||""),ogImage=absoluteHttpUrl(pageUrl,metaContent(html,["og:image:secure_url","og:image","twitter:image"])||itemPropImage),pageVideo=videoInfoFromHtml(html,pageUrl),pagePrice=priceInfoFromHtml(html),pageAvailability=availabilityFromHtml(html);
+  if(/product/i.test(pageType)||isProductDetailUrl(pageUrl)){const pageName=ogTitle||stripHtml((String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]),priority=productPriorityInfo(pageName+" "+supplierName+" "+pageUrl);add({productName:pageName,productUrl:canonicalPageUrl(html,pageUrl),imageUrl:ogImage,imageSource:ogImage?"open_graph":"",videoUrl:pageVideo.videoUrl,videoContentUrl:pageVideo.videoContentUrl,videoEmbedUrl:pageVideo.videoEmbedUrl,videoThumbnailUrl:pageVideo.videoThumbnailUrl,videoSource:pageVideo.videoSource,price:pagePrice.price,priceCurrency:pagePrice.priceCurrency,availability:pageAvailability,jsonLdProduct:false,offerPresent:!!pagePrice.price,priorityScore:priority.score,priorityLabel:priority.label});}
   return out.slice(0,max||60);
 }
 
@@ -951,17 +1016,17 @@ async function discoverSupplierProductsStep(supplier,params){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),19000);try{
     const initialUrls=[supplierSiteUrl],candidateUrl=absoluteHttpUrl(supplierSiteUrl,source.sourceCandidateUrl);if(candidateUrl&&sameSite(supplierSiteUrl,candidateUrl)&&candidateUrl!==supplierSiteUrl)initialUrls.push(candidateUrl);
     const initialPages=await Promise.all(initialUrls.map(url=>fetchProductHtml(url,controller))),validInitial=initialPages.filter(page=>page.ok);if(!validInitial.length){const firstFailure=initialPages[0]||{};return{ok:true,items:[],trace:{source:"supplier-product-discovery",status:firstFailure.status||"unavailable",detail:firstFailure.detail||null,supplierSiteUrl,count:0}};}
-    const supplierInfo={supplierId:text(source.supplierId),supplierName:first(source.title,source.name,source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),trustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),approvalReady:source.approvalReady===true,evidenceReady:source.evidenceReady===true};let items=[],extraUrls=[];
+    const supplierInfo={supplierId:text(source.supplierId),supplierName:first(source.title,source.name,source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),trustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),approvalReady:source.approvalReady===true,evidenceReady:source.evidenceReady===true,supplyLane:text(source.supplyLane)||"general",discoverySource:text(source.discoverySource)||"official_public_page",officialDirectoryUrl:text(source.officialDirectoryUrl)};let items=[],extraUrls=[];
     for(const page of validInitial){items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,50));extraUrls=extraUrls.concat(catalogPageUrls(page.html,page.url));}
-    const uniqueExtras=[];for(const url of extraUrls){if(!url||initialUrls.includes(url)||uniqueExtras.includes(url))continue;uniqueExtras.push(url);if(uniqueExtras.length>=8)break;}
+    const uniqueExtras=[];for(const url of extraUrls){if(!url||initialUrls.includes(url)||uniqueExtras.includes(url))continue;uniqueExtras.push(url);if(uniqueExtras.length>=12)break;}
     const extras=await Promise.all(uniqueExtras.map(url=>fetchProductHtml(url,controller)));for(const page of extras)if(page.ok)items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,50));
-    let sitemapCount=0;if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)).length<5){const sitemapUrls=await fetchProductSitemapUrls(supplierSiteUrl,controller,40);sitemapCount=sitemapUrls.length;for(const url of sitemapUrls){const priority=productPriorityInfo(supplierInfo.supplierName+" "+url);items.push({id:productIdSeed(url,"상품명 확인 중"),entityKind:"product_reference",productName:"상품명 확인 중",title:"상품명 확인 중",productUrl:url,url,imageUrl:"",imageOriginalUrl:"",imageSource:"sitemap_pending_inspection",videoUrl:"",videoContentUrl:"",videoEmbedUrl:"",videoThumbnailUrl:"",videoSource:"unresolved",supplierId:supplierInfo.supplierId,supplierName:supplierInfo.supplierName,supplierSiteUrl,supplierType:supplierInfo.supplierType,supplierTrustScore:supplierInfo.trustScore,supplierDecision:supplierInfo.supplierDecision,supplierApprovalReady:supplierInfo.approvalReady===true,supplierEvidenceReady:supplierInfo.evidenceReady===true,sourcePageUrl:supplierSiteUrl,jsonLdProduct:false,offerPresent:false,provisionalName:true,priorityScore:priority.score,priorityLabel:priority.label,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});}}
-    const dedup=[],seen=new Set();for(const row of items){const key=ProductRanking.productIdentity(row);if(!key||seen.has(key)||!isProductDetailUrl(row.productUrl))continue;seen.add(key);dedup.push(row);if(dedup.length>=Math.max(10,Math.min(80,Number(params&&params.limit)||50)))break;}
+    let sitemapCount=0;if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)).length<5){const sitemapUrls=await fetchProductSitemapUrls(supplierSiteUrl,controller,80);sitemapCount=sitemapUrls.length;for(const url of sitemapUrls){const priority=productPriorityInfo(supplierInfo.supplierName+" "+url);items.push({id:productIdSeed(url,"상품명 확인 중"),entityKind:"product_reference",productName:"상품명 확인 중",title:"상품명 확인 중",productUrl:url,url,imageUrl:"",imageOriginalUrl:"",imageSource:"sitemap_pending_inspection",videoUrl:"",videoContentUrl:"",videoEmbedUrl:"",videoThumbnailUrl:"",videoSource:"unresolved",supplierId:supplierInfo.supplierId,supplierName:supplierInfo.supplierName,supplierSiteUrl,supplierType:supplierInfo.supplierType,supplierTrustScore:supplierInfo.trustScore,supplierDecision:supplierInfo.supplierDecision,supplierApprovalReady:supplierInfo.approvalReady===true,supplierEvidenceReady:supplierInfo.evidenceReady===true,sourcePageUrl:supplierSiteUrl,jsonLdProduct:false,offerPresent:false,provisionalName:true,priorityScore:priority.score,priorityLabel:priority.label,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});}}
+    const dedup=[],seen=new Set();for(const row of items){const key=ProductRanking.productIdentity(row);if(!key||seen.has(key)||!isProductDetailUrl(row.productUrl))continue;seen.add(key);dedup.push(row);if(dedup.length>=Math.max(10,Math.min(120,Number(params&&params.limit)||80)))break;}
     return{ok:true,items:dedup,trace:{source:"supplier-product-discovery",status:"ok",supplierName:supplierInfo.supplierName,supplierSiteUrl,sourceCandidateChecked:initialUrls.length>1,catalogPagesChecked:validInitial.length+extras.filter(x=>x.ok).length,sitemapProductUrls:sitemapCount,count:dedup.length}};
   }finally{clearTimeout(timer);}
 }
 function prepareProductInspectionPool(rawItems,params){
-  const limit=Math.max(20,Math.min(300,Number(params&&params.limit)||120)),ranked=ProductRanking.mergeProductRows([],array(rawItems),{limit:Math.max(limit,300)}).filter(row=>ProductRanking.isReviewableProduct(row)||(row&&row.provisionalName===true&&ProductRanking.isSpecificProductUrl(row.productUrl))).sort((a,b)=>Number(!!b.imageUrl)-Number(!!a.imageUrl)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||text(a.productName).localeCompare(text(b.productName))),out=[],seen=new Set();
+  const limit=Math.max(20,Math.min(1200,Number(params&&params.limit)||300)),ranked=ProductRanking.mergeProductRows([],array(rawItems),{limit:Math.max(limit,300)}).filter(row=>ProductRanking.isReviewableProduct(row)||(row&&row.provisionalName===true&&ProductRanking.isSpecificProductUrl(row.productUrl))).sort((a,b)=>Number(!!b.imageUrl)-Number(!!a.imageUrl)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||text(a.productName).localeCompare(text(b.productName))),out=[],seen=new Set();
   for(const item of ranked){const url=ProductRanking.canonicalProductUrl(item&&item.productUrl),key=ProductRanking.productIdentity(item);if(!url||!key||seen.has(key)||!isProductDetailUrl(url))continue;seen.add(key);out.push(Object.assign({},item,{productUrl:url,url}));if(out.length>=limit)break;}return out;
 }
 
@@ -969,13 +1034,13 @@ async function inspectProductCandidate(item){
   const row=plain(item),productUrl=ProductRanking.canonicalProductUrl(absoluteHttpUrl(row.productUrl,row.productUrl)),supplierSiteUrl=absoluteHttpUrl(row.supplierSiteUrl,row.supplierSiteUrl);if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false,inspectionComplete:true});
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),14000);try{
     const page=await fetchProductHtml(productUrl,controller);if(!page.ok)return Object.assign({},row,{researchStatus:page.status,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString()});
-    const supplierMeta={supplierId:row.supplierId,supplierName:row.supplierName,supplierSiteUrl:supplierSiteUrl||row.supplierSiteUrl,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady,evidenceReady:row.supplierEvidenceReady};
+    const supplierMeta={supplierId:row.supplierId,supplierName:row.supplierName,supplierSiteUrl:supplierSiteUrl||row.supplierSiteUrl,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady,evidenceReady:row.supplierEvidenceReady,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl};
     const parsed=productRowsFromHtml(page.html,page.url,supplierMeta,20),canonical=ProductRanking.canonicalProductUrl(canonicalPageUrl(page.html,page.url))||productUrl,exact=parsed.find(x=>ProductRanking.canonicalProductUrl(x.productUrl)===canonical)||parsed[0]||{},pageVideo=videoInfoFromHtml(page.html,page.url);
-    const pageTitle=meaningfulProductName(metaContent(page.html,["og:title","twitter:title"])||stripHtml((String(page.html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1])),name=first(exact.productName!=="상품명 확인 중"?exact.productName:"",pageTitle,row.productName),image=first(exact.imageUrl,row.imageUrl),same=supplierSiteUrl?sameSite(supplierSiteUrl,page.url):true,ready=!!meaningfulProductName(name)&&!ProductRanking.isGenericProductName(name)&&!!image&&same&&ProductRanking.isSpecificProductUrl(canonical);
-    return Object.assign({},row,exact,{id:row.id||exact.id||productIdSeed(canonical,name),productName:name,title:name,productUrl:canonical,url:canonical,imageUrl:isProductImageUrl(image)?image:"",imageOriginalUrl:isProductImageUrl(image)?image:"",videoUrl:first(exact.videoUrl,pageVideo.videoUrl,row.videoUrl),videoContentUrl:first(exact.videoContentUrl,pageVideo.videoContentUrl,row.videoContentUrl),videoEmbedUrl:first(exact.videoEmbedUrl,pageVideo.videoEmbedUrl,row.videoEmbedUrl),videoThumbnailUrl:first(exact.videoThumbnailUrl,pageVideo.videoThumbnailUrl,row.videoThumbnailUrl),videoSource:first(exact.videoSource,pageVideo.videoSource,row.videoSource),supplierSiteUrl:supplierSiteUrl||exact.supplierSiteUrl,supplierId:first(row.supplierId,exact.supplierId),supplierType:first(row.supplierType,exact.supplierType),supplierTrustScore:Math.max(Number(row.supplierTrustScore)||0,Number(exact.supplierTrustScore)||0),supplierEvidenceReady:row.supplierEvidenceReady===true||exact.supplierEvidenceReady===true,supplierApprovalReady:row.supplierApprovalReady===true||exact.supplierApprovalReady===true,productPageLive:true,sameSupplierSite:same,inspectionComplete:true,inspectedAt:new Date().toISOString(),researchStatus:ready?"ready_for_admin_review":"needs_manual_review",slotDecision:text(row.slotDecision)||"undecided",publicPublication:false,automaticImport:false});
+    const pageTitle=meaningfulProductName(metaContent(page.html,["og:title","twitter:title"])||stripHtml((String(page.html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1])),candidateNames=[exact.productName!=="상품명 확인 중"?exact.productName:"",pageTitle,row.productName].map(meaningfulProductName).filter(name=>name&&!ProductRanking.isGenericProductName(name)),name=candidateNames[0]||"",image=first(exact.imageUrl,row.imageUrl),same=supplierSiteUrl?sameSite(supplierSiteUrl,page.url):true,pagePrice=priceInfoFromHtml(page.html),pageAvailability=availabilityFromHtml(page.html),price=first(exact.price,pagePrice.price,row.price),priceCurrency=first(exact.priceCurrency,pagePrice.priceCurrency,row.priceCurrency),availability=first(exact.availability,pageAvailability,row.availability),ready=!!name&&!!image&&same&&ProductRanking.isSpecificProductUrl(canonical);
+    return Object.assign({},row,exact,{id:row.id||exact.id||productIdSeed(canonical,name),productName:name,title:name,productUrl:canonical,url:canonical,imageUrl:isProductImageUrl(image)?image:"",imageOriginalUrl:isProductImageUrl(image)?image:"",price,priceCurrency,availability,offerPresent:exact.offerPresent===true||!!price,videoUrl:first(exact.videoUrl,pageVideo.videoUrl,row.videoUrl),videoContentUrl:first(exact.videoContentUrl,pageVideo.videoContentUrl,row.videoContentUrl),videoEmbedUrl:first(exact.videoEmbedUrl,pageVideo.videoEmbedUrl,row.videoEmbedUrl),videoThumbnailUrl:first(exact.videoThumbnailUrl,pageVideo.videoThumbnailUrl,row.videoThumbnailUrl),videoSource:first(exact.videoSource,pageVideo.videoSource,row.videoSource),supplierSiteUrl:supplierSiteUrl||exact.supplierSiteUrl,supplierId:first(row.supplierId,exact.supplierId),supplierType:first(row.supplierType,exact.supplierType),supplierTrustScore:Math.max(Number(row.supplierTrustScore)||0,Number(exact.supplierTrustScore)||0),supplierEvidenceReady:row.supplierEvidenceReady===true||exact.supplierEvidenceReady===true,supplierApprovalReady:row.supplierApprovalReady===true||exact.supplierApprovalReady===true,productPageLive:true,sameSupplierSite:same,inspectionComplete:true,inspectedAt:new Date().toISOString(),researchStatus:ready?"ready_for_admin_review":"needs_manual_review",slotDecision:text(row.slotDecision)||"undecided",publicPublication:false,automaticImport:false});
   }finally{clearTimeout(timer);}
 }
 
-async function inspectProductResearchStep(rawItems){const items=array(rawItems).slice(0,2),settled=await Promise.all(items.map(inspectProductCandidate));return{ok:true,version:VERSION,items:settled};}
+async function inspectProductResearchStep(rawItems){const items=array(rawItems).slice(0,4),settled=await Promise.all(items.map(inspectProductCandidate));return{ok:true,version:VERSION,items:settled};}
 
 module.exports={VERSION,runSelection,createSupplierResearchPlan,searchSupplierResearchStep,prepareSupplierInspectionPool,inspectSupplierResearchStep,buildSupplierReviewPool,discoverSupplierProductsStep,prepareProductInspectionPool,inspectProductResearchStep};

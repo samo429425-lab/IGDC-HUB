@@ -13,7 +13,7 @@ const path = require("path");
 const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.1.0-revenue-qualification-evidence";
+const VERSION = "commerce-candidate-registry-sync-v1.2.0-ordered-lifecycle-evidence-gate";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 
 function text(v){ return v == null ? "" : String(v).trim(); }
@@ -34,6 +34,8 @@ function requiredEnvPresent(){ return !!(text(process.env.GSLOT_SUPABASE_URL) &&
 function allowedCandidateStatus(v){ return ["revenue_ready","approval_pending","enrollable"].includes(lower(v)); }
 function allowedAssignmentState(v){ return ["approved","pinned"].includes(lower(v)); }
 function approvedRevenue(v){ return ["approved","active","verified","live","enabled"].includes(lower(v)); }
+function approvedAvailability(v){ return ["active","approved","ready"].includes(lower(v)); }
+function verifiedEvidenceRow(row){ return !!row && bool(row.verified) && !!safeUrl(row.evidence_url); }
 function sourcePayload(candidate){
   const payload=plain(candidate.source_payload);
   if(isObject(payload.candidate)) return Object.assign({},payload.candidate);
@@ -155,7 +157,7 @@ async function syncApprovedCandidates(input){
     ]);
     const aBy=new Map(); array(assignments).forEach(row=>{ if(allowedAssignmentState(row.state) && lower(row.publication_status)==="ready" && !aBy.has(row.candidate_id)) aBy.set(row.candidate_id,row); });
     const avBy=new Map(), rBy=new Map(), eBy=new Map();
-    array(availability).forEach(row=>{ if(!avBy.has(row.candidate_id)) avBy.set(row.candidate_id,[]); avBy.get(row.candidate_id).push(row); });
+    array(availability).forEach(row=>{ if(!approvedAvailability(row.availability_state)) return; if(!avBy.has(row.candidate_id)) avBy.set(row.candidate_id,[]); avBy.get(row.candidate_id).push(row); });
     array(revenue).forEach(row=>{ if(!rBy.has(row.candidate_id)) rBy.set(row.candidate_id,[]); rBy.get(row.candidate_id).push(row); });
     array(evidence).forEach(row=>{ if(!eBy.has(row.candidate_id)) eBy.set(row.candidate_id,[]); eBy.get(row.candidate_id).push(row); });
     const output=[];
@@ -164,7 +166,8 @@ async function syncApprovedCandidates(input){
       const assignment=aBy.get(candidate.id); if(!assignment) continue;
       const candidateRevenue=rBy.get(candidate.id)||[]; if(!candidateRevenue.some(row=>approvedRevenue(row.status))) continue;
       const avail=avBy.get(candidate.id)||[]; if(!avail.length) continue;
-      const compact=compactPayload(candidate,assignment,avail,candidateRevenue,eBy.get(candidate.id)||[]);
+      const verifiedEvidence=(eBy.get(candidate.id)||[]).filter(verifiedEvidenceRow); if(!verifiedEvidence.length) continue;
+      const compact=compactPayload(candidate,assignment,avail,candidateRevenue,verifiedEvidence);
       const row=candidateRevenue.find(entry=>approvedRevenue(entry.status))||{};
       const type=lower(row.revenue_type)||"brokerage";
       const contract=plain(compact.brokerageContract);
@@ -190,4 +193,4 @@ async function syncApprovedCandidates(input){
   }
 }
 
-module.exports={VERSION,QUEUE_FILE,syncApprovedCandidates};
+module.exports={VERSION,QUEUE_FILE,syncApprovedCandidates,approvedAvailability,verifiedEvidenceRow};

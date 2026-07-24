@@ -27,9 +27,11 @@
   function boolMark(v){ return v ? '<span class="ok">준비</span>' : '<span class="warn">미설정</span>'; }
   function render(report){
     lastReport=report;updateScope(report&&report.selectedScope);
-    var s=report.summary||{}, gate=report.gate||{}, runtime=report.runtime||{}, ps=runtime.providerSettlement||{};
+    var s=report.summary||{}, gate=report.gate||{}, runtime=report.runtime||{}, ps=runtime.providerSettlement||{}, pipeline=report.pipeline||{}, privateStage=pipeline.privateCandidateStage||{};
     $('summary').innerHTML=[
-      card('실제 상품 후보',s.realProductCandidates||0,'샘플·시드 제외','info'),
+      card('상품 리서치 이후 비공개 스테이지',privateStage.totalCandidates||0,'원장 동기화·후보 인테이크 단계','info'),
+      card('스테이지 발행 전 통과',privateStage.eligibleForRelease||0,'Canonical·수동 카나리 전','ok'),
+      card('실제 프론트 상품 후보',s.realProductCandidates||0,'샘플·시드 제외','info'),
       card('제휴 수수료 준비',s.readyAffiliate||0,'승인 제휴 계약 + 추적 URL','ok'),
       card('직접 광고·중개 수익 준비',s.readyDirectRevenue||0,'검증된 계약·상대방·고지·정산 근거','ok'),
       card('수익권 검토 필요',s.revenueReviewRequired||0,'트래픽 가치 또는 계약 증빙 보강 필요','warn'),
@@ -41,7 +43,7 @@
 
     var gateClass=statusClass(gate.state);
     $('gatePanel').classList.remove('hidden');
-    $('gatePanel').innerHTML='<h2>개방 게이트 · '+esc(scopeLabel())+'</h2><div class="notice '+(gateClass==='ok'?'okbox':(gateClass==='warn'?'warnbox':''))+'"><strong class="'+gateClass+'">'+esc(gate.state||'unknown')+'</strong><br>'+esc(gate.reason||'')+'<br><span class="small">'+esc(gate.note||'')+'</span></div>';
+    $('gatePanel').innerHTML='<h2>개방 게이트 · '+esc(scopeLabel())+'</h2><div class="notice '+(gateClass==='ok'?'okbox':(gateClass==='warn'?'warnbox':''))+'"><strong class="'+gateClass+'">'+esc(gate.state||'unknown')+'</strong><br>'+esc(gate.reason||'')+'<br><span class="small">'+esc(gate.note||'')+'</span></div><div class="small" style="margin-top:10px"><strong>비공개 스테이지:</strong> 전체 '+esc(privateStage.totalCandidates||0)+' · 통과 '+esc(privateStage.eligibleForRelease||0)+' · 보류 '+esc(privateStage.held||0)+' · 다음 단계 '+esc(privateStage.nextGate||'product_research_and_private_queue')+'<br><strong>승격 순서:</strong> '+esc((pipeline.promotionOrder||[]).join(' → ')||'상품 리서치 → 관리자 선택 → 시장·검증·수익·배정 → 원장 동기화 → 수동 카나리')+'</div>';
 
     var snapRows=(report.snapshots||[]).map(function(row){
       return '<tr><td>'+esc(row.key)+'</td><td>'+esc(row.sourceTotalItems||row.totalItems||0)+'</td><td>'+esc(row.totalItems||0)+'</td><td>'+esc(row.seedOrSample||0)+'</td><td>'+esc(row.realProductCandidates||0)+'</td><td>'+esc(row.readyAffiliate||0)+'</td><td>'+esc(row.readyDirectRevenue||0)+'</td><td>'+esc(row.revenueReviewRequired||0)+'</td><td>'+esc(row.readyExternalReferral||0)+'</td><td>'+esc(row.hold||0)+'</td><td>'+esc(row.block||0)+'</td><td class="'+(row.copies&&row.copies.synchronized?'ok':'warn')+'">'+(row.copies&&row.copies.synchronized?'동기화':'확인 필요')+'</td></tr>';
@@ -67,6 +69,8 @@
       '<tr><th>제휴 파트너 설정</th><td>'+boolMark(!!ps.affiliatePartnerConfigConfigured)+' <span class="small">('+esc(ps.affiliatePartnerCount||0)+'개)</span></td></tr>'+
       '<tr><th>제휴 전환 웹훅 수령</th><td>'+boolMark(!!ps.affiliateConversionWebhookReady)+'</td></tr>'+
       '<tr><th>광고·제휴 정산명세 수입</th><td>'+boolMark(!!ps.nonPgSettlementIngestReady)+'</td></tr>'+
+      '<tr><th>비공개 후보 인테이크</th><td>'+boolMark(!!privateStage.available)+' <span class="small">'+esc(privateStage.version||'스테이지 미생성')+'</span></td></tr>'+
+      '<tr><th>결제 책임</th><td>외부 판매처 결제 · IGDC 결제/판매자 책임 없음</td></tr>'+
       '<tr><th>상품 자동공급 스위치</th><td class="mono">PRODUCT_SUPPLY_ON='+esc(runtime.supplySwitches&&runtime.supplySwitches.productSupplyOn||'not-configured')+'<br>DATA_UPLOAD_ON='+esc(runtime.supplySwitches&&runtime.supplySwitches.dataUploadOn||'not-configured')+'<br>FRONT_SLOT_AUTO_FILL='+esc(runtime.supplySwitches&&runtime.supplySwitches.frontSlotAutoFill||'not-configured')+'<br>PAYMENT_LIVE='+esc(runtime.supplySwitches&&runtime.supplySwitches.paymentLive||'not-configured')+'</td></tr>'+
       '</tbody></table><div class="small">환경변수의 실제 값·토큰·계좌 정보는 표시하지 않습니다.</div>';
 

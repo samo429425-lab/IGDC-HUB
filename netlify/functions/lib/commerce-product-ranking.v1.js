@@ -12,7 +12,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "commerce-product-ranking-v1.1.0-risk-first-revenue-ranked-section-aware";
+const VERSION = "commerce-product-ranking-v1.3.0-family-representative-portfolio";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -217,11 +217,21 @@ function normalizeTitle(value) {
 function isGenericProductName(value) {
   const raw = text(value), normalized = normalizeTitle(raw);
   if (!raw || raw.length < 2 || !normalized) return true;
-  if (/^(?:상품명\s*확인\s*중|상품|제품|상품목록|제품목록|제품별|브랜드별|카테고리|전체상품|전체보기|보기|상세|더보기|구매|다른\s*기획전\s*보기|브랜드\s*사이트\s*목록\s*열기|사이트\s*목록\s*열기|업체\s*사이트\s*열기|공식\s*사이트\s*열기|원본\s*링크|shop|store|view|detail|list)$/i.test(raw)) return true;
+  if (/^(?:상품명\s*확인\s*중|상품|제품|상품목록|제품목록|제품별|브랜드별|카테고리|전체상품|전체보기|보기|상세|더보기|구매|결과|검색|검색결과|로그인|로그아웃|회원가입|마이페이지|장바구니|주문조회|상품\s*삭제|최근\s*검색어\s*전체삭제|전체삭제|품절|다른\s*기획전\s*보기|브랜드\s*사이트\s*목록\s*열기|사이트\s*목록\s*열기|업체\s*사이트\s*열기|공식\s*사이트\s*열기|원본\s*링크|shop|store|view|detail|list|result|results|login|logout|cart|search)$/i.test(raw)) return true;
   if (/^(?:new|best|sale|event|lucky\s*\d+|기획전|이벤트|추천상품)$/i.test(raw)) return true;
   if (/(?:사이트|브랜드|업체|공식몰).*(?:목록|열기|바로가기)$/i.test(raw)) return true;
   if (/(?:공식몰|브랜드몰|쇼핑몰|몰)\s*\|?.*(?:일상|행복|새로운|더\s*빛나게)|(?:일상|행복|새로운|더\s*빛나게).*(?:공식몰|브랜드몰|쇼핑몰)/i.test(raw)) return true;
   return false;
+}
+
+
+function normalizeFamilyTitle(value) {
+  return normalizeTitle(value)
+    .replace(/(?:\d+(?:[.,]\d+)?(?:ml|l|g|kg|mg|cm|mm|m|개|매|팩|입|병|봉|포|캔|세트|롤|겹|호|인치|oz|lb|pack|pcs|piece|set|roll)s?)/gi, "")
+    .replace(/(?:\d+\s*[x×]\s*\d+)/gi, "")
+    .replace(/(?:대용량|소용량|묶음|멀티팩|리필|본품|증정|선물세트|옵션|색상|컬러|사이즈|size|color|option|refill|bundle|multipack)/gi, "")
+    .replace(/\d+/g, "")
+    .slice(0, 220);
 }
 
 function imageFingerprint(value) {
@@ -253,12 +263,12 @@ function productIdentity(rowInput) {
 }
 
 function productFamilyKey(rowInput) {
-  const row = plain(rowInput), supplier = supplierKey(row), title = normalizeTitle(first(row.productName, row.title));
+  const row = plain(rowInput), supplier = supplierKey(row), title = normalizeFamilyTitle(first(row.productName, row.title));
   return supplier + "|family:" + (title || productIdFromUrl(first(row.productUrl, row.url)) || sha256(first(row.productUrl, row.url)).slice(0, 18));
 }
 
 function displayFamilyKey(rowInput) {
-  const row = plain(rowInput), title = normalizeTitle(first(row.productName, row.title));
+  const row = plain(rowInput), title = normalizeFamilyTitle(first(row.productName, row.title));
   return "display-family:" + (title || productIdFromUrl(first(row.productUrl, row.url)) || sha256(first(row.productUrl, row.url)).slice(0, 18));
 }
 
@@ -282,6 +292,7 @@ function classifyCategory(rowInput) {
   add("travel_local_services", 80, /(여행|관광|숙박|호텔|리조트|체험|투어|티켓|렌터카|지역서비스|travel|tour|hotel|resort|experience|ticket|rental)/i);
   add("local_products", 55, /(로컬푸드|지역특산|특산품|향토|산지직송|농장|어촌|산촌|local product|regional specialty|farm direct)/i);
   add("manufacturer_brands", 50, /(공식몰|본사|제조사|제조업체|생산자|농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|manufacturer|official store|producer|cooperative)/i);
+  add("manufacturer_brands", 75, /(공구|산업용품|기계|부품|금속|철강|플라스틱|고무|목재|포장재|전기자재|전자부품|자동차부품|건축자재|설비|안전용품|industrial|machinery|machine|tool|component|parts|metal|steel|plastic|rubber|packaging|electrical|hardware)/i);
 
   if (!Object.values(scores).some((score) => score > 0)) scores.manufacturer_brands = 15;
   const ranked = Object.entries(scores).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
@@ -641,17 +652,43 @@ function buildSectionQueues(rankedInput) {
   return { queues: output, counts };
 }
 
+function markFamilyRepresentatives(evaluatedInput) {
+  const rows = array(evaluatedInput), representativeByFamily = new Map(), familySizes = new Map();
+  for (const row of rows) {
+    const key = text(row.productFamilyKey) || text(row.productIdentity);
+    familySizes.set(key, (familySizes.get(key) || 0) + 1);
+    if (!representativeByFamily.has(key)) representativeByFamily.set(key, text(row.id));
+  }
+  return rows.map((row) => {
+    const key = text(row.productFamilyKey) || text(row.productIdentity), representativeId = representativeByFamily.get(key) || text(row.id);
+    const representative = text(row.id) === representativeId;
+    return Object.assign({}, row, {
+      familyRepresentative: representative,
+      familyRepresentativeId: representativeId || null,
+      familyVariant: !representative,
+      familyVariantCount: Math.max(0, Number(familySizes.get(key) || 1) - 1),
+      familyVariantReason: representative ? null : "same_supplier_product_family_variant",
+      rankingEligible: representative ? row.rankingEligible === true : false,
+      recommendedDecision: representative ? row.recommendedDecision : "hold_family_variant",
+      sectionAssignments: representative ? array(row.sectionAssignments) : [],
+      primaryPlacement: representative ? row.primaryPlacement : null
+    });
+  });
+}
+
 function buildPortfolio(rowsInput, contextInput) {
   const inputRows = array(rowsInput), merged = mergeProductRows([], inputRows, { limit: Math.max(300, inputRows.length) });
-  const evaluated = merged.map((row) => evaluateProduct(row, contextInput)).sort((a, b) =>
+  const evaluatedBase = merged.map((row) => evaluateProduct(row, contextInput)).sort((a, b) =>
     Number(b.rankingEligible === true) - Number(a.rankingEligible === true) ||
     Number(b.rankingScore || 0) - Number(a.rankingScore || 0) ||
     Number(b.riskAssessment && b.riskAssessment.qualityScore || 0) - Number(a.riskAssessment && a.riskAssessment.qualityScore || 0) ||
     first(a.productName, a.title).localeCompare(first(b.productName, b.title))
   );
-  const eligible = arrangeDiverse(evaluated.filter((row) => row.rankingEligible === true));
-  const held = evaluated.filter((row) => row.rankingEligible !== true);
-  const ranked = eligible.concat(held).map((row, index) => Object.assign({}, row, {
+  const evaluated = markFamilyRepresentatives(evaluatedBase);
+  const eligible = arrangeDiverse(evaluated.filter((row) => row.rankingEligible === true && row.familyRepresentative !== false));
+  const variants = evaluated.filter((row) => row.familyVariant === true);
+  const held = evaluated.filter((row) => row.familyVariant !== true && row.rankingEligible !== true);
+  const ranked = eligible.concat(variants, held).map((row, index) => Object.assign({}, row, {
     rank: row.rankingEligible === true ? index + 1 : null,
     reviewOrder: index + 1
   }));
@@ -665,6 +702,8 @@ function buildPortfolio(rowsInput, contextInput) {
       input: inputRows.length,
       exactDuplicatesRemoved: Math.max(0, inputRows.length - merged.length),
       uniqueProducts: merged.length,
+      familyRepresentatives: evaluated.filter((row) => row.familyRepresentative === true).length,
+      familyVariantsSuppressed: variants.length,
       rankingEligible: eligible.length,
       riskHeld: held.length,
       supplierEvidenceReady: ranked.filter((row) => row.supplierAssessment && row.supplierAssessment.evidenceReady === true).length,
@@ -698,6 +737,7 @@ module.exports = {
   isSpecificProductUrl,
   isReviewableProduct,
   isGenericProductName,
+  normalizeFamilyTitle,
   classifyCategory,
   supplierAssessment,
   riskAssessment,
@@ -706,5 +746,6 @@ module.exports = {
   mergeProductRows,
   arrangeDiverse,
   buildSectionQueues,
+  markFamilyRepresentatives,
   buildPortfolio
 };
