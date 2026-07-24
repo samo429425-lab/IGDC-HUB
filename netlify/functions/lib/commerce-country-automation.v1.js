@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v2.7.0-commerce-mesh-lifecycle";
+const VERSION = "commerce-country-automation-v2.7.1-product-visibility-regression-repair";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1301,7 +1301,12 @@ function publicProductJob(job) {
   const sourceProducts = array(job.rawProducts).concat(array(job.products));
   const portfolio = ProductRanking.buildPortfolio(sourceProducts, plain(job.rankingContext));
   const allRankedProducts = array(portfolio.products);
-  const visibleProducts = allRankedProducts.filter((row) => row.familyRepresentative !== false && ProductRanking.isReviewableProduct(row));
+  const visibleProducts = allRankedProducts.filter((row) => {
+    const specific = ProductRanking.isSpecificProductUrl(productUrl(row));
+    const inspectedPreview = specific && row && row.inspectionComplete === true && !!productImageUrl(row);
+    const provisionalPreview = specific && row && row.provisionalName === true;
+    return ProductRanking.isReviewableProduct(row) || inspectedPreview || provisionalPreview;
+  });
   return {
     ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, rankingVersion: ProductRanking.VERSION, rankingPolicy: ProductRanking.POLICY, jobVersion: text(job.version), needsRefresh: text(job.version) !== VERSION, jobId: job.jobId, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
     safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false, riskGateBeforeRevenueRanking: true, sponsorRequiresApprovedContract: true, sectionAssignmentsAreProposalsOnly: true },
@@ -1312,7 +1317,7 @@ function publicProductJob(job) {
       suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
       discovered: visibleProducts.length,
       discoveredRaw: array(job.rawProducts).length,
-      discardedCategoryOrListPages: allRankedProducts.filter((row) => !ProductRanking.isReviewableProduct(row)).length,
+      discardedCategoryOrListPages: Math.max(0, allRankedProducts.length - visibleProducts.length),
       exactDuplicatesRemoved: Number(portfolio.summary && portfolio.summary.exactDuplicatesRemoved || 0),
       familyRepresentatives: Number(portfolio.summary && portfolio.summary.familyRepresentatives || 0),
       familyVariantsSuppressed: Number(portfolio.summary && portfolio.summary.familyVariantsSuppressed || 0),
@@ -1320,12 +1325,12 @@ function publicProductJob(job) {
       withImage: visibleProducts.filter((row) => !!productImageUrl(row)).length,
       withVideo: visibleProducts.filter((row) => !!productVideoUrl(row)).length,
       readyForAdminReview: visibleProducts.filter((row) => row.researchStatus === "ready_for_admin_review").length,
-      rankingEligible: visibleProducts.filter((row) => row.rankingEligible === true).length,
+      rankingEligible: visibleProducts.filter((row) => row.rankingEligible === true && row.familyRepresentative !== false).length,
       riskHeld: visibleProducts.filter((row) => row.rankingEligible !== true).length,
       supplierEvidenceReady: visibleProducts.filter((row) => row.supplierAssessment && row.supplierAssessment.evidenceReady === true).length,
       contractReady: visibleProducts.filter((row) => row.commercialAssessment && row.commercialAssessment.contractReady === true).length,
       releaseReady: visibleProducts.filter((row) => row.releaseReadiness && row.releaseReadiness.releaseEligible === true).length,
-      proposedPlacementProducts: visibleProducts.filter((row) => array(row.sectionAssignments).length > 0).length,
+      proposedPlacementProducts: visibleProducts.filter((row) => row.familyRepresentative !== false && array(row.sectionAssignments).length > 0).length,
       slotCandidates: visibleProducts.filter((row) => row.slotDecision === "slot_candidate").length,
       held: visibleProducts.filter((row) => row.slotDecision === "hold").length,
       rejected: visibleProducts.filter((row) => row.slotDecision === "reject").length,

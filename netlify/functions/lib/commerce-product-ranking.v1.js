@@ -12,7 +12,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "commerce-product-ranking-v1.3.0-family-representative-portfolio";
+const VERSION = "commerce-product-ranking-v1.3.1-product-visibility-regression-repair";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -165,6 +165,7 @@ function productIdFromUrl(value) {
 function isTemplateOrPlaceholderUrl(value) {
   let raw = text(value);
   try { raw = decodeURIComponent(raw); } catch (_error) {}
+  if (/(?:[?&](?:goodsno|goods_no|productno|product_no|productid|product_id|itemno|item_no|itemid|item_id|prdno|prd_no|sku|skuid|code|idx|no)=)(?:$|[&#])/i.test(raw)) return true;
   return /(?:`|\$\{|item\.itemno|brand\.autocomp|targeturl|\+\s*\+\s*|%60|__product__|placeholder)/i.test(raw);
 }
 
@@ -217,6 +218,8 @@ function normalizeTitle(value) {
 function isGenericProductName(value) {
   const raw = text(value), normalized = normalizeTitle(raw);
   if (!raw || raw.length < 2 || !normalized) return true;
+  if (raw.length > 220) return true;
+  if (/(?:\br\.push\s*\(|\b(?:item|product|goods)\.[a-z_$][\w$]*|document\.|window\.|function\s*\(|=>|<\/?script\b|getCurrency\s*\()/i.test(raw)) return true;
   if (/^(?:상품명\s*확인\s*중|상품|제품|상품목록|제품목록|제품별|브랜드별|카테고리|전체상품|전체보기|보기|상세|더보기|구매|결과|검색|검색결과|로그인|로그아웃|회원가입|마이페이지|장바구니|주문조회|상품\s*삭제|최근\s*검색어\s*전체삭제|전체삭제|품절|다른\s*기획전\s*보기|브랜드\s*사이트\s*목록\s*열기|사이트\s*목록\s*열기|업체\s*사이트\s*열기|공식\s*사이트\s*열기|원본\s*링크|shop|store|view|detail|list|result|results|login|logout|cart|search)$/i.test(raw)) return true;
   if (/^(?:new|best|sale|event|lucky\s*\d+|기획전|이벤트|추천상품)$/i.test(raw)) return true;
   if (/(?:사이트|브랜드|업체|공식몰).*(?:목록|열기|바로가기)$/i.test(raw)) return true;
@@ -667,11 +670,7 @@ function markFamilyRepresentatives(evaluatedInput) {
       familyRepresentativeId: representativeId || null,
       familyVariant: !representative,
       familyVariantCount: Math.max(0, Number(familySizes.get(key) || 1) - 1),
-      familyVariantReason: representative ? null : "same_supplier_product_family_variant",
-      rankingEligible: representative ? row.rankingEligible === true : false,
-      recommendedDecision: representative ? row.recommendedDecision : "hold_family_variant",
-      sectionAssignments: representative ? array(row.sectionAssignments) : [],
-      primaryPlacement: representative ? row.primaryPlacement : null
+      familyVariantReason: representative ? null : "same_supplier_product_family_variant"
     });
   });
 }

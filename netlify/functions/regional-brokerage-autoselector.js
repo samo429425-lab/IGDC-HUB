@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.6.0-commerce-mesh-source-expansion";
+const VERSION="regional-brokerage-autoselector-v2.6.1-product-visibility-regression-repair";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -826,7 +826,7 @@ function imageFromValue(value,baseUrl){
 function isProductImageUrl(url){
   const low=text(url).toLowerCase();if(!/^https?:\/\//.test(low))return false;
   if(/\.(?:css|js|mjs|json|xml|map|txt|pdf|zip|svg)(?:$|[?#])/i.test(low))return false;
-  if(/(?:^|[\/_\-.])(logo|favicon|icon|sprite|avatar|profile|banner|header|footer|brandmark|placeholder|no[-_]?image)(?:[\/_\-.]|$)/i.test(low))return false;
+  if(/(?:^|[\/_\-.])(logo|favicon|icon|sprite|avatar|profile|banner|header|footer|brandmark|placeholder|no[-_]?image|blank|spacer|transparent|loading|1x1)(?:[\/_\-.]|$)/i.test(low))return false;
   return true;
 }
 function imageAttrFromHtml(fragment,baseUrl){
@@ -845,9 +845,13 @@ function imageAttrFromHtml(fragment,baseUrl){
 }
 function isProductDetailUrl(url){return ProductRanking.isSpecificProductUrl(url);}
 
+function isScriptArtifactName(value){
+  const raw=String(value||"");
+  return /(?:\br\.push\s*\(|\b(?:item|product|goods)\.[a-z_$][\w$]*|document\.|window\.|function\s*\(|=>|<\/?script\b|getCurrency\s*\()/i.test(raw);
+}
 function meaningfulProductName(value){
   const name=stripHtml(value).replace(/\s+/g," ").trim();
-  if(!name||name.length<2||name.length>220)return"";
+  if(!name||name.length<2||name.length>220||isScriptArtifactName(name))return"";
   if(/^(?:상품|제품|상품목록|제품목록|제품별|브랜드별|카테고리|전체상품|전체보기|보기|상세|더보기|구매|결과|검색|검색결과|로그인|로그아웃|회원가입|마이페이지|장바구니|주문조회|상품\s*삭제|최근\s*검색어\s*전체삭제|전체삭제|품절|shop|store|view|detail|list|result|results|login|logout|cart|search)$/i.test(name))return"";
   if(/^(?:new|best|sale|event|기획전|이벤트|추천상품)$/i.test(name))return"";
   return name;
@@ -967,12 +971,12 @@ function productRowsFromHtml(html,pageUrl,supplier,max){
     officialDirectoryUrl:text(supplier&&supplier.officialDirectoryUrl)
   };
   const add=(row)=>{
-    const resolved=absoluteHttpUrl(pageUrl,row&&row.productUrl),productUrl=ProductRanking.canonicalProductUrl(resolved),productName=stripHtml(first(row&&row.productName,row&&row.title));
-    if(!productUrl||!productName||!isProductDetailUrl(productUrl))return;
-    if(ProductRanking.isGenericProductName(productName)&&!(row&&row.provisionalName===true))return;
+    const resolved=absoluteHttpUrl(pageUrl,row&&row.productUrl),productUrl=ProductRanking.canonicalProductUrl(resolved),rawName=stripHtml(first(row&&row.productName,row&&row.title));
+    if(!productUrl||!isProductDetailUrl(productUrl)||isScriptArtifactName(rawName))return;
     if(supplierSiteUrl&&!sameSite(supplierSiteUrl,productUrl))return;
+    const provisionalName=row&&row.provisionalName===true||!meaningfulProductName(rawName)||ProductRanking.isGenericProductName(rawName),productName=provisionalName?"상품명 확인 중":rawName;
     const imageUrl=absoluteHttpUrl(productUrl,row&&row.imageUrl),videoUrl=absoluteHttpUrl(productUrl,first(row&&row.videoUrl,row&&row.videoContentUrl,row&&row.videoEmbedUrl)),videoContentUrl=absoluteHttpUrl(productUrl,row&&row.videoContentUrl),videoEmbedUrl=absoluteHttpUrl(productUrl,row&&row.videoEmbedUrl),videoThumbnailUrl=absoluteHttpUrl(productUrl,row&&row.videoThumbnailUrl),priority=productPriorityInfo(productName+" "+(supplierName||text(row&&row.supplierName))+" "+productUrl);
-    const candidate=Object.assign({},supplierMeta,{id:productIdSeed(productUrl,productName),entityKind:"product_reference",productName,title:productName,productUrl,url:productUrl,imageUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageOriginalUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageSource:text(row&&row.imageSource)||"unresolved",videoUrl,videoContentUrl,videoEmbedUrl,videoThumbnailUrl:isProductImageUrl(videoThumbnailUrl)?videoThumbnailUrl:"",videoSource:text(row&&row.videoSource)||"unresolved",supplierName:supplierName||text(row&&row.supplierName),supplierSiteUrl,sourcePageUrl:pageUrl,price:text(row&&row.price),priceCurrency:text(row&&row.priceCurrency),availability:text(row&&row.availability),jsonLdProduct:row&&row.jsonLdProduct===true,offerPresent:row&&row.offerPresent===true,provisionalName:row&&row.provisionalName===true,priorityScore:Math.max(Number(row&&row.priorityScore)||0,priority.score),priorityLabel:text(row&&row.priorityLabel)||priority.label,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});
+    const candidate=Object.assign({},supplierMeta,{id:productIdSeed(productUrl,productName),entityKind:"product_reference",productName,title:productName,productUrl,url:productUrl,imageUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageOriginalUrl:isProductImageUrl(imageUrl)?imageUrl:"",imageSource:text(row&&row.imageSource)||"unresolved",videoUrl,videoContentUrl,videoEmbedUrl,videoThumbnailUrl:isProductImageUrl(videoThumbnailUrl)?videoThumbnailUrl:"",videoSource:text(row&&row.videoSource)||"unresolved",supplierName:supplierName||text(row&&row.supplierName),supplierSiteUrl,sourcePageUrl:pageUrl,price:text(row&&row.price),priceCurrency:text(row&&row.priceCurrency),availability:text(row&&row.availability),jsonLdProduct:row&&row.jsonLdProduct===true,offerPresent:row&&row.offerPresent===true,provisionalName,priorityScore:Math.max(Number(row&&row.priorityScore)||0,priority.score),priorityLabel:text(row&&row.priorityLabel)||priority.label,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});
     const identity=ProductRanking.productIdentity(candidate);if(!identity||seen.has(identity))return;seen.add(identity);out.push(candidate);
   };
   const nodes=jsonLdNodesDeep(html);
@@ -1026,7 +1030,7 @@ async function discoverSupplierProductsStep(supplier,params){
   }finally{clearTimeout(timer);}
 }
 function prepareProductInspectionPool(rawItems,params){
-  const limit=Math.max(20,Math.min(1200,Number(params&&params.limit)||300)),ranked=ProductRanking.mergeProductRows([],array(rawItems),{limit:Math.max(limit,300)}).filter(row=>ProductRanking.isReviewableProduct(row)||(row&&row.provisionalName===true&&ProductRanking.isSpecificProductUrl(row.productUrl))).sort((a,b)=>Number(!!b.imageUrl)-Number(!!a.imageUrl)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||text(a.productName).localeCompare(text(b.productName))),out=[],seen=new Set();
+  const limit=Math.max(20,Math.min(1200,Number(params&&params.limit)||300)),ranked=ProductRanking.mergeProductRows([],array(rawItems),{limit:Math.max(limit,300)}).filter(row=>ProductRanking.isSpecificProductUrl(row&&row.productUrl)&&!isScriptArtifactName(first(row&&row.productName,row&&row.title))).sort((a,b)=>Number(!!b.imageUrl)-Number(!!a.imageUrl)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||text(a.productName).localeCompare(text(b.productName))),out=[],seen=new Set();
   for(const item of ranked){const url=ProductRanking.canonicalProductUrl(item&&item.productUrl),key=ProductRanking.productIdentity(item);if(!url||!key||seen.has(key)||!isProductDetailUrl(url))continue;seen.add(key);out.push(Object.assign({},item,{productUrl:url,url}));if(out.length>=limit)break;}return out;
 }
 
@@ -1036,8 +1040,8 @@ async function inspectProductCandidate(item){
     const page=await fetchProductHtml(productUrl,controller);if(!page.ok)return Object.assign({},row,{researchStatus:page.status,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString()});
     const supplierMeta={supplierId:row.supplierId,supplierName:row.supplierName,supplierSiteUrl:supplierSiteUrl||row.supplierSiteUrl,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady,evidenceReady:row.supplierEvidenceReady,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl};
     const parsed=productRowsFromHtml(page.html,page.url,supplierMeta,20),canonical=ProductRanking.canonicalProductUrl(canonicalPageUrl(page.html,page.url))||productUrl,exact=parsed.find(x=>ProductRanking.canonicalProductUrl(x.productUrl)===canonical)||parsed[0]||{},pageVideo=videoInfoFromHtml(page.html,page.url);
-    const pageTitle=meaningfulProductName(metaContent(page.html,["og:title","twitter:title"])||stripHtml((String(page.html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1])),candidateNames=[exact.productName!=="상품명 확인 중"?exact.productName:"",pageTitle,row.productName].map(meaningfulProductName).filter(name=>name&&!ProductRanking.isGenericProductName(name)),name=candidateNames[0]||"",image=first(exact.imageUrl,row.imageUrl),same=supplierSiteUrl?sameSite(supplierSiteUrl,page.url):true,pagePrice=priceInfoFromHtml(page.html),pageAvailability=availabilityFromHtml(page.html),price=first(exact.price,pagePrice.price,row.price),priceCurrency=first(exact.priceCurrency,pagePrice.priceCurrency,row.priceCurrency),availability=first(exact.availability,pageAvailability,row.availability),ready=!!name&&!!image&&same&&ProductRanking.isSpecificProductUrl(canonical);
-    return Object.assign({},row,exact,{id:row.id||exact.id||productIdSeed(canonical,name),productName:name,title:name,productUrl:canonical,url:canonical,imageUrl:isProductImageUrl(image)?image:"",imageOriginalUrl:isProductImageUrl(image)?image:"",price,priceCurrency,availability,offerPresent:exact.offerPresent===true||!!price,videoUrl:first(exact.videoUrl,pageVideo.videoUrl,row.videoUrl),videoContentUrl:first(exact.videoContentUrl,pageVideo.videoContentUrl,row.videoContentUrl),videoEmbedUrl:first(exact.videoEmbedUrl,pageVideo.videoEmbedUrl,row.videoEmbedUrl),videoThumbnailUrl:first(exact.videoThumbnailUrl,pageVideo.videoThumbnailUrl,row.videoThumbnailUrl),videoSource:first(exact.videoSource,pageVideo.videoSource,row.videoSource),supplierSiteUrl:supplierSiteUrl||exact.supplierSiteUrl,supplierId:first(row.supplierId,exact.supplierId),supplierType:first(row.supplierType,exact.supplierType),supplierTrustScore:Math.max(Number(row.supplierTrustScore)||0,Number(exact.supplierTrustScore)||0),supplierEvidenceReady:row.supplierEvidenceReady===true||exact.supplierEvidenceReady===true,supplierApprovalReady:row.supplierApprovalReady===true||exact.supplierApprovalReady===true,productPageLive:true,sameSupplierSite:same,inspectionComplete:true,inspectedAt:new Date().toISOString(),researchStatus:ready?"ready_for_admin_review":"needs_manual_review",slotDecision:text(row.slotDecision)||"undecided",publicPublication:false,automaticImport:false});
+    const pageTitle=meaningfulProductName(metaContent(page.html,["og:title","twitter:title"])||stripHtml((String(page.html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1])),candidateNames=[exact.productName!=="상품명 확인 중"?exact.productName:"",pageTitle,row.productName].map(meaningfulProductName).filter(name=>name&&!ProductRanking.isGenericProductName(name)),resolvedName=candidateNames[0]||"",name=resolvedName||"상품명 확인 중",image=first(exact.imageUrl,row.imageUrl),same=supplierSiteUrl?sameSite(supplierSiteUrl,page.url):true,pagePrice=priceInfoFromHtml(page.html),pageAvailability=availabilityFromHtml(page.html),price=first(exact.price,pagePrice.price,row.price),priceCurrency=first(exact.priceCurrency,pagePrice.priceCurrency,row.priceCurrency),availability=first(exact.availability,pageAvailability,row.availability),ready=!!resolvedName&&!!image&&same&&ProductRanking.isSpecificProductUrl(canonical);
+    return Object.assign({},row,exact,{id:row.id||exact.id||productIdSeed(canonical,name),productName:name,title:name,provisionalName:!resolvedName,productUrl:canonical,url:canonical,imageUrl:isProductImageUrl(image)?image:"",imageOriginalUrl:isProductImageUrl(image)?image:"",price,priceCurrency,availability,offerPresent:exact.offerPresent===true||!!price,videoUrl:first(exact.videoUrl,pageVideo.videoUrl,row.videoUrl),videoContentUrl:first(exact.videoContentUrl,pageVideo.videoContentUrl,row.videoContentUrl),videoEmbedUrl:first(exact.videoEmbedUrl,pageVideo.videoEmbedUrl,row.videoEmbedUrl),videoThumbnailUrl:first(exact.videoThumbnailUrl,pageVideo.videoThumbnailUrl,row.videoThumbnailUrl),videoSource:first(exact.videoSource,pageVideo.videoSource,row.videoSource),supplierSiteUrl:supplierSiteUrl||exact.supplierSiteUrl,supplierId:first(row.supplierId,exact.supplierId),supplierType:first(row.supplierType,exact.supplierType),supplierTrustScore:Math.max(Number(row.supplierTrustScore)||0,Number(exact.supplierTrustScore)||0),supplierEvidenceReady:row.supplierEvidenceReady===true||exact.supplierEvidenceReady===true,supplierApprovalReady:row.supplierApprovalReady===true||exact.supplierApprovalReady===true,productPageLive:true,sameSupplierSite:same,inspectionComplete:true,inspectedAt:new Date().toISOString(),researchStatus:ready?"ready_for_admin_review":"needs_manual_review",slotDecision:text(row.slotDecision)||"undecided",publicPublication:false,automaticImport:false});
   }finally{clearTimeout(timer);}
 }
 
