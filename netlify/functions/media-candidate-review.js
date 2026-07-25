@@ -11,7 +11,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 let MediaStore = null;
 try { MediaStore = require("./lib/media-candidate-store.v1"); } catch (_error) { MediaStore = null; }
 
-const VERSION = "media-candidate-review-api-v1.0.3-validated-platform-role";
+const VERSION = "media-candidate-review-api-v1.1.0-exclusion-player-stable";
 const READ_ROLES = new Set(["owner", "admin", "site_manager", "site_manager_director", "director", "media_manager", "commerce_manager"]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -174,6 +174,9 @@ function normalizeRow(row) {
     qualityPriority: text(row && (row.qualityPriority || row.quality_priority || row.priority)),
     riskLevel: text(row && (row.riskLevel || row.risk_level)),
     reviewStatus: text(row && (row.reviewStatus || row.review_status)),
+    blockedReason: text(row && (row.blockedReason || row.blocked_reason)),
+    reviewNote: text(row && (row.reviewNote || row.review_note)),
+    reviewedAt: text(row && (row.reviewedAt || row.reviewed_at || row.updated_at)),
     verificationStatus,
     sanmaruSearchSeed: text(row && (row.sanmaruSearchSeed || row.sanmaru_query || row.searchSeed || row.query)),
     url: sourceUrl,

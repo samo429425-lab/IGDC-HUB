@@ -2,13 +2,14 @@
 
 /**
  * Administrator action endpoint for media candidates stored in Supabase.
- * Delete removes only candidate queue rows; it never touches provider media files.
+ * Queue delete moves rows into the reversible search-exclusion area.
+ * Provider media files are never deleted.
  */
 const MediaStore = require("./lib/media-candidate-store.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "media-candidate-action-v1.2.0-queue-delete-shared-auth";
-const ACTIONS = new Set(["approve","hold","block","reject","reset","delete"]);
+const VERSION = "media-candidate-action-v1.3.0-search-exclusion-staging";
+const ACTIONS = new Set(["approve","hold","block","reject","reset","delete","restore","permanent_block","forget"]);
 
 async function actorFor(event){
   const actor=await SharedAdminAuth.resolveUser(event);
@@ -20,21 +21,28 @@ function idsFrom(body){
   const values=body.ids||body.candidateIds||body.id||body.candidateId||[];
   return Array.from(new Set(MediaStore.array(values).map(MediaStore.text).filter(Boolean))).slice(0,1000);
 }
+function audit(actor,body){
+  return {
+    now:MediaStore.nowIso(),
+    by:MediaStore.compact(actor.email||actor.memberId||"admin",200),
+    note:MediaStore.compact(body.note||body.reason||"",1000)
+  };
+}
 function patchFor(action,body,actor){
-  const now=MediaStore.nowIso();
-  const by=MediaStore.compact(actor.email||actor.memberId||"admin",200);
-  const note=MediaStore.compact(body.note||body.reason||"",1000);
+  const a=audit(actor,body), now=a.now, by=a.by, note=a.note;
   if(action==="approve"){
     if(body.confirmRightsSafe!==true&&body.confirmRightsSafe!=="true"){
       const error=new Error("승인은 confirmRightsSafe=true 확인값이 필요합니다.");
       error.statusCode=400;error.code="rights_confirmation_required";throw error;
     }
-    return {review_status:"approved",verification_status:"approved_for_snapshot",candidate_only:false,seed_content:false,review_note:note,reviewed_by:by,reviewed_at:now,approved_at:now,updated_by:by,updated_at:now};
+    return {review_status:"approved",verification_status:"approved_for_snapshot",candidate_only:false,seed_content:false,review_note:note,reviewed_by:by,reviewed_at:now,approved_at:now,updated_by:by,updated_at:now,blocked_reason:null};
   }
   if(action==="hold")return {review_status:"hold",verification_status:"hold",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now};
-  if(action==="block")return {review_status:"blocked",verification_status:"blocked",blocked_reason:note||"blocked_by_admin",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true};
   if(action==="reject")return {review_status:"rejected",verification_status:"rejected",blocked_reason:note||"rejected_by_admin",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true};
-  return {review_status:"pending",verification_status:"web_verification_required",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null,blocked_reason:null};
+  if(action==="delete")return {review_status:"search_excluded",verification_status:"search_excluded",blocked_reason:note||"moved_from_candidate_queue",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
+  if(action==="restore"||action==="reset")return {review_status:"pending",verification_status:"web_verification_required",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null,blocked_reason:null};
+  if(action==="block"||action==="permanent_block")return {review_status:"permanent_blocked",verification_status:"permanent_blocked",blocked_reason:note||"permanent_blocked_by_admin",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
+  return {};
 }
 exports.handler=async function(event){
   if(event&&event.httpMethod==="OPTIONS")return MediaStore.response(204,{});
@@ -46,14 +54,15 @@ exports.handler=async function(event){
     if(!ACTIONS.has(action))return MediaStore.response(400,{ok:false,error:"invalid_action",allowed:Array.from(ACTIONS)});
     const ids=idsFrom(body);
     if(!ids.length)return MediaStore.response(400,{ok:false,error:"candidate_ids_required"});
-    if(action==="delete"){
-      if(body.confirmQueueDelete!==true&&body.confirmQueueDelete!=="true")return MediaStore.response(400,{ok:false,error:"queue_delete_confirmation_required",message:"후보 목록 삭제 확인값이 필요합니다."});
+    if(action==="delete"&&(body.confirmQueueDelete!==true&&body.confirmQueueDelete!=="true"))return MediaStore.response(400,{ok:false,error:"queue_delete_confirmation_required",message:"검색 제외 목록 이동 확인값이 필요합니다."});
+    if(action==="forget"){
+      if(body.confirmPermanentDelete!==true&&body.confirmPermanentDelete!=="true")return MediaStore.response(400,{ok:false,error:"permanent_delete_confirmation_required",message:"검색 제외 기록 완전 삭제 확인값이 필요합니다."});
       const deleted=await MediaStore.deleteCandidates(ids);
       return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,deleted:Array.isArray(deleted)?deleted.length:0,items:deleted,sourceMediaDeleted:false,recollectAllowed:true});
     }
     const patch=patchFor(action,body,actor);
     const updated=await MediaStore.updateCandidates(ids,patch);
-    return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,updated:Array.isArray(updated)?updated.length:0,items:updated});
+    return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,updated:Array.isArray(updated)?updated.length:0,items:updated,sourceMediaDeleted:false,recollectAllowed:action==="restore",movedToSearchExclusion:action==="delete",permanentBlocked:action==="block"||action==="permanent_block"});
   }catch(error){
     return MediaStore.response(error.statusCode||500,{ok:false,version:VERSION,error:error.code||"media_candidate_action_failed",message:error.message||String(error)});
   }
