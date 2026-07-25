@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v2.8.0-private-review-queue-psom-linkage";
+const VERSION = "commerce-country-automation-v2.8.1-schema-safe-queue-restage-explicit-publication";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1381,6 +1381,20 @@ async function productRankingContext(scope) {
 }
 async function beginProductResearchJob(actorId, input) {
   const raw = plain(input), scope = researchScope(raw), existing = await productJobRule(scope);
+  if (existing && existing.schema === PRODUCT_JOB_SCHEMA && raw.retryStaging === true) {
+    const portfolio = ProductRanking.buildPortfolio(array(existing.rawProducts).concat(array(existing.products)), plain(existing.rankingContext));
+    existing.version = VERSION;
+    existing.rankingVersion = ProductRanking.VERSION;
+    existing.stagePool = array(portfolio.products).filter((row) => ProductPipeline.researchReadiness(row).queueEligible === true).slice(0, PRODUCT_PORTFOLIO_LIMIT);
+    existing.stageCursor = 0;
+    existing.stageSummary = { eligible: existing.stagePool.length, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 };
+    existing.status = "staging";
+    existing.finishedAt = null;
+    existing.lastError = null;
+    existing.trace = array(existing.trace).concat([{ at: iso(), source: "private-product-research-queue", status: "restage_started", products: existing.stagePool.length, reason: "administrator_retry_after_storage_failure" }]).slice(-240);
+    await saveProductJob(existing, actorId);
+    return publicProductJob(existing);
+  }
   if (existing && existing.schema === PRODUCT_JOB_SCHEMA && existing.version === VERSION && raw.restart !== true && !["cancelled","failed"].includes(existing.status)) return publicProductJob(existing);
   const supplierJob = await researchJobRule(scope);
   if (!supplierJob || !["complete","committed"].includes(supplierJob.status) || !array(supplierJob.candidates).length) { const error = new Error("책임 공급업체 단계별 리서치를 먼저 완료해야 공식 상품 목록을 조사할 수 있습니다."); error.statusCode = 409; throw error; }
@@ -1469,7 +1483,7 @@ async function syncProductResearchPreview(actorId, scope, product) {
   if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, currentStatus: text(existing.status) };
   if (existing && !["research_pending"].includes(lower(existing.status))) return { status: "operator_state_preserved", candidateId, currentStatus: text(existing.status) };
   const payload = productCandidatePayload(actorId, scope, product, "research_pending");
-  const row = { id: candidateId, kind: "product", title: payload.title, official_url: payload.externalProductUrl, status: "research_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: payload.image, description: "Private researched external-seller product card. Administrator selection, market evidence, revenue route and slot assignment remain pending.", owner_note: "Automatically placed in the private research queue only; no publication, checkout or payment.", source_payload: payload, updated_at: iso(), updated_by: text(actorId) || "product-research-orchestrator" };
+  const row = { id: candidateId, kind: "product", title: payload.title, official_url: payload.externalProductUrl, status: "research_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: payload.image, description: "Private researched external-seller product card. Administrator selection, market evidence, revenue route and slot assignment remain pending.", owner_note: "Automatically placed in the private research queue only; no publication, checkout or payment.", source_payload: payload, updated_at: iso() };
   if (existing) { await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), row); return { status: "research_preview_updated", candidateId }; }
   row.created_at = iso(); row.created_by = text(actorId) || "product-research-orchestrator"; await SlotStore.insert("gslot_candidates", row, "return=representation"); return { status: "research_preview_created", candidateId };
 }
@@ -1487,7 +1501,7 @@ async function syncProductCandidateQueue(actorId, scope, product, decision) {
   }
   const payload = productCandidatePayload(actorId, scope, product, "slot_candidate");
   const productUrlValue = payload.externalProductUrl, imageUrlValue = payload.image;
-  const row = { id: candidateId, kind: "product", title: payload.title, official_url: productUrlValue, status: "approval_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: imageUrlValue, description: "Risk-gated external-seller product candidate with a complete private product-card contract. It remains private until administrator approval, market evidence, revenue rights, slot assignment and Canonical validation are complete.", owner_note: "Auto-researched product reference; no publication, payment or seller responsibility transfer.", source_payload: payload, updated_at: iso(), updated_by: text(actorId) || "administrator" };
+  const row = { id: candidateId, kind: "product", title: payload.title, official_url: productUrlValue, status: "approval_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: imageUrlValue, description: "Risk-gated external-seller product candidate with a complete private product-card contract. It remains private until administrator approval, market evidence, revenue rights, slot assignment and Canonical validation are complete.", owner_note: "Auto-researched product reference; no publication, payment or seller responsibility transfer.", source_payload: payload, updated_at: iso() };
   if (existing) {
     await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), row);
     return { status: "private_candidate_updated", candidateId, placement: payload.placement };

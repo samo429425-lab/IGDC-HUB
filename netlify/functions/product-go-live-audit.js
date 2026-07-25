@@ -19,8 +19,12 @@ const NonPgRevenue = require("./lib/nonpg-revenue-contract.core.v1");
 const LedgerStore = require("./lib/revenue-ledger-supabase.v1");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const CommerceIntake = require("./lib/commerce-candidate-intake.v1");
+const AdminSession = require("./lib/global-slot-console-auth");
+const SlotStore = require("./lib/global-slot-console-supabase");
+const CandidateReview = require("./commerce-candidate-review");
+const ReleaseDispatch = require("./lib/commerce-release-dispatch.v1");
 
-const VERSION = "product-go-live-audit-v1.2.0-private-stage-pipeline-aware";
+const VERSION = "product-go-live-audit-v1.3.0-live-stage-explicit-targeted-publication-request";
 const MAX_ROWS = 120;
 
 const SNAPSHOT_SPECS = [
@@ -46,7 +50,9 @@ function noStoreHeaders(){
   return {
     "content-type":"application/json; charset=utf-8",
     "cache-control":"private, no-store, max-age=0",
-    "x-content-type-options":"nosniff"
+    "x-content-type-options":"nosniff",
+    "access-control-allow-headers":"Content-Type, Authorization",
+    "access-control-allow-methods":"GET,HEAD,POST,OPTIONS"
   };
 }
 function json(statusCode, body){ return { statusCode, headers:noStoreHeaders(), body:JSON.stringify(body) }; }
@@ -455,9 +461,11 @@ function privateStageScopeMatch(row, scope){
   const placement=isObject(row&&row.placement)?row.placement:{};add(placement.country,placement.region);
   const marketScope=isObject(row&&row.marketScope)?row.marketScope:{};add(marketScope.marketCountry,marketScope.marketRegion);
   const supply=isObject(row&&row.countrySupply)?row.countrySupply:{};add(first(supply.country,supply.countryCode),first(supply.region,supply.regionCode));
+  const assignment=isObject(row&&row.lifecycle&&row.lifecycle.assignment)?row.lifecycle.assignment:{};add(assignment.countryCode,assignment.regionCode);
   const sameCountry=scopes.filter((entry)=>entry.country===scope.country);
   if(!sameCountry.length)return {matched:false,mode:"none"};
   const requested=normalizeRegion(scope.region||"NATIONWIDE",scope.country)||"NATIONWIDE";
+  if(scope.region==="ALL")return {matched:true,mode:"country"};
   if(requested==="NATIONWIDE")return {matched:sameCountry.some((entry)=>entry.region==="NATIONWIDE"),mode:"nationwide"};
   if(sameCountry.some((entry)=>entry.region===requested))return {matched:true,mode:"exact_region"};
   if(sameCountry.some((entry)=>entry.region==="NATIONWIDE"))return {matched:true,mode:"nationwide_fallback"};
@@ -466,15 +474,66 @@ function privateStageScopeMatch(row, scope){
 function countStage(rows){
   const out={};for(const row of asArray(rows)){const key=text(row&&row.stageStatus)||"unknown";out[key]=(out[key]||0)+1;}return out;
 }
-function privateStageStatus(root, scope){
-  let doc=null;try{doc=CommerceIntake.readStage(root);}catch(_error){doc=null;}
+function stageName(row){ return text(row&&row.stageStatus)||text(row&&row.lifecycle&&row.lifecycle.stage); }
+function stageAssignment(row){ return isObject(row&&row.lifecycle&&row.lifecycle.assignment)?row.lifecycle.assignment:{}; }
+function isGoLiveAuditCandidate(row){
+  return row&&(
+    row.releaseEligible===true ||
+    stageName(row)==="registry_sync_ready" ||
+    ["audit_ready","publish_requested"].includes(low(stageAssignment(row).publicationStatus))
+  );
+}
+function privateCandidatePreview(row){
+  const card=isObject(row&&row.productCard)?row.productCard:{};
+  const assignment=stageAssignment(row);
+  const lifecycle=isObject(row&&row.lifecycle)?row.lifecycle:{};
+  const review=isObject(row&&row.review)?row.review:{};
+  return {
+    candidateId:text(row&&row.candidateId)||null,
+    digest:text(row&&row.digest)||null,
+    title:first(card.title,row&&row.title)||null,
+    image:first(card.image,row&&row.image)||null,
+    priceDisplay:first(card.priceDisplay,card.price)||"판매처에서 현재 가격 확인",
+    supplierName:first(card.supplierName,row&&row.supplier&&row.supplier.name)||null,
+    supplierUrl:first(card.supplierUrl,row&&row.supplier&&row.supplier.officialUrl)||null,
+    checkoutUrl:first(card.checkoutUrl)||null,
+    checkoutMode:first(card.checkoutMode,"external_seller_checkout"),
+    stageStatus:stageName(row)||null,
+    nextGate:first(review.nextGate,lifecycle.nextGate)||null,
+    releaseEligible:row&&row.releaseEligible===true,
+    auditReady:isGoLiveAuditCandidate(row),
+    assignment:{
+      id:text(assignment.id)||null,
+      hubKey:text(assignment.hubKey)||null,
+      slotKey:text(assignment.slotKey)||null,
+      countryCode:text(assignment.countryCode)||null,
+      regionCode:text(assignment.regionCode)||null,
+      state:text(assignment.state)||null,
+      publicationStatus:text(assignment.publicationStatus)||null,
+      priority:num(assignment.priority,0)
+    },
+    placement:isObject(row&&row.placement)?row.placement:{},
+    marketKeys:asArray(row&&row.marketKeys).slice(0,30),
+    revenue:isObject(row&&row.revenue)?{type:text(row.revenue.type)||null,monetizationState:text(row.revenue.monetizationState)||null,contractId:text(row.revenue.contractId)||null}:{},
+    reasons:asArray(row&&row.reasons).slice(0,30),
+    proposedPlacements:asArray(row&&row.proposedPlacements).slice(0,20)
+  };
+}
+function privateStageStatus(root, scope, suppliedDoc, limitInput){
+  let doc=suppliedDoc||null;
+  if(!doc){try{doc=CommerceIntake.readStage(root);}catch(_error){doc=null;}}
   const all=asArray(doc&&doc.candidates);
   const rows=all.filter((row)=>privateStageScopeMatch(row,scope).matched);
   const eligible=rows.filter((row)=>row&&row.releaseEligible===true).length;
-  const held=rows.length-eligible;
+  const registrySyncReady=rows.filter((row)=>stageName(row)==="registry_sync_ready").length;
+  const auditReady=rows.filter((row)=>["audit_ready","ready"].includes(low(stageAssignment(row).publicationStatus))).length;
+  const publicationRequested=rows.filter((row)=>low(stageAssignment(row).publicationStatus)==="publish_requested").length;
+  const publicationRows=rows.filter(isGoLiveAuditCandidate);
+  const held=rows.length-publicationRows.length;
   let nextGate="product_research_and_private_queue";
-  if(rows.length&&eligible===0)nextGate="complete_evidence_revenue_assignment_and_registry_sync";
-  if(eligible>0)nextGate="canonical_snapshot_build_and_manual_canary";
+  if(rows.length&&publicationRows.length===0)nextGate="complete_evidence_revenue_and_psom_approval";
+  if(publicationRows.length>0)nextGate="go_live_audit_and_explicit_publication_request";
+  const limit=safeLimit(limitInput||MAX_ROWS);
   return {
     available:!!doc,
     schema:text(doc&&doc.schema)||null,
@@ -484,10 +543,16 @@ function privateStageStatus(root, scope){
     selectedScope:scope,
     totalCandidates:rows.length,
     eligibleForRelease:eligible,
+    registrySyncReady,
+    auditReady,
+    publicationRequested,
+    goLiveAuditCandidates:publicationRows.length,
     held,
     byStageStatus:countStage(rows),
     releaseGate:isObject(doc&&doc.releaseGate)?doc.releaseGate:{},
     nextGate,
+    rows:rows.slice(0,limit).map(privateCandidatePreview),
+    publicationCandidateIds:publicationRows.map((row)=>text(row&&row.candidateId)).filter(Boolean),
     automaticPublication:false,
     paymentExecution:false
   };
@@ -525,7 +590,24 @@ function envReady(){
     }
   };
 }
-function summarize(mode, limit, scopeInput){
+function releaseControl(){
+  const release=ReleaseDispatch.releaseArmed();
+  const hook=ReleaseDispatch.validHook(process.env[ReleaseDispatch.HOOK_ENV]);
+  return {
+    version:ReleaseDispatch.VERSION,
+    armed:release.armed===true,
+    mode:release.mode||"",
+    keyPresent:release.keyPresent===true,
+    hookConfigured:!!hook,
+    actionAvailable:release.armed===true&&!!hook,
+    action:"request_publication",
+    targetMode:"selected-product-assignment",
+    automaticPublication:false,
+    confirmationRequired:true,
+    secretsExcluded:true
+  };
+}
+function summarize(mode, limit, scopeInput, privateDoc){
   const loaded = SNAPSHOT_SPECS.map(loadSnapshot);
   const snapshotReports = [];
   const uniqueReal = new Map();
@@ -538,23 +620,10 @@ function summarize(mode, limit, scopeInput){
     const rows = scopedRows.map((entry) => Object.assign({}, entry.row, { scopeMatch:entry.match }));
     counts.sourceAllItems += sourceRows.length;
     const one = {
-      key:record.spec.key,
-      publicPath:record.spec.publicPath,
-      available:!!(record.source && record.source.exists),
-      parseError: record.source && record.source.error ? record.source.error : null,
-      copies:record.copies,
-      sourceTotalItems:sourceRows.length,
-      totalItems:rows.length,
-      selectedScope:scope,
-      seedOrSample:0,
-      productSignals:0,
-      realProductCandidates:0,
-      readyAffiliate:0,
-      readyDirectRevenue:0,
-      revenueReviewRequired:0,
-      readyExternalReferral:0,
-      hold:0,
-      block:0
+      key:record.spec.key, publicPath:record.spec.publicPath, available:!!(record.source && record.source.exists),
+      parseError:record.source && record.source.error ? record.source.error : null, copies:record.copies,
+      sourceTotalItems:sourceRows.length,totalItems:rows.length,selectedScope:scope,seedOrSample:0,productSignals:0,realProductCandidates:0,
+      readyAffiliate:0,readyDirectRevenue:0,revenueReviewRequired:0,readyExternalReferral:0,hold:0,block:0
     };
     rows.forEach(row => {
       counts.allItems += 1;
@@ -587,41 +656,51 @@ function summarize(mode, limit, scopeInput){
   });
 
   const runtime = envReady();
-  const privateStage = privateStageStatus(process.cwd(), scope);
+  const privateStage = privateStageStatus(process.cwd(), scope, privateDoc, limit);
+  const release = releaseControl();
   counts.privateStageCandidates = privateStage.totalCandidates;
   counts.privateStageReleaseEligible = privateStage.eligibleForRelease;
   counts.privateStageHeld = privateStage.held;
+  counts.goLiveAuditCandidates = privateStage.goLiveAuditCandidates;
+  counts.auditReady = privateStage.auditReady;
+  counts.publicationRequested = privateStage.publicationRequested;
   const copiesOk = snapshotReports.every(x => x.available && x.copies.synchronized);
   const realReady = counts.readyAffiliate + counts.readyDirectRevenue;
   let gate = "not_ready";
   let gateReason = "no-real-product-candidate";
-  if(counts.realProductCandidates === 0 && privateStage.totalCandidates > 0 && privateStage.eligibleForRelease === 0){ gate = "hold"; gateReason = "private-stage-awaiting-evidence-revenue-assignment-or-registry-sync"; }
-  if(counts.realProductCandidates === 0 && privateStage.eligibleForRelease > 0){ gate = "hold"; gateReason = "private-stage-awaiting-canonical-snapshot-build"; }
-  if(counts.realProductCandidates > 0 && realReady === 0) { gate = "hold"; gateReason = "real-products-require-front-readiness"; }
-  if(realReady > 0 && !copiesOk) { gate = "hold"; gateReason = "snapshot-copies-not-synchronized"; }
-  if(realReady > 0 && copiesOk) { gate = "ready_for_canary"; gateReason = "use-one-approved-candidate-manual-review"; }
+
+  if(privateStage.goLiveAuditCandidates>0){
+    if(mode!=="production"){ gate="hold"; gateReason="select-production-mode-for-final-publication-request"; }
+    else if(!release.armed){ gate="hold"; gateReason="release-gate-not-armed"; }
+    else if(!release.hookConfigured){ gate="hold"; gateReason="publication-build-hook-not-configured"; }
+    else { gate="ready_for_publication_request"; gateReason="select-one-audited-candidate-and-confirm-publication"; }
+  }else if(counts.realProductCandidates > 0 && realReady === 0){ gate = "hold"; gateReason = "real-products-require-front-readiness"; }
+  else if(realReady > 0 && !copiesOk){ gate = "hold"; gateReason = "snapshot-copies-not-synchronized"; }
+  else if(realReady > 0 && copiesOk){ gate = "ready_for_canary"; gateReason = "published-products-ready-for-manual-canary"; }
+  else if(privateStage.totalCandidates > 0){ gate = "hold"; gateReason = "private-candidates-awaiting-evidence-revenue-or-psom-approval"; }
 
   const statusCounts = { readyAffiliate:counts.readyAffiliate, readyDirectRevenue:counts.readyDirectRevenue, revenueReviewRequired:counts.revenueReviewRequired, readyExternalReferral:counts.readyExternalReferral, hold:counts.hold, block:counts.block };
   return {
     ok:true,
-    status: gate === "ready_for_canary" ? "ok" : (gate === "hold" ? "warn" : "info"),
-    version:VERSION,
-    mode,
-    selectedScope:scope,
+    status:["ready_for_publication_request","ready_for_canary"].includes(gate)?"ok":(gate==="hold"?"warn":"info"),
+    version:VERSION, mode, selectedScope:scope,
     scopePolicy:{ exactRegionFirst:true, nationwideFallbackWithinSameCountry:true, crossCountryFallback:false, unresolvedScope:"empty" },
-    noWrite:true,
+    auditReadOnly:true,
+    explicitPublicationRequest:true,
     externalNavigation:false,
     providerCalls:false,
     generatedAt:new Date().toISOString(),
-    gate:{ state:gate, reason:gateReason, note:"This audit never opens seller links or enables supply. It reads the private staged-candidate state and public snapshot readiness, then identifies candidates that are safe for one manual canary review." },
+    gate:{ state:gate, reason:gateReason, note:"GET audit is read-only. Only an authenticated, explicit final publication request for one audited assignment can arm that assignment and queue the existing build pipeline. The build still re-runs registry, market, revenue, Canonical and snapshot gates." },
+    releaseControl:release,
     summary:counts,
     statusCounts,
     runtime,
     pipeline:{
       researchQueue:"authenticated-live-db",
       privateCandidateStage:privateStage,
-      promotionOrder:["product_research","administrator_selection","market_evidence","verified_evidence","approved_revenue_route","psom_assignment","registry_sync","private_candidate_intake","canonical_canary","front_snapshot"],
+      promotionOrder:["product_research","administrator_selection","market_evidence","verified_evidence","approved_revenue_route","psom_assignment","go_live_audit","explicit_publication_request","registry_sync","private_candidate_intake","canonical_canary","front_snapshot"],
       automaticPublication:false,
+      targetedProductPublication:true,
       igdcCheckout:false,
       externalSellerCheckout:true
     },
@@ -631,26 +710,102 @@ function summarize(mode, limit, scopeInput){
   };
 }
 
+const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
+const PUBLISH_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director"]);
+function normalizedRoles(actor){return Array.from(new Set(asArray(actor&&actor.roles).map((role)=>low(role).replace(/\s+/g,"_")).filter(Boolean)));}
+function requireActorRole(actor, publish){
+  const allowed=publish?PUBLISH_ROLES:READ_ROLES;
+  if(!normalizedRoles(actor).some((role)=>allowed.has(role))){const error=new Error(publish?"최종 사이트 게재 요청 권한이 없습니다.":"실상품 공급 개방 점검 권한이 없습니다.");error.statusCode=403;error.code="admin_capability_required";throw error;}
+}
+function parseBody(event){
+  if(!event||!event.body)return {};
+  try{return JSON.parse(event.isBase64Encoded?Buffer.from(event.body,"base64").toString("utf8"):event.body);}catch(_error){const error=new Error("요청 JSON 형식이 올바르지 않습니다.");error.statusCode=400;error.code="invalid_json";throw error;}
+}
+function resolveScope(event, body){
+  const requestedCountry=text(first(body&&body.country,getParam(event,"country"))).toUpperCase();
+  const requestedRegion=first(body&&body.region,getParam(event,"region"));
+  const geo=geoScope(event);
+  if(requestedCountry==="GLOBAL")return { country:null, region:"ALL", active:false, source:"administrator-global", fallback:"global-read", crossCountry:false };
+  if(requestedCountry)return selectedScope(requestedCountry,requestedRegion);
+  if(geo.resolved)return Object.assign(selectedScope(geo.country,geo.region),{source:"request-ip"});
+  return { country:null, region:null, active:true, unresolved:true, source:geo.excluded?"excluded-ip":"unresolved-ip", fallback:"empty", crossCountry:false, excluded:geo.excluded, detectedCountry:geo.detectedCountry };
+}
+function findPrivateCandidate(doc, scope, candidateId){
+  return asArray(doc&&doc.candidates).find((row)=>text(row&&row.candidateId)===text(candidateId)&&privateStageScopeMatch(row,scope).matched&&isGoLiveAuditCandidate(row))||null;
+}
+async function assignmentForPublication(candidateId, scope){
+  const rows=await SlotStore.select("gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,updated_at&candidate_id=eq."+encodeURIComponent(candidateId)+"&order=updated_at.desc&limit=100");
+  return asArray(rows).find((row)=>{
+    if(!["approved","pinned"].includes(low(row&&row.state)))return false;
+    if(!["audit_ready","publish_requested","ready"].includes(low(row&&row.publication_status)))return false;
+    if(!scope||!scope.active||scope.country==="UNSCOPED")return true;
+    const country=normalizeCountry(row&&row.country_code);if(country!==scope.country)return false;
+    if(scope.region==="ALL")return true;
+    const region=normalizeRegion(row&&row.region_code||"NATIONWIDE",country)||"NATIONWIDE";
+    return region===scope.region||region==="NATIONWIDE";
+  })||null;
+}
+async function requestPublication(event, actor, body, scope, liveDoc){
+  requireActorRole(actor,true);
+  if(cleanMode(body&&body.mode)!=="production"){const error=new Error("최종 사이트 게재 요청은 실상품 운영 모드에서만 가능합니다.");error.statusCode=409;error.code="production_mode_required";throw error;}
+  if(text(body&&body.confirmation)!=="SITE_PUBLISH"){const error=new Error("최종 사이트 게재 확인 문구가 일치하지 않습니다.");error.statusCode=409;error.code="publication_confirmation_required";throw error;}
+  const candidateId=text(body&&body.candidateId);if(!candidateId){const error=new Error("게재할 상품 후보를 한 건 선택해야 합니다.");error.statusCode=400;error.code="candidate_required";throw error;}
+  const candidate=findPrivateCandidate(liveDoc,scope,candidateId);
+  if(!candidate){const error=new Error("현재 범위에서 실상품 공급 개방 점검을 통과한 후보가 아닙니다.");error.statusCode=409;error.code="candidate_not_audit_ready";throw error;}
+  const expectedDigest=text(body&&body.expectedDigest);
+  if(expectedDigest&&text(candidate&&candidate.digest)!==expectedDigest){const error=new Error("후보 정보가 변경됐습니다. 개방 점검을 다시 실행해 주세요.");error.statusCode=409;error.code="candidate_changed";throw error;}
+  const control=releaseControl();
+  if(!control.armed){const error=new Error("배포 환경의 실상품 공개 게이트가 활성화되지 않았습니다.");error.statusCode=409;error.code="release_gate_not_armed";throw error;}
+  if(!control.hookConfigured){const error=new Error("사이트 게재 빌드 훅이 설정되지 않았습니다.");error.statusCode=409;error.code="publication_hook_not_configured";throw error;}
+  const assignment=await assignmentForPublication(candidateId,scope);
+  if(!assignment){const error=new Error("최종 승인된 PSOM 배정을 찾지 못했습니다.");error.statusCode=409;error.code="audit_ready_assignment_missing";throw error;}
+  const originalStatus=low(assignment.publication_status)||"audit_ready";
+  const now=new Date().toISOString();
+  if(originalStatus!=="publish_requested"){
+    await SlotStore.update("gslot_slot_assignments","id=eq."+encodeURIComponent(assignment.id),{publication_status:"publish_requested",updated_at:now,updated_by:text(actor&&actor.sub)});
+  }
+  const dispatch=await ReleaseDispatch.dispatch({candidateId,assignmentId:assignment.id,actorId:text(actor&&actor.sub)});
+  if(!dispatch.queued){
+    if(originalStatus!=="publish_requested"){
+      try{await SlotStore.update("gslot_slot_assignments","id=eq."+encodeURIComponent(assignment.id),{publication_status:originalStatus,updated_at:new Date().toISOString(),updated_by:text(actor&&actor.sub)});}catch(_rollbackError){}
+    }
+    const error=new Error("사이트 게재 빌드 요청을 대기열에 넣지 못했습니다: "+text(dispatch.reason));error.statusCode=409;error.code=text(dispatch.reason)||"publication_dispatch_failed";throw error;
+  }
+  return {
+    ok:true,status:"queued",version:VERSION,action:"request_publication",
+    candidate:{candidateId,title:first(candidate&&candidate.productCard&&candidate.productCard.title,candidate&&candidate.title)||null,digest:text(candidate&&candidate.digest)||null},
+    assignment:{id:assignment.id,hubKey:assignment.hub_key,slotKey:assignment.slot_key,countryCode:assignment.country_code,regionCode:assignment.region_code||null,publicationStatus:"publish_requested"},
+    release:{queued:true,reason:dispatch.reason,status:dispatch.status||null},
+    note:"선택한 상품의 게재 빌드 요청만 등록했습니다. 빌드 과정에서 원장 동기화·비공개 후보 인테이크·Canonical·국가/지역·프론트 스냅샷 검증을 다시 통과해야 실제 사이트에 반영됩니다."
+  };
+}
+
 exports.handler = async function(event){
-  const method = String((event && event.httpMethod) || "GET").toUpperCase();
-  if(method === "OPTIONS") return { statusCode:204, headers:Object.assign(noStoreHeaders(), { allow:"GET, HEAD, OPTIONS" }), body:"" };
-  if(method !== "GET" && method !== "HEAD") return json(405, { ok:false, error:"method_not_allowed", allowed:["GET", "HEAD"] });
-  try {
-    const mode = cleanMode(getParam(event, "mode"));
-    const limit = safeLimit(getParam(event, "limit"));
-    const requestedCountry = text(getParam(event, "country")).toUpperCase();
-    const geo = geoScope(event);
-    let scope;
-    if(requestedCountry === "GLOBAL") scope = { country:null, region:"ALL", active:false, source:"administrator-global", fallback:"global-read", crossCountry:false };
-    else if(requestedCountry) scope = selectedScope(requestedCountry, getParam(event, "region"));
-    else if(geo.resolved) scope = Object.assign(selectedScope(geo.country, geo.region), { source:"request-ip" });
-    else scope = { country:null, region:null, active:true, unresolved:true, source:geo.excluded?"excluded-ip":"unresolved-ip", fallback:"empty", crossCountry:false, excluded:geo.excluded, detectedCountry:geo.detectedCountry };
-    const report = summarize(mode, limit, scope);
-    if(method === "HEAD") return { statusCode:200, headers:noStoreHeaders(), body:"" };
-    return json(200, report);
-  } catch(error){
-    return json(500, { ok:false, status:"error", version:VERSION, error:String(error && error.message || error) });
+  const method=String(event&&event.httpMethod||"GET").toUpperCase();
+  if(method==="OPTIONS")return {statusCode:204,headers:Object.assign(noStoreHeaders(),{allow:"GET, HEAD, POST, OPTIONS"}),body:""};
+  if(!["GET","HEAD","POST"].includes(method))return json(405,{ok:false,error:"method_not_allowed",allowed:["GET","HEAD","POST"]});
+  try{
+    const actor=await AdminSession.resolveUser(event);
+    requireActorRole(actor,method==="POST");
+    const body=method==="POST"?parseBody(event):{};
+    const action=low(first(body.action,getParam(event,"action"),method==="POST"?"request_publication":"audit"));
+    const scope=resolveScope(event,body);
+    const liveDoc=await CandidateReview.stage(process.cwd());
+    if(method==="POST"){
+      if(action!=="request_publication")return json(404,{ok:false,error:"unsupported_action"});
+      const result=await requestPublication(event,actor,body,scope,liveDoc);
+      return json(202,result);
+    }
+    const mode=cleanMode(getParam(event,"mode"));
+    const limit=safeLimit(getParam(event,"limit"));
+    const report=summarize(mode,limit,scope,liveDoc);
+    report.session={roles:normalizedRoles(actor),publicationAuthorized:normalizedRoles(actor).some((role)=>PUBLISH_ROLES.has(role))};
+    if(method==="HEAD")return {statusCode:200,headers:noStoreHeaders(),body:""};
+    return json(200,report);
+  }catch(error){
+    return json(error&&error.statusCode||500,{ok:false,status:"error",version:VERSION,error:String(error&&error.message||error),code:error&&error.code||null});
   }
 };
 
-module.exports = { handler:exports.handler, VERSION, summarize, selectedScope, scopeMatch, itemMarketScopes, geoScope, privateStageStatus, privateStageScopeMatch };
+module.exports={handler:exports.handler,VERSION,summarize,selectedScope,scopeMatch,itemMarketScopes,geoScope,privateStageStatus,privateStageScopeMatch,releaseControl,isGoLiveAuditCandidate,requestPublication};
+

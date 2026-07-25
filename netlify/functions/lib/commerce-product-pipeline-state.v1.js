@@ -10,7 +10,7 @@
 
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-product-pipeline-state-v1.2.0-private-review-before-release-gates";
+const VERSION = "commerce-product-pipeline-state-v1.3.0-explicit-go-live-audit-publication-gate";
 const SOURCE_REF = "country-product-ranking-review";
 const STAGES = Object.freeze([
   "research_discovered",
@@ -142,7 +142,7 @@ function registryState(candidateInput, relationsInput){
   const candidate=plain(candidateInput), payload=plain(candidate.source_payload), relations=plain(relationsInput), status=lower(candidate.status);
   const assignments=array(relations.assignments), markets=array(relations.markets), revenues=array(relations.revenues), evidence=array(relations.evidence);
   const selected=lower(first(payload.slotDecision,plain(payload.review).state));
-  const assignment=assignments.find((row)=>["approved","pinned"].includes(lower(row&&row.state)) && lower(row&&row.publication_status)==="ready") || null;
+  const assignment=assignments.find((row)=>["approved","pinned"].includes(lower(row&&row.state)) && ["audit_ready","publish_requested","ready"].includes(lower(row&&row.publication_status))) || null;
   const market=markets.find((row)=>["active","approved","ready"].includes(lower(row&&row.availability_state))) || null;
   const revenueState=approvedRevenueRoute(payload,revenues), revenue=revenueState.ready?revenueState.row:null;
   const verifiedEvidence=evidence.find((row)=>row&&row.verified===true) || null;
@@ -154,7 +154,7 @@ function registryState(candidateInput, relationsInput){
   else if(!verifiedEvidence){ stage="trust_evidence_pending"; nextGate="record_verified_supplier_or_product_evidence"; reasons.push("verified_evidence_missing"); }
   else if(!revenue){ stage="revenue_route_pending"; nextGate="record_affiliate_referral_brokerage_or_advertising_right"; reasons.push(revenueState.reason||"approved_revenue_route_missing"); }
   else if(!assignment){ stage="slot_assignment_pending"; nextGate="approve_psom_assignment"; reasons.push("approved_slot_assignment_missing"); }
-  else { stage="registry_sync_ready"; nextGate="registry_sync_and_private_candidate_intake"; }
+  else { stage="registry_sync_ready"; nextGate=lower(assignment&&assignment.publication_status)==="publish_requested"?"publication_build_requested":"go_live_audit_and_explicit_publication_request"; }
   return {
     version:VERSION,
     stage,
@@ -163,6 +163,7 @@ function registryState(candidateInput, relationsInput){
     counts:{assignments:assignments.length,markets:markets.length,revenues:revenues.length,evidence:evidence.length},
     readiness:{market:!!market,evidence:!!verifiedEvidence,revenue:!!revenue,assignment:!!assignment},
     revenueRoute:{type:revenueState.type||null,trafficValueOnly:revenueState.trafficValueOnly===true,qualified:revenueState.ready===true},
+    assignment:assignment?{id:text(assignment.id)||null,hubKey:text(assignment.hub_key)||null,slotKey:text(assignment.slot_key)||null,countryCode:text(assignment.country_code)||null,regionCode:text(assignment.region_code)||null,state:text(assignment.state)||null,publicationStatus:text(assignment.publication_status)||null,priority:Number(assignment.priority||0)}:null,
     releaseEligible:false,
     publicPublication:false,
     paymentExecution:false

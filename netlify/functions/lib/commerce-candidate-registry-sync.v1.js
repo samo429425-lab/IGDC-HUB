@@ -13,8 +13,10 @@ const path = require("path");
 const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.2.0-ordered-lifecycle-evidence-gate";
+const VERSION = "commerce-candidate-registry-sync-v1.3.0-explicit-product-publication-request";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
+const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
+const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
 
 function text(v){ return v == null ? "" : String(v).trim(); }
 function lower(v){ return text(v).toLowerCase(); }
@@ -155,7 +157,8 @@ async function syncApprovedCandidates(input){
       sb.select("gslot_candidate_revenue","select=id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at&order=updated_at.desc&limit=5000"),
       sb.select("gslot_candidate_evidence","select=id,candidate_id,evidence_type,evidence_url,note,verified,created_at&order=created_at.desc&limit=5000")
     ]);
-    const aBy=new Map(); array(assignments).forEach(row=>{ if(allowedAssignmentState(row.state) && lower(row.publication_status)==="ready" && !aBy.has(row.candidate_id)) aBy.set(row.candidate_id,row); });
+    const assignmentByCandidate=new Map();
+    array(assignments).forEach(row=>{ if(!allowedAssignmentState(row.state))return; if(!assignmentByCandidate.has(row.candidate_id))assignmentByCandidate.set(row.candidate_id,[]); assignmentByCandidate.get(row.candidate_id).push(row); });
     const avBy=new Map(), rBy=new Map(), eBy=new Map();
     array(availability).forEach(row=>{ if(!approvedAvailability(row.availability_state)) return; if(!avBy.has(row.candidate_id)) avBy.set(row.candidate_id,[]); avBy.get(row.candidate_id).push(row); });
     array(revenue).forEach(row=>{ if(!rBy.has(row.candidate_id)) rBy.set(row.candidate_id,[]); rBy.get(row.candidate_id).push(row); });
@@ -163,7 +166,13 @@ async function syncApprovedCandidates(input){
     const output=[];
     for(const candidate of array(candidates)){
       if(!allowedCandidateStatus(candidate.status)) continue;
-      const assignment=aBy.get(candidate.id); if(!assignment) continue;
+      const assignmentRows=assignmentByCandidate.get(candidate.id)||[];
+      // Product research candidates require a separate, explicit request from
+      // the go-live audit. Legacy/direct registry candidates retain their
+      // existing ready-state contract for backward compatibility.
+      const explicitAuditSource=[PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF].includes(text(candidate.source_ref));
+      const assignment=assignmentRows.find((row)=>explicitAuditSource?lower(row.publication_status)==="publish_requested":["ready","publish_requested"].includes(lower(row.publication_status)));
+      if(!assignment) continue;
       const candidateRevenue=rBy.get(candidate.id)||[]; if(!candidateRevenue.some(row=>approvedRevenue(row.status))) continue;
       const avail=avBy.get(candidate.id)||[]; if(!avail.length) continue;
       const verifiedEvidence=(eBy.get(candidate.id)||[]).filter(verifiedEvidenceRow); if(!verifiedEvidence.length) continue;
@@ -193,4 +202,4 @@ async function syncApprovedCandidates(input){
   }
 }
 
-module.exports={VERSION,QUEUE_FILE,syncApprovedCandidates,approvedAvailability,verifiedEvidenceRow};
+module.exports={VERSION,QUEUE_FILE,PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF,syncApprovedCandidates,approvedAvailability,verifiedEvidenceRow};

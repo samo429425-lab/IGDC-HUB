@@ -1,4 +1,4 @@
-/* IGDC Commerce Candidate Pipeline Admin View v1.7.0
+/* IGDC Commerce Candidate Pipeline Admin View v1.8.0
  * Ordered private research/staging workflow and commerce queue diagnostic.
  * It reuses the existing administrator session.  No second commerce login,
  * provider call, seller navigation, publication, payment, or browser secret.
@@ -130,11 +130,24 @@
   }
   function labelTier(v){var x=text(v);return x==='approved_commerce_member'?'직접등록 승인':x==='managed_sponsor'?'관리 스폰서':x==='external_brokerage'?'외부중개/연결':x==='risk_ranked_official_supplier_product'?'공식 공급처 상품 리서치':x||'미분류';}
   function tierClass(v){return v==='approved_commerce_member'?'direct':v==='managed_sponsor'?'sponsor':'external';}
-  function stageLabel(v){var x=text(v);return ({private_research_queue:'비공개 리서치 대기열',research_review_ready:'승인 검토 가능',research_discovered:'리서치 발견',administrator_selection_pending:'관리자 상품 선택',market_evidence_pending:'시장·배송 근거',trust_evidence_pending:'검증 증빙',revenue_route_pending:'수익 경로',slot_assignment_pending:'PSOM 배정',registry_sync_ready:'원장 동기화 준비',staged_release_review:'공급 개방 점검',canonical_canary_ready:'수동 카나리 준비',held:'보류',rejected:'제외'})[x]||x||'검토 대기';}
+  function stageLabel(v){var x=text(v);return ({private_research_queue:'비공개 리서치 대기열',research_review_ready:'승인 검토 가능',research_discovered:'리서치 발견',administrator_selection_pending:'관리자 상품 선택',market_evidence_pending:'시장·배송 근거',trust_evidence_pending:'검증 증빙',revenue_route_pending:'수익 경로',slot_assignment_pending:'PSOM 배정',registry_sync_ready:'개방 점검 후보 확정',staged_release_review:'공급 개방 점검',canonical_canary_ready:'수동 카나리 준비',held:'보류',rejected:'제외'})[x]||x||'검토 대기';}
   function statusPill(c){return c.releaseEligible?'<span class="pill release">발행 전 통과</span>':'<span class="pill hold">'+esc(stageLabel(c.stageStatus))+'</span>';}
   function number(v){var n=Number(v);return Number.isFinite(n)?n:0;}
   function gridCard(title,value,small){return '<article class="card"><h2>'+esc(title)+'</h2><div class="num">'+esc(value)+'</div><div class="small">'+esc(small||'')+'</div></article>';}
-  function renderSummary(summary){var s=summary.summary||{};var g=$('summaryGrid');g.innerHTML=''+gridCard('전체 비공개 후보',s.considered||0,'상품 리서치·정식 스테이징 결합')+gridCard('상품 리서치 대기열',s.liveResearchQueue||0,'보완 필요 '+number(s.researchNeedsCompletion)+'건')+gridCard('승인 절차 진행 가능',s.researchPromotionEligible||0,'상품·공급업체 위험 게이트 통과')+gridCard('공급 개방 스테이지',s.stagedReleaseQueue||0,'원장 동기화·후보 인테이크 완료')+gridCard('발행 전 통과',s.eligibleForRelease||0,'공개 키는 별도 배포 환경에서만');g.classList.remove('hidden');var gate=summary.releaseGate||{};var panel=$('policyPanel');var release=gate.enabled===true;panel.innerHTML='<h2>공개 전 안전 상태</h2><div class="notice '+(release?'ok':'warn')+'"><strong>'+esc(release?'발행 키가 배포 환경에서 확인됨':'현재는 비공개 대기열 상태')+'</strong><br>'+esc(release?'그래도 각 후보는 Canonical·IP·판매시장 검증을 다시 통과해야 합니다.':'상품 리서치 완료 직후에는 정보 보완 후보도 비공개 대기열에 나타납니다. 관리자 선택→시장 근거→검증 증빙→수익 경로→PSOM 배정→원장 동기화 순서가 끝나야 공급 개방 점검으로 승격됩니다.')+'</div><div class="small" style="margin-top:9px">자동 공개·IGDC 결제는 실행하지 않습니다. 섹션 제안 후보: '+esc(number(s.proposedSectionCandidates))+'건 · stage: '+esc(summary.generatedAt||'아직 생성되지 않음')+'</div>';panel.classList.remove('hidden');}
+  function renderSummary(summary){
+    var s=summary.summary||{};var g=$('summaryGrid');
+    g.innerHTML=''
+      +gridCard('전체 비공개 후보',s.considered||0,'상품 리서치·정식 스테이징 결합')
+      +gridCard('상품 리서치 대기열',s.liveResearchQueue||0,'보완 필요 '+number(s.researchNeedsCompletion)+'건')
+      +gridCard('승인 절차 진행 가능',s.researchPromotionEligible||0,'상품·공급업체 위험 게이트 통과')
+      +gridCard('개방 점검 후보 확정',s.registrySyncReady||0,'시장·증빙·수익·PSOM 승인 완료')
+      +gridCard('공급 개방 스테이지',s.stagedReleaseQueue||0,'비공개 후보 인테이크 완료')
+      +gridCard('발행 전 통과',s.eligibleForRelease||0,'최종 게재 요청은 개방 점검에서만');
+    g.classList.remove('hidden');
+    var gate=summary.releaseGate||{};var panel=$('policyPanel');var release=gate.enabled===true;
+    panel.innerHTML='<h2>공개 전 안전 상태</h2><div class="notice '+(release?'ok':'warn')+'"><strong>'+esc(release?'발행 키가 배포 환경에서 확인됨':'현재는 비공개 대기열 상태')+'</strong><br>'+esc(release?'그래도 각 후보는 실상품 공급 개방 점검과 Canonical·IP·판매시장 검증을 다시 통과해야 합니다.':'상품 리서치 후보는 이곳에서 검토하고, 관리자 선택→시장 근거→검증 증빙→수익 경로→PSOM 승인까지 끝난 후보만 실상품 공급 개방 점검으로 이동합니다.')+'</div><div class="small" style="margin-top:9px">이 대기열에는 사이트 게재 기능이 없습니다. 섹션 제안 후보: '+esc(number(s.proposedSectionCandidates))+'건 · 개방 점검 후보: '+esc(number(s.registrySyncReady))+'건 · stage: '+esc(summary.generatedAt||'아직 생성되지 않음')+'</div>';
+    panel.classList.remove('hidden');
+  }
   function proposalHtml(c,p){
     var proposals=Array.isArray(c&&c.proposedPlacements)?c.proposedPlacements:[];
     if(!proposals.length&&p&&(p.page||p.section))proposals=[{page:p.page,section:p.section,approvalEligible:c&&c.releaseEligible===true}];
@@ -183,7 +196,9 @@
     var p=row.placement||{},card=row.productCard||{},review=row.review||{},ready=row.researchReadiness||{};
     $('candidateActionPanel').classList.remove('hidden');
     var gaps=[].concat(Array.isArray(ready.blockers)?ready.blockers:[],Array.isArray(ready.reviewGaps)?ready.reviewGaps:[]);
-    $('selectedCandidateMeta').innerHTML='<strong>'+esc(card.title||row.title||id)+'</strong><br>현재 단계: '+esc(stageLabel(row.stageStatus))+' · 다음 게이트: '+esc(review.nextGate||ready.nextGate||'-')+'<br><span class="small">추천 배정: '+esc((Array.isArray(row.proposedPlacements)?row.proposedPlacements:[]).map(function(x){return text(x.page)+'/'+text(x.sectionKey||x.section);}).filter(Boolean).join(', ')||'없음')+'</span>'+(gaps.length?'<br><span class="small">승인 전 보완: '+esc(gaps.join(', '))+'</span>':'')+'<br><span class="small">외부 판매처 결제 구조이며, 이 관리 작업은 IGDC 공개·결제·배송 책임을 생성하지 않습니다.</span>';
+    var auditReady=text(row.stageStatus)==='registry_sync_ready'||text(row.lifecycle&&row.lifecycle.stage)==='registry_sync_ready';
+    $('selectedCandidateMeta').className='notice '+(auditReady?'ok':'');
+    $('selectedCandidateMeta').innerHTML='<strong>'+esc(card.title||row.title||id)+'</strong><br>현재 단계: '+esc(stageLabel(row.stageStatus))+' · 다음 게이트: '+esc(review.nextGate||ready.nextGate||'-')+(auditReady?'<br><strong>시장·증빙·수익·PSOM 승인이 완료되어 실상품 공급 개방 점검 대상으로 확정됐습니다. 사이트 게재는 아직 실행되지 않았습니다.</strong>':'')+'<br><span class="small">추천 배정: '+esc((Array.isArray(row.proposedPlacements)?row.proposedPlacements:[]).map(function(x){return text(x.page)+'/'+text(x.sectionKey||x.section);}).filter(Boolean).join(', ')||'없음')+'</span>'+(gaps.length?'<br><span class="small">승인 전 보완: '+esc(gaps.join(', '))+'</span>':'')+'<br><span class="small">외부 판매처 결제 구조이며, 이 관리 작업은 IGDC 공개·결제·배송 책임을 생성하지 않습니다.</span>';
     $('selectProductBtn').disabled=ready.promotionEligible!==true;
     $('selectProductBtn').title=ready.promotionEligible===true?'관리자 승인 절차를 시작합니다.':'상품명·이미지·공급업체·위험 검증을 먼저 보완해야 합니다.';
     setValue('marketCountry',p.country||ACTIVE_SCOPE.country||'');setValue('marketRegion',p.region||ACTIVE_SCOPE.region||'NATIONWIDE');
@@ -204,7 +219,7 @@
     $('marketForm').addEventListener('submit',function(event){event.preventDefault();runWrite('record_market',{market:{countryCode:formText('marketCountry').toUpperCase(),regionCode:formText('marketRegion').toUpperCase(),deliveryOrAccess:formText('marketDelivery'),legalBasis:formText('marketBasis')}},'판매시장·배송·반품·지원 근거를 저장했습니다.');});
     $('evidenceForm').addEventListener('submit',function(event){event.preventDefault();runWrite('record_evidence',{evidence:{type:formText('evidenceType'),url:formText('evidenceUrl'),note:formText('evidenceNote')}},'검증 증빙을 저장했습니다.');});
     $('revenueForm').addEventListener('submit',function(event){event.preventDefault();var type=formText('revenueType');runWrite('record_revenue',{revenue:{type:type,providerName:formText('revenueProvider'),destinationUrl:formText('revenueUrl'),affiliateUrl:formText('revenueUrl'),programId:formText('revenueProgram'),contractId:formText('revenueProgram'),settlementMode:formText('revenueSettlement'),disclosureReady:formBool('revenueDisclosure'),officialDestination:formBool('revenueOfficial'),providerGenerated:formBool('revenueProviderGenerated'),manualLinkApproved:formBool('revenueManualApproved'),policyConfirmed:formBool('revenuePolicy'),payoutBasisVerified:formBool('revenuePayout'),note:formText('revenueNote')}},'수익·외부 연결 경로를 저장했습니다.');});
-    $('assignmentForm').addEventListener('submit',function(event){event.preventDefault();runWrite('decide',{decision:'approved',note:formText('assignNote'),assignment:{hubKey:formText('assignHub'),slotKey:formText('assignSlot'),countryCode:formText('assignCountry').toUpperCase(),regionCode:formText('assignRegion').toUpperCase(),priority:Number(formText('assignPriority')||0),pinned:false}},'PSOM 배정과 최종 관리자 승인을 저장했습니다. 다음 빌드에서 원장 동기화와 비공개 후보 인테이크가 진행됩니다.');});
+    $('assignmentForm').addEventListener('submit',function(event){event.preventDefault();runWrite('decide',{decision:'approved',note:formText('assignNote'),assignment:{hubKey:formText('assignHub'),slotKey:formText('assignSlot'),countryCode:formText('assignCountry').toUpperCase(),regionCode:formText('assignRegion').toUpperCase(),priority:Number(formText('assignPriority')||0),pinned:false}},'PSOM 승인을 저장했습니다. 이 후보는 실상품 공급 개방 점검 대상입니다. 사이트 게재는 아직 실행되지 않았습니다.');});
   }
 
   function renderDiagnostic(doc){diagnosticCache=doc||null;var panel=$('diagnosticPanel'),pre=$('diagnosticJson');pre.textContent=JSON.stringify(doc||{},null,2);panel.classList.remove('hidden');$('downloadDiagnosticBtn').disabled=!diagnosticCache;}
@@ -230,9 +245,16 @@
     window.setTimeout(function(){try{link.remove();URL.revokeObjectURL(href);}catch(_e){}},0);
     show('상품 후보·중개수익 점검 JSON 파일을 다운로드했습니다.','ok');
   }
+  function goLiveAudit(){
+    var target=new URL('/product-go-live-audit.html',location.origin);
+    if(ACTIVE_SCOPE.country){target.searchParams.set('country',ACTIVE_SCOPE.country);target.searchParams.set('region',ACTIVE_SCOPE.region||'NATIONWIDE');}
+    target.searchParams.set('source','commerce-candidate-pipeline');
+    target.searchParams.set('returnPath',location.pathname+location.search);
+    location.href=target.pathname+target.search;
+  }
   function back(){var q=new URLSearchParams(location.search);var p=q.get('returnPath');location.href=p&&p.charAt(0)==='/'?p:'/admin.html';}
   function init(){
-    $('refreshBtn').addEventListener('click',refresh);$('diagnosticBtn').addEventListener('click',diagnostic);$('downloadDiagnosticBtn').addEventListener('click',downloadDiagnostic);$('returnBtn').addEventListener('click',back);wireCandidateActions();
+    $('refreshBtn').addEventListener('click',refresh);$('diagnosticBtn').addEventListener('click',diagnostic);$('downloadDiagnosticBtn').addEventListener('click',downloadDiagnostic);$('goLiveAuditBtn').addEventListener('click',goLiveAudit);$('returnBtn').addEventListener('click',back);wireCandidateActions();
     document.addEventListener('igdc:member-auth-ready',function(){acceptedToken='';acceptedSession=null;refresh();});
     window.addEventListener('pageshow',function(){acceptedToken='';acceptedSession=null;refresh();});
     refresh();

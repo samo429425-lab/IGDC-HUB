@@ -15,7 +15,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.7.0-private-review-psom-policy-gates";
+const VERSION = "commerce-candidate-review-api-v1.9.0-explicit-go-live-audit-before-publication";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -92,16 +92,17 @@ async function stage(root){
   const live=await liveProductResearchQueue();
   const stagedRows=Array.isArray(stored.candidates)?stored.candidates:[];
   const merged=new Map();
-  for(const row of live.rows||[])merged.set(text(row&&row.candidateId),row);
   for(const row of stagedRows)merged.set(text(row&&row.candidateId),row);
+  for(const row of live.rows||[])merged.set(text(row&&row.candidateId),row);
   const candidates=Array.from(merged.values()).filter(Boolean);
   const eligible=candidates.filter((row)=>row&&row.releaseEligible===true).length;
+  const registrySyncReady=candidates.filter((row)=>text(row&&row.stageStatus)==="registry_sync_ready"||text(row&&row.lifecycle&&row.lifecycle.stage)==="registry_sync_ready").length;
   const liveIds=new Set((live.rows||[]).map((row)=>text(row&&row.candidateId)).filter(Boolean));
   const liveOnly=candidates.filter((row)=>liveIds.has(text(row&&row.candidateId))&&!stagedRows.some((item)=>text(item&&item.candidateId)===text(row&&row.candidateId))).length;
   return Object.assign({},stored,{
     generatedAt:stored.generatedAt||new Date().toISOString(),
     candidates,
-    summary:Object.assign({},plain(stored.summary),{considered:candidates.length,eligibleForRelease:eligible,held:candidates.length-eligible,liveResearchQueue:live.rows.length,liveResearchQueueOnly:liveOnly,stagedReleaseQueue:stagedRows.length}),
+    summary:Object.assign({},plain(stored.summary),{considered:candidates.length,eligibleForRelease:eligible,held:candidates.length-eligible,registrySyncReady,goLiveAuditCandidates:registrySyncReady+eligible,liveResearchQueue:live.rows.length,liveResearchQueueOnly:liveOnly,stagedReleaseQueue:stagedRows.length}),
     source:Object.assign({},plain(stored.source),{liveResearchQueueCount:live.rows.length,liveResearchQueueOnlyCount:liveOnly,stagedReleaseQueueCount:stagedRows.length,liveQueueStorageAvailable:live.storageError?false:true,liveQueueStorageError:live.storageError||null}),
     pipeline:{version:ProductPipeline.VERSION,livePrivateResearchQueue:true,privateStagingSnapshot:true,automaticPublication:false,paymentExecution:false,relationErrors:live.relationErrors||[]}
   });
@@ -158,6 +159,8 @@ function filteredStage(doc,countryInput,regionInput){
   const candidates=input.map(row=>{const match=scopeMatch(row,country,region);return match.matched?Object.assign({},row,{scopeMatch:match}):null;}).filter(Boolean);
   const released=candidates.filter(row=>/released|published/i.test(text(row&&row.stageStatus))).length;
   const eligible=candidates.filter(row=>row&&row.releaseEligible===true).length;
+  const registrySyncReady=candidates.filter((row)=>text(row&&row.stageStatus)==="registry_sync_ready"||text(row&&row.lifecycle&&row.lifecycle.stage)==="registry_sync_ready").length;
+  const publicationRequested=candidates.filter((row)=>text(row&&row.lifecycle&&row.lifecycle.assignment&&row.lifecycle.assignment.publicationStatus)==="publish_requested").length;
   const liveRows=candidates.filter((row)=>text(row&&row.pipelineSource)==="live_product_research_db");
   const liveResearchQueue=liveRows.length;
   const stagedReleaseQueue=candidates.length-liveResearchQueue;
@@ -169,7 +172,7 @@ function filteredStage(doc,countryInput,regionInput){
   return Object.assign({},source,{
     selectedScope:{country:(country==="UNRESOLVED"?null:(country==="GLOBAL"?null:(country||null))),region:(country==="UNRESOLVED"?null:(country==="GLOBAL"?"ALL":(country?(region||"ALL"):"ALL"))),source:country==="UNRESOLVED"?"unresolved-ip":(country==="GLOBAL"?"administrator-global":"selected-or-ip"),fallback:country==="UNRESOLVED"?"empty":"exact-region-then-nationwide-within-same-country",crossCountry:false},
     candidates,
-    summary:Object.assign({},plain(source.summary),{considered:candidates.length,eligibleForRelease:eligible,releasedToCanonical:released,held:candidates.length-eligible,liveResearchQueue,stagedReleaseQueue,researchPromotionEligible,researchNeedsCompletion,proposedSectionCandidates,proposedSectionCounts}),
+    summary:Object.assign({},plain(source.summary),{considered:candidates.length,eligibleForRelease:eligible,releasedToCanonical:released,held:candidates.length-eligible,registrySyncReady,goLiveAuditCandidates:registrySyncReady+eligible,publicationRequested,liveResearchQueue,stagedReleaseQueue,researchPromotionEligible,researchNeedsCompletion,proposedSectionCandidates,proposedSectionCounts}),
     source:Object.assign({},plain(source.source),{liveResearchQueueCount:liveResearchQueue,stagedReleaseQueueCount:stagedReleaseQueue})
   });
 }
@@ -321,6 +324,7 @@ function diagnosticDoc(doc, member){
     queue:{
       schema:text(stage.schema),stageVersion:text(stage.version),stageGeneratedAt:text(stage.generatedAt),
       totalCandidates:candidates.length,eligibleForRelease:releaseReady.length,held:held.length,
+      registrySyncReady:Number(summary.registrySyncReady||0),goLiveAuditCandidates:Number(summary.goLiveAuditCandidates||0),publicationRequested:Number(summary.publicationRequested||0),
       liveResearchQueue:liveResearchCount,stagedReleaseQueue:stagedReleaseCount,
       bySource:countBy(candidates,(row)=>row&&row.sourceTier),
       byStageStatus:countBy(candidates,(row)=>row&&row.stageStatus),
@@ -330,11 +334,11 @@ function diagnosticDoc(doc, member){
       rows:candidateDigestRows(candidates)
     },
     upstream:{searchBankCommerceInput:Number(source.searchBankCount||summary.receivedSearchBank||0),liveProductResearchQueue:liveResearchCount,stagedReleaseQueue:stagedReleaseCount,adminReviewQueueStale:source.reviewQueueStale===true,reviewQueueDigest:text(source.reviewQueueDigest)||null,storageAvailable:source.liveQueueStorageAvailable!==false,storageError:text(source.liveQueueStorageError)||null},
-    pipeline:{version:text(stage.pipeline&&stage.pipeline.version)||ProductPipeline.VERSION,automaticResearchQueue:true,administratorSelectionRequired:true,marketEvidenceRequired:true,verifiedEvidenceRequired:true,revenueRouteRequired:true,slotAssignmentRequired:true,registrySyncRequired:true,canonicalCanaryRequired:true,automaticPublication:false,paymentExecution:false},
+    pipeline:{version:text(stage.pipeline&&stage.pipeline.version)||ProductPipeline.VERSION,automaticResearchQueue:true,administratorSelectionRequired:true,marketEvidenceRequired:true,verifiedEvidenceRequired:true,revenueRouteRequired:true,slotAssignmentRequired:true,goLiveAuditRequired:true,explicitPublicationRequestRequired:true,registrySyncRequired:true,canonicalCanaryRequired:true,automaticPublication:false,paymentExecution:false},
     revenueRegistry:{version:text(affiliate.version)||null,valid:affiliate.ok!==false,problems:Array.isArray(affiliate.problems)?affiliate.problems.slice(0,50):[]},
     releaseGate:{enabled:gate.enabled===true,mode:text(gate.mode)||"staging_only",reason:text(gate.reason)||"unknown",keyPresent:gate.keyPresent===true},
     blockingConditions:blockers,
-    summary:{considered:Number(summary.considered||candidates.length||0),eligibleForRelease:Number(summary.eligibleForRelease||releaseReady.length||0),releasedToCanonical:Number(summary.releasedToCanonical||0),held:Number(summary.held||held.length||0)}
+    summary:{considered:Number(summary.considered||candidates.length||0),eligibleForRelease:Number(summary.eligibleForRelease||releaseReady.length||0),registrySyncReady:Number(summary.registrySyncReady||0),goLiveAuditCandidates:Number(summary.goLiveAuditCandidates||0),publicationRequested:Number(summary.publicationRequested||0),releasedToCanonical:Number(summary.releasedToCanonical||0),held:Number(summary.held||held.length||0)}
   };
 }
 function sessionDoc(member){return {ok:true,version:VERSION,session:{authenticated:true,roles:roles(member),readOnlyQueueAccess:true}};}
@@ -413,7 +417,7 @@ async function selectProductCandidate(member, body){
     source.review=Object.assign({},plain(source.review),{state:"pending",selectedAt:now,selectedBy:member.memberId});
     return source;
   });
-  await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"approval_pending",updated_at:now,updated_by:member.memberId});
+  await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"approval_pending",updated_at:now});
   return {ok:true,candidateId:id,status:"approval_pending",pipeline:plain(payload.pipeline),note:"상품 후보 선택만 완료했습니다. 시장·배송 근거, 검증 증빙, 수익 경로, PSOM 배정을 차례로 완료해야 원장 동기화 대상이 됩니다."};
 }
 
@@ -458,7 +462,7 @@ async function recordRevenue(member, body){
     await patchSourcePayload(id,function(payload){payload.brokerageContract=Object.assign({},plain(payload.brokerageContract),{id:contractId,type,providerName,counterparty:providerName,approved:true,status:"approved",destinationUrl:url,disclosureReady:true,payoutBasisVerified:true,settlementMode,policyStatus:policyConfirmed?"policy_ok":"contract_verified",policyCheckedAt:checkedAt,currency:text(revenue.currency)||null,note:text(revenue.note)||null});return payload;});
   }
   const rows=await SlotStore.insert("gslot_candidate_revenue",{id:"revenue_"+require("crypto").randomBytes(12).toString("hex"),candidate_id:id,revenue_type:type,status:"approved",affiliate_url:url,provider_name:providerName.slice(0,240),currency:text(revenue.currency).slice(0,16)||null,note:text(revenue.note).slice(0,4000)||null,updated_at:new Date().toISOString(),updated_by:member.memberId},"return=representation");
-  await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"revenue_ready",updated_at:new Date().toISOString(),updated_by:member.memberId});
+  await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"revenue_ready",updated_at:new Date().toISOString()});
   const note=type==="external_referral"?"외부 연결형은 상품별 수익을 확정으로 표시하지 않으며, 공식 판매처·판매시장·고지·Canonical 검증을 통과할 때만 공개 후보가 됩니다.":"승인 수익 경로를 저장했습니다. 시장 근거·검증 증빙·PSOM 배정과 원장 동기화가 끝나야 공급 개방 점검으로 넘어갑니다.";
   return {ok:true,candidateId:id,revenue:(rows||[])[0]||null,note};
 }
@@ -487,7 +491,7 @@ async function decide(member, body){
   if(decision!=="approved"){
     const now=new Date().toISOString();
     await patchSourcePayload(id,function(payload){payload.slotDecision=decision==="rejected"?"reject":"hold";payload.review=Object.assign({},plain(payload.review),{state:decision,decidedAt:now,decidedBy:member.memberId});return payload;});
-    await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:decision==="rejected"?"suppressed":"hold",owner_note:text(body.note).slice(0,3000)||null,updated_at:now,updated_by:member.memberId});
+    await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:decision==="rejected"?"suppressed":"hold",owner_note:text(body.note).slice(0,3000)||null,updated_at:now});
     return {ok:true,candidateId:id,status:decision};
   }
   const lifecycleState=requireLifecycleStage(await candidateLifecycle(id),["slot_assignment_pending"],"시장·검증 증빙·승인 수익 경로를 먼저 완료해야 PSOM 배정을 승인할 수 있습니다.");
@@ -497,11 +501,11 @@ async function decide(member, body){
   // Approval alone does not make a candidate public. Registry sync will export
   // it only when availability, revenue right and evidence records exist.
   const approvedAt=new Date().toISOString();
-  await patchSourcePayload(id,function(payload){payload.slotDecision="slot_candidate";payload.review=Object.assign({},plain(payload.review),{state:"approved",decidedAt:approvedAt,decidedBy:member.memberId});payload.pipeline=Object.assign({},plain(payload.pipeline),{stage:"slot_assignment_pending",nextGate:"registry_sync_and_private_candidate_intake"});return payload;});
-  await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"enrollable",owner_note:text(body.note).slice(0,3000)||null,updated_at:approvedAt,updated_by:member.memberId});
+  await patchSourcePayload(id,function(payload){payload.slotDecision="slot_candidate";payload.review=Object.assign({},plain(payload.review),{state:"approved",decidedAt:approvedAt,decidedBy:member.memberId});payload.pipeline=Object.assign({},plain(payload.pipeline),{stage:"registry_sync_ready",nextGate:"go_live_audit_and_explicit_publication_request"});return payload;});
+  await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"enrollable",owner_note:text(body.note).slice(0,3000)||null,updated_at:approvedAt});
   const assignmentId="assignment_"+require("crypto").randomBytes(12).toString("hex");
-  const rows=await SlotStore.insert("gslot_slot_assignments",{id:assignmentId,candidate_id:id,hub_key:hub,country_code:country,region_code:text(assignment.regionCode).toUpperCase()||null,slot_key:section,priority:Math.max(-1000000,Math.min(1000000,Number(assignment.priority)||0)),state:assignment.pinned===true?"pinned":"approved",publication_status:"ready",manual_pinned:assignment.pinned===true,decision_note:text(body.note).slice(0,3000)||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),updated_by:member.memberId},"return=representation");
-  return {ok:true,candidateId:id,status:"enrollable",assignment:(rows||[])[0]||null,note:"승인 배정만 완료되었습니다. 시장별 배송·반품·지원·책임 근거와 승인된 수익 계약이 등록된 뒤에만 다음 빌드의 비공개 대기열에 반영됩니다. 공개 발행 키는 별도로 필요합니다."};
+  const rows=await SlotStore.insert("gslot_slot_assignments",{id:assignmentId,candidate_id:id,hub_key:hub,country_code:country,region_code:text(assignment.regionCode).toUpperCase()||null,slot_key:section,priority:Math.max(-1000000,Math.min(1000000,Number(assignment.priority)||0)),state:assignment.pinned===true?"pinned":"approved",publication_status:"audit_ready",manual_pinned:assignment.pinned===true,decision_note:text(body.note).slice(0,3000)||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),updated_by:member.memberId},"return=representation");
+  return {ok:true,candidateId:id,status:"enrollable",assignment:(rows||[])[0]||null,note:"시장·검증 증빙·수익 경로·PSOM 승인이 완료되어 실상품 공급 개방 점검 대상으로 확정됐습니다. 아직 원장 동기화나 사이트 게재는 실행되지 않으며, 개방 점검에서 별도의 최종 게재 요청이 필요합니다."};
 }
 
 exports.buildDiagnostic=diagnosticDoc;

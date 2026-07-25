@@ -42,6 +42,16 @@
   
     .scope-audit-panel{border-color:#3e6388;background:linear-gradient(180deg,#10233a 0%,#0d1b2d 100%)}.scope-audit-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.scope-audit-title{margin:0;font-size:18px}.scope-audit-actions{display:flex;gap:8px;flex-wrap:wrap}.scope-audit-status{margin-top:10px;padding:10px 12px;border:1px solid #355677;border-radius:9px;background:#091525;color:#cfe5ff;line-height:1.55}.scope-audit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:9px;margin-top:10px}.scope-audit-detail{margin-top:10px;background:#091525;border:1px solid #29425f;border-radius:10px;padding:11px;line-height:1.55}.scope-audit-detail ul{margin:7px 0 0;padding-left:20px}.scope-audit-table{margin-top:10px;overflow:auto;border:1px solid #29425f;border-radius:10px}.scope-audit-table table{min-width:780px}.scope-audit-empty{padding:14px;color:#9fb3cb}.linkbtn.active{border-color:var(--blue);background:#0d3555}.review-return-note{margin-top:9px;padding:9px 11px;border:1px solid #355677;border-radius:9px;background:#0a2136;color:#c9e7ff;font-size:12px;line-height:1.5}.supplier-primary-link,.supplier-review-link,.supplier-url{font-size:14px!important;line-height:1.55}.supplier-primary-link{font-weight:900;color:#9edcff}.supplier-review-link{display:inline-block;margin-top:5px;padding:5px 8px;border:1px solid #3d668f;border-radius:7px;background:#122a43;color:#d8ecff;text-decoration:none}.supplier-url{display:inline-block;margin-top:5px;color:#b9d4ee;word-break:break-all}.tablewrap td .small{font-size:13px;line-height:1.6}.tablewrap .pill{font-size:11px;padding:3px 8px}
 </style>
+
+  <style>
+    .commerce-flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:10px}
+    .flow-step{position:relative;background:#091525;border:1px solid #2c4766;border-radius:11px;padding:12px 11px 11px 42px;min-height:96px}
+    .flow-step strong{position:absolute;left:10px;top:11px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#173f61;color:#c9ebff}
+    .flow-step span{display:block;font-weight:900;line-height:1.35}
+    .flow-step small{display:block;color:#9fb3cb;line-height:1.45;margin-top:5px}
+    .flow-step.publish{border-color:#b76b31;background:#2b170c}
+    .flow-step.publish strong{background:#b45309;color:#fff7ed}
+  </style>
 </head>
 <body>
 <main>
@@ -133,10 +143,25 @@
           <div class="field"><label for="maxCandidates">1회 최대 업체 후보</label><select id="maxCandidates"><option value="10">10개</option><option value="20">20개</option><option value="30">30개</option><option value="50">50개</option></select></div>
           <div id="expandField" class="field hidden"><label for="expandSubdivisions">하위 지역 자동화</label><select id="expandSubdivisions"><option value="false">전국 범위만</option><option value="true">주·성·지역 순환</option></select></div>
         </div>
-        <div class="actions"><button id="saveScopeBtn" type="button">범위 설정 저장</button><button id="countryPolicyBtn" type="button" class="ghost">국가 정책 입안·AI 협의</button><button id="previewRunBtn" type="button" class="ghost">책임 공급업체 단계별 검색</button><button id="researchPauseBtn" type="button" class="secondary" disabled>진행 일시정지</button><button id="refreshScopeBtn" type="button" class="secondary">선택 범위 읽기</button><button id="countryRunDownloadBtn" type="button" class="secondary" disabled>국가 실행 JSON 다운로드</button><button id="runNowBtn" type="button" disabled>검색 결과 실행</button></div><div id="countryPolicyState" class="policy-state">선택 국가의 관리자 수동 우선 정책을 확인할 수 있습니다.</div><div id="countryResearchProgress" class="policy-state">단계별 검색은 검색어·검색 경로·업체 페이지 증빙·AI 평가를 여러 요청으로 나누어 진행하며, 중간 결과를 관리 DB에 보존합니다.</div>
-        <div class="small">검색 시간을 억지로 줄이지 않습니다. 모든 계획 검색을 순차적으로 수행하고, 업체 페이지 증빙과 AI 평가를 별도 단계로 완료한 뒤 국가 실행 JSON 다운로드 옆의 검색 결과 실행을 눌러 비공개 후보 원장에 저장합니다. 중간에 창을 닫거나 일시정지해도 같은 범위에서 이어서 진행합니다.</div>
+        <div class="actions"><button id="saveScopeBtn" type="button">범위 설정 저장</button><button id="countryPolicyBtn" type="button" class="ghost">국가 정책 입안·AI 협의</button><button id="previewRunBtn" type="button" class="ghost">책임 공급업체 단계별 검색</button><button id="researchPauseBtn" type="button" class="secondary" disabled>진행 일시정지</button><button id="refreshScopeBtn" type="button" class="secondary">선택 범위 읽기</button><button id="countryRunDownloadBtn" type="button" class="secondary" disabled>국가 실행 JSON 다운로드</button><button id="runNowBtn" type="button" disabled>공급업체 후보 원장 등록</button></div><div id="countryPolicyState" class="policy-state">선택 국가의 관리자 수동 우선 정책을 확인할 수 있습니다.</div><div id="countryResearchProgress" class="policy-state">단계별 검색은 검색어·검색 경로·업체 페이지 증빙·AI 평가를 여러 요청으로 나누어 진행하며, 중간 결과를 관리 DB에 보존합니다.</div>
+        <div class="small">검색 시간을 억지로 줄이지 않습니다. 모든 계획 검색을 순차적으로 수행하고, 업체 페이지 증빙과 AI 평가를 별도 단계로 완료한 뒤 국가 실행 JSON 다운로드 옆의 공급업체 후보 원장 등록을 눌러 검증된 공급업체 검색 결과를 비공개 원장에 저장합니다. 이 버튼은 상품 리서치나 사이트 게재를 실행하지 않습니다. 중간에 창을 닫거나 일시정지해도 같은 범위에서 이어서 진행합니다.</div>
       </div>
     </div>
+  </section>
+
+
+  <section class="panel" id="commerceFlowPanel">
+    <h2>책임 공급업체·실상품 운영 단계</h2>
+    <div class="commerce-flow">
+      <div class="flow-step"><strong>1</strong><span>책임 공급업체 검색</span><small>업체·조합·마켓 발견과 증빙 점검</small></div>
+      <div class="flow-step"><strong>2</strong><span>공급업체 후보 원장 등록</span><small>검색 결과를 비공개 공급업체 원장에 저장</small></div>
+      <div class="flow-step"><strong>3</strong><span>공식 상품 목록 리서치</span><small>상품 상세페이지·이미지·가격·판매처 확인</small></div>
+      <div class="flow-step"><strong>4</strong><span>대기열 심사 후보 지정</span><small>상품을 비공개 후보·중개수익 대기열로 보냄</small></div>
+      <div class="flow-step"><strong>5</strong><span>후보 대기열 심사</span><small>시장·증빙·수익·PSOM 배정과 관리자 승인</small></div>
+      <div class="flow-step"><strong>6</strong><span>실상품 공급 개방 점검</span><small>사이트 게재 직전 최종 안전 감사</small></div>
+      <div class="flow-step publish"><strong>7</strong><span>최종 사이트 게재 요청</span><small>개방 점검 통과 후 별도 확인 절차로만 실행</small></div>
+    </div>
+    <div class="small" style="margin-top:10px">앞 단계의 완료가 다음 단계의 공개를 자동 실행하지 않습니다. 사이트 게재는 실상품 공급 개방 점검 화면의 별도 최종 버튼에서만 요청하도록 분리합니다.</div>
   </section>
 
   <section class="panel">
@@ -148,7 +173,7 @@
   <section id="scopeAuditPanel" class="panel scope-audit-panel hidden" aria-live="polite">
     <div class="scope-audit-head">
       <div><h2 id="scopeAuditTitle" class="scope-audit-title">선택 범위 점검</h2><div id="scopeAuditScope" class="small"></div></div>
-      <div class="scope-audit-actions"><button id="scopeAuditRefreshBtn" type="button" class="ghost">현재 범위 다시 점검</button><button id="scopeAuditDownloadBtn" type="button" class="secondary" disabled>점검 JSON 다운로드</button><button id="scopeAuditCloseBtn" type="button" class="secondary">닫기</button></div>
+      <div class="scope-audit-actions"><button id="scopeAuditRefreshBtn" type="button" class="ghost">현재 범위 다시 점검</button><button id="scopeAuditOpenBtn" type="button">전체 관리 화면 열기</button><button id="scopeAuditDownloadBtn" type="button" class="secondary" disabled>점검 JSON 다운로드</button><button id="scopeAuditCloseBtn" type="button" class="secondary">닫기</button></div>
     </div>
     <div id="scopeAuditStatus" class="scope-audit-status">점검 버튼을 누르면 현재 범위의 저장 원장을 읽습니다.</div>
     <div id="scopeAuditGrid" class="scope-audit-grid"></div>
@@ -254,7 +279,7 @@
 </div>
 
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-country-control.js?v=25"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=27"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=2"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=1"></script>
 </body>
