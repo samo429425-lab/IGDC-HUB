@@ -14,7 +14,7 @@
   var stateEl=$('state'),notice=$('notice');
   var acceptedToken='',acceptedSession=null,resolvingSession=null,wired=false;
   var catalog=null,locations=null,geo=null,regions=[],countries=[],settings=[],settingMap={};
-  var selectedRegion='',selectedCountry='',selectedSubdivision='NATIONWIDE',regionOnly=true,lastJson=null,lastGlobalJson=null,lastRegionalJson=null,lastCountryJson=null,lastDiagnosticJson=null,lastGlobalControlJson=null,lastProductJson=null,lastScopeCache=null,lastScopeAuditJson=null,activeScopeAudit='',selectionSource='initial',lastSignalReport=null,lastCountryPreview=null,researchStopRequested=false,researchLoopActive=false,productStopRequested=false,productLoopActive=false,signalLoopActive=false,returnRestoreActive=false,returnRestoreRow=null,returnRestoreTimer=null,lastPassiveRestoreAt=0;
+  var selectedRegion='',selectedCountry='',selectedSubdivision='NATIONWIDE',regionOnly=true,lastJson=null,lastGlobalJson=null,lastRegionalJson=null,lastCountryJson=null,lastDiagnosticJson=null,lastGlobalControlJson=null,lastProductJson=null,lastScopeCache=null,lastScopeAuditJson=null,activeScopeAudit='',selectionSource='initial',lastSignalReport=null,lastCountryPreview=null,researchStopRequested=false,researchLoopActive=false,productStopRequested=false,productLoopActive=false,signalLoopActive=false,returnRestoreActive=false,returnRestoreRow=null,returnRestoreTimer=null,lastPassiveRestoreAt=0,supplierControlScopeKey='';
   var REVIEW_RETURN_KEY='igdc.country.control.review.return.v2';
   var REVIEW_SNAPSHOT_KEY='igdc.country.control.review.snapshot.v3';
   var REVIEW_SNAPSHOT_LEGACY_KEY='igdc.country.control.review.snapshot.v2';
@@ -154,28 +154,54 @@
     $('summaryPanel').classList.remove('hidden');
   }
   function renderQueue(rows){rows=Array.isArray(rows)?rows:[];$('queueRows').innerHTML=rows.length?rows.map(function(c){var p=c.placement||{},r=c.revenue||{},m=c.scopeMatch||{},reasons=Array.isArray(c.reasons)?c.reasons.join(', '):'-';return'<tr><td><strong>'+esc(c.title||c.name||c.candidateId||'-')+'</strong><br><span class="mono">'+esc(c.candidateId||'-')+'</span></td><td>'+esc(m.mode||'-')+'<br>'+esc((m.country||'-')+' / '+(m.region||'-'))+'</td><td>'+(c.releaseEligible?'<span class="pill good">통과</span>':'<span class="pill warn">보류</span>')+'</td><td>'+esc((p.page||'-')+' / '+(p.section||'-'))+'</td><td>'+esc((c.marketKeys||[]).join(', ')||'-')+'</td><td>'+esc(r.type||'-')+' / '+esc(r.monetizationState||'-')+'</td><td>'+esc(reasons)+'</td></tr>';}).join(''):'<tr><td colspan="7" class="small">이 범위의 기존 후보가 없습니다.</td></tr>';$('queuePanel').classList.remove('hidden');}
-  async function applySupplierResearchAction(action,url){
-    if(!url)return;
-    var destructive=action==='purge'||action==='block';
-    var message=action==='purge'?'이 후보의 표시 데이터를 제거하고 재수집 방지용 최소 URL 지문만 남깁니다. 계속하시겠습니까?':(action==='block'?'이 업체 도메인의 후보를 차단하고 이후 같은 국가·지역 리서치에서 다시 올리지 않습니다. 계속하시겠습니까?':'');
-    if(destructive&&!window.confirm(message))return;
+  function supplierActionLabel(action){return {hold:'후보에서 제거·보류',restore:'본 후보로 복원',dismiss:'목록 삭제·재수집 허용',purge:'영구 제외',block:'도메인 차단',unblock:'차단 해제·보류 이동',remove_from_list:'목록에서 제거'}[action]||action;}
+  function supplierActionMessage(action,count){
+    count=Number(count||0);
+    if(action==='purge')return '선택 '+count+'건을 현재 목록에서 제거하고 같은 URL이 다시 수집되지 않도록 영구 제외 지문을 남깁니다. 계속하시겠습니까?';
+    if(action==='block')return '선택 '+count+'건의 도메인을 차단합니다. 같은 도메인의 다른 후보도 현재 목록에서 빠지고 이후 리서치에서 다시 올라오지 않습니다. 계속하시겠습니까?';
+    if(action==='dismiss')return '선택 '+count+'건을 현재 대기열 목록에서 삭제합니다. 차단 기록은 남기지 않아 다음 새 검색에서 다시 발견될 수 있습니다. 계속하시겠습니까?';
+    if(action==='remove_from_list')return '선택 '+count+'건을 현재 대기열 화면에서만 제거합니다. 기존 영구 제외·도메인 차단 기록은 그대로 유지됩니다. 계속하시겠습니까?';
+    return '';
+  }
+  async function applySupplierResearchAction(action,urlOrUrls){
+    var urls=(Array.isArray(urlOrUrls)?urlOrUrls:[urlOrUrls]).map(safeExternalUrl).filter(Boolean);
+    urls=Array.from(new Set(urls));if(!urls.length){show('처리할 공급업체 후보를 선택해 주세요.','warn');return;}
+    var message=supplierActionMessage(action,urls.length);if(message&&!window.confirm(message))return;
     try{
-      var data=await api(CONTROL,'research_candidate_action','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',url:url,decision:action});
+      var data=await api(CONTROL,'research_candidate_action','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',urls:urls,url:urls[0],decision:action});
       lastCountryPreview=data;lastCountryJson=data;renderResearchProgress(data);renderSummary(data,{candidates:data.candidates||[]},'공급업체 후보 관리 반영');renderAi(data.candidates||[],data.holdingCandidates||[],data.blockedCandidates||[]);rememberReport('country',data);saveReviewSnapshot();
-      var label={hold:'보류 대기열로 이동',restore:'본 후보로 복원',purge:'완전 삭제·재수집 방지',block:'도메인 차단',unblock:'차단 해제 후 보류 이동'}[action]||action;
-      show('공급업체 후보를 '+label+' 처리했습니다. 상품 반입이나 사이트 공개는 실행하지 않았습니다.','ok');
+      var result=data&&data.candidateAction||{},processed=Number(result.processed||urls.length),missing=Number(result.notFound||0);
+      show('공급업체 후보 '+processed+'건을 '+supplierActionLabel(action)+' 처리했습니다.'+(missing?' 현재 작업에서 찾지 못한 항목 '+missing+'건이 있습니다.':'')+' 상품 반입이나 사이트 공개는 실행하지 않았습니다.','ok');
     }catch(e){show(text(e.message)||'공급업체 후보 상태를 저장하지 못했습니다.','fail');}
   }
   function wireSupplierControlButtons(root){
-    Array.prototype.forEach.call((root||document).querySelectorAll('[data-supplier-control]'),function(button){button.addEventListener('click',function(){applySupplierResearchAction(button.getAttribute('data-supplier-control'),button.getAttribute('data-supplier-url'));});});
+    root=root||document;if(root.getAttribute&&root.getAttribute('data-supplier-control-wired')==='1')return;if(root.setAttribute)root.setAttribute('data-supplier-control-wired','1');
+    root.addEventListener('click',function(event){var button=event.target&&event.target.closest?event.target.closest('[data-supplier-control]'):null;if(!button||!root.contains(button))return;applySupplierResearchAction(button.getAttribute('data-supplier-control'),button.getAttribute('data-supplier-url'));});
   }
+  function supplierSelectionConfig(kind){
+    return {active:{all:'supplierActiveSelectAll',count:'supplierActiveSelectedCount'},hold:{all:'supplierHoldSelectAll',count:'supplierHoldSelectedCount'},blocked:{all:'supplierBlockedSelectAll',count:'supplierBlockedSelectedCount'}}[kind]||{};
+  }
+  function supplierSelectionBoxes(kind){return Array.prototype.slice.call(document.querySelectorAll('[data-supplier-select="'+kind+'"]')).filter(function(box){return !box.disabled;});}
+  function supplierSelectedUrls(kind){return supplierSelectionBoxes(kind).filter(function(box){return box.checked;}).map(function(box){return safeExternalUrl(box.value);}).filter(Boolean);}
+  function syncSupplierSelection(kind){
+    var cfg=supplierSelectionConfig(kind),boxes=supplierSelectionBoxes(kind),selected=boxes.filter(function(box){return box.checked;});
+    var all=cfg.all&&$(cfg.all),count=cfg.count&&$(cfg.count);if(all){all.checked=boxes.length>0&&selected.length===boxes.length;all.indeterminate=selected.length>0&&selected.length<boxes.length;all.disabled=boxes.length===0;}if(count)count.textContent='선택 '+selected.length+'건';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-supplier-bulk-scope="'+kind+'"]'),function(button){button.disabled=selected.length===0;});
+  }
+  function wireSupplierSelectionControls(root){
+    root=root||document;if(root.getAttribute&&root.getAttribute('data-supplier-selection-wired')==='1')return;if(root.setAttribute)root.setAttribute('data-supplier-selection-wired','1');
+    root.addEventListener('change',function(event){var all=event.target&&event.target.getAttribute&&event.target.getAttribute('data-supplier-select-all'),kind=event.target&&event.target.getAttribute&&event.target.getAttribute('data-supplier-select');if(all){supplierSelectionBoxes(all).forEach(function(box){box.checked=event.target.checked;});syncSupplierSelection(all);}else if(kind)syncSupplierSelection(kind);});
+    root.addEventListener('click',function(event){var button=event.target&&event.target.closest?event.target.closest('[data-supplier-bulk]'):null;if(!button||!root.contains(button))return;var kind=button.getAttribute('data-supplier-bulk-scope'),urls=supplierSelectedUrls(kind);if(!urls.length){show('먼저 처리할 후보를 선택해 주세요.','warn');return;}applySupplierResearchAction(button.getAttribute('data-supplier-bulk'),urls);});
+  }
+  function closeSupplierControlQueue(){var panel=$('supplierControlQueue');if(panel&&typeof panel.open==='boolean')panel.open=false;}
   function renderSupplierControlQueues(holdingRows,blockedRows){
     holdingRows=Array.isArray(holdingRows)?holdingRows:[];blockedRows=Array.isArray(blockedRows)?blockedRows:[];
-    var panel=$('supplierControlQueue');if(!panel)return;panel.classList.remove('hidden');
-    if($('supplierControlSummary'))$('supplierControlSummary').textContent='보류 '+holdingRows.length+'건 · 차단 '+blockedRows.length+'건 · 문서·다운로드 링크는 상품 공급업체 후보와 분리됩니다.';
-    $('supplierHoldRows').innerHTML=holdingRows.length?holdingRows.map(function(row){var url=safeExternalUrl(row.url||row.sourceCandidateUrl),reason=row.holdReason||'추가 확인 필요';return'<tr><td><strong>'+esc(row.title||row.host||'후보명 확인 필요')+'</strong><br><span class="small mono">'+esc(url||'-')+'</span></td><td>'+esc(reason)+'</td><td>'+esc(row.supplierType||'research_reference')+'</td><td><div class="supplier-action-row"><button type="button" data-supplier-control="restore" data-supplier-url="'+esc(url)+'">본 후보로 복원</button><button type="button" class="danger" data-supplier-control="purge" data-supplier-url="'+esc(url)+'">완전 삭제</button><button type="button" class="danger" data-supplier-control="block" data-supplier-url="'+esc(url)+'">도메인 차단</button></div></td></tr>';}).join(''):'<tr><td colspan="4" class="small">현재 보류 대기열이 비어 있습니다.</td></tr>';
-    $('supplierBlockedRows').innerHTML=blockedRows.length?blockedRows.map(function(row){var url=safeExternalUrl(row.url||row.sourceCandidateUrl),reason=row.holdReason||'관리자 차단';return'<tr><td><strong>'+esc(row.title||row.host||'차단 후보')+'</strong><br><span class="small mono">'+esc(url||'-')+'</span></td><td>'+esc(row.host||'-')+'</td><td>'+esc(reason)+'</td><td><button type="button" class="secondary" data-supplier-control="unblock" data-supplier-url="'+esc(url)+'">차단 해제·보류 이동</button></td></tr>';}).join(''):'<tr><td colspan="4" class="small">현재 차단된 공급업체 URL·도메인이 없습니다.</td></tr>';
-    wireSupplierControlButtons(panel);
+    var panel=$('supplierControlQueue');if(!panel)return;var currentScope=scopeKey(),keepOpen=supplierControlScopeKey===currentScope&&panel.open===true;supplierControlScopeKey=currentScope;panel.classList.remove('hidden');panel.open=keepOpen;
+    if($('supplierControlSummary'))$('supplierControlSummary').textContent='보류 '+holdingRows.length+'건 · 차단 '+blockedRows.length+'건';
+    if($('supplierControlToggleLabel'))$('supplierControlToggleLabel').textContent='보류 대기열 '+holdingRows.length+'건 · 차단 목록 '+blockedRows.length+'건';
+    $('supplierHoldRows').innerHTML=holdingRows.length?holdingRows.map(function(row){var url=safeExternalUrl(row.url||row.sourceCandidateUrl),reason=row.holdReason||'추가 확인 필요';return'<tr><td class="supplier-select-cell"><input type="checkbox" data-supplier-select="hold" value="'+esc(url)+'" aria-label="보류 후보 선택" '+(url?'':'disabled')+'></td><td><strong>'+esc(row.title||row.host||'후보명 확인 필요')+'</strong><br><span class="small mono">'+esc(url||'-')+'</span></td><td>'+esc(reason)+'</td><td>'+esc(row.supplierType||'research_reference')+'</td></tr>';}).join(''):'<tr><td colspan="4" class="small">현재 보류 대기열이 비어 있습니다.</td></tr>';
+    $('supplierBlockedRows').innerHTML=blockedRows.length?blockedRows.map(function(row){var url=safeExternalUrl(row.url||row.sourceCandidateUrl),reason=row.holdReason||'관리자 차단';return'<tr><td class="supplier-select-cell"><input type="checkbox" data-supplier-select="blocked" value="'+esc(url)+'" aria-label="차단 후보 선택" '+(url?'':'disabled')+'></td><td><strong>'+esc(row.title||row.host||'차단 후보')+'</strong><br><span class="small mono">'+esc(url||'-')+'</span></td><td>'+esc(row.host||'-')+'</td><td>'+esc(reason)+'</td></tr>';}).join(''):'<tr><td colspan="4" class="small">현재 차단된 공급업체 URL·도메인이 없습니다.</td></tr>';
+    syncSupplierSelection('hold');syncSupplierSelection('blocked');
   }
   function renderAi(rows,holdingRows,blockedRows){
     rows=Array.isArray(rows)?rows:[];holdingRows=Array.isArray(holdingRows)?holdingRows:[];blockedRows=Array.isArray(blockedRows)?blockedRows:[];
@@ -189,14 +215,16 @@
       var sourceLabel=mode==='openai_grounded'?'AI 추천':'규칙기반 임시추천',summary=ai.aiSummary||trust.aiSummary||ai.reason||'',strengths=Array.isArray(ai.strengths)?ai.strengths:(Array.isArray(trust.strengths)?trust.strengths:[]),concerns=Array.isArray(ai.concerns)?ai.concerns:(Array.isArray(trust.concerns)?trust.concerns:[]),nextChecks=Array.isArray(ai.nextChecks)?ai.nextChecks:(Array.isArray(trust.nextChecks)?trust.nextChecks:[]),missing=Array.isArray(c.missingEvidence)?c.missingEvidence:(Array.isArray(ai.missingEvidence)?ai.missingEvidence:[]);
       var detail='<div class="supplier-ai-head"><strong>'+esc(sourceLabel)+': '+esc(recommendation)+'</strong><span class="pill '+(rating>=8?'good':'warn')+'">신뢰 '+esc(rating)+'/10</span><span class="small">'+esc(score)+'/100 · 순위 '+esc(rank)+(confidence?' · 판단확신 '+esc(confidence)+'%':'')+'</span></div><div class="small supplier-ai-summary">'+esc(summary||'확인 근거를 보완해야 합니다.')+'</div><div class="supplier-ai-grid">'+listBlock('강점',strengths)+listBlock('주의',concerns)+listBlock('다음 확인',nextChecks)+listBlock('누락 증빙',missing)+'</div>';
       var actionId=c.id||c.candidateId||'',supplierUrl=safeExternalUrl(c.url||supplier.officialUrl),supplierTitle=text(c.title||c.id||'업체명 확인 필요');
-      var supplierCell=(supplierUrl?externalReviewAnchor(supplierUrl,supplierTitle,'supplier-primary-link')+'<br>'+externalReviewAnchor(supplierUrl,'업체·원본 사이트 열기','supplier-review-link')+'<br>'+externalReviewAnchor(supplierUrl,supplierUrl,'supplier-url mono'):'<strong>'+esc(supplierTitle)+'</strong><br><span class="small">확인 가능한 업체 사이트 링크 없음</span>')+'<div class="supplier-evidence-row">'+evidence+'</div><div class="small">상품 자동 반입 없음 · 거래는 공급업체에서 직접 진행</div>';
-      var actions='<div class="supplier-action-row">'+(actionId?'<button type="button" data-ai-action="accept_for_completion" data-id="'+esc(actionId)+'">업체 확인 계속</button>':'')+(supplierUrl?'<button type="button" class="secondary" data-supplier-control="hold" data-supplier-url="'+esc(supplierUrl)+'">보류 대기열로 이동</button><button type="button" class="danger" data-supplier-control="block" data-supplier-url="'+esc(supplierUrl)+'">도메인 차단</button>':'')+'</div>';
-      var state='<strong>'+esc(supplier.type||c.kind||'supplier')+'</strong><br><span class="small">'+esc((supplier.detectedCountry||c.targetCountry||'-')+' / '+(supplier.detectedRegion||c.targetRegion||'NATIONWIDE'))+'</span><div class="supplier-state-line"><span class="pill info">'+esc(c.status||c.persistence||'research_preview')+'</span></div><span class="small">'+esc(c.updatedAt||c.createdAt||ai.assessedAt||trust.assessedAt||'-')+'</span>'+actions;
-      return'<tr data-review-anchor="supplier-'+esc(actionId||supplierTitle.replace(/[^0-9A-Za-z가-힣_-]+/g,'-').slice(0,48))+'"><td>'+supplierCell+'</td><td>'+state+'</td><td>'+detail+'</td></tr>';
-    }).join(''):'<tr><td colspan="3" class="small">현재 본 후보 목록이 비어 있습니다. 문서·다운로드·불명확한 링크는 아래 보류 대기열에서 확인할 수 있습니다.</td></tr>';
+      var select='<label class="supplier-row-select"><input type="checkbox" data-supplier-select="active" value="'+esc(supplierUrl)+'" '+(supplierUrl?'':'disabled')+'> 선택</label>';
+      var links=supplierUrl?externalReviewAnchor(supplierUrl,supplierTitle,'supplier-primary-link')+'<br>'+externalReviewAnchor(supplierUrl,'업체·원본 사이트 열기','supplier-review-link')+'<br>'+externalReviewAnchor(supplierUrl,supplierUrl,'supplier-url mono'):'<strong>'+esc(supplierTitle)+'</strong><br><span class="small">확인 가능한 업체 사이트 링크 없음</span>';
+      var actions='<div class="supplier-action-row">'+(actionId?'<button type="button" data-ai-action="accept_for_completion" data-id="'+esc(actionId)+'">업체 확인 계속</button>':'')+(supplierUrl?'<button type="button" class="secondary" data-supplier-control="hold" data-supplier-url="'+esc(supplierUrl)+'">후보에서 제거·보류</button><button type="button" class="danger" data-supplier-control="block" data-supplier-url="'+esc(supplierUrl)+'">도메인 차단</button>':'')+'</div>';
+      var state='<div class="supplier-meta-block"><strong>'+esc(supplier.type||c.kind||'supplier')+'</strong> <span class="pill info">'+esc(c.status||c.persistence||'research_preview')+'</span><div class="small">'+esc((supplier.detectedCountry||c.targetCountry||'-')+' / '+(supplier.detectedRegion||c.targetRegion||'NATIONWIDE'))+' · '+esc(c.updatedAt||c.createdAt||ai.assessedAt||trust.assessedAt||'-')+'</div>'+actions+'</div>';
+      var supplierCell='<div class="supplier-card-head">'+select+'<div>'+links+'</div></div><div class="supplier-evidence-row">'+evidence+'</div><div class="small supplier-responsibility-note">상품 자동 반입 없음 · 거래는 공급업체에서 직접 진행</div>'+state;
+      return'<tr data-review-anchor="supplier-'+esc(actionId||supplierTitle.replace(/[^0-9A-Za-z가-힣_-]+/g,'-').slice(0,48))+'"><td>'+supplierCell+'</td><td>'+detail+'</td></tr>';
+    }).join(''):'<tr><td colspan="2" class="small">현재 본 후보 목록이 비어 있습니다. 문서·다운로드·불명확한 링크는 접힌 보류 대기열에서 확인할 수 있습니다.</td></tr>';
     $('aiPanel').classList.remove('hidden');
     Array.prototype.forEach.call(document.querySelectorAll('[data-ai-action]'),function(b){b.addEventListener('click',async function(){try{await api(CONTROL,'candidate_action','POST',{}, {candidateId:b.getAttribute('data-id'),decision:b.getAttribute('data-ai-action')});show('책임 공급업체 검토 상태를 저장했습니다. 상품 반입이나 공개 발행은 실행하지 않았습니다.','ok');loadScope();}catch(e){show(text(e.message),'fail');}});});
-    wireSupplierControlButtons($('aiPanel'));renderSupplierControlQueues(holdingRows,blockedRows);
+    wireSupplierControlButtons($('aiPanel'));wireSupplierSelectionControls($('aiPanel'));syncSupplierSelection('active');renderSupplierControlQueues(holdingRows,blockedRows);
   }
 
   function safeExternalUrl(value){try{var u=new URL(text(value));if((u.protocol!=='https:'&&u.protocol!=='http:')||u.username||u.password||!u.hostname)return'';return u.toString();}catch(_e){return'';}}
@@ -384,7 +412,7 @@
   async function runAutomation(dry){
     if(!selectedCountry||researchLoopActive)return;if(dry!==true){show('먼저 책임 공급업체 단계별 검색을 완료한 뒤 공급업체 후보 원장 등록을 눌러 주세요.','warn');return;}
     var requested=scopeSnapshot(),requestedKey=scopeKey(requested),restart=!!(lastCountryPreview&&(lastCountryPreview.status==='complete'||lastCountryPreview.status==='committed'));if(restart&&!window.confirm('현재 완료된 검색 결과는 관리 DB에 보존되어 있습니다. 같은 국가 범위에서 새 리서치를 시작하시겠습니까?'))return;
-    hide();researchStopRequested=false;researchLoopActive=true;var btn=$('previewRunBtn'),autoProductAfter=false;btn.disabled=true;setButtonEnabled('researchPauseBtn',true);setButtonEnabled('runNowBtn',false);
+    closeSupplierControlQueue();hide();researchStopRequested=false;researchLoopActive=true;var btn=$('previewRunBtn'),autoProductAfter=false;btn.disabled=true;setButtonEnabled('researchPauseBtn',true);setButtonEnabled('runNowBtn',false);
     try{
       var data=await api(CONTROL,'research_begin','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,restart:restart});
       while(true){

@@ -1755,8 +1755,9 @@ async function persistSupplierSuppression(scope,row,actorId,action,key){
   if(existing) await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),dbrow); else {dbrow.created_at=now;dbrow.created_by=text(actorId)||"administrator";await SlotStore.insert("gslot_candidates",dbrow,"return=representation");}
   return {status:existing?"suppression_updated":"suppression_created",candidateId:id};
 }
-async function removeSupplierSuppression(scope,row,key){
+async function removeSupplierSuppression(scope,row,key,options){
   const host=supplierRowHost(row),country=normalizeCountry(scope&&scope.country),region=normalizeRegion(scope&&scope.region||"NATIONWIDE",country)||"NATIONWIDE";
+  options=plain(options);
   const rows=array(await SlotStore.select("gslot_candidates","select=id,source_payload&source_ref=eq."+encodeURIComponent(SOURCE_REF)+"&status=eq.suppressed&limit=500"));
   const targets=rows.filter((entry)=>{
     const payload=plain(entry&&entry.source_payload),control=plain(payload.operatorControl);
@@ -1764,7 +1765,7 @@ async function removeSupplierSuppression(scope,row,key){
     const payloadHost=supplierRowHost({url:first(payload.supplierOfficialUrl,payload.sourceCandidateUrl)});
     return payloadCountry===country&&payloadRegion===region&&(
       (key&&text(control.key)===text(key))||
-      (host&&payloadHost===host)
+      (options.matchHost===true&&host&&payloadHost===host)
     );
   });
   for(const target of targets){if(target&&target.id) await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(target.id));}
@@ -1772,25 +1773,35 @@ async function removeSupplierSuppression(scope,row,key){
 }
 async function researchCandidateAction(actorId,input){
   const scope=researchScope(input),job=await researchJobRule(scope);if(!job||job.schema!==RESEARCH_JOB_SCHEMA){const error=new Error("책임 공급업체 단계별 리서치 작업을 찾을 수 없습니다.");error.statusCode=404;throw error;}
-  const action=lower(input&&input.decision),targetUrl=researchCandidateUrl({url:first(input&&input.url,input&&input.supplierUrl)});
-  if(!targetUrl||!["hold","restore","purge","block","unblock"].includes(action)){const error=new Error("공급업체 후보 URL과 보류·복원·완전삭제·차단·차단해제 결정을 확인하세요.");error.statusCode=400;throw error;}
-  const active=array(job.candidates),holding=array(job.supplierHoldingCandidates),blocked=array(job.supplierBlockedCandidates),all=active.concat(holding,blocked);
-  const target=all.find((row)=>sameSupplierUrl(row,targetUrl));if(!target){const error=new Error("선택한 공급업체 후보를 현재 리서치 작업에서 찾을 수 없습니다.");error.statusCode=404;throw error;}
-  const host=supplierRowHost(target),urlKey="url:"+sha256(targetUrl.toLowerCase()).slice(0,32),hostKey=host?"host:"+host:"",keys=new Set(array(job.blockedSupplierKeys).map(text).filter(Boolean));
-  function without(rows){return array(rows).filter((row)=>!sameSupplierUrl(row,targetUrl));}
-  if(action==="hold"){
-    job.candidates=without(active);job.supplierBlockedCandidates=without(blocked);job.supplierHoldingCandidates=without(holding).concat([Object.assign({},target,{queueState:"holding",holdReason:"operator_hold",operatorDecision:"hold",updatedAt:iso()})]);
-  }else if(action==="restore"){
-    job.supplierHoldingCandidates=without(holding);job.supplierBlockedCandidates=without(blocked);job.candidates=without(active).concat([Object.assign({},target,{queueState:"active",holdReason:null,operatorDecision:"restore",updatedAt:iso()})]);
-  }else if(action==="purge"){
-    keys.add(urlKey);job.candidates=without(active);job.supplierHoldingCandidates=without(holding);job.supplierBlockedCandidates=without(blocked);await persistSupplierSuppression(scope,target,actorId,"purge",urlKey);
-  }else if(action==="block"){
-    if(hostKey) keys.add(hostKey);const affected=all.filter((row)=>supplierRowHost(row)===host);job.candidates=active.filter((row)=>supplierRowHost(row)!==host);job.supplierHoldingCandidates=holding.filter((row)=>supplierRowHost(row)!==host);const keep=blocked.filter((row)=>supplierRowHost(row)!==host),moved=affected.map((row)=>Object.assign({},row,{queueState:"blocked",holdReason:"operator_domain_block",operatorDecision:"block",updatedAt:iso()}));job.supplierBlockedCandidates=keep.concat(moved);await persistSupplierSuppression(scope,target,actorId,"block",hostKey);
-  }else if(action==="unblock"){
-    keys.delete(urlKey);if(hostKey)keys.delete(hostKey);const same=blocked.filter((row)=>sameSupplierUrl(row,targetUrl)||supplierRowHost(row)===host);job.supplierBlockedCandidates=blocked.filter((row)=>!same.includes(row));job.supplierHoldingCandidates=holding.concat(same.map((row)=>Object.assign({},row,{queueState:"holding",holdReason:"operator_unblocked_review_required",operatorDecision:"unblock",updatedAt:iso()})));await removeSupplierSuppression(scope,target,hostKey||urlKey);
+  const action=lower(input&&input.decision),requested=Array.from(new Set(array(input&&input.urls).concat([first(input&&input.url,input&&input.supplierUrl)]).map((value)=>researchCandidateUrl({url:value})).filter(Boolean))).slice(0,500);
+  const allowed=["hold","restore","dismiss","purge","block","unblock","remove_from_list"];
+  if(!requested.length||!allowed.includes(action)){const error=new Error("공급업체 후보 URL과 보류·복원·목록삭제·영구제외·차단·차단해제 결정을 확인하세요.");error.statusCode=400;throw error;}
+  let active=array(job.candidates),holding=array(job.supplierHoldingCandidates),blocked=array(job.supplierBlockedCandidates);const keys=new Set(array(job.blockedSupplierKeys).map(text).filter(Boolean)),results=[];
+  function allRows(){return active.concat(holding,blocked);}
+  function removeUrl(rows,url){return array(rows).filter((row)=>!sameSupplierUrl(row,url));}
+  function addUnique(rows,row){const url=supplierRowUrl(row);return removeUrl(rows,url).concat([row]);}
+  for(const targetUrl of requested){
+    const target=allRows().find((row)=>sameSupplierUrl(row,targetUrl));if(!target){results.push({url:targetUrl,status:"not_found"});continue;}
+    const host=supplierRowHost(target),urlKey="url:"+sha256(targetUrl.toLowerCase()).slice(0,32),hostKey=host?"host:"+host:"";
+    if(action==="hold"){
+      active=removeUrl(active,targetUrl);blocked=removeUrl(blocked,targetUrl);holding=addUnique(holding,Object.assign({},target,{queueState:"holding",holdReason:"operator_hold",operatorDecision:"hold",updatedAt:iso()}));
+    }else if(action==="restore"){
+      const hostWasBlocked=!!(hostKey&&keys.has(hostKey));holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);active=addUnique(active,Object.assign({},target,{queueState:"active",holdReason:null,operatorDecision:"restore",updatedAt:iso()}));keys.delete(urlKey);if(hostWasBlocked)keys.delete(hostKey);await removeSupplierSuppression(scope,target,hostWasBlocked?hostKey:urlKey,{matchHost:hostWasBlocked});
+    }else if(action==="dismiss"){
+      const hostWasBlocked=!!(hostKey&&keys.has(hostKey));active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);keys.delete(urlKey);if(hostWasBlocked)keys.delete(hostKey);await removeSupplierSuppression(scope,target,hostWasBlocked?hostKey:urlKey,{matchHost:hostWasBlocked});
+    }else if(action==="purge"){
+      keys.add(urlKey);active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);await persistSupplierSuppression(scope,target,actorId,"purge",urlKey);
+    }else if(action==="block"){
+      if(hostKey)keys.add(hostKey);const affected=allRows().filter((row)=>supplierRowHost(row)===host);active=active.filter((row)=>supplierRowHost(row)!==host);holding=holding.filter((row)=>supplierRowHost(row)!==host);blocked=blocked.filter((row)=>supplierRowHost(row)!==host);for(const row of affected)blocked=addUnique(blocked,Object.assign({},row,{queueState:"blocked",holdReason:"operator_domain_block",operatorDecision:"block",updatedAt:iso()}));await persistSupplierSuppression(scope,target,actorId,"block",hostKey);
+    }else if(action==="unblock"){
+      keys.delete(urlKey);if(hostKey)keys.delete(hostKey);const same=blocked.filter((row)=>sameSupplierUrl(row,targetUrl)||supplierRowHost(row)===host);blocked=blocked.filter((row)=>!same.includes(row));for(const row of same)holding=addUnique(holding,Object.assign({},row,{queueState:"holding",holdReason:"operator_unblocked_review_required",operatorDecision:"unblock",updatedAt:iso()}));await removeSupplierSuppression(scope,target,hostKey||urlKey,{matchHost:true});
+    }else if(action==="remove_from_list"){
+      active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);
+    }
+    results.push({url:targetUrl,host,status:action});
   }
-  job.blockedSupplierKeys=Array.from(keys);job.trace=array(job.trace).concat([{source:"supplier-candidate-control",status:action,at:iso(),url:targetUrl,host,actor:text(actorId)||"administrator"}]).slice(-160);await saveResearchJob(job,actorId);
-  const result=publicResearchJob(job);result.candidateAction={action,url:targetUrl,host,blockedKeyCount:job.blockedSupplierKeys.length,publicPublication:false,productImport:false};return result;
+  job.candidates=active;job.supplierHoldingCandidates=holding;job.supplierBlockedCandidates=blocked;job.blockedSupplierKeys=Array.from(keys);job.trace=array(job.trace).concat(results.map((row)=>({source:"supplier-candidate-control",status:row.status,at:iso(),url:row.url,host:row.host||null,actor:text(actorId)||"administrator"}))).slice(-160);await saveResearchJob(job,actorId);
+  const result=publicResearchJob(job);result.candidateAction={action,requested:requested.length,processed:results.filter((row)=>row.status!=="not_found").length,notFound:results.filter((row)=>row.status==="not_found").length,results,blockedKeyCount:job.blockedSupplierKeys.length,publicPublication:false,productImport:false};return result;
 }
 
 async function listAutomationCandidates(countryCode, regionCode) {
