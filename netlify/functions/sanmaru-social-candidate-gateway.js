@@ -13,7 +13,7 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const Policy = require("./lib/social-candidate-policy.v1");
 const AdminAuth = require("./lib/commerce-candidate-auth.v1");
 
-const VERSION = "sanmaru-social-candidate-gateway-v1.0.2-sample-preserve-candidate-only";
+const VERSION = "sanmaru-social-candidate-gateway-v1.1.0-section-exclusion-preserve";
 
 function internalAuthorized(event) {
   const expected = SocialStore.text(process.env.SOCIAL_CANDIDATE_SYNC_SECRET || process.env.SANMARU_INTERNAL_TOKEN || process.env.IGDC_INTERNAL_TOKEN);
@@ -61,6 +61,14 @@ function bySection(rows) {
   (rows || []).forEach((r) => { const key = r.section_key || "unknown"; out[key] = (out[key] || 0) + 1; });
   return out;
 }
+async function excludedIdSet() {
+  try {
+    const rows = await SocialStore.selectCandidates("select=id,review_status&review_status=in.(search_excluded,permanent_blocked,blocked)&limit=10000");
+    return new Set((Array.isArray(rows) ? rows : []).map((row) => SocialStore.text(row && row.id)).filter(Boolean));
+  } catch (_error) {
+    return new Set();
+  }
+}
 exports.handler = async function(event) {
   if (event && event.httpMethod === "OPTIONS") return SocialStore.response(204, {});
   try {
@@ -98,10 +106,14 @@ exports.handler = async function(event) {
     let ignoredCount = 0;
     let sourceMode = "direct_candidates";
     let sourceFile = null;
+    const requestedSection = Policy.normalizeSectionKey(body.sectionKey || body.section || body.targetSection);
+    if ((body.sectionKey || body.section || body.targetSection) && !Policy.ALLOWED_SECTIONS.has(requestedSection)) {
+      return SocialStore.response(400, { ok: false, version: VERSION, error: "invalid_social_section", allowedSections: Policy.SECTION_KEYS });
+    }
     if (wantsSearchBankImport(body)) {
       const source = searchBankSnapshot();
       if (!source.doc) return SocialStore.response(404, { ok: false, version: VERSION, error: "search_bank_snapshot_not_found" });
-      const parsed = SocialStore.candidatesFromSearchBankSnapshot(source.doc, actor, { limit: body.limit });
+      const parsed = SocialStore.candidatesFromSearchBankSnapshot(source.doc, actor, { limit: 10000 });
       incoming = parsed.accepted;
       rejected = parsed.rejected;
       ignoredCount = parsed.ignoredCount;
@@ -116,9 +128,13 @@ exports.handler = async function(event) {
         else rejected.push({ index, id: row.id, section: row.section_key, platform: row.platform, title: row.title, reasons: check.reasons });
       });
     }
+    if (requestedSection) incoming = incoming.filter((row) => row.section_key === requestedSection);
     const cap = Math.max(1, Math.min(5000, Number(body.limit || incoming.length || 5000) || 5000));
-    const normalized = incoming.slice(0, cap);
+    const capped = incoming.slice(0, cap);
     const dryRun = body.dryRun === true || body.dry_run === true;
+    const excludedIds = await excludedIdSet();
+    const normalized = capped.filter((row) => !excludedIds.has(SocialStore.text(row && row.id)));
+    const excludedSkipped = capped.length - normalized.length;
     const saved = dryRun ? [] : await SocialStore.upsertCandidates(normalized);
     return SocialStore.response(200, {
       ok: true,
@@ -126,11 +142,13 @@ exports.handler = async function(event) {
       actor: { mode: actor.mode, email: actor.email || null, memberId: actor.memberId || null },
       sourceMode,
       sourceFile,
+      requestedSection: requestedSection || null,
       dryRun,
-      received: normalized.length + rejected.length + ignoredCount,
+      received: capped.length + rejected.length + ignoredCount,
       accepted: normalized.length,
       acceptedBySection: bySection(normalized),
       saved: dryRun ? 0 : (Array.isArray(saved) ? saved.length : normalized.length),
+      excludedSkipped,
       rejectedCount: rejected.length,
       rejectedByReason: rejectSummary(rejected),
       ignoredCount,

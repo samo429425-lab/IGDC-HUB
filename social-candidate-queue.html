@@ -5,17 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>IGDC 소셜 콘텐츠 후보 대기열</title>
   <style>
-    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#e5eefb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1400px;margin:0 auto;padding:28px 18px 72px}h1{margin:0 0 8px;font-size:25px}.lead{margin:0;max-width:1080px;color:#b9c8db;line-height:1.6}.bar{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}.bar button{border:0;border-radius:9px;padding:10px 13px;font-weight:800;cursor:pointer;background:#b9a7ff;color:#171236}.bar button.secondary{background:#dbe5f0;color:#172033}.bar button:disabled{opacity:.55;cursor:not-allowed}.filters{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}.filters input,.filters select{border:1px solid #304064;border-radius:9px;background:#0a1525;color:#e7f2ff;padding:9px 10px;font-size:12px}.filters input{min-width:260px;flex:1}.state{font-size:13px;line-height:1.45;color:#b9c8db;align-self:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:11px;margin:16px 0}.card,.panel{background:#111c2d;border:1px solid #304064;border-radius:14px;padding:14px}.card h2{font-size:13px;margin:0 0 7px;color:#eee8ff}.num{font-size:27px;font-weight:850}.small{font-size:12px;line-height:1.48;color:#9eb2cb}.panel{margin-top:14px}.panel h2{font-size:16px;margin:0 0 8px}.notice{padding:11px 12px;border-radius:9px;border-left:4px solid #b9a7ff;background:#211a45;color:#f1edff;line-height:1.5}.notice.warn{border-left-color:#f2b349;background:#3b2a0a;color:#ffe8b4}.notice.ok{border-left-color:#4ed18b;background:#0d2f22;color:#c9f7df}.hidden{display:none!important}.status-ok{color:#5de6a0}.status-warn{color:#ffd070}.status-fail{color:#ff8794}.status-info{color:#9fc5ff}table{width:100%;border-collapse:collapse;font-size:12px;min-width:1220px}th,td{text-align:left;vertical-align:top;padding:9px 8px;border-bottom:1px solid #293e5b}th{color:#c4d3ee;white-space:nowrap}td{color:#e6eef8}.tablewrap{overflow:auto;border:1px solid #304064;border-radius:12px;margin-top:10px}.pill{display:inline-block;border-radius:999px;padding:2px 7px;font-size:11px;font-weight:800;background:#243953;color:#d5e7f8}.pill.section{background:#27255f;color:#dfdbff}.pill.platform{background:#173f61;color:#c9ebff}.pill.safe{background:#104e35;color:#c6f9dd}.pill.hold{background:#5b3b10;color:#ffe2a1}.pill.risk{background:#5e3115;color:#ffe0bd}.pill.block{background:#5b1322;color:#ffd1da}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}.json{margin:10px 0 0;max-height:540px;overflow:auto;border:1px solid #304064;border-radius:10px;background:#08111f;color:#cfe5ff;padding:13px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.reason{max-width:390px;color:#ffd69a}.url{max-width:420px;color:#bddcff}.empty{padding:18px;color:#a9b9cb}.foot{margin-top:14px;color:#8ea2ba;font-size:12px;line-height:1.5}.nowrap{white-space:nowrap}.score{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;min-width:170px}.score span{background:#17263b;border-radius:6px;padding:3px 4px;text-align:center;color:#cddaf0}.policy{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;min-width:150px}.actions button{border:1px solid #425678;border-radius:7px;background:#17263b;color:#e7f2ff;padding:6px 7px;font-size:11px;font-weight:800;cursor:pointer}.actions button:hover{background:#243a58}
+    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#e5eefb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1480px;margin:0 auto;padding:28px 18px 72px}h1{margin:0 0 8px;font-size:25px}.lead{margin:0;max-width:1180px;color:#b9c8db;line-height:1.6}.bar,.reviewbar,.collectorbar,.modal-head{display:flex;gap:9px;flex-wrap:wrap;align-items:center}.bar{margin:20px 0}.bar button,.reviewbar button,.collectorbar button,.modal-head button{border:0;border-radius:9px;padding:10px 13px;font-weight:800;cursor:pointer;background:#72dfd2;color:#08252a}.bar button.secondary,.reviewbar button.secondary,.collectorbar button.secondary,.modal-head button.secondary{background:#dbe5f0;color:#172033}.reviewbar button.danger{background:#ff9ba7;color:#42111a}.reviewbar button:disabled,.bar button:disabled,.collectorbar button:disabled{opacity:.55;cursor:not-allowed}.filters{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}.filters input,.filters select,.collectorbar select{border:1px solid #304064;border-radius:9px;background:#0a1525;color:#e7f2ff;padding:9px 10px;font-size:12px}.filters input{min-width:260px;flex:1}.state{font-size:13px;line-height:1.45;color:#b9c8db;align-self:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:11px;margin:16px 0}.card,.panel{background:#111c2d;border:1px solid #304064;border-radius:14px;padding:14px}.card h2{font-size:13px;margin:0 0 7px;color:#d7fff9}.num{font-size:27px;font-weight:850}.small{font-size:12px;line-height:1.48;color:#9eb2cb}.panel{margin-top:14px}.panel h2{font-size:16px;margin:0 0 8px}.notice{padding:11px 12px;border-radius:9px;border-left:4px solid #72dfd2;background:#103a3d;color:#e8ffff;line-height:1.5}.notice.warn{border-left-color:#f2b349;background:#3b2a0a;color:#ffe8b4}.notice.ok{border-left-color:#4ed18b;background:#0d2f22;color:#c9f7df}.hidden{display:none!important}.status-ok{color:#5de6a0}.status-warn{color:#ffd070}.status-fail{color:#ff8794}.status-info{color:#9fc5ff}table{width:100%;border-collapse:collapse;font-size:12px;min-width:1320px}th,td{text-align:left;vertical-align:top;padding:9px 8px;border-bottom:1px solid #293e5b}th{color:#c4d3ee;white-space:nowrap}td{color:#e6eef8}.tablewrap{overflow:auto;border:1px solid #304064;border-radius:12px;margin-top:10px}.group-row td{background:#0d2639;color:#aee8ff;font-weight:850;font-size:13px}.seq{font-weight:850;color:#d6e8ff}.pill{display:inline-block;border-radius:999px;padding:2px 7px;font-size:11px;font-weight:800;background:#243953;color:#d5e7f8}.pill.section{background:#27255f;color:#dfdbff}.pill.platform{background:#173f61;color:#c9ebff}.pill.safe{background:#104e35;color:#c6f9dd}.pill.hold{background:#5b3b10;color:#ffe2a1}.pill.risk{background:#5e3115;color:#ffe0bd}.pill.block{background:#5b1322;color:#ffd1da}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}.json{margin:10px 0 0;max-height:540px;overflow:auto;border:1px solid #304064;border-radius:10px;background:#08111f;color:#cfe5ff;padding:13px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.reason{max-width:330px;color:#ffd69a}.url{max-width:360px;color:#bddcff}.empty{padding:18px;color:#a9b9cb}.foot{margin-top:14px;color:#8ea2ba;font-size:12px;line-height:1.5}.nowrap{white-space:nowrap}.score{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;min-width:170px}.score span{background:#17263b;border-radius:6px;padding:3px 4px;text-align:center;color:#cddaf0}.candidate-title button{padding:0;border:0;background:none;color:#f4f8ff;text-decoration:underline;font:inherit;font-weight:850;text-align:left;cursor:pointer}.candidate-title button:hover{color:#72dfd2}.reviewbar{margin:12px 0 7px}.rights-check{display:inline-flex;gap:6px;align-items:center;color:#c5d5e7;font-size:12px}.collectorbar{margin-top:12px}.collectorbar select{min-width:190px}.collector-state{color:#b9c8db;font-size:12px}.exclusion-head{justify-content:space-between}.exclusion-head h2{margin:0}.countline{margin-top:8px}.muted{color:#8ea2ba}
   </style>
 </head>
 <body>
 <main>
   <h1>소셜 콘텐츠 후보 대기열</h1>
-  <p class="lead">Sanmaru/SearchBank가 넓게 발견한 SNS 후보를 프론트 공개 전에 확인하는 읽기 전용 대기열입니다. 이 화면은 후보 상태 검토, 승인 후보 로테이션 미리보기, 생성용 `social.snapshot.json` 다운로드를 지원합니다. 런타임 정적 파일을 직접 수정하지 않고, 승인 후보가 있는 슬롯만 치환하며, 나머지 샘플 슬롯은 유지합니다. 외부 SNS 호출·광고 우회·로그인 우회·결제·수익 기록은 실행하지 않습니다.</p>
+  <p class="lead">Sanmaru/SearchBank가 넓게 발견한 SNS 후보를 프론트 공개 전에 섹션별로 수집·검토하는 관리자 대기열입니다. 승인 후보가 있는 슬롯만 치환하고 나머지 샘플 슬롯은 유지합니다. 외부 플랫폼의 광고·로그인·멤버십 권한은 우회하지 않습니다.</p>
   <div class="bar">
     <button id="refreshBtn" type="button">대기열 새로고침</button>
-    <button id="triggerDryRunBtn" type="button" class="secondary">SearchBank 연결 점검</button>
-    <button id="triggerImportBtn" type="button" class="secondary">SearchBank 후보 가져오기</button>
     <button id="diagnosticBtn" type="button" class="secondary">소셜 점검 JSON</button>
     <button id="downloadJsonBtn" type="button" class="secondary" disabled>JSON 다운로드</button>
     <button id="rotationBtn" type="button" class="secondary">로테이션 미리보기</button>
@@ -26,8 +24,24 @@
   </div>
   <div id="notice" class="notice hidden"></div>
   <section id="summaryGrid" class="grid hidden"></section>
+  <section id="collectorPanel" class="panel">
+    <h2>섹션별 소셜 후보 수집</h2>
+    <div class="small">SearchBank 스냅샷에서 실콘텐츠만 지정 섹션 후보 대기열로 가져옵니다. 소셜마루와 우측 패널, seed·placeholder는 수집하지 않습니다.</div>
+    <div class="collectorbar">
+      <select id="collectorSection"></select>
+      <select id="collectorLimit">
+        <option value="100">목표 100개</option>
+        <option value="200">목표 200개</option>
+        <option value="300">목표 300개</option>
+      </select>
+      <button id="collectDryRunBtn" type="button" class="secondary">선택 섹션 연결 점검</button>
+      <button id="collectSectionBtn" type="button">선택 섹션 후보 가져오기</button>
+      <button id="collectAllBtn" type="button" class="secondary">전체 9개 섹션 순차 가져오기</button>
+      <span id="collectorState" class="collector-state">수집 전</span>
+    </div>
+  </section>
   <section id="filterPanel" class="panel hidden">
-    <h2>후보 필터</h2>
+    <h2>섹션·플랫폼·상태 검색</h2>
     <div class="filters">
       <input id="searchInput" type="search" placeholder="제목, 크리에이터, 플랫폼, 섹션, URL 검색" />
       <select id="sectionFilter"><option value="">전체 섹션</option></select>
@@ -44,12 +58,39 @@
   </section>
   <section id="tablePanel" class="panel hidden">
     <h2>SNS 후보 목록</h2>
-    <div class="small">대상은 9개 SNS 섹션입니다. `social-maru`와 `rightPanel`은 제외합니다. seed/placeholder는 원장과 샘플 슬롯에 보존되며, 실콘텐츠 후보 저장소에는 들어가지 않습니다.</div>
-    <div class="tablewrap"><table><thead><tr><th>섹션/플랫폼</th><th>콘텐츠</th><th>크리에이터</th><th>접근/표시</th><th>점수</th><th>검증상태</th><th>외부권한 정책</th><th>원본 URL</th><th>검토 액션</th></tr></thead><tbody id="candidateRows"></tbody></table></div>
+    <div class="reviewbar">
+      <button id="approveBtn" type="button">선택 승인</button>
+      <button id="holdBtn" type="button">선택 보류</button>
+      <button id="resetBtn" type="button">선택 재검토</button>
+      <button id="rejectBtn" type="button" class="danger">선택 반려</button>
+      <button id="blockBtn" type="button" class="danger">선택 영구 차단</button>
+      <button id="deleteBtn" type="button" class="danger">선택 제외 목록 이동</button>
+      <button id="deleteVisibleBtn" type="button" class="danger">현재 목록 전체 제외</button>
+      <button id="downloadCandidateListBtn" type="button" class="secondary">후보 목록 JSON</button>
+      <label class="rights-check"><input id="socialConfirm" type="checkbox" /> 외부 플랫폼 권한·광고·로그인 정책 확인</label>
+    </div>
+    <div class="small">번호와 체크박스로 여러 항목을 한 번에 처리합니다. 콘텐츠 제목을 누르면 실제 원본 창이 열립니다. 목록에서 제외한 항목은 영구 삭제되지 않고 아래 제외 목록으로 이동합니다.</div>
+    <div class="tablewrap"><table><thead><tr><th>순번</th><th><input id="selectAllRows" type="checkbox" aria-label="현재 후보 전체 선택" /></th><th>섹션/플랫폼</th><th>콘텐츠</th><th>크리에이터</th><th>접근/표시</th><th>점수</th><th>검증상태</th><th>외부권한 정책</th><th>원본 URL</th></tr></thead><tbody id="candidateRows"></tbody></table></div>
   </section>
-  <p class="foot">이 페이지는 소셜 콘텐츠 후보 점검·상태 변경·로테이션 미리보기·생성 스냅샷 다운로드 전용입니다. 승인 완료 후보가 없으면 기존 샘플 슬롯은 그대로 유지됩니다. 생성본을 실제 `data/social.snapshot.json` 및 `netlify/functions/data/social.snapshot.json`에 반영하는 작업은 배포 전에 별도 확인 후 진행합니다.</p>
+  <section id="exclusionPanel" class="panel hidden">
+    <div class="modal-head exclusion-head">
+      <div><h2>검색 제외 목록</h2><div class="small">후보 목록에서 제외한 콘텐츠를 원래 섹션별로 보관합니다. 복원·영구 차단·기록 완전 삭제를 선택할 수 있습니다.</div></div>
+      <button id="toggleExclusionBtn" type="button" class="secondary">목록 펼치기</button>
+    </div>
+    <div id="exclusionSummary" class="small countline"></div>
+    <div id="exclusionBody" class="hidden">
+      <div class="reviewbar">
+        <button id="restoreExcludedBtn" type="button">선택 복원</button>
+        <button id="permanentBlockExcludedBtn" type="button" class="danger">선택 영구 차단</button>
+        <button id="forgetExcludedBtn" type="button" class="secondary">선택 기록 완전 삭제</button>
+      </div>
+      <div class="small muted">‘기록 완전 삭제’는 후보 DB 기록만 지우므로, 같은 콘텐츠가 나중에 다시 검색되면 후보로 들어올 수 있습니다. ‘영구 차단’은 재검색 반입도 막습니다.</div>
+      <div class="tablewrap"><table><thead><tr><th>순번</th><th><input id="selectAllExcluded" type="checkbox" aria-label="제외 후보 전체 선택" /></th><th>섹션</th><th>상태</th><th>콘텐츠</th><th>제외 사유</th><th>플랫폼</th><th>등록일</th></tr></thead><tbody id="excludedRows"></tbody></table></div>
+    </div>
+  </section>
+  <p class="foot">승인 완료 후보가 없으면 기존 샘플 슬롯은 그대로 유지됩니다. 생성본을 실제 `data/social.snapshot.json` 및 `netlify/functions/data/social.snapshot.json`에 반영하는 작업은 배포 전에 별도 확인 후 진행합니다.</p>
 </main>
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-social-candidate-queue.js?v=3"></script>
+<script src="/assets/js/admin-social-candidate-queue.js?v=4"></script>
 </body>
 </html>

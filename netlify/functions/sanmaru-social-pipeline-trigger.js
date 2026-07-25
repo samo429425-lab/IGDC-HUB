@@ -12,7 +12,7 @@
 const SocialStore = require("./lib/social-candidate-store.v1");
 const Gateway = require("./sanmaru-social-candidate-gateway");
 
-const VERSION = "sanmaru-social-pipeline-trigger-v1.0.0-thin-bridge";
+const VERSION = "sanmaru-social-pipeline-trigger-v1.1.0-section-scoped";
 
 function flag(value) {
   return value === true || value === "true" || value === "1" || value === 1 || value === "yes";
@@ -71,12 +71,14 @@ exports.handler = async function(event) {
     }
     const dryRun = action === "dry_run" || flag(body.dryRun) || flag(body.dry_run) || flag(qs.dryRun) || flag(qs.dry_run);
     const limit = Math.max(1, Math.min(5000, Number(body.limit || qs.limit || 5000) || 5000));
+    const sectionKey = SocialStore.text(body.sectionKey || body.section || body.targetSection || qs.sectionKey || qs.section || qs.targetSection);
     const gatewayEvent = makeGatewayEvent(event, {
       mode: "search-bank",
       source: "search-bank",
       fromSearchBankSnapshot: true,
       dryRun,
       limit,
+      sectionKey,
       trigger: "sanmaru-social-pipeline-trigger"
     });
     const gatewayResponse = await Gateway.handler(gatewayEvent);
@@ -87,6 +89,7 @@ exports.handler = async function(event) {
       action,
       dryRun,
       limit,
+      sectionKey: payload.requestedSection || sectionKey || null,
       source: "search-bank.snapshot.json",
       target: "social_candidates",
       publicSnapshotMutation: false,

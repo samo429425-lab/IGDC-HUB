@@ -9,7 +9,7 @@
 const crypto = require("crypto");
 const Policy = require("./social-candidate-policy.v1");
 
-const VERSION = "social-candidate-store-v1.1.0-review-rotation-publish";
+const VERSION = "social-candidate-store-v1.2.0-exclusion-preserving-review";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE = process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
 const RELEASE_TABLE = process.env.SOCIAL_SNAPSHOT_RELEASE_TABLE || "social_snapshot_releases";
@@ -112,6 +112,11 @@ async function updateCandidates(ids, patch) {
   const list = unique(ids);
   if (!list.length) return [];
   return supabase(rest(CANDIDATE_TABLE, "id=" + encodeIn(list)), { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(patch || {}) });
+}
+async function deleteCandidates(ids) {
+  const list = unique(ids);
+  if (!list.length) return [];
+  return supabase(rest(CANDIDATE_TABLE, "id=" + encodeIn(list)), { method: "DELETE", headers: { Prefer: "return=representation" } });
 }
 function idFor(input, normalized) {
   const row = plain(input);
@@ -261,27 +266,41 @@ function normalizeDbRow(row) {
     externalMembershipControlled: r.external_membership_controlled !== false,
     premiumBenefitPlatformControlled: r.premium_benefit_platform_controlled !== false,
     maruMembershipOverridesExternalAds: r.maru_membership_overrides_external_ads === true,
+    reviewNote: text(r.review_note || r.reviewNote),
+    blockedReason: text(r.blocked_reason || r.blockedReason),
+    reviewedBy: text(r.reviewed_by || r.reviewedBy),
+    reviewedAt: text(r.reviewed_at || r.reviewedAt),
+    approvedAt: text(r.approved_at || r.approvedAt),
+    createdAt: text(r.created_at || r.createdAt),
+    updatedAt: text(r.updated_at || r.updatedAt),
     promotable: isPromotable(r)
   };
 }
 function summaryDoc(rows) {
   const list = Array.isArray(rows) ? rows : [];
   const bySection = {}, byRisk = {}, byReview = {}, byPlatform = {};
-  let promotable = 0, verificationRequired = 0;
+  let activeCandidateCount = 0, searchExcludedCount = 0, permanentBlockedCount = 0, promotable = 0, verificationRequired = 0;
   list.forEach((row) => {
     const r = normalizeDbRow(row);
+    const reviewStatus = statusKey(r.reviewStatus);
     bySection[r.sectionKey] = (bySection[r.sectionKey] || 0) + 1;
     byRisk[r.riskLevel || "unknown"] = (byRisk[r.riskLevel || "unknown"] || 0) + 1;
     byReview[r.reviewStatus || "unknown"] = (byReview[r.reviewStatus || "unknown"] || 0) + 1;
     byPlatform[r.platform || "unknown"] = (byPlatform[r.platform || "unknown"] || 0) + 1;
+    if (reviewStatus === "search_excluded") searchExcludedCount += 1;
+    else if (reviewStatus === "permanent_blocked" || reviewStatus === "blocked") permanentBlockedCount += 1;
+    else activeCandidateCount += 1;
     if (r.promotable) promotable += 1;
-    if (r.verificationStatus && r.verificationStatus.indexOf("required") >= 0) verificationRequired += 1;
+    if (reviewStatus !== "search_excluded" && reviewStatus !== "permanent_blocked" && reviewStatus !== "blocked" && r.verificationStatus && r.verificationStatus.indexOf("required") >= 0) verificationRequired += 1;
   });
   return {
     version: VERSION,
     policyVersion: Policy.VERSION,
     generatedAt: nowIso(),
     candidateCount: list.length,
+    activeCandidateCount,
+    searchExcludedCount,
+    permanentBlockedCount,
     promotableCount: promotable,
     verificationRequired,
     rotationPolicy: {
@@ -509,6 +528,7 @@ module.exports = {
   selectCandidates,
   upsertCandidates,
   updateCandidates,
+  deleteCandidates,
   requireRole,
   normalizeCandidate,
   validateCandidate,
