@@ -197,6 +197,7 @@ function normalizeRow(row) {
     classifiedSection: text(raw.classifiedSection || row && (row.sectionKey || row.section_key) || ""),
     durationSeconds: Number(raw.durationSeconds || 0),
     sourceMetadata: plain(raw.sourceMetadata),
+    playbackCandidates: Array.isArray(plain(raw.sourceMetadata).playbackCandidates) ? plain(raw.sourceMetadata).playbackCandidates : [],
     rights: {
       status: text(rights.status) || text(row && row.rights_status),
       candidate: text(rights.candidate) || text(row && row.allowed_use),
