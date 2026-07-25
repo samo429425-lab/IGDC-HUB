@@ -5,7 +5,7 @@
  *  - MediaHub 메인 10섹션(data-psom-key="media-*")에 "미디어 콘텐츠"를 슬롯-우선(slot-first)으로 꽂는다.
  *  - 우선순위: /data/media.snapshot*.json 단일 경로(feed-media legacy fallback 비활성)
  *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
- *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
+ *  - 일반 섹션 100개, 음악·쇼츠 50개 상한(부족하면 placeholder 추가)
  *  - 우측 패널 없음(처리하지 않음)
  *  - Hero는 snapshot.hero.rotateFrom 순서로 1개 썸네일을 골라 img src에 적용(가능한 경우)
  */
@@ -17,7 +17,8 @@
 
   const D = document;
 
-  const LIMIT = 50;
+  const DEFAULT_LIMIT = 100;
+  const COMPACT_LIMIT = 50;
 
   // Legacy feed-media fallback is disabled.
   // Keep the original snapshot -> automap -> front sample/real-content rendering process unchanged.
@@ -50,6 +51,12 @@
     if(!k) return '';
     if(k.indexOf('media-') === 0) return k;
     return KEY_ALIAS[k] || k;
+  }
+
+  function limitForKey(key){
+    return key === 'media-trending' || key === 'media-music' || key === 'media-shorts'
+      ? COMPACT_LIMIT
+      : DEFAULT_LIMIT;
   }
 
   async function fetchJson(url){
@@ -87,20 +94,40 @@
     return map;
   }
 
+  function isReleasedItem(item){
+    if(!item || item.candidateOnly === true || item.seedContent === true) return false;
+    const contract = item.releaseContract || item.release_contract || {};
+    if(contract.policy === 'media-candidate-policy-v2.0.0' && contract.eligible === true) return true;
+    const verification = String(item.verificationStatus || item.verification_status || '').toLowerCase();
+    const rights = item.rights || {};
+    const rightsStatus = String(rights.status || item.rights_status || '').toLowerCase();
+    const allowedUse = String(rights.allowedUse || item.allowed_use || '').toLowerCase();
+    return verification === 'approved_for_snapshot' &&
+      /^(rights_verified_by_admin|public_domain_verified|cc0_verified|cc_by_verified|cc_by_sa_verified|direct_license_verified)$/.test(rightsStatus) &&
+      /^(approved_for_snapshot|approved_embed_or_link|public_domain|cc0|cc_by|cc_by_sa|direct_license)$/.test(allowedUse);
+  }
+
   function slotsToItems(section){
     const slots = section && Array.isArray(section.slots) ? section.slots : [];
-    return slots.map((slot)=>({
+    return slots.filter(isReleasedItem).map((slot)=>Object.assign({}, slot, {
+      id: slot.id || slot.contentId || '',
+      contentId: slot.contentId || slot.id || '',
       title: slot.title || '',
-      thumbnail: slot.thumb || '',
+      thumbnail: slot.thumb || slot.thumbnail || '',
       url: slot.url || slot.video || '',
       video: slot.video || '',
-      provider: slot.provider || ''
+      provider: slot.provider || '',
+      captions: Array.isArray(slot.captions) ? slot.captions : [],
+      year: slot.year || null,
+      publishedAt: slot.publishedAt || null,
+      ageRating: slot.ageRating || '',
+      contentWarnings: Array.isArray(slot.contentWarnings) ? slot.contentWarnings : []
     }));
   }
 
   function extractItems(section){
     if(!section) return [];
-    if(Array.isArray(section.items)) return section.items;
+    if(Array.isArray(section.items)) return section.items.filter(isReleasedItem);
     if(Array.isArray(section.slots)) return slotsToItems(section);
     return [];
   }
@@ -139,8 +166,9 @@
     return q('.scroll-content', line) || line;
   }
 
-  function ensurePlaceholders(line){
+  function ensurePlaceholders(line, limit){
     const container = getContainer(line);
+    limit = Math.max(1, Number(limit) || DEFAULT_LIMIT);
 
     // collect existing placeholders (preferred)
     let ph = qa('a[data-placeholder="true"]', container);
@@ -156,18 +184,21 @@
       ph = qa('a[data-placeholder="true"]', container);
     }
 
-    // add up to LIMIT
-    if(ph.length < LIMIT){
+    // Keep total cards at the section capacity. Counting only placeholders
+    // would grow the row every time an already-filled line is re-applied.
+    let cards = qa('a.card', container);
+    if(cards.length < limit){
       const frag = D.createDocumentFragment();
-      for(let i=ph.length;i<LIMIT;i++){
+      for(let i=cards.length;i<limit;i++){
         frag.appendChild(makePlaceholder());
       }
       container.appendChild(frag);
       ph = qa('a[data-placeholder="true"]', container);
+      cards = qa('a.card', container);
     }
 
-    // if too many, keep first LIMIT as fill targets
-    if(ph.length > LIMIT) ph = ph.slice(0, LIMIT);
+    // if too many, keep the configured capacity as fill targets
+    if(ph.length > limit) ph = ph.slice(0, limit);
 
     return ph;
   }
@@ -261,12 +292,27 @@
     a.removeAttribute('data-placeholder');
   }
 
-  function applyLine(line, items){
+  function applyLine(line, items, key){
     if(!Array.isArray(items) || items.length === 0) return; // keep dummy
-    const ph = ensurePlaceholders(line);
-    const n = Math.min(LIMIT, ph.length, items.length);
-    for(let i=0;i<n;i++){
-      fillAnchor(ph[i], items[i]);
+    const limit = limitForKey(key);
+    const ph = ensurePlaceholders(line, limit);
+    const container = getContainer(line);
+    const existing = qa('a.card[data-igdc-content-id]', container);
+    let placeholderIndex = 0;
+    const seen = new Set();
+    for(let i=0;i<items.length && seen.size<limit;i++){
+      const contentId = String(ensureContentId(items[i]) || '');
+      if(!contentId || seen.has(contentId)) continue;
+      seen.add(contentId);
+      const current = existing.find((anchor)=>String(anchor.dataset.igdcContentId || '') === contentId);
+      if(current){
+        fillAnchor(current, items[i]);
+        continue;
+      }
+      while(placeholderIndex<ph.length && !ph[placeholderIndex].hasAttribute('data-placeholder')) placeholderIndex++;
+      if(placeholderIndex>=ph.length) break;
+      fillAnchor(ph[placeholderIndex], items[i]);
+      placeholderIndex++;
     }
   }
 
@@ -305,7 +351,10 @@
     if(lines.length === 0) return;
 
     // stabilize layout first
-    lines.forEach(ensurePlaceholders);
+    lines.forEach((line)=>{
+      const key = canonKey(line.getAttribute('data-psom-key') || '');
+      ensurePlaceholders(line, limitForKey(key));
+    });
 
     const snapshot = await loadSnapshotAny();
     const sectionMap = normalizeSectionMap(snapshot);
@@ -335,10 +384,8 @@
   if(Array.isArray(items)){
     items.forEach(item => {
 
-      // 🔥 여기서 바로 섹션 정보 주입
-      item._sectionKey = key;
-
-      merged.push(item);
+      // Keep snapshot objects immutable while adding the derived section weight.
+      merged.push(Object.assign({}, item, { _sectionKey:key }));
     });
   }
 });
@@ -432,7 +479,7 @@
       if(!items || items.length === 0){
         items = await loadFeedItems(key);
       }
-      applyLine(line, items);
+      applyLine(line, items, key);
     }
   }
 

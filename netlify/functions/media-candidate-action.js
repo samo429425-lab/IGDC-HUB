@@ -1,15 +1,18 @@
 "use strict";
 
 /**
- * Administrator action endpoint for media candidates stored in Supabase.
- * Queue delete moves rows into the reversible search-exclusion area.
- * Provider media files are never deleted.
+ * Guarded administrator transitions for Supabase media candidates.
+ * Queue deletion changes only the search record; provider media is untouched.
  */
 const MediaStore = require("./lib/media-candidate-store.v1");
+const MediaPolicy = require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "media-candidate-action-v1.3.0-search-exclusion-staging";
-const ACTIONS = new Set(["approve","hold","block","reject","reset","delete","restore","permanent_block","forget"]);
+const VERSION = "media-candidate-action-v1.4.0-guarded-transitions";
+const ACTIONS = new Set([
+  "approve","hold","block","reject","reset","delete",
+  "release_exclusion","restore","permanent_block","forget"
+]);
 
 async function actorFor(event){
   const actor=await SharedAdminAuth.resolveUser(event);
@@ -28,22 +31,124 @@ function audit(actor,body){
     note:MediaStore.compact(body.note||body.reason||"",1000)
   };
 }
-function patchFor(action,body,actor){
-  const a=audit(actor,body), now=a.now, by=a.by, note=a.note;
-  if(action==="approve"){
-    if(body.confirmRightsSafe!==true&&body.confirmRightsSafe!=="true"){
-      const error=new Error("승인은 confirmRightsSafe=true 확인값이 필요합니다.");
-      error.statusCode=400;error.code="rights_confirmation_required";throw error;
-    }
-    return {review_status:"approved",verification_status:"approved_for_snapshot",candidate_only:false,seed_content:false,review_note:note,reviewed_by:by,reviewed_at:now,approved_at:now,updated_by:by,updated_at:now,blocked_reason:null};
+async function loadRows(ids){
+  const list=[];
+  for(let offset=0;offset<ids.length;offset+=100){
+    const chunk=ids.slice(offset,offset+100);
+    const rows=await MediaStore.selectCandidates("select=*&id="+MediaStore.encodeIn(chunk)+"&limit="+chunk.length);
+    if(Array.isArray(rows))list.push(...rows);
   }
+  if(list.length!==ids.length){
+    const found=new Set(list.map((row)=>MediaStore.text(row&&row.id)));
+    const error=new Error("후보를 찾지 못했습니다: "+ids.filter((id)=>!found.has(id)).join(", "));
+    error.statusCode=404;error.code="media_candidate_not_found";throw error;
+  }
+  return list;
+}
+async function updateMany(ids,patch){
+  const updated=[];
+  for(let offset=0;offset<ids.length;offset+=100){
+    const rows=await MediaStore.updateCandidates(ids.slice(offset,offset+100),patch);
+    if(Array.isArray(rows))updated.push(...rows);
+  }
+  return updated;
+}
+async function deleteMany(ids){
+  const deleted=[];
+  for(let offset=0;offset<ids.length;offset+=100){
+    const rows=await MediaStore.deleteCandidates(ids.slice(offset,offset+100));
+    if(Array.isArray(rows))deleted.push(...rows);
+  }
+  return deleted;
+}
+function statusOf(row){return MediaStore.lower(row&&row.review_status);}
+function requireNote(action,note){
+  if(["approve","reject","block","permanent_block"].includes(action)&&MediaStore.text(note).length<3){
+    const error=new Error("이 작업은 3자 이상의 관리자 검토 메모가 필요합니다.");
+    error.statusCode=400;error.code="administrator_review_note_required";throw error;
+  }
+}
+function validateTransitions(action,rows){
+  const invalid=[];
+  rows.forEach((row)=>{
+    const status=statusOf(row);
+    let ok=true;
+    if(action==="approve")ok=["pending","hold","safety_quarantine","rights_quarantine","classification_quarantine","quality_quarantine"].includes(status);
+    else if(action==="restore")ok=["search_excluded","exclusion_released"].includes(status);
+    else if(action==="release_exclusion")ok=status==="search_excluded";
+    else if(action==="forget")ok=["search_excluded","exclusion_released","permanent_blocked"].includes(status);
+    else if(action==="reset")ok=!["search_excluded","exclusion_released","permanent_blocked"].includes(status);
+    else if(action==="hold"||action==="reject"||action==="delete")ok=!["search_excluded","exclusion_released","permanent_blocked"].includes(status);
+    if(!ok)invalid.push(MediaStore.text(row.id)+":"+status);
+  });
+  if(invalid.length){
+    const error=new Error("현재 상태에서 허용되지 않는 전환입니다: "+invalid.join(", "));
+    error.statusCode=409;error.code="media_candidate_transition_forbidden";throw error;
+  }
+}
+function patchFor(action,body,actor){
+  const info=audit(actor,body),now=info.now,by=info.by,note=info.note;
   if(action==="hold")return {review_status:"hold",verification_status:"hold",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now};
-  if(action==="reject")return {review_status:"rejected",verification_status:"rejected",blocked_reason:note||"rejected_by_admin",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true};
+  if(action==="reject")return {review_status:"rejected",verification_status:"rejected",blocked_reason:note||"rejected_by_admin",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
   if(action==="delete")return {review_status:"search_excluded",verification_status:"search_excluded",blocked_reason:note||"moved_from_candidate_queue",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
+  if(action==="release_exclusion")return {review_status:"exclusion_released",verification_status:"not_queued",blocked_reason:null,review_note:note||"search_exclusion_released",reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
   if(action==="restore"||action==="reset")return {review_status:"pending",verification_status:"web_verification_required",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null,blocked_reason:null};
-  if(action==="block"||action==="permanent_block")return {review_status:"permanent_blocked",verification_status:"permanent_blocked",blocked_reason:note||"permanent_blocked_by_admin",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
+  if(action==="block"||action==="permanent_block")return {review_status:"permanent_blocked",verification_status:"permanent_blocked",rights_status:"blocked",allowed_use:"blocked",blocked_reason:note||"permanent_blocked_by_admin",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
   return {};
 }
+async function approveRows(rows,body,actor){
+  if(body.confirmRightsSafe!==true&&body.confirmRightsSafe!=="true"){
+    const error=new Error("승인에는 원본 권리 확인이 필요합니다.");
+    error.statusCode=400;error.code="rights_confirmation_required";throw error;
+  }
+  if(body.confirmContentSafe!==true&&body.confirmContentSafe!=="true"){
+    const error=new Error("승인에는 실제 재생을 통한 콘텐츠 안전 확인이 필요합니다.");
+    error.statusCode=400;error.code="content_safety_confirmation_required";throw error;
+  }
+  const info=audit(actor,body),blocked=[];
+  rows.forEach((row)=>{
+    const safety=MediaPolicy.assessSafety(row);
+    if(safety.decision==="hard_block")blocked.push({id:row.id,reasons:safety.reasons});
+  });
+  if(blocked.length){
+    const error=new Error("명백한 금지 콘텐츠 신호가 있는 후보는 승인할 수 없습니다.");
+    error.statusCode=409;error.code="prohibited_content_cannot_be_approved";error.blocked=blocked;throw error;
+  }
+  const updated=[];
+  for(const row of rows){
+    const raw=Object.assign({},MediaStore.plain(row.raw));
+    raw.policyAssessment=MediaPolicy.assessCandidate(row);
+    raw.administratorReview={
+      contentSafe:true,
+      rightsSafe:true,
+      playbackChecked:true,
+      subtitleChecked:body.confirmSubtitlesChecked===true||body.confirmSubtitlesChecked==="true",
+      note:info.note,
+      reviewedBy:info.by,
+      reviewedAt:info.now,
+      previousReviewStatus:statusOf(row)
+    };
+    const saved=await MediaStore.updateCandidates([row.id],{
+      review_status:"approved",
+      verification_status:"approved_for_snapshot",
+      rights_status:"rights_verified_by_admin",
+      allowed_use:"approved_for_snapshot",
+      candidate_only:false,
+      seed_content:false,
+      raw,
+      review_note:info.note,
+      reviewed_by:info.by,
+      reviewed_at:info.now,
+      approved_at:info.now,
+      updated_by:info.by,
+      updated_at:info.now,
+      blocked_reason:null
+    });
+    if(Array.isArray(saved))updated.push(...saved);
+  }
+  return updated;
+}
+
 exports.handler=async function(event){
   if(event&&event.httpMethod==="OPTIONS")return MediaStore.response(204,{});
   try{
@@ -54,16 +159,33 @@ exports.handler=async function(event){
     if(!ACTIONS.has(action))return MediaStore.response(400,{ok:false,error:"invalid_action",allowed:Array.from(ACTIONS)});
     const ids=idsFrom(body);
     if(!ids.length)return MediaStore.response(400,{ok:false,error:"candidate_ids_required"});
-    if(action==="delete"&&(body.confirmQueueDelete!==true&&body.confirmQueueDelete!=="true"))return MediaStore.response(400,{ok:false,error:"queue_delete_confirmation_required",message:"검색 제외 목록 이동 확인값이 필요합니다."});
+    const rows=await loadRows(ids);
+    validateTransitions(action,rows);
+    requireNote(action,body.note||body.reason);
+    if(action==="delete"&&(body.confirmQueueDelete!==true&&body.confirmQueueDelete!=="true")){
+      return MediaStore.response(400,{ok:false,error:"queue_delete_confirmation_required",message:"검색 제외 목록 이동 확인값이 필요합니다."});
+    }
     if(action==="forget"){
-      if(body.confirmPermanentDelete!==true&&body.confirmPermanentDelete!=="true")return MediaStore.response(400,{ok:false,error:"permanent_delete_confirmation_required",message:"검색 제외 기록 완전 삭제 확인값이 필요합니다."});
-      const deleted=await MediaStore.deleteCandidates(ids);
+      if(body.confirmPermanentDelete!==true&&body.confirmPermanentDelete!=="true"){
+        return MediaStore.response(400,{ok:false,error:"permanent_delete_confirmation_required",message:"검색 제외 기록 완전 삭제 확인값이 필요합니다."});
+      }
+      const deleted=await deleteMany(ids);
       return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,deleted:Array.isArray(deleted)?deleted.length:0,items:deleted,sourceMediaDeleted:false,recollectAllowed:true});
     }
+    if(action==="approve"){
+      const updated=await approveRows(rows,body,actor);
+      return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,updated:updated.length,items:updated,sourceMediaDeleted:false,recollectAllowed:false,publicationGate:MediaPolicy.VERSION});
+    }
     const patch=patchFor(action,body,actor);
-    const updated=await MediaStore.updateCandidates(ids,patch);
-    return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,updated:Array.isArray(updated)?updated.length:0,items:updated,sourceMediaDeleted:false,recollectAllowed:action==="restore",movedToSearchExclusion:action==="delete",permanentBlocked:action==="block"||action==="permanent_block"});
+    const updated=await updateMany(ids,patch);
+    return MediaStore.response(200,{
+      ok:true,version:VERSION,action,requested:ids.length,
+      updated:Array.isArray(updated)?updated.length:0,items:updated,
+      sourceMediaDeleted:false,recollectAllowed:action==="release_exclusion",
+      restoredToQueue:action==="restore",movedToSearchExclusion:action==="delete",
+      permanentBlocked:action==="block"||action==="permanent_block"
+    });
   }catch(error){
-    return MediaStore.response(error.statusCode||500,{ok:false,version:VERSION,error:error.code||"media_candidate_action_failed",message:error.message||String(error)});
+    return MediaStore.response(error.statusCode||500,{ok:false,version:VERSION,error:error.code||"media_candidate_action_failed",message:error.message||String(error),blocked:error.blocked||undefined});
   }
 };

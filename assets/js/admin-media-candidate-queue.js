@@ -1,58 +1,725 @@
-/* IGDC Media Candidate Queue v2.2 - search exclusion staging and fullscreen review player stabilization */
-(function(){'use strict';
-var END='/.netlify/functions/media-candidate-review',COL='/.netlify/functions/sanmaru-media-collector',ACT='/.netlify/functions/media-candidate-action',PUB='/.netlify/functions/media-snapshot-publish';
-var $=function(id){return document.getElementById(id);},text=function(v){return String(v==null?'':v).trim();},lower=function(v){return text(v).toLowerCase();},esc=function(v){return text(v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});};
-var rowsCache=[],excludedCache=[],diagnosticCache=null,notice=$('notice'),state=$('state'),currentPreview=null,collectorStopRequested=false,previewSources=[],previewSourceIndex=0,fullscreenUiTimer=null;
-function token(){try{return sessionStorage.getItem('igdc.mediaCandidateQueue.adminBearer')||localStorage.getItem('igdc.mediaCandidateQueue.adminBearer')||'';}catch(_e){return'';}}
-function headers(json){var h={Accept:'application/json'};var t=token();if(t&&t.split('.').length===3)h.Authorization='Bearer '+t;if(json)h['Content-Type']='application/json';return h;}
-async function get(url){var r=await fetch(url,{headers:headers(false),credentials:'same-origin',cache:'no-store'}),d=null;try{d=await r.json();}catch(_e){}if(!r.ok||!d||d.ok!==true){var e=new Error(d&&d.message||d&&d.error||'HTTP '+r.status);e.status=r.status;throw e;}return d;}
-async function post(url,body){var r=await fetch(url,{method:'POST',headers:headers(true),credentials:'same-origin',body:JSON.stringify(body)}),d=null;try{d=await r.json();}catch(_e){}if(!r.ok||!d||d.ok!==true){var e=new Error(d&&d.message||d&&d.error||'HTTP '+r.status);e.status=r.status;throw e;}return d;}
-function show(m,k){notice.className='notice '+(k==='warn'?'warn':'');notice.textContent=m;notice.classList.remove('hidden');}
-function hide(){notice.classList.add('hidden');notice.textContent='';}
-function card(t,v,s){return '<article class="card"><h2>'+esc(t)+'</h2><div class="num">'+esc(v)+'</div><div class="small">'+esc(s||'')+'</div></article>';}
-function renderSummary(s){s=s||{};$('summaryGrid').innerHTML=[card('후보 영상',s.candidateCount||0,'전체 대기열'),card('승격 가능',s.promotableCount||0,'승인 완료'),card('검증 대기',s.verificationRequired||0,'권리·재생 확인 필요'),card('섹션 수',Object.keys(s.bySection||{}).length,'2~10번 섹션')].join('');$('summaryGrid').classList.remove('hidden');}
-function fillSelect(id,vals,label){var el=$(id),cur=el.value;el.innerHTML='<option value="">'+esc(label)+'</option>'+vals.map(function(v){return '<option value="'+esc(v)+'">'+esc(v)+'</option>';}).join('');if(vals.indexOf(cur)>=0)el.value=cur;}
-function setupFilters(s){fillSelect('sectionFilter',Object.keys(s.bySection||{}).sort(),'전체 섹션');fillSelect('riskFilter',Object.keys(s.byRisk||{}).sort(),'전체 위험도');fillSelect('statusFilter',Object.keys(s.byVerificationStatus||{}).sort(),'전체 검증상태');$('filterPanel').classList.remove('hidden');}
-function qualityValue(v){var m=text(v).match(/(\d{3,4})p/i);return m?Number(m[1]):0;}
-function rowRank(r){return Number(r.rankingScore||String(r.qualityPriority||'').match(/(\d+)/)?.[1]||0);}
-function activeRows(){return rowsCache.filter(function(r){var st=lower(r.reviewStatus);return st!=='search_excluded'&&st!=='permanent_blocked';});}
-function exclusionRows(){return rowsCache.filter(function(r){var st=lower(r.reviewStatus);return st==='search_excluded'||st==='permanent_blocked';});}
-function visibleRows(){var q=lower($('searchInput').value),sec=text($('sectionFilter').value),risk=text($('riskFilter').value),st=text($('statusFilter').value),sort=$('sortSelect').value;var a=activeRows().filter(function(r){if(sec&&text(r.sectionKey)!==sec)return false;if(risk&&text(r.riskLevel)!==risk)return false;if(st&&text(r.verificationStatus)!==st)return false;if(!q)return true;return [r.title,r.provider,r.sectionKey,r.year,r.qualityTarget,r.rankingTier,r.ageRating,(r.subtitleLanguages||[]).join(' ')].map(text).join(' ').toLowerCase().indexOf(q)>=0;});a.sort(function(x,y){if(sort==='quality')return qualityValue(y.qualityTarget)-qualityValue(x.qualityTarget)||rowRank(y)-rowRank(x);if(sort==='year')return Number(y.year||0)-Number(x.year||0)||rowRank(y)-rowRank(x);if(sort==='subtitle')return Number(y.subtitleCount||0)-Number(x.subtitleCount||0)||rowRank(y)-rowRank(x);if(sort==='title')return text(x.title).localeCompare(text(y.title));return rowRank(y)-rowRank(x)||qualityValue(y.qualityTarget)-qualityValue(x.qualityTarget)||Number(y.year||0)-Number(x.year||0);});return a;}
-function pill(v,c){return '<span class="pill '+(c||'')+'">'+esc(v||'-')+'</span>';}
-function rowHtml(r,i){var id=text(r.contentId||r.id),langs=Array.isArray(r.subtitleLanguages)?r.subtitleLanguages:[],warn=Array.isArray(r.contentWarnings)?r.contentWarnings:[];return '<tr><td class="seq">'+(i+1)+'</td><td><input class="rowcheck" type="checkbox" data-candidate-id="'+esc(id)+'"></td><td>'+pill(r.sectionKey,'section')+'<div class="small">분류 '+esc(r.classificationConfidence||0)+'%</div></td><td>'+pill((r.rankingTier||'-')+' '+rowRank(r),'rank')+'<div class="small">'+esc((r.rankingSignals||[]).join(' · '))+'</div></td><td><strong class="candidate-title"><button type="button" class="previewBtn" data-candidate-id="'+esc(id)+'">'+esc(r.title||'(제목 없음)')+'</button></strong><div class="mono small">'+esc(id)+'</div></td><td class="nowrap">'+esc(r.year||'-')+'</td><td>'+esc(r.provider||'-')+'<div class="small">'+esc(r.rights&&r.rights.sourceHint||'')+'</div></td><td>'+esc(r.qualityTarget||'-')+'</td><td>'+esc(r.subtitleCount||0)+'개<div class="small">'+esc(langs.join(' · '))+'</div></td><td>'+esc(r.ageRating||'-')+'<div class="small">'+esc(warn.join(' · '))+'</div></td><td>'+esc(r.verificationStatus||'-')+'<div class="small">'+esc(r.rights&&r.rights.status||'')+'</div></td></tr>';}
-function renderRows(){var rows=visibleRows(),group=$('groupBySection').checked,html='',seq=0;if(group){var order=['media-movie','media-drama','media-thriller','media-romance','media-variety','media-documentary','media-animation','media-music','media-shorts'],groups={};rows.forEach(function(r){var k=text(r.sectionKey)||'unknown';(groups[k]||(groups[k]=[])).push(r);});order.concat(Object.keys(groups).filter(function(k){return order.indexOf(k)<0;}).sort()).forEach(function(k){var list=groups[k];if(!list||!list.length)return;html+='<tr class="group-row"><td colspan="11">'+esc(k)+' · '+list.length+'개</td></tr>';list.forEach(function(r){html+=rowHtml(r,seq++);});});}else rows.forEach(function(r){html+=rowHtml(r,seq++);});$('candidateRows').innerHTML=html||'<tr><td colspan="11" class="small">조건에 맞는 후보가 없습니다.</td></tr>';$('filterState').textContent='표시 '+rows.length+'개 / 후보 '+activeRows().length+'개';$('tablePanel').classList.remove('hidden');$('selectAllRows').checked=false;}
+/* IGDC Media Candidate Queue v2.3 - policy quarantine, guarded release and full-section collection */
+(function(){
+  'use strict';
 
-function exclusionRowHtml(r,i){var id=text(r.contentId||r.id),st=lower(r.reviewStatus),label=st==='permanent_blocked'?'영구 차단':'검색 제외';return '<tr><td class="seq">'+(i+1)+'</td><td><input class="excludedCheck" type="checkbox" data-candidate-id="'+esc(id)+'"></td><td>'+pill(r.sectionKey,'section')+'</td><td>'+pill(label,st==='permanent_blocked'?'rank':'')+'</td><td><strong class="candidate-title"><button type="button" class="previewBtn" data-candidate-id="'+esc(id)+'">'+esc(r.title||'(제목 없음)')+'</button></strong><div class="mono small">'+esc(id)+'</div></td><td>'+esc(r.blockedReason||r.reviewNote||'-')+'</td><td>'+esc(r.provider||'-')+'</td><td class="nowrap">'+esc(r.reviewedAt||'-')+'</td></tr>';}
-function renderExclusions(){excludedCache=exclusionRows();var groups={},order=['media-movie','media-drama','media-thriller','media-romance','media-variety','media-documentary','media-animation','media-music','media-shorts'];excludedCache.forEach(function(r){var k=text(r.sectionKey)||'unknown';(groups[k]||(groups[k]=[])).push(r);});var html='',seq=0;order.concat(Object.keys(groups).filter(function(k){return order.indexOf(k)<0;}).sort()).forEach(function(k){var list=groups[k];if(!list||!list.length)return;html+='<tr class="group-row"><td colspan="8">'+esc(k)+' · '+list.length+'개</td></tr>';list.forEach(function(r){html+=exclusionRowHtml(r,seq++);});});$('excludedRows').innerHTML=html||'<tr><td colspan="8" class="small">검색 제외 또는 영구 차단 항목이 없습니다.</td></tr>';var ex=excludedCache.filter(function(r){return lower(r.reviewStatus)==='search_excluded';}).length,pb=excludedCache.length-ex;$('exclusionSummary').textContent='검색 제외 '+ex+'건 · 영구 차단 '+pb+'건 · 전체 '+excludedCache.length+'건';$('exclusionPanel').classList.remove('hidden');$('selectAllExcluded').checked=false;}
-function selectedExcludedIds(){return Array.from(document.querySelectorAll('.excludedCheck:checked')).map(function(e){return text(e.dataset.candidateId);}).filter(Boolean);}
-async function exclusionAction(a,ids){if(!ids.length){show('처리할 검색 제외 항목을 선택해 주세요.','warn');return;}var label={restore:'복원',permanent_block:'영구 차단',forget:'기록 완전 삭제'}[a]||a;if(!window.confirm(label+' 처리할까요?'))return;var body={action:a,ids:ids,note:label};if(a==='forget')body.confirmPermanentDelete=true;try{var d=await post(ACT,body);show(label+' 처리 '+Number(d.updated||d.deleted||0)+'건 완료','ok');await refresh();}catch(e){show(e.message,'warn');}}
+  var END='/.netlify/functions/media-candidate-review';
+  var COL='/.netlify/functions/sanmaru-media-collector';
+  var ACT='/.netlify/functions/media-candidate-action';
+  var PUB='/.netlify/functions/media-snapshot-publish';
+  var SECTION_ORDER=['media-movie','media-drama','media-thriller','media-romance','media-variety','media-documentary','media-animation','media-music','media-shorts'];
 
-function selectedIds(){return Array.from(document.querySelectorAll('.rowcheck:checked')).map(function(e){return text(e.dataset.candidateId);}).filter(Boolean);}
-function currentVisibleIds(){return visibleRows().map(function(r){return text(r.contentId||r.id);}).filter(Boolean);}
-function download(content,name){var b=new Blob([content],{type:'application/json;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},300);}
-async function refresh(){hide();$('refreshBtn').disabled=true;try{state.textContent='후보 대기열 읽는 중';var d=await get(END+'?action=candidates');rowsCache=d.candidates||[];renderSummary(d.summary||{});setupFilters(d.summary||{});renderRows();renderExclusions();state.textContent='연결 정상';show('섹션·랭킹·품질 기준으로 후보 대기열을 읽었습니다.','ok');}catch(e){show(e.message,'warn');}finally{$('refreshBtn').disabled=false;}}
-async function diagnostic(){try{var d=await get(END+'?action=diagnostic');diagnosticCache=d;$('diagnosticJson').textContent=JSON.stringify(d,null,2);$('diagnosticPanel').classList.remove('hidden');$('downloadJsonBtn').disabled=false;}catch(e){show(e.message,'warn');}}
-function collectorJobKey(section){return 'igdc.mediaCollector.job.'+section;}
-function loadCollectorJob(section){try{var raw=localStorage.getItem(collectorJobKey(section));return raw?JSON.parse(raw):null;}catch(_e){return null;}}
-function saveCollectorJob(job){try{localStorage.setItem(collectorJobKey(job.section),JSON.stringify(job));}catch(_e){}}
-function clearCollectorJob(section){try{localStorage.removeItem(collectorJobKey(section));}catch(_e){}}
-function updateCollectorProgress(job){var target=Math.max(1,Number(job.target||1)),saved=Math.max(0,Number(job.saved||0)),pct=Math.min(100,Math.round(saved/target*100));$('collectorProgress').classList.remove('hidden');$('collectorProgressText').textContent='목표 '+target+'개 · 신규 저장 '+saved+'개 · 검색 '+Number(job.searched||0)+'건 · 정밀검사 '+Number(job.inspected||0)+'건 · 현재 묶음 '+Number(job.batch||0);$('collectorRejectText').textContent='제외 '+Number(job.rejected||0)+'건'+(job.lastReason?' · 최근 제외: '+job.lastReason:'');$('collectorProgressBar').style.width=pct+'%';$('collectorState').textContent=job.paused?'일시정지됨':(saved>=target?'목표 완료':'정밀 수집 중');}
-function wait(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
-async function collect(admin){var section=$('collectorSection').value,target=Number($('collectorLimit').value)||5;if(admin){var body={source:'internet_archive',section:section,target:1,batchSize:1,identifier:text($('adminArchiveIdentifier').value),adminException:true,overrideReason:text($('adminOverrideReason').value)};if(!body.identifier||!body.overrideReason){show('관리자 지정 주소와 사유가 필요합니다.','warn');return;}$('collectBtn').disabled=true;$('collectAdminExceptionBtn').disabled=true;try{$('collectorState').textContent='관리자 지정 후보 정밀검사 중';var one=await post(COL,body);show('관리자 지정 후보 '+Number(one.saved||0)+'건을 저장했습니다.','ok');await refresh();}catch(e){show(e.message,'warn');}finally{$('collectBtn').disabled=false;$('collectAdminExceptionBtn').disabled=false;}return;}
-var existing=loadCollectorJob(section),job;if(existing&&existing.paused&&Number(existing.saved||0)<Number(existing.target||0)){job=existing;job.paused=false;}else{job={section:section,target:target,batchSize:3,page:1,batch:0,saved:0,searched:0,inspected:0,rejected:0,knownIds:rowsCache.map(function(r){return text(r.contentId||r.id);}),paused:false,lastReason:''};}collectorStopRequested=false;$('collectBtn').disabled=true;$('collectAdminExceptionBtn').disabled=true;$('collectorStopBtn').disabled=false;updateCollectorProgress(job);var maxBatches=Math.min(80,Math.max(12,job.target*8));try{while(job.saved<job.target&&job.batch<maxBatches&&!collectorStopRequested){job.batch+=1;var attempts=0,d=null;while(attempts<3&&!d){attempts+=1;try{d=await post(COL,{source:'internet_archive',section:job.section,target:job.target,batchSize:job.batchSize,page:job.page,batchMode:true});}catch(e){if((e.status===502||e.status===503||e.status===504)&&attempts<3){$('collectorState').textContent='외부 원본 지연 · '+attempts+'차 재시도';await wait(1200*attempts);continue;}throw e;}}job.page=Number(d.nextPage||job.page+1);job.searched+=Number(d.searched||0);job.inspected+=Number(d.searched||0);job.rejected+=Number(d.rejectedCount||0);var ids=Array.isArray(d.savedIds)?d.savedIds:[];ids.forEach(function(id){id=text(id);if(id&&job.knownIds.indexOf(id)<0){job.knownIds.push(id);job.saved+=1;}});var last=(d.rejected||[]).slice(-1)[0];job.lastReason=last&&text(last.reason)||'';saveCollectorJob(job);updateCollectorProgress(job);if(d.done)break;if(job.saved<job.target)await wait(350);}job.paused=collectorStopRequested||job.saved<job.target;saveCollectorJob(job);updateCollectorProgress(job);if(job.saved>=job.target){clearCollectorJob(section);show('목표 '+job.target+'개를 품질 기준으로 누적 저장했습니다.','ok');}else if(collectorStopRequested){show('수집을 일시정지했습니다. 같은 섹션에서 다시 시작하면 이어서 진행합니다.','ok');}else{show('탐색 한도 안에서 '+job.saved+'개를 저장했습니다. 저품질 후보로 목표 수량을 강제로 채우지 않았습니다.','ok');}await refresh();}catch(e){job.paused=true;saveCollectorJob(job);updateCollectorProgress(job);$('collectorState').textContent='수집 일시정지';show(e.message+' · 진행 지점은 저장되었습니다.','warn');}finally{$('collectBtn').disabled=false;$('collectAdminExceptionBtn').disabled=false;$('collectorStopBtn').disabled=true;collectorStopRequested=false;}}
-async function action(a,ids){if(!ids.length){show('처리할 후보를 선택해 주세요.','warn');return;}if(a==='approve'&&!$('rightsConfirm').checked){show('승인 전 확인 체크가 필요합니다.','warn');return;}var labels={approve:'승인',hold:'보류',reset:'재검토',reject:'반려',block:'차단'};var note=window.prompt((labels[a]||a)+' 메모','')||'';try{var d=await post(ACT,{action:a,ids:ids,note:note,confirmRightsSafe:a==='approve'});show((labels[a]||a)+' 처리 '+(d.updated||0)+'건 완료','ok');$('rightsConfirm').checked=false;await refresh();}catch(e){show(e.message,'warn');}}
-async function remove(ids,allVisible){if(!ids.length){show('삭제할 후보가 없습니다.','warn');return;}var msg=allVisible?'현재 필터에 보이는 '+ids.length+'개 후보를 목록에서 모두 삭제할까요? 원본 영상은 삭제되지 않습니다.':'선택한 '+ids.length+'개 후보를 목록에서 삭제할까요? 원본 영상은 삭제되지 않습니다.';if(!window.confirm(msg))return;try{var d=await post(ACT,{action:'delete',ids:ids,confirmQueueDelete:true});show('후보 목록에서 '+Number(d.updated||0)+'건을 검색 제외 목록으로 이동했습니다.','ok');await refresh();}catch(e){show(e.message,'warn');}}
-async function publish(store){try{var d=await post(PUB,{storeRelease:!!store,includeSnapshot:store?'0':'1'});show('승격 가능 '+d.eligibleRows+'건'+(store?' · 릴리스 저장 완료':''),'ok');if(!store&&d.snapshot){diagnosticCache=d;$('diagnosticJson').textContent=JSON.stringify(d,null,2);$('diagnosticPanel').classList.remove('hidden');}}catch(e){show(e.message,'warn');}}
-function candidateSources(r){var out=[];function add(url,label){url=text(url);if(!/^https:\/\//i.test(url)||out.some(function(x){return x.url===url;}))return;out.push({url:url,label:label||url});}var pc=Array.isArray(r.playbackCandidates)?r.playbackCandidates:(r.sourceMetadata&&Array.isArray(r.sourceMetadata.playbackCandidates)?r.sourceMetadata.playbackCandidates:[]);pc.forEach(function(x){add(x&&x.url,x&&x.name);});add(r.video,'기본 영상');return out;}
-function setPlaybackState(message,warn){var el=$('previewPlaybackState');el.textContent=message;el.className='player-status'+(warn?' warn':'');}
-function loadPreviewSource(index,autoplay){var v=$('previewVideo');if(index>=previewSources.length){setPlaybackState('브라우저에서 재생 가능한 원본을 찾지 못했습니다. 원본 페이지에서 파일 상태를 확인해 주세요.',true);return;}previewSourceIndex=index;v.pause();v.removeAttribute('src');v.load();var src=previewSources[index];setPlaybackState('재생 원본 확인 중 '+(index+1)+'/'+previewSources.length+' · '+src.label,false);v.src=src.url;v.load();if(autoplay){var p=v.play();if(p&&p.catch)p.catch(function(){});}}
-function syncPlayButton(){var v=$('previewVideo');$('playToggle').textContent=v.paused?'재생':'일시정지';if(document.fullscreenElement===document.querySelector('.player-shell'))showFullscreenUi(v.paused);}
-function showFullscreenUi(keepVisible){var shell=document.querySelector('.player-shell'),v=$('previewVideo');if(!shell||document.fullscreenElement!==shell)return;shell.classList.add('controls-visible');clearTimeout(fullscreenUiTimer);if(keepVisible||!v||v.paused)return;fullscreenUiTimer=setTimeout(function(){if(document.fullscreenElement===shell&&!v.paused)shell.classList.remove('controls-visible');},3500);}function formatPlaybackTime(sec){sec=Number(sec);if(!isFinite(sec)||sec<0)sec=0;var h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),x=Math.floor(sec%60);return h>0?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');}function syncSeekUi(){var v=$('previewVideo'),bar=$('seekBar'),d=Number(v.duration);$('currentTimeText').textContent=formatPlaybackTime(v.currentTime);$('durationText').textContent=formatPlaybackTime(d);bar.value=isFinite(d)&&d>0?String(Math.max(0,Math.min(1000,Math.round((v.currentTime/d)*1000)))):'0';bar.disabled=!(isFinite(d)&&d>0);}
-function openPreview(id){var r=rowsCache.find(function(x){return text(x.contentId||x.id)===id;});if(!r)return;currentPreview=r;previewSources=candidateSources(r);previewSourceIndex=0;var v=$('previewVideo');v.pause();v.innerHTML='';$('previewTitle').textContent=r.title||'';$('previewMeta').textContent=[r.sectionKey,'랭킹 '+rowRank(r),r.qualityTarget,r.year,r.ageRating].filter(Boolean).join(' · ');$('sourceOpen').href=text(r.url||r.rights&&r.rights.sourceUrl||r.video);var sel=$('subtitleSelect');sel.innerHTML='<option value="">자막 없음</option>';var caps=Array.isArray(r.captions)?r.captions:[];caps.forEach(function(c,i){var o=document.createElement('option');o.value=String(i);o.textContent=(c.language||'und')+' · '+(c.label||('자막 '+(i+1)));sel.appendChild(o);});$('previewModal').classList.remove('hidden');$('playToggle').textContent='재생';$('seekBar').value='0';$('seekBar').disabled=true;$('currentTimeText').textContent='00:00';$('durationText').textContent='00:00';document.querySelector('.player-shell').classList.remove('controls-visible');if(previewSources.length)loadPreviewSource(0,false);else setPlaybackState('직접 재생 주소가 없습니다. 원본 페이지를 확인해 주세요.',true);}
-function applySubtitle(index){var v=$('previewVideo');Array.from(v.querySelectorAll('track')).forEach(function(t){t.remove();});if(index==='')return;var c=(currentPreview&&currentPreview.captions||[])[Number(index)];if(!c)return;var tr=document.createElement('track');tr.kind='subtitles';tr.label=c.label||c.language||'subtitle';tr.srclang=c.language&&c.language!=='und'?c.language:'en';tr.src=c.src;tr.default=true;v.appendChild(tr);setTimeout(function(){Array.from(v.textTracks||[]).forEach(function(t){t.mode='showing';});},150);}
-function closePreview(){var v=$('previewVideo');v.pause();clearTimeout(fullscreenUiTimer);document.querySelector('.player-shell').classList.remove('controls-visible');v.removeAttribute('src');v.innerHTML='';v.load();$('seekBar').value='0';$('seekBar').disabled=true;$('currentTimeText').textContent='00:00';$('durationText').textContent='00:00';$('previewModal').classList.add('hidden');currentPreview=null;previewSources=[];previewSourceIndex=0;}
-function bind(){
-$('refreshBtn').onclick=refresh;$('diagnosticBtn').onclick=diagnostic;$('downloadJsonBtn').onclick=function(){if(diagnosticCache)download(JSON.stringify(diagnosticCache,null,2)+'\n','igdc-media-candidate-diagnostic.json');};$('downloadCandidateListBtn').onclick=function(){var r=visibleRows();download(JSON.stringify({ok:true,generatedAt:new Date().toISOString(),count:r.length,rows:r},null,2)+'\n','igdc-media-candidate-visible-list.json');};$('returnBtn').onclick=function(){location.href='/admin.html';};$('collectBtn').onclick=function(){collect(false);};$('collectorStopBtn').onclick=function(){collectorStopRequested=true;this.disabled=true;$('collectorState').textContent='현재 묶음 후 일시정지';};$('collectAdminExceptionBtn').onclick=function(){collect(true);};$('approveBtn').onclick=function(){action('approve',selectedIds());};$('holdBtn').onclick=function(){action('hold',selectedIds());};$('resetBtn').onclick=function(){action('reset',selectedIds());};$('rejectBtn').onclick=function(){action('reject',selectedIds());};$('blockBtn').onclick=function(){action('block',selectedIds());};$('toggleExclusionBtn').onclick=function(){var b=$('exclusionBody'),open=b.classList.contains('hidden');b.classList.toggle('hidden',!open);this.textContent=open?'목록 접기':'목록 펼치기';};$('restoreExcludedBtn').onclick=function(){exclusionAction('restore',selectedExcludedIds());};$('permanentBlockExcludedBtn').onclick=function(){exclusionAction('permanent_block',selectedExcludedIds());};$('forgetExcludedBtn').onclick=function(){exclusionAction('forget',selectedExcludedIds());};$('deleteBtn').onclick=function(){remove(selectedIds(),false);};$('deleteVisibleBtn').onclick=function(){remove(currentVisibleIds(),true);};$('publishPreviewBtn').onclick=function(){publish(false);};$('storeReleaseBtn').onclick=function(){publish(true);};$('downloadSnapshotBtn').onclick=async function(){try{var r=await fetch(PUB+'?download=1',{headers:headers(false),credentials:'same-origin'}),t=await r.text();if(!r.ok)throw new Error(t||'다운로드 실패');download(t,'media.snapshot.generated.json');}catch(e){show(e.message,'warn');}};
-['searchInput','sectionFilter','riskFilter','statusFilter','sortSelect','groupBySection'].forEach(function(id){$(id).addEventListener('input',renderRows);$(id).addEventListener('change',renderRows);});$('selectAllRows').onchange=function(){var c=this.checked;document.querySelectorAll('.rowcheck').forEach(function(e){e.checked=c;});};$('selectAllExcluded').onchange=function(){var c=this.checked;document.querySelectorAll('.excludedCheck').forEach(function(e){e.checked=c;});};$('candidateRows').addEventListener('click',function(e){var b=e.target.closest('.previewBtn');if(b)openPreview(text(b.dataset.candidateId));});$('previewClose').onclick=closePreview;$('previewModal').addEventListener('click',function(e){if(e.target===this)closePreview();});$('playToggle').onclick=function(){var v=$('previewVideo');if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else v.pause();syncPlayButton();};$('previewVideo').onclick=function(){var v=this;if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else v.pause();};$('previewVideo').addEventListener('play',syncPlayButton);$('previewVideo').addEventListener('pause',syncPlayButton);$('previewVideo').addEventListener('ended',syncPlayButton);$('back10').onclick=function(){var v=$('previewVideo');v.currentTime=Math.max(0,v.currentTime-10);};$('forward10').onclick=function(){var v=$('previewVideo');v.currentTime=Math.min(v.duration||Infinity,v.currentTime+10);};$('muteToggle').onclick=function(){var v=$('previewVideo');v.muted=!v.muted;this.textContent=v.muted?'음소거 해제':'음소거';};$('fitToggle').onclick=function(){var v=$('previewVideo');v.style.objectFit=v.style.objectFit==='cover'?'contain':'cover';this.textContent=v.style.objectFit==='cover'?'맞춤':'채움';};$('previewVideo').addEventListener('loadedmetadata',function(){setPlaybackState('재생 가능 · '+(this.videoWidth||'?')+'×'+(this.videoHeight||'?')+' · '+(isFinite(this.duration)?Math.round(this.duration)+'초':'길이 확인 중'),false);syncSeekUi();});$('previewVideo').addEventListener('durationchange',syncSeekUi);$('previewVideo').addEventListener('timeupdate',syncSeekUi);$('previewVideo').addEventListener('progress',syncSeekUi);$('previewVideo').addEventListener('canplay',function(){setPlaybackState('실제 재생 준비 완료 · 원본 '+(previewSourceIndex+1)+'/'+previewSources.length,false);});$('previewVideo').addEventListener('error',function(){if(!$('previewModal').classList.contains('hidden')){var next=previewSourceIndex+1;if(next<previewSources.length){setPlaybackState('현재 원본 재생 실패 · 다음 고화질 원본으로 전환합니다.',true);loadPreviewSource(next,true);}else setPlaybackState('모든 직접 재생 원본이 실패했습니다. 원본 페이지에서 확인해 주세요.',true);}});$('seekBar').addEventListener('input',function(){var v=$('previewVideo'),d=Number(v.duration);if(isFinite(d)&&d>0){v.currentTime=(Number(this.value)/1000)*d;$('currentTimeText').textContent=formatPlaybackTime(v.currentTime);}showFullscreenUi(true);});$('seekBar').addEventListener('change',function(){showFullscreenUi($('previewVideo').paused);});$('subtitleSelect').onchange=function(){applySubtitle(this.value);};$('subtitleToggle').onclick=function(){var tracks=$('previewVideo').textTracks;if(!tracks||!tracks.length)return;var show=tracks[0].mode!=='showing';Array.from(tracks).forEach(function(t){t.mode=show?'showing':'disabled';});this.textContent=show?'자막 끄기':'자막 켜기';};$('fullscreenBtn').onclick=function(){var el=document.querySelector('.player-shell');if(document.fullscreenElement)document.exitFullscreen();else if(el.requestFullscreen)el.requestFullscreen();};var shell=document.querySelector('.player-shell');shell.addEventListener('pointermove',function(){if(document.fullscreenElement===shell)showFullscreenUi(false);});shell.addEventListener('pointerdown',function(){if(document.fullscreenElement===shell)showFullscreenUi(true);});document.addEventListener('pointermove',function(e){if(document.fullscreenElement!==shell)return;var h=window.innerHeight;if(e.clientY<130||e.clientY>h-220)showFullscreenUi(false);});shell.addEventListener('touchstart',function(){showFullscreenUi(true);},{passive:true});document.addEventListener('fullscreenchange',function(){if(document.fullscreenElement===shell){shell.classList.add('controls-visible');showFullscreenUi(true);$('fullscreenBtn').textContent='전체화면 종료';}else{clearTimeout(fullscreenUiTimer);shell.classList.remove('controls-visible');$('fullscreenBtn').textContent='전체화면';}});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!document.fullscreenElement&&!$('previewModal').classList.contains('hidden'))closePreview();});refresh();}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
+  var $=function(id){return document.getElementById(id);};
+  var text=function(value){return String(value==null?'':value).trim();};
+  var lower=function(value){return text(value).toLowerCase();};
+  var esc=function(value){
+    return text(value).replace(/[&<>"']/g,function(character){
+      return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[character];
+    });
+  };
+
+  var rowsCache=[];
+  var excludedCache=[];
+  var summaryCache={};
+  var diagnosticCache=null;
+  var notice=$('notice');
+  var state=$('state');
+  var currentPreview=null;
+  var collectorStopRequested=false;
+  var collectAllRunning=false;
+  var lastRunStats={saved:0,section:''};
+  var previewSources=[];
+  var previewSourceIndex=0;
+  var fullscreenUiTimer=null;
+
+  function token(){
+    try{
+      return sessionStorage.getItem('igdc.mediaCandidateQueue.adminBearer')||
+        localStorage.getItem('igdc.mediaCandidateQueue.adminBearer')||'';
+    }catch(_error){return'';}
+  }
+  function headers(json){
+    var result={Accept:'application/json'};
+    var bearer=token();
+    if(bearer&&bearer.split('.').length===3)result.Authorization='Bearer '+bearer;
+    if(json)result['Content-Type']='application/json';
+    return result;
+  }
+  async function get(url){
+    var response=await fetch(url,{headers:headers(false),credentials:'same-origin',cache:'no-store'});
+    var data=null;
+    try{data=await response.json();}catch(_error){}
+    if(!response.ok||!data||data.ok!==true){
+      var error=new Error(data&&data.message||data&&data.error||'HTTP '+response.status);
+      error.status=response.status;throw error;
+    }
+    return data;
+  }
+  async function post(url,body){
+    var response=await fetch(url,{method:'POST',headers:headers(true),credentials:'same-origin',body:JSON.stringify(body)});
+    var data=null;
+    try{data=await response.json();}catch(_error){}
+    if(!response.ok||!data||data.ok!==true){
+      var error=new Error(data&&data.message||data&&data.error||'HTTP '+response.status);
+      error.status=response.status;throw error;
+    }
+    return data;
+  }
+  function show(message,kind){
+    notice.className='notice '+(kind==='warn'?'warn':'');
+    notice.textContent=message;
+    notice.classList.remove('hidden');
+  }
+  function hide(){notice.classList.add('hidden');notice.textContent='';}
+  function card(title,value,caption){
+    return '<article class="card"><h2>'+esc(title)+'</h2><div class="num">'+esc(value)+'</div><div class="small">'+esc(caption||'')+'</div></article>';
+  }
+  function activeRows(){
+    return rowsCache.filter(function(row){
+      var status=lower(row.reviewStatus);
+      return status!=='search_excluded'&&status!=='exclusion_released'&&status!=='permanent_blocked';
+    });
+  }
+  function exclusionRows(){
+    return rowsCache.filter(function(row){
+      var status=lower(row.reviewStatus);
+      return status==='search_excluded'||status==='exclusion_released'||status==='permanent_blocked';
+    });
+  }
+  function renderSummary(summary){
+    summary=summary||summaryCache||{};
+    var selected=text($('collectorSection')&&$('collectorSection').value);
+    var selectedCount=activeRows().filter(function(row){return text(row.sectionKey)===selected;}).length;
+    $('summaryGrid').innerHTML=[
+      card('이번 수집',lastRunStats.saved||0,lastRunStats.section||'수집 전'),
+      card('선택 섹션',selectedCount,selected||'-'),
+      card('전체 대기열',activeRows().length,'검색 제외 제외'),
+      card('자동 격리',summary.quarantinedCount||0,'안전·권리·분류 검토'),
+      card('승격 가능',summary.promotableCount||0,'이중 확인 완료'),
+      card('검색 제외',exclusionRows().length,'해제·복원·차단 구분')
+    ].join('');
+    $('summaryGrid').classList.remove('hidden');
+  }
+  function fillSelect(id,values,label){
+    var element=$(id),current=element.value;
+    element.innerHTML='<option value="">'+esc(label)+'</option>'+values.map(function(value){
+      return '<option value="'+esc(value)+'">'+esc(value)+'</option>';
+    }).join('');
+    if(values.indexOf(current)>=0)element.value=current;
+  }
+  function setupFilters(summary){
+    fillSelect('sectionFilter',Object.keys(summary.bySection||{}).sort(),'전체 섹션');
+    fillSelect('riskFilter',Object.keys(summary.byRisk||{}).sort(),'전체 위험도');
+    fillSelect('safetyFilter',Object.keys(summary.bySafetyDecision||{}).sort(),'전체 안전판정');
+    fillSelect('statusFilter',Object.keys(summary.byVerificationStatus||{}).sort(),'전체 검증상태');
+    $('filterPanel').classList.remove('hidden');
+  }
+  function qualityValue(value){
+    var match=text(value).match(/(\d{3,4})p/i);
+    return match?Number(match[1]):0;
+  }
+  function rowRank(row){
+    var match=String(row.qualityPriority||'').match(/(\d+)/);
+    return Number(row.rankingScore||match&&match[1]||0);
+  }
+  function visibleRows(){
+    var query=lower($('searchInput').value);
+    var section=text($('sectionFilter').value);
+    var risk=text($('riskFilter').value);
+    var safety=text($('safetyFilter').value);
+    var status=text($('statusFilter').value);
+    var sort=$('sortSelect').value;
+    var rows=activeRows().filter(function(row){
+      if(section&&text(row.sectionKey)!==section)return false;
+      if(risk&&text(row.riskLevel)!==risk)return false;
+      if(safety&&text(row.safetyDecision)!==safety)return false;
+      if(status&&text(row.verificationStatus)!==status)return false;
+      if(!query)return true;
+      return[
+        row.title,row.provider,row.sectionKey,row.year,row.qualityTarget,row.rankingTier,
+        row.ageRating,row.safetyDecision,(row.policyReasons||[]).join(' '),(row.subtitleLanguages||[]).join(' ')
+      ].map(text).join(' ').toLowerCase().indexOf(query)>=0;
+    });
+    rows.sort(function(left,right){
+      if(sort==='quality')return qualityValue(right.qualityTarget)-qualityValue(left.qualityTarget)||rowRank(right)-rowRank(left);
+      if(sort==='year')return Number(right.year||0)-Number(left.year||0)||rowRank(right)-rowRank(left);
+      if(sort==='subtitle')return Number(right.subtitleCount||0)-Number(left.subtitleCount||0)||rowRank(right)-rowRank(left);
+      if(sort==='title')return text(left.title).localeCompare(text(right.title));
+      return rowRank(right)-rowRank(left)||qualityValue(right.qualityTarget)-qualityValue(left.qualityTarget)||Number(right.year||0)-Number(left.year||0);
+    });
+    return rows;
+  }
+  function pill(value,className){return '<span class="pill '+(className||'')+'">'+esc(value||'-')+'</span>';}
+  function rowHtml(row,index){
+    var id=text(row.contentId||row.id);
+    var languages=Array.isArray(row.subtitleLanguages)?row.subtitleLanguages:[];
+    var warnings=Array.isArray(row.contentWarnings)?row.contentWarnings:[];
+    var reasons=Array.isArray(row.policyReasons)?row.policyReasons:[];
+    var safety=lower(row.safetyDecision);
+    var safetyClass=safety==='hard_block'?'blocked':safety==='quarantine'?'quarantine':'';
+    return '<tr>'+
+      '<td class="seq">'+(index+1)+'</td>'+
+      '<td><input class="rowcheck" type="checkbox" data-candidate-id="'+esc(id)+'"></td>'+
+      '<td>'+pill(row.sectionKey,'section')+'<div class="small">요청 '+esc(row.requestedSection||'-')+' · 분류 '+esc(row.classificationConfidence||0)+'%</div></td>'+
+      '<td>'+pill((row.rankingTier||'-')+' '+rowRank(row),'rank')+'<div class="small">'+esc((row.rankingSignals||[]).join(' · '))+'</div></td>'+
+      '<td><strong class="candidate-title"><button type="button" class="previewBtn" data-candidate-id="'+esc(id)+'">'+esc(row.title||'(제목 없음)')+'</button></strong><div class="mono small">'+esc(id)+'</div></td>'+
+      '<td class="nowrap">'+esc(row.year||'-')+'</td>'+
+      '<td>'+esc(row.provider||'-')+'<div class="small">'+esc(row.rights&&row.rights.sourceHint||'')+'</div></td>'+
+      '<td>'+esc(row.qualityTarget||'-')+'<div class="small">'+esc(row.durationSeconds?Math.round(row.durationSeconds/60)+'분':'길이 미확인')+'</div></td>'+
+      '<td>'+esc(row.subtitleCount||0)+'개<div class="small">'+esc(languages.join(' · '))+'</div></td>'+
+      '<td>'+esc(row.ageRating||'-')+' '+pill(row.safetyDecision||'검토 필요',safetyClass)+'<div class="small">'+esc(warnings.concat(reasons).join(' · '))+'</div></td>'+
+      '<td>'+esc(row.reviewStatus||'-')+'<div class="small">'+esc(row.verificationStatus||'-')+' · '+esc(row.rights&&row.rights.status||'')+'</div></td>'+
+      '</tr>';
+  }
+  function renderRows(){
+    var rows=visibleRows(),group=$('groupBySection').checked,html='',sequence=0;
+    if(group){
+      var groups={};
+      rows.forEach(function(row){
+        var key=text(row.sectionKey)||'unknown';
+        (groups[key]||(groups[key]=[])).push(row);
+      });
+      SECTION_ORDER.concat(Object.keys(groups).filter(function(key){return SECTION_ORDER.indexOf(key)<0;}).sort()).forEach(function(key){
+        var list=groups[key];
+        if(!list||!list.length)return;
+        html+='<tr class="group-row"><td colspan="11">'+esc(key)+' · '+list.length+'개</td></tr>';
+        list.forEach(function(row){html+=rowHtml(row,sequence++);});
+      });
+    }else rows.forEach(function(row){html+=rowHtml(row,sequence++);});
+    $('candidateRows').innerHTML=html||'<tr><td colspan="11" class="small">조건에 맞는 후보가 없습니다.</td></tr>';
+    $('filterState').textContent='표시 '+rows.length+'개 / 후보 '+activeRows().length+'개';
+    $('tablePanel').classList.remove('hidden');
+    $('selectAllRows').checked=false;
+  }
+  function exclusionRowHtml(row,index){
+    var id=text(row.contentId||row.id),status=lower(row.reviewStatus);
+    var label=status==='permanent_blocked'?'영구 차단':status==='exclusion_released'?'제외 해제·재수집 허용':'검색 제외';
+    var className=status==='permanent_blocked'?'blocked':status==='search_excluded'?'quarantine':'';
+    return '<tr>'+
+      '<td class="seq">'+(index+1)+'</td><td><input class="excludedCheck" type="checkbox" data-candidate-id="'+esc(id)+'"></td>'+
+      '<td>'+pill(row.sectionKey,'section')+'</td><td>'+pill(label,className)+'</td>'+
+      '<td><strong class="candidate-title"><button type="button" class="previewBtn" data-candidate-id="'+esc(id)+'">'+esc(row.title||'(제목 없음)')+'</button></strong><div class="mono small">'+esc(id)+'</div></td>'+
+      '<td>'+esc(row.blockedReason||row.reviewNote||'-')+'</td><td>'+esc(row.provider||'-')+'</td><td class="nowrap">'+esc(row.reviewedAt||'-')+'</td>'+
+      '</tr>';
+  }
+  function renderExclusions(){
+    excludedCache=exclusionRows();
+    var groups={},html='',sequence=0;
+    excludedCache.forEach(function(row){
+      var key=text(row.sectionKey)||'unknown';
+      (groups[key]||(groups[key]=[])).push(row);
+    });
+    SECTION_ORDER.concat(Object.keys(groups).filter(function(key){return SECTION_ORDER.indexOf(key)<0;}).sort()).forEach(function(key){
+      var list=groups[key];
+      if(!list||!list.length)return;
+      html+='<tr class="group-row"><td colspan="8">'+esc(key)+' · '+list.length+'개</td></tr>';
+      list.forEach(function(row){html+=exclusionRowHtml(row,sequence++);});
+    });
+    $('excludedRows').innerHTML=html||'<tr><td colspan="8" class="small">검색 제외·해제 기록 또는 영구 차단 항목이 없습니다.</td></tr>';
+    var excluded=excludedCache.filter(function(row){return lower(row.reviewStatus)==='search_excluded';}).length;
+    var released=excludedCache.filter(function(row){return lower(row.reviewStatus)==='exclusion_released';}).length;
+    var blocked=excludedCache.filter(function(row){return lower(row.reviewStatus)==='permanent_blocked';}).length;
+    $('exclusionSummary').textContent='검색 제외 '+excluded+'건 · 해제 기록 '+released+'건 · 영구 차단 '+blocked+'건 · 전체 '+excludedCache.length+'건';
+    $('exclusionPanel').classList.remove('hidden');
+    $('selectAllExcluded').checked=false;
+  }
+  function selectedIds(selector){
+    return Array.from(document.querySelectorAll(selector+':checked')).map(function(element){
+      return text(element.dataset.candidateId);
+    }).filter(Boolean);
+  }
+  function currentVisibleIds(){
+    return visibleRows().map(function(row){return text(row.contentId||row.id);}).filter(Boolean);
+  }
+  function download(content,name){
+    var blob=new Blob([content],{type:'application/json;charset=utf-8'});
+    var anchor=document.createElement('a');
+    anchor.href=URL.createObjectURL(blob);anchor.download=name;
+    document.body.appendChild(anchor);anchor.click();
+    setTimeout(function(){URL.revokeObjectURL(anchor.href);anchor.remove();},300);
+  }
+  async function refresh(){
+    hide();$('refreshBtn').disabled=true;
+    try{
+      state.textContent='후보 대기열 읽는 중';
+      var data=await get(END+'?action=candidates');
+      rowsCache=data.candidates||[];
+      summaryCache=data.summary||{};
+      renderSummary(summaryCache);setupFilters(summaryCache);renderRows();renderExclusions();
+      var live=data.sourceMode==='supabase';
+      state.textContent=live?'실시간 저장소 연결 정상':'정적 점검본 대체 표시';
+      show(
+        live?'정책·섹션·랭킹 기준으로 실시간 후보 대기열을 읽었습니다.':'실시간 저장소에 연결하지 못해 정적 점검본을 표시합니다. 이 상태에서는 최신 변경을 확정하지 마십시오.',
+        live?'ok':'warn'
+      );
+    }catch(error){show(error.message,'warn');}
+    finally{$('refreshBtn').disabled=false;}
+  }
+  async function diagnostic(){
+    try{
+      var data=await get(END+'?action=diagnostic');
+      diagnosticCache=data;
+      $('diagnosticJson').textContent=JSON.stringify(data,null,2);
+      $('diagnosticPanel').classList.remove('hidden');
+      $('downloadJsonBtn').disabled=false;
+    }catch(error){show(error.message,'warn');}
+  }
+  function collectorJobKey(section){return'igdc.mediaCollector.job.'+section;}
+  function loadCollectorJob(section){
+    try{var raw=localStorage.getItem(collectorJobKey(section));return raw?JSON.parse(raw):null;}
+    catch(_error){return null;}
+  }
+  function saveCollectorJob(job){try{localStorage.setItem(collectorJobKey(job.section),JSON.stringify(job));}catch(_error){}}
+  function clearCollectorJob(section){try{localStorage.removeItem(collectorJobKey(section));}catch(_error){}}
+  function updateCollectorProgress(job){
+    var target=Math.max(1,Number(job.target||1));
+    var saved=Math.max(0,Number(job.saved||0));
+    var percent=Math.min(100,Math.round(saved/target*100));
+    $('collectorProgress').classList.remove('hidden');
+    $('collectorProgressText').textContent='목표 '+target+'개 · 신규 저장 '+saved+'개 · 검색 '+Number(job.searched||0)+'건 · 정밀검사 '+Number(job.inspected||0)+'건 · 현재 묶음 '+Number(job.batch||0);
+    $('collectorRejectText').textContent='제외 '+Number(job.rejected||0)+'건'+(job.lastReason?' · 최근 제외: '+job.lastReason:'');
+    $('collectorProgressBar').style.width=percent+'%';
+    $('collectorState').textContent=job.paused?'일시정지됨':(saved>=target?'목표 완료':'정밀 수집 중');
+  }
+  function wait(milliseconds){return new Promise(function(resolve){setTimeout(resolve,milliseconds);});}
+  async function collect(admin,wholeRun){
+    var section=$('collectorSection').value;
+    var target=Number($('collectorLimit').value)||5;
+    if(admin){
+      var body={
+        source:'internet_archive',section:section,target:1,batchSize:1,
+        identifier:text($('adminArchiveIdentifier').value),adminException:true,
+        overrideReason:text($('adminOverrideReason').value)
+      };
+      if(!body.identifier||!body.overrideReason){show('관리자 지정 주소와 사유가 필요합니다.','warn');return;}
+      $('collectBtn').disabled=true;$('collectAllBtn').disabled=true;$('collectAdminExceptionBtn').disabled=true;
+      try{
+        $('collectorState').textContent='관리자 지정 후보 정밀검사 중';
+        var one=await post(COL,body);
+        lastRunStats={saved:Number(one.saved||0),section:section};
+        show('관리자 지정 후보 '+Number(one.saved||0)+'건을 저장했습니다.','ok');
+        await refresh();
+      }catch(error){show(error.message,'warn');}
+      finally{$('collectBtn').disabled=false;$('collectAllBtn').disabled=false;$('collectAdminExceptionBtn').disabled=false;}
+      return;
+    }
+    var existing=loadCollectorJob(section),job;
+    if(existing&&existing.paused&&Number(existing.saved||0)<Number(existing.target||0)){job=existing;job.paused=false;}
+    else{
+      job={
+        section:section,target:target,batchSize:3,page:1,batch:0,saved:0,searched:0,inspected:0,rejected:0,
+        knownIds:rowsCache.map(function(row){return text(row.contentId||row.id);}),paused:false,lastReason:''
+      };
+    }
+    var startSaved=Number(job.saved||0);
+    if(!wholeRun)collectorStopRequested=false;
+    $('collectBtn').disabled=true;$('collectAllBtn').disabled=true;$('collectAdminExceptionBtn').disabled=true;$('collectorStopBtn').disabled=false;
+    updateCollectorProgress(job);
+    var maxBatches=Math.min(80,Math.max(12,job.target*8));
+    try{
+      while(job.saved<job.target&&job.batch<maxBatches&&!collectorStopRequested){
+        job.batch+=1;
+        var attempts=0,data=null;
+        while(attempts<3&&!data){
+          attempts+=1;
+          try{
+            data=await post(COL,{source:'internet_archive',section:job.section,target:job.target,batchSize:job.batchSize,page:job.page,batchMode:true});
+          }catch(error){
+            if((error.status===502||error.status===503||error.status===504)&&attempts<3){
+              $('collectorState').textContent='외부 원본 지연 · '+attempts+'차 재시도';
+              await wait(1200*attempts);continue;
+            }
+            throw error;
+          }
+        }
+        job.page=Number(data.nextPage||job.page+1);
+        job.searched+=Number(data.searched||0);job.inspected+=Number(data.searched||0);job.rejected+=Number(data.rejectedCount||0);
+        var responseItems=Array.isArray(data.items)?data.items:null;
+        var ids=responseItems?responseItems.filter(function(row){
+          return text(row.section_key||row.sectionKey)===job.section;
+        }).map(function(row){return text(row.id||row.contentId);}):(Array.isArray(data.savedIds)?data.savedIds:[]);
+        ids.forEach(function(id){
+          id=text(id);
+          if(id&&job.knownIds.indexOf(id)<0){job.knownIds.push(id);job.saved+=1;}
+        });
+        var last=(data.rejected||[]).slice(-1)[0];
+        job.lastReason=last&&text(last.reason)||'';
+        saveCollectorJob(job);updateCollectorProgress(job);
+        if(data.done)break;
+        if(job.saved<job.target)await wait(350);
+      }
+      job.paused=collectorStopRequested||job.saved<job.target;
+      saveCollectorJob(job);updateCollectorProgress(job);
+      lastRunStats={saved:Math.max(0,job.saved-startSaved),section:job.section};
+      if(job.saved>=job.target){
+        clearCollectorJob(section);show('목표 '+job.target+'개를 품질 기준으로 누적 저장했습니다.','ok');
+      }else if(collectorStopRequested){
+        show('수집을 일시정지했습니다. 같은 섹션에서 다시 시작하면 이어서 진행합니다.','ok');
+      }else{
+        show('탐색 한도 안에서 '+job.saved+'개를 저장했습니다. 저품질 후보로 목표 수량을 강제로 채우지 않았습니다.','ok');
+      }
+      await refresh();
+    }catch(error){
+      job.paused=true;saveCollectorJob(job);updateCollectorProgress(job);
+      $('collectorState').textContent='수집 일시정지';
+      show(error.message+' · 진행 지점은 저장되었습니다.','warn');
+    }finally{
+      if(!wholeRun){
+        $('collectBtn').disabled=false;$('collectAllBtn').disabled=false;$('collectAdminExceptionBtn').disabled=false;$('collectorStopBtn').disabled=true;
+        collectorStopRequested=false;
+      }
+    }
+  }
+  async function collectAll(){
+    if(collectAllRunning)return;
+    if(!window.confirm('9개 섹션을 현재 목표 수량으로 순차 수집할까요? 품질 미달 후보로 수량을 강제로 채우지 않습니다.'))return;
+    var total=0;
+    collectAllRunning=true;collectorStopRequested=false;
+    $('collectBtn').disabled=true;$('collectAllBtn').disabled=true;$('collectAdminExceptionBtn').disabled=true;$('collectorStopBtn').disabled=false;
+    try{
+      for(var index=0;index<SECTION_ORDER.length&&!collectorStopRequested;index+=1){
+        $('collectorSection').value=SECTION_ORDER[index];
+        $('collectorState').textContent='전체 수집 '+(index+1)+'/9 · '+SECTION_ORDER[index];
+        await collect(false,true);
+        total+=Number(lastRunStats.saved||0);
+      }
+      lastRunStats={saved:total,section:'전체 섹션'};
+      show(
+        collectorStopRequested?'전체 수집을 현재 묶음 뒤 일시정지했습니다.':'전체 섹션 순차 수집을 마쳤습니다. 이번 수집 '+total+'건입니다.',
+        collectorStopRequested?'warn':'ok'
+      );
+    }finally{
+      collectAllRunning=false;
+      $('collectBtn').disabled=false;$('collectAllBtn').disabled=false;$('collectAdminExceptionBtn').disabled=false;$('collectorStopBtn').disabled=true;
+      collectorStopRequested=false;renderSummary(summaryCache);
+    }
+  }
+  async function candidateAction(action,ids){
+    if(!ids.length){show('처리할 후보를 선택해 주세요.','warn');return;}
+    if(action==='approve'&&(!$('rightsConfirm').checked||!$('contentConfirm').checked)){
+      show('승인 전 콘텐츠 안전과 원본 권리를 각각 확인해 주세요.','warn');return;
+    }
+    var labels={approve:'승인',hold:'보류',reset:'재검토',reject:'반려',block:'영구 차단'};
+    var entered=window.prompt((labels[action]||action)+' 검토 메모(승인·반려·차단은 필수)','');
+    if(entered===null)return;
+    var note=text(entered);
+    if((action==='approve'||action==='reject'||action==='block')&&note.length<3){
+      show('3자 이상의 검토 메모가 필요합니다.','warn');return;
+    }
+    try{
+      var data=await post(ACT,{
+        action:action,ids:ids,note:note,
+        confirmRightsSafe:action==='approve'&&$('rightsConfirm').checked,
+        confirmContentSafe:action==='approve'&&$('contentConfirm').checked,
+        confirmSubtitlesChecked:action==='approve'&&$('subtitleConfirm').checked
+      });
+      show((labels[action]||action)+' 처리 '+Number(data.updated||0)+'건 완료','ok');
+      $('rightsConfirm').checked=false;$('contentConfirm').checked=false;$('subtitleConfirm').checked=false;
+      await refresh();
+    }catch(error){show(error.message,'warn');}
+  }
+  async function removeCandidates(ids,allVisible){
+    if(!ids.length){show('삭제할 후보가 없습니다.','warn');return;}
+    var message=allVisible?
+      '현재 필터에 보이는 '+ids.length+'개 후보를 목록에서 모두 삭제할까요? 원본 영상은 삭제되지 않습니다.':
+      '선택한 '+ids.length+'개 후보를 목록에서 삭제할까요? 원본 영상은 삭제되지 않습니다.';
+    if(!window.confirm(message))return;
+    try{
+      var data=await post(ACT,{action:'delete',ids:ids,confirmQueueDelete:true});
+      show('후보 목록에서 '+Number(data.updated||0)+'건을 검색 제외 목록으로 이동했습니다.','ok');
+      await refresh();
+    }catch(error){show(error.message,'warn');}
+  }
+  async function exclusionAction(action,ids){
+    if(!ids.length){show('처리할 검색 제외 항목을 선택해 주세요.','warn');return;}
+    var labels={
+      release_exclusion:'검색 제외 해제·재수집 허용',
+      restore:'후보 대기열 복원',
+      permanent_block:'영구 차단',
+      forget:'기록 완전 삭제'
+    };
+    var label=labels[action]||action;
+    if(!window.confirm(label+' 처리할까요?'))return;
+    var body={action:action,ids:ids,note:label};
+    if(action==='forget')body.confirmPermanentDelete=true;
+    try{
+      var data=await post(ACT,body);
+      show(label+' 처리 '+Number(data.updated||data.deleted||0)+'건 완료','ok');
+      await refresh();
+    }catch(error){show(error.message,'warn');}
+  }
+  async function publish(store){
+    try{
+      var data=await post(PUB,{storeRelease:!!store,includeSnapshot:store?'0':'1',includeBlocked:'1'});
+      show('승격 가능 '+data.eligibleRows+'건 · 정책 차단 '+Number(data.policyBlockedRows||0)+'건'+(store?' · 릴리스 저장 완료':''),'ok');
+      if(!store&&data.snapshot){
+        diagnosticCache=data;
+        $('diagnosticJson').textContent=JSON.stringify(data,null,2);
+        $('diagnosticPanel').classList.remove('hidden');
+      }
+    }catch(error){show(error.message,'warn');}
+  }
+
+  function candidateSources(row){
+    var output=[];
+    function add(url,label){
+      url=text(url);
+      if(!/^https:\/\//i.test(url)||output.some(function(item){return item.url===url;}))return;
+      output.push({url:url,label:label||url});
+    }
+    var candidates=Array.isArray(row.playbackCandidates)?row.playbackCandidates:
+      (row.sourceMetadata&&Array.isArray(row.sourceMetadata.playbackCandidates)?row.sourceMetadata.playbackCandidates:[]);
+    candidates.forEach(function(candidate){add(candidate&&candidate.url,candidate&&candidate.name);});
+    add(row.video,'기본 영상');
+    return output;
+  }
+  function setPlaybackState(message,warn){
+    var element=$('previewPlaybackState');
+    element.textContent=message;element.className='player-status'+(warn?' warn':'');
+  }
+  function loadPreviewSource(index,autoplay){
+    var video=$('previewVideo');
+    if(index>=previewSources.length){
+      setPlaybackState('브라우저에서 재생 가능한 원본을 찾지 못했습니다. 원본 페이지에서 파일 상태를 확인해 주세요.',true);
+      return;
+    }
+    previewSourceIndex=index;
+    video.pause();video.removeAttribute('src');video.load();
+    var source=previewSources[index];
+    setPlaybackState('재생 원본 확인 중 '+(index+1)+'/'+previewSources.length+' · '+source.label,false);
+    video.src=source.url;video.load();
+    if(autoplay){
+      var promise=video.play();
+      if(promise&&promise.catch)promise.catch(function(){});
+    }
+  }
+  function syncPlayButton(){
+    var video=$('previewVideo');
+    $('playToggle').textContent=video.paused?'재생':'일시정지';
+    if(document.fullscreenElement===document.querySelector('.player-shell'))showFullscreenUi(video.paused);
+  }
+  function showFullscreenUi(keepVisible){
+    var shell=document.querySelector('.player-shell'),video=$('previewVideo');
+    if(!shell||document.fullscreenElement!==shell)return;
+    shell.classList.add('controls-visible');clearTimeout(fullscreenUiTimer);
+    if(keepVisible||!video||video.paused)return;
+    fullscreenUiTimer=setTimeout(function(){
+      if(document.fullscreenElement===shell&&!video.paused)shell.classList.remove('controls-visible');
+    },3500);
+  }
+  function formatPlaybackTime(seconds){
+    seconds=Number(seconds);
+    if(!isFinite(seconds)||seconds<0)seconds=0;
+    var hours=Math.floor(seconds/3600);
+    var minutes=Math.floor((seconds%3600)/60);
+    var remainder=Math.floor(seconds%60);
+    return hours>0?
+      String(hours).padStart(2,'0')+':'+String(minutes).padStart(2,'0')+':'+String(remainder).padStart(2,'0'):
+      String(minutes).padStart(2,'0')+':'+String(remainder).padStart(2,'0');
+  }
+  function syncSeekUi(){
+    var video=$('previewVideo'),bar=$('seekBar'),duration=Number(video.duration);
+    $('currentTimeText').textContent=formatPlaybackTime(video.currentTime);
+    $('durationText').textContent=formatPlaybackTime(duration);
+    bar.value=isFinite(duration)&&duration>0?
+      String(Math.max(0,Math.min(1000,Math.round((video.currentTime/duration)*1000)))):'0';
+    bar.disabled=!(isFinite(duration)&&duration>0);
+  }
+  function openPreview(id){
+    var row=rowsCache.find(function(item){return text(item.contentId||item.id)===id;});
+    if(!row)return;
+    currentPreview=row;previewSources=candidateSources(row);previewSourceIndex=0;
+    var video=$('previewVideo');
+    video.pause();video.innerHTML='';
+    $('previewTitle').textContent=row.title||'';
+    $('previewMeta').textContent=[row.sectionKey,'랭킹 '+rowRank(row),row.qualityTarget,row.year,row.ageRating,row.safetyDecision].filter(Boolean).join(' · ');
+    $('sourceOpen').href=text(row.url||row.rights&&row.rights.sourceUrl||row.video)||'#';
+    var select=$('subtitleSelect');
+    select.innerHTML='<option value="">자막 없음</option>';
+    var captions=Array.isArray(row.captions)?row.captions:[];
+    captions.forEach(function(caption,index){
+      var option=document.createElement('option');
+      option.value=String(index);option.textContent=(caption.language||'und')+' · '+(caption.label||('자막 '+(index+1)));
+      select.appendChild(option);
+    });
+    $('previewModal').classList.remove('hidden');
+    $('playToggle').textContent='재생';$('seekBar').value='0';$('seekBar').disabled=true;
+    $('currentTimeText').textContent='00:00';$('durationText').textContent='00:00';
+    document.querySelector('.player-shell').classList.remove('controls-visible');
+    if(previewSources.length)loadPreviewSource(0,false);
+    else setPlaybackState('직접 재생 주소가 없습니다. 원본 페이지를 확인해 주세요.',true);
+  }
+  function applySubtitle(index){
+    var video=$('previewVideo');
+    Array.from(video.querySelectorAll('track')).forEach(function(track){track.remove();});
+    if(index==='')return;
+    var caption=(currentPreview&&currentPreview.captions||[])[Number(index)];
+    if(!caption)return;
+    var track=document.createElement('track');
+    track.kind='subtitles';track.label=caption.label||caption.language||'subtitle';
+    track.srclang=caption.language&&caption.language!=='und'?caption.language:'en';
+    track.src=caption.src;track.default=true;video.appendChild(track);
+    setTimeout(function(){
+      Array.from(video.textTracks||[]).forEach(function(item){item.mode='showing';});
+    },150);
+  }
+  function closePreview(){
+    var video=$('previewVideo');
+    video.pause();clearTimeout(fullscreenUiTimer);
+    if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen().catch(function(){});
+    document.querySelector('.player-shell').classList.remove('controls-visible');
+    video.removeAttribute('src');video.innerHTML='';video.load();
+    $('seekBar').value='0';$('seekBar').disabled=true;
+    $('currentTimeText').textContent='00:00';$('durationText').textContent='00:00';
+    $('previewModal').classList.add('hidden');
+    currentPreview=null;previewSources=[];previewSourceIndex=0;
+  }
+  function previewClick(event){
+    var button=event.target.closest('.previewBtn');
+    if(button)openPreview(text(button.dataset.candidateId));
+  }
+
+  function bind(){
+    $('refreshBtn').onclick=refresh;
+    $('diagnosticBtn').onclick=diagnostic;
+    $('downloadJsonBtn').onclick=function(){
+      if(diagnosticCache)download(JSON.stringify(diagnosticCache,null,2)+'\n','igdc-media-candidate-diagnostic.json');
+    };
+    $('downloadCandidateListBtn').onclick=function(){
+      var rows=visibleRows();
+      download(JSON.stringify({ok:true,generatedAt:new Date().toISOString(),count:rows.length,rows:rows},null,2)+'\n','igdc-media-candidate-visible-list.json');
+    };
+    $('returnBtn').onclick=function(){location.href='/admin.html';};
+    $('collectBtn').onclick=function(){collect(false,false);};
+    $('collectAllBtn').onclick=collectAll;
+    $('collectorStopBtn').onclick=function(){
+      collectorStopRequested=true;this.disabled=true;$('collectorState').textContent='현재 묶음 후 일시정지';
+    };
+    $('collectAdminExceptionBtn').onclick=function(){collect(true,false);};
+    $('approveBtn').onclick=function(){candidateAction('approve',selectedIds('.rowcheck'));};
+    $('holdBtn').onclick=function(){candidateAction('hold',selectedIds('.rowcheck'));};
+    $('resetBtn').onclick=function(){candidateAction('reset',selectedIds('.rowcheck'));};
+    $('rejectBtn').onclick=function(){candidateAction('reject',selectedIds('.rowcheck'));};
+    $('blockBtn').onclick=function(){candidateAction('block',selectedIds('.rowcheck'));};
+    $('deleteBtn').onclick=function(){removeCandidates(selectedIds('.rowcheck'),false);};
+    $('deleteVisibleBtn').onclick=function(){removeCandidates(currentVisibleIds(),true);};
+    $('toggleExclusionBtn').onclick=function(){
+      var body=$('exclusionBody'),open=body.classList.contains('hidden');
+      body.classList.toggle('hidden',!open);this.textContent=open?'목록 접기':'목록 펼치기';
+    };
+    $('releaseExcludedBtn').onclick=function(){exclusionAction('release_exclusion',selectedIds('.excludedCheck'));};
+    $('restoreExcludedBtn').onclick=function(){exclusionAction('restore',selectedIds('.excludedCheck'));};
+    $('permanentBlockExcludedBtn').onclick=function(){exclusionAction('permanent_block',selectedIds('.excludedCheck'));};
+    $('forgetExcludedBtn').onclick=function(){exclusionAction('forget',selectedIds('.excludedCheck'));};
+    $('publishPreviewBtn').onclick=function(){publish(false);};
+    $('storeReleaseBtn').onclick=function(){publish(true);};
+    $('downloadSnapshotBtn').onclick=async function(){
+      try{
+        var response=await fetch(PUB+'?download=1',{headers:headers(false),credentials:'same-origin'});
+        var body=await response.text();
+        if(!response.ok)throw new Error(body||'다운로드 실패');
+        download(body,'media.snapshot.generated.json');
+      }catch(error){show(error.message,'warn');}
+    };
+
+    ['searchInput','sectionFilter','riskFilter','safetyFilter','statusFilter','sortSelect','groupBySection'].forEach(function(id){
+      $(id).addEventListener('input',renderRows);$(id).addEventListener('change',renderRows);
+    });
+    $('collectorSection').addEventListener('change',function(){renderSummary(summaryCache);});
+    $('selectAllRows').onchange=function(){
+      var checked=this.checked;document.querySelectorAll('.rowcheck').forEach(function(element){element.checked=checked;});
+    };
+    $('selectAllExcluded').onchange=function(){
+      var checked=this.checked;document.querySelectorAll('.excludedCheck').forEach(function(element){element.checked=checked;});
+    };
+    $('candidateRows').addEventListener('click',previewClick);
+    $('excludedRows').addEventListener('click',previewClick);
+    $('previewClose').onclick=closePreview;
+    $('previewModal').addEventListener('click',function(event){if(event.target===this)closePreview();});
+    $('playToggle').onclick=function(){
+      var video=$('previewVideo');
+      if(video.paused){var promise=video.play();if(promise&&promise.catch)promise.catch(function(){});}
+      else video.pause();
+      syncPlayButton();
+    };
+    $('previewVideo').onclick=function(){
+      if(this.paused){var promise=this.play();if(promise&&promise.catch)promise.catch(function(){});}
+      else this.pause();
+    };
+    $('previewVideo').addEventListener('play',syncPlayButton);
+    $('previewVideo').addEventListener('pause',syncPlayButton);
+    $('previewVideo').addEventListener('ended',syncPlayButton);
+    $('back10').onclick=function(){
+      var video=$('previewVideo');video.currentTime=Math.max(0,video.currentTime-10);syncSeekUi();showFullscreenUi(video.paused);
+    };
+    $('forward10').onclick=function(){
+      var video=$('previewVideo');video.currentTime=Math.min(video.duration||Infinity,video.currentTime+10);syncSeekUi();showFullscreenUi(video.paused);
+    };
+    $('muteToggle').onclick=function(){
+      var video=$('previewVideo');video.muted=!video.muted;this.textContent=video.muted?'음소거 해제':'음소거';
+    };
+    $('fitToggle').onclick=function(){
+      var video=$('previewVideo');video.style.objectFit=video.style.objectFit==='cover'?'contain':'cover';this.textContent=video.style.objectFit==='cover'?'맞춤':'채움';
+    };
+    $('previewVideo').addEventListener('loadedmetadata',function(){
+      setPlaybackState('재생 가능 · '+(this.videoWidth||'?')+'×'+(this.videoHeight||'?')+' · '+(isFinite(this.duration)?Math.round(this.duration)+'초':'길이 확인 중'),false);
+      syncSeekUi();
+    });
+    $('previewVideo').addEventListener('durationchange',syncSeekUi);
+    $('previewVideo').addEventListener('timeupdate',syncSeekUi);
+    $('previewVideo').addEventListener('progress',syncSeekUi);
+    $('previewVideo').addEventListener('canplay',function(){
+      setPlaybackState('실제 재생 준비 완료 · 원본 '+(previewSourceIndex+1)+'/'+previewSources.length,false);
+    });
+    $('previewVideo').addEventListener('error',function(){
+      if($('previewModal').classList.contains('hidden'))return;
+      var next=previewSourceIndex+1;
+      if(next<previewSources.length){
+        setPlaybackState('현재 원본 재생 실패 · 다음 고화질 원본으로 전환합니다.',true);loadPreviewSource(next,true);
+      }else setPlaybackState('모든 직접 재생 원본이 실패했습니다. 원본 페이지에서 확인해 주세요.',true);
+    });
+    $('seekBar').addEventListener('input',function(){
+      var video=$('previewVideo'),duration=Number(video.duration);
+      if(isFinite(duration)&&duration>0){
+        video.currentTime=(Number(this.value)/1000)*duration;
+        $('currentTimeText').textContent=formatPlaybackTime(video.currentTime);
+      }
+      showFullscreenUi(true);
+    });
+    $('seekBar').addEventListener('change',function(){syncSeekUi();showFullscreenUi($('previewVideo').paused);});
+    $('subtitleSelect').onchange=function(){applySubtitle(this.value);};
+    $('subtitleToggle').onclick=function(){
+      var tracks=$('previewVideo').textTracks;
+      if(!tracks||!tracks.length)return;
+      var visible=tracks[0].mode!=='showing';
+      Array.from(tracks).forEach(function(track){track.mode=visible?'showing':'disabled';});
+      this.textContent=visible?'자막 끄기':'자막 켜기';
+    };
+    $('fullscreenBtn').onclick=function(){
+      var shell=document.querySelector('.player-shell');
+      if(document.fullscreenElement)document.exitFullscreen();
+      else if(shell.requestFullscreen)shell.requestFullscreen();
+    };
+    var shell=document.querySelector('.player-shell');
+    shell.addEventListener('pointermove',function(){if(document.fullscreenElement===shell)showFullscreenUi(false);});
+    shell.addEventListener('pointerdown',function(){if(document.fullscreenElement===shell)showFullscreenUi(true);});
+    document.addEventListener('pointermove',function(event){
+      if(document.fullscreenElement!==shell)return;
+      if(event.clientY<130||event.clientY>window.innerHeight-220)showFullscreenUi(false);
+    });
+    shell.addEventListener('touchstart',function(){showFullscreenUi(true);},{passive:true});
+    document.addEventListener('fullscreenchange',function(){
+      if(document.fullscreenElement===shell){
+        shell.classList.add('controls-visible');showFullscreenUi(true);$('fullscreenBtn').textContent='전체화면 종료';
+      }else{
+        clearTimeout(fullscreenUiTimer);shell.classList.remove('controls-visible');$('fullscreenBtn').textContent='전체화면';
+      }
+    });
+    document.addEventListener('keydown',function(event){
+      if(event.key==='Escape'&&!document.fullscreenElement&&!$('previewModal').classList.contains('hidden'))closePreview();
+    });
+    refresh();
+  }
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);
+  else bind();
 })();

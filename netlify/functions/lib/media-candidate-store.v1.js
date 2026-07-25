@@ -8,8 +8,9 @@
  * It does not modify public static data/*.json files at runtime.
  */
 const crypto = require("crypto");
+const MediaPolicy = require("./media-candidate-policy.v2");
 
-const VERSION = "media-candidate-store-v1.0.0-supabase-snapshot-bridge";
+const VERSION = "media-candidate-store-v1.1.0-policy-gated-snapshot-bridge";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE = process.env.MEDIA_CANDIDATE_TABLE || "media_candidates";
 const RELEASE_TABLE = process.env.MEDIA_SNAPSHOT_RELEASE_TABLE || "media_snapshot_releases";
@@ -142,8 +143,8 @@ function normalizeCandidate(input, actor){
   const idRaw=text(row.id || row.contentId || row.candidateId) || "media_"+shortHash({section,title,provider,sourceUrl,videoUrl,embedUrl});
   const id=idRaw.toLowerCase().replace(/[^a-z0-9_.:-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,96) || "media_"+shortHash({title,provider,sourceUrl});
   const rightsStatus=lower(row.rights_status || row.rightsStatus || row.license || row.rights && row.rights.status) || "web_verification_required";
-  const verificationStatus=lower(row.verification_status || row.verificationStatus) || "web_verification_required";
-  const reviewStatus=lower(row.review_status || row.reviewStatus) || "pending";
+  const policyAssessment=MediaPolicy.assessCandidate(row, {adminException:row.adminException===true || row.sourceMetadata && row.sourceMetadata.adminException===true});
+  const reviewStatus=policyAssessment.reviewStatus;
   return {
     id,
     section_key: section,
@@ -156,16 +157,16 @@ function normalizeCandidate(input, actor){
     source_host: host,
     quality_hint: compact(row.quality_hint || row.qualityHint || row.quality || row.resolution, 80),
     rights_status: rightsStatus,
-    allowed_use: lower(row.allowed_use || row.allowedUse) || "verification_required",
-    verification_status: verificationStatus,
+    allowed_use: rightsStatus === "public_rights_signal_found" ? "rights_evidence_review_required" : "verification_required",
+    verification_status: reviewStatus === "permanent_blocked" ? "permanent_blocked" : "web_verification_required",
     review_status: reviewStatus,
-    risk_level: lower(row.risk_level || row.riskLevel) || "unverified",
+    risk_level: policyAssessment.riskLevel,
     priority: compact(row.priority || row.rank || "B2", 30),
-    candidate_only: row.candidateOnly === undefined ? true : bool(row.candidateOnly),
-    seed_content: row.seedContent === undefined ? true : bool(row.seedContent),
+    candidate_only: true,
+    seed_content: true,
     sanmaru_query: compact(row.sanmaru_query || row.sanmaruSearchSeed || row.searchSeed || row.query, 500),
     notes: compact(row.notes || row.note || row.reason || "", 1000),
-    raw: row,
+    raw: Object.assign({}, row, {policyAssessment}),
     created_by: compact(actor && (actor.email || actor.memberId) || "sanmaru", 200),
     updated_by: compact(actor && (actor.email || actor.memberId) || "sanmaru", 200),
     updated_at: nowIso()
@@ -180,20 +181,23 @@ function validateCandidate(row){
   return {ok:reasons.length===0,reasons};
 }
 function snapshotEligible(row){
-  const review=lower(row.review_status);
-  const verify=lower(row.verification_status);
-  const rights=lower(row.rights_status);
-  const allowed=lower(row.allowed_use);
   const urls=[row.source_url,row.video_url,row.embed_url].map(normalizeUrl).filter(Boolean);
   const thumb=normalizeUrl(row.thumb_url);
-  const blocked = row.candidate_only === true || row.seed_content === true || /pending|verification_required|web_verification_required|candidate|hold|blocked|rejected/.test(review+" "+verify+" "+rights+" "+allowed);
-  return review === "approved" && verify === "approved_for_snapshot" && !blocked && !!row.title && !!thumb && urls.length>0;
+  return MediaPolicy.releaseEligibility(row).ok && !!row.title && !!thumb && urls.length>0;
 }
 function publicSlot(row, slotId, defaults){
   const base=plain(defaults);
+  const raw=plain(row.raw);
+  const source=plain(raw.sourceMetadata);
+  const policy=MediaPolicy.releaseEligibility(row);
   const sourceUrl=normalizeUrl(row.source_url || row.embed_url || row.video_url);
   const videoUrl=normalizeUrl(row.video_url);
   const embedUrl=normalizeUrl(row.embed_url);
+  const captions=array(raw.captions).filter((track)=>plain(track).src).map((track)=>({
+    src:normalizeUrl(track.src),
+    label:compact(track.label || track.language || "subtitle",160),
+    language:compact(track.language || "und",20)
+  })).filter((track)=>track.src);
   return Object.assign({}, base, {
     slotId: Number(slotId)||base.slotId||1,
     contentId: text(row.id),
@@ -206,9 +210,20 @@ function publicSlot(row, slotId, defaults){
     video: videoUrl || undefined,
     embedUrl: embedUrl || undefined,
     quality: text(row.quality_hint),
+    year: Number(raw.year || source.year || 0) || null,
+    publishedAt: text(raw.publishedAt || source.publicdate || source.date) || null,
+    durationSeconds: Number(raw.durationSeconds || source.durationSeconds || 0) || null,
+    captions,
+    subtitleLanguages:array(raw.subtitleLanguages).map(text).filter(Boolean),
+    ageRating:text(raw.ageRating || "전체"),
+    contentWarnings:array(raw.contentWarnings).map(text).filter(Boolean),
+    requestedSection:text(raw.requestedSection || source.requestedSection),
+    classifiedSection:text(raw.classifiedSection || source.classifiedSection || row.section_key),
+    rankingScore:Number(raw.rankingScore || 0),
+    rankingTier:text(raw.rankingTier || row.priority),
     rights: {
-      status: text(row.rights_status || "approved"),
-      allowedUse: text(row.allowed_use || "embed-only"),
+      status: text(row.rights_status),
+      allowedUse: text(row.allowed_use),
       verifiedAt: text(row.reviewed_at || row.updated_at || nowIso()),
       sourceUrl: sourceUrl,
       provider: text(row.provider || row.source_host),
@@ -218,6 +233,16 @@ function publicSlot(row, slotId, defaults){
     candidateOnly: false,
     seedContent: false,
     verificationStatus: "approved_for_snapshot",
+    managedBy:"media-snapshot-publish",
+    releaseContract:{
+      policy:MediaPolicy.VERSION,
+      eligible:policy.ok,
+      safetyDecision:policy.safety.decision === "quarantine" ? "administrator_approved" : policy.safety.decision,
+      rightsStatus:text(row.rights_status),
+      allowedUse:text(row.allowed_use),
+      reviewedAt:text(row.reviewed_at || row.updated_at),
+      reviewedBy:text(row.reviewed_by || row.updated_by)
+    },
     outbound: Object.assign({}, plain(base.outbound), {enabled:true, track:true}),
     payment: {enabled:false, type:"none", price:null, currency:"USD", pg:null, productId:null},
     revenue: {ads:true, affiliate:false, provider:false, directSale:false}
@@ -236,19 +261,29 @@ function groupsBySection(rows){
 }
 function buildSnapshot(baseSnapshot, rows, opts){
   const base=plain(baseSnapshot);
-  const sections=plain(base.sections);
+  const sections=Object.assign({}, plain(base.sections));
   const groups=groupsBySection(rows.filter(snapshotEligible));
   const filled={};
   Object.keys(groups).forEach((sectionKey)=>{
     const current=sections[sectionKey];
     const sectionObj=Array.isArray(current)?{title:sectionKey,slots:current,key:sectionKey}:plain(current);
     const slots=Array.isArray(sectionObj.slots)?sectionObj.slots.slice():[];
-    const capacity=Math.max(slots.length, Number(opts && opts.capacityPerSection)||90);
+    const requestedCapacity=Number(opts && opts.capacityPerSection);
+    const policyCapacity=sectionKey==="media-music"||sectionKey==="media-shorts"?50:100;
+    const capacity=Math.max(1, Math.min(policyCapacity, Number.isFinite(requestedCapacity)&&requestedCapacity>0?requestedCapacity:policyCapacity));
     const next=[];
-    for(let i=0;i<capacity;i++) next.push(slots[i] ? Object.assign({}, slots[i]) : {slotId:i+1, contentId:null, title:null, thumb:"#", provider:null});
-    groups[sectionKey].slice(0,capacity).forEach((row,index)=>{next[index]=publicSlot(row,index+1,next[index]);});
+    for(let i=0;i<capacity;i++){
+      const slot=plain(slots[i]);
+      const externallyManaged=text(slot.title) && slot.managedBy!=="media-snapshot-publish" && MediaPolicy.publicReleaseAllowed(slot);
+      next.push(externallyManaged?Object.assign({},slot):{slotId:i+1,contentId:null,title:null,thumb:"#",provider:null});
+    }
+    let cursor=0;
+    groups[sectionKey].slice(0,capacity).forEach((row)=>{
+      while(cursor<next.length && text(next[cursor].title)) cursor+=1;
+      if(cursor<next.length){next[cursor]=publicSlot(row,cursor+1,next[cursor]);cursor+=1;}
+    });
     sections[sectionKey]=Object.assign({}, sectionObj, {key:sectionKey, slots:next});
-    filled[sectionKey]=Math.min(groups[sectionKey].length,capacity);
+    filled[sectionKey]=next.filter((slot)=>slot && slot.managedBy==="media-snapshot-publish" && MediaPolicy.publicReleaseAllowed(slot)).length;
   });
   return Object.assign({}, base, {
     version:"media.snapshot.generated.supabase.v1",
@@ -259,6 +294,8 @@ function buildSnapshot(baseSnapshot, rows, opts){
       generatedBy:"media-snapshot-publish",
       source:"supabase.media_candidates",
       section1Policy:"media-trending is not manually seeded; only sections 2-10 are filled here.",
+      releasePolicy:MediaPolicy.VERSION,
+      capacities:{"media-music":50,"media-shorts":50,default:100},
       filled
     })
   });
@@ -267,5 +304,5 @@ module.exports={
   VERSION, CANDIDATE_TABLE, RELEASE_TABLE, ALLOWED_SECTIONS,
   text, lower, compact, bool, plain, array, nowIso, sha256, shortHash, normalizeUrl, hostOf, normalizeSection, roleList, requireRole,
   response, parseBody, config, supabase, rest, encodeEq, encodeIn, selectCandidates, upsertCandidates, updateCandidates, deleteCandidates, insertRelease,
-  normalizeCandidate, validateCandidate, snapshotEligible, publicSlot, buildSnapshot
+  normalizeCandidate, validateCandidate, snapshotEligible, publicSlot, buildSnapshot, MediaPolicy
 };

@@ -10,7 +10,7 @@ const path = require("path");
 const MediaStore = require("./lib/media-candidate-store.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "media-snapshot-publish-v1.0.1-shared-admin-auth";
+const VERSION = "media-snapshot-publish-v1.1.0-policy-gated-release";
 
 async function actorFor(event, storeRelease){
   const actor = await SharedAdminAuth.resolveUser(event);
@@ -43,15 +43,17 @@ exports.handler = async function(event){
     const actor=await actorFor(event, storeRelease);
     const rows=await MediaStore.selectCandidates(queryApproved(params.limit));
     const base=baseSnapshot();
-    const snapshot=MediaStore.buildSnapshot(base.doc, Array.isArray(rows)?rows:[], {capacityPerSection: Number(params.capacityPerSection)||90});
+    const snapshot=MediaStore.buildSnapshot(base.doc, Array.isArray(rows)?rows:[], Number(params.capacityPerSection)>0?{capacityPerSection:Number(params.capacityPerSection)}:{});
     const hash=MediaStore.sha256(snapshot);
     const eligible=Array.isArray(rows)?rows.filter(MediaStore.snapshotEligible).length:0;
+    const blocked=Array.isArray(rows)?rows.filter((row)=>!MediaStore.snapshotEligible(row)).map((row)=>({id:MediaStore.text(row&&row.id),reasons:MediaStore.MediaPolicy.releaseEligibility(row).reasons})):[]; 
     const release={
       release_id:"media_snapshot_"+MediaStore.shortHash({hash,at:MediaStore.nowIso()}),
       snapshot_hash:hash,
       snapshot,
       status: storeRelease ? "stored" : "preview",
-      counts:{approvedRows:Array.isArray(rows)?rows.length:0,eligibleRows:eligible,sections:snapshot.meta&&snapshot.meta.filled||{}},
+      policyVersion:MediaStore.MediaPolicy.VERSION,
+      counts:{approvedRows:Array.isArray(rows)?rows.length:0,eligibleRows:eligible,policyBlockedRows:blocked.length,sections:snapshot.meta&&snapshot.meta.filled||{}},
       created_by:MediaStore.compact(actor.email || actor.memberId || "admin",200),
       created_at:MediaStore.nowIso()
     };
@@ -60,7 +62,7 @@ exports.handler = async function(event){
     if(params.download === "1" || params.download === true || params.format === "snapshot"){
       return {statusCode:200,headers:{"content-type":"application/json; charset=utf-8","cache-control":"private, no-store, max-age=0","content-disposition":"attachment; filename=media.snapshot.generated.json"},body:JSON.stringify(snapshot,null,2)+"\n"};
     }
-    return MediaStore.response(200,{ok:true,version:VERSION,baseFile:base.file,hash,approvedRows:Array.isArray(rows)?rows.length:0,eligibleRows:eligible,releaseStored:!!stored,stored,release:params.includeSnapshot === "1" ? release : Object.assign({}, release, {snapshot:undefined}),snapshot:params.includeSnapshot === "1" ? snapshot : undefined});
+    return MediaStore.response(200,{ok:true,version:VERSION,policyVersion:MediaStore.MediaPolicy.VERSION,baseFile:base.file,hash,approvedRows:Array.isArray(rows)?rows.length:0,eligibleRows:eligible,policyBlockedRows:blocked.length,blocked:params.includeBlocked==="1"?blocked:undefined,releaseStored:!!stored,stored,release:params.includeSnapshot === "1" ? release : Object.assign({}, release, {snapshot:undefined}),snapshot:params.includeSnapshot === "1" ? snapshot : undefined});
   }catch(error){
     return MediaStore.response(error.statusCode || 500,{ok:false,version:VERSION,error:error.code||"media_snapshot_publish_failed",message:error.message||String(error)});
   }
