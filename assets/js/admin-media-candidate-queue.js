@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v2.3 - policy quarantine, guarded release and full-section collection */
+/* IGDC Media Candidate Queue v2.4 - exact exclusion restore and administrator playback diagnostics */
 (function(){
   'use strict';
 
@@ -192,13 +192,17 @@
   }
   function exclusionRowHtml(row,index){
     var id=text(row.contentId||row.id),status=lower(row.reviewStatus);
-    var label=status==='permanent_blocked'?'영구 차단':status==='exclusion_released'?'제외 해제·재수집 허용':'검색 제외';
+    var label=status==='permanent_blocked'?'영구 차단':status==='exclusion_released'?'이전 제외 해제 기록':'검색 제외';
     var className=status==='permanent_blocked'?'blocked':status==='search_excluded'?'quarantine':'';
+    var restore=row.exclusionRestore||{};
+    var restoreTarget=restore.exact?
+      [restore.originalReviewStatus||'상태 미상',restore.originalSectionKey||row.sectionKey||'섹션 미상',restore.originalPriority||'순위 미상'].join(' · '):
+      '이전 기록 · 보류/안전 기본값 복원';
     return '<tr>'+
       '<td class="seq">'+(index+1)+'</td><td><input class="excludedCheck" type="checkbox" data-candidate-id="'+esc(id)+'"></td>'+
       '<td>'+pill(row.sectionKey,'section')+'</td><td>'+pill(label,className)+'</td>'+
       '<td><strong class="candidate-title"><button type="button" class="previewBtn" data-candidate-id="'+esc(id)+'">'+esc(row.title||'(제목 없음)')+'</button></strong><div class="mono small">'+esc(id)+'</div></td>'+
-      '<td>'+esc(row.blockedReason||row.reviewNote||'-')+'</td><td>'+esc(row.provider||'-')+'</td><td class="nowrap">'+esc(row.reviewedAt||'-')+'</td>'+
+      '<td>'+esc(restoreTarget)+'</td><td>'+esc(row.blockedReason||row.reviewNote||'-')+'</td><td>'+esc(row.provider||'-')+'</td><td class="nowrap">'+esc(restore.excludedAt||row.reviewedAt||'-')+'</td>'+
       '</tr>';
   }
   function renderExclusions(){
@@ -211,14 +215,14 @@
     SECTION_ORDER.concat(Object.keys(groups).filter(function(key){return SECTION_ORDER.indexOf(key)<0;}).sort()).forEach(function(key){
       var list=groups[key];
       if(!list||!list.length)return;
-      html+='<tr class="group-row"><td colspan="8">'+esc(key)+' · '+list.length+'개</td></tr>';
+      html+='<tr class="group-row"><td colspan="9">'+esc(key)+' · '+list.length+'개</td></tr>';
       list.forEach(function(row){html+=exclusionRowHtml(row,sequence++);});
     });
-    $('excludedRows').innerHTML=html||'<tr><td colspan="8" class="small">검색 제외·해제 기록 또는 영구 차단 항목이 없습니다.</td></tr>';
+    $('excludedRows').innerHTML=html||'<tr><td colspan="9" class="small">검색 제외 기록 또는 영구 차단 항목이 없습니다.</td></tr>';
     var excluded=excludedCache.filter(function(row){return lower(row.reviewStatus)==='search_excluded';}).length;
     var released=excludedCache.filter(function(row){return lower(row.reviewStatus)==='exclusion_released';}).length;
     var blocked=excludedCache.filter(function(row){return lower(row.reviewStatus)==='permanent_blocked';}).length;
-    $('exclusionSummary').textContent='검색 제외 '+excluded+'건 · 해제 기록 '+released+'건 · 영구 차단 '+blocked+'건 · 전체 '+excludedCache.length+'건';
+    $('exclusionSummary').textContent='검색 제외 '+excluded+'건 · 이전 해제 기록 '+released+'건 · 영구 차단 '+blocked+'건 · 전체 '+excludedCache.length+'건';
     $('exclusionPanel').classList.remove('hidden');
     $('selectAllExcluded').checked=false;
   }
@@ -432,18 +436,25 @@
   async function exclusionAction(action,ids){
     if(!ids.length){show('처리할 검색 제외 항목을 선택해 주세요.','warn');return;}
     var labels={
-      release_exclusion:'검색 제외 해제·재수집 허용',
-      restore:'후보 대기열 복원',
+      restore_hold:'보류로 복원·검색 제외 해제',
+      restore:'원래 후보 상태·섹션·정렬 위치로 복원',
       permanent_block:'영구 차단',
       forget:'기록 완전 삭제'
     };
     var label=labels[action]||action;
-    if(!window.confirm(label+' 처리할까요?'))return;
+    var outcomes={
+      restore_hold:'후보 본문과 점검 이력은 보존되고 보류 대기열로 이동합니다.',
+      restore:'검색 제외 직전 상태와 위치 정보가 있으면 그대로 복귀합니다.',
+      permanent_block:'다음 수집과 일반·보류 복원이 모두 차단됩니다.',
+      forget:'후보와 제외·차단 기록을 완전히 삭제하여 향후 재평가를 허용합니다.'
+    };
+    if(!window.confirm(label+' 처리할까요?\n\n'+(outcomes[action]||'')))return;
     var body={action:action,ids:ids,note:label};
     if(action==='forget')body.confirmPermanentDelete=true;
     try{
       var data=await post(ACT,body);
-      show(label+' 처리 '+Number(data.updated||data.deleted||0)+'건 완료','ok');
+      var legacy=Number(data.legacyFallbackCount||0);
+      show(label+' 처리 '+Number(data.updated||data.deleted||0)+'건 완료'+(legacy?' · 이전 형식 '+legacy+'건은 안전 기본값으로 복원':''),'ok');
       await refresh();
     }catch(error){show(error.message,'warn');}
   }
@@ -461,16 +472,51 @@
 
   function candidateSources(row){
     var output=[];
-    function add(url,label){
+    function add(url,label,designated){
       url=text(url);
-      if(!/^https:\/\//i.test(url)||output.some(function(item){return item.url===url;}))return;
+      var direct=designated||/\.(?:mp4|m4v|webm|ogv|ogg)(?:[?#]|$)/i.test(url);
+      if(!direct||!/^https:\/\//i.test(url)||output.some(function(item){return item.url===url;}))return;
       output.push({url:url,label:label||url});
     }
     var candidates=Array.isArray(row.playbackCandidates)?row.playbackCandidates:
       (row.sourceMetadata&&Array.isArray(row.sourceMetadata.playbackCandidates)?row.sourceMetadata.playbackCandidates:[]);
-    candidates.forEach(function(candidate){add(candidate&&candidate.url,candidate&&candidate.name);});
-    add(row.video,'기본 영상');
+    candidates.forEach(function(candidate){add(candidate&&candidate.url,candidate&&candidate.name,true);});
+    add(row.video,'기본 영상',true);
+    add(row.embedUrl,'직접 미디어 형식의 임베드 주소',false);
+    add(row.url,'직접 미디어 형식의 원본 주소',false);
     return output;
+  }
+  function safeWebUrl(value){
+    value=text(value);
+    return /^https:\/\//i.test(value)?value:'';
+  }
+  function sourceDetail(row,directCount){
+    var parts=['직접 재생 원본 '+directCount+'개'];
+    if(safeWebUrl(row.embedUrl))parts.push('임베드 주소 있음'+(/\.(?:mp4|m4v|webm|ogv|ogg)(?:[?#]|$)/i.test(row.embedUrl)?' · 직접 재생 후보':' · 내부 영상 조작 불가 형식'));
+    else parts.push('임베드 주소 없음');
+    if(safeWebUrl(row.url||row.rights&&row.rights.sourceUrl))parts.push('원본 페이지 있음');
+    else parts.push('원본 페이지 없음');
+    parts.push('썸네일 '+(safeWebUrl(row.thumb)?'있음':'없음'));
+    parts.push('자막 '+Number((row.captions||[]).length||0)+'개');
+    return parts.join(' · ');
+  }
+  function playbackErrorText(video,error){
+    if(error&&error.name)return error.name+(error.message?' · '+error.message:'');
+    var mediaError=video&&video.error;
+    if(!mediaError)return'브라우저가 상세 오류를 제공하지 않았습니다.';
+    var labels={
+      1:'재생 요청이 중단되었습니다.',
+      2:'네트워크 오류로 미디어를 가져오지 못했습니다.',
+      3:'미디어 디코딩에 실패했습니다.',
+      4:'브라우저가 이 주소나 코덱을 지원하지 않습니다.'
+    };
+    return labels[mediaError.code]||('미디어 오류 코드 '+mediaError.code);
+  }
+  function attemptPlay(video){
+    var promise=video.play();
+    if(promise&&promise.catch)promise.catch(function(error){
+      setPlaybackState('재생 시작 실패: '+playbackErrorText(video,error),true);
+    });
   }
   function setPlaybackState(message,warn){
     var element=$('previewPlaybackState');
@@ -487,10 +533,7 @@
     var source=previewSources[index];
     setPlaybackState('재생 원본 확인 중 '+(index+1)+'/'+previewSources.length+' · '+source.label,false);
     video.src=source.url;video.load();
-    if(autoplay){
-      var promise=video.play();
-      if(promise&&promise.catch)promise.catch(function(){});
-    }
+    if(autoplay)attemptPlay(video);
   }
   function syncPlayButton(){
     var video=$('previewVideo');
@@ -529,10 +572,17 @@
     if(!row)return;
     currentPreview=row;previewSources=candidateSources(row);previewSourceIndex=0;
     var video=$('previewVideo');
-    video.pause();video.innerHTML='';
+    video.pause();video.innerHTML='';video.poster=safeWebUrl(row.thumb);
     $('previewTitle').textContent=row.title||'';
     $('previewMeta').textContent=[row.sectionKey,'랭킹 '+rowRank(row),row.qualityTarget,row.year,row.ageRating,row.safetyDecision].filter(Boolean).join(' · ');
-    $('sourceOpen').href=text(row.url||row.rights&&row.rights.sourceUrl||row.video)||'#';
+    $('previewSourceDetail').textContent=sourceDetail(row,previewSources.length);
+    var sourcePage=safeWebUrl(row.url||row.rights&&row.rights.sourceUrl);
+    var embedPage=safeWebUrl(row.embedUrl);
+    var directPage=safeWebUrl(row.video);
+    var sourceUrl=sourcePage||embedPage||directPage;
+    $('sourceOpen').href=sourceUrl||'#';
+    $('sourceOpen').textContent=sourcePage?'원본 페이지':embedPage?'임베드 주소':directPage?'직접 영상 주소':'외부 주소 없음';
+    $('sourceOpen').setAttribute('aria-disabled',sourceUrl?'false':'true');
     var select=$('subtitleSelect');
     select.innerHTML='<option value="">자막 없음</option>';
     var captions=Array.isArray(row.captions)?row.captions:[];
@@ -546,7 +596,9 @@
     $('currentTimeText').textContent='00:00';$('durationText').textContent='00:00';
     document.querySelector('.player-shell').classList.remove('controls-visible');
     if(previewSources.length)loadPreviewSource(0,false);
-    else setPlaybackState('직접 재생 주소가 없습니다. 원본 페이지를 확인해 주세요.',true);
+    else if(safeWebUrl(row.embedUrl))setPlaybackState('직접 재생 주소가 없습니다. 임베드 주소는 있으나 이 내부 HTML5 플레이어에서 진행바·±10초 조작을 지원하는 미디어 형식이 아닙니다.',true);
+    else if(sourceUrl)setPlaybackState('직접 재생 주소가 없습니다. 원본 페이지에서 실제 파일 제공 여부를 확인해 주세요.',true);
+    else setPlaybackState('영상·임베드·원본 페이지 주소가 모두 없어 재생할 수 없습니다.',true);
   }
   function applySubtitle(index){
     var video=$('previewVideo');
@@ -557,6 +609,7 @@
     var track=document.createElement('track');
     track.kind='subtitles';track.label=caption.label||caption.language||'subtitle';
     track.srclang=caption.language&&caption.language!=='und'?caption.language:'en';
+    if(!safeWebUrl(caption.src)){setPlaybackState('선택한 자막 주소가 유효한 HTTPS 주소가 아닙니다.',true);return;}
     track.src=caption.src;track.default=true;video.appendChild(track);
     setTimeout(function(){
       Array.from(video.textTracks||[]).forEach(function(item){item.mode='showing';});
@@ -567,7 +620,7 @@
     video.pause();clearTimeout(fullscreenUiTimer);
     if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen().catch(function(){});
     document.querySelector('.player-shell').classList.remove('controls-visible');
-    video.removeAttribute('src');video.innerHTML='';video.load();
+    video.removeAttribute('src');video.removeAttribute('poster');video.innerHTML='';video.load();
     $('seekBar').value='0';$('seekBar').disabled=true;
     $('currentTimeText').textContent='00:00';$('durationText').textContent='00:00';
     $('previewModal').classList.add('hidden');
@@ -606,7 +659,7 @@
       var body=$('exclusionBody'),open=body.classList.contains('hidden');
       body.classList.toggle('hidden',!open);this.textContent=open?'목록 접기':'목록 펼치기';
     };
-    $('releaseExcludedBtn').onclick=function(){exclusionAction('release_exclusion',selectedIds('.excludedCheck'));};
+    $('restoreHoldExcludedBtn').onclick=function(){exclusionAction('restore_hold',selectedIds('.excludedCheck'));};
     $('restoreExcludedBtn').onclick=function(){exclusionAction('restore',selectedIds('.excludedCheck'));};
     $('permanentBlockExcludedBtn').onclick=function(){exclusionAction('permanent_block',selectedIds('.excludedCheck'));};
     $('forgetExcludedBtn').onclick=function(){exclusionAction('forget',selectedIds('.excludedCheck'));};
@@ -637,22 +690,26 @@
     $('previewModal').addEventListener('click',function(event){if(event.target===this)closePreview();});
     $('playToggle').onclick=function(){
       var video=$('previewVideo');
-      if(video.paused){var promise=video.play();if(promise&&promise.catch)promise.catch(function(){});}
+      if(video.paused)attemptPlay(video);
       else video.pause();
       syncPlayButton();
     };
     $('previewVideo').onclick=function(){
-      if(this.paused){var promise=this.play();if(promise&&promise.catch)promise.catch(function(){});}
+      if(this.paused)attemptPlay(this);
       else this.pause();
     };
     $('previewVideo').addEventListener('play',syncPlayButton);
     $('previewVideo').addEventListener('pause',syncPlayButton);
     $('previewVideo').addEventListener('ended',syncPlayButton);
     $('back10').onclick=function(){
-      var video=$('previewVideo');video.currentTime=Math.max(0,video.currentTime-10);syncSeekUi();showFullscreenUi(video.paused);
+      var video=$('previewVideo');
+      if(!isFinite(Number(video.duration))||Number(video.duration)<=0){setPlaybackState('재생 시간이 확인되지 않아 -10초 이동을 실행할 수 없습니다.',true);return;}
+      video.currentTime=Math.max(0,video.currentTime-10);syncSeekUi();showFullscreenUi(video.paused);
     };
     $('forward10').onclick=function(){
-      var video=$('previewVideo');video.currentTime=Math.min(video.duration||Infinity,video.currentTime+10);syncSeekUi();showFullscreenUi(video.paused);
+      var video=$('previewVideo');
+      if(!isFinite(Number(video.duration))||Number(video.duration)<=0){setPlaybackState('재생 시간이 확인되지 않아 +10초 이동을 실행할 수 없습니다.',true);return;}
+      video.currentTime=Math.min(video.duration,video.currentTime+10);syncSeekUi();showFullscreenUi(video.paused);
     };
     $('muteToggle').onclick=function(){
       var video=$('previewVideo');video.muted=!video.muted;this.textContent=video.muted?'음소거 해제':'음소거';
@@ -675,7 +732,7 @@
       var next=previewSourceIndex+1;
       if(next<previewSources.length){
         setPlaybackState('현재 원본 재생 실패 · 다음 고화질 원본으로 전환합니다.',true);loadPreviewSource(next,true);
-      }else setPlaybackState('모든 직접 재생 원본이 실패했습니다. 원본 페이지에서 확인해 주세요.',true);
+      }else setPlaybackState('모든 직접 재생 원본이 실패했습니다: '+playbackErrorText(this)+ ' 원본 페이지에서 파일·CORS·코덱 상태를 확인해 주세요.',true);
     });
     $('seekBar').addEventListener('input',function(){
       var video=$('previewVideo'),duration=Number(video.duration);

@@ -14,7 +14,7 @@
     button.publish{background:#ffd070;color:#3e2b00}button.danger{background:#ff9aa5;color:#411018}button:disabled{opacity:.5;cursor:not-allowed}
     .state{font-size:13px;color:#b9c8db}.progressbox{margin-top:10px;padding:10px;border:1px solid #35516f;border-radius:10px;background:#0b1727}
     .progressbar{height:9px;border-radius:999px;background:#22344a;overflow:hidden;margin-top:7px}.progressbar>i{display:block;height:100%;width:0;background:#7de0d8;transition:width .2s}
-    .player-status{padding:8px 10px;background:#13283e;color:#cfe6fa;font-size:13px}.player-status.warn{background:#3b2a0a;color:#ffe2a8}
+    .player-status,.player-source-detail{padding:8px 10px;background:#13283e;color:#cfe6fa;font-size:13px}.player-status.warn{background:#3b2a0a;color:#ffe2a8}.player-source-detail{background:#0c1b2b;color:#aebfd4}
     .panel,.card{background:#111c2d;border:1px solid #28405f;border-radius:14px;padding:14px;margin-top:13px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px}
     .card{margin:0}.card h2{font-size:13px;margin:0 0 6px}.num{font-size:25px;font-weight:850}.notice{padding:11px;border-radius:9px;background:#0b3438;border-left:4px solid #7de0d8}
     .notice.warn{background:#3b2a0a;border-color:#f2b349}.hidden{display:none!important}.tablewrap{overflow:auto;border:1px solid #28405f;border-radius:12px;margin-top:10px}
@@ -31,6 +31,7 @@
     .player-progress-row input[type="range"]{width:100%;padding:0;height:18px;accent-color:#7de0d8;cursor:pointer}.player-progress-row span{min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
     .player-shell:fullscreen{width:100vw;height:100vh;border-radius:0;margin:0;background:#000}.player-shell:fullscreen video{flex:1 1 auto;width:100%;height:100%;max-height:none;min-height:0;object-fit:contain}
     .player-shell:fullscreen .player-status{position:absolute;left:0;right:0;top:0;z-index:4;background:rgba(13,31,50,.86);opacity:0;pointer-events:none;transition:opacity .18s ease}
+    .player-shell:fullscreen .player-source-detail{display:none}
     .player-shell:fullscreen .player-controls{position:absolute;left:0;right:0;bottom:0;z-index:5;background:linear-gradient(transparent,rgba(5,12,20,.96) 35%);padding:34px 18px 18px;opacity:0;transform:translateY(12px);pointer-events:none}
     .player-shell:fullscreen.controls-visible .player-controls,.player-shell:fullscreen.controls-visible .player-status{opacity:1;transform:none;pointer-events:auto}
     .player-controls button,.player-controls select{font-size:13px}.meta-line{font-size:13px;color:#bdd0e4;margin-top:8px}.nowrap{white-space:nowrap}
@@ -114,18 +115,19 @@
 
   <section id="exclusionPanel" class="panel hidden">
     <div class="modal-head">
-      <div><h2 style="margin:0">검색 제외 목록</h2><div class="small">검색 제외 해제는 기록을 보존한 채 다음 수집을 허용하고, 후보 복원은 즉시 대기열로 되돌립니다. 영구 차단과 기록 완전 삭제는 별도 작업입니다.</div></div>
+      <div><h2 style="margin:0">검색 제외 목록</h2><div class="small">보류 복원은 후보 본문·점검 이력을 보존한 채 보류 대기열로 돌려놓고 제외 기록만 해제합니다. 원상 복원은 제외 직전 상태·섹션·정렬 위치로 되돌립니다. 영구 차단과 기록 완전 삭제는 별도 작업입니다.</div></div>
       <button id="toggleExclusionBtn" class="secondary">목록 펼치기</button>
     </div>
     <div id="exclusionSummary" class="small" style="margin-top:8px"></div>
     <div id="exclusionBody" class="hidden">
       <div class="reviewbar">
-        <button id="releaseExcludedBtn" class="secondary">검색 제외 해제·재수집 허용</button>
-        <button id="restoreExcludedBtn">후보 대기열 복원</button>
+        <button id="restoreHoldExcludedBtn" class="secondary">선택 보류로 복원·제외 해제</button>
+        <button id="restoreExcludedBtn">선택 원래 상태·위치로 복원</button>
         <button id="permanentBlockExcludedBtn" class="danger">선택 영구 차단</button>
         <button id="forgetExcludedBtn" class="secondary">선택 기록 완전 삭제</button>
       </div>
-      <div class="tablewrap"><table><thead><tr><th>순번</th><th><input id="selectAllExcluded" type="checkbox"></th><th>섹션</th><th>상태</th><th>영상</th><th>제외 사유</th><th>출처</th><th>등록일</th></tr></thead><tbody id="excludedRows"></tbody></table></div>
+      <div class="small">기록 완전 삭제는 후보와 제외·차단 기록을 함께 지워 향후 재수집·재평가를 허용합니다. 영구 차단 항목은 보류 복원이나 원상 복원으로 해제할 수 없습니다.</div>
+      <div class="tablewrap"><table><thead><tr><th>순번</th><th><input id="selectAllExcluded" type="checkbox"></th><th>현재 섹션</th><th>상태</th><th>영상</th><th>복원 목표</th><th>제외 사유</th><th>출처</th><th>제외일</th></tr></thead><tbody id="excludedRows"></tbody></table></div>
     </div>
   </section>
   <p class="foot">검증 완료 후보만 최종 릴리스 절차를 통해 미디어 허브에 반영됩니다.</p>
@@ -137,6 +139,7 @@
     <div class="player-shell">
       <video id="previewVideo" playsinline preload="metadata"></video>
       <div id="previewPlaybackState" class="player-status">후보 영상을 불러오면 실제 재생 가능 여부를 확인합니다.</div>
+      <div id="previewSourceDetail" class="player-source-detail">직접 재생 주소·임베드 주소·원본 페이지를 구분해 점검합니다.</div>
       <div class="player-controls">
         <div class="player-progress-row"><span id="currentTimeText">00:00</span><input id="seekBar" type="range" min="0" max="1000" value="0" step="1" aria-label="재생 위치"><span id="durationText">00:00</span></div>
         <button id="playToggle">재생</button><button id="back10">-10초</button><button id="forward10">+10초</button><button id="fitToggle">맞춤</button>
@@ -147,6 +150,6 @@
   </div>
 </div>
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-media-candidate-queue.js?v=15"></script>
+<script src="/assets/js/admin-media-candidate-queue.js?v=16"></script>
 </body>
 </html>

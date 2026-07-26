@@ -4,7 +4,7 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="sanmaru-media-collector-v2.2.0-policy-quarantine-balanced-discovery";
+const VERSION="sanmaru-media-collector-v2.3.0-existing-candidate-reentry-guard";
 const IA_SEARCH="https://archive.org/advancedsearch.php";
 const IA_METADATA="https://archive.org/metadata/";
 const DEFAULT_RESULTS=5;
@@ -301,16 +301,16 @@ async function inspect(doc,requested,options){
   };
   return{candidate};
 }
-async function exclusionIdSet(){
+async function existingCandidateIdSet(){
   const ids=new Set(),pageSize=1000;
   for(let offset=0;offset<100000;offset+=pageSize){
-    const rows=await MediaStore.selectCandidates("select=id,review_status&review_status=in.(search_excluded,permanent_blocked,approved)&limit="+pageSize+"&offset="+offset);
+    const rows=await MediaStore.selectCandidates("select=id,review_status&order=id.asc&limit="+pageSize+"&offset="+offset);
     const pageRows=Array.isArray(rows)?rows:[];
     pageRows.forEach((row)=>{const id=MediaStore.text(row&&row.id);if(id)ids.add(id);});
     if(pageRows.length<pageSize)return ids;
   }
-  const error=new Error("검색 제외·승인 목록이 안전 점검 상한을 초과했습니다.");
-  error.statusCode=503;error.code="media_exclusion_scan_limit";throw error;
+  const error=new Error("기존 후보 목록이 안전 점검 상한을 초과했습니다.");
+  error.statusCode=503;error.code="media_existing_candidate_scan_limit";throw error;
 }
 function diversityKey(candidate){
   const source=candidate&&candidate.sourceMetadata||{};
@@ -394,9 +394,9 @@ exports.handler=async function(event){
       docs=search&&search.response&&Array.isArray(search.response.docs)?search.response.docs:[];
       totalFound=Number(search&&search.response&&search.response.numFound||0);
     }
-    const excludedIds=await exclusionIdSet();
-    const docsForInspection=docs.filter((doc)=>!excludedIds.has("ia:"+safeId(doc&&doc.identifier)));
-    const skippedExcluded=docs.length-docsForInspection.length;
+    const existingIds=await existingCandidateIdSet();
+    const docsForInspection=docs.filter((doc)=>!existingIds.has("ia:"+safeId(doc&&doc.identifier)));
+    const skippedExisting=docs.length-docsForInspection.length;
     const inspected=await mapLimit(docsForInspection,2,(doc)=>inspect(doc,section,{adminException,overrideReason}));
     const accepted=[],rejected=[];
     inspected.forEach((entry,index)=>{
@@ -428,8 +428,8 @@ exports.handler=async function(event){
       done:exhausted,searched:docs.length,totalFound,qualified:accepted.length,
       accepted:normalized.length,saved:savedRows.length,
       savedIds:savedRows.map((row)=>MediaStore.text(row&&row.id)).filter(Boolean),
-      rejectedCount:rejected.length+validationRejected.length+skippedExcluded,
-      rejected:rejected.concat(validationRejected).concat(skippedExcluded?[{reason:"search_excluded_permanent_blocked_or_already_approved",count:skippedExcluded}]:[]),
+      rejectedCount:rejected.length+validationRejected.length+skippedExisting,
+      rejected:rejected.concat(validationRejected).concat(skippedExisting?[{reason:"existing_candidate_not_reentered_or_overwritten",count:skippedExisting}]:[]),
       policy:{
         version:MediaPolicy.VERSION,minimumYear:DEFAULT_MIN_YEAR,minimumHeight:MIN_VIDEO_HEIGHT,
         minimumRankingScore:MIN_RANK_SCORE,autoPublish:false,

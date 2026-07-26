@@ -8,11 +8,12 @@ const MediaStore = require("./lib/media-candidate-store.v1");
 const MediaPolicy = require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "media-candidate-action-v1.4.0-guarded-transitions";
+const VERSION = "media-candidate-action-v1.5.0-exclusion-state-restore";
 const ACTIONS = new Set([
   "approve","hold","block","reject","reset","delete",
-  "release_exclusion","restore","permanent_block","forget"
+  "restore_hold","release_exclusion","restore","permanent_block","forget"
 ]);
+const EXCLUSION_RECORD_VERSION = "media-candidate-exclusion-v1";
 
 async function actorFor(event){
   const actor=await SharedAdminAuth.resolveUser(event);
@@ -62,6 +63,153 @@ async function deleteMany(ids){
   return deleted;
 }
 function statusOf(row){return MediaStore.lower(row&&row.review_status);}
+function nullable(value){return value===undefined?null:value;}
+function exclusionRecord(row,info){
+  return {
+    version:EXCLUSION_RECORD_VERSION,
+    excludedAt:info.now,
+    excludedBy:info.by,
+    exclusionReason:info.note||"moved_from_candidate_queue",
+    previous:{
+      reviewStatus:nullable(row.review_status),
+      verificationStatus:nullable(row.verification_status),
+      sectionKey:nullable(row.section_key),
+      priority:nullable(row.priority),
+      riskLevel:nullable(row.risk_level),
+      candidateOnly:nullable(row.candidate_only),
+      seedContent:nullable(row.seed_content),
+      rightsStatus:nullable(row.rights_status),
+      allowedUse:nullable(row.allowed_use),
+      approvedAt:nullable(row.approved_at),
+      blockedReason:nullable(row.blocked_reason),
+      reviewNote:nullable(row.review_note),
+      reviewedBy:nullable(row.reviewed_by),
+      reviewedAt:nullable(row.reviewed_at),
+      createdAt:nullable(row.created_at),
+      collectedAt:nullable(row.collected_at),
+      updatedAt:nullable(row.updated_at)
+    }
+  };
+}
+function appendHistory(raw,event){
+  const history=Array.isArray(raw.reviewHistory)?raw.reviewHistory.slice(-99):[];
+  history.push(event);
+  raw.reviewHistory=history;
+  return raw;
+}
+function rawWithHistory(row,info,action,detail){
+  const raw=Object.assign({},MediaStore.plain(row&&row.raw));
+  appendHistory(raw,Object.assign({
+    action,
+    at:info.now,
+    by:info.by,
+    note:info.note,
+    fromReviewStatus:nullable(row&&row.review_status),
+    fromVerificationStatus:nullable(row&&row.verification_status),
+    fromSectionKey:nullable(row&&row.section_key),
+    fromPriority:nullable(row&&row.priority)
+  },detail||{}));
+  return raw;
+}
+function exclusionOf(row){
+  const record=MediaStore.plain(MediaStore.plain(row&&row.raw).queueExclusion);
+  return record.version===EXCLUSION_RECORD_VERSION?record:{};
+}
+function deletePatch(row,body,actor){
+  const info=audit(actor,body);
+  const raw=rawWithHistory(row,info,"search_excluded",{
+    toReviewStatus:"search_excluded",
+    toVerificationStatus:"search_excluded"
+  });
+  raw.queueExclusion=exclusionRecord(row,info);
+  return {
+    review_status:"search_excluded",
+    verification_status:"search_excluded",
+    blocked_reason:info.note||"moved_from_candidate_queue",
+    review_note:info.note,
+    reviewed_by:info.by,
+    reviewed_at:info.now,
+    updated_by:info.by,
+    updated_at:info.now,
+    candidate_only:true,
+    seed_content:true,
+    approved_at:null,
+    raw
+  };
+}
+function legacyRestoreState(row){
+  const raw=MediaStore.plain(row&&row.raw);
+  return {
+    reviewStatus:MediaStore.lower(raw.review_status||raw.reviewStatus)||"pending",
+    verificationStatus:MediaStore.lower(raw.verification_status||raw.verificationStatus)||"web_verification_required",
+    sectionKey:MediaStore.normalizeSection(row&&row.section_key||raw.section_key||raw.sectionKey),
+    priority:row&&row.priority||raw.priority||"B2",
+    riskLevel:row&&row.risk_level||raw.risk_level||raw.riskLevel||"unverified",
+    candidateOnly:raw.candidateOnly===false||raw.candidate_only===false?false:true,
+    seedContent:raw.seedContent===false||raw.seed_content===false?false:true,
+    rightsStatus:row&&row.rights_status||raw.rights_status||raw.rightsStatus||"web_verification_required",
+    allowedUse:row&&row.allowed_use||raw.allowed_use||raw.allowedUse||"verification_required",
+    approvedAt:null,
+    blockedReason:null,
+    reviewNote:null,
+    reviewedBy:null,
+    reviewedAt:null
+  };
+}
+function restorePatch(row,body,actor,toHold){
+  const info=audit(actor,body);
+  const record=exclusionOf(row);
+  const exact=Object.keys(record).length>0;
+  const previous=exact?MediaStore.plain(record.previous):legacyRestoreState(row);
+  const raw=rawWithHistory(row,info,toHold?"restore_hold":"restore_original",{
+    exactOriginalState:exact,
+    toReviewStatus:toHold?"hold":previous.reviewStatus,
+    toVerificationStatus:toHold?"hold":previous.verificationStatus,
+    toSectionKey:previous.sectionKey,
+    toPriority:previous.priority
+  });
+  delete raw.queueExclusion;
+  const common={
+    section_key:MediaStore.normalizeSection(previous.sectionKey||row.section_key),
+    priority:previous.priority||row.priority||"B2",
+    review_note:toHold?(info.note||"search_exclusion_released_to_hold"):nullable(previous.reviewNote),
+    reviewed_by:toHold?info.by:nullable(previous.reviewedBy),
+    reviewed_at:toHold?info.now:nullable(previous.reviewedAt),
+    updated_by:info.by,
+    updated_at:info.now,
+    raw
+  };
+  if(toHold)return Object.assign(common,{
+    review_status:"hold",
+    verification_status:"hold",
+    risk_level:previous.riskLevel||row.risk_level||"unverified",
+    candidate_only:true,
+    seed_content:true,
+    rights_status:previous.rightsStatus||row.rights_status||"web_verification_required",
+    allowed_use:previous.allowedUse||row.allowed_use||"verification_required",
+    approved_at:null,
+    blocked_reason:null
+  });
+  return Object.assign(common,{
+    review_status:previous.reviewStatus||"pending",
+    verification_status:previous.verificationStatus||"web_verification_required",
+    risk_level:previous.riskLevel||row.risk_level||"unverified",
+    candidate_only:previous.candidateOnly===false?false:true,
+    seed_content:previous.seedContent===false?false:true,
+    rights_status:previous.rightsStatus||row.rights_status||"web_verification_required",
+    allowed_use:previous.allowedUse||row.allowed_use||"verification_required",
+    approved_at:nullable(previous.approvedAt),
+    blocked_reason:nullable(previous.blockedReason)
+  });
+}
+async function updateRowsIndividually(rows,patcher){
+  const updated=[];
+  for(const row of rows){
+    const saved=await MediaStore.updateCandidates([row.id],patcher(row));
+    if(Array.isArray(saved))updated.push(...saved);
+  }
+  return updated;
+}
 function requireNote(action,note){
   if(["approve","reject","block","permanent_block"].includes(action)&&MediaStore.text(note).length<3){
     const error=new Error("이 작업은 3자 이상의 관리자 검토 메모가 필요합니다.");
@@ -75,7 +223,7 @@ function validateTransitions(action,rows){
     let ok=true;
     if(action==="approve")ok=["pending","hold","safety_quarantine","rights_quarantine","classification_quarantine","quality_quarantine"].includes(status);
     else if(action==="restore")ok=["search_excluded","exclusion_released"].includes(status);
-    else if(action==="release_exclusion")ok=status==="search_excluded";
+    else if(action==="restore_hold"||action==="release_exclusion")ok=["search_excluded","exclusion_released"].includes(status);
     else if(action==="forget")ok=["search_excluded","exclusion_released","permanent_blocked"].includes(status);
     else if(action==="reset")ok=!["search_excluded","exclusion_released","permanent_blocked"].includes(status);
     else if(action==="hold"||action==="reject"||action==="delete")ok=!["search_excluded","exclusion_released","permanent_blocked"].includes(status);
@@ -90,9 +238,7 @@ function patchFor(action,body,actor){
   const info=audit(actor,body),now=info.now,by=info.by,note=info.note;
   if(action==="hold")return {review_status:"hold",verification_status:"hold",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now};
   if(action==="reject")return {review_status:"rejected",verification_status:"rejected",blocked_reason:note||"rejected_by_admin",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
-  if(action==="delete")return {review_status:"search_excluded",verification_status:"search_excluded",blocked_reason:note||"moved_from_candidate_queue",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
-  if(action==="release_exclusion")return {review_status:"exclusion_released",verification_status:"not_queued",blocked_reason:null,review_note:note||"search_exclusion_released",reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
-  if(action==="restore"||action==="reset")return {review_status:"pending",verification_status:"web_verification_required",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null,blocked_reason:null};
+  if(action==="reset")return {review_status:"pending",verification_status:"web_verification_required",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null,blocked_reason:null};
   if(action==="block"||action==="permanent_block")return {review_status:"permanent_blocked",verification_status:"permanent_blocked",rights_status:"blocked",allowed_use:"blocked",blocked_reason:note||"permanent_blocked_by_admin",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
   return {};
 }
@@ -176,13 +322,24 @@ exports.handler=async function(event){
       const updated=await approveRows(rows,body,actor);
       return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,updated:updated.length,items:updated,sourceMediaDeleted:false,recollectAllowed:false,publicationGate:MediaPolicy.VERSION});
     }
-    const patch=patchFor(action,body,actor);
-    const updated=await updateMany(ids,patch);
+    let updated,legacyFallbackCount=0;
+    if(action==="delete"){
+      updated=await updateRowsIndividually(rows,(row)=>deletePatch(row,body,actor));
+    }else if(action==="restore"||action==="restore_hold"||action==="release_exclusion"){
+      legacyFallbackCount=rows.filter((row)=>!Object.keys(exclusionOf(row)).length).length;
+      updated=await updateRowsIndividually(rows,(row)=>restorePatch(row,body,actor,action!=="restore"));
+    }else{
+      const patch=patchFor(action,body,actor);
+      updated=await updateMany(ids,patch);
+    }
     return MediaStore.response(200,{
       ok:true,version:VERSION,action,requested:ids.length,
       updated:Array.isArray(updated)?updated.length:0,items:updated,
-      sourceMediaDeleted:false,recollectAllowed:action==="release_exclusion",
+      sourceMediaDeleted:false,recollectAllowed:false,
       restoredToQueue:action==="restore",movedToSearchExclusion:action==="delete",
+      restoredToHold:action==="restore_hold"||action==="release_exclusion",
+      restoredOriginalState:action==="restore",
+      legacyFallbackCount,
       permanentBlocked:action==="block"||action==="permanent_block"
     });
   }catch(error){

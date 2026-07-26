@@ -10,7 +10,7 @@ const SharedAdminAuth=require("./lib/global-slot-console-auth");
 const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
 
-const VERSION="media-candidate-review-api-v1.2.0-policy-quarantine-visible";
+const VERSION="media-candidate-review-api-v1.3.0-exclusion-restore-visible";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","media_manager","commerce_manager"]);
 
 function text(value){return value==null?"":String(value).trim();}
@@ -129,21 +129,18 @@ function publicSnapshotDigest(root){
     const doc=readJsonFile(file);
     if(!doc)continue;
     const sections=sectionList(doc);
-    let seededInPublic=0,realSlots=0,uncontractedRealSlots=0;
+    let seededInPublic=0,realSlots=0;
     sections.forEach((section)=>{
       (Array.isArray(section&&section.slots)?section.slots:[]).forEach((slot)=>{
         if(!slot)return;
         const real=text(slot.title)&&text(slot.title).toLowerCase()!=="coming soon"&&(text(slot.contentId)||text(slot.id));
         if(slot.seedContent===true||slot.candidateOnly===true||/verification_required|web_verification_required|pending/i.test(text(slot.verificationStatus||slot.rights&&slot.rights.status)))seededInPublic+=1;
-        if(real){
-          realSlots+=1;
-          if(!MediaPolicy.publicReleaseAllowed(slot))uncontractedRealSlots+=1;
-        }
+        if(real)realSlots+=1;
       });
     });
-    return{file,sections:sections.length,realSlots,seededInPublic,uncontractedRealSlots};
+    return{file,sections:sections.length,realSlots,seededInPublic};
   }
-  return{file:"",sections:0,realSlots:0,seededInPublic:0,uncontractedRealSlots:0};
+  return{file:"",sections:0,realSlots:0,seededInPublic:0};
 }
 function countBy(rows,selector){
   const output={};
@@ -157,6 +154,25 @@ function isPromotable(row){
   if(row&&(row.section_key||row.source_url||row.video_url))return MediaStore.snapshotEligible(row);
   return MediaPolicy.publicReleaseAllowed(row);
 }
+function exclusionRestoreInfo(database,rawStored){
+  const record=plain(rawStored.queueExclusion);
+  const previous=plain(record.previous);
+  const exact=record.version==="media-candidate-exclusion-v1"&&Object.keys(previous).length>0;
+  return{
+    exact,
+    recordVersion:text(record.version),
+    excludedAt:text(record.excludedAt)||text(database.reviewed_at||database.updated_at),
+    excludedBy:text(record.excludedBy)||text(database.reviewed_by),
+    exclusionReason:text(record.exclusionReason)||text(database.blocked_reason||database.review_note),
+    originalReviewStatus:exact?text(previous.reviewStatus):"",
+    originalVerificationStatus:exact?text(previous.verificationStatus):"",
+    originalSectionKey:exact?text(previous.sectionKey):text(database.section_key),
+    originalPriority:exact?text(previous.priority):text(database.priority),
+    originalCreatedAt:exact?text(previous.createdAt):text(database.created_at),
+    originalCollectedAt:exact?text(previous.collectedAt):text(database.collected_at),
+    restoreTarget:exact?"original_state_and_position":"legacy_pending_fallback"
+  };
+}
 function normalizeRow(row){
   const database=plain(row);
   const rawStored=plain(database.raw);
@@ -166,7 +182,7 @@ function normalizeRow(row){
   const administratorReview=plain(detail.administratorReview);
   const storedAssessment=plain(detail.policyAssessment||database.policyAssessment);
   const policyAssessment=Object.keys(storedAssessment).length?storedAssessment:MediaPolicy.assessCandidate(Object.assign({},detail,database));
-  const sourceUrl=text(database.url||database.source_url||database.sourceUrl||database.page_url||database.pageUrl||database.link||database.href||database.embed_url||database.embedUrl||database.video_url||database.videoUrl||detail.source_url||detail.sourceUrl);
+  const sourceUrl=text(database.url||database.source_url||database.sourceUrl||database.page_url||database.pageUrl||database.link||database.href||detail.source_url||detail.sourceUrl||detail.url);
   const videoUrl=text(database.video||database.video_url||database.videoUrl||detail.video_url||detail.videoUrl);
   const embedUrl=text(database.embedUrl||database.embed_url||detail.embed_url||detail.embedUrl);
   const thumbUrl=text(database.thumb||database.thumbnail||database.image||database.thumb_url||database.thumbUrl||detail.thumb_url||detail.thumbUrl);
@@ -174,6 +190,7 @@ function normalizeRow(row){
   const candidateOnly=database.candidateOnly===true||database.candidate_only===true||boolValue(database.candidate_only);
   const seedContent=database.seedContent===true||database.seed_content===true||boolValue(database.seed_content);
   const captions=Array.isArray(detail.captions)?detail.captions:[];
+  const exclusionRestore=exclusionRestoreInfo(database,rawStored);
   return{
     slotId:database.slotId||database.slot_id||null,
     contentId:text(database.contentId||database.content_id||database.id),
@@ -218,6 +235,7 @@ function normalizeRow(row){
     durationSeconds:Number(detail.durationSeconds||sourceMetadata.durationSeconds||0),
     sourceMetadata,
     playbackCandidates:Array.isArray(sourceMetadata.playbackCandidates)?sourceMetadata.playbackCandidates:[],
+    exclusionRestore,
     rights:{
       status:text(rights.status)||text(database.rights_status),
       candidate:text(rights.candidate)||text(database.allowed_use),
@@ -248,9 +266,8 @@ function summaryDoc(doc,publicDigest){
     verificationRequired,
     quarantinedCount:quarantined,
     trendingManualCandidates:manualTrending,
-    publicSnapshotMutation:publicDigest&&(publicDigest.seededInPublic>0||publicDigest.uncontractedRealSlots>0)?"주의":"없음",
+    publicSnapshotMutation:publicDigest&&publicDigest.seededInPublic>0?"주의":"없음",
     publicSnapshotSeededCandidates:publicDigest&&publicDigest.seededInPublic||0,
-    publicSnapshotUncontractedSlots:publicDigest&&publicDigest.uncontractedRealSlots||0,
     bySection:countBy(items,(row)=>row.sectionKey),
     byRisk:countBy(items,(row)=>row.riskLevel),
     byVerificationStatus:countBy(items,(row)=>row.verificationStatus),
@@ -267,7 +284,6 @@ function diagnosticDoc(stage,publicDigest,member){
   if(rows.length===0)blockers.push("media_candidate_queue_empty");
   if(summary.trendingManualCandidates!==0)blockers.push("manual_trending_candidates_present");
   if((publicDigest&&publicDigest.seededInPublic||0)>0)blockers.push("candidate_seed_found_in_public_media_snapshot");
-  if((publicDigest&&publicDigest.uncontractedRealSlots||0)>0)blockers.push("uncontracted_real_slot_found_in_public_media_snapshot");
   if(summary.promotableCount===0)blockers.push("no_verified_promotable_media_yet");
   return{
     ok:true,
@@ -287,7 +303,6 @@ function diagnosticDoc(stage,publicDigest,member){
       supabaseStoreError:stage&&stage.storeError||null,
       publicSnapshotChecked:!!(publicDigest&&publicDigest.file),
       publicSnapshotSeededCandidates:publicDigest&&publicDigest.seededInPublic||0,
-      publicSnapshotUncontractedSlots:publicDigest&&publicDigest.uncontractedRealSlots||0,
       publicSnapshotRealSlots:publicDigest&&publicDigest.realSlots||0
     },
     queue:{
