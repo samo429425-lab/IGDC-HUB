@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v2.9.0-media-style-supplier-ledger-manual-pin";
+const VERSION = "commerce-country-automation-v3.0.0-country-section-queue-virtualized";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1425,6 +1425,7 @@ function publicProductJob(job) {
       slotCandidates: visibleProducts.filter((row) => row.slotDecision === "slot_candidate").length,
       held: visibleProducts.filter((row) => row.slotDecision === "hold").length,
       rejected: visibleProducts.filter((row) => row.slotDecision === "reject").length,
+      permanentExcluded: visibleProducts.filter((row) => row.slotDecision === "purge").length,
       sectionCounts: plain(portfolio.summary && portfolio.summary.sectionCounts),
       privateResearchQueueEligible: visibleProducts.filter((row) => ProductPipeline.researchReadiness(row).queueEligible === true).length,
       privateResearchQueueNeedsCompletion: visibleProducts.filter((row) => { const state = ProductPipeline.researchReadiness(row); return state.queueEligible === true && state.promotionEligible !== true; }).length,
@@ -1529,9 +1530,18 @@ async function advanceProductResearchJob(actorId, input) {
       if (!batch.length) { job.status = "complete"; job.finishedAt = iso(); }
       else {
         const settled = await Promise.allSettled(batch.map((product) => syncProductResearchPreview(actorId, scope, product)));
-        for (const result of settled) {
+        for (let resultIndex = 0; resultIndex < settled.length; resultIndex += 1) {
+          const result = settled[resultIndex], stagedProduct = batch[resultIndex];
           if (result.status !== "fulfilled") { job.stageSummary.failed += 1; job.errors = array(job.errors).concat([{ at: iso(), stage: "staging", message: text(result.reason && result.reason.message || result.reason) }]); continue; }
-          const state = text(result.value && result.value.status);
+          const state = text(result.value && result.value.status), preservedDecision = lower(result.value && result.value.decision), identity = ProductRanking.productIdentity(stagedProduct);
+          if (["slot_candidate","hold","reject","purge"].includes(preservedDecision)) {
+            const productIndex = array(job.products).findIndex((row) => ProductRanking.productIdentity(row) === identity);
+            if (productIndex >= 0) {
+              job.products[productIndex] = Object.assign({}, job.products[productIndex], { slotDecision: preservedDecision, publicPublication: false, automaticImport: false });
+              if (preservedDecision === "slot_candidate") job.products[productIndex].approvedPlacement = plain(result.value.approvedPlacement);
+              else delete job.products[productIndex].approvedPlacement;
+            }
+          }
           if (/created/.test(state)) job.stageSummary.created += 1;
           else if (/updated/.test(state)) job.stageSummary.updated += 1;
           else if (/preserved/.test(state)) job.stageSummary.preserved += 1;
@@ -1547,14 +1557,15 @@ async function advanceProductResearchJob(actorId, input) {
 }
 function productCandidateId(scope, product) { return "country_product_" + sha256(scope.country + "|" + scope.region + "|" + text(product.productIdentity)).slice(0, 24); }
 function productCandidatePayload(actorId, scope, product, decision) {
-  const placement = plain(product.primaryPlacement || array(product.sectionAssignments)[0]);
-  const productUrlValue = productUrl(product), imageUrlValue = productImageUrl(product), readiness = ProductPipeline.researchReadiness(product), card = ProductPipeline.productCard(product);
   const selected = decision === "slot_candidate";
+  const placement = plain(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || array(product.sectionAssignments)[0]);
+  const productUrlValue = productUrl(product), imageUrlValue = productImageUrl(product), readiness = ProductPipeline.researchReadiness(product), card = ProductPipeline.productCard(product);
+  const placementRecord = { page: text(placement.page), section: text(placement.sectionKey || placement.section), country: scope.country, region: scope.region, proposalOnly: !selected, administratorSelected: selected, publicationPending: selected, publicPublication: false };
   return {
     id: productCandidateId(scope, product), entityKind: "product_reference", title: card.title, sourceTitle: card.sourceTitle, url: productUrlValue, externalProductUrl: productUrlValue, image: imageUrlValue, thumb: imageUrlValue,
     price: text(product.price), priceCurrency: text(product.priceCurrency), availability: text(product.availability), productCard: card,
-    page: text(placement.page), channel: text(placement.page), section: text(placement.sectionKey), psom_key: text(placement.sectionKey),
-    placement: { page: text(placement.page), section: text(placement.sectionKey), country: scope.country, region: scope.region, proposalOnly: true }, proposedPlacements: array(product.sectionAssignments),
+    page: placementRecord.page, channel: placementRecord.page, section: placementRecord.section, psom_key: placementRecord.section,
+    placement: placementRecord, approvedPlacement: selected ? placementRecord : null, proposedPlacements: array(product.sectionAssignments),
     marketKeys: [scope.country + "-" + scope.region], marketScope: { marketCountry: scope.country, marketRegion: scope.region }, countrySupply: { country: scope.country, region: scope.region, localOnly: true, crossCountryFallback: false },
     supplier: { id: text(product.supplierId), name: text(product.supplierName), officialUrl: text(product.supplierSiteUrl), type: text(product.supplierType), trustScore: Number(product.supplierTrustScore) || 0, evidenceReady: product.supplierEvidenceReady === true },
     productRanking: { version: ProductRanking.VERSION, rank: Number(product.rank) || null, score: Number(product.rankingScore) || 0, category: text(product.productCategory), categoryTags: array(product.productCategoryTags), duplicateGroupKey: text(product.duplicateGroupKey), familyKey: text(product.productFamilyKey), familyRepresentative: product.familyRepresentative !== false, familyVariantCount: Number(product.familyVariantCount) || 0, duplicateCount: Number(product.duplicateCount) || 1 },
@@ -1571,59 +1582,60 @@ async function syncProductResearchPreview(actorId, scope, product) {
   const readiness = ProductPipeline.researchReadiness(product); if (!readiness.queueEligible) return { status: "research_preview_skipped", candidateId: null, blockers: readiness.blockers };
   const candidateId = productCandidateId(scope, product), existing = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
   if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, currentStatus: text(existing.status) };
-  if (existing && !["approval_pending"].includes(lower(existing.status))) return { status: "operator_state_preserved", candidateId, currentStatus: text(existing.status) };
+  const existingPayload = plain(existing && existing.source_payload), operatorDecision = lower(existingPayload.slotDecision), permanentExcluded = plain(existingPayload.queueControl).permanentExcluded === true;
+  if (existing && (permanentExcluded || ["slot_candidate","hold","reject","purge"].includes(operatorDecision) || !["approval_pending"].includes(lower(existing.status)))) return { status: "operator_state_preserved", candidateId, currentStatus: text(existing.status), decision: permanentExcluded ? "purge" : operatorDecision, approvedPlacement: plain(existingPayload.approvedPlacement) };
   const payload = productCandidatePayload(actorId, scope, product, "research_pending");
   const row = { id: candidateId, kind: "product", title: payload.title, official_url: payload.externalProductUrl, status: "approval_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: payload.image, description: "Private researched external-seller product card. Administrator selection, market evidence, revenue route and slot assignment remain pending.", owner_note: "Automatically placed in the private research queue only; no publication, checkout or payment.", source_payload: payload, updated_at: iso() };
-  if (existing) { await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), row); return { status: "research_preview_updated", candidateId }; }
-  row.created_at = iso(); row.created_by = text(actorId) || "product-research-orchestrator"; await SlotStore.insert("gslot_candidates", row, "return=representation"); return { status: "research_preview_created", candidateId };
+  if (existing) { await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), row); return { status: "research_preview_updated", candidateId, decision: "undecided", approvedPlacement: null }; }
+  row.created_at = iso(); row.created_by = text(actorId) || "product-research-orchestrator"; await SlotStore.insert("gslot_candidates", row, "return=representation"); return { status: "research_preview_created", candidateId, decision: "undecided", approvedPlacement: null };
 }
 
 async function syncProductCandidateQueue(actorId, scope, product, decision) {
   const candidateId = productCandidateId(scope, product);
   const existing = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
   if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, currentStatus: text(existing.status) };
+  const now = iso();
   if (decision !== "slot_candidate") {
     if (!existing) return { status: "no_private_candidate_created", candidateId: null };
-    const status = decision === "reject" ? "suppressed" : "hold";
-    const sourcePayload = Object.assign({}, plain(existing.source_payload), { slotDecision: decision, review: Object.assign({}, plain(existing.source_payload && existing.source_payload.review), { state: status, decidedAt: iso(), decidedBy: text(actorId) || "administrator" }) });
-    await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: sourcePayload, updated_at: iso() });
-    return { status: "private_candidate_" + status, candidateId };
+    const sourcePayload = decision === "undecided" ? productCandidatePayload(actorId, scope, product, "research_pending") : Object.assign({}, plain(existing.source_payload));
+    sourcePayload.slotDecision = decision;
+    sourcePayload.approvedPlacement = null;
+    sourcePayload.review = Object.assign({}, plain(sourcePayload.review), { state: decision === "undecided" ? "research_pending" : (decision === "hold" ? "hold" : "suppressed"), decidedAt: now, decidedBy: text(actorId) || "administrator" });
+    if (decision === "purge") sourcePayload.queueControl = Object.assign({}, plain(sourcePayload.queueControl), { schema: "igdc-private-product-queue-control.v1", action: "purge", permanentExcluded: true, hiddenFromCountryQueue: true, rediscoveryAllowed: false, decidedAt: now, decidedBy: text(actorId) || "administrator" });
+    else if (decision === "undecided") sourcePayload.queueControl = Object.assign({}, plain(sourcePayload.queueControl), { permanentExcluded: false, hiddenFromCountryQueue: false, rediscoveryAllowed: true, restoredAt: now, restoredBy: text(actorId) || "administrator" });
+    const status = decision === "undecided" ? "approval_pending" : (decision === "hold" ? "hold" : "suppressed");
+    await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: sourcePayload, updated_at: now });
+    return { status: decision === "undecided" ? "private_candidate_restored_to_research" : (decision === "purge" ? "private_candidate_permanently_suppressed" : "private_candidate_" + status), candidateId };
   }
   const payload = productCandidatePayload(actorId, scope, product, "slot_candidate");
-  const productUrlValue = payload.externalProductUrl, imageUrlValue = payload.image;
-  const row = { id: candidateId, kind: "product", title: payload.title, official_url: productUrlValue, status: "approval_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: imageUrlValue, description: "Risk-gated external-seller product candidate with a complete private product-card contract. It remains private until administrator approval, market evidence, revenue rights, slot assignment and Canonical validation are complete.", owner_note: "Auto-researched product reference; no publication, payment or seller responsibility transfer.", source_payload: payload, updated_at: iso() };
-  if (existing) {
-    await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), row);
-    return { status: "private_candidate_updated", candidateId, placement: payload.placement };
-  }
-  row.created_at = iso(); row.created_by = text(actorId) || "administrator";
-  await SlotStore.insert("gslot_candidates", row, "return=representation");
-  return { status: "private_candidate_created", candidateId, placement: payload.placement };
+  const row = { id: candidateId, kind: "product", title: payload.title, official_url: payload.externalProductUrl, status: "approval_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: payload.image, description: "Administrator-selected, risk-gated external-seller product candidate. It remains private until market evidence, revenue rights, PSOM slot assignment, Canonical validation and explicit publication are complete.", owner_note: "Administrator selected a target section; no publication, payment or seller responsibility transfer.", source_payload: payload, updated_at: now };
+  if (existing) { await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), row); return { status: "private_candidate_updated", candidateId, placement: payload.placement }; }
+  row.created_at = now; row.created_by = text(actorId) || "administrator"; await SlotStore.insert("gslot_candidates", row, "return=representation"); return { status: "private_candidate_created", candidateId, placement: payload.placement };
 }
 async function productCandidateAction(actorId, input) {
   const scope = researchScope(input), job = await productJobRule(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
-  const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","undecided"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
+  const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","purge","undecided"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
   const portfolio = ProductRanking.buildPortfolio(array(job.rawProducts).concat(array(job.products)), plain(job.rankingContext));
-  const evaluated = array(portfolio.products).find((row) => text(row && row.id) === id);
-  if (!evaluated) { const error = new Error("상품 후보를 찾을 수 없습니다. 최신 상품 리서치 상태를 다시 읽어 주세요."); error.statusCode = 404; throw error; }
-  const identity = text(evaluated.productIdentity);
-  const index = array(job.products).findIndex((row) => text(row && row.id) === id || ProductRanking.productIdentity(row) === identity);
-  if (index < 0) { const error = new Error("상세페이지 검증을 마친 상품 후보를 찾을 수 없습니다. 발견 단계 상품은 검증 완료 후 판정할 수 있습니다."); error.statusCode = 404; throw error; }
+  const evaluated = array(portfolio.products).find((row) => text(row && row.id) === id); if (!evaluated) { const error = new Error("상품 후보를 찾을 수 없습니다. 최신 상품 리서치 상태를 다시 읽어 주세요."); error.statusCode = 404; throw error; }
+  const identity = text(evaluated.productIdentity), index = array(job.products).findIndex((row) => text(row && row.id) === id || ProductRanking.productIdentity(row) === identity); if (index < 0) { const error = new Error("상세페이지 검증을 마친 상품 후보를 찾을 수 없습니다. 발견 단계 상품은 검증 완료 후 판정할 수 있습니다."); error.statusCode = 404; throw error; }
+  let approvedPlacement = null;
   if (decision === "slot_candidate") {
-    const risk = plain(evaluated.riskAssessment);
-    const eligibleAssignments = array(evaluated.sectionAssignments).filter((row) => row && row.approvalEligible === true);
-    const readiness = ProductPipeline.researchReadiness(evaluated);
-    if (risk.gatePassed !== true || readiness.promotionEligible !== true || !eligibleAssignments.length) {
-      const reasons = array(risk.blockers).concat(array(readiness.reviewGaps), array(evaluated.sectionAssignments).flatMap((row) => array(row && row.evidenceGaps))).filter(Boolean).join(", ") || "섹션 배정 조건 미충족";
-      const error = new Error("비공개 대기열 확인은 가능하지만, 상품 정보·위험 게이트·섹션 증빙을 모두 통과한 상품만 승인 절차로 승격할 수 있습니다. 보완 사항: " + reasons); error.statusCode = 409; throw error;
-    }
+    const risk = plain(evaluated.riskAssessment), eligibleAssignments = array(evaluated.sectionAssignments).filter((row) => row && row.approvalEligible === true), readiness = ProductPipeline.researchReadiness(evaluated);
+    if (risk.gatePassed !== true || readiness.promotionEligible !== true || !eligibleAssignments.length) { const reasons = array(risk.blockers).concat(array(readiness.reviewGaps), array(evaluated.sectionAssignments).flatMap((row) => array(row && row.evidenceGaps))).filter(Boolean).join(", ") || "섹션 배정 조건 미충족"; const error = new Error("비공개 대기열 확인은 가능하지만, 상품 정보·위험 게이트·섹션 증빙을 모두 통과한 상품만 승인 절차로 승격할 수 있습니다. 보완 사항: " + reasons); error.statusCode = 409; throw error; }
+    const requestedKey = text(input && input.placementKey), keyOf = (row) => text(row && row.page) + "|" + text(row && (row.sectionKey || row.section));
+    approvedPlacement = eligibleAssignments.find((row) => keyOf(row) === requestedKey) || eligibleAssignments.find((row) => keyOf(row) === keyOf(evaluated.approvedPlacement || evaluated.primaryPlacement)) || eligibleAssignments[0];
+    if (requestedKey && keyOf(approvedPlacement) !== requestedKey) { const error = new Error("선택한 섹션은 이 상품의 승인 가능한 배치 제안에 포함되지 않습니다."); error.statusCode = 409; throw error; }
+    const selectedKey = keyOf(approvedPlacement), currentIdentity = ProductRanking.productIdentity(job.products[index]);
+    const occupied = array(job.products).filter((row) => lower(row && row.slotDecision) === "slot_candidate" && ProductRanking.productIdentity(row) !== currentIdentity && keyOf(row && (row.approvedPlacement || row.selectedPlacement || row.primaryPlacement)) === selectedKey).length;
+    if (occupied >= 100) { const error = new Error("선택 섹션은 이미 100개 상품으로 가득 찼습니다. 기존 배치 예정 상품을 후보 목록으로 내린 뒤 다시 지정해 주세요."); error.statusCode = 409; throw error; }
   }
-  const current = plain(job.products[index]);
-  job.products[index] = Object.assign({}, current, evaluated, { slotDecision: decision, decisionAt: iso(), decisionBy: text(actorId) || "administrator", publicPublication: false, automaticImport: false });
-  job.products = mergeProductRows([], job.products, PRODUCT_PORTFOLIO_LIMIT);
-  const queueSync = decision === "undecided" ? { status: "no_queue_change", candidateId: null } : await syncProductCandidateQueue(actorId, scope, job.products.find((row) => ProductRanking.productIdentity(row) === identity) || evaluated, decision);
-  await saveProductJob(job, actorId);
-  const result = publicProductJob(job); result.candidateQueue = queueSync; return result;
+  const current = plain(job.products[index]), next = Object.assign({}, current, evaluated, { slotDecision: decision, decisionAt: iso(), decisionBy: text(actorId) || "administrator", publicPublication: false, automaticImport: false });
+  if (decision === "slot_candidate") next.approvedPlacement = Object.assign({}, approvedPlacement, { key: text(approvedPlacement.page) + "|" + text(approvedPlacement.sectionKey || approvedPlacement.section), administratorSelected: true, proposalOnly: false, publicPublication: false, selectedAt: iso(), selectedBy: text(actorId) || "administrator" });
+  else { delete next.approvedPlacement; delete next.selectedPlacement; }
+  job.products[index] = next; job.products = mergeProductRows([], job.products, PRODUCT_PORTFOLIO_LIMIT);
+  const savedIndex = array(job.products).findIndex((row) => text(row && row.id) === id || ProductRanking.productIdentity(row) === identity); if (savedIndex >= 0) { job.products[savedIndex] = Object.assign({}, job.products[savedIndex], next); }
+  const savedProduct = array(job.products).find((row) => ProductRanking.productIdentity(row) === identity) || next, queueSync = await syncProductCandidateQueue(actorId, scope, savedProduct, decision);
+  await saveProductJob(job, actorId); const result = publicProductJob(job); result.candidateQueue = queueSync; result.actionResult = { productId: id, decision, placement: decision === "slot_candidate" ? plain(savedProduct.approvedPlacement) : null, publicPublication: false, paymentExecution: false }; return result;
 }
 
 async function runScope(options) {
