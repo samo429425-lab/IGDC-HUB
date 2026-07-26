@@ -6,7 +6,7 @@
   'use strict';
 
   var REVIEW_ENDPOINT='/.netlify/functions/social-candidate-review';
-  var TRIGGER_ENDPOINT='/.netlify/functions/sanmaru-social-pipeline-trigger';
+  var LIVE_COLLECT_ENDPOINT='/.netlify/functions/sanmaru-social-live-collector';
   var ACTION_ENDPOINT='/.netlify/functions/social-candidate-action';
   var ROTATION_ENDPOINT='/.netlify/functions/social-rotation-selector';
   var PUBLISH_ENDPOINT='/.netlify/functions/social-snapshot-publish';
@@ -322,12 +322,13 @@
   }
   async function importSection(sectionKey,dryRun,silent){
     var target=Math.max(1,Math.min(300,Number($('collectorLimit').value)||100));
-    $('collectorState').textContent=sectionLabel(sectionKey)+' '+(dryRun?'연결 점검 중':'후보 가져오는 중');
-    var data=await postJson(TRIGGER_ENDPOINT,{
-      action:dryRun?'dry_run':'import_searchbank',
+    $('collectorState').textContent=sectionLabel(sectionKey)+' '+(dryRun?'실검색 점검 중':'실콘텐츠 찾는 중');
+    var data=await postJson(LIVE_COLLECT_ENDPOINT,{
+      action:'collect_live',
       dryRun:!!dryRun,
       sectionKey:sectionKey,
-      limit:target
+      limit:target,
+      queryPasses:target>=300?6:(target>=200?5:4)
     });
     if(!silent)renderDiagnostic(data);
     return data;
@@ -342,14 +343,16 @@
       var accepted=Number(data.accepted||0);
       var saved=Number(data.saved||0);
       var skipped=Number(data.excludedSkipped||0);
-      var message=sectionLabel(sectionKey)+' '+(dryRun?'연결 점검':'후보 반입')+' 완료: 후보 '+accepted+'개, 저장 '+saved+'개, 제외 상태 보존 '+skipped+'개.';
+      var searched=Number(data.liveCollection&&data.liveCollection.searchedRows||0);
+      var direct=Number(data.liveCollection&&data.liveCollection.directCandidates||0);
+      var message=sectionLabel(sectionKey)+' '+(dryRun?'실검색 점검':'실콘텐츠 수집')+' 완료: 검색 '+searched+'개, 직접 콘텐츠 '+direct+'개, 후보 '+accepted+'개, 저장 '+saved+'개, 제외 상태 보존 '+skipped+'개.';
       if(!dryRun)await refresh();
-      show(message,'ok');
+      show(message,direct?'ok':'warn');
     }catch(error){show(errorMessage(error),'warn');}
     finally{button.disabled=false;$('collectorState').textContent='수집 대기';}
   }
   async function collectAll(){
-    if(!confirm('9개 SNS 섹션을 SearchBank에서 순차적으로 가져올까요? 제외·영구 차단 항목은 다시 반입하지 않습니다.'))return;
+    if(!confirm('9개 SNS 섹션의 실제 공개 콘텐츠를 순차 검색할까요? 시간이 걸릴 수 있으며, 제외·영구 차단 항목은 다시 반입하지 않습니다.'))return;
     hideNotice();
     $('collectAllBtn').disabled=true;
     $('collectSectionBtn').disabled=true;
@@ -357,6 +360,8 @@
     var savedTotal=0;
     var acceptedTotal=0;
     var skippedTotal=0;
+    var searchedTotal=0;
+    var directTotal=0;
     try{
       for(var index=0;index<SECTION_ORDER.length;index+=1){
         $('collectorState').textContent=(index+1)+'/'+SECTION_ORDER.length+' · '+sectionLabel(SECTION_ORDER[index]);
@@ -364,9 +369,11 @@
         savedTotal+=Number(data.saved||0);
         acceptedTotal+=Number(data.accepted||0);
         skippedTotal+=Number(data.excludedSkipped||0);
+        searchedTotal+=Number(data.liveCollection&&data.liveCollection.searchedRows||0);
+        directTotal+=Number(data.liveCollection&&data.liveCollection.directCandidates||0);
       }
       await refresh();
-      show('전체 섹션 순차 반입 완료: 후보 '+acceptedTotal+'개, 저장 '+savedTotal+'개, 제외 상태 보존 '+skippedTotal+'개.','ok');
+      show('전체 섹션 실검색 완료: 검색 '+searchedTotal+'개, 직접 콘텐츠 '+directTotal+'개, 후보 '+acceptedTotal+'개, 저장 '+savedTotal+'개, 제외 상태 보존 '+skippedTotal+'개.',directTotal?'ok':'warn');
     }catch(error){show(errorMessage(error),'warn');}
     finally{
       $('collectAllBtn').disabled=false;

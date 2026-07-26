@@ -26,7 +26,7 @@
   <section id="summaryGrid" class="grid hidden"></section>
   <section id="collectorPanel" class="panel">
     <h2>섹션별 소셜 후보 수집</h2>
-    <div class="small">SearchBank 스냅샷에서 실콘텐츠만 지정 섹션 후보 대기열로 가져옵니다. 소셜마루와 우측 패널, seed·placeholder는 수집하지 않습니다.</div>
+    <div class="small">산마루 공개검색을 실제 실행한 뒤 각 플랫폼의 게시물·영상·공개 채널처럼 원본으로 바로 열리는 주소만 지정 섹션 후보 대기열로 가져옵니다. 검색 결과 페이지·플랫폼 홈·소셜마루·우측 패널·seed·placeholder는 수집하지 않습니다.</div>
     <div class="collectorbar">
       <select id="collectorSection"></select>
       <select id="collectorLimit">
@@ -34,9 +34,9 @@
         <option value="200">목표 200개</option>
         <option value="300">목표 300개</option>
       </select>
-      <button id="collectDryRunBtn" type="button" class="secondary">선택 섹션 연결 점검</button>
-      <button id="collectSectionBtn" type="button">선택 섹션 후보 가져오기</button>
-      <button id="collectAllBtn" type="button" class="secondary">전체 9개 섹션 순차 가져오기</button>
+      <button id="collectDryRunBtn" type="button" class="secondary">선택 섹션 실검색 점검</button>
+      <button id="collectSectionBtn" type="button">선택 섹션 실콘텐츠 수집</button>
+      <button id="collectAllBtn" type="button" class="secondary">전체 9개 섹션 순차 실검색</button>
       <span id="collectorState" class="collector-state">수집 전</span>
     </div>
   </section>
@@ -91,6 +91,6 @@
   <p class="foot">승인 완료 후보가 없으면 기존 샘플 슬롯은 그대로 유지됩니다. 생성본을 실제 `data/social.snapshot.json` 및 `netlify/functions/data/social.snapshot.json`에 반영하는 작업은 배포 전에 별도 확인 후 진행합니다.</p>
 </main>
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-social-candidate-queue.js?v=4"></script>
+<script src="/assets/js/admin-social-candidate-queue.js?v=5"></script>
 </body>
 </html>
