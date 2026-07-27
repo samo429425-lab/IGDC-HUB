@@ -15,9 +15,11 @@ const AdminAuth = require("./lib/commerce-candidate-auth.v1");
 const MaruSearch = require("./maru-search");
 const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 
-const VERSION = "sanmaru-social-live-collector-v1.0.0-direct-public-content";
-const DEFAULT_QUERY_PASSES = 4;
-const MAX_QUERY_PASSES = 6;
+const VERSION = "sanmaru-social-live-collector-v1.1.0-section-batch-provider-readiness";
+const DEFAULT_QUERY_PASSES = 1;
+const MAX_QUERY_PASSES = 2;
+const DEFAULT_BATCH_SIZE = 10;
+const MAX_BATCH_SIZE = 12;
 
 const SITE_FILTERS = Object.freeze({
   youtube: "site:youtube.com OR site:youtu.be",
@@ -237,6 +239,41 @@ function sectionPlan(sectionKey) {
   const policy = Policy.PLATFORM_POLICIES[platform];
   return platform && policy ? { sectionKey, platform, policy } : null;
 }
+function envJson() {
+  const raw = SocialStore.text(process.env.MARU_API_KEYS_JSON || process.env.API_KEYS_JSON || process.env.IGDC_API_KEYS_JSON);
+  if (!raw) return { present: false, valid: true, values: {} };
+  try {
+    const decoded = /^eyJ|^ewog|^[A-Za-z0-9+/=]{80,}$/i.test(raw) ? Buffer.from(raw, "base64").toString("utf8") : raw;
+    const values = JSON.parse(decoded);
+    return { present: true, valid: !!(values && typeof values === "object"), values: values && typeof values === "object" ? values : {} };
+  } catch (_error) { return { present: true, valid: false, values: {} }; }
+}
+function configured(names, values) {
+  return names.some((name) => !!SocialStore.text(process.env[name] || values[name]));
+}
+function providerReadiness() {
+  const bundle = envJson();
+  const values = bundle.values || {};
+  const googleKey = configured(["GOOGLE_API_KEY", "GOOGLE_SEARCH_API_KEY", "GOOGLE_CUSTOM_SEARCH_API_KEY", "GOOGLE_CLOUD_API_KEY"], values);
+  const googleCx = configured(["GOOGLE_CSE_ID", "GOOGLE_CX", "GOOGLE_SEARCH_ENGINE_ID", "GOOGLE_CUSTOM_SEARCH_ENGINE_ID", "GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID"], values);
+  const youtubeKey = configured(["YOUTUBE_API_KEY", "GOOGLE_YOUTUBE_API_KEY", "GOOGLE_API_KEY", "GOOGLE_SEARCH_API_KEY"], values);
+  const naverId = configured(["NAVER_API_KEY", "NAVER_CLIENT_ID", "NAVER_SEARCH_CLIENT_ID", "NAVER_OPENAPI_CLIENT_ID"], values);
+  const naverSecret = configured(["NAVER_CLIENT_SECRET", "NAVER_API_SECRET", "NAVER_SEARCH_CLIENT_SECRET", "NAVER_OPENAPI_CLIENT_SECRET"], values);
+  return {
+    apiKeyBundle: { configured: bundle.present, validJson: bundle.valid, note: bundle.present && !bundle.valid ? "API key bundle JSON is invalid; individual environment variables can still work." : "No secret values are returned." },
+    googleCustomSearch: { ready: googleKey && googleCx, googleApiKeyConfigured: googleKey, cseIdConfigured: googleCx, role: "Instagram, TikTok, Facebook, WeChat, Weibo, Pinterest, Reddit, X public URL discovery" },
+    youtubeDataApi: { ready: youtubeKey, apiKeyConfigured: youtubeKey, role: "YouTube public video/channel discovery; YouTube Data API v3 must be enabled for the key" },
+    naverSearch: { ready: naverId && naverSecret, clientIdConfigured: naverId, clientSecretConfigured: naverSecret, role: "Korean-language public-web discovery supplement" },
+    searchBankImport: { ready: true, role: "Imports only already-real SearchBank rows; current seed/placeholder rows remain blocked" },
+    collectionCanRun: googleKey && googleCx || youtubeKey || naverId && naverSecret,
+    requirements: [
+      { key: "GOOGLE_API_KEY + GOOGLE_CSE_ID", neededFor: "Cross-platform public URL discovery", cost: "Google service/quota terms apply" },
+      { key: "YOUTUBE_API_KEY", neededFor: "Reliable YouTube video/channel discovery", cost: "Google Cloud project and YouTube Data API v3 enablement required" },
+      { key: "NAVER_API_KEY + NAVER_CLIENT_SECRET", neededFor: "Korean public-web supplement", cost: "Naver Developers application registration required" },
+      { key: "Platform native API credentials", neededFor: "Meta, TikTok, X, Pinterest, Reddit direct platform APIs", cost: "Not required for this first public-link discovery adapter; platform permissions and terms differ" }
+    ]
+  };
+}
 function scopedQueries(plan, cursor, passes) {
   const base = plan.policy.collectionQueries || [];
   const offset = Math.max(0, Number(cursor || 0) || 0);
@@ -248,7 +285,7 @@ function scopedQueries(plan, cursor, passes) {
   }
   return Array.from(new Set(queries));
 }
-async function searchOne(event, plan, queryText, perQueryLimit, language) {
+async function searchOne(event, plan, queryText, perQueryLimit, language, start) {
   const result = await MaruSearch.runEngine({
     httpMethod: "GET",
     headers: event && event.headers || {},
@@ -257,6 +294,8 @@ async function searchOne(event, plan, queryText, perQueryLimit, language) {
       searchUi: "1",
       publicSearch: "1",
       realContentFirst: "1",
+      openPipe: "1",
+      external: "1",
       noAnalytics: "1",
       noRevenue: "1"
     }
@@ -264,7 +303,8 @@ async function searchOne(event, plan, queryText, perQueryLimit, language) {
     q: queryText,
     limit: perQueryLimit,
     lang: language || null,
-    deep: true,
+    start: start || 1,
+    deep: false,
     external: true,
     type: plan.platform === "youtube" ? "video" : "sns",
     noAnalytics: true,
@@ -306,6 +346,7 @@ exports.handler = async function(event) {
         externalProviderCalls: "POST only after administrator authorization",
         source: "existing maru-search/Sanmaru public gateway",
         target: "social_candidates through sanmaru-social-candidate-gateway",
+        providerReadiness: providerReadiness(),
         directUrlOnly: true,
         publicSnapshotMutation: false,
         searchBankCoreMutation: false,
@@ -321,11 +362,16 @@ exports.handler = async function(event) {
     if (!plan) return SocialStore.response(400, { ok: false, version: VERSION, error: "invalid_social_section", allowedSections: Policy.SECTION_KEYS });
 
     const dryRun = flag(body.dryRun || body.dry_run);
-    const target = Math.max(1, Math.min(300, Number(body.limit || body.target || 100) || 100));
+    const batchSize = Math.max(1, Math.min(MAX_BATCH_SIZE, Number(body.batchSize || body.batch_size || body.limit || DEFAULT_BATCH_SIZE) || DEFAULT_BATCH_SIZE));
+    const target = batchSize;
     const passes = Math.max(1, Math.min(MAX_QUERY_PASSES, Number(body.queryPasses || body.passes || DEFAULT_QUERY_PASSES) || DEFAULT_QUERY_PASSES));
-    const queries = scopedQueries(plan, body.queryCursor || body.cursor, passes);
-    const perQueryLimit = Math.max(25, Math.min(100, Math.ceil(target / queries.length) * 2));
-    const searchResults = await Promise.all(queries.map((queryText) => searchOne(event, plan, queryText, perQueryLimit, body.language || body.lang)));
+    const queryCursor = Math.max(0, Number(body.queryCursor || body.cursor || 0) || 0);
+    const queries = scopedQueries(plan, queryCursor, passes);
+    const perQueryLimit = Math.max(1, Math.min(MAX_BATCH_SIZE, Math.ceil(target / queries.length)));
+    const catalogSize = Math.max(1, plan.policy.collectionQueries.length);
+    const searchStart = Math.max(1, Math.min(91, Number(body.searchStart || body.search_start || (Math.floor(queryCursor / catalogSize) * perQueryLimit + 1)) || 1));
+    const searchResults = [];
+    for (const queryText of queries) searchResults.push(await searchOne(event, plan, queryText, perQueryLimit, body.language || body.lang, searchStart));
 
     const rejected = [];
     const candidates = [];
@@ -366,7 +412,11 @@ exports.handler = async function(event) {
       platform: plan.platform,
       dryRun,
       target,
+      batchSize,
       queryPasses: queries.length,
+      queryCatalogSize: catalogSize,
+      queryCursor,
+      searchStart,
       queries,
       searchedRows: searchResults.reduce((sum, result) => sum + result.items.length, 0),
       directCandidates: candidates.length,
@@ -374,7 +424,8 @@ exports.handler = async function(event) {
       rejectedRows: rejected.length,
       rejectedByReason: rejectionSummary(rejected),
       providerTrace: searchResults.map((result) => ({ query: result.query, source: result.source, itemCount: result.items.length, trace: result.trace })),
-      nextQueryCursor: (Math.max(0, Number(body.queryCursor || body.cursor || 0) || 0) + queries.length) % Math.max(1, plan.policy.collectionQueries.length),
+      nextQueryCursor: queryCursor + queries.length,
+      providerReadiness: providerReadiness(),
       directUrlOnly: true,
       publicSnapshotMutation: false,
       searchBankCoreMutation: false,
