@@ -846,12 +846,39 @@
   function configured(v) {
     return v && v.ready ? "설정됨" : "미설정";
   }
+  function providerName(value) {
+    return (
+      {
+        "wikidata-public-social-directory": "키 없는 공개 디렉터리",
+        "youtube-data-api-channel": "YouTube API",
+        "google-cse-channel": "Google CSE",
+        "naver-web-channel": "Naver 검색",
+        "sanmaru-public-search": "산마루·SearchBank",
+      }[text(value)] || text(value)
+    );
+  }
+  function providerState(value) {
+    return (
+      {
+        ok: "정상",
+        not_configured: "미설정",
+        route_skipped: "국가 경로 제외",
+        quota_or_api_disabled: "할당량·API 확인 필요",
+        credential_or_quota_error: "키·할당량 확인 필요",
+        rate_limited: "호출 제한",
+        timeout: "응답 지연",
+        error: "오류",
+        unsupported_platform: "미지원",
+      }[text(value)] || text(value)
+    );
+  }
   function renderProviderStatus(d) {
     var p = (d && d.providerReadiness) || {},
       b = p.apiKeyBundle || {},
       g = p.googleCustomSearch || {},
       y = p.youtubeDataApi || {},
       n = p.naverSearch || {},
+      w = p.publicSocialDirectory || {},
       c = p.countryLanguageRouting || {},
       u = p.directPublicUrlIntake || {},
       m = p.channelPromotion || {},
@@ -865,6 +892,7 @@
       : "미사용/개별 환경변수 방식";
     var lines = [
       "<strong>검색 제공자 상태</strong>",
+      "키 없는 공개 SNS 디렉터리: " + configured(w) + " · " + esc(w.role || ""),
       "Google Custom Search: " + configured(g) + " · " + esc(g.role || ""),
       "YouTube Data API: " + configured(y) + " · " + esc(y.role || ""),
       "Naver Search: " + configured(n) + " · " + esc(n.role || ""),
@@ -898,8 +926,8 @@
       renderProviderStatus(d);
       show(
         d.providerReadiness && d.providerReadiness.collectionCanRun
-          ? "자동 공개 채널 검색 경로가 하나 이상 준비되어 있습니다."
-          : "자동 검색 키가 없어도 공개 URL 직접 반입과 게시물→채널 승격은 사용할 수 있습니다.",
+          ? "키 없이 작동하는 공개 SNS 디렉터리를 포함해 자동 채널 검색 경로가 준비되어 있습니다."
+          : "자동 검색 경로를 사용할 수 없습니다. 제공자 상태를 확인해 주세요.",
         d.providerReadiness && d.providerReadiness.collectionCanRun
           ? "ok"
           : "warn",
@@ -996,8 +1024,26 @@
     j.accepted += Number(d.accepted || 0);
     j.saved += Number(d.saved || 0);
     j.skipped += Number(d.excludedSkipped || 0);
+    var traces = (live.providerTrace || []).reduce(function (all, row) {
+      return all.concat((row && row.providers) || []);
+    }, []);
+    var traceSummary = traces
+      .map(function (row) {
+        return (
+          providerName(row.provider) +
+          ":" +
+          providerState(row.status) +
+          "(" +
+          Number(row.count || 0) +
+          ")"
+        );
+      })
+      .filter(Boolean)
+      .join(", ");
     j.lastReason = text(
-      (live.rejectedByReason && Object.keys(live.rejectedByReason)[0]) || "",
+      traceSummary ||
+        (live.rejectedByReason && Object.keys(live.rejectedByReason)[0]) ||
+        "",
     );
     j.queryCursor = Number(
       live.nextQueryCursor == null

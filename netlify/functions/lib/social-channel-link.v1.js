@@ -5,7 +5,7 @@
  * IGDC actually recommends. This is a social-candidate adapter only; it does
  * not alter Sanmaru, SearchBank, Snapshot Engine, or public slots.
  */
-const VERSION = "social-channel-link-v1.0.0-direct-channel-assets";
+const VERSION = "social-channel-link-v1.1.0-public-directory-accounts";
 
 const PLATFORM_HOSTS = Object.freeze({
   youtube: ["youtube.com", "youtu.be"],
@@ -126,6 +126,10 @@ function resolve(value, options){
     else if (p[0] && handleAllowed(platform, p[0])) { targetUrl = canonical(platform, "/" + p[0]); entityKind = "public_page"; }
   } else if (platform === "wechat") {
     if (/^\/s(?:\/|$)/i.test(path) || evidence.searchParams.get("__biz")) { targetUrl = evidence.toString(); entityKind = "official_account_article_channel"; }
+    else if (hostOf(evidence.toString()) === "open.weixin.qq.com" && /^\/qr\/code$/i.test(path) && evidence.searchParams.get("username")) {
+      targetUrl = evidence.toString();
+      entityKind = "official_account";
+    }
   } else if (platform === "weibo") {
     if (p[0] === "u" && p[1]) { targetUrl = canonical(platform, "/u/" + p[1]); entityKind = "profile"; }
     else if (p[0] === "detail" && p[1]) { needsEnrichment = "weibo_profile_lookup"; entityKind = "profile"; }

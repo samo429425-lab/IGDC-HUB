@@ -17,12 +17,69 @@ const MaruSearch = require("./maru-search");
 const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.3.0-channel-profile-group-discovery";
+const VERSION = "sanmaru-social-live-collector-v1.4.0-no-key-public-directory";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
 const MAX_BATCH_SIZE = 12;
 const REQUEST_TIMEOUT_MS = 9000;
+const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
+
+/*
+ * Key-free public directory fallback.
+ *
+ * Wikidata stores public social identifiers for notable people,
+ * organisations and communities. These rows are discovery candidates only:
+ * they still pass through the existing channel resolver, candidate policy,
+ * administrator review and final publish controls.
+ */
+const PUBLIC_DIRECTORY = Object.freeze({
+  youtube: {
+    property: "P2397",
+    entityKind: "channel",
+    url: (value) => "https://www.youtube.com/channel/" + encodeURIComponent(value)
+  },
+  instagram: {
+    property: "P2003",
+    entityKind: "profile",
+    url: (value) => "https://www.instagram.com/" + encodeURIComponent(String(value).replace(/^@/, "")) + "/"
+  },
+  tiktok: {
+    property: "P7085",
+    entityKind: "profile",
+    url: (value) => "https://www.tiktok.com/@" + encodeURIComponent(String(value).replace(/^@/, ""))
+  },
+  facebook: {
+    property: "P2013",
+    entityKind: "public_page",
+    url: (value) => "https://www.facebook.com/" + encodeURIComponent(value)
+  },
+  wechat: {
+    property: "P7650",
+    entityKind: "official_account",
+    url: (value) => "https://open.weixin.qq.com/qr/code?username=" + encodeURIComponent(value)
+  },
+  weibo: {
+    property: "P3579",
+    entityKind: "profile",
+    url: (value) => "https://weibo.com/u/" + encodeURIComponent(value)
+  },
+  pinterest: {
+    property: "P3836",
+    entityKind: "profile",
+    url: (value) => "https://www.pinterest.com/" + encodeURIComponent(String(value).replace(/^@/, "")) + "/"
+  },
+  reddit: {
+    property: "P3984",
+    entityKind: "community",
+    url: (value) => "https://www.reddit.com/r/" + encodeURIComponent(String(value).replace(/^r\//i, "")) + "/"
+  },
+  twitter: {
+    property: "P2002",
+    entityKind: "profile",
+    url: (value) => "https://x.com/" + encodeURIComponent(String(value).replace(/^@/, ""))
+  }
+});
 
 const CHANNEL_SITE_FILTERS = Object.freeze({
   youtube: "(site:youtube.com/@ OR site:youtube.com/channel/ OR site:youtube.com/user/)",
@@ -232,12 +289,20 @@ function providerReadiness(configValue) {
       clientSecretConfigured: !!cfg.naverSecret,
       role: "한국어 공개 웹 채널 검색 보조"
     },
+    publicSocialDirectory: {
+      ready: true,
+      apiKeyRequired: false,
+      provider: "Wikidata Query Service",
+      role: "API 키 없이 공개 등록된 실제 SNS 채널·프로필·커뮤니티 주소 자동 발견"
+    },
     searchBankImport: { ready: true, role: "SearchBank의 실제 SNS 주소만 채널 자산으로 승격하여 반입" },
     countryLanguageRouting: { ready: true, role: "국가 단위와 언어 우선순위 적용; 원 IP는 저장하지 않음" },
     directPublicUrlIntake: { ready: true, role: "키 없이 관리자가 공개 채널·프로필·그룹·게시물 URL을 붙여넣어 채널 후보로 변환" },
     channelPromotion: { ready: true, role: "YouTube 영상, TikTok 영상, X 게시물, Reddit 글 등을 운영 채널·프로필·커뮤니티 주소로 승격" },
-    collectionCanRun: !!(cfg.googleKey && cfg.googleCx || cfg.youtubeKey || cfg.naverId && cfg.naverSecret),
+    collectionCanRun: true,
+    keyFreeAutomaticDiscovery: true,
     requirements: [
+      { key: "필수 키 없음", neededFor: "공개 디렉터리 기반 9개 SNS 실제 채널 링크 자동 후보 수집", cost: "무료 공개 데이터; 관리자 검증 후 사용" },
       { key: "GOOGLE_API_KEY + GOOGLE_CSE_ID", neededFor: "8개 비YouTube 플랫폼의 공개 채널 자동 발견", cost: "Google 무료 할당량 및 서비스 약관 범위" },
       { key: "YOUTUBE_API_KEY", neededFor: "YouTube 채널 직접 검색", cost: "Google Cloud에서 YouTube Data API v3 활성화" },
       { key: "NAVER_CLIENT_ID + NAVER_CLIENT_SECRET", neededFor: "한국어 공개 웹 검색 보조", cost: "Naver Developers 애플리케이션 등록" },
@@ -279,6 +344,102 @@ function scopedQueries(plan, cursor, passes, route) {
     queries.push([baseQuery, countryQueryTerm(route)].filter(Boolean).join(" "));
   }
   return Array.from(new Set(queries));
+}
+function sparqlLiteral(value) {
+  return '"' + String(value == null ? "" : value)
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\r?\n/g, " ") + '"';
+}
+function publicDirectoryQuery(plan, route, limit, offset, countryStrict) {
+  const directory = PUBLIC_DIRECTORY[plan.platform];
+  const countryCode = SocialStore.text(route && route.countryCode).toUpperCase();
+  const countryFilter = countryStrict && countryCode
+    ? [
+        "?country wdt:P297 " + sparqlLiteral(countryCode) + " .",
+        "{ ?item wdt:P27 ?country . } UNION",
+        "{ ?item wdt:P17 ?country . } UNION",
+        "{ ?item wdt:P495 ?country . }"
+      ].join("\n")
+    : "";
+  return [
+    "SELECT DISTINCT ?item ?itemLabel ?itemDescription ?account ?image ?sitelinks WHERE {",
+    "  ?item wdt:" + directory.property + " ?account .",
+    countryFilter ? "  " + countryFilter.replace(/\n/g, "\n  ") : "",
+    "  OPTIONAL { ?item wdt:P18 ?image . }",
+    "  OPTIONAL { ?item wikibase:sitelinks ?sitelinks . }",
+    '  SERVICE wikibase:label { bd:serviceParam wikibase:language "ko,en,[AUTO_LANGUAGE]" . }',
+    "}",
+    "ORDER BY DESC(?sitelinks)",
+    "LIMIT " + Math.max(1, Math.min(MAX_BATCH_SIZE, Number(limit) || DEFAULT_BATCH_SIZE)),
+    "OFFSET " + Math.max(0, Number(offset) || 0)
+  ].filter(Boolean).join("\n");
+}
+function bindingValue(binding, key) {
+  return SocialStore.text(binding && binding[key] && binding[key].value);
+}
+function commonsHttps(value) {
+  const clean = SocialStore.text(value);
+  return /^http:\/\//i.test(clean) ? "https://" + clean.slice(7) : clean;
+}
+async function publicDirectoryRequest(plan, route, limit, offset, countryStrict) {
+  const directory = PUBLIC_DIRECTORY[plan.platform];
+  if (!directory) return { provider: "wikidata-public-social-directory", status: "unsupported_platform", items: [] };
+  const query = publicDirectoryQuery(plan, route, limit, offset, countryStrict);
+  const params = new URLSearchParams({ query, format: "json" });
+  try {
+    const data = await fetchJson(WIKIDATA_ENDPOINT + "?" + params.toString(), {
+      headers: {
+        Accept: "application/sparql-results+json",
+        "User-Agent": "IGDC-MARU-SocialHub/1.0 (public-channel-candidate-discovery)"
+      }
+    }, 12000);
+    const bindings = data && data.results && Array.isArray(data.results.bindings) ? data.results.bindings : [];
+    const items = bindings.map((binding) => {
+      const account = bindingValue(binding, "account");
+      const url = account ? directory.url(account) : "";
+      return {
+        provider: "wikidata-public-social-directory",
+        platform: plan.platform,
+        channelUrl: url,
+        url,
+        title: bindingValue(binding, "itemLabel"),
+        creatorName: bindingValue(binding, "itemLabel"),
+        description: bindingValue(binding, "itemDescription"),
+        thumbnail: commonsHttps(bindingValue(binding, "image")),
+        entityKind: directory.entityKind,
+        publicDirectoryItem: bindingValue(binding, "item"),
+        quality: { rank: Number(bindingValue(binding, "sitelinks") || 0) },
+        country: countryStrict && route && route.countryCode || ""
+      };
+    }).filter((item) => item.channelUrl && item.title && !/^Q\d+$/i.test(item.title));
+    return {
+      provider: "wikidata-public-social-directory",
+      status: "ok",
+      countryStrict: !!countryStrict,
+      offset,
+      items
+    };
+  } catch (error) {
+    return {
+      provider: "wikidata-public-social-directory",
+      status: error.name === "AbortError" ? "timeout" : (error.statusCode === 429 ? "rate_limited" : "error"),
+      countryStrict: !!countryStrict,
+      offset,
+      error: error.message,
+      items: []
+    };
+  }
+}
+async function publicDirectorySearch(plan, route, limit, offset) {
+  const countryStrict = !!SocialStore.text(route && route.countryCode);
+  const primary = await publicDirectoryRequest(plan, route, limit, offset, countryStrict);
+  if (primary.items.length || !countryStrict || primary.status !== "ok") return primary;
+  const globalFallback = await publicDirectoryRequest(plan, route, limit, offset, false);
+  globalFallback.countryFallback = true;
+  globalFallback.countryPrimaryCount = 0;
+  globalFallback.items.forEach((item) => { item.publicDirectoryCountryFallback = true; });
+  return globalFallback;
 }
 async function youtubeChannelSearch(queryText, limit, cfg, qualitySweep) {
   if (!cfg.youtubeKey) return { provider: "youtube-data-api-channel", status: "not_configured", items: [] };
@@ -407,8 +568,9 @@ async function maruSearchOne(event, plan, queryText, limit, language, start) {
     return { provider: "sanmaru-public-search", status: "error", error: error.message, items: [], trace: [] };
   }
 }
-async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep) {
+async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset) {
   const providers = [];
+  providers.push(await publicDirectorySearch(plan, route, limit, directoryOffset));
   if (plan.platform === "youtube") providers.push(await youtubeChannelSearch(queryText, limit, cfg, qualitySweep));
   providers.push(await googleChannelSearch(plan, queryText, limit, start, cfg));
   providers.push(await naverChannelSearch(plan, queryText, limit, start, route, cfg));
@@ -418,7 +580,10 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     items: providers.flatMap((result) => result.items || []),
     providers: providers.map((result) => ({
       provider: result.provider, status: result.status, count: (result.items || []).length,
-      source: result.source || null, error: result.error || null, trace: result.trace || []
+      source: result.source || null, error: result.error || null, trace: result.trace || [],
+      countryStrict: result.countryStrict == null ? null : !!result.countryStrict,
+      countryFallback: !!result.countryFallback,
+      offset: Number(result.offset || 0)
     }))
   };
 }
@@ -486,7 +651,9 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route) {
     description: firstText([item && item.description, item && item.summary, item && item.snippet]).slice(0, 1200),
     creatorName: creatorName.slice(0, 180),
     language: firstText([item && item.lang, item && item.language, routeLanguages[0], "und"]),
-    countryScopes: route && route.countryCode ? [route.countryCode] : [],
+    countryScopes: item && item.publicDirectoryCountryFallback
+      ? []
+      : (route && route.countryCode ? [route.countryCode] : []),
     languageScopes: routeLanguages,
     category,
     publicAccess: true,
@@ -624,8 +791,14 @@ exports.handler = async function(event) {
     const catalogSize = Math.max(1, plan.policy.collectionQueries.length);
     const searchStart = Math.max(1, Math.min(91, Number(body.searchStart || body.search_start || (Math.floor(queryCursor / catalogSize) * perQueryLimit + 1)) || 1));
     const searchResults = [];
-    for (const queryText of queries) {
-      searchResults.push(await searchOne(event, plan, queryText, perQueryLimit, body.language || body.lang || route.languages[0], searchStart, route, cfg, qualitySweep));
+    for (let queryIndex = 0; queryIndex < queries.length; queryIndex += 1) {
+      const queryText = queries[queryIndex];
+      const directoryOffset = Math.max(0, (queryCursor + queryIndex) * perQueryLimit);
+      searchResults.push(await searchOne(
+        event, plan, queryText, perQueryLimit,
+        body.language || body.lang || route.languages[0],
+        searchStart, route, cfg, qualitySweep, directoryOffset
+      ));
     }
 
     const rejected = [];
