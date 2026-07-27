@@ -12,7 +12,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "commerce-product-ranking-v1.8.0-private-review-section-auto-and-front-gate";
+const VERSION = "commerce-product-ranking-v1.9.0-category-enrichment-balanced-private-placement";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -295,7 +295,7 @@ function isGenericProductName(value) {
   if (raw.length > 220) return true;
   if (/(?:\br\.push\s*\(|\b(?:item|product|goods)\.[a-z_$][\w$]*|document\.|window\.|function\s*\(|=>|<\/?script\b|getCurrency\s*\()/i.test(raw)) return true;
   if (/^(?:상품명\s*확인\s*중|상품|제품|상품목록|제품목록|제품별|브랜드별|카테고리|전체상품|전체보기|보기|상세|더보기|구매|결과|검색|검색결과|로그인|로그아웃|회원가입|마이페이지|장바구니|주문조회|상품\s*삭제|최근\s*검색어\s*전체삭제|전체삭제|품절|다른\s*기획전\s*보기|브랜드\s*사이트\s*목록\s*열기|사이트\s*목록\s*열기|업체\s*사이트\s*열기|공식\s*사이트\s*열기|원본\s*링크|shop|store|view|detail|list|result|results|login|logout|cart|search)$/i.test(raw)) return true;
-  if (/^(?:new|best|sale|event|lucky\s*\d+|기획전|이벤트|추천상품)$/i.test(raw)) return true;
+  if (/^(?:new|best|sale|event|lucky\s*\d+|기획전|이벤트|추천상품|오늘의\s*딜|오늘만\s*특가|타임\s*딜|핫\s*딜)$/i.test(raw)) return true;
   if (/(?:사이트|브랜드|업체|공식몰).*(?:목록|열기|바로가기)$/i.test(raw)) return true;
   if (/(?:공식몰|브랜드몰|쇼핑몰|몰)\s*\|?.*(?:일상|행복|새로운|더\s*빛나게)|(?:일상|행복|새로운|더\s*빛나게).*(?:공식몰|브랜드몰|쇼핑몰)/i.test(raw)) return true;
   return false;
@@ -340,13 +340,17 @@ function productIdentity(rowInput) {
 }
 
 function productFamilyKey(rowInput) {
-  const row = plain(rowInput), supplier = supplierKey(row), title = normalizeFamilyTitle(first(row.productName, row.title));
-  return supplier + "|family:" + (title || productIdFromUrl(first(row.productUrl, row.url)) || sha256(first(row.productUrl, row.url)).slice(0, 18));
+  const row = plain(rowInput), supplier = supplierKey(row), rawTitle = first(row.productName, row.title);
+  const title = isGenericProductName(rawTitle) ? "" : normalizeFamilyTitle(rawTitle);
+  const productSpecificFallback = productIdFromUrl(first(row.productUrl, row.url)) || sha256(first(row.productUrl, row.url)).slice(0, 18);
+  return supplier + "|family:" + (title || productSpecificFallback);
 }
 
 function displayFamilyKey(rowInput) {
-  const row = plain(rowInput), title = normalizeFamilyTitle(first(row.productName, row.title));
-  return "display-family:" + (title || productIdFromUrl(first(row.productUrl, row.url)) || sha256(first(row.productUrl, row.url)).slice(0, 18));
+  const row = plain(rowInput), rawTitle = first(row.productName, row.title);
+  const title = isGenericProductName(rawTitle) ? "" : normalizeFamilyTitle(rawTitle);
+  const productSpecificFallback = productIdFromUrl(first(row.productUrl, row.url)) || sha256(first(row.productUrl, row.url)).slice(0, 18);
+  return "display-family:" + (title || productSpecificFallback);
 }
 
 function classifyCategory(rowInput) {
@@ -366,14 +370,16 @@ function classifyCategory(rowInput) {
   addProduct("food_household_essentials", 80, /(화장지|두루마리|휴지|티슈|물티슈|키친타올|생리대|위생|세제|세정제|주방용품|생활용품|생필품|식료품|건강식품|가공식품|즉석식품|냉동식품|신선식품|수입식품|유기농식품|(?:^|[^가-힣])식품(?:[^가-힣]|$)|김치|장류|반찬|떡|한과|household|tissue|detergent|grocery|food)/i);
   addProduct("food_household_essentials", 35, /(미용티슈|각티슈|롤화장지|배변패드|발티슈|키친타월|키친타올|생리대|오버나이트)/i);
   addProduct("beauty_personal_care", 85, /(화장품|뷰티|스킨케어|세럼|크림|로션(?!\s*\d*겹)|선크림|샴푸|린스|클렌징|마스크팩|메이크업|향수|미스트|그루밍|이어클리너|이어클렌저|personal care|beauty|cosmetic|skincare|grooming)/i);
-  addProduct("fashion", 75, /(패션|의류|옷|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|안경|fashion|apparel|jewelry|ring|watch|shoes|bag)/i);
-  addProduct("electronics_accessories", 80, /(전자|스마트폰|휴대폰|태블릿|컴퓨터|노트북|모니터|이어폰|헤드폰|충전기|케이블|카메라|어댑터|아답터|커넥터|리모컨|전원부|센서|컨트롤러|electronics|smartphone|tablet|computer|laptop|charger|camera|adapter|connector|remote control)/i);
-  addProduct("home_appliances_living", 75, /(가전|냉장고|세탁기|청소기|에어컨|공기청정기|가구|침구|조명|인테리어|온수매트|전기요|전기장판|카본매트|냉온수|난방|써큘레이터|선풍기|펫하우스|메밀베개|베개|매트커버|클린필터|에어펌프|home appliance|furniture|living|vacuum|refrigerator|heated mat|electric blanket|circulator|fan)/i);
+  addProduct("fashion", 75, /(패션|의류|옷|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|안경|등산복|등산화|아웃도어의류|fashion|apparel|jewelry|ring|watch|shoes|bag|outdoor wear)/i);
+  addProduct("electronics_accessories", 80, /(전자|스마트폰|휴대폰|태블릿|컴퓨터|노트북|모니터|이어폰|헤드폰|충전기|케이블|카메라|어댑터|아답터|커넥터|리모컨|전원부|센서|컨트롤러|배터리|충전식|인버터|계측기|측정기|멀티미터|electronics|smartphone|tablet|computer|laptop|charger|camera|adapter|connector|remote control|battery|inverter|multimeter)/i);
+  addProduct("home_appliances_living", 75, /(가전|냉장고|세탁기|청소기|에어컨|공기청정기|가구|침구|조명|인테리어|온수매트|전기요|전기장판|카본매트|냉온수|난방|써큘레이터|선풍기|펫하우스|메밀베개|베개|매트커버|클린필터|에어펌프|수납장|테이블|의자|소파|책상|home appliance|furniture|living|vacuum|refrigerator|heated mat|electric blanket|circulator|fan|table|chair|sofa|desk)/i);
   addProduct("baby_family_education", 75, /(유아|아기|어린이|키즈|학생|교육|학습|도서|문구|장난감|아기물티슈|유아용|보솜이|baby|kids|child|education|book|toy)/i);
   addProduct("agriculture_fishery_forestry", 85, /(버섯|표고|느타리|목이|송이|고사리|산채|임산물|밤|대추|호두|잣|꿀|약초|쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|과일|채소|농산물|한우|돼지고기|닭고기|계란|우유|축산물|수산물|건어물|김|미역|젓갈|전복|굴|새우|agriculture|fishery|forestry|farm|seafood)/i);
   addProduct("travel_local_services", 90, /(여행(?!용)|관광|숙박|호텔|리조트|체험|투어|입장권|여행티켓|렌터카|지역서비스|travel(?!\s*size)|tour|hotel|resort|experience|admission|rental car)/i);
+  addProduct("travel_local_services", 88, /(등산|캠핑|백패킹|트레킹|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|아웃도어|낚시|차박|outdoor|camping|hiking|trekking|tent|sleeping bag|backpacking|fishing)/i);
   addCombined("local_products", 55, /(로컬푸드|지역특산|특산품|향토|산지직송|농장|어촌|산촌|local product|regional specialty|farm direct)/i);
   addSupplier("manufacturer_brands", 50, /(공식몰|본사|제조사|제조업체|생산자|manufacturer|official store|producer|brand)/i);
+  addProduct("manufacturer_brands", 90, /(전동공구|공구세트|드릴|해머드릴|임팩트|그라인더|절단기|샌더|용접기|콤프레샤|에어공구|작업대|측정공구|수공구|톱날|비트세트|공업용|산업재|power tool|drill|grinder|welder|compressor|sander|impact driver)/i);
   addProduct("manufacturer_brands", 75, /(공구|산업용품|기계|부품|금속|철강|플라스틱|고무|목재|포장재|전기자재|전자부품|자동차부품|건축자재|설비|안전용품|industrial|machinery|machine|tool|component|parts|metal|steel|plastic|rubber|packaging|electrical|hardware)/i);
 
   if (!Object.values(scores).some((score) => score > 0)) scores.manufacturer_brands = 15;
@@ -863,11 +869,18 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const responsibilityEvidence = has(["marketResponsibilityEvidence","sellerResponsibilityEvidence","localResponsibilityEvidence"]) || (row.supplierEvidenceReady === true && supplier.reviewEligible === true);
   const socialMarketEvidence = has(["marketEvidenceReady","sameMarketEvidence","socialMarketEvidence"]);
   const manufacturerBrand = manufacturer && !cooperative;
+  const outdoorGear = /(등산|캠핑|백패킹|트레킹|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|아웃도어|낚시|차박|outdoor|camping|hiking|trekking|tent|sleeping bag|backpacking|fishing)/i.test(hay);
+  const industrialTool = /(전동공구|공구세트|드릴|해머드릴|임팩트|그라인더|절단기|샌더|용접기|콤프레샤|에어공구|작업대|측정공구|수공구|톱날|비트세트|공업용|산업재|power tool|drill|grinder|welder|compressor|sander|impact driver)/i.test(hay);
+  const electronicsUtility = category.primary === "electronics_accessories" || /(배터리|충전기|인버터|계측기|측정기|멀티미터|전자부품|센서|컨트롤러|battery|charger|inverter|multimeter|sensor|controller)/i.test(hay);
+  const socialLifestyle = ["beauty_personal_care","fashion","baby_family_education"].includes(category.primary) || /(뷰티|패션|의류|신발|가방|주얼리|화장품|스킨케어|키즈|유아|beauty|fashion|apparel|cosmetic|kids)/i.test(hay);
 
   // HOME 8.  These are relevance/value proposals, never quota targets.
   if (highestValue) add("home", "home_right_top", baseScore + 4, "검증된 수익권·높은 신뢰·대중 가치가 함께 확인된 상품", "highest_verified_total_value", []);
+  if ((electronicsUtility || category.primary === "home_appliances_living") && risk.gatePassed === true) add("home", "home_right_top", baseScore + 2, "전자·가전·생활 효용 상품의 우측 상단 비공개 검토", "private_review_utility_right_top", []);
   if (localOrigin && responsibilityEvidence && Number(audience.audienceDemandScore || 0) >= 50) add("home", "home_right_middle", baseScore + 1, "지역 가치와 판매자 책임, 실제 수요가 함께 확인된 상품", "local_value_responsibility_and_demand", []);
+  if ((industrialTool || manufacturerBrand) && risk.gatePassed === true) add("home", "home_right_middle", baseScore, "제조·공업·공구 상품의 우측 중단 비공개 검토", "private_review_industrial_right_middle", []);
   if (verifiedNewness && value.privatePlacementEligible === true) add("home", "home_right_bottom", baseScore, "공식 신규성 및 기본 가치 기준을 통과한 상품", "new_verified_value_discovery", []);
+  if ((outdoorGear || recentDiscovery) && risk.gatePassed === true) add("home", "home_right_bottom", baseScore - 1, "아웃도어·신규 발견 상품의 우측 하단 비공개 검토", "private_review_outdoor_or_discovery_right_bottom", []);
 
   if (recurringEssential && Number(audience.audienceDemandScore || 0) >= 55 && (baseScore >= 48 || verifiedTrend || revenueValue.contractReady === true)) {
     add("home", "home_2", baseScore + 5, "생활 필요성과 반복 구매 가능성이 높은 대표 상품", "essential_repeat_demand", []);
@@ -875,8 +888,8 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   if (localOrigin && Number(audience.audienceDemandScore || 0) >= 50 && (baseScore >= 45 || revenueValue.contractReady === true)) {
     add("home", "home_3", baseScore + 3, "생산자·조합·지역 원산지 대표 가치 상품", "producer_cooperative_or_local_origin", responsibilityEvidence ? [] : ["sellerResponsibilityEvidence"]);
   }
-  if ((localService || travel || marketplace) && Number(audience.audienceDemandScore || 0) >= 48 && (baseScore >= 45 || verifiedTrend || revenueValue.contractReady === true)) {
-    add("home", "home_4", baseScore + 2, "현지 서비스·관광·검증 마켓 대표 수요 상품", "local_service_or_market", []);
+  if ((localService || travel || marketplace || outdoorGear) && (outdoorGear || Number(audience.audienceDemandScore || 0) >= 48) && (outdoorGear || baseScore >= 45 || verifiedTrend || revenueValue.contractReady === true)) {
+    add("home", "home_4", baseScore + (outdoorGear ? 4 : 2), outdoorGear ? "등산·캠핑·아웃도어 상품의 여행 연계 검토" : "현지 서비스·관광·검증 마켓 대표 수요 상품", outdoorGear ? "tour_outdoor_gear" : "local_service_or_market", []);
   }
   if ((manufacturerBrand || ["electronics_accessories","home_appliances_living"].includes(category.primary)) && Number(audience.broadAppealScore || 0) >= 65 && (baseScore >= 50 || verifiedTrend || revenueValue.contractReady === true)) {
     add("home", "home_1", baseScore + 3, "공식 제조사·브랜드의 대표 대중 효용 상품", "featured_manufacturer_utility", []);
@@ -894,18 +907,20 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   if (verifiedNewness && value.privatePlacementEligible === true) add("distribution", "distribution-new", baseScore + 2, "공식 신규성과 기본 가치 기준을 통과한 상품", "recently_verified_listing", []);
   if (verifiedSpecial && Number(audience.audienceDemandScore || 0) >= 45) add("distribution", "distribution-special", baseScore + 3, "공식 인증·특산·한정 근거와 수요가 확인된 상품", "certified_or_producer_special", []);
   if (highTrust && baseScore >= 62) add("distribution", "distribution-right", baseScore + 2, "고신뢰·고가치 큐레이션 상품", "curated_high_total_value", []);
+  if ((industrialTool || electronicsUtility) && risk.gatePassed === true) add("distribution", "distribution-right", baseScore + 3, "공구·전자·산업 효용 상품의 우측 유통 검토", "private_review_industrial_distribution_right", []);
   if (value.privatePlacementEligible === true && baseScore >= 58) add("distribution", "distribution-recommend", baseScore + 4, "대중 가치·거래 가능성·수익 기회를 종합한 추천 상품", "verified_total_value_recommendation", []);
-  if (value.privatePlacementEligible === true) add("distribution", "distribution-others", baseScore + 1, "기본 수요와 수익 기회 기준을 통과한 일반·롱테일 상품", "qualified_long_tail_offer", []);
+  if ((recurringEssential || socialLifestyle || electronicsUtility) && risk.gatePassed === true) add("distribution", "distribution-recommend", baseScore + 2, "대중 수요·반복 구매·생활 효용 중심 추천 검토", "private_review_demand_recommendation", []);
+  if (value.privatePlacementEligible === true || risk.gatePassed === true) add("distribution", "distribution-others", baseScore + 1, "기본 수요와 수익 기회 기준을 통과한 일반·롱테일 상품", "qualified_long_tail_offer", []);
 
   if ((manufacturerBrand || cooperative || marketplace) && value.privatePlacementEligible === true) {
     const networkScore = ["electronics_accessories","home_appliances_living","manufacturer_brands"].includes(category.primary) ? baseScore + 3 : baseScore - 1;
     add("network", "network-right", networkScore, "제조·생산·조합·마켓 공급망 연결 가치 상품", "market_hub_verified_offer", []);
   }
-  if ((travel || (localOrigin && /(특산품|기념품|체험)/i.test(hay))) && Number(audience.audienceDemandScore || 0) >= 42) {
-    add("tour", "tour", baseScore - 4, "여행·관광·지역 체험 수요 상품", "local_travel_or_tourism_offer", travelOperatorEvidence ? [] : ["travelOperatorEvidence"]);
+  if ((travel || outdoorGear || (localOrigin && /(특산품|기념품|체험)/i.test(hay))) && (outdoorGear || Number(audience.audienceDemandScore || 0) >= 42)) {
+    add("tour", "tour", baseScore + (outdoorGear ? 5 : -4), outdoorGear ? "등산·캠핑·아웃도어 여행 장비" : "여행·관광·지역 체험 수요 상품", outdoorGear ? "tour_outdoor_gear_offer" : "local_travel_or_tourism_offer", outdoorGear ? [] : (travelOperatorEvidence ? [] : ["travelOperatorEvidence"]));
   }
-  if ((commercial.visual || commercial.promotional || localOrigin) && Number(audience.audienceDemandScore || 0) >= 52) {
-    add("social", "rightPanel", baseScore - 3, "소셜 반응 가능성과 실제 수요가 함께 확인된 상품", "social_context_market_offer", socialMarketEvidence ? [] : ["socialMarketEvidence"]);
+  if ((commercial.visual || commercial.promotional || localOrigin || socialLifestyle) && (socialLifestyle || Number(audience.audienceDemandScore || 0) >= 52)) {
+    add("social", "rightPanel", baseScore + (socialLifestyle ? 2 : -3), socialLifestyle ? "패션·뷰티·가족 소비재의 소셜 반응 검토" : "소셜 반응 가능성과 실제 수요가 함께 확인된 상품", socialLifestyle ? "social_lifestyle_offer" : "social_context_market_offer", socialLifestyle ? [] : (socialMarketEvidence ? [] : ["socialMarketEvidence"]));
   }
 
   // Private management fallback: products that passed the hard product/risk

@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.5.0-max-private-placement-front-match-control";
+const VERSION = "commerce-country-automation-v3.6.0-enrichment-balanced-private-placement";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -41,6 +41,7 @@ const PRODUCT_PORTFOLIO_LIMIT = 1200;
 const PRODUCT_STAGE_BATCH = 12;
 const PRODUCT_SUPPLIER_LIMIT = 80;
 const PRODUCT_SECTION_CAPACITY = 100;
+const PRODUCT_AI_ENRICH_BATCH = 12;
 const PRODUCT_SECTION_KEYS = Object.freeze([
   "home|home_1", "home|home_2", "home|home_3", "home|home_4", "home|home_5",
   "home|home_right_top", "home|home_right_middle", "home|home_right_bottom",
@@ -1668,9 +1669,11 @@ function productPrivateReviewAssessment(rowInput) {
   if (!ProductRanking.isSpecificProductUrl(productUrl(row))) return { eligible: false, hold: false, reason: "specific_product_page_not_verified", warnings };
   if (row.sameSupplierSite === false) return { eligible: false, hold: true, reason: "supplier_product_domain_mismatch", warnings };
   if (!productImageUrl(row)) return { eligible: false, hold: false, reason: "actual_product_image_not_verified", warnings };
-  if (row.provisionalName === true || blockers.includes("generic_or_unresolved_product_name")) return { eligible: false, hold: false, reason: "product_name_not_verified", warnings };
+  const genericNamePending = row.provisionalName === true || ProductRanking.isGenericProductName(first(row.productName, row.title)) || blockers.includes("generic_or_unresolved_product_name");
+  if (genericNamePending && !text(row.priorityLabel) && !text(row.supplierName)) return { eligible: false, hold: false, reason: "product_name_not_verified", warnings };
   const hardBlockers = blockers.filter((item) => !PRIVATE_REVIEW_SOFT_BLOCKERS.has(item) && !PRIVATE_REVIEW_UNASSIGNED_BLOCKERS.has(item));
   if (hardBlockers.length) return { eligible: false, hold: true, reason: hardBlockers.join(",") || "risk_gate_failed", warnings };
+  if (genericNamePending) warnings.push("product_name_pending");
   if (row.inspectionComplete !== true) warnings.push("inspection_pending");
   if (!text(row.price)) warnings.push("price_pending");
   if (!text(row.availability)) warnings.push("availability_pending");
@@ -1682,34 +1685,137 @@ function productPrivateReviewAssessment(rowInput) {
 function privateReviewFallbackAssignments(rowInput) {
   const row = plain(rowInput), assessment = productPrivateReviewAssessment(row);
   if (!assessment.eligible) return [];
-  const category = text(row.productCategory), titleHay = lower([row.productName, row.title, row.priorityLabel].map(text).join(" "));
-  const manufacturer = category === "manufacturer_brands" || /(제조|브랜드|공식몰|manufacturer|official_store)/i.test(titleHay);
-  const newness = /(신제품|신상품|신규출시|new_arrival|new_product|new_release)/i.test(titleHay);
-  const trending = /(베스트|인기상품|판매상위|best_seller|most_popular)/i.test(titleHay);
+  const category = text(row.productCategory);
+  const titleHay = lower([row.productName, row.title, row.priorityLabel, row.description, row.summary, row.supplierName, row.supplierType].map(text).join(" "));
+  const manufacturer = category === "manufacturer_brands" || /(제조|브랜드|공식몰|공업|산업재|manufacturer|official_store|industrial)/i.test(titleHay);
+  const newness = /(신제품|신상품|신규출시|새상품|new_arrival|new_product|new_release)/i.test(titleHay);
+  const trending = /(베스트|인기상품|판매상위|핫딜|best_seller|most_popular)/i.test(titleHay);
   const special = /(특산|한정|인증|유기농|무농약|수상|limited|certified)/i.test(titleHay);
+  const outdoor = /(등산|캠핑|백패킹|트레킹|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|아웃도어|낚시|차박|outdoor|camping|hiking|trekking|tent|sleeping bag|backpacking|fishing)/i.test(titleHay);
+  const industrialTool = /(전동공구|공구세트|드릴|해머드릴|임팩트|그라인더|절단기|샌더|용접기|콤프레샤|에어공구|작업대|측정공구|수공구|톱날|비트세트|공업용|산업재|power tool|drill|grinder|welder|compressor|sander|impact driver)/i.test(titleHay);
+  const electronics = category === "electronics_accessories" || /(전자|충전기|배터리|인버터|계측기|멀티미터|센서|컨트롤러|electronics|charger|battery|inverter|multimeter|sensor|controller)/i.test(titleHay);
+  const living = category === "home_appliances_living";
+  const essential = ["food_household_essentials", "baby_family_education"].includes(category);
+  const socialLifestyle = ["beauty_personal_care", "fashion", "baby_family_education"].includes(category);
+  const localOrigin = ["local_products", "agriculture_fishery_forestry"].includes(category);
   const map = [];
   const add = (key, score, reason, role) => {
     if (!validProductSectionKey(key) || map.some((item) => item.key === key)) return;
     const split = splitProductSectionKey(key);
-    map.push({ key, page: split.page, sectionKey: split.sectionKey, section: split.sectionKey, score, reason, policyRole: role, requiredEvidence: [], evidenceGaps: assessment.warnings.slice(), valueQualified: true, reviewEligible: true, approvalEligible: false, privateReviewOnly: true, publicReleaseEvidencePending: assessment.warnings.length > 0, proposalOnly: true, publicPublication: false });
+    map.push({
+      key,
+      page: split.page,
+      sectionKey: split.sectionKey,
+      section: split.sectionKey,
+      score,
+      reason,
+      policyRole: role,
+      requiredEvidence: [],
+      evidenceGaps: assessment.warnings.slice(),
+      valueQualified: true,
+      reviewEligible: true,
+      approvalEligible: false,
+      privateReviewOnly: true,
+      publicReleaseEvidencePending: assessment.warnings.length > 0,
+      proposalOnly: true,
+      publicPublication: false
+    });
   };
-  if (newness) { add("distribution|distribution-new", 76, "공식 상품명에서 신규성이 확인된 비공개 검토 상품", "private_review_new_product"); add("home|home_5", 69, "신규 발견 상품 비공개 검토", "private_review_new_discovery"); add("home|home_right_bottom", 64, "신규 상품 우측 검토 후보", "private_review_new_right"); }
-  if (trending) add("distribution|distribution-trending", 74, "인기·판매상위 문구가 확인된 비공개 검토 상품", "private_review_trending");
-  if (special) add("distribution|distribution-special", 72, "특산·인증·한정 신호가 확인된 비공개 검토 상품", "private_review_special");
-  if (category === "travel_local_services") { add("tour|tour", 78, "여행·지역 서비스 비공개 검토", "private_review_travel"); add("home|home_4", 70, "현지 서비스·관광 검토", "private_review_local_service"); }
-  else if (["food_household_essentials", "baby_family_education"].includes(category)) { add("home|home_2", 78, "생활필수·반복구매 상품 비공개 검토", "private_review_essential"); add("distribution|distribution-recommend", 70, "대중 수요 생활상품 검토", "private_review_essential_recommend"); }
-  else if (["electronics_accessories", "home_appliances_living"].includes(category)) { add("home|home_1", 77, "전자·가전·생활 효용 상품 비공개 검토", "private_review_electronics_living"); add("network|network-right", 73, "제조·공급망 연결 상품 비공개 검토", "private_review_supply_network"); }
-  else if (["beauty_personal_care", "fashion"].includes(category)) { add("home|home_1", 75, "대중 생활·뷰티·패션 상품 비공개 검토", "private_review_lifestyle"); add("social|rightPanel", 66, "소셜 반응 가능 상품 비공개 검토", "private_review_social"); }
-  else if (["local_products", "agriculture_fishery_forestry"].includes(category)) { add("home|home_3", 76, "지역 생산·원산지 상품 비공개 검토", "private_review_local_origin"); add("distribution|distribution-special", 68, "지역 특산 상품 비공개 검토", "private_review_local_special"); }
-  else if (manufacturer) { add("home|home_1", 75, "공식 제조사·브랜드 상품 비공개 검토", "private_review_manufacturer"); add("network|network-right", 72, "제조·공급망 상품 비공개 검토", "private_review_manufacturer_network"); }
-  else add("home|home_5", 64, "신규 발견 일반 상품 비공개 검토", "private_review_general_discovery");
-  add("distribution|distribution-others", 62, "일반 유통 비공개 검토", "private_review_general_distribution");
+
+  if (outdoor) {
+    add("tour|tour", 90, "등산·캠핑·아웃도어 여행 장비 비공개 검토", "private_review_tour_outdoor");
+    add("home|home_4", 86, "여행·야외활동 상품 비공개 검토", "private_review_outdoor_home");
+    add("home|home_right_bottom", 84, "아웃도어 발견 상품 우측 검토", "private_review_outdoor_right");
+    add("distribution|distribution-special", 78, "테마형 아웃도어 상품 검토", "private_review_outdoor_special");
+  } else if (category === "travel_local_services") {
+    add("tour|tour", 88, "여행·관광·지역 서비스 비공개 검토", "private_review_travel");
+    add("home|home_4", 80, "현지 서비스·관광 검토", "private_review_local_service");
+    add("home|home_right_bottom", 73, "여행·지역 발견 상품 우측 검토", "private_review_travel_right");
+  }
+
+  if (industrialTool) {
+    add("network|network-right", 88, "전동공구·산업재 공급망 상품 비공개 검토", "private_review_industrial_network");
+    add("distribution|distribution-right", 84, "공구·산업재 우측 유통 검토", "private_review_industrial_distribution_right");
+    add("home|home_right_middle", 82, "산업 효용 상품 우측 중단 검토", "private_review_industrial_home_right");
+    add("distribution|distribution-others", 76, "공구·산업재 일반 유통 검토", "private_review_industrial_distribution");
+  } else if (electronics || living) {
+    add("home|home_1", 86, "전자·가전·생활 효용 상품 비공개 검토", "private_review_electronics_living");
+    add("home|home_right_top", 85, "전자·가전 대표 효용 상품 우측 상단 검토", "private_review_utility_right_top");
+    add("network|network-right", 80, "제조·공급망 연결 상품 비공개 검토", "private_review_supply_network");
+    add("distribution|distribution-right", 77, "전자·가전 우측 유통 검토", "private_review_utility_distribution_right");
+    add("distribution|distribution-recommend", 73, "생활 효용 중심 추천 검토", "private_review_utility_recommend");
+  }
+
+  if (essential) {
+    add("home|home_2", 86, "생활필수·반복구매 상품 비공개 검토", "private_review_essential");
+    add("distribution|distribution-recommend", 82, "대중 수요 생활상품 추천 검토", "private_review_essential_recommend");
+    add("home|home_right_middle", 79, "반복구매 생활상품 우측 검토", "private_review_essential_right");
+  }
+
+  if (socialLifestyle) {
+    add("social|rightPanel", 86, "패션·뷰티·가족 소비재 소셜 반응 검토", "private_review_social_lifestyle");
+    add("home|home_1", 80, "대중 생활·뷰티·패션 상품 비공개 검토", "private_review_lifestyle");
+    add("home|home_right_top", 80, "소셜 반응형 생활상품 우측 검토", "private_review_lifestyle_right");
+    add("distribution|distribution-recommend", 73, "대중 반응형 상품 추천 검토", "private_review_lifestyle_recommend");
+  }
+
+  if (localOrigin) {
+    add("home|home_3", 86, "지역 생산·원산지 상품 비공개 검토", "private_review_local_origin");
+    add("distribution|distribution-special", 82, "지역 특산 상품 비공개 검토", "private_review_local_special");
+    add("home|home_right_middle", 75, "지역 가치 상품 우측 검토", "private_review_local_right");
+    add("network|network-right", 71, "생산자·조합 공급망 검토", "private_review_local_network");
+  }
+
+  if (manufacturer && !industrialTool && !electronics && !living && !essential && !socialLifestyle && !localOrigin && category !== "travel_local_services") {
+    add("network|network-right", 84, "공식 제조사·브랜드 공급망 상품 비공개 검토", "private_review_manufacturer_network");
+    add("distribution|distribution-right", 80, "공식 제조사·브랜드 우측 유통 검토", "private_review_manufacturer_distribution_right");
+    add("home|home_right_middle", 80, "제조·브랜드 효용 상품 우측 검토", "private_review_manufacturer_home_right");
+  }
+
+  if (newness) {
+    add("distribution|distribution-new", 84, "공식 상품명에서 신규성이 확인된 비공개 검토 상품", "private_review_new_product");
+    add("home|home_5", 78, "신규 발견 상품 비공개 검토", "private_review_new_discovery");
+    add("home|home_right_bottom", 80, "신규 상품 우측 검토 후보", "private_review_new_right");
+  }
+  if (trending) {
+    add("distribution|distribution-trending", 82, "인기·판매상위 문구가 확인된 비공개 검토 상품", "private_review_trending");
+    add("home|home_right_top", 77, "인기 신호 상품 우측 상단 검토", "private_review_trending_right");
+  }
+  if (special) add("distribution|distribution-special", 80, "특산·인증·한정 신호가 확인된 비공개 검토 상품", "private_review_special");
+
+  if (!map.length) {
+    add("home|home_5", 72, "새로 발견한 일반 상품 비공개 검토", "private_review_general_discovery");
+    add("home|home_right_bottom", 68, "일반 발견 상품 우측 검토", "private_review_general_right");
+  }
+  add("distribution|distribution-others", 66, "일반 유통 비공개 검토", "private_review_general_distribution");
   return map;
+}
+function combinedProductAssignments(rowInput) {
+  const row = plain(rowInput), byKey = new Map();
+  for (const assignmentInput of array(row.sectionAssignments).concat(privateReviewFallbackAssignments(row))) {
+    const assignment = plain(assignmentInput), key = productPlacementKey(assignment);
+    if (!validProductSectionKey(key)) continue;
+    const prior = byKey.get(key);
+    if (!prior) { byKey.set(key, assignment); continue; }
+    const priorScore = Number(prior.score || 0), nextScore = Number(assignment.score || 0);
+    const preferred = nextScore > priorScore ? assignment : prior;
+    byKey.set(key, Object.assign({}, prior, assignment, preferred, {
+      score: Math.max(priorScore, nextScore),
+      approvalEligible: prior.approvalEligible === true || assignment.approvalEligible === true,
+      reviewEligible: prior.reviewEligible === true || assignment.reviewEligible === true,
+      valueQualified: prior.valueQualified === true || assignment.valueQualified === true,
+      privateReviewOnly: prior.privateReviewOnly === true || assignment.privateReviewOnly === true,
+      publicReleaseEvidencePending: prior.publicReleaseEvidencePending === true || assignment.publicReleaseEvidencePending === true,
+      evidenceGaps: Array.from(new Set(array(prior.evidenceGaps).concat(array(assignment.evidenceGaps)))),
+      publicPublication: false
+    }));
+  }
+  return Array.from(byKey.values());
 }
 function productAutomaticPlacement(rowInput, requestedKey) {
   const row = plain(rowInput), key = text(requestedKey);
   if (!validProductSectionKey(key)) return null;
-  return array(row.sectionAssignments).concat(privateReviewFallbackAssignments(row)).find((assignment) => assignment && (assignment.approvalEligible === true || assignment.reviewEligible === true) && productPlacementKey(assignment) === key) || null;
+  return combinedProductAssignments(row).find((assignment) => assignment && (assignment.approvalEligible === true || assignment.reviewEligible === true) && productPlacementKey(assignment) === key) || null;
 }
 function stripAutomaticProductPlacement(rowInput) {
   const row = Object.assign({}, plain(rowInput));
@@ -1735,12 +1841,10 @@ function productAutomaticAssignmentEligible(rowInput, requestedSectionKey) {
   return true;
 }
 function productAutomaticPlacementOptions(rowInput, requestedSectionKey) {
-  const row = plain(rowInput), onlyKey = text(requestedSectionKey), combined = array(row.sectionAssignments).concat(privateReviewFallbackAssignments(row));
-  const seen = new Set();
+  const row = plain(rowInput), onlyKey = text(requestedSectionKey), combined = combinedProductAssignments(row);
   return combined.filter((assignment) => {
     const key = productPlacementKey(assignment);
-    if (!validProductSectionKey(key) || seen.has(key) || (onlyKey && key !== onlyKey)) return false;
-    seen.add(key);
+    if (!validProductSectionKey(key) || (onlyKey && key !== onlyKey)) return false;
     if (assignment.approvalEligible !== true && assignment.reviewEligible !== true) return false;
     if (key === "distribution|distribution-sponsor" && !(row.commercialAssessment && row.commercialAssessment.contractReady === true)) return false;
     return productAutomaticAssignmentEligible(row, key);
@@ -1802,6 +1906,61 @@ function automaticManagementControl(actorId, mode, runId, extra) {
 }
 function productAutomationPlanningSource(job) {
   return array(job.rawProducts).concat(array(job.products).map((row) => productAdministratorLocked(row) ? plain(row) : stripAutomaticProductPlacement(row)));
+}
+function productNeedsAutomationEnrichment(rowInput) {
+  const row = plain(rowInput), decision = lower(row.slotDecision || "undecided");
+  if (productAdministratorLocked(row) || ["hold","reject","purge"].includes(decision)) return false;
+  if (!ProductRanking.isSpecificProductUrl(productUrl(row))) return false;
+  const name = first(row.productName, row.title), attempts = Number(row.automationEnrichmentAttempts || 0);
+  return attempts < 1 && (row.inspectionComplete !== true || row.provisionalName === true || ProductRanking.isGenericProductName(name));
+}
+function mergeAutomationInspection(currentInput, inspectedInput) {
+  const current = plain(currentInput), inspected = plain(inspectedInput);
+  const next = Object.assign({}, current, inspected, {
+    id: text(current.id) || text(inspected.id),
+    slotDecision: text(current.slotDecision) || text(inspected.slotDecision) || "undecided",
+    automationEnrichmentAttempts: Number(current.automationEnrichmentAttempts || 0) + 1,
+    automationEnrichmentAt: iso(),
+    publicPublication: false,
+    automaticImport: false
+  });
+  for (const key of ["approvedPlacement","selectedPlacement","managementControl","affiliateSettlement","affiliateStage","frontPublication","decisionAt","decisionBy","decisionSource"]) {
+    if (current[key] !== undefined) next[key] = current[key];
+  }
+  return next;
+}
+async function enrichAutomationProducts(job, mode) {
+  if (mode !== "all") return { attempted: 0, completed: 0, changed: 0, remaining: array(job.products).filter(productNeedsAutomationEnrichment).length };
+  const currentRows = array(job.products), candidates = currentRows.filter(productNeedsAutomationEnrichment).slice(0, PRODUCT_AI_ENRICH_BATCH);
+  if (!candidates.length) return { attempted: 0, completed: 0, changed: 0, remaining: 0 };
+  const chunks = [];
+  for (let offset = 0; offset < candidates.length; offset += 4) chunks.push(candidates.slice(offset, offset + 4));
+  const settled = await Promise.allSettled(chunks.map((chunk) => RegionalSelector.inspectProductResearchStep(chunk)));
+  const inspectedRows = [];
+  for (const result of settled) {
+    if (result.status === "fulfilled") inspectedRows.push(...array(result.value && result.value.items));
+  }
+  const inspectedByIdentity = new Map(inspectedRows.map((row) => [ProductRanking.productIdentity(row), row]));
+  let completed = 0, changed = 0;
+  job.products = currentRows.map((current) => {
+    const inspected = inspectedByIdentity.get(ProductRanking.productIdentity(current));
+    if (!inspected) return current;
+    const next = mergeAutomationInspection(current, inspected);
+    if (next.inspectionComplete === true) completed += 1;
+    if (text(next.productName) !== text(current.productName) || next.inspectionComplete !== current.inspectionComplete || text(next.researchStatus) !== text(current.researchStatus) || text(next.imageUrl) !== text(current.imageUrl)) changed += 1;
+    return next;
+  });
+  const refreshedByIdentity = new Map(array(job.products).map((row) => [ProductRanking.productIdentity(row), row]));
+  job.rawProducts = array(job.rawProducts).map((row) => {
+    const refreshed = refreshedByIdentity.get(ProductRanking.productIdentity(row));
+    return refreshed ? mergeAutomationInspection(row, refreshed) : row;
+  });
+  return {
+    attempted: candidates.length,
+    completed,
+    changed,
+    remaining: array(job.products).filter(productNeedsAutomationEnrichment).length
+  };
 }
 function productCandidateId(scope, product) { return "country_product_" + sha256(scope.country + "|" + scope.region + "|" + text(product.productIdentity)).slice(0, 24); }
 function productCandidatePayload(actorId, scope, product, decision) {
@@ -1932,10 +2091,10 @@ async function productAiAutomation(actorId, input) {
   const mode = lower(input && input.mode) === "section" ? "section" : "all", sectionKey = text(input && input.sectionKey);
   if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("AI 자동 관리할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
   const runId = "product_ai_management_" + sha256(iso() + "|" + scope.country + "|" + scope.region + "|" + mode + "|" + sectionKey + "|" + Math.random()).slice(0, 20);
+  const enrichment = await enrichAutomationProducts(job, mode);
   const portfolio = ProductRanking.buildPortfolio(productAutomationPlanningSource(job), plain(job.rankingContext));
   const evaluatedByIdentity = new Map(array(portfolio.products).map((row) => {
-    const assessment = productPrivateReviewAssessment(row), assignments = array(row.sectionAssignments), fallback = privateReviewFallbackAssignments(row), seen = new Set();
-    const combined = assignments.concat(fallback).filter((item) => { const key = productPlacementKey(item); if (!key || seen.has(key)) return false; seen.add(key); return true; });
+    const assessment = productPrivateReviewAssessment(row), combined = combinedProductAssignments(row);
     return [ProductRanking.productIdentity(row), Object.assign({}, row, { sectionAssignments: combined, privatePlacementReviewEligible: assessment.eligible, privatePlacementReviewReason: assessment.reason, privatePlacementWarnings: assessment.warnings })];
   }));
   const currentRows = array(job.products), manualCounts = {};
@@ -1964,13 +2123,13 @@ async function productAiAutomation(actorId, input) {
     if (!candidate.options.length) continue;
     const available = candidate.options.filter((assignment) => Number(workingCounts[productPlacementKey(assignment)] || 0) < PRODUCT_SECTION_CAPACITY);
     if (!available.length) { allocationReasons.set(candidate.identity, "all_compatible_sections_full"); continue; }
-    const bestRaw = Math.max(...available.map((assignment) => productAutomaticPlacementScore(candidate.evaluated, assignment)));
-    const closeFit = available.filter((assignment) => productAutomaticPlacementScore(candidate.evaluated, assignment) >= bestRaw - 8);
+    const bestSectionFit = Math.max(...available.map((assignment) => Number(assignment && assignment.score || 0)));
+    const closeFit = available.filter((assignment) => Number(assignment && assignment.score || 0) >= bestSectionFit - 14);
     const pool = closeFit.length ? closeFit : available;
     const picked = pool.slice().sort((a, b) => {
       const aKey = productPlacementKey(a), bKey = productPlacementKey(b);
-      const aLoad = Number(workingCounts[aKey] || 0) / PRODUCT_SECTION_CAPACITY * 5;
-      const bLoad = Number(workingCounts[bKey] || 0) / PRODUCT_SECTION_CAPACITY * 5;
+      const aLoad = Number(workingCounts[aKey] || 0) / PRODUCT_SECTION_CAPACITY * 240;
+      const bLoad = Number(workingCounts[bKey] || 0) / PRODUCT_SECTION_CAPACITY * 240;
       return (productAutomaticPlacementScore(candidate.evaluated, b) - bLoad) - (productAutomaticPlacementScore(candidate.evaluated, a) - aLoad) || PRODUCT_SECTION_KEYS.indexOf(aKey) - PRODUCT_SECTION_KEYS.indexOf(bKey);
     })[0];
     const pickedKey = productPlacementKey(picked);
@@ -2021,7 +2180,7 @@ async function productAiAutomation(actorId, input) {
   }
   const queueFailures = syncResults.filter((row) => row.ok !== true);
   job.version = VERSION; job.rankingVersion = ProductRanking.VERSION; job.updatedAt = iso();
-  job.trace = array(job.trace).concat([{ at: iso(), source: "product-ai-private-placement-management", status: queueFailures.length ? "completed_with_queue_warnings" : "complete", runId, mode, sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, manualPreserved, queueFailures: queueFailures.length, automaticPublication: false, automaticProductImport: false }]).slice(-240);
+  job.trace = array(job.trace).concat([{ at: iso(), source: "product-ai-private-placement-management", status: queueFailures.length ? "completed_with_queue_warnings" : "complete", runId, mode, sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, manualPreserved, queueFailures: queueFailures.length, enrichmentAttempted: enrichment.attempted, enrichmentCompleted: enrichment.completed, enrichmentChanged: enrichment.changed, enrichmentRemaining: enrichment.remaining, automaticPublication: false, automaticProductImport: false }]).slice(-240);
   if (queueFailures.length) job.errors = array(job.errors).concat(queueFailures.slice(0, 30).map((row) => ({ at: iso(), stage: "product_ai_automation_queue_sync", productId: row.productId, message: row.error }))).slice(-60);
   await saveProductJob(job, actorId);
   const result = publicProductJob(job), finalRows = array(result.products);
@@ -2042,6 +2201,11 @@ async function productAiAutomation(actorId, input) {
     held: resultScopeRows.filter((row) => lower(row.slotDecision) === "hold" && productAutomationManaged(row)).length,
     unassignedReasonCounts,
     manualPreserved,
+    enrichmentAttempted: Number(enrichment.attempted || 0),
+    enrichmentCompleted: Number(enrichment.completed || 0),
+    enrichmentChanged: Number(enrichment.changed || 0),
+    enrichmentRemaining: Number(enrichment.remaining || 0),
+    enrichmentBatchSize: PRODUCT_AI_ENRICH_BATCH,
     settlementReady: finalRows.filter((row) => plain(row.affiliateSettlement).settlementReady === true).length,
     referralVerified: finalRows.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "referral_verified" && plain(row.affiliateSettlement).settlementReady === true).length,
     onlineAffiliateActive: finalRows.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "online_affiliate_active" && plain(row.affiliateSettlement).settlementReady === true).length,
