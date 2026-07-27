@@ -17,12 +17,21 @@ const MaruSearch = require("./maru-search");
 const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.4.0-no-key-public-directory";
+const VERSION = "sanmaru-social-live-collector-v1.5.0-staged-provider-research";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
 const MAX_BATCH_SIZE = 12;
-const REQUEST_TIMEOUT_MS = 9000;
+const REQUEST_TIMEOUT_MS = 3800;
+const PROVIDER_GROUP_COUNT = 3;
+const PROVIDER_GROUP_NAMES = Object.freeze([
+  "public_directory",
+  "configured_search_apis",
+  "sanmaru_searchbank"
+]);
+const CHANNEL_RESOLUTION_TIMEOUT_MS = 1500;
+const CHANNEL_RESOLUTION_BUDGET_MS = 3200;
+const CHANNEL_RESOLUTION_CONCURRENCY = 4;
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 
 /*
@@ -326,6 +335,22 @@ async function fetchJson(url, init, timeoutMs) {
     return data;
   } finally { clearTimeout(timer); }
 }
+async function withDeadline(promise, timeoutMs, fallback) {
+  let timer = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((resolve) => {
+        timer = setTimeout(
+          () => resolve(typeof fallback === "function" ? fallback() : fallback),
+          Math.max(500, Number(timeoutMs) || REQUEST_TIMEOUT_MS)
+        );
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 function stripHtml(value) {
   return SocialStore.text(value).replace(/<[^>]+>/g, " ").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
 }
@@ -393,7 +418,7 @@ async function publicDirectoryRequest(plan, route, limit, offset, countryStrict)
         Accept: "application/sparql-results+json",
         "User-Agent": "IGDC-MARU-SocialHub/1.0 (public-channel-candidate-discovery)"
       }
-    }, 12000);
+    }, REQUEST_TIMEOUT_MS);
     const bindings = data && data.results && Array.isArray(data.results.bindings) ? data.results.bindings : [];
     const items = bindings.map((binding) => {
       const account = bindingValue(binding, "account");
@@ -433,11 +458,18 @@ async function publicDirectoryRequest(plan, route, limit, offset, countryStrict)
 }
 async function publicDirectorySearch(plan, route, limit, offset) {
   const countryStrict = !!SocialStore.text(route && route.countryCode);
-  const primary = await publicDirectoryRequest(plan, route, limit, offset, countryStrict);
-  if (primary.items.length || !countryStrict || primary.status !== "ok") return primary;
-  const globalFallback = await publicDirectoryRequest(plan, route, limit, offset, false);
+  if (!countryStrict) return publicDirectoryRequest(plan, route, limit, offset, false);
+  const results = await Promise.all([
+    publicDirectoryRequest(plan, route, limit, offset, true),
+    publicDirectoryRequest(plan, route, limit, offset, false)
+  ]);
+  const primary = results[0];
+  const globalFallback = results[1];
+  if (primary.items.length) return primary;
   globalFallback.countryFallback = true;
   globalFallback.countryPrimaryCount = 0;
+  globalFallback.countryPrimaryStatus = primary.status;
+  globalFallback.countryPrimaryError = primary.error || null;
   globalFallback.items.forEach((item) => { item.publicDirectoryCountryFallback = true; });
   return globalFallback;
 }
@@ -448,7 +480,7 @@ async function youtubeChannelSearch(queryText, limit, cfg, qualitySweep) {
     q: queryText, key: cfg.youtubeKey, safeSearch: "strict", order: qualitySweep ? "viewCount" : "relevance"
   });
   try {
-    const data = await fetchJson("https://www.googleapis.com/youtube/v3/search?" + params.toString());
+    const data = await fetchJson("https://www.googleapis.com/youtube/v3/search?" + params.toString(), {}, 2600);
     const base = (data.items || []).map((row) => ({
       provider: "youtube-data-api-channel",
       platform: "youtube",
@@ -465,7 +497,7 @@ async function youtubeChannelSearch(queryText, limit, cfg, qualitySweep) {
     if (ids.length) {
       try {
         const statsParams = new URLSearchParams({ part: "snippet,statistics", id: ids.join(","), key: cfg.youtubeKey });
-        const stats = await fetchJson("https://www.googleapis.com/youtube/v3/channels?" + statsParams.toString());
+        const stats = await fetchJson("https://www.googleapis.com/youtube/v3/channels?" + statsParams.toString(), {}, 1200);
         const byId = new Map((stats.items || []).map((row) => [row.id, row]));
         base.forEach((row) => {
           const detail = byId.get(row.channelId);
@@ -491,7 +523,7 @@ async function googleChannelSearch(plan, queryText, limit, start, cfg) {
     safe: "active"
   });
   try {
-    const data = await fetchJson("https://www.googleapis.com/customsearch/v1?" + params.toString());
+    const data = await fetchJson("https://www.googleapis.com/customsearch/v1?" + params.toString(), {}, REQUEST_TIMEOUT_MS);
     const items = (data.items || []).map((row) => {
       const page = row.pagemap || {};
       const thumb = (page.cse_thumbnail && page.cse_thumbnail[0] && page.cse_thumbnail[0].src) ||
@@ -527,7 +559,7 @@ async function naverChannelSearch(plan, queryText, limit, start, route, cfg) {
   try {
     const data = await fetchJson("https://openapi.naver.com/v1/search/webkr.json?" + params.toString(), {
       headers: { "X-Naver-Client-Id": cfg.naverId, "X-Naver-Client-Secret": cfg.naverSecret }
-    });
+    }, REQUEST_TIMEOUT_MS);
     return {
       provider: "naver-web-channel",
       status: "ok",
@@ -543,18 +575,25 @@ async function naverChannelSearch(plan, queryText, limit, start, route, cfg) {
 }
 async function maruSearchOne(event, plan, queryText, limit, language, start) {
   try {
-    const result = await MaruSearch.runEngine({
-      httpMethod: "GET",
-      headers: event && event.headers || {},
-      queryStringParameters: {
-        action: "search-ui", searchUi: "1", publicSearch: "1", realContentFirst: "1",
-        openPipe: "1", external: "1", noAnalytics: "1", noRevenue: "1"
-      }
-    }, {
-      q: queryText + " " + CHANNEL_SITE_FILTERS[plan.platform],
-      limit, lang: language || null, start: start || 1, deep: false, external: true,
-      type: plan.platform === "youtube" ? "video" : "sns", noAnalytics: true, noRevenue: true
-    });
+    const result = await withDeadline(
+      MaruSearch.runEngine({
+        httpMethod: "GET",
+        headers: event && event.headers || {},
+        queryStringParameters: {
+          action: "search-ui", searchUi: "1", publicSearch: "1", realContentFirst: "1",
+          openPipe: "1", external: "1", noAnalytics: "1", noRevenue: "1"
+        }
+      }, {
+        q: queryText + " " + CHANNEL_SITE_FILTERS[plan.platform],
+        limit, lang: language || null, start: start || 1, deep: false, external: true,
+        type: plan.platform === "youtube" ? "video" : "sns", noAnalytics: true, noRevenue: true
+      }),
+      REQUEST_TIMEOUT_MS,
+      () => ({ __providerTimeout: true })
+    );
+    if (result && result.__providerTimeout) {
+      return { provider: "sanmaru-public-search", status: "timeout", error: "provider_deadline", items: [], trace: [] };
+    }
     return {
       provider: "sanmaru-public-search",
       status: "ok",
@@ -568,13 +607,29 @@ async function maruSearchOne(event, plan, queryText, limit, language, start) {
     return { provider: "sanmaru-public-search", status: "error", error: error.message, items: [], trace: [] };
   }
 }
-async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset) {
-  const providers = [];
-  providers.push(await publicDirectorySearch(plan, route, limit, directoryOffset));
-  if (plan.platform === "youtube") providers.push(await youtubeChannelSearch(queryText, limit, cfg, qualitySweep));
-  providers.push(await googleChannelSearch(plan, queryText, limit, start, cfg));
-  providers.push(await naverChannelSearch(plan, queryText, limit, start, route, cfg));
-  providers.push(await maruSearchOne(event, plan, queryText, limit, language, start));
+async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset, providerGroup) {
+  let tasks = [];
+  if (providerGroup === 0) {
+    tasks = [publicDirectorySearch(plan, route, limit, directoryOffset)];
+  } else if (providerGroup === 1) {
+    if (plan.platform === "youtube") {
+      tasks.push(youtubeChannelSearch(queryText, limit, cfg, qualitySweep));
+    }
+    tasks.push(googleChannelSearch(plan, queryText, limit, start, cfg));
+    tasks.push(naverChannelSearch(plan, queryText, limit, start, route, cfg));
+  } else {
+    tasks = [maruSearchOne(event, plan, queryText, limit, language, start)];
+  }
+  const settled = await Promise.allSettled(tasks);
+  const providers = settled.map((entry, index) => {
+    if (entry.status === "fulfilled") return entry.value;
+    return {
+      provider: "provider-group-" + providerGroup + "-" + index,
+      status: "error",
+      error: entry.reason && entry.reason.message || String(entry.reason || "provider_failed"),
+      items: []
+    };
+  });
   return {
     query: queryText,
     items: providers.flatMap((result) => result.items || []),
@@ -589,7 +644,11 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
 }
 async function youtubeOembed(value) {
   try {
-    const data = await fetchJson("https://www.youtube.com/oembed?" + new URLSearchParams({ url: value, format: "json" }).toString(), {}, 7000);
+    const data = await fetchJson(
+      "https://www.youtube.com/oembed?" + new URLSearchParams({ url: value, format: "json" }).toString(),
+      {},
+      CHANNEL_RESOLUTION_TIMEOUT_MS
+    );
     return {
       ok: !!Policy.normalizeUrl(data.author_url),
       channelUrl: Policy.normalizeUrl(data.author_url),
@@ -674,6 +733,80 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route) {
   };
   const reasons = Policy.validationReasons(candidate);
   return reasons.length ? { ok: false, reason: reasons[0] } : { ok: true, candidate };
+}
+function directEntityPriority(item) {
+  return /^(channel|profile|public_group|public_page|official_account|community|board)$/.test(
+    SocialStore.text(item && item.entityKind)
+  ) ? 0 : 1;
+}
+async function resolveSearchCandidates(searchResults, sectionKey, platform, route, target) {
+  const inputs = [];
+  (searchResults || []).forEach((result) => {
+    (result.items || []).forEach((item) => {
+      inputs.push({ item, query: result.query, order: inputs.length });
+    });
+  });
+  inputs.sort((left, right) =>
+    directEntityPriority(left.item) - directEntityPriority(right.item) ||
+    left.order - right.order
+  );
+  const limit = Math.max(target, Math.min(48, target * 4));
+  const selectedInputs = inputs.slice(0, limit);
+  const converted = new Array(selectedInputs.length);
+  const deadline = Date.now() + CHANNEL_RESOLUTION_BUDGET_MS;
+  let cursor = 0;
+  async function worker() {
+    while (cursor < selectedInputs.length && Date.now() < deadline) {
+      const index = cursor;
+      cursor += 1;
+      const input = selectedInputs[index];
+      try {
+        converted[index] = await candidateFromItem(
+          input.item,
+          sectionKey,
+          platform,
+          input.query,
+          route
+        );
+      } catch (error) {
+        converted[index] = {
+          ok: false,
+          reason: error && error.message || "channel_resolution_failed"
+        };
+      }
+    }
+  }
+  await Promise.all(
+    Array.from(
+      { length: Math.min(CHANNEL_RESOLUTION_CONCURRENCY, selectedInputs.length || 1) },
+      worker
+    )
+  );
+
+  const rejected = [];
+  const candidates = [];
+  const seenUrls = new Set();
+  converted.forEach((result) => {
+    if (!result) return;
+    if (!result.ok) {
+      rejected.push({ reason: result.reason });
+      return;
+    }
+    const key = result.candidate.sourceUrl.toLowerCase();
+    if (seenUrls.has(key)) {
+      rejected.push({ reason: "duplicate_channel_url" });
+      return;
+    }
+    seenUrls.add(key);
+    candidates.push(result.candidate);
+  });
+  return {
+    candidates,
+    rejected,
+    inputRows: inputs.length,
+    resolutionRows: converted.filter(Boolean).length,
+    deferredRows: Math.max(0, inputs.length - converted.filter(Boolean).length)
+  };
 }
 function gatewayEvent(event, candidates, sectionKey, dryRun, limit, source) {
   return Object.assign({}, event || {}, {
@@ -783,37 +916,35 @@ exports.handler = async function(event) {
     const target = batchSize;
     const passes = Math.max(1, Math.min(MAX_QUERY_PASSES, Number(body.queryPasses || body.passes || DEFAULT_QUERY_PASSES) || DEFAULT_QUERY_PASSES));
     const queryCursor = Math.max(0, Number(body.queryCursor || body.cursor || 0) || 0);
+    const providerGroup = queryCursor % PROVIDER_GROUP_COUNT;
+    const researchCursor = Math.floor(queryCursor / PROVIDER_GROUP_COUNT);
     const qualitySweep = flag(body.qualitySweep || body.quality_sweep);
-    const queries = scopedQueries(plan, queryCursor, passes, route).map((query) =>
+    const queries = scopedQueries(plan, researchCursor, passes, route).map((query) =>
       qualitySweep ? query + " popular high quality active official" : query
     );
     const perQueryLimit = Math.max(1, Math.min(MAX_BATCH_SIZE, Math.ceil(target / queries.length)));
     const catalogSize = Math.max(1, plan.policy.collectionQueries.length);
-    const searchStart = Math.max(1, Math.min(91, Number(body.searchStart || body.search_start || (Math.floor(queryCursor / catalogSize) * perQueryLimit + 1)) || 1));
+    const searchStart = Math.max(1, Math.min(91, Number(body.searchStart || body.search_start || (Math.floor(researchCursor / catalogSize) * perQueryLimit + 1)) || 1));
     const searchResults = [];
     for (let queryIndex = 0; queryIndex < queries.length; queryIndex += 1) {
       const queryText = queries[queryIndex];
-      const directoryOffset = Math.max(0, (queryCursor + queryIndex) * perQueryLimit);
+      const directoryOffset = Math.max(0, (researchCursor + queryIndex) * perQueryLimit);
       searchResults.push(await searchOne(
         event, plan, queryText, perQueryLimit,
         body.language || body.lang || route.languages[0],
-        searchStart, route, cfg, qualitySweep, directoryOffset
+        searchStart, route, cfg, qualitySweep, directoryOffset, providerGroup
       ));
     }
 
-    const rejected = [];
-    const candidates = [];
-    const seenUrls = new Set();
-    for (const result of searchResults) {
-      for (const item of result.items) {
-        const converted = await candidateFromItem(item, sectionKey, plan.platform, result.query, route);
-        if (!converted.ok) { rejected.push({ reason: converted.reason }); continue; }
-        const key = converted.candidate.sourceUrl.toLowerCase();
-        if (seenUrls.has(key)) { rejected.push({ reason: "duplicate_channel_url" }); continue; }
-        seenUrls.add(key);
-        candidates.push(converted.candidate);
-      }
-    }
+    const resolved = await resolveSearchCandidates(
+      searchResults,
+      sectionKey,
+      plan.platform,
+      route,
+      target
+    );
+    const rejected = resolved.rejected;
+    const candidates = resolved.candidates;
 
     const selected = candidates.slice(0, target);
     const gatewayResponse = await CandidateGateway.handler(gatewayEvent(event, selected, sectionKey, dryRun, target));
@@ -831,18 +962,24 @@ exports.handler = async function(event) {
       target,
       batchSize,
       queryPasses: queries.length,
-      queryCatalogSize: catalogSize,
+      queryCatalogSize: catalogSize * PROVIDER_GROUP_COUNT,
       queryCursor,
+      researchCursor,
+      providerGroup,
+      providerGroupName: PROVIDER_GROUP_NAMES[providerGroup],
+      providerGroupCount: PROVIDER_GROUP_COUNT,
       searchStart,
       qualitySweep,
       queries,
       searchedRows: searchResults.reduce((sum, result) => sum + result.items.length, 0),
+      resolutionRows: resolved.resolutionRows,
+      resolutionDeferredRows: resolved.deferredRows,
       directCandidates: candidates.length,
       submittedCandidates: selected.length,
       rejectedRows: rejected.length,
       rejectedByReason: rejectionSummary(rejected),
       providerTrace: searchResults.map((result) => ({ query: result.query, providers: result.providers })),
-      nextQueryCursor: queryCursor + queries.length,
+      nextQueryCursor: queryCursor + 1,
       providerReadiness: providerReadiness(cfg),
       candidateAssetType: "channel_profile_group",
       publicSnapshotMutation: false,

@@ -1,4 +1,4 @@
-/* IGDC Social Hub Channel Candidate Control v2.0.1 */
+/* IGDC Social Hub Channel Candidate Control v2.1.0 */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -885,6 +885,59 @@
       a.remove();
     }, 300);
   }
+  function collectorSectionSummary() {
+    var summary = {};
+    SECTIONS.forEach(function (section) {
+      var key = section[0],
+        list = rows.filter(function (row) {
+          return row.sectionKey === key;
+        });
+      summary[key] = {
+        label: section[1],
+        platform: section[2],
+        total: list.length,
+        active: list.filter(function (row) {
+          return !excluded(row);
+        }).length,
+        searchExcluded: list.filter(function (row) {
+          return excluded(row) && !blocked(row);
+        }).length,
+        permanentlyBlocked: list.filter(blocked).length,
+      };
+    });
+    return summary;
+  }
+  function downloadCollectorProgress() {
+    var now = new Date(),
+      report = {
+        ok: true,
+        reportType: "igdc-social-channel-collection-progress",
+        generatedAt: now.toISOString(),
+        scope: currentScope(),
+        selectedSection: text($("collectorSection").value),
+        selectedBatchSize: Number($("collectorBatchSize").value) || 10,
+        collectorState: text($("collectorState").textContent),
+        savedJob: loadJob(),
+        sectionSummary: collectorSectionSummary(),
+        collectionBatches: liveReports.map(function (row) {
+          return row && row.liveCollection ? row.liveCollection : row;
+        }),
+        candidateData: {
+          count: rows.length,
+          rows: rows,
+        },
+      };
+    download(
+      "igdc-social-channel-collection-progress-" +
+        now.toISOString().slice(0, 19).replace(/[:T]/g, "-") +
+        ".json",
+      report,
+    );
+    show(
+      "현재 수집 진행 상황과 후보 데이터 JSON을 다운로드했습니다.",
+      "ok",
+    );
+  }
   function applyPlacement(d) {
     placementById = {};
     placementStats = { selected: 0, replacement: 0 };
@@ -1112,7 +1165,13 @@
       j.newlyFound +
       "건" +
       (j.qualitySweepActive
-        ? " · 인기·품질 보강 " + j.qualitySweepBatches + "/2"
+        ? " · 인기·품질 보강 " +
+          j.qualitySweepBatches +
+          "/" +
+          Number(j.qualitySweepTarget || 3)
+        : "") +
+      (j.providerGroupName
+        ? " · 조사 경로 " + j.providerGroupName
         : "");
     $("collectorRejectText").textContent =
       "저장 응답 " +
@@ -1180,6 +1239,13 @@
         : live.nextQueryCursor,
     );
     j.catalogSize = Number(live.queryCatalogSize || j.catalogSize || 5);
+    j.providerGroup = Number(live.providerGroup || 0);
+    j.providerGroupName =
+      {
+        public_directory: "공개 디렉터리",
+        configured_search_apis: "YouTube·Google·Naver",
+        sanmaru_searchbank: "산마루·SearchBank",
+      }[text(live.providerGroupName)] || text(live.providerGroupName);
     return d;
   }
   async function collectSection(section, dryRun, j) {
@@ -1193,7 +1259,7 @@
     j.section = section;
     j.sectionCount = sectionCount(section);
     j.qualitySweepBatches = Number(j.qualitySweepBatches || 0);
-    var maxEmpty = Math.max(4, Number(j.catalogSize || 5));
+    var maxEmpty = Math.max(6, Number(j.catalogSize || 15));
     while (
       !stopRequested &&
       j.sectionCount < j.target &&
@@ -1203,6 +1269,7 @@
       j.batch += 1;
       progress(j);
       var d = await collectOne(section, dryRun, j);
+      maxEmpty = Math.max(maxEmpty, Number(j.catalogSize || 15));
       var newly = newIds(d, known);
       j.newlyFound += newly;
       j.sectionCount += newly;
@@ -1220,9 +1287,15 @@
       !j.qualitySweepDone
     ) {
       j.qualitySweepActive = true;
+      j.qualitySweepTarget = Math.max(
+        3,
+        Number(j.qualitySweepTarget || 3),
+      );
       for (
         var sweep = 0;
-        sweep < 2 && !stopRequested && j.emptyBatches < maxEmpty;
+        sweep < j.qualitySweepTarget &&
+        !stopRequested &&
+        j.emptyBatches < maxEmpty;
         sweep++
       ) {
         j.batch += 1;
@@ -1230,13 +1303,15 @@
         progress(j);
         var q = await collectOne(section, false, j),
           qualityNew = newIds(q, known);
+        maxEmpty = Math.max(maxEmpty, Number(j.catalogSize || 15));
         j.newlyFound += qualityNew;
         j.sectionCount += qualityNew;
         if (qualityNew) j.emptyBatches = 0;
         else j.emptyBatches += 1;
         progress(j);
         saveJob(j);
-        if (sweep < 1 && !stopRequested) await wait(650);
+        if (sweep < j.qualitySweepTarget - 1 && !stopRequested)
+          await wait(650);
       }
       j.qualitySweepDone = true;
       j.qualitySweepActive = false;
@@ -1266,7 +1341,7 @@
       languages: text($("collectorLanguages").value),
       batch: 0,
       queryCursor: 0,
-      catalogSize: 5,
+      catalogSize: 15,
       sectionCount: sectionCount(section),
       searched: 0,
       direct: 0,
@@ -1276,6 +1351,7 @@
       newlyFound: 0,
       emptyBatches: 0,
       qualitySweepBatches: 0,
+      qualitySweepTarget: 3,
       qualitySweepDone: false,
       qualitySweepActive: false,
       lastReason: "",
@@ -1382,6 +1458,7 @@
           j.emptyBatches = 0;
           j.newlyFound = 0;
           j.qualitySweepBatches = 0;
+          j.qualitySweepTarget = 3;
           j.qualitySweepDone = false;
           j.qualitySweepActive = false;
         }
@@ -1868,6 +1945,7 @@
       collectSelected(false);
     };
     $("collectAllBtn").onclick = collectAll;
+    $("collectorProgressJsonBtn").onclick = downloadCollectorProgress;
     $("channelIntakeDryRunBtn").onclick = function () {
       intakeChannels(true);
     };

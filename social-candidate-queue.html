@@ -502,8 +502,9 @@
         <div class="small">
           한 번에 100개를 검색하지 않습니다. 선택한 섹션을 8~10개 단위로
           조사·검증·저장합니다. 100개에 도달하면 인기·품질·활동성 중심의 보강
-          검색을 두 묶음 더 실행하고, 전체 비교 후보에서 상위 100개를 공개 배치
-          대상으로 정리합니다. 100개 전에 연속 검색에서 신규 후보가 더 이상
+          검색을 공개 디렉터리·직접 검색 API·산마루 검색의 세 경로로 나누어
+          실행하고, 전체 비교 후보에서 상위 100개를 공개 배치 대상으로
+          정리합니다. 100개 전에 연속 검색에서 신규 후보가 더 이상
           나오거나 보강 검색이 소진되면 다음 섹션으로 넘어갑니다. 국가는 소셜
           전용 국가 단위이며 주·성은 사용하지 않습니다. 검색 결과 페이지·플랫폼
           홈·소셜마루·우측 패널·seed·placeholder는 후보로 반입하지 않습니다.
@@ -522,6 +523,8 @@
             전체 9개 섹션 순차 수집</button
           ><button id="collectorStopBtn" class="secondary" disabled>
             일시정지</button
+          ><button id="collectorProgressJsonBtn" class="secondary">
+            수집 진행 JSON</button
           ><span id="collectorState" class="state">수집 전</span>
         </div>
         <div class="collect-controls">
@@ -698,6 +701,6 @@
       </p>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=12"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=14"></script>
   </body>
 </html>
