@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.2.0-ai-private-placement-management";
+const VERSION = "commerce-country-automation-v3.5.0-max-private-placement-front-match-control";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -49,6 +49,11 @@ const PRODUCT_SECTION_KEYS = Object.freeze([
   "distribution|distribution-special", "distribution|distribution-others",
   "distribution|distribution-right", "network|network-right", "social|rightPanel", "tour|tour"
 ]);
+const AFFILIATE_SETTLEMENT_STAGES = Object.freeze(["connection_required", "referral_verified", "online_affiliate_active", "formal_partner"]);
+const AFFILIATE_STAGE_PRIORITY = Object.freeze({ connection_required: 0, referral_verified: 1, online_affiliate_active: 2, formal_partner: 3 });
+const PRIVATE_REVIEW_SOFT_BLOCKERS = Object.freeze(new Set(["inspection_incomplete", "not_ready_for_admin_review"]));
+const PRIVATE_REVIEW_UNASSIGNED_BLOCKERS = Object.freeze(new Set(["missing_https_product_image", "generic_or_unresolved_product_name"]));
+const PRIVATE_REVIEW_HARD_STATUSES = Object.freeze(new Set(["http_404", "non_html", "blocked", "unavailable"]));
 const SUPPLIER_RAW_LIMIT = 800;
 const SUPPLIER_INSPECTION_LIMIT = 100;
 const SUPPLIER_REVIEW_LIMIT = 100;
@@ -97,6 +102,53 @@ function safeUrl(value) {
     return url.toString();
   } catch (_error) { return ""; }
 }
+function affiliateSettlementStage(value) { const stage = lower(value); return AFFILIATE_SETTLEMENT_STAGES.includes(stage) ? stage : "connection_required"; }
+function affiliateSettlementPriority(value) { return Number(AFFILIATE_STAGE_PRIORITY[affiliateSettlementStage(value)] || 0); }
+function settlementHttpsUrl(value) { const url = safeUrl(value); return /^https:\/\//i.test(url) ? url : ""; }
+function normalizeAffiliateSettlement(input, options) {
+  const raw = plain(input), opts = plain(options), existing = plain(opts.existing), stage = affiliateSettlementStage(raw.stage || existing.stage);
+  const counterparty = text(raw.counterparty || raw.providerName || existing.counterparty || existing.providerName);
+  const trackingUrl = settlementHttpsUrl(raw.trackingUrl || raw.destinationUrl || existing.trackingUrl || existing.destinationUrl);
+  const programId = text(raw.programId || existing.programId);
+  const contractId = text(raw.contractId || existing.contractId || (stage === "formal_partner" ? programId : ""));
+  const settlementMode = lower(raw.settlementMode || existing.settlementMode);
+  const commissionRateRaw = raw.commissionRate != null ? Number(raw.commissionRate) : Number(existing.commissionRate);
+  const payoutRaw = raw.payoutPerTransaction != null ? Number(raw.payoutPerTransaction) : Number(existing.payoutPerTransaction);
+  const payoutBasisVerified = raw.payoutBasisVerified === true || (raw.payoutBasisVerified == null && existing.payoutBasisVerified === true);
+  const trackingVerified = raw.trackingVerified === true || (raw.trackingVerified == null && existing.trackingVerified === true);
+  const officialDestination = raw.officialDestination === true || (raw.officialDestination == null && existing.officialDestination === true);
+  const contractVerified = raw.contractVerified === true || (raw.contractVerified == null && existing.contractVerified === true);
+  const stageRank = affiliateSettlementPriority(stage);
+  const baseEvidence = !!counterparty && !!trackingUrl && !!settlementMode && payoutBasisVerified && trackingVerified && officialDestination;
+  const referralReady = stage === "referral_verified" && baseEvidence;
+  const onlineReady = stage === "online_affiliate_active" && baseEvidence && !!programId;
+  const partnerReady = stage === "formal_partner" && baseEvidence && !!(contractId || programId) && contractVerified;
+  const settlementReady = referralReady || onlineReady || partnerReady;
+  if (opts.validate === true && stage !== "connection_required" && !settlementReady) {
+    const missing = [];
+    if (!counterparty) missing.push("제휴사·정산 상대");
+    if (!trackingUrl) missing.push("HTTPS 제휴 추적 URL");
+    if (!settlementMode) missing.push("정산 기준");
+    if (!payoutBasisVerified) missing.push("공식 지급 조건 확인");
+    if (!trackingVerified) missing.push("성과 추적 확인");
+    if (!officialDestination) missing.push("공식 판매처 목적지 확인");
+    if (["online_affiliate_active","formal_partner"].includes(stage) && !programId && !contractId) missing.push("프로그램·계약 ID");
+    if (stage === "formal_partner" && !contractVerified) missing.push("정식 계약·승인 증빙");
+    const error = new Error("제휴·정산 단계를 활성화하려면 다음 항목이 필요합니다: " + missing.join(", ")); error.statusCode = 409; throw error;
+  }
+  return {
+    schema: "igdc-affiliate-settlement-control.v1", stage, stageRank, counterparty: counterparty || null, providerName: counterparty || null,
+    trackingUrl: trackingUrl || null, destinationUrl: trackingUrl || null, programId: programId || null, contractId: contractId || null, settlementMode: settlementMode || null,
+    commissionRate: Number.isFinite(commissionRateRaw) && commissionRateRaw >= 0 && commissionRateRaw <= 1 ? commissionRateRaw : null,
+    payoutPerTransaction: Number.isFinite(payoutRaw) && payoutRaw >= 0 ? payoutRaw : null, currency: text(raw.currency || existing.currency).toUpperCase() || null, payoutSchedule: text(raw.payoutSchedule || existing.payoutSchedule) || null,
+    payoutBasisVerified, trackingVerified, officialDestination, contractVerified, operatorApproved: opts.operatorApproved === true || existing.operatorApproved === true,
+    administratorSelected: opts.administratorSelected === true || existing.administratorSelected === true, administratorPriority: stageRank > 0, settlementReady,
+    payableRevenueRightVerified: settlementReady, settlementState: partnerReady ? "formal_partner_settlement_ready" : onlineReady ? "online_affiliate_settlement_ready" : referralReady ? "referral_settlement_ready" : "affiliate_connection_required",
+    settlementExecution: false, payoutAccountStoredHere: false, updatedAt: iso(), updatedBy: text(opts.actorId) || text(existing.updatedBy) || "administrator"
+  };
+}
+function productAffiliateSettlement(rowInput) { return normalizeAffiliateSettlement(plain(rowInput).affiliateSettlement, { existing: plain(plain(rowInput).affiliateSettlement) }); }
+
 function first() {
   for (const value of arguments) {
     const out = text(value);
@@ -1171,7 +1223,7 @@ function supplierRootUrl(value){const url=safeUrl(value);if(!url)return"";try{co
 function sameSupplierSite(left,right){try{const a=new URL(left),b=new URL(right),ah=a.hostname.toLowerCase().replace(/^www\./,""),bh=b.hostname.toLowerCase().replace(/^www\./,"");return ah===bh||ah.endsWith("."+bh)||bh.endsWith("."+ah);}catch(_error){return false;}}
 function manualSupplierSeed(scope,row){
   const entry=plain(row),officialUrl=supplierRootUrl(entry.officialUrl),productPageUrl=safeUrl(entry.productPageUrl)||officialUrl,now=text(entry.updatedAt||entry.registeredAt)||iso();
-  return {title:text(entry.name)||supplierHostLabel((()=>{try{return new URL(officialUrl).hostname;}catch(_e){return"";}})()),name:text(entry.name),url:officialUrl,link:officialUrl,supplierOfficialUrl:officialUrl,sourceCandidateUrl:productPageUrl,productPageUrl,manualSupplierId:text(entry.id),manualRegistered:true,adminPinned:entry.adminPinned!==false,manualPinned:entry.adminPinned!==false,manualRegisteredAt:text(entry.registeredAt),manualRegisteredBy:text(entry.registeredBy),updatedAt:now,supplierType:text(entry.supplierType)||"responsible_seller",igdcSupplierCandidate:true,igdcProductCandidate:false,supplierProfile:{name:text(entry.name),type:text(entry.supplierType)||"responsible_seller",officialUrl,targetCountry:scope.country,targetRegion:scope.region,responsibleForTransaction:true,adminVerificationRequired:true,performanceVerificationRequired:true,productCatalogImportAllowed:false,researchStatus:"manual_registration_verification_pending"},brokerageVerification:{automated:false,manualRegistered:true,official:false,responsibleEntity:false,directSales:false,payment:false,secureTransport:true,shipping:false,returns:false,refund:false,service:false,contactChannel:false,legalIdentity:false,marketplace:false,supplierType:text(entry.supplierType)||"responsible_seller",supplierReviewEligible:false,supplierResearchEligible:true,trustEvidenceReady:false,provisionalTrustScore:0,researchStatus:"manual_registration_verification_pending",privateQueueOnly:true,publicEligible:false}};
+  return {title:text(entry.name)||supplierHostLabel((()=>{try{return new URL(officialUrl).hostname;}catch(_e){return"";}})()),name:text(entry.name),url:officialUrl,link:officialUrl,supplierOfficialUrl:officialUrl,sourceCandidateUrl:productPageUrl,productPageUrl,manualSupplierId:text(entry.id),manualRegistered:true,adminPinned:entry.adminPinned!==false,manualPinned:entry.adminPinned!==false,manualRegisteredAt:text(entry.registeredAt),manualRegisteredBy:text(entry.registeredBy),updatedAt:now,supplierType:text(entry.supplierType)||"responsible_seller",affiliateSettlement:normalizeAffiliateSettlement(entry.affiliateSettlement,{existing:entry.affiliateSettlement}),igdcSupplierCandidate:true,igdcProductCandidate:false,supplierProfile:{name:text(entry.name),type:text(entry.supplierType)||"responsible_seller",officialUrl,targetCountry:scope.country,targetRegion:scope.region,responsibleForTransaction:true,adminVerificationRequired:true,performanceVerificationRequired:true,productCatalogImportAllowed:false,researchStatus:"manual_registration_verification_pending"},brokerageVerification:{automated:false,manualRegistered:true,official:false,responsibleEntity:false,directSales:false,payment:false,secureTransport:true,shipping:false,returns:false,refund:false,service:false,contactChannel:false,legalIdentity:false,marketplace:false,supplierType:text(entry.supplierType)||"responsible_seller",supplierReviewEligible:false,supplierResearchEligible:true,trustEvidenceReady:false,provisionalTrustScore:0,researchStatus:"manual_registration_verification_pending",privateQueueOnly:true,publicEligible:false}};
 }
 function activeManualSupplierSeeds(registry){return array(registry&&registry.suppliers).filter((row)=>row&&row.adminPinned===true&&row.state!=="disabled"&&supplierRootUrl(row.officialUrl)).map((row)=>manualSupplierSeed(registry.scope,row));}
 function reindexCandidateRows(rows){return array(rows).map((row,index)=>Object.assign({},row,{rank:index+1,aiAssessment:Object.assign({},plain(row&&row.aiAssessment),{rank:index+1})}));}
@@ -1273,6 +1325,7 @@ function stagedCandidateRow(entry, rank) {
     evidence: evidenceProjection(item), missingEvidence: array(assessment.missingEvidence), performanceMissing: array(assessment.performanceMissing), reason: assessment.reason,
     manualSupplierId: text(item && item.manualSupplierId), manualRegistered: item && item.manualRegistered === true, adminPinned: item && item.adminPinned === true, manualPinned: item && item.manualPinned === true,
     manualRegisteredAt: text(item && item.manualRegisteredAt) || null, manualRegisteredBy: text(item && item.manualRegisteredBy) || null,
+    affiliateSettlement: normalizeAffiliateSettlement(item && item.affiliateSettlement, { existing: item && item.affiliateSettlement }),
     productPageUrl: safeUrl(item && item.productPageUrl) || null, sourceCandidateUrl: safeUrl(item && item.sourceCandidateUrl) || null,
     persistence: "research_preview", persistenceError: null, sourceRunId: null
   };
@@ -1409,7 +1462,7 @@ function publicProductJob(job) {
   });
   return {
     ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, rankingVersion: ProductRanking.VERSION, rankingPolicy: ProductRanking.POLICY, jobVersion: text(job.version), needsRefresh: text(job.version) !== VERSION, jobId: job.jobId, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
-    safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false, riskGateBeforeRevenueRanking: true, sponsorRequiresApprovedContract: true, sectionAssignmentsAreProposalsOnly: true, audienceAndRevenueValuePriority: true, noSectionQuotaFill: true, manualDecisionPrecedence: true, aiPrivatePlacementAutomation: true },
+    safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false, riskGateBeforeRevenueRanking: true, sponsorRequiresApprovedContract: true, sectionAssignmentsAreProposalsOnly: true, audienceAndRevenueValuePriority: true, noSectionQuotaFill: true, manualDecisionPrecedence: true, aiPrivatePlacementAutomation: true, affiliateSettlementTracking: true, payoutExecution: false },
     rankingContext: plain(job.rankingContext),
     progress: productProgress(job),
     summary: {
@@ -1443,6 +1496,11 @@ function publicProductJob(job) {
       permanentExcluded: visibleProducts.filter((row) => row.slotDecision === "purge").length,
       aiManagedSlotCandidates: visibleProducts.filter((row) => row.slotDecision === "slot_candidate" && plain(row.managementControl).source === "ai_automation").length,
       administratorLockedProducts: visibleProducts.filter((row) => plain(row.managementControl).administratorLocked === true).length,
+      affiliateConnectionRequired: visibleProducts.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "connection_required").length,
+      referralRevenueVerified: visibleProducts.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "referral_verified" && plain(row.affiliateSettlement).settlementReady === true).length,
+      onlineAffiliateActive: visibleProducts.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "online_affiliate_active" && plain(row.affiliateSettlement).settlementReady === true).length,
+      formalPartners: visibleProducts.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "formal_partner" && plain(row.affiliateSettlement).settlementReady === true).length,
+      settlementReadyProducts: visibleProducts.filter((row) => plain(row.affiliateSettlement).settlementReady === true).length,
       sectionCounts: plain(portfolio.summary && portfolio.summary.sectionCounts),
       primaryPlacementCounts: plain(portfolio.summary && portfolio.summary.primaryPlacementCounts),
       sectionCapacity: Number(portfolio.summary && portfolio.summary.sectionCapacity || 100),
@@ -1471,7 +1529,8 @@ function productSupplierSource(row) {
   const strict=evidence.supplierReviewEligible===true||(evidence.official===true&&evidence.responsibleEntity===true&&evidence.directSales===true&&evidence.legalIdentity===true&&evidence.contactChannel===true&&evidence.marketplace!==true);
   if(!strict)return null;
   const designated=safeUrl(first(row&&row.productPageUrl,row&&row.sourceCandidateUrl));parsed.pathname="/";parsed.search="";parsed.hash="";const supplierSiteUrl=parsed.toString(),sourceCandidateUrl=designated&&sameSupplierSite(supplierSiteUrl,designated)?designated:supplierSiteUrl,priority=merchandisePriority(title+" "+url+" "+parsed.hostname);
-  return{supplierId:text(row&&[row.id,row.candidateId,row.manualSupplierId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl,url:supplierSiteUrl,supplierType:text(row&&row.supplierType||evidence.supplierType),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),approvalReady:row&&row.approvalReady===true,sourceCandidateUrl,productPageUrl:sourceCandidateUrl,evidenceReady:evidence.supplierReviewEligible===true,supplyLane:text(evidence.supplyLane)||"general",discoverySource:text(evidence.discoverySource),officialDirectoryUrl:text(evidence.officialDirectoryUrl),adminPinned:row&&row.adminPinned===true,manualRegistered:row&&row.manualRegistered===true,priorityScore:priority.score,priorityLabel:priority.label};
+  const affiliateSettlement=normalizeAffiliateSettlement(row&&row.affiliateSettlement,{existing:row&&row.affiliateSettlement});
+  return{supplierId:text(row&&[row.id,row.candidateId,row.manualSupplierId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl,url:supplierSiteUrl,supplierType:text(row&&row.supplierType||evidence.supplierType),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),approvalReady:row&&row.approvalReady===true,sourceCandidateUrl,productPageUrl:sourceCandidateUrl,evidenceReady:evidence.supplierReviewEligible===true,supplyLane:text(evidence.supplyLane)||"general",discoverySource:text(evidence.discoverySource),officialDirectoryUrl:text(evidence.officialDirectoryUrl),adminPinned:row&&row.adminPinned===true,manualRegistered:row&&row.manualRegistered===true,affiliateSettlement,affiliateStage:affiliateSettlement.stage,affiliatePriority:affiliateSettlement.stageRank,priorityScore:priority.score+affiliateSettlement.stageRank*400,priorityLabel:affiliateSettlement.stageRank>0?affiliateSettlement.stage+" · "+(priority.label||"제휴 사이트"):priority.label};
 }
 async function productRankingContext(scope) {
   let signalStatus = null, policyControl = null;
@@ -1512,7 +1571,7 @@ async function beginProductResearchJob(actorId, input) {
   if (!supplierJob || !["complete","committed"].includes(supplierJob.status) || !array(supplierJob.candidates).length) { const error = new Error("책임 공급업체 단계별 리서치를 먼저 완료해야 공식 상품 목록을 조사할 수 있습니다."); error.statusCode = 409; throw error; }
   const sourcePool = []; const seenSupplierSites = new Set();
   for (const row of array(supplierJob.candidates)) { const source=productSupplierSource(row); if(!source)continue; const key=lower(source.supplierSiteUrl); if(seenSupplierSites.has(key))continue; seenSupplierSites.add(key); sourcePool.push(source); }
-  const supplierSources = sourcePool.sort((a,b)=>Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,PRODUCT_SUPPLIER_LIMIT);
+  const supplierSources = sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,PRODUCT_SUPPLIER_LIMIT);
   if(!supplierSources.length){const error=new Error("완료된 공급업체 후보 중 공식 판매 사이트·법적 신원·직접 판매 증빙을 갖춘 상품 조사 출처가 없습니다. 공급업체 후보의 잡음과 증빙 상태를 먼저 정리하세요.");error.statusCode=409;throw error;}
   const rankingContext = await productRankingContext(scope);
   const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, rankingContext, discoveryCursor: 0, rawProducts: [], inspectionPool: [], inspectCursor: 0, products: [], stagePool: [], stageCursor: 0, stageSummary: { eligible: 0, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 }, trace: [{ at: now, source: "product-research-job", status: "started", suppliers: supplierSources.length, sourcePolicy: "official_direct_sales_legal_identity_only; trust_gate; audience_need_and_repeat_demand; transaction_frequency_and_total_expected_value; payable_revenue_right_before_release; psom_relevance_proposals; no_section_quota_fill; administrator_approval_before_publication" }], errors: [], lastError: null };
@@ -1529,7 +1588,9 @@ async function advanceProductResearchJob(actorId, input) {
       if (!source) { job.inspectionPool = RegionalSelector.prepareProductInspectionPool(job.rawProducts, { limit: Math.max(120, Math.min(PRODUCT_PORTFOLIO_LIMIT, array(job.supplierSources).length * 40)) }); job.status = "inspecting"; job.inspectCursor = 0; }
       else {
         const result = await RegionalSelector.discoverSupplierProductsStep(source, { country: scope.country, region: scope.region, limit: 100 });
-        job.rawProducts = mergeProductRows(job.rawProducts, result.items, PRODUCT_PORTFOLIO_LIMIT); job.discoveryCursor = Number(job.discoveryCursor || 0) + 1; job.trace = array(job.trace).concat([Object.assign({ at: iso(), supplierIndex: job.discoveryCursor - 1 }, plain(result.trace))]);
+        const sourceSettlement = normalizeAffiliateSettlement(source.affiliateSettlement, { existing: source.affiliateSettlement });
+        const discoveredItems = array(result.items).map((row) => Object.assign({}, row, { affiliateSettlement: sourceSettlement, affiliateStage: sourceSettlement.stage, supplierAdminPinned: source.adminPinned === true, supplierAffiliatePriority: sourceSettlement.stageRank }));
+        job.rawProducts = mergeProductRows(job.rawProducts, discoveredItems, PRODUCT_PORTFOLIO_LIMIT); job.discoveryCursor = Number(job.discoveryCursor || 0) + 1; job.trace = array(job.trace).concat([Object.assign({ at: iso(), supplierIndex: job.discoveryCursor - 1 }, plain(result.trace))]);
         if (job.discoveryCursor >= array(job.supplierSources).length) { job.inspectionPool = RegionalSelector.prepareProductInspectionPool(job.rawProducts, { limit: Math.max(120, Math.min(PRODUCT_PORTFOLIO_LIMIT, array(job.supplierSources).length * 40)) }); job.status = "inspecting"; job.inspectCursor = 0; }
       }
     } else if (job.status === "inspecting") {
@@ -1589,17 +1650,66 @@ function productAutomationManaged(rowInput) {
   const row = plain(rowInput), control = plain(row.managementControl), placement = plain(row.approvedPlacement);
   return lower(control.source) === "ai_automation" || placement.aiSelected === true || lower(placement.selectedBy) === "ai_automation";
 }
+function productFrontPublicationLocked(rowInput) {
+  const status = lower(plain(rowInput && rowInput.frontPublication).status);
+  return ["queued", "publish_requested", "matched", "published", "unpublish_failed"].includes(status);
+}
 function productAdministratorLocked(rowInput) {
   const row = plain(rowInput), control = plain(row.managementControl), placement = plain(row.approvedPlacement), source = lower(control.source || row.decisionSource);
+  if (productFrontPublicationLocked(row)) return true;
   if (control.administratorLocked === true || control.aiReclassificationAllowed === false || source === "administrator") return true;
   if (placement.administratorSelected === true && placement.aiSelected !== true) return true;
   const decision = lower(row.slotDecision || "undecided");
   return ["hold", "reject", "purge"].includes(decision) && !productAutomationManaged(row);
 }
+function productPrivateReviewAssessment(rowInput) {
+  const row = plain(rowInput), risk = plain(row.riskAssessment), status = lower(row.researchStatus), blockers = array(risk.blockers).map(lower), warnings = [];
+  if (PRIVATE_REVIEW_HARD_STATUSES.has(status) || row.productPageLive === false || risk.explicitUnavailable === true) return { eligible: false, hold: true, reason: "product_page_unavailable", warnings };
+  if (!ProductRanking.isSpecificProductUrl(productUrl(row))) return { eligible: false, hold: false, reason: "specific_product_page_not_verified", warnings };
+  if (row.sameSupplierSite === false) return { eligible: false, hold: true, reason: "supplier_product_domain_mismatch", warnings };
+  if (!productImageUrl(row)) return { eligible: false, hold: false, reason: "actual_product_image_not_verified", warnings };
+  if (row.provisionalName === true || blockers.includes("generic_or_unresolved_product_name")) return { eligible: false, hold: false, reason: "product_name_not_verified", warnings };
+  const hardBlockers = blockers.filter((item) => !PRIVATE_REVIEW_SOFT_BLOCKERS.has(item) && !PRIVATE_REVIEW_UNASSIGNED_BLOCKERS.has(item));
+  if (hardBlockers.length) return { eligible: false, hold: true, reason: hardBlockers.join(",") || "risk_gate_failed", warnings };
+  if (row.inspectionComplete !== true) warnings.push("inspection_pending");
+  if (!text(row.price)) warnings.push("price_pending");
+  if (!text(row.availability)) warnings.push("availability_pending");
+  if (plain(row.supplierAssessment).approvalReady !== true) warnings.push("supplier_approval_pending");
+  if (Number(row.supplierTrustScore || plain(row.supplierAssessment).trustScore || 0) < 82) warnings.push("supplier_trust_review_pending");
+  if (normalizeAffiliateSettlement(row.affiliateSettlement, { existing: row.affiliateSettlement }).settlementReady !== true) warnings.push("affiliate_connection_pending");
+  return { eligible: true, hold: false, reason: "private_review_eligible", warnings };
+}
+function privateReviewFallbackAssignments(rowInput) {
+  const row = plain(rowInput), assessment = productPrivateReviewAssessment(row);
+  if (!assessment.eligible) return [];
+  const category = text(row.productCategory), titleHay = lower([row.productName, row.title, row.priorityLabel].map(text).join(" "));
+  const manufacturer = category === "manufacturer_brands" || /(제조|브랜드|공식몰|manufacturer|official_store)/i.test(titleHay);
+  const newness = /(신제품|신상품|신규출시|new_arrival|new_product|new_release)/i.test(titleHay);
+  const trending = /(베스트|인기상품|판매상위|best_seller|most_popular)/i.test(titleHay);
+  const special = /(특산|한정|인증|유기농|무농약|수상|limited|certified)/i.test(titleHay);
+  const map = [];
+  const add = (key, score, reason, role) => {
+    if (!validProductSectionKey(key) || map.some((item) => item.key === key)) return;
+    const split = splitProductSectionKey(key);
+    map.push({ key, page: split.page, sectionKey: split.sectionKey, section: split.sectionKey, score, reason, policyRole: role, requiredEvidence: [], evidenceGaps: assessment.warnings.slice(), valueQualified: true, reviewEligible: true, approvalEligible: false, privateReviewOnly: true, publicReleaseEvidencePending: assessment.warnings.length > 0, proposalOnly: true, publicPublication: false });
+  };
+  if (newness) { add("distribution|distribution-new", 76, "공식 상품명에서 신규성이 확인된 비공개 검토 상품", "private_review_new_product"); add("home|home_5", 69, "신규 발견 상품 비공개 검토", "private_review_new_discovery"); add("home|home_right_bottom", 64, "신규 상품 우측 검토 후보", "private_review_new_right"); }
+  if (trending) add("distribution|distribution-trending", 74, "인기·판매상위 문구가 확인된 비공개 검토 상품", "private_review_trending");
+  if (special) add("distribution|distribution-special", 72, "특산·인증·한정 신호가 확인된 비공개 검토 상품", "private_review_special");
+  if (category === "travel_local_services") { add("tour|tour", 78, "여행·지역 서비스 비공개 검토", "private_review_travel"); add("home|home_4", 70, "현지 서비스·관광 검토", "private_review_local_service"); }
+  else if (["food_household_essentials", "baby_family_education"].includes(category)) { add("home|home_2", 78, "생활필수·반복구매 상품 비공개 검토", "private_review_essential"); add("distribution|distribution-recommend", 70, "대중 수요 생활상품 검토", "private_review_essential_recommend"); }
+  else if (["electronics_accessories", "home_appliances_living"].includes(category)) { add("home|home_1", 77, "전자·가전·생활 효용 상품 비공개 검토", "private_review_electronics_living"); add("network|network-right", 73, "제조·공급망 연결 상품 비공개 검토", "private_review_supply_network"); }
+  else if (["beauty_personal_care", "fashion"].includes(category)) { add("home|home_1", 75, "대중 생활·뷰티·패션 상품 비공개 검토", "private_review_lifestyle"); add("social|rightPanel", 66, "소셜 반응 가능 상품 비공개 검토", "private_review_social"); }
+  else if (["local_products", "agriculture_fishery_forestry"].includes(category)) { add("home|home_3", 76, "지역 생산·원산지 상품 비공개 검토", "private_review_local_origin"); add("distribution|distribution-special", 68, "지역 특산 상품 비공개 검토", "private_review_local_special"); }
+  else if (manufacturer) { add("home|home_1", 75, "공식 제조사·브랜드 상품 비공개 검토", "private_review_manufacturer"); add("network|network-right", 72, "제조·공급망 상품 비공개 검토", "private_review_manufacturer_network"); }
+  else add("home|home_5", 64, "신규 발견 일반 상품 비공개 검토", "private_review_general_discovery");
+  add("distribution|distribution-others", 62, "일반 유통 비공개 검토", "private_review_general_distribution");
+  return map;
+}
 function productAutomaticPlacement(rowInput, requestedKey) {
   const row = plain(rowInput), key = text(requestedKey);
   if (!validProductSectionKey(key)) return null;
-  return array(row.sectionAssignments).find((assignment) => assignment && assignment.approvalEligible === true && productPlacementKey(assignment) === key) || null;
+  return array(row.sectionAssignments).concat(privateReviewFallbackAssignments(row)).find((assignment) => assignment && (assignment.approvalEligible === true || assignment.reviewEligible === true) && productPlacementKey(assignment) === key) || null;
 }
 function stripAutomaticProductPlacement(rowInput) {
   const row = Object.assign({}, plain(rowInput));
@@ -1611,25 +1721,43 @@ function stripAutomaticProductPlacement(rowInput) {
   return row;
 }
 function productAutomaticHoldReason(rowInput) {
-  const row = plain(rowInput), risk = plain(row.riskAssessment), readiness = ProductPipeline.researchReadiness(row), status = lower(row.researchStatus);
-  if (row.inspectionComplete !== true) return "";
-  if (!ProductRanking.isSpecificProductUrl(productUrl(row))) return "specific_product_page_not_verified";
-  if (!productImageUrl(row)) return "actual_product_image_not_verified";
-  if (["http_404", "non_html", "blocked", "unavailable"].includes(status)) return "product_page_unavailable";
-  if (risk.gatePassed !== true) return array(risk.blockers).join(",") || "risk_gate_failed";
-  if (readiness.queueEligible !== true) return array(readiness.reviewGaps).join(",") || "private_queue_ineligible";
-  return "";
+  const assessment = productPrivateReviewAssessment(rowInput);
+  return assessment.hold === true ? assessment.reason : "";
 }
 function productAutomaticAssignmentEligible(rowInput, requestedSectionKey) {
-  const row = plain(rowInput), risk = plain(row.riskAssessment), readiness = ProductPipeline.researchReadiness(row), value = plain(row.valueAssessment);
-  if (row.familyRepresentative === false || risk.gatePassed !== true || readiness.promotionEligible !== true || value.privatePlacementEligible !== true) return false;
-  if (!ProductRanking.isSpecificProductUrl(productUrl(row)) || !productImageUrl(row)) return false;
+  const row = plain(rowInput), assessment = productPrivateReviewAssessment(row);
+  if (!assessment.eligible) return false;
   const key = text(requestedSectionKey || productPlacementKey(row.primaryPlacement));
   if (!validProductSectionKey(key)) return false;
   const assignment = productAutomaticPlacement(row, key);
   if (!assignment) return false;
   if (key === "distribution|distribution-sponsor" && !(row.commercialAssessment && row.commercialAssessment.contractReady === true)) return false;
   return true;
+}
+function productAutomaticPlacementOptions(rowInput, requestedSectionKey) {
+  const row = plain(rowInput), onlyKey = text(requestedSectionKey), combined = array(row.sectionAssignments).concat(privateReviewFallbackAssignments(row));
+  const seen = new Set();
+  return combined.filter((assignment) => {
+    const key = productPlacementKey(assignment);
+    if (!validProductSectionKey(key) || seen.has(key) || (onlyKey && key !== onlyKey)) return false;
+    seen.add(key);
+    if (assignment.approvalEligible !== true && assignment.reviewEligible !== true) return false;
+    if (key === "distribution|distribution-sponsor" && !(row.commercialAssessment && row.commercialAssessment.contractReady === true)) return false;
+    return productAutomaticAssignmentEligible(row, key);
+  });
+}
+function productAutomaticPlacementScore(rowInput, assignmentInput) {
+  const row = plain(rowInput), assignment = plain(assignmentInput), settlement = normalizeAffiliateSettlement(row.affiliateSettlement, { existing: row.affiliateSettlement });
+  const affiliateBonus = Number(AFFILIATE_STAGE_PRIORITY[affiliateSettlementStage(settlement.stage)] || 0) * 6;
+  const approvalBonus = assignment.approvalEligible === true ? 18 : (assignment.reviewEligible === true ? 8 : 0);
+  const value = plain(row.valueAssessment);
+  return Number(assignment.score || 0) * 10 + Number(row.rankingScore || 0) + Number(value.portfolioPriorityScore || 0) + affiliateBonus + approvalBonus;
+}
+function productAutomaticUnassignedReason(rowInput) {
+  const row = plain(rowInput), assessment = productPrivateReviewAssessment(row);
+  if (!assessment.eligible) return assessment.reason;
+  if (!productAutomaticPlacementOptions(row).length) return "no_compatible_private_review_section";
+  return "all_compatible_sections_full";
 }
 function automaticPlacementRecord(assignmentInput, scope, actorId, mode, runId) {
   const assignment = plain(assignmentInput), key = productPlacementKey(assignment), split = splitProductSectionKey(key);
@@ -1644,6 +1772,9 @@ function automaticPlacementRecord(assignmentInput, scope, actorId, mode, runId) 
     administratorSelected: false,
     aiSelected: true,
     automaticPrivatePlacement: true,
+    privateReviewOnly: assignment.privateReviewOnly === true,
+    publicReleaseEvidencePending: assignment.publicReleaseEvidencePending === true,
+    privatePlacementWarnings: array(assignment.evidenceGaps),
     publicPublication: false,
     selectedAt: iso(),
     selectedBy: "ai-automation",
@@ -1687,7 +1818,9 @@ function productCandidatePayload(actorId, scope, product, decision) {
     supplier: { id: text(product.supplierId), name: text(product.supplierName), officialUrl: text(product.supplierSiteUrl), type: text(product.supplierType), trustScore: Number(product.supplierTrustScore) || 0, evidenceReady: product.supplierEvidenceReady === true },
     productRanking: { version: ProductRanking.VERSION, rank: Number(product.rank) || null, score: Number(product.rankingScore) || 0, reviewPriority: text(product.valueAssessment && product.valueAssessment.reviewPriority), audienceDemandScore: Number(product.valueAssessment && product.valueAssessment.audience && product.valueAssessment.audience.audienceDemandScore) || 0, revenueOpportunityScore: Number(product.valueAssessment && product.valueAssessment.revenue && product.valueAssessment.revenue.revenueOpportunityScore) || 0, category: text(product.productCategory), categoryTags: array(product.productCategoryTags), duplicateGroupKey: text(product.duplicateGroupKey), familyKey: text(product.productFamilyKey), familyRepresentative: product.familyRepresentative !== false, familyVariantCount: Number(product.familyVariantCount) || 0, duplicateCount: Number(product.duplicateCount) || 1 },
     supplierAssessment: plain(product.supplierAssessment), riskAssessment: plain(product.riskAssessment), commercialAssessment: plain(product.commercialAssessment), valueAssessment: plain(product.valueAssessment), releaseReadiness: plain(product.releaseReadiness), researchReadiness: readiness,
-    revenue: { type: text(product.commercialAssessment && product.commercialAssessment.revenueType) || "commercial_candidate", monetizationState: text(product.commercialAssessment && product.commercialAssessment.monetizationState) || "contract_required", contractId: text(product.commercialAssessment && product.commercialAssessment.revenueEvidence && product.commercialAssessment.revenueEvidence.contractId) || null, payableRevenueRightVerified: plain(product.valueAssessment).revenue && plain(product.valueAssessment).revenue.payableRevenueRightVerified === true },
+    revenue: { type: text(product.commercialAssessment && product.commercialAssessment.revenueType) || "commercial_candidate", monetizationState: text(product.commercialAssessment && product.commercialAssessment.monetizationState) || "contract_required", contractId: text(product.commercialAssessment && product.commercialAssessment.revenueEvidence && product.commercialAssessment.revenueEvidence.contractId) || text(plain(product.affiliateSettlement).contractId) || null, affiliateStage: affiliateSettlementStage(plain(product.affiliateSettlement).stage), settlementState: text(plain(product.affiliateSettlement).settlementState) || "affiliate_connection_required", payableRevenueRightVerified: plain(product.affiliateSettlement).settlementReady === true || (plain(product.valueAssessment).revenue && plain(product.valueAssessment).revenue.payableRevenueRightVerified === true), settlementExecution: false },
+    affiliateSettlement: Object.assign({}, normalizeAffiliateSettlement(product.affiliateSettlement, { existing: product.affiliateSettlement }), { payoutAccountStoredHere: false, settlementExecution: false }),
+    settlementLedger: { schema: "igdc-affiliate-settlement-ledger.v1", attributionKey: sha256(scope.country + "|" + scope.region + "|" + text(product.productIdentity) + "|" + text(plain(product.affiliateSettlement).trackingUrl)).slice(0, 32), attributionMode: plain(product.affiliateSettlement).trackingVerified === true ? "affiliate_tracking_url" : "not_connected", state: plain(product.affiliateSettlement).settlementReady === true ? "awaiting_external_conversion_reports" : "affiliate_connection_required", grossCommission: null, cancellationReturnAdjustment: null, netPayable: null, reconciliationRequired: true, externalStatementRequired: true, settlementExecution: false, payoutAccountStoredHere: false },
     commerceCandidate: { sourceTier: "risk_ranked_official_supplier_product", origin: PRODUCT_SOURCE_REF, administratorReviewRequired: true, riskGatePassed: product.riskAssessment && product.riskAssessment.gatePassed === true, automaticPrivateResearchStaging: true, automaticPublication: false },
     connectionAdapter: { schema: "igdc-commerce-connection-adapter.v1", supplyLane: text(product.supplyLane) || "general", discoveryMode: text(product.discoverySource) || "official_public_page", currentIntegrationMode: "public_page_product_reference", supportedUpgradeModes: ["structured_data", "sitemap", "manual_product_feed", "supplier_self_registration", "affiliate_deeplink", "affiliate_api"], apiKeyRequiredNow: false, externalSellerCheckout: true },
     pipeline: { version: ProductPipeline.VERSION, stage: selected ? "administrator_selection_pending" : "private_research_queue", nextGate: selected ? "market_evidence_and_revenue_route" : "administrator_product_selection", promotedAt: iso(), promotedBy: text(actorId) || "product-research-orchestrator" },
@@ -1731,18 +1864,28 @@ async function syncProductCandidateQueue(actorId, scope, product, decision) {
 }
 async function productCandidateAction(actorId, input) {
   const scope = researchScope(input), job = await productJobRule(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
-  const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","purge","undecided","ai_reclassify"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
+  const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","purge","undecided","ai_reclassify","affiliate_settlement"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
   const portfolio = ProductRanking.buildPortfolio(array(job.rawProducts).concat(array(job.products)), plain(job.rankingContext));
   const evaluated = array(portfolio.products).find((row) => text(row && row.id) === id); if (!evaluated) { const error = new Error("상품 후보를 찾을 수 없습니다. 최신 상품 리서치 상태를 다시 읽어 주세요."); error.statusCode = 404; throw error; }
   const identity = text(evaluated.productIdentity), index = array(job.products).findIndex((row) => text(row && row.id) === id || ProductRanking.productIdentity(row) === identity); if (index < 0) { const error = new Error("상세페이지 검증을 마친 상품 후보를 찾을 수 없습니다. 발견 단계 상품은 검증 완료 후 판정할 수 있습니다."); error.statusCode = 404; throw error; }
+  if (decision === "affiliate_settlement") {
+    const current = plain(job.products[index]), now = iso(), settlement = normalizeAffiliateSettlement(input && input.affiliateSettlement, { existing: current.affiliateSettlement, validate: true, operatorApproved: true, administratorSelected: true, actorId });
+    const next = Object.assign({}, current, evaluated, { affiliateSettlement: settlement, affiliateStage: settlement.stage, affiliateSettlementUpdatedAt: now, affiliateSettlementUpdatedBy: text(actorId) || "administrator", publicPublication: false, automaticImport: false });
+    job.products[index] = next;
+    const queueSync = await syncProductCandidateQueue(actorId, scope, next, lower(next.slotDecision || "undecided"));
+    job.version = VERSION; job.rankingVersion = ProductRanking.VERSION;
+    job.trace = array(job.trace).concat([{ at: now, source: "affiliate-settlement-control", status: settlement.stage, productId: id, settlementReady: settlement.settlementReady, administratorPriority: true, settlementExecution: false, publicPublication: false }]).slice(-240);
+    await saveProductJob(job, actorId);
+    const result = publicProductJob(job); result.candidateQueue = queueSync; result.actionResult = { productId: id, decision, affiliateSettlement: settlement, administratorRevenuePriority: true, publicPublication: false, paymentExecution: false, settlementExecution: false }; return result;
+  }
   let approvedPlacement = null;
   if (decision === "slot_candidate") {
-    const risk = plain(evaluated.riskAssessment), readiness = ProductPipeline.researchReadiness(evaluated);
-    if (risk.gatePassed !== true || readiness.promotionEligible !== true) { const reasons = array(risk.blockers).concat(array(readiness.reviewGaps)).filter(Boolean).join(", ") || "섹션 배정 조건 미충족"; const error = new Error("상품 정보와 위험 게이트를 통과한 상품만 비공개 섹션 후보로 지정할 수 있습니다. 보완 사항: " + reasons); error.statusCode = 409; throw error; }
+    const privateReview = productPrivateReviewAssessment(evaluated);
+    if (!privateReview.eligible) { const error = new Error("비공개 섹션 후보로 지정할 수 없는 상품입니다. 보완 사항: " + privateReview.reason); error.statusCode = 409; throw error; }
     const requestedKey = text(input && input.placementKey);
     if (requestedKey && !validProductSectionKey(requestedKey)) { const error = new Error("18개 관리 섹션 중 하나를 선택해 주세요."); error.statusCode = 400; throw error; }
     if (requestedKey === "distribution|distribution-sponsor" && !(evaluated.commercialAssessment && evaluated.commercialAssessment.contractReady === true)) { const error = new Error("유통 스폰서 섹션은 승인된 스폰서 계약 증빙이 있는 상품만 선택할 수 있습니다."); error.statusCode = 409; throw error; }
-    const eligibleAssignments = array(evaluated.sectionAssignments).filter((row) => row && row.approvalEligible === true);
+    const eligibleAssignments = array(evaluated.sectionAssignments).concat(privateReviewFallbackAssignments(evaluated)).filter((row) => row && (row.approvalEligible === true || row.reviewEligible === true));
     const fallbackKey = productPlacementKey(evaluated.approvedPlacement || evaluated.primaryPlacement || eligibleAssignments[0]);
     const selectedKey = requestedKey || fallbackKey;
     if (!selectedKey) { const error = new Error("선택 가능한 배치 섹션이 없습니다. 18개 섹션 드롭다운에서 대상을 지정해 주세요."); error.statusCode = 409; throw error; }
@@ -1755,7 +1898,8 @@ async function productCandidateAction(actorId, input) {
     if (occupied >= PRODUCT_SECTION_CAPACITY) { const error = new Error("선택 섹션은 이미 100개 상품으로 가득 찼습니다. 기존 배치 예정 상품을 후보 목록으로 내린 뒤 다시 지정해 주세요."); error.statusCode = 409; throw error; }
   }
   const effectiveDecision = decision === "ai_reclassify" ? "undecided" : decision, current = plain(job.products[index]), now = iso();
-  const next = Object.assign({}, current, evaluated, {
+  const preservedSettlement = normalizeAffiliateSettlement(current.affiliateSettlement || evaluated.affiliateSettlement, { existing: current.affiliateSettlement || evaluated.affiliateSettlement });
+  const next = Object.assign({}, current, evaluated, { affiliateSettlement: preservedSettlement, affiliateStage: preservedSettlement.stage,
     slotDecision: effectiveDecision,
     decisionAt: now,
     decisionBy: text(actorId) || "administrator",
@@ -1789,7 +1933,11 @@ async function productAiAutomation(actorId, input) {
   if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("AI 자동 관리할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
   const runId = "product_ai_management_" + sha256(iso() + "|" + scope.country + "|" + scope.region + "|" + mode + "|" + sectionKey + "|" + Math.random()).slice(0, 20);
   const portfolio = ProductRanking.buildPortfolio(productAutomationPlanningSource(job), plain(job.rankingContext));
-  const evaluatedByIdentity = new Map(array(portfolio.products).map((row) => [ProductRanking.productIdentity(row), row]));
+  const evaluatedByIdentity = new Map(array(portfolio.products).map((row) => {
+    const assessment = productPrivateReviewAssessment(row), assignments = array(row.sectionAssignments), fallback = privateReviewFallbackAssignments(row), seen = new Set();
+    const combined = assignments.concat(fallback).filter((item) => { const key = productPlacementKey(item); if (!key || seen.has(key)) return false; seen.add(key); return true; });
+    return [ProductRanking.productIdentity(row), Object.assign({}, row, { sectionAssignments: combined, privatePlacementReviewEligible: assessment.eligible, privatePlacementReviewReason: assessment.reason, privatePlacementWarnings: assessment.warnings })];
+  }));
   const currentRows = array(job.products), manualCounts = {};
   for (const key of PRODUCT_SECTION_KEYS) manualCounts[key] = 0;
   let manualPreserved = 0;
@@ -1800,32 +1948,46 @@ async function productAiAutomation(actorId, input) {
       if (decision === "slot_candidate" && validProductSectionKey(key)) manualCounts[key] += 1;
     }
   }
-  const selectedForSection = new Set();
-  if (mode === "section") {
-    const capacity = Math.max(0, PRODUCT_SECTION_CAPACITY - Number(manualCounts[sectionKey] || 0));
-    const candidates = currentRows.map((current) => {
-      if (productAdministratorLocked(current)) return null;
-      const decision = lower(current && current.slotDecision || "undecided");
-      if (["reject","purge"].includes(decision) && !productAutomationManaged(current)) return null;
-      const identity = ProductRanking.productIdentity(current), evaluated = evaluatedByIdentity.get(identity);
-      if (!evaluated || !productAutomaticAssignmentEligible(evaluated, sectionKey)) return null;
-      const assignment = productAutomaticPlacement(evaluated, sectionKey);
-      const currentKey = productPlacementKey(current && (current.approvedPlacement || current.selectedPlacement || current.primaryPlacement));
-      if (decision === "slot_candidate" && currentKey !== sectionKey && productAutomationManaged(current)) return null;
-      return { identity, evaluated, assignment, score: Number(assignment && assignment.score || 0) * 10 + Number(evaluated.rankingScore || 0) };
-    }).filter(Boolean).sort((a, b) => b.score - a.score || a.identity.localeCompare(b.identity));
-    candidates.slice(0, capacity).forEach((row) => selectedForSection.add(row.identity));
+  const selectedPlacementByIdentity = new Map(), workingCounts = Object.assign({}, manualCounts), allocationReasons = new Map();
+  const automationCandidates = currentRows.map((current) => {
+    if (productAdministratorLocked(current)) return null;
+    const decision = lower(current && current.slotDecision || "undecided");
+    if (["reject","purge"].includes(decision) && !productAutomationManaged(current)) return null;
+    const identity = ProductRanking.productIdentity(current), evaluated = evaluatedByIdentity.get(identity);
+    if (!evaluated) return null;
+    const options = productAutomaticPlacementOptions(evaluated, mode === "section" ? sectionKey : "");
+    if (!options.length) { allocationReasons.set(identity, productAutomaticUnassignedReason(evaluated)); return { identity, current, evaluated, options: [] }; }
+    const best = Math.max(...options.map((assignment) => productAutomaticPlacementScore(evaluated, assignment)));
+    return { identity, current, evaluated, options, best };
+  }).filter(Boolean).sort((a, b) => Number(b.best || 0) - Number(a.best || 0) || Number(b.evaluated && b.evaluated.rankingScore || 0) - Number(a.evaluated && a.evaluated.rankingScore || 0) || a.identity.localeCompare(b.identity));
+  for (const candidate of automationCandidates) {
+    if (!candidate.options.length) continue;
+    const available = candidate.options.filter((assignment) => Number(workingCounts[productPlacementKey(assignment)] || 0) < PRODUCT_SECTION_CAPACITY);
+    if (!available.length) { allocationReasons.set(candidate.identity, "all_compatible_sections_full"); continue; }
+    const bestRaw = Math.max(...available.map((assignment) => productAutomaticPlacementScore(candidate.evaluated, assignment)));
+    const closeFit = available.filter((assignment) => productAutomaticPlacementScore(candidate.evaluated, assignment) >= bestRaw - 8);
+    const pool = closeFit.length ? closeFit : available;
+    const picked = pool.slice().sort((a, b) => {
+      const aKey = productPlacementKey(a), bKey = productPlacementKey(b);
+      const aLoad = Number(workingCounts[aKey] || 0) / PRODUCT_SECTION_CAPACITY * 5;
+      const bLoad = Number(workingCounts[bKey] || 0) / PRODUCT_SECTION_CAPACITY * 5;
+      return (productAutomaticPlacementScore(candidate.evaluated, b) - bLoad) - (productAutomaticPlacementScore(candidate.evaluated, a) - aLoad) || PRODUCT_SECTION_KEYS.indexOf(aKey) - PRODUCT_SECTION_KEYS.indexOf(bKey);
+    })[0];
+    const pickedKey = productPlacementKey(picked);
+    selectedPlacementByIdentity.set(candidate.identity, picked);
+    workingCounts[pickedKey] = Number(workingCounts[pickedKey] || 0) + 1;
   }
   const nextRows = [], changed = [];
   for (const current of currentRows) {
     const identity = ProductRanking.productIdentity(current), evaluated = evaluatedByIdentity.get(identity) || plain(current), priorDecision = lower(current && current.slotDecision || "undecided"), priorKey = productPlacementKey(current && (current.approvedPlacement || current.selectedPlacement || current.primaryPlacement));
     if (productAdministratorLocked(current)) { nextRows.push(current); continue; }
     if (["hold","reject","purge"].includes(priorDecision) && !productAutomationManaged(current)) { nextRows.push(current); continue; }
-    let next = Object.assign({}, current, evaluated), targetDecision = priorDecision, targetPlacement = null, holdReason = "";
+    const preservedSettlement = normalizeAffiliateSettlement(current.affiliateSettlement || evaluated.affiliateSettlement, { existing: current.affiliateSettlement || evaluated.affiliateSettlement });
+    let next = Object.assign({}, current, evaluated, { affiliateSettlement: preservedSettlement, affiliateStage: preservedSettlement.stage }), targetDecision = priorDecision, targetPlacement = null, holdReason = "";
     if (mode === "section") {
-      if (selectedForSection.has(identity)) {
+      if (selectedPlacementByIdentity.has(identity)) {
         targetDecision = "slot_candidate";
-        targetPlacement = productAutomaticPlacement(evaluated, sectionKey);
+        targetPlacement = selectedPlacementByIdentity.get(identity);
       } else if (productAutomationManaged(current) && priorKey === sectionKey) {
         holdReason = productAutomaticHoldReason(evaluated);
         targetDecision = holdReason ? "hold" : "undecided";
@@ -1834,10 +1996,9 @@ async function productAiAutomation(actorId, input) {
         continue;
       }
     } else {
-      const key = productPlacementKey(evaluated.primaryPlacement);
-      if (productAutomaticAssignmentEligible(evaluated, key)) {
+      if (selectedPlacementByIdentity.has(identity)) {
         targetDecision = "slot_candidate";
-        targetPlacement = productAutomaticPlacement(evaluated, key);
+        targetPlacement = selectedPlacementByIdentity.get(identity);
       } else {
         holdReason = productAutomaticHoldReason(evaluated);
         targetDecision = holdReason ? "hold" : "undecided";
@@ -1865,25 +2026,77 @@ async function productAiAutomation(actorId, input) {
   await saveProductJob(job, actorId);
   const result = publicProductJob(job), finalRows = array(result.products);
   const resultScopeRows = mode === "section" ? finalRows.filter((row) => productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement) === sectionKey || (productAutomationManaged(row) && plain(row.managementControl).sectionKey === sectionKey)) : finalRows;
+  const unassignedReasonCounts = {};
+  finalRows.filter((row) => lower(row.slotDecision || "undecided") === "undecided").forEach((row) => {
+    const identity = ProductRanking.productIdentity(row), reason = allocationReasons.get(identity) || productAutomaticUnassignedReason(row);
+    unassignedReasonCounts[reason] = Number(unassignedReasonCounts[reason] || 0) + 1;
+  });
   result.aiAutomationResult = {
-    schema: "igdc-product-ai-private-placement-result.v1",
+    schema: "igdc-product-ai-private-placement-result.v3",
     runId, mode, sectionKey: mode === "section" ? sectionKey : null,
     considered: currentRows.length,
     changed: changed.length,
     assigned: resultScopeRows.filter((row) => lower(row.slotDecision) === "slot_candidate" && productAutomationManaged(row)).length,
+    pendingEvidenceAssigned: resultScopeRows.filter((row) => lower(row.slotDecision) === "slot_candidate" && productAutomationManaged(row) && (plain(row.approvedPlacement).publicReleaseEvidencePending === true || array(plain(row.approvedPlacement).privatePlacementWarnings).length > 0)).length,
     unassigned: finalRows.filter((row) => lower(row.slotDecision || "undecided") === "undecided").length,
     held: resultScopeRows.filter((row) => lower(row.slotDecision) === "hold" && productAutomationManaged(row)).length,
+    unassignedReasonCounts,
     manualPreserved,
+    settlementReady: finalRows.filter((row) => plain(row.affiliateSettlement).settlementReady === true).length,
+    referralVerified: finalRows.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "referral_verified" && plain(row.affiliateSettlement).settlementReady === true).length,
+    onlineAffiliateActive: finalRows.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "online_affiliate_active" && plain(row.affiliateSettlement).settlementReady === true).length,
+    formalPartners: finalRows.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "formal_partner" && plain(row.affiliateSettlement).settlementReady === true).length,
     queueSynced: syncResults.filter((row) => row.ok === true).length,
     queueSyncFailed: queueFailures.length,
     sectionCapacity: PRODUCT_SECTION_CAPACITY,
     sectionsFilledForCount: false,
+    maximumPrivatePlacementWithoutWeakeningPublicReleaseGate: true,
+    incompleteInspectionIsWarningNotAutomaticRejection: true,
     administratorDecisionPrecedence: true,
     automaticPublication: false,
     automaticProductImport: false,
     checkout: false,
     paymentExecution: false
   };
+  return result;
+}
+
+async function productFrontSyncTargets(input) {
+  const scope = researchScope(input), job = await productJobRule(scope);
+  if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
+  if (job.status !== "complete") { const error = new Error("공식 상품 목록 리서치를 완료한 뒤 프론트 매칭을 실행해 주세요."); error.statusCode = 409; throw error; }
+  const mode = lower(input && input.mode) === "section" ? "section" : "all", sectionKey = text(input && input.sectionKey);
+  if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("프론트에 매칭할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
+  const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match";
+  const targets = array(job.products).filter((row) => {
+    const key = productPlacementKey(row && (row.approvedPlacement || row.selectedPlacement || row.primaryPlacement));
+    if (mode === "section" && key !== sectionKey) return false;
+    if (operation === "match") return lower(row && row.slotDecision) === "slot_candidate" && validProductSectionKey(key);
+    const front = plain(row && row.frontPublication);
+    return validProductSectionKey(key) && (lower(row && row.slotDecision) === "slot_candidate" || ["queued","publish_requested","matched","published","unpublish_failed"].includes(lower(front.status)));
+  }).map((row) => ({
+    productId: text(row.id), candidateId: productCandidateId(scope, row), title: first(row.productName, row.title), sectionKey: productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement), digest: sha256({ id: text(row.id), identity: ProductRanking.productIdentity(row), placement: productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement), updatedAt: row.updatedAt || row.decisionAt || null })
+  }));
+  return { ok: true, scope, mode, sectionKey: mode === "section" ? sectionKey : null, operation, targets, productCount: array(job.products).length };
+}
+async function recordProductFrontSync(actorId, input, batchResult) {
+  const scope = researchScope(input), job = await productJobRule(scope);
+  if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
+  const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match", now = iso(), byCandidate = new Map(array(batchResult && batchResult.items).map((item) => [text(item && item.candidateId), plain(item)]));
+  job.products = array(job.products).map((row) => {
+    const candidateId = productCandidateId(scope, row), item = byCandidate.get(candidateId);
+    if (!item) return row;
+    const status = text(item.status) || (item.queued === true ? (operation === "match" ? "publish_requested" : "unpublish_requested") : "blocked");
+    return Object.assign({}, row, {
+      frontPublication: { schema: "igdc-product-front-publication-control.v1", candidateId, operation, status, queued: item.queued === true, reason: text(item.reason) || null, assignmentId: text(item.assignmentId) || null, requestedAt: now, requestedBy: text(actorId) || "administrator", publicSnapshotConfirmed: false, buildVerificationRequired: true },
+      publicPublication: false
+    });
+  });
+  job.version = VERSION; job.updatedAt = now;
+  job.trace = array(job.trace).concat([{ at: now, source: "product-front-publication-control", operation, requested: Number(batchResult && batchResult.requested || 0), queued: Number(batchResult && batchResult.queued || 0), blocked: Number(batchResult && batchResult.blocked || 0), publicSnapshotConfirmed: false }]).slice(-240);
+  await saveProductJob(job, actorId);
+  const result = publicProductJob(job);
+  result.frontSyncResult = Object.assign({}, plain(batchResult), { operation, publicSnapshotConfirmed: false, buildVerificationRequired: true });
   return result;
 }
 
@@ -2065,7 +2278,7 @@ async function manualSupplierRegister(actorId,input){
   if(productPageUrl&&!sameSupplierSite(officialUrl,productPageUrl)){const error=new Error("공식 상품 목록 페이지는 등록 업체와 같은 도메인 또는 그 하위 도메인이어야 합니다.");error.statusCode=400;throw error;}
   const existingJob=await researchJobRule(scope),host=(()=>{try{return new URL(officialUrl).hostname.toLowerCase().replace(/^www\./,"");}catch(_e){return"";}})(),urlKey="url:"+sha256(officialUrl.toLowerCase()).slice(0,32),hostKey=host?"host:"+host:"",persistentBlockedKeys=await persistentSupplierSuppressionKeys(scope),blockedKeys=new Set(array(existingJob&&existingJob.blockedSupplierKeys).concat(persistentBlockedKeys).map(text).filter(Boolean));
   if(blockedKeys.has(urlKey)||blockedKeys.has(hostKey)){const error=new Error("이 업체 URL 또는 도메인은 현재 범위에서 영구 제외·차단되어 있습니다. 먼저 후보 제외 업체 목록에서 차단을 해제하세요.");error.statusCode=409;throw error;}
-  const registry=await manualSupplierRegistry(scope),now=iso(),id="manual_supplier_"+sha256(scope.country+"|"+scope.region+"|"+officialUrl.toLowerCase()).slice(0,24),existingEntry=array(registry.suppliers).find((row)=>supplierRootUrl(row&&row.officialUrl)===officialUrl),entry={id,name,officialUrl,productPageUrl:productPageUrl||officialUrl,supplierType,adminPinned:true,state:"active",registeredAt:existingEntry&&existingEntry.registeredAt||now,registeredBy:existingEntry&&existingEntry.registeredBy||text(actorId)||"administrator",updatedAt:now,updatedBy:text(actorId)||"administrator"};
+  const registry=await manualSupplierRegistry(scope),now=iso(),id="manual_supplier_"+sha256(scope.country+"|"+scope.region+"|"+officialUrl.toLowerCase()).slice(0,24),existingEntry=array(registry.suppliers).find((row)=>supplierRootUrl(row&&row.officialUrl)===officialUrl),affiliateSettlement=normalizeAffiliateSettlement(input&&input.affiliateSettlement,{existing:existingEntry&&existingEntry.affiliateSettlement,validate:true,operatorApproved:true,administratorSelected:true,actorId}),entry={id,name,officialUrl,productPageUrl:productPageUrl||officialUrl,supplierType,affiliateSettlement,adminPinned:true,state:"active",registeredAt:existingEntry&&existingEntry.registeredAt||now,registeredBy:existingEntry&&existingEntry.registeredBy||text(actorId)||"administrator",updatedAt:now,updatedBy:text(actorId)||"administrator"};
   registry.suppliers=array(registry.suppliers).filter((row)=>supplierRootUrl(row&&row.officialUrl)!==officialUrl).concat([entry]);await saveManualSupplierRegistry(scope,registry,actorId);
   const seed=manualSupplierSeed(scope,entry),selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region};let inspected=seed,verificationStatus="manual_registration_verification_pending";
   try{const result=await RegionalSelector.inspectSupplierResearchStep([seed],selectorInput);inspected=Object.assign({},seed,array(result&&result.items)[0]||{});verificationStatus=text(inspected&&inspected.brokerageVerification&&inspected.brokerageVerification.researchStatus)||"verification_pending";}catch(error){inspected=Object.assign({},seed,{brokerageVerification:Object.assign({},seed.brokerageVerification,{researchStatus:"manual_registration_page_check_failed",researchError:text(error&&error.message).slice(0,180)})});verificationStatus="manual_registration_page_check_failed";}
@@ -2073,7 +2286,7 @@ async function manualSupplierRegister(actorId,input){
   const assessment=deterministicAssessment([inspected])[0],candidate=stagedCandidateRow({item:inspected,assessment,originalIndex:0},1);let job=existingJob&&existingJob.schema===RESEARCH_JOB_SCHEMA?existingJob:null;
   if(!job){const state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region);job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_manual_"+sha256(now+"|"+officialUrl).slice(0,20),status:"complete",manualOnly:true,startedAt:now,createdAt:now,finishedAt:now,scope,effective,selectorInput,researchPlanVersion:"manual-supplier-registration",planRows:[],planDiagnostics:{manualOnly:true,manualPinnedSuppliers:1},searchTasks:[],searchCursor:0,blockedSupplierKeys:[],manualSupplierCount:1,rawCandidates:[inspected],supplierHoldingCandidates:[],supplierBlockedCandidates:[],inspectionPool:[inspected],inspectCursor:1,inspectedCandidates:[inspected],reviewPool:[inspected],rankQueue:[inspected],rankCursor:1,rankAttempt:0,rankedEntries:[{item:inspected,assessment,originalIndex:0}],candidates:[candidate],trace:[{source:"manual-supplier-registration",status:verificationStatus,at:now,url:officialUrl,productPageUrl:entry.productPageUrl}],errors:[],lastError:null,marketSignals:{active:false,categoryWeights:{}},policyControl:{active:false,categoryWeights:{},priorityDirections:[],avoidDirections:[],manualPriorityTargets:[],manualBlockedTargets:[]}};}
   else{job.rawCandidates=mergeResearchItems([inspected],job.rawCandidates,SUPPLIER_RAW_LIMIT,job.blockedSupplierKeys);job.inspectedCandidates=mergeResearchItems([inspected],job.inspectedCandidates,300,job.blockedSupplierKeys);job.reviewPool=preservePinnedReviewPool([inspected].concat(array(job.reviewPool)),job.inspectedCandidates);job.rankQueue=preservePinnedReviewPool([inspected].concat(array(job.rankQueue)),job.reviewPool);job.rankedEntries=array(job.rankedEntries).filter((row)=>!sameSupplierUrl(row&&row.item,officialUrl));job.rankedEntries.unshift({item:inspected,assessment,originalIndex:0});job.candidates=reindexCandidateRows([candidate].concat(array(job.candidates).filter((row)=>!sameSupplierUrl(row,officialUrl))));job.supplierHoldingCandidates=array(job.supplierHoldingCandidates).filter((row)=>!sameSupplierUrl(row,officialUrl));job.supplierBlockedCandidates=array(job.supplierBlockedCandidates).filter((row)=>!sameSupplierUrl(row,officialUrl));job.manualSupplierCount=activeManualSupplierSeeds(registry).length;job.manualOnly=job.manualOnly===true&&array(job.searchTasks).length===0;job.status=["searching","inspecting","ranking"].includes(job.status)?job.status:"complete";if(job.status==="complete")job.finishedAt=now;job.trace=array(job.trace).concat([{source:"manual-supplier-registration",status:verificationStatus,at:now,url:officialUrl,productPageUrl:entry.productPageUrl,actor:text(actorId)||"administrator"}]).slice(-160);}
-  await saveResearchJob(job,actorId);const result=publicResearchJob(job);result.manualRegistration={id,officialUrl,productPageUrl:entry.productPageUrl,adminPinned:true,verificationStatus,publicPublication:false,productImport:false};return result;
+  await saveResearchJob(job,actorId);const result=publicResearchJob(job);result.manualRegistration={id,officialUrl,productPageUrl:entry.productPageUrl,adminPinned:true,affiliateSettlement:entry.affiliateSettlement,verificationStatus,publicPublication:false,productImport:false,settlementExecution:false};return result;
 }
 
 async function researchCandidateAction(actorId,input){
@@ -2208,5 +2421,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, productCandidateAction, productAiAutomation, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, productCandidateAction, productAiAutomation, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
 };

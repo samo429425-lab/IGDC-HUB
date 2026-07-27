@@ -4,6 +4,8 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const Automation = require("./lib/commerce-country-automation.v1");
 const MarketSignals = require("./lib/commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./lib/commerce-policy-discussion.v1");
+const ProductGoLiveAudit = require("./product-go-live-audit");
+const CandidateReview = require("./commerce-candidate-review");
 
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
@@ -56,7 +58,7 @@ exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();if(method==="OPTIONS")return json(204,{});
     const body=method==="GET"?{}:parse(event),query=event&&event.queryStringParameters||{},action=lower(query.action||body.action||"catalog");
-    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_candidate_action","product_ai_automation","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
+    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_candidate_action","product_ai_automation","product_front_match","product_front_unmatch","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
     const actorId=text(actor&&actor.sub);
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
@@ -104,6 +106,22 @@ exports.handler=async function(event){
     if(action==="product_research_step")return json(200,await Automation.advanceProductResearchJob(actorId,body));
     if(action==="product_candidate_action")return json(200,await Automation.productCandidateAction(actorId,body));
     if(action==="product_ai_automation")return json(200,await Automation.productAiAutomation(actorId,body));
+    if(action==="product_front_match"||action==="product_front_unmatch"){
+      const operation=action==="product_front_unmatch"?"unmatch":"match";
+      const request=Object.assign({},body,{operation});
+      const plan=await Automation.productFrontSyncTargets(request);
+      const scope=ProductGoLiveAudit.selectedScope(plan.scope.country,plan.scope.region);
+      let batchResult;
+      if(!plan.targets.length){
+        batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
+      }else if(operation==="match"){
+        const liveDoc=await CandidateReview.stage(process.cwd());
+        batchResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope,liveDoc);
+      }else{
+        batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope);
+      }
+      return json(200,await Automation.recordProductFrontSync(actorId,request,batchResult));
+    }
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
     if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset));
     if(action==="signal_research_begin"||action==="signal_research_step"){

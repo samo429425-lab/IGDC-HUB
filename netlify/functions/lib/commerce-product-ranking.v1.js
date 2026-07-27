@@ -12,7 +12,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "commerce-product-ranking-v1.6.0-demand-frequency-revenue-value-priority";
+const VERSION = "commerce-product-ranking-v1.8.0-private-review-section-auto-and-front-gate";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -391,6 +391,7 @@ function metricContainers(rowInput) {
     row,
     plain(row.revenue),
     plain(row.affiliate),
+    plain(row.affiliateSettlement),
     plain(row.outboundReferral),
     plain(row.sponsor),
     plain(row.analytics),
@@ -426,20 +427,22 @@ function anyEvidenceFlag(rowInput, namesInput) {
 }
 
 function explicitRevenue(rowInput) {
-  const row = plain(rowInput), affiliate = plain(row.affiliate), outbound = plain(row.outboundReferral), sponsor = plain(row.sponsor), revenue = plain(row.revenue);
+  const row = plain(rowInput), affiliate = plain(row.affiliate), outbound = plain(row.outboundReferral), sponsor = plain(row.sponsor), revenue = plain(row.revenue), settlement = plain(row.affiliateSettlement), settlementStage = lower(settlement.stage);
   const nestedCandidateRevenue = plain(plain(row.commerceCandidate).revenue), nestedSelectionRevenue = plain(plain(row.candidateSelection).revenue);
   const route = Object.assign({}, nestedCandidateRevenue, nestedSelectionRevenue, revenue);
   const revenueTypeRaw = lower(first(route.type, route.revenueType, affiliate.type, outbound.type, sponsor.type));
   const allowedRevenueTypes = new Set(["advertising","affiliate","brokerage","external_referral","lead","manual_affiliate","referral","sponsor"]);
   const payoutBasisVerified = anyEvidenceFlag(row, ["payoutBasisVerified","payout_basis_verified","settlementVerified","settlementModeVerified"]);
   const disclosureReady = anyEvidenceFlag(row, ["disclosureReady","disclosureApproved","sponsorDisclosure","sponsorDisclosureApproved"]);
-  const counterparty = first(route.counterparty, route.providerName, affiliate.providerName, outbound.providerName, sponsor.counterparty);
-  const contractId = first(route.contractId, route.programId, affiliate.contractId, affiliate.programId, outbound.contractId, sponsor.contractId);
-  const settlementMode = lower(first(route.settlementMode, route.payoutBasis, route.payoutType, affiliate.settlementMode, outbound.settlementMode, sponsor.settlementMode));
-  const affiliateReady = affiliate.approved === true && lower(affiliate.status) === "approved" && !!safeHttpsUrl(first(affiliate.trackingUrl, row.affiliateOutboundUrl));
-  const referralReady = outbound.approved === true && outbound.operatorApproved === true && outbound.officialDestination === true && !!safeHttpsUrl(first(outbound.destinationUrl, row.externalOutboundUrl));
+  const counterparty = first(settlement.counterparty, settlement.providerName, route.counterparty, route.providerName, affiliate.providerName, outbound.providerName, sponsor.counterparty);
+  const contractId = first(settlement.contractId, settlement.programId, route.contractId, route.programId, affiliate.contractId, affiliate.programId, outbound.contractId, sponsor.contractId);
+  const settlementMode = lower(first(settlement.settlementMode, route.settlementMode, route.payoutBasis, route.payoutType, affiliate.settlementMode, outbound.settlementMode, sponsor.settlementMode));
+  const settlementTrackingUrl = safeHttpsUrl(first(settlement.trackingUrl, settlement.destinationUrl));
+  const settlementBaseReady = settlement.settlementReady === true && settlement.payoutBasisVerified === true && settlement.trackingVerified === true && settlement.officialDestination === true && !!settlementTrackingUrl && !!counterparty && !!settlementMode;
+  const affiliateReady = (affiliate.approved === true && lower(affiliate.status) === "approved" && !!safeHttpsUrl(first(affiliate.trackingUrl, row.affiliateOutboundUrl))) || (["online_affiliate_active","formal_partner"].includes(settlementStage) && settlementBaseReady && !!contractId);
+  const referralReady = (outbound.approved === true && outbound.operatorApproved === true && outbound.officialDestination === true && !!safeHttpsUrl(first(outbound.destinationUrl, row.externalOutboundUrl))) || (settlementStage === "referral_verified" && settlementBaseReady);
   const sponsorReady = sponsor.approved === true && sponsor.contractVerified === true && !!first(sponsor.contractId, route.contractId);
-  const directPayable = route.payable === true || (
+  const directPayable = (settlementStage === "formal_partner" && settlementBaseReady && settlement.contractVerified === true && !!contractId) || route.payable === true || (
     allowedRevenueTypes.has(revenueTypeRaw) && revenueTypeRaw !== "external_referral" &&
     lower(first(route.status, route.approvalState)) === "approved" && !!contractId && !!counterparty &&
     disclosureReady && payoutBasisVerified
@@ -465,6 +468,8 @@ function explicitRevenue(rowInput) {
     affiliateReady,
     referralReady,
     trafficOnly,
+    affiliateSettlementStage: settlementStage || "connection_required",
+    affiliateSettlementReady: settlementBaseReady,
     revenueType,
     contractId: contractId || null,
     counterparty: counterparty || null,
@@ -480,7 +485,7 @@ function explicitRevenue(rowInput) {
     verifiedImpressions: Number.isFinite(verifiedImpressions) && verifiedImpressions >= 0 ? verifiedImpressions : null,
     verifiedClicks: Number.isFinite(verifiedClicks) && verifiedClicks >= 0 ? verifiedClicks : null,
     verifiedConversions: Number.isFinite(verifiedConversions) && verifiedConversions >= 0 ? verifiedConversions : null,
-    monetizationState: contractReady ? "approved_contract" : (trafficOnly ? "traffic_value_only_review" : "contract_required")
+    monetizationState: settlementStage === "formal_partner" && contractReady ? "formal_partner_active" : settlementStage === "online_affiliate_active" && contractReady ? "online_affiliate_active" : settlementStage === "referral_verified" && contractReady ? "referral_revenue_verified" : contractReady ? "approved_contract" : (trafficOnly ? "traffic_value_only_review" : "affiliate_connection_required")
   };
 }
 
@@ -665,8 +670,11 @@ function revenueValueAssessment(rowInput, audience, commercial) {
   const row = plain(rowInput), revenue = plain(commercial.revenueEvidence), price = finiteNumber(row.price, NaN);
   const sourceTier = lower(first(row.sourceTier, row.supplyLane, row.candidateSourceTier));
   let sourcePriorityScore = 24;
-  if (/approved_commerce_member|direct_member/.test(sourceTier)) sourcePriorityScore = 100;
+  if (revenue.affiliateSettlementStage === "formal_partner" && revenue.contractReady) sourcePriorityScore = 100;
+  else if (/approved_commerce_member|direct_member/.test(sourceTier)) sourcePriorityScore = 96;
+  else if (revenue.affiliateSettlementStage === "online_affiliate_active" && revenue.contractReady) sourcePriorityScore = 88;
   else if (revenue.sponsorReady) sourcePriorityScore = 82;
+  else if (revenue.affiliateSettlementStage === "referral_verified" && revenue.contractReady) sourcePriorityScore = 76;
   else if (revenue.contractReady && ["brokerage","affiliate","manual_affiliate","lead","referral"].includes(revenue.revenueType)) sourcePriorityScore = 74;
   else if (revenue.referralReady || revenue.trafficOnly) sourcePriorityScore = 46;
 
@@ -731,7 +739,7 @@ function revenueValueAssessment(rowInput, audience, commercial) {
     revenueOpportunityScore,
     revenueQualifiedForPrivatePlacement,
     contractReady: revenue.contractReady === true,
-    payableRevenueRightVerified: revenue.directPayable === true || revenue.affiliateReady === true || revenue.sponsorReady === true,
+    payableRevenueRightVerified: revenue.directPayable === true || revenue.affiliateReady === true || revenue.referralReady === true || revenue.sponsorReady === true,
     revenuePriorityState: revenue.contractReady ? "verified_or_approved_revenue_route" : (revenue.trafficOnly ? "traffic_value_only_review" : "contract_required")
   };
 }
@@ -818,6 +826,7 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
       requiredEvidence,
       evidenceGaps: gaps,
       valueQualified,
+      reviewEligible: risk.gatePassed === true,
       audienceDemandScore: Number(audience.audienceDemandScore || 0),
       revenueOpportunityScore: Number(revenueValue.revenueOpportunityScore || 0),
       portfolioPriorityScore: baseScore,
@@ -897,6 +906,18 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   }
   if ((commercial.visual || commercial.promotional || localOrigin) && Number(audience.audienceDemandScore || 0) >= 52) {
     add("social", "rightPanel", baseScore - 3, "소셜 반응 가능성과 실제 수요가 함께 확인된 상품", "social_context_market_offer", socialMarketEvidence ? [] : ["socialMarketEvidence"]);
+  }
+
+  // Private management fallback: products that passed the hard product/risk
+  // gate still receive a category-fit section proposal even when demand or
+  // revenue evidence is not yet strong enough for front publication.  This
+  // lets the administrator's full-AI button organise the review queue without
+  // weakening the separate public release gate.
+  if (risk.gatePassed === true && !out.length) {
+    if (travel) add("tour", "tour", baseScore, "검증 완료 여행·지역 서비스의 비공개 검토 배치", "private_review_travel_fit", []);
+    else if (["electronics_accessories", "home_appliances_living", "manufacturer_brands"].includes(category.primary) || manufacturerBrand) add("network", "network-right", baseScore + 1, "검증 완료 제조·전자·가전 상품의 비공개 공급망 검토 배치", "private_review_supply_network_fit", []);
+    else if (["food_household_essentials", "beauty_personal_care", "fashion", "baby_family_education", "agriculture_fishery_forestry", "local_products"].includes(category.primary) || localOrigin) add("distribution", "distribution-others", baseScore, "검증 완료 생활·소비재 상품의 비공개 일반 유통 검토 배치", "private_review_general_distribution_fit", []);
+    else add("distribution", "distribution-others", baseScore - 1, "검증 완료 상품의 비공개 일반 유통 검토 배치", "private_review_fallback_distribution_fit", []);
   }
 
   const pageOrder = { home: 0, distribution: 1, network: 2, tour: 3, social: 4 };
