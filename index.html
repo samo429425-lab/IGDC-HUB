@@ -1323,18 +1323,36 @@ window.addEventListener('DOMContentLoaded', function() {
 </script>
 <script>
 (function(){
+  'use strict';
+
   const AUTH0_DOMAIN = "login.igdcglobal.com";
   const CLIENT_ID =
-  "4JeT1Fdy" +
-  "DZaN7nEO" +
-  "DVsKe2Sx8" +
-  "kKMWagj";
+    "4JeT1Fdy" +
+    "DZaN7nEO" +
+    "DVsKe2Sx8" +
+    "kKMWagj";
   const REDIRECT_URI = window.location.origin + "/callback.html";
-  const SCOPE        = "openid profile email";
-  const STORAGE      = { TOKENS:"osauth.tokens.v2", PKCE:"osauth.pkce.v1" };
+  const SCOPE = "openid profile email offline_access";
+  const STORAGE = {
+    TOKENS: "osauth.tokens.v2",
+    PKCE: "osauth.pkce.v1",
+    REMEMBER: "osauth.remember.v1",
+    SILENT_FAIL: "osauth.silent-fail.v1",
+    REFRESH_LOCK: "osauth.refresh-lock.v1"
+  };
+  const FRESH_SKEW_SECONDS = 30;
+  const REFRESH_LOCK_MS = 15000;
+  const TRANSIENT_RETRY_MS = 30000;
+  const SILENT_RETRY_MS = 6 * 60 * 60 * 1000;
+  const TAB_ID = "tab_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+  let renewPromise = null;
+  let renewing = false;
+  let lastTransientAttempt = 0;
 
   function b64url(buf){
-    return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+    return btoa(String.fromCharCode.apply(null, new Uint8Array(buf)))
+      .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
   }
   async function sha256(input){
     const data = new TextEncoder().encode(input);
@@ -1344,102 +1362,455 @@ window.addEventListener('DOMContentLoaded', function() {
   function randString(len){
     const arr = new Uint8Array(len); crypto.getRandomValues(arr);
     const tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-    let s=""; for (let i=0;i<len;i++) s += tbl[arr[i] % tbl.length]; return s;
+    let out = "";
+    for (let i=0; i<len; i++) out += tbl[arr[i] % tbl.length];
+    return out;
   }
-  function save(name,obj){ try{ localStorage.setItem(name, JSON.stringify(obj)); }catch(_){ } }
-  function load(name){ try{ return JSON.parse(localStorage.getItem(name)||"null"); }catch(_){ return null; } }
-  function del(name){ try{ localStorage.removeItem(name); }catch(_){ } }
+  function save(name, value){
+    try { localStorage.setItem(name, JSON.stringify(value)); return true; } catch (_) { return false; }
+  }
+  function load(name){
+    try { return JSON.parse(localStorage.getItem(name) || "null"); } catch (_) { return null; }
+  }
+  function del(name){ try { localStorage.removeItem(name); } catch (_) {} }
+  function decodeJwt(token){
+    try {
+      const parts = String(token || "").split(".");
+      if (parts.length !== 3) return null;
+      let value = parts[1].replace(/-/g,"+").replace(/_/g,"/");
+      while (value.length % 4) value += "=";
+      return JSON.parse(atob(value));
+    } catch (_) { return null; }
+  }
+  function tokenExp(record){
+    const payload = decodeJwt(record && record.id_token);
+    if (payload && payload.exp) return Number(payload.exp) || 0;
+    if (record && record.exp) return Number(record.exp) || 0;
+    if (record && record.expires_in && record.saved_at) {
+      return Math.floor(Number(record.saved_at) / 1000) + Number(record.expires_in || 0);
+    }
+    return 0;
+  }
+  function isFreshRecord(record, skewSeconds){
+    const exp = tokenExp(record);
+    const skew = Number(skewSeconds == null ? FRESH_SKEW_SECONDS : skewSeconds) || 0;
+    return !!(record && exp && Math.floor(Date.now()/1000) + skew < exp);
+  }
+  function tokenRecord(){ return load(STORAGE.TOKENS); }
+  function rememberRecord(){ return load(STORAGE.REMEMBER); }
+  function silentFailure(){ return load(STORAGE.SILENT_FAIL); }
+  function hasRememberMarker(){
+    const value = rememberRecord();
+    return !!(value && value.active !== false);
+  }
+  function silentBlocked(){
+    const fail = silentFailure();
+    return !!(fail && fail.terminal && Number(fail.retryAfter || 0) > Date.now());
+  }
+  function markRemembered(record){
+    const payload = decodeJwt(record && record.id_token) || {};
+    save(STORAGE.REMEMBER, {
+      active: true,
+      sub: payload.sub || "",
+      since: Number((rememberRecord() || {}).since || Date.now()),
+      updatedAt: Date.now()
+    });
+  }
+  function clearSessionStorage(){
+    [STORAGE.TOKENS, STORAGE.PKCE, STORAGE.REMEMBER, STORAGE.SILENT_FAIL, STORAGE.REFRESH_LOCK,
+      "id_token", "os_id_token", "access_token", "os_access_token",
+      "auth_token", "igdc_token", "IGDC_AUTH_TOKEN"].forEach(del);
+  }
+  function dispatch(name, detail){
+    try { document.dispatchEvent(new CustomEvent(name, { detail: detail || {} })); } catch (_) {}
+  }
+  function authDetail(extra){
+    const record = tokenRecord();
+    return Object.assign({
+      tokens: record,
+      payload: decodeJwt(record && record.id_token),
+      authenticated: isFreshRecord(record),
+      renewing: renewing,
+      remembered: hasRememberMarker()
+    }, extra || {});
+  }
+  function setRenewing(value, reason){
+    renewing = !!value;
+    try {
+      document.documentElement.dataset.igdcAuthRenewing = renewing ? "1" : "0";
+    } catch (_) {}
+    dispatch(renewing ? "osauth:renewing" : "osauth:renew-idle", authDetail({ reason: reason || "" }));
+  }
   function toast(msg){
-    try{ let t=document.getElementById("oslogin-toast"); if(!t){ t=document.createElement("div"); t.id="oslogin-toast";
-      Object.assign(t.style,{position:"fixed",top:"12px",left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,0.82)",color:"#fff",padding:"8px 14px",borderRadius:"8px",zIndex:"2000",fontSize:"14px"});
-      document.body.appendChild(t); } t.textContent=msg; t.style.opacity="1"; setTimeout(()=>{t.style.transition="opacity .4s"; t.style.opacity="0";},1200);}catch(_){}
+    try {
+      let el = document.getElementById("oslogin-toast");
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "oslogin-toast";
+        Object.assign(el.style, {
+          position:"fixed", top:"12px", left:"50%", transform:"translateX(-50%)",
+          background:"rgba(0,0,0,0.82)", color:"#fff", padding:"8px 14px",
+          borderRadius:"8px", zIndex:"2000", fontSize:"14px"
+        });
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      el.style.opacity = "1";
+      setTimeout(function(){ el.style.transition="opacity .4s"; el.style.opacity="0"; }, 1200);
+    } catch (_) {}
+  }
+  function safeReturnTo(value){
+    try {
+      const url = new URL(value || "/index.html", location.origin);
+      if (url.origin !== location.origin) return "/index.html";
+      ["code","state","error","error_description"].forEach(function(key){ url.searchParams.delete(key); });
+      return url.pathname + (url.search || "") + (url.hash || "");
+    } catch (_) { return "/index.html"; }
+  }
+  function cleanCallbackUrl(returnTo){
+    try { history.replaceState(null, document.title, safeReturnTo(returnTo)); } catch (_) {}
+  }
+  function validCallbackToken(record, cached){
+    const payload = decodeJwt(record && record.id_token);
+    if (!payload || !payload.exp || Number(payload.exp) * 1000 <= Date.now()) return false;
+    if (payload.iss && payload.iss !== "https://" + AUTH0_DOMAIN + "/") return false;
+    if (payload.aud) {
+      const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+      if (audiences.indexOf(CLIENT_ID) < 0) return false;
+    }
+    if (cached && cached.nonce && payload.nonce && payload.nonce !== cached.nonce) return false;
+    return true;
+  }
+  function saveTokenResponse(response, previous){
+    const now = Date.now();
+    const merged = Object.assign({}, previous || {}, response || {}, { saved_at: now });
+    if (!(response && response.refresh_token) && previous && previous.refresh_token) {
+      merged.refresh_token = previous.refresh_token;
+    }
+    merged.exp = tokenExp(merged);
+    save(STORAGE.TOKENS, merged);
+    markRemembered(merged);
+    del(STORAGE.SILENT_FAIL);
+    return merged;
+  }
+  function hasStoredSession(){
+    const record = tokenRecord();
+    return !!(record && (record.id_token || record.access_token || record.refresh_token)) || hasRememberMarker();
+  }
+  function hasRestorableSession(){
+    const record = tokenRecord();
+    if (isFreshRecord(record, 0)) return true;
+    if (record && record.refresh_token) return true;
+    return hasRememberMarker() && !silentBlocked();
+  }
+  function readLock(){ return load(STORAGE.REFRESH_LOCK); }
+  function releaseLock(){
+    const lock = readLock();
+    if (lock && lock.owner === TAB_ID) del(STORAGE.REFRESH_LOCK);
+  }
+  async function waitForPeerRefresh(){
+    const until = Date.now() + REFRESH_LOCK_MS;
+    while (Date.now() < until) {
+      if (isFreshRecord(tokenRecord())) return true;
+      const lock = readLock();
+      if (!lock || Number(lock.expiresAt || 0) <= Date.now()) return false;
+      await new Promise(function(resolve){ setTimeout(resolve, 250); });
+    }
+    return isFreshRecord(tokenRecord());
+  }
+  async function acquireLock(){
+    const existing = readLock();
+    if (existing && existing.owner !== TAB_ID && Number(existing.expiresAt || 0) > Date.now()) {
+      if (await waitForPeerRefresh()) return "peer";
+    }
+    const mine = { owner:TAB_ID, expiresAt:Date.now()+REFRESH_LOCK_MS };
+    save(STORAGE.REFRESH_LOCK, mine);
+    const verified = readLock();
+    return verified && verified.owner === TAB_ID ? "mine" : "none";
+  }
+  async function refreshWithToken(record){
+    const response = await fetch("https://" + AUTH0_DOMAIN + "/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({
+        grant_type: "refresh_token",
+        client_id: CLIENT_ID,
+        refresh_token: record.refresh_token,
+        scope: SCOPE
+      })
+    });
+    let body = null;
+    try { body = await response.json(); } catch (_) { body = {}; }
+    if (!response.ok) {
+      const error = new Error(String(body.error_description || body.error || "refresh_failed"));
+      error.code = String(body.error || "refresh_failed");
+      error.terminal = error.code === "invalid_grant" || error.code === "invalid_request";
+      throw error;
+    }
+    const saved = saveTokenResponse(body, record);
+    if (!isFreshRecord(saved, 0)) {
+      const error = new Error("refreshed_token_missing_or_expired");
+      error.code = "invalid_token_response";
+      error.terminal = false;
+      throw error;
+    }
+    dispatch("osauth:refreshed", authDetail({ method:"refresh_token" }));
+    dispatch("osauth:ready", authDetail({ method:"refresh_token" }));
+    return true;
+  }
+  async function beginAuthorization(mode){
+    const silent = mode === "silent";
+    if (silent && silentBlocked()) return false;
+
+    const state = "st_" + randString(24);
+    const nonce = "nn_" + randString(24);
+    const code_verifier = randString(64);
+    const code_challenge = await sha256(code_verifier);
+    const returnTo = safeReturnTo(location.href);
+    save(STORAGE.PKCE, {
+      state:state, nonce:nonce, code_verifier:code_verifier,
+      time:Date.now(), mode:silent ? "silent" : "login", returnTo:returnTo
+    });
+
+    const params = new URLSearchParams({
+      response_type:"code",
+      code_challenge_method:"S256",
+      code_challenge:code_challenge,
+      client_id:CLIENT_ID,
+      redirect_uri:REDIRECT_URI,
+      scope:SCOPE,
+      state:state,
+      nonce:nonce,
+      prompt:silent ? "none" : "login"
+    });
+    if (!silent) {
+      params.set("max_age", "0");
+      params.set("auth_type", "reauthenticate");
+    }
+    const authz = "https://" + AUTH0_DOMAIN + "/authorize?" + params.toString();
+    if (silent) location.replace(authz);
+    else location.href = authz;
+    return false;
   }
 
-  // The OSO/Auth0 session stored here is the only browser token source for
-  // member administration. The member modal uses getIdToken() rather than
-  // scanning unrelated legacy token keys.
+  async function refreshSession(options){
+    options = options || {};
+    if (isFreshRecord(tokenRecord())) return true;
+    if (!hasStoredSession()) return false;
+    if (renewPromise) return renewPromise;
+    if (Date.now() - lastTransientAttempt < TRANSIENT_RETRY_MS && !options.force) return false;
+
+    renewPromise = (async function(){
+      setRenewing(true, options.reason || "session-check");
+      let lockState = "none";
+      try {
+        lockState = await acquireLock();
+        if (lockState === "peer" && isFreshRecord(tokenRecord())) {
+          dispatch("osauth:ready", authDetail({ method:"peer-tab" }));
+          return true;
+        }
+
+        let record = tokenRecord() || {};
+        if (record.refresh_token) {
+          try {
+            return await refreshWithToken(record);
+          } catch (error) {
+            if (!error.terminal) {
+              lastTransientAttempt = Date.now();
+              dispatch("osauth:renew-failed", authDetail({ terminal:false, code:error.code || "network_error" }));
+              return false;
+            }
+            const withoutRefresh = Object.assign({}, record);
+            delete withoutRefresh.refresh_token;
+            save(STORAGE.TOKENS, withoutRefresh);
+          }
+        }
+
+        if (options.allowSilent !== false && hasRememberMarker() && !silentBlocked()) {
+          await beginAuthorization("silent");
+          return false;
+        }
+
+        return false;
+      } catch (error) {
+        lastTransientAttempt = Date.now();
+        dispatch("osauth:renew-failed", authDetail({ terminal:false, code:error && error.code || "renew_error" }));
+        return false;
+      } finally {
+        if (lockState === "mine") releaseLock();
+        setRenewing(false, options.reason || "session-check");
+        renewPromise = null;
+      }
+    })();
+    return renewPromise;
+  }
+
   window.IGDC_AUTH_SESSION = {
     issuer: "https://" + AUTH0_DOMAIN + "/",
     clientId: CLIENT_ID,
-    tokenKey: STORAGE.TOKENS
+    tokenKey: STORAGE.TOKENS,
+    rememberKey: STORAGE.REMEMBER
   };
 
   window.osAuth = {
-    isAuthenticated(){ const t=load(STORAGE.TOKENS); return !!t && (Math.floor(Date.now()/1000) < Number(t.exp||0)); },
-    getIdToken(){ const t=load(STORAGE.TOKENS); return t ? (t.id_token || "") : ""; },
-    getIdTokenPayload(){ const t=load(STORAGE.TOKENS); if(!t) return null; const p=(t.id_token||"").split("."); if(p.length<2) return null; try{ return JSON.parse(atob(p[1].replace(/-/g,"+").replace(/_/g,"/"))); }catch(_){ return null; } },
-    getAccessToken(){ const t=load(STORAGE.TOKENS); return t ? (t.access_token||null) : null; },
-    logout(to){ del(STORAGE.TOKENS); if(to) location.href=to; else location.reload(); }
-  };
-
-  window.osLogin = async function(){
-    const state="st_"+randString(24), nonce="nn_"+randString(24), code_verifier=randString(64);
-    const code_challenge = await sha256(code_verifier);
-    save(STORAGE.PKCE, {state,nonce,code_verifier,time:Date.now()});
-
-    const params = new URLSearchParams({
-      response_type: "code",
-      code_challenge_method: "S256",
-      code_challenge: code_challenge,
-      client_id: CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
-      scope: SCOPE,
-      state: state,
-      nonce: nonce,
-      prompt: "login",
-      max_age: "0",
-      // NAVER re-auth guard: Auth0 may use this only when the upstream connection supports/passes it.
-      auth_type: "reauthenticate"
-    });
-    const authz = "https://" + AUTH0_DOMAIN + "/authorize?" + params.toString();
-    location.href = authz;
-  };
-
-  (async function handleCallback(){
-    const qs = new URLSearchParams(location.search);
-    if (!qs.has("code") && !qs.has("error")){
-      document.dispatchEvent(new CustomEvent("osauth:ready", { detail: { tokens: load(STORAGE.TOKENS), payload: (window.osAuth.getIdTokenPayload && window.osAuth.getIdTokenPayload()) || null } }));
-      return;
+    isAuthenticated: function(){ return isFreshRecord(tokenRecord(), 0); },
+    hasStoredSession: hasStoredSession,
+    hasRestorableSession: hasRestorableSession,
+    isRenewing: function(){ return renewing; },
+    getIdToken: function(){ const record=tokenRecord(); return isFreshRecord(record,0) ? (record.id_token || "") : ""; },
+    getStoredIdToken: function(){ const record=tokenRecord(); return record ? (record.id_token || "") : ""; },
+    getIdTokenPayload: function(){ return decodeJwt(this.getIdToken()) || null; },
+    getStoredIdTokenPayload: function(){ return decodeJwt(this.getStoredIdToken()) || null; },
+    getAccessToken: function(){ const record=tokenRecord(); return isFreshRecord(record,0) ? (record.access_token || null) : null; },
+    refreshSession: refreshSession,
+    ensureSession: refreshSession,
+    loginWithRedirect: function(){ return beginAuthorization("login"); },
+    logout: function(to){
+      clearSessionStorage();
+      dispatch("osauth:logout", { explicit:true });
+      if (to && to !== "/logout") location.href = to;
+      else location.reload();
     }
-    if (qs.has("error")){ console.warn("Auth error:", qs.get("error")); toast("Login error"); return; }
+  };
+
+  window.osLogin = function(){ return beginAuthorization("login"); };
+
+  async function exchangeCode(code, cached){
+    const response = await fetch("https://" + AUTH0_DOMAIN + "/oauth/token", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        grant_type:"authorization_code",
+        client_id:CLIENT_ID,
+        code_verifier:cached.code_verifier,
+        code:code,
+        redirect_uri:REDIRECT_URI
+      })
+    });
+    let body = null;
+    try { body = await response.json(); } catch (_) { body = {}; }
+    if (!response.ok) {
+      const error = new Error(String(body.error_description || body.error || "token_exchange_failed"));
+      error.code = String(body.error || "token_exchange_failed");
+      throw error;
+    }
+    const previous = tokenRecord();
+    const candidate = Object.assign({}, previous || {}, body || {}, { saved_at:Date.now() });
+    if (!(body && body.refresh_token) && previous && previous.refresh_token) {
+      candidate.refresh_token = previous.refresh_token;
+    }
+    candidate.exp = tokenExp(candidate);
+    if (!validCallbackToken(candidate, cached)) {
+      const error = new Error("invalid_id_token");
+      error.code = "invalid_id_token";
+      throw error;
+    }
+    return saveTokenResponse(body, previous);
+  }
+
+  async function handleCallback(){
+    const query = new URLSearchParams(location.search);
+    const hasCallback = query.has("code") || query.has("error");
+    if (!hasCallback) return false;
+
     const cached = load(STORAGE.PKCE);
-    if (!cached || cached.state !== qs.get("state")){ toast("Session expired: try again"); return; }
-
-    try{
-      const resp = await fetch("https://"+AUTH0_DOMAIN+"/oauth/token", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          grant_type:"authorization_code",
-          client_id: CLIENT_ID,
-          code_verifier: cached.code_verifier,
-          code: qs.get("code"),
-          redirect_uri: REDIRECT_URI
-        })
-      });
-      if (!resp.ok){ console.warn("Token error", await resp.text()); toast("Token exchange failed"); return; }
-      const tok = await resp.json();
-      let exp=0; try{ const p=(tok.id_token||"").split("."); if(p.length>=2){ exp = JSON.parse(atob(p[1].replace(/-/g,"+").replace(/_/g,"/"))).exp||0; } }catch(_){}
-      save(STORAGE.TOKENS, {...tok, exp}); del(STORAGE.PKCE);
-      history.replaceState(null, document.title, "/index.html"); toast("Logged in");
-      document.dispatchEvent(new CustomEvent("osauth:ready", { detail: { tokens: tok, payload: window.osAuth.getIdTokenPayload() } }));
-      setTimeout(()=>location.href="/index.html", 50);
-    }catch(e){ console.error(e); toast("Network error"); }
-  })();
-
-  document.addEventListener("DOMContentLoaded", function(){
-    const btn = document.getElementById("osLoginBtn");
-    if (btn){
-      if (window.osAuth.isAuthenticated()){ btn.textContent="Logout"; btn.onclick=()=>window.osAuth.logout("/logout"); }
-      else { btn.textContent="OS‑Login"; btn.onclick=()=>window.osLogin(); }
+    const returnTo = safeReturnTo(cached && cached.returnTo);
+    const callbackState = query.get("state") || "";
+    if (!cached || !cached.state || cached.state !== callbackState) {
+      del(STORAGE.PKCE);
+      cleanCallbackUrl(returnTo);
+      dispatch("osauth:renew-failed", authDetail({ terminal:true, code:"state_mismatch" }));
+      return true;
     }
-    document.addEventListener("osauth:ready", function(){
-      if (btn){
-        if (window.osAuth.isAuthenticated()){ btn.textContent="Logout"; btn.onclick=()=>window.osAuth.logout("/logout"); }
-        else { btn.textContent="OS‑Login"; btn.onclick=()=>window.osLogin(); }
+
+    if (query.has("error")) {
+      const code = String(query.get("error") || "authorization_error");
+      const silent = cached.mode === "silent";
+      del(STORAGE.PKCE);
+      cleanCallbackUrl(returnTo);
+      if (silent) {
+        const terminal = ["login_required","consent_required","interaction_required","account_selection_required"].indexOf(code) >= 0;
+        save(STORAGE.SILENT_FAIL, {
+          code:code,
+          terminal:terminal,
+          at:Date.now(),
+          retryAfter:Date.now() + (terminal ? SILENT_RETRY_MS : TRANSIENT_RETRY_MS)
+        });
+        dispatch("osauth:renew-failed", authDetail({ terminal:terminal, code:code }));
+      } else {
+        toast("Login error");
+        dispatch("osauth:renew-failed", authDetail({ terminal:true, code:code }));
       }
-    });
+      return true;
+    }
+
+    try {
+      const saved = await exchangeCode(query.get("code"), cached);
+      del(STORAGE.PKCE);
+      del(STORAGE.SILENT_FAIL);
+      cleanCallbackUrl(returnTo);
+      const method = cached.mode === "silent" ? "silent" : "login";
+      dispatch("osauth:refreshed", authDetail({ method:method }));
+      dispatch("osauth:ready", authDetail({ method:method }));
+      if (cached.mode !== "silent") toast("Logged in");
+    } catch (error) {
+      del(STORAGE.PKCE);
+      cleanCallbackUrl(returnTo);
+      if (cached.mode !== "silent") toast("Token exchange failed");
+      dispatch("osauth:renew-failed", authDetail({ terminal:false, code:error && error.code || "token_exchange_failed" }));
+    }
+    return true;
+  }
+
+  function updateLoginButton(){
+    const btn = document.getElementById("osLoginBtn");
+    if (!btn) return;
+    if (window.osAuth.isAuthenticated() || window.osAuth.hasRestorableSession() || window.osAuth.isRenewing()) {
+      btn.textContent = "Logout";
+      btn.onclick = function(){ window.osAuth.logout(); };
+    } else {
+      btn.textContent = "OS‑Login";
+      btn.onclick = function(){ window.osLogin(); };
+    }
+  }
+  function requestRestore(reason, force){
+    updateLoginButton();
+    if (!window.osAuth.isAuthenticated() && window.osAuth.hasRestorableSession()) {
+      window.osAuth.ensureSession({ allowSilent:true, reason:reason, force:!!force }).then(updateLoginButton);
+    }
+  }
+  function onVisible(){
+    if (!document.hidden) requestRestore("visible", true);
+  }
+
+  const existing = tokenRecord();
+  if (existing && !hasRememberMarker()) markRemembered(existing);
+
+  handleCallback().then(function(wasCallback){
+    updateLoginButton();
+    if (!wasCallback) {
+      dispatch("osauth:ready", authDetail({ method:"startup" }));
+      requestRestore("startup", false);
+    }
   });
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function(){ requestRestore("dom-ready", false); }, { once:true });
+  } else {
+    requestRestore("dom-ready", false);
+  }
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("pageshow", function(){ requestRestore("pageshow", true); });
+  window.addEventListener("online", function(){ requestRestore("online", true); });
+  window.addEventListener("storage", function(event){
+    if (!event || [STORAGE.TOKENS, STORAGE.REMEMBER, STORAGE.SILENT_FAIL].indexOf(event.key) >= 0) {
+      updateLoginButton();
+      dispatch("osauth:ready", authDetail({ method:"storage" }));
+    }
+  });
+  document.addEventListener("osauth:ready", updateLoginButton);
+  document.addEventListener("osauth:refreshed", updateLoginButton);
+  document.addEventListener("osauth:renew-failed", updateLoginButton);
 })();
 </script>
 <!-- Auth0 SPA SDK -->
@@ -2583,7 +2954,7 @@ function setActive(i){
 </script>
 <script src="edge-autohide-mobile.js"></script>
 <script src="assets/js/seller-modal.addon.js"></script>
-<script src="/assets/js/igdc-member-auth.js?v=1.0.1-roleclaims"></script>
+<script src="/assets/js/igdc-member-auth.js?v=1.0.2-session-keeper"></script>
 <script id="igdc-member-auth-click-guard-v2">
 (function(){
   'use strict';
@@ -3467,37 +3838,38 @@ function normLang(l){
   var stopAfter = 0;
 
   function byId(id){ return document.getElementById(id); }
-  function tokenObj(){
-    try { return JSON.parse(localStorage.getItem('osauth.tokens.v2') || 'null'); } catch(e){ return null; }
+  function auth(){ return window.osAuth || null; }
+  function isAuthed(){
+    try { return !!(auth() && auth().isAuthenticated && auth().isAuthenticated()); } catch (_) { return false; }
   }
-  function hasFreshToken(){
-    try{
-      if(window.IGDCMemberAuth && typeof window.IGDCMemberAuth.isAuthenticated === 'function'){
-        return !!window.IGDCMemberAuth.isAuthenticated();
-      }
-    }catch(e){}
-    try{
-      var t = tokenObj();
-      var exp = Number(t && t.exp || 0);
-      return !!(t && exp && Math.floor(Date.now()/1000) < exp);
-    }catch(e){ return false; }
+  function isRestoring(){
+    try {
+      var current = auth();
+      return !!(current && ((current.isRenewing && current.isRenewing()) ||
+        (current.hasRestorableSession && current.hasRestorableSession())));
+    } catch (_) { return false; }
   }
   function clearStaleRoleMarkers(){
     try{
-      ['igdc_role','igdc_roles','igdc_role_label'].forEach(function(key){ localStorage.removeItem(key); sessionStorage.removeItem(key); });
+      ['igdc_role','igdc_roles','igdc_role_label'].forEach(function(key){
+        localStorage.removeItem(key); sessionStorage.removeItem(key);
+      });
       window.__IGDC_ROLE = 'guest';
       document.documentElement.dataset.role = 'guest';
       ['roleStatusBtn','igtcRoleText3','igtcRoleInline3','userRole'].forEach(function(id){
         var el = byId(id);
         if(el && /owner|admin|director|manager/i.test(String(el.textContent || ''))) el.textContent = '';
       });
-    }catch(e){}
+    }catch(_){}
   }
-  function isAuthed(){
+  function requestRestore(reason, force){
     try{
-      if(window.osAuth && typeof window.osAuth.isAuthenticated === 'function' && window.osAuth.isAuthenticated()) return true;
-    }catch(e){}
-    return hasFreshToken();
+      var current = auth();
+      if (!current || isAuthed() || !current.hasRestorableSession || !current.hasRestorableSession()) return;
+      if (typeof current.ensureSession === 'function') {
+        current.ensureSession({ allowSilent:true, reason:reason || 'authbar', force:!!force }).then(syncLoginButton);
+      }
+    }catch(_){}
   }
   function modalConfirm(){
     return new Promise(function(resolve){
@@ -3514,72 +3886,60 @@ function normLang(l){
       if(title) title.textContent = 'Confirm';
       if(body) body.textContent = '정말 로그아웃 하시겠습니까?';
       function off(result){
-        try{ mask.style.display='none'; box.style.display='none'; }catch(e){}
+        try{ mask.style.display='none'; box.style.display='none'; }catch(_){}
         ok.onclick = null; no.onclick = null; mask.onclick = null;
         resolve(!!result);
       }
       ok.onclick = function(){ off(true); };
       no.onclick = function(){ off(false); };
       mask.onclick = function(){ off(false); };
-      try{ mask.style.display='block'; box.style.display='block'; }catch(e){ resolve(false); }
+      try{ mask.style.display='block'; box.style.display='block'; }catch(_){ resolve(false); }
     });
   }
-  function clearAuthStorage(){
-    var keys = [
-      'osauth.tokens.v2','osauth.pkce.v1','id_token','os_id_token','access_token','os_access_token',
-      'auth_token','igdc_token','IGDC_AUTH_TOKEN'
-    ];
-    keys.forEach(function(k){ try{ localStorage.removeItem(k); }catch(e){} });
-    try{ window.__IGDC_ROLE='guest'; document.documentElement.dataset.role='guest'; }catch(e){}
-  }
   function doLogin(){
-    try{
-      if(typeof window.osLogin === 'function') { window.osLogin(); return; }
-    }catch(e){}
-    try{ location.href='/login'; }catch(e){}
+    try{ if(typeof window.osLogin === 'function') { window.osLogin(); return; } }catch(_){}
+    try{ location.href='/login'; }catch(_){}
   }
   function doLogout(){
-    clearAuthStorage();
     try{
-      if(window.osAuth && typeof window.osAuth.logout === 'function'){
-        window.osAuth.logout();
-        return;
-      }
-    }catch(e){}
-    try{
-      if(window.osauth && typeof window.osauth.logout === 'function'){
-        window.osauth.logout();
-        return;
-      }
-    }catch(e){}
-    try{ location.reload(); }catch(e){ location.href='/index.html'; }
+      if(auth() && typeof auth().logout === 'function') { auth().logout(); return; }
+    }catch(_){}
+    try{ location.reload(); }catch(_){ location.href='/index.html'; }
+  }
+  function setLogoutButton(btn, state){
+    if(btn.textContent !== 'Logout') btn.textContent = 'Logout';
+    btn.setAttribute('aria-label','Logout');
+    btn.setAttribute('data-igdc-auth-state', state || 'logout');
+    btn.removeAttribute('data-os-login');
+    btn.removeAttribute('data-os-logout');
   }
   function syncLoginButton(){
     var btn = byId('osLoginBtn');
     if(!btn) return;
-    var authed = isAuthed();
-    if(authed){
-      if(btn.textContent !== 'Logout') btn.textContent = 'Logout';
-      btn.setAttribute('aria-label','Logout');
-      btn.setAttribute('data-igdc-auth-state','logout');
-      btn.removeAttribute('data-os-login');
-      btn.removeAttribute('data-os-logout');
-    } else {
-      clearStaleRoleMarkers();
-      if(btn.textContent !== 'OS‑Login') btn.textContent = 'OS‑Login';
-      btn.setAttribute('aria-label','OS-Login');
-      btn.setAttribute('data-igdc-auth-state','login');
-      btn.setAttribute('data-os-login','1');
-      btn.removeAttribute('data-os-logout');
+    if(isAuthed()) {
+      setLogoutButton(btn, 'logout');
+      return;
     }
+    if(isRestoring()) {
+      setLogoutButton(btn, 'restoring');
+      requestRestore('authbar-sync', false);
+      return;
+    }
+    clearStaleRoleMarkers();
+    if(btn.textContent !== 'OS‑Login') btn.textContent = 'OS‑Login';
+    btn.setAttribute('aria-label','OS-Login');
+    btn.setAttribute('data-igdc-auth-state','login');
+    btn.setAttribute('data-os-login','1');
+    btn.removeAttribute('data-os-logout');
   }
+
   document.addEventListener('click', async function(ev){
     var btn = ev.target && ev.target.closest && ev.target.closest('#osLoginBtn');
     if(!btn) return;
     ev.preventDefault();
     ev.stopPropagation();
     ev.stopImmediatePropagation();
-    if(isAuthed()){
+    if(isAuthed() || isRestoring()){
       syncLoginButton();
       var ok = await modalConfirm();
       if(ok) doLogout();
@@ -3591,16 +3951,26 @@ function normLang(l){
 
   function boot(){
     syncLoginButton();
+    requestRestore('authbar-boot', false);
     stopAfter = Date.now() + 30000;
     var timer = setInterval(function(){
       syncLoginButton();
       if(Date.now() > stopAfter) clearInterval(timer);
     }, SYNC_MS);
   }
+  function resume(reason){
+    stopAfter = Date.now() + 30000;
+    requestRestore(reason, true);
+    syncLoginButton();
+  }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
-  document.addEventListener('osauth:ready', function(){ stopAfter = Date.now() + 30000; syncLoginButton(); });
-  window.addEventListener('pageshow', syncLoginButton);
+  ['osauth:ready','osauth:refreshed','osauth:renewing','osauth:renew-failed','igdc:member-auth-ready'].forEach(function(name){
+    document.addEventListener(name, function(){ stopAfter = Date.now() + 30000; syncLoginButton(); }, true);
+  });
+  window.addEventListener('pageshow', function(){ resume('authbar-pageshow'); });
+  window.addEventListener('online', function(){ resume('authbar-online'); });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) resume('authbar-visible'); });
 })();
 </script>
 <!-- /IGDC mobile logout final guard v1 -->
@@ -3630,6 +4000,7 @@ function normLang(l){
     } catch (_) { return true; }
   }
   function guestLabel(){ return languageIsKorean() ? '게스트' : 'Guest'; }
+  function checkingLabel(){ return languageIsKorean() ? '연결 확인 중' : 'Checking'; }
   function roleRank(role){
     var ranks = { guest:0, member:1, member_standard:2, member_premium:3, special_member:4,
       commerce_manager:5, site_manager:12, coordinator_director:13, site_manager_director:14,
@@ -3649,18 +4020,60 @@ function normLang(l){
     });
     return best;
   }
-  function getFreshIdentity(){
+  function osSession(){ return window.osAuth || null; }
+  function sessionPending(){
+    try {
+      var session = osSession();
+      return !!(session && ((session.isRenewing && session.isRenewing()) ||
+        (session.hasRestorableSession && session.hasRestorableSession())));
+    } catch (_) { return false; }
+  }
+  function storedPayload(){
+    try {
+      var auth = window.IGDCMemberAuth;
+      if (auth && typeof auth.getStoredIdTokenPayload === 'function') return auth.getStoredIdTokenPayload();
+    } catch (_) {}
+    try {
+      var session = osSession();
+      if (session && typeof session.getStoredIdTokenPayload === 'function') return session.getStoredIdTokenPayload();
+    } catch (_) {}
+    return null;
+  }
+  function rolesFromPayload(payload){
+    var keys = [
+      'https://igdcglobal.com/roles','https://os.auth/roles','https://os0.app/roles',
+      'https://example.com/roles','https://osu/roles','roles','role','permissions'
+    ];
+    var values = [];
+    keys.forEach(function(key){
+      var value = payload && payload[key];
+      if (Array.isArray(value)) values = values.concat(value);
+      else if (typeof value === 'string') values = values.concat(value.split(','));
+    });
+    return values;
+  }
+  function getIdentity(){
     try{
       var auth = window.IGDCMemberAuth;
-      if (!auth || typeof auth.getIdTokenPayload !== 'function') return { authenticated:false, role:'guest', label:guestLabel() };
-      var payload = auth.getIdTokenPayload();
-      if (!isFresh(payload)) return { authenticated:false, role:'guest', label:guestLabel() };
-      var roles = typeof auth.getRoles === 'function' ? auth.getRoles() : [];
-      var role = highestRole(roles);
-      return { authenticated:true, role:role, label:role || 'member' };
-    }catch(_){
-      return { authenticated:false, role:'guest', label:guestLabel() };
-    }
+      var payload = auth && typeof auth.getIdTokenPayload === 'function' ? auth.getIdTokenPayload() : null;
+      if (isFresh(payload)) {
+        var roles = typeof auth.getRoles === 'function' ? auth.getRoles() : rolesFromPayload(payload);
+        var role = highestRole(roles);
+        return { authenticated:true, pending:false, role:role, label:role || 'member' };
+      }
+      if (sessionPending()) {
+        var cachedPayload = storedPayload();
+        var cachedRoles = auth && typeof auth.getStoredRoles === 'function' ? auth.getStoredRoles() : rolesFromPayload(cachedPayload);
+        var cachedRole = highestRole(cachedRoles);
+        return {
+          authenticated:false,
+          pending:true,
+          role:cachedRole,
+          label:cachedRole !== 'guest' ? cachedRole : checkingLabel()
+        };
+      }
+    }catch(_){}
+    return { authenticated:false, pending:false, role:'guest', label:guestLabel() };
   }
   function clearLegacyRoleMarkers(){
     ['igdc_role','igdc_roles','igdc_role_label'].forEach(function(key){
@@ -3711,11 +4124,11 @@ function normLang(l){
   }
   function apply(){
     syncQueued = false;
-    var identity = getFreshIdentity();
-    var role = identity.authenticated ? identity.role : 'guest';
-    var label = identity.authenticated ? identity.label : guestLabel();
+    var identity = getIdentity();
+    var role = identity.authenticated || identity.pending ? identity.role : 'guest';
+    var label = identity.authenticated || identity.pending ? identity.label : guestLabel();
 
-    if (!identity.authenticated) clearLegacyRoleMarkers();
+    if (!identity.authenticated && !identity.pending) clearLegacyRoleMarkers();
 
     window.__IGDC_ROLE = role;
     window.__IGDC_ROLE_LABEL = label;
@@ -3723,13 +4136,16 @@ function normLang(l){
     window.__IGTC_ROLE_LABEL = label;
     try {
       document.documentElement.dataset.role = role;
+      document.documentElement.dataset.igdcAuthPending = identity.pending ? '1' : '0';
       document.documentElement.dataset.igdcAuthReady = '1';
     } catch (_) {}
 
     var badge = canonicalBadge();
     badge.text.textContent = label;
     badge.badge.setAttribute('data-role-base', role);
-    badge.badge.setAttribute('aria-label', identity.authenticated ? ('현재 권한: ' + label) : '현재 상태: 게스트');
+    badge.badge.setAttribute('data-auth-pending', identity.pending ? '1' : '0');
+    badge.badge.setAttribute('aria-label', identity.authenticated ? ('현재 권한: ' + label) :
+      (identity.pending ? ('권한 확인 중: ' + label) : '현재 상태: 게스트'));
     alignBadge(badge.badge);
 
     var canAdmin = identity.authenticated && (role === 'owner' || role === 'super_admin' || role === 'admin');
@@ -3737,6 +4153,15 @@ function normLang(l){
       el.style.display = canAdmin ? '' : 'none';
       el.setAttribute('aria-hidden', canAdmin ? 'false' : 'true');
     });
+  }
+  function requestRestore(reason, force){
+    try {
+      var session = osSession();
+      if (session && !session.isAuthenticated() && session.hasRestorableSession && session.hasRestorableSession() &&
+          typeof session.ensureSession === 'function') {
+        session.ensureSession({ allowSilent:true, reason:reason || 'role-gate', force:!!force }).then(schedule);
+      }
+    } catch (_) {}
   }
   function schedule(){
     if (syncQueued) return;
@@ -3746,14 +4171,17 @@ function normLang(l){
   }
   function arm(){
     schedule();
-    document.addEventListener('osauth:ready', schedule, true);
-    document.addEventListener('osauth:done', schedule, true);
-    document.addEventListener('igdc:member-auth-ready', schedule, true);
-    window.addEventListener('pageshow', schedule);
+    requestRestore('role-gate-boot', false);
+    ['osauth:ready','osauth:done','osauth:refreshed','osauth:renewing','osauth:renew-failed','igdc:member-auth-ready'].forEach(function(name){
+      document.addEventListener(name, schedule, true);
+    });
+    window.addEventListener('pageshow', function(){ requestRestore('role-gate-pageshow', true); schedule(); });
+    window.addEventListener('online', function(){ requestRestore('role-gate-online', true); schedule(); });
     window.addEventListener('resize', schedule);
     window.addEventListener('storage', schedule);
-    // Auth events plus the short startup resync below cover late-loading login scripts.
-    // No global MutationObserver: it would fight legacy DOM writers and cause a render loop.
+    document.addEventListener('visibilitychange', function(){
+      if (!document.hidden) { requestRestore('role-gate-visible', true); schedule(); }
+    });
     var deadline = Date.now() + 30000;
     repeatTimer = window.setInterval(function(){
       schedule();
