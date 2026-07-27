@@ -8,35 +8,98 @@
  */
 const crypto = require("crypto");
 const Policy = require("./social-candidate-policy.v1");
+const CountryRouting = require("./social-country-routing.v1");
+const ChannelLink = require("./social-channel-link.v1");
 
-const VERSION = "social-candidate-store-v1.2.0-exclusion-preserving-review";
+const VERSION = "social-candidate-store-v1.5.0-country-final-replacement-application";
 const DEFAULT_TIMEOUT_MS = 12000;
-const CANDIDATE_TABLE = process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
-const RELEASE_TABLE = process.env.SOCIAL_SNAPSHOT_RELEASE_TABLE || "social_snapshot_releases";
-const READ_ROLES = new Set(["owner", "admin", "super_admin", "site_manager", "site_manager_director", "director", "social_manager", "media_manager", "commerce_manager"]);
-const WRITE_ROLES = new Set(["owner", "admin", "super_admin", "site_manager_director", "director", "social_manager"]);
+const CANDIDATE_TABLE =
+  process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
+const RELEASE_TABLE =
+  process.env.SOCIAL_SNAPSHOT_RELEASE_TABLE || "social_snapshot_releases";
+const READ_ROLES = new Set([
+  "owner",
+  "admin",
+  "super_admin",
+  "site_manager",
+  "site_manager_director",
+  "director",
+  "social_manager",
+  "media_manager",
+  "commerce_manager",
+]);
+const WRITE_ROLES = new Set([
+  "owner",
+  "admin",
+  "super_admin",
+  "site_manager_director",
+  "director",
+  "social_manager",
+]);
 
 const {
-  text, compact, lowerText, lowerKey, array, plain, bool, clamp,
-  ALLOWED_SECTIONS, PLATFORM_BY_SECTION,
-  POOL_TARGET_PER_SECTION, POOL_MIN_PER_SECTION, POOL_MAX_PER_SECTION, ROTATION_LIMIT_PER_SECTION
+  text,
+  compact,
+  lowerText,
+  lowerKey,
+  array,
+  plain,
+  bool,
+  clamp,
+  ALLOWED_SECTIONS,
+  PLATFORM_BY_SECTION,
+  POOL_TARGET_PER_SECTION,
+  POOL_MIN_PER_SECTION,
+  POOL_MAX_PER_SECTION,
+  ROTATION_LIMIT_PER_SECTION,
 } = Policy;
 
 function stableStringify(value) {
   if (value == null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return "[" + value.map(stableStringify).join(",") + "]";
-  return "{" + Object.keys(value).sort().map((key) => JSON.stringify(key) + ":" + stableStringify(value[key])).join(",") + "}";
+  if (Array.isArray(value))
+    return "[" + value.map(stableStringify).join(",") + "]";
+  return (
+    "{" +
+    Object.keys(value)
+      .sort()
+      .map((key) => JSON.stringify(key) + ":" + stableStringify(value[key]))
+      .join(",") +
+    "}"
+  );
 }
-function sha256(value) { return crypto.createHash("sha256").update(typeof value === "string" ? value : stableStringify(value)).digest("hex"); }
-function shortHash(value) { return sha256(value).slice(0, 20); }
-function nowIso() { return new Date().toISOString(); }
-function unique(values) { return Array.from(new Set(array(values).map(text).filter(Boolean))); }
-function roleList(member) { return Array.from(new Set(array(member && member.roles).map(lowerKey).filter(Boolean))); }
+function sha256(value) {
+  return crypto
+    .createHash("sha256")
+    .update(typeof value === "string" ? value : stableStringify(value))
+    .digest("hex");
+}
+function shortHash(value) {
+  return sha256(value).slice(0, 20);
+}
+function nowIso() {
+  return new Date().toISOString();
+}
+function unique(values) {
+  return Array.from(new Set(array(values).map(text).filter(Boolean)));
+}
+function roleList(member) {
+  return Array.from(
+    new Set(
+      array(member && member.roles)
+        .map(lowerKey)
+        .filter(Boolean),
+    ),
+  );
+}
 function requireRole(member, mode) {
   const allowed = mode === "write" ? WRITE_ROLES : READ_ROLES;
   const roles = roleList(member);
   if (!roles.some((role) => allowed.has(role))) {
-    const error = new Error(mode === "write" ? "소셜 후보 변경 권한이 없습니다." : "소셜 후보 조회 권한이 없습니다.");
+    const error = new Error(
+      mode === "write"
+        ? "소셜 후보 변경 권한이 없습니다."
+        : "소셜 후보 조회 권한이 없습니다.",
+    );
     error.statusCode = 403;
     error.code = "social_candidate_forbidden";
     throw error;
@@ -44,92 +107,246 @@ function requireRole(member, mode) {
   return roles;
 }
 function jsonHeaders(extra) {
-  return Object.assign({
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "private, no-store, max-age=0",
-    "x-content-type-options": "nosniff",
-    "access-control-allow-headers": "Content-Type, Authorization, X-IGDC-Internal-Token, X-Sanmaru-Token",
-    "access-control-allow-methods": "GET,POST,OPTIONS"
-  }, extra || {});
+  return Object.assign(
+    {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "private, no-store, max-age=0",
+      "x-content-type-options": "nosniff",
+      "access-control-allow-headers":
+        "Content-Type, Authorization, X-IGDC-Internal-Token, X-Sanmaru-Token",
+      "access-control-allow-methods": "GET,POST,OPTIONS",
+    },
+    extra || {},
+  );
 }
 function response(statusCode, body, headers) {
-  return { statusCode, headers: jsonHeaders(headers), body: statusCode === 204 ? "" : JSON.stringify(body) };
+  return {
+    statusCode,
+    headers: jsonHeaders(headers),
+    body: statusCode === 204 ? "" : JSON.stringify(body),
+  };
 }
 function parseBody(event) {
-  const raw = event && event.body || "";
+  const raw = (event && event.body) || "";
   if (!raw) return {};
-  try { return JSON.parse(event.isBase64Encoded ? Buffer.from(raw, "base64").toString("utf8") : raw); }
-  catch (_e) { const error = new Error("요청 JSON이 올바르지 않습니다."); error.statusCode = 400; error.code = "invalid_json_body"; throw error; }
+  try {
+    return JSON.parse(
+      event.isBase64Encoded ? Buffer.from(raw, "base64").toString("utf8") : raw,
+    );
+  } catch (_e) {
+    const error = new Error("요청 JSON이 올바르지 않습니다.");
+    error.statusCode = 400;
+    error.code = "invalid_json_body";
+    throw error;
+  }
 }
 function firstEnv(names) {
-  for (const name of names) { const value = text(process.env[name]); if (value) return { name, value }; }
+  for (const name of names) {
+    const value = text(process.env[name]);
+    if (value) return { name, value };
+  }
   return { name: null, value: "" };
 }
 function config() {
-  const urlRec = firstEnv(["SOCIAL_SUPABASE_URL", "IGDC_SOCIAL_SUPABASE_URL", "GSLOT_SUPABASE_URL", "SUPABASE_URL"]);
-  const keyRec = firstEnv(["SOCIAL_SUPABASE_SERVICE_ROLE_KEY", "SOCIAL_SUPABASE_SECRET_KEY", "IGDC_SOCIAL_SUPABASE_SERVICE_ROLE_KEY", "IGDC_SOCIAL_SUPABASE_SECRET_KEY", "GSLOT_SUPABASE_SECRET_KEY", "GSLOT_SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_KEY"]);
+  const urlRec = firstEnv([
+    "SOCIAL_SUPABASE_URL",
+    "IGDC_SOCIAL_SUPABASE_URL",
+    "GSLOT_SUPABASE_URL",
+    "SUPABASE_URL",
+  ]);
+  const keyRec = firstEnv([
+    "SOCIAL_SUPABASE_SERVICE_ROLE_KEY",
+    "SOCIAL_SUPABASE_SECRET_KEY",
+    "IGDC_SOCIAL_SUPABASE_SERVICE_ROLE_KEY",
+    "IGDC_SOCIAL_SUPABASE_SECRET_KEY",
+    "GSLOT_SUPABASE_SECRET_KEY",
+    "GSLOT_SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SECRET_KEY",
+    "SUPABASE_SERVICE_KEY",
+  ]);
   const url = text(urlRec.value).replace(/\/+$/g, "");
   const key = text(keyRec.value);
   if (!/^https:\/\/[^/]+$/i.test(url) || !key) {
-    const error = new Error("소셜 후보 Supabase 연결 환경변수가 없습니다. SOCIAL_SUPABASE_URL/SOCIAL_SUPABASE_SERVICE_ROLE_KEY 또는 기존 SUPABASE 서버 키를 설정하세요.");
+    const error = new Error(
+      "소셜 후보 Supabase 연결 환경변수가 없습니다. SOCIAL_SUPABASE_URL/SOCIAL_SUPABASE_SERVICE_ROLE_KEY 또는 기존 SUPABASE 서버 키를 설정하세요.",
+    );
     error.statusCode = 503;
     error.code = "social_supabase_config_missing";
     throw error;
   }
-  return { url, key, urlSource: urlRec.name, keySource: keyRec.name, candidateTable: CANDIDATE_TABLE, releaseTable: RELEASE_TABLE };
+  return {
+    url,
+    key,
+    urlSource: urlRec.name,
+    keySource: keyRec.name,
+    candidateTable: CANDIDATE_TABLE,
+    releaseTable: RELEASE_TABLE,
+  };
 }
 async function supabase(path, init) {
   const cfg = config();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), Math.max(2000, Math.min(30000, Number(process.env.SOCIAL_SUPABASE_TIMEOUT_MS || DEFAULT_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS)));
-  const headers = Object.assign({}, init && init.headers || {}, { apikey: cfg.key, Authorization: "Bearer " + cfg.key, "content-type": "application/json" });
+  const timer = setTimeout(
+    () => controller.abort(),
+    Math.max(
+      2000,
+      Math.min(
+        30000,
+        Number(process.env.SOCIAL_SUPABASE_TIMEOUT_MS || DEFAULT_TIMEOUT_MS) ||
+          DEFAULT_TIMEOUT_MS,
+      ),
+    ),
+  );
+  const headers = Object.assign({}, (init && init.headers) || {}, {
+    apikey: cfg.key,
+    Authorization: "Bearer " + cfg.key,
+    "content-type": "application/json",
+  });
   try {
-    const res = await fetch(cfg.url + path, Object.assign({}, init || {}, { headers, signal: controller.signal }));
+    const res = await fetch(
+      cfg.url + path,
+      Object.assign({}, init || {}, { headers, signal: controller.signal }),
+    );
     const raw = await res.text();
     let body = null;
-    try { body = raw ? JSON.parse(raw) : null; } catch (_e) { body = raw || null; }
+    try {
+      body = raw ? JSON.parse(raw) : null;
+    } catch (_e) {
+      body = raw || null;
+    }
     if (!res.ok) {
-      const error = new Error((body && body.message) || (body && body.error_description) || (body && body.error) || raw || ("Supabase HTTP " + res.status));
+      const error = new Error(
+        (body && body.message) ||
+          (body && body.error_description) ||
+          (body && body.error) ||
+          raw ||
+          "Supabase HTTP " + res.status,
+      );
       error.statusCode = res.status;
-      error.code = res.status === 404 ? "social_supabase_table_missing" : "social_supabase_http_error";
+      error.code =
+        res.status === 404
+          ? "social_supabase_table_missing"
+          : "social_supabase_http_error";
       error.supabaseBody = body;
       throw error;
     }
     return body;
   } catch (error) {
-    if (error && error.name === "AbortError") { error.statusCode = 504; error.code = "social_supabase_timeout"; }
+    if (error && error.name === "AbortError") {
+      error.statusCode = 504;
+      error.code = "social_supabase_timeout";
+    }
     throw error;
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+  }
 }
-function rest(table, query) { return "/rest/v1/" + encodeURIComponent(table) + (query ? "?" + query : ""); }
-function encodeIn(values) { return "in.(" + values.map((v) => JSON.stringify(text(v))).join(",") + ")"; }
-async function selectCandidates(query) { return supabase(rest(CANDIDATE_TABLE, query || "select=*"), { method: "GET", headers: { Prefer: "count=exact" } }); }
+function rest(table, query) {
+  return "/rest/v1/" + encodeURIComponent(table) + (query ? "?" + query : "");
+}
+function encodeIn(values) {
+  return "in.(" + values.map((v) => JSON.stringify(text(v))).join(",") + ")";
+}
+async function selectCandidates(query) {
+  return supabase(rest(CANDIDATE_TABLE, query || "select=*"), {
+    method: "GET",
+    headers: { Prefer: "count=exact" },
+  });
+}
 async function upsertCandidates(rows) {
   if (!rows.length) return [];
-  return supabase(rest(CANDIDATE_TABLE, "on_conflict=id"), { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(rows) });
+  return supabase(rest(CANDIDATE_TABLE, "on_conflict=id"), {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify(rows),
+  });
 }
 async function updateCandidates(ids, patch) {
   const list = unique(ids);
   if (!list.length) return [];
-  return supabase(rest(CANDIDATE_TABLE, "id=" + encodeIn(list)), { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(patch || {}) });
+  return supabase(rest(CANDIDATE_TABLE, "id=" + encodeIn(list)), {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(patch || {}),
+  });
 }
 async function deleteCandidates(ids) {
   const list = unique(ids);
   if (!list.length) return [];
-  return supabase(rest(CANDIDATE_TABLE, "id=" + encodeIn(list)), { method: "DELETE", headers: { Prefer: "return=representation" } });
+  return supabase(rest(CANDIDATE_TABLE, "id=" + encodeIn(list)), {
+    method: "DELETE",
+    headers: { Prefer: "return=representation" },
+  });
 }
 function idFor(input, normalized) {
   const row = plain(input);
   const raw = text(row.id || row.contentId || row.candidateId);
-  if (raw && !/^ph_/i.test(raw) && !/seed/i.test(raw)) return raw.toLowerCase().replace(/[^a-z0-9_.:-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 110);
-  return "social_" + shortHash({ section: normalized.sectionKey, platform: normalized.platform, title: normalized.title, sourceUrl: normalized.sourceUrl, creator: normalized.creatorName || normalized.creatorHandle });
+  if (raw && !/^ph_/i.test(raw) && !/seed/i.test(raw))
+    return raw
+      .toLowerCase()
+      .replace(/[^a-z0-9_.:-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 110);
+  return (
+    "social_" +
+    shortHash({
+      section: normalized.sectionKey,
+      platform: normalized.platform,
+      title: normalized.title,
+      sourceUrl: normalized.sourceUrl,
+      creator: normalized.creatorName || normalized.creatorHandle,
+    })
+  );
 }
 function normalizeCandidate(input, actor) {
-  const row = plain(input);
+  let row = plain(input);
+  const sourceInput = text(
+    row.source_url ||
+      row.sourceUrl ||
+      row.url ||
+      row.permalink ||
+      row.pageUrl ||
+      row.link ||
+      row.href ||
+      row.accountUrl ||
+      row.channelUrl,
+  );
+  const platformInput = Policy.normalizePlatform(
+    row.platform ||
+      row.sourcePlatform ||
+      plain(row.source).platform ||
+      plain(row.bind).platform,
+    sourceInput,
+  );
+  const channel = sourceInput
+    ? ChannelLink.resolve(sourceInput, {
+        platform: platformInput || undefined,
+        title: row.title || row.name || row.label,
+      })
+    : { ok: false };
+  if (channel.ok && channel.channelUrl) {
+    row = Object.assign({}, row, {
+      sourceUrl: channel.channelUrl,
+      channelUrl: channel.channelUrl,
+      channelEvidenceUrl: channel.evidenceUrl,
+      sourceContentUrl: channel.promotedFromContent
+        ? channel.evidenceUrl
+        : text(row.sourceContentUrl || row.source_content_url),
+      entityKind: channel.entityKind,
+      channelAsset: true,
+    });
+  }
   const normalized = Policy.classifyCandidate(row);
   const now = nowIso();
-  const by = compact(actor && (actor.email || actor.memberId) || "social-candidate-gateway", 200);
+  const by = compact(
+    (actor && (actor.email || actor.memberId)) || "social-candidate-gateway",
+    200,
+  );
   const scores = normalized.scores || {};
+  const geoScopes = CountryRouting.scopesFrom(
+    Object.assign({}, row, { language: normalized.language }),
+  );
   return {
     id: idFor(row, normalized),
     section_key: normalized.sectionKey,
@@ -161,40 +378,72 @@ function normalizeCandidate(input, actor) {
     rotation_score: Math.round(scores.rotation || 0),
     risk_level: normalized.riskLevel || "medium",
     review_status: lowerKey(row.review_status || row.reviewStatus) || "pending",
-    verification_status: lowerKey(row.verification_status || row.verificationStatus) || "web_verification_required",
-    candidate_only: row.candidate_only === false || row.candidateOnly === false ? false : true,
-    seed_content: normalized.seedContent || bool(row.seed_content || row.seedContent),
+    verification_status:
+      lowerKey(row.verification_status || row.verificationStatus) ||
+      "web_verification_required",
+    candidate_only:
+      row.candidate_only === false || row.candidateOnly === false
+        ? false
+        : true,
+    seed_content:
+      normalized.seedContent || bool(row.seed_content || row.seedContent),
     rotation_eligible: bool(row.rotation_eligible || row.rotationEligible),
     evidence: {
       source: "social_candidate_gateway",
       policyVersion: Policy.VERSION,
       sourceHost: Policy.hostOf(normalized.sourceUrl),
-      searchBankSection: text(row.section || row.sectionKey || plain(row.bind).section),
-      searchBankPsomKey: text(row.psom_key || row.psomKey || plain(row.bind).psom_key),
+      candidateAssetType: text(row.entityKind || row.entity_kind || "channel"),
+      channelAsset: row.channelAsset !== false && row.channel_asset !== false,
+      channelEvidenceUrl: text(
+        row.channelEvidenceUrl ||
+          row.channel_evidence_url ||
+          row.sourceContentUrl ||
+          row.source_content_url,
+      ),
+      searchBankSection: text(
+        row.section || row.sectionKey || plain(row.bind).section,
+      ),
+      searchBankPsomKey: text(
+        row.psom_key || row.psomKey || plain(row.bind).psom_key,
+      ),
       softRiskCount: normalized.softRiskCount || 0,
       revenueHintCount: scores.revenueHintCount || 0,
       membershipPolicy: {
         externalMembershipControlled: true,
         maruMembershipOverridesExternalAds: false,
         premiumBenefitPlatformControlled: true,
-        adControl: "platform_controlled"
-      }
+        adControl: "platform_controlled",
+      },
     },
-    raw: row,
+    raw: Object.assign({}, row, {
+      countryScopes: geoScopes.countries,
+      languageScopes: geoScopes.languages,
+    }),
     created_by: by,
     updated_by: by,
     created_at: row.created_at || row.createdAt || now,
-    updated_at: now
+    updated_at: now,
   };
 }
 function validateCandidate(row) {
   const reasons = [];
   if (!row || typeof row !== "object") reasons.push("invalid_row");
-  if (!ALLOWED_SECTIONS.has(row.section_key)) reasons.push("section_not_allowed");
-  if (row.section_key && row.platform && PLATFORM_BY_SECTION[row.section_key] && PLATFORM_BY_SECTION[row.section_key] !== row.platform) reasons.push("platform_section_mismatch");
+  if (!ALLOWED_SECTIONS.has(row.section_key))
+    reasons.push("section_not_allowed");
+  if (
+    row.section_key &&
+    row.platform &&
+    PLATFORM_BY_SECTION[row.section_key] &&
+    PLATFORM_BY_SECTION[row.section_key] !== row.platform
+  )
+    reasons.push("platform_section_mismatch");
   if (!row.title) reasons.push("title_required");
-  if (!row.source_url || Policy.isBadPlaceholderUrl(row.source_url)) reasons.push("source_url_required");
-  if (row.seed_content) reasons.push("seed_or_placeholder_preserved_not_imported");
+  if (!row.source_url || Policy.isBadPlaceholderUrl(row.source_url))
+    reasons.push("source_url_required");
+  if (!plain(row.raw).channelAsset)
+    reasons.push("channel_profile_group_required");
+  if (row.seed_content)
+    reasons.push("seed_or_placeholder_preserved_not_imported");
   if (row.risk_level === "blocked") reasons.push("safety_blocked");
   return { ok: reasons.length === 0, reasons };
 }
@@ -204,11 +453,21 @@ function candidatesFromSearchBankSnapshot(snapshot, actor, options) {
   const accepted = [];
   const rejected = [];
   const ignored = [];
-  const cap = Math.max(1, Math.min(10000, Number(opts.limit || 10000) || 10000));
-  for (let index = 0; index < items.length && accepted.length < cap; index += 1) {
+  const cap = Math.max(
+    1,
+    Math.min(10000, Number(opts.limit || 10000) || 10000),
+  );
+  for (
+    let index = 0;
+    index < items.length && accepted.length < cap;
+    index += 1
+  ) {
     const item = items[index];
     const row = normalizeCandidate(item, actor);
-    if (!row.section_key) { ignored.push({ index, reason: "not_social_section" }); continue; }
+    if (!row.section_key) {
+      ignored.push({ index, reason: "not_social_section" });
+      continue;
+    }
     if (row.seed_content) {
       ignored.push({
         index,
@@ -216,21 +475,36 @@ function candidatesFromSearchBankSnapshot(snapshot, actor, options) {
         section: row.section_key,
         platform: row.platform,
         title: row.title,
-        reason: "seed_or_placeholder_preserved_in_searchbank_snapshot"
+        reason: "seed_or_placeholder_preserved_in_searchbank_snapshot",
       });
       continue;
     }
     const check = validateCandidate(row);
     if (check.ok) accepted.push(row);
-    else rejected.push({ index, id: row.id, section: row.section_key, platform: row.platform, title: row.title, reasons: check.reasons });
+    else
+      rejected.push({
+        index,
+        id: row.id,
+        section: row.section_key,
+        platform: row.platform,
+        title: row.title,
+        reasons: check.reasons,
+      });
   }
-  return { accepted, rejected, ignoredCount: ignored.length, total: items.length };
+  return {
+    accepted,
+    rejected,
+    ignoredCount: ignored.length,
+    total: items.length,
+  };
 }
 function isPromotable(row) {
   return isApprovedForSnapshot(row);
 }
 function normalizeDbRow(row) {
   const r = plain(row);
+  const raw = plain(r.raw);
+  const geoScopes = CountryRouting.scopesFrom(r);
   return {
     id: text(r.id),
     sectionKey: text(r.section_key || r.sectionKey),
@@ -239,11 +513,30 @@ function normalizeDbRow(row) {
     creatorName: text(r.creator_name || r.creatorName),
     creatorHandle: text(r.creator_handle || r.creatorHandle),
     sourceUrl: text(r.source_url || r.sourceUrl),
+    channelUrl: text(
+      raw.channelUrl || raw.channel_url || r.source_url || r.sourceUrl,
+    ),
+    channelEvidenceUrl: text(
+      raw.channelEvidenceUrl ||
+        raw.channel_evidence_url ||
+        raw.sourceContentUrl ||
+        raw.source_content_url,
+    ),
+    entityKind: text(
+      raw.entityKind ||
+        raw.entity_kind ||
+        plain(r.evidence).candidateAssetType ||
+        "channel",
+    ),
+    channelAsset: raw.channelAsset !== false && raw.channel_asset !== false,
+    category: text(raw.category),
     embedUrl: text(r.embed_url || r.embedUrl),
     thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl),
     description: text(r.description),
     language: text(r.language),
     region: text(r.region),
+    countryScopes: geoScopes.countries,
+    languageScopes: geoScopes.languages,
     displayMode: text(r.display_mode || r.displayMode),
     adControl: text(r.ad_control || r.adControl),
     publicAccess: r.public_access === true || r.publicAccess === true,
@@ -261,11 +554,14 @@ function normalizeDbRow(row) {
     verificationStatus: text(r.verification_status || r.verificationStatus),
     candidateOnly: r.candidate_only !== false && r.candidateOnly !== false,
     seedContent: r.seed_content === true || r.seedContent === true,
-    rotationEligible: r.rotation_eligible === true || r.rotationEligible === true,
+    rotationEligible:
+      r.rotation_eligible === true || r.rotationEligible === true,
     platformAccountDependent: r.platform_account_dependent !== false,
     externalMembershipControlled: r.external_membership_controlled !== false,
-    premiumBenefitPlatformControlled: r.premium_benefit_platform_controlled !== false,
-    maruMembershipOverridesExternalAds: r.maru_membership_overrides_external_ads === true,
+    premiumBenefitPlatformControlled:
+      r.premium_benefit_platform_controlled !== false,
+    maruMembershipOverridesExternalAds:
+      r.maru_membership_overrides_external_ads === true,
     reviewNote: text(r.review_note || r.reviewNote),
     blockedReason: text(r.blocked_reason || r.blockedReason),
     reviewedBy: text(r.reviewed_by || r.reviewedBy),
@@ -273,26 +569,44 @@ function normalizeDbRow(row) {
     approvedAt: text(r.approved_at || r.approvedAt),
     createdAt: text(r.created_at || r.createdAt),
     updatedAt: text(r.updated_at || r.updatedAt),
-    raw: plain(r.raw),
-    promotable: isPromotable(r)
+    raw,
+    promotable: isPromotable(r),
   };
 }
 function summaryDoc(rows) {
   const list = Array.isArray(rows) ? rows : [];
-  const bySection = {}, byRisk = {}, byReview = {}, byPlatform = {};
-  let activeCandidateCount = 0, searchExcludedCount = 0, permanentBlockedCount = 0, promotable = 0, verificationRequired = 0;
+  const bySection = {},
+    byRisk = {},
+    byReview = {},
+    byPlatform = {};
+  let activeCandidateCount = 0,
+    searchExcludedCount = 0,
+    permanentBlockedCount = 0,
+    promotable = 0,
+    verificationRequired = 0;
   list.forEach((row) => {
     const r = normalizeDbRow(row);
     const reviewStatus = statusKey(r.reviewStatus);
     bySection[r.sectionKey] = (bySection[r.sectionKey] || 0) + 1;
-    byRisk[r.riskLevel || "unknown"] = (byRisk[r.riskLevel || "unknown"] || 0) + 1;
-    byReview[r.reviewStatus || "unknown"] = (byReview[r.reviewStatus || "unknown"] || 0) + 1;
-    byPlatform[r.platform || "unknown"] = (byPlatform[r.platform || "unknown"] || 0) + 1;
+    byRisk[r.riskLevel || "unknown"] =
+      (byRisk[r.riskLevel || "unknown"] || 0) + 1;
+    byReview[r.reviewStatus || "unknown"] =
+      (byReview[r.reviewStatus || "unknown"] || 0) + 1;
+    byPlatform[r.platform || "unknown"] =
+      (byPlatform[r.platform || "unknown"] || 0) + 1;
     if (reviewStatus === "search_excluded") searchExcludedCount += 1;
-    else if (reviewStatus === "permanent_blocked" || reviewStatus === "blocked") permanentBlockedCount += 1;
+    else if (reviewStatus === "permanent_blocked" || reviewStatus === "blocked")
+      permanentBlockedCount += 1;
     else activeCandidateCount += 1;
     if (r.promotable) promotable += 1;
-    if (reviewStatus !== "search_excluded" && reviewStatus !== "permanent_blocked" && reviewStatus !== "blocked" && r.verificationStatus && r.verificationStatus.indexOf("required") >= 0) verificationRequired += 1;
+    if (
+      reviewStatus !== "search_excluded" &&
+      reviewStatus !== "permanent_blocked" &&
+      reviewStatus !== "blocked" &&
+      r.verificationStatus &&
+      r.verificationStatus.indexOf("required") >= 0
+    )
+      verificationRequired += 1;
   });
   return {
     version: VERSION,
@@ -308,20 +622,34 @@ function summaryDoc(rows) {
       targetPerSection: POOL_TARGET_PER_SECTION,
       minPerSection: POOL_MIN_PER_SECTION,
       maxPerSection: POOL_MAX_PER_SECTION,
-      publicSlotsPerSection: ROTATION_LIMIT_PER_SECTION
+      publicSlotsPerSection: ROTATION_LIMIT_PER_SECTION,
     },
     bySection,
     byRisk,
     byReview,
-    byPlatform
+    byPlatform,
   };
 }
 
-
 async function insertRelease(row) {
-  return supabase(rest(RELEASE_TABLE), { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify([row]) });
+  return supabase(rest(RELEASE_TABLE), {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify([row]),
+  });
 }
-function statusKey(value) { return lowerText(value).replace(/[\s-]+/g, "_").replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, ""); }
+async function selectReleases(query) {
+  return supabase(
+    rest(RELEASE_TABLE, query || "select=*&order=created_at.desc&limit=1"),
+    { method: "GET" },
+  );
+}
+function statusKey(value) {
+  return lowerText(value)
+    .replace(/[\s-]+/g, "_")
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
 function isApprovedForSnapshot(row) {
   const r = plain(row);
   const review = statusKey(r.review_status || r.reviewStatus);
@@ -333,28 +661,95 @@ function isApprovedForSnapshot(row) {
   const loginRequired = r.login_required === true || r.loginRequired === true;
   const candidateOnly = r.candidate_only === true || r.candidateOnly === true;
   const seedContent = r.seed_content === true || r.seedContent === true;
-  const approvedVerify = verify === "approved_for_snapshot" || verify === "verified" || verify === "approved";
-  const accessOk = publicAccess === true && loginRequired !== true && !/private|blocked|login_required/.test(access || "public");
-  return review === "approved" && approvedVerify && accessOk && !candidateOnly && !seedContent && risk !== "blocked" && risk !== "rejected" && ALLOWED_SECTIONS.has(section) && !!text(r.title) && !!text(r.source_url || r.sourceUrl);
+  const approvedVerify =
+    verify === "approved_for_snapshot" ||
+    verify === "verified" ||
+    verify === "approved";
+  const accessOk =
+    publicAccess === true &&
+    loginRequired !== true &&
+    !/private|blocked|login_required/.test(access || "public");
+  return (
+    review === "approved" &&
+    approvedVerify &&
+    accessOk &&
+    !candidateOnly &&
+    !seedContent &&
+    risk !== "blocked" &&
+    risk !== "rejected" &&
+    ALLOWED_SECTIONS.has(section) &&
+    !!text(r.title) &&
+    !!text(r.source_url || r.sourceUrl)
+  );
 }
 function rowScore(row) {
   const r = plain(row);
-  return Number(r.rotation_score || r.rotationScore || 0) * 2 +
+  return (
+    Number(r.rotation_score || r.rotationScore || 0) * 2 +
     Number(r.revenue_score || r.revenueScore || 0) * 1.6 +
     Number(r.quality_score || r.qualityScore || 0) * 1.4 +
     Number(r.engagement_score || r.engagementScore || 0) * 1.1 +
     Number(r.trust_score || r.trustScore || 0) +
     Number(r.safety_score || r.safetyScore || 0) +
-    Number(r.locale_score || r.localeScore || 0) * 0.7;
+    Number(r.locale_score || r.localeScore || 0) * 0.7
+  );
 }
 function dateValue(row) {
   const r = plain(row);
-  const value = Date.parse(text(r.approved_at || r.approvedAt || r.reviewed_at || r.reviewedAt || r.updated_at || r.updatedAt || r.created_at || r.createdAt));
+  const value = Date.parse(
+    text(
+      r.approved_at ||
+        r.approvedAt ||
+        r.reviewed_at ||
+        r.reviewedAt ||
+        r.updated_at ||
+        r.updatedAt ||
+        r.created_at ||
+        r.createdAt,
+    ),
+  );
   return Number.isFinite(value) ? value : 0;
+}
+function commercialRoute(row) {
+  const r = plain(row);
+  const raw = plain(r.raw);
+  const source = plain(
+    raw.commercial || raw.monetization || r.commercial || r.monetization,
+  );
+  const affiliateUrl = text(
+    source.affiliateOutboundUrl ||
+      source.affiliateUrl ||
+      raw.affiliateOutboundUrl ||
+      raw.affiliateUrl ||
+      r.affiliate_outbound_url ||
+      r.affiliateOutboundUrl,
+  );
+  const campaignId = text(
+    source.campaignId || raw.campaignId || r.campaign_id || r.campaignId,
+  );
+  const leadRoute = text(
+    source.leadRoute || raw.leadRoute || r.lead_route || r.leadRoute,
+  );
+  const sponsorAgreement =
+    source.sponsorAgreement === true ||
+    raw.sponsorAgreement === true ||
+    r.sponsor_agreement === true;
+  const eligible =
+    !!affiliateUrl || !!campaignId || !!leadRoute || sponsorAgreement;
+  return {
+    eligible,
+    affiliateUrl: affiliateUrl || undefined,
+    campaignId: campaignId || undefined,
+    leadRoute: leadRoute || undefined,
+    sponsorAgreement,
+    policy: "explicit_agreement_or_attribution_only",
+  };
 }
 function groupRowsBySection(rows) {
   const out = {};
-  Policy.SECTION_KEYS.forEach((section) => { out[section] = []; });
+  Policy.SECTION_KEYS.forEach((section) => {
+    out[section] = [];
+  });
   array(rows).forEach((row) => {
     const section = lowerKey(row.section_key || row.sectionKey);
     if (ALLOWED_SECTIONS.has(section)) out[section].push(row);
@@ -362,19 +757,39 @@ function groupRowsBySection(rows) {
   return out;
 }
 function byRank(salt) {
-  return function(a, b) {
+  return function (a, b) {
     const d = rowScore(b) - rowScore(a);
     if (d) return d;
-    const ah = shortHash({ id: a.id, section: a.section_key || a.sectionKey, salt });
-    const bh = shortHash({ id: b.id, section: b.section_key || b.sectionKey, salt });
+    const ah = shortHash({
+      id: a.id,
+      section: a.section_key || a.sectionKey,
+      salt,
+    });
+    const bh = shortHash({
+      id: b.id,
+      section: b.section_key || b.sectionKey,
+      salt,
+    });
     return ah < bh ? -1 : ah > bh ? 1 : 0;
+  };
+}
+function byRouteRank(route, salt) {
+  return function (a, b) {
+    const d =
+      rowScore(b) +
+      CountryRouting.matchScore(b, route) -
+      (rowScore(a) + CountryRouting.matchScore(a, route));
+    if (d) return d;
+    return byRank(salt)(a, b);
   };
 }
 function uniqueRows(rows) {
   const seen = new Set();
   const out = [];
   array(rows).forEach((row) => {
-    const id = text(row.id || row.candidateId || row.source_url || row.sourceUrl);
+    const id = text(
+      row.id || row.candidateId || row.source_url || row.sourceUrl,
+    );
     if (!id || seen.has(id)) return;
     seen.add(id);
     out.push(row);
@@ -383,43 +798,125 @@ function uniqueRows(rows) {
 }
 function selectRotation(rows, options) {
   const opts = plain(options);
-  const limit = Math.max(1, Math.min(200, Number(opts.limitPerSection || opts.publicSlotsPerSection || ROTATION_LIMIT_PER_SECTION) || ROTATION_LIMIT_PER_SECTION));
-  const stableCount = Math.min(limit, Math.round(limit * 0.70));
-  const refreshCount = Math.min(limit - stableCount, Math.round(limit * 0.20));
-  const testCount = Math.max(0, limit - stableCount - refreshCount);
-  const salt = text(opts.rotationSalt || opts.salt) || new Date().toISOString().slice(0, 10);
-  const groups = groupRowsBySection(array(rows).filter(isApprovedForSnapshot));
+  const limit = Math.max(
+    1,
+    Math.min(
+      200,
+      Number(
+        opts.limitPerSection ||
+          opts.publicSlotsPerSection ||
+          ROTATION_LIMIT_PER_SECTION,
+      ) || ROTATION_LIMIT_PER_SECTION,
+    ),
+  );
+  const stableCount = Math.min(limit, Math.round(limit * 0.7));
+  const refreshCount = Math.min(limit - stableCount, Math.round(limit * 0.2));
+  const discoveryCount = Math.max(0, limit - stableCount - refreshCount);
+  const salt =
+    text(opts.rotationSalt || opts.salt) ||
+    new Date().toISOString().slice(0, 10);
+  const route =
+    opts.route && typeof opts.route === "object"
+      ? opts.route
+      : {
+          countryCode: opts.countryCode || opts.country,
+          languages: opts.languages || opts.language || opts.lang,
+        };
+  const routeCountry = text(route.countryCode || route.country).toUpperCase();
+  const groups = groupRowsBySection(
+    array(rows)
+      .filter(isApprovedForSnapshot)
+      .filter((row) => {
+        const scopes = CountryRouting.scopesFrom(row).countries;
+        return !routeCountry || !scopes.length || scopes.includes(routeCountry);
+      }),
+  );
   const selected = {};
+  const replacement = {};
   const counts = {};
   Object.keys(groups).forEach((section) => {
-    const ranked = groups[section].slice().sort(byRank(salt));
-    const stable = ranked.slice(0, stableCount);
+    const ranked = groups[section].slice().sort(byRouteRank(route, salt));
+    const forcedReplacement = ranked.filter(
+      (row) =>
+        plain(row && row.raw).placementOverride === "replacement_waiting",
+    );
+    const selectable = ranked.filter(
+      (row) =>
+        plain(row && row.raw).placementOverride !== "replacement_waiting",
+    );
+    const stable = selectable.slice(0, stableCount);
     const stableIds = new Set(stable.map((row) => text(row.id)));
-    const remaining = ranked.filter((row) => !stableIds.has(text(row.id)));
-    const refresh = remaining.slice().sort((a, b) => dateValue(b) - dateValue(a)).slice(0, refreshCount);
+    const remaining = selectable.filter((row) => !stableIds.has(text(row.id)));
+    const refresh = remaining
+      .slice()
+      .sort((a, b) => dateValue(b) - dateValue(a))
+      .slice(0, refreshCount);
     const used = new Set(stable.concat(refresh).map((row) => text(row.id)));
-    const test = remaining.filter((row) => !used.has(text(row.id))).sort((a, b) => {
-      const ah = shortHash({ id: a.id, salt, mode: "test" });
-      const bh = shortHash({ id: b.id, salt, mode: "test" });
-      return ah < bh ? -1 : ah > bh ? 1 : 0;
-    }).slice(0, testCount);
-    const merged = uniqueRows(stable.concat(refresh, test, ranked)).slice(0, limit);
+    const discovery = remaining
+      .filter((row) => !used.has(text(row.id)))
+      .sort((a, b) => {
+        const ah = shortHash({ id: a.id, salt, mode: "discovery" });
+        const bh = shortHash({ id: b.id, salt, mode: "discovery" });
+        return ah < bh ? -1 : ah > bh ? 1 : 0;
+      })
+      .slice(0, discoveryCount);
+    const merged = uniqueRows(
+      stable.concat(refresh, discovery, selectable),
+    ).slice(0, limit);
     selected[section] = merged;
-    counts[section] = { available: ranked.length, selected: merged.length, stable: Math.min(stable.length, merged.length), refresh: Math.min(refresh.length, Math.max(0, merged.length - stable.length)), test: Math.max(0, merged.length - stable.length - refresh.length) };
+    const selectedIds = new Set(merged.map((row) => text(row.id)));
+    replacement[section] = uniqueRows(
+      selectable
+        .filter((row) => !selectedIds.has(text(row.id)))
+        .concat(forcedReplacement),
+    );
+    counts[section] = {
+      available: ranked.length,
+      selected: merged.length,
+      replacement: replacement[section].length,
+      stable: Math.min(stable.length, merged.length),
+      refresh: Math.min(
+        refresh.length,
+        Math.max(0, merged.length - stable.length),
+      ),
+      discovery: Math.max(0, merged.length - stable.length - refresh.length),
+    };
   });
-  return { selected, counts, rotationSalt: salt, limitPerSection: limit, policy: { stablePercent: 70, refreshPercent: 20, testPercent: 10 } };
+  return {
+    selected,
+    replacement,
+    counts,
+    rotationSalt: salt,
+    limitPerSection: limit,
+    route: {
+      countryCode:
+        text(route.countryCode || route.country).toUpperCase() || null,
+      languages: CountryRouting.normalizeLanguages(
+        route.languages || route.language || route.lang,
+      ),
+    },
+    policy: { stablePercent: 70, refreshPercent: 20, discoveryPercent: 10 },
+  };
 }
 function publicSocialSlot(row, slotId, defaults) {
   const base = plain(defaults);
   const r = plain(row);
+  const raw = plain(r.raw);
   const sourceUrl = text(r.source_url || r.sourceUrl);
-  const thumb = text(r.thumbnail_url || r.thumbnailUrl || base.thumb || base.thumbnail || base.image || "");
+  const thumb = text(
+    r.thumbnail_url ||
+      r.thumbnailUrl ||
+      base.thumb ||
+      base.thumbnail ||
+      base.image ||
+      "",
+  );
   const section = text(r.section_key || r.sectionKey);
   const platform = text(r.platform || PLATFORM_BY_SECTION[section] || "social");
   const now = nowIso();
   return Object.assign({}, base, {
     slotId: Number(slotId) || Number(base.slotId) || 1,
-    id: text(r.id) || ("social_" + shortHash({ section, platform, sourceUrl })),
+    id: text(r.id) || "social_" + shortHash({ section, platform, sourceUrl }),
     contentId: text(r.id) || text(base.contentId),
     type: "external_social",
     title: text(r.title),
@@ -432,38 +929,70 @@ function publicSocialSlot(row, slotId, defaults) {
     thumbnailUrl: thumb || undefined,
     image: thumb || undefined,
     description: text(r.description),
-    creator: text(r.creator_name || r.creatorName || r.creator_handle || r.creatorHandle),
+    creator: text(
+      r.creator_name || r.creatorName || r.creator_handle || r.creatorHandle,
+    ),
     creatorName: text(r.creator_name || r.creatorName),
     creatorHandle: text(r.creator_handle || r.creatorHandle),
     embedUrl: text(r.embed_url || r.embedUrl) || undefined,
     displayMode: text(r.display_mode || r.displayMode || "link_card"),
-    source: Object.assign({}, plain(base.source), { platform, section_key: section, provider: "external_social_platform", url: sourceUrl }),
+    source: Object.assign({}, plain(base.source), {
+      platform,
+      section_key: section,
+      provider: "external_social_platform",
+      url: sourceUrl,
+    }),
     social: {
       platform,
       sectionKey: section,
+      assetType: text(
+        raw.entityKind ||
+          raw.entity_kind ||
+          plain(r.evidence).candidateAssetType ||
+          "channel",
+      ),
+      channelAsset: true,
+      category: text(raw.category),
+      topicTags: unique(raw.tags).slice(0, 12),
       adControl: text(r.ad_control || r.adControl || "platform_controlled"),
       platformAccountDependent: r.platform_account_dependent !== false,
       externalMembershipControlled: r.external_membership_controlled !== false,
-      premiumBenefitPlatformControlled: r.premium_benefit_platform_controlled !== false,
-      maruMembershipOverridesExternalAds: r.maru_membership_overrides_external_ads === true,
+      premiumBenefitPlatformControlled:
+        r.premium_benefit_platform_controlled !== false,
+      maruMembershipOverridesExternalAds:
+        r.maru_membership_overrides_external_ads === true,
       loginRequired: r.login_required === true,
-      publicAccess: r.public_access === true
+      publicAccess: r.public_access === true,
+      countryScopes: CountryRouting.scopesFrom(r).countries,
+      languageScopes: CountryRouting.scopesFrom(r).languages,
+      commercial: commercialRoute(r),
     },
     signals: Object.assign({}, plain(base.signals), {
       quality_score: Number(r.quality_score || 0),
       trust_score: Number(r.trust_score || 0),
       safety_score: Number(r.safety_score || 0),
       revenue_score: Number(r.revenue_score || 0),
-      rotation_score: Number(r.rotation_score || 0)
+      rotation_score: Number(r.rotation_score || 0),
     }),
     candidateOnly: false,
     seedContent: false,
     verificationStatus: text(r.verification_status || "approved_for_snapshot"),
-    audit: Object.assign({}, plain(base.audit), { origin: "social_candidates", candidate_id: text(r.id), approved_at: text(r.approved_at || r.approvedAt), generated_at: now }),
-    timestamps: Object.assign({}, plain(base.timestamps), { published: now, ingested: text(r.created_at || r.createdAt), updated: text(r.updated_at || r.updatedAt || now) })
+    audit: Object.assign({}, plain(base.audit), {
+      origin: "social_candidates",
+      candidate_id: text(r.id),
+      approved_at: text(r.approved_at || r.approvedAt),
+      generated_at: now,
+    }),
+    timestamps: Object.assign({}, plain(base.timestamps), {
+      published: now,
+      ingested: text(r.created_at || r.createdAt),
+      updated: text(r.updated_at || r.updatedAt || now),
+    }),
   });
 }
-function cloneJson(value) { return JSON.parse(JSON.stringify(value == null ? {} : value)); }
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value == null ? {} : value));
+}
 function buildSnapshot(baseSnapshot, rows, options) {
   const opts = plain(options);
   const base = cloneJson(baseSnapshot || {});
@@ -471,29 +1000,103 @@ function buildSnapshot(baseSnapshot, rows, options) {
   if (!base.pages.social) base.pages.social = {};
   if (!base.pages.social.sections) base.pages.social.sections = {};
   const sections = base.pages.social.sections;
+  const requestedSection = Policy.normalizeSectionKey(
+    opts.sectionKey || opts.section || opts.targetSection,
+  );
+  const targetSections =
+    requestedSection && ALLOWED_SECTIONS.has(requestedSection)
+      ? [requestedSection]
+      : Policy.SECTION_KEYS;
   const rotation = selectRotation(rows, opts);
+  const routeCountry = text(
+    opts.route &&
+      (opts.route.countryCode || opts.route.country),
+  ).toUpperCase();
+  const approvedRows = array(rows)
+    .filter(isApprovedForSnapshot)
+    .filter((row) => {
+      const scopes = CountryRouting.scopesFrom(row).countries;
+      return !routeCountry || !scopes.length || scopes.includes(routeCountry);
+    });
   const filled = {};
-  Policy.SECTION_KEYS.forEach((sectionKey) => {
-    const current = Array.isArray(sections[sectionKey]) ? sections[sectionKey].slice() : [];
-    const capacity = Math.max(current.length, Number(opts.limitPerSection || opts.publicSlotsPerSection || ROTATION_LIMIT_PER_SECTION) || ROTATION_LIMIT_PER_SECTION);
+  targetSections.forEach((sectionKey) => {
+    const current = Array.isArray(sections[sectionKey])
+      ? sections[sectionKey].slice()
+      : [];
+    const capacity = Math.max(
+      current.length,
+      Number(
+        opts.limitPerSection ||
+          opts.publicSlotsPerSection ||
+          ROTATION_LIMIT_PER_SECTION,
+      ) || ROTATION_LIMIT_PER_SECTION,
+    );
     const next = [];
     for (let index = 0; index < capacity; index += 1) {
-      next.push(current[index] ? Object.assign({}, current[index]) : { id: "ph_" + sectionKey + "_" + String(index + 1).padStart(3, "0"), type: "placeholder", title: "Loading…", url: "#", source: { platform: "placeholder", section_key: sectionKey } });
+      next.push(
+        current[index]
+          ? Object.assign({}, current[index])
+          : {
+              id: "ph_" + sectionKey + "_" + String(index + 1).padStart(3, "0"),
+              type: "placeholder",
+              title: "Loading…",
+              url: "#",
+              source: { platform: "placeholder", section_key: sectionKey },
+            },
+      );
     }
     const selected = rotation.selected[sectionKey] || [];
-    selected.slice(0, capacity).forEach((row, index) => { next[index] = publicSocialSlot(row, index + 1, next[index]); });
+    selected.slice(0, capacity).forEach((row, index) => {
+      next[index] = publicSocialSlot(row, index + 1, next[index]);
+    });
     sections[sectionKey] = next;
     filled[sectionKey] = selected.length;
   });
+  const candidatePool = plain(base.pages.social.candidatePool);
+  const poolGroups = groupRowsBySection(approvedRows);
+  targetSections.forEach((sectionKey) => {
+    candidatePool[sectionKey] = poolGroups[sectionKey]
+      .slice()
+      .sort(byRank(rotation.rotationSalt))
+      .slice(0, POOL_MAX_PER_SECTION)
+      .map((row, index) => publicSocialSlot(row, index + 1, {}));
+  });
+  base.pages.social.candidatePool = candidatePool;
+  base.pages.social.countryRouting = {
+    version: CountryRouting.VERSION,
+    scope: "country_only",
+    ipStorage: "none",
+    selectedCountryPrecedence: true,
+    languageFallback: true,
+    publicSlotsPerSection: ROTATION_LIMIT_PER_SECTION,
+    poolTargetPerSection: POOL_TARGET_PER_SECTION,
+  };
   base.version = "social.snapshot.generated.supabase.v1";
   base.meta = Object.assign({}, plain(base.meta), {
     generatedAt: nowIso(),
     generatedBy: "social-snapshot-publish",
     source: "supabase.social_candidates",
-    samplePreservePolicy: "Approved rotation candidates replace only their target slots; all remaining sample/placeholder slots are preserved.",
+    samplePreservePolicy:
+      "Approved rotation candidates replace only their target slots; all remaining sample/placeholder slots are preserved.",
     excludedSections: ["social-maru", "rightPanel"],
+    appliedSections: targetSections,
+    applicationScope: {
+      countryCode:
+        text(rotation.route && rotation.route.countryCode).toUpperCase() ||
+        null,
+      languages: CountryRouting.normalizeLanguages(
+        rotation.route && rotation.route.languages,
+      ),
+      worldRegion: text(opts.route && opts.route.worldRegion) || null,
+      ipMatchedAtRead: true,
+      rawIpStored: false,
+    },
     filled,
-    rotation: { salt: rotation.rotationSalt, counts: rotation.counts, policy: rotation.policy }
+    rotation: {
+      salt: rotation.rotationSalt,
+      counts: rotation.counts,
+      policy: rotation.policy,
+    },
   });
   return base;
 }
@@ -526,6 +1129,7 @@ module.exports = {
   supabase,
   rest,
   insertRelease,
+  selectReleases,
   selectCandidates,
   upsertCandidates,
   updateCandidates,
@@ -538,7 +1142,9 @@ module.exports = {
   isPromotable,
   summaryDoc,
   isApprovedForSnapshot,
+  rowScore,
   selectRotation,
   publicSocialSlot,
-  buildSnapshot
+  buildSnapshot,
+  commercialRoute,
 };

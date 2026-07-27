@@ -1,28 +1,703 @@
 <!doctype html>
 <html lang="ko">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>IGDC 소셜 콘텐츠 후보 대기열</title>
-  <style>
-    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#e5eefb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1500px;margin:auto;padding:24px 16px 70px}h1{margin:0 0 7px;font-size:25px}.lead,.small,.foot{color:#aebfd4;line-height:1.55}.bar,.filters,.reviewbar,.collect-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}button,input,select{border:1px solid #35516f;border-radius:9px;background:#102238;color:#edf6ff;padding:9px 11px}button{font-weight:800;cursor:pointer;background:#7de0d8;color:#073234;border:0}button.secondary{background:#dbe5f0;color:#172033}button.publish{background:#ffd070;color:#3e2b00}button.danger{background:#ff9aa5;color:#411018}button:disabled{opacity:.5;cursor:not-allowed}.state{font-size:13px;color:#b9c8db}.panel,.card{background:#111c2d;border:1px solid #28405f;border-radius:14px;padding:14px;margin-top:13px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px}.card{margin:0}.card h2{font-size:13px;margin:0 0 6px}.num{font-size:25px;font-weight:850}.notice{padding:11px;border-radius:9px;background:#0b3438;border-left:4px solid #7de0d8}.notice.warn{background:#3b2a0a;border-color:#f2b349}.hidden{display:none!important}.progressbox{margin-top:10px;padding:10px;border:1px solid #35516f;border-radius:10px;background:#0b1727}.progressbar{height:9px;border-radius:999px;background:#22344a;overflow:hidden;margin-top:7px}.progressbar>i{display:block;height:100%;width:0;background:#7de0d8;transition:width .2s}.json{max-height:520px;overflow:auto;background:#08111f;border:1px solid #28405f;border-radius:10px;padding:12px;white-space:pre-wrap}.pill{display:inline-block;border-radius:999px;padding:3px 8px;font-size:12px;font-weight:800;background:#243953}.pill.section{background:#173f61;color:#c9ebff}.pill.platform{background:#27255f;color:#dfdbff}.pill.safe{background:#104e35;color:#c6f9dd}.pill.hold{background:#5b3b10;color:#ffe2a1}.pill.risk{background:#5e3115;color:#ffe0bd}.pill.block{background:#5b1322;color:#ffd1da}.section-accordion{display:grid;gap:10px;margin-top:12px}.candidate-section{border:1px solid #28405f;border-radius:14px;background:#0c1828;overflow:hidden}.section-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-radius:0;background:#13283e;color:#edf6ff;text-align:left}.section-toggle:hover{background:#18334f}.section-toggle-main{display:flex;gap:10px;align-items:center;min-width:0}.section-toggle-title{font-size:16px}.section-count{background:#243953;border-radius:999px;padding:3px 9px;color:#cfe7ff;font-size:12px}.section-chevron{font-size:18px;transition:transform .18s}.candidate-section.open .section-chevron{transform:rotate(180deg)}.section-body{padding:14px}.section-actionbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:10px;border:1px solid #28405f;border-radius:11px;background:#0a1523;margin-bottom:12px}.section-note{min-width:250px;flex:1}.candidate-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:12px}.candidate-card{position:relative;background:#101f31;border:1px solid #2c4564;border-radius:13px;overflow:hidden;min-width:0}.candidate-card.selected{border-color:#7de0d8;box-shadow:0 0 0 1px #7de0d8 inset}.candidate-card-check{position:absolute;z-index:3;top:9px;left:9px;width:20px;height:20px;accent-color:#7de0d8}.candidate-thumb-button{display:block;width:100%;padding:0;border:0;border-radius:0;background:#07111e;color:#fff;position:relative;aspect-ratio:16/9;overflow:hidden}.candidate-thumb-button img{width:100%;height:100%;object-fit:cover;display:block}.candidate-thumb-fallback{display:grid;place-items:center;width:100%;height:100%;padding:20px;color:#9eb0c5;background:linear-gradient(135deg,#172b42,#0b1420)}.candidate-card-body{padding:10px}.candidate-card-title{font-size:14px;line-height:1.4;font-weight:850;min-height:40px;margin-bottom:7px}.candidate-card-meta{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px}.candidate-card-detail{color:#aebfd4;font-size:12px;line-height:1.45}.candidate-card-footer{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.candidate-card-footer button,.candidate-card-footer a{font-size:12px;padding:7px 9px;text-decoration:none;border-radius:8px}.empty-section{padding:28px;text-align:center;color:#9eb0c5;border:1px dashed #35516f;border-radius:11px}.modal-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.tablewrap{overflow:auto;border:1px solid #28405f;border-radius:12px;margin-top:10px}table{width:100%;border-collapse:collapse;font-size:13px;min-width:1050px}th,td{padding:9px 8px;border-bottom:1px solid #293e5b;text-align:left;vertical-align:top}.group-row td{background:#0c2237;color:#a9ddff;font-size:14px;font-weight:850}.candidate-title{font-weight:800;color:#f4f8ff}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}.nowrap{white-space:nowrap}@media(max-width:700px){main{padding:16px 10px}.candidate-card-grid{grid-template-columns:1fr}.modal-head{align-items:flex-start;flex-direction:column}}
-  </style>
-</head>
-<body>
-<main>
-  <h1>소셜 콘텐츠 후보 대기열</h1>
-  <p class="lead">Sanmaru/SearchBank가 발견한 공개 SNS 후보를 9개 섹션별로 수집·검토하는 관리자 대기열입니다. 후보를 승인해도 실제 스냅샷 발행 전까지 기존 샘플 슬롯은 유지합니다. 외부 플랫폼의 광고·로그인·멤버십 권한은 우회하지 않습니다.</p>
-  <div class="bar"><button id="refreshBtn">대기열 새로고침</button><button id="diagnosticBtn" class="secondary">소셜 점검 JSON</button><button id="rotationBtn" class="secondary">로테이션 미리보기</button><button id="publishPreviewBtn" class="publish">스냅샷 발행 미리보기</button><button id="snapshotDownloadBtn" class="secondary">스냅샷 다운로드</button><button id="downloadJsonBtn" class="secondary" disabled>점검 JSON</button><button id="downloadCandidateListBtn" class="secondary">후보 목록 JSON</button><button id="returnBtn" class="secondary">관리자 화면으로</button><span id="state" class="state">연결 준비 중</span></div>
-  <div id="notice" class="notice hidden"></div>
-  <section class="panel"><h2>섹션별 공개 SNS 콘텐츠 수집</h2><div class="small">한 번에 대량 검색하지 않습니다. 선택한 섹션을 8~10개 단위로 조사·검증·저장하고, 목표 수량 또는 실제 신규 후보 탐색 한도에 도달한 뒤 다음 섹션으로 넘어갑니다. 검색 결과·플랫폼 홈·소셜마루·우측 패널·seed·placeholder는 후보로 반입하지 않습니다.</div><div class="collect-controls"><select id="collectorSection"></select><select id="collectorLimit"><option value="100">섹션 목표 100개</option><option value="200">섹션 목표 200개</option><option value="300" selected>섹션 목표 300개</option></select><select id="collectorBatchSize"><option value="8">묶음 8개</option><option value="10" selected>묶음 10개</option><option value="12">묶음 12개</option></select><button id="collectDryRunBtn" class="secondary">선택 섹션 1묶음 점검</button><button id="collectSectionBtn">선택 섹션 전량 수집</button><button id="collectAllBtn" class="publish">전체 9개 섹션 순차 수집</button><button id="collectorStopBtn" class="secondary" disabled>일시정지</button><span id="collectorState" class="state">수집 전</span></div><div class="collect-controls"><button id="providerStatusBtn" class="secondary">검색 제공자·필요 설정 확인</button><button id="searchBankImportBtn" class="secondary">SearchBank 실후보 반입</button><span class="small">키가 없는 경로는 대기 상태로 남기고, 이미 검증된 SearchBank 후보 및 설정된 제공자 경로는 계속 작동합니다.</span></div><div id="providerStatus" class="progressbox hidden"></div><div id="collectorProgress" class="progressbox hidden"><div id="collectorProgressText" class="small"></div><div class="progressbar"><i id="collectorProgressBar"></i></div><div id="collectorRejectText" class="small"></div></div></section>
-  <section id="summaryGrid" class="grid hidden"></section>
-  <section id="filterPanel" class="panel hidden"><h2>섹션·플랫폼·상태 검색</h2><div class="filters"><input id="searchInput" type="search" placeholder="제목, 크리에이터, 플랫폼, 섹션, URL 검색" style="min-width:260px;flex:1"><select id="sectionFilter"><option value="">전체 섹션</option></select><select id="platformFilter"><option value="">전체 플랫폼</option></select><select id="riskFilter"><option value="">전체 위험도</option></select><select id="reviewFilter"><option value="">전체 검토상태</option></select></div><div id="filterState" class="small">섹션을 펼치면 해당 섹션 후보 카드만 표시합니다.</div></section>
-  <section id="diagnosticPanel" class="panel hidden"><h2>소셜 후보 점검 JSON</h2><pre id="diagnosticJson" class="json"></pre></section>
-  <section id="tablePanel" class="panel hidden"><div class="modal-head"><div><h2 style="margin:0">9개 SNS 섹션 후보</h2><div class="small">한 번에 한 섹션만 펼쳐 검토합니다. 해당 섹션의 썸네일만 불러오며, 원본 콘텐츠는 새 창에서 확인합니다.</div></div><span id="candidateCapacityState" class="state"></span></div><div class="reviewbar"><button id="approveBtn">선택 승인</button><button id="holdBtn" class="secondary">선택 보류</button><button id="resetBtn" class="secondary">선택 재검토</button><button id="rejectBtn" class="danger">선택 반려</button><button id="blockBtn" class="danger">선택 영구 차단</button><button id="deleteBtn" class="danger">선택 제외 목록 이동</button><button id="deleteVisibleBtn" class="danger">현재 검색 결과 전체 제외</button><label class="small"><input id="socialConfirm" type="checkbox"> 외부 플랫폼 권한·광고·로그인 정책 확인</label></div><div id="sectionAccordion" class="section-accordion"></div></section>
-  <section id="exclusionPanel" class="panel hidden"><div class="modal-head"><div><h2 style="margin:0">검색 제외 목록</h2><div class="small">후보 목록에서 제외한 콘텐츠를 원래 섹션별로 보관합니다. 보류 복원은 제외만 해제하고, 원상 복원은 제외 전의 검토 상태를 되돌립니다. 영구 차단과 기록 완전 삭제는 별도 작업입니다.</div></div><button id="toggleExclusionBtn" class="secondary">목록 펼치기</button></div><div id="exclusionSummary" class="small" style="margin-top:8px"></div><div id="exclusionBody" class="hidden"><div class="reviewbar"><button id="restoreHoldExcludedBtn" class="secondary">선택 보류로 복원·제외 해제</button><button id="restoreExcludedBtn">선택 원래 상태로 복원</button><button id="permanentBlockExcludedBtn" class="danger">선택 영구 차단</button><button id="forgetExcludedBtn" class="secondary">선택 기록 완전 삭제</button></div><div class="small">기록 완전 삭제는 후보 DB 기록만 삭제하므로, 나중에 같은 콘텐츠가 다시 검색될 수 있습니다. 영구 차단은 재검색 반입도 막습니다.</div><div class="tablewrap"><table><thead><tr><th>순번</th><th><input id="selectAllExcluded" type="checkbox"></th><th>섹션</th><th>상태</th><th>콘텐츠</th><th>복원 목표</th><th>제외 사유</th><th>플랫폼</th><th>등록일</th></tr></thead><tbody id="excludedRows"></tbody></table></div></div></section>
-  <p class="foot">후보 수집·검토만으로 프런트 공개 목록은 바뀌지 않습니다. 검증 완료 후보만 별도의 발행 절차를 통해 소셜 네트워크에 반영됩니다.</p>
-</main>
-<script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-social-candidate-queue.js?v=6"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>IGDC 소셜 네트워크 허브 채널 후보 관제</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #0b1220;
+        color: #e5eefb;
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      main {
+        max-width: 1500px;
+        margin: auto;
+        padding: 24px 16px 70px;
+      }
+      h1 {
+        margin: 0 0 7px;
+        font-size: 25px;
+      }
+      .lead,
+      .small,
+      .foot {
+        color: #aebfd4;
+        line-height: 1.55;
+      }
+      .bar,
+      .filters,
+      .reviewbar,
+      .collect-controls {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin: 12px 0;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        border: 1px solid #35516f;
+        border-radius: 9px;
+        background: #102238;
+        color: #edf6ff;
+        padding: 9px 11px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 122px;
+        resize: vertical;
+        font:
+          13px/1.5 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+      button {
+        font-weight: 800;
+        cursor: pointer;
+        background: #7de0d8;
+        color: #073234;
+        border: 0;
+      }
+      button.secondary {
+        background: #dbe5f0;
+        color: #172033;
+      }
+      button.publish {
+        background: #ffd070;
+        color: #3e2b00;
+      }
+      button.danger {
+        background: #ff9aa5;
+        color: #411018;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .state {
+        font-size: 13px;
+        color: #b9c8db;
+      }
+      .panel,
+      .card {
+        background: #111c2d;
+        border: 1px solid #28405f;
+        border-radius: 14px;
+        padding: 14px;
+        margin-top: 13px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+        gap: 10px;
+      }
+      .scope-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .scope-field {
+        display: grid;
+        gap: 6px;
+      }
+      .scope-field label {
+        color: #aebfd4;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .scope-field select {
+        width: 100%;
+      }
+      .card {
+        margin: 0;
+      }
+      .card h2 {
+        font-size: 13px;
+        margin: 0 0 6px;
+      }
+      .num {
+        font-size: 25px;
+        font-weight: 850;
+      }
+      .notice {
+        padding: 11px;
+        border-radius: 9px;
+        background: #0b3438;
+        border-left: 4px solid #7de0d8;
+      }
+      .notice.warn {
+        background: #3b2a0a;
+        border-color: #f2b349;
+      }
+      .hidden {
+        display: none !important;
+      }
+      .progressbox {
+        margin-top: 10px;
+        padding: 10px;
+        border: 1px solid #35516f;
+        border-radius: 10px;
+        background: #0b1727;
+      }
+      .progressbar {
+        height: 9px;
+        border-radius: 999px;
+        background: #22344a;
+        overflow: hidden;
+        margin-top: 7px;
+      }
+      .progressbar > i {
+        display: block;
+        height: 100%;
+        width: 0;
+        background: #7de0d8;
+        transition: width 0.2s;
+      }
+      .json {
+        max-height: 520px;
+        overflow: auto;
+        background: #08111f;
+        border: 1px solid #28405f;
+        border-radius: 10px;
+        padding: 12px;
+        white-space: pre-wrap;
+      }
+      .pill {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 12px;
+        font-weight: 800;
+        background: #243953;
+      }
+      .pill.section {
+        background: #173f61;
+        color: #c9ebff;
+      }
+      .pill.platform {
+        background: #27255f;
+        color: #dfdbff;
+      }
+      .pill.safe {
+        background: #104e35;
+        color: #c6f9dd;
+      }
+      .pill.hold {
+        background: #5b3b10;
+        color: #ffe2a1;
+      }
+      .pill.risk {
+        background: #5e3115;
+        color: #ffe0bd;
+      }
+      .pill.block {
+        background: #5b1322;
+        color: #ffd1da;
+      }
+      .section-accordion {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .candidate-section {
+        border: 1px solid #28405f;
+        border-radius: 14px;
+        background: #0c1828;
+        overflow: hidden;
+      }
+      .section-toggle {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 0;
+        background: #13283e;
+        color: #edf6ff;
+        text-align: left;
+      }
+      .section-toggle:hover {
+        background: #18334f;
+      }
+      .section-toggle-main {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        min-width: 0;
+      }
+      .section-toggle-title {
+        font-size: 16px;
+      }
+      .section-count {
+        background: #243953;
+        border-radius: 999px;
+        padding: 3px 9px;
+        color: #cfe7ff;
+        font-size: 12px;
+      }
+      .section-chevron {
+        font-size: 18px;
+        transition: transform 0.18s;
+      }
+      .candidate-section.open .section-chevron {
+        transform: rotate(180deg);
+      }
+      .section-body {
+        padding: 14px;
+      }
+      .section-actionbar {
+        display: flex;
+        gap: 7px;
+        align-items: center;
+        flex-wrap: wrap;
+        padding: 10px;
+        border: 1px solid #28405f;
+        border-radius: 11px;
+        background: #0a1523;
+        margin-bottom: 12px;
+      }
+      .section-note {
+        min-width: 250px;
+        flex: 1;
+      }
+      .candidate-card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+        gap: 12px;
+      }
+      .candidate-card {
+        position: relative;
+        background: #101f31;
+        border: 1px solid #2c4564;
+        border-radius: 13px;
+        overflow: hidden;
+        min-width: 0;
+      }
+      .candidate-card.selected {
+        border-color: #7de0d8;
+        box-shadow: 0 0 0 1px #7de0d8 inset;
+      }
+      .candidate-card-check {
+        position: absolute;
+        z-index: 3;
+        top: 9px;
+        left: 9px;
+        width: 20px;
+        height: 20px;
+        accent-color: #7de0d8;
+      }
+      .candidate-thumb-button {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: #07111e;
+        color: #fff;
+        position: relative;
+        aspect-ratio: 16/9;
+        overflow: hidden;
+      }
+      .candidate-thumb-button img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .candidate-thumb-fallback {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 100%;
+        padding: 20px;
+        color: #9eb0c5;
+        background: linear-gradient(135deg, #172b42, #0b1420);
+      }
+      .candidate-card-body {
+        padding: 10px;
+      }
+      .candidate-card-title {
+        font-size: 14px;
+        line-height: 1.4;
+        font-weight: 850;
+        min-height: 40px;
+        margin-bottom: 7px;
+      }
+      .candidate-card-meta {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+        margin-bottom: 7px;
+      }
+      .candidate-card-detail {
+        color: #aebfd4;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .candidate-card-footer {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 9px;
+      }
+      .candidate-card-footer button,
+      .candidate-card-footer a {
+        font-size: 12px;
+        padding: 7px 9px;
+        text-decoration: none;
+        border-radius: 8px;
+      }
+      .empty-section {
+        padding: 28px;
+        text-align: center;
+        color: #9eb0c5;
+        border: 1px dashed #35516f;
+        border-radius: 11px;
+      }
+      .modal-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+      .tablewrap {
+        overflow: auto;
+        border: 1px solid #28405f;
+        border-radius: 12px;
+        margin-top: 10px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        min-width: 1050px;
+      }
+      th,
+      td {
+        padding: 9px 8px;
+        border-bottom: 1px solid #293e5b;
+        text-align: left;
+        vertical-align: top;
+      }
+      .group-row td {
+        background: #0c2237;
+        color: #a9ddff;
+        font-size: 14px;
+        font-weight: 850;
+      }
+      .candidate-title {
+        font-weight: 800;
+        color: #f4f8ff;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        word-break: break-word;
+      }
+      .nowrap {
+        white-space: nowrap;
+      }
+      @media (max-width: 700px) {
+        main {
+          padding: 16px 10px;
+        }
+        .candidate-card-grid {
+          grid-template-columns: 1fr;
+        }
+        .modal-head {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>소셜 네트워크 허브 채널 후보 관제</h1>
+      <p class="lead">
+        IGDC가 추천할 공개 SNS 채널·프로필·그룹을 9개 섹션별로 수집·검토합니다.
+        개별 게시물이 발견되면 운영 채널 주소로 승격한 뒤 후보에 넣습니다.
+        후보를 확정해도 <strong>실제 적용</strong> 버튼을 누르기 전까지 기존
+        샘플 슬롯은 유지하며 외부 플랫폼의 권한을 우회하지 않습니다.
+      </p>
+      <div class="bar">
+        <button id="refreshBtn">대기열 새로고침</button
+        ><button id="diagnosticBtn" class="secondary">소셜 점검 JSON</button
+        ><button id="rotationBtn" class="secondary">최종 100개 다시 정리</button
+        ><button id="publishPreviewBtn" class="publish">
+          실제 적용 전 미리보기</button
+        ><button id="snapshotDownloadBtn" class="secondary">
+          적용 내용 JSON 다운로드</button
+        ><button id="downloadJsonBtn" class="secondary" disabled>
+          점검 JSON</button
+        ><button id="downloadCandidateListBtn" class="secondary">
+          후보 목록 JSON</button
+        ><button id="returnBtn" class="secondary">관리자 화면으로</button
+        ><span id="state" class="state">연결 준비 중</span>
+      </div>
+      <div id="notice" class="notice hidden"></div>
+      <section class="panel" id="countryScopePanel">
+        <h2>전 세계 권역 · 국가 · 접속 국가(IP) 관리 범위</h2>
+        <div class="small">
+          소셜 허브는 주·성 단위로 나누지 않고 국가 단위로 관리합니다. 권역은
+          국가 목록을 빠르게 찾기 위한 분류이며, 선택한 국가는 후보 수집·최종
+          100개 정리·실제 프론트 적용에 함께 사용됩니다. 언어는 프론트의 기존
+          30개 언어 전환 체계를 그대로 사용합니다.
+        </div>
+        <div class="scope-grid">
+          <div class="scope-field">
+            <label for="collectorRegion">관리 권역</label>
+            <select id="collectorRegion">
+              <option value="">전체 권역</option>
+            </select>
+          </div>
+          <div class="scope-field">
+            <label for="collectorCountry">관리·적용 국가</label>
+            <select id="collectorCountry">
+              <option value="">전 세계 공통</option>
+            </select>
+          </div>
+          <div class="scope-field">
+            <label>접속 국가 자동 확인</label>
+            <div class="collect-controls" style="margin: 0">
+              <button id="detectCountryBtn" class="secondary" type="button">
+                IP 기준 국가 확인</button
+              ><button id="useDetectedCountryBtn" type="button">
+                확인 국가로 선택
+              </button>
+            </div>
+          </div>
+          <div class="scope-field">
+            <label>국가 관리자 위임 준비</label>
+            <div class="small">
+              현재 선택한 권역·국가가 관리 작업 범위로 전달됩니다. 향후 관리자
+              계정에는 같은 국가 범위만 연결하면 됩니다.
+            </div>
+          </div>
+        </div>
+        <input id="collectorLanguages" type="hidden" value="" />
+        <div id="countryScopeState" class="progressbox small">
+          국가 목록과 접속 국가를 확인하는 중입니다.
+        </div>
+      </section>
+      <section class="panel">
+        <h2>섹션별 공개 SNS 채널 수집</h2>
+        <div class="small">
+          한 번에 100개를 검색하지 않습니다. 선택한 섹션을 8~10개 단위로
+          조사·검증·저장합니다. 100개에 도달하면 인기·품질·활동성 중심의 보강
+          검색을 두 묶음 더 실행하고, 전체 비교 후보에서 상위 100개를 공개 배치
+          대상으로 정리합니다. 100개 전에 연속 검색에서 신규 후보가 더 이상
+          나오거나 보강 검색이 소진되면 다음 섹션으로 넘어갑니다. 국가는 소셜
+          전용 국가 단위이며 주·성은 사용하지 않습니다. 검색 결과 페이지·플랫폼
+          홈·소셜마루·우측 패널·seed·placeholder는 후보로 반입하지 않습니다.
+        </div>
+        <div class="collect-controls">
+          <select id="collectorSection"></select
+          ><span class="state">공개 배치 100개 + 품질 보강</span
+          ><select id="collectorBatchSize">
+            <option value="8">묶음 8개</option>
+            <option value="10" selected>묶음 10개</option>
+            <option value="12">묶음 12개</option></select
+          ><button id="collectDryRunBtn" class="secondary">
+            선택 섹션 1묶음 점검</button
+          ><button id="collectSectionBtn">선택 섹션 100개+보강</button
+          ><button id="collectAllBtn" class="publish">
+            전체 9개 섹션 순차 수집</button
+          ><button id="collectorStopBtn" class="secondary" disabled>
+            일시정지</button
+          ><span id="collectorState" class="state">수집 전</span>
+        </div>
+        <div class="collect-controls">
+          <button id="providerStatusBtn" class="secondary">
+            검색 제공자·필요 설정 확인</button
+          ><button id="searchBankImportBtn" class="secondary">
+            SearchBank 실후보 반입</button
+          ><span class="small"
+            >키가 없어도 아래 공개 URL 직접 반입과 게시물→채널 승격은
+            작동합니다. 자동 신규 발견은 설정된 검색 제공자를 순차
+            사용합니다.</span
+          >
+        </div>
+        <div id="providerStatus" class="progressbox hidden"></div>
+        <div id="collectorProgress" class="progressbox hidden">
+          <div id="collectorProgressText" class="small"></div>
+          <div class="progressbar"><i id="collectorProgressBar"></i></div>
+          <div id="collectorRejectText" class="small"></div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>공개 채널 URL 직접 반입</h2>
+        <div class="small">
+          검색 API가 없거나 제한된 플랫폼도 운영할 수 있는 보조 경로입니다.
+          위에서 국가와 여기의 섹션을 먼저 선택한 뒤 한 줄에 하나씩
+          붙여넣으세요. 형식:
+          <span class="mono">https://공개주소 | 채널명(선택) | 주제(선택)</span
+          >. YouTube 영상·TikTok 영상·X 게시물·Reddit 글 주소는 확인 가능한 운영
+          채널·프로필·커뮤니티 주소로 바꿉니다.
+        </div>
+        <textarea
+          id="channelIntakeText"
+          maxlength="100000"
+          placeholder="https://www.youtube.com/@channel | 채널명 | travel&#10;https://www.tiktok.com/@creator/video/123456789 | 크리에이터명 | culture"
+        ></textarea>
+        <div class="collect-controls">
+          <button id="channelIntakeDryRunBtn" class="secondary">
+            채널 주소 변환 점검</button
+          ><button id="channelIntakeBtn">채널 후보 반입</button
+          ><button id="channelIntakeClearBtn" class="secondary">
+            입력 비우기</button
+          ><span id="channelIntakeState" class="state">입력 대기</span>
+        </div>
+      </section>
+      <section id="summaryGrid" class="grid hidden"></section>
+      <section id="filterPanel" class="panel hidden">
+        <h2>섹션·플랫폼·상태 검색</h2>
+        <div class="filters">
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="제목, 크리에이터, 플랫폼, 섹션, URL 검색"
+            style="min-width: 260px; flex: 1"
+          /><select id="sectionFilter">
+            <option value="">전체 섹션</option></select
+          ><select id="platformFilter">
+            <option value="">전체 플랫폼</option></select
+          ><select id="riskFilter">
+            <option value="">전체 위험도</option></select
+          ><select id="reviewFilter">
+            <option value="">전체 검토상태</option>
+          </select>
+        </div>
+        <div id="filterState" class="small">
+          섹션을 펼치면 해당 섹션 후보 카드만 표시합니다.
+        </div>
+      </section>
+      <section id="diagnosticPanel" class="panel hidden">
+        <h2>소셜 후보 점검 JSON</h2>
+        <pre id="diagnosticJson" class="json"></pre>
+      </section>
+      <section id="tablePanel" class="panel hidden">
+        <div class="modal-head">
+          <div>
+            <h2 style="margin: 0">최종 확정 채널 · 9개 SNS 섹션</h2>
+            <div class="small">
+              각 섹션의 최종 100개를 썸네일로 확인합니다. 한 번에 한 섹션만 펼쳐
+              과도한 이미지 로딩을 막습니다.
+            </div>
+          </div>
+          <span id="candidateCapacityState" class="state"></span>
+        </div>
+        <div class="reviewbar">
+          <button id="approveBtn">선택 확정</button
+          ><button id="moveWaitingBtn" class="secondary">
+            선택 대기열로 내리기</button
+          ><button id="holdBtn" class="secondary">선택 보류</button
+          ><button id="resetBtn" class="secondary">선택 재검토</button
+          ><button id="rejectBtn" class="danger">선택 반려</button
+          ><button id="blockBtn" class="danger">선택 영구 차단</button
+          ><label class="small"
+            ><input id="socialConfirm" type="checkbox" /> 공개성·안전성
+            확인</label
+          ><span style="flex: 1"></span
+          ><button id="aiAutoBtn" class="publish">AI 전자동 후보 확정</button
+          ><button id="publishAllBtn" class="publish">
+            전체 9개 섹션 실제 적용
+          </button>
+        </div>
+        <div id="sectionAccordion" class="section-accordion"></div>
+      </section>
+      <section id="waitingPanel" class="panel hidden">
+        <div class="modal-head">
+          <div>
+            <h2 style="margin: 0">교체 후보 대기열 · 9개 SNS 섹션</h2>
+            <div class="small">
+              최종 100개에서 밀렸거나 수동으로 내린 채널입니다. 삭제하면 후보
+              기록이 완전히 없어지고, 영구 차단하면 다시 검색돼도 반입되지
+              않습니다.
+            </div>
+          </div>
+          <span id="waitingCapacityState" class="state"></span>
+        </div>
+        <div class="reviewbar">
+          <button id="waitingPromoteBtn">선택 최종 후보로 올리기</button
+          ><button id="waitingDeleteBtn" class="danger">선택 완전 삭제</button
+          ><button id="waitingBlockBtn" class="danger">선택 영구 차단</button>
+        </div>
+        <div id="waitingAccordion" class="section-accordion"></div>
+      </section>
+      <section id="exclusionPanel" class="panel hidden">
+        <div class="modal-head">
+          <div>
+            <h2 style="margin: 0">검색 제외 목록</h2>
+            <div class="small">
+              후보 목록에서 제외한 콘텐츠를 원래 섹션별로 보관합니다. 보류
+              복원은 제외만 해제하고, 원상 복원은 제외 전의 검토 상태를
+              되돌립니다. 영구 차단과 기록 완전 삭제는 별도 작업입니다.
+            </div>
+          </div>
+          <button id="toggleExclusionBtn" class="secondary">목록 펼치기</button>
+        </div>
+        <div id="exclusionSummary" class="small" style="margin-top: 8px"></div>
+        <div id="exclusionBody" class="hidden">
+          <div class="reviewbar">
+            <button id="restoreHoldExcludedBtn" class="secondary">
+              선택 보류로 복원·제외 해제</button
+            ><button id="restoreExcludedBtn">선택 원래 상태로 복원</button
+            ><button id="permanentBlockExcludedBtn" class="danger">
+              선택 영구 차단</button
+            ><button id="forgetExcludedBtn" class="secondary">
+              선택 기록 완전 삭제
+            </button>
+          </div>
+          <div class="small">
+            기록 완전 삭제는 후보 DB 기록만 삭제하므로, 나중에 같은 콘텐츠가
+            다시 검색될 수 있습니다. 영구 차단은 재검색 반입도 막습니다.
+          </div>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>순번</th>
+                  <th><input id="selectAllExcluded" type="checkbox" /></th>
+                  <th>섹션</th>
+                  <th>상태</th>
+                  <th>콘텐츠</th>
+                  <th>복원 목표</th>
+                  <th>제외 사유</th>
+                  <th>플랫폼</th>
+                  <th>등록일</th>
+                </tr>
+              </thead>
+              <tbody id="excludedRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <p class="foot">
+        후보 수집·검토만으로 프런트 공개 목록은 바뀌지 않습니다. 검증 완료
+        후보만 <strong>전체 9개 섹션 실제 적용</strong> 또는
+        <strong>이 섹션 실제 적용</strong> 버튼으로 소셜 네트워크 화면에
+        반영됩니다.
+      </p>
+    </main>
+    <script src="/assets/js/igdc-member-auth.js"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=10"></script>
+  </body>
 </html>

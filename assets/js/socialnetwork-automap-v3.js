@@ -6,294 +6,426 @@
 // 4) 우측 패널도 실데이터가 있을 때만 기존 더미를 밀어내고 교체한다.
 
 (function () {
-  'use strict';
+  "use strict";
 
- // --- bootstrap guard ---
- if (window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ === true) return;
- window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
+  // --- bootstrap guard ---
+  if (window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ === true) return;
+  window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
 
- // --- config ---
- const SNAPSHOT_URL = "/data/social.snapshot.json";
- const MAIN_ROWS = 9;
- const MAIN_LIMIT = 100;
- const RIGHT_LIMIT = 100;
- const RIGHT_SECTION_KEY = "rightPanel";
+  // --- config ---
+  const SNAPSHOT_URL = "/data/social.snapshot.json";
+  const CURRENT_SNAPSHOT_URL = "/.netlify/functions/social-snapshot-current";
+  const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
+  const MAIN_ROWS = 9;
+  const MAIN_LIMIT = 100;
+  const RIGHT_LIMIT = 100;
+  const RIGHT_SECTION_KEY = "rightPanel";
 
-  function qs(sel, root){ return (root || document).querySelector(sel); }
-  function qsa(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
-  function safeText(v){ return v == null ? '' : String(v); }
+  function qs(sel, root) {
+    return (root || document).querySelector(sel);
+  }
+  function qsa(sel, root) {
+    return Array.from((root || document).querySelectorAll(sel));
+  }
+  function safeText(v) {
+    return v == null ? "" : String(v);
+  }
 
-  function pickTitle(it){
+  function pickTitle(it) {
     return safeText(it && (it.title || it.name || it.text || it.label));
   }
 
-  function pickUrl(it){
-    return safeText(it && (
-      it.affiliateOutboundUrl ||
-      it.affiliate_outbound_url ||
-      it.externalOutboundUrl ||
-      it.external_outbound_url ||
-      it.checkoutUrl ||
-      it.paymentUrl ||
-      it.contentUrl ||
-      it.pageUrl ||
-      it.internalUrl ||
-      it.productUrl ||
-      it.productLink ||
-      it.detailUrl ||
-      it.redirectUrl ||
-      it.permalink ||
-      it.path ||
-      it.url ||
-      it.href ||
-      it.link ||
-      ''
-    )) || '#';
-  }
-
-  function pickThumb(it){
-    return safeText(it && (it.thumb || it.image || it.thumbnail || it.imageUrl || it.thumbnailUrl));
-  }
-
-  function pickDesc(it){
-    return safeText(
-      it && (
-        it.description ||
-        it.summary ||
-        (it.source && (it.source.platform || it.source.site || it.source.provider)) ||
-        ''
-      )
+  function pickUrl(it) {
+    return (
+      safeText(
+        it &&
+          (it.affiliateOutboundUrl ||
+            it.affiliate_outbound_url ||
+            it.externalOutboundUrl ||
+            it.external_outbound_url ||
+            it.checkoutUrl ||
+            it.paymentUrl ||
+            it.contentUrl ||
+            it.pageUrl ||
+            it.internalUrl ||
+            it.productUrl ||
+            it.productLink ||
+            it.detailUrl ||
+            it.redirectUrl ||
+            it.permalink ||
+            it.path ||
+            it.url ||
+            it.href ||
+            it.link ||
+            ""),
+      ) || "#"
     );
   }
 
-  function pickProductId(it){
-    return safeText(it && (
-      it.productId ||
-      it.product_id ||
-      it.contentId ||
-      it.content_id ||
-      it.itemId ||
-      it.item_id ||
-      it.sku ||
-      it.code ||
-      it.id ||
-      ''
-    )).trim();
+  function pickThumb(it) {
+    return safeText(
+      it &&
+        (it.thumb ||
+          it.image ||
+          it.thumbnail ||
+          it.imageUrl ||
+          it.thumbnailUrl),
+    );
   }
 
-  function isExternalUrl(url){
+  function pickDesc(it) {
+    return safeText(
+      it &&
+        (it.description ||
+          it.summary ||
+          (it.source &&
+            (it.source.platform || it.source.site || it.source.provider)) ||
+          ""),
+    );
+  }
+
+  function pickProductId(it) {
+    return safeText(
+      it &&
+        (it.productId ||
+          it.product_id ||
+          it.contentId ||
+          it.content_id ||
+          it.itemId ||
+          it.item_id ||
+          it.sku ||
+          it.code ||
+          it.id ||
+          ""),
+    ).trim();
+  }
+
+  function isExternalUrl(url) {
     return /^https?:\/\//i.test(safeText(url).trim());
   }
 
-  function isInternalUrl(url){
+  function isInternalUrl(url) {
     url = safeText(url).trim();
-    return !!url && (
-      url.charAt(0) === '/' ||
-      url.startsWith('./') ||
-      url.startsWith('../') ||
-      /^[^?#]+\.html(?:$|[?#])/i.test(url)
+    return (
+      !!url &&
+      (url.charAt(0) === "/" ||
+        url.startsWith("./") ||
+        url.startsWith("../") ||
+        /^[^?#]+\.html(?:$|[?#])/i.test(url))
     );
   }
 
-  function isBadPlaceholderUrl(url){
+  function isBadPlaceholderUrl(url) {
     url = safeText(url).trim();
-    if(!url || url === '#') return true;
-    if(/^javascript:/i.test(url)) return true;
-    if(/\/pages\/coming-soon\.html/i.test(url)) return true;
-    if(/(?:^|\.)example\.com(?:[\/:?#]|$)/i.test(url)) return true;
+    if (!url || url === "#") return true;
+    if (/^javascript:/i.test(url)) return true;
+    if (/\/pages\/coming-soon\.html/i.test(url)) return true;
+    if (/(?:^|\.)example\.com(?:[\/:?#]|$)/i.test(url)) return true;
     return false;
   }
 
-  function isValidSecondUrl(url){
+  function isValidSecondUrl(url) {
     url = safeText(url).trim();
-    if(isBadPlaceholderUrl(url)) return false;
+    if (isBadPlaceholderUrl(url)) return false;
     return isExternalUrl(url) || isInternalUrl(url);
   }
 
-  function isPlaceholderItem(it){
-    if(!it) return true;
+  function isPlaceholderItem(it) {
+    if (!it) return true;
 
     const title = pickTitle(it).trim();
     const url = pickUrl(it).trim();
     const id = pickProductId(it);
     const type = safeText(it.type).trim().toLowerCase();
-    const sourcePlatform = safeText(it && it.source && it.source.platform).trim().toLowerCase();
+    const sourcePlatform = safeText(it && it.source && it.source.platform)
+      .trim()
+      .toLowerCase();
 
-    if(type === 'placeholder') return true;
-    if(sourcePlatform === 'placeholder') return true;
-    if(/^ph_/i.test(id)) return true;
-    if(title === 'Loading…' || title === 'Loading...' || title === 'Loading' || title === 'RIGHT SAMPLE') return true;
-    if(isBadPlaceholderUrl(url) && !pickThumb(it).trim()) return true;
+    if (type === "placeholder") return true;
+    if (sourcePlatform === "placeholder") return true;
+    if (/^ph_/i.test(id)) return true;
+    if (
+      title === "Loading…" ||
+      title === "Loading..." ||
+      title === "Loading" ||
+      title === "RIGHT SAMPLE"
+    )
+      return true;
+    if (isBadPlaceholderUrl(url) && !pickThumb(it).trim()) return true;
 
     return false;
   }
 
-  function resolveItemUrl(it){
-    if(!it || isPlaceholderItem(it)) return '';
+  function resolveItemUrl(it) {
+    if (!it || isPlaceholderItem(it)) return "";
 
     const id = pickProductId(it);
-    const explicitInternal = safeText(it && (
-      it.contentUrl ||
-      it.pageUrl ||
-      it.internalUrl ||
-      it.detailPage ||
-      it.detailUrl ||
-      it.path ||
-      ''
-    )).trim();
+    const explicitInternal = safeText(
+      it &&
+        (it.contentUrl ||
+          it.pageUrl ||
+          it.internalUrl ||
+          it.detailPage ||
+          it.detailUrl ||
+          it.path ||
+          ""),
+    ).trim();
 
-    if(isInternalUrl(explicitInternal) && !isBadPlaceholderUrl(explicitInternal)){
+    if (
+      isInternalUrl(explicitInternal) &&
+      !isBadPlaceholderUrl(explicitInternal)
+    ) {
       return explicitInternal;
     }
 
     // 우측 상품/콘텐츠 슬롯의 원칙: 실 ID가 있으면 IGDC 내부 원페이지를 우선 사용한다.
-    if(id && !/^ph_/i.test(id)){
-      return '/content.html?id=' + encodeURIComponent(id);
+    if (id && !/^ph_/i.test(id)) {
+      return "/content.html?id=" + encodeURIComponent(id);
     }
 
     const raw = pickUrl(it).trim();
-    if(isValidSecondUrl(raw)) return raw;
+    if (isValidSecondUrl(raw)) return raw;
 
-    return '';
+    return "";
   }
 
-  function resolveElementUrl(el){
-    if(!el) return '';
+  function resolveElementUrl(el) {
+    if (!el) return "";
 
     return safeText(
-      (el.dataset && (
-        el.dataset.checkoutUrl ||
-        el.dataset.paymentUrl ||
-        el.dataset.contentUrl ||
-        el.dataset.pageUrl ||
-        el.dataset.internalUrl ||
-        el.dataset.productUrl ||
-        el.dataset.productLink ||
-        el.dataset.detailUrl ||
-        el.dataset.href ||
-        el.dataset.url
-      )) ||
-      el.getAttribute('data-checkout-url') ||
-      el.getAttribute('data-payment-url') ||
-      el.getAttribute('data-content-url') ||
-      el.getAttribute('data-page-url') ||
-      el.getAttribute('data-internal-url') ||
-      el.getAttribute('data-product-url') ||
-      el.getAttribute('data-product-link') ||
-      el.getAttribute('data-detail-url') ||
-      el.getAttribute('data-href') ||
-      el.getAttribute('href') ||
-      ''
+      (el.dataset &&
+        (el.dataset.checkoutUrl ||
+          el.dataset.paymentUrl ||
+          el.dataset.contentUrl ||
+          el.dataset.pageUrl ||
+          el.dataset.internalUrl ||
+          el.dataset.productUrl ||
+          el.dataset.productLink ||
+          el.dataset.detailUrl ||
+          el.dataset.href ||
+          el.dataset.url)) ||
+        el.getAttribute("data-checkout-url") ||
+        el.getAttribute("data-payment-url") ||
+        el.getAttribute("data-content-url") ||
+        el.getAttribute("data-page-url") ||
+        el.getAttribute("data-internal-url") ||
+        el.getAttribute("data-product-url") ||
+        el.getAttribute("data-product-link") ||
+        el.getAttribute("data-detail-url") ||
+        el.getAttribute("data-href") ||
+        el.getAttribute("href") ||
+        "",
     ).trim();
   }
 
-function isRealItem(it){
-  return !!it;
-}
+  function isRealItem(it) {
+    return !!it;
+  }
 
-function getSections(snapshot){
-  if(!snapshot) return null;
+  function getSections(snapshot) {
+    if (!snapshot) return null;
 
-  const sec =
-    snapshot?.pages?.social?.sections ||
-    snapshot?.sections ||
-    null;
+    const sec = snapshot?.pages?.social?.sections || snapshot?.sections || null;
 
-  if(!sec) return null;
+    if (!sec) return null;
 
-  return sec;
-}
+    return sec;
+  }
 
-  async function loadSnapshot(){
-    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
-    if(!res.ok) throw new Error('snapshot_load_failed:' + res.status);
+  function languageKey(value) {
+    var raw = safeText(value).replace(/_/g, "-").toLowerCase();
+    if (raw === "zh-hans" || raw === "zh-cn" || raw === "zh-sg") return "zh";
+    if (
+      raw === "zh-hant" ||
+      raw === "zh-tw" ||
+      raw === "zh-hk" ||
+      raw === "zh-mo"
+    )
+      return "zht";
+    if (raw === "fil") return "tl";
+    return raw.split("-")[0];
+  }
+  function routeFallback() {
+    var lang =
+      languageKey(
+        (navigator.languages && navigator.languages[0]) ||
+          navigator.language ||
+          "en",
+      ) || "en";
+    return {
+      countryCode: null,
+      languages: [lang, "en"],
+      source: "browser_language_fallback",
+      ipStored: false,
+    };
+  }
+  async function loadCountryRoute() {
+    try {
+      var res = await fetch(COUNTRY_ROUTE_URL, {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!res.ok) throw new Error("route");
+      var data = await res.json();
+      return data && data.ok === true ? data : routeFallback();
+    } catch (_e) {
+      return routeFallback();
+    }
+  }
+  function listValue(value) {
+    return Array.isArray(value)
+      ? value
+      : !value
+        ? []
+        : safeText(value).split(",");
+  }
+  function routeScore(item, route) {
+    var social = (item && item.social) || {},
+      countries = listValue(social.countryScopes || item.countryScopes).map(
+        function (v) {
+          return safeText(v).toUpperCase();
+        },
+      ),
+      langs = listValue(
+        social.languageScopes || item.languageScopes || item.language,
+      ).map(languageKey),
+      wanted = ((route && route.languages) || []).map(languageKey),
+      country = safeText(route && route.countryCode).toUpperCase(),
+      score = 0;
+    if (country && countries.indexOf(country) >= 0) score += 120;
+    else if (countries.length) score -= 60;
+    var pos = -1;
+    langs.some(function (lang) {
+      pos = wanted.indexOf(lang);
+      return pos >= 0;
+    });
+    if (pos >= 0) score += 16 - pos * 2;
+    score +=
+      Number((item && item.signals && item.signals.rotation_score) || 0) * 2 +
+      Number((item && item.signals && item.signals.quality_score) || 0);
+    return score;
+  }
+  function routedItems(snapshot, key, route) {
+    var pool =
+        snapshot &&
+        snapshot.pages &&
+        snapshot.pages.social &&
+        snapshot.pages.social.candidatePool,
+      list = Array.isArray(pool && pool[key]) ? pool[key] : [];
+    if (!list.length) return null;
+    return list
+      .slice()
+      .sort(function (a, b) {
+        return (
+          routeScore(b, route) - routeScore(a, route) ||
+          safeText(a && a.id).localeCompare(safeText(b && b.id))
+        );
+      })
+      .slice(0, MAIN_LIMIT);
+  }
+
+  async function loadSnapshot() {
+    try {
+      const current = await fetch(CURRENT_SNAPSHOT_URL, {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (current.ok) {
+        const payload = await current.json();
+        if (payload && payload.ok === true && payload.snapshot)
+          return payload.snapshot;
+      }
+    } catch (_e) {
+      /* 기존 정적 스냅샷으로 안전하게 이어간다. */
+    }
+    const res = await fetch(SNAPSHOT_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error("snapshot_load_failed:" + res.status);
     return res.json();
   }
 
-function getMainSlots(gridEl){
-  if(!gridEl) return [];
-  return qsa('a.card', gridEl);
-}
+  function getMainSlots(gridEl) {
+    if (!gridEl) return [];
+    return qsa("a.card", gridEl);
+  }
 
-  function paintMainCard(card, it){
-    if(!card) return;
+  function paintMainCard(card, it) {
+    if (!card) return;
 
     const url = pickUrl(it);
-    const title = pickTitle(it) || 'Item';
-    const desc = pickDesc(it) || ' ';
+    const title = pickTitle(it) || "Item";
+    const desc = pickDesc(it) || " ";
     const thumb = pickThumb(it);
 
-    card.href = url || '#';
-    card.target = (url && url !== '#') ? '_blank' : '_self';
-    card.rel = 'noopener';
-    card.removeAttribute('data-dummy');
+    card.href = url || "#";
+    card.target = url && url !== "#" ? "_blank" : "_self";
+    card.rel = "noopener";
+    card.removeAttribute("data-dummy");
 
-    const pic = qs('.pic', card);
-    const metaTitle = qs('.title', card);
-    const metaDesc = qs('.desc', card);
+    const pic = qs(".pic", card);
+    const metaTitle = qs(".title", card);
+    const metaDesc = qs(".desc", card);
 
-    if(metaTitle) metaTitle.textContent = title;
-    if(metaDesc) metaDesc.textContent = desc;
+    if (metaTitle) metaTitle.textContent = title;
+    if (metaDesc) metaDesc.textContent = desc;
 
-    if(pic){
-      if(thumb){
-        pic.textContent = '';
+    if (pic) {
+      if (thumb) {
+        pic.textContent = "";
         pic.style.backgroundImage = "url('" + thumb.replace(/'/g, "%27") + "')";
-        pic.style.backgroundSize = 'cover';
-        pic.style.backgroundPosition = 'center';
-      }else{
-        pic.style.backgroundImage = '';
-        pic.textContent = '•';
+        pic.style.backgroundSize = "cover";
+        pic.style.backgroundPosition = "center";
+      } else {
+        pic.style.backgroundImage = "";
+        pic.textContent = "•";
       }
     }
   }
 
- function resetMainCardToDummy(card){
-  if(!card) return;
+  function resetMainCardToDummy(card) {
+    if (!card) return;
 
-  card.href = '#';
-  card.target = '_self';
-  card.rel = 'noopener';
-  card.dataset.dummy = '1';
+    card.href = "#";
+    card.target = "_self";
+    card.rel = "noopener";
+    card.dataset.dummy = "1";
 
-  const pic = qs('.pic', card);
-  const metaTitle = qs('.title', card);
-  const metaDesc = qs('.desc', card);
+    const pic = qs(".pic", card);
+    const metaTitle = qs(".title", card);
+    const metaDesc = qs(".desc", card);
 
-  if(metaTitle) metaTitle.textContent = 'Loading';
-  if(metaDesc) metaDesc.textContent = 'Preparing';
+    if (metaTitle) metaTitle.textContent = "Loading";
+    if (metaDesc) metaDesc.textContent = "Preparing";
 
-  if(pic){
-    pic.style.backgroundImage = '';
-    pic.textContent = '';
+    if (pic) {
+      pic.style.backgroundImage = "";
+      pic.textContent = "";
+    }
   }
-}
 
-function mountMainRow(gridEl, items){
-  if(!gridEl) return;
+  function mountMainRow(gridEl, items) {
+    if (!gridEl) return;
 
-const raw = Array.isArray(items) ? items : [];
-const displayItems = raw.slice(0, MAIN_LIMIT);
+    const raw = Array.isArray(items) ? items : [];
+    const displayItems = raw.slice(0, MAIN_LIMIT);
 
-// 🔥 핵심: slot 강제 채움 (디스트리뷰션 방식)
-while (displayItems.length < MAIN_LIMIT) {
-  displayItems.push(null);
-}
+    // 🔥 핵심: slot 강제 채움 (디스트리뷰션 방식)
+    while (displayItems.length < MAIN_LIMIT) {
+      displayItems.push(null);
+    }
 
-  // 기존 카드 가져오기
-  let cards = getMainSlots(gridEl);
+    // 기존 카드 가져오기
+    let cards = getMainSlots(gridEl);
 
-  // 부족하면 카드 생성
-  if(cards.length < MAIN_LIMIT){
+    // 부족하면 카드 생성
+    if (cards.length < MAIN_LIMIT) {
+      const frag = document.createDocumentFragment();
 
-    const frag = document.createDocumentFragment();
+      for (let i = cards.length; i < MAIN_LIMIT; i++) {
+        const a = document.createElement("a");
+        a.className = "card";
+        a.href = "#";
 
-    for(let i = cards.length; i < MAIN_LIMIT; i++){
-      const a = document.createElement('a');
-      a.className = 'card';
-      a.href = '#';
-
-      a.innerHTML = `
+        a.innerHTML = `
         <div class="pic"></div>
         <div class="meta">
           <div class="title"></div>
@@ -301,304 +433,332 @@ while (displayItems.length < MAIN_LIMIT) {
         </div>
       `;
 
-      frag.appendChild(a);
+        frag.appendChild(a);
+      }
+
+      gridEl.appendChild(frag);
+
+      // 다시 카드 목록 갱신
+      cards = getMainSlots(gridEl);
     }
 
-    gridEl.appendChild(frag);
+    // 데이터 렌더
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      const it = displayItems[i] || null;
 
-    // 다시 카드 목록 갱신
-    cards = getMainSlots(gridEl);
+      if (it) paintMainCard(card, it);
+      else resetMainCardToDummy(card);
+    }
   }
 
-  // 데이터 렌더
-  for(let i = 0; i < cards.length; i++){
-    const card = cards[i];
-    const it = displayItems[i] || null;
-
-    if(it) paintMainCard(card, it);
-    else resetMainCardToDummy(card);
+  function getRightPanels() {
+    return qsa('[data-psom-key="rightPanel"]');
   }
-}
 
- function getRightPanels(){
-  return qsa('[data-psom-key="rightPanel"]');
-}
+  function getRightCards(panel) {
+    if (!panel) return [];
 
-function getRightCards(panel){
-  if(!panel) return [];
+    let cards = qsa(".ad-box", panel);
 
-  let cards = qsa('.ad-box', panel);
+    if (cards.length === 0) {
+      const frag = document.createDocumentFragment();
 
-  if(cards.length === 0){
-    const frag = document.createDocumentFragment();
+      for (let i = 0; i < RIGHT_LIMIT; i++) {
+        const box = document.createElement("div");
+        box.className = "ad-box product-card";
+        box.dataset.dummy = "1";
+        box.dataset.productId = "";
+        box.dataset.productTitle = "RIGHT SAMPLE";
+        box.dataset.productLink = "";
+        box.dataset.productUrl = "";
+        box.dataset.detailUrl = "";
+        box.dataset.href = "";
+        box.innerHTML =
+          '<a href="javascript:void(0)" aria-disabled="true" data-product-id="" data-product-title="RIGHT SAMPLE" data-product-link="">RIGHT SAMPLE</a>';
+        frag.appendChild(box);
+      }
 
-    for(let i = 0; i < RIGHT_LIMIT; i++){
-      const box = document.createElement('div');
-      box.className = 'ad-box product-card';
-      box.dataset.dummy = '1';
-      box.dataset.productId = '';
-      box.dataset.productTitle = 'RIGHT SAMPLE';
-      box.dataset.productLink = '';
-      box.dataset.productUrl = '';
-      box.dataset.detailUrl = '';
-      box.dataset.href = '';
-      box.innerHTML = '<a href="javascript:void(0)" aria-disabled="true" data-product-id="" data-product-title="RIGHT SAMPLE" data-product-link="">RIGHT SAMPLE</a>';
-      frag.appendChild(box);
+      panel.appendChild(frag);
+      cards = qsa(".ad-box", panel);
     }
 
-    panel.appendChild(frag);
-    cards = qsa('.ad-box', panel);
+    return cards;
   }
 
-  return cards;
-}
+  function paintRightCard(box, it) {
+    if (!box) return;
 
-function paintRightCard(box, it){
-  if(!box) return;
-
-  if(isPlaceholderItem(it)){
-    resetRightCardToDummy(box);
-    return;
-  }
-
-  const url = resolveItemUrl(it);
-  const title = pickTitle(it) || 'Item';
-  const productId = pickProductId(it);
-  const rawUrl = pickUrl(it).trim();
-  const externalUrl = (rawUrl && isExternalUrl(rawUrl) && !isBadPlaceholderUrl(rawUrl)) ? rawUrl : '';
-
-  box.className = 'ad-box product-card';
-  box.removeAttribute('data-dummy');
-  box.dataset.productId = productId;
-  box.dataset.productTitle = title;
-  box.dataset.productLink = url;
-  box.dataset.productUrl = url;
-  box.dataset.detailUrl = url;
-  box.dataset.href = url;
-  if(externalUrl) box.dataset.externalUrl = externalUrl;
-  else delete box.dataset.externalUrl;
-
-  let a = qs('a', box);
-  if(!a){
-    box.innerHTML = '';
-    a = document.createElement('a');
-    box.appendChild(a);
-  }
-
-  a.href = url || 'javascript:void(0)';
-  a.target = url ? (isExternalUrl(url) ? '_blank' : '_self') : '_self';
-  a.rel = 'noopener';
-  a.textContent = title;
-  a.dataset.productId = productId;
-  a.dataset.productTitle = title;
-  a.dataset.productLink = url;
-  a.dataset.productUrl = url;
-  a.dataset.detailUrl = url;
-  if(it && it.affiliateOutboundUrl) a.dataset.affiliateOutbound = '1';
-  if(it && it.externalOutboundUrl) a.dataset.externalOutbound = '1';
-  a.dataset.href = url;
-  if(externalUrl) a.dataset.externalUrl = externalUrl;
-  else delete a.dataset.externalUrl;
-
-  if(url){
-    a.removeAttribute('aria-disabled');
-  }else{
-    a.setAttribute('aria-disabled', 'true');
-  }
-}
-
-function resetRightCardToDummy(box){
-  if(!box) return;
-
-  box.className = 'ad-box product-card';
-  box.dataset.dummy = '1';
-  box.dataset.productId = '';
-  box.dataset.productTitle = 'RIGHT SAMPLE';
-  box.dataset.productLink = '';
-  box.dataset.productUrl = '';
-  box.dataset.detailUrl = '';
-  box.dataset.href = '';
-  delete box.dataset.externalUrl;
-
-  let a = qs('a', box);
-  if(!a){
-    box.innerHTML = '';
-    a = document.createElement('a');
-    box.appendChild(a);
-  }
-
-  a.href = 'javascript:void(0)';
-  a.target = '_self';
-  a.rel = 'noopener';
-  a.textContent = 'RIGHT SAMPLE';
-  a.dataset.productId = '';
-  a.dataset.productTitle = 'RIGHT SAMPLE';
-  a.dataset.productLink = '';
-  a.dataset.productUrl = '';
-  a.dataset.detailUrl = '';
-  a.dataset.href = '';
-  delete a.dataset.externalUrl;
-  a.setAttribute('aria-disabled', 'true');
-}
-
-function installRightPanelClickRouter(){
-  if(window.__SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__) return;
-  window.__SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__ = true;
-
-  document.addEventListener('click', function(e){
-    if(e.defaultPrevented) return;
-    if(e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
-    if(e.target && e.target.closest && e.target.closest('.rscroll')) return;
-
-    const hit = e.target && e.target.closest && e.target.closest(
-      '[data-psom-key="rightPanel"] [data-checkout], ' +
-      '[data-psom-key="rightPanel"] .product-card, ' +
-      '[data-psom-key="rightPanel"] .ad-box, ' +
-      '[data-psom-key="rightPanel"] a[href]'
-    );
-
-    if(!hit) return;
-
-    // 결제 훅은 기존 IGTC checkout 로직에 맡긴다.
-    if(hit.closest && hit.closest('[data-checkout]')) return;
-
-    const box = hit.closest ? (hit.closest('.product-card, .ad-box') || hit) : hit;
-    const a = (hit.matches && hit.matches('a[href]'))
-      ? hit
-      : (box.querySelector ? box.querySelector('a[href]') : null);
-
-    const url = resolveElementUrl(box) || resolveElementUrl(a);
-
-    if(!isValidSecondUrl(url)){
-      e.preventDefault();
-      e.stopPropagation();
+    if (isPlaceholderItem(it)) {
+      resetRightCardToDummy(box);
       return;
     }
 
-    e.preventDefault();
-    e.stopPropagation();
-
-    if(isExternalUrl(url)){
-      window.open(url, '_blank', 'noopener');
-    }else{
-      window.location.assign(url);
-    }
-  }, true);
-}
-
-function installRightPanelRenderOverride(){
-  if(window.__SOCIAL_RIGHTPANEL_RENDER_OVERRIDE_READY__) return;
-  window.__SOCIAL_RIGHTPANEL_RENDER_OVERRIDE_READY__ = true;
-
-  window.__IGDC_RIGHTPANEL_RENDER = function(items){
-    const rightPanels = getRightPanels();
-    rightPanels.forEach(function(panel){
-      mountRightPanel(panel, Array.isArray(items) ? items : []);
-    });
-  };
-}
-
-function mountRightPanel(panel, items){
-  if(!panel) return;
-
-  const raw = Array.isArray(items) ? items : [];
-
-  const usable = raw.filter(function(it){
-    if(!it) return false;
-    if(isPlaceholderItem(it)) return false;
-
-    const title = pickTitle(it).trim();
     const url = resolveItemUrl(it);
-    const thumb = pickThumb(it).trim();
+    const title = pickTitle(it) || "Item";
+    const productId = pickProductId(it);
+    const rawUrl = pickUrl(it).trim();
+    const externalUrl =
+      rawUrl && isExternalUrl(rawUrl) && !isBadPlaceholderUrl(rawUrl)
+        ? rawUrl
+        : "";
 
-    return !!(title || thumb || url);
-  });
+    box.className = "ad-box product-card";
+    box.removeAttribute("data-dummy");
+    box.dataset.productId = productId;
+    box.dataset.productTitle = title;
+    box.dataset.productLink = url;
+    box.dataset.productUrl = url;
+    box.dataset.detailUrl = url;
+    box.dataset.href = url;
+    if (externalUrl) box.dataset.externalUrl = externalUrl;
+    else delete box.dataset.externalUrl;
 
-  const displayItems = usable.slice(0, RIGHT_LIMIT);
+    let a = qs("a", box);
+    if (!a) {
+      box.innerHTML = "";
+      a = document.createElement("a");
+      box.appendChild(a);
+    }
 
-  while(displayItems.length < RIGHT_LIMIT){
-    displayItems.push(null);
-  }
+    a.href = url || "javascript:void(0)";
+    a.target = url ? (isExternalUrl(url) ? "_blank" : "_self") : "_self";
+    a.rel = "noopener";
+    a.textContent = title;
+    a.dataset.productId = productId;
+    a.dataset.productTitle = title;
+    a.dataset.productLink = url;
+    a.dataset.productUrl = url;
+    a.dataset.detailUrl = url;
+    if (it && it.affiliateOutboundUrl) a.dataset.affiliateOutbound = "1";
+    if (it && it.externalOutboundUrl) a.dataset.externalOutbound = "1";
+    a.dataset.href = url;
+    if (externalUrl) a.dataset.externalUrl = externalUrl;
+    else delete a.dataset.externalUrl;
 
-  const cards = getRightCards(panel);
-
-  for(let i = 0; i < cards.length; i++){
-    const box = cards[i];
-    const it = displayItems[i];
-
-    if(it){
-      paintRightCard(box, it);
-    }else{
-      resetRightCardToDummy(box);
+    if (url) {
+      a.removeAttribute("aria-disabled");
+    } else {
+      a.setAttribute("aria-disabled", "true");
     }
   }
-}
 
-  async function run(){
-	  
-    try{
+  function resetRightCardToDummy(box) {
+    if (!box) return;
+
+    box.className = "ad-box product-card";
+    box.dataset.dummy = "1";
+    box.dataset.productId = "";
+    box.dataset.productTitle = "RIGHT SAMPLE";
+    box.dataset.productLink = "";
+    box.dataset.productUrl = "";
+    box.dataset.detailUrl = "";
+    box.dataset.href = "";
+    delete box.dataset.externalUrl;
+
+    let a = qs("a", box);
+    if (!a) {
+      box.innerHTML = "";
+      a = document.createElement("a");
+      box.appendChild(a);
+    }
+
+    a.href = "javascript:void(0)";
+    a.target = "_self";
+    a.rel = "noopener";
+    a.textContent = "RIGHT SAMPLE";
+    a.dataset.productId = "";
+    a.dataset.productTitle = "RIGHT SAMPLE";
+    a.dataset.productLink = "";
+    a.dataset.productUrl = "";
+    a.dataset.detailUrl = "";
+    a.dataset.href = "";
+    delete a.dataset.externalUrl;
+    a.setAttribute("aria-disabled", "true");
+  }
+
+  function installRightPanelClickRouter() {
+    if (window.__SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__) return;
+    window.__SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__ = true;
+
+    document.addEventListener(
+      "click",
+      function (e) {
+        if (e.defaultPrevented) return;
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
+        if (e.target && e.target.closest && e.target.closest(".rscroll"))
+          return;
+
+        const hit =
+          e.target &&
+          e.target.closest &&
+          e.target.closest(
+            '[data-psom-key="rightPanel"] [data-checkout], ' +
+              '[data-psom-key="rightPanel"] .product-card, ' +
+              '[data-psom-key="rightPanel"] .ad-box, ' +
+              '[data-psom-key="rightPanel"] a[href]',
+          );
+
+        if (!hit) return;
+
+        // 결제 훅은 기존 IGTC checkout 로직에 맡긴다.
+        if (hit.closest && hit.closest("[data-checkout]")) return;
+
+        const box = hit.closest
+          ? hit.closest(".product-card, .ad-box") || hit
+          : hit;
+        const a =
+          hit.matches && hit.matches("a[href]")
+            ? hit
+            : box.querySelector
+              ? box.querySelector("a[href]")
+              : null;
+
+        const url = resolveElementUrl(box) || resolveElementUrl(a);
+
+        if (!isValidSecondUrl(url)) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (isExternalUrl(url)) {
+          window.open(url, "_blank", "noopener");
+        } else {
+          window.location.assign(url);
+        }
+      },
+      true,
+    );
+  }
+
+  function installRightPanelRenderOverride() {
+    if (window.__SOCIAL_RIGHTPANEL_RENDER_OVERRIDE_READY__) return;
+    window.__SOCIAL_RIGHTPANEL_RENDER_OVERRIDE_READY__ = true;
+
+    window.__IGDC_RIGHTPANEL_RENDER = function (items) {
+      const rightPanels = getRightPanels();
+      rightPanels.forEach(function (panel) {
+        mountRightPanel(panel, Array.isArray(items) ? items : []);
+      });
+    };
+  }
+
+  function mountRightPanel(panel, items) {
+    if (!panel) return;
+
+    const raw = Array.isArray(items) ? items : [];
+
+    const usable = raw.filter(function (it) {
+      if (!it) return false;
+      if (isPlaceholderItem(it)) return false;
+
+      const title = pickTitle(it).trim();
+      const url = resolveItemUrl(it);
+      const thumb = pickThumb(it).trim();
+
+      return !!(title || thumb || url);
+    });
+
+    const displayItems = usable.slice(0, RIGHT_LIMIT);
+
+    while (displayItems.length < RIGHT_LIMIT) {
+      displayItems.push(null);
+    }
+
+    const cards = getRightCards(panel);
+
+    for (let i = 0; i < cards.length; i++) {
+      const box = cards[i];
+      const it = displayItems[i];
+
+      if (it) {
+        paintRightCard(box, it);
+      } else {
+        resetRightCardToDummy(box);
+      }
+    }
+  }
+
+  async function run() {
+    try {
       const snap = await loadSnapshot();
       const sections = getSections(snap);
-      if(!sections) return;
+      const route = await loadCountryRoute();
+      if (!sections) return;
 
-const grids = document.querySelectorAll('[data-psom-key]');
+      const grids = document.querySelectorAll("[data-psom-key]");
 
-grids.forEach(grid => {
-  const key = grid.getAttribute('data-psom-key');
-  if(!key) return;
+      grids.forEach((grid) => {
+        const key = grid.getAttribute("data-psom-key");
+        if (!key) return;
 
-  if(key === 'rightPanel') return;
-  if(key === 'social-maru') return;
+        if (key === "rightPanel") return;
+        if (key === "social-maru") return;
 
-const raw = sections[key];
+        const raw = routedItems(snap, key, route) || sections[key];
 
-const items = Array.isArray(raw)
-  ? raw
-  : (Array.isArray(raw?.items) ? raw.items : []);
+        const items = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.items)
+            ? raw.items
+            : [];
 
-// 🔥 샘플 자동 주입 (데이터 없을 때)
-const finalItems = items.length > 0 ? items : [{
-  title: key + " SAMPLE",
-  url: "#",
-  thumbnail: ""
-}];
+        // 🔥 샘플 자동 주입 (데이터 없을 때)
+        const finalItems =
+          items.length > 0
+            ? items
+            : [
+                {
+                  title: key + " SAMPLE",
+                  url: "#",
+                  thumbnail: "",
+                },
+              ];
 
-  mountMainRow(grid, finalItems);
-});
+        mountMainRow(grid, finalItems);
+      });
 
-const rightPanels = getRightPanels();
+      const rightPanels = getRightPanels();
 
-if(rightPanels.length){
-  const raw =
-    Array.isArray(sections.rightPanel)
-      ? sections.rightPanel
-      : (Array.isArray(sections.rightPanel?.items) ? sections.rightPanel.items : []);
+      if (rightPanels.length) {
+        const raw = Array.isArray(sections.rightPanel)
+          ? sections.rightPanel
+          : Array.isArray(sections.rightPanel?.items)
+            ? sections.rightPanel.items
+            : [];
 
-  const finalItems = raw.length > 0 ? raw : [];
+        const finalItems = raw.length > 0 ? raw : [];
 
-  rightPanels.forEach(function(panel){
-    mountRightPanel(panel, finalItems);
-  });
-}
+        rightPanels.forEach(function (panel) {
+          mountRightPanel(panel, finalItems);
+        });
+      }
 
       window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
-    }catch(e){
-      console.error('[social-automap-fixed] fail', e);
+      window.__IGDC_SOCIAL_COUNTRY_ROUTE__ = {
+        countryCode: route.countryCode || null,
+        languages: route.languages || [],
+        source: route.source || "fallback",
+      };
+    } catch (e) {
+      console.error("[social-automap-fixed] fail", e);
     }
   }
 
-  function boot(){
+  function boot() {
     installRightPanelClickRouter();
     installRightPanelRenderOverride();
     run();
   }
-window.addEventListener('igdc:rightpanel:refresh', function(){
-  run();
-});
+  window.addEventListener("igdc:rightpanel:refresh", function () {
+    run();
+  });
   boot();
-
 })();
-
 
 /* ------------------------------------------------------------------
  * MARU Revenue AutoHook Loader
@@ -609,19 +769,19 @@ window.addEventListener('igdc:rightpanel:refresh', function(){
  * - Then load /assets/js/maru-revenue-autohook.js
  * - Do not change this automap's original rendering pipeline.
  * ------------------------------------------------------------------ */
-(function loadMaruRevenueAutoHookForAutomap(){
+(function loadMaruRevenueAutoHookForAutomap() {
   "use strict";
 
   if (typeof window === "undefined" || typeof document === "undefined") return;
 
-  function installIfReady(){
+  function installIfReady() {
     try {
       if (
         window.MaruRevenueAutoHook &&
         typeof window.MaruRevenueAutoHook.install === "function"
       ) {
         window.MaruRevenueAutoHook.install({
-          service: "front-automap"
+          service: "front-automap",
         });
       }
     } catch (e) {
@@ -629,7 +789,7 @@ window.addEventListener('igdc:rightpanel:refresh', function(){
     }
   }
 
-  function loadScriptOnce(src, id, globalName, done){
+  function loadScriptOnce(src, id, globalName, done) {
     var existing = document.getElementById(id);
 
     if (window[globalName]) {
@@ -638,12 +798,20 @@ window.addEventListener('igdc:rightpanel:refresh', function(){
     }
 
     if (existing) {
-      existing.addEventListener("load", function(){
-        if (typeof done === "function") done();
-      }, { once:true });
-      existing.addEventListener("error", function(){
-        console.warn("[MARU Revenue] failed to load:", src);
-      }, { once:true });
+      existing.addEventListener(
+        "load",
+        function () {
+          if (typeof done === "function") done();
+        },
+        { once: true },
+      );
+      existing.addEventListener(
+        "error",
+        function () {
+          console.warn("[MARU Revenue] failed to load:", src);
+        },
+        { once: true },
+      );
       return;
     }
 
@@ -651,10 +819,10 @@ window.addEventListener('igdc:rightpanel:refresh', function(){
     script.id = id;
     script.src = src;
     script.async = false;
-    script.onload = function(){
+    script.onload = function () {
       if (typeof done === "function") done();
     };
-    script.onerror = function(){
+    script.onerror = function () {
       console.warn("[MARU Revenue] failed to load:", src);
     };
 
@@ -672,13 +840,13 @@ window.addEventListener('igdc:rightpanel:refresh', function(){
     "/assets/js/maru-revenue-tracker.js",
     "maruRevenueTrackerScript",
     "MaruRevenueTracker",
-    function(){
+    function () {
       loadScriptOnce(
         "/assets/js/maru-revenue-autohook.js",
         "maruRevenueAutoHookScript",
         "MaruRevenueAutoHook",
-        installIfReady
+        installIfReady,
       );
-    }
+    },
   );
 })();
