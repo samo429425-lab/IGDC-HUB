@@ -8,7 +8,7 @@
 const SocialStore = require("./lib/social-candidate-store.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "social-candidate-action-v1.1.0-search-exclusion-staging";
+const VERSION = "social-candidate-action-v1.2.0-reversible-exclusion";
 const ACTIONS = new Set(["approve", "hold", "reject", "block", "reset", "delete", "restore", "permanent_block", "forget", "request_replacement"]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -26,6 +26,35 @@ async function actorFor(event) {
 function idsFrom(body) {
   const values = body.ids || body.candidateIds || body.id || body.candidateId || [];
   return Array.from(new Set(SocialStore.array(values).map(SocialStore.text).filter(Boolean))).slice(0, 1000);
+}
+function rawObject(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
+function dbValue(row, snake, camel) { return row && (row[snake] != null ? row[snake] : row[camel]); }
+function originalState(row) {
+  return {
+    reviewStatus: SocialStore.text(dbValue(row, "review_status", "reviewStatus")) || "pending",
+    verificationStatus: SocialStore.text(dbValue(row, "verification_status", "verificationStatus")) || "web_verification_required",
+    riskLevel: SocialStore.text(dbValue(row, "risk_level", "riskLevel")) || "medium",
+    candidateOnly: dbValue(row, "candidate_only", "candidateOnly") !== false,
+    seedContent: dbValue(row, "seed_content", "seedContent") === true,
+    rotationEligible: dbValue(row, "rotation_eligible", "rotationEligible") === true,
+    blockedReason: SocialStore.text(dbValue(row, "blocked_reason", "blockedReason")),
+    reviewNote: SocialStore.text(dbValue(row, "review_note", "reviewNote")),
+    approvedAt: dbValue(row, "approved_at", "approvedAt") || null,
+    sectionKey: SocialStore.text(dbValue(row, "section_key", "sectionKey"))
+  };
+}
+async function requestedRows(ids) {
+  const requested = new Set(ids);
+  const rows = await SocialStore.selectCandidates("select=*&limit=10000");
+  return (Array.isArray(rows) ? rows : []).filter((row) => requested.has(SocialStore.text(row && row.id)));
+}
+async function updateIndividually(rows, makePatch) {
+  const updated = [];
+  for (const row of rows) {
+    const result = await SocialStore.updateCandidates([row.id], makePatch(row));
+    if (Array.isArray(result)) updated.push.apply(updated, result);
+  }
+  return updated;
 }
 function patchFor(action, body, actor) {
   const now = SocialStore.nowIso();
@@ -97,8 +126,39 @@ exports.handler = async function(event) {
         recollectAllowed: true
       });
     }
-    const patch = patchFor(action, body, actor);
-    const updated = await SocialStore.updateCandidates(ids, patch);
+    let updated;
+    if (action === "delete") {
+      const candidates = await requestedRows(ids);
+      const actorId = SocialStore.compact(actor.email || actor.memberId || "admin", 200);
+      const note = SocialStore.compact(body.note || body.reason || "moved_from_candidate_queue", 1200);
+      updated = await updateIndividually(candidates.filter((row) => !/^(permanent_blocked|blocked)$/i.test(SocialStore.text(row.review_status))), (row) => {
+        const raw = Object.assign({}, rawObject(row.raw), { exclusionRestore: Object.assign(originalState(row), { storedAt: SocialStore.nowIso(), storedBy: actorId }) });
+        return Object.assign(patchFor("delete", Object.assign({}, body, { note }), actor), { raw });
+      });
+    } else if (action === "restore") {
+      const candidates = await requestedRows(ids);
+      const restoreMode = SocialStore.text(body.restoreMode || body.restore_mode).toLowerCase() === "original" ? "original" : "hold";
+      updated = await updateIndividually(candidates.filter((row) => SocialStore.text(row.review_status) === "search_excluded"), (row) => {
+        const stored = rawObject(rawObject(row.raw).exclusionRestore);
+        const base = restoreMode === "original" && stored.reviewStatus ? {
+          review_status: SocialStore.text(stored.reviewStatus),
+          verification_status: SocialStore.text(stored.verificationStatus) || "web_verification_required",
+          risk_level: SocialStore.text(stored.riskLevel) || "medium",
+          candidate_only: stored.candidateOnly !== false,
+          seed_content: stored.seedContent === true,
+          rotation_eligible: stored.rotationEligible === true,
+          blocked_reason: stored.blockedReason || null,
+          review_note: stored.reviewNote || "restored_original_state",
+          approved_at: stored.approvedAt || null
+        } : patchFor("hold", Object.assign({}, body, { note: "restored_to_hold" }), actor);
+        const raw = Object.assign({}, rawObject(row.raw));
+        delete raw.exclusionRestore;
+        return Object.assign({}, base, { raw, reviewed_by: SocialStore.compact(actor.email || actor.memberId || "admin", 200), reviewed_at: SocialStore.nowIso(), updated_by: SocialStore.compact(actor.email || actor.memberId || "admin", 200), updated_at: SocialStore.nowIso() });
+      });
+    } else {
+      const patch = patchFor(action, body, actor);
+      updated = await SocialStore.updateCandidates(ids, patch);
+    }
     return SocialStore.response(200, {
       ok: true,
       version: VERSION,

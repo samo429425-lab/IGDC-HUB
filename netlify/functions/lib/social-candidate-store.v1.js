@@ -273,6 +273,7 @@ function normalizeDbRow(row) {
     approvedAt: text(r.approved_at || r.approvedAt),
     createdAt: text(r.created_at || r.createdAt),
     updatedAt: text(r.updated_at || r.updatedAt),
+    raw: plain(r.raw),
     promotable: isPromotable(r)
   };
 }
