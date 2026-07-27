@@ -5,6 +5,7 @@
   var END='/.netlify/functions/media-candidate-review';
   var COL='/.netlify/functions/sanmaru-media-collector';
   var ACT='/.netlify/functions/media-candidate-action';
+  var AUTO='/.netlify/functions/media-candidate-auto-curate';
   var PUB='/.netlify/functions/media-snapshot-publish';
   var THUMB='/.netlify/functions/media-candidate-thumbnail';
   var SECTION_ORDER=['media-trending','media-movie','media-drama','media-thriller','media-romance','media-variety','media-documentary','media-animation','media-music','media-shorts'];
@@ -311,6 +312,7 @@
       $('diagnosticJson').textContent=JSON.stringify(data,null,2);
       $('diagnosticPanel').classList.remove('hidden');
       $('downloadJsonBtn').disabled=false;
+      if(typeof $('diagnosticPanel').scrollIntoView==='function')$('diagnosticPanel').scrollIntoView({behavior:'smooth',block:'start'});
     }catch(error){show(error.message,'warn');}
   }
   function collectorJobKey(section){return'igdc.mediaCollector.job.'+section;}
@@ -602,6 +604,64 @@
       }
     }catch(error){show(error.message,'warn');}
   }
+  async function autoCurateAll(){
+    if(!window.confirm('현재 대기열의 미승인 후보를 AI로 다시 분류·품질 점검할까요?\n\nAI는 섹션 정리와 격리 신호만 적용하며 승인·공개·영구 차단은 실행하지 않습니다.'))return;
+    var button=$('autoCurateBtn'),frontButton=$('publishFrontBtn');
+    button.disabled=true;frontButton.disabled=true;
+    var cursor=0,batches=0,total={scanned:0,processed:0,updated:0,moved:0,quarantined:0};
+    try{
+      while(batches<100){
+        batches+=1;
+        $('collectorState').textContent='AI 후보 정리 '+batches+'차 처리 중';
+        var data=await post(AUTO,{cursor:cursor,batchSize:15});
+        ['scanned','processed','updated','moved','quarantined'].forEach(function(key){
+          total[key]+=Number(data[key]||0);
+        });
+        $('collectorState').textContent='AI 정리 · 점검 '+total.scanned+' · 적용 '+total.updated+' · 섹션 이동 '+total.moved+' · 격리 '+total.quarantined;
+        if(data.done)break;
+        var next=Number(data.nextCursor);
+        if(!isFinite(next)||next<=cursor)throw new Error('AI 후보 정리 진행 위치가 갱신되지 않았습니다.');
+        cursor=next;
+        await wait(120);
+      }
+      if(batches>=100)throw new Error('AI 후보 정리가 안전 처리 한도에서 중지되었습니다.');
+      await refresh();
+      show('AI 전자동 후보 정리 완료 · 점검 '+total.scanned+'건 · 적용 '+total.updated+'건 · 섹션 이동 '+total.moved+'건 · 관리자 격리 '+total.quarantined+'건','ok');
+    }catch(error){
+      show('AI 전자동 후보 정리 중지: '+error.message,'warn');
+    }finally{
+      button.disabled=false;frontButton.disabled=false;
+    }
+  }
+  function frontPublishReason(value){
+    return({
+      release_gate_not_armed:'프론트 공개 게이트가 활성화되지 않았습니다.',
+      build_hook_not_configured:'Netlify 미디어 배포 훅이 설정되지 않았습니다.',
+      build_hook_invalid:'Netlify 미디어 배포 훅 주소가 올바르지 않습니다.',
+      build_hook_timeout:'Netlify 배포 요청 시간이 초과되었습니다.',
+      build_hook_request_failed:'Netlify 배포 요청에 실패했습니다.'
+    })[text(value)]||text(value)||'프론트 배포가 시작되지 않았습니다.';
+  }
+  async function publishFront(){
+    if(!window.confirm('승인·권리확인·공개검증을 모두 통과한 후보만 새 미디어 스냅샷으로 만들고 프론트 배포를 실행할까요?\n\n후보·시드·미검증·격리 항목은 공개되지 않습니다.'))return;
+    var button=$('publishFrontBtn'),autoButton=$('autoCurateBtn');
+    button.disabled=true;autoButton.disabled=true;
+    try{
+      button.textContent='프론트 반영 요청 중';
+      var data=await post(PUB,{storeRelease:true,publishFront:true,includeSnapshot:'0',includeBlocked:'1'});
+      var dispatch=data.frontPublication||{};
+      if(data.releaseStored===true&&dispatch.queued===true){
+        show('프론트 미디어 허브 반영 배포를 시작했습니다. 공개 가능 '+Number(data.eligibleRows||0)+'건 · 정책 차단 '+Number(data.policyBlockedRows||0)+'건','ok');
+      }else{
+        show('공개 스냅샷 릴리스는 저장됐지만 프론트 배포는 시작되지 않았습니다: '+frontPublishReason(dispatch.reason),'warn');
+      }
+    }catch(error){
+      show('프론트 미디어 허브 반영 실패: '+error.message,'warn');
+    }finally{
+      button.textContent='프론트 미디어 허브 반영 실행';
+      button.disabled=false;autoButton.disabled=false;
+    }
+  }
 
   function candidateSources(row){
     var output=[];
@@ -774,6 +834,8 @@
     $('returnBtn').onclick=function(){location.href='/admin.html';};
     $('collectBtn').onclick=function(){collect(false,false);};
     $('collectAllBtn').onclick=collectAll;
+    $('autoCurateBtn').onclick=autoCurateAll;
+    $('publishFrontBtn').onclick=publishFront;
     $('collectorStopBtn').onclick=function(){
       collectorStopRequested=true;this.disabled=true;$('collectorState').textContent='현재 묶음 후 일시정지';
     };

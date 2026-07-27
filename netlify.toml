@@ -21,3 +21,8 @@
 # country/subdivision scopes whose configured 1-30 day interval is due.
 [functions."commerce-country-ai-scheduler"]
   schedule = "@hourly"
+
+# Apply only the latest administrator-stored, policy-gated media snapshot
+# release inside the Netlify build workspace before production deployment.
+[[plugins]]
+  package = "./netlify/plugins/media-snapshot-release"

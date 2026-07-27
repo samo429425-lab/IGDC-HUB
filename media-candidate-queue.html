@@ -9,6 +9,7 @@
     body{margin:0;background:#0b1220;color:#e5eefb;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     main{max-width:1500px;margin:auto;padding:24px 16px 70px}h1{margin:0 0 7px;font-size:25px}
     .lead,.small,.foot{color:#aebfd4;line-height:1.5}.bar,.filters,.reviewbar,.collect-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
+    .collector-release-actions{display:flex;gap:8px;align-items:center;margin-left:auto;padding-left:22px;border-left:1px solid #35516f}
     button,input,select{border:1px solid #35516f;border-radius:9px;background:#102238;color:#edf6ff;padding:9px 11px}
     button{font-weight:800;cursor:pointer;background:#7de0d8;color:#073234;border:0}button.secondary{background:#dbe5f0;color:#172033}
     button.publish{background:#ffd070;color:#3e2b00}button.danger{background:#ff9aa5;color:#411018}button:disabled{opacity:.5;cursor:not-allowed}
@@ -49,6 +50,7 @@
     .candidate-card-title{font-size:14px;line-height:1.4;font-weight:850;min-height:40px;margin-bottom:7px}.candidate-card-meta{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px}.candidate-card-detail{color:#aebfd4;font-size:12px;line-height:1.45}
     .candidate-card-footer{display:flex;gap:6px;margin-top:9px}.candidate-card-footer button{font-size:12px;padding:7px 9px}.read-only-note{padding:10px;border-radius:9px;background:#13283e;color:#bed4e8;margin-bottom:11px}
     .empty-section{padding:28px;text-align:center;color:#9eb0c5;border:1px dashed #35516f;border-radius:11px}
+    @media(max-width:980px){.collector-release-actions{width:100%;margin-left:0;padding:10px 0 0;border-left:0;border-top:1px solid #35516f}}
     @media(max-width:700px){main{padding:16px 10px}table{min-width:1200px}.modal{padding:6px}.player-shell video{max-height:58vh}}
   </style>
 </head>
@@ -62,7 +64,6 @@
     <button id="publishPreviewBtn" class="publish">승격 미리보기</button>
     <button id="storeReleaseBtn" class="publish">최종 릴리스 저장</button>
     <button id="downloadSnapshotBtn" class="secondary">스냅샷 다운로드</button>
-    <button id="downloadJsonBtn" class="secondary" disabled>점검 JSON</button>
     <button id="downloadAllCandidateListBtn" class="secondary">전체 10개 섹션 후보 JSON</button>
     <button id="returnBtn" class="secondary">관리자 화면으로</button>
     <span id="state" class="state"></span>
@@ -71,7 +72,7 @@
 
   <section class="panel">
     <h2>품질 중심 공개 영상 수집</h2>
-    <div class="small">2000년 이후, 실제 1080p 이상, 섹션별 전체 길이, 최소 비트레이트, 인기도, 분류 확신도와 실제 원본 응답속도를 함께 검사합니다. 명백한 포르노·헨타이·불법 신호는 차단하고, 애매한 성인성·권리·분류 신호는 관리자 검토로 격리합니다. 일반 로맨스는 차단하지 않습니다.</div>
+    <div class="small">최신·인기·권리표시·중국어권 장편 탐색을 교차 실행하고, 2000년 이후 실제 1080p 이상, 섹션별 전체 길이, 최소 비트레이트, 분류 확신도와 실제 원본 응답속도를 함께 검사합니다. 명백한 포르노·헨타이·불법 신호는 차단하고, 애매한 성인성·권리·분류 신호는 관리자 검토로 격리합니다. 일반 로맨스는 차단하지 않습니다.</div>
     <div class="collect-controls">
       <select id="collectorSection">
         <option value="media-movie">영화</option><option value="media-drama">드라마·TV</option><option value="media-thriller">스릴러·미스터리</option>
@@ -83,6 +84,10 @@
       <button id="collectAllBtn" class="publish">전체 섹션 순차 수집</button>
       <button id="collectorStopBtn" class="secondary" disabled>일시정지</button>
       <span id="collectorState" class="state">수집 전</span>
+      <div class="collector-release-actions">
+        <button id="autoCurateBtn" class="secondary">AI 전자동 후보 정리 적용</button>
+        <button id="publishFrontBtn" class="publish">프론트 미디어 허브 반영 실행</button>
+      </div>
     </div>
     <div id="collectorProgress" class="progressbox hidden">
       <div id="collectorProgressText" class="small"></div><div class="progressbar"><i id="collectorProgressBar"></i></div><div id="collectorRejectText" class="small"></div>
@@ -107,11 +112,17 @@
     <div id="filterState" class="small">섹션을 펼치면 해당 섹션의 카드만 불러옵니다.</div>
   </section>
 
-  <section id="diagnosticPanel" class="panel hidden"><h2>미디어 후보 점검 JSON</h2><pre id="diagnosticJson" class="json"></pre></section>
-
   <section id="tablePanel" class="panel hidden">
     <div class="modal-head"><div><h2 style="margin:0">10개 섹션 영상 후보</h2><div class="small">한 번에 한 섹션만 펼쳐지고, 펼친 섹션의 썸네일만 불러옵니다. 각 섹션의 선택 작업은 다른 섹션에 영향을 주지 않으며, 정원을 넘은 후보도 숨기지 않고 점검할 수 있습니다.</div></div><span id="candidateCapacityState" class="state"></span></div>
     <div id="sectionAccordion" class="section-accordion"></div>
+  </section>
+
+  <section id="diagnosticPanel" class="panel hidden">
+    <div class="modal-head">
+      <h2 style="margin:0">미디어 후보 점검 JSON</h2>
+      <button id="downloadJsonBtn" class="secondary" disabled>점검 JSON 다운로드</button>
+    </div>
+    <pre id="diagnosticJson" class="json"></pre>
   </section>
 
   <section id="exclusionPanel" class="panel hidden">
@@ -151,6 +162,6 @@
   </div>
 </div>
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-media-candidate-queue.js?v=18"></script>
+<script src="/assets/js/admin-media-candidate-queue.js?v=19"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="sanmaru-media-collector-v2.4.0-popularity-reliability-classification-gate";
+const VERSION="sanmaru-media-collector-v2.5.0-recent-longform-multilingual-discovery";
 const IA_SEARCH="https://archive.org/advancedsearch.php";
 const IA_METADATA="https://archive.org/metadata/";
 const DEFAULT_RESULTS=5;
@@ -16,14 +16,20 @@ const PLAYBACK_PROBE_TIMEOUT_MS=7000;
 const MAX_PLAYBACK_START_MS=5000;
 const DEFAULT_MIN_YEAR=2000;
 const MIN_VIDEO_HEIGHT=1080;
-const MIN_VIDEO_BITRATE_BPS=900000;
+const MIN_VIDEO_BITRATE_BPS=1500000;
 const MIN_RANK_SCORE=72;
 const MIN_DOWNLOADS=250;
 const MIN_CLASSIFICATION_CONFIDENCE=72;
+const MIN_RECENT_RIGHTS_CLASSIFICATION_CONFIDENCE=82;
+const RECENT_WINDOW_YEARS=8;
+const RECENT_UNVERIFIED_REVIEW_WINDOW_YEARS=3;
+const MIN_RIGHTS_REVIEW_RANK_SCORE=50;
 const VIDEO_EXT=/\.(mp4|webm|ogv|m4v)$/i;
 const SUBTITLE_EXT=/\.(vtt|srt|ass|ssa)$/i;
 const EXCLUDED_TITLE=/\b(trailer|teaser|promo|preview|clip|excerpt|sample|highlight|commercial|advertisement|featurette|behind\s+the\s+scenes)\b/i;
 const EXCLUDED_CONTEXT=/\b(home\s+movie|camera\s+test|screen\s+test|test\s+footage|raw\s+footage|fan\s+edit|fan\s+film|gameplay|walkthrough|advertisement|commercial)\b/i;
+const UNRELIABLE_UPLOAD_CONTEXT=/\b(?:camrip|hdcam|telesync|dvdrip|bdrip|br\s*rip|blu\s*ray\s*rip|webrip|web[- .]?dl|yify|yts(?:\.mx)?|torrent|warez|full\s+rips?|screen\s+recording|deleted\s+video)\b/i;
+const RESERVED_RIGHTS_CONTEXT=/\ball\s+rights\s+reserved\b|版权所有|版權所有/i;
 const ACTION_CONTEXT=/(action|martial\s+arts|superhero|war\s+film|spy|adventure|crime\s+drama)/i;
 const VIOLENCE_CONTEXT=/(violence|violent|blood|fight|weapon|gun|murder|horror|terror)/i;
 
@@ -37,6 +43,28 @@ const SECTION_QUERIES=Object.freeze({
   "media-animation":'(mediatype:movies) AND (subject:(animation OR animated OR cartoon OR anime)) NOT title:(trailer OR teaser OR clip OR preview)',
   "media-music":'(mediatype:movies) AND (subject:(concert OR performance OR music OR recital)) NOT title:(trailer OR teaser OR clip OR preview)',
   "media-shorts":'(mediatype:movies) AND (subject:(short film OR shortfilm)) NOT title:(trailer OR teaser OR clip OR preview)'
+});
+const SECTION_LONGFORM_QUERIES=Object.freeze({
+  "media-movie":'(mediatype:movies) AND (collection:(feature_films OR opensource_movies) OR subject:("feature film" OR "full movie" OR cinema OR "motion picture") OR title:("full movie" OR "full film" OR 电影 OR 電影)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-drama":'(mediatype:movies) AND (subject:(drama OR "television series" OR "tv series" OR "web series") OR title:(episode OR season OR 电视剧 OR 電視劇 OR 剧集 OR 劇集)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-thriller":'(mediatype:movies) AND (subject:(thriller OR mystery OR suspense OR horror OR "science fiction" OR crime) OR title:(悬疑 OR 懸疑 OR 惊悚 OR 驚悚)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-romance":'(mediatype:movies) AND (subject:(romance OR romantic OR melodrama OR "love story") OR title:(爱情 OR 愛情 OR 言情)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-variety":'(mediatype:movies) AND (subject:(variety OR entertainment OR "talk show" OR "television program") OR title:(综艺 OR 綜藝 OR 脱口秀 OR 脫口秀)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-documentary":'(mediatype:movies) AND (subject:(documentary OR nonfiction OR "investigative report") OR collection:documentary_films OR title:(纪录片 OR 紀錄片)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-animation":'(mediatype:movies) AND (subject:(animation OR animated OR cartoon OR anime) OR title:(动画 OR 動畫 OR 动漫 OR 動漫)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-music":'(mediatype:movies) AND (subject:(concert OR performance OR music OR recital OR orchestra) OR title:(演唱会 OR 演唱會 OR 音乐会 OR 音樂會)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-shorts":'(mediatype:movies) AND (subject:("short film" OR shortfilm OR "short subject") OR title:(短片 OR 微电影 OR 微電影)) NOT title:(trailer OR teaser OR clip OR preview)'
+});
+const SECTION_CHINESE_QUERIES=Object.freeze({
+  "media-movie":'(mediatype:movies) AND (language:(chi OR zho OR Chinese OR zh) OR subject:("Chinese film" OR "Chinese cinema" OR "Mandarin film" OR "Hong Kong cinema")) AND (subject:("feature film" OR cinema OR "motion picture") OR title:(电影 OR 電影 OR "full movie")) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-drama":'(mediatype:movies) AND (language:(chi OR zho OR Chinese OR zh) OR subject:("Chinese drama" OR "Mandarin drama")) AND (subject:(drama OR "television series" OR "web series") OR title:(episode OR 电视剧 OR 電視劇 OR 剧集 OR 劇集)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-thriller":'(mediatype:movies) AND (language:(chi OR zho OR Chinese OR zh)) AND (subject:(thriller OR mystery OR suspense OR crime) OR title:(悬疑 OR 懸疑 OR 惊悚 OR 驚悚)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-romance":'(mediatype:movies) AND (language:(chi OR zho OR Chinese OR zh)) AND (subject:(romance OR melodrama OR "love story") OR title:(爱情 OR 愛情 OR 言情)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-variety":'(mediatype:movies) AND (language:(chi OR zho OR Chinese OR zh)) AND (subject:(variety OR entertainment OR "talk show") OR title:(综艺 OR 綜藝 OR 脱口秀 OR 脫口秀)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-documentary":'(mediatype:movies) AND (language:(chi OR zho OR Chinese OR zh)) AND (subject:(documentary OR nonfiction) OR title:(纪录片 OR 紀錄片)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-animation":'(mediatype:movies) AND (language:(chi OR zho OR Chinese OR zh)) AND (subject:(animation OR anime OR cartoon) OR title:(动画 OR 動畫 OR 动漫 OR 動漫)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-music":'(mediatype:movies) AND (language:(chi OR zho OR Chinese OR zh)) AND (subject:(concert OR performance OR music) OR title:(演唱会 OR 演唱會 OR 音乐会 OR 音樂會)) NOT title:(trailer OR teaser OR clip OR preview)',
+  "media-shorts":'(mediatype:movies) AND (language:(chi OR zho OR Chinese OR zh)) AND (subject:("short film" OR shortfilm) OR title:(短片 OR 微电影 OR 微電影)) NOT title:(trailer OR teaser OR clip OR preview)'
 });
 
 function headers(){return{"accept":"application/json","user-agent":"IGDC-MARU-MediaCollector/2.4 (+https://igdc.info)"};}
@@ -76,9 +104,11 @@ function num(value,fallback,min,max){
 }
 function duration(value){
   if(typeof value==="number"&&Number.isFinite(value))return value;
-  const parts=MediaStore.text(value).split(":").map(Number);
+  const raw=MediaStore.text(value);
+  if(/^\d+(?:\.\d+)?$/.test(raw))return Number(raw);
+  const parts=raw.split(":").map(Number);
   if(parts.some((item)=>!Number.isFinite(item)))return Number(value)||0;
-  return parts.length===3?parts[0]*3600+parts[1]*60+parts[2]:parts.length===2?parts[0]*60+parts[1]:0;
+  return parts.length===3?parts[0]*3600+parts[1]*60+parts[2]:parts.length===2?parts[0]*60+parts[1]:Number(value)||0;
 }
 function minDuration(section){
   if(section==="media-shorts")return 120;
@@ -101,6 +131,12 @@ function dims(file){
   const width=Number(file&&file.width||0),height=Number(file&&file.height||0);
   return{width,height,ok:height>=MIN_VIDEO_HEIGHT};
 }
+function bitrateFloor(file){
+  const height=dims(file).height;
+  if(height>=2160)return 4500000;
+  if(height>=1440)return 2500000;
+  return MIN_VIDEO_BITRATE_BPS;
+}
 function videoPreference(name){
   const value=MediaStore.lower(name);
   if(/\.mp4$/.test(value))return 4;
@@ -122,8 +158,9 @@ function chooseVideos(files,section){
     const seconds=duration(file&&file.length);
     if(!seconds||seconds<minimum||seconds>maximum)return null;
     const bitrateBps=Math.round(size*8/seconds);
-    if(bitrateBps<MIN_VIDEO_BITRATE_BPS)return null;
-    return Object.assign({},file,{_durationSeconds:seconds,_bitrateBps:bitrateBps});
+    const requiredBitrateBps=bitrateFloor(file);
+    if(bitrateBps<requiredBitrateBps)return null;
+    return Object.assign({},file,{_durationSeconds:seconds,_bitrateBps:bitrateBps,_requiredBitrateBps:requiredBitrateBps});
   }).filter(Boolean).sort((a,b)=>{
     const bitrate=Number(b&&b._bitrateBps||0)-Number(a&&a._bitrateBps||0);
     if(Math.abs(bitrate)>=500000)return bitrate;
@@ -162,17 +199,17 @@ function classificationText(meta,doc){
 }
 function classify(meta,doc,requested,seconds){
   const value=classificationText(meta,doc);
-  let section=requested,confidence=55;
-  if(/(?:^|\b)(animation|animated|cartoon|anime|stop motion)(?:\b|$)/.test(value)){section="media-animation";confidence=94;}
-  else if(/concert|recital|live performance|music video|orchestra|symphony|opera|musical performance/.test(value)){section="media-music";confidence=92;}
-  else if(/short film|shortfilm|short subject/.test(value)){section="media-shorts";confidence=92;}
-  else if(/documentary|nonfiction|oral history|investigative report|nature film/.test(value)){section="media-documentary";confidence=90;}
-  else if(/talk show|variety show|entertainment show|panel show|game show|classic tv|television program/.test(value)){section="media-variety";confidence=88;}
+  let section=requested,confidence=74;
+  if(/(?:^|\b)(animation|animated|cartoon|anime|stop motion)(?:\b|$)|动画|動畫|动漫|動漫/.test(value)){section="media-animation";confidence=94;}
+  else if(/concert|recital|live performance|music video|orchestra|symphony|opera|musical performance|演唱会|演唱會|音乐会|音樂會/.test(value)){section="media-music";confidence=92;}
+  else if(/short film|shortfilm|short subject|短片|微电影|微電影/.test(value)){section="media-shorts";confidence=92;}
+  else if(/documentary|nonfiction|oral history|investigative report|nature film|纪录片|紀錄片/.test(value)){section="media-documentary";confidence=90;}
+  else if(/talk show|variety show|entertainment show|panel show|game show|classic tv|television program|综艺|綜藝|脱口秀|脫口秀/.test(value)){section="media-variety";confidence=88;}
   else if(seconds>0&&seconds<=1200){section="media-shorts";confidence=84;}
-  else if(/romance|romantic|melodrama|love story/.test(value)){section="media-romance";confidence=84;}
-  else if(/thriller|mystery|suspense|horror|science fiction|sci-fi|crime film/.test(value)){section="media-thriller";confidence=84;}
-  else if(/television series|tv series|television episode|episode\s*\d+|season\s*\d+|drama series|soap opera|\bdrama\b/.test(value)){section="media-drama";confidence=86;}
-  else if(/feature films?|motion picture|full movie|cinema/.test(value)){section="media-movie";confidence=82;}
+  else if(/romance|romantic|melodrama|love story|爱情|愛情|言情/.test(value)){section="media-romance";confidence=84;}
+  else if(/thriller|mystery|suspense|horror|science fiction|sci-fi|crime film|悬疑|懸疑|惊悚|驚悚/.test(value)){section="media-thriller";confidence=84;}
+  else if(/television series|tv series|television episode|web series|episode\s*\d+|season\s*\d+|drama series|soap opera|\bdrama\b|电视剧|電視劇|剧集|劇集/.test(value)){section="media-drama";confidence=88;}
+  else if(/feature films?|motion picture|full movie|cinema|电影|電影/.test(value)){section="media-movie";confidence=84;}
   return{section,confidence};
 }
 async function probeAsset(url,kind){
@@ -263,20 +300,55 @@ function scoreCandidate(input){
   score=Math.round(score);
   return{score,tier:score>=90?"S":score>=78?"A":score>=68?"B":"C",signals,subtitleLanguages:languages};
 }
-function discoveryLane(page){return["recent","popular","rated"][(Math.max(1,Number(page)||1)-1)%3];}
+function discoveryPlan(section,page){
+  const plans=[
+    {lane:"recent",query:SECTION_QUERIES[section],sort:["publicdate desc","downloads desc"]},
+    {lane:"recent_rights",query:"("+SECTION_LONGFORM_QUERIES[section]+") AND (licenseurl:* OR rights:*)",sort:["publicdate desc","downloads desc"]},
+    {lane:"longform",query:SECTION_LONGFORM_QUERIES[section],sort:["year desc","downloads desc"]},
+    {lane:"chinese_recent",query:SECTION_CHINESE_QUERIES[section],sort:["publicdate desc","downloads desc"]},
+    {lane:"popular",query:SECTION_QUERIES[section],sort:["downloads desc","publicdate desc"]},
+    {lane:"rated",query:SECTION_QUERIES[section],sort:["avg_rating desc","publicdate desc"]},
+    {lane:"chinese_rights",query:"("+SECTION_CHINESE_QUERIES[section]+") AND (licenseurl:* OR rights:*)",sort:["year desc","downloads desc"]}
+  ];
+  const index=(Math.max(1,Number(page)||1)-1)%plans.length;
+  return Object.assign({sourcePage:Math.floor((Math.max(1,Number(page)||1)-1)/plans.length)+1},plans[index]);
+}
+function discoveryLane(page,section){return discoveryPlan(section||"media-movie",page).lane;}
 function searchUrl(section,rows,page){
   const params=new URLSearchParams();
-  const lane=discoveryLane(page);
-  const sourcePage=Math.floor((Math.max(1,Number(page)||1)-1)/3)+1;
-  params.set("q","("+SECTION_QUERIES[section]+") AND year:["+DEFAULT_MIN_YEAR+" TO 9999]");
+  const plan=discoveryPlan(section,page);
+  params.set("q","("+plan.query+") AND year:["+DEFAULT_MIN_YEAR+" TO 9999]");
   ["identifier","title","creator","year","description","subject","collection","licenseurl","rights","downloads","date","publicdate","language","avg_rating","num_reviews"].forEach((field)=>params.append("fl[]",field));
-  if(lane==="recent"){params.append("sort[]","publicdate desc");params.append("sort[]","downloads desc");}
-  else if(lane==="rated"){params.append("sort[]","avg_rating desc");params.append("sort[]","publicdate desc");}
-  else{params.append("sort[]","downloads desc");params.append("sort[]","publicdate desc");}
+  plan.sort.forEach((sort)=>params.append("sort[]",sort));
   params.set("rows",String(rows));
-  params.set("page",String(sourcePage));
+  params.set("page",String(plan.sourcePage));
   params.set("output","json");
   return IA_SEARCH+"?"+params.toString();
+}
+function recentRightsCandidate(input){
+  const currentYear=new Date().getUTCFullYear();
+  return Number(input.year)>=currentYear-RECENT_WINDOW_YEARS&&
+    input.rightsSafe===true&&
+    Number(input.classificationConfidence)>=MIN_RECENT_RIGHTS_CLASSIFICATION_CONFIDENCE;
+}
+function recentQualityRightsReviewCandidate(input){
+  const currentYear=new Date().getUTCFullYear();
+  const section=MediaStore.text(input.section);
+  return input.rightsSafe!==true&&
+    ["media-movie","media-drama"].includes(section)&&
+    ["recent","longform","chinese_recent"].includes(MediaStore.text(input.discoveryLane))&&
+    Number(input.year)>=currentYear-RECENT_UNVERIFIED_REVIEW_WINDOW_YEARS&&
+    Number(input.classificationConfidence)>=84&&
+    Number(input.height)>=MIN_VIDEO_HEIGHT&&
+    Number(input.bitrateBps)>=Number(input.requiredBitrateBps||MIN_VIDEO_BITRATE_BPS)&&
+    Number(input.durationSeconds)>=minDuration(section);
+}
+function popularityAccepted(input){
+  if(Number(input.downloads)>=MIN_DOWNLOADS)return{ok:true,reason:"minimum_downloads"};
+  if(Number(input.rating)>=4.2&&Number(input.reviews)>=5)return{ok:true,reason:"rated"};
+  if(recentRightsCandidate(input))return{ok:true,reason:"recent_structured_rights"};
+  if(recentQualityRightsReviewCandidate(input))return{ok:true,reason:"recent_quality_rights_review"};
+  return{ok:false,reason:"popularity_signal_below_threshold"};
 }
 async function inspect(doc,requested,options){
   const id=safeId(doc&&doc.identifier);
@@ -288,6 +360,12 @@ async function inspect(doc,requested,options){
   const title=MediaStore.compact(meta.title||initialTitle,240);
   if(EXCLUDED_CONTEXT.test(combined(meta,doc))){
     return{rejected:"low_value_or_nonprogram_video_context",identifier:id,title};
+  }
+  if(UNRELIABLE_UPLOAD_CONTEXT.test(combined(meta,doc))){
+    return{rejected:"unreliable_or_piracy_upload_signal",identifier:id,title};
+  }
+  if(RESERVED_RIGHTS_CONTEXT.test([meta.rights,meta.usage,doc&&doc.rights].flatMap(list).join(" "))){
+    return{rejected:"explicit_all_rights_reserved",identifier:id,title};
   }
   const year=yearOf([meta.year,doc.year,meta.date,doc.date,title].flatMap(list).join(" "));
   if(!options.adminException&&(!year||year<DEFAULT_MIN_YEAR)){
@@ -315,8 +393,16 @@ async function inspect(doc,requested,options){
   const downloads=Number(doc.downloads||meta.downloads||0);
   const rating=Number(doc.avg_rating||meta.avg_rating||0);
   const reviews=Number(doc.num_reviews||meta.num_reviews||0);
-  if(!options.adminException&&downloads<MIN_DOWNLOADS&&!(rating>=4.2&&reviews>=5)){
-    return{rejected:"popularity_signal_below_threshold",identifier:id,title,year,downloads,rating,reviews};
+  const popularity=popularityAccepted({
+    year,downloads,rating,reviews,rightsSafe:evidence.safe,
+    classificationConfidence:classification.confidence,
+    section:classification.section,discoveryLane:options.discoveryLane,
+    height:dimensions.height,bitrateBps:Number(video._bitrateBps||0),
+    requiredBitrateBps:Number(video._requiredBitrateBps||MIN_VIDEO_BITRATE_BPS),
+    durationSeconds:selectedSeconds
+  });
+  if(!options.adminException&&!popularity.ok){
+    return{rejected:popularity.reason,identifier:id,title,year,downloads,rating,reviews};
   }
   const sourceUrl="https://archive.org/details/"+encodeURIComponent(id);
   const videoUrl="https://archive.org/download/"+encodeURIComponent(id)+"/"+encodeURIComponent(video.name);
@@ -336,8 +422,9 @@ async function inspect(doc,requested,options){
     rightsSafe:evidence.safe,captions,classificationConfidence:classification.confidence,
     adminException:options.adminException
   });
-  if(!options.adminException&&ranking.score<MIN_RANK_SCORE){
-    return{rejected:"ranking_score_below_threshold",identifier:id,title,year,score:ranking.score};
+  const minimumAcceptedRank=popularity.reason==="recent_quality_rights_review"?MIN_RIGHTS_REVIEW_RANK_SCORE:MIN_RANK_SCORE;
+  if(!options.adminException&&ranking.score<minimumAcceptedRank){
+    return{rejected:"ranking_score_below_threshold",identifier:id,title,year,score:ranking.score,minimumAcceptedRank};
   }
   const playbackCandidates=videos.map((file)=>({
     url:"https://archive.org/download/"+encodeURIComponent(id)+"/"+encodeURIComponent(file.name),
@@ -360,6 +447,7 @@ async function inspect(doc,requested,options){
     year:year||null,publishedAt:MediaStore.text(meta.publicdate||doc.publicdate||meta.date||doc.date)||null,
     language:list(meta.language||doc.language),durationSeconds:selectedSeconds,captions,
     rankingScore:ranking.score,rankingTier:ranking.tier,rankingSignals:ranking.signals,
+    discoveryLane:options.discoveryLane,popularityQualification:popularity.reason,
     subtitleLanguages:ranking.subtitleLanguages,subtitleCount:captions.length,
     ageRating:safe.ageRating,contentWarnings:safe.warnings,
     classificationConfidence:classification.confidence,requestedSection:requested,
@@ -386,6 +474,7 @@ async function inspect(doc,requested,options){
       subject:list(meta.subject||doc.subject),licenseurl:MediaStore.text(meta.licenseurl||doc.licenseurl),
       rights:MediaStore.compact(meta.rights||doc.rights||"",500),videoFile:video.name,
       width:dimensions.width,height:dimensions.height,durationSeconds:selectedSeconds,bitrateBps,
+      requiredBitrateBps:Number(video._requiredBitrateBps||MIN_VIDEO_BITRATE_BPS),
       subtitleCount:captions.length,classificationConfidence:classification.confidence,
       requestedSection:requested,classifiedSection:classification.section,
       playbackProbe,thumbnailProbe,
@@ -403,6 +492,14 @@ async function inspect(doc,requested,options){
   candidate.policyAssessment=MediaPolicy.assessCandidate(candidate,{adminException:!!options.adminException});
   candidate.review_status=candidate.policyAssessment.reviewStatus;
   candidate.risk_level=candidate.policyAssessment.riskLevel;
+  if(popularity.reason==="recent_quality_rights_review"){
+    candidate.review_status="rights_quarantine";
+    candidate.risk_level="rights_risk";
+    candidate.policyAssessment=Object.assign({},candidate.policyAssessment,{
+      decision:"quarantine",reviewStatus:"rights_quarantine",riskLevel:"rights_risk",
+      reasons:Array.from(new Set((candidate.policyAssessment.reasons||[]).concat(["recent_content_rights_verification_required"])))
+    });
+  }
   candidate.aiReview={
     status:candidate.policyAssessment.safety.ai.present?"signal_received":"optional_signal_not_received",
     policy:"AI may quarantine but cannot permanently block or publish without administrator review.",
@@ -476,11 +573,15 @@ exports.handler=async function(event){
         version:MediaPolicy.VERSION,minimumYear:DEFAULT_MIN_YEAR,minimumHeight:MIN_VIDEO_HEIGHT,
         minimumBitrateBps:MIN_VIDEO_BITRATE_BPS,maximumPlaybackStartMs:MAX_PLAYBACK_START_MS,
         minimumDownloads:MIN_DOWNLOADS,minimumClassificationConfidence:MIN_CLASSIFICATION_CONFIDENCE,
+        minimumRecentRightsClassificationConfidence:MIN_RECENT_RIGHTS_CLASSIFICATION_CONFIDENCE,
+        recentWindowYears:RECENT_WINDOW_YEARS,recentStructuredRightsPopularityException:true,
+        recentUnverifiedReviewWindowYears:RECENT_UNVERIFIED_REVIEW_WINDOW_YEARS,
+        recentQualityRightsQuarantine:true,minimumRightsReviewRankingScore:MIN_RIGHTS_REVIEW_RANK_SCORE,
         minimumRankingScore:MIN_RANK_SCORE,defaultTarget:DEFAULT_RESULTS,
         defaultBatchSize:DEFAULT_BATCH_SIZE,maxBatchSize:MAX_BATCH_SIZE,
         autoPublish:false,sectionReclassification:"strong-signal quarantine",
         unsafeFiltering:"hard-block plus administrator quarantine",
-        romanceAllowed:true,balancedDiscovery:true,batchedCumulative:true
+        romanceAllowed:true,balancedDiscovery:true,multilingualLongformDiscovery:true,batchedCumulative:true
       }
     });
     if(event.httpMethod!=="POST")return MediaStore.response(405,{ok:false,error:"method_not_allowed"});
@@ -499,6 +600,7 @@ exports.handler=async function(event){
       error.statusCode=400;error.code="admin_exception_input_required";throw error;
     }
     let docs,totalFound=0;
+    const plan=discoveryPlan(section,page);
     if(identifier){docs=[{identifier,title:identifier}];totalFound=1;}
     else{
       const search=await fetchJson(searchUrl(section,batchSize,page));
@@ -508,7 +610,10 @@ exports.handler=async function(event){
     const existingIds=await existingCandidateIdSet();
     const docsForInspection=docs.filter((doc)=>!existingIds.has("ia:"+safeId(doc&&doc.identifier)));
     const skippedExisting=docs.length-docsForInspection.length;
-    const inspected=await mapLimit(docsForInspection,2,(doc)=>inspect(doc,section,{adminException,overrideReason}));
+    const inspected=await mapLimit(docsForInspection,2,(doc)=>inspect(doc,section,{
+      adminException,overrideReason,
+      discoveryLane:identifier?"administrator_identifier":plan.lane
+    }));
     const accepted=[],rejected=[];
     inspected.forEach((entry,index)=>{
       if(entry&&entry.candidate)accepted.push(entry.candidate);
@@ -524,6 +629,17 @@ exports.handler=async function(event){
     const normalized=[],validationRejected=[];
     selected.forEach((candidate)=>{
       const row=MediaStore.normalizeCandidate(candidate,actor);
+      if(candidate.popularityQualification==="recent_quality_rights_review"){
+        row.review_status="rights_quarantine";
+        row.risk_level="rights_risk";
+        row.verification_status="web_verification_required";
+        row.raw=Object.assign({},row.raw,{
+          policyAssessment:Object.assign({},row.raw&&row.raw.policyAssessment||{},{
+            decision:"quarantine",reviewStatus:"rights_quarantine",riskLevel:"rights_risk",
+            reasons:Array.from(new Set((((row.raw&&row.raw.policyAssessment||{}).reasons)||[]).concat(["recent_content_rights_verification_required"])))
+          })
+        });
+      }
       const validation=MediaStore.validateCandidate(row);
       if(validation.ok)normalized.push(row);
       else validationRejected.push({id:row.id,title:row.title,reasons:validation.reasons});
@@ -531,11 +647,11 @@ exports.handler=async function(event){
     const saved=await MediaStore.upsertCandidates(normalized);
     const savedRows=Array.isArray(saved)?saved:normalized;
     const nextPage=identifier?page:page+1;
-    const exhausted=identifier||docs.length<batchSize;
+    const exhausted=!!identifier;
     return MediaStore.response(200,{
       ok:true,version:VERSION,mode:identifier?"administrator_exception":"batched_cumulative",
       section,target,batchSize,page,nextPage,
-      discoveryLane:identifier?"administrator_identifier":discoveryLane(page),
+      discoveryLane:identifier?"administrator_identifier":plan.lane,
       done:exhausted,searched:docs.length,totalFound,qualified:accepted.length,
       accepted:normalized.length,saved:savedRows.length,
       savedIds:savedRows.map((row)=>MediaStore.text(row&&row.id)).filter(Boolean),
@@ -545,10 +661,14 @@ exports.handler=async function(event){
         version:MediaPolicy.VERSION,minimumYear:DEFAULT_MIN_YEAR,minimumHeight:MIN_VIDEO_HEIGHT,
         minimumBitrateBps:MIN_VIDEO_BITRATE_BPS,maximumPlaybackStartMs:MAX_PLAYBACK_START_MS,
         minimumDownloads:MIN_DOWNLOADS,minimumClassificationConfidence:MIN_CLASSIFICATION_CONFIDENCE,
+        minimumRecentRightsClassificationConfidence:MIN_RECENT_RIGHTS_CLASSIFICATION_CONFIDENCE,
+        recentWindowYears:RECENT_WINDOW_YEARS,recentStructuredRightsPopularityException:true,
+        recentUnverifiedReviewWindowYears:RECENT_UNVERIFIED_REVIEW_WINDOW_YEARS,
+        recentQualityRightsQuarantine:true,minimumRightsReviewRankingScore:MIN_RIGHTS_REVIEW_RANK_SCORE,
         minimumRankingScore:MIN_RANK_SCORE,autoPublish:false,
         sectionReclassification:"strong-signal quarantine",
         unsafeFiltering:"hard-block plus administrator quarantine",
-        romanceAllowed:true,balancedDiscovery:true,adminException,batchedCumulative:true
+        romanceAllowed:true,balancedDiscovery:true,multilingualLongformDiscovery:true,adminException,batchedCumulative:true
       },
       items:savedRows
     });

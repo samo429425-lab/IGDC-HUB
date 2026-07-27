@@ -9,8 +9,9 @@ const fs = require("fs");
 const path = require("path");
 const MediaStore = require("./lib/media-candidate-store.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
+const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
 
-const VERSION = "media-snapshot-publish-v1.1.0-policy-gated-release";
+const VERSION = "media-snapshot-publish-v1.2.0-policy-gated-front-dispatch";
 
 async function actorFor(event, storeRelease){
   const actor = await SharedAdminAuth.resolveUser(event);
@@ -39,7 +40,8 @@ exports.handler = async function(event){
   try{
     if(!["GET","POST"].includes(event.httpMethod)) return MediaStore.response(405,{ok:false,error:"method_not_allowed"});
     const params=Object.assign({}, event.queryStringParameters || {}, event.httpMethod === "POST" ? MediaStore.parseBody(event) : {});
-    const storeRelease = params.storeRelease === true || params.storeRelease === "true";
+    const publishFront = params.publishFront === true || params.publishFront === "true";
+    const storeRelease = publishFront || params.storeRelease === true || params.storeRelease === "true";
     const actor=await actorFor(event, storeRelease);
     const rows=await MediaStore.selectCandidates(queryApproved(params.limit));
     const base=baseSnapshot();
@@ -47,6 +49,10 @@ exports.handler = async function(event){
     const hash=MediaStore.sha256(snapshot);
     const eligible=Array.isArray(rows)?rows.filter(MediaStore.snapshotEligible).length:0;
     const blocked=Array.isArray(rows)?rows.filter((row)=>!MediaStore.snapshotEligible(row)).map((row)=>({id:MediaStore.text(row&&row.id),reasons:MediaStore.MediaPolicy.releaseEligibility(row).reasons})):[]; 
+    if(publishFront&&eligible===0){
+      const error=new Error("프론트에 반영할 승인·권리확인·공개검증 완료 후보가 없습니다.");
+      error.statusCode=409;error.code="no_verified_promotable_media";throw error;
+    }
     const release={
       release_id:"media_snapshot_"+MediaStore.shortHash({hash,at:MediaStore.nowIso()}),
       snapshot_hash:hash,
@@ -59,10 +65,28 @@ exports.handler = async function(event){
     };
     let stored=null;
     if(storeRelease) stored=await MediaStore.insertRelease(release);
+    let frontPublication=null;
+    if(publishFront){
+      frontPublication=await MediaReleaseDispatch.dispatch({
+        releaseId:release.release_id,
+        snapshotHash:hash,
+        actorId:actor.email||actor.memberId
+      });
+    }
     if(params.download === "1" || params.download === true || params.format === "snapshot"){
       return {statusCode:200,headers:{"content-type":"application/json; charset=utf-8","cache-control":"private, no-store, max-age=0","content-disposition":"attachment; filename=media.snapshot.generated.json"},body:JSON.stringify(snapshot,null,2)+"\n"};
     }
-    return MediaStore.response(200,{ok:true,version:VERSION,policyVersion:MediaStore.MediaPolicy.VERSION,baseFile:base.file,hash,approvedRows:Array.isArray(rows)?rows.length:0,eligibleRows:eligible,policyBlockedRows:blocked.length,blocked:params.includeBlocked==="1"?blocked:undefined,releaseStored:!!stored,stored,release:params.includeSnapshot === "1" ? release : Object.assign({}, release, {snapshot:undefined}),snapshot:params.includeSnapshot === "1" ? snapshot : undefined});
+    return MediaStore.response(200,{
+      ok:true,version:VERSION,policyVersion:MediaStore.MediaPolicy.VERSION,
+      baseFile:base.file,hash,approvedRows:Array.isArray(rows)?rows.length:0,
+      eligibleRows:eligible,policyBlockedRows:blocked.length,
+      blocked:params.includeBlocked==="1"?blocked:undefined,
+      releaseStored:!!stored,stored,
+      frontPublicationRequested:publishFront,
+      frontPublication,
+      release:params.includeSnapshot === "1" ? release : Object.assign({}, release, {snapshot:undefined}),
+      snapshot:params.includeSnapshot === "1" ? snapshot : undefined
+    });
   }catch(error){
     return MediaStore.response(error.statusCode || 500,{ok:false,version:VERSION,error:error.code||"media_snapshot_publish_failed",message:error.message||String(error)});
   }

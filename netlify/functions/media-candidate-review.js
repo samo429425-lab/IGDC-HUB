@@ -9,8 +9,9 @@ const path=require("path");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
+const MediaReleaseDispatch=require("./lib/media-release-dispatch.v1");
 
-const VERSION="media-candidate-review-api-v1.4.0-quality-thumbnail-diagnostics";
+const VERSION="media-candidate-review-api-v1.5.0-automation-release-diagnostics";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","media_manager","commerce_manager"]);
 
 function text(value){return value==null?"":String(value).trim();}
@@ -289,6 +290,8 @@ function diagnosticDoc(stage,publicDigest,member){
   if(summary.trendingManualCandidates!==0)blockers.push("manual_trending_candidates_present");
   if((publicDigest&&publicDigest.seededInPublic||0)>0)blockers.push("candidate_seed_found_in_public_media_snapshot");
   if(summary.promotableCount===0)blockers.push("no_verified_promotable_media_yet");
+  const releaseGate=MediaReleaseDispatch.releaseArmed();
+  const releaseHook=MediaReleaseDispatch.validHook(process.env[MediaReleaseDispatch.HOOK_ENV]);
   return{
     ok:true,
     reportType:"igdc-media-candidate-queue-diagnostic",
@@ -300,6 +303,19 @@ function diagnosticDoc(stage,publicDigest,member){
       externalVideoNavigation:false,providerCalls:false,paymentOrRevenueMutation:false,secretsExcluded:true
     },
     administrator:{roles:roles(member),access:"validated-media-candidate-read",authMode:text(member&&member.authMode)},
+    automation:{
+      aiAutoCurationConfigured:!!text(process.env.OPENAI_API_KEY||process.env.OPENAI_KEY),
+      aiModel:text(process.env.MEDIA_CANDIDATE_AI_MODEL||process.env.OPENAI_MODEL||"gpt-4o-mini"),
+      aiAuthority:"private_reclassify_or_quarantine_only",
+      frontPublication:{
+        armed:releaseGate.armed===true,
+        mode:text(releaseGate.mode),
+        keyPresent:releaseGate.keyPresent===true,
+        buildHookConfigured:!!releaseHook,
+        actionAvailable:releaseGate.armed===true&&!!releaseHook,
+        buildAdapter:"netlify/plugins/media-snapshot-release"
+      }
+    },
     source:{
       candidateFileLoaded:!!(stage&&stage.file),
       candidateFile:stage&&stage.file?(String(stage.file).startsWith("supabase:")?stage.file:path.basename(stage.file)):"not_found",
