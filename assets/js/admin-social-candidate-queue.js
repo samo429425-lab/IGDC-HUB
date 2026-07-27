@@ -1,4 +1,4 @@
-/* IGDC Social Hub Channel Candidate Control v2.0.0 */
+/* IGDC Social Hub Channel Candidate Control v2.0.1 */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -93,25 +93,158 @@
       );
     });
   }
-  function headers(json) {
+  var ADMIN_BEARER_KEY = "igdc.socialCandidateQueue.adminBearer";
+  var AUTH_RECORD_KEYS = [
+    "osauth.tokens.v2",
+    "osauth.tokens.v1",
+    "igdc.tokens",
+    "igdc_auth_tokens",
+    "auth0_tokens",
+    "auth0spa",
+  ];
+  function authStores() {
+    var stores = [];
+    try {
+      stores.push(window.localStorage);
+    } catch (_e) {}
+    try {
+      stores.push(window.sessionStorage);
+    } catch (_e) {}
+    return stores;
+  }
+  function parseJson(value) {
+    try {
+      return JSON.parse(value);
+    } catch (_e) {
+      return null;
+    }
+  }
+  function jwtPayload(token) {
+    try {
+      var parts = text(token).split(".");
+      if (parts.length !== 3) return null;
+      var value = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      while (value.length % 4) value += "=";
+      return JSON.parse(window.atob(value));
+    } catch (_e) {
+      return null;
+    }
+  }
+  function usableIdToken(token) {
+    var payload = jwtPayload(token);
+    return !!(
+      payload &&
+      payload.sub &&
+      payload.exp &&
+      Number(payload.exp) * 1000 > Date.now() + 15000
+    );
+  }
+  function expectedIssuer() {
+    var issuer = "";
+    try {
+      issuer = text(window.IGDC_AUTH_SESSION && window.IGDC_AUTH_SESSION.issuer);
+    } catch (_e) {}
+    return (issuer || "https://login.igdcglobal.com/").replace(/\/?$/, "/");
+  }
+  function pushToken(list, token, source) {
+    if (!usableIdToken(token)) return;
+    if (
+      list.some(function (item) {
+        return item.token === token;
+      })
+    )
+      return;
+    list.push({ token: token, source: source });
+  }
+  function adminBearer(excludeDedicated) {
+    var candidates = [],
+      stores = authStores();
+    try {
+      if (
+        window.IGDCMemberAuth &&
+        typeof window.IGDCMemberAuth.getIdToken === "function"
+      )
+        pushToken(
+          candidates,
+          window.IGDCMemberAuth.getIdToken(),
+          "member-auth",
+        );
+    } catch (_e) {}
+    try {
+      if (window.osAuth && typeof window.osAuth.getIdToken === "function")
+        pushToken(candidates, window.osAuth.getIdToken(), "os-auth");
+    } catch (_e) {}
+    stores.forEach(function (store) {
+      AUTH_RECORD_KEYS.forEach(function (key) {
+        try {
+          var record = parseJson(store.getItem(key));
+          if (!record || typeof record !== "object") return;
+          pushToken(candidates, record.id_token, key);
+          pushToken(candidates, record.idToken, key);
+          pushToken(candidates, record.__raw, key);
+          pushToken(candidates, record.raw, key);
+        } catch (_e) {}
+      });
+      ["igdc_id_token", "id_token", "auth0_id_token"].forEach(function (key) {
+        try {
+          pushToken(candidates, store.getItem(key), key);
+        } catch (_e) {}
+      });
+    });
+    if (!excludeDedicated) {
+      stores.forEach(function (store) {
+        try {
+          pushToken(candidates, store.getItem(ADMIN_BEARER_KEY), "dedicated");
+        } catch (_e) {}
+      });
+    }
+    var issuer = expectedIssuer();
+    var chosen =
+      candidates.filter(function (item) {
+        var payload = jwtPayload(item.token);
+        return payload && text(payload.iss).replace(/\/?$/, "/") === issuer;
+      })[0] || candidates[0];
+    if (!chosen) return "";
+    if (chosen.source !== "dedicated") {
+      stores.forEach(function (store) {
+        try {
+          store.setItem(ADMIN_BEARER_KEY, chosen.token);
+        } catch (_e) {}
+      });
+    }
+    return chosen.token;
+  }
+  function clearDedicatedBearer() {
+    authStores().forEach(function (store) {
+      try {
+        store.removeItem(ADMIN_BEARER_KEY);
+      } catch (_e) {}
+    });
+  }
+  function headers(json, token) {
     var h = { Accept: "application/json" };
     if (json) h["Content-Type"] = "application/json";
-    try {
-      var t =
-        sessionStorage.getItem("igdc.socialCandidateQueue.adminBearer") ||
-        localStorage.getItem("igdc.socialCandidateQueue.adminBearer") ||
-        "";
-      if (t && t.split(".").length === 3) h.Authorization = "Bearer " + t;
-    } catch (_e) {}
+    var bearer = token === undefined ? adminBearer(false) : token;
+    if (bearer) h.Authorization = "Bearer " + bearer;
     return h;
   }
-  async function get(url) {
-    var r = await fetch(url, {
-        headers: headers(false),
+  async function request(url, options, json) {
+    var firstToken = adminBearer(false),
+      config = Object.assign({}, options || {}, {
+        headers: headers(json, firstToken),
         credentials: "same-origin",
         cache: "no-store",
       }),
+      r = await fetch(url, config),
       d;
+    if (r.status === 401) {
+      clearDedicatedBearer();
+      var replacementToken = adminBearer(true);
+      if (replacementToken && replacementToken !== firstToken) {
+        config.headers = headers(json, replacementToken);
+        r = await fetch(url, config);
+      }
+    }
     try {
       d = await r.json();
     } catch (_e) {}
@@ -124,26 +257,22 @@
     }
     return d;
   }
+  async function get(url) {
+    return request(url, {}, false);
+  }
   async function post(url, body) {
-    var r = await fetch(url, {
-        method: "POST",
-        headers: headers(true),
-        credentials: "same-origin",
-        cache: "no-store",
-        body: JSON.stringify(body || {}),
-      }),
-      d;
-    try {
-      d = await r.json();
-    } catch (_e) {}
-    if (!r.ok || !d || d.ok !== true) {
-      var e = new Error(
-        (d && d.message) || (d && d.error) || "요청 실패: HTTP " + r.status,
-      );
-      e.status = r.status;
-      throw e;
-    }
-    return d;
+    return request(
+      url,
+      { method: "POST", body: JSON.stringify(body || {}) },
+      true,
+    );
+  }
+  function collectionErrorState(error) {
+    var message = text(error && error.message);
+    return Number(error && error.status) === 401 ||
+      /(로그인|인증|세션|token|issuer|audience)/i.test(message)
+      ? "관리자 인증 실패"
+      : "수집 실패";
   }
   function show(msg, kind) {
     var n = $("notice");
@@ -1159,6 +1288,7 @@
     lockCollection(true);
     var key = $("collectorSection").value,
       j = newJob(key, 0, 1);
+    var failed = false;
     try {
       await collectSection(key, dry, j);
       j.done = 1;
@@ -1194,8 +1324,10 @@
         j.newlyFound ? "ok" : "warn",
       );
     } catch (e) {
+      failed = true;
       j.paused = true;
       saveJob(j);
+      $("collectorState").textContent = collectionErrorState(e);
       show(
         (e.message || "수집 오류") + " · 현재 지점은 저장되었습니다.",
         "warn",
@@ -1203,7 +1335,10 @@
     } finally {
       lockCollection(false);
       stopRequested = false;
-      $("collectorState").textContent = "수집 대기";
+      if (!failed)
+        $("collectorState").textContent = j.paused
+          ? "일시정지됨"
+          : "수집 대기";
     }
   }
   async function collectAll() {
@@ -1227,6 +1362,7 @@
       j.total = order.length;
       j.target = 100;
     }
+    var failed = false;
     try {
       for (; j.index < order.length && !stopRequested; j.index++) {
         var continuing = resume && j.section === order[j.index];
@@ -1286,8 +1422,10 @@
         );
       }
     } catch (e) {
+      failed = true;
       j.paused = true;
       saveJob(j);
+      $("collectorState").textContent = collectionErrorState(e);
       show(
         (e.message || "수집 오류") + " · 현재 지점은 저장되었습니다.",
         "warn",
@@ -1295,7 +1433,10 @@
     } finally {
       lockCollection(false);
       stopRequested = false;
-      $("collectorState").textContent = "수집 대기";
+      if (!failed)
+        $("collectorState").textContent = j.paused
+          ? "일시정지됨"
+          : "수집 대기";
     }
   }
   async function importSearchBank() {
