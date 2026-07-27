@@ -15,6 +15,8 @@
     'media-documentary':'다큐멘터리','media-animation':'애니메이션','media-music':'음악·공연','media-shorts':'쇼츠·단편'
   };
   var SECTION_CAPACITY={'media-music':50,'media-shorts':50};
+  function sectionCapacity(key){return key==='media-trending'?50:(SECTION_CAPACITY[key]||100);}
+  function sectionReserveCapacity(key){return key==='media-trending'?0:sectionCapacity(key);}
 
   var $=function(id){return document.getElementById(id);};
   var text=function(value){return String(value==null?'':value).trim();};
@@ -34,6 +36,7 @@
   var currentPreview=null;
   var collectorStopRequested=false;
   var collectAllRunning=false;
+  var collectAllProgress=null;
   var lastRunStats={saved:0,section:''};
   var previewSources=[];
   var previewSourceIndex=0;
@@ -219,18 +222,26 @@
   }
   function renderRows(){
     var rows=visibleRows();
+    var allActive=activeRows();
     var html=SECTION_ORDER.map(function(key){
       var list=sectionRows(key,rows);
       var open=key===openSectionKey;
-      var capacity=key==='media-trending'?50:(SECTION_CAPACITY[key]||100);
+      var capacity=sectionCapacity(key);
+      var fullCount=sectionRows(key,allActive).length;
+      var primaryCount=Math.min(fullCount,capacity);
+      var reserveCount=Math.max(0,fullCount-capacity);
+      var countLabel=key==='media-trending'?
+        primaryCount+' / '+capacity:
+        '본선 '+primaryCount+'/'+capacity+' · 예비 '+reserveCount+'/'+sectionReserveCapacity(key);
+      if(list.length!==fullCount)countLabel+=' · 표시 '+list.length;
       return '<section class="candidate-section'+(open?' open':'')+'" data-section-key="'+esc(key)+'">'+
-        '<button type="button" class="section-toggle" data-section-key="'+esc(key)+'" aria-expanded="'+(open?'true':'false')+'"><span class="section-toggle-main"><span class="section-toggle-title">'+esc(SECTION_LABELS[key]||key)+'</span><span class="section-count">'+list.length+' / '+capacity+'</span></span><span class="section-chevron">⌄</span></button>'+
+        '<button type="button" class="section-toggle" data-section-key="'+esc(key)+'" aria-expanded="'+(open?'true':'false')+'"><span class="section-toggle-main"><span class="section-toggle-title">'+esc(SECTION_LABELS[key]||key)+'</span><span class="section-count">'+countLabel+'</span></span><span class="section-chevron">⌄</span></button>'+
         (open?'<div class="section-body">'+sectionBodyHtml(key,list)+'</div>':'')+
       '</section>';
     }).join('');
     $('sectionAccordion').innerHTML=html;
     $('filterState').textContent='검색 조건 일치 '+rows.length+'개 / 전체 활성 후보 '+activeRows().length+'개 · 펼친 섹션만 썸네일 로드';
-    $('candidateCapacityState').textContent='일반 100개 · 음악/쇼츠 50개 · 전체 최대 900개';
+    $('candidateCapacityState').textContent='일반 본선 100 + 예비 100 · 음악/쇼츠 본선 50 + 예비 50';
     $('tablePanel').classList.remove('hidden');
   }
   function exclusionRowHtml(row,index){
@@ -326,16 +337,82 @@
     var target=Math.max(1,Number(job.target||1));
     var saved=Math.max(0,Number(job.saved||0));
     var percent=Math.min(100,Math.round(saved/target*100));
+    var sectionLabel=SECTION_LABELS[job.section]||job.section||'';
+    var sequence=collectAllRunning&&collectAllProgress?
+      '전체 순차 '+collectAllProgress.round+'/'+collectAllProgress.maxRounds+
+      '회 · '+collectAllProgress.sectionIndex+'/9 '+sectionLabel+' · ':'';
     $('collectorProgress').classList.remove('hidden');
-    $('collectorProgressText').textContent='목표 '+target+'개 · 신규 저장 '+saved+'개 · 검색 '+Number(job.searched||0)+'건 · 정밀검사 '+Number(job.inspected||0)+'건 · 현재 묶음 '+Number(job.batch||0);
+    $('collectorProgressText').textContent=sequence+'목표 '+target+'개 · 해당 섹션 신규 '+saved+'개 · 이 탐색 전체 신규 '+Number(job.totalSaved||saved)+'개 · 검색 '+Number(job.searched||0)+'건 · 정밀검사 '+Number(job.inspected||0)+'건 · 누적 묶음 '+Number(job.batch||0);
     $('collectorRejectText').textContent='제외 '+Number(job.rejected||0)+'건'+(job.lastReason?' · 최근 제외: '+job.lastReason:'');
     $('collectorProgressBar').style.width=percent+'%';
-    $('collectorState').textContent=job.paused?'일시정지됨':(saved>=target?'목표 완료':'정밀 수집 중');
+    $('collectorState').textContent=job.paused?(job.pauseReason==='checkpoint'?'다음 순환 대기':'일시정지됨'):(saved>=target?'목표 완료':(sequence||'')+'정밀 수집 중');
   }
   function wait(milliseconds){return new Promise(function(resolve){setTimeout(resolve,milliseconds);});}
-  async function collect(admin,wholeRun){
+  function qualityResearchJobKey(section){return'igdc.mediaCollector.qualityResearch.'+section;}
+  function loadQualityResearchJob(section){
+    try{var raw=localStorage.getItem(qualityResearchJobKey(section));return raw?JSON.parse(raw):null;}
+    catch(_error){return null;}
+  }
+  function saveQualityResearchJob(job){
+    try{localStorage.setItem(qualityResearchJobKey(job.section),JSON.stringify(job));}catch(_error){}
+  }
+  async function researchSectionQuality(section,currentCount){
+    var primaryCapacity=sectionCapacity(section);
+    var reserveCapacity=sectionReserveCapacity(section);
+    if(!reserveCapacity||currentCount<primaryCapacity||currentCount>=primaryCapacity+reserveCapacity){
+      return{requestedSaved:0,newSavedAll:0,batches:0,skipped:true};
+    }
+    var remaining=primaryCapacity+reserveCapacity-currentCount;
+    var stored=loadQualityResearchJob(section)||{};
+    var job={
+      section:section,
+      page:Math.max(1,Number(stored.page||1)),
+      cycle:Number(stored.cycle||0)+1,
+      searched:0,rejected:0,saved:0,batches:0
+    };
+    var totalAll=0;
+    while(job.batches<7&&job.saved<remaining&&!collectorStopRequested){
+      job.batches+=1;
+      var attempts=0,data=null;
+      while(attempts<3&&!data){
+        attempts+=1;
+        try{
+          data=await post(COL,{
+            source:'internet_archive',section:section,target:remaining,
+            batchSize:Math.min(3,remaining-job.saved),page:job.page,batchMode:true,
+            qualityResearch:true
+          });
+        }catch(error){
+          if((error.status===502||error.status===503||error.status===504)&&attempts<3){
+            $('collectorState').textContent='추가 품질 탐색 원본 지연 · '+attempts+'차 재시도';
+            await wait(1200*attempts);continue;
+          }
+          throw error;
+        }
+      }
+      job.page=Number(data.nextPage||job.page+1);
+      job.searched+=Number(data.searched||0);
+      job.rejected+=Number(data.rejectedCount||0);
+      var items=Array.isArray(data.items)?data.items:[];
+      var sameSection=items.filter(function(row){
+        return text(row.section_key||row.sectionKey)===section;
+      }).length;
+      job.saved+=sameSection;
+      totalAll+=Number(data.saved||items.length||0);
+      saveQualityResearchJob(job);
+      $('collectorState').textContent='추가 품질 탐색 · '+(SECTION_LABELS[section]||section)+' · '+job.batches+'/7';
+      $('collectorProgress').classList.remove('hidden');
+      $('collectorProgressText').textContent='본선 '+primaryCapacity+'개 충족 · 더 나은 후보 및 예비 '+job.saved+'/'+remaining+'개 탐색 · 검색 '+job.searched+'건';
+      $('collectorRejectText').textContent='추가 탐색 제외 '+job.rejected+'건 · 기존 후보는 삭제하지 않고 품질순으로 본선/예비를 다시 구분합니다.';
+      $('collectorProgressBar').style.width=Math.min(100,Math.round(job.batches/7*100))+'%';
+      if(data.done)break;
+      if(job.batches<7&&job.saved<remaining)await wait(350);
+    }
+    return{requestedSaved:job.saved,newSavedAll:totalAll,batches:job.batches,skipped:false};
+  }
+  async function collect(admin,wholeRun,targetOverride){
     var section=$('collectorSection').value;
-    var target=Number($('collectorLimit').value)||5;
+    var target=Math.max(1,Number(targetOverride||$('collectorLimit').value)||5);
     if(admin){
       var body={
         source:'internet_archive',section:section,target:1,batchSize:1,
@@ -359,22 +436,30 @@
     else{
       job={
         section:section,target:target,batchSize:3,page:1,batch:0,saved:0,searched:0,inspected:0,rejected:0,
-        knownIds:rowsCache.map(function(row){return text(row.contentId||row.id);}),paused:false,lastReason:''
+        totalSaved:0,knownIds:rowsCache.map(function(row){return text(row.contentId||row.id);}),paused:false,lastReason:''
       };
     }
+    job.section=section;job.target=target;job.batchSize=3;
+    job.page=Math.max(1,Number(job.page||1));job.batch=Math.max(0,Number(job.batch||0));
+    job.saved=Math.max(0,Number(job.saved||0));job.totalSaved=Math.max(job.saved,Number(job.totalSaved||0));
+    job.searched=Math.max(0,Number(job.searched||0));job.inspected=Math.max(0,Number(job.inspected||0));
+    job.rejected=Math.max(0,Number(job.rejected||0));job.knownIds=Array.isArray(job.knownIds)?job.knownIds:[];
     var startSaved=Number(job.saved||0);
+    var startTotalSaved=Number(job.totalSaved||0);
     if(!wholeRun)collectorStopRequested=false;
     $('collectBtn').disabled=true;$('collectAllBtn').disabled=true;$('collectAdminExceptionBtn').disabled=true;$('collectorStopBtn').disabled=false;
     updateCollectorProgress(job);
-    var maxBatches=Math.min(80,Math.max(12,job.target*8));
+    var visitBatches=0;
+    var maxBatchesThisVisit=wholeRun?7:Math.min(80,Math.max(12,job.target*8));
     try{
-      while(job.saved<job.target&&job.batch<maxBatches&&!collectorStopRequested){
-        job.batch+=1;
+      while(job.saved<job.target&&visitBatches<maxBatchesThisVisit&&!collectorStopRequested){
+        visitBatches+=1;job.batch+=1;
+        var requestBatchSize=Math.max(1,Math.min(job.batchSize,job.target-job.saved));
         var attempts=0,data=null;
         while(attempts<3&&!data){
           attempts+=1;
           try{
-            data=await post(COL,{source:'internet_archive',section:job.section,target:job.target,batchSize:job.batchSize,page:job.page,batchMode:true});
+            data=await post(COL,{source:'internet_archive',section:job.section,target:job.target,batchSize:requestBatchSize,page:job.page,batchMode:true});
           }catch(error){
             if((error.status===502||error.status===503||error.status===504)&&attempts<3){
               $('collectorState').textContent='외부 원본 지연 · '+attempts+'차 재시도';
@@ -385,13 +470,20 @@
         }
         job.page=Number(data.nextPage||job.page+1);
         job.searched+=Number(data.searched||0);job.inspected+=Number(data.searched||0);job.rejected+=Number(data.rejectedCount||0);
-        var responseItems=Array.isArray(data.items)?data.items:null;
-        var ids=responseItems?responseItems.filter(function(row){
+        var responseItems=Array.isArray(data.items)?data.items:[];
+        var hasResponseItems=responseItems.length>0;
+        var requestedIds=new Set(responseItems.filter(function(row){
           return text(row.section_key||row.sectionKey)===job.section;
-        }).map(function(row){return text(row.id||row.contentId);}):(Array.isArray(data.savedIds)?data.savedIds:[]);
+        }).map(function(row){return text(row.id||row.contentId);}));
+        var ids=responseItems.length?responseItems.map(function(row){
+          return text(row.id||row.contentId);
+        }):(Array.isArray(data.savedIds)?data.savedIds.map(text):[]);
         ids.forEach(function(id){
           id=text(id);
-          if(id&&job.knownIds.indexOf(id)<0){job.knownIds.push(id);job.saved+=1;}
+          if(id&&job.knownIds.indexOf(id)<0){
+            job.knownIds.push(id);job.totalSaved+=1;
+            if(!hasResponseItems||requestedIds.has(id))job.saved+=1;
+          }
         });
         var last=(data.rejected||[]).slice(-1)[0];
         job.lastReason=last&&text(last.reason)||'';
@@ -399,21 +491,30 @@
         if(data.done)break;
         if(job.saved<job.target)await wait(350);
       }
-      job.paused=collectorStopRequested||job.saved<job.target;
-      saveCollectorJob(job);updateCollectorProgress(job);
-      lastRunStats={saved:Math.max(0,job.saved-startSaved),section:job.section};
+      var complete=job.saved>=job.target;
+      job.paused=!complete;job.pauseReason=complete?'':(collectorStopRequested?'user':'checkpoint');
+      if(complete)clearCollectorJob(section);else saveCollectorJob(job);
+      updateCollectorProgress(job);
+      lastRunStats={saved:Math.max(0,job.totalSaved-startTotalSaved),section:job.section};
       if(job.saved>=job.target){
-        clearCollectorJob(section);show('목표 '+job.target+'개를 품질 기준으로 누적 저장했습니다.','ok');
+        if(!wholeRun)show('목표 '+job.target+'개를 품질 기준으로 누적 저장했습니다.','ok');
       }else if(collectorStopRequested){
-        show('수집을 일시정지했습니다. 같은 섹션에서 다시 시작하면 이어서 진행합니다.','ok');
+        if(!wholeRun)show('수집을 일시정지했습니다. 같은 섹션에서 다시 시작하면 이어서 진행합니다.','ok');
       }else{
-        show('탐색 한도 안에서 '+job.saved+'개를 저장했습니다. 저품질 후보로 목표 수량을 강제로 채우지 않았습니다.','ok');
+        if(!wholeRun)show('이번 탐색 구간에서 '+job.saved+'개를 저장했습니다. 다음 실행은 이어지는 검색 위치에서 계속합니다.','ok');
       }
-      await refresh();
+      if(!wholeRun)await refresh();
+      return{
+        complete:complete,stopped:collectorStopRequested,
+        requestedSaved:Math.max(0,job.saved-startSaved),
+        newSavedAll:Math.max(0,job.totalSaved-startTotalSaved),
+        page:job.page,batches:visitBatches
+      };
     }catch(error){
-      job.paused=true;saveCollectorJob(job);updateCollectorProgress(job);
+      job.paused=true;job.pauseReason='error';saveCollectorJob(job);updateCollectorProgress(job);
       $('collectorState').textContent='수집 일시정지';
-      show(error.message+' · 진행 지점은 저장되었습니다.','warn');
+      if(!wholeRun)show(error.message+' · 진행 지점은 저장되었습니다.','warn');
+      return{complete:false,stopped:collectorStopRequested,error:error.message||String(error),requestedSaved:0,newSavedAll:Math.max(0,job.totalSaved-startTotalSaved)};
     }finally{
       if(!wholeRun){
         $('collectBtn').disabled=false;$('collectAllBtn').disabled=false;$('collectAdminExceptionBtn').disabled=false;$('collectorStopBtn').disabled=true;
@@ -423,25 +524,66 @@
   }
   async function collectAll(){
     if(collectAllRunning)return;
-    if(!window.confirm('9개 섹션을 현재 목표 수량으로 순차 수집할까요? 품질 미달 후보로 수량을 강제로 채우지 않습니다.'))return;
+    if(!window.confirm('9개 섹션을 현재 목표 수량으로 순차 수집할까요? 정원을 채운 섹션은 7개 탐색 경로를 한 번 더 점검해 더 좋은 본선 후보와 예비 후보를 확보합니다. 품질 미달 후보로 수량을 강제로 채우지 않습니다.'))return;
     var collectionSections=SECTION_ORDER.filter(function(key){return key!=='media-trending';});
-    var total=0;
+    var target=Number($('collectorLimit').value)||5;
+    var maxRounds=Math.min(12,Math.max(4,target*2));
+    var total=0,errors=0,completed=new Set();
+    var sectionCounts={};
+    collectionSections.forEach(function(section){
+      sectionCounts[section]=activeRows().filter(function(row){return text(row.sectionKey)===section;}).length;
+    });
     collectAllRunning=true;collectorStopRequested=false;
     $('collectBtn').disabled=true;$('collectAllBtn').disabled=true;$('collectAdminExceptionBtn').disabled=true;$('collectorStopBtn').disabled=false;
     try{
-      for(var index=0;index<collectionSections.length&&!collectorStopRequested;index+=1){
-        $('collectorSection').value=collectionSections[index];
-        $('collectorState').textContent='전체 수집 '+(index+1)+'/9 · '+collectionSections[index];
-        await collect(false,true);
-        total+=Number(lastRunStats.saved||0);
+      for(var round=1;round<=maxRounds&&completed.size<collectionSections.length&&!collectorStopRequested;round+=1){
+        for(var index=0;index<collectionSections.length&&!collectorStopRequested;index+=1){
+          var section=collectionSections[index];
+          if(completed.has(section))continue;
+          var inventoryMaximum=sectionCapacity(section)+sectionReserveCapacity(section);
+          var collectionTarget=Math.min(target,Math.max(0,inventoryMaximum-sectionCounts[section]));
+          if(collectionTarget<=0){
+            completed.add(section);
+            continue;
+          }
+          collectAllProgress={round:round,maxRounds:maxRounds,sectionIndex:index+1,totalSaved:total};
+          $('collectorSection').value=section;
+          $('collectorState').textContent='전체 순차 '+round+'/'+maxRounds+'회 · '+(index+1)+'/9 '+(SECTION_LABELS[section]||section);
+          var result=await collect(false,true,collectionTarget);
+          total+=Number(result&&result.newSavedAll||0);
+          sectionCounts[section]+=Number(result&&result.requestedSaved||0);
+          if(result&&result.complete){
+            if(sectionCounts[section]>=sectionCapacity(section)&&!collectorStopRequested){
+              try{
+                var research=await researchSectionQuality(section,sectionCounts[section]);
+                total+=Number(research&&research.newSavedAll||0);
+                sectionCounts[section]+=Number(research&&research.requestedSaved||0);
+              }catch(error){
+                errors+=1;
+                $('collectorState').textContent='추가 품질 탐색 일시 오류 · 다음 섹션 계속';
+              }
+            }
+            completed.add(section);
+          }
+          if(result&&result.error)errors+=1;
+        }
       }
       lastRunStats={saved:total,section:'전체 섹션'};
-      show(
-        collectorStopRequested?'전체 수집을 현재 묶음 뒤 일시정지했습니다.':'전체 섹션 순차 수집을 마쳤습니다. 이번 수집 '+total+'건입니다.',
-        collectorStopRequested?'warn':'ok'
-      );
+      collectAllProgress=null;
+      await refresh();
+      var remaining=collectionSections.length-completed.size;
+      if(collectorStopRequested){
+        $('collectorState').textContent='전체 순차 수집 일시정지됨';
+        show('전체 수집을 현재 묶음 뒤 일시정지했습니다. 진행 위치는 섹션별로 저장됐습니다.','warn');
+      }else if(remaining===0){
+        $('collectorState').textContent='전체 순차 수집 완료 · 9/9';
+        show('9개 섹션 순차 수집을 완료했습니다. 이번 수집 신규 '+total+'건입니다.','ok');
+      }else{
+        $('collectorState').textContent='전체 순차 탐색 완료 · 목표 완료 '+completed.size+'/9';
+        show('전체 순차 탐색을 마쳤습니다. 신규 '+total+'건 · 목표 완료 '+completed.size+'/9 · 이어서 점검할 섹션 '+remaining+'개'+(errors?' · 일시 오류 '+errors+'회':'')+'. 다음 실행은 저장된 위치에서 계속합니다.','warn');
+      }
     }finally{
-      collectAllRunning=false;
+      collectAllRunning=false;collectAllProgress=null;
       $('collectBtn').disabled=false;$('collectAllBtn').disabled=false;$('collectAdminExceptionBtn').disabled=false;$('collectorStopBtn').disabled=true;
       collectorStopRequested=false;renderSummary(summaryCache);
     }
@@ -493,7 +635,11 @@
       sections[key]={
         label:SECTION_LABELS[key]||key,
         automatic:key==='media-trending',
-        capacity:key==='media-trending'?50:(SECTION_CAPACITY[key]||100),
+        capacity:sectionCapacity(key),
+        primaryCapacity:sectionCapacity(key),
+        reserveCapacity:sectionReserveCapacity(key),
+        primaryCount:Math.min(list.length,sectionCapacity(key)),
+        reserveCount:Math.max(0,list.length-sectionCapacity(key)),
         count:list.length,
         items:list
       };

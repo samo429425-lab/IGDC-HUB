@@ -10,7 +10,7 @@
 const crypto = require("crypto");
 const MediaPolicy = require("./media-candidate-policy.v2");
 
-const VERSION = "media-candidate-store-v1.1.0-policy-gated-snapshot-bridge";
+const VERSION = "media-candidate-store-v1.2.0-quality-ranked-primary-reserve";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE = process.env.MEDIA_CANDIDATE_TABLE || "media_candidates";
 const RELEASE_TABLE = process.env.MEDIA_SNAPSHOT_RELEASE_TABLE || "media_snapshot_releases";
@@ -253,6 +253,24 @@ function groupsBySection(rows){
   Array.from(ALLOWED_SECTIONS).forEach((section)=>{out[section]=[];});
   rows.forEach((row)=>{const section=normalizeSection(row.section_key);if(section)out[section].push(row);});
   Object.keys(out).forEach((section)=>out[section].sort((a,b)=>{
+    const ar=plain(a&&a.raw),br=plain(b&&b.raw);
+    const as=plain(ar.sourceMetadata),bs=plain(br.sourceMetadata);
+    const apriority=Number((text(a&&a.priority).match(/(\d+(?:\.\d+)?)/)||[])[1]||0);
+    const bpriority=Number((text(b&&b.priority).match(/(\d+(?:\.\d+)?)/)||[])[1]||0);
+    const arank=Number(ar.rankingScore||a&&a.ranking_score||apriority||0);
+    const brank=Number(br.rankingScore||b&&b.ranking_score||bpriority||0);
+    if(arank!==brank)return brank-arank;
+    const aheight=Number(as.height||ar.height||(text(a&&a.quality_hint).match(/(\d{3,4})p/i)||[])[1]||0);
+    const bheight=Number(bs.height||br.height||(text(b&&b.quality_hint).match(/(\d{3,4})p/i)||[])[1]||0);
+    if(aheight!==bheight)return bheight-aheight;
+    const abitrate=Number(as.bitrateBps||ar.bitrateBps||0);
+    const bbitrate=Number(bs.bitrateBps||br.bitrateBps||0);
+    if(abitrate!==bbitrate)return bbitrate-abitrate;
+    const alatency=Number(plain(ar.playbackProbe||as.playbackProbe).latencyMs||Number.MAX_SAFE_INTEGER);
+    const blatency=Number(plain(br.playbackProbe||bs.playbackProbe).latencyMs||Number.MAX_SAFE_INTEGER);
+    if(alatency!==blatency)return alatency-blatency;
+    const ayear=Number(ar.year||as.year||0),byear=Number(br.year||bs.year||0);
+    if(ayear!==byear)return byear-ayear;
     const ap=text(a.approved_at || a.reviewed_at || a.updated_at); const bp=text(b.approved_at || b.reviewed_at || b.updated_at);
     if(ap!==bp) return ap<bp?1:-1;
     return text(a.title).localeCompare(text(b.title));
