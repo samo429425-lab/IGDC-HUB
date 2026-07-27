@@ -4,7 +4,7 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="sanmaru-media-collector-v2.3.0-existing-candidate-reentry-guard";
+const VERSION="sanmaru-media-collector-v2.4.0-popularity-reliability-classification-gate";
 const IA_SEARCH="https://archive.org/advancedsearch.php";
 const IA_METADATA="https://archive.org/metadata/";
 const DEFAULT_RESULTS=5;
@@ -12,12 +12,18 @@ const MAX_RESULTS=20;
 const DEFAULT_BATCH_SIZE=3;
 const MAX_BATCH_SIZE=5;
 const REQUEST_TIMEOUT_MS=9000;
+const PLAYBACK_PROBE_TIMEOUT_MS=7000;
+const MAX_PLAYBACK_START_MS=5000;
 const DEFAULT_MIN_YEAR=2000;
 const MIN_VIDEO_HEIGHT=1080;
-const MIN_RANK_SCORE=58;
+const MIN_VIDEO_BITRATE_BPS=900000;
+const MIN_RANK_SCORE=72;
+const MIN_DOWNLOADS=250;
+const MIN_CLASSIFICATION_CONFIDENCE=72;
 const VIDEO_EXT=/\.(mp4|webm|ogv|m4v)$/i;
 const SUBTITLE_EXT=/\.(vtt|srt|ass|ssa)$/i;
 const EXCLUDED_TITLE=/\b(trailer|teaser|promo|preview|clip|excerpt|sample|highlight|commercial|advertisement|featurette|behind\s+the\s+scenes)\b/i;
+const EXCLUDED_CONTEXT=/\b(home\s+movie|camera\s+test|screen\s+test|test\s+footage|raw\s+footage|fan\s+edit|fan\s+film|gameplay|walkthrough|advertisement|commercial)\b/i;
 const ACTION_CONTEXT=/(action|martial\s+arts|superhero|war\s+film|spy|adventure|crime\s+drama)/i;
 const VIOLENCE_CONTEXT=/(violence|violent|blood|fight|weapon|gun|murder|horror|terror)/i;
 
@@ -33,7 +39,7 @@ const SECTION_QUERIES=Object.freeze({
   "media-shorts":'(mediatype:movies) AND (subject:(short film OR shortfilm)) NOT title:(trailer OR teaser OR clip OR preview)'
 });
 
-function headers(){return{"accept":"application/json","user-agent":"IGDC-MARU-MediaCollector/2.2 (+https://igdc.info)"};}
+function headers(){return{"accept":"application/json","user-agent":"IGDC-MARU-MediaCollector/2.4 (+https://igdc.info)"};}
 async function fetchJson(url){
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),REQUEST_TIMEOUT_MS);
@@ -75,9 +81,16 @@ function duration(value){
   return parts.length===3?parts[0]*3600+parts[1]*60+parts[2]:parts.length===2?parts[0]*60+parts[1]:0;
 }
 function minDuration(section){
-  if(section==="media-shorts")return 180;
+  if(section==="media-shorts")return 120;
   if(section==="media-music")return 600;
-  return 1200;
+  if(section==="media-movie"||section==="media-thriller"||section==="media-romance")return 2400;
+  if(section==="media-drama"||section==="media-documentary")return 1200;
+  if(section==="media-variety")return 900;
+  if(section==="media-animation")return 180;
+  return 120;
+}
+function maxDuration(section){
+  return section==="media-shorts"?1200:Infinity;
 }
 function yearOf(value){
   const match=MediaStore.text(Array.isArray(value)?value[0]:value).match(/(?:18|19|20|21)\d{2}/);
@@ -98,22 +111,29 @@ function videoPreference(name){
 }
 function chooseVideos(files,section){
   const minimum=minDuration(section);
-  return arr(files).filter((file)=>{
+  const maximum=maxDuration(section);
+  return arr(files).map((file)=>{
     const name=MediaStore.text(file&&file.name),source=MediaStore.lower(file&&file.source);
-    if(!VIDEO_EXT.test(name)||EXCLUDED_TITLE.test(name))return false;
-    if(source&&source!=="original"&&source!=="derivative")return false;
-    if(Number(file&&file.size||0)<5*1024*1024)return false;
-    if(!dims(file).ok)return false;
+    if(!VIDEO_EXT.test(name)||EXCLUDED_TITLE.test(name))return null;
+    if(source&&source!=="original"&&source!=="derivative")return null;
+    const size=Number(file&&file.size||0);
+    if(size<20*1024*1024)return null;
+    if(!dims(file).ok)return null;
     const seconds=duration(file&&file.length);
-    return !seconds||seconds>=minimum;
-  }).sort((a,b)=>{
+    if(!seconds||seconds<minimum||seconds>maximum)return null;
+    const bitrateBps=Math.round(size*8/seconds);
+    if(bitrateBps<MIN_VIDEO_BITRATE_BPS)return null;
+    return Object.assign({},file,{_durationSeconds:seconds,_bitrateBps:bitrateBps});
+  }).filter(Boolean).sort((a,b)=>{
+    const bitrate=Number(b&&b._bitrateBps||0)-Number(a&&a._bitrateBps||0);
+    if(Math.abs(bitrate)>=500000)return bitrate;
     const preferred=videoPreference(b&&b.name)-videoPreference(a&&a.name);
     if(preferred)return preferred;
     const original=(MediaStore.lower(b&&b.source)==="original"?1:0)-(MediaStore.lower(a&&a.source)==="original"?1:0);
     if(original)return original;
     const left=dims(a),right=dims(b);
     return right.height-left.height||right.width-left.width||Number(b&&b.size||0)-Number(a&&a.size||0);
-  }).slice(0,5);
+  });
 }
 
 const LANG_MAP={ko:"ko",kor:"ko",korean:"ko",en:"en",eng:"en",english:"en",zh:"zh",chi:"zh",zho:"zh",chinese:"zh",ja:"ja",jpn:"ja",japanese:"ja",es:"es",spa:"es",spanish:"es",fr:"fr",fre:"fr",fra:"fr",de:"de",ger:"de",deu:"de",pt:"pt",por:"pt",ru:"ru",rus:"ru",ar:"ar",ara:"ar"};
@@ -137,21 +157,59 @@ function combined(meta,doc){
   return[meta.title,meta.description,meta.subject,meta.collection,meta.creator,doc&&doc.title,doc&&doc.description,doc&&doc.subject,doc&&doc.collection].flatMap(list).join(" ");
 }
 function classificationText(meta,doc){
-  return[meta.title,meta.subject,meta.collection,meta.mediatype,doc&&doc.title,doc&&doc.subject,doc&&doc.collection].flatMap(list).join(" ").toLowerCase();
+  return[meta.title,meta.subject,meta.collection,meta.mediatype,doc&&doc.title,doc&&doc.subject,doc&&doc.collection]
+    .flatMap(list).join(" ").toLowerCase().replace(/[_-]+/g," ");
 }
 function classify(meta,doc,requested,seconds){
   const value=classificationText(meta,doc);
   let section=requested,confidence=55;
   if(/(?:^|\b)(animation|animated|cartoon|anime|stop motion)(?:\b|$)/.test(value)){section="media-animation";confidence=94;}
-  else if(/television series|tv series|episode|season\s*\d+|drama series/.test(value)){section="media-drama";confidence=88;}
-  else if(/documentary|nonfiction|public lecture|oral history|archive footage/.test(value)){section="media-documentary";confidence=88;}
-  else if(/concert|recital|live performance|music video|orchestra|symphony|opera/.test(value)){section="media-music";confidence=86;}
-  else if(/short film|shortfilm/.test(value)||(seconds>0&&seconds<1200)){section="media-shorts";confidence=82;}
-  else if(/romance|romantic|melodrama/.test(value)){section="media-romance";confidence=78;}
-  else if(/thriller|mystery|suspense|horror|science fiction|sci-fi/.test(value)){section="media-thriller";confidence=78;}
-  else if(/talk show|variety|entertainment show|panel discussion/.test(value)){section="media-variety";confidence=76;}
-  else if(/feature film|movie|cinema/.test(value)){section="media-movie";confidence=72;}
+  else if(/concert|recital|live performance|music video|orchestra|symphony|opera|musical performance/.test(value)){section="media-music";confidence=92;}
+  else if(/short film|shortfilm|short subject/.test(value)){section="media-shorts";confidence=92;}
+  else if(/documentary|nonfiction|oral history|investigative report|nature film/.test(value)){section="media-documentary";confidence=90;}
+  else if(/talk show|variety show|entertainment show|panel show|game show|classic tv|television program/.test(value)){section="media-variety";confidence=88;}
+  else if(seconds>0&&seconds<=1200){section="media-shorts";confidence=84;}
+  else if(/romance|romantic|melodrama|love story/.test(value)){section="media-romance";confidence=84;}
+  else if(/thriller|mystery|suspense|horror|science fiction|sci-fi|crime film/.test(value)){section="media-thriller";confidence=84;}
+  else if(/television series|tv series|television episode|episode\s*\d+|season\s*\d+|drama series|soap opera|\bdrama\b/.test(value)){section="media-drama";confidence=86;}
+  else if(/feature films?|motion picture|full movie|cinema/.test(value)){section="media-movie";confidence=82;}
   return{section,confidence};
+}
+async function probeAsset(url,kind){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),PLAYBACK_PROBE_TIMEOUT_MS);
+  const started=Date.now();
+  try{
+    const response=await fetch(url,{
+      method:"GET",redirect:"follow",signal:controller.signal,
+      headers:Object.assign({},headers(),{range:kind==="image"?"bytes=0-4095":"bytes=0-65535"})
+    });
+    const latencyMs=Date.now()-started;
+    const contentType=MediaStore.lower(response.headers&&response.headers.get&&response.headers.get("content-type"));
+    let bytesRead=0;
+    if(response.body&&typeof response.body.getReader==="function"){
+      const reader=response.body.getReader();
+      const chunk=await reader.read();
+      bytesRead=chunk&&chunk.value&&chunk.value.byteLength||0;
+      try{await reader.cancel();}catch(_error){}
+    }
+    const statusOk=response.ok||response.status===206;
+    const typeOk=kind==="image"?
+      /^image\//.test(contentType):
+      (/^(video|audio)\//.test(contentType)||/octet-stream|binary/.test(contentType)||VIDEO_EXT.test(new URL(url).pathname));
+    const ok=statusOk&&typeOk&&bytesRead>0&&latencyMs<=MAX_PLAYBACK_START_MS;
+    return{
+      present:true,ok,status:response.status,latencyMs,bytesRead,contentType,
+      finalUrl:MediaStore.normalizeUrl(response.url||url),
+      reason:!statusOk?"source_http_"+response.status:!typeOk?"unexpected_content_type":!bytesRead?"empty_probe_body":latencyMs>MAX_PLAYBACK_START_MS?"playback_start_too_slow":""
+    };
+  }catch(error){
+    return{
+      present:true,ok:false,status:0,latencyMs:Date.now()-started,bytesRead:0,contentType:"",
+      finalUrl:MediaStore.normalizeUrl(url),
+      reason:error&&error.name==="AbortError"?"probe_timeout":MediaStore.compact(error&&error.message||"probe_failed",180)
+    };
+  }finally{clearTimeout(timer);}
 }
 function rights(meta){
   const assessment=MediaPolicy.assessRights(meta);
@@ -192,6 +250,12 @@ function scoreCandidate(input){
   score+=Math.min(4,Number(input.reviews||0));
   if(input.rightsSafe){score+=20;signals.push("구조화 권리 근거");}
   else score-=8;
+  if(input.bitrateBps>=5000000){score+=10;signals.push("고비트레이트");}
+  else if(input.bitrateBps>=2500000){score+=7;signals.push("안정적 비트레이트");}
+  else if(input.bitrateBps>=MIN_VIDEO_BITRATE_BPS){score+=4;signals.push("기본 비트레이트 통과");}
+  if(input.playbackLatencyMs>0&&input.playbackLatencyMs<=1500){score+=8;signals.push("빠른 재생 응답");}
+  else if(input.playbackLatencyMs<=3000){score+=5;signals.push("재생 응답 통과");}
+  else if(input.playbackLatencyMs<=MAX_PLAYBACK_START_MS){score+=2;signals.push("재생 응답 허용");}
   const languages=[...new Set(input.captions.map((caption)=>caption.language).filter((language)=>language&&language!=="und"))];
   if(languages.length){score+=Math.min(8,languages.length*2);signals.push("자막 "+languages.length+"개 언어");}
   if(languages.some((language)=>["ko","en","zh","es"].includes(language)))score+=4;
@@ -222,41 +286,69 @@ async function inspect(doc,requested,options){
   const details=await fetchJson(IA_METADATA+encodeURIComponent(id));
   const meta=details&&details.metadata||{};
   const title=MediaStore.compact(meta.title||initialTitle,240);
+  if(EXCLUDED_CONTEXT.test(combined(meta,doc))){
+    return{rejected:"low_value_or_nonprogram_video_context",identifier:id,title};
+  }
   const year=yearOf([meta.year,doc.year,meta.date,doc.date,title].flatMap(list).join(" "));
   if(!options.adminException&&(!year||year<DEFAULT_MIN_YEAR)){
     return{rejected:year?"release_year_before_2000":"release_year_unknown",identifier:id,title,year};
   }
   const safe=safety(meta,doc);
   if(safe.blocked)return{rejected:"prohibited_content_hard_block",policyReasons:safe.assessment.reasons,identifier:id,title,year};
-  const videos=chooseVideos(details&&details.files,requested);
-  const video=videos[0];
-  if(!video)return{rejected:"full_length_1080p_video_file_not_found",identifier:id,title,year};
-  const seconds=duration(video.length);
+  const broadVideos=chooseVideos(details&&details.files,"");
+  const broadVideo=broadVideos.slice().sort((left,right)=>duration(right&&right.length)-duration(left&&left.length))[0];
+  if(!broadVideo)return{rejected:"reliable_1080p_video_file_not_found",identifier:id,title,year};
+  const seconds=duration(broadVideo.length);
   const classification=classify(meta,doc,requested,seconds);
+  if(!options.adminException&&classification.confidence<MIN_CLASSIFICATION_CONFIDENCE){
+    return{rejected:"classification_confidence_below_threshold",identifier:id,title,year,classification};
+  }
+  const videos=chooseVideos(details&&details.files,classification.section).slice(0,5);
+  const video=videos[0];
+  if(!video){
+    return{rejected:"section_duration_or_bitrate_requirement_not_met",identifier:id,title,year,classification};
+  }
+  const selectedSeconds=duration(video.length);
   const evidence=rights(meta);
   const captions=subtitles(id,details&&details.files);
   const dimensions=dims(video);
+  const downloads=Number(doc.downloads||meta.downloads||0);
+  const rating=Number(doc.avg_rating||meta.avg_rating||0);
+  const reviews=Number(doc.num_reviews||meta.num_reviews||0);
+  if(!options.adminException&&downloads<MIN_DOWNLOADS&&!(rating>=4.2&&reviews>=5)){
+    return{rejected:"popularity_signal_below_threshold",identifier:id,title,year,downloads,rating,reviews};
+  }
+  const sourceUrl="https://archive.org/details/"+encodeURIComponent(id);
+  const videoUrl="https://archive.org/download/"+encodeURIComponent(id)+"/"+encodeURIComponent(video.name);
+  const providerThumbUrl="https://archive.org/services/img/"+encodeURIComponent(id);
+  const probeResults=await Promise.all([probeAsset(videoUrl,"video"),probeAsset(providerThumbUrl,"image")]);
+  const playbackProbe=probeResults[0],thumbnailProbe=probeResults[1];
+  if(!options.adminException&&!playbackProbe.ok){
+    return{
+      rejected:playbackProbe.reason||"playback_probe_failed",identifier:id,title,year,
+      playbackProbe
+    };
+  }
+  const bitrateBps=Number(video._bitrateBps||0);
   const ranking=scoreCandidate({
-    year,height:dimensions.height,downloads:Number(doc.downloads||meta.downloads||0),
-    rating:Number(doc.avg_rating||meta.avg_rating||0),reviews:Number(doc.num_reviews||meta.num_reviews||0),
+    year,height:dimensions.height,downloads,rating,reviews,bitrateBps,
+    playbackLatencyMs:Number(playbackProbe.latencyMs||0),
     rightsSafe:evidence.safe,captions,classificationConfidence:classification.confidence,
     adminException:options.adminException
   });
   if(!options.adminException&&ranking.score<MIN_RANK_SCORE){
     return{rejected:"ranking_score_below_threshold",identifier:id,title,year,score:ranking.score};
   }
-  const sourceUrl="https://archive.org/details/"+encodeURIComponent(id);
-  const videoUrl="https://archive.org/download/"+encodeURIComponent(id)+"/"+encodeURIComponent(video.name);
   const playbackCandidates=videos.map((file)=>({
     url:"https://archive.org/download/"+encodeURIComponent(id)+"/"+encodeURIComponent(file.name),
     name:MediaStore.text(file.name),width:dims(file).width,height:dims(file).height,
     format:MediaStore.text(file.format||file.name.split(".").pop()||""),
-    durationSeconds:duration(file.length)
+    durationSeconds:duration(file.length),bitrateBps:Number(file._bitrateBps||0)
   }));
   const candidate={
     id:"ia:"+id,contentId:"ia:"+id,section_key:classification.section,title,
     provider:"Internet Archive",source_url:sourceUrl,video_url:videoUrl,
-    thumb_url:"https://archive.org/services/img/"+encodeURIComponent(id),
+    thumb_url:thumbnailProbe.ok?providerThumbUrl:"",
     quality_hint:dimensions.height+"p",
     rights_status:evidence.safe?"public_rights_signal_found":"web_verification_required",
     allowed_use:evidence.safe?"rights_evidence_review_required":"verification_required",
@@ -266,27 +358,44 @@ async function inspect(doc,requested,options){
     candidateOnly:true,seedContent:true,sanmaru_query:SECTION_QUERIES[requested],
     notes:"1080p+ candidate only. Publication is disabled until administrator content and rights verification.",
     year:year||null,publishedAt:MediaStore.text(meta.publicdate||doc.publicdate||meta.date||doc.date)||null,
-    language:list(meta.language||doc.language),durationSeconds:seconds,captions,
+    language:list(meta.language||doc.language),durationSeconds:selectedSeconds,captions,
     rankingScore:ranking.score,rankingTier:ranking.tier,rankingSignals:ranking.signals,
     subtitleLanguages:ranking.subtitleLanguages,subtitleCount:captions.length,
     ageRating:safe.ageRating,contentWarnings:safe.warnings,
     classificationConfidence:classification.confidence,requestedSection:requested,
     classifiedSection:classification.section,safetyDecision:safe.quarantine?"quarantine":"allow",
+    bitrateBps,playbackProbe,thumbnailProbe,
+    mediaReliability:{
+      playbackVerified:playbackProbe.ok===true,
+      playbackStartMs:Number(playbackProbe.latencyMs||0),
+      thumbnailVerified:thumbnailProbe.ok===true,
+      popularityVerified:downloads>=MIN_DOWNLOADS||(rating>=4.2&&reviews>=5),
+      classificationVerified:classification.confidence>=MIN_CLASSIFICATION_CONFIDENCE,
+      checkedAt:new Date().toISOString()
+    },
     rights:{
       status:evidence.safe?"public_rights_signal_found":"web_verification_required",
       sourceUrl,licenseUrl:evidence.licenseUrl,sourceHint:"archive.org structured metadata",
       candidate:evidence.text||"Rights evidence requires administrator verification"
     },
     sourceMetadata:{
-      identifier:id,playbackCandidates,downloads:Number(doc.downloads||meta.downloads||0),
-      avgRating:Number(doc.avg_rating||meta.avg_rating||0),numReviews:Number(doc.num_reviews||meta.num_reviews||0),
+      identifier:id,playbackCandidates,downloads,
+      avgRating:rating,numReviews:reviews,
       year,publicdate:MediaStore.text(meta.publicdate||doc.publicdate),date:MediaStore.text(meta.date||doc.date),
       creator:list(meta.creator||doc.creator),collection:list(meta.collection||doc.collection),
       subject:list(meta.subject||doc.subject),licenseurl:MediaStore.text(meta.licenseurl||doc.licenseurl),
       rights:MediaStore.compact(meta.rights||doc.rights||"",500),videoFile:video.name,
-      width:dimensions.width,height:dimensions.height,durationSeconds:seconds,
+      width:dimensions.width,height:dimensions.height,durationSeconds:selectedSeconds,bitrateBps,
       subtitleCount:captions.length,classificationConfidence:classification.confidence,
       requestedSection:requested,classifiedSection:classification.section,
+      playbackProbe,thumbnailProbe,
+      mediaReliability:{
+        playbackVerified:playbackProbe.ok===true,
+        playbackStartMs:Number(playbackProbe.latencyMs||0),
+        thumbnailVerified:thumbnailProbe.ok===true,
+        popularityVerified:downloads>=MIN_DOWNLOADS||(rating>=4.2&&reviews>=5),
+        classificationVerified:classification.confidence>=MIN_CLASSIFICATION_CONFIDENCE
+      },
       adminException:!!options.adminException,
       overrideReason:MediaStore.compact(options.overrideReason||"",500)
     }
@@ -365,6 +474,8 @@ exports.handler=async function(event){
       ok:true,version:VERSION,sections:Object.keys(SECTION_QUERIES),
       policy:{
         version:MediaPolicy.VERSION,minimumYear:DEFAULT_MIN_YEAR,minimumHeight:MIN_VIDEO_HEIGHT,
+        minimumBitrateBps:MIN_VIDEO_BITRATE_BPS,maximumPlaybackStartMs:MAX_PLAYBACK_START_MS,
+        minimumDownloads:MIN_DOWNLOADS,minimumClassificationConfidence:MIN_CLASSIFICATION_CONFIDENCE,
         minimumRankingScore:MIN_RANK_SCORE,defaultTarget:DEFAULT_RESULTS,
         defaultBatchSize:DEFAULT_BATCH_SIZE,maxBatchSize:MAX_BATCH_SIZE,
         autoPublish:false,sectionReclassification:"strong-signal quarantine",
@@ -432,6 +543,8 @@ exports.handler=async function(event){
       rejected:rejected.concat(validationRejected).concat(skippedExisting?[{reason:"existing_candidate_not_reentered_or_overwritten",count:skippedExisting}]:[]),
       policy:{
         version:MediaPolicy.VERSION,minimumYear:DEFAULT_MIN_YEAR,minimumHeight:MIN_VIDEO_HEIGHT,
+        minimumBitrateBps:MIN_VIDEO_BITRATE_BPS,maximumPlaybackStartMs:MAX_PLAYBACK_START_MS,
+        minimumDownloads:MIN_DOWNLOADS,minimumClassificationConfidence:MIN_CLASSIFICATION_CONFIDENCE,
         minimumRankingScore:MIN_RANK_SCORE,autoPublish:false,
         sectionReclassification:"strong-signal quarantine",
         unsafeFiltering:"hard-block plus administrator quarantine",

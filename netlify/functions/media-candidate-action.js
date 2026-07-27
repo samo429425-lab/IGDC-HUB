@@ -8,7 +8,7 @@ const MediaStore = require("./lib/media-candidate-store.v1");
 const MediaPolicy = require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "media-candidate-action-v1.5.0-exclusion-state-restore";
+const VERSION = "media-candidate-action-v1.6.0-optional-nonrelease-notes";
 const ACTIONS = new Set([
   "approve","hold","block","reject","reset","delete",
   "restore_hold","release_exclusion","restore","permanent_block","forget"
@@ -211,8 +211,8 @@ async function updateRowsIndividually(rows,patcher){
   return updated;
 }
 function requireNote(action,note){
-  if(["approve","reject","block","permanent_block"].includes(action)&&MediaStore.text(note).length<3){
-    const error=new Error("이 작업은 3자 이상의 관리자 검토 메모가 필요합니다.");
+  if(action==="approve"&&MediaStore.text(note).length<3){
+    const error=new Error("공개 승인에는 3자 이상의 관리자 검토 메모가 필요합니다.");
     error.statusCode=400;error.code="administrator_review_note_required";throw error;
   }
 }

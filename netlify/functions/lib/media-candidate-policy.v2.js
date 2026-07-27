@@ -9,7 +9,7 @@
  * Ordinary romance, dating, marriage and non-explicit affection are not
  * restricted by this policy.
  */
-const VERSION = "media-candidate-policy-v2.0.0";
+const VERSION = "media-candidate-policy-v2.1.0-reliability-classification-gate";
 
 const VERIFIED_RIGHTS = new Set([
   "rights_verified_by_admin",
@@ -182,8 +182,12 @@ function assessRights(input){
 }
 function minDuration(section){
   const key=text(section);
-  if(key==="media-shorts") return 180;
+  if(key==="media-shorts") return 120;
   if(key==="media-music") return 600;
+  if(key==="media-movie" || key==="media-thriller" || key==="media-romance") return 2400;
+  if(key==="media-drama" || key==="media-documentary") return 1200;
+  if(key==="media-variety") return 900;
+  if(key==="media-animation") return 180;
   return 1200;
 }
 function qualityAssessment(input, options){
@@ -203,12 +207,24 @@ function qualityAssessment(input, options){
   const requested=text(raw.requestedSection || source.requestedSection || row.requestedSection);
   const classified=text(raw.classifiedSection || source.classifiedSection || row.classifiedSection || section);
   const confidence=Number(raw.classificationConfidence || source.classificationConfidence || row.classificationConfidence || 0);
+  const playbackProbe=plain(row.playbackProbe || raw.playbackProbe || source.playbackProbe);
+  const bitrate=Number(row.bitrateBps || raw.bitrateBps || source.bitrateBps || 0);
   if(requested && classified && requested!==classified && confidence>=80) reasons.push("strong_section_mismatch");
+  if(confidence && confidence<72) reasons.push("classification_confidence_below_threshold");
+  if(playbackProbe.present===true && playbackProbe.ok!==true) reasons.push("playback_probe_failed");
+  if(Number(playbackProbe.latencyMs||0)>5000) reasons.push("playback_start_too_slow");
+  if(bitrate && bitrate<900000) reasons.push("video_bitrate_below_quality_floor");
   if(options && options.adminException===true){
-    const index=reasons.indexOf("full_length_duration_not_met");
-    if(index>=0) reasons.splice(index,1);
+    ["full_length_duration_not_met","classification_confidence_below_threshold"].forEach((reason)=>{
+      const index=reasons.indexOf(reason);
+      if(index>=0) reasons.splice(index,1);
+    });
   }
-  return {decision:reasons.length?"quarantine":"allow",reasons:uniq(reasons),durationSeconds:duration,height,requestedSection:requested,classifiedSection:classified,classificationConfidence:confidence};
+  return {
+    decision:reasons.length?"quarantine":"allow",reasons:uniq(reasons),
+    durationSeconds:duration,height,bitrateBps:bitrate,playbackProbe,
+    requestedSection:requested,classifiedSection:classified,classificationConfidence:confidence
+  };
 }
 function assessCandidate(input, options){
   const safety=assessSafety(input);

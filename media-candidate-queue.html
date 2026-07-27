@@ -35,6 +35,20 @@
     .player-shell:fullscreen .player-controls{position:absolute;left:0;right:0;bottom:0;z-index:5;background:linear-gradient(transparent,rgba(5,12,20,.96) 35%);padding:34px 18px 18px;opacity:0;transform:translateY(12px);pointer-events:none}
     .player-shell:fullscreen.controls-visible .player-controls,.player-shell:fullscreen.controls-visible .player-status{opacity:1;transform:none;pointer-events:auto}
     .player-controls button,.player-controls select{font-size:13px}.meta-line{font-size:13px;color:#bdd0e4;margin-top:8px}.nowrap{white-space:nowrap}
+    .section-accordion{display:grid;gap:10px;margin-top:12px}.candidate-section{border:1px solid #28405f;border-radius:14px;background:#0c1828;overflow:hidden}
+    .section-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-radius:0;background:#13283e;color:#edf6ff;text-align:left}
+    .section-toggle:hover{background:#18334f}.section-toggle-main{display:flex;gap:10px;align-items:center;min-width:0}.section-toggle-title{font-size:16px}.section-count{background:#243953;border-radius:999px;padding:3px 9px;color:#cfe7ff;font-size:12px}
+    .section-chevron{font-size:18px;transition:transform .18s}.candidate-section.open .section-chevron{transform:rotate(180deg)}
+    .section-body{padding:14px}.section-actionbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:10px;border:1px solid #28405f;border-radius:11px;background:#0a1523;margin-bottom:12px}
+    .section-note{min-width:250px;flex:1}.section-confirmations{display:flex;gap:10px;flex-wrap:wrap;flex:1 0 100%;color:#b8c9dc;font-size:12px}
+    .candidate-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}.candidate-card{position:relative;background:#101f31;border:1px solid #2c4564;border-radius:13px;overflow:hidden;min-width:0}
+    .candidate-card.selected{border-color:#7de0d8;box-shadow:0 0 0 1px #7de0d8 inset}.candidate-card-check{position:absolute;z-index:3;top:9px;left:9px;width:20px;height:20px;accent-color:#7de0d8}
+    .candidate-thumb-button{display:block;width:100%;padding:0;border:0;border-radius:0;background:#07111e;color:#fff;position:relative;aspect-ratio:16/9;overflow:hidden}
+    .candidate-thumb-button img{width:100%;height:100%;object-fit:cover;display:block}.candidate-thumb-fallback{display:grid;place-items:center;width:100%;height:100%;padding:20px;color:#9eb0c5;background:linear-gradient(135deg,#172b42,#0b1420)}
+    .candidate-duration{position:absolute;right:7px;bottom:7px;background:rgba(0,0,0,.82);border-radius:5px;padding:3px 6px;font-size:11px}.candidate-card-body{padding:10px}
+    .candidate-card-title{font-size:14px;line-height:1.4;font-weight:850;min-height:40px;margin-bottom:7px}.candidate-card-meta{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px}.candidate-card-detail{color:#aebfd4;font-size:12px;line-height:1.45}
+    .candidate-card-footer{display:flex;gap:6px;margin-top:9px}.candidate-card-footer button{font-size:12px;padding:7px 9px}.read-only-note{padding:10px;border-radius:9px;background:#13283e;color:#bed4e8;margin-bottom:11px}
+    .empty-section{padding:28px;text-align:center;color:#9eb0c5;border:1px dashed #35516f;border-radius:11px}
     @media(max-width:700px){main{padding:16px 10px}table{min-width:1200px}.modal{padding:6px}.player-shell video{max-height:58vh}}
   </style>
 </head>
@@ -49,6 +63,7 @@
     <button id="storeReleaseBtn" class="publish">최종 릴리스 저장</button>
     <button id="downloadSnapshotBtn" class="secondary">스냅샷 다운로드</button>
     <button id="downloadJsonBtn" class="secondary" disabled>점검 JSON</button>
+    <button id="downloadAllCandidateListBtn" class="secondary">전체 10개 섹션 후보 JSON</button>
     <button id="returnBtn" class="secondary">관리자 화면으로</button>
     <span id="state" class="state"></span>
   </div>
@@ -56,12 +71,12 @@
 
   <section class="panel">
     <h2>품질 중심 공개 영상 수집</h2>
-    <div class="small">2000년 이후, 실제 1080p 이상, 전체 영상, 종합랭킹 기준을 적용합니다. 명백한 포르노·헨타이·불법 신호는 차단하고, 애매한 성인성·권리·분류 신호는 관리자 검토로 격리합니다. 일반 로맨스는 차단하지 않습니다.</div>
+    <div class="small">2000년 이후, 실제 1080p 이상, 섹션별 전체 길이, 최소 비트레이트, 인기도, 분류 확신도와 실제 원본 응답속도를 함께 검사합니다. 명백한 포르노·헨타이·불법 신호는 차단하고, 애매한 성인성·권리·분류 신호는 관리자 검토로 격리합니다. 일반 로맨스는 차단하지 않습니다.</div>
     <div class="collect-controls">
       <select id="collectorSection">
         <option value="media-movie">영화</option><option value="media-drama">드라마·TV</option><option value="media-thriller">스릴러·미스터리</option>
         <option value="media-romance">로맨스</option><option value="media-variety">버라이어티·토크</option><option value="media-documentary">다큐멘터리</option>
-        <option value="media-animation">애니메이션</option><option value="media-music">음악·공연</option><option value="media-shorts">단편</option>
+        <option value="media-animation">애니메이션</option><option value="media-music">음악·공연</option><option value="media-shorts">쇼츠·단편</option>
       </select>
       <select id="collectorLimit" aria-label="목표 후보 수"><option value="3">목표 3개</option><option value="5" selected>목표 5개</option><option value="10">목표 10개</option><option value="20">목표 20개</option></select>
       <button id="collectBtn">선택 섹션 수집</button>
@@ -84,33 +99,19 @@
     <h2>섹션·랭킹·품질 정렬</h2>
     <div class="filters">
       <input id="searchInput" type="search" placeholder="제목, 출처, 섹션 검색" style="min-width:260px;flex:1">
-      <select id="sectionFilter"><option value="">전체 섹션</option></select>
       <select id="riskFilter"><option value="">전체 위험도</option></select>
       <select id="safetyFilter"><option value="">전체 안전판정</option></select>
       <select id="statusFilter"><option value="">전체 검증상태</option></select>
       <select id="sortSelect"><option value="rank">종합랭킹순</option><option value="quality">화질순</option><option value="year">최신연도순</option><option value="subtitle">자막수순</option><option value="title">제목순</option></select>
-      <label><input id="groupBySection" type="checkbox" checked> 섹션별 묶기</label>
     </div>
-    <div id="filterState" class="small"></div>
+    <div id="filterState" class="small">섹션을 펼치면 해당 섹션의 카드만 불러옵니다.</div>
   </section>
 
   <section id="diagnosticPanel" class="panel hidden"><h2>미디어 후보 점검 JSON</h2><pre id="diagnosticJson" class="json"></pre></section>
 
   <section id="tablePanel" class="panel hidden">
-    <h2>영상 후보 목록</h2>
-    <div class="reviewbar">
-      <button id="approveBtn">선택 승인</button><button id="holdBtn">선택 보류</button><button id="resetBtn">선택 재검토</button>
-      <button id="rejectBtn" class="danger">선택 반려</button><button id="blockBtn" class="danger">선택 영구 차단</button>
-      <button id="deleteBtn" class="danger">선택 삭제→검색 제외</button><button id="deleteVisibleBtn" class="danger">현재 목록 전체 삭제</button>
-      <button id="downloadCandidateListBtn" class="secondary">후보 목록 JSON</button>
-    </div>
-    <div class="reviewbar">
-      <label><input id="contentConfirm" type="checkbox"> 실제 재생·콘텐츠 안전 확인</label>
-      <label><input id="rightsConfirm" type="checkbox"> 원본·권리 확인</label>
-      <label><input id="subtitleConfirm" type="checkbox"> 자막 확인</label>
-    </div>
-    <div class="small">승인은 콘텐츠와 권리를 각각 확인하고 검토 메모를 남긴 경우에만 가능합니다. 삭제는 원본 영상을 지우지 않고 검색 제외 목록으로 이동합니다.</div>
-    <div class="tablewrap"><table><thead><tr><th>순번</th><th><input id="selectAllRows" type="checkbox"></th><th>섹션</th><th>랭킹</th><th>영상</th><th>연도</th><th>출처</th><th>화질</th><th>자막</th><th>연령·안전판정</th><th>권리·상태</th></tr></thead><tbody id="candidateRows"></tbody></table></div>
+    <div class="modal-head"><div><h2 style="margin:0">10개 섹션 영상 후보</h2><div class="small">한 번에 한 섹션만 펼쳐지고, 펼친 섹션의 썸네일만 불러옵니다. 각 섹션의 선택 작업은 다른 섹션에 영향을 주지 않으며, 정원을 넘은 후보도 숨기지 않고 점검할 수 있습니다.</div></div><span id="candidateCapacityState" class="state"></span></div>
+    <div id="sectionAccordion" class="section-accordion"></div>
   </section>
 
   <section id="exclusionPanel" class="panel hidden">
@@ -150,6 +151,6 @@
   </div>
 </div>
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-media-candidate-queue.js?v=16"></script>
+<script src="/assets/js/admin-media-candidate-queue.js?v=18"></script>
 </body>
 </html>

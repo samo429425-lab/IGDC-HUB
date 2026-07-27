@@ -10,7 +10,7 @@ const SharedAdminAuth=require("./lib/global-slot-console-auth");
 const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
 
-const VERSION="media-candidate-review-api-v1.3.0-exclusion-restore-visible";
+const VERSION="media-candidate-review-api-v1.4.0-quality-thumbnail-diagnostics";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","media_manager","commerce_manager"]);
 
 function text(value){return value==null?"":String(value).trim();}
@@ -235,6 +235,10 @@ function normalizeRow(row){
     durationSeconds:Number(detail.durationSeconds||sourceMetadata.durationSeconds||0),
     sourceMetadata,
     playbackCandidates:Array.isArray(sourceMetadata.playbackCandidates)?sourceMetadata.playbackCandidates:[],
+    playbackProbe:plain(detail.playbackProbe||sourceMetadata.playbackProbe),
+    thumbnailProbe:plain(detail.thumbnailProbe||sourceMetadata.thumbnailProbe),
+    mediaReliability:plain(detail.mediaReliability||sourceMetadata.mediaReliability),
+    thumbnailGeneration:plain(detail.thumbnailGeneration||sourceMetadata.thumbnailGeneration),
     exclusionRestore,
     rights:{
       status:text(rights.status)||text(database.rights_status),
