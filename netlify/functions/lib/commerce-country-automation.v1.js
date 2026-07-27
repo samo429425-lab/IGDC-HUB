@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.0.0-country-section-queue-virtualized";
+const VERSION = "commerce-country-automation-v3.1.0-demand-revenue-value-priority";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1400,7 +1400,7 @@ function publicProductJob(job) {
   });
   return {
     ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, rankingVersion: ProductRanking.VERSION, rankingPolicy: ProductRanking.POLICY, jobVersion: text(job.version), needsRefresh: text(job.version) !== VERSION, jobId: job.jobId, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
-    safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false, riskGateBeforeRevenueRanking: true, sponsorRequiresApprovedContract: true, sectionAssignmentsAreProposalsOnly: true },
+    safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false, riskGateBeforeRevenueRanking: true, sponsorRequiresApprovedContract: true, sectionAssignmentsAreProposalsOnly: true, audienceAndRevenueValuePriority: true, noSectionQuotaFill: true },
     rankingContext: plain(job.rankingContext),
     progress: productProgress(job),
     summary: {
@@ -1420,13 +1420,23 @@ function publicProductJob(job) {
       riskHeld: visibleProducts.filter((row) => row.rankingEligible !== true).length,
       supplierEvidenceReady: visibleProducts.filter((row) => row.supplierAssessment && row.supplierAssessment.evidenceReady === true).length,
       contractReady: visibleProducts.filter((row) => row.commercialAssessment && row.commercialAssessment.contractReady === true).length,
+      payableRevenueRightVerified: visibleProducts.filter((row) => plain(row.valueAssessment).revenue && plain(row.valueAssessment).revenue.payableRevenueRightVerified === true).length,
+      audienceQualified: visibleProducts.filter((row) => plain(row.valueAssessment).audience && plain(row.valueAssessment).audience.audienceQualified === true).length,
+      privatePlacementValueEligible: visibleProducts.filter((row) => plain(row.valueAssessment).privatePlacementEligible === true).length,
+      revenueReviewRequired: visibleProducts.filter((row) => plain(row.valueAssessment).privatePlacementEligible === true && !(row.commercialAssessment && row.commercialAssessment.contractReady === true)).length,
+      highValuePriority: visibleProducts.filter((row) => Number(row.rankingScore || 0) >= 58).length,
       releaseReady: visibleProducts.filter((row) => row.releaseReadiness && row.releaseReadiness.releaseEligible === true).length,
       proposedPlacementProducts: visibleProducts.filter((row) => row.familyRepresentative !== false && array(row.sectionAssignments).length > 0).length,
+      assignedPlacementProducts: visibleProducts.filter((row) => row.familyRepresentative !== false && !!row.primaryPlacement).length,
       slotCandidates: visibleProducts.filter((row) => row.slotDecision === "slot_candidate").length,
       held: visibleProducts.filter((row) => row.slotDecision === "hold").length,
       rejected: visibleProducts.filter((row) => row.slotDecision === "reject").length,
       permanentExcluded: visibleProducts.filter((row) => row.slotDecision === "purge").length,
       sectionCounts: plain(portfolio.summary && portfolio.summary.sectionCounts),
+      primaryPlacementCounts: plain(portfolio.summary && portfolio.summary.primaryPlacementCounts),
+      sectionCapacity: Number(portfolio.summary && portfolio.summary.sectionCapacity || 100),
+      sectionCapacityUnassigned: Number(portfolio.summary && portfolio.summary.sectionCapacityUnassigned || 0),
+      sectionCapacityOverflow: plain(portfolio.summary && portfolio.summary.sectionCapacityOverflow),
       privateResearchQueueEligible: visibleProducts.filter((row) => ProductPipeline.researchReadiness(row).queueEligible === true).length,
       privateResearchQueueNeedsCompletion: visibleProducts.filter((row) => { const state = ProductPipeline.researchReadiness(row); return state.queueEligible === true && state.promotionEligible !== true; }).length,
       privateResearchQueueStaged: Number(job.stageSummary && (Number(job.stageSummary.created || 0) + Number(job.stageSummary.updated || 0) + Number(job.stageSummary.preserved || 0)) || 0)
@@ -1494,7 +1504,7 @@ async function beginProductResearchJob(actorId, input) {
   const supplierSources = sourcePool.sort((a,b)=>Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,PRODUCT_SUPPLIER_LIMIT);
   if(!supplierSources.length){const error=new Error("완료된 공급업체 후보 중 공식 판매 사이트·법적 신원·직접 판매 증빙을 갖춘 상품 조사 출처가 없습니다. 공급업체 후보의 잡음과 증빙 상태를 먼저 정리하세요.");error.statusCode=409;throw error;}
   const rankingContext = await productRankingContext(scope);
-  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, rankingContext, discoveryCursor: 0, rawProducts: [], inspectionPool: [], inspectCursor: 0, products: [], stagePool: [], stageCursor: 0, stageSummary: { eligible: 0, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 }, trace: [{ at: now, source: "product-research-job", status: "started", suppliers: supplierSources.length, sourcePolicy: "official_direct_sales_legal_identity_only; broad_private_review_queue_before_release_gates; supplier_aware_exact_dedupe; psom_policy_proposals; administrator_approval_before_publication" }], errors: [], lastError: null };
+  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, rankingContext, discoveryCursor: 0, rawProducts: [], inspectionPool: [], inspectCursor: 0, products: [], stagePool: [], stageCursor: 0, stageSummary: { eligible: 0, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 }, trace: [{ at: now, source: "product-research-job", status: "started", suppliers: supplierSources.length, sourcePolicy: "official_direct_sales_legal_identity_only; trust_gate; audience_need_and_repeat_demand; transaction_frequency_and_total_expected_value; payable_revenue_right_before_release; psom_relevance_proposals; no_section_quota_fill; administrator_approval_before_publication" }], errors: [], lastError: null };
   await saveProductJob(job, actorId); return publicProductJob(job);
 }
 
@@ -1568,9 +1578,9 @@ function productCandidatePayload(actorId, scope, product, decision) {
     placement: placementRecord, approvedPlacement: selected ? placementRecord : null, proposedPlacements: array(product.sectionAssignments),
     marketKeys: [scope.country + "-" + scope.region], marketScope: { marketCountry: scope.country, marketRegion: scope.region }, countrySupply: { country: scope.country, region: scope.region, localOnly: true, crossCountryFallback: false },
     supplier: { id: text(product.supplierId), name: text(product.supplierName), officialUrl: text(product.supplierSiteUrl), type: text(product.supplierType), trustScore: Number(product.supplierTrustScore) || 0, evidenceReady: product.supplierEvidenceReady === true },
-    productRanking: { version: ProductRanking.VERSION, rank: Number(product.rank) || null, score: Number(product.rankingScore) || 0, category: text(product.productCategory), categoryTags: array(product.productCategoryTags), duplicateGroupKey: text(product.duplicateGroupKey), familyKey: text(product.productFamilyKey), familyRepresentative: product.familyRepresentative !== false, familyVariantCount: Number(product.familyVariantCount) || 0, duplicateCount: Number(product.duplicateCount) || 1 },
-    supplierAssessment: plain(product.supplierAssessment), riskAssessment: plain(product.riskAssessment), commercialAssessment: plain(product.commercialAssessment), releaseReadiness: plain(product.releaseReadiness), researchReadiness: readiness,
-    revenue: { type: text(product.commercialAssessment && product.commercialAssessment.revenueType) || "commercial_candidate", monetizationState: text(product.commercialAssessment && product.commercialAssessment.monetizationState) || "contract_required", contractId: null },
+    productRanking: { version: ProductRanking.VERSION, rank: Number(product.rank) || null, score: Number(product.rankingScore) || 0, reviewPriority: text(product.valueAssessment && product.valueAssessment.reviewPriority), audienceDemandScore: Number(product.valueAssessment && product.valueAssessment.audience && product.valueAssessment.audience.audienceDemandScore) || 0, revenueOpportunityScore: Number(product.valueAssessment && product.valueAssessment.revenue && product.valueAssessment.revenue.revenueOpportunityScore) || 0, category: text(product.productCategory), categoryTags: array(product.productCategoryTags), duplicateGroupKey: text(product.duplicateGroupKey), familyKey: text(product.productFamilyKey), familyRepresentative: product.familyRepresentative !== false, familyVariantCount: Number(product.familyVariantCount) || 0, duplicateCount: Number(product.duplicateCount) || 1 },
+    supplierAssessment: plain(product.supplierAssessment), riskAssessment: plain(product.riskAssessment), commercialAssessment: plain(product.commercialAssessment), valueAssessment: plain(product.valueAssessment), releaseReadiness: plain(product.releaseReadiness), researchReadiness: readiness,
+    revenue: { type: text(product.commercialAssessment && product.commercialAssessment.revenueType) || "commercial_candidate", monetizationState: text(product.commercialAssessment && product.commercialAssessment.monetizationState) || "contract_required", contractId: text(product.commercialAssessment && product.commercialAssessment.revenueEvidence && product.commercialAssessment.revenueEvidence.contractId) || null, payableRevenueRightVerified: plain(product.valueAssessment).revenue && plain(product.valueAssessment).revenue.payableRevenueRightVerified === true },
     commerceCandidate: { sourceTier: "risk_ranked_official_supplier_product", origin: PRODUCT_SOURCE_REF, administratorReviewRequired: true, riskGatePassed: product.riskAssessment && product.riskAssessment.gatePassed === true, automaticPrivateResearchStaging: true, automaticPublication: false },
     connectionAdapter: { schema: "igdc-commerce-connection-adapter.v1", supplyLane: text(product.supplyLane) || "general", discoveryMode: text(product.discoverySource) || "official_public_page", currentIntegrationMode: "public_page_product_reference", supportedUpgradeModes: ["structured_data", "sitemap", "manual_product_feed", "supplier_self_registration", "affiliate_deeplink", "affiliate_api"], apiKeyRequiredNow: false, externalSellerCheckout: true },
     pipeline: { version: ProductPipeline.VERSION, stage: selected ? "administrator_selection_pending" : "private_research_queue", nextGate: selected ? "market_evidence_and_revenue_route" : "administrator_product_selection", promotedAt: iso(), promotedBy: text(actorId) || "product-research-orchestrator" },
