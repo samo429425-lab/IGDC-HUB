@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.6.0-enrichment-balanced-private-placement";
+const VERSION = "commerce-country-automation-v3.6.2-global-country-policy-manual-private-placement";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1682,6 +1682,26 @@ function productPrivateReviewAssessment(rowInput) {
   if (normalizeAffiliateSettlement(row.affiliateSettlement, { existing: row.affiliateSettlement }).settlementReady !== true) warnings.push("affiliate_connection_pending");
   return { eligible: true, hold: false, reason: "private_review_eligible", warnings };
 }
+function manualPrivatePlacementAssessment(rowInput) {
+  const row = plain(rowInput), risk = plain(row.riskAssessment), status = lower(row.researchStatus), blockers = array(risk.blockers).map(lower), warnings = [];
+  const url = productUrl(row);
+  if (!text(row.id)) return { eligible: false, reason: "missing_product_id", warnings };
+  if (!url) return { eligible: false, reason: "missing_product_url", warnings };
+  if (PRIVATE_REVIEW_HARD_STATUSES.has(status) || row.productPageLive === false || risk.explicitUnavailable === true) return { eligible: false, reason: "product_page_unavailable", warnings };
+  if (!ProductRanking.isSpecificProductUrl(url) && risk.specificProductUrl !== true) return { eligible: false, reason: "specific_product_page_not_verified", warnings };
+  if (row.sameSupplierSite === false) return { eligible: false, reason: "supplier_product_domain_mismatch", warnings };
+  const prohibited = blockers.filter((item) => /(malware|phishing|fraud|illegal|prohibited|sanction|counterfeit|adult|unsafe|product_page_unavailable|supplier_product_domain_mismatch)/.test(item));
+  if (prohibited.length) return { eligible: false, reason: prohibited.join(","), warnings };
+  if (!productImageUrl(row)) warnings.push("actual_product_image_pending");
+  if (row.provisionalName === true || ProductRanking.isGenericProductName(first(row.productName, row.title))) warnings.push("product_name_pending");
+  if (row.inspectionComplete !== true) warnings.push("inspection_pending");
+  if (!text(row.price)) warnings.push("price_pending");
+  if (!text(row.availability)) warnings.push("availability_pending");
+  if (plain(row.supplierAssessment).approvalReady !== true) warnings.push("supplier_approval_pending");
+  if (Number(row.supplierTrustScore || plain(row.supplierAssessment).trustScore || 0) < 82) warnings.push("supplier_trust_review_pending");
+  warnings.push(...blockers.filter((item) => !PRIVATE_REVIEW_SOFT_BLOCKERS.has(item) && !PRIVATE_REVIEW_UNASSIGNED_BLOCKERS.has(item) && !prohibited.includes(item)));
+  return { eligible: true, reason: warnings.length ? "administrator_private_placement_with_pending_evidence" : "administrator_private_placement_eligible", warnings: Array.from(new Set(warnings.filter(Boolean))) };
+}
 function privateReviewFallbackAssignments(rowInput) {
   const row = plain(rowInput), assessment = productPrivateReviewAssessment(row);
   if (!assessment.eligible) return [];
@@ -2039,8 +2059,8 @@ async function productCandidateAction(actorId, input) {
   }
   let approvedPlacement = null;
   if (decision === "slot_candidate") {
-    const privateReview = productPrivateReviewAssessment(evaluated);
-    if (!privateReview.eligible) { const error = new Error("비공개 섹션 후보로 지정할 수 없는 상품입니다. 보완 사항: " + privateReview.reason); error.statusCode = 409; throw error; }
+    const privateReview = productPrivateReviewAssessment(evaluated), manualReview = manualPrivatePlacementAssessment(evaluated);
+    if (!privateReview.eligible && !manualReview.eligible) { const error = new Error("비공개 섹션 후보로 지정할 수 없는 상품입니다. 보완 사항: " + (manualReview.reason || privateReview.reason)); error.statusCode = 409; throw error; }
     const requestedKey = text(input && input.placementKey);
     if (requestedKey && !validProductSectionKey(requestedKey)) { const error = new Error("18개 관리 섹션 중 하나를 선택해 주세요."); error.statusCode = 400; throw error; }
     if (requestedKey === "distribution|distribution-sponsor" && !(evaluated.commercialAssessment && evaluated.commercialAssessment.contractReady === true)) { const error = new Error("유통 스폰서 섹션은 승인된 스폰서 계약 증빙이 있는 상품만 선택할 수 있습니다."); error.statusCode = 409; throw error; }
@@ -2048,10 +2068,16 @@ async function productCandidateAction(actorId, input) {
     const fallbackKey = productPlacementKey(evaluated.approvedPlacement || evaluated.primaryPlacement || eligibleAssignments[0]);
     const selectedKey = requestedKey || fallbackKey;
     if (!selectedKey) { const error = new Error("선택 가능한 배치 섹션이 없습니다. 18개 섹션 드롭다운에서 대상을 지정해 주세요."); error.statusCode = 409; throw error; }
-    const split = splitProductSectionKey(selectedKey);
-    approvedPlacement = eligibleAssignments.find((row) => productPlacementKey(row) === selectedKey) || {
-      page: split.page, sectionKey: split.sectionKey, score: 0, reason: "administrator_private_section_override", role: "administrator_selected_private_placement", approvalEligible: true, evidenceGaps: [], proposalOnly: false
-    };
+    const split = splitProductSectionKey(selectedKey), selectedAssignment = eligibleAssignments.find((row) => productPlacementKey(row) === selectedKey);
+    const placementWarnings = Array.from(new Set(array(privateReview.warnings).concat(array(manualReview.warnings)).concat(privateReview.eligible ? [] : [privateReview.reason]).filter(Boolean)));
+    approvedPlacement = Object.assign({}, selectedAssignment || {
+      page: split.page, sectionKey: split.sectionKey, section: split.sectionKey, score: 0, reason: "administrator_private_section_override", role: "administrator_selected_private_placement", evidenceGaps: [], proposalOnly: false
+    }, {
+      key: selectedKey, page: split.page, sectionKey: split.sectionKey, section: split.sectionKey, country: scope.country, region: scope.region,
+      approvalEligible: privateReview.eligible === true && selectedAssignment && selectedAssignment.approvalEligible === true, reviewEligible: true, privateReviewOnly: privateReview.eligible !== true || placementWarnings.length > 0,
+      evidenceGaps: placementWarnings, privatePlacementWarnings: placementWarnings, publicReleaseEvidencePending: privateReview.eligible !== true || placementWarnings.length > 0,
+      localOnly: true, crossCountryFallback: false, proposalOnly: false, publicPublication: false
+    });
     const currentIdentity = ProductRanking.productIdentity(job.products[index]);
     const occupied = array(job.products).filter((row) => lower(row && row.slotDecision) === "slot_candidate" && ProductRanking.productIdentity(row) !== currentIdentity && productPlacementKey(row && (row.approvedPlacement || row.selectedPlacement || row.primaryPlacement)) === selectedKey).length;
     if (occupied >= PRODUCT_SECTION_CAPACITY) { const error = new Error("선택 섹션은 이미 100개 상품으로 가득 찼습니다. 기존 배치 예정 상품을 후보 목록으로 내린 뒤 다시 지정해 주세요."); error.statusCode = 409; throw error; }
@@ -2090,8 +2116,13 @@ async function productAiAutomation(actorId, input) {
   if (job.status !== "complete") { const error = new Error("공식 상품 목록 리서치를 완료한 뒤 AI 자동화를 실행해 주세요."); error.statusCode = 409; throw error; }
   const mode = lower(input && input.mode) === "section" ? "section" : "all", sectionKey = text(input && input.sectionKey);
   if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("AI 자동 관리할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
+  const unassignedPlacementOnly = mode === "all" && array(job.products).some((row) =>
+    lower(row && row.slotDecision || "undecided") === "undecided" && !productAdministratorLocked(row)
+  );
   const runId = "product_ai_management_" + sha256(iso() + "|" + scope.country + "|" + scope.region + "|" + mode + "|" + sectionKey + "|" + Math.random()).slice(0, 20);
-  const enrichment = await enrichAutomationProducts(job, mode);
+  const enrichment = unassignedPlacementOnly
+    ? { attempted: 0, completed: 0, changed: 0, remaining: 0 }
+    : await enrichAutomationProducts(job, mode);
   const portfolio = ProductRanking.buildPortfolio(productAutomationPlanningSource(job), plain(job.rankingContext));
   const evaluatedByIdentity = new Map(array(portfolio.products).map((row) => {
     const assessment = productPrivateReviewAssessment(row), combined = combinedProductAssignments(row);
@@ -2102,15 +2133,14 @@ async function productAiAutomation(actorId, input) {
   let manualPreserved = 0;
   for (const row of currentRows) {
     const decision = lower(row && row.slotDecision || "undecided"), key = productPlacementKey(row && (row.approvedPlacement || row.selectedPlacement || row.primaryPlacement));
-    if (productAdministratorLocked(row)) {
-      manualPreserved += 1;
-      if (decision === "slot_candidate" && validProductSectionKey(key)) manualCounts[key] += 1;
-    }
+    if (productAdministratorLocked(row)) manualPreserved += 1;
+    if ((unassignedPlacementOnly || productAdministratorLocked(row)) && decision === "slot_candidate" && validProductSectionKey(key)) manualCounts[key] += 1;
   }
   const selectedPlacementByIdentity = new Map(), workingCounts = Object.assign({}, manualCounts), allocationReasons = new Map();
   const automationCandidates = currentRows.map((current) => {
     if (productAdministratorLocked(current)) return null;
     const decision = lower(current && current.slotDecision || "undecided");
+    if (unassignedPlacementOnly && decision !== "undecided") return null;
     if (["reject","purge"].includes(decision) && !productAutomationManaged(current)) return null;
     const identity = ProductRanking.productIdentity(current), evaluated = evaluatedByIdentity.get(identity);
     if (!evaluated) return null;
@@ -2140,6 +2170,7 @@ async function productAiAutomation(actorId, input) {
   for (const current of currentRows) {
     const identity = ProductRanking.productIdentity(current), evaluated = evaluatedByIdentity.get(identity) || plain(current), priorDecision = lower(current && current.slotDecision || "undecided"), priorKey = productPlacementKey(current && (current.approvedPlacement || current.selectedPlacement || current.primaryPlacement));
     if (productAdministratorLocked(current)) { nextRows.push(current); continue; }
+    if (unassignedPlacementOnly && priorDecision !== "undecided") { nextRows.push(current); continue; }
     if (["hold","reject","purge"].includes(priorDecision) && !productAutomationManaged(current)) { nextRows.push(current); continue; }
     const preservedSettlement = normalizeAffiliateSettlement(current.affiliateSettlement || evaluated.affiliateSettlement, { existing: current.affiliateSettlement || evaluated.affiliateSettlement });
     let next = Object.assign({}, current, evaluated, { affiliateSettlement: preservedSettlement, affiliateStage: preservedSettlement.stage }), targetDecision = priorDecision, targetPlacement = null, holdReason = "";
@@ -2173,14 +2204,16 @@ async function productAiAutomation(actorId, input) {
   }
   job.products = nextRows.slice(0, PRODUCT_PORTFOLIO_LIMIT);
   const syncResults = [];
-  for (let offset = 0; offset < changed.length; offset += 8) {
-    const batch = changed.slice(offset, offset + 8);
-    const settled = await Promise.allSettled(batch.map((product) => syncProductCandidateQueue(actorId, scope, product, lower(product.slotDecision) || "undecided")));
-    settled.forEach((entry, index) => syncResults.push(entry.status === "fulfilled" ? { ok: true, productId: text(batch[index].id), status: text(entry.value && entry.value.status) } : { ok: false, productId: text(batch[index].id), error: text(entry.reason && entry.reason.message || entry.reason) }));
+  if (!unassignedPlacementOnly) {
+    for (let offset = 0; offset < changed.length; offset += 8) {
+      const batch = changed.slice(offset, offset + 8);
+      const settled = await Promise.allSettled(batch.map((product) => syncProductCandidateQueue(actorId, scope, product, lower(product.slotDecision) || "undecided")));
+      settled.forEach((entry, index) => syncResults.push(entry.status === "fulfilled" ? { ok: true, productId: text(batch[index].id), status: text(entry.value && entry.value.status) } : { ok: false, productId: text(batch[index].id), error: text(entry.reason && entry.reason.message || entry.reason) }));
+    }
   }
   const queueFailures = syncResults.filter((row) => row.ok !== true);
   job.version = VERSION; job.rankingVersion = ProductRanking.VERSION; job.updatedAt = iso();
-  job.trace = array(job.trace).concat([{ at: iso(), source: "product-ai-private-placement-management", status: queueFailures.length ? "completed_with_queue_warnings" : "complete", runId, mode, sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, manualPreserved, queueFailures: queueFailures.length, enrichmentAttempted: enrichment.attempted, enrichmentCompleted: enrichment.completed, enrichmentChanged: enrichment.changed, enrichmentRemaining: enrichment.remaining, automaticPublication: false, automaticProductImport: false }]).slice(-240);
+  job.trace = array(job.trace).concat([{ at: iso(), source: unassignedPlacementOnly ? "product-ai-unassigned-auto-section-placement" : "product-ai-private-placement-management", status: queueFailures.length ? "completed_with_queue_warnings" : "complete", runId, mode, sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, manualPreserved, queueFailures: queueFailures.length, queueSyncDeferred: unassignedPlacementOnly ? changed.length : 0, enrichmentAttempted: enrichment.attempted, enrichmentCompleted: enrichment.completed, enrichmentChanged: enrichment.changed, enrichmentRemaining: enrichment.remaining, automaticPublication: false, automaticProductImport: false }]).slice(-240);
   if (queueFailures.length) job.errors = array(job.errors).concat(queueFailures.slice(0, 30).map((row) => ({ at: iso(), stage: "product_ai_automation_queue_sync", productId: row.productId, message: row.error }))).slice(-60);
   await saveProductJob(job, actorId);
   const result = publicProductJob(job), finalRows = array(result.products);
@@ -2193,12 +2226,12 @@ async function productAiAutomation(actorId, input) {
   result.aiAutomationResult = {
     schema: "igdc-product-ai-private-placement-result.v3",
     runId, mode, sectionKey: mode === "section" ? sectionKey : null,
-    considered: currentRows.length,
+    considered: unassignedPlacementOnly ? currentRows.filter((row) => lower(row && row.slotDecision || "undecided") === "undecided" && !productAdministratorLocked(row)).length : currentRows.length,
     changed: changed.length,
-    assigned: resultScopeRows.filter((row) => lower(row.slotDecision) === "slot_candidate" && productAutomationManaged(row)).length,
-    pendingEvidenceAssigned: resultScopeRows.filter((row) => lower(row.slotDecision) === "slot_candidate" && productAutomationManaged(row) && (plain(row.approvedPlacement).publicReleaseEvidencePending === true || array(plain(row.approvedPlacement).privatePlacementWarnings).length > 0)).length,
+    assigned: unassignedPlacementOnly ? changed.filter((row) => lower(row.slotDecision) === "slot_candidate").length : resultScopeRows.filter((row) => lower(row.slotDecision) === "slot_candidate" && productAutomationManaged(row)).length,
+    pendingEvidenceAssigned: (unassignedPlacementOnly ? changed : resultScopeRows).filter((row) => lower(row.slotDecision) === "slot_candidate" && productAutomationManaged(row) && (plain(row.approvedPlacement).publicReleaseEvidencePending === true || array(plain(row.approvedPlacement).privatePlacementWarnings).length > 0)).length,
     unassigned: finalRows.filter((row) => lower(row.slotDecision || "undecided") === "undecided").length,
-    held: resultScopeRows.filter((row) => lower(row.slotDecision) === "hold" && productAutomationManaged(row)).length,
+    held: unassignedPlacementOnly ? changed.filter((row) => lower(row.slotDecision) === "hold").length : resultScopeRows.filter((row) => lower(row.slotDecision) === "hold" && productAutomationManaged(row)).length,
     unassignedReasonCounts,
     manualPreserved,
     enrichmentAttempted: Number(enrichment.attempted || 0),
@@ -2212,6 +2245,7 @@ async function productAiAutomation(actorId, input) {
     formalPartners: finalRows.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "formal_partner" && plain(row.affiliateSettlement).settlementReady === true).length,
     queueSynced: syncResults.filter((row) => row.ok === true).length,
     queueSyncFailed: queueFailures.length,
+    queueSyncDeferred: unassignedPlacementOnly ? changed.length : 0,
     sectionCapacity: PRODUCT_SECTION_CAPACITY,
     sectionsFilledForCount: false,
     maximumPrivatePlacementWithoutWeakeningPublicReleaseGate: true,
