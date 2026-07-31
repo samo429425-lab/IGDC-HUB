@@ -297,7 +297,18 @@ async function main() {
     return;
   }
 
-  const publication = canonical.publish({ root, trigger: "netlify-build-country-region-admin-publication", bank: upstream.doc, requireMirrorConsensus: false });
+  // Canonical publication must receive the actual post-intake release set.
+  // The previous bridge passed the pre-intake upstream document, so explicit
+  // administrator products were visible in the private queue but never entered
+  // SearchBank or any front Snapshot. An authoritative empty set is preserved
+  // for explicit withdrawal and therefore restores the safe sample fallbacks.
+  const publicationBank = Object.assign({}, upstream.doc, {
+    schema: "search-bank.release-input.v1",
+    generatedAt: new Date().toISOString(),
+    source: "commerce-candidate-intake-release",
+    items: releaseItems
+  });
+  const publication = canonical.publish({ root, trigger: "netlify-build-country-region-admin-publication", bank: publicationBank, requireMirrorConsensus: false });
   if (publication.status !== "published") {
     throw new Error("Canonical Snapshot Publisher blocked build: " + JSON.stringify(publication.errors || publication));
   }
@@ -344,7 +355,8 @@ async function main() {
   process.stdout.write(JSON.stringify({
     commerceRegistrySync,
     upstream: { candidateCount: upstream.candidateCount, sourceMode: upstream.sourceMode || null, warning: upstream.warning || null, queueAuthoritative, mirrors: upstream.mirrors },
-    intake: { releaseGate: intake.releaseGate, summary: intake.summary },
+    intake: { releaseGate: intake.releaseGate, summary: intake.summary, releaseItemCount: releaseItems.length },
+    publicationInput: { source: publicationBank.source, itemCount: publicationBank.items.length },
     publication,
     published,
     donation: { mode: "independent-runtime-contract-not-touched" },
