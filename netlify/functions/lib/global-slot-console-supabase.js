@@ -2,6 +2,8 @@
 
 const crypto = require('crypto');
 
+const PUBLICATION_STATUS_COMPAT_VERSION = 'gslot-publication-status-compat-v1.0.0';
+
 function clean(value) { return String(value == null ? '' : value).trim(); }
 
 function config() {
@@ -15,6 +17,57 @@ function config() {
   return { url, serviceKey };
 }
 
+function isAssignmentPath(value) {
+  return /^\/rest\/v1\/gslot_slot_assignments(?:\?|$)/.test(String(value || ''));
+}
+
+function normalizeAssignmentStatusForWrite(value, method) {
+  const status = clean(value).toLowerCase();
+  const verb = clean(method).toUpperCase();
+  // The deployed Global Slot registry uses its established four-state DB
+  // contract: not_ready / ready / published / failed.  Newer commerce modules
+  // use richer in-memory names.  Translate only at the persistence boundary so
+  // no database migration or core-engine replacement is required.
+  if (status === 'audit_ready') return verb === 'PATCH' ? 'not_ready' : 'ready';
+  if (status === 'publish_requested') return 'published';
+  if (status === 'unpublish_requested') return 'not_ready';
+  return value;
+}
+
+function normalizeAssignmentWriteBody(path, init) {
+  if (!isAssignmentPath(path) || !init || init.body == null) return init;
+  let parsed;
+  try { parsed = typeof init.body === 'string' ? JSON.parse(init.body) : init.body; }
+  catch (_) { return init; }
+  const method = clean(init.method || 'GET').toUpperCase();
+  const normalize = (row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+    const copy = Object.assign({}, row);
+    if (Object.prototype.hasOwnProperty.call(copy, 'publication_status')) {
+      copy.publication_status = normalizeAssignmentStatusForWrite(copy.publication_status, method);
+    }
+    return copy;
+  };
+  const body = Array.isArray(parsed) ? parsed.map(normalize) : normalize(parsed);
+  return Object.assign({}, init, { body: JSON.stringify(body) });
+}
+
+function normalizeAssignmentReadBody(path, body) {
+  if (!isAssignmentPath(path)) return body;
+  const normalize = (row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+    const copy = Object.assign({}, row);
+    // "published" is the persistent active/front-matched state.  Existing
+    // commerce modules call that state "publish_requested" until a build has
+    // regenerated and verified the SearchBank/front snapshots.
+    if (clean(copy.publication_status).toLowerCase() === 'published') {
+      copy.publication_status = 'publish_requested';
+    }
+    return copy;
+  };
+  return Array.isArray(body) ? body.map(normalize) : normalize(body);
+}
+
 async function request(path, init) {
   const cfg = config();
   const baseHeaders = {
@@ -24,8 +77,9 @@ async function request(path, init) {
   };
   // Per-call headers such as Prefer must be added without discarding the
   // service-role headers required by Supabase REST and Storage APIs.
-  const options = Object.assign({}, init || {});
-  options.headers = Object.assign({}, (init && init.headers) || {}, baseHeaders);
+  let options = Object.assign({}, init || {});
+  options = normalizeAssignmentWriteBody(path, options);
+  options.headers = Object.assign({}, (options && options.headers) || {}, baseHeaders);
   const response = await fetch(cfg.url + path, options);
   const raw = await response.text();
   let body = null;
@@ -35,7 +89,7 @@ async function request(path, init) {
     error.statusCode = response.status >= 400 && response.status < 600 ? response.status : 502;
     throw error;
   }
-  return body;
+  return normalizeAssignmentReadBody(path, body);
 }
 
 function rest(table, query) {
@@ -87,4 +141,10 @@ function id(prefix) {
   return String(prefix || 'gslot') + '_' + crypto.randomBytes(12).toString('hex');
 }
 
-module.exports = { config, request, rest, select, insert, update, remove, storageSignedUpload, id };
+module.exports = {
+  config, request, rest, select, insert, update, remove, storageSignedUpload, id,
+  PUBLICATION_STATUS_COMPAT_VERSION,
+  normalizeAssignmentStatusForWrite,
+  normalizeAssignmentWriteBody,
+  normalizeAssignmentReadBody
+};

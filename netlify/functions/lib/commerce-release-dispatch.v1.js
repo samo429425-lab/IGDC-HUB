@@ -6,13 +6,26 @@
  * snapshot itself and it never exposes the build hook URL.
  */
 
-const VERSION = "commerce-release-dispatch-v1.1.0-explicit-admin-or-deployment-gate";
-const HOOK_ENV = "COMMERCE_RELEASE_BUILD_HOOK_URL";
+const VERSION = "commerce-release-dispatch-v1.2.0-build-hook-alias-compatible";
+const HOOK_ENVS = Object.freeze([
+  "COMMERCE_RELEASE_BUILD_HOOK_URL",
+  "NETLIFY_BUILD_HOOK_URL",
+  "NETLIFY_DEPLOY_HOOK_URL",
+  "BUILD_HOOK_URL"
+]);
+const HOOK_ENV = HOOK_ENVS.find((name) => String(process.env[name] || "").trim()) || HOOK_ENVS[0];
 const MODE_ENV = "COMMERCE_CANDIDATE_RELEASE_MODE";
 const KEY_ENV = "COMMERCE_CANDIDATE_RELEASE_KEY";
 
 function text(value) { return value == null ? "" : String(value).trim(); }
 function lower(value) { return text(value).toLowerCase(); }
+function configuredHook() {
+  for (const name of HOOK_ENVS) {
+    const value = text(process.env[name]);
+    if (value) return { name, value };
+  }
+  return { name: HOOK_ENVS[0], value: "" };
+}
 function releaseArmed(input) {
   const mode = lower(process.env[MODE_ENV]);
   const key = text(process.env[KEY_ENV]);
@@ -40,12 +53,13 @@ function safeReason(error) {
 
 async function dispatch(input) {
   const release = releaseArmed(input);
+  const configured = configuredHook();
   if (!release.armed) {
-    return { ok: true, queued: false, version: VERSION, reason: "release_gate_not_armed", releaseGate: release, hookConfigured: !!text(process.env[HOOK_ENV]) };
+    return { ok: true, queued: false, version: VERSION, reason: "release_gate_not_armed", releaseGate: release, hookConfigured: !!configured.value, hookSource: configured.value ? configured.name : null };
   }
-  const hook = validHook(process.env[HOOK_ENV]);
+  const hook = validHook(configured.value);
   if (!hook) {
-    return { ok: true, queued: false, version: VERSION, reason: text(process.env[HOOK_ENV]) ? "build_hook_invalid" : "build_hook_not_configured", releaseGate: release, hookConfigured: false };
+    return { ok: true, queued: false, version: VERSION, reason: configured.value ? "build_hook_invalid" : "build_hook_not_configured", releaseGate: release, hookConfigured: false, hookSource: configured.value ? configured.name : null };
   }
 
   const controller = new AbortController();
@@ -53,7 +67,7 @@ async function dispatch(input) {
   const fetchImpl = input && input.fetch || global.fetch;
   if (typeof fetchImpl !== "function") {
     clearTimeout(timeout);
-    return { ok: false, queued: false, version: VERSION, reason: "fetch_unavailable", releaseGate: release, hookConfigured: true };
+    return { ok: false, queued: false, version: VERSION, reason: "fetch_unavailable", releaseGate: release, hookConfigured: true, hookSource: configured.name };
   }
   const payload = {
     trigger: text(input && input.operation) === "unpublish" ? "approved-commerce-unpublication" : "approved-commerce-assignment",
@@ -80,13 +94,14 @@ async function dispatch(input) {
       reason: queued ? "build_hook_queued" : "build_hook_http_" + response.status,
       status: response.status,
       releaseGate: release,
-      hookConfigured: true
+      hookConfigured: true,
+      hookSource: configured.name
     };
   } catch (error) {
-    return { ok: false, queued: false, version: VERSION, reason: safeReason(error), releaseGate: release, hookConfigured: true };
+    return { ok: false, queued: false, version: VERSION, reason: safeReason(error), releaseGate: release, hookConfigured: true, hookSource: configured.name };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-module.exports = { VERSION, HOOK_ENV, MODE_ENV, KEY_ENV, releaseArmed, validHook, dispatch };
+module.exports = { VERSION, HOOK_ENVS, HOOK_ENV, MODE_ENV, KEY_ENV, configuredHook, releaseArmed, validHook, dispatch };
