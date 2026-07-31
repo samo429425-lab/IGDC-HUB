@@ -425,7 +425,9 @@ function loadPage(index){
   
 <script>
 (function(){
-  function bootstrapLang(){
+  var waitingForAuthRestore = false;
+
+  function applyBootstrapLang(){
     try{
       // 저장값 우선, 없으면 위 detect 결과(currentLang) 유지
       var saved = localStorage.getItem('igdc_lang');
@@ -436,6 +438,22 @@ function loadPage(index){
       // 라벨/타이틀/iframe 적용
       if (typeof changeLanguage === 'function'){ changeLanguage(currentLang); }
     }catch(e){}
+  }
+
+  function bootstrapLang(){
+    try{
+      var restore = window.__IGDC_AUTH_RESTORE_PROMISE__;
+      if (!window.__IGDC_AUTH_RESTORE_DONE__ && restore && typeof restore.then === 'function') {
+        if (waitingForAuthRestore) return;
+        waitingForAuthRestore = true;
+        Promise.resolve(restore).catch(function(){}).then(function(){
+          waitingForAuthRestore = false;
+          applyBootstrapLang();
+        });
+        return;
+      }
+    }catch(e){}
+    applyBootstrapLang();
   }
   document.addEventListener('DOMContentLoaded', bootstrapLang);
   document.addEventListener('osauth:ready', bootstrapLang);
@@ -1297,6 +1315,7 @@ window.addEventListener('DOMContentLoaded', function() {
     try{
       var btn = document.getElementById("osLoginBtn");
       if(!btn) return;
+      if (window.__IGDC_AUTH_RESTORE_PENDING__) return;
       if (window.osAuth && window.osAuth.isAuthenticated && window.osAuth.isAuthenticated()){
         btn.textContent = "Logout";
         btn.onclick = function(){
@@ -1330,8 +1349,13 @@ window.addEventListener('DOMContentLoaded', function() {
   "DVsKe2Sx8" +
   "kKMWagj";
   const REDIRECT_URI = window.location.origin + "/callback.html";
-  const SCOPE        = "openid profile email";
+  const SCOPE        = "openid profile email offline_access";
   const STORAGE      = { TOKENS:"osauth.tokens.v2", PKCE:"osauth.pkce.v1" };
+  const REFRESH_SKEW_SECONDS = 90;
+  const REFRESH_TIMEOUT_MS = 10000;
+  const REFRESH_RETRY_MS = 5 * 60 * 1000;
+  let refreshInFlight = null;
+  let refreshRetryAfter = 0;
 
   function b64url(buf){
     return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
@@ -1353,6 +1377,114 @@ window.addEventListener('DOMContentLoaded', function() {
     try{ let t=document.getElementById("oslogin-toast"); if(!t){ t=document.createElement("div"); t.id="oslogin-toast";
       Object.assign(t.style,{position:"fixed",top:"12px",left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,0.82)",color:"#fff",padding:"8px 14px",borderRadius:"8px",zIndex:"2000",fontSize:"14px"});
       document.body.appendChild(t); } t.textContent=msg; t.style.opacity="1"; setTimeout(()=>{t.style.transition="opacity .4s"; t.style.opacity="0";},1200);}catch(_){}
+  }
+
+  function decodeIdToken(token){
+    try{
+      const parts = String(token || "").split(".");
+      if(parts.length < 2) return null;
+      let value = parts[1].replace(/-/g,"+").replace(/_/g,"/");
+      while(value.length % 4) value += "=";
+      return JSON.parse(atob(value));
+    }catch(_){ return null; }
+  }
+  function tokenExpiry(tokens){
+    const payload = decodeIdToken(tokens && tokens.id_token);
+    return Number((payload && payload.exp) || (tokens && tokens.exp) || 0);
+  }
+  function tokenIsFresh(tokens, skewSeconds){
+    const exp = tokenExpiry(tokens);
+    const skew = Number(skewSeconds == null ? REFRESH_SKEW_SECONDS : skewSeconds) || 0;
+    return !!(tokens && exp && Math.floor(Date.now()/1000) + skew < exp);
+  }
+  function setRefreshPending(value){
+    window.__IGDC_AUTH_RESTORE_PENDING__ = !!value;
+    try{ document.documentElement.dataset.igdcAuthRestorePending = value ? "1" : "0"; }catch(_){}
+  }
+  function emitRefreshComplete(result){
+    try{
+      document.dispatchEvent(new CustomEvent("igdc:session-refresh-complete", { detail: result || {} }));
+    }catch(_){}
+  }
+  function emitAuthStorageReady(tokens){
+    try{
+      document.dispatchEvent(new CustomEvent("igdc:auth-storage-ready", {
+        detail: { tokens: tokens || null, payload: decodeIdToken(tokens && tokens.id_token) }
+      }));
+    }catch(_){}
+  }
+  async function exchangeRefreshToken(current){
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const timeout = setTimeout(function(){ try{ if(controller) controller.abort(); }catch(_){} }, REFRESH_TIMEOUT_MS);
+    try{
+      const response = await fetch("https://" + AUTH0_DOMAIN + "/oauth/token", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        signal: controller ? controller.signal : undefined,
+        body:JSON.stringify({
+          grant_type:"refresh_token",
+          client_id:CLIENT_ID,
+          refresh_token:current.refresh_token
+        })
+      });
+      if(!response.ok){
+        console.warn("[IGDC Auth] Session refresh rejected:", response.status);
+        return { attempted:true, updated:false, status:response.status };
+      }
+      const nextResponse = await response.json();
+      const nextIdToken = nextResponse && nextResponse.id_token;
+      const nextPayload = decodeIdToken(nextIdToken);
+      if(!nextIdToken || !nextPayload || !nextPayload.exp || Number(nextPayload.exp) * 1000 <= Date.now()){
+        console.warn("[IGDC Auth] Session refresh returned no usable ID token.");
+        return { attempted:true, updated:false, status:0 };
+      }
+      const next = Object.assign({}, current, nextResponse, { exp:Number(nextPayload.exp) });
+      if(!nextResponse.refresh_token && current.refresh_token) next.refresh_token = current.refresh_token;
+      save(STORAGE.TOKENS, next);
+      refreshRetryAfter = 0;
+      emitAuthStorageReady(next);
+      return { attempted:true, updated:true, status:200, tokens:next };
+    }catch(error){
+      console.warn("[IGDC Auth] Session refresh unavailable:", error && error.name ? error.name : String(error));
+      return { attempted:true, updated:false, status:0 };
+    }finally{
+      clearTimeout(timeout);
+    }
+  }
+  function refreshStoredSession(reason){
+    const current = load(STORAGE.TOKENS);
+    if(tokenIsFresh(current)) return Promise.resolve({ attempted:false, updated:false, reason:reason || "fresh" });
+    if(!current || !current.refresh_token) return Promise.resolve({ attempted:false, updated:false, reason:reason || "no_refresh_token" });
+    if(Date.now() < refreshRetryAfter) return Promise.resolve({ attempted:false, updated:false, reason:reason || "retry_wait" });
+    if(refreshInFlight) return refreshInFlight;
+
+    // Promise callback runs after refreshInFlight has been assigned, preventing same-tab re-entry.
+    refreshInFlight = Promise.resolve().then(async function(){
+      setRefreshPending(true);
+      const run = async function(){
+        const latest = load(STORAGE.TOKENS);
+        if(tokenIsFresh(latest)) return { attempted:false, updated:false, reason:"peer_refreshed" };
+        if(!latest || !latest.refresh_token) return { attempted:false, updated:false, reason:"no_refresh_token" };
+        return exchangeRefreshToken(latest);
+      };
+      try{
+        if(navigator.locks && typeof navigator.locks.request === "function"){
+          return await navigator.locks.request("igdc-auth-token-refresh", { mode:"exclusive" }, run);
+        }
+      }catch(_){}
+      return run();
+    }).then(function(result){
+      if(result && result.attempted && !result.updated) refreshRetryAfter = Date.now() + REFRESH_RETRY_MS;
+      return result || { attempted:false, updated:false };
+    }).catch(function(error){
+      refreshRetryAfter = Date.now() + REFRESH_RETRY_MS;
+      console.warn("[IGDC Auth] Session refresh failed safely:", error && error.message ? error.message : String(error));
+      return { attempted:true, updated:false, status:0 };
+    }).finally(function(){
+      setRefreshPending(false);
+      refreshInFlight = null;
+    });
+    return refreshInFlight;
   }
 
   // The OSO/Auth0 session stored here is the only browser token source for
@@ -1395,10 +1527,14 @@ window.addEventListener('DOMContentLoaded', function() {
     location.href = authz;
   };
 
-  (async function handleCallback(){
+  window.__IGDC_AUTH_RESTORE_DONE__ = false;
+  window.__IGDC_AUTH_RESTORE_PROMISE__ = (async function handleCallback(){
     const qs = new URLSearchParams(location.search);
     if (!qs.has("code") && !qs.has("error")){
-      document.dispatchEvent(new CustomEvent("osauth:ready", { detail: { tokens: load(STORAGE.TOKENS), payload: (window.osAuth.getIdTokenPayload && window.osAuth.getIdTokenPayload()) || null } }));
+      const result = await refreshStoredSession("startup");
+      const tokens = load(STORAGE.TOKENS);
+      document.dispatchEvent(new CustomEvent("osauth:ready", { detail: { tokens: tokens, payload: (window.osAuth.getIdTokenPayload && window.osAuth.getIdTokenPayload()) || null, refreshed:!!(result && result.updated) } }));
+      emitRefreshComplete(result);
       return;
     }
     if (qs.has("error")){ console.warn("Auth error:", qs.get("error")); toast("Login error"); return; }
@@ -1425,7 +1561,23 @@ window.addEventListener('DOMContentLoaded', function() {
       document.dispatchEvent(new CustomEvent("osauth:ready", { detail: { tokens: tok, payload: window.osAuth.getIdTokenPayload() } }));
       setTimeout(()=>location.href="/index.html", 50);
     }catch(e){ console.error(e); toast("Network error"); }
-  })();
+  })().catch(function(error){
+    console.warn("[IGDC Auth] Startup restore failed safely:", error && error.message ? error.message : String(error));
+  }).finally(function(){
+    window.__IGDC_AUTH_RESTORE_DONE__ = true;
+  });
+
+  function requestBackgroundRefresh(reason){
+    refreshStoredSession(reason).then(function(result){
+      emitRefreshComplete(result);
+    });
+  }
+  window.addEventListener("pageshow", function(){ requestBackgroundRefresh("pageshow"); });
+  window.addEventListener("online", function(){ requestBackgroundRefresh("online"); });
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible") requestBackgroundRefresh("visible");
+  });
+  setInterval(function(){ requestBackgroundRefresh("timer"); }, 60000);
 
   document.addEventListener("DOMContentLoaded", function(){
     const btn = document.getElementById("osLoginBtn");
@@ -3557,6 +3709,7 @@ function normLang(l){
   function syncLoginButton(){
     var btn = byId('osLoginBtn');
     if(!btn) return;
+    if(window.__IGDC_AUTH_RESTORE_PENDING__) return;
     var authed = isAuthed();
     if(authed){
       if(btn.textContent !== 'Logout') btn.textContent = 'Logout';
@@ -3600,6 +3753,7 @@ function normLang(l){
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
   document.addEventListener('osauth:ready', function(){ stopAfter = Date.now() + 30000; syncLoginButton(); });
+  document.addEventListener('igdc:session-refresh-complete', syncLoginButton);
   window.addEventListener('pageshow', syncLoginButton);
 })();
 </script>
@@ -3711,6 +3865,7 @@ function normLang(l){
   }
   function apply(){
     syncQueued = false;
+    if(window.__IGDC_AUTH_RESTORE_PENDING__) return;
     var identity = getFreshIdentity();
     var role = identity.authenticated ? identity.role : 'guest';
     var label = identity.authenticated ? identity.label : guestLabel();
@@ -3749,6 +3904,7 @@ function normLang(l){
     document.addEventListener('osauth:ready', schedule, true);
     document.addEventListener('osauth:done', schedule, true);
     document.addEventListener('igdc:member-auth-ready', schedule, true);
+    document.addEventListener('igdc:session-refresh-complete', schedule, true);
     window.addEventListener('pageshow', schedule);
     window.addEventListener('resize', schedule);
     window.addEventListener('storage', schedule);
