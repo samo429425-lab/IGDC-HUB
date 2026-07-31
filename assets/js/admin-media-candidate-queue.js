@@ -15,6 +15,8 @@
     'media-documentary':'다큐멘터리','media-animation':'애니메이션','media-music':'음악·공연','media-shorts':'쇼츠·단편'
   };
   var SECTION_CAPACITY={'media-music':50,'media-shorts':50};
+  var DISCOVERY_CYCLE_LENGTH=12;
+  var MIN_REGIONAL_LANES_PER_RUN=6;
   function sectionCapacity(key){return key==='media-trending'?50:(SECTION_CAPACITY[key]||100);}
   function sectionReserveCapacity(key){return key==='media-trending'?0:sectionCapacity(key);}
 
@@ -43,6 +45,7 @@
   var fullscreenUiTimer=null;
   var openSectionKey='';
   var selectedBySection={};
+  var frontReleaseState={hasRelease:false,totalManagedSlots:0,sections:{}};
 
   function token(){
     try{
@@ -195,9 +198,10 @@
       '</button>'+
       '<div class="candidate-card-body">'+
         '<div class="candidate-card-title">'+esc(row.title||'(제목 없음)')+'</div>'+
-        '<div class="candidate-card-meta">'+pill(row.qualityTarget||'화질 미확인','rank')+pill((row.rankingTier||'-')+' '+rowRank(row),'rank')+pill(row.safetyDecision||'검토 필요',safetyClass)+'</div>'+
+        '<div class="candidate-card-meta">'+pill(row.qualityTarget||'화질 미확인','rank')+pill((row.rankingTier||'-')+' '+rowRank(row),'rank')+pill(row.discoveryRegion||row.region||'지역 미확인','section')+pill(row.safetyDecision||'검토 필요',safetyClass)+'</div>'+
         '<div class="candidate-card-detail">'+esc(row.provider||'-')+' · '+esc(row.year||'연도 미확인')+' · 자막 '+esc(row.subtitleCount||0)+'개<br>'+
         '분류 '+esc(row.classificationConfidence||0)+'% · '+esc(row.reviewStatus||'-')+
+        (row.discoveryLane?'<br>탐색 '+esc(row.discoveryLane)+' · '+esc(row.discoveryRegion||row.region||'지역 미확인'):'')+
         (latency?' · 응답 '+esc(latency)+'ms':' · 응답속도 미확인')+
         (languages.length?'<br>자막 '+esc(languages.join(' · ')):'')+
         (warnings.length||reasons.length?'<br>'+esc(warnings.concat(reasons).slice(0,3).join(' · ')):'')+
@@ -209,9 +213,11 @@
   }
   function sectionBodyHtml(key,list){
     var readOnly=key==='media-trending';
+    var released=Number(frontReleaseState.sections&&frontReleaseState.sections[key]||0);
     var controls=readOnly?
       '<div class="read-only-note">지금 뜨는 콘텐츠는 영화·드라마·버라이어티·음악 후보의 최신성·랭킹을 자동 조합한 점검용 미리보기입니다. 수동 고정이나 일괄 상태 변경은 하지 않습니다.</div>':
       '<div class="section-actionbar" data-section-key="'+esc(key)+'">'+
+        '<div class="section-front-control"><span class="pill section">마지막 프론트 릴리스 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 취소·중지</button></div>'+
         '<button type="button" class="secondary sectionSelectAllBtn">전체 선택</button><button type="button" class="secondary sectionClearSelectionBtn">선택 해제</button>'+
         '<button type="button" class="sectionActionBtn" data-action="approve">선택 승인</button><button type="button" class="sectionActionBtn" data-action="hold">선택 보류</button><button type="button" class="sectionActionBtn" data-action="reset">선택 재검토</button>'+
         '<button type="button" class="danger sectionActionBtn" data-action="reject">선택 반려</button><button type="button" class="danger sectionActionBtn" data-action="block">선택 영구 차단</button><button type="button" class="danger sectionActionBtn" data-action="delete">선택 삭제→검색 제외</button>'+
@@ -228,12 +234,14 @@
       var open=key===openSectionKey;
       var capacity=sectionCapacity(key);
       var fullCount=sectionRows(key,allActive).length;
+      var released=Number(frontReleaseState.sections&&frontReleaseState.sections[key]||0);
       var primaryCount=Math.min(fullCount,capacity);
       var reserveCount=Math.max(0,fullCount-capacity);
       var countLabel=key==='media-trending'?
         primaryCount+' / '+capacity:
         '본선 '+primaryCount+'/'+capacity+' · 예비 '+reserveCount+'/'+sectionReserveCapacity(key);
       if(list.length!==fullCount)countLabel+=' · 표시 '+list.length;
+      if(key!=='media-trending')countLabel+=' · 프론트 '+released;
       return '<section class="candidate-section'+(open?' open':'')+'" data-section-key="'+esc(key)+'">'+
         '<button type="button" class="section-toggle" data-section-key="'+esc(key)+'" aria-expanded="'+(open?'true':'false')+'"><span class="section-toggle-main"><span class="section-toggle-title">'+esc(SECTION_LABELS[key]||key)+'</span><span class="section-count">'+countLabel+'</span></span><span class="section-chevron">⌄</span></button>'+
         (open?'<div class="section-body">'+sectionBodyHtml(key,list)+'</div>':'')+
@@ -300,6 +308,8 @@
     try{
       state.textContent='후보 대기열 읽는 중';
       var data=await get(END+'?action=candidates');
+      try{frontReleaseState=await get(PUB+'?frontStatus=1');}
+      catch(_frontError){frontReleaseState={hasRelease:false,totalManagedSlots:0,sections:{}};}
       rowsCache=data.candidates||[];
       var available=new Set(rowsCache.map(function(row){return text(row.contentId||row.id);}));
       Object.keys(selectedBySection).forEach(function(key){
@@ -309,6 +319,7 @@
       renderSummary(summaryCache);setupFilters(summaryCache);renderRows();renderExclusions();
       var live=data.sourceMode==='supabase';
       state.textContent=live?'실시간 저장소 연결 정상':'정적 점검본 대체 표시';
+      if($('frontReleaseState'))$('frontReleaseState').textContent=frontReleaseState.hasRelease?'마지막 프론트 릴리스 '+Number(frontReleaseState.totalManagedSlots||0)+'개':'저장된 프론트 릴리스 없음';
       show(
         live?'정책·섹션·랭킹 기준으로 실시간 후보 대기열을 읽었습니다.':'실시간 저장소에 연결하지 못해 정적 점검본을 표시합니다. 이 상태에서는 최신 변경을 확정하지 마십시오.',
         live?'ok':'warn'
@@ -327,6 +338,11 @@
     }catch(error){show(error.message,'warn');}
   }
   function collectorJobKey(section){return'igdc.mediaCollector.job.'+section;}
+  function discoveryCursorKey(section){return'igdc.mediaCollector.discoveryCursor.'+section;}
+  function loadDiscoveryCursor(section){
+    try{return Math.max(1,Number(localStorage.getItem(discoveryCursorKey(section))||1));}catch(_error){return 1;}
+  }
+  function saveDiscoveryCursor(section,page){try{localStorage.setItem(discoveryCursorKey(section),String(Math.max(1,Number(page||1))));}catch(_error){}}
   function loadCollectorJob(section){
     try{var raw=localStorage.getItem(collectorJobKey(section));return raw?JSON.parse(raw):null;}
     catch(_error){return null;}
@@ -342,7 +358,7 @@
       '전체 순차 '+collectAllProgress.round+'/'+collectAllProgress.maxRounds+
       '회 · '+collectAllProgress.sectionIndex+'/9 '+sectionLabel+' · ':'';
     $('collectorProgress').classList.remove('hidden');
-    $('collectorProgressText').textContent=sequence+'목표 '+target+'개 · 해당 섹션 신규 '+saved+'개 · 이 탐색 전체 신규 '+Number(job.totalSaved||saved)+'개 · 검색 '+Number(job.searched||0)+'건 · 정밀검사 '+Number(job.inspected||0)+'건 · 누적 묶음 '+Number(job.batch||0);
+    $('collectorProgressText').textContent=sequence+'목표 '+target+'개 · 해당 섹션 신규 '+saved+'개 · 이 탐색 전체 신규 '+Number(job.totalSaved||saved)+'개 · 검색 '+Number(job.searched||0)+'건 · 정밀검사 '+Number(job.inspected||0)+'건 · 누적 묶음 '+Number(job.batch||0)+(job.lastRegion?' · 지역 '+job.lastRegion:'')+(job.lastLane?' · 경로 '+job.lastLane:'');
     $('collectorRejectText').textContent='제외 '+Number(job.rejected||0)+'건'+(job.lastReason?' · 최근 제외: '+job.lastReason:'');
     $('collectorProgressBar').style.width=percent+'%';
     $('collectorState').textContent=job.paused?(job.pauseReason==='checkpoint'?'다음 순환 대기':'일시정지됨'):(saved>=target?'목표 완료':(sequence||'')+'정밀 수집 중');
@@ -371,7 +387,7 @@
       searched:0,rejected:0,saved:0,batches:0
     };
     var totalAll=0;
-    while(job.batches<7&&job.saved<remaining&&!collectorStopRequested){
+    while(job.batches<DISCOVERY_CYCLE_LENGTH&&job.saved<remaining&&!collectorStopRequested){
       job.batches+=1;
       var attempts=0,data=null;
       while(attempts<3&&!data){
@@ -391,6 +407,7 @@
         }
       }
       job.page=Number(data.nextPage||job.page+1);
+      saveDiscoveryCursor(section,job.page);
       job.searched+=Number(data.searched||0);
       job.rejected+=Number(data.rejectedCount||0);
       var items=Array.isArray(data.items)?data.items:[];
@@ -400,13 +417,13 @@
       job.saved+=sameSection;
       totalAll+=Number(data.saved||items.length||0);
       saveQualityResearchJob(job);
-      $('collectorState').textContent='추가 품질 탐색 · '+(SECTION_LABELS[section]||section)+' · '+job.batches+'/7';
+      $('collectorState').textContent='추가 품질 탐색 · '+(SECTION_LABELS[section]||section)+' · '+job.batches+'/'+DISCOVERY_CYCLE_LENGTH;
       $('collectorProgress').classList.remove('hidden');
       $('collectorProgressText').textContent='본선 '+primaryCapacity+'개 충족 · 더 나은 후보 및 예비 '+job.saved+'/'+remaining+'개 탐색 · 검색 '+job.searched+'건';
       $('collectorRejectText').textContent='추가 탐색 제외 '+job.rejected+'건 · 기존 후보는 삭제하지 않고 품질순으로 본선/예비를 다시 구분합니다.';
-      $('collectorProgressBar').style.width=Math.min(100,Math.round(job.batches/7*100))+'%';
+      $('collectorProgressBar').style.width=Math.min(100,Math.round(job.batches/DISCOVERY_CYCLE_LENGTH*100))+'%';
       if(data.done)break;
-      if(job.batches<7&&job.saved<remaining)await wait(350);
+      if(job.batches<DISCOVERY_CYCLE_LENGTH&&job.saved<remaining)await wait(350);
     }
     return{requestedSaved:job.saved,newSavedAll:totalAll,batches:job.batches,skipped:false};
   }
@@ -435,7 +452,7 @@
     if(existing&&existing.paused&&Number(existing.saved||0)<Number(existing.target||0)){job=existing;job.paused=false;}
     else{
       job={
-        section:section,target:target,batchSize:3,page:1,batch:0,saved:0,searched:0,inspected:0,rejected:0,
+        section:section,target:target,batchSize:3,page:loadDiscoveryCursor(section),batch:0,saved:0,searched:0,inspected:0,rejected:0,
         totalSaved:0,knownIds:rowsCache.map(function(row){return text(row.contentId||row.id);}),paused:false,lastReason:''
       };
     }
@@ -450,9 +467,10 @@
     $('collectBtn').disabled=true;$('collectAllBtn').disabled=true;$('collectAdminExceptionBtn').disabled=true;$('collectorStopBtn').disabled=false;
     updateCollectorProgress(job);
     var visitBatches=0;
-    var maxBatchesThisVisit=wholeRun?7:Math.min(80,Math.max(12,job.target*8));
+    var maxBatchesThisVisit=wholeRun?DISCOVERY_CYCLE_LENGTH:Math.min(80,Math.max(DISCOVERY_CYCLE_LENGTH,job.target*8));
+    var minimumCoverageBatches=Math.min(MIN_REGIONAL_LANES_PER_RUN,maxBatchesThisVisit);
     try{
-      while(job.saved<job.target&&visitBatches<maxBatchesThisVisit&&!collectorStopRequested){
+      while((job.saved<job.target||visitBatches<minimumCoverageBatches)&&visitBatches<maxBatchesThisVisit&&!collectorStopRequested){
         visitBatches+=1;job.batch+=1;
         var requestBatchSize=Math.max(1,Math.min(job.batchSize,job.target-job.saved));
         var attempts=0,data=null;
@@ -469,6 +487,8 @@
           }
         }
         job.page=Number(data.nextPage||job.page+1);
+        saveDiscoveryCursor(section,job.page);
+        job.lastLane=text(data.discoveryLane);job.lastRegion=text(data.discoveryRegion);
         job.searched+=Number(data.searched||0);job.inspected+=Number(data.searched||0);job.rejected+=Number(data.rejectedCount||0);
         var responseItems=Array.isArray(data.items)?data.items:[];
         var hasResponseItems=responseItems.length>0;
@@ -489,7 +509,7 @@
         job.lastReason=last&&text(last.reason)||'';
         saveCollectorJob(job);updateCollectorProgress(job);
         if(data.done)break;
-        if(job.saved<job.target)await wait(350);
+        if((job.saved<job.target||visitBatches<minimumCoverageBatches)&&visitBatches<maxBatchesThisVisit)await wait(350);
       }
       var complete=job.saved>=job.target;
       job.paused=!complete;job.pauseReason=complete?'':(collectorStopRequested?'user':'checkpoint');
@@ -524,7 +544,7 @@
   }
   async function collectAll(){
     if(collectAllRunning)return;
-    if(!window.confirm('9개 섹션을 현재 목표 수량으로 순차 수집할까요? 정원을 채운 섹션은 7개 탐색 경로를 한 번 더 점검해 더 좋은 본선 후보와 예비 후보를 확보합니다. 품질 미달 후보로 수량을 강제로 채우지 않습니다.'))return;
+    if(!window.confirm('9개 섹션을 현재 목표 수량으로 순차 수집할까요? 각 섹션은 중국권·동남아권·유럽권·남미권·북미권을 포함한 지역 탐색 경로를 순환합니다. 정원을 채운 섹션은 12개 탐색 경로를 한 번 더 점검해 더 좋은 본선 후보와 예비 후보를 확보합니다. 품질 미달 후보로 수량을 강제로 채우지 않습니다.'))return;
     var collectionSections=SECTION_ORDER.filter(function(key){return key!=='media-trending';});
     var target=Number($('collectorLimit').value)||5;
     var maxRounds=Math.min(12,Math.max(4,target*2));
@@ -752,8 +772,8 @@
   }
   async function autoCurateAll(){
     if(!window.confirm('현재 대기열의 미승인 후보를 AI로 다시 분류·품질 점검할까요?\n\nAI는 섹션 정리와 격리 신호만 적용하며 승인·공개·영구 차단은 실행하지 않습니다.'))return;
-    var button=$('autoCurateBtn'),frontButton=$('publishFrontBtn');
-    button.disabled=true;frontButton.disabled=true;
+    var button=$('autoCurateBtn');
+    setFrontButtonsDisabled(true);
     var cursor=0,batches=0,total={scanned:0,processed:0,updated:0,moved:0,quarantined:0};
     try{
       while(batches<100){
@@ -776,7 +796,7 @@
     }catch(error){
       show('AI 전자동 후보 정리 중지: '+error.message,'warn');
     }finally{
-      button.disabled=false;frontButton.disabled=false;
+      setFrontButtonsDisabled(false);
     }
   }
   function frontPublishReason(value){
@@ -788,26 +808,50 @@
       build_hook_request_failed:'Netlify 배포 요청에 실패했습니다.'
     })[text(value)]||text(value)||'프론트 배포가 시작되지 않았습니다.';
   }
-  async function publishFront(){
-    if(!window.confirm('승인·권리확인·공개검증을 모두 통과한 후보만 새 미디어 스냅샷으로 만들고 프론트 배포를 실행할까요?\n\n후보·시드·미검증·격리 항목은 공개되지 않습니다.'))return;
-    var button=$('publishFrontBtn'),autoButton=$('autoCurateBtn');
-    button.disabled=true;autoButton.disabled=true;
+  function setFrontButtonsDisabled(disabled){
+    ['publishFrontBtn','stopFrontBtn','autoCurateBtn'].forEach(function(id){if($(id))$(id).disabled=disabled;});
+    document.querySelectorAll('.sectionFrontBtn').forEach(function(button){button.disabled=disabled;});
+  }
+  function frontActionLabel(action,sectionKey){
+    var section=SECTION_LABELS[sectionKey]||sectionKey||'';
+    return({
+      publish_all:'전체 프론트 반영',stop_all:'전체 프론트 반영 취소·중지',
+      publish_section:section+' 섹션 프론트 반영',stop_section:section+' 섹션 반영 취소·중지'
+    })[action]||action;
+  }
+  async function publishFrontAction(action,sectionKey){
+    var label=frontActionLabel(action,sectionKey);
+    var stopping=action==='stop_all'||action==='stop_section';
+    var detail=stopping?
+      '후보 대기열·승인·점검 기록은 삭제하지 않고 프론트 공개 릴리스에서만 내립니다. 원본 샘플 슬롯은 유지되며, 새 중지 릴리스가 이전 반영보다 우선 적용됩니다.':
+      '승인·권리확인·공개검증을 모두 통과한 후보만 반영됩니다. 후보·시드·미검증·격리 항목은 공개되지 않습니다.';
+    if(!window.confirm(label+'을 실행할까요?\n\n'+detail))return;
+    var mainButton=action==='stop_all'?$('stopFrontBtn'):action==='publish_all'?$('publishFrontBtn'):null;
+    var originalText=mainButton&&mainButton.textContent;
+    setFrontButtonsDisabled(true);
     try{
-      button.textContent='프론트 반영 요청 중';
-      var data=await post(PUB,{storeRelease:true,publishFront:true,includeSnapshot:'0',includeBlocked:'1'});
+      if(mainButton)mainButton.textContent='프론트 릴리스 요청 중';
+      var data=await post(PUB,{
+        storeRelease:true,publishFront:true,frontAction:action,sectionKey:sectionKey||'',
+        includeSnapshot:'0',includeBlocked:'1'
+      });
       var dispatch=data.frontPublication||{};
       if(data.releaseStored===true&&dispatch.queued===true){
-        show('프론트 미디어 허브 반영 배포를 시작했습니다. 공개 가능 '+Number(data.eligibleRows||0)+'건 · 정책 차단 '+Number(data.policyBlockedRows||0)+'건','ok');
+        frontReleaseState=data.frontState||frontReleaseState;
+        renderRows();
+        if($('frontReleaseState'))$('frontReleaseState').textContent='마지막 프론트 릴리스 '+Number(frontReleaseState.totalManagedSlots||0)+'개 · 배포 요청됨';
+        show(label+' 배포를 시작했습니다.'+(stopping?' 후보 기록은 보존됩니다.':' 공개 가능 '+Number(data.eligibleRows||0)+'건 · 정책 차단 '+Number(data.policyBlockedRows||0)+'건'),'ok');
       }else{
-        show('공개 스냅샷 릴리스는 저장됐지만 프론트 배포는 시작되지 않았습니다: '+frontPublishReason(dispatch.reason),'warn');
+        show(label+' 릴리스는 저장됐지만 프론트 배포는 시작되지 않았습니다: '+frontPublishReason(dispatch.reason),'warn');
       }
     }catch(error){
-      show('프론트 미디어 허브 반영 실패: '+error.message,'warn');
+      show(label+' 실패: '+error.message,'warn');
     }finally{
-      button.textContent='프론트 미디어 허브 반영 실행';
-      button.disabled=false;autoButton.disabled=false;
+      if(mainButton)mainButton.textContent=originalText;
+      setFrontButtonsDisabled(false);
     }
   }
+  function publishFront(){return publishFrontAction('publish_all','');}
 
   function candidateSources(row){
     var output=[];
@@ -982,6 +1026,7 @@
     $('collectAllBtn').onclick=collectAll;
     $('autoCurateBtn').onclick=autoCurateAll;
     $('publishFrontBtn').onclick=publishFront;
+    $('stopFrontBtn').onclick=function(){publishFrontAction('stop_all','');};
     $('collectorStopBtn').onclick=function(){
       collectorStopRequested=true;this.disabled=true;$('collectorState').textContent='현재 묶음 후 일시정지';
     };
@@ -1028,6 +1073,8 @@
       if(!section)return;
       var sectionKey=text(section.dataset.sectionKey);
       var selected=selectedBySection[sectionKey]||(selectedBySection[sectionKey]=new Set());
+      var sectionFrontButton=event.target.closest('.sectionFrontBtn');
+      if(sectionFrontButton){publishFrontAction(text(sectionFrontButton.dataset.frontAction),sectionKey);return;}
       if(event.target.closest('.sectionSelectAllBtn')){
         sectionRows(sectionKey,visibleRows()).forEach(function(row){selected.add(text(row.contentId||row.id));});
         renderRows();return;

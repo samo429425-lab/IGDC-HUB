@@ -11,7 +11,7 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
 const MediaReleaseDispatch=require("./lib/media-release-dispatch.v1");
 
-const VERSION="media-candidate-review-api-v1.5.0-automation-release-diagnostics";
+const VERSION="media-candidate-review-api-v1.6.1-regional-release-diagnostics";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","media_manager","commerce_manager"]);
 
 function text(value){return value==null?"":String(value).trim();}
@@ -210,6 +210,8 @@ function normalizeRow(row){
     reviewedAt:text(database.reviewedAt||database.reviewed_at||database.updated_at),
     verificationStatus,
     sanmaruSearchSeed:text(database.sanmaruSearchSeed||database.sanmaru_query||database.searchSeed||database.query||detail.sanmaru_query),
+    discoveryLane:text(detail.discoveryLane||sourceMetadata.discoveryLane),
+    discoveryRegion:text(detail.discoveryRegion||sourceMetadata.discoveryRegion||database.region),
     url:sourceUrl,
     video:videoUrl,
     embedUrl,
@@ -314,6 +316,15 @@ function diagnosticDoc(stage,publicDigest,member){
         buildHookConfigured:!!releaseHook,
         actionAvailable:releaseGate.armed===true&&!!releaseHook,
         buildAdapter:"netlify/plugins/media-snapshot-release"
+      },
+      collectionResearch:{
+        provider:"internet_archive",
+        countryOrRegionBlacklist:false,
+        balancedRegionalDiscovery:true,
+        discoveryCycleLength:12,
+        regions:["greater_china","southeast_asia","europe","latin_america","north_america","global_multilingual"],
+        effectiveQualityFilters:{minimumYear:2000,minimumHeight:1080,minimumBitrateBps:1500000,maximumPlaybackStartMs:5000},
+        note:"지역 검색 차단은 없으며 품질·재생·권리·분류 기준 미달만 후보 저장 전 제외"
       }
     },
     source:{

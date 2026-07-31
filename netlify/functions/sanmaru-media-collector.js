@@ -4,7 +4,7 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="sanmaru-media-collector-v2.5.0-recent-longform-multilingual-discovery";
+const VERSION="sanmaru-media-collector-v2.6.0-balanced-global-region-discovery";
 const IA_SEARCH="https://archive.org/advancedsearch.php";
 const IA_METADATA="https://archive.org/metadata/";
 const DEFAULT_RESULTS=5;
@@ -66,6 +66,15 @@ const SECTION_CHINESE_QUERIES=Object.freeze({
   "media-music":'(mediatype:movies) AND (language:(chi OR zho OR Chinese OR zh)) AND (subject:(concert OR performance OR music) OR title:(演唱会 OR 演唱會 OR 音乐会 OR 音樂會)) NOT title:(trailer OR teaser OR clip OR preview)',
   "media-shorts":'(mediatype:movies) AND (language:(chi OR zho OR Chinese OR zh)) AND (subject:("short film" OR shortfilm) OR title:(短片 OR 微电影 OR 微電影)) NOT title:(trailer OR teaser OR clip OR preview)'
 });
+const REGION_FILTERS=Object.freeze({
+  southeast_asia:'language:(ind OR Indonesian OR tha OR Thai OR vie OR Vietnamese OR tgl OR Tagalog OR fil OR Filipino OR may OR Malay OR bur OR Burmese OR khm OR Khmer) OR subject:(Indonesia OR Thailand OR Vietnam OR Philippines OR Malaysia OR Singapore OR Myanmar OR Cambodia OR Laos OR "Southeast Asia") OR coverage:(Indonesia OR Thailand OR Vietnam OR Philippines OR Malaysia OR Singapore OR Myanmar OR Cambodia OR Laos)',
+  europe:'language:(fre OR fra OR French OR ger OR deu OR German OR ita OR Italian OR dut OR nld OR Dutch OR pol OR Polish OR swe OR Swedish OR nor OR Norwegian OR dan OR Danish OR fin OR Finnish OR rus OR Russian OR tur OR Turkish) OR subject:(Europe OR European OR France OR Germany OR Italy OR Netherlands OR Poland OR Sweden OR Norway OR Denmark OR Finland OR Russia OR Turkey) OR coverage:(Europe OR France OR Germany OR Italy OR Netherlands OR Poland OR Sweden OR Norway OR Denmark OR Finland OR Russia OR Turkey)',
+  latin_america:'subject:("Latin America" OR "Latin American" OR Mexico OR Argentina OR Brazil OR Colombia OR Chile OR Peru OR Venezuela OR Ecuador OR Uruguay OR Paraguay OR Bolivia OR Cuba) OR coverage:("Latin America" OR Mexico OR Argentina OR Brazil OR Colombia OR Chile OR Peru OR Venezuela OR Ecuador OR Uruguay OR Paraguay OR Bolivia OR Cuba) OR title:(pelicula OR película OR novela OR capitulo OR capítulo OR filme OR episodio OR episódio)',
+  north_america:'subject:("North America" OR "United States" OR USA OR American OR Canada OR Canadian OR Mexico) OR coverage:("North America" OR "United States" OR USA OR Canada OR Mexico) OR collection:(feature_films OR classic_tv)',
+  global_multilingual:'language:(chi OR zho OR Chinese OR jpn OR Japanese OR kor OR Korean OR spa OR Spanish OR por OR Portuguese OR fre OR French OR ger OR German OR ita OR Italian OR rus OR Russian OR ara OR Arabic OR ind OR Indonesian OR tha OR Thai OR vie OR Vietnamese OR tgl OR Tagalog OR may OR Malay)'
+});
+const DISCOVERY_CYCLE_LENGTH=12;
+function regionalQuery(section,region){return"("+SECTION_LONGFORM_QUERIES[section]+") AND ("+REGION_FILTERS[region]+")";}
 
 function headers(){return{"accept":"application/json","user-agent":"IGDC-MARU-MediaCollector/2.4 (+https://igdc.info)"};}
 async function fetchJson(url){
@@ -302,13 +311,18 @@ function scoreCandidate(input){
 }
 function discoveryPlan(section,page){
   const plans=[
-    {lane:"recent",query:SECTION_QUERIES[section],sort:["publicdate desc","downloads desc"]},
-    {lane:"recent_rights",query:"("+SECTION_LONGFORM_QUERIES[section]+") AND (licenseurl:* OR rights:*)",sort:["publicdate desc","downloads desc"]},
-    {lane:"longform",query:SECTION_LONGFORM_QUERIES[section],sort:["year desc","downloads desc"]},
-    {lane:"chinese_recent",query:SECTION_CHINESE_QUERIES[section],sort:["publicdate desc","downloads desc"]},
-    {lane:"popular",query:SECTION_QUERIES[section],sort:["downloads desc","publicdate desc"]},
-    {lane:"rated",query:SECTION_QUERIES[section],sort:["avg_rating desc","publicdate desc"]},
-    {lane:"chinese_rights",query:"("+SECTION_CHINESE_QUERIES[section]+") AND (licenseurl:* OR rights:*)",sort:["year desc","downloads desc"]}
+    {lane:"recent",region:"global",query:SECTION_QUERIES[section],sort:["publicdate desc","downloads desc"]},
+    {lane:"chinese_recent",region:"greater_china",query:SECTION_CHINESE_QUERIES[section],sort:["publicdate desc","downloads desc"]},
+    {lane:"southeast_asia",region:"southeast_asia",query:regionalQuery(section,"southeast_asia"),sort:["publicdate desc","downloads desc"]},
+    {lane:"europe",region:"europe",query:regionalQuery(section,"europe"),sort:["publicdate desc","downloads desc"]},
+    {lane:"latin_america",region:"latin_america",query:regionalQuery(section,"latin_america"),sort:["publicdate desc","downloads desc"]},
+    {lane:"north_america",region:"north_america",query:regionalQuery(section,"north_america"),sort:["publicdate desc","downloads desc"]},
+    {lane:"recent_rights",region:"global",query:"("+SECTION_LONGFORM_QUERIES[section]+") AND (licenseurl:* OR rights:*)",sort:["publicdate desc","downloads desc"]},
+    {lane:"longform",region:"global",query:SECTION_LONGFORM_QUERIES[section],sort:["year desc","downloads desc"]},
+    {lane:"popular",region:"global",query:SECTION_QUERIES[section],sort:["downloads desc","publicdate desc"]},
+    {lane:"rated",region:"global",query:SECTION_QUERIES[section],sort:["avg_rating desc","publicdate desc"]},
+    {lane:"chinese_rights",region:"greater_china",query:"("+SECTION_CHINESE_QUERIES[section]+") AND (licenseurl:* OR rights:*)",sort:["year desc","downloads desc"]},
+    {lane:"global_multilingual_rights",region:"global_multilingual",query:"("+regionalQuery(section,"global_multilingual")+") AND (licenseurl:* OR rights:*)",sort:["year desc","downloads desc"]}
   ];
   const index=(Math.max(1,Number(page)||1)-1)%plans.length;
   return Object.assign({sourcePage:Math.floor((Math.max(1,Number(page)||1)-1)/plans.length)+1},plans[index]);
@@ -318,7 +332,7 @@ function searchUrl(section,rows,page){
   const params=new URLSearchParams();
   const plan=discoveryPlan(section,page);
   params.set("q","("+plan.query+") AND year:["+DEFAULT_MIN_YEAR+" TO 9999]");
-  ["identifier","title","creator","year","description","subject","collection","licenseurl","rights","downloads","date","publicdate","language","avg_rating","num_reviews"].forEach((field)=>params.append("fl[]",field));
+  ["identifier","title","creator","year","description","subject","collection","coverage","licenseurl","rights","downloads","date","publicdate","language","avg_rating","num_reviews"].forEach((field)=>params.append("fl[]",field));
   plan.sort.forEach((sort)=>params.append("sort[]",sort));
   params.set("rows",String(rows));
   params.set("page",String(plan.sourcePage));
@@ -336,7 +350,7 @@ function recentQualityRightsReviewCandidate(input){
   const section=MediaStore.text(input.section);
   return input.rightsSafe!==true&&
     ["media-movie","media-drama"].includes(section)&&
-    ["recent","longform","chinese_recent"].includes(MediaStore.text(input.discoveryLane))&&
+    ["recent","longform","chinese_recent","southeast_asia","europe","latin_america","north_america"].includes(MediaStore.text(input.discoveryLane))&&
     Number(input.year)>=currentYear-RECENT_UNVERIFIED_REVIEW_WINDOW_YEARS&&
     Number(input.classificationConfidence)>=84&&
     Number(input.height)>=MIN_VIDEO_HEIGHT&&
@@ -442,12 +456,12 @@ async function inspect(doc,requested,options){
     verification_status:"web_verification_required",review_status:"pending",
     risk_level:evidence.safe?"rights_review":"unverified",
     priority:(options.adminException?"ADMIN_EXCEPTION_":"")+ranking.tier+"-"+ranking.score,
-    candidateOnly:true,seedContent:true,sanmaru_query:SECTION_QUERIES[requested],
+    candidateOnly:true,seedContent:true,sanmaru_query:MediaStore.compact(options.discoveryQuery||SECTION_QUERIES[requested],500),
     notes:"1080p+ candidate only. Publication is disabled until administrator content and rights verification.",
-    year:year||null,publishedAt:MediaStore.text(meta.publicdate||doc.publicdate||meta.date||doc.date)||null,
+    year:year||null,region:options.discoveryRegion||"global",publishedAt:MediaStore.text(meta.publicdate||doc.publicdate||meta.date||doc.date)||null,
     language:list(meta.language||doc.language),durationSeconds:selectedSeconds,captions,
     rankingScore:ranking.score,rankingTier:ranking.tier,rankingSignals:ranking.signals,
-    discoveryLane:options.discoveryLane,popularityQualification:popularity.reason,
+    discoveryLane:options.discoveryLane,discoveryRegion:options.discoveryRegion||"global",popularityQualification:popularity.reason,
     subtitleLanguages:ranking.subtitleLanguages,subtitleCount:captions.length,
     ageRating:safe.ageRating,contentWarnings:safe.warnings,
     classificationConfidence:classification.confidence,requestedSection:requested,
@@ -470,13 +484,14 @@ async function inspect(doc,requested,options){
       identifier:id,playbackCandidates,downloads,
       avgRating:rating,numReviews:reviews,
       year,publicdate:MediaStore.text(meta.publicdate||doc.publicdate),date:MediaStore.text(meta.date||doc.date),
-      creator:list(meta.creator||doc.creator),collection:list(meta.collection||doc.collection),
+      creator:list(meta.creator||doc.creator),collection:list(meta.collection||doc.collection),coverage:list(meta.coverage||doc.coverage),
       subject:list(meta.subject||doc.subject),licenseurl:MediaStore.text(meta.licenseurl||doc.licenseurl),
       rights:MediaStore.compact(meta.rights||doc.rights||"",500),videoFile:video.name,
       width:dimensions.width,height:dimensions.height,durationSeconds:selectedSeconds,bitrateBps,
       requiredBitrateBps:Number(video._requiredBitrateBps||MIN_VIDEO_BITRATE_BPS),
       subtitleCount:captions.length,classificationConfidence:classification.confidence,
       requestedSection:requested,classifiedSection:classification.section,
+      discoveryLane:options.discoveryLane,discoveryRegion:options.discoveryRegion||"global",
       playbackProbe,thumbnailProbe,
       mediaReliability:{
         playbackVerified:playbackProbe.ok===true,
@@ -612,7 +627,9 @@ exports.handler=async function(event){
     const skippedExisting=docs.length-docsForInspection.length;
     const inspected=await mapLimit(docsForInspection,2,(doc)=>inspect(doc,section,{
       adminException,overrideReason,
-      discoveryLane:identifier?"administrator_identifier":plan.lane
+      discoveryLane:identifier?"administrator_identifier":plan.lane,
+      discoveryRegion:identifier?"administrator":plan.region,
+      discoveryQuery:identifier?"identifier:"+identifier:plan.query
     }));
     const accepted=[],rejected=[];
     inspected.forEach((entry,index)=>{
@@ -652,6 +669,8 @@ exports.handler=async function(event){
       ok:true,version:VERSION,mode:identifier?"administrator_exception":"batched_cumulative",
       section,target,batchSize,page,nextPage,
       discoveryLane:identifier?"administrator_identifier":plan.lane,
+      discoveryRegion:identifier?"administrator":plan.region,
+      discoveryCycleLength:DISCOVERY_CYCLE_LENGTH,
       done:exhausted,searched:docs.length,totalFound,qualified:accepted.length,
       accepted:normalized.length,saved:savedRows.length,
       savedIds:savedRows.map((row)=>MediaStore.text(row&&row.id)).filter(Boolean),
@@ -668,7 +687,10 @@ exports.handler=async function(event){
         minimumRankingScore:MIN_RANK_SCORE,autoPublish:false,
         sectionReclassification:"strong-signal quarantine",
         unsafeFiltering:"hard-block plus administrator quarantine",
-        romanceAllowed:true,balancedDiscovery:true,multilingualLongformDiscovery:true,adminException,batchedCumulative:true
+        romanceAllowed:true,balancedDiscovery:true,multilingualLongformDiscovery:true,
+        balancedRegionalDiscovery:true,discoveryCycleLength:DISCOVERY_CYCLE_LENGTH,
+        regions:["greater_china","southeast_asia","europe","latin_america","north_america","global_multilingual"],
+        adminException,batchedCumulative:true
       },
       items:savedRows
     });
