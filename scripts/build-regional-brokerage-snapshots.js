@@ -172,6 +172,36 @@ function verifyPublishedRootSampleFallbacks(ipSlotReport) {
   if (!checked.size) problems.push("IP_SLOT_ROOT_FALLBACK_OUTPUT_MISSING");
   return { ok: problems.length === 0, summary, problems };
 }
+function canonicalPublicationExpectations() {
+  const file = path.join(root, "data", "search-bank.snapshot.json");
+  const doc = fileExists(file) ? readJson(file) : null;
+  const expected = new Map();
+  for (const item of Array.isArray(doc && doc.items) ? doc.items : []) {
+    const placement = item && item.placement || {};
+    const page = String(placement.page || "").trim();
+    const country = String(placement.country || "").trim().toUpperCase();
+    const regionRaw = String(placement.region || "").trim().toUpperCase();
+    const region = regionRaw && regionRaw !== "NATIONWIDE" ? regionRaw : null;
+    if (!page || !country || !["home","distribution","network","social","tour"].includes(page)) continue;
+    const key = [page,country,region || "NATIONWIDE"].join("|");
+    if (!expected.has(key)) expected.set(key,{page,country,region,count:0});
+    expected.get(key).count += 1;
+  }
+  return Array.from(expected.values());
+}
+
+function verifyCanonicalToIpOutputs(ipSlotReport) {
+  const expected = canonicalPublicationExpectations();
+  const outputs = Array.isArray(ipSlotReport && ipSlotReport.scopedOutputs) ? ipSlotReport.scopedOutputs : [];
+  const problems = [];
+  for (const target of expected) {
+    const found = outputs.find((row) => row && row.page === target.page && row.country === target.country && String(row.region || "") === String(target.region || ""));
+    if (!found) problems.push("CANONICAL_SCOPE_NOT_PUBLISHED:" + [target.page,target.country,target.region || "NATIONWIDE"].join(":"));
+    else if (Number(found.cardCount || 0) <= 0) problems.push("CANONICAL_SCOPE_PUBLISHED_EMPTY:" + String(found.path || ""));
+  }
+  return { ok: problems.length === 0, expected, outputCount: outputs.length, problems };
+}
+
 function writePreservedBuild(reason, details) {
   process.stdout.write(JSON.stringify({
     mode: "preserve-existing-snapshots",
@@ -254,6 +284,10 @@ async function main() {
   }
 
   const releaseItems = Array.isArray(intake.releaseItems) ? intake.releaseItems : [];
+  const administratorRequestedCount = Number(commerceRegistrySync && commerceRegistrySync.requestedCount || 0);
+  if (releaseItems.length === 0 && administratorRequestedCount > 0) {
+    throw new Error("Administrator publication queue contained " + administratorRequestedCount + " requested products, but Commerce Candidate Intake released none: " + JSON.stringify(intake.summary || {}));
+  }
   if (releaseItems.length === 0 && !queueAuthoritative) {
     writePreservedBuild("no-release-ready-candidates", {
       commerceRegistrySync,
@@ -270,6 +304,9 @@ async function main() {
   if (!publication.counts) {
     throw new Error("Canonical Snapshot Publisher did not return candidate counts.");
   }
+  if (Number(publication.counts.accepted || 0) <= 0 && administratorRequestedCount > 0) {
+    throw new Error("Canonical Snapshot Publisher rejected every administrator-requested product. Inspect data/canonical-snapshot/audit/latest.json before publishing sample-only output.");
+  }
   if (Number(publication.counts.accepted || 0) <= 0 && !queueAuthoritative) {
     throw new Error("Canonical Snapshot Publisher produced no accepted candidates without an authoritative administrator withdrawal state.");
   }
@@ -281,7 +318,10 @@ async function main() {
 
   // Only commercial Snapshot surfaces are built here. Donation has an
   // independent endpoint/snapshot contract and is intentionally excluded.
-  snapshots.run({ canonicalReleaseId: publication.releaseId });
+  const snapshotEngineReport = snapshots.run({ canonicalReleaseId: publication.releaseId });
+  if (!snapshotEngineReport || snapshotEngineReport.ok !== true) {
+    throw new Error("Snapshot Engine did not complete the SearchBank-to-front merge layer.");
+  }
 
   const regionalReport = regional.publishFromSearchBank({ root, trigger: "netlify-build-canonical" });
   const ipSlotReport = ipSlots.publish({ root, trigger: "netlify-build-canonical-ip-slots", fallbackTemplates: sampleFallback.templates });
@@ -296,6 +336,10 @@ async function main() {
   if (!rootFallbackVerification.ok) {
     throw new Error("Canonical IP root sample-fallback integrity failure: " + JSON.stringify(rootFallbackVerification.problems));
   }
+  const canonicalToIpVerification = verifyCanonicalToIpOutputs(ipSlotReport);
+  if (!canonicalToIpVerification.ok) {
+    throw new Error("Canonical SearchBank products did not reach their country/IP front snapshots: " + JSON.stringify(canonicalToIpVerification.problems));
+  }
 
   process.stdout.write(JSON.stringify({
     commerceRegistrySync,
@@ -304,6 +348,8 @@ async function main() {
     publication,
     published,
     donation: { mode: "independent-runtime-contract-not-touched" },
+    snapshotEngine: snapshotEngineReport,
+    canonicalToIpVerification,
     regional: regionalReport,
     ipSlots: ipSlotReport,
     ipSlotVerification,

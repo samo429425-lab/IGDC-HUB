@@ -34,7 +34,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.2-section-cap-seed-preserve-production-stable";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3-fail-loud-publication-report";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -820,6 +820,14 @@ function run(payload) {
   let bank = loadSearchBank();
 
   bank.items = (Array.isArray(bank.items) ? bank.items : []).filter(item => snapshotCandidateAllowed(item, { pageName: "snapshot" }));
+  const executionReport = {
+    ok: false,
+    version: SNAPSHOT_ENGINE_VERSION,
+    canonicalReleaseId: payload && payload.canonicalReleaseId || null,
+    searchBankItemCount: bank.items.length,
+    completedHandlers: [],
+    generatedAt: new Date().toISOString()
+  };
   
 function mergeFrontFromSearchBank(frontSnap, searchbankSnap) {
 
@@ -1663,27 +1671,27 @@ function handleTourSnapshot(bank) {
 try {
 
   if (typeof handleHomeSnapshot === "function") {
-    handleHomeSnapshot(bank);
+    handleHomeSnapshot(bank); executionReport.completedHandlers.push("home");
   }
 
   if (typeof handleNetworkSnapshot === "function") {
-    handleNetworkSnapshot(bank);
+    handleNetworkSnapshot(bank); executionReport.completedHandlers.push("network");
   }
   
   if (typeof handleDistributionSnapshot === "function") {
-    handleDistributionSnapshot(bank);
+    handleDistributionSnapshot(bank); executionReport.completedHandlers.push("distribution");
   }
 
   if (typeof handleSocialSnapshot === "function") {
-    handleSocialSnapshot(bank);
+    handleSocialSnapshot(bank); executionReport.completedHandlers.push("social");
   }
 
   if (typeof handleMediaSnapshot === "function") {
-    handleMediaSnapshot(bank);
+    handleMediaSnapshot(bank); executionReport.completedHandlers.push("media");
   }
 
   if (typeof handleTourSnapshot === "function") {
-    handleTourSnapshot(bank);
+    handleTourSnapshot(bank); executionReport.completedHandlers.push("tour");
   }
 
   enforceSnapshotFileLimit("home", bank.items);
@@ -1694,8 +1702,14 @@ try {
   enforceSnapshotFileLimit("tour", bank.items);
 
 } catch (e) {
-  console.error("Snapshot Engine Execution Error:", e);
+  const error = e instanceof Error ? e : new Error(String(e));
+  error.code = error.code || "SNAPSHOT_ENGINE_EXECUTION_FAILED";
+  error.snapshotEngineVersion = SNAPSHOT_ENGINE_VERSION;
+  throw error;
 }
+  executionReport.ok = true;
+  executionReport.completedAt = new Date().toISOString();
+  return executionReport;
 }
 
 module.exports = { run };

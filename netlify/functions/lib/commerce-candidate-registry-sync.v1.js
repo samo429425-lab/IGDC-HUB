@@ -14,7 +14,7 @@ const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.5.0-country-scoped-searchbank-slot-profile";
+const VERSION = "commerce-candidate-registry-sync-v1.6.0-authoritative-assignment-slot-contract";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -39,6 +39,18 @@ function allowedAssignmentState(v){ return ["approved","pinned"].includes(lower(
 function approvedRevenue(v){ return ["approved","active","verified","live","enabled"].includes(lower(v)); }
 function approvedAvailability(v){ return ["active","approved","ready"].includes(lower(v)); }
 function verifiedEvidenceRow(row){ return !!row && bool(row.verified) && !!safeUrl(row.evidence_url); }
+function authoritativeSlotProfile(payload, slotStrategy){
+  const required=array(slotStrategy&&slotStrategy.requiredSlotProfiles).map(text).filter(Boolean);
+  const existing=first(plain(payload&&payload.productMapping).slotProfile,payload&&payload.slotProfile);
+  if(existing&&required.includes(existing)) return existing;
+  return first(required[0],slotStrategy&&slotStrategy.strategyId,existing);
+}
+function authoritativeRequestedSlot(payload, assignment){
+  if(!bool(assignment&&assignment.manual_pinned)) return "";
+  const raw=first(plain(payload&&payload.placement).slot,payload&&payload.slot,assignment&&assignment.priority);
+  const value=Number(raw);
+  return Number.isInteger(value)&&value>=1&&value<=100?value:"";
+}
 function sourcePayload(candidate){
   const payload=plain(candidate.source_payload);
   if(isObject(payload.candidate)) return Object.assign({},payload.candidate);
@@ -89,11 +101,17 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   const markets=(availabilityRows||[]).map(row=>marketRecord(candidate,row,evidenceRows));
   const pageMap={home:"home",distribution:"distribution",network:"network",tour:"tour",social:"social"};
   const page=pageMap[text(assignmentInfo.hub_key)]||text(payload.page);
-  const section=first(payload.section,assignmentInfo.slot_key);
+  // The selected Global Slot assignment is the authoritative publication
+  // route. A stale candidate payload must never override the administrator's
+  // current page/section decision.
+  const section=first(assignmentInfo.slot_key,payload.section);
   const policyDoc=plain(ipPolicy&&ipPolicy.policy);
   const pageStrategies=plain(plain(policyDoc.slotStrategies)[page]);
   const slotStrategy=plain(pageStrategies[section]);
-  const slotProfile=first(plain(payload.productMapping).slotProfile,payload.slotProfile,slotStrategy.strategyId);
+  const slotProfile=authoritativeSlotProfile(payload,slotStrategy);
+  // gslot_slot_assignments.priority is ranking priority, not a physical slot.
+  // Only a manually pinned assignment may request a concrete slot number.
+  const requestedSlot=authoritativeRequestedSlot(payload,assignmentInfo);
   const item=Object.assign({},payload,{
     id:first(payload.id,candidate.id),
     title:first(payload.title,candidate.title),
@@ -105,8 +123,8 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
     page,
     channel:page,
     section,
-    psom_key:first(payload.psom_key,section),
-    placement:Object.assign({},plain(payload.placement),{page,section,slot:first(payload.slot,assignmentInfo.priority>0?assignmentInfo.priority:"")}),
+    psom_key:section,
+    placement:Object.assign({},plain(payload.placement),{page,section,slot:requestedSlot}),
     source:{name:first(plain(payload.source).name,candidate.title,"Approved commerce member"),url:first(plain(payload.source).url,candidate.official_url)},
     searchBankContract:Object.assign({},plain(payload.searchBankContract),{frontSupplyAllowed:true,searchBankEligible:true,snapshotEligible:true,indexEligible:true,lastVerifiedAt:first(plain(payload.searchBankContract).lastVerifiedAt,candidate.updated_at),trustScore:Number(plain(payload.searchBankContract).trustScore||payload.trustScore||75),trustTier:first(plain(payload.searchBankContract).trustTier,payload.trustTier,"A"),officialSource:bool(first(plain(payload.searchBankContract).officialSource,payload.officialSource,true)),producerVerified:bool(first(plain(payload.searchBankContract).producerVerified,payload.producerVerified,true))}),
     marketAvailability:{markets},

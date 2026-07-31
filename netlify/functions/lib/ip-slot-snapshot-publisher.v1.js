@@ -22,7 +22,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const SlotOverlay = require("./sample-slot-overlay.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.0-safe-sample-root-fallback";
+const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.1-policy-digest-bound-scoped-output";
 const MANIFEST_FILE = "ip-slot-manifest.json";
 const AUTO_ROOT = ["data", "auto"];
 const ROUTES = Object.freeze({
@@ -315,7 +315,7 @@ function setListForSection(sections, key, list) {
   else if (isObject(sections[key]) && Array.isArray(sections[key].slots)) sections[key].slots = list;
   else sections[key] = list;
 }
-function renderPage(template, page, items, scope) {
+function renderPage(template, page, items, scope, policyDigest) {
   const doc = clone(template);
   if (page === "home") {
     const holder = doc.pages && doc.pages.home;
@@ -351,6 +351,10 @@ function renderPage(template, page, items, scope) {
     geoResolutionRequired: true,
     geoMatched: true,
     canonicalReleaseId: items[0] && items[0].canonicalPublication.releaseId || null,
+    // Bind the scoped document to the same IP-slot policy fingerprint carried
+    // by the manifest and verified by the Edge router. Without this field the
+    // router must reject the real snapshot and fall back to the root sample.
+    ipSlotPolicyDigest: text(policyDigest) || null,
     targetCountry: scope.country,
     targetRegion: scope.region || null,
     scope: scope.region ? "country-region" : "country-nationwide",
@@ -473,6 +477,7 @@ function validateScopedOutput(doc, output, manifest, policy) {
   const meta = doc && doc.meta || {};
   if (page !== "distribution") {
     if (!(meta.ipSlotSnapshot === true && meta.geoMatched === true && meta.targetCountry === country)) problems.push("IP_SLOT_SNAPSHOT_META_INVALID:" + output.path);
+    if (!manifest || !manifest.ipSlotPolicyDigest || meta.ipSlotPolicyDigest !== manifest.ipSlotPolicyDigest) problems.push("IP_SLOT_SNAPSHOT_POLICY_DIGEST_MISMATCH:" + output.path);
     if (region && meta.targetRegion !== region) problems.push("IP_SLOT_SNAPSHOT_REGION_META_INVALID:" + output.path);
     if (!region && meta.targetRegion) problems.push("IP_SLOT_SNAPSHOT_NATIONWIDE_META_INVALID:" + output.path);
   }
@@ -552,7 +557,7 @@ function publish(input) {
       if (page === "distribution") continue; // preserved regional-brokerage publisher owns this surface
       const selected = selectScopeItems(items, page, scope.country, scope.region);
       if (!selected.length) continue;
-      const document = renderPage(templates[page], page, selected, scope);
+      const document = renderPage(templates[page], page, selected, scope, policy.fingerprint);
       if (!document) { report.errors.push("IP_SLOT_RENDER_FAILED:" + page + ":" + scope.country + ":" + (scope.region || "NATIONWIDE")); continue; }
       const absolute = publicPath(root, scope.country, scope.region, ROUTES[page].file);
       const digest = atomicWrite(absolute, PublicSnapshot.sanitizeDocument(document));
