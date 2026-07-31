@@ -421,9 +421,10 @@
     if(!selectedCountry||productFrontSyncActive)return;
     if(!lastProductJson||lastProductJson.status!=='complete'){show('공식 상품 목록 리서치와 AI·관리자 배치를 완료한 뒤 프론트 매칭을 실행해 주세요.','warn');return;}
     var unmatch=operation==='unmatch',sectionMode=mode==='section',label=sectionMode?sectionLabel(sectionKey):'현재 국가 전체 배치 예정 상품',confirmation=unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH';
-    var explanation=unmatch?label+'의 기존 프론트 매칭 해제를 요청합니다.':label+'을 기존 실상품 공개 안전 게이트와 빌드 대기열에 전달합니다. 검증·수익권·공개 조건을 통과하지 못한 상품은 자동으로 차단됩니다.';
-    var typed=window.prompt(explanation+'\n\n계속하려면 '+confirmation+' 를 정확히 입력하세요.','');
-    if(typed!==confirmation){if(typed!==null)show('확인 문구가 일치하지 않아 프론트 작업을 실행하지 않았습니다.','warn');return;}
+    var explanation=unmatch
+      ?label+'의 기존 프론트 매칭을 해제하시겠습니까?\n\n확인을 누르면 매칭 해제 절차가 바로 시작되며, 빌드·스냅샷 갱신을 거쳐 프론트에서 내려옵니다.'
+      :label+'을 프론트 실상품 매칭 절차로 전달하시겠습니까?\n\n확인을 누르면 공개 안전 게이트와 빌드 대기열 처리가 바로 시작되며, 검증·수익권·공개 조건을 통과하지 못한 상품은 자동으로 차단됩니다.';
+    if(!window.confirm(explanation))return;
     productFrontSyncActive=true;var state=$('productFrontSyncState');
     if(state){state.className='front-sync-state running';state.textContent=label+' '+(unmatch?'매칭 해제':'프론트 실상품 매칭')+' 요청을 처리하고 있습니다.';}
     renderProducts(productRows);
