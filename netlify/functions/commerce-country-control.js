@@ -115,8 +115,20 @@ exports.handler=async function(event){
       if(!plan.targets.length){
         batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
       }else if(operation==="match"){
-        const liveDoc=await CandidateReview.stage(process.cwd());
-        batchResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope,liveDoc);
+        const preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets);
+        const preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds:[];
+        const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked");
+        if(!preparedIds.length){
+          batchResult={ok:true,status:"blocked",action:"request_publication_batch",requested:plan.targets.length,queued:0,blocked:preparationBlocked.length,items:preparationBlocked,release:{queued:false,reason:"no_front_ready_products"},preparation};
+        }else{
+          const liveDoc=await CandidateReview.stage(process.cwd());
+          const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds},scope,liveDoc);
+          const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
+          const items=preparationBlocked.concat(publishItems);
+          const queued=items.filter((item)=>item&&item.queued===true).length;
+          const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
+          batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,blocked,items,preparation,status:queued?(blocked?"partial":"queued"):(blocked?"blocked":"empty")});
+        }
       }else{
         batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope);
       }

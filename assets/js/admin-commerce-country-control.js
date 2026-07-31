@@ -431,9 +431,12 @@
       var action=unmatch?'product_front_unmatch':'product_front_match';
       var data=await api(CONTROL,action,'POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',mode:sectionMode?'section':'all',sectionKey:sectionMode?sectionKey:'',confirmation:confirmation});
       lastProductJson=data;rememberReport('product',data);renderProductProgress(data);renderProducts(data.products||[]);saveReviewSnapshot();
-      var result=data.frontSyncResult||{},requested=Number(result.requested||0),queued=Number(result.queued||0),blocked=Number(result.blocked||0);
-      if(state){state.className='front-sync-state '+(blocked&&queued===0?'warn':'complete');state.textContent=label+' · 요청 '+requested+'건 · 대기열 '+queued+'건 · 차단 '+blocked+'건 · 실제 스냅샷 반영은 빌드 검증 후 확인';}
-      show((unmatch?'프론트 매칭 해제':'프론트 실상품 매칭')+' 요청: '+requested+'건 중 '+queued+'건을 빌드 대기열로 전달하고 '+blocked+'건은 안전 게이트에서 차단했습니다.','ok');
+      var result=data.frontSyncResult||{},requested=Number(result.requested||0),queued=Number(result.queued||0),blocked=Number(result.blocked||0),reasonCounts={};
+      (Array.isArray(result.items)?result.items:[]).forEach(function(item){if(!item||item.queued===true)return;var reason=text(item.reason)||text(item.status)||'blocked';reasonCounts[reason]=(reasonCounts[reason]||0)+1;});
+      var topReasons=Object.keys(reasonCounts).sort(function(a,b){return reasonCounts[b]-reasonCounts[a];}).slice(0,3).map(function(reason){return reason+' '+reasonCounts[reason]+'건';});
+      var reasonText=topReasons.length?' · 주요 차단: '+topReasons.join(' / '):'';
+      if(state){state.className='front-sync-state '+(queued===0?'warn':(blocked?'warn':'complete'));state.textContent=label+' · 요청 '+requested+'건 · 대기열 '+queued+'건 · 차단 '+blocked+'건'+reasonText+(queued?' · 실제 스냅샷 반영은 빌드 검증 후 확인':'');}
+      show((unmatch?'프론트 매칭 해제':'프론트 실상품 매칭')+' 요청: '+requested+'건 중 '+queued+'건을 빌드 대기열로 전달하고 '+blocked+'건은 안전 게이트에서 차단했습니다.'+reasonText,queued===0?'warn':(blocked?'warn':'ok'));
     }catch(e){if(state){state.className='front-sync-state warn';state.textContent='프론트 작업 실패: '+(text(e&&e.message)||'알 수 없는 오류')+' · 기존 배치와 공개 상태는 유지됩니다.';}show(text(e&&e.message)||'프론트 작업에 실패했습니다.','fail');}
     finally{productFrontSyncActive=false;renderProducts(productRows);}
   }

@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.6.2-global-country-policy-manual-private-placement";
+const VERSION = "commerce-country-automation-v3.6.3-explicit-front-match-lifecycle-bridge";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2259,6 +2259,154 @@ async function productAiAutomation(actorId, input) {
   return result;
 }
 
+
+function frontSyncChunk(rowsInput, sizeInput) {
+  const rows = array(rowsInput), size = Math.max(1, Number(sizeInput) || 80), out = [];
+  for (let index = 0; index < rows.length; index += size) out.push(rows.slice(index, index + size));
+  return out;
+}
+function frontSyncInFilter(valuesInput) {
+  return "(" + array(valuesInput).map((value) => encodeURIComponent(text(value))).filter(Boolean).join(",") + ")";
+}
+async function frontSyncSelectByCandidate(table, select, candidateIds) {
+  const rows = [];
+  for (const ids of frontSyncChunk(candidateIds, 80)) {
+    if (!ids.length) continue;
+    const found = await SlotStore.select(table, "select=" + select + "&candidate_id=in." + frontSyncInFilter(ids) + "&order=updated_at.desc&limit=5000");
+    rows.push(...array(found));
+  }
+  return rows;
+}
+async function frontSyncSelectCandidates(candidateIds) {
+  const rows = [];
+  for (const ids of frontSyncChunk(candidateIds, 80)) {
+    if (!ids.length) continue;
+    const found = await SlotStore.select("gslot_candidates", "select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at&id=in." + frontSyncInFilter(ids) + "&limit=5000");
+    rows.push(...array(found));
+  }
+  return rows;
+}
+async function frontSyncUpsert(table, rowsInput, conflictColumns) {
+  const rows = array(rowsInput), output = [];
+  for (const batch of frontSyncChunk(rows, 80)) {
+    if (!batch.length) continue;
+    const query = "on_conflict=" + encodeURIComponent(text(conflictColumns));
+    const result = await SlotStore.request(SlotStore.rest(table, query), {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(batch)
+    });
+    output.push(...array(result));
+  }
+  return output;
+}
+function frontSyncPublicReadiness(productInput, existingCandidate) {
+  const product = plain(productInput), existingPayload = plain(existingCandidate && existingCandidate.source_payload), risk = plain(product.riskAssessment), supplier = plain(product.supplierAssessment), reasons = [];
+  const productPageUrl = safeUrl(productUrl(product)), imageUrl = safeUrl(productImageUrl(product)), supplierUrl = safeUrl(first(product.supplierSiteUrl, plain(product.supplier).officialUrl)), supplierName = first(product.supplierName, plain(product.supplier).name);
+  const trustScore = Number(first(product.supplierTrustScore, supplier.trustScore, plain(product.supplier).trustScore)) || 0;
+  const evidenceReady = product.supplierEvidenceReady === true || supplier.evidenceReady === true || plain(product.supplier).evidenceReady === true;
+  if (plain(existingPayload.queueControl).permanentExcluded === true) reasons.push("permanently_excluded");
+  if (!productPageUrl || !ProductRanking.isSpecificProductUrl(productPageUrl)) reasons.push("specific_product_url_missing");
+  if (!imageUrl) reasons.push("actual_product_image_missing");
+  if (!supplierUrl || !supplierName) reasons.push("official_supplier_identity_missing");
+  if (product.productPageLive === false) reasons.push("product_page_unavailable");
+  if (product.sameSupplierSite === false) reasons.push("supplier_product_domain_mismatch");
+  if (product.inspectionComplete !== true) reasons.push("product_inspection_incomplete");
+  if (risk.gatePassed !== true) reasons.push("product_or_supplier_risk_gate_not_passed");
+  if (!evidenceReady) reasons.push("supplier_evidence_not_ready");
+  if (trustScore > 0 && trustScore < TRUST_POLICY.minimumTrustScore) reasons.push("supplier_trust_below_public_threshold");
+  if (ProductRanking.isGenericProductName(first(product.productName, product.title))) reasons.push("product_title_not_verified");
+  return { eligible: reasons.length === 0, reasons: Array.from(new Set(reasons)), productPageUrl, imageUrl, supplierUrl, supplierName, trustScore, evidenceReady };
+}
+function frontSyncAssignmentId(candidateId, scope, sectionKey) {
+  return "front_assignment_" + sha256(candidateId + "|" + scope.country + "|" + scope.region + "|" + sectionKey).slice(0, 24);
+}
+function frontSyncRevenueId(candidateId) { return "front_referral_" + sha256(candidateId).slice(0, 24); }
+function frontSyncEvidenceId(candidateId) { return "front_evidence_" + sha256(candidateId).slice(0, 24); }
+async function prepareProductFrontTargets(actorId, input, targetsInput) {
+  const scope = researchScope(input), job = await productJobRule(scope);
+  if (!job || job.schema !== PRODUCT_JOB_SCHEMA || job.status !== "complete") { const error = new Error("공식 상품 목록 리서치를 완료한 뒤 프론트 매칭을 실행해 주세요."); error.statusCode = 409; throw error; }
+  const targets = array(targetsInput), targetIds = targets.map((row) => text(row && row.candidateId)).filter(Boolean), targetById = new Map(targets.map((row) => [text(row && row.candidateId), row]));
+  const productByCandidate = new Map(array(job.products).map((row) => [productCandidateId(scope, row), row]));
+  const [candidateRows, assignmentRows, availabilityRows, revenueRows, evidenceRows] = await Promise.all([
+    frontSyncSelectCandidates(targetIds),
+    frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", targetIds),
+    frontSyncSelectByCandidate("gslot_candidate_availability", "candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at", targetIds),
+    frontSyncSelectByCandidate("gslot_candidate_revenue", "id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at", targetIds),
+    frontSyncSelectByCandidate("gslot_candidate_evidence", "id,candidate_id,evidence_type,evidence_url,note,verified,created_at", targetIds)
+  ]);
+  const candidateById = new Map(candidateRows.map((row) => [text(row && row.id), row]));
+  const assignmentsByCandidate = new Map(), availabilityByCandidate = new Map(), revenuesByCandidate = new Map(), evidenceByCandidate = new Map();
+  function group(map, rows) { for (const row of rows) { const id = text(row && row.candidate_id); if (!map.has(id)) map.set(id, []); map.get(id).push(row); } }
+  group(assignmentsByCandidate, assignmentRows); group(availabilityByCandidate, availabilityRows); group(revenuesByCandidate, revenueRows); group(evidenceByCandidate, evidenceRows);
+
+  const now = iso(), actor = text(actorId) || "administrator", candidateUpserts = [], assignmentUpserts = [], revenueUpserts = [], evidenceUpserts = [], availabilityInserts = [], items = [], preparedCandidateIds = [];
+  for (const candidateId of targetIds) {
+    const target = plain(targetById.get(candidateId)), product = plain(productByCandidate.get(candidateId)), existing = plain(candidateById.get(candidateId));
+    if (!Object.keys(product).length) { items.push({ candidateId, status: "blocked", queued: false, reason: "product_job_candidate_missing", assignmentId: null }); continue; }
+    const sectionKey = text(target.sectionKey || productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement));
+    if (!validProductSectionKey(sectionKey)) { items.push({ candidateId, status: "blocked", queued: false, reason: "invalid_product_section", assignmentId: null }); continue; }
+    const readiness = frontSyncPublicReadiness(product, existing);
+    if (!readiness.eligible) { items.push({ candidateId, status: "blocked", queued: false, reason: readiness.reasons.join(","), reasons: readiness.reasons, assignmentId: null }); continue; }
+    const split = splitProductSectionKey(sectionKey), assignmentExisting = array(assignmentsByCandidate.get(candidateId)).find((row) => text(row && row.hub_key) === split.page && text(row && row.slot_key) === split.sectionKey && normalizeCountry(row && row.country_code) === scope.country && (normalizeRegion(row && row.region_code || "NATIONWIDE", scope.country) || "NATIONWIDE") === scope.region && ["approved","pinned"].includes(lower(row && row.state)));
+    const assignmentId = text(assignmentExisting && assignmentExisting.id) || frontSyncAssignmentId(candidateId, scope, sectionKey);
+    const freshPayload = productCandidatePayload(actor, scope, product, "slot_candidate"), existingPayload = plain(existing.source_payload), payload = Object.assign({}, existingPayload, freshPayload);
+    payload.outboundReferral = Object.assign({}, plain(existingPayload.outboundReferral), plain(freshPayload.outboundReferral), {
+      operatorApproved: true, approved: true, status: "approved", officialDestination: true, officialSeller: true, disclosureReady: true,
+      verifiedAt: now, destinationUrl: readiness.productPageUrl, providerName: readiness.supplierName,
+      approvalSource: "explicit_administrator_front_match", trafficValueOnly: true, guaranteedCommission: false
+    });
+    payload.review = Object.assign({}, plain(payload.review), { state: "approved", decidedAt: now, decidedBy: actor, approvalSource: "explicit_front_match" });
+    payload.pipeline = Object.assign({}, plain(payload.pipeline), { stage: "registry_sync_ready", nextGate: "go_live_audit_and_explicit_publication_request", preparedAt: now, preparedBy: actor });
+    payload.commerceReview = Object.assign({}, plain(payload.commerceReview), { status: "approved", assignmentState: "approved", approvalId: assignmentId, approvedAt: now, approvedBy: actor });
+    payload.publicPublication = false;
+    candidateUpserts.push({
+      id: candidateId, kind: "product", title: first(payload.title, readiness.supplierName), official_url: readiness.productPageUrl, status: "revenue_ready", source_ref: PRODUCT_SOURCE_REF,
+      thumbnail_url: readiness.imageUrl, description: text(existing.description) || "Administrator-confirmed official external-seller product reference prepared for the existing go-live audit and build gate.",
+      owner_note: "Explicit front-match preparation only. IGDC remains discovery/referral intermediary; seller handles sale, payment, delivery, returns, refunds and support.",
+      source_payload: payload, created_at: text(existing.created_at) || now, updated_at: now, created_by: text(existing.created_by) || actor
+    });
+    assignmentUpserts.push({
+      id: assignmentId, candidate_id: candidateId, hub_key: split.page, country_code: scope.country, region_code: scope.region === "NATIONWIDE" ? null : scope.region,
+      slot_key: split.sectionKey, priority: Math.max(0, Number(target.priority || product.rankingScore || 0)), state: assignmentExisting && lower(assignmentExisting.state) === "pinned" ? "pinned" : "approved",
+      publication_status: lower(assignmentExisting && assignmentExisting.publication_status) === "publish_requested" ? "publish_requested" : "audit_ready", manual_pinned: assignmentExisting && assignmentExisting.manual_pinned === true,
+      decision_note: "Prepared by explicit administrator front-match confirmation after product, image, supplier evidence and trust checks.",
+      created_at: text(assignmentExisting && assignmentExisting.created_at) || now, updated_at: now, updated_by: actor
+    });
+    const hasActiveAvailability = array(availabilityByCandidate.get(candidateId)).some((row) => normalizeCountry(row && row.country_code) === scope.country && (normalizeRegion(row && row.region_code || "NATIONWIDE", scope.country) || "NATIONWIDE") === scope.region && ["active","approved","ready"].includes(lower(row && row.availability_state)));
+    if (!hasActiveAvailability) availabilityInserts.push({
+      candidate_id: candidateId, country_code: scope.country, region_code: scope.region === "NATIONWIDE" ? null : scope.region, availability_state: "active",
+      legal_basis: "Administrator-confirmed official supplier product reference; external seller remains seller and merchant of record.",
+      delivery_or_access: "Official seller product page and supplier evidence were verified; delivery, returns, refunds and support remain the seller's responsibility.", updated_at: now, updated_by: actor
+    });
+    const hasApprovedExternalReferral = array(revenuesByCandidate.get(candidateId)).some((row) => lower(row && row.revenue_type) === "external_referral" && lower(row && row.status) === "approved");
+    if (!hasApprovedExternalReferral) revenueUpserts.push({
+      id: frontSyncRevenueId(candidateId), candidate_id: candidateId, revenue_type: "external_referral", status: "approved", affiliate_url: readiness.productPageUrl,
+      provider_name: readiness.supplierName.slice(0, 240), currency: null,
+      note: "Verified official-seller external referral approved by the administrator. Traffic-value route only; no guaranteed commission or IGDC checkout.", updated_at: now, updated_by: actor
+    });
+    const hasVerifiedEvidence = array(evidenceByCandidate.get(candidateId)).some((row) => row && row.verified === true && safeUrl(row.evidence_url));
+    if (!hasVerifiedEvidence) evidenceUpserts.push({
+      id: frontSyncEvidenceId(candidateId), candidate_id: candidateId, evidence_type: "official_supplier_product_reference", evidence_url: readiness.supplierUrl,
+      note: "Official supplier identity, same-domain product page, product image, inspection completion, supplier evidence-ready state and trust threshold were confirmed before explicit front matching.",
+      verified: true, created_at: now, created_by: actor
+    });
+    preparedCandidateIds.push(candidateId);
+    items.push({ candidateId, status: "prepared", queued: false, reason: "front_lifecycle_prepared", assignmentId });
+  }
+
+  if (candidateUpserts.length) await frontSyncUpsert("gslot_candidates", candidateUpserts, "id");
+  if (assignmentUpserts.length) await frontSyncUpsert("gslot_slot_assignments", assignmentUpserts, "id");
+  if (availabilityInserts.length) for (const batch of frontSyncChunk(availabilityInserts, 80)) await SlotStore.insert("gslot_candidate_availability", batch, "return=representation");
+  if (revenueUpserts.length) await frontSyncUpsert("gslot_candidate_revenue", revenueUpserts, "id");
+  if (evidenceUpserts.length) await frontSyncUpsert("gslot_candidate_evidence", evidenceUpserts, "id");
+  return {
+    ok: true, schema: "igdc-product-front-lifecycle-preparation.v1", scope, requested: targetIds.length, prepared: preparedCandidateIds.length,
+    blocked: items.filter((item) => item.status === "blocked").length, preparedCandidateIds, items,
+    policy: { explicitAdministratorConfirmationRequired: true, officialSellerExternalReferralOnly: true, trustThresholdWhenScored: TRUST_POLICY.minimumTrustScore, verifiedOfficialSupplierEvidenceMaySatisfyUnscoredTrust: true, noIgdcCheckout: true, noPaymentExecution: true, noCrossCountryFallback: true }
+  };
+}
+
 async function productFrontSyncTargets(input) {
   const scope = researchScope(input), job = await productJobRule(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
@@ -2619,5 +2767,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, productCandidateAction, productAiAutomation, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, productCandidateAction, productAiAutomation, prepareProductFrontTargets, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
 };
