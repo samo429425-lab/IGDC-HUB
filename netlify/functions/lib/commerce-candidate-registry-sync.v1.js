@@ -12,8 +12,9 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
+const IpSlotPolicy = require("./ip-slot-policy.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.3.0-explicit-product-publication-request";
+const VERSION = "commerce-candidate-registry-sync-v1.5.0-country-scoped-searchbank-slot-profile";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -69,7 +70,7 @@ function marketRecord(candidate, availability, evidenceRows){
   };
 }
 function unique(values){ return Array.from(new Set((values||[]).map(text).filter(Boolean))); }
-function compactPayload(candidate, assignment, availabilityRows, revenueRows, evidenceRows){
+function compactPayload(candidate, assignment, availabilityRows, revenueRows, evidenceRows, ipPolicy){
   const payload=sourcePayload(candidate);
   const assignmentInfo=assignment||{};
   const revenue=(revenueRows||[]).find(row=>approvedRevenue(row.status)) || {};
@@ -88,6 +89,11 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   const markets=(availabilityRows||[]).map(row=>marketRecord(candidate,row,evidenceRows));
   const pageMap={home:"home",distribution:"distribution",network:"network",tour:"tour",social:"social"};
   const page=pageMap[text(assignmentInfo.hub_key)]||text(payload.page);
+  const section=first(payload.section,assignmentInfo.slot_key);
+  const policyDoc=plain(ipPolicy&&ipPolicy.policy);
+  const pageStrategies=plain(plain(policyDoc.slotStrategies)[page]);
+  const slotStrategy=plain(pageStrategies[section]);
+  const slotProfile=first(plain(payload.productMapping).slotProfile,payload.slotProfile,slotStrategy.strategyId);
   const item=Object.assign({},payload,{
     id:first(payload.id,candidate.id),
     title:first(payload.title,candidate.title),
@@ -98,9 +104,9 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
     thumb:first(payload.thumb,candidate.thumbnail_url),
     page,
     channel:page,
-    section:first(payload.section,assignmentInfo.slot_key),
-    psom_key:first(payload.psom_key,assignmentInfo.slot_key),
-    placement:Object.assign({},plain(payload.placement),{page,section:first(payload.section,assignmentInfo.slot_key),slot:first(payload.slot,assignmentInfo.priority>0?assignmentInfo.priority:"")}),
+    section,
+    psom_key:first(payload.psom_key,section),
+    placement:Object.assign({},plain(payload.placement),{page,section,slot:first(payload.slot,assignmentInfo.priority>0?assignmentInfo.priority:"")}),
     source:{name:first(plain(payload.source).name,candidate.title,"Approved commerce member"),url:first(plain(payload.source).url,candidate.official_url)},
     searchBankContract:Object.assign({},plain(payload.searchBankContract),{frontSupplyAllowed:true,searchBankEligible:true,snapshotEligible:true,indexEligible:true,lastVerifiedAt:first(plain(payload.searchBankContract).lastVerifiedAt,candidate.updated_at),trustScore:Number(plain(payload.searchBankContract).trustScore||payload.trustScore||75),trustTier:first(plain(payload.searchBankContract).trustTier,payload.trustTier,"A"),officialSource:bool(first(plain(payload.searchBankContract).officialSource,payload.officialSource,true)),producerVerified:bool(first(plain(payload.searchBankContract).producerVerified,payload.producerVerified,true))}),
     marketAvailability:{markets},
@@ -138,7 +144,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
       expectedNetRevenuePerOrder:first(plain(payload.brokerageContract).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)
     }),
     originCountry:first(payload.originCountry,payload.manufacturingCountry),
-    productMapping:Object.assign({},plain(payload.productMapping),{slotProfile:first(plain(payload.productMapping).slotProfile,payload.slotProfile),productClass:first(plain(payload.productMapping).productClass,payload.productClass,"physical_product"),productIdentity:first(plain(payload.productMapping).productIdentity,payload.productId,candidate.id)})
+    productMapping:Object.assign({},plain(payload.productMapping),{slotProfile,productClass:first(plain(payload.productMapping).productClass,payload.productClass,"physical_product"),productIdentity:first(plain(payload.productMapping).productIdentity,payload.productId,candidate.id),strategyId:first(slotStrategy.strategyId,slotProfile),strategyRole:first(slotStrategy.role),policyDerivedSlotProfile:!!slotStrategy.strategyId})
   });
   return item;
 }
@@ -150,6 +156,8 @@ async function syncApprovedCandidates(input){
   let sb;
   try { sb=require("./global-slot-console-supabase"); } catch(error){ return {ok:false,status:"blocked",version:VERSION,wrote:false,file,reason:"global-slot-console-store-unavailable",error:String(error&&error.message||error)}; }
   try {
+    const ipPolicy=IpSlotPolicy.load(root);
+    if(!ipPolicy.ok) return {ok:false,status:"blocked",version:VERSION,wrote:false,file,reason:"ip-slot-policy-invalid",problems:ipPolicy.problems||[]};
     const [candidates,assignments,availability,revenue,evidence]=await Promise.all([
       sb.select("gslot_candidates","select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,source_payload,updated_at,created_at&order=updated_at.desc&limit=2000"),
       sb.select("gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,priority,state,publication_status,manual_pinned,updated_at,updated_by&order=updated_at.desc&limit=5000"),
@@ -176,27 +184,59 @@ async function syncApprovedCandidates(input){
       const candidateRevenue=rBy.get(candidate.id)||[]; if(!candidateRevenue.some(row=>approvedRevenue(row.status))) continue;
       const avail=avBy.get(candidate.id)||[]; if(!avail.length) continue;
       const verifiedEvidence=(eBy.get(candidate.id)||[]).filter(verifiedEvidenceRow); if(!verifiedEvidence.length) continue;
-      const compact=compactPayload(candidate,assignment,avail,candidateRevenue,verifiedEvidence);
+      const compact=compactPayload(candidate,assignment,avail,candidateRevenue,verifiedEvidence,ipPolicy);
       const row=candidateRevenue.find(entry=>approvedRevenue(entry.status))||{};
       const type=lower(row.revenue_type)||"brokerage";
       const contract=plain(compact.brokerageContract);
       const listing=plain(compact.directCommerceListing);
       const trafficOnly=type==="external_referral";
       const payable=bool(first(contract.approved,listing.contractApproved)) && bool(first(contract.disclosureReady,listing.disclosureReady)) && bool(first(contract.payoutBasisVerified,listing.payoutBasisVerified));
+      const publicationStatus=lower(assignment.publication_status);
+      const publicationRequested=publicationStatus==="publish_requested";
       output.push({
         id:"gslot-"+candidate.id,
         sourceTier:"approved_commerce_member",
         syncedAt:now(),
         candidate:compact,
         review:{status:"approved",assignmentState:assignment.state,approvalId:assignment.id,approvedAt:assignment.updated_at,approvedBy:assignment.updated_by||null},
-        assignment:{id:assignment.id,state:assignment.state,page:assignment.hub_key,section:assignment.slot_key,country:assignment.country_code,region:assignment.region_code||null,priority:assignment.priority,updatedAt:assignment.updated_at},
+        assignment:{id:assignment.id,state:assignment.state,page:assignment.hub_key,section:assignment.slot_key,country:assignment.country_code,region:assignment.region_code||null,priority:assignment.priority,publicationStatus,updatedAt:assignment.updated_at},
+        publicationRequest:{
+          requested:publicationRequested,
+          status:publicationStatus||null,
+          assignmentId:assignment.id,
+          requestedAt:assignment.updated_at||candidate.updated_at||null,
+          requestedBy:assignment.updated_by||null,
+          country:assignment.country_code,
+          region:assignment.region_code||"NATIONWIDE",
+          page:assignment.hub_key,
+          section:assignment.slot_key,
+          crossCountryFallback:false
+        },
         revenue:{id:row.id||null,status:"approved",type,contractId:first(contract.id,listing.contractId,row.id,assignment.id),approved:payable,trafficValueOnly:trafficOnly,providerName:first(contract.providerName,listing.providerName,row.provider_name)||null,settlementMode:first(contract.settlementMode,listing.settlementMode,trafficOnly?"traffic_only":"provider_program"),disclosureReady:bool(first(contract.disclosureReady,listing.disclosureReady)),payoutBasisVerified:bool(first(contract.payoutBasisVerified,listing.payoutBasisVerified))}
       });
     }
     const expires=new Date(Date.now()+7*86400000).toISOString();
-    const doc={schema:"commerce-candidate-review-queue.v1",version:VERSION,generatedAt:now(),expiresAt:expires,source:"global-slot-console-approved-candidates",sourceDigest:sha256({candidates,assignments,availability,revenue,evidence}),items:output};
+    const requestedRows=output.filter((entry)=>entry&&entry.publicationRequest&&entry.publicationRequest.requested===true);
+    const scopeKeys=unique(requestedRows.map((entry)=>{
+      const request=plain(entry.publicationRequest);
+      const country=MarketSaleScope.normalizeCountry(request.country);
+      const region=MarketSaleScope.normalizeRegion(request.region||"NATIONWIDE",country)||"NATIONWIDE";
+      return country?country+"|"+region:"";
+    }));
+    const releaseAuthorization={
+      authoritative:true,
+      mode:"explicit-admin-publication-request",
+      explicitAdminRequest:requestedRows.length>0,
+      requestedCount:requestedRows.length,
+      scopeKeys,
+      generatedAt:now(),
+      source:"gslot_slot_assignments.publication_status",
+      crossCountryFallback:false,
+      automaticPublication:false
+    };
+    const doc={schema:"commerce-candidate-review-queue.v1",version:VERSION,generatedAt:now(),expiresAt:expires,source:"global-slot-console-approved-candidates",sourceDigest:sha256({candidates,assignments,availability,revenue,evidence}),releaseAuthorization,items:output};
     const digest=atomicWrite(file,doc);
-    return {ok:true,status:"synchronized",version:VERSION,wrote:true,file,digest,count:output.length,expiresAt:expires};
+    return {ok:true,status:"synchronized",version:VERSION,wrote:true,file,digest,count:output.length,requestedCount:requestedRows.length,scopeKeys,authoritative:true,releaseAuthorization,expiresAt:expires};
   } catch(error){
     return {ok:false,status:"blocked",version:VERSION,wrote:false,file,reason:"registry-sync-failed-existing-queue-preserved",error:String(error&&error.message||error)};
   }

@@ -4,9 +4,9 @@
  * Canonical IP Slot Snapshot Publisher v1
  *
  * Publishes only IP-scoped snapshots for the PSOM sections explicitly marked
- * in ip-slot-policy.v1.json. The public root snapshot remains an empty,
- * fail-closed geo gate for those pages; an Edge function selects only an
- * approved same-country regional or nationwide snapshot.
+ * in ip-slot-policy.v1.json. The public root snapshot remains a safe,
+ * non-clickable sample fallback; an Edge function selects only an approved
+ * same-country regional or nationwide real-product snapshot when available.
  *
  * Distribution keeps the existing regional brokerage publisher as the owner
  * of outbound tracking and seller-referral cards. This module validates and
@@ -22,7 +22,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const SlotOverlay = require("./sample-slot-overlay.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-ip-slot-snapshot-publisher-v1.4.0-commerce-outbound-route";
+const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.0-safe-sample-root-fallback";
 const MANIFEST_FILE = "ip-slot-manifest.json";
 const AUTO_ROOT = ["data", "auto"];
 const ROUTES = Object.freeze({
@@ -63,11 +63,10 @@ function publicPath(root, country, region, file) {
 }
 function webPath(root, absolute) { return "/" + path.relative(root, absolute).replace(/\\/g, "/"); }
 function rootSnapshotPaths(root, file) {
-  const paths = [
+  return [
     path.join(root, "data", file),
     path.join(root, "netlify", "functions", "data", file)
   ];
-  return paths.filter(exists);
 }
 function canonicalSnapshot(root) {
   const verification = Canonical.verifyPublished({ root });
@@ -219,6 +218,91 @@ function clearForPage(document, page) {
   if (page === "social") return clearSocialRightPanel(document);
   return clearSimple(document);
 }
+
+function genericSampleBase(section, slot) {
+  return {
+    id: "sample-" + section + "-" + String(slot).padStart(3, "0"),
+    title: "Loading…",
+    name: "Loading…",
+    summary: "",
+    description: "",
+    thumb: "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
+    image: "data:image/gif;base64,R0lGODlhAQABAAAAACw="
+  };
+}
+function sampleLikeTemplate(row) {
+  if (!isObject(row) || SlotOverlay.canonicalRealCard(row)) return false;
+  if (SlotOverlay.isSampleCard(row)) return true;
+  const url = text(row.url || row.link).toLowerCase();
+  const marker = text([row.id,row.type,row.title,row.name,row.audit&&row.audit.origin].filter(Boolean).join(" ")).toLowerCase();
+  return !url || url === "#" || /(^|\.)example\.(com|org|net)(\/|$)/.test(url.replace(/^https?:\/\//,"")) || /placeholder|sample|loading|준비 중/.test(marker);
+}
+function safeTemplateRows(rows, section, capacityInput) {
+  const source = Array.isArray(rows) ? rows : [];
+  const capacity = Math.max(1, Number(capacityInput) || source.length || 100);
+  const bases = [];
+  for (let index = 0; index < capacity; index += 1) {
+    const row = source[index];
+    bases.push(sampleLikeTemplate(row) ? row : genericSampleBase(section, index + 1));
+  }
+  return SlotOverlay.overlayList(bases, [], section, capacity);
+}
+function sampleFallbackDocument(template, page) {
+  const doc = clone(template || {});
+  if (page === "home" || page === "distribution") {
+    const holder = doc.pages && doc.pages[page];
+    const sections = holder && holder.sections;
+    if (!isObject(sections)) return null;
+    for (const key of Object.keys(sections)) {
+      const base = SlotOverlay.list(sections[key]);
+      SlotOverlay.setList(sections, key, safeTemplateRows(base, key, base.length || 100));
+    }
+  } else if (page === "network" || page === "tour") {
+    const section = page === "network" ? "network-right" : "tour";
+    const base = array(doc.items).length ? array(doc.items) : array(doc.slots);
+    const rows = safeTemplateRows(base, section, base.length || 100);
+    doc.items = rows;
+    doc.slots = clone(rows);
+  } else if (page === "social") {
+    const sections = doc.pages && doc.pages.social && doc.pages.social.sections;
+    if (!isObject(sections) || !("rightPanel" in sections)) return null;
+    const base = SlotOverlay.list(sections.rightPanel);
+    SlotOverlay.setList(sections, "rightPanel", safeTemplateRows(base, "rightPanel", base.length || 100));
+  } else {
+    return null;
+  }
+  const cards = outputCards(doc, page);
+  if (!cards.length || cards.some(card => !SlotOverlay.safeSampleCard(card))) return null;
+  doc.meta = Object.assign({}, doc.meta || {}, {
+    ipSlotSampleFallback: true,
+    ipSlotGeoGate: false,
+    geoResolutionRequired: true,
+    geoMatched: false,
+    scope: "sample-fallback",
+    source: "canonical-ip-slot-snapshot-publisher",
+    generatedAt: new Date().toISOString(),
+    cardCount: cards.length,
+    realCardCount: 0,
+    sampleCardCount: cards.length,
+    sampleFallbackPreserved: true,
+    noCrossCountryFallback: true,
+    noGlobalRealProductFallback: true
+  });
+  return doc;
+}
+function captureSampleFallbackTemplates(input) {
+  const root = rootOf(input);
+  const templates = {};
+  const problems = [];
+  for (const [page, route] of Object.entries(ROUTES)) {
+    const sourcePath = rootSnapshotPaths(root, route.file).find(exists);
+    const source = sourcePath ? safeRead(sourcePath) : null;
+    const template = source ? sampleFallbackDocument(source, page) : null;
+    if (!template) problems.push("IP_SLOT_SAMPLE_TEMPLATE_INVALID:" + route.file);
+    else templates[page] = template;
+  }
+  return { ok: problems.length === 0, version: VERSION, templates, problems };
+}
 function listForSection(sections, key) {
   const value = sections[key];
   if (Array.isArray(value)) return value;
@@ -281,28 +365,15 @@ function renderPage(template, page, items, scope) {
   });
   return doc;
 }
-function writeEmptyGeoGate(root, file, page) {
+function writeSampleFallback(root, file, page, template) {
   const paths = rootSnapshotPaths(root, file);
-  // A root snapshot is a safe empty gate, not a second source of truth.  Build
-  // it once from the authoritative public template and write byte-equivalent
-  // JSON to every mirror; stale template metadata must never make mirrors drift.
-  const sourcePath = paths.find(filePath => !!safeRead(filePath));
-  const source = sourcePath ? safeRead(sourcePath) : null;
-  if (!source) return [];
-  const doc = clearForPage(source, page);
-  doc.meta = Object.assign({}, doc.meta || {}, {
-    ipSlotGeoGate: true,
-    geoResolutionRequired: true,
-    geoMatched: false,
-    scope: "unresolved",
-    source: "canonical-ip-slot-snapshot-publisher",
-    generatedAt: new Date().toISOString(),
-    noCrossCountryFallback: true,
-    noGlobalFallback: true
-  });
+  const doc = sampleFallbackDocument(template, page);
+  if (!doc) return [];
   return paths.map((output) => ({
     path: path.relative(root, output).replace(/\\/g, "/"),
-    sha256: atomicWrite(output, clone(doc))
+    sha256: atomicWrite(output, PublicSnapshot.sanitizeDocument(clone(doc))),
+    cardCount: outputCards(doc, page).length,
+    sampleFallback: true
   }));
 }
 function walk(dir, result) {
@@ -458,20 +529,18 @@ function publish(input) {
   const root = rootOf(input);
   const policy = IpPolicy.load(root);
   const source = canonicalSnapshot(root);
-  const report = { version: VERSION, generatedAt: new Date().toISOString(), status: "blocked", errors: [], scopedOutputs: [], rootGates: [], removedStale: [] };
+  const report = { version: VERSION, generatedAt: new Date().toISOString(), status: "blocked", errors: [], scopedOutputs: [], rootFallbacks: [], rootGates: [], removedStale: [] };
   if (!policy.ok) { report.errors.push(...policy.problems); return report; }
   if (!source.ok) { report.errors.push(...(source.verification && source.verification.problems || ["CANONICAL_SOURCE_UNAVAILABLE"])); return report; }
   const releaseId = source.document.meta && source.document.meta.releaseId;
   if (!releaseId) { report.errors.push("CANONICAL_RELEASE_ID_MISSING"); return report; }
   const targetPages = array(policy.policy.ipScopedPages).filter(page => ROUTES[page]);
-  const templates = {};
-  for (const page of targetPages) {
-    const route = ROUTES[page];
-    const sourcePath = path.join(root, "data", route.file);
-    const template = safeRead(sourcePath);
-    if (!template) report.errors.push("IP_SLOT_TEMPLATE_MISSING:" + route.file);
-    else templates[page] = template;
-  }
+  const captured = input && isObject(input.fallbackTemplates)
+    ? { ok:true, templates:input.fallbackTemplates, problems:[] }
+    : captureSampleFallbackTemplates({ root });
+  const templates = captured.templates || {};
+  if (!captured.ok) report.errors.push(...(captured.problems || ["IP_SLOT_SAMPLE_TEMPLATE_CAPTURE_FAILED"]));
+  for (const page of targetPages) if (!templates[page]) report.errors.push("IP_SLOT_TEMPLATE_MISSING:" + ROUTES[page].file);
   if (report.errors.length) return report;
 
   const items = source.items.filter(canonicalCard);
@@ -495,7 +564,8 @@ function publish(input) {
   for (const output of distribution) keep.add(path.resolve(path.join(root, output.path.replace(/^\//, ""))));
   outputs.push(...distribution);
 
-  for (const page of targetPages) report.rootGates.push(...writeEmptyGeoGate(root, ROUTES[page].file, page));
+  for (const page of targetPages) report.rootFallbacks.push(...writeSampleFallback(root, ROUTES[page].file, page, templates[page]));
+  report.rootGates = report.rootFallbacks.slice();
   report.removedStale = cleanupStale(root, keep);
   const manifest = {
     schema: "canonical-ip-slot-release-manifest-v1",
@@ -513,9 +583,11 @@ function publish(input) {
     geoPrivacy: "Country and subdivision codes are used only at request routing time. No visitor IP or precise visitor location is written to snapshots, manifests or audit records.",
     routes: targetPages.map(page => ({ page, file: ROUTES[page].file })),
     snapshots: outputs.sort((a, b) => a.file.localeCompare(b.file) || a.country.localeCompare(b.country) || String(a.region || "").localeCompare(String(b.region || ""))),
-    rootGeoGate: true,
+    rootFallbacks: report.rootFallbacks.map((row)=>({path:row.path,sha256:row.sha256,cardCount:row.cardCount})),
+    rootGeoGate: false,
+    rootSampleFallback: true,
     noCrossCountryFallback: true,
-    noGlobalFallback: true
+    noGlobalRealProductFallback: true
   };
   const manifestPath = path.join(root, "data", "auto", MANIFEST_FILE);
   atomicWrite(manifestPath, manifest);
@@ -545,7 +617,20 @@ function verifyPublished(input) {
     if (!policy.ok) problems.push(...policy.problems.map(problem => "IP_POLICY:" + problem));
     problems.push(...validateScopedOutput(doc, output, manifest, policy.policy));
   }
-  return { ok: problems.length === 0, version: VERSION, releaseId: canonical.releaseId || null, outputCount: outputs.length, problems };
+  const fallbacks=array(manifest&&manifest.rootFallbacks);
+  for(const fallback of fallbacks){
+    const absolute=path.join(root,String(fallback&&fallback.path||"").replace(/^\//,""));
+    const doc=safeRead(absolute);
+    if(!doc){problems.push("IP_SLOT_ROOT_FALLBACK_MISSING:"+String(fallback&&fallback.path||""));continue;}
+    const actual=sha256(fs.readFileSync(absolute));
+    if(actual!==fallback.sha256)problems.push("IP_SLOT_ROOT_FALLBACK_HASH_MISMATCH:"+fallback.path);
+    const page=Object.keys(ROUTES).find((key)=>ROUTES[key].file===path.basename(absolute));
+    const cards=page?outputCards(doc,page):[];
+    const meta=doc&&doc.meta||{};
+    if(!page||meta.ipSlotSampleFallback!==true||meta.geoMatched!==false||meta.noCrossCountryFallback!==true||meta.noGlobalRealProductFallback!==true)problems.push("IP_SLOT_ROOT_FALLBACK_META_INVALID:"+fallback.path);
+    if(!cards.length||cards.some((card)=>!SlotOverlay.safeSampleCard(card)))problems.push("IP_SLOT_ROOT_FALLBACK_UNSAFE_OR_EMPTY:"+fallback.path);
+  }
+  return { ok: problems.length === 0, version: VERSION, releaseId: canonical.releaseId || null, outputCount: outputs.length, fallbackCount:fallbacks.length, problems };
 }
 
-module.exports = { VERSION, MANIFEST_FILE, publish, verifyPublished };
+module.exports = { VERSION, MANIFEST_FILE, publish, verifyPublished, captureSampleFallbackTemplates, sampleFallbackDocument };

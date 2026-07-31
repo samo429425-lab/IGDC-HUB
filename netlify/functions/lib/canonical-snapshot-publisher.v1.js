@@ -25,8 +25,8 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-snapshot-publisher-v1.5.0-commerce-candidate-intake";
-const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.5-commerce-candidate-intake";
+const VERSION = "canonical-snapshot-publisher-v1.6.0-country-scoped-admin-publication-contract";
+const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.6-country-scoped-admin-publication";
 const UPSTREAM_FILE = "search-bank.upstream.snapshot.json";
 const PUBLIC_FILE = "search-bank.snapshot.json";
 const POLICY_FILE = "canonical-snapshot-policy.v1.json";
@@ -940,7 +940,10 @@ function publish(input) {
       crossCountrySnapshotFallbackDisabled: true,
       legacyFallbackDisabled: true,
       commerceCandidateIntakeRequiredForIpSlots: true,
-      commercePublicationReleaseKeyRequired: true,
+      commercePublicationAuthorizationRequired: true,
+      deploymentReleaseKeyOrExplicitAdminQueueRequired: true,
+      explicitAdminQueueIsCountryRegionScoped: true,
+      authoritativeEmptyQueueRestoresSampleFallback: true,
       ipSlotPolicyDigest: ipPolicy.fingerprint
     }
   };

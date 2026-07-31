@@ -6,17 +6,25 @@
  * snapshot itself and it never exposes the build hook URL.
  */
 
-const VERSION = "commerce-release-dispatch-v1.0.0-approved-assignment-build-hook";
+const VERSION = "commerce-release-dispatch-v1.1.0-explicit-admin-or-deployment-gate";
 const HOOK_ENV = "COMMERCE_RELEASE_BUILD_HOOK_URL";
 const MODE_ENV = "COMMERCE_CANDIDATE_RELEASE_MODE";
 const KEY_ENV = "COMMERCE_CANDIDATE_RELEASE_KEY";
 
 function text(value) { return value == null ? "" : String(value).trim(); }
 function lower(value) { return text(value).toLowerCase(); }
-function releaseArmed() {
+function releaseArmed(input) {
   const mode = lower(process.env[MODE_ENV]);
   const key = text(process.env[KEY_ENV]);
-  return { armed: mode === "enabled" && key.length >= 32, mode, keyPresent: key.length >= 32 };
+  const environmentArmed = mode === "enabled" && key.length >= 32;
+  const explicitAdminAuthorization = !!(input && input.explicitAdminAuthorization === true);
+  return {
+    armed: environmentArmed || explicitAdminAuthorization,
+    mode: environmentArmed ? mode : (explicitAdminAuthorization ? "explicit_admin_confirmation" : mode),
+    keyPresent: key.length >= 32,
+    environmentArmed,
+    explicitAdminAuthorization
+  };
 }
 function validHook(raw) {
   try {
@@ -31,7 +39,7 @@ function safeReason(error) {
 }
 
 async function dispatch(input) {
-  const release = releaseArmed();
+  const release = releaseArmed(input);
   if (!release.armed) {
     return { ok: true, queued: false, version: VERSION, reason: "release_gate_not_armed", releaseGate: release, hookConfigured: !!text(process.env[HOOK_ENV]) };
   }
@@ -48,10 +56,13 @@ async function dispatch(input) {
     return { ok: false, queued: false, version: VERSION, reason: "fetch_unavailable", releaseGate: release, hookConfigured: true };
   }
   const payload = {
-    trigger: "approved-commerce-assignment",
+    trigger: text(input && input.operation) === "unpublish" ? "approved-commerce-unpublication" : "approved-commerce-assignment",
     candidateId: text(input && input.candidateId) || null,
     assignmentId: text(input && input.assignmentId) || null,
     actorId: text(input && input.actorId) || null,
+    operation: text(input && input.operation) || "publish",
+    candidateCount: Math.max(1, Number(input && input.candidateCount) || 1),
+    authorization: release.explicitAdminAuthorization ? "explicit_admin_confirmation" : "deployment_release_gate",
     requestedAt: new Date().toISOString()
   };
   try {

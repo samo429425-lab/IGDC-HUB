@@ -39,16 +39,28 @@ function upstreamMirrorFiles() {
 function loadConfirmedUpstream(commerceRegistrySync) {
   const files = upstreamMirrorFiles();
   const mirrors = files.map(file => ({ path: path.relative(root, file).replace(/\\/g, "/"), present: fileExists(file) }));
-  const queueOnlyReady = !!(commerceRegistrySync && commerceRegistrySync.ok === true && Number(commerceRegistrySync.count || 0) > 0);
+  const queueAuthoritative = !!(
+    commerceRegistrySync &&
+    commerceRegistrySync.ok === true &&
+    commerceRegistrySync.status === "synchronized" &&
+    commerceRegistrySync.authoritative === true
+  );
+  const queueMeta = {
+    authoritative: queueAuthoritative,
+    requestedCount: Number(commerceRegistrySync && commerceRegistrySync.requestedCount || 0),
+    scopeKeys: Array.isArray(commerceRegistrySync && commerceRegistrySync.scopeKeys) ? commerceRegistrySync.scopeKeys.slice() : [],
+    releaseAuthorization: commerceRegistrySync && commerceRegistrySync.releaseAuthorization || null
+  };
 
   if (mirrors.some(row => !row.present)) {
-    if (queueOnlyReady) {
+    if (queueAuthoritative) {
       return {
         ok: true,
-        sourceMode: "approved-review-queue-only",
+        sourceMode: "authoritative-admin-review-queue",
         warning: "upstream-candidate-source-missing",
-        doc: { schema: "search-bank.upstream.review-queue-only.v1", generatedAt: new Date().toISOString(), items: [] },
+        doc: { schema: "search-bank.upstream.authoritative-admin-queue.v1", generatedAt: new Date().toISOString(), source:"country-region-admin-publication-queue", queue:queueMeta, items: [] },
         candidateCount: 0,
+        queueAuthoritative,
         mirrors
       };
     }
@@ -73,13 +85,15 @@ function loadConfirmedUpstream(commerceRegistrySync) {
   }
 
   if (parsed[0].doc.items.length === 0) {
-    if (queueOnlyReady) {
+    if (queueAuthoritative) {
+      const doc = Object.assign({}, parsed[0].doc, { queue:queueMeta, source:"country-region-admin-publication-queue", items:[] });
       return {
         ok: true,
-        sourceMode: "approved-review-queue-only",
+        sourceMode: "authoritative-admin-review-queue",
         warning: "upstream-candidate-source-empty",
-        doc: parsed[0].doc,
+        doc,
         candidateCount: 0,
+        queueAuthoritative,
         mirrors
       };
     }
@@ -88,9 +102,10 @@ function loadConfirmedUpstream(commerceRegistrySync) {
 
   return {
     ok: true,
-    sourceMode: "mirrored-sanmaru-searchbank-upstream",
-    doc: parsed[0].doc,
+    sourceMode: queueAuthoritative ? "mirrored-sanmaru-searchbank-upstream+authoritative-admin-review-queue" : "mirrored-sanmaru-searchbank-upstream",
+    doc: Object.assign({}, parsed[0].doc, { queue:queueMeta }),
     candidateCount: parsed[0].doc.items.length,
+    queueAuthoritative,
     mirrors
   };
 }
@@ -126,8 +141,10 @@ function rootGateRows(doc, page) {
   return listRows(doc.items).concat(listRows(doc.slots));
 }
 
-function verifyPublishedRootGeoGates(ipSlotReport) {
-  const writes = Array.isArray(ipSlotReport && ipSlotReport.rootGates) ? ipSlotReport.rootGates : [];
+function verifyPublishedRootSampleFallbacks(ipSlotReport) {
+  const writes = Array.isArray(ipSlotReport && ipSlotReport.rootFallbacks)
+    ? ipSlotReport.rootFallbacks
+    : (Array.isArray(ipSlotReport && ipSlotReport.rootGates) ? ipSlotReport.rootGates : []);
   const checked = new Set();
   const summary = [];
   const problems = [];
@@ -138,22 +155,23 @@ function verifyPublishedRootGeoGates(ipSlotReport) {
     const file = path.basename(relative);
     const page = ROOT_GATE_PAGE_BY_FILE[file];
     if (!page) {
-      problems.push("IP_SLOT_ROOT_GATE_UNKNOWN_FILE:" + relative);
+      problems.push("IP_SLOT_ROOT_FALLBACK_UNKNOWN_FILE:" + relative);
       continue;
     }
     const absolute = path.join(root, relative);
     const doc = readJson(absolute);
     const meta = doc && doc.meta && typeof doc.meta === "object" ? doc.meta : {};
     const rows = rootGateRows(doc, page);
-    const metaOk = meta.ipSlotGeoGate === true && meta.geoResolutionRequired === true && meta.geoMatched === false && meta.noCrossCountryFallback === true && meta.noGlobalFallback === true;
-    summary.push({ path: relative, page, cardCount: rows.length, metaOk });
-    if (!metaOk) problems.push("IP_SLOT_ROOT_GATE_META_INVALID:" + relative);
-    if (rows.length) problems.push("IP_SLOT_ROOT_GATE_NOT_EMPTY:" + relative + ":" + rows.length);
+    const unsafe = rows.filter(row => !(row && row.sample === true && row.placeholder === true && row.realProduct === false && String(row.url || "") === "#" && String(row.link || "") === "#" && row.monetization && row.monetization.enabled === false));
+    const metaOk = meta.ipSlotSampleFallback === true && meta.geoResolutionRequired === true && meta.geoMatched === false && meta.noCrossCountryFallback === true && meta.noGlobalRealProductFallback === true;
+    summary.push({ path: relative, page, cardCount: rows.length, unsafeCount: unsafe.length, metaOk });
+    if (!metaOk) problems.push("IP_SLOT_ROOT_FALLBACK_META_INVALID:" + relative);
+    if (!rows.length) problems.push("IP_SLOT_ROOT_FALLBACK_EMPTY:" + relative);
+    if (unsafe.length) problems.push("IP_SLOT_ROOT_FALLBACK_UNSAFE:" + relative + ":" + unsafe.length);
   }
-  if (!checked.size) problems.push("IP_SLOT_ROOT_GATE_OUTPUT_MISSING");
+  if (!checked.size) problems.push("IP_SLOT_ROOT_FALLBACK_OUTPUT_MISSING");
   return { ok: problems.length === 0, summary, problems };
 }
-
 function writePreservedBuild(reason, details) {
   process.stdout.write(JSON.stringify({
     mode: "preserve-existing-snapshots",
@@ -171,11 +189,27 @@ async function main() {
   // never writes a public Snapshot and cannot by itself publish front cards.
   const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
 
-  // Ordinary builds do not publish or regenerate Snapshot files. Publication
-  // begins only after a real, mirrored upstream candidate source is present.
+  // An authoritative country/region administrator queue is a valid release
+  // source even when the broad Sanmaru/SearchBank upstream mirror is absent or
+  // empty. This is the explicit control plane for publication and withdrawal.
   const upstream = loadConfirmedUpstream(commerceRegistrySync);
   if (!upstream.ok) {
     writePreservedBuild(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors });
+    return;
+  }
+  const queueAuthoritative = upstream.queueAuthoritative === true || (
+    commerceRegistrySync && commerceRegistrySync.status === "synchronized" && commerceRegistrySync.authoritative === true
+  );
+
+  // Capture the committed safe sample templates before Snapshot Engine writes
+  // any real-product documents. They are restored at root whenever the request
+  // IP has no matching country/region real-product snapshot.
+  const sampleFallback = ipSlots.captureSampleFallbackTemplates({ root });
+  if (!sampleFallback.ok) {
+    writePreservedBuild("sample-fallback-template-capture-failed", {
+      commerceRegistrySync,
+      problems: sampleFallback.problems || []
+    });
     return;
   }
 
@@ -219,7 +253,8 @@ async function main() {
     return;
   }
 
-  if (!Array.isArray(intake.releaseItems) || intake.releaseItems.length === 0) {
+  const releaseItems = Array.isArray(intake.releaseItems) ? intake.releaseItems : [];
+  if (releaseItems.length === 0 && !queueAuthoritative) {
     writePreservedBuild("no-release-ready-candidates", {
       commerceRegistrySync,
       candidateCount: upstream.candidateCount,
@@ -228,12 +263,15 @@ async function main() {
     return;
   }
 
-  const publication = canonical.publish({ root, trigger: "netlify-build", bank: upstream.doc, requireMirrorConsensus: false });
+  const publication = canonical.publish({ root, trigger: "netlify-build-country-region-admin-publication", bank: upstream.doc, requireMirrorConsensus: false });
   if (publication.status !== "published") {
     throw new Error("Canonical Snapshot Publisher blocked build: " + JSON.stringify(publication.errors || publication));
   }
-  if (!publication.counts || Number(publication.counts.accepted || 0) <= 0) {
-    throw new Error("Canonical Snapshot Publisher produced no accepted candidates; deployment halted before front Snapshot publishing.");
+  if (!publication.counts) {
+    throw new Error("Canonical Snapshot Publisher did not return candidate counts.");
+  }
+  if (Number(publication.counts.accepted || 0) <= 0 && !queueAuthoritative) {
+    throw new Error("Canonical Snapshot Publisher produced no accepted candidates without an authoritative administrator withdrawal state.");
   }
 
   const published = canonical.verifyPublished({ root });
@@ -246,7 +284,7 @@ async function main() {
   snapshots.run({ canonicalReleaseId: publication.releaseId });
 
   const regionalReport = regional.publishFromSearchBank({ root, trigger: "netlify-build-canonical" });
-  const ipSlotReport = ipSlots.publish({ root, trigger: "netlify-build-canonical-ip-slots" });
+  const ipSlotReport = ipSlots.publish({ root, trigger: "netlify-build-canonical-ip-slots", fallbackTemplates: sampleFallback.templates });
   if (ipSlotReport.status !== "published") {
     throw new Error("Canonical IP Slot Publisher blocked build: " + JSON.stringify(ipSlotReport.errors || ipSlotReport));
   }
@@ -254,14 +292,14 @@ async function main() {
   if (!ipSlotVerification.ok) {
     throw new Error("Canonical IP Slot Publisher integrity failure: " + JSON.stringify(ipSlotVerification.problems));
   }
-  const rootGateVerification = verifyPublishedRootGeoGates(ipSlotReport);
-  if (!rootGateVerification.ok) {
-    throw new Error("Canonical IP root geo-gate integrity failure: " + JSON.stringify(rootGateVerification.problems));
+  const rootFallbackVerification = verifyPublishedRootSampleFallbacks(ipSlotReport);
+  if (!rootFallbackVerification.ok) {
+    throw new Error("Canonical IP root sample-fallback integrity failure: " + JSON.stringify(rootFallbackVerification.problems));
   }
 
   process.stdout.write(JSON.stringify({
     commerceRegistrySync,
-    upstream: { candidateCount: upstream.candidateCount, sourceMode: upstream.sourceMode || null, warning: upstream.warning || null, mirrors: upstream.mirrors },
+    upstream: { candidateCount: upstream.candidateCount, sourceMode: upstream.sourceMode || null, warning: upstream.warning || null, queueAuthoritative, mirrors: upstream.mirrors },
     intake: { releaseGate: intake.releaseGate, summary: intake.summary },
     publication,
     published,
@@ -269,7 +307,7 @@ async function main() {
     regional: regionalReport,
     ipSlots: ipSlotReport,
     ipSlotVerification,
-    rootGateVerification
+    rootFallbackVerification
   }, null, 2) + "\n");
 }
 

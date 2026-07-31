@@ -19,7 +19,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const AffiliateRegistry = require("./affiliate-program-registry.v1");
 
-const VERSION = "commerce-candidate-intake-v1.2.0-payable-revenue-qualification-gate";
+const VERSION = "commerce-candidate-intake-v1.3.0-explicit-admin-queue-publication-authority";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -80,7 +80,8 @@ function loadReviewQueue(root, policy){
   const maxDays=Number(policy.reviewQueue && policy.reviewQueue.maxQueueAgeDays || 7);
   const stale=doc.generatedAt && !isFresh(doc.generatedAt,maxDays);
   const expired=doc.expiresAt && Date.parse(doc.expiresAt) < Date.now();
-  return {file,doc,items,stale:!!(stale||expired),digest:sha256(doc),problems:!Array.isArray(doc.items)?["COMMERCE_REVIEW_QUEUE_INVALID"]:[]};
+  const releaseAuthorization=plain(doc.releaseAuthorization);
+  return {file,doc,items,stale:!!(stale||expired),digest:sha256(doc),releaseAuthorization,problems:!Array.isArray(doc.items)?["COMMERCE_REVIEW_QUEUE_INVALID"]:[]};
 }
 function releaseGate(policy, input){
   const p=plain(policy.publication);
@@ -181,13 +182,20 @@ function revenueRight(item, tier, policy, affiliateRegistry, candidateCountries)
     (payoutBasisVerified||payableAmountEvidence||payableModeEvidence);
   const payable=permittedType && (affiliateApproved||directApproved||sponsorApproved);
   const allowTrafficOnlyPublic=revenuePolicy.allowTrafficOnlyPublicRelease===true;
-  const rightOk=!!tier && (payable || (allowTrafficOnlyPublic && externalReferralApproved));
+  const review=plain(item&&item.commerceReview);
+  const explicitAdminPublication=bool(first(source.explicitPublicationRequested,review.explicitPublicationRequested,review.publicationRequested)) || lower(review.publicationStatus)==="publish_requested";
+  // A verified official-seller referral is not a payable revenue right. It may
+  // enter the public candidate path only after an authenticated administrator
+  // explicitly requests publication for that exact country/region assignment.
+  // The route remains non-monetized and never enables IGDC checkout.
+  const explicitVerifiedReferral=externalReferralApproved && revenuePolicy.allowVerifiedExternalReferral===true && explicitAdminPublication;
+  const rightOk=!!tier && (payable || (allowTrafficOnlyPublic && externalReferralApproved) || explicitVerifiedReferral);
   const potential=payable || externalReferralApproved || !!(permittedType && (contractId||counterparty||bool(source.revenueCandidate)||bool(source.monetizationCandidate)));
   const monetizationState=affiliateApproved
     ? "verified_affiliate_payable"
     : (directApproved||sponsorApproved
       ? "verified_direct_revenue_right"
-      : (externalReferralApproved?"traffic_value_only_review":"not_verified"));
+      : (explicitVerifiedReferral?"verified_external_referral_nonpayable":(externalReferralApproved?"traffic_value_only_review":"not_verified")));
   let publicRoute=AffiliateRegistry.publicRoute(route);
   let allowedCountries=route.allowedCountries||[];
   if(directApproved||sponsorApproved){
@@ -218,6 +226,8 @@ function revenueRight(item, tier, policy, affiliateRegistry, candidateCountries)
     ok:rightOk,
     payable,
     potential,
+    explicitAdminPublication,
+    explicitVerifiedReferral,
     type:type||null,
     contractId:contractId||null,
     counterparty:counterparty||null,
@@ -245,7 +255,9 @@ function reviewApproval(item, tier, policy){
   const assignment=lower(first(review.assignmentState,listing.assignmentState,approval.assignmentState));
   const id=first(review.approvalId,listing.approvalId,approval.approvalId,approval.id);
   const at=first(review.approvedAt,listing.approvedAt,approval.approvedAt,approval.updatedAt);
-  return {ok:state===desired && allowed.includes(assignment) && !!id && !!at,state,assignment,approvalId:id||null,approvedAt:at||null};
+  const publicationStatus=lower(first(review.publicationStatus,listing.publicationStatus,approval.publicationStatus));
+  const explicitPublicationRequested=bool(first(review.explicitPublicationRequested,review.publicationRequested,listing.publicationRequested,approval.publicationRequested)) || publicationStatus==="publish_requested";
+  return {ok:state===desired && allowed.includes(assignment) && !!id && !!at,state,assignment,approvalId:id||null,approvedAt:at||null,publicationStatus:publicationStatus||null,explicitPublicationRequested};
 }
 function marketReady(item, policy){
   const records=MarketSaleScope.recordsFor(item);
@@ -300,7 +312,11 @@ function queueRecordToItem(entry){
   const review=plain(entry.review); const assignment=plain(entry.assignment); const revenue=plain(entry.revenue);
   candidate.commerceCandidate=Object.assign({},plain(candidate.commerceCandidate),{sourceTier:first(entry.sourceTier,"approved_commerce_member")});
   candidate.directCommerceListing=Object.assign({},plain(candidate.directCommerceListing),plain(entry.directCommerceListing),{sourceTier:first(entry.sourceTier,"approved_commerce_member"),contractApproved:bool(first(entry.contractApproved,plain(entry.directCommerceListing).contractApproved)),contractStatus:first(entry.contractStatus,plain(entry.directCommerceListing).contractStatus),contractId:first(entry.contractId,plain(entry.directCommerceListing).contractId),expectedNetRevenuePerOrder:first(entry.expectedNetRevenuePerOrder,plain(entry.directCommerceListing).expectedNetRevenuePerOrder)});
-  candidate.commerceReview=Object.assign({},plain(candidate.commerceReview),review,{assignmentState:first(review.assignmentState,assignment.state),approvalId:first(review.approvalId,assignment.id),approvedAt:first(review.approvedAt,assignment.updatedAt)});
+  const publicationRequest=plain(entry&&entry.publicationRequest);
+  const publicationStatus=lower(first(publicationRequest.status,assignment.publicationStatus));
+  const explicitPublicationRequested=publicationRequest.requested===true || publicationStatus==="publish_requested";
+  candidate.commerceReview=Object.assign({},plain(candidate.commerceReview),review,{assignmentState:first(review.assignmentState,assignment.state),approvalId:first(review.approvalId,assignment.id),approvedAt:first(review.approvedAt,assignment.updatedAt),publicationStatus:publicationStatus||null,explicitPublicationRequested,publicationRequest:clone(publicationRequest)});
+  candidate.commerceCandidate=Object.assign({},plain(candidate.commerceCandidate),{sourceTier:first(entry.sourceTier,"approved_commerce_member"),explicitPublicationRequested,publicationScope:{country:first(publicationRequest.country,assignment.country),region:first(publicationRequest.region,assignment.region,"NATIONWIDE"),page:first(publicationRequest.page,assignment.page),section:first(publicationRequest.section,assignment.section),crossCountryFallback:false}});
   candidate.brokerageContract=Object.assign({},plain(candidate.brokerageContract),revenue,{approved:bool(first(revenue.approved,entry.contractApproved)),status:first(revenue.status,entry.contractStatus),id:first(revenue.contractId,entry.contractId),expectedNetRevenuePerOrder:first(revenue.expectedNetRevenuePerOrder,entry.expectedNetRevenuePerOrder)});
   return candidate;
 }
@@ -338,7 +354,7 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
     marketKeys:publishMarkets.validRecords.flatMap(record=>{ const values=record.regions.slice(); if(record.nationwide) values.push("NATIONWIDE"); return values.map(region=>MarketSaleScope.marketKey(record,region)); }),
     heldMarketReasons:market.invalidRecords.map(x=>({country:x.record.country,regions:(x.record.regions||[]).slice(),reasons:x.result.reasons.slice()})).concat(publishMarkets.blocked.map(x=>({country:x.country,regions:x.regions,reasons:[x.reason]}))),
     revenue:{type:revenue.type,contractId:revenue.contractId,counterparty:revenue.counterparty,settlementMode:revenue.settlementMode,disclosureReady:revenue.disclosureReady,payoutBasisVerified:revenue.payoutBasisVerified,payable:revenue.payable,potential:revenue.potential,verificationReasons:revenue.verificationReasons,certainty:revenue.certainty,affiliateEligible:revenue.route&&revenue.route.kind==="affiliate",outboundRoute:revenue.publicRoute,monetizationState:revenue.monetizationState,allowedCountries:revenue.allowedCountries,estimatedNetRevenuePerOrder:revenue.estimatedNetRevenuePerOrder,commissionRate:revenue.commissionRate,expectedConversionRate:revenue.expectedConversionRate},
-    review:{ok:approval.ok,state:approval.state,assignment:approval.assignment||null,approvalId:approval.approvalId||null,approvedAt:approval.approvedAt||null},
+    review:{ok:approval.ok,state:approval.state,assignment:approval.assignment||null,approvalId:approval.approvalId||null,approvedAt:approval.approvedAt||null,publicationStatus:approval.publicationStatus||null,explicitPublicationRequested:approval.explicitPublicationRequested===true},
     ranking:rank, destinationHost:(()=>{try{return new URL(destination).hostname.toLowerCase()}catch(_e){return null}})(),
     item
   };
@@ -346,7 +362,23 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   return result;
 }
 function build(input){
-  const root=rootOf(input); const policyPack=loadPolicy(root); const policy=policyPack.policy; const affiliateRegistry=AffiliateRegistry.load(root); const gate=releaseGate(policy,input); const queue=loadReviewQueue(root,policy);
+  const root=rootOf(input); const policyPack=loadPolicy(root); const policy=policyPack.policy; const affiliateRegistry=AffiliateRegistry.load(root); const environmentGate=releaseGate(policy,input); const queue=loadReviewQueue(root,policy);
+  const queueAuthorization=plain(queue.releaseAuthorization);
+  const authoritativeAdminQueue=!queue.stale && queueAuthorization.authoritative===true && lower(queueAuthorization.mode)==="explicit-admin-publication-request";
+  const explicitAdminRequest=authoritativeAdminQueue && queueAuthorization.explicitAdminRequest===true && Number(queueAuthorization.requestedCount||0)>0;
+  const gate={
+    enabled:environmentGate.enabled===true || authoritativeAdminQueue,
+    mode:environmentGate.enabled===true?"release_enabled":(explicitAdminRequest?"explicit_admin_publication_request":"authoritative_admin_queue_empty"),
+    reason:environmentGate.enabled===true?environmentGate.reason:(explicitAdminRequest?"authenticated-admin-publication-request-in-queue":"authoritative-admin-queue-empty"),
+    keyPresent:environmentGate.keyPresent===true,
+    keyLength:environmentGate.keyLength,
+    environmentEnabled:environmentGate.enabled===true,
+    authoritativeAdminQueue,
+    explicitAdminRequest,
+    requestedCount:Number(queueAuthorization.requestedCount||0),
+    scopeKeys:array(queueAuthorization.scopeKeys).map(text).filter(Boolean),
+    crossCountryFallback:false
+  };
   const raw=array(input&&input.items); const all=[]; let skippedNonCommerce=0;
   raw.forEach((rawItem,index)=>{
     const tier=sourceTier(rawItem);
@@ -358,7 +390,11 @@ function build(input){
   }
   const decisions=all.map(entry=>candidateDecision(entry.item,entry.index,sourceTier(entry.item),entry.origin,policy,affiliateRegistry));
   decisions.sort((a,b)=>b.ranking.finalScore-a.ranking.finalScore||a.candidateId.localeCompare(b.candidateId));
-  const releaseDecisions=gate.enabled?decisions.filter(x=>x.releaseEligible):[];
+  const releaseDecisions=decisions.filter((decision)=>{
+    if(!decision.releaseEligible) return false;
+    if(environmentGate.enabled===true) return true;
+    return authoritativeAdminQueue && decision.origin==="admin_review_queue" && decision.review && decision.review.explicitPublicationRequested===true;
+  });
   const outputItems=releaseDecisions.map(decision=>{
     const candidate=clone(decision.item);
     // Canonical expands only the independently verified sales markets. Invalid
@@ -379,13 +415,13 @@ function build(input){
     if(decision.sourceTier==="approved_commerce_member") candidate.managedPriority=true;
     return candidate;
   });
-  const summary={receivedSearchBank:raw.length,skippedNonCommerce,receivedReviewQueue:queue.stale?0:queue.items.length,queueStale:queue.stale,considered:decisions.length,eligibleForRelease:decisions.filter(x=>x.releaseEligible).length,releasedToCanonical:outputItems.length,held:decisions.filter(x=>!x.releaseEligible).length,bySource:{},byReason:{}};
+  const summary={receivedSearchBank:raw.length,skippedNonCommerce,receivedReviewQueue:queue.stale?0:queue.items.length,queueStale:queue.stale,queueAuthoritative:authoritativeAdminQueue,explicitAdminRequested:Number(queueAuthorization.requestedCount||0),considered:decisions.length,eligibleForRelease:decisions.filter(x=>x.releaseEligible).length,releasedToCanonical:outputItems.length,held:decisions.filter(x=>!x.releaseEligible).length,bySource:{},byReason:{}};
   decisions.forEach(x=>{ summary.bySource[x.sourceTier||"unknown"]=(summary.bySource[x.sourceTier||"unknown"]||0)+1; x.reasons.forEach(r=>summary.byReason[r]=(summary.byReason[r]||0)+1); });
-  const stageDoc={schema:"commerce-candidate-staging.snapshot.v1",version:VERSION,generatedAt:now(),policy:{version:policy.version,fingerprint:policyPack.fingerprint},affiliateRegistry:{version:affiliateRegistry.raw&&affiliateRegistry.raw.version||AffiliateRegistry.VERSION,fingerprint:affiliateRegistry.fingerprint,ok:affiliateRegistry.ok,problems:affiliateRegistry.problems},releaseGate:{enabled:gate.enabled,mode:gate.mode,reason:gate.reason,keyPresent:gate.keyPresent},source:{searchBankCount:raw.length,reviewQueueDigest:queue.digest,reviewQueueStale:queue.stale},summary,candidates:decisions.map(x=>({candidateId:x.candidateId,sourceTier:x.sourceTier,origin:x.origin,stageStatus:x.stageStatus,releaseEligible:x.releaseEligible,reasons:x.reasons,essentialClass:x.essentialClass,placement:x.placement,marketKeys:x.marketKeys,heldMarketCount:x.heldMarketCount,heldMarketReasons:x.heldMarketReasons,revenue:x.revenue,review:x.review,ranking:x.ranking,destinationHost:x.destinationHost,digest:x.digest})),releaseCandidateIds:outputItems.map(x=>x.commerceCandidate.candidateId)};
+  const stageDoc={schema:"commerce-candidate-staging.snapshot.v1",version:VERSION,generatedAt:now(),policy:{version:policy.version,fingerprint:policyPack.fingerprint},affiliateRegistry:{version:affiliateRegistry.raw&&affiliateRegistry.raw.version||AffiliateRegistry.VERSION,fingerprint:affiliateRegistry.fingerprint,ok:affiliateRegistry.ok,problems:affiliateRegistry.problems},releaseGate:{enabled:gate.enabled,mode:gate.mode,reason:gate.reason,keyPresent:gate.keyPresent,environmentEnabled:gate.environmentEnabled,authoritativeAdminQueue:gate.authoritativeAdminQueue,explicitAdminRequest:gate.explicitAdminRequest,requestedCount:gate.requestedCount,scopeKeys:gate.scopeKeys,crossCountryFallback:false},source:{searchBankCount:raw.length,reviewQueueDigest:queue.digest,reviewQueueStale:queue.stale,reviewQueueAuthoritative:authoritativeAdminQueue},summary,candidates:decisions.map(x=>({candidateId:x.candidateId,sourceTier:x.sourceTier,origin:x.origin,stageStatus:x.stageStatus,releaseEligible:x.releaseEligible,reasons:x.reasons,essentialClass:x.essentialClass,placement:x.placement,marketKeys:x.marketKeys,heldMarketCount:x.heldMarketCount,heldMarketReasons:x.heldMarketReasons,revenue:x.revenue,review:x.review,ranking:x.ranking,destinationHost:x.destinationHost,digest:x.digest})),releaseCandidateIds:outputItems.map(x=>x.commerceCandidate.candidateId)};
   const auditDoc={schema:"commerce-candidate-staging.audit.v1",version:VERSION,generatedAt:now(),policyFingerprint:policyPack.fingerprint,queueDigest:queue.digest,queueStale:queue.stale,releaseGate:{enabled:gate.enabled,mode:gate.mode,reason:gate.reason},summary,held:decisions.filter(x=>!x.releaseEligible).slice(0,50000).map(x=>({candidateId:x.candidateId,sourceTier:x.sourceTier,origin:x.origin,reasons:x.reasons,digest:x.digest}))};
   const digest=sha256({sourceItems:raw,queueDigest:queue.digest,policy:policyPack.fingerprint,affiliateRegistry:affiliateRegistry.fingerprint,stage:stageDoc.candidates,gate:{enabled:gate.enabled,mode:gate.mode}});
   if(input&&input.write!==false){ atomicWrite(outputPath(root,STAGING_FILE),stageDoc); atomicWrite(outputPath(root,AUDIT_FILE),auditDoc); }
-  return {ok:policyPack.ok && affiliateRegistry.ok && queue.problems.length===0,version:VERSION,policy:policyPack,affiliateRegistry,queue:{file:queue.file,digest:queue.digest,stale:queue.stale,problems:queue.problems},releaseGate:gate,summary,stage:stageDoc,releaseItems:outputItems,digest,problems:policyPack.problems.concat(affiliateRegistry.problems,queue.problems)};
+  return {ok:policyPack.ok && affiliateRegistry.ok && queue.problems.length===0,version:VERSION,policy:policyPack,affiliateRegistry,queue:{file:queue.file,digest:queue.digest,stale:queue.stale,authoritative:authoritativeAdminQueue,releaseAuthorization:queueAuthorization,problems:queue.problems},releaseGate:gate,summary,stage:stageDoc,releaseItems:outputItems,digest,problems:policyPack.problems.concat(affiliateRegistry.problems,queue.problems)};
 }
 function readStage(rootInput){ const root=rootOf({root:rootInput}); return safeRead(outputPath(root,STAGING_FILE)); }
 

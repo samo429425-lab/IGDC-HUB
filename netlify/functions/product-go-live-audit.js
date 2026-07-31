@@ -24,7 +24,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const CandidateReview = require("./commerce-candidate-review");
 const ReleaseDispatch = require("./lib/commerce-release-dispatch.v1");
 
-const VERSION = "product-go-live-audit-v1.3.1-country-batch-publication-contract";
+const VERSION = "product-go-live-audit-v1.4.0-explicit-admin-country-batch-publication";
 const MAX_ROWS = 120;
 
 const SNAPSHOT_SPECS = [
@@ -590,16 +590,20 @@ function envReady(){
     }
   };
 }
-function releaseControl(){
-  const release=ReleaseDispatch.releaseArmed();
+function releaseControl(input){
+  const explicitAdminAuthorization=!!(input&&input.explicitAdminAuthorization===true);
+  const release=ReleaseDispatch.releaseArmed({explicitAdminAuthorization});
   const hook=ReleaseDispatch.validHook(process.env[ReleaseDispatch.HOOK_ENV]);
   return {
     version:ReleaseDispatch.VERSION,
     armed:release.armed===true,
+    environmentArmed:release.environmentArmed===true,
+    explicitAdminAuthorization:release.explicitAdminAuthorization===true,
     mode:release.mode||"",
     keyPresent:release.keyPresent===true,
     hookConfigured:!!hook,
     actionAvailable:release.armed===true&&!!hook,
+    explicitAdminConfirmationAvailable:!!hook,
     action:"request_publication",
     targetMode:"selected-product-assignment",
     automaticPublication:false,
@@ -657,7 +661,7 @@ function summarize(mode, limit, scopeInput, privateDoc){
 
   const runtime = envReady();
   const privateStage = privateStageStatus(process.cwd(), scope, privateDoc, limit);
-  const release = releaseControl();
+  const release = releaseControl({explicitAdminAuthorization:true});
   counts.privateStageCandidates = privateStage.totalCandidates;
   counts.privateStageReleaseEligible = privateStage.eligibleForRelease;
   counts.privateStageHeld = privateStage.held;
@@ -665,7 +669,7 @@ function summarize(mode, limit, scopeInput, privateDoc){
   counts.auditReady = privateStage.auditReady;
   counts.publicationRequested = privateStage.publicationRequested;
   const copiesOk = snapshotReports.every(x => x.available && x.copies.synchronized);
-  const realReady = counts.readyAffiliate + counts.readyDirectRevenue;
+  const realReady = counts.readyAffiliate + counts.readyDirectRevenue + counts.readyExternalReferral;
   let gate = "not_ready";
   let gateReason = "no-real-product-candidate";
 
@@ -754,7 +758,7 @@ async function requestPublication(event, actor, body, scope, liveDoc){
   if(!candidate){const error=new Error("현재 범위에서 실상품 공급 개방 점검을 통과한 후보가 아닙니다.");error.statusCode=409;error.code="candidate_not_audit_ready";throw error;}
   const expectedDigest=text(body&&body.expectedDigest);
   if(expectedDigest&&text(candidate&&candidate.digest)!==expectedDigest){const error=new Error("후보 정보가 변경됐습니다. 개방 점검을 다시 실행해 주세요.");error.statusCode=409;error.code="candidate_changed";throw error;}
-  const control=releaseControl();
+  const control=releaseControl({explicitAdminAuthorization:true});
   if(!control.armed){const error=new Error("배포 환경의 실상품 공개 게이트가 활성화되지 않았습니다.");error.statusCode=409;error.code="release_gate_not_armed";throw error;}
   if(!control.hookConfigured){const error=new Error("사이트 게재 빌드 훅이 설정되지 않았습니다.");error.statusCode=409;error.code="publication_hook_not_configured";throw error;}
   const assignment=await assignmentForPublication(candidateId,scope);
@@ -764,7 +768,7 @@ async function requestPublication(event, actor, body, scope, liveDoc){
   if(originalStatus!=="publish_requested"){
     await SlotStore.update("gslot_slot_assignments","id=eq."+encodeURIComponent(assignment.id),{publication_status:"publish_requested",updated_at:now,updated_by:text(actor&&actor.sub)});
   }
-  const dispatch=await ReleaseDispatch.dispatch({candidateId,assignmentId:assignment.id,actorId:text(actor&&actor.sub)});
+  const dispatch=await ReleaseDispatch.dispatch({candidateId,assignmentId:assignment.id,actorId:text(actor&&actor.sub),operation:"publish",candidateCount:1,explicitAdminAuthorization:true});
   if(!dispatch.queued){
     if(originalStatus!=="publish_requested"){
       try{await SlotStore.update("gslot_slot_assignments","id=eq."+encodeURIComponent(assignment.id),{publication_status:originalStatus,updated_at:new Date().toISOString(),updated_by:text(actor&&actor.sub)});}catch(_rollbackError){}
@@ -871,7 +875,7 @@ async function requestPublicationBatch(event,actor,body,scope,liveDoc){
   if(text(body&&body.confirmation)!=="SITE_PUBLISH"){const error=new Error("최종 사이트 게재 확인 값이 일치하지 않습니다.");error.statusCode=409;error.code="publication_confirmation_required";throw error;}
   const candidateIds=uniqueCandidateIds(body);
   if(!candidateIds.length)return batchSummary("request_publication_batch",candidateIds,[],{queued:false,reason:"no_selected_products"});
-  const control=releaseControl();
+  const control=releaseControl({explicitAdminAuthorization:true});
   if(!control.armed||!control.hookConfigured){
     const reason=!control.armed?"release_gate_not_armed":"publication_hook_not_configured";
     return batchSummary("request_publication_batch",candidateIds,candidateIds.map((id)=>({candidateId:id,status:"blocked",queued:false,reason,assignmentId:null})),{queued:false,reason});
@@ -900,7 +904,7 @@ async function requestPublicationBatch(event,actor,body,scope,liveDoc){
   const active=already.concat(updated);
   if(!active.length)return batchSummary("request_publication_batch",candidateIds,items,{queued:false,reason:"no_eligible_products"});
   const firstItem=active[0];
-  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"publish",candidateCount:active.length});
+  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"publish",candidateCount:active.length,explicitAdminAuthorization:true});
   if(!dispatch.queued){
     await rollbackAssignmentStatuses(updated,actor&&actor.sub);
     for(const item of active)items.push({candidateId:item.candidateId,status:"blocked",queued:false,reason:text(dispatch.reason)||"publication_dispatch_failed",assignmentId:item.assignment.id});
@@ -915,7 +919,7 @@ async function requestUnpublicationBatch(event,actor,body,scope){
   if(text(body&&body.confirmation)!=="SITE_UNPUBLISH"){const error=new Error("전체 매칭 해제 확인 값이 일치하지 않습니다.");error.statusCode=409;error.code="unpublication_confirmation_required";throw error;}
   const candidateIds=uniqueCandidateIds(body);
   if(!candidateIds.length)return batchSummary("request_unpublication_batch",candidateIds,[],{queued:false,reason:"no_selected_products"});
-  const control=releaseControl();
+  const control=releaseControl({explicitAdminAuthorization:true});
   if(!control.armed||!control.hookConfigured){
     const reason=!control.armed?"release_gate_not_armed":"publication_hook_not_configured";
     return batchSummary("request_unpublication_batch",candidateIds,candidateIds.map((id)=>({candidateId:id,status:"unpublish_failed",queued:false,reason,assignmentId:null})),{queued:false,reason});
@@ -939,7 +943,7 @@ async function requestUnpublicationBatch(event,actor,body,scope){
   const active=updateResult.updated;
   if(!active.length)return batchSummary("request_unpublication_batch",candidateIds,items,{queued:false,reason:"no_updated_products"});
   const firstItem=active[0];
-  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:active.length});
+  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:active.length,explicitAdminAuthorization:true});
   if(!dispatch.queued){
     await rollbackAssignmentStatuses(active,actor&&actor.sub);
     for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_failed",queued:false,reason:text(dispatch.reason)||"unpublication_dispatch_failed",assignmentId:item.assignment.id});
