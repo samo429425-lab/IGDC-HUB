@@ -1,4 +1,4 @@
-/* IGDC real-product go-live audit admin v1.3.0
+/* IGDC real-product go-live audit admin v1.3.1
  * Authenticated live private-stage audit plus explicit, targeted publication request.
  */
 (function(){
@@ -210,6 +210,7 @@
   }
   function htmlSummary(){return '<!doctype html><meta charset="utf-8"><title>IGDC 실상품 공급 개방 점검</title><pre>'+esc($('rawOutput').textContent||'')+'</pre>';}
   function returnToQueue(){var q=new URLSearchParams(location.search),back=q.get('returnPath');location.href=back&&back.charAt(0)==='/'?back:'/commerce-candidate-pipeline.html';}
+  function goToAdmin(){var q=new URLSearchParams(location.search),target=q.get('adminPath');location.href=target&&target.charAt(0)==='/'?target:'/admin.html';}
   function init(){
     var q=new URLSearchParams(location.search),saved=localStorage.getItem('igdc_product_go_live_audit_mode'),requested=q.get('mode');$('auditMode').value=(requested==='production'||saved==='production')?'production':'pre-product';
     $('auditMode').addEventListener('change',function(){localStorage.setItem('igdc_product_go_live_audit_mode',mode());updatePublishControls();runAudit();});
@@ -217,7 +218,7 @@
     $('publishConfirmCheck').addEventListener('change',updatePublishControls);$('publishConfirmText').addEventListener('input',updatePublishControls);
     $('downloadJsonBtn').addEventListener('click',function(){if(lastReport)download('IGDC_PRODUCT_GO_LIVE_AUDIT_'+nowStamp()+'.json',JSON.stringify(lastReport,null,2),'application/json');});
     $('downloadHtmlBtn').addEventListener('click',function(){if(lastReport)download('IGDC_PRODUCT_GO_LIVE_AUDIT_'+nowStamp()+'.html',htmlSummary(),'text/html;charset=utf-8');});
-    $('returnBtn').addEventListener('click',returnToQueue);
+    $('returnBtn').addEventListener('click',returnToQueue);$('adminBtn').addEventListener('click',goToAdmin);
     document.addEventListener('igdc:member-auth-ready',function(){acceptedToken='';runAudit();});window.addEventListener('pageshow',function(){acceptedToken='';runAudit();});
     setStatus('점검 범위 · '+scopeLabel(),'info');runAudit();
   }

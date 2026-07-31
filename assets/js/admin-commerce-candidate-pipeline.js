@@ -1,4 +1,4 @@
-/* IGDC Commerce Candidate Pipeline Admin View v1.8.0
+/* IGDC Commerce Candidate Pipeline Admin View v1.8.1
  * Ordered private research/staging workflow and commerce queue diagnostic.
  * It reuses the existing administrator session.  No second commerce login,
  * provider call, seller navigation, publication, payment, or browser secret.
@@ -9,7 +9,7 @@
   var $=function(id){return document.getElementById(id);};
   var esc=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(ch){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];});};
   var text=function(v){return String(v==null?'':v).trim();};
-  var state=$('state'), notice=$('notice'), diagnosticCache=null, acceptedToken='', acceptedSession=null, resolvingSession=null, candidateStore={}, selectedCandidateId='';
+  var state=$('state'), notice=$('notice'), diagnosticCache=null, dashboardCache=null, acceptedToken='', acceptedSession=null, resolvingSession=null, candidateStore={}, selectedCandidateId='', refreshPromise=null, lastRefreshAt=0;
   var TOKEN_KEYS=['osauth.tokens.v2','osauth.tokens.v1','igdc.tokens','igdc_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token'];
 
   function scopeContext(){
@@ -223,8 +223,31 @@
   }
 
   function renderDiagnostic(doc){diagnosticCache=doc||null;var panel=$('diagnosticPanel'),pre=$('diagnosticJson');pre.textContent=JSON.stringify(doc||{},null,2);panel.classList.remove('hidden');$('downloadDiagnosticBtn').disabled=!diagnosticCache;}
-  async function refresh(){hideNotice();var button=$('refreshBtn');button.disabled=true;try{await ensureSession(false);var both=await Promise.all([api('summary'),api('candidates')]);updateScope(both[0].scope);state.textContent='관리자 공통 세션 확인 · 범위 '+scopeLabel();renderSummary(both[0].summary||{});renderRows(both[1].candidates||[]);show(scopeLabel()+' 비공개 상품 후보 대기열을 새로 읽었습니다. 이 동작은 공개 발행·외부 판매처 이동·결제를 실행하지 않습니다.','ok');}catch(error){show(authErrorMessage(error),'warn');}finally{button.disabled=false;}}
-  async function diagnostic(){hideNotice();var button=$('diagnosticBtn');button.disabled=true;try{await ensureSession(false);var data=await api('diagnostic');renderDiagnostic(data);show('상품 후보·중개수익 전용 점검 JSON을 읽었습니다. 이 동작은 읽기 전용입니다.','ok');}catch(error){show(authErrorMessage(error),'warn');}finally{button.disabled=false;}}
+  async function refresh(force){
+    if(refreshPromise)return refreshPromise;
+    if(!force&&Date.now()-lastRefreshAt<2500&&dashboardCache)return dashboardCache;
+    hideNotice();var button=$('refreshBtn');button.disabled=true;
+    refreshPromise=(async function(){
+      try{
+        await ensureSession(false);
+        var data=await api('dashboard');dashboardCache=data||{};diagnosticCache=data&&data.diagnostic||null;lastRefreshAt=Date.now();
+        updateScope(data.scope);state.textContent='관리자 공통 세션 확인 · 범위 '+scopeLabel();renderSummary(data.summary||{});renderRows(data.candidates||[]);
+        show(scopeLabel()+' 비공개 상품 후보 대기열을 한 번의 통합 조회로 새로 읽었습니다. 이 동작은 공개 발행·외부 판매처 이동·결제를 실행하지 않습니다.','ok');
+        return data;
+      }catch(error){show(authErrorMessage(error),'warn');throw error;}
+      finally{button.disabled=false;refreshPromise=null;}
+    })();
+    return refreshPromise;
+  }
+  async function diagnostic(){
+    hideNotice();var button=$('diagnosticBtn');button.disabled=true;
+    try{
+      if(!diagnosticCache){var data=await refresh(true);diagnosticCache=data&&data.diagnostic||null;}
+      if(!diagnosticCache)throw new Error('후보·수익 점검 JSON을 만들지 못했습니다.');
+      renderDiagnostic(diagnosticCache);show('현재 통합 조회에 포함된 상품 후보·중개수익 점검 JSON을 표시했습니다. 추가 중복 조회는 실행하지 않았습니다.','ok');
+    }catch(error){show(authErrorMessage(error),'warn');}
+    finally{button.disabled=false;}
+  }
   function safeFilePart(value){return text(value).toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80)||'commerce-candidate-queue';}
   function jsonFileName(doc){
     var type=safeFilePart(doc&&doc.reportType||'commerce-candidate-queue-diagnostic');
@@ -254,10 +277,10 @@
   }
   function back(){var q=new URLSearchParams(location.search);var p=q.get('returnPath');location.href=p&&p.charAt(0)==='/'?p:'/admin.html';}
   function init(){
-    $('refreshBtn').addEventListener('click',refresh);$('diagnosticBtn').addEventListener('click',diagnostic);$('downloadDiagnosticBtn').addEventListener('click',downloadDiagnostic);$('goLiveAuditBtn').addEventListener('click',goLiveAudit);$('returnBtn').addEventListener('click',back);wireCandidateActions();
-    document.addEventListener('igdc:member-auth-ready',function(){acceptedToken='';acceptedSession=null;refresh();});
-    window.addEventListener('pageshow',function(){acceptedToken='';acceptedSession=null;refresh();});
-    refresh();
+    $('refreshBtn').addEventListener('click',function(){refresh(true).catch(function(){});});$('diagnosticBtn').addEventListener('click',diagnostic);$('downloadDiagnosticBtn').addEventListener('click',downloadDiagnostic);$('goLiveAuditBtn').addEventListener('click',goLiveAudit);$('returnBtn').addEventListener('click',back);wireCandidateActions();
+    document.addEventListener('igdc:member-auth-ready',function(){acceptedToken='';acceptedSession=null;if(Date.now()-lastRefreshAt>3000)refresh(false).catch(function(){});});
+    window.addEventListener('pageshow',function(event){if(event.persisted===true){acceptedToken='';acceptedSession=null;refresh(false).catch(function(){});}});
+    refresh(true).catch(function(){});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

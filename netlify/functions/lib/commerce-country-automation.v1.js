@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.6.3-explicit-front-match-lifecycle-bridge";
+const VERSION = "commerce-country-automation-v3.6.4-explicit-front-match-soft-evidence-bridge";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2301,22 +2301,32 @@ async function frontSyncUpsert(table, rowsInput, conflictColumns) {
   return output;
 }
 function frontSyncPublicReadiness(productInput, existingCandidate) {
-  const product = plain(productInput), existingPayload = plain(existingCandidate && existingCandidate.source_payload), risk = plain(product.riskAssessment), supplier = plain(product.supplierAssessment), reasons = [];
+  const product = plain(productInput), existingPayload = plain(existingCandidate && existingCandidate.source_payload), risk = plain(product.riskAssessment), supplier = plain(product.supplierAssessment), reasons = [], warnings = [];
   const productPageUrl = safeUrl(productUrl(product)), imageUrl = safeUrl(productImageUrl(product)), supplierUrl = safeUrl(first(product.supplierSiteUrl, plain(product.supplier).officialUrl)), supplierName = first(product.supplierName, plain(product.supplier).name);
   const trustScore = Number(first(product.supplierTrustScore, supplier.trustScore, plain(product.supplier).trustScore)) || 0;
   const evidenceReady = product.supplierEvidenceReady === true || supplier.evidenceReady === true || plain(product.supplier).evidenceReady === true;
+  const blockers = array(risk.blockers).map(lower).filter(Boolean);
+  const prohibited = blockers.filter((item) => /(malware|phishing|fraud|illegal|prohibited|sanction|counterfeit|adult|unsafe|product_page_unavailable|supplier_product_domain_mismatch)/.test(item));
   if (plain(existingPayload.queueControl).permanentExcluded === true) reasons.push("permanently_excluded");
   if (!productPageUrl || !ProductRanking.isSpecificProductUrl(productPageUrl)) reasons.push("specific_product_url_missing");
   if (!imageUrl) reasons.push("actual_product_image_missing");
   if (!supplierUrl || !supplierName) reasons.push("official_supplier_identity_missing");
-  if (product.productPageLive === false) reasons.push("product_page_unavailable");
+  if (product.productPageLive === false || risk.explicitUnavailable === true) reasons.push("product_page_unavailable");
   if (product.sameSupplierSite === false) reasons.push("supplier_product_domain_mismatch");
-  if (product.inspectionComplete !== true) reasons.push("product_inspection_incomplete");
-  if (risk.gatePassed !== true) reasons.push("product_or_supplier_risk_gate_not_passed");
-  if (!evidenceReady) reasons.push("supplier_evidence_not_ready");
+  if (prohibited.length) reasons.push(...prohibited);
   if (trustScore > 0 && trustScore < TRUST_POLICY.minimumTrustScore) reasons.push("supplier_trust_below_public_threshold");
-  if (ProductRanking.isGenericProductName(first(product.productName, product.title))) reasons.push("product_title_not_verified");
-  return { eligible: reasons.length === 0, reasons: Array.from(new Set(reasons)), productPageUrl, imageUrl, supplierUrl, supplierName, trustScore, evidenceReady };
+  if (ProductRanking.isGenericProductName(first(product.productName, product.title)) && !text(product.priorityLabel) && !supplierName) reasons.push("product_title_not_verified");
+  if (product.inspectionComplete !== true) warnings.push("product_inspection_pending");
+  if (risk.gatePassed !== true) warnings.push("risk_review_pending");
+  if (!evidenceReady) warnings.push("supplier_evidence_pending");
+  warnings.push(...blockers.filter((item) => !prohibited.includes(item)));
+  return {
+    eligible: reasons.length === 0,
+    reasons: Array.from(new Set(reasons.filter(Boolean))),
+    warnings: Array.from(new Set(warnings.filter(Boolean))),
+    approvalMode: "explicit_administrator_front_match",
+    productPageUrl, imageUrl, supplierUrl, supplierName, trustScore, evidenceReady
+  };
 }
 function frontSyncAssignmentId(candidateId, scope, sectionKey) {
   return "front_assignment_" + sha256(candidateId + "|" + scope.country + "|" + scope.region + "|" + sectionKey).slice(0, 24);
@@ -2388,11 +2398,11 @@ async function prepareProductFrontTargets(actorId, input, targetsInput) {
     const hasVerifiedEvidence = array(evidenceByCandidate.get(candidateId)).some((row) => row && row.verified === true && safeUrl(row.evidence_url));
     if (!hasVerifiedEvidence) evidenceUpserts.push({
       id: frontSyncEvidenceId(candidateId), candidate_id: candidateId, evidence_type: "official_supplier_product_reference", evidence_url: readiness.supplierUrl,
-      note: "Official supplier identity, same-domain product page, product image, inspection completion, supplier evidence-ready state and trust threshold were confirmed before explicit front matching.",
+      note: "Official supplier identity and official product reference were confirmed by the administrator. Pending inspection or supplier-evidence warnings remain recorded in the candidate payload and must still pass the final build gate.",
       verified: true, created_at: now, created_by: actor
     });
     preparedCandidateIds.push(candidateId);
-    items.push({ candidateId, status: "prepared", queued: false, reason: "front_lifecycle_prepared", assignmentId });
+    items.push({ candidateId, status: "prepared", queued: false, reason: "front_lifecycle_prepared", warnings: readiness.warnings || [], assignmentId });
   }
 
   if (candidateUpserts.length) await frontSyncUpsert("gslot_candidates", candidateUpserts, "id");

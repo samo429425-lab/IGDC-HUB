@@ -526,6 +526,10 @@ exports.handler=async function(event){
       const scopeCountry=requested||(probe.resolved?probe.country:"UNRESOLVED");
       const scopeRegion=text(query.region)||(probe.resolved?(probe.region||"NATIONWIDE"):"");
       const doc=filteredStage(raw,scopeCountry,scopeRegion);
+      if(action==="dashboard"){
+        const summary=summaryDoc(doc),diagnostic=diagnosticDoc(doc,member);
+        return json(200,{ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,500),diagnostic});
+      }
       if(action==="summary")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc)});
       if(action==="candidates")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc),candidates:(doc.candidates||[]).slice(0,500)});
       if(action==="diagnostic")return json(200,diagnosticDoc(doc,member));
