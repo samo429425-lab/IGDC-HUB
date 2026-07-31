@@ -5,7 +5,7 @@
  * IGDC actually recommends. This is a social-candidate adapter only; it does
  * not alter Sanmaru, SearchBank, Snapshot Engine, or public slots.
  */
-const VERSION = "social-channel-link-v1.1.0-public-directory-accounts";
+const VERSION = "social-channel-link-v1.2.0-latest-content-creator-identity";
 
 const PLATFORM_HOSTS = Object.freeze({
   youtube: ["youtube.com", "youtu.be"],
@@ -71,8 +71,10 @@ function handleAllowed(platform, value){
 function titleHandle(title, platform){
   const raw = cleanTitle(title);
   const patterns = platform === "instagram"
-    ? [
+      ? [
         /^@?([a-z0-9._]{2,100})\s+(?:on\s+instagram|•\s+instagram)/i,
+        /^.+?\(@([a-z0-9._]{2,100})\)\s*(?:[|·•-]\s*)?instagram/i,
+        /^.+?[|·•-]\s*@?([a-z0-9._]{2,100})\s+(?:on\s+)?instagram/i,
         /instagram\s+(?:photos|profile|account)\s+(?:and\s+videos\s+)?from\s+@?([a-z0-9._]{2,100})/i
       ]
     : platform === "pinterest"

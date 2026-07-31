@@ -1,12 +1,12 @@
 "use strict";
 
 /**
- * Public web/Sanmaru discovery -> IGDC Social Hub channel candidate collector.
+ * Public web/Sanmaru discovery -> IGDC Social Hub latest-content collector.
  *
  * This is a thin social-only adapter. It does not modify Sanmaru, SearchBank,
  * Snapshot Engine, sample slots, or public social.snapshot.json. Search hits
- * are promoted to a public channel/profile/group asset before they enter the
- * existing candidate gateway.
+ * keep their public channel/profile/group as the creator identity, while the
+ * latest public video/post remains the visible candidate and outbound target.
  */
 const crypto = require("crypto");
 const SocialStore = require("./lib/social-candidate-store.v1");
@@ -17,7 +17,7 @@ const MaruSearch = require("./maru-search");
 const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.5.0-staged-provider-research";
+const VERSION = "sanmaru-social-live-collector-v1.6.0-country-latest-content";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -30,7 +30,7 @@ const PROVIDER_GROUP_NAMES = Object.freeze([
   "sanmaru_searchbank"
 ]);
 const CHANNEL_RESOLUTION_TIMEOUT_MS = 1500;
-const CHANNEL_RESOLUTION_BUDGET_MS = 3200;
+const CHANNEL_RESOLUTION_BUDGET_MS = 4200;
 const CHANNEL_RESOLUTION_CONCURRENCY = 4;
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 
@@ -90,16 +90,49 @@ const PUBLIC_DIRECTORY = Object.freeze({
   }
 });
 
-const CHANNEL_SITE_FILTERS = Object.freeze({
-  youtube: "(site:youtube.com/@ OR site:youtube.com/channel/ OR site:youtube.com/user/)",
-  instagram: "site:instagram.com -inurl:/p/ -inurl:/reel/ -inurl:/stories/",
-  tiktok: "site:tiktok.com/@",
-  facebook: "(site:facebook.com/groups/ OR site:facebook.com/pages/ OR site:facebook.com)",
+const CONTENT_SITE_FILTERS = Object.freeze({
+  youtube: "(site:youtube.com/watch OR site:youtube.com/shorts/ OR site:youtu.be)",
+  instagram: "(site:instagram.com/p/ OR site:instagram.com/reel/)",
+  tiktok: "site:tiktok.com/@ inurl:/video/",
+  facebook: "(site:facebook.com/reel/ OR site:facebook.com/watch OR site:facebook.com/videos/ OR site:facebook.com/posts/)",
   wechat: "site:mp.weixin.qq.com/s",
-  weibo: "(site:weibo.com/u/ OR site:weibo.com)",
-  pinterest: "site:pinterest.com -inurl:/pin/",
-  reddit: "site:reddit.com/r/",
-  twitter: "(site:x.com OR site:twitter.com) -inurl:/status/"
+  weibo: "(site:weibo.com/status/ OR site:m.weibo.cn/detail/)",
+  pinterest: "site:pinterest.com/pin/",
+  reddit: "site:reddit.com/r/ inurl:/comments/",
+  twitter: "(site:x.com/status/ OR site:twitter.com/status/)"
+});
+
+const LATEST_QUERY_TERMS = Object.freeze({
+  ko: "한국어 최신 영상 새 게시물",
+  en: "latest video recent post",
+  ja: "日本語 最新動画 新しい投稿",
+  zh: "中文 最新视频 最新帖子",
+  zht: "繁體中文 最新影片 最新貼文",
+  de: "deutsch neuestes Video aktueller Beitrag",
+  fr: "français dernière vidéo publication récente",
+  es: "español último video publicación reciente",
+  pt: "português vídeo mais recente publicação",
+  ru: "русский последнее видео новая публикация",
+  it: "italiano ultimo video post recente",
+  nl: "Nederlands nieuwste video recent bericht",
+  sv: "svenska senaste video nytt inlägg",
+  pl: "polski najnowszy film nowy wpis",
+  tr: "Türkçe en son video yeni gönderi",
+  ar: "العربية أحدث فيديو منشور",
+  th: "ภาษาไทย วิดีโอล่าสุด โพสต์ล่าสุด",
+  vi: "tiếng Việt video mới nhất bài đăng mới",
+  bn: "বাংলা সর্বশেষ ভিডিও নতুন পোস্ট",
+  fa: "فارسی جدیدترین ویدیو پست",
+  hi: "हिन्दी नवीनतम वीडियो नई पोस्ट",
+  hu: "magyar legújabb videó friss bejegyzés",
+  id: "bahasa Indonesia video terbaru posting terbaru",
+  ms: "bahasa Melayu video terkini siaran terbaru",
+  sw: "Kiswahili video mpya chapisho jipya",
+  ta: "தமிழ் சமீபத்திய காணொளி புதிய பதிவு",
+  tl: "Filipino pinakabagong video bagong post",
+  uk: "українська останнє відео новий допис",
+  ur: "اردو تازہ ترین ویڈیو نئی پوسٹ",
+  uz: "o‘zbekcha eng so‘nggi video yangi post"
 });
 
 const FRIENDLY_KEY_NAMES = Object.freeze({
@@ -170,6 +203,39 @@ function candidateUrls(item) {
     payload.url, payload.link, payload.openUrl, payload.pageUrl, payload.watchUrl,
     preview.pageUrl, preview.videoUrl
   ].map(Policy.normalizeUrl).filter(Boolean);
+}
+function contentKind(platform, value) {
+  const normalized = Policy.normalizeUrl(value);
+  if (!normalized || Policy.platformFromHost(normalized) !== platform) return "";
+  try {
+    const url = new URL(normalized);
+    const path = url.pathname.replace(/\/+/g, "/");
+    if (platform === "youtube") {
+      if (/youtu\.be$/i.test(url.hostname) && /^\/[^/]+/.test(path)) return "latest_video";
+      if (/^\/watch/i.test(path) && url.searchParams.get("v")) return "latest_video";
+      if (/^\/(shorts|live|embed)\/[^/]+/i.test(path)) return "latest_video";
+    }
+    if (platform === "instagram" && /^\/(p|reel|tv)\/[^/]+/i.test(path)) return "latest_post";
+    if (platform === "tiktok" && /^\/@[^/]+\/video\/[^/]+/i.test(path)) return "latest_video";
+    if (platform === "facebook" && (/^\/(reel|watch|videos|posts)\//i.test(path) || /\/(videos|posts)\/[^/]+/i.test(path) || /\/permalink\.php$/i.test(path))) return "latest_post";
+    if (platform === "wechat" && (/^\/s(?:\/|$)/i.test(path) || url.searchParams.get("__biz"))) return "latest_post";
+    if (platform === "weibo" && (/^\/(status|detail|tv\/show)\//i.test(path) || /^\/\d+\/[a-z0-9]+/i.test(path))) return "latest_post";
+    if (platform === "pinterest" && /^\/pin\/[^/]+/i.test(path)) return "latest_post";
+    if (platform === "reddit" && /\/comments\/[^/]+/i.test(path)) return "latest_post";
+    if (platform === "twitter" && /\/status\/[^/]+/i.test(path)) return "latest_post";
+  } catch (_error) {}
+  return "";
+}
+function channelIdFromItem(item) {
+  const direct = SocialStore.text(item && item.channelId);
+  if (/^UC[a-zA-Z0-9_-]{20,}$/.test(direct)) return direct;
+  for (const value of candidateUrls(item)) {
+    try {
+      const match = new URL(value).pathname.match(/^\/channel\/(UC[a-zA-Z0-9_-]{20,})/i);
+      if (match) return match[1];
+    } catch (_error) {}
+  }
+  return "";
 }
 function syntheticTitle(value) {
   const title = SocialStore.text(value);
@@ -285,37 +351,37 @@ function providerReadiness(configValue) {
       ready: !!(cfg.googleKey && cfg.googleCx),
       googleApiKeyConfigured: !!cfg.googleKey,
       cseIdConfigured: !!cfg.googleCx,
-      role: "Instagram·TikTok·Facebook·WeChat·Weibo·Pinterest·Reddit·X 공개 채널 주소 검색"
+      role: "Instagram·TikTok·Facebook·WeChat·Weibo·Pinterest·Reddit·X 공개 최신 게시물 검색"
     },
     youtubeDataApi: {
       ready: !!cfg.youtubeKey,
       apiKeyConfigured: !!cfg.youtubeKey,
-      role: "게시물이 아닌 YouTube 채널(type=channel) 직접 검색 및 공개 통계 확인"
+      role: "국가·언어별 YouTube 채널 검색 후 공개 RSS로 최신 영상 확인"
     },
     naverSearch: {
       ready: !!(cfg.naverId && cfg.naverSecret),
       clientIdConfigured: !!cfg.naverId,
       clientSecretConfigured: !!cfg.naverSecret,
-      role: "한국어 공개 웹 채널 검색 보조"
+      role: "한국어 최신 공개 영상·게시물 검색 보조"
     },
     publicSocialDirectory: {
       ready: true,
       apiKeyRequired: false,
       provider: "Wikidata Query Service",
-      role: "API 키 없이 공개 등록된 실제 SNS 채널·프로필·커뮤니티 주소 자동 발견"
+      role: "API 키 없이 공개 등록된 크리에이터를 찾고, YouTube는 공개 RSS로 최신 영상 확인"
     },
-    searchBankImport: { ready: true, role: "SearchBank의 실제 SNS 주소만 채널 자산으로 승격하여 반입" },
+    searchBankImport: { ready: true, role: "SearchBank의 실제 최신 SNS 영상·게시물 주소를 후보로 반입" },
     countryLanguageRouting: { ready: true, role: "국가 단위와 언어 우선순위 적용; 원 IP는 저장하지 않음" },
-    directPublicUrlIntake: { ready: true, role: "키 없이 관리자가 공개 채널·프로필·그룹·게시물 URL을 붙여넣어 채널 후보로 변환" },
-    channelPromotion: { ready: true, role: "YouTube 영상, TikTok 영상, X 게시물, Reddit 글 등을 운영 채널·프로필·커뮤니티 주소로 승격" },
+    directPublicUrlIntake: { ready: true, role: "키 없이 관리자가 공개 최신 영상·게시물 URL을 후보로 반입" },
+    channelPromotion: { ready: true, role: "운영 채널은 내부 식별자로 보존하고 최신 영상·게시물을 표시·클릭 대상으로 유지" },
     collectionCanRun: true,
     keyFreeAutomaticDiscovery: true,
     requirements: [
-      { key: "필수 키 없음", neededFor: "공개 디렉터리 기반 9개 SNS 실제 채널 링크 자동 후보 수집", cost: "무료 공개 데이터; 관리자 검증 후 사용" },
-      { key: "GOOGLE_API_KEY + GOOGLE_CSE_ID", neededFor: "8개 비YouTube 플랫폼의 공개 채널 자동 발견", cost: "Google 무료 할당량 및 서비스 약관 범위" },
-      { key: "YOUTUBE_API_KEY", neededFor: "YouTube 채널 직접 검색", cost: "Google Cloud에서 YouTube Data API v3 활성화" },
-      { key: "NAVER_CLIENT_ID + NAVER_CLIENT_SECRET", neededFor: "한국어 공개 웹 검색 보조", cost: "Naver Developers 애플리케이션 등록" },
-      { key: "공개 URL 직접 반입", neededFor: "키가 없거나 검색 API가 제한된 플랫폼의 후보 확보", cost: "무료; 관리자 공개성·안전성 검토 필요" }
+      { key: "필수 키 없음", neededFor: "공개 디렉터리의 YouTube 크리에이터별 최신 영상 RSS 수집", cost: "무료 공개 데이터; 관리자 검증 후 사용" },
+      { key: "GOOGLE_API_KEY + GOOGLE_CSE_ID", neededFor: "8개 비YouTube 플랫폼의 최신 공개 게시물 발견", cost: "Google 무료 할당량 및 서비스 약관 범위" },
+      { key: "YOUTUBE_API_KEY", neededFor: "국가·언어별 YouTube 크리에이터 직접 검색", cost: "Google Cloud에서 YouTube Data API v3 활성화" },
+      { key: "NAVER_CLIENT_ID + NAVER_CLIENT_SECRET", neededFor: "한국어 최신 공개 영상·게시물 검색 보조", cost: "Naver Developers 애플리케이션 등록" },
+      { key: "공개 최신 콘텐츠 URL 직접 반입", neededFor: "키가 없거나 검색 API가 제한된 플랫폼의 후보 확보", cost: "무료; 관리자 공개성·안전성 검토 필요" }
     ]
   };
 }
@@ -333,6 +399,20 @@ async function fetchJson(url, init, timeoutMs) {
       throw error;
     }
     return data;
+  } finally { clearTimeout(timer); }
+}
+async function fetchText(url, init, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs || REQUEST_TIMEOUT_MS)));
+  try {
+    const response = await fetch(url, Object.assign({}, init || {}, { signal: controller.signal }));
+    const raw = await response.text();
+    if (!response.ok) {
+      const error = new Error(raw || "HTTP " + response.status);
+      error.statusCode = response.status;
+      throw error;
+    }
+    return raw;
   } finally { clearTimeout(timer); }
 }
 async function withDeadline(promise, timeoutMs, fallback) {
@@ -359,14 +439,19 @@ function countryQueryTerm(route) {
   if (!code) return "";
   try { return new Intl.DisplayNames(["en"], { type: "region" }).of(code) || code; } catch (_error) { return code; }
 }
+function languageQueryTerm(route) {
+  const languages = CountryRouting.normalizeLanguages(route && route.languages);
+  const primary = languages[0] || "en";
+  return LATEST_QUERY_TERMS[primary] || LATEST_QUERY_TERMS.en;
+}
 function scopedQueries(plan, cursor, passes, route) {
   const base = plan.policy.collectionQueries || [];
   const offset = Math.max(0, Number(cursor || 0) || 0);
   const count = Math.max(1, Math.min(MAX_QUERY_PASSES, Number(passes || DEFAULT_QUERY_PASSES) || DEFAULT_QUERY_PASSES));
   const queries = [];
   for (let index = 0; index < count; index += 1) {
-    const baseQuery = base[(offset + index) % base.length] || (plan.platform + " useful creator channel");
-    queries.push([baseQuery, countryQueryTerm(route)].filter(Boolean).join(" "));
+    const baseQuery = base[(offset + index) % base.length] || (plan.platform + " useful creator");
+    queries.push([baseQuery, countryQueryTerm(route), languageQueryTerm(route)].filter(Boolean).join(" "));
   }
   return Array.from(new Set(queries));
 }
@@ -426,6 +511,7 @@ async function publicDirectoryRequest(plan, route, limit, offset, countryStrict)
       return {
         provider: "wikidata-public-social-directory",
         platform: plan.platform,
+        channelId: plan.platform === "youtube" ? account : "",
         channelUrl: url,
         url,
         title: bindingValue(binding, "itemLabel"),
@@ -473,12 +559,20 @@ async function publicDirectorySearch(plan, route, limit, offset) {
   globalFallback.items.forEach((item) => { item.publicDirectoryCountryFallback = true; });
   return globalFallback;
 }
-async function youtubeChannelSearch(queryText, limit, cfg, qualitySweep) {
+function youtubeLanguageCode(route) {
+  const primary = CountryRouting.normalizeLanguages(route && route.languages)[0] || "";
+  return primary === "zht" ? "zh-TW" : primary;
+}
+async function youtubeChannelSearch(queryText, limit, cfg, qualitySweep, route) {
   if (!cfg.youtubeKey) return { provider: "youtube-data-api-channel", status: "not_configured", items: [] };
   const params = new URLSearchParams({
     part: "snippet", type: "channel", maxResults: String(Math.min(25, limit)),
     q: queryText, key: cfg.youtubeKey, safeSearch: "strict", order: qualitySweep ? "viewCount" : "relevance"
   });
+  const regionCode = SocialStore.text(route && route.countryCode).toUpperCase();
+  const relevanceLanguage = youtubeLanguageCode(route);
+  if (/^[A-Z]{2}$/.test(regionCode)) params.set("regionCode", regionCode);
+  if (relevanceLanguage) params.set("relevanceLanguage", relevanceLanguage);
   try {
     const data = await fetchJson("https://www.googleapis.com/youtube/v3/search?" + params.toString(), {}, 2600);
     const base = (data.items || []).map((row) => ({
@@ -518,9 +612,9 @@ async function googleChannelSearch(plan, queryText, limit, start, cfg) {
   if (!cfg.googleKey || !cfg.googleCx) return { provider: "google-cse-channel", status: "not_configured", items: [] };
   const params = new URLSearchParams({
     key: cfg.googleKey, cx: cfg.googleCx,
-    q: queryText + " " + CHANNEL_SITE_FILTERS[plan.platform],
+    q: queryText + " " + CONTENT_SITE_FILTERS[plan.platform],
     num: String(Math.min(10, limit)), start: String(Math.max(1, Math.min(91, start || 1))),
-    safe: "active"
+    safe: "active", dateRestrict: "m6"
   });
   try {
     const data = await fetchJson("https://www.googleapis.com/customsearch/v1?" + params.toString(), {}, REQUEST_TIMEOUT_MS);
@@ -535,7 +629,7 @@ async function googleChannelSearch(plan, queryText, limit, start, cfg) {
         title: row.title,
         description: row.snippet,
         thumbnail: thumb,
-        entityKind: "channel_search_hit"
+        entityKind: contentKind(plan.platform, row.link) || "content_search_hit"
       };
     });
     return { provider: "google-cse-channel", status: "ok", items };
@@ -551,10 +645,10 @@ async function naverChannelSearch(plan, queryText, limit, start, route, cfg) {
   }
   const params = new URLSearchParams({
     // Naver Web Search often returns zero when Google-style site: filters are
-    // appended. Search broadly, then the channel resolver keeps only the
-    // requested platform's real public channel/profile/group URLs.
+    // appended. Search broadly, then the latest-content resolver keeps only
+    // the requested platform's real public video/post URLs.
     query: queryText + " " + plan.platform,
-    display: String(Math.min(100, limit)), start: String(Math.max(1, Math.min(1000, start || 1))), sort: "sim"
+    display: String(Math.min(100, limit)), start: String(Math.max(1, Math.min(1000, start || 1))), sort: "date"
   });
   try {
     const data = await fetchJson("https://openapi.naver.com/v1/search/webkr.json?" + params.toString(), {
@@ -566,7 +660,7 @@ async function naverChannelSearch(plan, queryText, limit, start, route, cfg) {
       items: (data.items || []).map((row) => ({
         provider: "naver-web-channel", platform: plan.platform,
         url: row.link, title: stripHtml(row.title), description: stripHtml(row.description),
-        entityKind: "channel_search_hit", language: "ko"
+        entityKind: contentKind(plan.platform, row.link) || "content_search_hit", language: "ko"
       }))
     };
   } catch (error) {
@@ -584,9 +678,10 @@ async function maruSearchOne(event, plan, queryText, limit, language, start) {
           openPipe: "1", external: "1", noAnalytics: "1", noRevenue: "1"
         }
       }, {
-        q: queryText + " " + CHANNEL_SITE_FILTERS[plan.platform],
+        q: queryText + " " + CONTENT_SITE_FILTERS[plan.platform],
         limit, lang: language || null, start: start || 1, deep: false, external: true,
-        type: plan.platform === "youtube" ? "video" : "sns", noAnalytics: true, noRevenue: true
+        type: plan.platform === "youtube" ? "video" : "sns",
+        sort: "date", freshness: "recent", noAnalytics: true, noRevenue: true
       }),
       REQUEST_TIMEOUT_MS,
       () => ({ __providerTimeout: true })
@@ -613,7 +708,7 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     tasks = [publicDirectorySearch(plan, route, limit, directoryOffset)];
   } else if (providerGroup === 1) {
     if (plan.platform === "youtube") {
-      tasks.push(youtubeChannelSearch(queryText, limit, cfg, qualitySweep));
+      tasks.push(youtubeChannelSearch(queryText, limit, cfg, qualitySweep, route));
     }
     tasks.push(googleChannelSearch(plan, queryText, limit, start, cfg));
     tasks.push(naverChannelSearch(plan, queryText, limit, start, route, cfg));
@@ -652,64 +747,146 @@ async function youtubeOembed(value) {
     return {
       ok: !!Policy.normalizeUrl(data.author_url),
       channelUrl: Policy.normalizeUrl(data.author_url),
-      title: firstText([data.author_name, data.title]),
+      title: firstText([data.title]),
       creatorName: firstText([data.author_name]),
       thumbnail: firstText([data.thumbnail_url])
     };
   } catch (_error) { return { ok: false }; }
 }
+function decodeXml(value) {
+  return SocialStore.text(value)
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+function xmlValue(xml, tag) {
+  const match = String(xml || "").match(new RegExp("<" + tag.replace(":", "\\:") + "[^>]*>([\\s\\S]*?)<\\/" + tag.replace(":", "\\:") + ">", "i"));
+  return match ? decodeXml(match[1]) : "";
+}
+async function youtubeLatestFromFeed(channelId) {
+  if (!/^UC[a-zA-Z0-9_-]{20,}$/.test(SocialStore.text(channelId))) return { ok: false };
+  try {
+    const xml = await fetchText(
+      "https://www.youtube.com/feeds/videos.xml?channel_id=" + encodeURIComponent(channelId),
+      { headers: { Accept: "application/atom+xml, application/xml;q=0.9" } },
+      CHANNEL_RESOLUTION_TIMEOUT_MS
+    );
+    const entryMatch = xml.match(/<entry>([\s\S]*?)<\/entry>/i);
+    const entry = entryMatch && entryMatch[1] || "";
+    const videoId = xmlValue(entry, "yt:videoId");
+    const title = xmlValue(entry, "title");
+    const publishedAt = xmlValue(entry, "published") || xmlValue(entry, "updated");
+    const authorMatch = xml.match(/<author>([\s\S]*?)<\/author>/i);
+    const creatorName = xmlValue(authorMatch && authorMatch[1], "name");
+    const thumbnailMatch = entry.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i);
+    if (!videoId || !title) return { ok: false };
+    return {
+      ok: true,
+      channelId,
+      channelUrl: "https://www.youtube.com/channel/" + channelId,
+      contentUrl: "https://www.youtube.com/watch?v=" + encodeURIComponent(videoId),
+      title,
+      creatorName,
+      thumbnail: thumbnailMatch ? decodeXml(thumbnailMatch[1]) : "https://i.ytimg.com/vi/" + videoId + "/hqdefault.jpg",
+      publishedAt,
+      entityKind: "latest_video"
+    };
+  } catch (_error) { return { ok: false }; }
+}
 async function resolveChannelAsset(item, platform) {
   const title = firstText([item && item.title, item && item.name, item && item.label]);
-  for (const url of candidateUrls(item)) {
+  const urls = candidateUrls(item);
+  let latestContentUrl = urls.find((url) => contentKind(platform, url)) || "";
+  let latest = {};
+  if (platform === "youtube" && !latestContentUrl) {
+    latest = await youtubeLatestFromFeed(channelIdFromItem(item));
+    if (latest.ok) latestContentUrl = latest.contentUrl;
+  }
+  if (latest.ok && latest.channelUrl) {
+    const channel = ChannelLink.resolve(latest.channelUrl, { platform, title: latest.creatorName });
+    if (channel.ok && channel.channelUrl) {
+      channel.latestContentUrl = latestContentUrl;
+      channel.latestContentKind = "latest_video";
+      channel.latest = latest;
+      return channel;
+    }
+  }
+  const ordered = latestContentUrl
+    ? [latestContentUrl].concat(urls.filter((url) => url !== latestContentUrl))
+    : urls;
+  for (const url of ordered) {
     let resolved = ChannelLink.resolve(url, { platform, title });
     if (resolved.ok && resolved.needsEnrichment === "youtube_oembed_author") {
       const enriched = await youtubeOembed(resolved.evidenceUrl);
       if (enriched.ok) {
         resolved = ChannelLink.resolve(enriched.channelUrl, { platform, title: enriched.title });
-        if (resolved.ok) resolved.enrichment = enriched;
+        if (resolved.ok) resolved.enrichment = Object.assign({}, enriched, latest);
       }
     }
-    if (resolved.ok && resolved.channelUrl) return resolved;
+    if (resolved.ok && resolved.channelUrl) {
+      resolved.latestContentUrl = latestContentUrl;
+      resolved.latestContentKind = contentKind(platform, latestContentUrl);
+      resolved.latest = latest;
+      return resolved;
+    }
   }
-  const hasPlatformUrl = candidateUrls(item).some((url) => Policy.platformFromHost(url) === platform);
+  const hasPlatformUrl = urls.some((url) => Policy.platformFromHost(url) === platform);
   return { ok: false, reason: hasPlatformUrl ? "channel_target_not_resolved" : "platform_host_mismatch" };
 }
 async function candidateFromItem(item, sectionKey, platform, queryText, route) {
   const resolved = await resolveChannelAsset(item, platform);
   if (!resolved.ok) return { ok: false, reason: resolved.reason };
+  if (!resolved.latestContentUrl || !resolved.latestContentKind) {
+    return { ok: false, reason: "latest_public_content_required" };
+  }
   const originalTitle = firstText([item && item.title, item && item.name, item && item.label]);
   const enrichment = resolved.enrichment || {};
-  const isDirectEntity = /^(channel|profile|public_group|public_page|community|board)$/.test(SocialStore.text(item && item.entityKind));
+  const latest = resolved.latest || {};
   const title = firstText([
+    latest.title,
     enrichment.title,
-    isDirectEntity ? originalTitle : "",
     resolved.promotedFromContent ? resolved.suggestedTitle : "",
     originalTitle,
     resolved.suggestedTitle
   ]);
-  if (syntheticTitle(title)) return { ok: false, reason: "real_channel_title_required" };
+  if (syntheticTitle(title)) return { ok: false, reason: "real_content_title_required" };
   const source = item && item.source;
   const creatorName = firstText([
-    enrichment.creatorName, item && item.creatorName, item && item.channelName,
+    latest.creatorName, enrichment.creatorName, item && item.creatorName, item && item.channelName,
     item && item.channel, item && item.publisher, source && typeof source === "object" && source.name,
-    title
+    resolved.suggestedTitle
   ]);
   const routeLanguages = route && route.languages || [];
+  const explicitCountry = SocialStore.text(item && item.country).toUpperCase();
+  if (route && route.countryCode && explicitCountry && explicitCountry !== route.countryCode) {
+    return { ok: false, reason: "country_creator_mismatch" };
+  }
   const category = firstText([item && item.category, categoryFromQuery(platform, queryText)]);
+  const itemLanguage = CountryRouting.normalizeLanguage(item && (item.lang || item.language));
+  const language = itemLanguage && routeLanguages.includes(itemLanguage)
+    ? itemLanguage
+    : firstText([routeLanguages[0], itemLanguage, "und"]);
   const candidate = {
     sectionKey,
     platform,
     title: title.slice(0, 240),
-    sourceUrl: resolved.channelUrl,
+    sourceUrl: resolved.latestContentUrl,
+    latestContentUrl: resolved.latestContentUrl,
     channelUrl: resolved.channelUrl,
-    channelEvidenceUrl: resolved.evidenceUrl,
-    sourceContentUrl: resolved.promotedFromContent ? resolved.evidenceUrl : "",
-    entityKind: resolved.entityKind,
+    channelEvidenceUrl: resolved.latestContentUrl,
+    sourceContentUrl: resolved.latestContentUrl,
+    entityKind: resolved.latestContentKind,
+    channelEntityKind: resolved.entityKind,
     channelAsset: true,
-    thumbnailUrl: firstText([enrichment.thumbnail, item && item.thumbnail, item && item.thumb, item && item.image, item && item.imageUrl, item && item.cardImage]),
+    latestContentAsset: true,
+    contentPublishedAt: firstText([latest.publishedAt, item && item.publishedAt, item && item.published_at, item && item.pubDate, item && item.date]),
+    thumbnailUrl: firstText([latest.thumbnail, enrichment.thumbnail, item && item.thumbnail, item && item.thumb, item && item.image, item && item.imageUrl, item && item.cardImage]),
     description: firstText([item && item.description, item && item.summary, item && item.snippet]).slice(0, 1200),
     creatorName: creatorName.slice(0, 180),
-    language: firstText([item && item.lang, item && item.language, routeLanguages[0], "und"]),
+    language,
     countryScopes: item && item.publicDirectoryCountryFallback
       ? []
       : (route && route.countryCode ? [route.countryCode] : []),
@@ -725,19 +902,17 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route) {
     source: {
       name: itemSourceName(item),
       platform,
-      mode: "social_hub_channel_discovery"
+      mode: "social_hub_latest_content_discovery"
     },
     bind: { section: sectionKey, psom_key: sectionKey, platform },
-    tags: Array.from(new Set([].concat(item && item.tags || [], [platform, category, resolved.entityKind, "public", "channel_asset"]))).slice(0, 12),
+    tags: Array.from(new Set([].concat(item && item.tags || [], [platform, category, resolved.latestContentKind, "public", "latest_content", "creator_channel_identified"]))).slice(0, 12),
     quality: { rank: Number(item && (item._finalScore || item.score || item.rank) || 0) }
   };
   const reasons = Policy.validationReasons(candidate);
   return reasons.length ? { ok: false, reason: reasons[0] } : { ok: true, candidate };
 }
-function directEntityPriority(item) {
-  return /^(channel|profile|public_group|public_page|official_account|community|board)$/.test(
-    SocialStore.text(item && item.entityKind)
-  ) ? 0 : 1;
+function latestContentPriority(item, platform) {
+  return candidateUrls(item).some((url) => contentKind(platform, url)) ? 0 : 1;
 }
 async function resolveSearchCandidates(searchResults, sectionKey, platform, route, target) {
   const inputs = [];
@@ -747,7 +922,7 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
     });
   });
   inputs.sort((left, right) =>
-    directEntityPriority(left.item) - directEntityPriority(right.item) ||
+    latestContentPriority(left.item, platform) - latestContentPriority(right.item, platform) ||
     left.order - right.order
   );
   const limit = Math.max(target, Math.min(48, target * 4));
@@ -792,9 +967,9 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
       rejected.push({ reason: result.reason });
       return;
     }
-    const key = result.candidate.sourceUrl.toLowerCase();
+    const key = result.candidate.channelUrl.toLowerCase();
     if (seenUrls.has(key)) {
-      rejected.push({ reason: "duplicate_channel_url" });
+      rejected.push({ reason: "duplicate_creator_channel" });
       return;
     }
     seenUrls.add(key);
@@ -825,6 +1000,9 @@ function previewItems(payload) {
       platform: item && item.platform,
       title: item && item.title,
       sourceUrl: item && (item.source_url || item.sourceUrl),
+      latestContentUrl: raw.latestContentUrl || raw.sourceContentUrl || item && (item.source_url || item.sourceUrl),
+      channelUrl: raw.channelUrl || item && item.channelUrl,
+      contentPublishedAt: raw.contentPublishedAt || item && item.contentPublishedAt,
       entityKind: raw.entityKind || item && item.entityKind,
       countryScopes: raw.countryScopes || item && item.countryScopes || []
     };
@@ -848,8 +1026,8 @@ async function intakeCandidates(body, plan, route) {
       provider: "admin-public-url-intake"
     }, plan.sectionKey, plan.platform, "admin_public_url_intake", route);
     if (!converted.ok) { rejected.push({ index: index + 1, reason: converted.reason }); continue; }
-    const key = converted.candidate.sourceUrl.toLowerCase();
-    if (seen.has(key)) { rejected.push({ index: index + 1, reason: "duplicate_channel_url" }); continue; }
+    const key = converted.candidate.channelUrl.toLowerCase();
+    if (seen.has(key)) { rejected.push({ index: index + 1, reason: "duplicate_creator_channel" }); continue; }
     seen.add(key);
     candidates.push(converted.candidate);
   }
@@ -869,7 +1047,7 @@ exports.handler = async function(event) {
         allowedSections: Policy.SECTION_KEYS,
         externalProviderCalls: "POST only after administrator authorization",
         source: "direct provider + existing Maru/Sanmaru public gateway",
-        target: "public channel/profile/group candidates through existing social candidate gateway",
+        target: "country-language matched creator latest public content through existing social candidate gateway",
         providerReadiness: providerReadiness(cfg),
         publicSnapshotMutation: false,
         searchBankCoreMutation: false,
@@ -892,7 +1070,7 @@ exports.handler = async function(event) {
     if (/^(intake_channels|intake_urls|direct_intake)$/i.test(SocialStore.text(body.action))) {
       const intake = await intakeCandidates(body, plan, route);
       const selected = intake.candidates.slice(0, 500);
-      const gatewayResponse = await CandidateGateway.handler(gatewayEvent(event, selected, sectionKey, dryRun, selected.length || 1, "admin-public-channel-url-intake"));
+      const gatewayResponse = await CandidateGateway.handler(gatewayEvent(event, selected, sectionKey, dryRun, selected.length || 1, "admin-public-latest-content-url-intake"));
       const payload = jsonBody(gatewayResponse);
       payload.itemsPreview = previewItems(payload);
       delete payload.items;
@@ -903,7 +1081,7 @@ exports.handler = async function(event) {
         route,
         dryRun,
         inputLines: intake.lineCount,
-        resolvedChannels: intake.candidates.length,
+        resolvedLatestContents: intake.candidates.length,
         submittedCandidates: selected.length,
         rejectedRows: intake.rejected.length,
         rejectedByReason: rejectionSummary(intake.rejected),
@@ -981,7 +1159,7 @@ exports.handler = async function(event) {
       providerTrace: searchResults.map((result) => ({ query: result.query, providers: result.providers })),
       nextQueryCursor: queryCursor + 1,
       providerReadiness: providerReadiness(cfg),
-      candidateAssetType: "channel_profile_group",
+      candidateAssetType: "creator_latest_public_content",
       publicSnapshotMutation: false,
       searchBankCoreMutation: false,
       sampleSlotMutation: false

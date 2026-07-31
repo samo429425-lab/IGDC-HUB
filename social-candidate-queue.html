@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>IGDC 소셜 네트워크 허브 채널 후보 관제</title>
+    <title>IGDC 소셜 네트워크 허브 최신 콘텐츠 후보 관제</title>
     <style>
       :root {
         color-scheme: dark;
@@ -430,10 +430,11 @@
   </head>
   <body>
     <main>
-      <h1>소셜 네트워크 허브 채널 후보 관제</h1>
+      <h1>소셜 네트워크 허브 최신 콘텐츠 후보 관제</h1>
       <p class="lead">
-        IGDC가 추천할 공개 SNS 채널·프로필·그룹을 9개 섹션별로 수집·검토합니다.
-        개별 게시물이 발견되면 운영 채널 주소로 승격한 뒤 후보에 넣습니다.
+        국가·언어에 맞는 공개 SNS 인플루언서를 선별한 뒤, 계정 자체가 아니라
+        각 인플루언서가 최근 공개한 영상·게시물을 9개 섹션별로 수집·검토합니다.
+        운영 채널 주소는 내부 식별과 중복 방지에만 보존합니다.
         후보를 확정해도 <strong>실제 적용</strong> 버튼을 누르기 전까지 기존
         샘플 슬롯은 유지하며 외부 플랫폼의 권한을 우회하지 않습니다.
       </p>
@@ -498,10 +499,12 @@
         </div>
       </section>
       <section class="panel">
-        <h2>섹션별 공개 SNS 채널 수집</h2>
+        <h2>섹션별 공개 SNS 최신 콘텐츠 수집</h2>
         <div class="small">
           한 번에 100개를 검색하지 않습니다. 선택한 섹션을 8~10개 단위로
-          조사·검증·저장합니다. 100개에 도달하면 인기·품질·활동성 중심의 보강
+          조사·검증·저장합니다. 국가별 선호 언어를 검색어와 배치 기준에
+          반영하고, 한 인플루언서당 최신 공개 콘텐츠 1건을 후보로 유지합니다.
+          100개에 도달하면 인기·품질·활동성 중심의 보강
           검색을 공개 디렉터리·직접 검색 API·산마루 검색의 세 경로로 나누어
           실행하고, 전체 비교 후보에서 상위 100개를 공개 배치 대상으로
           정리합니다. 100개 전에 연속 검색에서 신규 후보가 더 이상
@@ -533,8 +536,8 @@
           ><button id="searchBankImportBtn" class="secondary">
             SearchBank 실후보 반입</button
           ><span class="small"
-            >API 키가 없어도 공개 SNS 디렉터리에서 실제 채널·프로필·커뮤니티
-            주소를 8~10개씩 자동 수집합니다. 설정된 Google·YouTube·Naver와
+            >API 키가 없어도 공개 디렉터리에서 인플루언서를 찾고 YouTube 공개
+            RSS로 최신 영상을 8~10개씩 수집합니다. 설정된 Google·YouTube·Naver와
             SearchBank 결과는 추가 탐색 경로로 함께 사용합니다.</span
           >
         </div>
@@ -546,24 +549,24 @@
         </div>
       </section>
       <section class="panel">
-        <h2>공개 채널 URL 직접 반입</h2>
+        <h2>공개 최신 콘텐츠 URL 직접 반입</h2>
         <div class="small">
           검색 API가 없거나 제한된 플랫폼도 운영할 수 있는 보조 경로입니다.
           위에서 국가와 여기의 섹션을 먼저 선택한 뒤 한 줄에 하나씩
           붙여넣으세요. 형식:
           <span class="mono">https://공개주소 | 채널명(선택) | 주제(선택)</span
-          >. YouTube 영상·TikTok 영상·X 게시물·Reddit 글 주소는 확인 가능한 운영
-          채널·프로필·커뮤니티 주소로 바꿉니다.
+          >. 영상·게시물 주소는 표시 후보로 유지하고, 확인 가능한 운영
+          채널·프로필·커뮤니티 주소는 내부 식별자로 함께 보존합니다.
         </div>
         <textarea
           id="channelIntakeText"
           maxlength="100000"
-          placeholder="https://www.youtube.com/@channel | 채널명 | travel&#10;https://www.tiktok.com/@creator/video/123456789 | 크리에이터명 | culture"
+          placeholder="https://www.youtube.com/watch?v=VIDEO_ID | 영상 제목 | travel&#10;https://www.tiktok.com/@creator/video/123456789 | 영상 제목 | culture"
         ></textarea>
         <div class="collect-controls">
           <button id="channelIntakeDryRunBtn" class="secondary">
-            채널 주소 변환 점검</button
-          ><button id="channelIntakeBtn">채널 후보 반입</button
+            최신 콘텐츠 주소 점검</button
+          ><button id="channelIntakeBtn">최신 콘텐츠 후보 반입</button
           ><button id="channelIntakeClearBtn" class="secondary">
             입력 비우기</button
           ><span id="channelIntakeState" class="state">입력 대기</span>
@@ -599,7 +602,7 @@
       <section id="tablePanel" class="panel hidden">
         <div class="modal-head">
           <div>
-            <h2 style="margin: 0">최종 확정 채널 · 9개 SNS 섹션</h2>
+            <h2 style="margin: 0">최종 확정 최신 콘텐츠 · 9개 SNS 섹션</h2>
             <div class="small">
               각 섹션의 최종 100개를 썸네일로 확인합니다. 한 번에 한 섹션만 펼쳐
               과도한 이미지 로딩을 막습니다.
@@ -701,6 +704,6 @@
       </p>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=14"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=15"></script>
   </body>
 </html>

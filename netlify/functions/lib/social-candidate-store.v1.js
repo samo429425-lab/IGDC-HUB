@@ -11,7 +11,7 @@ const Policy = require("./social-candidate-policy.v1");
 const CountryRouting = require("./social-country-routing.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
-const VERSION = "social-candidate-store-v1.5.0-country-final-replacement-application";
+const VERSION = "social-candidate-store-v1.6.0-latest-content-channel-identity";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -293,9 +293,8 @@ function idFor(input, normalized) {
     shortHash({
       section: normalized.sectionKey,
       platform: normalized.platform,
-      title: normalized.title,
-      sourceUrl: normalized.sourceUrl,
-      creator: normalized.creatorName || normalized.creatorHandle,
+      creatorChannel:
+        text(row.channelUrl || row.channel_url) || normalized.sourceUrl,
     })
   );
 }
@@ -319,22 +318,46 @@ function normalizeCandidate(input, actor) {
       plain(row.bind).platform,
     sourceInput,
   );
-  const channel = sourceInput
-    ? ChannelLink.resolve(sourceInput, {
+  const requestedContentUrl = Policy.normalizeUrl(
+    row.latestContentUrl ||
+      row.latest_content_url ||
+      row.sourceContentUrl ||
+      row.source_content_url ||
+      (row.latestContentAsset || row.latest_content_asset ? sourceInput : ""),
+  );
+  const channelInput = text(
+    row.channelUrl || row.channel_url || row.accountUrl || sourceInput,
+  );
+  const channel = channelInput
+    ? ChannelLink.resolve(channelInput, {
         platform: platformInput || undefined,
         title: row.title || row.name || row.label,
       })
     : { ok: false };
   if (channel.ok && channel.channelUrl) {
+    const contentPlatform = requestedContentUrl
+      ? Policy.platformFromHost(requestedContentUrl)
+      : "";
+    const validLatestContent =
+      requestedContentUrl &&
+      contentPlatform &&
+      contentPlatform === (platformInput || channel.platform);
     row = Object.assign({}, row, {
-      sourceUrl: channel.channelUrl,
+      sourceUrl: validLatestContent
+        ? requestedContentUrl
+        : channel.channelUrl,
+      latestContentUrl: validLatestContent ? requestedContentUrl : "",
       channelUrl: channel.channelUrl,
-      channelEvidenceUrl: channel.evidenceUrl,
-      sourceContentUrl: channel.promotedFromContent
-        ? channel.evidenceUrl
-        : text(row.sourceContentUrl || row.source_content_url),
-      entityKind: channel.entityKind,
+      channelEvidenceUrl: validLatestContent
+        ? requestedContentUrl
+        : channel.evidenceUrl,
+      sourceContentUrl: validLatestContent ? requestedContentUrl : "",
+      entityKind: validLatestContent
+        ? text(row.entityKind || row.entity_kind || "latest_post")
+        : channel.entityKind,
+      channelEntityKind: channel.entityKind,
       channelAsset: true,
+      latestContentAsset: !!validLatestContent,
     });
   }
   const normalized = Policy.classifyCandidate(row);
@@ -394,6 +417,24 @@ function normalizeCandidate(input, actor) {
       sourceHost: Policy.hostOf(normalized.sourceUrl),
       candidateAssetType: text(row.entityKind || row.entity_kind || "channel"),
       channelAsset: row.channelAsset !== false && row.channel_asset !== false,
+      latestContentAsset:
+        row.latestContentAsset === true || row.latest_content_asset === true,
+      latestContentUrl: text(
+        row.latestContentUrl ||
+          row.latest_content_url ||
+          row.sourceContentUrl ||
+          row.source_content_url,
+      ),
+      contentPublishedAt: text(
+        row.contentPublishedAt ||
+          row.content_published_at ||
+          row.publishedAt ||
+          row.published_at,
+      ),
+      channelUrl: text(row.channelUrl || row.channel_url),
+      channelEntityKind: text(
+        row.channelEntityKind || row.channel_entity_kind,
+      ),
       channelEvidenceUrl: text(
         row.channelEvidenceUrl ||
           row.channel_evidence_url ||
@@ -442,6 +483,8 @@ function validateCandidate(row) {
     reasons.push("source_url_required");
   if (!plain(row.raw).channelAsset)
     reasons.push("channel_profile_group_required");
+  if (!plain(row.raw).latestContentAsset)
+    reasons.push("latest_public_content_required");
   if (row.seed_content)
     reasons.push("seed_or_placeholder_preserved_not_imported");
   if (row.risk_level === "blocked") reasons.push("safety_blocked");
@@ -514,7 +557,27 @@ function normalizeDbRow(row) {
     creatorHandle: text(r.creator_handle || r.creatorHandle),
     sourceUrl: text(r.source_url || r.sourceUrl),
     channelUrl: text(
-      raw.channelUrl || raw.channel_url || r.source_url || r.sourceUrl,
+      raw.channelUrl ||
+        raw.channel_url ||
+        plain(r.evidence).channelUrl ||
+        r.source_url ||
+        r.sourceUrl,
+    ),
+    latestContentUrl: text(
+      raw.latestContentUrl ||
+        raw.latest_content_url ||
+        raw.sourceContentUrl ||
+        raw.source_content_url ||
+        plain(r.evidence).latestContentUrl ||
+        r.source_url ||
+        r.sourceUrl,
+    ),
+    contentPublishedAt: text(
+      raw.contentPublishedAt ||
+        raw.content_published_at ||
+        raw.publishedAt ||
+        raw.published_at ||
+        plain(r.evidence).contentPublishedAt,
     ),
     channelEvidenceUrl: text(
       raw.channelEvidenceUrl ||
@@ -529,6 +592,10 @@ function normalizeDbRow(row) {
         "channel",
     ),
     channelAsset: raw.channelAsset !== false && raw.channel_asset !== false,
+    latestContentAsset:
+      raw.latestContentAsset === true ||
+      raw.latest_content_asset === true ||
+      plain(r.evidence).latestContentAsset === true,
     category: text(raw.category),
     embedUrl: text(r.embed_url || r.embedUrl),
     thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl),
@@ -652,6 +719,7 @@ function statusKey(value) {
 }
 function isApprovedForSnapshot(row) {
   const r = plain(row);
+  const raw = plain(r.raw);
   const review = statusKey(r.review_status || r.reviewStatus);
   const verify = statusKey(r.verification_status || r.verificationStatus);
   const risk = statusKey(r.risk_level || r.riskLevel);
@@ -675,6 +743,9 @@ function isApprovedForSnapshot(row) {
     accessOk &&
     !candidateOnly &&
     !seedContent &&
+    (raw.latestContentAsset === true ||
+      raw.latest_content_asset === true ||
+      plain(r.evidence).latestContentAsset === true) &&
     risk !== "blocked" &&
     risk !== "rejected" &&
     ALLOWED_SECTIONS.has(section) &&
@@ -914,6 +985,16 @@ function publicSocialSlot(row, slotId, defaults) {
   const section = text(r.section_key || r.sectionKey);
   const platform = text(r.platform || PLATFORM_BY_SECTION[section] || "social");
   const now = nowIso();
+  const channelUrl = text(
+    raw.channelUrl || raw.channel_url || plain(r.evidence).channelUrl,
+  );
+  const contentPublishedAt = text(
+    raw.contentPublishedAt ||
+      raw.content_published_at ||
+      raw.publishedAt ||
+      raw.published_at ||
+      plain(r.evidence).contentPublishedAt,
+  );
   return Object.assign({}, base, {
     slotId: Number(slotId) || Number(base.slotId) || 1,
     id: text(r.id) || "social_" + shortHash({ section, platform, sourceUrl }),
@@ -952,6 +1033,10 @@ function publicSocialSlot(row, slotId, defaults) {
           "channel",
       ),
       channelAsset: true,
+      latestContentAsset: true,
+      channelUrl: channelUrl || undefined,
+      latestContentUrl: sourceUrl,
+      contentPublishedAt: contentPublishedAt || undefined,
       category: text(raw.category),
       topicTags: unique(raw.tags).slice(0, 12),
       adControl: text(r.ad_control || r.adControl || "platform_controlled"),
@@ -984,7 +1069,7 @@ function publicSocialSlot(row, slotId, defaults) {
       generated_at: now,
     }),
     timestamps: Object.assign({}, plain(base.timestamps), {
-      published: now,
+      published: contentPublishedAt || now,
       ingested: text(r.created_at || r.createdAt),
       updated: text(r.updated_at || r.updatedAt || now),
     }),

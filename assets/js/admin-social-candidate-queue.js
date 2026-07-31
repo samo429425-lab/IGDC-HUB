@@ -593,7 +593,7 @@
   function item(r, queue) {
     var id = esc(r.id),
       raw = r.raw || {},
-      entity = text(r.entityKind || raw.entityKind || "channel"),
+      entity = text(r.entityKind || raw.entityKind || "latest_post"),
       placement = text(placementById[r.id]),
       countries = (r.countryScopes || raw.countryScopes || []).join(","),
       languages = (r.languageScopes || raw.languageScopes || []).join(","),
@@ -636,6 +636,7 @@
           countries && "국가 " + countries,
           languages && "언어 " + languages,
           r.category && "주제 " + r.category,
+          r.contentPublishedAt && "게시 " + r.contentPublishedAt.slice(0, 10),
         ]
           .filter(Boolean)
           .join(" · ") || "국가·언어 공통",
@@ -648,7 +649,7 @@
       esc(r.verificationStatus || "검증 대기") +
       '</div><div class="candidate-card-footer"><a class="secondary previewLink" href="' +
       esc(r.sourceUrl || "#") +
-      '">채널 열기</a><button class="secondary sourceBtn" type="button" data-candidate-id="' +
+      '">최신 콘텐츠 열기</a><button class="secondary sourceBtn" type="button" data-candidate-id="' +
       id +
       '">주소 확인</button></div></div></article>'
     );
@@ -664,7 +665,7 @@
   }
   function finalActions(key) {
     return (
-      '<div class="section-actionbar"><span class="section-note small">이 섹션에서 선택한 채널만 처리합니다.</span>' +
+      '<div class="section-actionbar"><span class="section-note small">이 섹션에서 선택한 최신 콘텐츠만 처리합니다.</span>' +
       '<button class="publish" type="button" data-section-ai="' +
       esc(key) +
       '">AI 자동 정리</button>' +
@@ -911,7 +912,7 @@
     var now = new Date(),
       report = {
         ok: true,
-        reportType: "igdc-social-channel-collection-progress",
+        reportType: "igdc-social-latest-content-collection-progress",
         generatedAt: now.toISOString(),
         scope: currentScope(),
         selectedSection: text($("collectorSection").value),
@@ -928,7 +929,7 @@
         },
       };
     download(
-      "igdc-social-channel-collection-progress-" +
+      "igdc-social-latest-content-collection-progress-" +
         now.toISOString().slice(0, 19).replace(/[:T]/g, "-") +
         ".json",
       report,
@@ -991,7 +992,7 @@
         "연결 정상 · " +
         ((d.source && d.source.candidateSourceMode) || "read_only");
       show(
-        "채널 후보 대기열을 읽었습니다. 최종 100개와 교체 후보는 분리 표시되며, 제외 항목은 접힌 목록에 보관됩니다.",
+        "최신 콘텐츠 후보 대기열을 읽었습니다. 최종 100개와 교체 후보는 분리 표시되며, 제외 항목은 접힌 목록에 보관됩니다.",
         "ok",
       );
     } catch (e) {
@@ -1079,7 +1080,10 @@
       "YouTube Data API: " + configured(y) + " · " + esc(y.role || ""),
       "Naver Search: " + configured(n) + " · " + esc(n.role || ""),
       "국가·언어 배치: " + configured(c) + " · " + esc(c.role || ""),
-      "게시물→채널 승격: " + configured(m) + " · " + esc(m.role || ""),
+      "채널 식별·최신 콘텐츠 유지: " +
+        configured(m) +
+        " · " +
+        esc(m.role || ""),
       "공개 URL 직접 반입: " + configured(u) + " · " + esc(u.role || ""),
       "키 묶음 JSON: " + bundleState,
       "SearchBank 실후보 반입: " +
@@ -1108,7 +1112,7 @@
       renderProviderStatus(d);
       show(
         d.providerReadiness && d.providerReadiness.collectionCanRun
-          ? "키 없이 작동하는 공개 SNS 디렉터리를 포함해 자동 채널 검색 경로가 준비되어 있습니다."
+          ? "키 없이 작동하는 공개 디렉터리·YouTube 최신 영상 RSS를 포함해 최신 콘텐츠 검색 경로가 준비되어 있습니다."
           : "자동 검색 경로를 사용할 수 없습니다. 제공자 상태를 확인해 주세요.",
         d.providerReadiness && d.providerReadiness.collectionCanRun
           ? "ok"
@@ -1159,7 +1163,7 @@
       j.batch +
       "묶음 · 검색 " +
       j.searched +
-      "건 · 채널 후보 " +
+      "건 · 최신 콘텐츠 후보 " +
       j.direct +
       "건 · 신규 " +
       j.newlyFound +
@@ -1488,7 +1492,7 @@
         show(
           "전체 9개 섹션 수집·품질 보강 완료: 검색 " +
             j.searched +
-            "건, 채널 후보 " +
+            "건, 최신 콘텐츠 후보 " +
             j.direct +
             "건, 신규 " +
             j.newlyFound +
@@ -1541,13 +1545,15 @@
       state = $("channelIntakeState");
     if (!raw) {
       show(
-        "반입할 공개 채널 또는 게시물 URL을 한 줄 이상 입력해 주세요.",
+        "반입할 공개 최신 영상 또는 게시물 URL을 한 줄 이상 입력해 주세요.",
         "warn",
       );
       return;
     }
     var section = text($("collectorSection").value);
-    state.textContent = dryRun ? "주소 변환 점검 중" : "채널 후보 반입 중";
+    state.textContent = dryRun
+      ? "최신 콘텐츠 주소 점검 중"
+      : "최신 콘텐츠 후보 반입 중";
     $("channelIntakeBtn").disabled = true;
     $("channelIntakeDryRunBtn").disabled = true;
     try {
@@ -1565,7 +1571,7 @@
       if (!dryRun) await refresh();
       state.textContent =
         "변환 " +
-        Number(report.resolvedChannels || 0) +
+        Number(report.resolvedLatestContents || report.resolvedChannels || 0) +
         "개 · 제외 " +
         Number(report.rejectedRows || 0) +
         "개";
@@ -1839,14 +1845,16 @@
     if (!row) return;
     alert(
       [
-        "채널 주소: " + text(row.sourceUrl),
-        "검색 근거 주소: " +
+        "최신 콘텐츠 주소: " + text(row.latestContentUrl || row.sourceUrl),
+        "운영 채널 주소: " + text(row.channelUrl || raw.channelUrl),
+        "수집 근거 주소: " +
           text(
             row.channelEvidenceUrl ||
               raw.channelEvidenceUrl ||
               raw.sourceContentUrl,
           ),
-        "유형: " + text(row.entityKind || raw.entityKind),
+        "콘텐츠 유형: " + text(row.entityKind || raw.entityKind),
+        "게시 시각: " + text(row.contentPublishedAt || raw.contentPublishedAt),
         "국가: " + (row.countryScopes || raw.countryScopes || []).join(","),
       ].join("\n"),
     );
