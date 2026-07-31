@@ -24,7 +24,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const CandidateReview = require("./commerce-candidate-review");
 const ReleaseDispatch = require("./lib/commerce-release-dispatch.v1");
 
-const VERSION = "product-go-live-audit-v1.4.0-explicit-admin-country-batch-publication";
+const VERSION = "product-go-live-audit-v1.5.0-persisted-admin-publication-queue";
 const MAX_ROWS = 120;
 
 const SNAPSHOT_SPECS = [
@@ -760,7 +760,6 @@ async function requestPublication(event, actor, body, scope, liveDoc){
   if(expectedDigest&&text(candidate&&candidate.digest)!==expectedDigest){const error=new Error("후보 정보가 변경됐습니다. 개방 점검을 다시 실행해 주세요.");error.statusCode=409;error.code="candidate_changed";throw error;}
   const control=releaseControl({explicitAdminAuthorization:true});
   if(!control.armed){const error=new Error("배포 환경의 실상품 공개 게이트가 활성화되지 않았습니다.");error.statusCode=409;error.code="release_gate_not_armed";throw error;}
-  if(!control.hookConfigured){const error=new Error("사이트 게재 빌드 훅이 설정되지 않았습니다.");error.statusCode=409;error.code="publication_hook_not_configured";throw error;}
   const assignment=await assignmentForPublication(candidateId,scope);
   if(!assignment){const error=new Error("최종 승인된 PSOM 배정을 찾지 못했습니다.");error.statusCode=409;error.code="audit_ready_assignment_missing";throw error;}
   const originalStatus=low(assignment.publication_status)||"audit_ready";
@@ -769,18 +768,14 @@ async function requestPublication(event, actor, body, scope, liveDoc){
     await SlotStore.update("gslot_slot_assignments","id=eq."+encodeURIComponent(assignment.id),{publication_status:"publish_requested",updated_at:now,updated_by:text(actor&&actor.sub)});
   }
   const dispatch=await ReleaseDispatch.dispatch({candidateId,assignmentId:assignment.id,actorId:text(actor&&actor.sub),operation:"publish",candidateCount:1,explicitAdminAuthorization:true});
-  if(!dispatch.queued){
-    if(originalStatus!=="publish_requested"){
-      try{await SlotStore.update("gslot_slot_assignments","id=eq."+encodeURIComponent(assignment.id),{publication_status:originalStatus,updated_at:new Date().toISOString(),updated_by:text(actor&&actor.sub)});}catch(_rollbackError){}
-    }
-    const error=new Error("사이트 게재 빌드 요청을 대기열에 넣지 못했습니다: "+text(dispatch.reason));error.statusCode=409;error.code=text(dispatch.reason)||"publication_dispatch_failed";throw error;
-  }
+  const queued=dispatch.queued===true;
   return {
-    ok:true,status:"queued",version:VERSION,action:"request_publication",
+    ok:true,status:queued?"queued":"pending_build",version:VERSION,action:"request_publication",
     candidate:{candidateId,title:first(candidate&&candidate.productCard&&candidate.productCard.title,candidate&&candidate.title)||null,digest:text(candidate&&candidate.digest)||null},
     assignment:{id:assignment.id,hubKey:assignment.hub_key,slotKey:assignment.slot_key,countryCode:assignment.country_code,regionCode:assignment.region_code||null,publicationStatus:"publish_requested"},
-    release:{queued:true,reason:dispatch.reason,status:dispatch.status||null},
-    note:"선택한 상품의 게재 빌드 요청만 등록했습니다. 빌드 과정에서 원장 동기화·비공개 후보 인테이크·Canonical·국가/지역·프론트 스냅샷 검증을 다시 통과해야 실제 사이트에 반영됩니다."
+    release:{queued,reason:dispatch.reason,status:dispatch.status||null,hookConfigured:dispatch.hookConfigured===true},
+    persisted:true,pendingBuild:!queued,
+    note:queued?"선택한 상품의 관리자 게재 요청을 원장에 저장하고 빌드 대기열에 등록했습니다. 빌드에서 원장 동기화·Canonical·국가/IP·프론트 스냅샷 검증을 다시 통과해야 실제 사이트에 반영됩니다.":"선택한 상품의 관리자 게재 요청은 원장에 저장했습니다. 자동 빌드 훅이 없거나 실패하여 즉시 스냅샷 빌드는 시작되지 않았지만, 다음 정상 배포가 이 publish_requested 원장을 소비합니다."
   };
 }
 
@@ -851,15 +846,19 @@ async function rollbackAssignmentStatuses(items,actorId){
 }
 function batchSummary(action,candidateIds,items,release){
   const queued=items.filter((item)=>item.queued===true).length;
+  const persisted=items.filter((item)=>item.persisted===true).length;
+  const pendingBuild=items.filter((item)=>item.pendingBuild===true).length;
   const blocked=items.filter((item)=>item.status==="blocked"||item.status==="unpublish_failed").length;
   const skipped=items.filter((item)=>item.status==="unmatched"||item.status==="already_unmatched").length;
   return {
     ok:true,
-    status:queued?(blocked?"partial":"queued"):(blocked?"blocked":"empty"),
+    status:queued?(blocked?"partial":"queued"):(pendingBuild?(blocked?"partial":"pending_build"):(blocked?"blocked":"empty")),
     version:VERSION,
     action,
     requested:candidateIds.length,
     queued,
+    persisted,
+    pendingBuild,
     blocked,
     skipped,
     items,
@@ -876,10 +875,11 @@ async function requestPublicationBatch(event,actor,body,scope,liveDoc){
   const candidateIds=uniqueCandidateIds(body);
   if(!candidateIds.length)return batchSummary("request_publication_batch",candidateIds,[],{queued:false,reason:"no_selected_products"});
   const control=releaseControl({explicitAdminAuthorization:true});
-  if(!control.armed||!control.hookConfigured){
-    const reason=!control.armed?"release_gate_not_armed":"publication_hook_not_configured";
-    return batchSummary("request_publication_batch",candidateIds,candidateIds.map((id)=>({candidateId:id,status:"blocked",queued:false,reason,assignmentId:null})),{queued:false,reason});
+  if(!control.armed){
+    const reason="release_gate_not_armed";
+    return batchSummary("request_publication_batch",candidateIds,candidateIds.map((id)=>({candidateId:id,status:"blocked",queued:false,persisted:false,pendingBuild:false,reason,assignmentId:null})),{queued:false,reason});
   }
+  const lifecyclePrepared=body&&body.preparedByFrontLifecycle===true;
   const liveRows=asArray(liveDoc&&liveDoc.candidates).filter((row)=>privateStageScopeMatch(row,scope).matched&&isGoLiveAuditCandidate(row));
   const liveById=new Map(liveRows.map((row)=>[text(row&&row.candidateId),row]));
   let assignmentRows=[];
@@ -888,8 +888,8 @@ async function requestPublicationBatch(event,actor,body,scope,liveDoc){
   }
   const items=[],eligible=[];
   for(const candidateId of candidateIds){
-    const candidate=liveById.get(candidateId);
-    if(!candidate){items.push({candidateId,status:"blocked",queued:false,reason:"candidate_not_audit_ready",assignmentId:null});continue;}
+    const candidate=liveById.get(candidateId)||null;
+    if(!candidate&&!lifecyclePrepared){items.push({candidateId,status:"blocked",queued:false,persisted:false,pendingBuild:false,reason:"candidate_not_audit_ready",assignmentId:null});continue;}
     const assignment=selectAssignment(assignmentRows,candidateId,scope);
     if(!assignment||!["audit_ready","publish_requested","ready"].includes(low(assignment.publication_status))){items.push({candidateId,status:"blocked",queued:false,reason:"audit_ready_assignment_missing",assignmentId:assignment&&assignment.id||null});continue;}
     eligible.push({candidateId,candidate,assignment,originalStatus:low(assignment.publication_status)||"audit_ready"});
@@ -906,11 +906,10 @@ async function requestPublicationBatch(event,actor,body,scope,liveDoc){
   const firstItem=active[0];
   const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"publish",candidateCount:active.length,explicitAdminAuthorization:true});
   if(!dispatch.queued){
-    await rollbackAssignmentStatuses(updated,actor&&actor.sub);
-    for(const item of active)items.push({candidateId:item.candidateId,status:"blocked",queued:false,reason:text(dispatch.reason)||"publication_dispatch_failed",assignmentId:item.assignment.id});
+    for(const item of active)items.push({candidateId:item.candidateId,status:"publish_requested",queued:false,persisted:true,pendingBuild:true,reason:text(dispatch.reason)||"publication_build_pending",assignmentId:item.assignment.id});
     return batchSummary("request_publication_batch",candidateIds,items,dispatch);
   }
-  for(const item of active)items.push({candidateId:item.candidateId,status:"publish_requested",queued:true,reason:text(dispatch.reason)||"build_hook_queued",assignmentId:item.assignment.id});
+  for(const item of active)items.push({candidateId:item.candidateId,status:"publish_requested",queued:true,persisted:true,pendingBuild:false,reason:text(dispatch.reason)||"build_hook_queued",assignmentId:item.assignment.id});
   return batchSummary("request_publication_batch",candidateIds,items,dispatch);
 }
 async function requestUnpublicationBatch(event,actor,body,scope){
@@ -920,9 +919,9 @@ async function requestUnpublicationBatch(event,actor,body,scope){
   const candidateIds=uniqueCandidateIds(body);
   if(!candidateIds.length)return batchSummary("request_unpublication_batch",candidateIds,[],{queued:false,reason:"no_selected_products"});
   const control=releaseControl({explicitAdminAuthorization:true});
-  if(!control.armed||!control.hookConfigured){
-    const reason=!control.armed?"release_gate_not_armed":"publication_hook_not_configured";
-    return batchSummary("request_unpublication_batch",candidateIds,candidateIds.map((id)=>({candidateId:id,status:"unpublish_failed",queued:false,reason,assignmentId:null})),{queued:false,reason});
+  if(!control.armed){
+    const reason="release_gate_not_armed";
+    return batchSummary("request_unpublication_batch",candidateIds,candidateIds.map((id)=>({candidateId:id,status:"unpublish_failed",queued:false,persisted:false,pendingBuild:false,reason,assignmentId:null})),{queued:false,reason});
   }
   let assignmentRows=[];
   try{assignmentRows=await assignmentRowsForCandidates(candidateIds);}catch(error){
@@ -945,11 +944,10 @@ async function requestUnpublicationBatch(event,actor,body,scope){
   const firstItem=active[0];
   const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:active.length,explicitAdminAuthorization:true});
   if(!dispatch.queued){
-    await rollbackAssignmentStatuses(active,actor&&actor.sub);
-    for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_failed",queued:false,reason:text(dispatch.reason)||"unpublication_dispatch_failed",assignmentId:item.assignment.id});
+    for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:false,persisted:true,pendingBuild:true,reason:text(dispatch.reason)||"unpublication_build_pending",assignmentId:item.assignment.id});
     return batchSummary("request_unpublication_batch",candidateIds,items,dispatch);
   }
-  for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:true,reason:text(dispatch.reason)||"build_hook_queued",assignmentId:item.assignment.id});
+  for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:true,persisted:true,pendingBuild:false,reason:text(dispatch.reason)||"build_hook_queued",assignmentId:item.assignment.id});
   return batchSummary("request_unpublication_batch",candidateIds,items,dispatch);
 }
 

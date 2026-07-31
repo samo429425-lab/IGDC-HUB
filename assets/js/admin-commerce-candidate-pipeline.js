@@ -1,4 +1,4 @@
-/* IGDC Commerce Candidate Pipeline Admin View v1.8.1
+/* IGDC Commerce Candidate Pipeline Admin View v1.9.0
  * Ordered private research/staging workflow and commerce queue diagnostic.
  * It reuses the existing administrator session.  No second commerce login,
  * provider call, seller navigation, publication, payment, or browser secret.
@@ -21,7 +21,7 @@
   var ACTIVE_SCOPE=scopeContext();
   function updateScope(scope){
     if(!scope)return;
-    if(scope.country&&/^[A-Z]{2}$/.test(String(scope.country))){ACTIVE_SCOPE={country:String(scope.country).toUpperCase(),region:String(scope.region||'NATIONWIDE').toUpperCase(),source:scope.source||'resolved'};try{localStorage.setItem('igdc_admin_country_scope_v1',JSON.stringify({country:ACTIVE_SCOPE.country,region:ACTIVE_SCOPE.region,updatedAt:new Date().toISOString(),source:'commerce-candidate-pipeline'}));}catch(_e){}}
+    if(scope.country&&/^[A-Z]{2}$/.test(String(scope.country))){ACTIVE_SCOPE={country:String(scope.country).toUpperCase(),region:String(scope.region||'NATIONWIDE').toUpperCase(),source:scope.source||'resolved'};try{sessionStorage.setItem('igdc_admin_country_scope_v1',JSON.stringify({country:ACTIVE_SCOPE.country,region:ACTIVE_SCOPE.region,updatedAt:new Date().toISOString(),source:'commerce-candidate-pipeline'}));}catch(_e){}}
     else if(scope.source==='unresolved-ip')ACTIVE_SCOPE={country:'',region:'',source:'unresolved-ip'};
   }
   function scopeLabel(){return ACTIVE_SCOPE.country?((ACTIVE_SCOPE.country==='GLOBAL'?'전 세계':ACTIVE_SCOPE.country)+' / '+(ACTIVE_SCOPE.region||'ALL')):(ACTIVE_SCOPE.source==='unresolved-ip'?'IP 범위 미확인':'현재 접속 IP 자동 판정');}
@@ -222,7 +222,11 @@
     $('assignmentForm').addEventListener('submit',function(event){event.preventDefault();runWrite('decide',{decision:'approved',note:formText('assignNote'),assignment:{hubKey:formText('assignHub'),slotKey:formText('assignSlot'),countryCode:formText('assignCountry').toUpperCase(),regionCode:formText('assignRegion').toUpperCase(),priority:Number(formText('assignPriority')||0),pinned:false}},'PSOM 승인을 저장했습니다. 이 후보는 실상품 공급 개방 점검 대상입니다. 사이트 게재는 아직 실행되지 않았습니다.');});
   }
 
-  function renderDiagnostic(doc){diagnosticCache=doc||null;var panel=$('diagnosticPanel'),pre=$('diagnosticJson');pre.textContent=JSON.stringify(doc||{},null,2);panel.classList.remove('hidden');$('downloadDiagnosticBtn').disabled=!diagnosticCache;}
+  function compactDiagnosticView(doc){
+    doc=doc&&typeof doc==='object'?doc:{};var queue=doc.queue&&typeof doc.queue==='object'?doc.queue:{},rows=Array.isArray(queue.rows)?queue.rows:[];
+    return {ok:doc.ok===true,reportType:doc.reportType||null,version:doc.version||null,generatedAt:doc.generatedAt||null,mode:doc.mode||null,selectedScope:doc.selectedScope||null,safety:doc.safety||null,queue:{schema:queue.schema||null,stageVersion:queue.stageVersion||null,stageGeneratedAt:queue.stageGeneratedAt||null,totalCandidates:Number(queue.totalCandidates||rows.length||0),eligibleForRelease:Number(queue.eligibleForRelease||0),held:Number(queue.held||0),registrySyncReady:Number(queue.registrySyncReady||0),goLiveAuditCandidates:Number(queue.goLiveAuditCandidates||0),publicationRequested:Number(queue.publicationRequested||0),liveResearchQueue:Number(queue.liveResearchQueue||0),stagedReleaseQueue:Number(queue.stagedReleaseQueue||0),byStageStatus:queue.byStageStatus||{},byRevenueType:queue.byRevenueType||{},byReviewState:queue.byReviewState||{},topBlockingReasons:Array.isArray(queue.topBlockingReasons)?queue.topBlockingReasons.slice(0,25):[],previewRows:rows.slice(0,12).map(function(row){return{candidateId:row&&row.candidateId||null,title:row&&row.title||null,stageStatus:row&&row.stageStatus||null,releaseEligible:row&&row.releaseEligible===true,placement:row&&row.placement||null,review:row&&row.review||null,reasons:Array.isArray(row&&row.reasons)?row.reasons.slice(0,12):[]};}),omittedRows:Math.max(0,rows.length-12)},upstream:doc.upstream||null,pipeline:doc.pipeline||null,revenueRegistry:doc.revenueRegistry||null,releaseGate:doc.releaseGate||null,blockingConditions:Array.isArray(doc.blockingConditions)?doc.blockingConditions.slice(0,40):[],summary:doc.summary||null,displayNote:'화면 정지를 막기 위해 후보 상세는 12건만 미리 표시합니다. JSON 다운로드에는 전체 점검 원문이 포함됩니다.'};
+  }
+  function renderDiagnostic(doc){diagnosticCache=doc||null;var panel=$('diagnosticPanel'),pre=$('diagnosticJson'),view=compactDiagnosticView(doc);pre.textContent=JSON.stringify(view,null,2);panel.classList.remove('hidden');$('downloadDiagnosticBtn').disabled=!diagnosticCache;}
   async function refresh(force){
     if(refreshPromise)return refreshPromise;
     if(!force&&Date.now()-lastRefreshAt<2500&&dashboardCache)return dashboardCache;

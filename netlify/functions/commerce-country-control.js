@@ -122,12 +122,14 @@ exports.handler=async function(event){
           batchResult={ok:true,status:"blocked",action:"request_publication_batch",requested:plan.targets.length,queued:0,blocked:preparationBlocked.length,items:preparationBlocked,release:{queued:false,reason:"no_front_ready_products"},preparation};
         }else{
           const liveDoc=await CandidateReview.stage(process.cwd());
-          const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds},scope,liveDoc);
+          const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true},scope,liveDoc);
           const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
           const items=preparationBlocked.concat(publishItems);
           const queued=items.filter((item)=>item&&item.queued===true).length;
+          const persisted=items.filter((item)=>item&&item.persisted===true).length;
+          const pendingBuild=items.filter((item)=>item&&item.pendingBuild===true).length;
           const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
-          batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,blocked,items,preparation,status:queued?(blocked?"partial":"queued"):(blocked?"blocked":"empty")});
+          batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,persisted,pendingBuild,blocked,items,preparation,status:queued?(blocked?"partial":"queued"):(pendingBuild?(blocked?"partial":"pending_build"):(blocked?"blocked":"empty"))});
         }
       }else{
         batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope);
