@@ -11,7 +11,7 @@ const Policy = require("./social-candidate-policy.v1");
 const CountryRouting = require("./social-country-routing.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
-const VERSION = "social-candidate-store-v1.6.0-latest-content-channel-identity";
+const VERSION = "social-candidate-store-v1.7.0-influencer-registry-content-queue";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -281,6 +281,9 @@ async function deleteCandidates(ids) {
 }
 function idFor(input, normalized) {
   const row = plain(input);
+  const assetClass = lowerKey(
+    row.assetClass || row.asset_class || plain(row.raw).assetClass,
+  );
   const raw = text(row.id || row.contentId || row.candidateId);
   if (raw && !/^ph_/i.test(raw) && !/seed/i.test(raw))
     return raw
@@ -289,7 +292,7 @@ function idFor(input, normalized) {
       .replace(/^-+|-+$/g, "")
       .slice(0, 110);
   return (
-    "social_" +
+    (assetClass === "influencer-registry" ? "influencer_" : "social_") +
     shortHash({
       section: normalized.sectionKey,
       platform: normalized.platform,
@@ -300,6 +303,11 @@ function idFor(input, normalized) {
 }
 function normalizeCandidate(input, actor) {
   let row = plain(input);
+  const assetClass =
+    lowerKey(row.assetClass || row.asset_class || plain(row.raw).assetClass) ===
+    "influencer-registry"
+      ? "influencer_registry"
+      : "latest_content";
   const sourceInput = text(
     row.source_url ||
       row.sourceUrl ||
@@ -318,13 +326,16 @@ function normalizeCandidate(input, actor) {
       plain(row.bind).platform,
     sourceInput,
   );
-  const requestedContentUrl = Policy.normalizeUrl(
+  const requestedContentUrl =
+    assetClass === "latest_content"
+      ? Policy.normalizeUrl(
     row.latestContentUrl ||
       row.latest_content_url ||
       row.sourceContentUrl ||
       row.source_content_url ||
       (row.latestContentAsset || row.latest_content_asset ? sourceInput : ""),
-  );
+        )
+      : "";
   const channelInput = text(
     row.channelUrl || row.channel_url || row.accountUrl || sourceInput,
   );
@@ -358,6 +369,7 @@ function normalizeCandidate(input, actor) {
       channelEntityKind: channel.entityKind,
       channelAsset: true,
       latestContentAsset: !!validLatestContent,
+      assetClass,
     });
   }
   const normalized = Policy.classifyCandidate(row);
@@ -416,6 +428,7 @@ function normalizeCandidate(input, actor) {
       policyVersion: Policy.VERSION,
       sourceHost: Policy.hostOf(normalized.sourceUrl),
       candidateAssetType: text(row.entityKind || row.entity_kind || "channel"),
+      assetClass,
       channelAsset: row.channelAsset !== false && row.channel_asset !== false,
       latestContentAsset:
         row.latestContentAsset === true || row.latest_content_asset === true,
@@ -457,6 +470,7 @@ function normalizeCandidate(input, actor) {
       },
     },
     raw: Object.assign({}, row, {
+      assetClass,
       countryScopes: geoScopes.countries,
       languageScopes: geoScopes.languages,
     }),
@@ -483,7 +497,11 @@ function validateCandidate(row) {
     reasons.push("source_url_required");
   if (!plain(row.raw).channelAsset)
     reasons.push("channel_profile_group_required");
-  if (!plain(row.raw).latestContentAsset)
+  const assetClass = text(plain(row.raw).assetClass || "latest_content");
+  if (
+    assetClass === "latest_content" &&
+    !plain(row.raw).latestContentAsset
+  )
     reasons.push("latest_public_content_required");
   if (row.seed_content)
     reasons.push("seed_or_placeholder_preserved_not_imported");
@@ -592,6 +610,11 @@ function normalizeDbRow(row) {
         "channel",
     ),
     channelAsset: raw.channelAsset !== false && raw.channel_asset !== false,
+    assetClass: text(
+      raw.assetClass ||
+        plain(r.evidence).assetClass ||
+        (raw.latestContentAsset === true ? "latest_content" : "influencer_registry"),
+    ),
     latestContentAsset:
       raw.latestContentAsset === true ||
       raw.latest_content_asset === true ||
@@ -599,6 +622,11 @@ function normalizeDbRow(row) {
     category: text(raw.category),
     embedUrl: text(r.embed_url || r.embedUrl),
     thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl),
+    channelThumbnailUrl: text(
+      raw.channelThumbnailUrl ||
+        raw.channel_thumbnail_url ||
+        plain(r.evidence).channelThumbnailUrl,
+    ),
     description: text(r.description),
     language: text(r.language),
     region: text(r.region),
@@ -645,7 +673,8 @@ function summaryDoc(rows) {
   const bySection = {},
     byRisk = {},
     byReview = {},
-    byPlatform = {};
+    byPlatform = {},
+    byAssetClass = {};
   let activeCandidateCount = 0,
     searchExcludedCount = 0,
     permanentBlockedCount = 0,
@@ -661,6 +690,8 @@ function summaryDoc(rows) {
       (byReview[r.reviewStatus || "unknown"] || 0) + 1;
     byPlatform[r.platform || "unknown"] =
       (byPlatform[r.platform || "unknown"] || 0) + 1;
+    byAssetClass[r.assetClass || "unknown"] =
+      (byAssetClass[r.assetClass || "unknown"] || 0) + 1;
     if (reviewStatus === "search_excluded") searchExcludedCount += 1;
     else if (reviewStatus === "permanent_blocked" || reviewStatus === "blocked")
       permanentBlockedCount += 1;
@@ -695,6 +726,7 @@ function summaryDoc(rows) {
     byRisk,
     byReview,
     byPlatform,
+    byAssetClass,
   };
 }
 
@@ -720,6 +752,11 @@ function statusKey(value) {
 function isApprovedForSnapshot(row) {
   const r = plain(row);
   const raw = plain(r.raw);
+  const assetClass = text(
+    raw.assetClass ||
+      plain(r.evidence).assetClass ||
+      (raw.latestContentAsset === true ? "latest_content" : ""),
+  );
   const review = statusKey(r.review_status || r.reviewStatus);
   const verify = statusKey(r.verification_status || r.verificationStatus);
   const risk = statusKey(r.risk_level || r.riskLevel);
@@ -743,6 +780,7 @@ function isApprovedForSnapshot(row) {
     accessOk &&
     !candidateOnly &&
     !seedContent &&
+    assetClass === "latest_content" &&
     (raw.latestContentAsset === true ||
       raw.latest_content_asset === true ||
       plain(r.evidence).latestContentAsset === true) &&
@@ -827,6 +865,68 @@ function groupRowsBySection(rows) {
   });
   return out;
 }
+function channelIdentity(row) {
+  const r = plain(row);
+  const raw = plain(r.raw);
+  return text(
+    raw.channelUrl ||
+      raw.channel_url ||
+      plain(r.evidence).channelUrl ||
+      r.channel_url ||
+      r.channelUrl,
+  ).toLowerCase();
+}
+function assetClassOf(row) {
+  const r = plain(row);
+  const raw = plain(r.raw);
+  return text(
+    raw.assetClass ||
+      plain(r.evidence).assetClass ||
+      (raw.latestContentAsset === true ? "latest_content" : ""),
+  );
+}
+function isApprovedInfluencer(row) {
+  const r = plain(row);
+  const review = statusKey(r.review_status || r.reviewStatus);
+  const verify = statusKey(r.verification_status || r.verificationStatus);
+  const risk = statusKey(r.risk_level || r.riskLevel);
+  const candidateOnly = r.candidate_only === true || r.candidateOnly === true;
+  return (
+    assetClassOf(r) === "influencer_registry" &&
+    review === "approved" &&
+    (verify === "approved_for_snapshot" ||
+      verify === "verified" ||
+      verify === "approved") &&
+    !candidateOnly &&
+    risk !== "blocked" &&
+    risk !== "rejected" &&
+    !!channelIdentity(r)
+  );
+}
+function approvedContentRows(rows) {
+  const list = array(rows);
+  const registryBySection = {};
+  const approvedChannelsBySection = {};
+  list.forEach((row) => {
+    const section = lowerKey(row.section_key || row.sectionKey);
+    if (!section) return;
+    if (assetClassOf(row) === "influencer_registry") {
+      registryBySection[section] = true;
+      if (isApprovedInfluencer(row)) {
+        if (!approvedChannelsBySection[section])
+          approvedChannelsBySection[section] = new Set();
+        approvedChannelsBySection[section].add(channelIdentity(row));
+      }
+    }
+  });
+  return list.filter((row) => {
+    if (!isApprovedForSnapshot(row)) return false;
+    const section = lowerKey(row.section_key || row.sectionKey);
+    if (!registryBySection[section]) return true;
+    const channels = approvedChannelsBySection[section] || new Set();
+    return channels.has(channelIdentity(row));
+  });
+}
 function byRank(salt) {
   return function (a, b) {
     const d = rowScore(b) - rowScore(a);
@@ -895,8 +995,7 @@ function selectRotation(rows, options) {
         };
   const routeCountry = text(route.countryCode || route.country).toUpperCase();
   const groups = groupRowsBySection(
-    array(rows)
-      .filter(isApprovedForSnapshot)
+    approvedContentRows(rows)
       .filter((row) => {
         const scopes = CountryRouting.scopesFrom(row).countries;
         return !routeCountry || !scopes.length || scopes.includes(routeCountry);
@@ -1097,8 +1196,7 @@ function buildSnapshot(baseSnapshot, rows, options) {
     opts.route &&
       (opts.route.countryCode || opts.route.country),
   ).toUpperCase();
-  const approvedRows = array(rows)
-    .filter(isApprovedForSnapshot)
+  const approvedRows = approvedContentRows(rows)
     .filter((row) => {
       const scopes = CountryRouting.scopesFrom(row).countries;
       return !routeCountry || !scopes.length || scopes.includes(routeCountry);
@@ -1213,6 +1311,7 @@ module.exports = {
   config,
   supabase,
   rest,
+  encodeIn,
   insertRelease,
   selectReleases,
   selectCandidates,
@@ -1232,4 +1331,8 @@ module.exports = {
   publicSocialSlot,
   buildSnapshot,
   commercialRoute,
+  channelIdentity,
+  assetClassOf,
+  isApprovedInfluencer,
+  approvedContentRows,
 };

@@ -602,19 +602,24 @@
       <section id="tablePanel" class="panel hidden">
         <div class="modal-head">
           <div>
-            <h2 style="margin: 0">최종 확정 최신 콘텐츠 · 9개 SNS 섹션</h2>
+            <h2 style="margin: 0">인플루언서 등록부 · 9개 SNS 섹션</h2>
             <div class="small">
-              각 섹션의 최종 100개를 썸네일로 확인합니다. 한 번에 한 섹션만 펼쳐
-              과도한 이미지 로딩을 막습니다.
+              인플루언서를 기업 목록처럼 채널 링크 단위로 관리합니다. 최신
+              콘텐츠는 아래 후보·교체 대기열에서 별도로 관리하며, 한 번에 한
+              섹션만 펼쳐 과도한 이미지 로딩을 막습니다.
             </div>
           </div>
           <span id="candidateCapacityState" class="state"></span>
         </div>
         <div class="reviewbar">
-          <button id="approveBtn">선택 확정</button
+          <button id="selectAllFinalBtn" class="secondary">
+            현재 조회 전체 선택</button
+          ><button id="clearFinalSelectionBtn" class="secondary">
+            선택 전체 해제</button
+          ><button id="approveBtn">선택 인플루언서 승인</button
           ><button id="moveWaitingBtn" class="secondary">
-            선택 대기열로 내리기</button
-          ><button id="holdBtn" class="secondary">선택 보류</button
+            선택 검색 제외</button
+          ><button id="holdBtn" class="secondary">선택 등록 보류</button
           ><button id="resetBtn" class="secondary">선택 재검토</button
           ><button id="rejectBtn" class="danger">선택 반려</button
           ><button id="blockBtn" class="danger">선택 영구 차단</button
@@ -622,29 +627,37 @@
             ><input id="socialConfirm" type="checkbox" /> 공개성·안전성
             확인</label
           ><span style="flex: 1"></span
-          ><button id="aiAutoBtn" class="publish">AI 전자동 후보 확정</button
-          ><button id="publishAllBtn" class="publish">
-            전체 9개 섹션 실제 적용
-          </button>
+          ><button id="aiAutoBtn" class="publish">AI 전자동 후보 정리</button>
         </div>
         <div id="sectionAccordion" class="section-accordion"></div>
       </section>
       <section id="waitingPanel" class="panel hidden">
         <div class="modal-head">
           <div>
-            <h2 style="margin: 0">교체 후보 대기열 · 9개 SNS 섹션</h2>
+            <h2 style="margin: 0">
+              최신 콘텐츠 후보·교체 대기열 · 9개 SNS 섹션
+            </h2>
             <div class="small">
-              최종 100개에서 밀렸거나 수동으로 내린 채널입니다. 삭제하면 후보
-              기록이 완전히 없어지고, 영구 차단하면 다시 검색돼도 반입되지
-              않습니다.
+              등록된 인플루언서별 최신 공개 영상·게시물 1건을 표시합니다.
+              공개 100개와 초과 교체 후보 수를 함께 확인하며, 콘텐츠 기록을
+              삭제해도 인플루언서 등록부는 별도로 유지됩니다.
             </div>
           </div>
           <span id="waitingCapacityState" class="state"></span>
         </div>
         <div class="reviewbar">
-          <button id="waitingPromoteBtn">선택 최종 후보로 올리기</button
-          ><button id="waitingDeleteBtn" class="danger">선택 완전 삭제</button
-          ><button id="waitingBlockBtn" class="danger">선택 영구 차단</button>
+          <button id="selectAllWaitingBtn" class="secondary">
+            현재 조회 전체 선택</button
+          ><button id="clearWaitingSelectionBtn" class="secondary">
+            선택 전체 해제</button
+          ><button id="waitingPromoteBtn">선택 최종 후보로 올리기</button
+          ><button id="waitingDeleteBtn" class="danger">
+            선택 교체후보 삭제</button
+          ><button id="waitingBlockBtn" class="danger">선택 영구 차단</button
+          ><span style="flex: 1"></span
+          ><button id="publishAllBtn" class="publish">
+            전체 9개 섹션 최신 콘텐츠 실제 적용
+          </button>
         </div>
         <div id="waitingAccordion" class="section-accordion"></div>
       </section>
@@ -704,6 +717,6 @@
       </p>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=15"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=16"></script>
   </body>
 </html>

@@ -17,7 +17,7 @@ const MaruSearch = require("./maru-search");
 const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.6.0-country-latest-content";
+const VERSION = "sanmaru-social-live-collector-v1.7.0-influencer-content-split";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -30,6 +30,7 @@ const PROVIDER_GROUP_NAMES = Object.freeze([
   "sanmaru_searchbank"
 ]);
 const CHANNEL_RESOLUTION_TIMEOUT_MS = 1500;
+const PUBLIC_METADATA_TIMEOUT_MS = 1500;
 const CHANNEL_RESOLUTION_BUDGET_MS = 4200;
 const CHANNEL_RESOLUTION_CONCURRENCY = 4;
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
@@ -434,6 +435,22 @@ async function withDeadline(promise, timeoutMs, fallback) {
 function stripHtml(value) {
   return SocialStore.text(value).replace(/<[^>]+>/g, " ").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
 }
+function pageMapValue(page, names) {
+  const source = page && typeof page === "object" ? page : {};
+  for (const group of Object.values(source)) {
+    for (const row of Array.isArray(group) ? group : []) {
+      for (const name of names || []) {
+        const value = firstText([
+          row && row[name],
+          row && row[name.toLowerCase()],
+          row && row[name.toUpperCase()]
+        ]);
+        if (value) return value;
+      }
+    }
+  }
+  return "";
+}
 function countryQueryTerm(route) {
   const code = SocialStore.text(route && route.countryCode).toUpperCase();
   if (!code) return "";
@@ -518,6 +535,7 @@ async function publicDirectoryRequest(plan, route, limit, offset, countryStrict)
         creatorName: bindingValue(binding, "itemLabel"),
         description: bindingValue(binding, "itemDescription"),
         thumbnail: commonsHttps(bindingValue(binding, "image")),
+        channelThumbnail: commonsHttps(bindingValue(binding, "image")),
         entityKind: directory.entityKind,
         publicDirectoryItem: bindingValue(binding, "item"),
         quality: { rank: Number(bindingValue(binding, "sitelinks") || 0) },
@@ -584,6 +602,7 @@ async function youtubeChannelSearch(queryText, limit, cfg, qualitySweep, route) 
       creatorName: row && row.snippet && row.snippet.channelTitle,
       description: row && row.snippet && row.snippet.description,
       thumbnail: row && row.snippet && row.snippet.thumbnails && (row.snippet.thumbnails.high || row.snippet.thumbnails.medium || row.snippet.thumbnails.default) && (row.snippet.thumbnails.high || row.snippet.thumbnails.medium || row.snippet.thumbnails.default).url,
+      channelThumbnail: row && row.snippet && row.snippet.thumbnails && (row.snippet.thumbnails.high || row.snippet.thumbnails.medium || row.snippet.thumbnails.default) && (row.snippet.thumbnails.high || row.snippet.thumbnails.medium || row.snippet.thumbnails.default).url,
       language: row && row.snippet && row.snippet.defaultLanguage,
       entityKind: "channel"
     })).filter((row) => row.channelUrl);
@@ -621,7 +640,11 @@ async function googleChannelSearch(plan, queryText, limit, start, cfg) {
     const items = (data.items || []).map((row) => {
       const page = row.pagemap || {};
       const thumb = (page.cse_thumbnail && page.cse_thumbnail[0] && page.cse_thumbnail[0].src) ||
-        (page.cse_image && page.cse_image[0] && page.cse_image[0].src) || "";
+        (page.cse_image && page.cse_image[0] && page.cse_image[0].src) ||
+        pageMapValue(page, [
+          "og:image", "og:image:url", "twitter:image", "twitter:image:src",
+          "thumbnailUrl", "thumbnailurl", "image", "contentUrl"
+        ]) || "";
       return {
         provider: "google-cse-channel",
         platform: plan.platform,
@@ -766,6 +789,93 @@ function xmlValue(xml, tag) {
   const match = String(xml || "").match(new RegExp("<" + tag.replace(":", "\\:") + "[^>]*>([\\s\\S]*?)<\\/" + tag.replace(":", "\\:") + ">", "i"));
   return match ? decodeXml(match[1]) : "";
 }
+function absoluteHttps(value, baseUrl) {
+  try {
+    const url = new URL(SocialStore.text(value), baseUrl);
+    return url.protocol === "https:" ? url.toString() : "";
+  } catch (_error) { return ""; }
+}
+function htmlMetaValue(html, names) {
+  const source = String(html || "").slice(0, 1500000);
+  for (const name of names || []) {
+    const escaped = String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const patterns = [
+      new RegExp("<meta[^>]+(?:property|name)=[\"']" + escaped + "[\"'][^>]+content=[\"']([^\"']+)[\"'][^>]*>", "i"),
+      new RegExp("<meta[^>]+content=[\"']([^\"']+)[\"'][^>]+(?:property|name)=[\"']" + escaped + "[\"'][^>]*>", "i")
+    ];
+    for (const pattern of patterns) {
+      const match = source.match(pattern);
+      if (match && match[1]) return decodeXml(match[1]);
+    }
+  }
+  return "";
+}
+async function publicOembed(platform, contentUrl) {
+  const endpoints = {
+    tiktok: "https://www.tiktok.com/oembed?url=",
+    twitter: "https://publish.twitter.com/oembed?omit_script=1&dnt=1&url=",
+    reddit: "https://www.reddit.com/oembed?url=",
+    pinterest: "https://www.pinterest.com/oembed.json?url="
+  };
+  const endpoint = endpoints[platform];
+  if (!endpoint) return {};
+  try {
+    const data = await fetchJson(
+      endpoint + encodeURIComponent(contentUrl),
+      { headers: { Accept: "application/json" } },
+      PUBLIC_METADATA_TIMEOUT_MS
+    );
+    return {
+      title: firstText([data.title]),
+      creatorName: firstText([data.author_name]),
+      channelUrl: Policy.normalizeUrl(data.author_url),
+      thumbnail: firstText([
+        data.thumbnail_url,
+        data.thumbnailUrl,
+        data.image,
+        data.image_url
+      ])
+    };
+  } catch (_error) { return {}; }
+}
+async function publicPageMetadata(platform, contentUrl) {
+  if (
+    !contentUrl ||
+    Policy.platformFromHost(contentUrl) !== platform
+  ) return {};
+  const oembed = await publicOembed(platform, contentUrl);
+  if (Policy.normalizeUrl(oembed.thumbnail)) return oembed;
+  try {
+    const html = await fetchText(
+      contentUrl,
+      {
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "User-Agent": "Mozilla/5.0 (compatible; IGDC-MARU-SocialHub/1.0)"
+        }
+      },
+      PUBLIC_METADATA_TIMEOUT_MS
+    );
+    const thumbnail = absoluteHttps(
+      htmlMetaValue(html, [
+        "og:image:secure_url", "og:image", "twitter:image:src",
+        "twitter:image", "thumbnail"
+      ]),
+      contentUrl
+    );
+    return Object.assign({}, oembed, {
+      title: firstText([
+        oembed.title,
+        htmlMetaValue(html, ["og:title", "twitter:title"])
+      ]),
+      creatorName: firstText([
+        oembed.creatorName,
+        htmlMetaValue(html, ["author", "article:author", "og:site_name"])
+      ]),
+      thumbnail
+    });
+  } catch (_error) { return oembed; }
+}
 async function youtubeLatestFromFeed(channelId) {
   if (!/^UC[a-zA-Z0-9_-]{20,}$/.test(SocialStore.text(channelId))) return { ok: false };
   try {
@@ -845,9 +955,30 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route) {
   const originalTitle = firstText([item && item.title, item && item.name, item && item.label]);
   const enrichment = resolved.enrichment || {};
   const latest = resolved.latest || {};
+  const media = item && item.media && typeof item.media === "object" ? item.media : {};
+  const mediaPreview = media.preview && typeof media.preview === "object" ? media.preview : {};
+  const suppliedThumbnail = firstText([
+    latest.thumbnail,
+    enrichment.thumbnail,
+    item && item.thumbnail,
+    item && item.thumb,
+    item && item.image,
+    item && item.imageUrl,
+    item && item.cardImage,
+    item && item.poster,
+    media.thumbnail,
+    media.poster,
+    mediaPreview.thumbnail,
+    mediaPreview.poster,
+    mediaPreview.image
+  ]);
+  const publicMetadata = suppliedThumbnail
+    ? {}
+    : await publicPageMetadata(platform, resolved.latestContentUrl);
   const title = firstText([
     latest.title,
     enrichment.title,
+    publicMetadata.title,
     resolved.promotedFromContent ? resolved.suggestedTitle : "",
     originalTitle,
     resolved.suggestedTitle
@@ -855,7 +986,8 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route) {
   if (syntheticTitle(title)) return { ok: false, reason: "real_content_title_required" };
   const source = item && item.source;
   const creatorName = firstText([
-    latest.creatorName, enrichment.creatorName, item && item.creatorName, item && item.channelName,
+    latest.creatorName, enrichment.creatorName, publicMetadata.creatorName,
+    item && item.creatorName, item && item.channelName,
     item && item.channel, item && item.publisher, source && typeof source === "object" && source.name,
     resolved.suggestedTitle
   ]);
@@ -870,6 +1002,7 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route) {
     ? itemLanguage
     : firstText([routeLanguages[0], itemLanguage, "und"]);
   const candidate = {
+    assetClass: "latest_content",
     sectionKey,
     platform,
     title: title.slice(0, 240),
@@ -883,7 +1016,12 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route) {
     channelAsset: true,
     latestContentAsset: true,
     contentPublishedAt: firstText([latest.publishedAt, item && item.publishedAt, item && item.published_at, item && item.pubDate, item && item.date]),
-    thumbnailUrl: firstText([latest.thumbnail, enrichment.thumbnail, item && item.thumbnail, item && item.thumb, item && item.image, item && item.imageUrl, item && item.cardImage]),
+    thumbnailUrl: firstText([suppliedThumbnail, publicMetadata.thumbnail]),
+    channelThumbnailUrl: firstText([
+      item && item.channelThumbnail,
+      item && item.channelThumbnailUrl,
+      latest.channelThumbnail
+    ]),
     description: firstText([item && item.description, item && item.summary, item && item.snippet]).slice(0, 1200),
     creatorName: creatorName.slice(0, 180),
     language,
@@ -909,7 +1047,50 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route) {
     quality: { rank: Number(item && (item._finalScore || item.score || item.rank) || 0) }
   };
   const reasons = Policy.validationReasons(candidate);
-  return reasons.length ? { ok: false, reason: reasons[0] } : { ok: true, candidate };
+  if (reasons.length) return { ok: false, reason: reasons[0] };
+  const influencer = {
+    assetClass: "influencer_registry",
+    sectionKey,
+    platform,
+    title: creatorName.slice(0, 240),
+    sourceUrl: resolved.channelUrl,
+    channelUrl: resolved.channelUrl,
+    channelEvidenceUrl: resolved.latestContentUrl,
+    entityKind: resolved.entityKind,
+    channelEntityKind: resolved.entityKind,
+    channelAsset: true,
+    latestContentAsset: false,
+    thumbnailUrl: firstText([
+      candidate.channelThumbnailUrl,
+      item && item.channelThumbnail,
+      item && item.channelThumbnailUrl,
+      item && item.publicDirectoryItem && item.thumbnail
+    ]),
+    description: candidate.description,
+    creatorName: creatorName.slice(0, 180),
+    language,
+    countryScopes: candidate.countryScopes,
+    languageScopes: routeLanguages,
+    category,
+    publicAccess: true,
+    loginRequired: false,
+    accessStatus: "public",
+    candidateOnly: true,
+    verificationStatus: "web_verification_required",
+    discoveryQuery: queryText,
+    engagement: candidate.engagement,
+    source: {
+      name: itemSourceName(item),
+      platform,
+      mode: "social_hub_influencer_registry_discovery"
+    },
+    bind: { section: sectionKey, psom_key: sectionKey, platform },
+    tags: Array.from(new Set([
+      platform, category, resolved.entityKind, "public", "influencer_registry"
+    ])).slice(0, 12),
+    quality: candidate.quality
+  };
+  return { ok: true, candidate, influencer };
 }
 function latestContentPriority(item, platform) {
   return candidateUrls(item).some((url) => contentKind(platform, url)) ? 0 : 1;
@@ -960,6 +1141,7 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
 
   const rejected = [];
   const candidates = [];
+  const influencers = [];
   const seenUrls = new Set();
   converted.forEach((result) => {
     if (!result) return;
@@ -974,9 +1156,11 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
     }
     seenUrls.add(key);
     candidates.push(result.candidate);
+    influencers.push(result.influencer);
   });
   return {
     candidates,
+    influencers,
     rejected,
     inputRows: inputs.length,
     resolutionRows: converted.filter(Boolean).length,
@@ -998,11 +1182,13 @@ function previewItems(payload) {
       id: item && item.id,
       sectionKey: item && (item.section_key || item.sectionKey),
       platform: item && item.platform,
+      assetClass: raw.assetClass || item && item.assetClass,
       title: item && item.title,
       sourceUrl: item && (item.source_url || item.sourceUrl),
       latestContentUrl: raw.latestContentUrl || raw.sourceContentUrl || item && (item.source_url || item.sourceUrl),
       channelUrl: raw.channelUrl || item && item.channelUrl,
       contentPublishedAt: raw.contentPublishedAt || item && item.contentPublishedAt,
+      thumbnailUrl: item && (item.thumbnail_url || item.thumbnailUrl),
       entityKind: raw.entityKind || item && item.entityKind,
       countryScopes: raw.countryScopes || item && item.countryScopes || []
     };
@@ -1013,6 +1199,7 @@ async function intakeCandidates(body, plan, route) {
   // breaks here before each individual line is normalized.
   const lines = String(body.rawText || body.urls || body.urlList || "").trim().split(/\r?\n/).slice(0, 500);
   const candidates = [];
+  const influencers = [];
   const rejected = [];
   const seen = new Set();
   for (let index = 0; index < lines.length; index += 1) {
@@ -1030,8 +1217,14 @@ async function intakeCandidates(body, plan, route) {
     if (seen.has(key)) { rejected.push({ index: index + 1, reason: "duplicate_creator_channel" }); continue; }
     seen.add(key);
     candidates.push(converted.candidate);
+    influencers.push(converted.influencer);
   }
-  return { candidates, rejected, lineCount: lines.filter((line) => SocialStore.text(line) && !SocialStore.text(line).startsWith("#")).length };
+  return {
+    candidates,
+    influencers,
+    rejected,
+    lineCount: lines.filter((line) => SocialStore.text(line) && !SocialStore.text(line).startsWith("#")).length
+  };
 }
 
 exports.handler = async function(event) {
@@ -1070,7 +1263,19 @@ exports.handler = async function(event) {
     if (/^(intake_channels|intake_urls|direct_intake)$/i.test(SocialStore.text(body.action))) {
       const intake = await intakeCandidates(body, plan, route);
       const selected = intake.candidates.slice(0, 500);
-      const gatewayResponse = await CandidateGateway.handler(gatewayEvent(event, selected, sectionKey, dryRun, selected.length || 1, "admin-public-latest-content-url-intake"));
+      const submitted = [];
+      selected.forEach((candidate, index) => {
+        if (intake.influencers[index]) submitted.push(intake.influencers[index]);
+        submitted.push(candidate);
+      });
+      const gatewayResponse = await CandidateGateway.handler(gatewayEvent(
+        event,
+        submitted,
+        sectionKey,
+        dryRun,
+        submitted.length || 1,
+        "admin-public-influencer-and-latest-content-intake"
+      ));
       const payload = jsonBody(gatewayResponse);
       payload.itemsPreview = previewItems(payload);
       delete payload.items;
@@ -1082,7 +1287,9 @@ exports.handler = async function(event) {
         dryRun,
         inputLines: intake.lineCount,
         resolvedLatestContents: intake.candidates.length,
+        resolvedInfluencers: intake.influencers.length,
         submittedCandidates: selected.length,
+        submittedRecords: submitted.length,
         rejectedRows: intake.rejected.length,
         rejectedByReason: rejectionSummary(intake.rejected),
         rejectedPreview: intake.rejected.slice(0, 50),
@@ -1125,7 +1332,14 @@ exports.handler = async function(event) {
     const candidates = resolved.candidates;
 
     const selected = candidates.slice(0, target);
-    const gatewayResponse = await CandidateGateway.handler(gatewayEvent(event, selected, sectionKey, dryRun, target));
+    const submitted = [];
+    selected.forEach((candidate, index) => {
+      if (resolved.influencers[index]) submitted.push(resolved.influencers[index]);
+      submitted.push(candidate);
+    });
+    const gatewayResponse = await CandidateGateway.handler(
+      gatewayEvent(event, submitted, sectionKey, dryRun, submitted.length || 1)
+    );
     const payload = jsonBody(gatewayResponse);
     payload.itemsPreview = previewItems(payload);
     delete payload.items;
@@ -1154,12 +1368,14 @@ exports.handler = async function(event) {
       resolutionDeferredRows: resolved.deferredRows,
       directCandidates: candidates.length,
       submittedCandidates: selected.length,
+      submittedInfluencers: Math.min(selected.length, resolved.influencers.length),
+      submittedRecords: submitted.length,
       rejectedRows: rejected.length,
       rejectedByReason: rejectionSummary(rejected),
       providerTrace: searchResults.map((result) => ({ query: result.query, providers: result.providers })),
       nextQueryCursor: queryCursor + 1,
       providerReadiness: providerReadiness(cfg),
-      candidateAssetType: "creator_latest_public_content",
+      candidateAssetType: "influencer_registry_plus_latest_content",
       publicSnapshotMutation: false,
       searchBankCoreMutation: false,
       sampleSlotMutation: false

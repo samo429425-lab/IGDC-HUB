@@ -13,7 +13,7 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const Policy = require("./lib/social-candidate-policy.v1");
 const AdminAuth = require("./lib/commerce-candidate-auth.v1");
 
-const VERSION = "sanmaru-social-candidate-gateway-v1.1.0-section-exclusion-preserve";
+const VERSION = "sanmaru-social-candidate-gateway-v1.2.0-registry-review-preserve";
 
 function internalAuthorized(event) {
   const expected = SocialStore.text(process.env.SOCIAL_CANDIDATE_SYNC_SECRET || process.env.SANMARU_INTERNAL_TOKEN || process.env.IGDC_INTERNAL_TOKEN);
@@ -68,6 +68,53 @@ async function excludedIdSet() {
   } catch (_error) {
     return new Set();
   }
+}
+async function existingRowsById(ids) {
+  const list = Array.from(new Set((ids || []).map(SocialStore.text).filter(Boolean)));
+  if (!list.length) return new Map();
+  try {
+    const rows = await SocialStore.selectCandidates(
+      "select=*&id=" + SocialStore.encodeIn(list)
+    );
+    return new Map(
+      (Array.isArray(rows) ? rows : [])
+        .filter((row) => row && row.id)
+        .map((row) => [SocialStore.text(row.id), row])
+    );
+  } catch (_error) {
+    return new Map();
+  }
+}
+function preserveReviewState(next, previous) {
+  if (!previous) return next;
+  const review = SocialStore.text(previous.review_status);
+  if (!/^(approved|hold|recheck|rejected)$/i.test(review)) return next;
+  const merged = Object.assign({}, next, {
+    review_status: previous.review_status,
+    verification_status: previous.verification_status,
+    candidate_only: previous.candidate_only,
+    rotation_eligible: previous.rotation_eligible,
+    reviewed_by: previous.reviewed_by,
+    reviewed_at: previous.reviewed_at,
+    approved_at: previous.approved_at,
+    review_note: previous.review_note,
+    raw: Object.assign({}, previous.raw || {}, next.raw || {})
+  });
+  if (
+    SocialStore.text(previous.source_url) !== SocialStore.text(next.source_url) &&
+    SocialStore.assetClassOf(next) === "latest_content"
+  ) {
+    merged.raw.placementOverride = "replacement_waiting";
+    merged.raw.placementOverrideAt = SocialStore.nowIso();
+    merged.raw.placementOverrideBy = "automatic_latest_content_refresh";
+    merged.raw.latestContentRefresh = {
+      status: "replacement_waiting",
+      previousUrl: SocialStore.text(previous.source_url),
+      nextUrl: SocialStore.text(next.source_url),
+      detectedAt: SocialStore.nowIso()
+    };
+  }
+  return merged;
 }
 exports.handler = async function(event) {
   if (event && event.httpMethod === "OPTIONS") return SocialStore.response(204, {});
@@ -133,7 +180,14 @@ exports.handler = async function(event) {
     const capped = incoming.slice(0, cap);
     const dryRun = body.dryRun === true || body.dry_run === true;
     const excludedIds = await excludedIdSet();
-    const normalized = capped.filter((row) => !excludedIds.has(SocialStore.text(row && row.id)));
+    const existing = await existingRowsById(
+      capped.map((row) => row && row.id)
+    );
+    const normalized = capped
+      .filter((row) => !excludedIds.has(SocialStore.text(row && row.id)))
+      .map((row) =>
+        preserveReviewState(row, existing.get(SocialStore.text(row && row.id)))
+      );
     const excludedSkipped = capped.length - normalized.length;
     const saved = dryRun ? [] : await SocialStore.upsertCandidates(normalized);
     return SocialStore.response(200, {

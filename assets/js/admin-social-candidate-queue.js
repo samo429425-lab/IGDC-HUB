@@ -1,4 +1,4 @@
-/* IGDC Social Hub Channel Candidate Control v2.1.0 */
+/* IGDC Social Hub Influencer Registry + Latest Content Control v2.2.0 */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -34,7 +34,9 @@
     countryCatalog = [],
     regionCatalog = [],
     detectedCountry = null,
-    previewWindow = null;
+    previewWindow = null,
+    selectedInfluencers = new Set(),
+    selectedContents = new Set();
   var $ = function (id) {
       return document.getElementById(id);
     },
@@ -77,6 +79,24 @@
     return rows.filter(function (r) {
       return !excluded(r);
     });
+  }
+  function assetClass(r) {
+    var raw = (r && r.raw) || {};
+    return text(
+      (r && r.assetClass) ||
+        raw.assetClass ||
+        (raw.latestContentAsset === true
+          ? "latest_content"
+          : "influencer_registry"),
+    );
+  }
+  function channelIdentity(r) {
+    var raw = (r && r.raw) || {};
+    return lower(
+      (r && r.channelUrl) ||
+        raw.channelUrl ||
+        (assetClass(r) === "influencer_registry" && r && r.sourceUrl),
+    );
   }
   function countryScopedActive() {
     var countryCode = selectedCountry();
@@ -318,11 +338,18 @@
       blockCount = rows.filter(blocked).length;
     $("summaryGrid").innerHTML = [
       card(
-        "활성 후보",
-        s.activeCandidateCount == null
-          ? active().length
-          : s.activeCandidateCount,
-        "검토·배치 대상",
+        "인플루언서 등록부",
+        active().filter(function (row) {
+          return assetClass(row) === "influencer_registry";
+        }).length,
+        "채널 링크 관리 대상",
+      ),
+      card(
+        "최신 콘텐츠 후보",
+        active().filter(function (row) {
+          return assetClass(row) === "latest_content";
+        }).length,
+        "인플루언서별 최신 1건",
       ),
       card(
         "최종 공개 배치",
@@ -546,6 +573,8 @@
             r.platform,
             r.sectionKey,
             r.sourceUrl,
+            r.channelUrl,
+            r.assetClass,
             r.entityKind,
             r.category,
             r.language,
@@ -580,23 +609,65 @@
     if (/hold|replacement|search_excluded/i.test(r.reviewStatus)) return "hold";
     return "risk";
   }
-  function thumb(r) {
-    var url = text(r.thumbnailUrl);
+  function thumb(r, mode) {
+    var raw = r.raw || {},
+      url = text(
+        mode === "registry"
+          ? r.channelThumbnailUrl ||
+              raw.channelThumbnailUrl ||
+              r.thumbnailUrl
+          : r.thumbnailUrl,
+      );
     return /^https:\/\//i.test(url)
       ? '<img loading="lazy" referrerpolicy="no-referrer" src="' +
           esc(url) +
-          '" alt="" onerror="this.remove()">'
+          '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'grid\'">' +
+          '<span class="candidate-thumb-fallback" style="display:none">' +
+          esc(r.platform || "SNS") +
+          "<br>" +
+          esc(r.creatorName || r.title || "공개 미리보기") +
+          "</span>"
       : '<span class="candidate-thumb-fallback">' +
           esc(r.platform || "SNS") +
-          "<br>썸네일 없음</span>";
+          "<br>" +
+          esc(r.creatorName || r.title || "공개 미리보기") +
+          "</span>";
+  }
+  function latestForInfluencer(r) {
+    var identity = channelIdentity(r);
+    if (!identity) return null;
+    return (
+      countryScopedActive()
+        .filter(function (row) {
+          return (
+            assetClass(row) === "latest_content" &&
+            channelIdentity(row) === identity
+          );
+        })
+        .sort(function (a, b) {
+          return (
+            (Date.parse(text(b.contentPublishedAt)) || 0) -
+              (Date.parse(text(a.contentPublishedAt)) || 0) ||
+            score(b) - score(a)
+          );
+        })[0] || null
+    );
   }
   function item(r, queue) {
     var id = esc(r.id),
       raw = r.raw || {},
+      registry = queue === "registry",
+      latest = registry ? latestForInfluencer(r) : null,
       entity = text(r.entityKind || raw.entityKind || "latest_post"),
       placement = text(placementById[r.id]),
       countries = (r.countryScopes || raw.countryScopes || []).join(","),
       languages = (r.languageScopes || raw.languageScopes || []).join(","),
+      primaryUrl = registry
+        ? text(r.channelUrl || raw.channelUrl || r.sourceUrl)
+        : text(r.latestContentUrl || r.sourceUrl),
+      checked = (
+        registry ? selectedInfluencers : selectedContents
+      ).has(text(r.id)),
       policy = [
         "공개 " + (r.publicAccess ? "확인" : "확인 필요"),
         r.loginRequired ? "로그인 장벽" : "",
@@ -605,22 +676,30 @@
         .filter(Boolean)
         .join(" · ");
     return (
-      '<article class="candidate-card"><input class="candidate-card-check rowcheck ' +
-      (queue === "final" ? "finalCheck" : "waitingCheck") +
+      '<article class="candidate-card' +
+      (checked ? " selected" : "") +
+      '"><input class="candidate-card-check rowcheck ' +
+      (registry ? "finalCheck" : "waitingCheck") +
       '" type="checkbox" data-candidate-id="' +
       id +
+      '"' +
+      (checked ? " checked" : "") +
       '" aria-label="' +
       esc(r.title || id) +
       ' 선택"><a class="candidate-thumb-button previewLink" href="' +
-      esc(r.sourceUrl || "#") +
+      esc(primaryUrl || "#") +
       '">' +
-      thumb(r) +
+      thumb(r, registry ? "registry" : "content") +
       '</a><div class="candidate-card-body"><div class="candidate-card-title">' +
-      esc(r.title || "(제목 없음)") +
+      esc(
+        registry
+          ? r.creatorName || r.title || "(인플루언서 이름 없음)"
+          : r.title || "(콘텐츠 제목 없음)",
+      ) +
       '</div><div class="candidate-card-meta">' +
       pill(label(r.sectionKey), "section") +
       pill(r.platform, "platform") +
-      pill(entity, "") +
+      pill(registry ? "인플루언서" : entity, "") +
       (placement
         ? pill(
             placement === "public_selected" ? "최종 100" : "교체 대기",
@@ -629,14 +708,22 @@
         : "") +
       pill(r.reviewStatus || "pending", status(r)) +
       '</div><div class="candidate-card-detail">' +
-      esc(r.creatorName || r.creatorHandle || "채널 운영자 정보 없음") +
+      esc(
+        registry
+          ? latest
+            ? "최신 콘텐츠 후보 1개 · " + text(latest.title)
+            : "최신 콘텐츠 후보 0개"
+          : r.creatorName || r.creatorHandle || "채널 운영자 정보 없음",
+      ) +
       "<br>" +
       esc(
         [
           countries && "국가 " + countries,
           languages && "언어 " + languages,
           r.category && "주제 " + r.category,
-          r.contentPublishedAt && "게시 " + r.contentPublishedAt.slice(0, 10),
+          !registry &&
+            r.contentPublishedAt &&
+            "게시 " + r.contentPublishedAt.slice(0, 10),
         ]
           .filter(Boolean)
           .join(" · ") || "국가·언어 공통",
@@ -648,33 +735,82 @@
       " · " +
       esc(r.verificationStatus || "검증 대기") +
       '</div><div class="candidate-card-footer"><a class="secondary previewLink" href="' +
-      esc(r.sourceUrl || "#") +
-      '">최신 콘텐츠 열기</a><button class="secondary sourceBtn" type="button" data-candidate-id="' +
+      esc(primaryUrl || "#") +
+      '">' +
+      (registry ? "인플루언서 채널 열기" : "최신 콘텐츠 열기") +
+      "</a>" +
+      (registry && latest
+        ? '<a class="secondary previewLink" href="' +
+          esc(latest.sourceUrl || "#") +
+          '">최신 콘텐츠 확인</a>'
+        : "") +
+      '<button class="secondary sourceBtn" type="button" data-candidate-id="' +
       id +
       '">주소 확인</button></div></div></article>'
     );
   }
   function sectionIds(container, section, checkboxClass) {
-    var root = container.querySelector('[data-section="' + section + '"]');
-    if (!root) return [];
-    return Array.from(root.querySelectorAll("." + checkboxClass + ":checked"))
-      .map(function (el) {
-        return text(el.dataset.candidateId);
+    var source =
+      checkboxClass === "finalCheck"
+        ? selectedInfluencers
+        : selectedContents;
+    return Array.from(source).filter(function (id) {
+      return rows.some(function (row) {
+        return text(row.id) === id && row.sectionKey === section;
+      });
+    });
+  }
+  function queueRows(queue, section) {
+    return visible().filter(function (row) {
+      return (
+        assetClass(row) ===
+          (queue === "registry" ? "influencer_registry" : "latest_content") &&
+        (!section || row.sectionKey === section)
+      );
+    });
+  }
+  function selectQueue(queue, section, checked) {
+    var target =
+      queue === "registry" ? selectedInfluencers : selectedContents;
+    queueRows(queue, section).forEach(function (row) {
+      if (checked) target.add(text(row.id));
+      else target.delete(text(row.id));
+    });
+    renderSections();
+    show(
+      (section ? label(section) + " " : "현재 조회 범위 ") +
+        (queue === "registry" ? "인플루언서" : "최신 콘텐츠") +
+        (checked ? " 전체를 선택했습니다." : " 선택을 해제했습니다."),
+      "ok",
+    );
+  }
+  function pruneSelections() {
+    var ids = new Set(
+      rows.map(function (row) {
+        return text(row.id);
+      }),
+    );
+    [selectedInfluencers, selectedContents].forEach(function (selection) {
+      Array.from(selection).forEach(function (id) {
+        if (!ids.has(id)) selection.delete(id);
       })
-      .filter(Boolean);
+    });
   }
   function finalActions(key) {
     return (
-      '<div class="section-actionbar"><span class="section-note small">이 섹션에서 선택한 최신 콘텐츠만 처리합니다.</span>' +
+      '<div class="section-actionbar"><span class="section-note small">인플루언서 등록과 최신 콘텐츠 배치는 별도로 관리됩니다.</span>' +
+      '<button class="secondary" type="button" data-section-select-all="' +
+      esc(key) +
+      '">섹션 전체 선택</button>' +
+      '<button class="secondary" type="button" data-section-clear-all="' +
+      esc(key) +
+      '">선택 해제</button>' +
+      '<button type="button" data-section-approve="' +
+      esc(key) +
+      '">선택 인플루언서 승인</button>' +
       '<button class="publish" type="button" data-section-ai="' +
       esc(key) +
       '">AI 자동 정리</button>' +
-      '<button class="publish" type="button" data-section-publish="' +
-      esc(key) +
-      '">이 섹션 실제 적용</button>' +
-      '<button class="secondary" type="button" data-section-move="' +
-      esc(key) +
-      '">선택 대기열로</button>' +
       '<button class="danger" type="button" data-section-block="' +
       esc(key) +
       '">선택 영구 차단</button></div>'
@@ -682,13 +818,22 @@
   }
   function waitingActions(key) {
     return (
-      '<div class="section-actionbar"><span class="section-note small">교체 후보는 최종 100개와 비교한 뒤 다시 올릴 수 있습니다.</span>' +
+      '<div class="section-actionbar"><span class="section-note small">각 인플루언서의 최신 콘텐츠 1건만 유지하며 공개 100개와 교체 후보를 함께 관리합니다.</span>' +
+      '<button class="secondary" type="button" data-waiting-select-all="' +
+      esc(key) +
+      '">섹션 전체 선택</button>' +
+      '<button class="secondary" type="button" data-waiting-clear-all="' +
+      esc(key) +
+      '">선택 해제</button>' +
       '<button type="button" data-waiting-promote="' +
       esc(key) +
       '">선택 최종 후보로</button>' +
+      '<button class="publish" type="button" data-waiting-publish="' +
+      esc(key) +
+      '">이 섹션 실제 적용</button>' +
       '<button class="danger" type="button" data-waiting-delete="' +
       esc(key) +
-      '">선택 완전 삭제</button>' +
+      '">선택 교체후보 삭제</button>' +
       '<button class="danger" type="button" data-waiting-block="' +
       esc(key) +
       '">선택 영구 차단</button></div>'
@@ -702,7 +847,7 @@
           }),
           isOpen = openKey === key,
           toggleAttribute =
-            queue === "final" ? "data-final-toggle" : "data-waiting-toggle";
+            queue === "registry" ? "data-final-toggle" : "data-waiting-toggle";
         return (
           '<section class="candidate-section ' +
           (isOpen ? "open" : "") +
@@ -716,10 +861,11 @@
           esc(label(key)) +
           '</span><span class="section-count">' +
           part.length +
-          '개</span></span><span class="section-chevron">⌄</span></button>' +
+          (queue === "registry" ? "명" : "개") +
+          '</span></span><span class="section-chevron">⌄</span></button>' +
           (isOpen
             ? '<div class="section-body">' +
-              (queue === "final" ? finalActions(key) : waitingActions(key)) +
+              (queue === "registry" ? finalActions(key) : waitingActions(key)) +
               (part.length
                 ? '<div class="candidate-card-grid">' +
                   part
@@ -728,7 +874,7 @@
                     })
                     .join("") +
                   "</div>"
-                : '<div class="empty-section">현재 이 범위에 해당하는 채널이 없습니다.</div>') +
+                : '<div class="empty-section">현재 이 범위에 해당하는 항목이 없습니다.</div>') +
               "</div>"
             : "") +
           "</section>"
@@ -739,10 +885,10 @@
   function renderSections() {
     var list = visible(),
       finalList = list.filter(function (row) {
-        return placementById[row.id] === "public_selected";
+        return assetClass(row) === "influencer_registry";
       }),
       waitingList = list.filter(function (row) {
-        return placementById[row.id] !== "public_selected";
+        return assetClass(row) === "latest_content";
       });
     $("filterState").textContent =
       "표시 " +
@@ -769,12 +915,18 @@
         })[0] || order[0];
     }
     $("candidateCapacityState").textContent =
-      "최종 " + finalList.length + "개 · 섹션별 최대 100개";
+      "인플루언서 " + finalList.length + "명 · 채널 링크 등록부";
     $("waitingCapacityState").textContent =
-      "교체 대기 " + waitingList.length + "개 · 9개 섹션별 보관";
+      "최신 콘텐츠 " +
+      waitingList.length +
+      "개 · 공개 " +
+      placementStats.selected +
+      "개 · 교체 " +
+      placementStats.replacement +
+      "개";
     $("sectionAccordion").innerHTML = accordionHtml(
       finalList,
-      "final",
+      "registry",
       openFinalSection,
     );
     $("waitingAccordion").innerHTML = accordionHtml(
@@ -897,6 +1049,12 @@
         label: section[1],
         platform: section[2],
         total: list.length,
+        influencers: list.filter(function (row) {
+          return assetClass(row) === "influencer_registry";
+        }).length,
+        latestContents: list.filter(function (row) {
+          return assetClass(row) === "latest_content";
+        }).length,
         active: list.filter(function (row) {
           return !excluded(row);
         }).length,
@@ -983,6 +1141,7 @@
     try {
       var d = await get(REVIEW + "?action=candidates");
       rows = (d.queue && d.queue.rows) || d.candidates || [];
+      pruneSelections();
       await loadPlacement();
       renderSummary(d.summary);
       filters(d.summary);
@@ -992,7 +1151,7 @@
         "연결 정상 · " +
         ((d.source && d.source.candidateSourceMode) || "read_only");
       show(
-        "최신 콘텐츠 후보 대기열을 읽었습니다. 최종 100개와 교체 후보는 분리 표시되며, 제외 항목은 접힌 목록에 보관됩니다.",
+        "인플루언서 등록부와 최신 콘텐츠 후보·교체 대기열을 분리해 읽었습니다.",
         "ok",
       );
     } catch (e) {
@@ -1124,14 +1283,18 @@
   }
   function sectionCount(section) {
     return countryScopedActive().filter(function (r) {
-      return r.sectionKey === section;
+      return (
+        r.sectionKey === section && assetClass(r) === "latest_content"
+      );
     }).length;
   }
   function newIds(data, known) {
     var list = (data && data.itemsPreview) || [],
       added = 0;
     list.forEach(function (row) {
-      var id = text(row && row.id);
+      var id = text(row && row.id),
+        kind = text(row && row.assetClass);
+      if (kind && kind !== "latest_content") return;
       if (id && !known.has(id)) {
         known.add(id);
         added += 1;
@@ -1581,12 +1744,16 @@
           (dryRun ? "변환 점검" : "후보 반입") +
           " 완료: 입력 " +
           Number(report.inputLines || 0) +
-          "줄, 채널·프로필·그룹 " +
-          Number(report.resolvedChannels || 0) +
+          "줄, 인플루언서 " +
+          Number(report.resolvedInfluencers || 0) +
+          "명 · 최신 콘텐츠 " +
+          Number(report.resolvedLatestContents || report.resolvedChannels || 0) +
           "개, 제외 " +
           Number(report.rejectedRows || 0) +
           "개.",
-        Number(report.resolvedChannels || 0) ? "ok" : "warn",
+        Number(report.resolvedLatestContents || report.resolvedChannels || 0)
+          ? "ok"
+          : "warn",
       );
     } catch (e) {
       state.textContent = "반입 실패";
@@ -1597,6 +1764,8 @@
     }
   }
   function selected(sel) {
+    if (sel === ".finalCheck") return Array.from(selectedInfluencers);
+    if (sel === ".waitingCheck") return Array.from(selectedContents);
     return Array.from(document.querySelectorAll(sel + ":checked"))
       .map(function (e) {
         return text(e.dataset.candidateId);
@@ -1682,6 +1851,10 @@
       if (action === "forget" || action === "delete_waiting")
         body.confirmPermanentDelete = true;
       var d = await post(ACTION, body);
+      ids.forEach(function (id) {
+        selectedInfluencers.delete(text(id));
+        selectedContents.delete(text(id));
+      });
       $("socialConfirm").checked = false;
       await refresh();
       show(
@@ -1798,7 +1971,7 @@
         scopeName +
           " 방문자에게 보일 " +
           target +
-          " 최종 채널을 실제 프론트 슬롯에 적용할까요?",
+          " 인플루언서들의 최종 최신 콘텐츠를 실제 프론트 슬롯에 적용할까요?",
       )
     )
       return;
@@ -1843,9 +2016,18 @@
       })[0],
       raw = (row && row.raw) || {};
     if (!row) return;
+    var latest =
+      assetClass(row) === "influencer_registry"
+        ? latestForInfluencer(row)
+        : row;
     alert(
       [
-        "최신 콘텐츠 주소: " + text(row.latestContentUrl || row.sourceUrl),
+        "구분: " +
+          (assetClass(row) === "influencer_registry"
+            ? "인플루언서 등록부"
+            : "최신 콘텐츠 후보"),
+        "최신 콘텐츠 주소: " +
+          text(latest && (latest.latestContentUrl || latest.sourceUrl)),
         "운영 채널 주소: " + text(row.channelUrl || raw.channelUrl),
         "수집 근거 주소: " +
           text(
@@ -1854,7 +2036,12 @@
               raw.sourceContentUrl,
           ),
         "콘텐츠 유형: " + text(row.entityKind || raw.entityKind),
-        "게시 시각: " + text(row.contentPublishedAt || raw.contentPublishedAt),
+        "게시 시각: " +
+          text(
+            latest &&
+              (latest.contentPublishedAt ||
+                (latest.raw && latest.raw.contentPublishedAt)),
+          ),
         "국가: " + (row.countryScopes || raw.countryScopes || []).join(","),
       ].join("\n"),
     );
@@ -1890,24 +2077,39 @@
         return;
       }
       var key;
-      if ((key = event.target.dataset.sectionAi)) autoCurate(key);
-      else if ((key = event.target.dataset.sectionPublish)) actualApply(key);
-      else if ((key = event.target.dataset.sectionMove))
-        run("move_to_replacement", sectionIds(container, key, "finalCheck"));
+      if ((key = event.target.dataset.sectionSelectAll))
+        selectQueue("registry", key, true);
+      else if ((key = event.target.dataset.sectionClearAll))
+        selectQueue("registry", key, false);
+      else if ((key = event.target.dataset.waitingSelectAll))
+        selectQueue("content", key, true);
+      else if ((key = event.target.dataset.waitingClearAll))
+        selectQueue("content", key, false);
+      else if ((key = event.target.dataset.sectionApprove))
+        run("approve", sectionIds(container, key, "finalCheck"));
+      else if ((key = event.target.dataset.sectionAi)) autoCurate(key);
       else if ((key = event.target.dataset.sectionBlock))
         run("permanent_block", sectionIds(container, key, "finalCheck"));
       else if ((key = event.target.dataset.waitingPromote))
         run("promote_candidate", sectionIds(container, key, "waitingCheck"));
+      else if ((key = event.target.dataset.waitingPublish)) actualApply(key);
       else if ((key = event.target.dataset.waitingDelete))
         run("delete_waiting", sectionIds(container, key, "waitingCheck"));
       else if ((key = event.target.dataset.waitingBlock))
         run("permanent_block", sectionIds(container, key, "waitingCheck"));
     });
     container.addEventListener("change", function (event) {
-      if (event.target.matches(".rowcheck"))
+      if (event.target.matches(".rowcheck")) {
+        var target = event.target.matches(".finalCheck")
+          ? selectedInfluencers
+          : selectedContents;
+        if (event.target.checked)
+          target.add(text(event.target.dataset.candidateId));
+        else target.delete(text(event.target.dataset.candidateId));
         event.target
           .closest(".candidate-card")
           .classList.toggle("selected", event.target.checked);
+      }
     });
   }
   function bind() {
@@ -1980,8 +2182,14 @@
     $("approveBtn").onclick = function () {
       run("approve", selected(".finalCheck"));
     };
+    $("selectAllFinalBtn").onclick = function () {
+      selectQueue("registry", "", true);
+    };
+    $("clearFinalSelectionBtn").onclick = function () {
+      selectQueue("registry", "", false);
+    };
     $("moveWaitingBtn").onclick = function () {
-      run("move_to_replacement", selected(".finalCheck"));
+      run("delete", selected(".finalCheck"));
     };
     $("holdBtn").onclick = function () {
       run("hold", selected(".finalCheck"));
@@ -2003,6 +2211,12 @@
     };
     $("waitingPromoteBtn").onclick = function () {
       run("promote_candidate", selected(".waitingCheck"));
+    };
+    $("selectAllWaitingBtn").onclick = function () {
+      selectQueue("content", "", true);
+    };
+    $("clearWaitingSelectionBtn").onclick = function () {
+      selectQueue("content", "", false);
     };
     $("waitingDeleteBtn").onclick = function () {
       run("delete_waiting", selected(".waitingCheck"));

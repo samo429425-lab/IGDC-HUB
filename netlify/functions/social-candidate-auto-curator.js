@@ -12,7 +12,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
 const VERSION =
-  "social-candidate-auto-curator-v1.0.0-policy-score-channel-selection";
+  "social-candidate-auto-curator-v1.1.0-registry-content-paired-selection";
 const MAX_PER_SECTION = SocialStore.POOL_MAX_PER_SECTION || 350;
 
 function text(value) {
@@ -152,17 +152,28 @@ exports.handler = async function (event) {
     const approvedIds = [];
     const bySection = {};
     Object.keys(groups).forEach((section) => {
-      const ranked = groups[section]
-        .slice()
-        .sort(
+      const rankRows = (items) =>
+        items.slice().sort(
           (a, b) =>
             SocialStore.rowScore(b) +
             CountryRouting.matchScore(b, route) -
             (SocialStore.rowScore(a) + CountryRouting.matchScore(a, route)),
         );
-      const selected = ranked.slice(0, MAX_PER_SECTION);
+      const influencers = rankRows(
+        groups[section].filter(
+          (row) => SocialStore.assetClassOf(row) === "influencer_registry",
+        ),
+      ).slice(0, MAX_PER_SECTION);
+      const contents = rankRows(
+        groups[section].filter(
+          (row) => SocialStore.assetClassOf(row) === "latest_content",
+        ),
+      ).slice(0, MAX_PER_SECTION);
+      const selected = influencers.concat(contents);
       bySection[section] = {
-        eligible: ranked.length,
+        eligible: groups[section].length,
+        influencerRegistry: influencers.length,
+        latestContentPool: contents.length,
         registeredCandidatePool: selected.length,
       };
       selected.forEach((row) => approvedIds.push(text(row.id)));
