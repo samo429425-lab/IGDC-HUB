@@ -11,7 +11,8 @@ const Policy = require("./social-candidate-policy.v1");
 const CountryRouting = require("./social-country-routing.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
-const VERSION = "social-candidate-store-v1.7.0-influencer-registry-content-queue";
+const VERSION =
+  "social-candidate-store-v1.7.1-selected-unpublish-sample-restore";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -1284,6 +1285,115 @@ function buildSnapshot(baseSnapshot, rows, options) {
   return base;
 }
 
+function slotCandidateId(slot) {
+  const value = plain(slot);
+  return text(
+    value.contentId ||
+      value.candidateId ||
+      plain(value.audit).candidate_id ||
+      value.id,
+  );
+}
+
+function sampleSlot(seedSections, sectionKey, index) {
+  const seed = Array.isArray(seedSections[sectionKey])
+    ? seedSections[sectionKey][index]
+    : null;
+  if (seed)
+    return Object.assign({}, cloneJson(seed), {
+      slotId: Number(seed.slotId) || index + 1,
+    });
+  return {
+    id: "ph_" + sectionKey + "_" + String(index + 1).padStart(3, "0"),
+    slotId: index + 1,
+    type: "placeholder",
+    title: "Loading…",
+    url: "#",
+    source: { platform: "placeholder", section_key: sectionKey },
+  };
+}
+
+function unpublishSnapshot(currentSnapshot, seedSnapshot, candidateIds, options) {
+  const opts = plain(options);
+  const base = cloneJson(currentSnapshot || {});
+  const seed = cloneJson(seedSnapshot || {});
+  if (!base.pages) base.pages = {};
+  if (!base.pages.social) base.pages.social = {};
+  if (!base.pages.social.sections) base.pages.social.sections = {};
+  const sections = base.pages.social.sections;
+  const seedSections = plain(
+    seed.pages && seed.pages.social && seed.pages.social.sections,
+  );
+  const ids = new Set(array(candidateIds).map(text).filter(Boolean));
+  const requestedSection = Policy.normalizeSectionKey(
+    opts.sectionKey || opts.section || opts.targetSection,
+  );
+  const targetSections =
+    requestedSection && ALLOWED_SECTIONS.has(requestedSection)
+      ? [requestedSection]
+      : Policy.SECTION_KEYS;
+  const removedBySection = {};
+  let removedSlots = 0;
+
+  targetSections.forEach((sectionKey) => {
+    const current = Array.isArray(sections[sectionKey])
+      ? sections[sectionKey].slice()
+      : [];
+    let sectionRemoved = 0;
+    sections[sectionKey] = current.map((slot, index) => {
+      const candidateId = slotCandidateId(slot);
+      if (!candidateId || !ids.has(candidateId)) return slot;
+      sectionRemoved += 1;
+      removedSlots += 1;
+      const fallback = sampleSlot(seedSections, sectionKey, index);
+      return ids.has(slotCandidateId(fallback))
+        ? sampleSlot({}, sectionKey, index)
+        : fallback;
+    });
+    removedBySection[sectionKey] = sectionRemoved;
+  });
+
+  const candidatePool = plain(base.pages.social.candidatePool);
+  targetSections.forEach((sectionKey) => {
+    candidatePool[sectionKey] = array(candidatePool[sectionKey]).filter(
+      (slot) => !ids.has(slotCandidateId(slot)),
+    );
+  });
+  base.pages.social.candidatePool = candidatePool;
+
+  const filled = Object.assign({}, plain(plain(base.meta).filled));
+  targetSections.forEach((sectionKey) => {
+    filled[sectionKey] = array(sections[sectionKey]).filter(
+      (slot) =>
+        text(plain(slot).type) === "external_social" &&
+        text(plain(plain(slot).audit).origin) === "social_candidates",
+    ).length;
+  });
+  base.version = "social.snapshot.generated.supabase.v1";
+  base.meta = Object.assign({}, plain(base.meta), {
+    generatedAt: nowIso(),
+    generatedBy: "social-snapshot-publish",
+    samplePreservePolicy:
+      "Unpublished selected candidates return to the replacement queue and their original sample/placeholder slots are restored.",
+    excludedSections: ["social-maru", "rightPanel"],
+    appliedSections: targetSections,
+    filled,
+    frontUnpublish: {
+      candidateIds: Array.from(ids),
+      removedSlots,
+      removedBySection,
+      operation: "selected_front_unpublish",
+    },
+  });
+  return {
+    snapshot: base,
+    candidateIds: Array.from(ids),
+    removedSlots,
+    removedBySection,
+    targetSections,
+  };
+}
+
 module.exports = {
   VERSION,
   CANDIDATE_TABLE,
@@ -1330,6 +1440,8 @@ module.exports = {
   selectRotation,
   publicSocialSlot,
   buildSnapshot,
+  slotCandidateId,
+  unpublishSnapshot,
   commercialRoute,
   channelIdentity,
   assetClassOf,

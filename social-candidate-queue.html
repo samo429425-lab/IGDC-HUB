@@ -651,13 +651,15 @@
           ><button id="clearWaitingSelectionBtn" class="secondary">
             선택 전체 해제</button
           ><button id="waitingPromoteBtn">선택 최종 후보로 올리기</button
+          ><button id="publishAllBtn" class="publish">
+            전체 9개 섹션 실제 적용</button
+          ><button id="unpublishAllScopeBtn" class="danger">
+            전체 9개 섹션 실제 적용 해제</button
+          ><button id="unpublishAllBtn" class="danger">
+            선택 콘텐츠만 적용 취소</button
           ><button id="waitingDeleteBtn" class="danger">
             선택 교체후보 삭제</button
-          ><button id="waitingBlockBtn" class="danger">선택 영구 차단</button
-          ><span style="flex: 1"></span
-          ><button id="publishAllBtn" class="publish">
-            전체 9개 섹션 최신 콘텐츠 실제 적용
-          </button>
+          ><button id="waitingBlockBtn" class="danger">선택 영구 차단</button>
         </div>
         <div id="waitingAccordion" class="section-accordion"></div>
       </section>
@@ -713,10 +715,12 @@
         후보 수집·검토만으로 프런트 공개 목록은 바뀌지 않습니다. 검증 완료
         후보만 <strong>전체 9개 섹션 실제 적용</strong> 또는
         <strong>이 섹션 실제 적용</strong> 버튼으로 소셜 네트워크 화면에
-        반영됩니다.
+        반영됩니다. 적용 취소한 콘텐츠는 삭제하지 않고 교체 후보 대기열로
+        복귀하며, 해당 프론트 슬롯은 기존 샘플 또는 준비 중 슬롯으로
+        되돌아갑니다.
       </p>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=16"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=18"></script>
   </body>
 </html>

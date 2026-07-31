@@ -11,7 +11,8 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-snapshot-publish-v1.2.0-country-scoped-front-application";
+const VERSION =
+  "social-snapshot-publish-v1.3.0-selected-front-unpublish-sample-restore";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -112,6 +113,17 @@ function approvedQuery(limit) {
     safeLimit
   );
 }
+function candidateIdsFrom(params) {
+  return Array.from(
+    new Set(
+      SocialStore.array(
+        params.candidateIds || params.ids || params.candidateId || params.id,
+      )
+        .map(SocialStore.text)
+        .filter(Boolean),
+    ),
+  ).slice(0, 1000);
+}
 exports.handler = async function (event) {
   if (event && event.httpMethod === "OPTIONS")
     return SocialStore.response(204, {});
@@ -127,10 +139,18 @@ exports.handler = async function (event) {
       event.queryStringParameters || {},
       event.httpMethod === "POST" ? SocialStore.parseBody(event) : {},
     );
+    const operation = text(params.operation || params.action)
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_");
+    const unpublishSelected =
+      operation === "unpublish_selected" ||
+      operation === "selected_front_unpublish";
+    const candidateIds = candidateIdsFrom(params);
     const storeRelease =
       params.storeRelease === true || params.storeRelease === "true";
     if (
       storeRelease &&
+      !unpublishSelected &&
       params.confirmPublish !== true &&
       params.confirmPublish !== "true"
     ) {
@@ -139,6 +159,27 @@ exports.handler = async function (event) {
         version: VERSION,
         error: "actual_apply_confirmation_required",
         message: "실제 화면 적용 확인값이 필요합니다.",
+      });
+    }
+    if (
+      storeRelease &&
+      unpublishSelected &&
+      params.confirmUnpublish !== true &&
+      params.confirmUnpublish !== "true"
+    ) {
+      return SocialStore.response(400, {
+        ok: false,
+        version: VERSION,
+        error: "actual_unpublish_confirmation_required",
+        message: "선택 콘텐츠 실제 적용 취소 확인값이 필요합니다.",
+      });
+    }
+    if (unpublishSelected && !candidateIds.length) {
+      return SocialStore.response(400, {
+        ok: false,
+        version: VERSION,
+        error: "candidate_ids_required",
+        message: "실제 적용을 취소할 콘텐츠를 선택해 주세요.",
       });
     }
     const sectionKey = SocialStore.Policy.normalizeSectionKey(
@@ -155,26 +196,40 @@ exports.handler = async function (event) {
         allowedSections: SocialStore.Policy.SECTION_KEYS,
       });
     }
-    const allRows = await SocialStore.selectCandidates(
-      approvedQuery(params.limit),
-    );
-    const rows = sectionKey
-      ? (Array.isArray(allRows) ? allRows : []).filter(
-          (row) => SocialStore.text(row && row.section_key) === sectionKey,
-        )
-      : allRows;
     const route = CountryRouting.resolve(event, params);
     const base = await latestStoredBase(route);
-    const snapshot = SocialStore.buildSnapshot(
-      base.doc,
-      Array.isArray(rows) ? rows : [],
-      {
-        rotationSalt: params.rotationSalt || params.salt,
-        limitPerSection: params.limitPerSection,
-        route,
-        sectionKey,
-      },
-    );
+    let rows = [];
+    let unpublish = null;
+    let snapshot;
+    if (unpublishSelected) {
+      const seed = baseSnapshot();
+      unpublish = SocialStore.unpublishSnapshot(
+        base.doc,
+        seed.doc,
+        candidateIds,
+        { route, sectionKey },
+      );
+      snapshot = unpublish.snapshot;
+    } else {
+      const allRows = await SocialStore.selectCandidates(
+        approvedQuery(params.limit),
+      );
+      rows = sectionKey
+        ? (Array.isArray(allRows) ? allRows : []).filter(
+            (row) => SocialStore.text(row && row.section_key) === sectionKey,
+          )
+        : allRows;
+      snapshot = SocialStore.buildSnapshot(
+        base.doc,
+        Array.isArray(rows) ? rows : [],
+        {
+          rotationSalt: params.rotationSalt || params.salt,
+          limitPerSection: params.limitPerSection,
+          route,
+          sectionKey,
+        },
+      );
+    }
     const hash = SocialStore.sha256(snapshot);
     const rotation = (snapshot.meta && snapshot.meta.rotation) || {};
     const eligible = Array.isArray(rows)
@@ -199,9 +254,13 @@ exports.handler = async function (event) {
         "scope=" +
           scopeToken(route) +
           ";" +
-          (sectionKey
-            ? "section_actual_apply:" + sectionKey
-            : "all_social_sections_actual_apply") +
+          (unpublishSelected
+            ? sectionKey
+              ? "section_selected_unpublish:" + sectionKey
+              : "all_sections_selected_unpublish"
+            : sectionKey
+              ? "section_actual_apply:" + sectionKey
+              : "all_social_sections_actual_apply") +
           (params.notes ? ";" + params.notes : ""),
         1000,
       ),
@@ -234,8 +293,15 @@ exports.handler = async function (event) {
       eligibleRows: eligible,
       appliedSection: sectionKey || null,
       appliedAllSections: !sectionKey,
+      operation: unpublishSelected
+        ? "selected_front_unpublish"
+        : "actual_front_apply",
+      requestedCandidateIds: candidateIds.length,
+      removedSlots: unpublish ? unpublish.removedSlots : 0,
+      removedBySection: unpublish ? unpublish.removedBySection : {},
       releaseStored: !!stored,
-      actualFrontApplyStored: !!stored,
+      actualFrontApplyStored: !!stored && !unpublishSelected,
+      actualFrontUnpublishStored: !!stored && unpublishSelected,
       stored,
       rotation,
       route,
@@ -249,6 +315,7 @@ exports.handler = async function (event) {
         socialSnapshotMutation: false,
         frontReadsLatestStoredSnapshot: true,
         sampleSlotsPreserved: true,
+        selectedCandidatesReturnedToWaiting: unpublishSelected,
         externalProviderCalls: false,
         externalMembershipOverride: false,
       },

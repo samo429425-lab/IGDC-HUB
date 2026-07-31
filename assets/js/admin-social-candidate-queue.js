@@ -1,4 +1,4 @@
-/* IGDC Social Hub Influencer Registry + Latest Content Control v2.2.0 */
+/* IGDC Social Hub Influencer Registry + Latest Content Control v2.4.0 */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -8,6 +8,7 @@
     AUTO = "/.netlify/functions/social-candidate-auto-curator",
     ROTATION = "/.netlify/functions/social-rotation-selector",
     PUBLISH = "/.netlify/functions/social-snapshot-publish",
+    CURRENT = "/.netlify/functions/social-snapshot-current",
     COUNTRY = "/.netlify/functions/social-country-route";
   var SECTIONS = [
     ["social-youtube", "YouTube", "youtube"],
@@ -831,6 +832,12 @@
       '<button class="publish" type="button" data-waiting-publish="' +
       esc(key) +
       '">이 섹션 실제 적용</button>' +
+      '<button class="danger" type="button" data-waiting-unpublish-all="' +
+      esc(key) +
+      '">이 섹션 전체 적용 해제</button>' +
+      '<button class="danger" type="button" data-waiting-unpublish="' +
+      esc(key) +
+      '">선택 콘텐츠만 적용 취소</button>' +
       '<button class="danger" type="button" data-waiting-delete="' +
       esc(key) +
       '">선택 교체후보 삭제</button>' +
@@ -1996,6 +2003,150 @@
       show(e.message || "실제 화면 적용을 완료하지 못했습니다.", "warn");
     }
   }
+  function publishedCandidateId(slot) {
+    var value = slot || {},
+      audit = value.audit || {};
+    return text(
+      value.contentId || value.candidateId || audit.candidate_id || value.id,
+    );
+  }
+  async function currentPublishedIds(sectionKey) {
+    var q = new URLSearchParams({
+        countryCode: selectedCountry(),
+        scopeMode: scopeMode(),
+      }),
+      d = await get(CURRENT + "?" + q.toString()),
+      sections =
+        (d &&
+          d.snapshot &&
+          d.snapshot.pages &&
+          d.snapshot.pages.social &&
+          d.snapshot.pages.social.sections) ||
+        {},
+      keys = sectionKey ? [sectionKey] : order,
+      ids = [];
+    keys.forEach(function (key) {
+      (Array.isArray(sections[key]) ? sections[key] : []).forEach(function (
+        slot,
+      ) {
+        var audit = (slot && slot.audit) || {},
+          id = publishedCandidateId(slot);
+        if (
+          id &&
+          text(slot && slot.type) === "external_social" &&
+          text(audit.origin) === "social_candidates"
+        )
+          ids.push(id);
+      });
+    });
+    return Array.from(new Set(ids));
+  }
+  async function moveToReplacementInBatches(ids, scope) {
+    var batchSize = 10,
+      completed = 0;
+    for (var index = 0; index < ids.length; index += batchSize) {
+      var batch = ids.slice(index, index + batchSize);
+      await post(ACTION, {
+        action: "move_to_replacement",
+        ids: batch,
+        note: "selected_front_unpublish",
+        countryCode: scope.countryCode,
+        scopeMode: scopeMode(),
+      });
+      completed += batch.length;
+      $("waitingCapacityState").textContent =
+        "실제 적용 해제 준비 " + completed + "/" + ids.length + "개";
+    }
+  }
+  async function actualUnapplyIds(ids, sectionKey, target) {
+    var scope = currentScope(),
+      scopeName =
+        (scope.country &&
+          (scope.country.nameKo ||
+            scope.country.nameEn ||
+            scope.country.code)) ||
+        "전 세계 공통",
+      movedToWaiting = false;
+    if (!ids.length) {
+      show("실제 적용을 취소할 최신 콘텐츠를 먼저 선택해 주세요.", "warn");
+      return;
+    }
+    if (
+      !confirm(
+        scopeName +
+          " 범위의 " +
+          target +
+          "에서 실제 적용을 취소할 " +
+          ids.length +
+          "개 콘텐츠를 프론트에서 내리고 교체 후보 대기열로 되돌릴까요?",
+      )
+    )
+      return;
+    try {
+      await moveToReplacementInBatches(ids, scope);
+      movedToWaiting = true;
+      var d = await post(PUBLISH, {
+        operation: "unpublish_selected",
+        candidateIds: ids,
+        storeRelease: true,
+        confirmUnpublish: true,
+        includeSnapshot: 0,
+        sectionKey: sectionKey || "",
+        countryCode: scope.countryCode,
+        scopeMode: scopeMode(),
+      });
+      diagnostic(d);
+      ids.forEach(function (id) {
+        selectedContents.delete(text(id));
+      });
+      await refresh();
+      show(
+        scopeName +
+          " 범위의 선택 콘텐츠 " +
+          ids.length +
+          "개를 대기열로 복귀시키고, 실제 프론트 슬롯 " +
+          Number(d.removedSlots || 0) +
+          "개에서 적용을 취소했습니다.",
+        "ok",
+      );
+    } catch (e) {
+      show(
+        movedToWaiting
+          ? "선택 콘텐츠는 대기열로 복귀했지만 프론트 적용 취소 저장을 완료하지 못했습니다. 같은 항목을 다시 선택해 적용 취소를 실행해 주세요. · " +
+              (e.message || "저장 실패")
+          : e.message || "선택 콘텐츠 적용 취소를 완료하지 못했습니다.",
+        "warn",
+      );
+    }
+  }
+  async function actualUnapply(sectionKey) {
+    var ids = sectionKey
+      ? sectionIds($("waitingAccordion"), sectionKey, "waitingCheck")
+      : selected(".waitingCheck");
+    return actualUnapplyIds(
+      ids,
+      sectionKey,
+      sectionKey ? label(sectionKey) + " 선택 콘텐츠" : "현재 선택 범위",
+    );
+  }
+  async function actualUnapplyAll(sectionKey) {
+    var target = sectionKey
+      ? label(sectionKey) + " 섹션 전체"
+      : "전체 9개 섹션";
+    try {
+      var ids = await currentPublishedIds(sectionKey);
+      if (!ids.length) {
+        show(target + "에 현재 실제 적용된 콘텐츠가 없습니다.", "warn");
+        return;
+      }
+      return actualUnapplyIds(ids, sectionKey, target);
+    } catch (e) {
+      show(
+        e.message || target + "의 현재 실제 적용 목록을 읽지 못했습니다.",
+        "warn",
+      );
+    }
+  }
   function openPreview(url) {
     var safeUrl = text(url);
     if (!/^https:\/\//i.test(safeUrl)) return;
@@ -2093,6 +2244,10 @@
       else if ((key = event.target.dataset.waitingPromote))
         run("promote_candidate", sectionIds(container, key, "waitingCheck"));
       else if ((key = event.target.dataset.waitingPublish)) actualApply(key);
+      else if ((key = event.target.dataset.waitingUnpublishAll))
+        actualUnapplyAll(key);
+      else if ((key = event.target.dataset.waitingUnpublish))
+        actualUnapply(key);
       else if ((key = event.target.dataset.waitingDelete))
         run("delete_waiting", sectionIds(container, key, "waitingCheck"));
       else if ((key = event.target.dataset.waitingBlock))
@@ -2208,6 +2363,12 @@
     };
     $("publishAllBtn").onclick = function () {
       actualApply("");
+    };
+    $("unpublishAllScopeBtn").onclick = function () {
+      actualUnapplyAll("");
+    };
+    $("unpublishAllBtn").onclick = function () {
+      actualUnapply("");
     };
     $("waitingPromoteBtn").onclick = function () {
       run("promote_candidate", selected(".waitingCheck"));
