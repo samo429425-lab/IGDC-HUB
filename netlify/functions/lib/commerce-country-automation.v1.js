@@ -1555,6 +1555,42 @@ function publicProductJob(job) {
   };
 }
 
+function compactProductResearchStep(job) {
+  const products = array(job && job.products), stageSummary = plain(job && job.stageSummary);
+  const decisions = { slotCandidates: 0, held: 0, rejected: 0, permanentExcluded: 0 };
+  for (const row of products) {
+    const decision = lower(row && row.slotDecision || "undecided");
+    if (decision === "slot_candidate") decisions.slotCandidates += 1;
+    else if (decision === "hold") decisions.held += 1;
+    else if (decision === "reject") decisions.rejected += 1;
+    else if (decision === "purge") decisions.permanentExcluded += 1;
+  }
+  return {
+    ok: true, compact: true, reportType: "igdc-country-product-reference-research-progress",
+    version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: job.jobId, status: job.status,
+    startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
+    progress: productProgress(job),
+    summary: Object.assign({
+      suppliers: array(job.supplierSources).length,
+      suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
+      discovered: products.length,
+      discoveredRaw: array(job.rawProducts).length,
+      inspected: products.filter((row) => row && row.inspectionComplete === true).length,
+      withImage: products.filter((row) => !!productImageUrl(row)).length,
+      withVideo: products.filter((row) => !!productVideoUrl(row)).length,
+      readyForAdminReview: products.filter((row) => row && row.researchStatus === "ready_for_admin_review").length,
+      privateResearchQueueEligible: Number(stageSummary.eligible || 0),
+      privateResearchQueueStaged: Number(stageSummary.created || 0) + Number(stageSummary.updated || 0) + Number(stageSummary.preserved || 0)
+    }, decisions),
+    pipeline: { version: ProductPipeline.VERSION, automaticPrivateResearchStaging: true, automaticPublicPublication: false, stageSummary, nextGate: job.status === "complete" ? "administrator_product_selection_and_commerce_evidence" : text(job.status) },
+    lastError: job.lastError || null
+  };
+}
+
+function productResearchStepResponse(job, input) {
+  return input && input.compact === true ? compactProductResearchStep(job) : publicProductJob(job);
+}
+
 function productSupplierSource(row) {
   const url=researchCandidateUrl(row),evidence=plain(row&&row.evidence),title=text(row&&row.title),recommendation=lower(row&&row.recommendation),decision=lower(row&&row.decision);
   if(!url||recommendation==="exclude"||decision==="reject")return null;
@@ -1626,7 +1662,7 @@ function incrementalInspectionPool(job) {
 async function productResearchJobStatus(input) { return publicProductJob(await loadProductResearchJob(researchScope(input))); }
 async function advanceProductResearchJob(actorId, input) {
   const scope = researchScope(input), job = await productJobRule(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("진행 중인 공식 상품 리서치 작업이 없습니다."); error.statusCode = 404; throw error; }
-  if (["complete","cancelled"].includes(job.status)) return publicProductJob(job);
+  if (["complete","cancelled"].includes(job.status)) return productResearchStepResponse(job, input);
   try {
     if (job.status === "discovering") {
       const source = array(job.supplierSources)[Number(job.discoveryCursor || 0)];
@@ -1679,7 +1715,7 @@ async function advanceProductResearchJob(actorId, input) {
         if (job.stageCursor >= array(job.stagePool).length) { job.status = "complete"; job.finishedAt = iso(); }
       }
     }
-    job.lastError = null; await saveProductJob(job, actorId); return publicProductJob(job);
+    job.lastError = null; await saveProductJob(job, actorId); return productResearchStepResponse(job, input);
   } catch (error) { job.lastError = { at: iso(), stage: job.status, message: text(error && error.message), code: text(error && error.code) || null }; job.errors = array(job.errors).concat([job.lastError]); try { await saveProductJob(job, actorId); } catch (_saveError) {} throw error; }
 }
 function productPlacementKey(placementInput) {
@@ -2161,7 +2197,7 @@ async function productCandidateAction(actorId, input) {
 async function productAiAutomation(actorId, input) {
   const scope = researchScope(input), job = await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
-  if (job.status !== "complete") { const error = new Error("공식 상품 목록 리서치를 완료한 뒤 AI 자동화를 실행해 주세요."); error.statusCode = 409; throw error; }
+  if (!array(job.products).length) { const error = new Error("AI 자동 배치할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
   const mode = lower(input && input.mode) === "section" ? "section" : "all", sectionKey = text(input && input.sectionKey);
   if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("AI 자동 관리할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
   const unassignedPlacementOnly = mode === "all" && array(job.products).some((row) =>
@@ -2383,7 +2419,7 @@ function frontSyncRevenueId(candidateId) { return "front_referral_" + sha256(can
 function frontSyncEvidenceId(candidateId) { return "front_evidence_" + sha256(candidateId).slice(0, 24); }
 async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput) {
   const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
-  if (!job || job.schema !== PRODUCT_JOB_SCHEMA || job.status !== "complete") { const error = new Error("공식 상품 목록 리서치를 완료한 뒤 프론트 매칭을 실행해 주세요."); error.statusCode = 409; throw error; }
+  if (!job || job.schema !== PRODUCT_JOB_SCHEMA || !array(job.products).length) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
   const targets = array(targetsInput), targetIds = targets.map((row) => text(row && row.candidateId)).filter(Boolean), targetById = new Map(targets.map((row) => [text(row && row.candidateId), row]));
   const productByCandidate = new Map(array(job.products).map((row) => [productCandidateId(scope, row), row]));
   const [candidateRows, assignmentRows, availabilityRows, revenueRows, evidenceRows] = await Promise.all([
@@ -2468,7 +2504,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
 async function productFrontSyncTargets(input, jobInput) {
   const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
-  if (job.status !== "complete") { const error = new Error("공식 상품 목록 리서치를 완료한 뒤 프론트 매칭을 실행해 주세요."); error.statusCode = 409; throw error; }
+  if (!array(job.products).length) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
   const mode = lower(input && input.mode) === "section" ? "section" : "all", sectionKey = text(input && input.sectionKey);
   if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("프론트에 매칭할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
   const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match";
