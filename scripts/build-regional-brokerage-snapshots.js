@@ -159,7 +159,8 @@ function loadConfirmedUpstream(commerceRegistrySync) {
     commerceRegistrySync &&
     commerceRegistrySync.ok === true &&
     commerceRegistrySync.status === "synchronized" &&
-    commerceRegistrySync.authoritative === true
+    commerceRegistrySync.authoritative === true &&
+    Number(commerceRegistrySync.requestedCount || 0) > 0
   );
   const queueMeta = {
     authoritative: queueAuthoritative,
@@ -168,18 +169,30 @@ function loadConfirmedUpstream(commerceRegistrySync) {
     releaseAuthorization: commerceRegistrySync && commerceRegistrySync.releaseAuthorization || null
   };
 
-  if (mirrors.some(row => !row.present)) {
-    if (queueAuthoritative) {
+  if (queueAuthoritative) {
+    try {
+      const queueFile = String(commerceRegistrySync.file || path.join(root, "netlify", "functions", "data", "commerce-candidate-review-queue.v1.json"));
+      const queueDoc = readJson(queueFile);
+      const requestedItems = Array.isArray(queueDoc && queueDoc.items)
+        ? queueDoc.items.filter(item => item && item.publicationRequest && item.publicationRequest.requested === true)
+        : [];
+      if (requestedItems.length !== queueMeta.requestedCount || requestedItems.length === 0) {
+        return { ok: false, reason: "authoritative-admin-queue-count-mismatch", mirrors, queueAuthoritative };
+      }
       return {
         ok: true,
         sourceMode: "authoritative-admin-review-queue",
-        warning: "upstream-candidate-source-missing",
-        doc: { schema: "search-bank.upstream.authoritative-admin-queue.v1", generatedAt: new Date().toISOString(), source:"country-region-admin-publication-queue", queue:queueMeta, items: [] },
-        candidateCount: 0,
+        doc: Object.assign({}, queueDoc, { queue: queueMeta, items: requestedItems }),
+        candidateCount: requestedItems.length,
         queueAuthoritative,
         mirrors
       };
+    } catch (_error) {
+      return { ok: false, reason: "authoritative-admin-queue-invalid", mirrors, queueAuthoritative };
     }
+  }
+
+  if (mirrors.some(row => !row.present)) {
     return { ok: false, reason: "upstream-candidate-source-missing", mirrors };
   }
 
@@ -201,18 +214,6 @@ function loadConfirmedUpstream(commerceRegistrySync) {
   }
 
   if (parsed[0].doc.items.length === 0) {
-    if (queueAuthoritative) {
-      const doc = Object.assign({}, parsed[0].doc, { queue:queueMeta, source:"country-region-admin-publication-queue", items:[] });
-      return {
-        ok: true,
-        sourceMode: "authoritative-admin-review-queue",
-        warning: "upstream-candidate-source-empty",
-        doc,
-        candidateCount: 0,
-        queueAuthoritative,
-        mirrors
-      };
-    }
     return { ok: false, reason: "upstream-candidate-source-empty", mirrors };
   }
 
@@ -379,16 +380,17 @@ async function main() {
   // never writes a public Snapshot and cannot by itself publish front cards.
   const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
 
-  // An authoritative country/region administrator queue is a valid release
-  // source even when the broad Sanmaru/SearchBank upstream mirror is absent or
-  // empty. This is the explicit control plane for publication and withdrawal.
+  // A publication queue is authoritative only when it contains at least one
+  // explicit administrator request. A zero-count queue is not a withdrawal
+  // command and must never erase the committed SearchBank/front snapshots.
   const upstream = loadConfirmedUpstream(commerceRegistrySync);
   if (!upstream.ok) {
     writePreservedBuild(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors });
     return;
   }
   const queueAuthoritative = upstream.queueAuthoritative === true || (
-    commerceRegistrySync && commerceRegistrySync.status === "synchronized" && commerceRegistrySync.authoritative === true
+    commerceRegistrySync && commerceRegistrySync.status === "synchronized" &&
+    commerceRegistrySync.authoritative === true && Number(commerceRegistrySync.requestedCount || 0) > 0
   );
 
   // Capture the committed safe sample templates before Snapshot Engine writes
