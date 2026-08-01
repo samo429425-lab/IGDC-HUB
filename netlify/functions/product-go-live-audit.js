@@ -24,7 +24,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const CandidateReview = require("./commerce-candidate-review");
 const ReleaseDispatch = require("./lib/commerce-release-dispatch.v1");
 
-const VERSION = "product-go-live-audit-v1.5.0-persisted-admin-publication-queue";
+const VERSION = "product-go-live-audit-v1.6.0-explicit-admin-persist-before-build";
 const MAX_ROWS = 120;
 
 const SNAPSHOT_SPECS = [
@@ -675,8 +675,7 @@ function summarize(mode, limit, scopeInput, privateDoc){
 
   if(privateStage.goLiveAuditCandidates>0){
     if(mode!=="production"){ gate="hold"; gateReason="select-production-mode-for-final-publication-request"; }
-    else if(!release.armed){ gate="hold"; gateReason="release-gate-not-armed"; }
-    else if(!release.hookConfigured){ gate="hold"; gateReason="publication-build-hook-not-configured"; }
+    else if(!release.hookConfigured){ gate="hold"; gateReason="publication-build-hook-not-configured-request-will-persist"; }
     else { gate="ready_for_publication_request"; gateReason="select-one-audited-candidate-and-confirm-publication"; }
   }else if(counts.realProductCandidates > 0 && realReady === 0){ gate = "hold"; gateReason = "real-products-require-front-readiness"; }
   else if(realReady > 0 && !copiesOk){ gate = "hold"; gateReason = "snapshot-copies-not-synchronized"; }
@@ -758,8 +757,9 @@ async function requestPublication(event, actor, body, scope, liveDoc){
   if(!candidate){const error=new Error("현재 범위에서 실상품 공급 개방 점검을 통과한 후보가 아닙니다.");error.statusCode=409;error.code="candidate_not_audit_ready";throw error;}
   const expectedDigest=text(body&&body.expectedDigest);
   if(expectedDigest&&text(candidate&&candidate.digest)!==expectedDigest){const error=new Error("후보 정보가 변경됐습니다. 개방 점검을 다시 실행해 주세요.");error.statusCode=409;error.code="candidate_changed";throw error;}
-  const control=releaseControl({explicitAdminAuthorization:true});
-  if(!control.armed){const error=new Error("배포 환경의 실상품 공개 게이트가 활성화되지 않았습니다.");error.statusCode=409;error.code="release_gate_not_armed";throw error;}
+  // The authenticated administrator confirmation is the publication authority.
+  // Persist the assignment first; build-hook availability controls only whether
+  // the static SearchBank/Snapshot rebuild starts immediately.
   const assignment=await assignmentForPublication(candidateId,scope);
   if(!assignment){const error=new Error("최종 승인된 PSOM 배정을 찾지 못했습니다.");error.statusCode=409;error.code="audit_ready_assignment_missing";throw error;}
   const originalStatus=low(assignment.publication_status)||"audit_ready";
@@ -874,11 +874,9 @@ async function requestPublicationBatch(event,actor,body,scope,liveDoc){
   if(text(body&&body.confirmation)!=="SITE_PUBLISH"){const error=new Error("최종 사이트 게재 확인 값이 일치하지 않습니다.");error.statusCode=409;error.code="publication_confirmation_required";throw error;}
   const candidateIds=uniqueCandidateIds(body);
   if(!candidateIds.length)return batchSummary("request_publication_batch",candidateIds,[],{queued:false,reason:"no_selected_products"});
-  const control=releaseControl({explicitAdminAuthorization:true});
-  if(!control.armed){
-    const reason="release_gate_not_armed";
-    return batchSummary("request_publication_batch",candidateIds,candidateIds.map((id)=>({candidateId:id,status:"blocked",queued:false,persisted:false,pendingBuild:false,reason,assignmentId:null})),{queued:false,reason});
-  }
+  // Do not discard an authenticated manual match because an environment gate
+  // or build hook is absent. The durable assignment is authoritative and the
+  // next successful build consumes it.
   const lifecyclePrepared=body&&body.preparedByFrontLifecycle===true;
   const liveRows=asArray(liveDoc&&liveDoc.candidates).filter((row)=>privateStageScopeMatch(row,scope).matched&&isGoLiveAuditCandidate(row));
   const liveById=new Map(liveRows.map((row)=>[text(row&&row.candidateId),row]));
@@ -918,11 +916,8 @@ async function requestUnpublicationBatch(event,actor,body,scope){
   if(text(body&&body.confirmation)!=="SITE_UNPUBLISH"){const error=new Error("전체 매칭 해제 확인 값이 일치하지 않습니다.");error.statusCode=409;error.code="unpublication_confirmation_required";throw error;}
   const candidateIds=uniqueCandidateIds(body);
   if(!candidateIds.length)return batchSummary("request_unpublication_batch",candidateIds,[],{queued:false,reason:"no_selected_products"});
-  const control=releaseControl({explicitAdminAuthorization:true});
-  if(!control.armed){
-    const reason="release_gate_not_armed";
-    return batchSummary("request_unpublication_batch",candidateIds,candidateIds.map((id)=>({candidateId:id,status:"unpublish_failed",queued:false,persisted:false,pendingBuild:false,reason,assignmentId:null})),{queued:false,reason});
-  }
+  // Unpublication is also durable first. A missing hook delays the rebuild but
+  // must not restore the old published state in the management ledger.
   let assignmentRows=[];
   try{assignmentRows=await assignmentRowsForCandidates(candidateIds);}catch(error){
     return batchSummary("request_unpublication_batch",candidateIds,candidateIds.map((id)=>({candidateId:id,status:"unpublish_failed",queued:false,reason:text(error&&error.code)||"assignment_lookup_failed",assignmentId:null})),{queued:false,reason:text(error&&error.code)||"assignment_lookup_failed"});

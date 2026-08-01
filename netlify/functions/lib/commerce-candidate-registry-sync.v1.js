@@ -14,7 +14,7 @@ const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.6.0-authoritative-assignment-slot-contract";
+const VERSION = "commerce-candidate-registry-sync-v1.7.0-explicit-admin-safe-referral";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -39,6 +39,48 @@ function allowedAssignmentState(v){ return ["approved","pinned"].includes(lower(
 function approvedRevenue(v){ return ["approved","active","verified","live","enabled"].includes(lower(v)); }
 function approvedAvailability(v){ return ["active","approved","ready"].includes(lower(v)); }
 function verifiedEvidenceRow(row){ return !!row && bool(row.verified) && !!safeUrl(row.evidence_url); }
+function genericProductTitle(value){
+  const valueText=lower(value).replace(/&[a-z0-9#]+;/g," ").replace(/[^a-z0-9가-힣]+/g," ").trim();
+  return !valueText || valueText.length<4 || /^(aside menu|menu|home|product|products|item|detail|details|상품|상품 상세|목록)$/.test(valueText);
+}
+function explicitHardRisk(payload){
+  const risk=plain(payload&&payload.riskAssessment);
+  const supplier=plain(payload&&payload.supplierAssessment);
+  if(risk.gatePassed===false||risk.productGatePassed===false||risk.supplierGatePassed===false) return true;
+  if(payload&&payload.productPageLive===false) return true;
+  if(payload&&payload.sameSupplierSite===false||risk.supplierSiteMatched===false||risk.explicitUnavailable===true) return true;
+  if(supplier.reviewEligible===false||supplier.evidenceReady===false) return true;
+  const blockers=unique([].concat(array(risk.blockers),array(supplier.blockers),array(payload&&payload.blockers),array(payload&&payload.hardBlockers))).map(lower).join(" ");
+  return /fraud|scam|phish|malware|illegal|counterfeit|forgery|adult|porn|sanction|blocked|prohibited|사기|악성|피싱|불법|위조|성인|음란|제재|금지/.test(blockers);
+}
+function explicitAdminReferralReady(candidate,assignment,availabilityRows){
+  if(lower(assignment&&assignment.publication_status)!=="publish_requested") return false;
+  const payload=sourcePayload(candidate);
+  const title=first(payload.title,payload.productName,candidate&&candidate.title);
+  const destination=safeUrl(first(payload.url,payload.productUrl,payload.checkoutUrl,candidate&&candidate.official_url));
+  const image=safeUrl(first(payload.image,payload.imageUrl,payload.imageOriginalUrl,payload.thumbnail,payload.thumb,candidate&&candidate.thumbnail_url));
+  if(genericProductTitle(title)||!destination||!image) return false;
+  if(!array(availabilityRows).length||explicitHardRisk(payload)) return false;
+  const seller=plain(payload.sellerResponsibility);
+  const risk=plain(payload.riskAssessment);
+  const supplier=plain(payload.supplierAssessment);
+  const trusted=bool(first(payload.officialSource,payload.producerVerified,seller.verified,risk.supplierGatePassed,supplier.evidenceReady));
+  return trusted;
+}
+function explicitReferralRevenueRow(candidate,assignment){
+  const payload=sourcePayload(candidate);
+  return {
+    id:first(assignment&&assignment.id,"admin-referral-"+text(candidate&&candidate.id)),
+    candidate_id:candidate&&candidate.id,
+    revenue_type:"external_referral",
+    status:"administrator_nonpayable_referral",
+    affiliate_url:first(payload.url,payload.productUrl,payload.checkoutUrl,candidate&&candidate.official_url),
+    provider_name:first(payload.sellerName,payload.supplierName,plain(payload.sellerResponsibility).legalEntity,candidate&&candidate.title),
+    currency:null,
+    note:"Authenticated administrator publication request; non-payable external seller referral",
+    updated_at:first(assignment&&assignment.updated_at,candidate&&candidate.updated_at,now())
+  };
+}
 function authoritativeSlotProfile(payload, slotStrategy){
   const required=array(slotStrategy&&slotStrategy.requiredSlotProfiles).map(text).filter(Boolean);
   const existing=first(plain(payload&&payload.productMapping).slotProfile,payload&&payload.slotProfile);
@@ -85,7 +127,7 @@ function unique(values){ return Array.from(new Set((values||[]).map(text).filter
 function compactPayload(candidate, assignment, availabilityRows, revenueRows, evidenceRows, ipPolicy){
   const payload=sourcePayload(candidate);
   const assignmentInfo=assignment||{};
-  const revenue=(revenueRows||[]).find(row=>approvedRevenue(row.status)) || {};
+  const revenue=(revenueRows||[]).find(row=>approvedRevenue(row.status)) || (revenueRows||[]).find(row=>lower(row.status)==="administrator_nonpayable_referral") || {};
   const revenueType=lower(revenue.revenue_type);
   const trafficOnly=revenueType==="external_referral";
   const payloadDirect=plain(payload.directCommerceListing);
@@ -199,18 +241,23 @@ async function syncApprovedCandidates(input){
       const explicitAuditSource=[PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF].includes(text(candidate.source_ref));
       const assignment=assignmentRows.find((row)=>explicitAuditSource?lower(row.publication_status)==="publish_requested":["ready","publish_requested"].includes(lower(row.publication_status)));
       if(!assignment) continue;
-      const candidateRevenue=rBy.get(candidate.id)||[]; if(!candidateRevenue.some(row=>approvedRevenue(row.status))) continue;
+      const publicationRequested=lower(assignment.publication_status)==="publish_requested";
       const avail=avBy.get(candidate.id)||[]; if(!avail.length) continue;
-      const verifiedEvidence=(eBy.get(candidate.id)||[]).filter(verifiedEvidenceRow); if(!verifiedEvidence.length) continue;
-      const compact=compactPayload(candidate,assignment,avail,candidateRevenue,verifiedEvidence,ipPolicy);
-      const row=candidateRevenue.find(entry=>approvedRevenue(entry.status))||{};
-      const type=lower(row.revenue_type)||"brokerage";
+      const candidateRevenue=rBy.get(candidate.id)||[];
+      const hasApprovedRevenue=candidateRevenue.some(row=>approvedRevenue(row.status));
+      const explicitAdminReferral=explicitAuditSource&&publicationRequested&&explicitAdminReferralReady(candidate,assignment,avail);
+      if(!hasApprovedRevenue&&!explicitAdminReferral) continue;
+      const verifiedEvidence=(eBy.get(candidate.id)||[]).filter(verifiedEvidenceRow);
+      if(!verifiedEvidence.length&&!explicitAdminReferral) continue;
+      const publicationRevenue=hasApprovedRevenue?candidateRevenue:[explicitReferralRevenueRow(candidate,assignment)];
+      const compact=compactPayload(candidate,assignment,avail,publicationRevenue,verifiedEvidence,ipPolicy);
+      const row=publicationRevenue.find(entry=>approvedRevenue(entry.status))||publicationRevenue[0]||{};
+      const type=lower(row.revenue_type)||"external_referral";
       const contract=plain(compact.brokerageContract);
       const listing=plain(compact.directCommerceListing);
       const trafficOnly=type==="external_referral";
       const payable=bool(first(contract.approved,listing.contractApproved)) && bool(first(contract.disclosureReady,listing.disclosureReady)) && bool(first(contract.payoutBasisVerified,listing.payoutBasisVerified));
       const publicationStatus=lower(assignment.publication_status);
-      const publicationRequested=publicationStatus==="publish_requested";
       output.push({
         id:"gslot-"+candidate.id,
         sourceTier:"approved_commerce_member",
@@ -230,7 +277,7 @@ async function syncApprovedCandidates(input){
           section:assignment.slot_key,
           crossCountryFallback:false
         },
-        revenue:{id:row.id||null,status:"approved",type,contractId:first(contract.id,listing.contractId,row.id,assignment.id),approved:payable,trafficValueOnly:trafficOnly,providerName:first(contract.providerName,listing.providerName,row.provider_name)||null,settlementMode:first(contract.settlementMode,listing.settlementMode,trafficOnly?"traffic_only":"provider_program"),disclosureReady:bool(first(contract.disclosureReady,listing.disclosureReady)),payoutBasisVerified:bool(first(contract.payoutBasisVerified,listing.payoutBasisVerified))}
+        revenue:{id:row.id||null,status:payable?"approved":"administrator_nonpayable_referral",type,contractId:first(contract.id,listing.contractId,row.id,assignment.id),approved:payable,trafficValueOnly:trafficOnly,nonPayableReferral:trafficOnly&&!payable,providerName:first(contract.providerName,listing.providerName,row.provider_name)||null,settlementMode:first(contract.settlementMode,listing.settlementMode,trafficOnly?"traffic_only":"provider_program"),disclosureReady:bool(first(contract.disclosureReady,listing.disclosureReady)),payoutBasisVerified:bool(first(contract.payoutBasisVerified,listing.payoutBasisVerified))}
       });
     }
     const expires=new Date(Date.now()+7*86400000).toISOString();

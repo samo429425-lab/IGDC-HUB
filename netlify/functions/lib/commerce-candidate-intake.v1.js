@@ -19,7 +19,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const AffiliateRegistry = require("./affiliate-program-registry.v1");
 
-const VERSION = "commerce-candidate-intake-v1.3.0-explicit-admin-queue-publication-authority";
+const VERSION = "commerce-candidate-intake-v1.4.0-explicit-admin-safe-referral";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -184,22 +184,32 @@ function revenueRight(item, tier, policy, affiliateRegistry, candidateCountries)
   const allowTrafficOnlyPublic=revenuePolicy.allowTrafficOnlyPublicRelease===true;
   const review=plain(item&&item.commerceReview);
   const explicitAdminPublication=bool(first(source.explicitPublicationRequested,review.explicitPublicationRequested,review.publicationRequested)) || lower(review.publicationStatus)==="publish_requested";
-  // A verified official-seller referral is not a payable revenue right. It may
-  // enter the public candidate path only after an authenticated administrator
-  // explicitly requests publication for that exact country/region assignment.
-  // The route remains non-monetized and never enables IGDC checkout.
+  const searchContract=plain(item&&item.searchBankContract);
+  const sellerResponsibility=plain(item&&item.sellerResponsibility);
+  const officialSellerVerified=bool(first(item&&item.officialSource,item&&item.producerVerified,searchContract.officialSource,searchContract.producerVerified,sellerResponsibility.verified));
+  const referralStatus=lower(first(direct.contractStatus,contract.status,source.referralStatus));
+  const candidateCountryList=unique((candidateCountries||[]).map(normalizeCountry).filter(Boolean));
+  // The administrator's exact country/region publication request may expose a
+  // verified official-seller link before an affiliate contract exists. This is
+  // a non-payable referral only: IGDC checkout, payment and revenue claims stay
+  // disabled. Market, trust, HTTPS, PSOM and explicit assignment gates remain.
+  const explicitAdminReferral=explicitAdminPublication && tier==="approved_commerce_member" &&
+    permittedType && type==="external_referral" && officialSellerVerified &&
+    !!safeHttpsUrl(productDestination(item)) && candidateCountryList.length>0 &&
+    ["traffic_only","administrator_nonpayable_referral","provider_program"].includes(referralStatus||settlementMode);
+  // A registry-backed verified referral remains valid as before.
   const explicitVerifiedReferral=externalReferralApproved && revenuePolicy.allowVerifiedExternalReferral===true && explicitAdminPublication;
-  const rightOk=!!tier && (payable || (allowTrafficOnlyPublic && externalReferralApproved) || explicitVerifiedReferral);
-  const potential=payable || externalReferralApproved || !!(permittedType && (contractId||counterparty||bool(source.revenueCandidate)||bool(source.monetizationCandidate)));
+  const rightOk=!!tier && (payable || (allowTrafficOnlyPublic && externalReferralApproved) || explicitVerifiedReferral || explicitAdminReferral);
+  const potential=payable || externalReferralApproved || explicitAdminReferral || !!(permittedType && (contractId||counterparty||bool(source.revenueCandidate)||bool(source.monetizationCandidate)));
   const monetizationState=affiliateApproved
     ? "verified_affiliate_payable"
     : (directApproved||sponsorApproved
       ? "verified_direct_revenue_right"
-      : (explicitVerifiedReferral?"verified_external_referral_nonpayable":(externalReferralApproved?"traffic_value_only_review":"not_verified")));
+      : (explicitAdminReferral?"administrator_nonpayable_external_referral":(explicitVerifiedReferral?"verified_external_referral_nonpayable":(externalReferralApproved?"traffic_value_only_review":"not_verified"))));
   let publicRoute=AffiliateRegistry.publicRoute(route);
   let allowedCountries=route.allowedCountries||[];
   if(directApproved||sponsorApproved){
-    allowedCountries=unique((candidateCountries||[]).map(normalizeCountry).filter(Boolean));
+    allowedCountries=candidateCountryList;
     publicRoute={
       mode:"approved_direct_revenue",
       revenueType:type,
@@ -208,12 +218,27 @@ function revenueRight(item, tier, policy, affiliateRegistry, candidateCountries)
       disclosureReady:true,
       settlementMode:settlementMode||"operator_approved_statement_or_invoice"
     };
+  }else if(explicitAdminReferral){
+    allowedCountries=candidateCountryList;
+    publicRoute={
+      mode:"verified_external_referral",
+      revenueType:"external_referral",
+      destinationUrl:productDestination(item),
+      allowedCountries,
+      disclosureReady:false,
+      settlementMode:"traffic_only",
+      nonPayable:true,
+      igdcCheckout:false,
+      igdcPayment:false,
+      administratorAuthorized:true
+    };
   }
   const verificationReasons=[];
   if(!type) verificationReasons.push("REVENUE_TYPE_MISSING");
   else if(!permittedType) verificationReasons.push("REVENUE_TYPE_NOT_ALLOWED");
   if(!payable){
-    if(externalReferralApproved) verificationReasons.push("TRAFFIC_ONLY_ROUTE_HAS_NO_PAYABLE_REVENUE_RIGHT");
+    if(explicitAdminReferral) verificationReasons.push("ADMINISTRATOR_NONPAYABLE_EXTERNAL_REFERRAL");
+    else if(externalReferralApproved) verificationReasons.push("TRAFFIC_ONLY_ROUTE_HAS_NO_PAYABLE_REVENUE_RIGHT");
     else {
       if(!contractId && !affiliateApproved) verificationReasons.push("REVENUE_CONTRACT_OR_PROGRAM_ID_MISSING");
       if(!counterparty && !affiliateApproved) verificationReasons.push("REVENUE_COUNTERPARTY_MISSING");
@@ -221,13 +246,14 @@ function revenueRight(item, tier, policy, affiliateRegistry, candidateCountries)
       if(!payoutBasisVerified&&!payableAmountEvidence&&!payableModeEvidence&&!affiliateApproved) verificationReasons.push("REVENUE_PAYOUT_BASIS_NOT_VERIFIED");
     }
   }
-  const certainty=affiliateApproved?100:((directApproved||sponsorApproved)?95:(externalReferralApproved?35:(potential?15:0)));
+  const certainty=affiliateApproved?100:((directApproved||sponsorApproved)?95:(explicitAdminReferral?40:(externalReferralApproved?35:(potential?15:0))));
   return {
     ok:rightOk,
     payable,
     potential,
     explicitAdminPublication,
     explicitVerifiedReferral,
+    explicitAdminReferral,
     type:type||null,
     contractId:contractId||null,
     counterparty:counterparty||null,
@@ -409,7 +435,11 @@ function build(input){
     });
     candidate.outboundRoute=Object.assign({},decision.revenue.outboundRoute||{}, { candidateId:decision.candidateId, routeDigest:sha256({candidateId:decision.candidateId,revenue:decision.revenue,markets:decision.marketKeys}) });
     if(candidate.outboundRoute.mode==="approved_manual_affiliate") candidate.affiliateOutboundUrl="/.netlify/functions/affiliate-outbound?id="+encodeURIComponent(decision.candidateId);
-    if(candidate.outboundRoute.mode==="verified_external_referral") candidate.externalOutboundUrl="/.netlify/functions/affiliate-outbound?id="+encodeURIComponent(decision.candidateId);
+    if(candidate.outboundRoute.mode==="verified_external_referral"){
+      candidate.externalOutboundUrl=decision.revenue.monetizationState==="administrator_nonpayable_external_referral"
+        ? productDestination(candidate)
+        : "/.netlify/functions/affiliate-outbound?id="+encodeURIComponent(decision.candidateId);
+    }
     candidate.candidateSelection={version:VERSION,releaseEligible:true,sourceTier:decision.sourceTier,selectionDigest:decision.digest,rankingScore:decision.ranking.finalScore,ranking:decision.ranking,revenue:decision.revenue,review:decision.review,stagedAt:now()};
     candidate.priority=Math.max(number(candidate.priority,0),Math.round(decision.ranking.finalScore*100));
     if(decision.sourceTier==="approved_commerce_member") candidate.managedPriority=true;
