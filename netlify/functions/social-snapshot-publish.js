@@ -1,9 +1,10 @@
 "use strict";
 
 /**
- * Builds a publishable social.snapshot.json from approved Supabase candidates.
- * It does not write runtime static files. Use download=1 to receive JSON, or
- * storeRelease=true to save a release copy in Supabase for deployment/build tooling.
+ * Builds and validates a Social release from approved Supabase candidates.
+ * Runtime functions never write deployed static files. A confirmed release is
+ * stored first, then the configured Netlify build hook runs the canonical line:
+ * Social release -> SearchBank adapter -> Snapshot Engine -> social.snapshot.json.
  */
 const fs = require("fs");
 const path = require("path");
@@ -12,7 +13,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.3.0-selected-front-unpublish-sample-restore";
+  "social-snapshot-publish-v1.4.0-canonical-searchbank-build-pipeline";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -123,6 +124,99 @@ function candidateIdsFrom(params) {
         .filter(Boolean),
     ),
   ).slice(0, 1000);
+}
+function buildHookSetting() {
+  const names = [
+    "SOCIAL_NETLIFY_BUILD_HOOK_URL",
+    "IGDC_NETLIFY_BUILD_HOOK_URL",
+    "NETLIFY_BUILD_HOOK_URL",
+  ];
+  for (const name of names) {
+    const value = text(process.env[name]);
+    if (value) return { name, value };
+  }
+  return { name: names[0], value: "" };
+}
+function buildHookStatus() {
+  const setting = buildHookSetting();
+  return {
+    configured: !!setting.value,
+    environment: setting.value ? setting.name : "SOCIAL_NETLIFY_BUILD_HOOK_URL",
+  };
+}
+async function triggerCanonicalBuild(release, operation) {
+  const setting = buildHookSetting();
+  if (!setting.value) {
+    return {
+      ok: false,
+      status: "not_configured",
+      requiredEnvironment: "SOCIAL_NETLIFY_BUILD_HOOK_URL",
+      message:
+        "승인본은 저장됐지만 정식 정적 스냅샷 배포를 시작할 Netlify Build Hook이 설정되지 않았습니다.",
+    };
+  }
+  let parsed;
+  try {
+    parsed = new URL(setting.value);
+  } catch (_error) {
+    return {
+      ok: false,
+      status: "invalid_configuration",
+      environment: setting.name,
+      message: "Netlify Build Hook 주소 형식이 올바르지 않습니다.",
+    };
+  }
+  if (parsed.protocol !== "https:") {
+    return {
+      ok: false,
+      status: "invalid_configuration",
+      environment: setting.name,
+      message: "Netlify Build Hook은 HTTPS 주소여야 합니다.",
+    };
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(setting.value, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        trigger_title:
+          "IGDC Social " + operation + " " + text(release.release_id),
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: "request_failed",
+        environment: setting.name,
+        httpStatus: response.status,
+        message: "Netlify 정식 배포 요청이 접수되지 않았습니다.",
+      };
+    }
+    return {
+      ok: true,
+      status: "queued",
+      environment: setting.name,
+      httpStatus: response.status,
+      releaseId: text(release.release_id),
+      message:
+        "정식 빌드가 접수됐습니다. 빌드에서 SearchBank 어댑터와 기존 Snapshot Engine이 실행됩니다.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: error && error.name === "AbortError" ? "timeout" : "request_failed",
+      environment: setting.name,
+      message:
+        error && error.name === "AbortError"
+          ? "Netlify 정식 배포 요청 시간이 초과됐습니다."
+          : "Netlify 정식 배포 요청 중 오류가 발생했습니다.",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 exports.handler = async function (event) {
   if (event && event.httpMethod === "OPTIONS")
@@ -235,6 +329,19 @@ exports.handler = async function (event) {
     const eligible = Array.isArray(rows)
       ? rows.filter(SocialStore.isApprovedForSnapshot).length
       : 0;
+    if (storeRelease && !unpublishSelected && eligible < 1) {
+      return SocialStore.response(409, {
+        ok: false,
+        version: VERSION,
+        error: "no_eligible_social_candidates",
+        message:
+          "검증을 통과한 실제 소셜 후보가 0개이므로 빈 적용본은 저장·배포하지 않았습니다.",
+        appliedSection: sectionKey || null,
+        approvedRows: Array.isArray(rows) ? rows.length : 0,
+        eligibleRows: eligible,
+        buildHook: buildHookStatus(),
+      });
+    }
     const release = {
       release_id:
         "social_snapshot_" +
@@ -268,6 +375,13 @@ exports.handler = async function (event) {
     };
     let stored = null;
     if (storeRelease) stored = await SocialStore.insertRelease(release);
+    let buildTrigger = null;
+    if (storeRelease && stored) {
+      buildTrigger = await triggerCanonicalBuild(
+        release,
+        unpublishSelected ? "unpublish" : "publish",
+      );
+    }
     if (
       params.download === "1" ||
       params.download === true ||
@@ -284,7 +398,7 @@ exports.handler = async function (event) {
         body: JSON.stringify(snapshot, null, 2) + "\n",
       };
     }
-    return SocialStore.response(200, {
+    return SocialStore.response(storeRelease && buildTrigger && buildTrigger.ok ? 202 : 200, {
       ok: true,
       version: VERSION,
       baseFile: base.file,
@@ -302,6 +416,17 @@ exports.handler = async function (event) {
       releaseStored: !!stored,
       actualFrontApplyStored: !!stored && !unpublishSelected,
       actualFrontUnpublishStored: !!stored && unpublishSelected,
+      actualFrontApplyQueued:
+        !!stored && !!buildTrigger && buildTrigger.ok && !unpublishSelected,
+      actualFrontUnpublishQueued:
+        !!stored && !!buildTrigger && buildTrigger.ok && unpublishSelected,
+      frontPublicationStatus: !storeRelease
+        ? "preview_only"
+        : buildTrigger && buildTrigger.ok
+          ? "canonical_build_queued"
+          : "release_stored_waiting_for_build",
+      buildHook: buildHookStatus(),
+      buildTrigger,
       stored,
       rotation,
       route,
@@ -313,7 +438,16 @@ exports.handler = async function (event) {
       safety: {
         runtimeFileWrite: false,
         socialSnapshotMutation: false,
-        frontReadsLatestStoredSnapshot: true,
+        frontReadsLatestStoredSnapshot: false,
+        canonicalBuildPipeline: true,
+        publicSnapshotSource: "/data/social.snapshot.json",
+        pipelineOrder: [
+          "stored_social_release",
+          "social_searchbank_release_adapter",
+          "existing_snapshot_engine",
+          "data/social.snapshot.json",
+          "existing_social_automap",
+        ],
         sampleSlotsPreserved: true,
         selectedCandidatesReturnedToWaiting: unpublishSelected,
         externalProviderCalls: false,

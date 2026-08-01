@@ -7,7 +7,7 @@
 const SocialStore = require("./lib/social-candidate-store.v1");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-snapshot-current-v1.1.0-country-ip-matched";
+const VERSION = "social-snapshot-current-v1.2.0-pipeline-readback";
 
 function text(value) {
   return value == null ? "" : String(value).trim();
@@ -28,6 +28,29 @@ async function latestForToken(token) {
       "&order=created_at.desc&limit=1",
   );
   return Array.isArray(rows) && rows[0];
+}
+function publicSlotCounts(snapshot) {
+  const sections =
+    snapshot &&
+    snapshot.pages &&
+    snapshot.pages.social &&
+    snapshot.pages.social.sections;
+  const counts = {};
+  let total = 0;
+  SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
+    const list = Array.isArray(sections && sections[sectionKey])
+      ? sections[sectionKey]
+      : [];
+    counts[sectionKey] = list.filter((slot) => {
+      const audit = (slot && slot.audit) || {};
+      return (
+        SocialStore.text(slot && slot.type) === "external_social" &&
+        SocialStore.text(audit.origin) === "social_candidates"
+      );
+    }).length;
+    total += counts[sectionKey];
+  });
+  return { total, bySection: counts };
 }
 
 exports.handler = async function (event) {
@@ -57,7 +80,7 @@ exports.handler = async function (event) {
         ? list.find((row) => releaseCountry(row) === countryCode)
         : null;
       global = list.find((row) => !releaseCountry(row));
-      release = exact || global || list[0];
+      release = exact || global || null;
     }
     if (!release || !release.snapshot) {
       return SocialStore.response(
@@ -67,11 +90,11 @@ exports.handler = async function (event) {
           version: VERSION,
           error: "stored_social_release_not_found",
         },
-        {
-          "cache-control": "public, max-age=30, stale-while-revalidate=120",
-        },
+        { "cache-control": "no-store, max-age=0" },
       );
     }
+    const documentHash = SocialStore.sha256(release.snapshot);
+    const publicSlots = publicSlotCounts(release.snapshot);
     return SocialStore.response(
       200,
       {
@@ -79,7 +102,11 @@ exports.handler = async function (event) {
         version: VERSION,
         releaseId: release.release_id,
         hash: release.snapshot_hash,
+        documentHash,
+        hashVerified:
+          !!release.snapshot_hash && release.snapshot_hash === documentHash,
         createdAt: release.created_at,
+        publicSlots,
         route: {
           countryCode: route.countryCode,
           worldRegion: route.worldRegion,
@@ -87,11 +114,24 @@ exports.handler = async function (event) {
           usedGlobalFallback: !exact && !!global,
           rawIpStored: false,
         },
+        pipeline: {
+          releaseLookup: "passed",
+          releaseScope:
+            exact && countryCode
+              ? "country_exact"
+              : global
+                ? "global_fallback"
+                : "legacy_fallback",
+          storedHashVerification:
+            release.snapshot_hash === documentHash ? "passed" : "failed",
+          frontPayloadReady: publicSlots.total > 0 ? "passed" : "empty",
+        },
         snapshot: release.snapshot,
       },
       {
-        "cache-control": "public, max-age=60, stale-while-revalidate=300",
+        "cache-control": "no-store, max-age=0",
         "access-control-allow-origin": "*",
+        vary: "x-country-code, x-nf-country, cf-ipcountry",
       },
     );
   } catch (error) {

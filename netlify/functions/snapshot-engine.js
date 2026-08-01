@@ -274,6 +274,11 @@ function isSeedLikeSnapshotSlot(item) {
   if (!item || typeof item !== "object") return true;
   if (item.sample === true || item.isSample === true || item.placeholder === true || item.replaceableSlot === true) return true;
   const title = String(item.title || item.name || "").trim();
+  const summary = String(item.summary || item.description || "").trim();
+  // The Social baseline contains URL-shaped demonstration cards explicitly
+  // marked as "Seed placeholder". Only this declared marker is replaceable;
+  // ordinary public cards with valid URLs remain protected.
+  if (/^seed placeholder\b/i.test(summary)) return true;
   if (/^(network|home|distribution|media|social|tour|donation)\s+item\s+\d+$/i.test(title)) return true;
   if (isPlaceholderUrlValue(urlOfSnapshotItem(item))) return true;
   if (isSampleAssetValue(imageOfSnapshotItem(item))) return true;
@@ -817,13 +822,25 @@ function mergeItems(snapshot, sectionKey, items, slotLimit) {
 
 function run(payload) {
 
-  let bank = loadSearchBank();
+  const suppliedBank = payload && payload.bank;
+  const suppliedTarget = String(payload && payload.targetPage || "").trim().toLowerCase();
+  const targetPage = Object.prototype.hasOwnProperty.call(SNAPSHOT_FILES, suppliedTarget)
+    ? suppliedTarget
+    : "";
+  // Optional build-time input contract. Existing calls still load the normal
+  // SearchBank snapshot and execute every handler. A validated caller may
+  // supply one SearchBank-shaped bank and one target page without bypassing
+  // this Snapshot Engine.
+  let bank = suppliedBank && Array.isArray(suppliedBank.items)
+    ? suppliedBank
+    : loadSearchBank();
 
   bank.items = (Array.isArray(bank.items) ? bank.items : []).filter(item => snapshotCandidateAllowed(item, { pageName: "snapshot" }));
   const executionReport = {
     ok: false,
     version: SNAPSHOT_ENGINE_VERSION,
     canonicalReleaseId: payload && payload.canonicalReleaseId || null,
+    targetPage: targetPage || "all",
     searchBankItemCount: bank.items.length,
     completedHandlers: [],
     generatedAt: new Date().toISOString()
@@ -1306,14 +1323,36 @@ function handleSocialSnapshot(bank) {
 
       const card = enrichSnapshotCard({
         id,
+        contentId: item.contentId || item.candidateId || id,
+        candidateId: item.candidateId || item.contentId || id,
+        type: item.type || "external_social",
         title: item.title || item.name || "Untitled",
+        description: item.description || item.summary || "",
         summary: item.summary || "",
         url: item.url || item.link || "#",
+        link: item.link || item.url || "#",
+        href: item.href || item.url || item.link || "#",
         thumb:
           item.thumbnail ||
           item.thumb ||
           item.image ||
           "/assets/img/placeholder.png",
+        thumbnail: item.thumbnail || item.thumb || item.image || "",
+        thumbnailUrl: item.thumbnailUrl || item.thumbnail || item.thumb || item.image || "",
+        image: item.image || item.thumbnail || item.thumb || "",
+        creator: item.creator || item.creatorName || item.creatorHandle || "",
+        creatorName: item.creatorName || "",
+        creatorHandle: item.creatorHandle || "",
+        embedUrl: item.embedUrl || undefined,
+        displayMode: item.displayMode || "link_card",
+        source: item.source && typeof item.source === "object" ? Object.assign({}, item.source) : {},
+        social: item.social && typeof item.social === "object" ? Object.assign({}, item.social) : {},
+        signals: item.signals && typeof item.signals === "object" ? Object.assign({}, item.signals) : {},
+        audit: item.audit && typeof item.audit === "object" ? Object.assign({}, item.audit) : {
+          origin: "social_candidates",
+          candidate_id: item.contentId || item.candidateId || id
+        },
+        timestamps: item.timestamps && typeof item.timestamps === "object" ? Object.assign({}, item.timestamps) : {},
         priority: item.priority || item.score || 0,
         ...buildTrackingMeta(item, {
           id,
@@ -1670,36 +1709,36 @@ function handleTourSnapshot(bank) {
 
 try {
 
-  if (typeof handleHomeSnapshot === "function") {
+  if ((!targetPage || targetPage === "home") && typeof handleHomeSnapshot === "function") {
     handleHomeSnapshot(bank); executionReport.completedHandlers.push("home");
   }
 
-  if (typeof handleNetworkSnapshot === "function") {
+  if ((!targetPage || targetPage === "network") && typeof handleNetworkSnapshot === "function") {
     handleNetworkSnapshot(bank); executionReport.completedHandlers.push("network");
   }
   
-  if (typeof handleDistributionSnapshot === "function") {
+  if ((!targetPage || targetPage === "distribution") && typeof handleDistributionSnapshot === "function") {
     handleDistributionSnapshot(bank); executionReport.completedHandlers.push("distribution");
   }
 
-  if (typeof handleSocialSnapshot === "function") {
+  if ((!targetPage || targetPage === "social") && typeof handleSocialSnapshot === "function") {
     handleSocialSnapshot(bank); executionReport.completedHandlers.push("social");
   }
 
-  if (typeof handleMediaSnapshot === "function") {
+  if ((!targetPage || targetPage === "media") && typeof handleMediaSnapshot === "function") {
     handleMediaSnapshot(bank); executionReport.completedHandlers.push("media");
   }
 
-  if (typeof handleTourSnapshot === "function") {
+  if ((!targetPage || targetPage === "tour") && typeof handleTourSnapshot === "function") {
     handleTourSnapshot(bank); executionReport.completedHandlers.push("tour");
   }
 
-  enforceSnapshotFileLimit("home", bank.items);
-  enforceSnapshotFileLimit("distribution", bank.items);
-  enforceSnapshotFileLimit("media", bank.items);
-  enforceSnapshotFileLimit("social", bank.items);
-  enforceSnapshotFileLimit("network", bank.items);
-  enforceSnapshotFileLimit("tour", bank.items);
+  if (!targetPage || targetPage === "home") enforceSnapshotFileLimit("home", bank.items);
+  if (!targetPage || targetPage === "distribution") enforceSnapshotFileLimit("distribution", bank.items);
+  if (!targetPage || targetPage === "media") enforceSnapshotFileLimit("media", bank.items);
+  if (!targetPage || targetPage === "social") enforceSnapshotFileLimit("social", bank.items);
+  if (!targetPage || targetPage === "network") enforceSnapshotFileLimit("network", bank.items);
+  if (!targetPage || targetPage === "tour") enforceSnapshotFileLimit("tour", bank.items);
 
 } catch (e) {
   const error = e instanceof Error ? e : new Error(String(e));

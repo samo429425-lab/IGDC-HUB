@@ -326,20 +326,40 @@
 
   async function loadSnapshot() {
     try {
-      const current = await fetch(CURRENT_SNAPSHOT_URL, {
+      const current = await fetch(
+        CURRENT_SNAPSHOT_URL + "?_=" + encodeURIComponent(Date.now()),
+        {
         cache: "no-store",
         credentials: "same-origin",
-      });
+        },
+      );
       if (current.ok) {
         const payload = await current.json();
-        if (payload && payload.ok === true && payload.snapshot)
+        if (payload && payload.ok === true && payload.snapshot) {
+          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+            source: "stored_release_current",
+            status: "front_readback_passed",
+            releaseId: payload.releaseId || null,
+            hash: payload.hash || null,
+            documentHash: payload.documentHash || null,
+            hashVerified: payload.hashVerified === true,
+            publicSlots: payload.publicSlots || null,
+            route: payload.route || null,
+            loadedAt: new Date().toISOString(),
+          };
           return payload.snapshot;
+        }
       }
     } catch (_e) {
       /* 기존 정적 스냅샷으로 안전하게 이어간다. */
     }
     const res = await fetch(SNAPSHOT_URL, { cache: "no-store" });
     if (!res.ok) throw new Error("snapshot_load_failed:" + res.status);
+    window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+      source: "static_snapshot_fallback",
+      status: "stored_release_current_unavailable",
+      loadedAt: new Date().toISOString(),
+    };
     return res.json();
   }
 

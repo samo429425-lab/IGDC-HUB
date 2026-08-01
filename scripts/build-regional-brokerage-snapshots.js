@@ -10,6 +10,7 @@ const regional = require(path.join(root, "netlify", "functions", "lib", "regiona
 const ipSlots = require(path.join(root, "netlify", "functions", "lib", "ip-slot-snapshot-publisher.v1"));
 const commerceRegistry = require(path.join(root, "netlify", "functions", "lib", "commerce-candidate-registry-sync.v1"));
 const commerceIntake = require(path.join(root, "netlify", "functions", "lib", "commerce-candidate-intake.v1"));
+const socialRelease = require(path.join(root, "netlify", "functions", "lib", "social-searchbank-release-adapter.v1"));
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -215,6 +216,18 @@ function writePreservedBuild(reason, details) {
 }
 
 async function main() {
+  // Social publication is an independent build-time SearchBank contract.
+  // It targets only the existing Social Snapshot Engine path and does not
+  // replace or bypass the commerce, country/region or IP-slot pipeline below.
+  const socialPublication = await socialRelease.publish({
+    root,
+    snapshotEngine: snapshots
+  });
+  process.stdout.write(JSON.stringify({ socialPublication }, null, 2) + "\n");
+  if (socialPublication.status === "blocked") {
+    throw new Error("Social SearchBank release pipeline blocked build: " + JSON.stringify(socialPublication));
+  }
+
   // This sync only refreshes the private approved-candidate review queue. It
   // never writes a public Snapshot and cannot by itself publish front cards.
   const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });

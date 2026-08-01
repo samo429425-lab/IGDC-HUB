@@ -1,4 +1,4 @@
-/* IGDC Social Hub Influencer Registry + Latest Content Control v2.4.0 */
+/* IGDC Social Hub Influencer Registry + Latest Content Control v2.5.0 */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -8,7 +8,9 @@
     AUTO = "/.netlify/functions/social-candidate-auto-curator",
     ROTATION = "/.netlify/functions/social-rotation-selector",
     PUBLISH = "/.netlify/functions/social-snapshot-publish",
-    CURRENT = "/.netlify/functions/social-snapshot-current",
+    STATIC_SOCIAL_SNAPSHOT = "/data/social.snapshot.json",
+    PIPELINE_REPORT = "/data/social-pipeline.report.json",
+    SEARCHBANK_SOCIAL_RELEASE = "/data/social-searchbank.release.snapshot.json",
     COUNTRY = "/.netlify/functions/social-country-route";
   var SECTIONS = [
     ["social-youtube", "YouTube", "youtube"],
@@ -287,6 +289,22 @@
       { method: "POST", body: JSON.stringify(body || {}) },
       true,
     );
+  }
+  async function staticJson(url) {
+    var separator = url.indexOf("?") >= 0 ? "&" : "?",
+      response = await fetch(url + separator + "_=" + Date.now(), {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      }),
+      document;
+    try {
+      document = await response.json();
+    } catch (_error) {}
+    if (!response.ok || !document) {
+      throw new Error("정적 검증 JSON을 읽지 못했습니다: HTTP " + response.status);
+    }
+    return document;
   }
   function collectionErrorState(error) {
     var message = text(error && error.message);
@@ -1926,6 +1944,123 @@
       show(e.message, "warn");
     }
   }
+  async function downloadApplicationValidation() {
+    try {
+      var q = new URLSearchParams({
+          includeSnapshot: "1",
+          countryCode: selectedCountry(),
+          scopeMode: scopeMode(),
+        }),
+        result = await get(PUBLISH + "?" + q.toString());
+      download("igdc-social-application-validation.json", {
+        reportType: "igdc-social-application-validation",
+        generatedAt: new Date().toISOString(),
+        scope: currentScope(),
+        validation: result,
+      });
+      diagnostic(result);
+      show("실제 적용 전 후보 검증 JSON을 다운로드했습니다.", "ok");
+    } catch (error) {
+      show(error.message || "후보 검증 JSON을 만들지 못했습니다.", "warn");
+    }
+  }
+  async function downloadActualApplied() {
+    try {
+      var snapshot = await staticJson(STATIC_SOCIAL_SNAPSHOT);
+      download("igdc-social-actual-applied.snapshot.json", snapshot);
+      show("현재 배포된 최종 소셜 스냅샷 JSON을 다운로드했습니다.", "ok");
+    } catch (error) {
+      show(error.message || "최종 적용 JSON을 읽지 못했습니다.", "warn");
+    }
+  }
+  function releasedCandidateIds(snapshot) {
+    var sections =
+        (snapshot &&
+          snapshot.pages &&
+          snapshot.pages.social &&
+          snapshot.pages.social.sections) ||
+        {},
+      result = {};
+    order.forEach(function (sectionKey) {
+      result[sectionKey] = (Array.isArray(sections[sectionKey])
+        ? sections[sectionKey]
+        : []
+      )
+        .filter(function (slot) {
+          var audit = (slot && slot.audit) || {};
+          return (
+            text(slot && slot.type) === "external_social" &&
+            text(audit.origin) === "social_candidates"
+          );
+        })
+        .map(publishedCandidateId)
+        .filter(Boolean);
+    });
+    return result;
+  }
+  async function downloadPipelineVerification() {
+    try {
+      var documents = await Promise.all([
+          staticJson(PIPELINE_REPORT),
+          staticJson(SEARCHBANK_SOCIAL_RELEASE),
+          staticJson(STATIC_SOCIAL_SNAPSHOT),
+        ]),
+        report = documents[0],
+        searchBankRelease = documents[1],
+        finalSnapshot = documents[2],
+        idsBySection = releasedCandidateIds(finalSnapshot),
+        finalCount = Object.keys(idsBySection).reduce(function (sum, key) {
+          return sum + idsBySection[key].length;
+        }, 0),
+        expected = Number(
+          report &&
+            report.searchBankRelease &&
+            report.searchBankRelease.itemCount,
+        ),
+        verification = {
+          ok:
+            report &&
+            report.status === "published" &&
+            finalCount === expected &&
+            !(
+              report.finalSocialSnapshot &&
+              report.finalSocialSnapshot.missingIds &&
+              report.finalSocialSnapshot.missingIds.length
+            ),
+          reportType: "igdc-social-canonical-pipeline-verification",
+          generatedAt: new Date().toISOString(),
+          canonicalPipeline: [
+            "stored_social_release",
+            "social_searchbank_release_adapter",
+            "existing_snapshot_engine",
+            "data/social.snapshot.json",
+            "existing_social_automap",
+          ],
+          comparison: {
+            expectedSearchBankItems: expected,
+            finalCandidateItems: finalCount,
+            idsBySection: idsBySection,
+          },
+          pipelineReport: report,
+          socialSearchBankRelease: searchBankRelease,
+          finalSocialSnapshot: finalSnapshot,
+        };
+      download("igdc-social-canonical-pipeline-verification.json", verification);
+      diagnostic(verification);
+      show(
+        verification.ok
+          ? "정식 파이프라인 단계별 검증 JSON을 다운로드했습니다."
+          : "파이프라인 불일치가 포함된 점검 JSON을 다운로드했습니다.",
+        verification.ok ? "ok" : "warn",
+      );
+    } catch (error) {
+      show(
+        (error.message || "파이프라인 JSON을 읽지 못했습니다.") +
+          " 배포 빌드가 완료된 뒤 다시 확인해 주세요.",
+        "warn",
+      );
+    }
+  }
   async function autoCurate(sectionKey) {
     var target = sectionKey ? label(sectionKey) : "전체 9개 섹션",
       scope = currentScope(),
@@ -1983,6 +2118,18 @@
     )
       return;
     try {
+      var previewQuery = new URLSearchParams({
+          includeSnapshot: "0",
+          sectionKey: sectionKey || "",
+          countryCode: scope.countryCode,
+          scopeMode: scopeMode(),
+        }),
+        preview = await get(PUBLISH + "?" + previewQuery.toString());
+      if (Number(preview.eligibleRows || 0) < 1) {
+        throw new Error(
+          "검증을 통과한 실제 후보가 0개이므로 빈 적용본은 배포하지 않습니다.",
+        );
+      }
       var d = await post(PUBLISH, {
         storeRelease: true,
         confirmPublish: true,
@@ -1992,13 +2139,21 @@
         scopeMode: scopeMode(),
       });
       diagnostic(d);
-      show(
-        scopeName +
-          " 범위의 " +
-          target +
-          " 실제 적용 저장을 완료했습니다. 프론트는 이 적용본을 자동으로 읽습니다.",
-        "ok",
-      );
+      if (d.buildTrigger && d.buildTrigger.ok) {
+        show(
+          scopeName +
+            " 범위의 " +
+            target +
+            " 승인본을 저장했고 정식 배포 빌드를 접수했습니다. 배포가 끝나면 SearchBank 어댑터→기존 Snapshot Engine→정적 소셜 스냅샷 순서로 반영됩니다.",
+          "ok",
+        );
+      } else {
+        show(
+          scopeName +
+            " 범위의 승인본은 안전하게 저장됐지만 정식 배포는 아직 시작되지 않았습니다. Netlify 환경변수 SOCIAL_NETLIFY_BUILD_HOOK_URL을 설정한 뒤 다시 실제 적용을 실행해 주세요.",
+          "warn",
+        );
+      }
     } catch (e) {
       show(e.message || "실제 화면 적용을 완료하지 못했습니다.", "warn");
     }
@@ -2011,17 +2166,12 @@
     );
   }
   async function currentPublishedIds(sectionKey) {
-    var q = new URLSearchParams({
-        countryCode: selectedCountry(),
-        scopeMode: scopeMode(),
-      }),
-      d = await get(CURRENT + "?" + q.toString()),
+    var d = await staticJson(STATIC_SOCIAL_SNAPSHOT),
       sections =
         (d &&
-          d.snapshot &&
-          d.snapshot.pages &&
-          d.snapshot.pages.social &&
-          d.snapshot.pages.social.sections) ||
+          d.pages &&
+          d.pages.social &&
+          d.pages.social.sections) ||
         {},
       keys = sectionKey ? [sectionKey] : order,
       ids = [];
@@ -2100,15 +2250,20 @@
         selectedContents.delete(text(id));
       });
       await refresh();
-      show(
-        scopeName +
-          " 범위의 선택 콘텐츠 " +
-          ids.length +
-          "개를 대기열로 복귀시키고, 실제 프론트 슬롯 " +
-          Number(d.removedSlots || 0) +
-          "개에서 적용을 취소했습니다.",
-        "ok",
-      );
+      if (d.buildTrigger && d.buildTrigger.ok) {
+        show(
+          scopeName +
+            " 범위의 선택 콘텐츠 " +
+            ids.length +
+            "개를 대기열로 복귀시켰고, 실제 적용 취소 정식 빌드를 접수했습니다. 배포 완료 후 프론트에서 내려갑니다.",
+          "ok",
+        );
+      } else {
+        show(
+          "선택 콘텐츠는 대기열로 복귀했고 적용 취소본도 저장됐지만, SOCIAL_NETLIFY_BUILD_HOOK_URL 미설정으로 정식 배포가 시작되지 않았습니다.",
+          "warn",
+        );
+      }
     } catch (e) {
       show(
         movedToWaiting
@@ -2329,6 +2484,9 @@
     $("rotationBtn").onclick = rotate;
     $("publishPreviewBtn").onclick = publish;
     $("snapshotDownloadBtn").onclick = snapshot;
+    $("applicationValidationJsonBtn").onclick = downloadApplicationValidation;
+    $("actualAppliedJsonBtn").onclick = downloadActualApplied;
+    $("pipelineVerificationJsonBtn").onclick = downloadPipelineVerification;
     $("returnBtn").onclick = function () {
       var p = new URLSearchParams(location.search),
         to = p.get("returnPath") || "/admin.html";
