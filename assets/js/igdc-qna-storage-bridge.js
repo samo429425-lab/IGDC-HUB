@@ -277,3 +277,81 @@
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 })(window, document);
+/* MARU Windows public policy links — PG review reinforcement v1.0 */
+(function (global, doc) {
+  'use strict';
+  if (global.__MARU_WINDOWS_POLICY_LINKS_V1__) return;
+  global.__MARU_WINDOWS_POLICY_LINKS_V1__ = true;
+
+  var LABELS = {
+    ko:{title:'MARU Windows 정책 문서',terms:'이용약관',privacy:'개인정보처리방침',refund:'환불정책',note:'Windows용 MARU Media Player와 유료 AI 자막 서비스에 적용되는 공개 정책입니다.'},
+    en:{title:'MARU Windows policies',terms:'Terms of Service',privacy:'Privacy Policy',refund:'Refund Policy',note:'Public policies for MARU Media Player for Windows and its paid AI subtitle services.'},
+    ja:{title:'MARU Windows ポリシー',terms:'利用規約',privacy:'プライバシーポリシー',refund:'返金ポリシー',note:'Windows版MARU Media Playerと有料AI字幕サービスに適用される公開ポリシーです。'},
+    zh:{title:'MARU Windows 政策文件',terms:'服务条款',privacy:'隐私政策',refund:'退款政策',note:'适用于 Windows 版 MARU Media Player 及其付费 AI 字幕服务的公开政策。'},
+    zht:{title:'MARU Windows 政策文件',terms:'服務條款',privacy:'隱私權政策',refund:'退款政策',note:'適用於 Windows 版 MARU Media Player 及其付費 AI 字幕服務的公開政策。'},
+    de:{title:'MARU Windows Richtlinien',terms:'Nutzungsbedingungen',privacy:'Datenschutzrichtlinie',refund:'Erstattungsrichtlinie',note:'Öffentliche Richtlinien für MARU Media Player für Windows und die kostenpflichtigen KI-Untertiteldienste.'},
+    fr:{title:'Politiques MARU Windows',terms:'Conditions d’utilisation',privacy:'Politique de confidentialité',refund:'Politique de remboursement',note:'Politiques publiques applicables à MARU Media Player pour Windows et à ses services payants de sous-titres IA.'},
+    es:{title:'Políticas de MARU Windows',terms:'Términos del servicio',privacy:'Política de privacidad',refund:'Política de reembolso',note:'Políticas públicas para MARU Media Player para Windows y sus servicios de subtítulos IA de pago.'},
+    pt:{title:'Políticas do MARU Windows',terms:'Termos de Serviço',privacy:'Política de Privacidade',refund:'Política de Reembolso',note:'Políticas públicas do MARU Media Player para Windows e dos seus serviços pagos de legendas por IA.'},
+    ru:{title:'Политики MARU Windows',terms:'Условия использования',privacy:'Политика конфиденциальности',refund:'Политика возврата',note:'Публичные правила для MARU Media Player для Windows и платных сервисов ИИ-субтитров.'},
+    it:{title:'Politiche MARU Windows',terms:'Termini di servizio',privacy:'Informativa sulla privacy',refund:'Politica di rimborso',note:'Politiche pubbliche per MARU Media Player per Windows e i servizi a pagamento di sottotitoli IA.'},
+    nl:{title:'MARU Windows-beleid',terms:'Servicevoorwaarden',privacy:'Privacybeleid',refund:'Restitutiebeleid',note:'Openbaar beleid voor MARU Media Player voor Windows en de betaalde AI-ondertitelingsdiensten.'},
+    sv:{title:'MARU Windows-policyer',terms:'Användarvillkor',privacy:'Integritetspolicy',refund:'Återbetalningspolicy',note:'Offentliga policyer för MARU Media Player för Windows och dess betalda AI-undertexttjänster.'},
+    pl:{title:'Zasady MARU Windows',terms:'Warunki korzystania',privacy:'Polityka prywatności',refund:'Polityka zwrotów',note:'Publiczne zasady dla MARU Media Player dla Windows i płatnych usług napisów AI.'},
+    tr:{title:'MARU Windows politikaları',terms:'Hizmet Koşulları',privacy:'Gizlilik Politikası',refund:'İade Politikası',note:'Windows için MARU Media Player ve ücretli yapay zekâ altyazı hizmetlerine ilişkin kamuya açık politikalar.'},
+    ar:{title:'سياسات MARU لنظام Windows',terms:'شروط الخدمة',privacy:'سياسة الخصوصية',refund:'سياسة الاسترداد',note:'السياسات العامة لمشغل MARU Media Player لنظام Windows وخدمات ترجمات الذكاء الاصطناعي المدفوعة.'},
+    th:{title:'นโยบาย MARU Windows',terms:'ข้อกำหนดการให้บริการ',privacy:'นโยบายความเป็นส่วนตัว',refund:'นโยบายการคืนเงิน',note:'นโยบายสาธารณะสำหรับ MARU Media Player บน Windows และบริการคำบรรยาย AI แบบชำระเงิน'},
+    vi:{title:'Chính sách MARU Windows',terms:'Điều khoản dịch vụ',privacy:'Chính sách quyền riêng tư',refund:'Chính sách hoàn tiền',note:'Các chính sách công khai áp dụng cho MARU Media Player trên Windows và dịch vụ phụ đề AI trả phí.'},
+    id:{title:'Kebijakan MARU Windows',terms:'Ketentuan Layanan',privacy:'Kebijakan Privasi',refund:'Kebijakan Pengembalian Dana',note:'Kebijakan publik untuk MARU Media Player bagi Windows dan layanan subtitle AI berbayar.'},
+    hi:{title:'MARU Windows नीतियाँ',terms:'सेवा की शर्तें',privacy:'गोपनीयता नीति',refund:'धनवापसी नीति',note:'Windows के लिए MARU Media Player और इसकी सशुल्क AI उपशीर्षक सेवाओं की सार्वजनिक नीतियाँ।'},
+    ms:{title:'Dasar MARU Windows',terms:'Syarat Perkhidmatan',privacy:'Dasar Privasi',refund:'Dasar Bayaran Balik',note:'Dasar awam untuk MARU Media Player bagi Windows dan perkhidmatan sari kata AI berbayar.'},
+    fa:{title:'سیاست‌های MARU Windows',terms:'شرایط خدمات',privacy:'سیاست حریم خصوصی',refund:'سیاست بازپرداخت',note:'سیاست‌های عمومی MARU Media Player برای Windows و خدمات پولی زیرنویس هوش مصنوعی.'},
+    bn:{title:'MARU Windows নীতিমালা',terms:'সেবার শর্তাবলি',privacy:'গোপনীয়তা নীতি',refund:'রিফান্ড নীতি',note:'Windows-এর MARU Media Player এবং এর সশুল্ক AI সাবটাইটেল সেবার প্রকাশ্য নীতিমালা।'},
+    ta:{title:'MARU Windows கொள்கைகள்',terms:'சேவை விதிமுறைகள்',privacy:'தனியுரிமைக் கொள்கை',refund:'பணத்தீர்ப்பு கொள்கை',note:'Windows-க்கான MARU Media Player மற்றும் கட்டண AI வசன சேவைகளுக்கான பொதுக் கொள்கைகள்.'},
+    ur:{title:'MARU Windows پالیسیاں',terms:'سروس کی شرائط',privacy:'رازداری کی پالیسی',refund:'رقم واپسی کی پالیسی',note:'Windows کے لیے MARU Media Player اور اس کی بامعاوضہ AI سب ٹائٹل خدمات کی عوامی پالیسیاں۔'},
+    sw:{title:'Sera za MARU Windows',terms:'Masharti ya Huduma',privacy:'Sera ya Faragha',refund:'Sera ya Marejesho',note:'Sera za umma za MARU Media Player ya Windows na huduma zake za kulipia za manukuu ya AI.'},
+    hu:{title:'MARU Windows szabályzatok',terms:'Szolgáltatási feltételek',privacy:'Adatvédelmi szabályzat',refund:'Visszatérítési szabályzat',note:'A Windows rendszerű MARU Media Player és fizetős MI-felirat szolgáltatásainak nyilvános szabályzatai.'},
+    uk:{title:'Політики MARU Windows',terms:'Умови користування',privacy:'Політика конфіденційності',refund:'Політика повернення',note:'Публічні правила для MARU Media Player для Windows і платних сервісів ШІ-субтитрів.'},
+    uz:{title:'MARU Windows siyosatlari',terms:'Xizmat shartlari',privacy:'Maxfiylik siyosati',refund:'Qaytarish siyosati',note:'Windows uchun MARU Media Player va pulli AI subtitr xizmatlariga oid ochiq siyosatlar.'},
+    tl:{title:'Mga patakaran ng MARU Windows',terms:'Mga Tuntunin ng Serbisyo',privacy:'Patakaran sa Privacy',refund:'Patakaran sa Refund',note:'Mga pampublikong patakaran para sa MARU Media Player para sa Windows at mga bayad na AI subtitle service.'}
+  };
+  var RTL = {ar:1,fa:1,ur:1};
+  function lang(){
+    var raw=(doc.documentElement.getAttribute('lang')||'en').toLowerCase().replace('_','-');
+    if(raw==='zh-tw'||raw==='zh-hk'||raw==='zh-hant') return 'zht';
+    raw=raw.split('-')[0];
+    return LABELS[raw]?raw:'en';
+  }
+  function links(code){
+    var t=LABELS[code]||LABELS.en;
+    return '<div class="maruPolicyLinks" dir="'+(RTL[code]?'rtl':'ltr')+'">'+
+      '<a href="maru-windows-terms.html?lang='+encodeURIComponent(code)+'" target="_blank" rel="noopener">'+t.terms+'</a>'+
+      '<a href="maru-windows-privacy.html?lang='+encodeURIComponent(code)+'" target="_blank" rel="noopener">'+t.privacy+'</a>'+
+      '<a href="maru-windows-refund.html?lang='+encodeURIComponent(code)+'" target="_blank" rel="noopener">'+t.refund+'</a>'+
+    '</div>';
+  }
+  function style(){
+    if(doc.getElementById('maruPolicyLinksStyle')) return;
+    var s=doc.createElement('style'); s.id='maruPolicyLinksStyle';
+    s.textContent='.maruPolicyPublicCard{grid-column:1/-1;background:#fff;border:1px solid #d9e4f2;border-radius:14px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.03)}.maruPolicyPublicCard h2{margin:0 0 8px;color:#004080;font-size:20px}.maruPolicyPublicCard p{margin:0 0 12px;line-height:1.6;color:#4c6177}.maruPolicyLinks{display:flex;gap:8px;flex-wrap:wrap}.maruPolicyLinks a{display:inline-block;text-decoration:none;border:1px solid #b9d2ee;background:#eef7ff;color:#004080;border-radius:9px;padding:9px 12px;font-weight:700}.maruPolicyLinks a:hover{text-decoration:underline}.maruProductSection .maruPolicyLinks{margin-top:8px}';
+    doc.head.appendChild(s);
+  }
+  function install(){
+    style(); var code=lang(),t=LABELS[code]||LABELS.en;
+    var grid=doc.querySelector('.grid');
+    if(grid){
+      var card=doc.getElementById('maruPolicyPublicCard');
+      if(!card){card=doc.createElement('article');card.id='maruPolicyPublicCard';card.className='maruPolicyPublicCard';grid.appendChild(card);}
+      card.setAttribute('dir',RTL[code]?'rtl':'ltr');
+      card.innerHTML='<h2>'+t.title+'</h2><p>'+t.note+'</p>'+links(code);
+    }
+    var body=doc.getElementById('maruProductInfoBody');
+    if(body){
+      var section=doc.getElementById('maruProductPolicySection');
+      if(!section){section=doc.createElement('section');section.id='maruProductPolicySection';section.className='maruProductSection';body.appendChild(section);}
+      section.innerHTML='<h3>'+t.title+'</h3><p>'+t.note+'</p>'+links(code);
+    }
+  }
+  function start(){install();setTimeout(install,300);setTimeout(install,1200);new MutationObserver(function(){install();}).observe(doc.documentElement,{attributes:true,attributeFilter:['lang'],subtree:false});}
+  if(doc.readyState==='loading') doc.addEventListener('DOMContentLoaded',start,{once:true}); else start();
+})(window, document);
