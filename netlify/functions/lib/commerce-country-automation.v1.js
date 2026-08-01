@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.6.7-cumulative-product-research-hard-risk-only";
+const VERSION = "commerce-country-automation-v3.6.5-cumulative-ledger-recovery";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1418,6 +1418,39 @@ async function productJobRule(scope) {
   const rows = await SlotStore.select("gslot_policies", "select=id,name,scope_hub,scope_country,scope_region,enabled,rule,updated_at,updated_by&id=eq." + encodeURIComponent(productJobId(scope)) + "&limit=1");
   const row = array(rows)[0]; return row ? Object.assign({}, plain(row.rule)) : null;
 }
+function restoredProductFromCandidate(rowInput, scope) {
+  const row=plain(rowInput),payload=plain(row.source_payload),card=plain(payload.productCard),supplier=plain(payload.supplier),ranking=plain(payload.productRanking),placement=plain(payload.approvedPlacement||payload.placement),readiness=plain(payload.researchReadiness),url=safeUrl(first(payload.externalProductUrl,payload.url,row.official_url,card.checkoutUrl)),image=safeUrl(first(payload.image,payload.thumb,row.thumbnail_url,card.image));
+  if(!url||!image)return null;
+  const market=plain(payload.marketScope),country=normalizeCountry(first(market.marketCountry,plain(payload.countrySupply).country,placement.country,scope.country)),region=normalizeRegion(first(market.marketRegion,plain(payload.countrySupply).region,placement.region,"NATIONWIDE"),country)||"NATIONWIDE";
+  if(country!==scope.country||region!==scope.region)return null;
+  const sectionAssignments=array(payload.proposedPlacements).map((item)=>Object.assign({},plain(item),{sectionKey:text(item&&item.sectionKey||item&&item.section)}));
+  return Object.assign({},payload,{
+    candidateId:text(row.id),id:first(payload.originalProductId,row.id),productIdentity:first(payload.productIdentity,row.id),
+    productName:first(payload.title,row.title,card.title),title:first(payload.title,row.title,card.title),sourceTitle:first(payload.sourceTitle,card.sourceTitle),
+    productUrl:url,url,imageUrl:image,imageOriginalUrl:image,price:first(payload.price,card.price),priceCurrency:first(payload.priceCurrency,card.priceCurrency),availability:first(payload.availability,card.availability),
+    supplierId:first(supplier.id,payload.supplierId),supplierName:first(supplier.name,payload.supplierName,card.supplierName),supplierSiteUrl:first(supplier.officialUrl,payload.supplierSiteUrl,card.supplierUrl),supplierType:first(supplier.type,payload.supplierType),supplierTrustScore:Number(first(supplier.trustScore,payload.supplierTrustScore))||0,supplierEvidenceReady:supplier.evidenceReady===true||payload.supplierEvidenceReady===true,
+    productCategory:first(ranking.category,payload.productCategory),productCategoryTags:array(ranking.categoryTags).concat(array(payload.productCategoryTags)),rankingScore:Number(first(ranking.score,payload.rankingScore))||0,
+    sectionAssignments,approvedPlacement:Object.keys(placement).length?placement:null,primaryPlacement:Object.keys(placement).length?placement:null,
+    slotDecision:text(payload.slotDecision)||(["approved","revenue_ready"].includes(lower(row.status))?"slot_candidate":"undecided"),
+    inspectionComplete:payload.inspectionComplete!==false,productPageLive:payload.productPageLive!==false,sameSupplierSite:payload.sameSupplierSite!==false,
+    researchStatus:first(payload.researchStatus,readiness.stage,"research_review_ready"),updatedAt:first(row.updated_at,payload.updatedAt),publicPublication:false,automaticImport:false
+  });
+}
+async function persistedProductRows(scope) {
+  let rows=[];
+  try{rows=array(await SlotStore.select("gslot_candidates","select=id,title,official_url,status,source_ref,thumbnail_url,source_payload,created_at,updated_at&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&order=updated_at.desc&limit=2000"));}catch(_error){return[];}
+  return rows.map((row)=>restoredProductFromCandidate(row,scope)).filter(Boolean).slice(0,PRODUCT_PORTFOLIO_LIMIT);
+}
+async function loadProductResearchJob(input) {
+  const scope=input&&input.country&&input.region&&input.regionGroup?input:researchScope(input),stored=await productJobRule(scope),ledger=await persistedProductRows(scope);
+  if(!stored&&!ledger.length)return null;
+  const job=stored&&stored.schema===PRODUCT_JOB_SCHEMA?stored:{schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_recovered_"+sha256(scope.country+"|"+scope.region).slice(0,20),status:"complete",scope,startedAt:null,finishedAt:iso(),supplierSources:[],rankingContext:await productRankingContext(scope),discoveryCursor:0,rawProducts:[],inspectionPool:[],inspectCursor:0,products:[],stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:ledger.length,skipped:0,failed:0},trace:[],errors:[],lastError:null};
+  const before=array(job.products).length;
+  job.products=mergeProductRows(ledger,job.products,PRODUCT_PORTFOLIO_LIMIT);
+  job.recoveredFromCandidateLedger=Math.max(0,job.products.length-before);
+  job.preservedCandidateLedgerCount=ledger.length;
+  return job;
+}
 async function saveProductJob(job, actorId) {
   const now = iso(); job.updatedAt = now;
   const row = { id: productJobId(job.scope), name: "국가 공식 상품 이미지·원본 링크 리서치 작업", scope_hub: "country-product-reference-research-job", scope_country: job.scope.country, scope_region: job.scope.region === "NATIONWIDE" ? null : job.scope.region, enabled: !["complete","cancelled"].includes(job.status), rule: job, updated_at: now, updated_by: text(actorId) || "country-product-research-orchestrator" };
@@ -1455,7 +1488,6 @@ function publicProductJob(job) {
   const sourceProducts = array(job.rawProducts).concat(array(job.products));
   const portfolio = ProductRanking.buildPortfolio(sourceProducts, plain(job.rankingContext));
   const allRankedProducts = array(portfolio.products);
-  const latestCycleStart = array(job.trace).slice().reverse().find((row) => row && row.status === "cumulative_cycle_started") || {};
   const visibleProducts = allRankedProducts.filter((row) => {
     const specific = ProductRanking.isSpecificProductUrl(productUrl(row));
     const inspectedPreview = specific && row && row.inspectionComplete === true && !!productImageUrl(row);
@@ -1463,8 +1495,9 @@ function publicProductJob(job) {
     return ProductRanking.isReviewableProduct(row) || inspectedPreview || provisionalPreview;
   });
   return {
-    ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, rankingVersion: ProductRanking.VERSION, rankingPolicy: ProductRanking.POLICY, jobVersion: text(job.version), needsRefresh: text(job.version) !== VERSION, jobId: job.jobId, previousJobId: text(job.previousJobId) || null, researchCycle: Math.max(1, Number(job.researchCycle || 1)), status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
-    safety: { reviewOnly: true, cumulativeResearch: true, preserveExistingProductsOnNewCycle: true, preserveAdministratorDecisionsOnMerge: true, inspectNewDiscoveriesOnly: true, canonicalDuplicateMerge: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false, riskGateBeforeRevenueRanking: true, sponsorRequiresApprovedContract: true, sectionAssignmentsAreProposalsOnly: true, audienceAndRevenueValuePriority: true, noSectionQuotaFill: true, manualDecisionPrecedence: true, aiPrivatePlacementAutomation: true, affiliateSettlementTracking: true, payoutExecution: false },
+    ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, rankingVersion: ProductRanking.VERSION, rankingPolicy: ProductRanking.POLICY, jobVersion: text(job.version), needsRefresh: text(job.version) !== VERSION, jobId: job.jobId, previousJobId:job.previousJobId||null, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
+    researchCycle:{mode:"cumulative",preserveExisting:true,newProductsOnlyInspection:true,duplicatePolicy:"merge_and_enrich",administratorDecisionPrecedence:true},
+    safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false, riskGateBeforeRevenueRanking: true, sponsorRequiresApprovedContract: true, sectionAssignmentsAreProposalsOnly: true, audienceAndRevenueValuePriority: true, noSectionQuotaFill: true, manualDecisionPrecedence: true, aiPrivatePlacementAutomation: true, affiliateSettlementTracking: true, payoutExecution: false },
     rankingContext: plain(job.rankingContext),
     progress: productProgress(job),
     summary: {
@@ -1472,8 +1505,9 @@ function publicProductJob(job) {
       suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
       discovered: visibleProducts.length,
       discoveredRaw: array(job.rawProducts).length,
-      discoveredThisCycle: array(job.runRawProducts).length,
-      preservedFromPreviousCycle: Number(latestCycleStart.preservedVisibleProducts || 0),
+      discoveredThisCycle:Math.max(0,array(job.rawProducts).length-Number(job.preservedRawCount||0)),
+      preservedFromPreviousCycle:Number(job.preservedFromPreviousCycle||job.preservedCandidateLedgerCount||0),
+      recoveredFromCandidateLedger:Number(job.recoveredFromCandidateLedger||0),
       discardedCategoryOrListPages: Math.max(0, allRankedProducts.length - visibleProducts.length),
       exactDuplicatesRemoved: Number(portfolio.summary && portfolio.summary.exactDuplicatesRemoved || 0),
       familyRepresentatives: Number(portfolio.summary && portfolio.summary.familyRepresentatives || 0),
@@ -1555,7 +1589,7 @@ async function productRankingContext(scope) {
   };
 }
 async function beginProductResearchJob(actorId, input) {
-  const raw = plain(input), scope = researchScope(raw), existing = await productJobRule(scope);
+  const raw = plain(input), scope = researchScope(raw), existing = await loadProductResearchJob(scope);
   if (existing && existing.schema === PRODUCT_JOB_SCHEMA && raw.retryStaging === true) {
     const portfolio = ProductRanking.buildPortfolio(array(existing.rawProducts).concat(array(existing.products)), plain(existing.rankingContext));
     existing.version = VERSION;
@@ -1570,10 +1604,7 @@ async function beginProductResearchJob(actorId, input) {
     await saveProductJob(existing, actorId);
     return publicProductJob(existing);
   }
-  // A completed administrator work ledger must survive engine-version changes.
-  // An explicit restart starts a cumulative discovery cycle; it never replaces
-  // the existing product ledger or administrator decisions.
-  if (existing && existing.schema === PRODUCT_JOB_SCHEMA && raw.restart !== true && !["cancelled","failed"].includes(existing.status)) return publicProductJob(existing);
+  if (existing && existing.schema === PRODUCT_JOB_SCHEMA && existing.version === VERSION && raw.restart !== true && !["cancelled","failed"].includes(existing.status)) return publicProductJob(existing);
   const supplierJob = await researchJobRule(scope);
   if (!supplierJob || !["complete","committed"].includes(supplierJob.status) || !array(supplierJob.candidates).length) { const error = new Error("책임 공급업체 단계별 리서치를 먼저 완료해야 공식 상품 목록을 조사할 수 있습니다."); error.statusCode = 409; throw error; }
   const sourcePool = []; const seenSupplierSites = new Set();
@@ -1581,54 +1612,31 @@ async function beginProductResearchJob(actorId, input) {
   const supplierSources = sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,PRODUCT_SUPPLIER_LIMIT);
   if(!supplierSources.length){const error=new Error("완료된 공급업체 후보 중 공식 판매 사이트·법적 신원·직접 판매 증빙을 갖춘 상품 조사 출처가 없습니다. 공급업체 후보의 잡음과 증빙 상태를 먼저 정리하세요.");error.statusCode=409;throw error;}
   const rankingContext = await productRankingContext(scope);
-  const prior = existing && existing.schema === PRODUCT_JOB_SCHEMA ? existing : null;
-  const preservedRawProducts = mergeProductRows([], array(prior && prior.rawProducts), PRODUCT_PORTFOLIO_LIMIT);
-  const preservedProducts = mergeProductRows([], array(prior && prior.products), PRODUCT_PORTFOLIO_LIMIT);
-  const priorPortfolio = ProductRanking.buildPortfolio(preservedRawProducts.concat(preservedProducts), plain(prior && prior.rankingContext));
-  const now = iso(), cycle = prior ? Math.max(2, Number(prior.researchCycle || 1) + 1) : 1;
-  const cycleStart = {
-    at: now,
-    source: "product-research-job",
-    status: "cumulative_cycle_started",
-    cycle,
-    suppliers: supplierSources.length,
-    previousJobId: text(prior && prior.jobId) || null,
-    preservedRawProducts: preservedRawProducts.length,
-    preservedInspectedProducts: preservedProducts.length,
-    preservedVisibleProducts: array(priorPortfolio.products).length,
-    sourcePolicy: "preserve_existing_ledger_and_administrator_decisions; discover_and_inspect_new_results; canonical_deduplication_merge; trust_gate; administrator_approval_before_publication"
-  };
-  const job = {
-    schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION,
-    jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20),
-    previousJobId: text(prior && prior.jobId) || null, researchCycle: cycle, status: "discovering", scope, startedAt: now, finishedAt: null,
-    supplierResearchJobId: supplierJob.jobId, supplierSources, rankingContext, discoveryCursor: 0,
-    rawProducts: preservedRawProducts, runRawProducts: [], inspectionPool: [], inspectCursor: 0, products: preservedProducts,
-    stagePool: array(prior && prior.stagePool), stageCursor: Number(prior && prior.stageCursor || 0),
-    stageSummary: Object.assign({ eligible: 0, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 }, plain(prior && prior.stageSummary)),
-    researchHistory: array(prior && prior.researchHistory).concat(prior ? [{ jobId: text(prior.jobId), cycle: Number(prior.researchCycle || Math.max(1, cycle - 1)), startedAt: prior.startedAt || null, finishedAt: prior.finishedAt || null, status: prior.status, visibleProducts: array(priorPortfolio.products).length }] : []).slice(-40),
-    trace: array(prior && prior.trace).concat([cycleStart]).slice(-240), errors: array(prior && prior.errors).slice(-60), lastError: null
-  };
+  const preservedProducts=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.products):[],preservedRaw=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.rawProducts):[];
+  const preservedProductIdentities=Array.from(new Set(preservedProducts.map((row)=>ProductRanking.productIdentity(row)).filter(Boolean))).slice(0,PRODUCT_PORTFOLIO_LIMIT);
+  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), previousJobId:existing&&existing.jobId||null, preservedFromPreviousCycle:preservedProducts.length, preservedRawCount:preservedRaw.length, status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, rankingContext, discoveryCursor: 0, rawProducts: preservedRaw, inspectionPool: [], inspectCursor: 0, products: preservedProducts, preservedProductIdentities, stagePool: [], stageCursor: 0, stageSummary: { eligible: 0, created: 0, updated: 0, preserved: preservedProducts.length, skipped: 0, failed: 0 }, trace: [{ at: now, source: "product-research-job", status: "cumulative_started", suppliers: supplierSources.length, preservedProducts:preservedProducts.length, sourcePolicy: "preserve_existing_products_and_administrator_decisions; discover_and_inspect_new_products; merge_exact_duplicates; official_direct_sales_legal_identity_only; administrator_approval_before_publication" }], errors: [], lastError: null };
   await saveProductJob(job, actorId); return publicProductJob(job);
 }
 
-async function productResearchJobStatus(input) { return publicProductJob(await productJobRule(researchScope(input))); }
-
+function incrementalInspectionPool(job) {
+  const preserved=new Set(array(job.preservedProductIdentities).map(text).filter(Boolean));
+  const newRows=array(job.rawProducts).filter((row)=>!preserved.has(ProductRanking.productIdentity(row)));
+  return RegionalSelector.prepareProductInspectionPool(newRows,{limit:Math.max(120,Math.min(PRODUCT_PORTFOLIO_LIMIT,array(job.supplierSources).length*40))});
+}
+async function productResearchJobStatus(input) { return publicProductJob(await loadProductResearchJob(researchScope(input))); }
 async function advanceProductResearchJob(actorId, input) {
   const scope = researchScope(input), job = await productJobRule(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("진행 중인 공식 상품 리서치 작업이 없습니다."); error.statusCode = 404; throw error; }
   if (["complete","cancelled"].includes(job.status)) return publicProductJob(job);
   try {
-    if (!Array.isArray(job.runRawProducts)) job.runRawProducts = array(job.rawProducts).slice();
     if (job.status === "discovering") {
       const source = array(job.supplierSources)[Number(job.discoveryCursor || 0)];
-      if (!source) { job.inspectionPool = RegionalSelector.prepareProductInspectionPool(job.runRawProducts, { limit: Math.max(120, Math.min(PRODUCT_PORTFOLIO_LIMIT, array(job.supplierSources).length * 40)) }); job.status = "inspecting"; job.inspectCursor = 0; }
+      if (!source) { job.inspectionPool = incrementalInspectionPool(job); job.status = "inspecting"; job.inspectCursor = 0; }
       else {
         const result = await RegionalSelector.discoverSupplierProductsStep(source, { country: scope.country, region: scope.region, limit: 100 });
         const sourceSettlement = normalizeAffiliateSettlement(source.affiliateSettlement, { existing: source.affiliateSettlement });
         const discoveredItems = array(result.items).map((row) => Object.assign({}, row, { affiliateSettlement: sourceSettlement, affiliateStage: sourceSettlement.stage, supplierAdminPinned: source.adminPinned === true, supplierAffiliatePriority: sourceSettlement.stageRank }));
-        job.runRawProducts = mergeProductRows(job.runRawProducts, discoveredItems, PRODUCT_PORTFOLIO_LIMIT);
         job.rawProducts = mergeProductRows(job.rawProducts, discoveredItems, PRODUCT_PORTFOLIO_LIMIT); job.discoveryCursor = Number(job.discoveryCursor || 0) + 1; job.trace = array(job.trace).concat([Object.assign({ at: iso(), supplierIndex: job.discoveryCursor - 1 }, plain(result.trace))]);
-        if (job.discoveryCursor >= array(job.supplierSources).length) { job.inspectionPool = RegionalSelector.prepareProductInspectionPool(job.runRawProducts, { limit: Math.max(120, Math.min(PRODUCT_PORTFOLIO_LIMIT, array(job.supplierSources).length * 40)) }); job.status = "inspecting"; job.inspectCursor = 0; }
+        if (job.discoveryCursor >= array(job.supplierSources).length) { job.inspectionPool = incrementalInspectionPool(job); job.status = "inspecting"; job.inspectCursor = 0; }
       }
     } else if (job.status === "inspecting") {
       const batch = array(job.inspectionPool).slice(Number(job.inspectCursor || 0), Number(job.inspectCursor || 0) + 4);
@@ -2018,7 +2026,11 @@ async function enrichAutomationProducts(job, mode) {
     remaining: array(job.products).filter(productNeedsAutomationEnrichment).length
   };
 }
-function productCandidateId(scope, product) { return "country_product_" + sha256(scope.country + "|" + scope.region + "|" + text(product.productIdentity)).slice(0, 24); }
+function productCandidateId(scope, product) {
+  const restored=text(product&&product.candidateId);
+  if(/^country_product_[a-f0-9]{24}$/i.test(restored))return restored;
+  return "country_product_" + sha256(scope.country + "|" + scope.region + "|" + text(product.productIdentity)).slice(0, 24);
+}
 function productCandidatePayload(actorId, scope, product, decision) {
   const selected = decision === "slot_candidate", managementControl = plain(product.managementControl), aiSelected = selected && lower(managementControl.source) === "ai_automation";
   const placement = plain(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || array(product.sectionAssignments)[0]);
@@ -2078,7 +2090,7 @@ async function syncProductCandidateQueue(actorId, scope, product, decision) {
   row.created_at = now; row.created_by = text(actorId) || "administrator"; await SlotStore.insert("gslot_candidates", row, "return=representation"); return { status: "private_candidate_created", candidateId, placement: payload.placement };
 }
 async function productCandidateAction(actorId, input) {
-  const scope = researchScope(input), job = await productJobRule(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
+  const scope = researchScope(input), job = await loadProductResearchJob(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","purge","undecided","ai_reclassify","affiliate_settlement"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
   const portfolio = ProductRanking.buildPortfolio(array(job.rawProducts).concat(array(job.products)), plain(job.rankingContext));
   const evaluated = array(portfolio.products).find((row) => text(row && row.id) === id); if (!evaluated) { const error = new Error("상품 후보를 찾을 수 없습니다. 최신 상품 리서치 상태를 다시 읽어 주세요."); error.statusCode = 404; throw error; }
@@ -2147,7 +2159,7 @@ async function productCandidateAction(actorId, input) {
 }
 
 async function productAiAutomation(actorId, input) {
-  const scope = researchScope(input), job = await productJobRule(scope);
+  const scope = researchScope(input), job = await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   if (job.status !== "complete") { const error = new Error("공식 상품 목록 리서치를 완료한 뒤 AI 자동화를 실행해 주세요."); error.statusCode = 409; throw error; }
   const mode = lower(input && input.mode) === "section" ? "section" : "all", sectionKey = text(input && input.sectionKey);
@@ -2350,12 +2362,8 @@ function frontSyncPublicReadiness(productInput, existingCandidate) {
   if (product.productPageLive === false || risk.explicitUnavailable === true) reasons.push("product_page_unavailable");
   if (product.sameSupplierSite === false) reasons.push("supplier_product_domain_mismatch");
   if (prohibited.length) reasons.push(...prohibited);
-  // An authenticated administrator's explicit front-match decision is the
-  // publication authority for a verified official-seller referral. A score
-  // below the automatic discovery threshold remains visible for follow-up,
-  // but is not itself evidence of fraud, illegality or another hard hazard.
-  if (trustScore > 0 && trustScore < TRUST_POLICY.minimumTrustScore) warnings.push("supplier_trust_below_public_threshold");
-  if (ProductRanking.isGenericProductName(first(product.productName, product.title))) reasons.push("product_title_not_verified");
+  if (trustScore > 0 && trustScore < TRUST_POLICY.minimumTrustScore) reasons.push("supplier_trust_below_public_threshold");
+  if (ProductRanking.isGenericProductName(first(product.productName, product.title)) && !text(product.priorityLabel) && !supplierName) reasons.push("product_title_not_verified");
   if (product.inspectionComplete !== true) warnings.push("product_inspection_pending");
   if (risk.gatePassed !== true) warnings.push("risk_review_pending");
   if (!evidenceReady) warnings.push("supplier_evidence_pending");
@@ -2373,8 +2381,8 @@ function frontSyncAssignmentId(candidateId, scope, sectionKey) {
 }
 function frontSyncRevenueId(candidateId) { return "front_referral_" + sha256(candidateId).slice(0, 24); }
 function frontSyncEvidenceId(candidateId) { return "front_evidence_" + sha256(candidateId).slice(0, 24); }
-async function prepareProductFrontTargets(actorId, input, targetsInput, loadedJob) {
-  const scope = researchScope(input), job = loadedJob && loadedJob.schema === PRODUCT_JOB_SCHEMA ? loadedJob : await productJobRule(scope);
+async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput) {
+  const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA || job.status !== "complete") { const error = new Error("공식 상품 목록 리서치를 완료한 뒤 프론트 매칭을 실행해 주세요."); error.statusCode = 409; throw error; }
   const targets = array(targetsInput), targetIds = targets.map((row) => text(row && row.candidateId)).filter(Boolean), targetById = new Map(targets.map((row) => [text(row && row.candidateId), row]));
   const productByCandidate = new Map(array(job.products).map((row) => [productCandidateId(scope, row), row]));
@@ -2457,8 +2465,8 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, loadedJo
   };
 }
 
-async function productFrontSyncTargets(input, loadedJob) {
-  const scope = researchScope(input), job = loadedJob && loadedJob.schema === PRODUCT_JOB_SCHEMA ? loadedJob : await productJobRule(scope);
+async function productFrontSyncTargets(input, jobInput) {
+  const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   if (job.status !== "complete") { const error = new Error("공식 상품 목록 리서치를 완료한 뒤 프론트 매칭을 실행해 주세요."); error.statusCode = 409; throw error; }
   const mode = lower(input && input.mode) === "section" ? "section" : "all", sectionKey = text(input && input.sectionKey);
@@ -2475,8 +2483,8 @@ async function productFrontSyncTargets(input, loadedJob) {
   }));
   return { ok: true, scope, mode, sectionKey: mode === "section" ? sectionKey : null, operation, targets, productCount: array(job.products).length };
 }
-async function recordProductFrontSync(actorId, input, batchResult, loadedJob) {
-  const scope = researchScope(input), job = loadedJob && loadedJob.schema === PRODUCT_JOB_SCHEMA ? loadedJob : await productJobRule(scope);
+async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
+  const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match", now = iso(), byCandidate = new Map(array(batchResult && batchResult.items).map((item) => [text(item && item.candidateId), plain(item)]));
   job.products = array(job.products).map((row) => {
@@ -2815,10 +2823,7 @@ function diagnostic(state) {
   };
 }
 
-async function loadProductResearchJob(input) { return productJobRule(researchScope(input)); }
-function publicProductResearchJob(job) { return publicProductJob(job); }
-
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, loadProductResearchJob, publicProductResearchJob, productCandidateAction, productAiAutomation, prepareProductFrontTargets, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productAiAutomation, prepareProductFrontTargets, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
 };

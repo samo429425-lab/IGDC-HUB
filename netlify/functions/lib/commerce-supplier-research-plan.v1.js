@@ -11,7 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const VERSION = "commerce-supplier-research-plan-v1.4.0-global-country-policy-local-mesh";
+const VERSION = "commerce-supplier-research-plan-v1.4.1-global-plus-restored-kr-supply-mesh";
 
 function text(value){ return String(value == null ? "" : value).trim(); }
 function lower(value){ return text(value).toLowerCase(); }
@@ -75,6 +75,42 @@ const LANE_ORDER = Object.freeze([
   "wholesale_distribution",
   "small_business",
   "public_directory"
+]);
+
+// Preserve the proven Korean discovery mesh from v1.3. The global language
+// packs remain active for every other country; KR uses these detailed local
+// producer/manufacturer/distributor queries so a generic global query rotation
+// cannot narrow the supplier pool again.
+const KR_FOUNDATION_QUERIES = Object.freeze([
+  "대한민국 생활필수품 식료품 농수축임산물 생산자 농협 축협 수협 산림조합 협동조합 공식몰 직거래 배송 반품 환불 고객센터",
+  "대한민국 표고버섯 느타리버섯 목이버섯 버섯 재배 농가 산림조합 영농조합법인 공식몰 직거래 택배",
+  "대한민국 농협 축협 수협 산림조합 협동조합 로컬푸드 직매장 공식몰 직거래 배송 반품 고객센터",
+  "대한민국 지역농협 지역축협 지역수협 산림조합 온라인 쇼핑몰 특산품 농산물 수산물 임산물",
+  "대한민국 사과 농장 참외 농장 토마토 농장 딸기 농장 버섯 재배 고사리 농가 영농조합법인 직거래 택배",
+  "대한민국 농업회사법인 식품 제조업체 가공식품 공장 생산자 공식 온라인몰 배송 반품 환불 고객센터",
+  "대한민국 전통시장 상인회 지역특산품 공동몰 로컬푸드 생산자 공동판매 온라인 주문 배송 반품",
+  "대한민국 화장품 제조사 브랜드 본사 책임판매업자 공식몰 제품 구매 배송 반품 환불 고객센터",
+  "대한민국 지역 유통업체 도매 총판 공판장 소규모 유통업체 공식 판매처 온라인 주문 배송 반품",
+  "대한민국 생활용품 주방용품 가구 침구 제조사 생산업체 직영몰 공식 판매처 배송 반품 고객지원",
+  "대한민국 전자제품 소형가전 부품 공구 산업용품 제조사 공장 직영몰 온라인 주문 배송 반품",
+  "대한민국 기계 금속 플라스틱 목재 포장재 사무용품 제조업체 자체 쇼핑몰 제품 카탈로그 구매",
+  "대한민국 의류 신발 가방 섬유 봉제 제조사 브랜드 직영몰 공식 온라인 판매처",
+  "대한민국 유아용품 교육용품 문구 완구 제조사 공식몰 배송 반품 고객지원",
+  "대한민국 사회적기업 마을기업 협동조합 자활기업 생산품 공식몰 온라인 판매 배송 반품",
+  "대한민국 지자체 농업기술센터 생산자 명단 지역 기업 제품 공식 판매몰"
+]);
+const KR_PRODUCT_CLUSTERS = Object.freeze([
+  "사과 배 복숭아 포도 감귤 딸기 참외 수박 토마토", "버섯 표고버섯 느타리버섯 고사리 나물 산채",
+  "쌀 잡곡 콩 참깨 들깨 고춧가루 마늘 양파", "한우 돼지고기 닭고기 계란 우유 치즈 축산물",
+  "수산물 건어물 김 미역 젓갈 전복 굴 새우", "임산물 밤 대추 호두 잣 꿀 약초",
+  "김치 장류 반찬 떡 한과 전통식품 가공식품", "건강식품 차 음료 주스 발효식품",
+  "화장품 스킨케어 헤어케어 바디케어 미용용품", "생활용품 세제 위생용품 주방용품",
+  "의류 신발 가방 패션잡화", "가구 침구 인테리어 생활가전", "전자제품 액세서리 소형가전", "유아용품 교육용품 문구 완구"
+]);
+const KR_ENTITY_CLUSTERS = Object.freeze([
+  "농가 농장 생산자 영농조합법인 농업회사법인", "농협 축협 수협 산림조합 협동조합",
+  "제조사 제조업체 공장 브랜드 본사 책임판매업자", "지역 유통업체 도매 총판 공판장 로컬푸드 직매장",
+  "소규모 판매업체 직영몰 공식 판매처 온라인몰"
 ]);
 
 const PACKS = Object.freeze({
@@ -323,7 +359,7 @@ function packForLocale(locale){ return PACKS[locale] || PACKS[baseLocale(locale)
 
 function loadSources(){
   const psomFile=findFile(["data/psom.json","netlify/functions/data/psom.json","assets/hero/psom.json"]);
-  const bankFile=findFile(["data/search-bank.snapshot.json","netlify/functions/data/search-bank.snapshot.json","netlify/functions/search-bank.snapshot.json"]);
+  const bankFile=findFile(["data/search-bank.research-reservoir.snapshot.json","netlify/functions/data/search-bank.research-reservoir.snapshot.json","netlify/functions/search-bank.research-reservoir.snapshot.json","data/search-bank.snapshot.json","netlify/functions/data/search-bank.snapshot.json","netlify/functions/search-bank.snapshot.json"]);
   const commerceFile=findFile(["netlify/functions/data/commerce-candidate-policy.v1.json","data/commerce-candidate-policy.v1.json"]);
   const regionalFile=findFile(["netlify/functions/data/regional-brokerage-policy.json","data/regional-brokerage-policy.json"]);
   return {
@@ -368,8 +404,33 @@ function sourceHintTerms(sourceTerms, locale){
   const preferred=sourceTerms.filter(term=>term.length<=28&&(!rx||rx.test(term)));
   return unique(preferred,8).join(" ");
 }
+function restoredKrRows(geo, sourceTerms, maxQueries){
+  const period=Math.floor(Date.now()/(6*60*60*1000));
+  const productOffset=stableOffset([geo.country,geo.region||"NATIONWIDE",period,"product"].join("|"),KR_PRODUCT_CLUSTERS.length);
+  const entityOffset=stableOffset([geo.country,geo.region||"NATIONWIDE",period,"entity"].join("|"),KR_ENTITY_CLUSTERS.length);
+  const dynamic=[];
+  for(let index=0;index<4;index+=1){
+    const products=KR_PRODUCT_CLUSTERS[(productOffset+index)%KR_PRODUCT_CLUSTERS.length];
+    const entities=KR_ENTITY_CLUSTERS[(entityOffset+index)%KR_ENTITY_CLUSTERS.length];
+    dynamic.push(`대한민국 ${products} ${entities} 공식몰 직거래 온라인 주문 배송 반품 환불 고객센터`);
+  }
+  const sourceHint=unique(sourceTerms.filter(term=>/[가-힣]/.test(term)&&term.length<=24),10).join(" ");
+  if(sourceHint) dynamic.push(`대한민국 ${sourceHint} 생산자 제조사 협동조합 책임 판매업체 공식 판매처`);
+  function laneFor(query,index){
+    if(/지자체|농업기술센터|생산자 명단|기업 제품/.test(query)) return "public_directory_bridge";
+    if(/기계|금속|플라스틱|목재|포장재|공구|산업용품|전자제품|부품/.test(query)) return "industrial_manufacturing";
+    if(/전통시장|지역특산품|공동몰/.test(query)) return "regional_market";
+    if(/지역 유통업체|도매|총판|공판장/.test(query)) return "wholesale_distribution";
+    if(/사회적기업|마을기업|자활기업/.test(query)) return "small_business";
+    if(/화장품|생활용품|가구|침구|의류|신발|가방|유아용품|교육용품|문구|완구/.test(query)) return "consumer_manufacturing";
+    if(/농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|농장|농가|수산물|임산물/.test(query)) return "agri_cooperative";
+    return index<KR_FOUNDATION_QUERIES.length?"food_essentials":"kr_rotating";
+  }
+  return unique(KR_FOUNDATION_QUERIES.concat(dynamic),maxQueries).map((query,index)=>({query,locale:"ko",origin:`country-supply-lane:${laneFor(query,index)}`,lane:laneFor(query,index),localName:"대한민국",localizationError:null}));
+}
 function buildCountryRows(geo, locales, sourceTerms, maxQueries){
   const country=text(geo&&geo.country).toUpperCase();
+  if(country==="KR") return restoredKrRows(geo,sourceTerms,maxQueries);
   const region=text(geo&&geo.region);
   const regionPart=region&&region!=="NATIONWIDE"?region:"";
   const localeRows=unique(locales&&locales.length?locales:[country==="KR"?"ko":"en"],12);

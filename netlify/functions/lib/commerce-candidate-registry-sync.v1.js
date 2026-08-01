@@ -14,7 +14,7 @@ const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.7.1-explicit-admin-hard-risk-only";
+const VERSION = "commerce-candidate-registry-sync-v1.7.0-explicit-admin-safe-referral";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -46,9 +46,10 @@ function genericProductTitle(value){
 function explicitHardRisk(payload){
   const risk=plain(payload&&payload.riskAssessment);
   const supplier=plain(payload&&payload.supplierAssessment);
+  if(risk.gatePassed===false||risk.productGatePassed===false||risk.supplierGatePassed===false) return true;
   if(payload&&payload.productPageLive===false) return true;
   if(payload&&payload.sameSupplierSite===false||risk.supplierSiteMatched===false||risk.explicitUnavailable===true) return true;
-  if(supplier.reviewEligible===false) return true;
+  if(supplier.reviewEligible===false||supplier.evidenceReady===false) return true;
   const blockers=unique([].concat(array(risk.blockers),array(supplier.blockers),array(payload&&payload.blockers),array(payload&&payload.hardBlockers))).map(lower).join(" ");
   return /fraud|scam|phish|malware|illegal|counterfeit|forgery|adult|porn|sanction|blocked|prohibited|사기|악성|피싱|불법|위조|성인|음란|제재|금지/.test(blockers);
 }
@@ -287,10 +288,11 @@ async function syncApprovedCandidates(input){
       const region=MarketSaleScope.normalizeRegion(request.region||"NATIONWIDE",country)||"NATIONWIDE";
       return country?country+"|"+region:"";
     }));
+    const explicitAdminRequest=requestedRows.length>0;
     const releaseAuthorization={
-      authoritative:true,
+      authoritative:explicitAdminRequest,
       mode:"explicit-admin-publication-request",
-      explicitAdminRequest:requestedRows.length>0,
+      explicitAdminRequest,
       requestedCount:requestedRows.length,
       scopeKeys,
       generatedAt:now(),
@@ -298,9 +300,9 @@ async function syncApprovedCandidates(input){
       crossCountryFallback:false,
       automaticPublication:false
     };
-    const doc={schema:"commerce-candidate-review-queue.v1",version:VERSION,generatedAt:now(),expiresAt:expires,source:"global-slot-console-approved-candidates",sourceDigest:sha256({candidates,assignments,availability,revenue,evidence}),releaseAuthorization,items:output};
+    const doc={schema:"commerce-candidate-review-queue.v1",version:VERSION,generatedAt:now(),expiresAt:expires,source:"global-slot-console-approved-candidates",sourceDigest:sha256({candidates,assignments,availability,revenue,evidence}),authoritative:explicitAdminRequest,mode:"explicit-admin-publication-request",explicitAdminRequest,requestedCount:requestedRows.length,scopeKeys,releaseAuthorization,items:output};
     const digest=atomicWrite(file,doc);
-    return {ok:true,status:"synchronized",version:VERSION,wrote:true,file,digest,count:output.length,requestedCount:requestedRows.length,scopeKeys,authoritative:true,releaseAuthorization,expiresAt:expires};
+    return {ok:true,status:"synchronized",version:VERSION,wrote:true,file,digest,count:output.length,requestedCount:requestedRows.length,scopeKeys,authoritative:explicitAdminRequest,releaseAuthorization,expiresAt:expires};
   } catch(error){
     return {ok:false,status:"blocked",version:VERSION,wrote:false,file,reason:"registry-sync-failed-existing-queue-preserved",error:String(error&&error.message||error)};
   }
