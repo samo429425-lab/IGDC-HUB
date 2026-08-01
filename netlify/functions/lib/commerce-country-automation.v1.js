@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.6.5-explicit-front-match-verified-title";
+const VERSION = "commerce-country-automation-v3.6.6-explicit-front-match-hard-risk-only";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2314,7 +2314,11 @@ function frontSyncPublicReadiness(productInput, existingCandidate) {
   if (product.productPageLive === false || risk.explicitUnavailable === true) reasons.push("product_page_unavailable");
   if (product.sameSupplierSite === false) reasons.push("supplier_product_domain_mismatch");
   if (prohibited.length) reasons.push(...prohibited);
-  if (trustScore > 0 && trustScore < TRUST_POLICY.minimumTrustScore) reasons.push("supplier_trust_below_public_threshold");
+  // An authenticated administrator's explicit front-match decision is the
+  // publication authority for a verified official-seller referral. A score
+  // below the automatic discovery threshold remains visible for follow-up,
+  // but is not itself evidence of fraud, illegality or another hard hazard.
+  if (trustScore > 0 && trustScore < TRUST_POLICY.minimumTrustScore) warnings.push("supplier_trust_below_public_threshold");
   if (ProductRanking.isGenericProductName(first(product.productName, product.title))) reasons.push("product_title_not_verified");
   if (product.inspectionComplete !== true) warnings.push("product_inspection_pending");
   if (risk.gatePassed !== true) warnings.push("risk_review_pending");
