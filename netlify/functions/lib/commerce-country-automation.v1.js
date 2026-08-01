@@ -1584,35 +1584,6 @@ async function beginProductResearchJob(actorId, input) {
 
 async function productResearchJobStatus(input) { return publicProductJob(await productJobRule(researchScope(input))); }
 
-async function restoreProductJobSnapshot(actorId, input, snapshotInput) {
-  const scope = researchScope(input), snapshot = plain(snapshotInput), products = array(snapshot.products);
-  if (text(input && input.confirmation) !== "RESTORE_PRODUCT_JOB_SNAPSHOT") { const error = new Error("상품 후보 복구 확인 값이 일치하지 않습니다."); error.statusCode = 409; throw error; }
-  if (snapshot.reportType !== "igdc-country-product-reference-persisted-research" || snapshot.status !== "complete" || products.length < 1) { const error = new Error("복구할 완료 상품 후보 스냅샷이 올바르지 않습니다."); error.statusCode = 409; throw error; }
-  const snapshotScope = researchScope({ countryCode: snapshot.scope && snapshot.scope.country, subdivisionCode: snapshot.scope && snapshot.scope.region });
-  if (snapshotScope.country !== scope.country || snapshotScope.region !== scope.region) { const error = new Error("복구 스냅샷의 국가·지역 범위가 현재 범위와 일치하지 않습니다."); error.statusCode = 409; throw error; }
-  const expectedUnassigned = Number(snapshot.summary && snapshot.summary.sectionCapacityUnassigned || 0), expectedSlotCandidates = Number(snapshot.summary && snapshot.summary.slotCandidates || 0);
-  if (scope.country === "KR" && scope.region === "NATIONWIDE" && (expectedUnassigned !== 167 || expectedSlotCandidates !== 125)) { const error = new Error("검증된 한국 기존 후보 스냅샷의 수량 지문이 일치하지 않습니다."); error.statusCode = 409; throw error; }
-  const current = await productJobRule(scope), currentProducts = array(current && current.products);
-  if (array(current && current.trace).some((row) => row && row.source === "administrator-product-job-snapshot-restore") && currentProducts.length >= products.length) return Object.assign(publicProductJob(current), { recovery: { restored: false, alreadyRestored: true, currentProducts: currentProducts.length } });
-  const now = iso(), actor = text(actorId) || "administrator";
-  if (current) {
-    const backupId = productJobId(scope) + "_backup_" + sha256(now + "|" + actor).slice(0, 16);
-    await SlotStore.insert("gslot_policies", { id: backupId, name: "상품 후보 원장 복구 전 안전 백업", scope_hub: "country-product-reference-research-job-backup", scope_country: scope.country, scope_region: scope.region === "NATIONWIDE" ? null : scope.region, enabled: false, rule: current, created_at: now, updated_at: now, updated_by: actor }, "return=representation");
-  }
-  const suppliers = [], seenSuppliers = new Set();
-  for (const product of products) { const key = text(product && (product.supplierId || product.supplierSiteUrl || product.supplierName)); if (!key || seenSuppliers.has(key)) continue; seenSuppliers.add(key); suppliers.push({ id: text(product.supplierId) || key, supplierName: text(product.supplierName), supplierSiteUrl: text(product.supplierSiteUrl), trustScore: Number(product.supplierTrustScore) || 0, evidenceReady: product.supplierEvidenceReady === true }); }
-  const stageSummary = plain(snapshot.pipeline && snapshot.pipeline.stageSummary), restored = {
-    schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION,
-    jobId: text(snapshot.jobId) || ("country_product_research_restored_" + sha256(now + "|" + scope.country + "|" + scope.region).slice(0, 20)),
-    status: "complete", scope, startedAt: snapshot.startedAt || now, createdAt: snapshot.startedAt || now, finishedAt: now,
-    supplierResearchJobId: null, supplierSources: suppliers, rankingContext: plain(snapshot.rankingContext), discoveryCursor: suppliers.length,
-    rawProducts: [], inspectionPool: products, inspectCursor: products.length, products, stagePool: [], stageCursor: 0,
-    stageSummary, trace: array(snapshot.trace).concat([{ at: now, source: "administrator-product-job-snapshot-restore", status: "restored", restoredProducts: products.length, expectedUnassigned, expectedSlotCandidates, restoredBy: actor }]).slice(-240),
-    errors: [], lastError: null, restoredFrom: { reportType: snapshot.reportType, jobId: snapshot.jobId || null, jobVersion: snapshot.jobVersion || null, downloadedAt: snapshot.updatedAt || snapshot.finishedAt || null }
-  };
-  await saveProductJob(restored, actor);
-  return Object.assign(publicProductJob(restored), { recovery: { restored: true, backupCreated: !!current, replacedProducts: currentProducts.length, restoredProducts: products.length, expectedUnassigned, expectedSlotCandidates } });
-}
 async function advanceProductResearchJob(actorId, input) {
   const scope = researchScope(input), job = await productJobRule(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("진행 중인 공식 상품 리서치 작업이 없습니다."); error.statusCode = 404; throw error; }
   if (["complete","cancelled"].includes(job.status)) return publicProductJob(job);
@@ -2814,5 +2785,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, restoreProductJobSnapshot, productCandidateAction, productAiAutomation, prepareProductFrontTargets, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, productCandidateAction, productAiAutomation, prepareProductFrontTargets, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
 };

@@ -6,7 +6,6 @@ const MarketSignals = require("./lib/commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./lib/commerce-policy-discussion.v1");
 const ProductGoLiveAudit = require("./product-go-live-audit");
 const CandidateReview = require("./commerce-candidate-review");
-const ProductJobRecoverySnapshot = require("./lib/commerce-product-job-recovery.kr-nationwide.20260801.json");
 
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
@@ -59,7 +58,7 @@ exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();if(method==="OPTIONS")return json(204,{});
     const body=method==="GET"?{}:parse(event),query=event&&event.queryStringParameters||{},action=lower(query.action||body.action||"catalog");
-    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_job_restore_snapshot","product_candidate_action","product_ai_automation","product_front_match","product_front_unmatch","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
+    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_candidate_action","product_ai_automation","product_front_match","product_front_unmatch","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
     const actorId=text(actor&&actor.sub);
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
@@ -105,7 +104,6 @@ exports.handler=async function(event){
     if(action==="supplier_manual_register")return json(200,await Automation.manualSupplierRegister(actorId,body));
     if(action==="product_research_begin")return json(200,await Automation.beginProductResearchJob(actorId,body));
     if(action==="product_research_step")return json(200,await Automation.advanceProductResearchJob(actorId,body));
-    if(action==="product_job_restore_snapshot")return json(200,await Automation.restoreProductJobSnapshot(actorId,body,ProductJobRecoverySnapshot));
     if(action==="product_candidate_action")return json(200,await Automation.productCandidateAction(actorId,body));
     if(action==="product_ai_automation")return json(200,await Automation.productAiAutomation(actorId,body));
     if(action==="product_front_match"||action==="product_front_unmatch"){
