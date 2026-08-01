@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const os = require("os");
 const root = path.resolve(__dirname, "..");
 const canonical = require(path.join(root, "netlify", "functions", "lib", "canonical-snapshot-publisher.v1"));
 const snapshots = require(path.join(root, "netlify", "functions", "snapshot-engine"));
@@ -10,7 +11,121 @@ const regional = require(path.join(root, "netlify", "functions", "lib", "regiona
 const ipSlots = require(path.join(root, "netlify", "functions", "lib", "ip-slot-snapshot-publisher.v1"));
 const commerceRegistry = require(path.join(root, "netlify", "functions", "lib", "commerce-candidate-registry-sync.v1"));
 const commerceIntake = require(path.join(root, "netlify", "functions", "lib", "commerce-candidate-intake.v1"));
-const socialRelease = require(path.join(root, "netlify", "functions", "lib", "social-searchbank-release-adapter.v1"));
+
+async function publishSocialIndependently() {
+  const adapterPath = path.join(root, "netlify", "functions", "lib", "social-searchbank-release-adapter.v1");
+  let socialRelease;
+  try {
+    socialRelease = require(adapterPath);
+  } catch (error) {
+    return {
+      status: "skipped",
+      isolated: true,
+      reason: "social_release_adapter_unavailable",
+      error: String(error && error.message || error)
+    };
+  }
+  if (!socialRelease || typeof socialRelease.publish !== "function") {
+    return {
+      status: "skipped",
+      isolated: true,
+      reason: "social_release_adapter_invalid"
+    };
+  }
+  try {
+    const result = await socialRelease.publish({ root, snapshotEngine: snapshots });
+    return Object.assign({}, result || {}, { isolated: true });
+  } catch (error) {
+    return {
+      status: "failed",
+      isolated: true,
+      reason: "social_release_execution_failed",
+      error: String(error && error.message || error)
+    };
+  }
+}
+
+const SOCIAL_CHECKPOINT_TARGETS = [
+  path.join("data", "social.snapshot.json"),
+  path.join("data", "social-searchbank.release.snapshot.json"),
+  path.join("data", "social-pipeline.report.json"),
+  path.join("netlify", "functions", "data", "social.snapshot.json"),
+  path.join("netlify", "functions", "social.snapshot.json")
+];
+
+function createSocialCheckpoint() {
+  const checkpointRoot = fs.mkdtempSync(path.join(os.tmpdir(), "igdc-social-checkpoint-"));
+  const entries = SOCIAL_CHECKPOINT_TARGETS.map(relative => {
+    const source = path.join(root, relative);
+    const backup = path.join(checkpointRoot, relative);
+    const present = fs.existsSync(source);
+    if (present) {
+      fs.mkdirSync(path.dirname(backup), { recursive: true });
+      fs.copyFileSync(source, backup);
+    }
+    return { relative, source, backup, present };
+  });
+  return { checkpointRoot, entries };
+}
+
+function restoreSocialCheckpoint(checkpoint) {
+  const restored = [];
+  for (const entry of checkpoint.entries) {
+    fs.rmSync(entry.source, { force: true });
+    if (entry.present) {
+      fs.mkdirSync(path.dirname(entry.source), { recursive: true });
+      fs.copyFileSync(entry.backup, entry.source);
+    }
+    restored.push(entry.relative.replace(/\\/g, "/"));
+  }
+  return restored;
+}
+
+function removeSocialCheckpoint(checkpoint) {
+  if (checkpoint && checkpoint.checkpointRoot) {
+    fs.rmSync(checkpoint.checkpointRoot, { recursive: true, force: true });
+  }
+}
+
+const COMMERCE_CHECKPOINT_TARGETS = [
+  { type: "directory", relative: "data" },
+  { type: "directory", relative: path.join("netlify", "functions", "data") },
+  { type: "file", relative: path.join("netlify", "functions", "search-bank.snapshot.json") }
+];
+
+function createCommerceCheckpoint() {
+  const checkpointRoot = fs.mkdtempSync(path.join(os.tmpdir(), "igdc-commerce-checkpoint-"));
+  const entries = [];
+  for (const target of COMMERCE_CHECKPOINT_TARGETS) {
+    const source = path.join(root, target.relative);
+    const backup = path.join(checkpointRoot, target.relative);
+    const present = fs.existsSync(source);
+    entries.push(Object.assign({}, target, { source, backup, present }));
+    if (!present) continue;
+    fs.mkdirSync(path.dirname(backup), { recursive: true });
+    fs.cpSync(source, backup, { recursive: true, force: true });
+  }
+  return { checkpointRoot, entries };
+}
+
+function restoreCommerceCheckpoint(checkpoint) {
+  const restored = [];
+  for (const entry of checkpoint.entries) {
+    fs.rmSync(entry.source, { recursive: true, force: true });
+    if (entry.present) {
+      fs.mkdirSync(path.dirname(entry.source), { recursive: true });
+      fs.cpSync(entry.backup, entry.source, { recursive: true, force: true });
+    }
+    restored.push(entry.relative.replace(/\\/g, "/"));
+  }
+  return restored;
+}
+
+function removeCommerceCheckpoint(checkpoint) {
+  if (checkpoint && checkpoint.checkpointRoot) {
+    fs.rmSync(checkpoint.checkpointRoot, { recursive: true, force: true });
+  }
+}
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -219,14 +334,46 @@ async function main() {
   // Social publication is an independent build-time SearchBank contract.
   // It targets only the existing Social Snapshot Engine path and does not
   // replace or bypass the commerce, country/region or IP-slot pipeline below.
-  const socialPublication = await socialRelease.publish({
-    root,
-    snapshotEngine: snapshots
-  });
-  process.stdout.write(JSON.stringify({ socialPublication }, null, 2) + "\n");
-  if (socialPublication.status === "blocked") {
-    throw new Error("Social SearchBank release pipeline blocked build: " + JSON.stringify(socialPublication));
+  const socialCheckpoint = createSocialCheckpoint();
+  let socialPublication;
+  try {
+    socialPublication = await publishSocialIndependently();
+    const socialStatus = String(socialPublication && socialPublication.status || "").toLowerCase();
+    if (["blocked", "failed", "skipped"].includes(socialStatus)) {
+      const restored = restoreSocialCheckpoint(socialCheckpoint);
+      socialPublication = Object.assign({}, socialPublication, {
+        rollback: "restored",
+        restored
+      });
+    }
+  } catch (error) {
+    let rollbackError = null;
+    try {
+      restoreSocialCheckpoint(socialCheckpoint);
+    } catch (restoreError) {
+      rollbackError = String(restoreError && restoreError.message || restoreError);
+    }
+    const safetyError = new Error(
+      rollbackError
+        ? "Social publication and rollback both failed: " + rollbackError
+        : "Social publication isolation failed: " + String(error && error.message || error)
+    );
+    safetyError.code = "SOCIAL_PUBLICATION_ISOLATION_FAILED";
+    throw safetyError;
+  } finally {
+    removeSocialCheckpoint(socialCheckpoint);
   }
+  process.stdout.write(JSON.stringify({ socialPublication }, null, 2) + "\n");
+  if (["blocked", "failed", "skipped"].includes(String(socialPublication.status || "").toLowerCase())) {
+    process.stderr.write("Social SearchBank release did not publish; commerce build continues independently: " + JSON.stringify(socialPublication) + "\n");
+  }
+
+  // Commerce writes are transactional with respect to this combined build.
+  // A failed commerce publication restores the exact post-social checkpoint,
+  // allowing a successful Social publication to deploy independently without
+  // exposing partially written commerce/SearchBank/front Snapshot artifacts.
+  const commerceCheckpoint = createCommerceCheckpoint();
+  try {
 
   // This sync only refreshes the private approved-candidate review queue. It
   // never writes a public Snapshot and cannot by itself publish front cards.
@@ -380,6 +527,27 @@ async function main() {
     ipSlotVerification,
     rootFallbackVerification
   }, null, 2) + "\n");
+  } catch (error) {
+    let restored = [];
+    let rollbackError = null;
+    try {
+      restored = restoreCommerceCheckpoint(commerceCheckpoint);
+    } catch (restoreError) {
+      rollbackError = String(restoreError && restoreError.message || restoreError);
+    }
+    process.stderr.write("Commerce release did not publish; Social build remains independent: " + JSON.stringify({
+      status: "failed",
+      isolated: true,
+      reason: "commerce_release_execution_failed",
+      error: String(error && error.message || error),
+      rollback: rollbackError ? "failed" : "restored",
+      restored,
+      rollbackError
+    }) + "\n");
+    if (rollbackError) throw error;
+  } finally {
+    removeCommerceCheckpoint(commerceCheckpoint);
+  }
 }
 
 main().catch((error) => {
