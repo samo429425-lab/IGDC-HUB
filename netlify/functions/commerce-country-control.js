@@ -6,7 +6,6 @@ const MarketSignals = require("./lib/commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./lib/commerce-policy-discussion.v1");
 const ProductGoLiveAudit = require("./product-go-live-audit");
 const CandidateReview = require("./commerce-candidate-review");
-const ProductLedgerMigration = require("./lib/commerce-product-ledger-migration.v1");
 
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
@@ -87,11 +86,7 @@ exports.handler=async function(event){
       return json(200,await PolicyDiscussion.effectivePolicy(scope));
     }
     if(action==="research_status")return json(200,await Automation.researchJobStatus({countryCode:query.country||body.countryCode,subdivisionCode:query.region||body.subdivisionCode||body.regionCode||"NATIONWIDE"}));
-    if(action==="product_research_status"){
-      const productScope={countryCode:query.country||body.countryCode,subdivisionCode:query.region||body.subdivisionCode||body.regionCode||"NATIONWIDE"};
-      const ledgerMigration=await ProductLedgerMigration.ensureHealthyLedger(actorId,productScope,Automation.VERSION);
-      return json(200,Object.assign({},await Automation.productResearchJobStatus(productScope),{ledgerMigration}));
-    }
+    if(action==="product_research_status")return json(200,await Automation.productResearchJobStatus({countryCode:query.country||body.countryCode,subdivisionCode:query.region||body.subdivisionCode||body.regionCode||"NATIONWIDE"}));
     if(action==="scope"){
       const countryCode=text(query.country||body.countryCode).toUpperCase(),region=text(query.region||body.subdivisionCode||body.regionCode||"NATIONWIDE").toUpperCase()||"NATIONWIDE";
       const country=Automation.countryRow(countryCode);
@@ -107,28 +102,21 @@ exports.handler=async function(event){
     if(action==="research_step")return json(200,await Automation.advanceResearchJob(actorId,body,event));
     if(action==="research_commit")return json(200,await Automation.commitResearchJob(actorId,body));
     if(action==="supplier_manual_register")return json(200,await Automation.manualSupplierRegister(actorId,body));
-    if(action==="product_research_begin"){
-      const ledgerMigration=await ProductLedgerMigration.ensureHealthyLedger(actorId,body,Automation.VERSION);
-      const current=await Automation.productResearchJobStatus(body);
-      if(ledgerMigration.applicable===true&&body.retryStaging!==true&&current.status==="complete"&&Array.isArray(current.products)&&current.products.length>0){
-        return json(200,Object.assign({},current,{ledgerMigration,restartBlocked:body.restart===true,ledgerPolicy:"active_complete_ledger_immutable"}));
-      }
-      return json(200,Object.assign({},await Automation.beginProductResearchJob(actorId,body),{ledgerMigration}));
-    }
+    if(action==="product_research_begin")return json(200,await Automation.beginProductResearchJob(actorId,body));
     if(action==="product_research_step")return json(200,await Automation.advanceProductResearchJob(actorId,body));
     if(action==="product_candidate_action")return json(200,await Automation.productCandidateAction(actorId,body));
     if(action==="product_ai_automation")return json(200,await Automation.productAiAutomation(actorId,body));
     if(action==="product_front_match"||action==="product_front_unmatch"){
       const operation=action==="product_front_unmatch"?"unmatch":"match";
       const request=Object.assign({},body,{operation});
-      await ProductLedgerMigration.ensureHealthyLedger(actorId,request,Automation.VERSION);
-      const plan=await Automation.productFrontSyncTargets(request);
+      const loadedJob=await Automation.loadProductResearchJob(request);
+      const plan=await Automation.productFrontSyncTargets(request,loadedJob);
       const scope=ProductGoLiveAudit.selectedScope(plan.scope.country,plan.scope.region);
       let batchResult;
       if(!plan.targets.length){
         batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
       }else if(operation==="match"){
-        const preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets);
+        const preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets,loadedJob);
         const preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds:[];
         const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked");
         if(!preparedIds.length){
@@ -147,7 +135,7 @@ exports.handler=async function(event){
       }else{
         batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope);
       }
-      return json(200,await Automation.recordProductFrontSync(actorId,request,batchResult));
+      return json(200,await Automation.recordProductFrontSync(actorId,request,batchResult,loadedJob));
     }
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
     if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset));
