@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v3.0 - section accordion, thumbnail cards and quality diagnostics */
+/* IGDC Media Candidate Queue v3.1 - verified front release pipeline diagnostics */
 (function(){
   'use strict';
 
@@ -33,6 +33,7 @@
   var excludedCache=[];
   var summaryCache={};
   var diagnosticCache=null;
+  var pipelineStatusCache=null;
   var notice=$('notice');
   var state=$('state');
   var currentPreview=null;
@@ -215,9 +216,9 @@
     var readOnly=key==='media-trending';
     var released=Number(frontReleaseState.sections&&frontReleaseState.sections[key]||0);
     var controls=readOnly?
-      '<div class="read-only-note">지금 뜨는 콘텐츠는 영화·드라마·버라이어티·음악 후보의 최신성·랭킹을 자동 조합한 점검용 미리보기입니다. 수동 고정이나 일괄 상태 변경은 하지 않습니다.</div>':
+      '<div class="read-only-note">지금 뜨는 콘텐츠는 영화·드라마·버라이어티·음악 후보의 최신성·랭킹을 자동 조합한 점검용 미리보기입니다. 수동 고정이나 일괄 상태 변경은 하지 않습니다. <button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>':
       '<div class="section-actionbar" data-section-key="'+esc(key)+'">'+
-        '<div class="section-front-control"><span class="pill section">마지막 프론트 릴리스 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 취소·중지</button></div>'+
+        '<div class="section-front-control"><span class="pill section">마지막 프론트 릴리스 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 취소·중지</button><button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>'+
         '<button type="button" class="secondary sectionSelectAllBtn">전체 선택</button><button type="button" class="secondary sectionClearSelectionBtn">선택 해제</button>'+
         '<button type="button" class="sectionActionBtn" data-action="approve">선택 승인</button><button type="button" class="sectionActionBtn" data-action="hold">선택 보류</button><button type="button" class="sectionActionBtn" data-action="reset">선택 재검토</button>'+
         '<button type="button" class="danger sectionActionBtn" data-action="reject">선택 반려</button><button type="button" class="danger sectionActionBtn" data-action="block">선택 영구 차단</button><button type="button" class="danger sectionActionBtn" data-action="delete">선택 삭제→검색 제외</button>'+
@@ -319,7 +320,9 @@
       renderSummary(summaryCache);setupFilters(summaryCache);renderRows();renderExclusions();
       var live=data.sourceMode==='supabase';
       state.textContent=live?'실시간 저장소 연결 정상':'정적 점검본 대체 표시';
-      if($('frontReleaseState'))$('frontReleaseState').textContent=frontReleaseState.hasRelease?'마지막 프론트 릴리스 '+Number(frontReleaseState.totalManagedSlots||0)+'개':'저장된 프론트 릴리스 없음';
+      if($('frontReleaseState'))$('frontReleaseState').textContent=frontReleaseState.hasRelease?
+        (frontReleaseState.pipelineApplied?'프론트 적용 완료 ':'릴리스 저장·배포 대기 ')+Number(frontReleaseState.totalManagedSlots||0)+'개':
+        '저장된 프론트 릴리스 없음';
       show(
         live?'정책·섹션·랭킹 기준으로 실시간 후보 대기열을 읽었습니다.':'실시간 저장소에 연결하지 못해 정적 점검본을 표시합니다. 이 상태에서는 최신 변경을 확정하지 마십시오.',
         live?'ok':'warn'
@@ -676,6 +679,35 @@
       searchExclusionAndPermanentBlocks:excluded
     },null,2)+'\n','igdc-media-candidate-all-10-sections.json');
   }
+  async function downloadPipelineStatus(sectionKey){
+    var button=sectionKey?null:$('downloadPipelineStatusBtn');
+    if(button)button.disabled=true;
+    try{
+      var report=await get(PUB+'?pipelineStatus=1&probePublic=1');
+      pipelineStatusCache=report;
+      if(sectionKey){
+        var sectionReport={
+          ok:true,
+          reportType:'igdc-media-section-front-pipeline-status',
+          generatedAt:new Date().toISOString(),
+          pipelineReportVersion:report.version,
+          adapterVersion:report.adapterVersion,
+          pipelineComplete:report.pipelineComplete===true,
+          sectionKey:sectionKey,
+          sectionLabel:SECTION_LABELS[sectionKey]||sectionKey,
+          stages:report.stages,
+          section:report.sections&&report.sections[sectionKey]||null
+        };
+        download(JSON.stringify(sectionReport,null,2)+'\n','igdc-media-'+sectionKey+'-pipeline-status.json');
+      }else{
+        download(JSON.stringify(report,null,2)+'\n','igdc-media-front-pipeline-all-10-sections.json');
+      }
+      var publicStage=report.stages&&report.stages.publicMediaSnapshot||{};
+      show(report.pipelineComplete?'공개 파이프라인 전체 단계가 일치합니다.':'단계 JSON을 저장했습니다. 미완료·불일치 단계는 JSON의 stages에서 확인하십시오.',report.pipelineComplete?'ok':'warn');
+      if($('frontReleaseState'))$('frontReleaseState').textContent=report.pipelineComplete?'프론트 공개 검증 완료 · '+Number(publicStage.totalManagedSlots||0)+'개':'프론트 공개 단계 점검 필요';
+    }catch(error){show('공개 파이프라인 JSON 생성 실패: '+error.message,'warn');}
+    finally{if(button)button.disabled=false;}
+  }
   function captureFrameDataUrl(row){
     return new Promise(function(resolve,reject){
       var sources=candidateSources(row);
@@ -1021,6 +1053,7 @@
       if(diagnosticCache)download(JSON.stringify(diagnosticCache,null,2)+'\n','igdc-media-candidate-diagnostic.json');
     };
     $('downloadAllCandidateListBtn').onclick=exportAllCandidates;
+    $('downloadPipelineStatusBtn').onclick=function(){downloadPipelineStatus('');};
     $('returnBtn').onclick=function(){location.href='/admin.html';};
     $('collectBtn').onclick=function(){collect(false,false);};
     $('collectAllBtn').onclick=collectAll;
@@ -1075,6 +1108,7 @@
       var selected=selectedBySection[sectionKey]||(selectedBySection[sectionKey]=new Set());
       var sectionFrontButton=event.target.closest('.sectionFrontBtn');
       if(sectionFrontButton){publishFrontAction(text(sectionFrontButton.dataset.frontAction),sectionKey);return;}
+      if(event.target.closest('.sectionPipelineJsonBtn')){downloadPipelineStatus(sectionKey);return;}
       if(event.target.closest('.sectionSelectAllBtn')){
         sectionRows(sectionKey,visibleRows()).forEach(function(row){selected.add(text(row.contentId||row.id));});
         renderRows();return;

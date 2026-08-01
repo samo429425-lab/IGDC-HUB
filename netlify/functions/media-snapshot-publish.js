@@ -10,9 +10,11 @@ const path = require("path");
 const MediaStore = require("./lib/media-candidate-store.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
+const MediaReleaseAdapter = require("./lib/media-searchbank-release-adapter.v1");
 
-const VERSION = "media-snapshot-publish-v1.3.0-section-release-stop-control";
+const VERSION = "media-snapshot-publish-v1.4.0-pipeline-stage-diagnostics";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
+const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
 
 async function actorFor(event, storeRelease){
   const actor = await SharedAdminAuth.resolveUser(event);
@@ -78,7 +80,7 @@ function stampReleaseControl(snapshot, action, sectionKey, actor){
 async function latestStoredRelease(){
   const query=new URLSearchParams();
   query.set("select","release_id,snapshot_hash,snapshot,status,created_at,created_by");
-  query.set("status","eq.stored");
+  query.set("status","in.(stored,applied)");
   query.set("order","created_at.desc");
   query.set("limit","1");
   const rows=await MediaStore.supabase(MediaStore.rest(MediaStore.RELEASE_TABLE,query.toString()),{method:"GET"});
@@ -89,13 +91,103 @@ function statusPayload(release){
   const snapshot=release.snapshot&&typeof release.snapshot==="object"?release.snapshot:{};
   const counts=managedCounts(snapshot);
   const control=snapshot.meta&&snapshot.meta.releaseControl||{};
+  const pipeline=snapshot.meta&&snapshot.meta.releasePipeline||{};
   return{
     ok:true,version:VERSION,hasRelease:true,
     releaseId:MediaStore.text(release.release_id),createdAt:MediaStore.text(release.created_at),
+    releaseStatus:MediaStore.text(release.status)||"stored",
     action:MediaStore.text(control.action)||"legacy_release",sectionKey:MediaStore.text(control.sectionKey)||null,
-    totalManagedSlots:counts.total,sections:counts.sections
+    totalManagedSlots:counts.total,sections:counts.sections,
+    pipelineApplied:pipeline.status==="applied",
+    pipelineVersion:MediaStore.text(pipeline.version)||null,
+    appliedAt:MediaStore.text(pipeline.appliedAt)||null
   };
 }
+function eligibleCounts(rows){
+  const sections=Object.fromEntries(MANUAL_SECTIONS.map((key)=>[key,{approved:0,eligible:0,blocked:0}]));
+  (Array.isArray(rows)?rows:[]).forEach((row)=>{
+    const key=MediaStore.normalizeSection(row&&row.section_key);if(!sections[key])return;
+    sections[key].approved+=1;
+    if(MediaStore.snapshotEligible(row))sections[key].eligible+=1;else sections[key].blocked+=1;
+  });
+  return sections;
+}
+function publicOrigin(){
+  for(const raw of [process.env.URL,process.env.DEPLOY_PRIME_URL]){
+    try{const url=new URL(MediaStore.text(raw));if(url.protocol==="https:")return url.origin;}catch(_error){}
+  }
+  return"";
+}
+async function fetchPublicJson(origin,pathName){
+  if(!origin)return{checked:false,ok:false,reason:"public_origin_unavailable",document:null};
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+  try{
+    const response=await fetch(origin+pathName+(pathName.includes("?")?"&":"?")+"pipeline_probe="+Date.now(),{signal:controller.signal,headers:{accept:"application/json","cache-control":"no-cache"}});
+    if(!response.ok)return{checked:true,ok:false,reason:"public_http_"+response.status,document:null};
+    const document=await response.json();return{checked:true,ok:true,reason:null,document};
+  }catch(error){return{checked:true,ok:false,reason:/abort/i.test(String(error&&error.name||error))?"public_probe_timeout":"public_probe_failed",document:null};}
+  finally{clearTimeout(timer);}
+}
+async function pipelineStatusDocument(release,rows,probePublic){
+  const candidateSections=eligibleCounts(rows),releaseSnapshot=release&&release.snapshot||{};
+  const releaseState=MediaReleaseAdapter.sectionState(releaseSnapshot),pipeline=releaseSnapshot&&releaseSnapshot.meta&&releaseSnapshot.meta.releasePipeline||{};
+  let publicMedia={checked:false,ok:false,reason:"probe_not_requested",document:null};
+  let publicBank={checked:false,ok:false,reason:"probe_not_requested",document:null};
+  if(probePublic){
+    const origin=publicOrigin();
+    [publicMedia,publicBank]=await Promise.all([
+      fetchPublicJson(origin,"/data/media.snapshot.json"),
+      fetchPublicJson(origin,"/data/search-bank.snapshot.json")
+    ]);
+  }
+  const publicState=publicMedia.document?MediaReleaseAdapter.sectionState(publicMedia.document):{totalManaged:0,sections:{}};
+  const publicPipeline=publicMedia.document&&publicMedia.document.meta&&publicMedia.document.meta.releasePipeline||{};
+  const publicBankItems=publicBank.document?MediaReleaseAdapter.ownedItems(publicBank.document,release&&release.release_id):[];
+  const sections={};
+  MANUAL_SECTIONS.forEach((key)=>{
+    sections[key]={
+      approvedCandidates:candidateSections[key].approved,
+      eligibleCandidates:candidateSections[key].eligible,
+      policyBlockedCandidates:candidateSections[key].blocked,
+      releaseManagedSlots:releaseState.sections[key].managedCount,
+      releaseContentIds:releaseState.sections[key].contentIds,
+      publicManagedSlots:publicState.sections[key]?publicState.sections[key].managedCount:null,
+      publicContentIds:publicState.sections[key]?publicState.sections[key].contentIds:[]
+    };
+  });
+  const trendingSources=["media-movie","media-drama","media-variety","media-music"];
+  const publicTrendingSlots=publicMedia.document?MediaReleaseAdapter.slotsOf(publicMedia.document.sections&&publicMedia.document.sections["media-trending"]):[];
+  sections["media-trending"]={
+    automatic:true,manualPublicationAllowed:false,sourceSections:trendingSources,
+    approvedSourceCandidates:trendingSources.reduce((sum,key)=>sum+candidateSections[key].approved,0),
+    eligibleSourceCandidates:trendingSources.reduce((sum,key)=>sum+candidateSections[key].eligible,0),
+    releaseManagedSlots:0,releaseContentIds:[],
+    publicSlotCount:publicMedia.ok?publicTrendingSlots.length:null,
+    publicManagedSlots:0,publicContentIds:[]
+  };
+  const releaseId=MediaStore.text(release&&release.release_id),releaseApplied=pipeline.status==="applied";
+  const publicReleaseMatches=publicMedia.ok===true&&MediaStore.text(publicPipeline.releaseId)===releaseId;
+  const publicSectionsMatch=publicMedia.ok===true&&MANUAL_SECTIONS.every((key)=>{
+    const expected=releaseState.sections[key],actual=publicState.sections[key];
+    return actual&&JSON.stringify(expected.contentIds)===JSON.stringify(actual.contentIds);
+  });
+  const publicBankHash=publicBank.ok?MediaReleaseAdapter.sha256(publicBank.document):null;
+  const publicBankMatches=publicBank.ok===true&&MediaStore.text(pipeline.searchBankHash)===publicBankHash;
+  const publicMatches=publicReleaseMatches&&publicSectionsMatch&&publicBankMatches;
+  return{
+    ok:true,reportType:"igdc-media-front-pipeline-status",version:VERSION,adapterVersion:MediaReleaseAdapter.VERSION,generatedAt:MediaStore.nowIso(),
+    pipelineComplete:releaseApplied&&(!probePublic||publicMatches),
+    stages:{
+      candidates:{source:"supabase.media_candidates",approvedRows:Array.isArray(rows)?rows.length:0,eligibleRows:(Array.isArray(rows)?rows:[]).filter(MediaStore.snapshotEligible).length,sections:candidateSections},
+      release:{present:!!release,releaseId,status:MediaStore.text(release&&release.status)||null,requestHash:MediaStore.text(pipeline.requestHash||release&&release.snapshot_hash)||null,outputHash:MediaStore.text(release&&release.snapshot_hash)||null,action:MediaStore.text(releaseSnapshot&&releaseSnapshot.meta&&releaseSnapshot.meta.releaseControl&&releaseSnapshot.meta.releaseControl.action)||null,totalManagedSlots:releaseState.totalManaged},
+      searchBank:{applied:releaseApplied&&!!MediaStore.text(pipeline.searchBankHash),hash:MediaStore.text(pipeline.searchBankHash)||null,releaseMediaItemCount:Number(pipeline.searchBankMediaCount||0),publicProbeChecked:publicBank.checked,publicProbeOk:publicBank.ok,publicProbeReason:publicBank.reason,publicHash:publicBankHash,publicHashMatches:publicBank.checked?publicBankMatches:null,publicReleaseMediaItemCount:publicBank.ok?publicBankItems.length:null},
+      snapshotEngine:{applied:releaseApplied,version:MediaStore.text(pipeline.snapshotEngineVersion)||null,completedHandlers:Array.isArray(pipeline.snapshotEngineCompletedHandlers)?pipeline.snapshotEngineCompletedHandlers:[],appliedAt:MediaStore.text(pipeline.appliedAt)||null},
+      publicMediaSnapshot:{checked:publicMedia.checked,ok:publicMedia.ok,reason:publicMedia.reason,releaseId:MediaStore.text(publicPipeline.releaseId)||null,releaseIdMatches:publicMedia.checked?publicReleaseMatches:null,sectionContentIdsMatch:publicMedia.checked?publicSectionsMatch:null,totalManagedSlots:publicMedia.ok?publicState.totalManaged:null}
+    },
+    sectionOrder:STATUS_SECTIONS,sections
+  };
+}
+exports.buildPipelineStatusDocument=pipelineStatusDocument;
 exports.handler = async function(event){
   if(event && event.httpMethod === "OPTIONS") return MediaStore.response(204,{});
   try{
@@ -106,6 +198,12 @@ exports.handler = async function(event){
     const actor=await actorFor(event, storeRelease);
     if(params.frontStatus === "1" || params.frontStatus === 1 || params.frontStatus === true){
       return MediaStore.response(200,statusPayload(await latestStoredRelease()));
+    }
+    if(params.pipelineStatus === "1" || params.pipelineStatus === 1 || params.pipelineStatus === true){
+      const release=await latestStoredRelease();
+      const rows=await MediaStore.selectCandidates(queryApproved(params.limit));
+      const probePublic=params.probePublic === "1" || params.probePublic === 1 || params.probePublic === true;
+      return MediaStore.response(200,await pipelineStatusDocument(release,rows,probePublic));
     }
     const frontAction=MediaStore.text(params.frontAction)||(publishFront?"publish_all":"preview_all");
     const sectionKey=MediaStore.normalizeSection(params.sectionKey);

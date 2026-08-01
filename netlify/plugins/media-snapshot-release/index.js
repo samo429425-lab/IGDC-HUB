@@ -2,18 +2,17 @@
 
 const crypto=require("crypto");
 const fs=require("fs");
+const os=require("os");
 const path=require("path");
+const Adapter=require("../../functions/lib/media-searchbank-release-adapter.v1");
 
-const VERSION="igdc-media-snapshot-release-build-plugin-v1.0.0";
+const VERSION="igdc-media-snapshot-release-build-plugin-v2.0.0-searchbank-snapshot-pipeline";
 const DEFAULT_TABLE="media_snapshot_releases";
 
 function text(value){return value==null?"":String(value).trim();}
 function lower(value){return text(value).toLowerCase();}
 function firstEnv(names){
-  for(const name of names){
-    const value=text(process.env[name]);
-    if(value)return{name,value};
-  }
+  for(const name of names){const value=text(process.env[name]);if(value)return{name,value};}
   return{name:null,value:""};
 }
 function stableStringify(value){
@@ -21,12 +20,9 @@ function stableStringify(value){
   if(Array.isArray(value))return"["+value.map(stableStringify).join(",")+"]";
   return"{"+Object.keys(value).sort().map((key)=>JSON.stringify(key)+":"+stableStringify(value[key])).join(",")+"}";
 }
-function sha256(value){
-  return crypto.createHash("sha256").update(typeof value==="string"?value:stableStringify(value)).digest("hex");
-}
+function sha256(value){return crypto.createHash("sha256").update(typeof value==="string"?value:stableStringify(value)).digest("hex");}
 function releaseArmed(){
-  const mode=lower(process.env.MEDIA_RELEASE_MODE);
-  const key=text(process.env.MEDIA_RELEASE_KEY);
+  const mode=lower(process.env.MEDIA_RELEASE_MODE),key=text(process.env.MEDIA_RELEASE_KEY);
   return mode==="enabled"&&key.length>=32;
 }
 function config(){
@@ -38,32 +34,16 @@ function config(){
     "SUPABASE_SERVICE_ROLE_KEY","SUPABASE_SECRET_KEY","SUPABASE_SERVICE_KEY"
   ]);
   const normalizedUrl=text(url.value).replace(/\/+$/g,"");
-  if(!/^https:\/\/[^/]+$/i.test(normalizedUrl)||!text(key.value)){
-    throw new Error("media_snapshot_release_storage_not_configured");
-  }
-  return{
-    url:normalizedUrl,key:text(key.value),
-    table:text(process.env.MEDIA_SNAPSHOT_RELEASE_TABLE)||DEFAULT_TABLE
-  };
+  if(!/^https:\/\/[^/]+$/i.test(normalizedUrl)||!text(key.value))throw new Error("media_snapshot_release_storage_not_configured");
+  return{url:normalizedUrl,key:text(key.value),table:text(process.env.MEDIA_SNAPSHOT_RELEASE_TABLE)||DEFAULT_TABLE};
 }
 function safeManagedSlots(snapshot){
-  if(!snapshot||snapshot.type!=="media_snapshot"||!snapshot.sections||typeof snapshot.sections!=="object"){
-    throw new Error("media_snapshot_release_structure_invalid");
-  }
+  if(!snapshot||snapshot.type!=="media_snapshot"||!snapshot.sections||typeof snapshot.sections!=="object")throw new Error("media_snapshot_release_structure_invalid");
   Object.entries(snapshot.sections).forEach(([sectionKey,section])=>{
-    const slots=Array.isArray(section)?section:(section&&Array.isArray(section.slots)?section.slots:[]);
-    slots.forEach((slot,index)=>{
-      if(!slot||slot.managedBy!=="media-snapshot-publish")return;
+    Adapter.slotsOf(section).forEach((slot,index)=>{
+      if(!slot||slot.managedBy!==Adapter.SLOT_OWNER)return;
       const release=slot.releaseContract||{};
-      if(
-        slot.candidateOnly!==false||
-        slot.seedContent!==false||
-        slot.verificationStatus!=="approved_for_snapshot"||
-        release.eligible!==true||
-        !text(slot.title)||
-        !/^https:\/\//i.test(text(slot.thumb))||
-        !/^https:\/\//i.test(text(slot.url||slot.video||slot.embedUrl))
-      ){
+      if(slot.candidateOnly!==false||slot.seedContent!==false||slot.verificationStatus!=="approved_for_snapshot"||release.eligible!==true||!text(slot.title)||!/^https:\/\//i.test(text(slot.thumb))||!/^https:\/\//i.test(text(slot.url||slot.video||slot.embedUrl))){
         throw new Error("unsafe_managed_media_slot:"+sectionKey+":"+(index+1));
       }
     });
@@ -71,84 +51,117 @@ function safeManagedSlots(snapshot){
   return snapshot;
 }
 function incomingReleaseExpectation(){
-  const raw=text(process.env.INCOMING_HOOK_BODY);
-  if(!raw)return{};
-  try{
-    const body=JSON.parse(raw);
-    if(body&&body.trigger==="approved-media-snapshot-release"){
-      return{releaseId:text(body.releaseId),snapshotHash:text(body.snapshotHash)};
-    }
-  }catch(_error){}
+  const raw=text(process.env.INCOMING_HOOK_BODY);if(!raw)return{};
+  try{const body=JSON.parse(raw);if(body&&body.trigger==="approved-media-snapshot-release")return{releaseId:text(body.releaseId),snapshotHash:text(body.snapshotHash)};}catch(_error){}
   return{};
 }
-async function latestRelease(settings){
-  const query=new URLSearchParams();
-  query.set("select","release_id,snapshot_hash,snapshot,status,created_at");
-  query.set("status","eq.stored");
-  query.set("order","created_at.desc");
-  query.set("limit","1");
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),12000);
+async function request(settings,resource,init){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
   try{
-    const response=await fetch(
-      settings.url+"/rest/v1/"+encodeURIComponent(settings.table)+"?"+query.toString(),
-      {
-        method:"GET",signal:controller.signal,
-        headers:{
-          apikey:settings.key,
-          authorization:"Bearer "+settings.key,
-          accept:"application/json"
-        }
-      }
-    );
-    const body=await response.json().catch(()=>null);
+    const response=await fetch(settings.url+resource,Object.assign({},init||{}, {
+      signal:controller.signal,
+      headers:Object.assign({apikey:settings.key,authorization:"Bearer "+settings.key,"content-type":"application/json",accept:"application/json"},init&&init.headers||{})
+    }));
+    const raw=await response.text();let body=null;try{body=raw?JSON.parse(raw):null;}catch(_error){body=raw||null;}
     if(!response.ok)throw new Error(body&&body.message||"media_snapshot_release_http_"+response.status);
-    const release=Array.isArray(body)&&body[0];
-    if(!release)throw new Error("stored_media_snapshot_release_not_found");
-    return release;
+    return body;
   }finally{clearTimeout(timer);}
 }
+async function loadRelease(settings,expected){
+  const query=new URLSearchParams();
+  query.set("select","release_id,snapshot_hash,snapshot,status,created_at,created_by");
+  if(expected.releaseId)query.set("release_id","eq."+expected.releaseId);
+  else query.set("status","in.(stored,applied)");
+  query.set("order","created_at.desc");query.set("limit","1");
+  const body=await request(settings,"/rest/v1/"+encodeURIComponent(settings.table)+"?"+query.toString(),{method:"GET"});
+  const release=Array.isArray(body)&&body[0];if(!release)throw new Error("stored_media_snapshot_release_not_found");
+  return release;
+}
+async function markApplied(settings,release,snapshot,hash){
+  const query="release_id=eq."+encodeURIComponent(text(release.release_id));
+  const body=await request(settings,"/rest/v1/"+encodeURIComponent(settings.table)+"?"+query,{
+    method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({snapshot_hash:hash,snapshot})
+  });
+  if(!Array.isArray(body)||!body.length)throw new Error("media_snapshot_release_applied_audit_not_saved");
+  return body[0];
+}
+function readJson(file){try{return JSON.parse(fs.readFileSync(file,"utf8"));}catch(_error){return null;}}
+function readFirst(files){for(const file of files){const doc=readJson(file);if(doc)return{file,doc};}return{file:"",doc:{items:[]}};}
 function atomicWrite(file,document){
   fs.mkdirSync(path.dirname(file),{recursive:true});
   const temporary=file+".release-"+process.pid+"-"+Date.now()+".tmp";
+  try{fs.writeFileSync(temporary,JSON.stringify(document,null,2)+"\n",{encoding:"utf8",mode:0o644});JSON.parse(fs.readFileSync(temporary,"utf8"));fs.renameSync(temporary,file);}
+  finally{try{if(fs.existsSync(temporary))fs.unlinkSync(temporary);}catch(_error){}}
+}
+function runSnapshotEngineIsolated(publishRoot,bank,template,releaseId){
+  const stage=fs.mkdtempSync(path.join(os.tmpdir(),"igdc-media-release-"));
+  const originalCwd=process.cwd(),enginePath=path.join(publishRoot,"netlify","functions","snapshot-engine.js");
   try{
-    fs.writeFileSync(temporary,JSON.stringify(document,null,2)+"\n",{encoding:"utf8",mode:0o644});
-    JSON.parse(fs.readFileSync(temporary,"utf8"));
-    fs.renameSync(temporary,file);
+    atomicWrite(path.join(stage,"data","search-bank.snapshot.json"),bank);
+    atomicWrite(path.join(stage,"data","media.snapshot.json"),template);
+    process.chdir(stage);
+    delete require.cache[require.resolve(enginePath)];
+    const engine=require(enginePath),report=engine.run({canonicalReleaseId:releaseId,mediaReleasePipeline:true});
+    if(!report||report.ok!==true||!Array.isArray(report.completedHandlers)||!report.completedHandlers.includes("media"))throw new Error("snapshot_engine_media_handler_not_completed");
+    const snapshot=readJson(path.join(stage,"data","media.snapshot.json"));
+    if(!snapshot)throw new Error("snapshot_engine_media_output_missing");
+    return{snapshot,report};
   }finally{
-    try{if(fs.existsSync(temporary))fs.unlinkSync(temporary);}catch(_error){}
+    process.chdir(originalCwd);
+    try{delete require.cache[require.resolve(enginePath)];}catch(_error){}
+    try{fs.rmSync(stage,{recursive:true,force:true});}catch(_error){}
   }
 }
 
 module.exports={
-  onPreBuild:async({constants,utils})=>{
+  onPostBuild:async({constants,utils})=>{
     if(!releaseArmed()){
-      utils.status.show({
-        title:"IGDC 미디어 스냅샷",
-        summary:"공개 게이트 비활성 — 기존 배포 스냅샷 유지"
-      });
+      utils.status.show({title:"IGDC 미디어 스냅샷",summary:"공개 게이트 비활성 — 기존 배포 스냅샷 유지"});
       return;
     }
     try{
-      const settings=config();
-      const release=await latestRelease(settings);
-      const snapshot=safeManagedSlots(release.snapshot);
-      const actualHash=sha256(snapshot);
-      if(actualHash!==text(release.snapshot_hash))throw new Error("media_snapshot_release_hash_mismatch");
-      const expected=incomingReleaseExpectation();
-      if(expected.releaseId&&expected.releaseId!==text(release.release_id))throw new Error("media_snapshot_release_id_mismatch");
-      if(expected.snapshotHash&&expected.snapshotHash!==actualHash)throw new Error("media_snapshot_hook_hash_mismatch");
       const publishRoot=path.resolve(constants.PUBLISH_DIR||process.cwd());
-      atomicWrite(path.join(publishRoot,"data","media.snapshot.json"),snapshot);
-      atomicWrite(path.join(publishRoot,"netlify","functions","data","media.snapshot.json"),snapshot);
-      utils.status.show({
-        title:"IGDC 미디어 스냅샷",
-        summary:"승인 릴리스 적용 완료",
-        text:"release "+text(release.release_id)+" · "+actualHash.slice(0,16)
+      const settings=config(),expected=incomingReleaseExpectation(),release=await loadRelease(settings,expected);
+      safeManagedSlots(release.snapshot);
+      const requestHash=sha256(release.snapshot);
+      if(requestHash!==text(release.snapshot_hash))throw new Error("media_snapshot_release_hash_mismatch");
+      if(expected.releaseId&&expected.releaseId!==text(release.release_id))throw new Error("media_snapshot_release_id_mismatch");
+      if(expected.snapshotHash&&expected.snapshotHash!==requestHash)throw new Error("media_snapshot_hook_hash_mismatch");
+
+      const bankFiles=[
+        path.join(publishRoot,"data","search-bank.snapshot.json"),
+        path.join(publishRoot,"netlify","functions","data","search-bank.snapshot.json"),
+        path.join(publishRoot,"netlify","functions","search-bank.snapshot.json")
+      ];
+      const currentBank=readFirst(bankFiles),contract=Adapter.buildSearchBankDocument(currentBank.doc,release);
+      const stageBank={
+        meta:{source:"approved-media-release-searchbank-stage",mediaReleasePipeline:contract.bank.meta&&contract.bank.meta.mediaReleasePipeline},
+        items:Adapter.ownedItems(contract.bank,release.release_id)
+      };
+      const template=Adapter.buildEngineTemplate(release.snapshot);
+      const engine=runSnapshotEngineIsolated(publishRoot,stageBank,template,release.release_id);
+      const final=Adapter.decorateEngineSnapshot(engine.snapshot,release,engine.report,contract.hash);
+      safeManagedSlots(final.snapshot);
+
+      bankFiles.forEach((file)=>atomicWrite(file,contract.bank));
+      [
+        path.join(publishRoot,"data","media.snapshot.json"),
+        path.join(publishRoot,"netlify","functions","data","media.snapshot.json")
+      ].forEach((file)=>atomicWrite(file,final.snapshot));
+      await markApplied(settings,release,final.snapshot,final.hash);
+
+      const report=Adapter.buildPipelineReport({
+        release:Object.assign({},release,{snapshot:final.snapshot,snapshot_hash:final.hash}),
+        snapshot:final.snapshot,searchBank:contract.bank,searchBankHash:contract.hash,outputHash:final.hash
       });
-      console.log("["+VERSION+"] applied release",text(release.release_id),actualHash);
+      utils.status.show({
+        title:"IGDC 미디어 공개 파이프라인",
+        summary:"SearchBank → Snapshot Engine → Media Snapshot 적용 완료",
+        text:"release "+text(release.release_id)+" · "+report.output.totalManagedSlots+"개 · "+final.hash.slice(0,16)
+      });
+      console.log("["+VERSION+"]",JSON.stringify(report));
     }catch(error){
-      utils.build.failBuild("승인된 미디어 스냅샷을 안전하게 적용하지 못해 배포를 중단했습니다.",{error});
+      utils.build.failBuild("승인 미디어의 SearchBank → Snapshot Engine → Media Snapshot 연결을 검증하지 못해 배포를 중단했습니다.",{error});
     }
   }
 };
