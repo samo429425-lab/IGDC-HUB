@@ -1705,6 +1705,13 @@ function render(lang){
   fillText('maruMediaTermsLink', mediaPolicy.terms);
   fillText('maruMediaPrivacyLink', mediaPolicy.privacy);
   fillText('maruMediaRefundLink', mediaPolicy.refund);
+  const policyLang=encodeURIComponent(lang);
+  const termsLink=document.getElementById('maruMediaTermsLink');
+  const privacyLink=document.getElementById('maruMediaPrivacyLink');
+  const refundLink=document.getElementById('maruMediaRefundLink');
+  if(termsLink) termsLink.href='maru-windows-terms.html?lang='+policyLang;
+  if(privacyLink) privacyLink.href='maru-windows-privacy.html?lang='+policyLang;
+  if(refundLink) refundLink.href='maru-windows-refund.html?lang='+policyLang;
   fillText('footer', t.footer);
   document.querySelectorAll('[data-i18n-btn]').forEach(a=>a.textContent=t.btnDownload||'Download');
 }
