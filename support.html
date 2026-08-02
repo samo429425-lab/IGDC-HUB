@@ -43,6 +43,14 @@
   .downloadItem span { color:#5b7189; font-size:13px; }
   .policyActions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .btn { display:inline-block; text-decoration:none; border-radius:9px; padding:9px 12px; border:1px solid #b9d2ee; color:#004080; background:#eef7ff; font-weight:700; }
+  .maruPricingBlock { margin-top:12px; border:1px solid #cfe0f2; background:#f8fbff; border-radius:12px; padding:14px; }
+  .maruPricingBlock h3 { margin:0 0 6px; color:#183e63; font-size:18px; }
+  .maruPricingBlock > p { margin:0 0 12px; color:#5b7189; line-height:1.55; }
+  .maruPricingList { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .maruPricingItem { border:1px solid #dce7f3; background:#fff; border-radius:11px; padding:13px; display:flex; flex-direction:column; gap:7px; }
+  .maruPricingItem b { color:#183e63; }
+  .maruPricingPrice { color:#004080; font-size:18px; font-weight:800; }
+  .maruPricingDetail { color:#5b7189; font-size:13px; line-height:1.5; }
   .notice { margin-top:12px; color:#7a5600; background:#fff8e5; border:1px solid #f2dfad; border-radius:10px; padding:10px 12px; font-size:14px; }
   .full { grid-column:1/-1; }
   .footer { margin-top:18px; color:#6f7f8f; font-size:13px; text-align:center; }
@@ -50,7 +58,7 @@
      RTL is applied only to the support content panels below. */
   html, body { direction:ltr !important; }
   body.rtl ul { margin:8px 20px 0 0; }
-  @media (max-width:760px) { .grid { grid-template-columns:1fr; } h1 { font-size:25px; } }
+  @media (max-width:760px) { .grid, .maruPricingList { grid-template-columns:1fr; } h1 { font-size:25px; } }
 </style>
 
 <style id="support-sidebar-shell-css">
@@ -243,9 +251,25 @@ body.rtl .support-shell{direction:ltr !important;}
         <div class="downloadItem" id="maruMediaPolicyItem">
           <div><b id="maruMediaPolicyTitle"></b><span id="maruMediaPolicyText"></span></div>
           <div class="policyActions">
-            <a class="btn" id="maruMediaTermsLink" href="terms.html" target="_blank" rel="noopener"></a>
-            <a class="btn" id="maruMediaPrivacyLink" href="privacy.html" target="_blank" rel="noopener"></a>
-            <a class="btn" id="maruMediaRefundLink" href="refund-policy.html" target="_blank" rel="noopener"></a>
+            <a class="btn" id="maruMediaTermsLink" href="maru-windows-terms.html" target="_blank" rel="noopener"></a>
+            <a class="btn" id="maruMediaPrivacyLink" href="maru-windows-privacy.html" target="_blank" rel="noopener"></a>
+            <a class="btn" id="maruMediaRefundLink" href="maru-windows-refund.html" target="_blank" rel="noopener"></a>
+          </div>
+        </div>
+      </div>
+      <div class="maruPricingBlock" id="maruMediaPricing">
+        <h3 id="maruPricingTitle">MARU 미디어 AI 서비스 결제</h3>
+        <p id="maruPricingIntro">PG/카드 결제 승인 및 연동이 완료되면 결제 기능이 활성화됩니다.</p>
+        <div class="maruPricingList">
+          <div class="maruPricingItem">
+            <b id="maruMonthlyName">AI 자막 생성·번역 월 이용권</b>
+            <span class="maruPricingPrice">USD 9 / month</span>
+            <span class="maruPricingDetail" id="maruMonthlyDetail">매월 자동 갱신됩니다. 다음 결제 전에 언제든 구독 취소를 요청할 수 있습니다.</span>
+          </div>
+          <div class="maruPricingItem">
+            <b id="maruCreditName">AI 크레딧 추가 팩</b>
+            <span class="maruPricingPrice">USD 5 / one-time</span>
+            <span class="maruPricingDetail" id="maruCreditDetail">AI 자막 생성·번역용 추가 크레딧이며 자동 갱신되지 않습니다.</span>
           </div>
         </div>
       </div>
@@ -1648,6 +1672,219 @@ Object.keys(MARU_MEDIA_POLICY_I18N).forEach(function(code){
 });
 
 
+const MARU_PRICING_I18N = {
+  "ko": {
+    "title": "MARU 미디어 AI 서비스 결제",
+    "monthly": "AI 자막 생성·번역 월 이용권",
+    "monthlyDetail": "매월 자동 갱신됩니다. 다음 결제 전에 언제든 구독 취소를 요청할 수 있습니다.",
+    "credit": "AI 크레딧 추가 팩",
+    "creditDetail": "AI 자막 생성·번역용 추가 크레딧이며 자동 갱신되지 않습니다."
+  },
+  "en": {
+    "title": "MARU Media AI checkout",
+    "monthly": "AI subtitle generation and translation — monthly",
+    "monthlyDetail": "Renews automatically each month. You may request cancellation before the next billing date.",
+    "credit": "Additional AI credit pack",
+    "creditDetail": "Additional credits for AI subtitle generation and translation. This purchase does not renew."
+  },
+  "zh": {
+    "title": "MARU 媒体 AI 服务结账",
+    "monthly": "AI 字幕生成与翻译月度服务",
+    "monthlyDetail": "每月自动续订，可在下次扣款前申请取消。",
+    "credit": "AI 额外点数包",
+    "creditDetail": "用于 AI 字幕生成与翻译的额外点数，不会自动续订。"
+  },
+  "zht": {
+    "title": "MARU 媒體 AI 服務結帳",
+    "monthly": "AI 字幕產生與翻譯月度服務",
+    "monthlyDetail": "每月自動續訂，可在下次扣款前申請取消。",
+    "credit": "AI 額外點數包",
+    "creditDetail": "用於 AI 字幕產生與翻譯的額外點數，不會自動續訂。"
+  },
+  "ja": {
+    "title": "MARU メディアAIサービス決済",
+    "monthly": "AI字幕生成・翻訳 月額サービス",
+    "monthlyDetail": "毎月自動更新されます。次回請求前に解約を申請できます。",
+    "credit": "AI追加クレジットパック",
+    "creditDetail": "AI字幕生成・翻訳用の追加クレジットです。自動更新はありません。"
+  },
+  "es": {
+    "title": "Pago de servicios de IA de MARU Media",
+    "monthly": "Subtítulos y traducción con IA — mensual",
+    "monthlyDetail": "Se renueva automáticamente cada mes. Puede solicitar la cancelación antes del próximo cobro.",
+    "credit": "Paquete adicional de créditos de IA",
+    "creditDetail": "Créditos adicionales para subtítulos y traducción con IA. No se renueva."
+  },
+  "fr": {
+    "title": "Paiement des services IA de MARU Media",
+    "monthly": "Sous-titrage et traduction IA — mensuel",
+    "monthlyDetail": "Renouvellement automatique chaque mois. Vous pouvez demander l’annulation avant la prochaine échéance.",
+    "credit": "Pack de crédits IA supplémentaires",
+    "creditDetail": "Crédits supplémentaires pour le sous-titrage et la traduction IA, sans renouvellement."
+  },
+  "de": {
+    "title": "MARU Media KI-Zahlung",
+    "monthly": "KI-Untertitel und Übersetzung — monatlich",
+    "monthlyDetail": "Verlängert sich monatlich automatisch. Eine Kündigung kann vor der nächsten Abrechnung beantragt werden.",
+    "credit": "Zusätzliches KI-Guthabenpaket",
+    "creditDetail": "Zusätzliches Guthaben für KI-Untertitel und Übersetzung, ohne automatische Verlängerung."
+  },
+  "ru": {
+    "title": "Оплата ИИ-сервисов MARU Media",
+    "monthly": "ИИ-субтитры и перевод — ежемесячно",
+    "monthlyDetail": "Автоматически продлевается каждый месяц. Отмену можно запросить до следующего платежа.",
+    "credit": "Дополнительный пакет ИИ-кредитов",
+    "creditDetail": "Дополнительные кредиты для ИИ-субтитров и перевода без автопродления."
+  },
+  "pt": {
+    "title": "Pagamento de serviços de IA da MARU Media",
+    "monthly": "Legendas e tradução por IA — mensal",
+    "monthlyDetail": "Renova automaticamente todo mês. O cancelamento pode ser solicitado antes da próxima cobrança.",
+    "credit": "Pacote adicional de créditos de IA",
+    "creditDetail": "Créditos adicionais para legendas e tradução por IA, sem renovação automática."
+  },
+  "it": {
+    "title": "Pagamento servizi IA MARU Media",
+    "monthly": "Sottotitoli e traduzione IA — mensile",
+    "monthlyDetail": "Rinnovo automatico mensile. Puoi richiedere l’annullamento prima del prossimo addebito.",
+    "credit": "Pacchetto crediti IA aggiuntivi",
+    "creditDetail": "Crediti aggiuntivi per sottotitoli e traduzione IA, senza rinnovo automatico."
+  },
+  "ar": {
+    "title": "الدفع مقابل خدمات MARU Media بالذكاء الاصطناعي",
+    "monthly": "إنشاء الترجمات النصية وترجمتها بالذكاء الاصطناعي — شهرياً",
+    "monthlyDetail": "يتجدد تلقائياً كل شهر، ويمكن طلب الإلغاء قبل موعد الفوترة التالي.",
+    "credit": "حزمة أرصدة ذكاء اصطناعي إضافية",
+    "creditDetail": "أرصدة إضافية للترجمة النصية والترجمة، ولا تتجدد تلقائياً."
+  },
+  "vi": {
+    "title": "Thanh toán dịch vụ AI MARU Media",
+    "monthly": "Tạo và dịch phụ đề bằng AI — hàng tháng",
+    "monthlyDetail": "Tự động gia hạn mỗi tháng. Có thể yêu cầu hủy trước kỳ thanh toán tiếp theo.",
+    "credit": "Gói tín dụng AI bổ sung",
+    "creditDetail": "Tín dụng bổ sung cho tạo và dịch phụ đề AI, không tự động gia hạn."
+  },
+  "th": {
+    "title": "ชำระค่าบริการ AI ของ MARU Media",
+    "monthly": "สร้างและแปลคำบรรยายด้วย AI — รายเดือน",
+    "monthlyDetail": "ต่ออายุอัตโนมัติทุกเดือน และขอยกเลิกได้ก่อนรอบเรียกเก็บถัดไป",
+    "credit": "แพ็กเครดิต AI เพิ่มเติม",
+    "creditDetail": "เครดิตเพิ่มเติมสำหรับสร้างและแปลคำบรรยายด้วย AI โดยไม่ต่ออายุอัตโนมัติ"
+  },
+  "id": {
+    "title": "Pembayaran layanan AI MARU Media",
+    "monthly": "Pembuatan dan terjemahan subtitle AI — bulanan",
+    "monthlyDetail": "Diperpanjang otomatis setiap bulan. Pembatalan dapat diminta sebelum tagihan berikutnya.",
+    "credit": "Paket kredit AI tambahan",
+    "creditDetail": "Kredit tambahan untuk subtitle dan terjemahan AI, tanpa perpanjangan otomatis."
+  },
+  "hi": {
+    "title": "MARU Media AI सेवा भुगतान",
+    "monthly": "AI उपशीर्षक निर्माण और अनुवाद — मासिक",
+    "monthlyDetail": "हर महीने स्वतः नवीनीकृत होता है। अगली बिलिंग से पहले रद्द करने का अनुरोध किया जा सकता है।",
+    "credit": "अतिरिक्त AI क्रेडिट पैक",
+    "creditDetail": "AI उपशीर्षक और अनुवाद के अतिरिक्त क्रेडिट; स्वतः नवीनीकरण नहीं।"
+  },
+  "tr": {
+    "title": "MARU Media AI hizmet ödemesi",
+    "monthly": "AI altyazı oluşturma ve çeviri — aylık",
+    "monthlyDetail": "Her ay otomatik yenilenir. Sonraki faturalandırmadan önce iptal talep edilebilir.",
+    "credit": "Ek AI kredi paketi",
+    "creditDetail": "AI altyazı ve çeviri için ek krediler; otomatik yenilenmez."
+  },
+  "fa": {
+    "title": "پرداخت خدمات هوش مصنوعی MARU Media",
+    "monthly": "ساخت و ترجمه زیرنویس با هوش مصنوعی — ماهانه",
+    "monthlyDetail": "هر ماه خودکار تمدید می‌شود و پیش از صورتحساب بعدی می‌توان لغو را درخواست کرد.",
+    "credit": "بسته اعتبار اضافی هوش مصنوعی",
+    "creditDetail": "اعتبار اضافی برای ساخت و ترجمه زیرنویس، بدون تمدید خودکار."
+  },
+  "bn": {
+    "title": "MARU Media AI সেবা পেমেন্ট",
+    "monthly": "AI সাবটাইটেল তৈরি ও অনুবাদ — মাসিক",
+    "monthlyDetail": "প্রতি মাসে স্বয়ংক্রিয় নবায়ন হয়। পরবর্তী বিলিংয়ের আগে বাতিলের অনুরোধ করা যায়।",
+    "credit": "অতিরিক্ত AI ক্রেডিট প্যাক",
+    "creditDetail": "AI সাবটাইটেল ও অনুবাদের অতিরিক্ত ক্রেডিট; স্বয়ংক্রিয় নবায়ন নেই।"
+  },
+  "ur": {
+    "title": "MARU Media AI سروس کی ادائیگی",
+    "monthly": "AI سب ٹائٹل بنانا اور ترجمہ — ماہانہ",
+    "monthlyDetail": "ہر ماہ خودکار تجدید ہوگی۔ اگلی بلنگ سے پہلے منسوخی کی درخواست دی جا سکتی ہے۔",
+    "credit": "اضافی AI کریڈٹ پیک",
+    "creditDetail": "AI سب ٹائٹل اور ترجمے کے اضافی کریڈٹس، خودکار تجدید کے بغیر۔"
+  },
+  "sw": {
+    "title": "Malipo ya huduma za AI za MARU Media",
+    "monthly": "Uundaji na tafsiri ya manukuu kwa AI — kila mwezi",
+    "monthlyDetail": "Hujisasisha kila mwezi. Unaweza kuomba kughairi kabla ya bili inayofuata.",
+    "credit": "Kifurushi cha ziada cha mikopo ya AI",
+    "creditDetail": "Mikopo ya ziada ya manukuu na tafsiri ya AI, bila kujisasisha."
+  },
+  "ta": {
+    "title": "MARU Media AI சேவை கட்டணம்",
+    "monthly": "AI வசன உருவாக்கம் மற்றும் மொழிபெயர்ப்பு — மாதாந்திரம்",
+    "monthlyDetail": "ஒவ்வொரு மாதமும் தானாகப் புதுப்பிக்கப்படும். அடுத்த கட்டணத்திற்கு முன் ரத்து கோரலாம்.",
+    "credit": "கூடுதல் AI கிரெடிட் தொகுப்பு",
+    "creditDetail": "AI வசனமும் மொழிபெயர்ப்பும் செய்ய கூடுதல் கிரெடிட்கள்; தானியங்கி புதுப்பிப்பு இல்லை."
+  },
+  "hu": {
+    "title": "MARU Media AI-szolgáltatás fizetés",
+    "monthly": "AI-feliratkészítés és fordítás — havonta",
+    "monthlyDetail": "Havonta automatikusan megújul. A következő számlázás előtt lemondás kérhető.",
+    "credit": "További AI-kreditcsomag",
+    "creditDetail": "További kreditek AI-feliratokhoz és fordításhoz, automatikus megújítás nélkül."
+  },
+  "ms": {
+    "title": "Pembayaran perkhidmatan AI MARU Media",
+    "monthly": "Penjanaan dan terjemahan sari kata AI — bulanan",
+    "monthlyDetail": "Diperbaharui secara automatik setiap bulan. Pembatalan boleh diminta sebelum bil seterusnya.",
+    "credit": "Pek kredit AI tambahan",
+    "creditDetail": "Kredit tambahan untuk sari kata dan terjemahan AI, tanpa pembaharuan automatik."
+  },
+  "nl": {
+    "title": "Betaling voor MARU Media AI-diensten",
+    "monthly": "AI-ondertiteling en vertaling — maandelijks",
+    "monthlyDetail": "Wordt elke maand automatisch verlengd. Opzegging kan vóór de volgende factuur worden aangevraagd.",
+    "credit": "Extra AI-tegoedpakket",
+    "creditDetail": "Extra tegoed voor AI-ondertiteling en vertaling, zonder automatische verlenging."
+  },
+  "pl": {
+    "title": "Płatność za usługi AI MARU Media",
+    "monthly": "Napisy i tłumaczenie AI — miesięcznie",
+    "monthlyDetail": "Odnawia się automatycznie co miesiąc. Rezygnację można zgłosić przed kolejną płatnością.",
+    "credit": "Dodatkowy pakiet kredytów AI",
+    "creditDetail": "Dodatkowe kredyty do napisów i tłumaczenia AI, bez automatycznego odnowienia."
+  },
+  "sv": {
+    "title": "Betalning för MARU Media AI-tjänster",
+    "monthly": "AI-undertexter och översättning — månadsvis",
+    "monthlyDetail": "Förnyas automatiskt varje månad. Uppsägning kan begäras före nästa debitering.",
+    "credit": "Extra AI-kreditpaket",
+    "creditDetail": "Extra krediter för AI-undertexter och översättning, utan automatisk förnyelse."
+  },
+  "tl": {
+    "title": "Pagbabayad sa MARU Media AI service",
+    "monthly": "AI subtitle at pagsasalin — buwanan",
+    "monthlyDetail": "Awtomatikong nagre-renew bawat buwan. Maaaring humiling ng pagkansela bago ang susunod na billing.",
+    "credit": "Dagdag na AI credit pack",
+    "creditDetail": "Dagdag na credit para sa AI subtitle at pagsasalin, walang awtomatikong renewal."
+  },
+  "uk": {
+    "title": "Оплата ШІ-сервісів MARU Media",
+    "monthly": "ШІ-субтитри та переклад — щомісяця",
+    "monthlyDetail": "Автоматично поновлюється щомісяця. Скасування можна запросити до наступної оплати.",
+    "credit": "Додатковий пакет ШІ-кредитів",
+    "creditDetail": "Додаткові кредити для ШІ-субтитрів і перекладу без автопоновлення."
+  },
+  "uz": {
+    "title": "MARU Media AI xizmati to‘lovi",
+    "monthly": "AI subtitr yaratish va tarjima — oylik",
+    "monthlyDetail": "Har oy avtomatik yangilanadi. Keyingi to‘lovdan oldin bekor qilish so‘ralishi mumkin.",
+    "credit": "Qo‘shimcha AI kredit paketi",
+    "creditDetail": "AI subtitr va tarjima uchun qo‘shimcha kreditlar, avtomatik yangilanishsiz."
+  }
+};
+
 const RTL = new Set(['ar','fa','ur']);
 function getLang(){
   try{
@@ -1705,6 +1942,13 @@ function render(lang){
   fillText('maruMediaTermsLink', mediaPolicy.terms);
   fillText('maruMediaPrivacyLink', mediaPolicy.privacy);
   fillText('maruMediaRefundLink', mediaPolicy.refund);
+  const pricing=MARU_PRICING_I18N[lang] || MARU_PRICING_I18N.en;
+  fillText('maruPricingTitle', pricing.title);
+  fillText('maruPricingIntro', (t.paymentItems && t.paymentItems[0]) || 'Payment becomes available after PG/card approval and integration are complete.');
+  fillText('maruMonthlyName', pricing.monthly);
+  fillText('maruMonthlyDetail', pricing.monthlyDetail);
+  fillText('maruCreditName', pricing.credit);
+  fillText('maruCreditDetail', pricing.creditDetail);
   fillText('footer', t.footer);
   document.querySelectorAll('[data-i18n-btn]').forEach(a=>a.textContent=t.btnDownload||'Download');
 }
@@ -2234,6 +2478,10 @@ window.addEventListener("message",function(ev){
 });
 </script>
 
+<script>
+/* The MARU policy links are already rendered beside the download guide. */
+window.__MARU_WINDOWS_POLICY_LINKS_V1__ = true;
+</script>
 <script defer src="/assets/js/igdc-qna-storage-bridge.js?v=20260628qa3-final7"></script>
 </body>
 </html>
