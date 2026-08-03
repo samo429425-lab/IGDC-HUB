@@ -17,8 +17,9 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { authorizeAiAccess, bearerToken } = require("./lib/maru-ai-access-control");
 
-const VERSION = "igdc-qa-proxy-v1.2.1-canonical-thread-store";
+const VERSION = "igdc-qa-proxy-v1.2.2-public-template-secure-ai";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
@@ -38,6 +39,33 @@ function safeNum(v, d){ const n = Number(v); return Number.isFinite(n) ? n : d; 
 function json(statusCode, body){ return { statusCode, headers: Object.assign({ "Content-Type":"application/json; charset=utf-8" }, CORS), body: JSON.stringify(body) }; }
 function hash(v){ return crypto.createHash("sha1").update(String(v||"")).digest("hex").slice(0,16); }
 function nowIso(){ return new Date().toISOString(); }
+
+const QA_RATE_STATE = new Map();
+function requestIp(event){
+  const headers = event && event.headers || {};
+  const raw = headers["x-nf-client-connection-ip"] || headers["X-Nf-Client-Connection-Ip"] || headers["x-forwarded-for"] || "unknown";
+  return String(raw || "unknown").split(",")[0].trim().slice(0,96) || "unknown";
+}
+function qaRateAllowed(event){
+  const now = Date.now();
+  const configured = Number(process.env.IGDC_QA_PUBLIC_RPM);
+  const limit = Number.isFinite(configured) && configured > 0 ? Math.min(120, Math.floor(configured)) : 12;
+  const key = requestIp(event);
+  const row = QA_RATE_STATE.get(key) || { startedAt: now, count: 0 };
+  if (now - row.startedAt >= 60 * 1000) { row.startedAt = now; row.count = 0; }
+  row.count += 1;
+  QA_RATE_STATE.set(key, row);
+  return row.count <= limit;
+}
+async function canUseOpenAiForQa(event){
+  if (!bearerToken(event)) return false;
+  try {
+    await authorizeAiAccess(event, { purpose: "qa-support", allowPaid: false, maximumBytes: 64 * 1024 });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 async function fetchCompat(url, init){
   if (typeof fetch === "function") return fetch(url, init);
@@ -150,7 +178,7 @@ function classify(question, meta, k){
   return { category, priority, admin_required: !!adminRequired, status: adminRequired ? "pending" : "answered", ai_answered: true, confidence: category === "general" ? 0.62 : 0.8 };
 }
 
-async function answerFor(question, meta, route, k){
+async function answerFor(question, meta, route, k, allowOpenAi){
   const lang = normalizeLang((meta && meta.lang) || "ko");
   const pack = QA_I18N[lang] || QA_I18N.en;
   const bodies = pack.b || QA_I18N.en.b;
@@ -167,7 +195,7 @@ async function answerFor(question, meta, route, k){
 
   const adminNote = route.admin_required ? pack.admin : pack.done;
   const fallback = [pack.hello, pack.intro, "", body, "", adminNote, "", pack.thanks].join("\n");
-  const ai = await openAiAnswer(question, meta, route, k, fallback);
+  const ai = allowOpenAi === true ? await openAiAnswer(question, meta, route, k, fallback) : null;
   return ai || fallback;
 }
 
@@ -503,6 +531,9 @@ exports.handler = async function(event){
     }
 
     if (method === "POST") {
+      if (!qaRateAllowed(event)) return json(429, { ok:false, version:VERSION, error:"rate_limited" });
+      const rawBytes = Buffer.byteLength(String(event.body || ""), event.isBase64Encoded ? "base64" : "utf8");
+      if (rawBytes > 64 * 1024) return json(413, { ok:false, version:VERSION, error:"request_too_large" });
       const body = parseBody(event);
       if (low(body.action) === "admin-update") {
         return json(403, { ok:false, version:VERSION, error:"Admin Q&A updates require a verified server-side admin session." });
@@ -525,7 +556,11 @@ exports.handler = async function(event){
       };
       const k = readKnowledge();
       const route = classify(question, meta, k);
-      const answer = await answerFor(question, meta, route, k);
+      const allowOpenAi = await canUseOpenAiForQa(event);
+      const answerMode = allowOpenAi ? "verified-owner-admin-openai" : "public-guidance-template";
+      const answer = await answerFor(question, meta, route, k, allowOpenAi);
+      meta.answer_mode = answerMode;
+      console.log("[qa-proxy]", "answer_mode=", answerMode, "category=", route.category);
       const record = Object.assign({
         project,
         page_id: pageId,
@@ -547,6 +582,7 @@ exports.handler = async function(event){
         priority: route.priority,
         category: route.category,
         status: route.status,
+        answer_mode: answerMode,
         saved,
         record:persistedRow,
         error: stored ? null : "Q&A answer was generated, but the question was not saved."

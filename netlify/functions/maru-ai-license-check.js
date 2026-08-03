@@ -1,36 +1,102 @@
 'use strict';
 
-const OWNER_DEFAULTS = ['owner', 'admin', 'samo429425@gmail.com'];
+/*
+ * MARU AI license/status gate.
+ *
+ * This endpoint never trusts identity, email, role, license, paid or subscription
+ * values supplied by the player. Access is derived only from a signed bearer
+ * session and current server-side role state.
+ */
+const {
+  accessErrorResponse,
+  authorizeAiAccess,
+  bearerToken,
+  pgExecutionReady,
+  publicServiceState
+} = require('./lib/maru-ai-access-control');
+
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': process.env.MARU_AI_CORS_ALLOW_ORIGIN || 'https://igdcglobal.com',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-MARU-Client, X-MARU-Client-Version',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Content-Type': 'application/json; charset=utf-8',
-  'Cache-Control': 'no-store'
+  'Cache-Control': 'no-store',
+  'Vary': 'Origin',
+  'X-Content-Type-Options': 'nosniff'
 };
-function json(statusCode, body) { return { statusCode, headers: CORS_HEADERS, body: JSON.stringify(body) }; }
-function splitEnv(name) { return String(process.env[name] || '').split(',').map((x) => x.trim()).filter(Boolean); }
-function norm(value) { return String(value || '').trim().toLowerCase(); }
-function parseBody(event) { try { const raw = event.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString('utf8') : String(event.body || ''); return raw.trim() ? JSON.parse(raw) : {}; } catch { return {}; } }
-function ownerSet() { return new Set([...OWNER_DEFAULTS, ...splitEnv('MARU_AI_OWNER_IDENTITIES')].map(norm)); }
-function paidSet() { return new Set(splitEnv('MARU_AI_PAID_IDENTITIES').map(norm)); }
-function paymentUrl(identity, deviceId) {
-  const base = process.env.MARU_AI_PAYMENT_URL || 'https://igdcglobal.com/maru-player/ai-pro';
-  try { const url = new URL(base); if (identity) url.searchParams.set('license_identity', identity); if (deviceId) url.searchParams.set('device_id', deviceId); url.searchParams.set('app', 'maru-media-player'); return url.toString(); } catch { return base; }
+function json(statusCode, body) { return { statusCode, headers: CORS_HEADERS, body: JSON.stringify(body || {}) }; }
+function paymentUrl() {
+  if (!pgExecutionReady()) return '';
+  const raw = String(process.env.MARU_AI_PAYMENT_URL || 'https://igdcglobal.com/maru-player/ai-pro').trim();
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:') return '';
+    url.searchParams.set('app', 'maru-media-player');
+    return url.toString();
+  } catch (_) { return ''; }
 }
+function preparingResponse() {
+  return Object.assign({
+    ok: true,
+    active: false,
+    allowed: false,
+    status: 'preparing',
+    plan: 'PREPARING',
+    role: 'guest_or_member',
+    roles: [],
+    message: 'AI 자막·번역·더빙 유료 서비스는 PG 승인 및 운영 연결을 준비 중입니다.',
+    paymentUrl: ''
+  }, publicServiceState());
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS_HEADERS, body: '' };
-  const body = event.httpMethod === 'GET' ? Object.fromEntries(new URLSearchParams(event.rawQuery || '')) : parseBody(event);
-  const identity = String(body.identity || body.email || body.user_id || body.member_id || body.licenseKey || '').trim();
-  const key = norm(identity);
-  if (key && ownerSet().has(key)) {
-    return json(200, { ok: true, active: true, allowed: true, status: 'active', plan: 'OWNER_ADMIN', role: 'owner', roles: ['owner','admin'], source: 'owner-allowlist', publicServiceState: 'preparing', message: '' });
+  if (!['GET', 'POST'].includes(String(event.httpMethod || '').toUpperCase())) {
+    return json(405, { ok: false, error: 'method_not_allowed' });
   }
-  // PG approval is not active. Do not expose a payment URL, paid allowlist,
-  // or a provisional member upgrade path to general users.
-  return json(200, {
-    ok: true, active: false, allowed: false, status: 'preparing', plan: 'PREPARING',
-    role: 'guest_or_member', roles: [], publicServiceState: 'preparing',
-    message: 'AI 연동을 위한 유료버전은 준비 중입니다.', paymentUrl: ''
-  });
+
+  // Public/legacy identity checks never grant access. They receive only the
+  // non-sensitive preparing state until the player supplies a signed session.
+  if (!bearerToken(event)) return json(200, preparingResponse());
+
+  try {
+    const access = await authorizeAiAccess(event, { purpose: 'license-check', maximumBytes: 64 * 1024 });
+    return json(200, Object.assign({
+      ok: true,
+      active: true,
+      allowed: true,
+      status: 'active',
+      plan: access.plan,
+      role: access.role,
+      roles: access.roles,
+      accessClass: access.accessClass,
+      message: '',
+      paymentUrl: ''
+    }, publicServiceState()));
+  } catch (error) {
+    const classified = accessErrorResponse(error);
+    if (classified.code === 'ai_public_service_preparing') return json(200, preparingResponse());
+    if (classified.code === 'ai_membership_required') {
+      return json(200, Object.assign({
+        ok: true,
+        active: false,
+        allowed: false,
+        status: 'membership_required',
+        plan: 'PAID_MEMBERSHIP_REQUIRED',
+        role: 'member',
+        roles: [],
+        message: 'MARU AI 월 회원권 또는 유효한 유료 이용권이 필요합니다.',
+        paymentUrl: paymentUrl()
+      }, publicServiceState()));
+    }
+    return json(classified.statusCode, {
+      ok: false,
+      active: false,
+      allowed: false,
+      status: classified.code,
+      error: classified.code,
+      message: classified.message,
+      paymentUrl: ''
+    });
+  }
 };

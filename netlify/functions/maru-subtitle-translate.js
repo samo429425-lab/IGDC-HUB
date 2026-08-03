@@ -1,5 +1,7 @@
 'use strict';
 
+const { authorizeAiAccess, publicServiceState } = require('./lib/maru-ai-access-control');
+
 /*
  * MARU subtitle translation — SAFE53
  * One bounded SRT group per request. The desktop application owns the long-job
@@ -21,7 +23,7 @@ const DEFAULT_ALLOWED_ROLES = Object.freeze(['owner', 'admin', 'super_admin']);
 const LANG_NAMES = Object.freeze({
   ko: 'Korean', en: 'English', zh: 'Simplified Chinese', zht: 'Traditional Chinese', ja: 'Japanese', es: 'Spanish', fr: 'French', de: 'German', ru: 'Russian', pt: 'Portuguese', it: 'Italian', ar: 'Arabic', vi: 'Vietnamese', th: 'Thai', id: 'Indonesian', hi: 'Hindi', tr: 'Turkish', ta: 'Tamil', sw: 'Swahili', ur: 'Urdu', bn: 'Bengali', fa: 'Persian', hu: 'Hungarian', ms: 'Malay', nl: 'Dutch', pl: 'Polish', sv: 'Swedish', tl: 'Filipino', uk: 'Ukrainian', uz: 'Uzbek'
 });
-function headers(extra = {}) { return { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-MARU-Client, X-MARU-Client-Version', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Cache-Control': 'no-store', ...extra }; }
+function headers(extra = {}) { return { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': process.env.MARU_AI_CORS_ALLOW_ORIGIN || 'https://igdcglobal.com', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-MARU-Client, X-MARU-Client-Version', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Cache-Control': 'no-store', ...extra }; }
 function json(statusCode, body) { return { statusCode, headers: headers(), body: JSON.stringify(body || {}) }; }
 function normalizeLanguage(value) {
   const raw = String(value || '').trim().toLowerCase().replace(/_/g, '-');
@@ -68,42 +70,10 @@ function authVerifyUrl() {
   return url.toString();
 }
 async function verifyPaidAccess(event) {
-  const token = bearerToken(event);
-  if (!token) throw accessError(401, 'authentication_required', 'A valid signed-in account is required for AI subtitle translation.');
-
-  let response;
-  try {
-    response = await fetch(authVerifyUrl(), {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      }
-    });
-  } catch {
-    throw accessError(503, 'authorization_service_unavailable', 'AI authorization could not be verified.');
-  }
-
-  let payload = {};
-  try { payload = await response.json(); } catch {}
-
-  if (response.status === 401) throw accessError(401, 'authentication_invalid', 'The login token is missing, invalid, or expired.');
-  if (response.status === 403) throw accessError(403, 'account_forbidden', 'This account is not permitted to use AI subtitle translation.');
-  if (!response.ok || !payload?.ok || !payload?.me) {
-    throw accessError(503, 'authorization_service_unavailable', 'AI authorization could not be verified.');
-  }
-
-  const me = payload.me || {};
-  const roles = uniqueRoles([...(Array.isArray(me.roles) ? me.roles : []), me.role]);
-  const allow = allowedRoles();
-  if (!roles.some((role) => allow.has(role))) {
-    throw accessError(403, 'ai_plan_required', 'AI subtitle translation is currently limited to authorized owner/admin accounts.');
-  }
-
-  return {
-    userId: String(me.user_id || ''),
-    roles
-  };
+  return authorizeAiAccess(event, {
+    purpose: 'translate-subtitle',
+    maximumBytes: Math.max(64 * 1024, MAX_SUBTITLE_CHARS * 4)
+  });
 }
 function parseBody(event) { try { const raw = event?.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString('utf8') : String(event?.body || ''); return raw.trim() ? JSON.parse(raw) : {}; } catch (error) { const e = new Error('invalid_json'); e.statusCode = 400; throw e; } }
 function openAiError(status, body) { const e = new Error(`openai_${status}: ${String(body || '').slice(0, 600)}`); e.statusCode = status; return e; }
@@ -147,6 +117,9 @@ async function translateOnce(apiKey, subtitle, targetLang, targetName, fileName)
 function classifyError(error) {
   const status = Number(error?.statusCode || 500); const msg = String(error?.message || error || 'translate_failed');
   if (error?.serverCode) return { statusCode: status, code: String(error.serverCode), error: msg.slice(0, 700) };
+  if (error?.code && /^(authentication_|account_forbidden|authorization_|auth_verifier_|privileged_role_required|ai_public_service_preparing|ai_membership_required|ai_rate_limited|ai_request_too_large)/.test(String(error.code))) {
+    return { statusCode: status, code: String(error.code), error: msg.slice(0, 700) };
+  }
   if (status === 429) return { statusCode: 429, code: 'openai_rate_limit', error: 'Translation service rate limit reached. Retry this subtitle group after a short delay.' };
   if (status === 504 || /timeout/i.test(msg)) return { statusCode: 504, code: 'openai_timeout', error: 'The current subtitle translation group timed out. Retry this group.' };
   if (/api.?key|unauthor/i.test(msg)) return { statusCode: status === 500 ? 401 : status, code: 'openai_api_key', error: 'OpenAI API key is missing or invalid.' };
@@ -155,7 +128,7 @@ function classifyError(error) {
 }
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: headers(), body: '' };
-  if (event.httpMethod === 'GET') return json(200, { ok: true, service: 'maru-subtitle-translate', version: 'safe53-authenticated-single-group', maxSubtitleChars: MAX_SUBTITLE_CHARS, method: 'POST_REQUIRED', authentication: 'bearer-required' });
+  if (event.httpMethod === 'GET') return json(200, Object.assign({ ok: true, service: 'maru-subtitle-translate', version: 'safe54-role-and-paid-membership-gate', maxSubtitleChars: MAX_SUBTITLE_CHARS, method: 'POST_REQUIRED', authentication: 'signed-bearer-required' }, publicServiceState()));
   if (event.httpMethod !== 'POST') return json(405, { ok: false, code: 'method_not_allowed', error: 'method_not_allowed' });
   try {
     await verifyPaidAccess(event);

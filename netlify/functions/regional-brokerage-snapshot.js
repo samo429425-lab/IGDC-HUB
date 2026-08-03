@@ -5,7 +5,10 @@ exports.handler=async function(event){
   try{
     const p=(event&&event.queryStringParameters)||{};
     if(String(p.hub||"distribution").toLowerCase()!=="distribution")return json(400,{status:"blocked",code:"DISTRIBUTION_HUB_ONLY"});
-    const result=await Selector.runSelection(event,p);
+    // Public snapshot reads are cache/snapshot only. Query parameters may not
+    // enable private collection, live supplier discovery, or OpenAI localization.
+    const safeParams=Object.assign({},p,{privateCollection:false,noLiveDiscovery:true});
+    const result=await Selector.runSelection(event,safeParams);
     if(!result.snapshot)return json(204,{status:"empty",engine:Selector.VERSION,meta:result.meta,geo:result.geo});
     return json(200,result.snapshot);
   }catch(e){return json(200,{status:"fallback",engine:Selector.VERSION,error:String(e&&e.message||e)});}

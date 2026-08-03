@@ -665,10 +665,11 @@ async function runSelection(event,params){
   const adminPolicyHints=policyHints(requested.policyHints);
   const geo=explicitCountry?{country:explicitCountry,region:Core.normalizeRegion(requested.region||requested.targetRegion,explicitCountry),city:"",countryName:Core.COUNTRY_NAMES[explicitCountry]||explicitCountry,categoryWeights,signalPlanVersion:text(requested.signalPlanVersion),policyHints:adminPolicyHints}:Object.assign({},Core.parseGeo(event,requested),{categoryWeights,signalPlanVersion:text(requested.signalPlanVersion),policyHints:adminPolicyHints});
   const privateCollection=requested.privateCollection===true||String(requested.privateCollection||"").toLowerCase()==="true";
+  const noLiveDiscovery=requested.noLiveDiscovery===true||String(requested.noLiveDiscovery||"").toLowerCase()==="true";
   const privateLimit=Math.max(1,Math.min(50,Number(requested.privateLimit||requested.maxCandidates||20)||20));
   const key=cacheKey(geo,privateCollection?"private-supplier":"front");const cached=getCache(key);if(cached)return Object.assign({},cached,{meta:Object.assign({},cached.meta||{},{cache:"hit"})});
   const started=Date.now(),stored=Core.loadStoredCandidates();let selected=Core.selection(stored.items,geo),discovery={items:[],trace:[]},checked=[],privateReviewItems=[];
-  if((privateCollection||selected.accepted.length<6)&&geo.country!=="GLOBAL"){
+  if(!noLiveDiscovery&&(privateCollection||selected.accepted.length<6)&&geo.country!=="GLOBAL"){
     discovery=await runSanmaruDiscovery(event,geo,privateLimit);
     checked=await inspectLive(discovery.items,geo);
     if(privateCollection)privateReviewItems=privateReviewPool(discovery.items,checked,geo,privateLimit);
@@ -684,7 +685,7 @@ async function runSelection(event,params){
       marketSignals:{applied:Object.values(categoryWeights).some(value=>value!==0),categoryWeights,signalPlanVersion:text(requested.signalPlanVersion),categoryKeys:queryCategories(geo).map(index=>CATEGORY_KEYS[index])},
       administratorPolicy:{applied:adminPolicyHints.priorityDirections.length>0||adminPolicyHints.avoidDirections.length>0||adminPolicyHints.manualPriorityTargets.length>0||adminPolicyHints.manualBlockedTargets.length>0,priorityDirections:adminPolicyHints.priorityDirections,avoidDirections:adminPolicyHints.avoidDirections,manualPriorityTargets:adminPolicyHints.manualPriorityTargets,manualBlockedTargets:adminPolicyHints.manualBlockedTargets,manualPrecedence:true},
       privateReview:{enabled:privateCollection,entityKind:"supplier",raw:discovery.items.length,inspected:checked.length,count:privateReviewItems.length,researchEligible:privateReviewItems.filter(item=>plain(item&&item.brokerageVerification).supplierResearchEligible===true).length,evidenceReady:privateReviewItems.filter(item=>plain(item&&item.brokerageVerification).supplierReviewEligible===true).length,productPageImport:false,publicPublication:false},
-      elapsedMs:Date.now()-started,hasSnapshot:!!snapshot}
+      liveDiscoveryAllowed:!noLiveDiscovery,elapsedMs:Date.now()-started,hasSnapshot:!!snapshot}
   };
   return setCache(key,result);
 }
