@@ -377,7 +377,7 @@ function policyPageHref(value) {
   return '';
 }
 
-function changeLanguage(lang) {
+function renderIndexLanguage(lang) {
   const nextLang =
     (lang && pageMap[lang]) ? lang :
     (currentLang && pageMap[currentLang]) ? currentLang :
@@ -389,6 +389,11 @@ function changeLanguage(lang) {
   if (document.documentElement) {
     document.documentElement.setAttribute('lang', currentLang);
   }
+
+  try{
+    var sel = document.querySelector('.language-select');
+    if (sel) sel.value = currentLang;
+  }catch(e){}
 
   // 1) Title/subtitle
   try{
@@ -425,6 +430,12 @@ function changeLanguage(lang) {
       }
     });
   }catch(e){}
+
+  return currentLang;
+}
+
+function changeLanguage(lang) {
+  renderIndexLanguage(lang);
 
   // 3) Keep current page index, map to page, set iframe
   try{
@@ -582,13 +593,26 @@ function loadPage(index, event, options){
 
 window.addEventListener('popstate', function(ev){
   try{
+    var route = detectPublicRoute();
+    var queryLang = (new URLSearchParams(location.search).get('lang') || '').toLowerCase();
+    var restoredLang =
+      (ev.state && ev.state.lang && pageMap[ev.state.lang]) ? ev.state.lang :
+      (queryLang && pageMap[queryLang]) ? queryLang :
+      (route && route.lang && pageMap[route.lang]) ? route.lang :
+      currentLang;
+
+    // Browser back/forward changes the URL without firing the language picker.
+    // Restore the index title, picker and navigation before restoring the frame.
+    renderIndexLanguage(restoredLang);
+
     if (ev.state && ev.state.frameSrc) {
-      if (ev.state.lang && pageMap[ev.state.lang]) currentLang = ev.state.lang;
       if (Number.isInteger(ev.state.igdcPage) && ev.state.igdcPage >= 0) currentPageIndex = ev.state.igdcPage;
       restoreFrameWithoutHistory(ev.state.frameSrc);
       return;
     }
-    var idx = ev.state && Number.isInteger(ev.state.igdcPage) ? ev.state.igdcPage : 0;
+    var idx = ev.state && Number.isInteger(ev.state.igdcPage)
+      ? ev.state.igdcPage
+      : (route && Number.isInteger(route.index) ? route.index : 0);
     loadPage(idx, null, {skipHistory:true});
   }catch(e){}
 });

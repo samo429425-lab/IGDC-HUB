@@ -212,7 +212,7 @@ body.rtl .support-shell{direction:ltr !important;}
     <p class="subtitle" id="subtitle"></p>
     <div class="legalOperator" aria-label="Legal operator">
       <strong>International General Trading Company</strong>
-      <span>IGDC Global (국제종합상사)</span>
+      <span id="legalOperatorBrand">IGDC Global (국제종합상사)</span>
     </div>
     <div class="guideLines">
       <p id="upgradeLine"></p>
@@ -1656,6 +1656,11 @@ Object.keys(MARU_MEDIA_POLICY_I18N).forEach(function(code){
 
 
 const RTL = new Set(['ar','fa','ur']);
+const LEGAL_OPERATOR_LOCAL_NAME = {
+  zh:'国际综合商社',
+  zht:'國際綜合商社',
+  ja:'国際総合商社'
+};
 function getLang(){
   try{
     const q = new URLSearchParams(location.search).get('lang');
@@ -1681,6 +1686,7 @@ function render(lang){
   document.documentElement.lang=lang;
   document.body.classList.toggle('rtl', RTL.has(lang));
   document.title=t.title || 'IGDC Help';
+  fillText('legalOperatorBrand', 'IGDC Global ('+(LEGAL_OPERATOR_LOCAL_NAME[lang]||'국제종합상사')+')');
   fillText('title', t.title);
   fillText('subtitle', t.subtitle);
   fillText('upgradeLine', t.upgradeLine);
