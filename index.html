@@ -352,15 +352,11 @@ function policyPageHref(value) {
   return '';
 }
 
-function changeLanguage(lang, options) {
-  options = options || {};
-  const previousLang = currentLang;
+function changeLanguage(lang) {
   const nextLang =
     (lang && pageMap[lang]) ? lang :
     (currentLang && pageMap[currentLang]) ? currentLang :
     detectPreferredLang();
-
-  if (!options.initial && !options.force && nextLang === previousLang) return false;
 
   currentLang = nextLang || "ko";
 
@@ -368,10 +364,6 @@ function changeLanguage(lang, options) {
   if (document.documentElement) {
     document.documentElement.setAttribute('lang', currentLang);
   }
-  try{
-    var languagePicker = document.querySelector('.language-select');
-    if (languagePicker) languagePicker.value = currentLang;
-  }catch(e){}
 
   // 1) Title/subtitle
   try{
@@ -444,16 +436,11 @@ function changeLanguage(lang, options) {
       publicTarget = withLanguage(publicPageHref(page, currentPageIndex), currentLang);
     }
 
-    if (options.frameTarget) frameTarget = options.frameTarget;
-
-    if (!options.skipHistory && !/\/callback\.html$/i.test(location.pathname)) {
-      var state = {igdcPage:stateIndex, lang:currentLang, frameSrc:frameTarget};
-      if (options.initial) history.replaceState(state, '', publicTarget);
-      else history.pushState(state, '', publicTarget);
+    if (!/\/callback\.html$/i.test(location.pathname)) {
+      history.replaceState({igdcPage:stateIndex, lang:currentLang, frameSrc:frameTarget}, '', publicTarget);
     }
     restoreFrameWithoutHistory(frameTarget);
   }catch(e){}
-  return false;
 }
 
 function publicPageHref(page, index){
@@ -472,13 +459,37 @@ function restoreFrameWithoutHistory(src){
     var f = document.getElementById('mainFrame');
     if (!f || !src) return;
     var target = new URL(src, location.origin);
+    var targetKey = target.pathname + target.search + target.hash;
+    var now = Date.now();
     try{
       var live = new URL(f.contentWindow.location.href, location.origin);
-      if (live.pathname + live.search + live.hash === target.pathname + target.search + target.hash) return;
-      f.contentWindow.location.replace(target.pathname + target.search + target.hash);
+      if (live.pathname + live.search + live.hash === targetKey) {
+        f.__igdcPendingSrc = '';
+        f.__igdcPendingAt = 0;
+        return;
+      }
+    }catch(e){}
+    if (f.__igdcPendingSrc === targetKey && now - (f.__igdcPendingAt || 0) < 8000) return;
+    if (!f.__igdcPendingGuardBound) {
+      f.__igdcPendingGuardBound = true;
+      f.addEventListener('load', function(){
+        try{
+          if (!f.__igdcPendingSrc) return;
+          var loaded = new URL(f.contentWindow.location.href, location.origin);
+          if (loaded.pathname + loaded.search + loaded.hash === f.__igdcPendingSrc) {
+            f.__igdcPendingSrc = '';
+            f.__igdcPendingAt = 0;
+          }
+        }catch(e){}
+      });
+    }
+    f.__igdcPendingSrc = targetKey;
+    f.__igdcPendingAt = now;
+    try{
+      f.contentWindow.location.replace(targetKey);
       return;
     }catch(e){}
-    f.src = target.pathname + target.search + target.hash;
+    f.src = targetKey;
   }catch(e){}
 }
 
@@ -547,12 +558,9 @@ function loadPage(index, event, options){
 window.addEventListener('popstate', function(ev){
   try{
     if (ev.state && ev.state.frameSrc) {
+      if (ev.state.lang && pageMap[ev.state.lang]) currentLang = ev.state.lang;
       if (Number.isInteger(ev.state.igdcPage) && ev.state.igdcPage >= 0) currentPageIndex = ev.state.igdcPage;
-      if (ev.state.lang && pageMap[ev.state.lang]) {
-        changeLanguage(ev.state.lang, {skipHistory:true, force:true, frameTarget:ev.state.frameSrc});
-      } else {
-        restoreFrameWithoutHistory(ev.state.frameSrc);
-      }
+      restoreFrameWithoutHistory(ev.state.frameSrc);
       return;
     }
     var idx = ev.state && Number.isInteger(ev.state.igdcPage) ? ev.state.igdcPage : 0;
@@ -563,6 +571,7 @@ window.addEventListener('popstate', function(ev){
   
 <script>
 (function(){
+  var waitingForAuthRestore = false;
 
   function applyBootstrapLang(){
     try{
@@ -570,18 +579,36 @@ window.addEventListener('popstate', function(ev){
       var queryLang = (new URLSearchParams(location.search).get('lang') || '').toLowerCase();
       var saved = localStorage.getItem('igdc_lang');
       var bootstrapLang = (queryLang && pageMap[queryLang]) ? queryLang : saved;
-      if (typeof changeLanguage === 'function'){
-        changeLanguage((bootstrapLang && pageMap[bootstrapLang]) ? bootstrapLang : currentLang, {initial:true, force:true});
+      if (bootstrapLang && pageMap[bootstrapLang]){
+        currentLang = bootstrapLang;
+        document.documentElement.setAttribute('lang', bootstrapLang);
       }
+      // 드롭다운 동기화
+      var sel = document.querySelector('.language-select');
+      if (sel) sel.value = currentLang;
+      // 라벨/타이틀/iframe 적용
+      if (typeof changeLanguage === 'function'){ changeLanguage(currentLang); }
     }catch(e){}
   }
 
   function bootstrapLang(){
-    if (window.__IGDC_LANG_BOOTSTRAPPED__) return;
+    try{
+      var restore = window.__IGDC_AUTH_RESTORE_PROMISE__;
+      if (!window.__IGDC_AUTH_RESTORE_DONE__ && restore && typeof restore.then === 'function') {
+        if (waitingForAuthRestore) return;
+        waitingForAuthRestore = true;
+        Promise.resolve(restore).catch(function(){}).then(function(){
+          waitingForAuthRestore = false;
+          applyBootstrapLang();
+        });
+        return;
+      }
+    }catch(e){}
     applyBootstrapLang();
-    window.__IGDC_LANG_BOOTSTRAPPED__ = true;
   }
   document.addEventListener('DOMContentLoaded', bootstrapLang);
+  document.addEventListener('osauth:ready', bootstrapLang);
+  document.addEventListener('osauth:done', bootstrapLang, true);
 })();
 </script>
 <style>
@@ -2309,13 +2336,13 @@ function applyRoleUI(role) {
   // Restore on boot and on auth events
   function restore(){
     try{
-      if (window.__IGDC_LANG_BOOTSTRAPPED__) return;
       var queryLang = (new URLSearchParams(location.search).get('lang') || '').toLowerCase();
       applyLang((queryLang && pageMap[queryLang]) ? queryLang : (localStorage.getItem(LANG_KEY) || detectPref()));
-      window.__IGDC_LANG_BOOTSTRAPPED__ = true;
     }catch(_){ }
   }
   document.addEventListener("DOMContentLoaded", restore);
+  document.addEventListener("osauth:ready", restore);
+  document.addEventListener("osauth:done", restore, true);
 
   // ===== 2) Double-reload guard around Auth0 callbacks =====
   (function(){
