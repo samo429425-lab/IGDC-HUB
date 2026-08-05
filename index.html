@@ -315,11 +315,12 @@ const titleText = {
 function detectPublicRoute() {
   try {
     const pathname = (location.pathname || '/').replace(/\/$/, '') || '/';
+    if (pathname === '/admin') return { lang: null, index: 7 };
+    if (pathname === '/help') return { lang: null, index: 8 };
     const languages = Object.keys(pageMap || {});
     for (const lang of languages) {
       const pages = pageMap[lang] || [];
-      // Only the seven public front pages have language-specific routes.
-      // Admin/help/policy routes keep their existing standalone contracts.
+      // Only the seven public front pages have language-specific route paths.
       for (let index = 0; index <= 6; index++) {
         if (publicPageHref(pages[index], index) === pathname) {
           return { lang, index };
@@ -469,7 +470,7 @@ function changeLanguage(lang) {
 
 function publicPageHref(page, index){
   if (index === 8) return '/help';
-  if (index === 7) return '/admin.html';
+  if (index === 7) return '/admin';
   var clean = String(page || 'home.html').replace(/^\/+/, '').replace(/\.html(?=([?#]|$))/i, '');
   return '/' + clean;
 }

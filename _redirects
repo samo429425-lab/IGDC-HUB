@@ -218,6 +218,10 @@
 /zht/tour_zht                        /index.html                      200!
 /zht/donation_zht                    /index.html                      200!
 
+# Keep the index shell for shared admin/help public routes.
+/admin                               /index.html                      200!
+/help                                /index.html                      200!
+
 
 /assets/*                     /assets/:splat                       200
 /assets/splat/*               /assets/splat/:splat                 200
@@ -271,7 +275,6 @@
 /callback.html          /index.html                      200
 
 # Stable public URLs for automated domain/product review and direct sharing.
-/help                   /support.html                    200
 /maru-media-player      /support.html                    200
 /pricing                /maru-windows-terms.html         200
 /terms                  /maru-windows-terms.html         200
