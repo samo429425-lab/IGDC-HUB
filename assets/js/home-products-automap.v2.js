@@ -22,9 +22,9 @@
   const ALL_KEYS = KEYS_MAIN.concat(KEYS_RIGHT);
 
   const MAIN_LIMIT = 100;
-  const MAIN_BATCH = 7;
+  const MAIN_BATCH = 20;
   const RIGHT_LIMIT = 80;
-  const RIGHT_BATCH = 5;
+  const RIGHT_BATCH = 20;
 
   const EMPTY_I18N = {
     de: 'Inhalte werden vorbereitet.',
@@ -421,7 +421,8 @@ function bindIncremental(target, items) {
   let offset = 0;
 
   function renderMore() {
-    const end = Math.min(offset + 20, limit, items.length); // 🔥 강제 확장
+    const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
+    const end = Math.min(offset + batch, limit, items.length);
     const frag = document.createDocumentFragment();
 
     for (let i = offset; i < end; i++) {
@@ -435,16 +436,8 @@ function bindIncremental(target, items) {
 
   target.list.innerHTML = '';
 
-  // 초기 렌더링은 1회만 실행한다. 모바일 전체 렌더링 안전판은 그대로 유지한다.
+  // 초기 렌더링은 화면 크기와 관계없이 한 묶음만 실행한다.
   renderMore();
-
-  // 🔥 모바일 대응: 강제 전체 렌더
-  if (window.innerWidth <= 768) {
-    while (offset < items.length && offset < limit) {
-      renderMore();
-    }
-    return;
-  }
 
   const scroller = target.scroller;
   if (!scroller) return;

@@ -16,6 +16,7 @@
   const STATIC_SNAPSHOT_URL='/data/distribution.snapshot.json';
   const REGIONAL_SNAPSHOT_URL=''; // Edge-routed canonical snapshot is the only source.
   const LIMIT_MAIN=100, LIMIT_RIGHT=100;
+  const RENDER_BATCH=20;
 
   // Cached content is only the instant first view. Every return visit revalidates
   // the public snapshot without delaying the visible page.
@@ -59,6 +60,7 @@
   let regionalFollowUpScheduled=false;
   let regionalRetryCount=0;
   let renderGeneration=0;
+  const incrementalJobs=new WeakMap();
 
   function text(v){return v==null?'':String(v);}
   function pick(item,names){for(const name of names){const value=item&&item[name];if(value!==undefined&&value!==null&&value!=='')return value;}return '';}
@@ -286,6 +288,31 @@
     if(typeof window.requestAnimationFrame==='function') window.requestAnimationFrame(task);
     else setTimeout(task,16);
   }
+  function renderMore(job){
+    if(!job||job.generation!==renderGeneration||job.offset>=job.list.length) return;
+    const end=Math.min(job.offset+RENDER_BATCH,job.list.length);
+    const fragment=document.createDocumentFragment();
+    for(let i=job.offset;i<end;i++) fragment.appendChild(makeCard(job.list[i]));
+    if(job.offset===0) replaceChildren(job.box,fragment);
+    else job.box.appendChild(fragment);
+    job.offset=end;
+  }
+  function bindIncremental(box,list,generation){
+    const job={box:box,list:list,offset:0,generation:generation};
+    incrementalJobs.set(box,job);
+    renderMore(job);
+    if(box.dataset.igdcDistributionBatchBound==='1') return;
+    box.dataset.igdcDistributionBatchBound='1';
+    box.addEventListener('scroll',function(){
+      const current=incrementalJobs.get(box);
+      if(!current||current.offset>=current.list.length) return;
+      const vertical=box.classList.contains('vertical');
+      const nearEnd=vertical
+        ? box.scrollTop+box.clientHeight>=box.scrollHeight-40
+        : box.scrollLeft+box.clientWidth>=box.scrollWidth-40;
+      if(nearEnd) renderMore(current);
+    },{passive:true});
+  }
   function shouldRender(snapshot,priority,kind){
     const key=fingerprint(snapshot,kind);
     if(key&&key===activeFingerprint) return false;
@@ -298,9 +325,8 @@
     const sections=sectionsOf(snapshot);
     if(!sections||!shouldRender(snapshot,priority,kind)) return false;
 
-    // Rendering 700 cards in one task can delay the first usable screen on
-    // slower devices. Commit a completed section per frame and keep the last
-    // valid cards in every other section until its replacement is ready.
+    // Give every section its first usable row before filling later cards.
+    // The complete approved list is preserved; only DOM commits are batched.
     const generation=++renderGeneration;
     const nextFingerprint=fingerprint(snapshot,kind);
     activePriority=priority;
@@ -308,33 +334,22 @@
     activeStamp=snapshotStamp(snapshot);
     controlHosts();
 
-    let cursor=0;
-    const commitNext=function(){
-      if(generation!==renderGeneration) return;
-      while(cursor<SECTION_MAP.length){
-        const cfg=SECTION_MAP[cursor++];
-        const box=document.querySelector(cfg.selector);
-        if(!box) continue;
-        const raw=sections[cfg.key]||sections[ALIAS[cfg.key]];
-        const list=normalizeList(raw).slice(0,cfg.limit);
-        // A canonical IP gate deliberately returns an empty scope when no exact
-        // same-country supply exists. Empty sections must therefore clear rather
-        // than preserve a previous-country cache or a local seed.
-        if(!list.length){
-          if(snapshot&&snapshot.meta&&snapshot.meta.geoResolutionRequired===true){
-            replaceChildren(box,document.createDocumentFragment());
-          }
-          continue;
+    SECTION_MAP.forEach(function(cfg){
+      const box=document.querySelector(cfg.selector);
+      if(!box) return;
+      const raw=sections[cfg.key]||sections[ALIAS[cfg.key]];
+      const list=normalizeList(raw).slice(0,cfg.limit);
+      // A canonical IP gate deliberately returns an empty scope when no exact
+      // same-country supply exists. Empty sections must therefore clear rather
+      // than preserve a previous-country cache or a local seed.
+      if(!list.length){
+        if(snapshot&&snapshot.meta&&snapshot.meta.geoResolutionRequired===true){
+          replaceChildren(box,document.createDocumentFragment());
         }
-        const fragment=document.createDocumentFragment();
-        list.forEach(function(item){fragment.appendChild(makeCard(item));});
-        if(generation!==renderGeneration) return;
-        replaceChildren(box,fragment);
-        nextFrame(commitNext);
         return;
       }
-    };
-    commitNext();
+      bindIncremental(box,list,generation);
+    });
     return true;
   }
   async function fetchJson(url,timeout,cacheMode){
