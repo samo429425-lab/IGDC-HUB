@@ -371,6 +371,9 @@ function changeLanguage(lang) {
 
     navLinks.forEach(function(a, i){
       if (src[i] != null) a.textContent = src[i];
+      if (pageMap[currentLang] && pageMap[currentLang][i]) {
+        a.setAttribute('href', publicPageHref(pageMap[currentLang][i], i));
+      }
     });
   }catch(e){}
 
@@ -388,11 +391,23 @@ function changeLanguage(lang) {
       'home.html';
 
     var f = document.getElementById('mainFrame');
-    if (f) f.src = page;
+    if (f) f.src = framePageSrc(page);
   }catch(e){}
 }
 
-function loadPage(index){
+function publicPageHref(page, index){
+  if (index === 8) return '/help';
+  if (index === 7) return '/admin.html';
+  var clean = String(page || 'home.html').replace(/^\/+/, '').replace(/\.html(?=([?#]|$))/i, '');
+  return '/' + clean;
+}
+
+function framePageSrc(page){
+  return '/' + String(page || 'home.html').replace(/^\/+/, '');
+}
+
+function loadPage(index, event, options){
+  if (event && typeof event.preventDefault === 'function') event.preventDefault();
   let pageList =
     pageMap[currentLang] ||
     pageMap[detectPreferredLang()] ||
@@ -414,13 +429,26 @@ function loadPage(index){
     // Admin page is gated by destination, not by nav order.
     // Help/support is public and must not be blocked by the old 8th-link rule.
     if (/admin\.html(?:$|[?#])/i.test(String(page || "")) && !isAdminLike) {
-      return;
+      return false;
     }
   }catch(e){}
 
   currentPageIndex = index;
-  document.getElementById("mainFrame").src = page;
+  document.getElementById("mainFrame").src = framePageSrc(page);
+  try{
+    if (!(options && options.skipHistory)) {
+      history.pushState({igdcPage:index, lang:currentLang}, "", publicPageHref(page, index));
+    }
+  }catch(e){}
+  return false;
 }
+
+window.addEventListener('popstate', function(ev){
+  try{
+    var idx = ev.state && Number.isInteger(ev.state.igdcPage) ? ev.state.igdcPage : 0;
+    loadPage(idx, null, {skipHistory:true});
+  }catch(e){}
+});
 </script>
   
 <script>
@@ -914,15 +942,15 @@ html:not([data-igdc-donation-ready="1"]) nav [data-igdc-donation-nav="1"] { disp
 </div>
 </header>
 <nav>
-<a onclick="loadPage(0)">🏠 홈</a>
-<a onclick="loadPage(1)">🛒 마켓 허브</a>
-<a onclick="loadPage(2)">🏭 유통허브</a>
-<a onclick="loadPage(3)">📢 소셜 네트워크</a>
-<a onclick="loadPage(4)">🎬 미디어 허브</a>
-<a onclick="loadPage(5)">🧳 관광</a>
-<a data-igdc-donation-nav="1" onclick="loadPage(6)">💝 후원</a>
-<a data-role="admin" onclick="loadPage(7)">🛠 Admin</a>
-<a onclick="loadPage(8)">❓ 도움말</a>
+<a href="/home" data-page-index="0" onclick="return loadPage(0,event)">🏠 홈</a>
+<a href="/networkhub" data-page-index="1" onclick="return loadPage(1,event)">🛒 마켓 허브</a>
+<a href="/distributionhub" data-page-index="2" onclick="return loadPage(2,event)">🏭 유통허브</a>
+<a href="/socialnetwork" data-page-index="3" onclick="return loadPage(3,event)">📢 소셜 네트워크</a>
+<a href="/mediahub" data-page-index="4" onclick="return loadPage(4,event)">🎬 미디어 허브</a>
+<a href="/tour" data-page-index="5" onclick="return loadPage(5,event)">🧳 관광</a>
+<a href="/donation" data-page-index="6" data-igdc-donation-nav="1" onclick="return loadPage(6,event)">💝 후원</a>
+<a href="/admin.html" data-page-index="7" data-role="admin" onclick="return loadPage(7,event)">🛠 Admin</a>
+<a href="/help" data-page-index="8" onclick="return loadPage(8,event)">❓ 도움말</a>
 </nav>
 <iframe id="mainFrame" name="mainFrame"></iframe>
 <!-- 🧠 자동 API 연동 및 도네이션 수익 로직 삽입 -->
@@ -2714,10 +2742,10 @@ document.addEventListener("osauth:ready", applyAdminGate);
 <script>
 function setActive(i){
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('active'));
-  const t=document.querySelector('nav a[onclick="loadPage('+i+')"]');
+  const t=document.querySelector('nav a[data-page-index="'+i+'"]');
   if(t){t.classList.add('active');}
 }
-(function(){const _lp=window.loadPage;window.loadPage=function(i){if(_lp)_lp(i);setActive(i);};})();
+(function(){const _lp=window.loadPage;window.loadPage=function(){var i=arguments[0],result;if(_lp)result=_lp.apply(this,arguments);setActive(i);return result;};})();
 </script>
 <script id="nav-hysteresis-desktop">
 (function(){
@@ -3377,7 +3405,7 @@ function normLang(l){
     try{
       document.querySelectorAll("nav a.active").forEach(function(a){ a.classList.remove("active"); });
       if (idx < 0) return;
-      var a = document.querySelector('nav a[onclick="loadPage('+idx+')"]');
+      var a = document.querySelector('nav a[data-page-index="'+idx+'"]');
       if (!a){
         var list = document.querySelectorAll("nav a");
         if (list && list[idx]) a = list[idx];
@@ -3390,6 +3418,20 @@ function normLang(l){
     var root = toRootName(href);
     var idx  = findIndexByRoot(root);
     setActiveIndex(idx);
+    try{
+      if (idx >= 0 && href) {
+        var frameUrl = new URL(href, location.origin);
+        if (frameUrl.origin === location.origin) {
+          var map = getMap();
+          var target = publicPageHref(map[idx] || frameUrl.pathname, idx);
+          var nextUrl = target + (frameUrl.search || '') + (frameUrl.hash || '');
+          var currentUrl = location.pathname + location.search + location.hash;
+          if (nextUrl !== currentUrl) {
+            history.replaceState({igdcPage:idx, lang:getLang()}, '', nextUrl);
+          }
+        }
+      }
+    }catch(e){}
   }
   document.addEventListener("DOMContentLoaded", function(){
     var f = document.getElementById("mainFrame");
@@ -3397,7 +3439,7 @@ function normLang(l){
     try{
       if (typeof window.loadPage === "function"){
         var _orig = window.loadPage;
-        window.loadPage = function(i){ try{ _orig(i); } finally { setTimeout(syncActive, 20); } };
+        window.loadPage = function(){ try{ return _orig.apply(this, arguments); } finally { setTimeout(syncActive, 20); } };
       }
     }catch(e){}
     syncActive();
@@ -3426,7 +3468,7 @@ function normLang(l){
       if (ev) ev.preventDefault();
       var f = getFrame(); if (!f) return;
       // Always route to home.html with ?open=qna — no returnTo navigation
-      var u = new URL("home.html", location.href);
+      var u = new URL("/home.html", location.origin);
       u.searchParams.set("open","qna");
       f.src = u.href;
     }catch(e){}

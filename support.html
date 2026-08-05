@@ -204,7 +204,7 @@ body.rtl .support-shell{direction:ltr !important;}
 </aside>
 <main class="support-main" id="supportMain">
 <div class="wrap">
-  <section class="hero">
+  <section class="hero" id="help-overview">
     <h1 id="title">IGDC Help · Download Center</h1>
     <p class="subtitle" id="subtitle"></p>
     <div class="guideLines">
@@ -214,27 +214,27 @@ body.rtl .support-shell{direction:ltr !important;}
   </section>
 
   <section class="grid">
-    <article class="card">
+    <article class="card" id="platform-guide">
       <h2 id="platformTitle"></h2>
       <p id="platformText"></p>
     </article>
-    <article class="card">
+    <article class="card" id="access-guide">
       <h2 id="accessTitle"></h2>
       <ul id="accessItems"></ul>
     </article>
-    <article class="card">
+    <article class="card" id="payment-guide">
       <h2 id="paymentTitle"></h2>
       <ul id="paymentItems"></ul>
     </article>
-    <article class="card">
+    <article class="card" id="commerce-guide">
       <h2 id="commerceTitle"></h2>
       <p id="commerceText"></p>
     </article>
-    <article class="card">
+    <article class="card" id="policy-guide">
       <h2 id="policyTitle"></h2>
       <p id="policyText"></p>
     </article>
-    <article class="card full">
+    <article class="card full" id="downloads">
       <h2 id="downloadsTitle"></h2>
       <p id="downloadText"></p>
       <div class="downloadList">
@@ -243,16 +243,16 @@ body.rtl .support-shell{direction:ltr !important;}
         <div class="downloadItem" id="maruMediaPolicyItem">
           <div><b id="maruMediaPolicyTitle"></b><span id="maruMediaPolicyText"></span></div>
           <div class="policyActions">
-            <a class="btn" id="maruMediaTermsLink" href="maru-windows-terms.html"></a>
-            <a class="btn" id="maruMediaPrivacyLink" href="maru-windows-privacy.html"></a>
-            <a class="btn" id="maruMediaRefundLink" href="maru-windows-refund.html"></a>
+            <a class="btn" id="maruMediaTermsLink" href="/terms"></a>
+            <a class="btn" id="maruMediaPrivacyLink" href="/privacy"></a>
+            <a class="btn" id="maruMediaRefundLink" href="/refund"></a>
           </div>
         </div>
       </div>
       <div class="notice" id="downloadNotice"></div>
     </article>
   </section>
-  <section class="officialEmail">
+  <section class="officialEmail" id="contact">
     <p id="officialEmailNote"></p>
     <span class="emailLabel" id="emailLabel"></span>
     <a class="email" href="#" id="supportAiEmailLink" role="button">igdcplatform@gmail.com</a>
@@ -1709,9 +1709,9 @@ function render(lang){
   const termsLink=document.getElementById('maruMediaTermsLink');
   const privacyLink=document.getElementById('maruMediaPrivacyLink');
   const refundLink=document.getElementById('maruMediaRefundLink');
-  if(termsLink) termsLink.href='maru-windows-terms.html?lang='+policyLang;
-  if(privacyLink) privacyLink.href='maru-windows-privacy.html?lang='+policyLang;
-  if(refundLink) refundLink.href='maru-windows-refund.html?lang='+policyLang;
+  if(termsLink) termsLink.href='/terms?lang='+policyLang;
+  if(privacyLink) privacyLink.href='/privacy?lang='+policyLang;
+  if(refundLink) refundLink.href='/refund?lang='+policyLang;
   fillText('footer', t.footer);
   document.querySelectorAll('[data-i18n-btn]').forEach(a=>a.textContent=t.btnDownload||'Download');
 }

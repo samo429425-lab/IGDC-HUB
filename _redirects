@@ -53,6 +53,15 @@
 /api/*                       /.netlify/functions/:splat                  200
 
 
+/callback.html          /index.html                      200
+
+# Stable public URLs for automated domain/product review and direct sharing.
+/help                   /support.html                    200
+/maru-media-player      /support.html                    200
+/pricing                /maru-windows-terms.html         200
+/terms                  /maru-windows-terms.html         200
+/privacy                /maru-windows-privacy.html       200
+/refund                 /maru-windows-refund.html        200
 
 
 
