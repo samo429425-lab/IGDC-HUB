@@ -436,10 +436,10 @@ function changeLanguage(lang) {
       publicTarget = withLanguage(publicPageHref(page, currentPageIndex), currentLang);
     }
 
-    if (f) f.src = frameTarget;
     if (!/\/callback\.html$/i.test(location.pathname)) {
       history.replaceState({igdcPage:stateIndex, lang:currentLang, frameSrc:frameTarget}, '', publicTarget);
     }
+    restoreFrameWithoutHistory(frameTarget);
   }catch(e){}
 }
 
@@ -519,12 +519,15 @@ function loadPage(index, event, options){
   currentPageIndex = index;
   var frameTarget = withLanguage(framePageSrc(page), currentLang);
   var publicTarget = withLanguage(publicPageHref(page, index), currentLang);
-  document.getElementById("mainFrame").src = frameTarget;
   try{
     if (!(options && options.skipHistory)) {
-      history.pushState({igdcPage:index, lang:currentLang, frameSrc:frameTarget}, "", publicTarget);
+      var currentUrl = location.pathname + location.search + location.hash;
+      if (publicTarget !== currentUrl) {
+        history.pushState({igdcPage:index, lang:currentLang, frameSrc:frameTarget}, "", publicTarget);
+      }
     }
   }catch(e){}
+  restoreFrameWithoutHistory(frameTarget);
   return false;
 }
 
