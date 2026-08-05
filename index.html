@@ -459,37 +459,13 @@ function restoreFrameWithoutHistory(src){
     var f = document.getElementById('mainFrame');
     if (!f || !src) return;
     var target = new URL(src, location.origin);
-    var targetKey = target.pathname + target.search + target.hash;
-    var now = Date.now();
     try{
       var live = new URL(f.contentWindow.location.href, location.origin);
-      if (live.pathname + live.search + live.hash === targetKey) {
-        f.__igdcPendingSrc = '';
-        f.__igdcPendingAt = 0;
-        return;
-      }
-    }catch(e){}
-    if (f.__igdcPendingSrc === targetKey && now - (f.__igdcPendingAt || 0) < 8000) return;
-    if (!f.__igdcPendingGuardBound) {
-      f.__igdcPendingGuardBound = true;
-      f.addEventListener('load', function(){
-        try{
-          if (!f.__igdcPendingSrc) return;
-          var loaded = new URL(f.contentWindow.location.href, location.origin);
-          if (loaded.pathname + loaded.search + loaded.hash === f.__igdcPendingSrc) {
-            f.__igdcPendingSrc = '';
-            f.__igdcPendingAt = 0;
-          }
-        }catch(e){}
-      });
-    }
-    f.__igdcPendingSrc = targetKey;
-    f.__igdcPendingAt = now;
-    try{
-      f.contentWindow.location.replace(targetKey);
+      if (live.pathname + live.search + live.hash === target.pathname + target.search + target.hash) return;
+      f.contentWindow.location.replace(target.pathname + target.search + target.hash);
       return;
     }catch(e){}
-    f.src = targetKey;
+    f.src = target.pathname + target.search + target.hash;
   }catch(e){}
 }
 
