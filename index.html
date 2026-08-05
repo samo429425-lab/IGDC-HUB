@@ -3879,6 +3879,55 @@ function normLang(l){
   var SYNC_MS = 700;
   var stopAfter = 0;
 
+  var LOGOUT_TEXT = {
+    ko:'정말 로그아웃하시겠습니까?',
+    en:'Are you sure you want to log out?',
+    zh:'确定要退出登录吗？',
+    zht:'確定要登出嗎？',
+    ja:'本当にログアウトしますか？',
+    es:'¿Seguro que desea cerrar sesión?',
+    fr:'Voulez-vous vraiment vous déconnecter ?',
+    de:'Möchten Sie sich wirklich abmelden?',
+    ru:'Вы действительно хотите выйти?',
+    pt:'Tem certeza de que deseja sair?',
+    it:'Vuoi davvero uscire?',
+    ar:'هل أنت متأكد من تسجيل الخروج؟',
+    vi:'Bạn có chắc chắn muốn đăng xuất không?',
+    th:'คุณแน่ใจหรือไม่ว่าต้องการออกจากระบบ?',
+    id:'Apakah Anda yakin ingin keluar?',
+    hi:'क्या आप वाकई लॉग आउट करना चाहते हैं?',
+    tr:'Çıkış yapmak istediğinizden emin misiniz?',
+    fa:'آیا مطمئن هستید که می‌خواهید خارج شوید؟',
+    bn:'আপনি কি সত্যিই লগ আউট করতে চান?',
+    ur:'کیا آپ واقعی لاگ آؤٹ کرنا چاہتے ہیں؟',
+    sw:'Una uhakika unataka kuondoka?',
+    ta:'நிச்சயமாக வெளியேற விரும்புகிறீர்களா?',
+    hu:'Biztosan ki szeretne jelentkezni?',
+    ms:'Adakah anda pasti mahu log keluar?',
+    nl:'Weet u zeker dat u wilt uitloggen?',
+    pl:'Czy na pewno chcesz się wylogować?',
+    sv:'Är du säker på att du vill logga ut?',
+    tl:'Sigurado ka bang gusto mong mag-log out?',
+    uk:'Ви впевнені, що хочете вийти?',
+    uz:'Haqiqatan ham tizimdan chiqmoqchimisiz?'
+  };
+
+  function normalizeLogoutLang(value){
+    var code=String(value||'').trim().toLowerCase().replace('_','-');
+    if(code==='zh-tw'||code==='zh-hk'||code==='zh-mo'||code==='zh-hant'||code==='zht') return 'zht';
+    if(code==='zh-cn'||code==='zh-sg'||code==='zh-hans'||code==='zh') return 'zh';
+    if(code.indexOf('-')>-1) code=code.split('-')[0];
+    return LOGOUT_TEXT[code] ? code : '';
+  }
+  function logoutLang(){
+    try{ var sel=document.querySelector('.language-select'); var selected=normalizeLogoutLang(sel&&sel.value); if(selected) return selected; }catch(e){}
+    try{ var q=normalizeLogoutLang(new URLSearchParams(location.search).get('lang')); if(q) return q; }catch(e){}
+    try{ var doc=normalizeLogoutLang(document.documentElement.lang); if(doc) return doc; }catch(e){}
+    try{ var saved=normalizeLogoutLang(localStorage.getItem('igdc_lang')); if(saved) return saved; }catch(e){}
+    return 'ko';
+  }
+  function logoutCopy(){ return LOGOUT_TEXT[logoutLang()] || LOGOUT_TEXT.ko; }
+
   function byId(id){ return document.getElementById(id); }
   function tokenObj(){
     try { return JSON.parse(localStorage.getItem('osauth.tokens.v2') || 'null'); } catch(e){ return null; }
@@ -3918,14 +3967,13 @@ function normLang(l){
       var box  = byId('os-modal');
       var ok   = byId('os-modal-ok');
       var no   = byId('os-modal-cancel');
-      var title = byId('os-modal-title');
       var body  = byId('os-modal-body');
+      var copy  = logoutCopy();
       if(!(mask && box && ok && no)){
-        resolve(window.confirm('정말 로그아웃 하시겠습니까?'));
+        resolve(window.confirm(copy));
         return;
       }
-      if(title) title.textContent = 'Confirm';
-      if(body) body.textContent = '정말 로그아웃 하시겠습니까?';
+      if(body) body.textContent = copy;
       function off(result){
         try{ mask.style.display='none'; box.style.display='none'; }catch(e){}
         ok.onclick = null; no.onclick = null; mask.onclick = null;
