@@ -312,10 +312,31 @@ const titleText = {
   }
 }
 
+function detectPublicRoute() {
+  try {
+    const pathname = (location.pathname || '/').replace(/\/$/, '') || '/';
+    const languages = Object.keys(pageMap || {});
+    for (const lang of languages) {
+      const pages = pageMap[lang] || [];
+      // Only the seven public front pages have language-specific routes.
+      // Admin/help/policy routes keep their existing standalone contracts.
+      for (let index = 0; index <= 6; index++) {
+        if (publicPageHref(pages[index], index) === pathname) {
+          return { lang, index };
+        }
+      }
+    }
+  } catch(e) {}
+  return null;
+}
+
 let currentLang = (function () {
   try {
     const queryLang = (new URLSearchParams(location.search).get('lang') || '').toLowerCase();
     if (queryLang && pageMap[queryLang]) return queryLang;
+
+    const publicRoute = detectPublicRoute();
+    if (publicRoute && pageMap[publicRoute.lang]) return publicRoute.lang;
 
     const saved = (localStorage.getItem('igdc_lang') || '').toLowerCase();
     if (saved && pageMap[saved]) return saved;
@@ -329,7 +350,10 @@ let currentLang = (function () {
   }
 })();
 
-let currentPageIndex = 0;
+let currentPageIndex = (function () {
+  const publicRoute = detectPublicRoute();
+  return publicRoute ? publicRoute.index : 0;
+})();
 
 function withLanguage(href, lang) {
   try{
@@ -459,13 +483,37 @@ function restoreFrameWithoutHistory(src){
     var f = document.getElementById('mainFrame');
     if (!f || !src) return;
     var target = new URL(src, location.origin);
+    var targetKey = target.pathname + target.search + target.hash;
+    var now = Date.now();
     try{
       var live = new URL(f.contentWindow.location.href, location.origin);
-      if (live.pathname + live.search + live.hash === target.pathname + target.search + target.hash) return;
-      f.contentWindow.location.replace(target.pathname + target.search + target.hash);
+      if (live.pathname + live.search + live.hash === targetKey) {
+        f.__igdcPendingSrc = '';
+        f.__igdcPendingAt = 0;
+        return;
+      }
+    }catch(e){}
+    if (f.__igdcPendingSrc === targetKey && now - (f.__igdcPendingAt || 0) < 8000) return;
+    if (!f.__igdcPendingGuardBound) {
+      f.__igdcPendingGuardBound = true;
+      f.addEventListener('load', function(){
+        try{
+          if (!f.__igdcPendingSrc) return;
+          var loaded = new URL(f.contentWindow.location.href, location.origin);
+          if (loaded.pathname + loaded.search + loaded.hash === f.__igdcPendingSrc) {
+            f.__igdcPendingSrc = '';
+            f.__igdcPendingAt = 0;
+          }
+        }catch(e){}
+      });
+    }
+    f.__igdcPendingSrc = targetKey;
+    f.__igdcPendingAt = now;
+    try{
+      f.contentWindow.location.replace(targetKey);
       return;
     }catch(e){}
-    f.src = target.pathname + target.search + target.hash;
+    f.src = targetKey;
   }catch(e){}
 }
 
