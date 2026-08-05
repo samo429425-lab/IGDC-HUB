@@ -352,11 +352,15 @@ function policyPageHref(value) {
   return '';
 }
 
-function changeLanguage(lang) {
+function changeLanguage(lang, options) {
+  options = options || {};
+  const previousLang = currentLang;
   const nextLang =
     (lang && pageMap[lang]) ? lang :
     (currentLang && pageMap[currentLang]) ? currentLang :
     detectPreferredLang();
+
+  if (!options.initial && !options.force && nextLang === previousLang) return false;
 
   currentLang = nextLang || "ko";
 
@@ -364,6 +368,10 @@ function changeLanguage(lang) {
   if (document.documentElement) {
     document.documentElement.setAttribute('lang', currentLang);
   }
+  try{
+    var languagePicker = document.querySelector('.language-select');
+    if (languagePicker) languagePicker.value = currentLang;
+  }catch(e){}
 
   // 1) Title/subtitle
   try{
@@ -436,11 +444,16 @@ function changeLanguage(lang) {
       publicTarget = withLanguage(publicPageHref(page, currentPageIndex), currentLang);
     }
 
-    if (!/\/callback\.html$/i.test(location.pathname)) {
-      history.replaceState({igdcPage:stateIndex, lang:currentLang, frameSrc:frameTarget}, '', publicTarget);
+    if (options.frameTarget) frameTarget = options.frameTarget;
+
+    if (!options.skipHistory && !/\/callback\.html$/i.test(location.pathname)) {
+      var state = {igdcPage:stateIndex, lang:currentLang, frameSrc:frameTarget};
+      if (options.initial) history.replaceState(state, '', publicTarget);
+      else history.pushState(state, '', publicTarget);
     }
     restoreFrameWithoutHistory(frameTarget);
   }catch(e){}
+  return false;
 }
 
 function publicPageHref(page, index){
@@ -534,9 +547,12 @@ function loadPage(index, event, options){
 window.addEventListener('popstate', function(ev){
   try{
     if (ev.state && ev.state.frameSrc) {
-      if (ev.state.lang && pageMap[ev.state.lang]) currentLang = ev.state.lang;
       if (Number.isInteger(ev.state.igdcPage) && ev.state.igdcPage >= 0) currentPageIndex = ev.state.igdcPage;
-      restoreFrameWithoutHistory(ev.state.frameSrc);
+      if (ev.state.lang && pageMap[ev.state.lang]) {
+        changeLanguage(ev.state.lang, {skipHistory:true, force:true, frameTarget:ev.state.frameSrc});
+      } else {
+        restoreFrameWithoutHistory(ev.state.frameSrc);
+      }
       return;
     }
     var idx = ev.state && Number.isInteger(ev.state.igdcPage) ? ev.state.igdcPage : 0;
@@ -547,7 +563,6 @@ window.addEventListener('popstate', function(ev){
   
 <script>
 (function(){
-  var waitingForAuthRestore = false;
 
   function applyBootstrapLang(){
     try{
@@ -555,36 +570,18 @@ window.addEventListener('popstate', function(ev){
       var queryLang = (new URLSearchParams(location.search).get('lang') || '').toLowerCase();
       var saved = localStorage.getItem('igdc_lang');
       var bootstrapLang = (queryLang && pageMap[queryLang]) ? queryLang : saved;
-      if (bootstrapLang && pageMap[bootstrapLang]){
-        currentLang = bootstrapLang;
-        document.documentElement.setAttribute('lang', bootstrapLang);
+      if (typeof changeLanguage === 'function'){
+        changeLanguage((bootstrapLang && pageMap[bootstrapLang]) ? bootstrapLang : currentLang, {initial:true, force:true});
       }
-      // 드롭다운 동기화
-      var sel = document.querySelector('.language-select');
-      if (sel) sel.value = currentLang;
-      // 라벨/타이틀/iframe 적용
-      if (typeof changeLanguage === 'function'){ changeLanguage(currentLang); }
     }catch(e){}
   }
 
   function bootstrapLang(){
-    try{
-      var restore = window.__IGDC_AUTH_RESTORE_PROMISE__;
-      if (!window.__IGDC_AUTH_RESTORE_DONE__ && restore && typeof restore.then === 'function') {
-        if (waitingForAuthRestore) return;
-        waitingForAuthRestore = true;
-        Promise.resolve(restore).catch(function(){}).then(function(){
-          waitingForAuthRestore = false;
-          applyBootstrapLang();
-        });
-        return;
-      }
-    }catch(e){}
+    if (window.__IGDC_LANG_BOOTSTRAPPED__) return;
     applyBootstrapLang();
+    window.__IGDC_LANG_BOOTSTRAPPED__ = true;
   }
   document.addEventListener('DOMContentLoaded', bootstrapLang);
-  document.addEventListener('osauth:ready', bootstrapLang);
-  document.addEventListener('osauth:done', bootstrapLang, true);
 })();
 </script>
 <style>
@@ -2312,13 +2309,13 @@ function applyRoleUI(role) {
   // Restore on boot and on auth events
   function restore(){
     try{
+      if (window.__IGDC_LANG_BOOTSTRAPPED__) return;
       var queryLang = (new URLSearchParams(location.search).get('lang') || '').toLowerCase();
       applyLang((queryLang && pageMap[queryLang]) ? queryLang : (localStorage.getItem(LANG_KEY) || detectPref()));
+      window.__IGDC_LANG_BOOTSTRAPPED__ = true;
     }catch(_){ }
   }
   document.addEventListener("DOMContentLoaded", restore);
-  document.addEventListener("osauth:ready", restore);
-  document.addEventListener("osauth:done", restore, true);
 
   // ===== 2) Double-reload guard around Auth0 callbacks =====
   (function(){
