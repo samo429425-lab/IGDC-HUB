@@ -3968,12 +3968,18 @@ function normLang(l){
       var ok   = byId('os-modal-ok');
       var no   = byId('os-modal-cancel');
       var body  = byId('os-modal-body');
+      var lang  = logoutLang();
       var copy  = logoutCopy();
       if(!(mask && box && ok && no)){
         resolve(window.confirm(copy));
         return;
       }
-      if(body) body.textContent = copy;
+      if(body){
+        var rtl = lang==='ar' || lang==='fa' || lang==='ur';
+        body.textContent = copy;
+        body.setAttribute('dir', rtl ? 'rtl' : 'ltr');
+        body.style.textAlign = rtl ? 'right' : 'left';
+      }
       function off(result){
         try{ mask.style.display='none'; box.style.display='none'; }catch(e){}
         ok.onclick = null; no.onclick = null; mask.onclick = null;
