@@ -314,6 +314,9 @@ const titleText = {
 
 let currentLang = (function () {
   try {
+    const queryLang = (new URLSearchParams(location.search).get('lang') || '').toLowerCase();
+    if (queryLang && pageMap[queryLang]) return queryLang;
+
     const saved = (localStorage.getItem('igdc_lang') || '').toLowerCase();
     if (saved && pageMap[saved]) return saved;
 
@@ -327,6 +330,27 @@ let currentLang = (function () {
 })();
 
 let currentPageIndex = 0;
+
+function withLanguage(href, lang) {
+  try{
+    var url = new URL(href, location.origin);
+    url.searchParams.set('lang', lang || currentLang || 'ko');
+    return url.pathname + url.search + url.hash;
+  }catch(e){
+    return href;
+  }
+}
+
+function policyPageHref(value) {
+  try{
+    var pathname = new URL(value || '', location.origin).pathname.toLowerCase();
+    var name = pathname.split('/').pop().replace(/\.html?$/i, '');
+    if (name === 'terms' || name === 'maru-windows-terms') return '/terms';
+    if (name === 'privacy' || name === 'maru-windows-privacy') return '/privacy';
+    if (name === 'refund' || name === 'maru-windows-refund') return '/refund';
+  }catch(e){}
+  return '';
+}
 
 function changeLanguage(lang) {
   const nextLang =
@@ -372,7 +396,7 @@ function changeLanguage(lang) {
     navLinks.forEach(function(a, i){
       if (src[i] != null) a.textContent = src[i];
       if (pageMap[currentLang] && pageMap[currentLang][i]) {
-        a.setAttribute('href', publicPageHref(pageMap[currentLang][i], i));
+        a.setAttribute('href', withLanguage(publicPageHref(pageMap[currentLang][i], i), currentLang));
       }
     });
   }catch(e){}
@@ -385,13 +409,37 @@ function changeLanguage(lang) {
       (pageMap && pageMap['ko']) ||
       [];
 
-    var page =
-      pageList[currentPageIndex] ||
-      (pageMap['ko'] && pageMap['ko'][currentPageIndex]) ||
-      'home.html';
-
     var f = document.getElementById('mainFrame');
-    if (f) f.src = framePageSrc(page);
+    var currentPolicy = '';
+    try{
+      var currentFrameHref = (f && f.contentWindow && f.contentWindow.location)
+        ? f.contentWindow.location.href
+        : (f ? f.getAttribute('src') : '');
+      currentPolicy = policyPageHref(currentFrameHref);
+    }catch(e){
+      currentPolicy = policyPageHref(f ? f.getAttribute('src') : '');
+    }
+
+    var frameTarget;
+    var publicTarget;
+    var stateIndex = currentPageIndex;
+    if (currentPolicy) {
+      frameTarget = withLanguage(currentPolicy, currentLang);
+      publicTarget = frameTarget;
+      stateIndex = -1;
+    } else {
+      var page =
+        pageList[currentPageIndex] ||
+        (pageMap['ko'] && pageMap['ko'][currentPageIndex]) ||
+        'home.html';
+      frameTarget = withLanguage(framePageSrc(page), currentLang);
+      publicTarget = withLanguage(publicPageHref(page, currentPageIndex), currentLang);
+    }
+
+    if (f) f.src = frameTarget;
+    if (!/\/callback\.html$/i.test(location.pathname)) {
+      history.replaceState({igdcPage:stateIndex, lang:currentLang, frameSrc:frameTarget}, '', publicTarget);
+    }
   }catch(e){}
 }
 
@@ -434,10 +482,12 @@ function loadPage(index, event, options){
   }catch(e){}
 
   currentPageIndex = index;
-  document.getElementById("mainFrame").src = framePageSrc(page);
+  var frameTarget = withLanguage(framePageSrc(page), currentLang);
+  var publicTarget = withLanguage(publicPageHref(page, index), currentLang);
+  document.getElementById("mainFrame").src = frameTarget;
   try{
     if (!(options && options.skipHistory)) {
-      history.pushState({igdcPage:index, lang:currentLang}, "", publicPageHref(page, index));
+      history.pushState({igdcPage:index, lang:currentLang, frameSrc:frameTarget}, "", publicTarget);
     }
   }catch(e){}
   return false;
@@ -461,9 +511,14 @@ window.addEventListener('popstate', function(ev){
 
   function applyBootstrapLang(){
     try{
-      // 저장값 우선, 없으면 위 detect 결과(currentLang) 유지
+      // URL 언어 우선, 없으면 저장값과 위 detect 결과(currentLang) 순서로 적용
+      var queryLang = (new URLSearchParams(location.search).get('lang') || '').toLowerCase();
       var saved = localStorage.getItem('igdc_lang');
-      if (saved){ currentLang = saved; document.documentElement.setAttribute('lang', saved); }
+      var bootstrapLang = (queryLang && pageMap[queryLang]) ? queryLang : saved;
+      if (bootstrapLang && pageMap[bootstrapLang]){
+        currentLang = bootstrapLang;
+        document.documentElement.setAttribute('lang', bootstrapLang);
+      }
       // 드롭다운 동기화
       var sel = document.querySelector('.language-select');
       if (sel) sel.value = currentLang;
@@ -2215,7 +2270,12 @@ function applyRoleUI(role) {
     }catch(_){}
   }, true);
   // Restore on boot and on auth events
-  function restore(){ try{ applyLang(localStorage.getItem(LANG_KEY) || detectPref()); }catch(_){ } }
+  function restore(){
+    try{
+      var queryLang = (new URLSearchParams(location.search).get('lang') || '').toLowerCase();
+      applyLang((queryLang && pageMap[queryLang]) ? queryLang : (localStorage.getItem(LANG_KEY) || detectPref()));
+    }catch(_){ }
+  }
   document.addEventListener("DOMContentLoaded", restore);
   document.addEventListener("osauth:ready", restore);
   document.addEventListener("osauth:done", restore, true);
@@ -3375,7 +3435,7 @@ function normLang(l){
   }
   function getLang(){
     try{
-      return (window.currentLang || (navigator.language||"en").slice(0,2) || "en").toLowerCase();
+      return ((typeof currentLang !== 'undefined' && currentLang) || window.currentLang || (navigator.language||"en").slice(0,2) || "en").toLowerCase();
     }catch(e){ return "en"; }
   }
   function getMap(){
@@ -3407,8 +3467,11 @@ function normLang(l){
   }
   function policyPublicPath(root){
     var paths = {
+      "terms": "/terms",
       "maru-windows-terms": "/terms",
+      "privacy": "/privacy",
       "maru-windows-privacy": "/privacy",
+      "refund": "/refund",
       "maru-windows-refund": "/refund"
     };
     return paths[root] || "";
@@ -3429,6 +3492,7 @@ function normLang(l){
     var href = resolveFromIframe();
     var root = toRootName(href);
     var idx  = findIndexByRoot(root);
+    if (idx >= 0) currentPageIndex = idx;
     setActiveIndex(idx);
     try{
       if (href) {
@@ -3439,7 +3503,7 @@ function normLang(l){
             ? publicPageHref(map[idx] || frameUrl.pathname, idx)
             : policyPublicPath(root);
           if (!target) return;
-          var nextUrl = target + (frameUrl.search || '') + (frameUrl.hash || '');
+          var nextUrl = withLanguage(target + (frameUrl.search || '') + (frameUrl.hash || ''), getLang());
           var currentUrl = location.pathname + location.search + location.hash;
           if (nextUrl !== currentUrl) {
             var state = {
