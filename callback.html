@@ -20,27 +20,96 @@
 <script>
 (function(){
   'use strict';
+
   var query = new URLSearchParams(location.search || '');
   var state = String(query.get('state') || '');
-  var isPlayer = /^mp_[A-Za-z0-9_-]+$/.test(state);
-  if (!isPlayer) {
-    var destination = '/index.html' + (location.search || '') + (location.hash || '');
-    location.replace(destination);
+
+  // MARU Player callback: preserve the existing app hand-off exactly.
+  if (/^mp_[A-Za-z0-9_-]+$/.test(state)) {
+    var playerCallback = new URL('maru://media-player/auth');
+    ['code','state','error','error_description'].forEach(function(key){
+      var value = query.get(key);
+      if (value) playerCallback.searchParams.set(key, value);
+    });
+    var playerTarget = playerCallback.toString();
+    var link = document.getElementById('openPlayer');
+    if (link) link.href = playerTarget;
+    location.replace(playerTarget);
+    setTimeout(function(){
+      var status = document.getElementById('status');
+      if (status) status.hidden = false;
+    }, 1200);
     return;
   }
-  var callback = new URL('maru://media-player/auth');
-  ['code','state','error','error_description'].forEach(function(key){
-    var value = query.get(key);
-    if (value) callback.searchParams.set(key, value);
+
+  // Web callback: finish the PKCE exchange here before any front-page router runs.
+  // The index keeps owning session refresh, role propagation, logout and all UI.
+  var AUTH0_DOMAIN = 'login.igdcglobal.com';
+  var CLIENT_ID = '4JeT1Fdy' + 'DZaN7nEO' + 'DVsKe2Sx8' + 'kKMWagj';
+  var REDIRECT_URI = location.origin + '/callback.html';
+  var TOKEN_KEY = 'osauth.tokens.v2';
+  var PKCE_KEY = 'osauth.pkce.v1';
+
+  function handOffToIndex(){
+    location.replace('/index.html' + (location.search || '') + (location.hash || ''));
+  }
+
+  function decodeExpiry(idToken){
+    try{
+      var parts = String(idToken || '').split('.');
+      if (parts.length !== 3) return 0;
+      var value = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (value.length % 4) value += '=';
+      return Number(JSON.parse(atob(value)).exp || 0);
+    }catch(_){ return 0; }
+  }
+
+  if (query.has('error') || !query.has('code')) {
+    handOffToIndex();
+    return;
+  }
+
+  var cached = null;
+  try { cached = JSON.parse(localStorage.getItem(PKCE_KEY) || 'null'); } catch(_) {}
+  if (!cached || !cached.code_verifier || cached.state !== state) {
+    handOffToIndex();
+    return;
+  }
+
+  var controller = typeof AbortController === 'function' ? new AbortController() : null;
+  var timeout = setTimeout(function(){
+    try { if (controller) controller.abort(); } catch(_) {}
+  }, 12000);
+
+  fetch('https://' + AUTH0_DOMAIN + '/oauth/token', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    cache: 'no-store',
+    signal: controller ? controller.signal : undefined,
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      client_id: CLIENT_ID,
+      code_verifier: cached.code_verifier,
+      code: query.get('code'),
+      redirect_uri: REDIRECT_URI
+    })
+  }).then(function(response){
+    if (!response.ok) throw new Error('token_exchange_' + response.status);
+    return response.json();
+  }).then(function(tokens){
+    var exp = decodeExpiry(tokens && tokens.id_token);
+    if (!tokens || !tokens.id_token || !exp || exp * 1000 <= Date.now()) {
+      throw new Error('invalid_id_token');
+    }
+    localStorage.setItem(TOKEN_KEY, JSON.stringify(Object.assign({}, tokens, {exp:exp})));
+    localStorage.removeItem(PKCE_KEY);
+    location.replace('/index.html');
+  }).catch(function(){
+    // Preserve the existing index callback as a safe fallback and diagnostic path.
+    handOffToIndex();
+  }).finally(function(){
+    clearTimeout(timeout);
   });
-  var target = callback.toString();
-  var link = document.getElementById('openPlayer');
-  if (link) link.href = target;
-  location.replace(target);
-  setTimeout(function(){
-    var status = document.getElementById('status');
-    if (status) status.hidden = false;
-  }, 1200);
 })();
 </script>
 </body>
