@@ -454,6 +454,21 @@ function framePageSrc(page){
   return '/' + String(page || 'home.html').replace(/^\/+/, '');
 }
 
+function restoreFrameWithoutHistory(src){
+  try{
+    var f = document.getElementById('mainFrame');
+    if (!f || !src) return;
+    var target = new URL(src, location.origin);
+    try{
+      var live = new URL(f.contentWindow.location.href, location.origin);
+      if (live.pathname + live.search + live.hash === target.pathname + target.search + target.hash) return;
+      f.contentWindow.location.replace(target.pathname + target.search + target.hash);
+      return;
+    }catch(e){}
+    f.src = target.pathname + target.search + target.hash;
+  }catch(e){}
+}
+
 function loadPage(index, event, options){
   if (event && typeof event.preventDefault === 'function') event.preventDefault();
   let pageList =
@@ -496,7 +511,9 @@ function loadPage(index, event, options){
 window.addEventListener('popstate', function(ev){
   try{
     if (ev.state && ev.state.frameSrc) {
-      document.getElementById("mainFrame").src = ev.state.frameSrc;
+      if (ev.state.lang && pageMap[ev.state.lang]) currentLang = ev.state.lang;
+      if (Number.isInteger(ev.state.igdcPage) && ev.state.igdcPage >= 0) currentPageIndex = ev.state.igdcPage;
+      restoreFrameWithoutHistory(ev.state.frameSrc);
       return;
     }
     var idx = ev.state && Number.isInteger(ev.state.igdcPage) ? ev.state.igdcPage : 0;
@@ -3511,8 +3528,9 @@ function normLang(l){
               lang:getLang(),
               frameSrc:frameUrl.pathname + (frameUrl.search || '') + (frameUrl.hash || '')
             };
-            if (idx >= 0) history.replaceState(state, '', nextUrl);
-            else history.pushState(state, '', nextUrl);
+            // The iframe navigation already owns this browser-history step.
+            // Replace its top URL/state so one click never creates a duplicate entry.
+            history.replaceState(state, '', nextUrl);
           }
         }
       }
