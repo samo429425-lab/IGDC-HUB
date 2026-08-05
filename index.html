@@ -445,6 +445,10 @@ function loadPage(index, event, options){
 
 window.addEventListener('popstate', function(ev){
   try{
+    if (ev.state && ev.state.frameSrc) {
+      document.getElementById("mainFrame").src = ev.state.frameSrc;
+      return;
+    }
     var idx = ev.state && Number.isInteger(ev.state.igdcPage) ? ev.state.igdcPage : 0;
     loadPage(idx, null, {skipHistory:true});
   }catch(e){}
@@ -3401,6 +3405,14 @@ function normLang(l){
     }
     return -1;
   }
+  function policyPublicPath(root){
+    var paths = {
+      "maru-windows-terms": "/terms",
+      "maru-windows-privacy": "/privacy",
+      "maru-windows-refund": "/refund"
+    };
+    return paths[root] || "";
+  }
   function setActiveIndex(idx){
     try{
       document.querySelectorAll("nav a.active").forEach(function(a){ a.classList.remove("active"); });
@@ -3419,15 +3431,24 @@ function normLang(l){
     var idx  = findIndexByRoot(root);
     setActiveIndex(idx);
     try{
-      if (idx >= 0 && href) {
+      if (href) {
         var frameUrl = new URL(href, location.origin);
         if (frameUrl.origin === location.origin) {
           var map = getMap();
-          var target = publicPageHref(map[idx] || frameUrl.pathname, idx);
+          var target = idx >= 0
+            ? publicPageHref(map[idx] || frameUrl.pathname, idx)
+            : policyPublicPath(root);
+          if (!target) return;
           var nextUrl = target + (frameUrl.search || '') + (frameUrl.hash || '');
           var currentUrl = location.pathname + location.search + location.hash;
           if (nextUrl !== currentUrl) {
-            history.replaceState({igdcPage:idx, lang:getLang()}, '', nextUrl);
+            var state = {
+              igdcPage:idx,
+              lang:getLang(),
+              frameSrc:frameUrl.pathname + (frameUrl.search || '') + (frameUrl.hash || '')
+            };
+            if (idx >= 0) history.replaceState(state, '', nextUrl);
+            else history.pushState(state, '', nextUrl);
           }
         }
       }
