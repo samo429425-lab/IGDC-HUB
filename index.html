@@ -469,6 +469,26 @@ function restoreFrameWithoutHistory(src){
   }catch(e){}
 }
 
+function navigatePolicyFromFrame(href){
+  try{
+    var policyPath = policyPageHref(href);
+    if (!policyPath) return false;
+    var source = new URL(href, location.origin);
+    var requestedLang = (source.searchParams.get('lang') || '').toLowerCase();
+    var lang = (requestedLang && pageMap[requestedLang]) ? requestedLang : currentLang;
+    var target = withLanguage(policyPath, lang);
+    var currentUrl = location.pathname + location.search + location.hash;
+    currentLang = lang;
+    if (target !== currentUrl) {
+      history.pushState({igdcPage:-1, lang:lang, frameSrc:target}, '', target);
+    }
+    restoreFrameWithoutHistory(target);
+    return false;
+  }catch(e){
+    return false;
+  }
+}
+
 function loadPage(index, event, options){
   if (event && typeof event.preventDefault === 'function') event.preventDefault();
   let pageList =
@@ -3536,15 +3556,35 @@ function normLang(l){
       }
     }catch(e){}
   }
+  function hookPolicyNavigation(){
+    try{
+      var f = document.getElementById('mainFrame');
+      var doc = f && f.contentDocument;
+      if (!doc || doc.__igdcPolicyNavigationHooked) return;
+      doc.__igdcPolicyNavigationHooked = true;
+      doc.addEventListener('click', function(ev){
+        try{
+          if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+          var link = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+          if (!link) return;
+          var href = link.href || link.getAttribute('href') || '';
+          if (!policyPageHref(href)) return;
+          ev.preventDefault();
+          navigatePolicyFromFrame(href);
+        }catch(e){}
+      }, true);
+    }catch(e){}
+  }
   document.addEventListener("DOMContentLoaded", function(){
     var f = document.getElementById("mainFrame");
-    if (f) f.addEventListener("load", function(){ setTimeout(syncActive, 20); }, true);
+    if (f) f.addEventListener("load", function(){ hookPolicyNavigation(); setTimeout(syncActive, 20); }, true);
     try{
       if (typeof window.loadPage === "function"){
         var _orig = window.loadPage;
         window.loadPage = function(){ try{ return _orig.apply(this, arguments); } finally { setTimeout(syncActive, 20); } };
       }
     }catch(e){}
+    hookPolicyNavigation();
     syncActive();
   });
 })();
