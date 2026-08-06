@@ -24,7 +24,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const CandidateReview = require("./commerce-candidate-review");
 const ReleaseDispatch = require("./lib/commerce-release-dispatch.v1");
 
-const VERSION = "product-go-live-audit-v1.6.0-explicit-admin-persist-before-build";
+const VERSION = "product-go-live-audit-v1.7.0-publication-persistence-readback";
 const MAX_ROWS = 120;
 
 const SNAPSHOT_SPECS = [
@@ -764,8 +764,10 @@ async function requestPublication(event, actor, body, scope, liveDoc){
   if(!assignment){const error=new Error("최종 승인된 PSOM 배정을 찾지 못했습니다.");error.statusCode=409;error.code="audit_ready_assignment_missing";throw error;}
   const originalStatus=low(assignment.publication_status)||"audit_ready";
   const now=new Date().toISOString();
+  let persistence={updated:[],failed:[],trace:{schema:"igdc-assignment-publication-persistence.v1",requested:1,status:"publish_requested",attempted:0,updateReturned:0,readBack:1,confirmed:1,failed:0,ok:true,alreadyPersisted:true}};
   if(originalStatus!=="publish_requested"){
-    await SlotStore.update("gslot_slot_assignments","id=eq."+encodeURIComponent(assignment.id),{publication_status:"publish_requested",updated_at:now,updated_by:text(actor&&actor.sub)});
+    persistence=await bulkAssignmentStatus([{candidateId,candidate,assignment,originalStatus}],"publish_requested",actor&&actor.sub);
+    if(!persistence.updated.length){const failure=persistence.failed[0];const error=new Error("관리자 게재 요청을 배정 원장에 저장하지 못했습니다.");error.statusCode=409;error.code=text(failure&&failure.error&&failure.error.code)||"publication_persistence_unverified";error.lifecycleTrace={stage:"publish_requested_readback",persistence:persistence.trace};throw error;}
   }
   const dispatch=await ReleaseDispatch.dispatch({candidateId,assignmentId:assignment.id,actorId:text(actor&&actor.sub),operation:"publish",candidateCount:1,explicitAdminAuthorization:true});
   const queued=dispatch.queued===true;
@@ -774,7 +776,7 @@ async function requestPublication(event, actor, body, scope, liveDoc){
     candidate:{candidateId,title:first(candidate&&candidate.productCard&&candidate.productCard.title,candidate&&candidate.title)||null,digest:text(candidate&&candidate.digest)||null},
     assignment:{id:assignment.id,hubKey:assignment.hub_key,slotKey:assignment.slot_key,countryCode:assignment.country_code,regionCode:assignment.region_code||null,publicationStatus:"publish_requested"},
     release:{queued,reason:dispatch.reason,status:dispatch.status||null,hookConfigured:dispatch.hookConfigured===true},
-    persisted:true,pendingBuild:!queued,
+    persisted:true,persistenceVerified:true,persistence:persistence.trace,pendingBuild:!queued,
     note:queued?"선택한 상품의 관리자 게재 요청을 원장에 저장하고 빌드 대기열에 등록했습니다. 빌드에서 원장 동기화·Canonical·국가/IP·프론트 스냅샷 검증을 다시 통과해야 실제 사이트에 반영됩니다.":"선택한 상품의 관리자 게재 요청은 원장에 저장했습니다. 자동 빌드 훅이 없거나 실패하여 즉시 스냅샷 빌드는 시작되지 않았지만, 다음 정상 배포가 이 publish_requested 원장을 소비합니다."
   };
 }
@@ -810,6 +812,22 @@ async function assignmentRowsForCandidates(candidateIds){
   }
   return rows;
 }
+async function assignmentRowsForIds(assignmentIds){
+  const rows=[];
+  for(const ids of chunkRows(assignmentIds,80)){
+    if(!ids.length)continue;
+    const found=await SlotStore.select("gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,updated_at&id=in."+inFilter(ids)+"&order=updated_at.desc&limit=5000");
+    rows.push(...asArray(found));
+  }
+  return rows;
+}
+function assignmentStatusConfirmed(actualInput,expectedInput){
+  const actual=low(actualInput),expected=low(expectedInput);
+  if(expected==="publish_requested")return ["publish_requested","published"].includes(actual);
+  if(expected==="audit_ready")return ["audit_ready","ready","not_ready"].includes(actual);
+  if(expected==="unpublish_requested")return ["unpublish_requested","not_ready"].includes(actual);
+  return actual===expected;
+}
 function selectAssignment(rows,candidateId,scope){
   return asArray(rows).find((row)=>text(row&&row.candidate_id)===candidateId&&assignmentScopeMatch(row,scope))||null;
 }
@@ -817,21 +835,28 @@ function batchErrorItem(candidateId,error,status){
   return {candidateId,status:status||"blocked",queued:false,reason:text(error&&error.code)||text(error&&error.message)||"batch_item_blocked",assignmentId:null};
 }
 async function bulkAssignmentStatus(items,status,actorId){
-  const updated=[],failed=[];
+  const updated=[],failed=[],trace={schema:"igdc-assignment-publication-persistence.v1",requested:asArray(items).length,status,attempted:0,updateReturned:0,readBack:0,confirmed:0,failed:0};
   for(const group of chunkRows(items,80)){
     const ids=group.map((item)=>text(item&&item.assignment&&item.assignment.id)).filter(Boolean);
     if(!ids.length)continue;
+    trace.attempted+=ids.length;
     try{
       const rows=await SlotStore.update("gslot_slot_assignments","id=in."+inFilter(ids),{publication_status:status,updated_at:new Date().toISOString(),updated_by:text(actorId)});
-      const returned=new Set(asArray(rows).map((row)=>text(row&&row.id)).filter(Boolean));
+      trace.updateReturned+=asArray(rows).length;
+      const readBack=await assignmentRowsForIds(ids);
+      trace.readBack+=readBack.length;
+      const confirmed=new Map(asArray(readBack).map((row)=>[text(row&&row.id),row]));
       for(const item of group){
         const id=text(item&&item.assignment&&item.assignment.id);
-        if(returned.size&& !returned.has(id))failed.push({item,error:Object.assign(new Error("배정 상태가 갱신되지 않았습니다."),{code:"assignment_update_missing"})});
-        else updated.push(item);
+        const persisted=confirmed.get(id);
+        if(!persisted)failed.push({item,error:Object.assign(new Error("배정 상태 저장 후 원장 재조회에서 행을 찾지 못했습니다."),{code:"assignment_update_missing"})});
+        else if(!assignmentStatusConfirmed(persisted.publication_status,status))failed.push({item,error:Object.assign(new Error("배정 상태 저장값이 요청 상태와 일치하지 않습니다."),{code:"assignment_status_readback_mismatch",actualStatus:low(persisted.publication_status),expectedStatus:low(status)})});
+        else updated.push(Object.assign({},item,{assignment:Object.assign({},item.assignment,{publication_status:persisted.publication_status,updated_at:persisted.updated_at||item.assignment.updated_at})}));
       }
     }catch(error){for(const item of group)failed.push({item,error});}
   }
-  return {updated,failed};
+  trace.confirmed=updated.length;trace.failed=failed.length;trace.ok=failed.length===0&&updated.length===trace.requested;
+  return {updated,failed,trace};
 }
 async function rollbackAssignmentStatuses(items,actorId){
   const groups=new Map();
@@ -844,7 +869,7 @@ async function rollbackAssignmentStatuses(items,actorId){
     try{await bulkAssignmentStatus(rows,status,actorId);}catch(_error){}
   }
 }
-function batchSummary(action,candidateIds,items,release){
+function batchSummary(action,candidateIds,items,release,lifecycleTrace){
   const queued=items.filter((item)=>item.queued===true).length;
   const persisted=items.filter((item)=>item.persisted===true).length;
   const pendingBuild=items.filter((item)=>item.pendingBuild===true).length;
@@ -863,6 +888,7 @@ function batchSummary(action,candidateIds,items,release){
     skipped,
     items,
     release:release||{queued:false,reason:candidateIds.length?"no_eligible_products":"no_selected_products"},
+    lifecycleTrace:lifecycleTrace||null,
     automaticPublication:false,
     publicSnapshotConfirmed:false,
     buildVerificationRequired:true
@@ -884,7 +910,7 @@ async function requestPublicationBatch(event,actor,body,scope,liveDoc){
   try{assignmentRows=await assignmentRowsForCandidates(candidateIds);}catch(error){
     return batchSummary("request_publication_batch",candidateIds,candidateIds.map((id)=>batchErrorItem(id,error)),{queued:false,reason:text(error&&error.code)||"assignment_lookup_failed"});
   }
-  const items=[],eligible=[];
+  const items=[],eligible=[],lifecycleTrace={schema:"igdc-product-publication-lifecycle-trace.v1",selected:candidateIds.length,assignmentLookup:{rows:assignmentRows.length,eligible:0,blocked:0},persistence:null,dispatch:null};
   for(const candidateId of candidateIds){
     const candidate=liveById.get(candidateId)||null;
     if(!candidate&&!lifecyclePrepared){items.push({candidateId,status:"blocked",queued:false,persisted:false,pendingBuild:false,reason:"candidate_not_audit_ready",assignmentId:null});continue;}
@@ -892,23 +918,28 @@ async function requestPublicationBatch(event,actor,body,scope,liveDoc){
     if(!assignment||!["audit_ready","publish_requested","ready"].includes(low(assignment.publication_status))){items.push({candidateId,status:"blocked",queued:false,reason:"audit_ready_assignment_missing",assignmentId:assignment&&assignment.id||null});continue;}
     eligible.push({candidateId,candidate,assignment,originalStatus:low(assignment.publication_status)||"audit_ready"});
   }
+  lifecycleTrace.assignmentLookup.eligible=eligible.length;lifecycleTrace.assignmentLookup.blocked=items.length;
   const already=eligible.filter((item)=>item.originalStatus==="publish_requested"),toUpdate=eligible.filter((item)=>item.originalStatus!=="publish_requested");
   let updated=[];
   if(toUpdate.length){
     const updateResult=await bulkAssignmentStatus(toUpdate,"publish_requested",actor&&actor.sub);
     updated=updateResult.updated;
-    for(const failure of updateResult.failed)items.push({candidateId:failure.item.candidateId,status:"blocked",queued:false,reason:text(failure.error&&failure.error.code)||"assignment_update_failed",assignmentId:failure.item.assignment.id});
+    lifecycleTrace.persistence=updateResult.trace;
+    for(const failure of updateResult.failed)items.push({candidateId:failure.item.candidateId,status:"blocked",queued:false,persisted:false,persistenceVerified:false,pendingBuild:false,reason:text(failure.error&&failure.error.code)||"assignment_update_failed",assignmentId:failure.item.assignment.id});
+  }else{
+    lifecycleTrace.persistence={schema:"igdc-assignment-publication-persistence.v1",requested:already.length,status:"publish_requested",attempted:0,updateReturned:0,readBack:already.length,confirmed:already.length,failed:0,ok:true,alreadyPersisted:true};
   }
   const active=already.concat(updated);
-  if(!active.length)return batchSummary("request_publication_batch",candidateIds,items,{queued:false,reason:"no_eligible_products"});
+  if(!active.length)return batchSummary("request_publication_batch",candidateIds,items,{queued:false,reason:"no_eligible_products"},lifecycleTrace);
   const firstItem=active[0];
   const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"publish",candidateCount:active.length,explicitAdminAuthorization:true});
+  lifecycleTrace.dispatch={queued:dispatch.queued===true,reason:text(dispatch.reason)||null,status:text(dispatch.status)||null,hookConfigured:dispatch.hookConfigured===true,candidateCount:active.length};
   if(!dispatch.queued){
-    for(const item of active)items.push({candidateId:item.candidateId,status:"publish_requested",queued:false,persisted:true,pendingBuild:true,reason:text(dispatch.reason)||"publication_build_pending",assignmentId:item.assignment.id});
-    return batchSummary("request_publication_batch",candidateIds,items,dispatch);
+    for(const item of active)items.push({candidateId:item.candidateId,status:"publish_requested",queued:false,persisted:true,persistenceVerified:true,pendingBuild:true,reason:text(dispatch.reason)||"publication_build_pending",assignmentId:item.assignment.id});
+    return batchSummary("request_publication_batch",candidateIds,items,dispatch,lifecycleTrace);
   }
-  for(const item of active)items.push({candidateId:item.candidateId,status:"publish_requested",queued:true,persisted:true,pendingBuild:false,reason:text(dispatch.reason)||"build_hook_queued",assignmentId:item.assignment.id});
-  return batchSummary("request_publication_batch",candidateIds,items,dispatch);
+  for(const item of active)items.push({candidateId:item.candidateId,status:"publish_requested",queued:true,persisted:true,persistenceVerified:true,pendingBuild:false,reason:text(dispatch.reason)||"build_hook_queued",assignmentId:item.assignment.id});
+  return batchSummary("request_publication_batch",candidateIds,items,dispatch,lifecycleTrace);
 }
 async function requestUnpublicationBatch(event,actor,body,scope){
   requireActorRole(actor,true);
@@ -974,4 +1005,3 @@ exports.handler = async function(event){
 };
 
 module.exports={handler:exports.handler,VERSION,summarize,selectedScope,scopeMatch,itemMarketScopes,geoScope,privateStageStatus,privateStageScopeMatch,releaseControl,isGoLiveAuditCandidate,requestPublication,requestPublicationBatch,requestUnpublicationBatch};
-

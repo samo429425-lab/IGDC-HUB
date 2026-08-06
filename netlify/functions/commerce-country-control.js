@@ -112,11 +112,13 @@ exports.handler=async function(event){
       const loadedJob=await Automation.loadProductResearchJob(request);
       const plan=await Automation.productFrontSyncTargets(request,loadedJob);
       const scope=ProductGoLiveAudit.selectedScope(plan.scope.country,plan.scope.region);
+      const lifecycleTrace={schema:"igdc-product-front-control-trace.v1",operation,scope:plan.scope,plan:{mode:plan.mode,sectionKey:plan.sectionKey||null,productId:plan.productId||null,candidateId:plan.candidateId||null,productCount:Number(plan.productCount||0),selectedTargets:Array.isArray(plan.targets)?plan.targets.length:0},preparation:null,publication:null};
       let batchResult;
       if(!plan.targets.length){
         batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
       }else if(operation==="match"){
         const preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets,loadedJob);
+        lifecycleTrace.preparation=preparation&&preparation.writeTrace||{requested:Number(preparation&&preparation.requested||0),prepared:Number(preparation&&preparation.prepared||0),blocked:Number(preparation&&preparation.blocked||0)};
         const preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds:[];
         const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked");
         if(!preparedIds.length){
@@ -124,17 +126,19 @@ exports.handler=async function(event){
         }else{
           const liveDoc=await CandidateReview.stage(process.cwd());
           const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true},scope,liveDoc);
+          lifecycleTrace.publication=publishResult&&publishResult.lifecycleTrace||null;
           const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
           const items=preparationBlocked.concat(publishItems);
           const queued=items.filter((item)=>item&&item.queued===true).length;
           const persisted=items.filter((item)=>item&&item.persisted===true).length;
           const pendingBuild=items.filter((item)=>item&&item.pendingBuild===true).length;
           const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
-          batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,persisted,pendingBuild,blocked,items,preparation,status:queued?(blocked?"partial":"queued"):(pendingBuild?(blocked?"partial":"pending_build"):(blocked?"blocked":"empty"))});
+          batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,persisted,pendingBuild,blocked,items,preparation,lifecycleTrace,status:queued?(blocked?"partial":"queued"):(pendingBuild?(blocked?"partial":"pending_build"):(blocked?"blocked":"empty"))});
         }
       }else{
         batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope);
       }
+      if(!batchResult.lifecycleTrace)batchResult.lifecycleTrace=lifecycleTrace;
       return json(200,await Automation.recordProductFrontSync(actorId,request,batchResult,loadedJob));
     }
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
@@ -168,5 +172,5 @@ exports.handler=async function(event){
     if(action==="candidate_action")return json(200,await Automation.candidateAction(actorId,body));
     if(action==="research_candidate_action")return json(200,await Automation.researchCandidateAction(actorId,body));
     return json(404,{ok:false,error:"지원하지 않는 국가·지역 관제 요청입니다."});
-  }catch(error){return json(error&&error.statusCode||500,{ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null});}
+  }catch(error){return json(error&&error.statusCode||500,{ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null,lifecycleTrace:plain(error&&error.lifecycleTrace)});}
 };

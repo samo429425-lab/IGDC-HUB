@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.6.5-cumulative-ledger-recovery";
+const VERSION = "commerce-country-automation-v3.7.0-front-publication-persistence-verified";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2384,6 +2384,75 @@ async function frontSyncUpsert(table, rowsInput, conflictColumns) {
   }
   return output;
 }
+function frontSyncExpectedRegion(row, country) {
+  return normalizeRegion(row && row.region_code || "NATIONWIDE", country) || "NATIONWIDE";
+}
+function frontSyncAssignmentStatusReady(value) {
+  return ["audit_ready", "ready", "publish_requested", "published"].includes(lower(value));
+}
+async function verifyProductFrontPreparation(candidateIdsInput, scope, targetById) {
+  const candidateIds = array(candidateIdsInput).map(text).filter(Boolean);
+  const [candidateRows, assignmentRows, availabilityRows, revenueRows, evidenceRows] = await Promise.all([
+    frontSyncSelectCandidates(candidateIds),
+    frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", candidateIds),
+    frontSyncSelectByCandidate("gslot_candidate_availability", "candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at", candidateIds),
+    frontSyncSelectByCandidate("gslot_candidate_revenue", "id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at", candidateIds),
+    frontSyncSelectByCandidate("gslot_candidate_evidence", "id,candidate_id,evidence_type,evidence_url,note,verified,created_at", candidateIds)
+  ]);
+  const candidates = new Map(candidateRows.map((row) => [text(row && row.id), row]));
+  const assignments = new Map(), availability = new Map(), revenues = new Map(), evidence = new Map();
+  function group(map, rows) { for (const row of rows) { const id = text(row && row.candidate_id); if (!map.has(id)) map.set(id, []); map.get(id).push(row); } }
+  group(assignments, assignmentRows); group(availability, availabilityRows); group(revenues, revenueRows); group(evidence, evidenceRows);
+  const items = [], verifiedCandidateIds = [];
+  for (const candidateId of candidateIds) {
+    const target = plain(targetById.get(candidateId)), split = splitProductSectionKey(target.sectionKey), reasons = [];
+    const candidate = candidates.get(candidateId);
+    if (!candidate || lower(candidate.status) !== "revenue_ready") reasons.push("candidate_revenue_ready_not_persisted");
+    const assignment = array(assignments.get(candidateId)).find((row) =>
+      text(row && row.hub_key) === split.page && text(row && row.slot_key) === split.sectionKey &&
+      normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region &&
+      ["approved", "pinned"].includes(lower(row && row.state)) && frontSyncAssignmentStatusReady(row && row.publication_status)
+    );
+    if (!assignment) reasons.push("audit_ready_assignment_not_persisted");
+    const hasAvailability = array(availability.get(candidateId)).some((row) =>
+      normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region &&
+      ["active", "approved", "ready"].includes(lower(row && row.availability_state))
+    );
+    if (!hasAvailability) reasons.push("active_availability_not_persisted");
+    const hasRevenue = array(revenues.get(candidateId)).some((row) => lower(row && row.revenue_type) === "external_referral" && lower(row && row.status) === "approved");
+    if (!hasRevenue) reasons.push("approved_referral_revenue_not_persisted");
+    const hasEvidence = array(evidence.get(candidateId)).some((row) => row && row.verified === true && !!safeUrl(row.evidence_url));
+    if (!hasEvidence) reasons.push("verified_supplier_evidence_not_persisted");
+    const verified = reasons.length === 0;
+    if (verified) verifiedCandidateIds.push(candidateId);
+    items.push({ candidateId, verified, assignmentId: text(assignment && assignment.id) || null, publicationStatus: text(assignment && assignment.publication_status) || null, reasons });
+  }
+  return {
+    ok: verifiedCandidateIds.length === candidateIds.length,
+    requested: candidateIds.length,
+    verified: verifiedCandidateIds.length,
+    failed: candidateIds.length - verifiedCandidateIds.length,
+    verifiedCandidateIds,
+    items
+  };
+}
+async function frontSyncWriteStage(trace, name, attempted, writer) {
+  const stage = { attempted: Number(attempted || 0), returned: 0, ok: true };
+  trace[name] = stage;
+  if (!stage.attempted) return [];
+  try {
+    const rows = array(await writer());
+    stage.returned = rows.length;
+    return rows;
+  } catch (error) {
+    stage.ok = false;
+    stage.error = text(error && (error.code || error.message)) || "front_lifecycle_write_failed";
+    error.code = error.code || "front_lifecycle_" + name + "_write_failed";
+    error.statusCode = error.statusCode || 502;
+    error.lifecycleTrace = trace;
+    throw error;
+  }
+}
 function frontSyncPublicReadiness(productInput, existingCandidate) {
   const product = plain(productInput), existingPayload = plain(existingCandidate && existingCandidate.source_payload), risk = plain(product.riskAssessment), supplier = plain(product.supplierAssessment), reasons = [], warnings = [];
   const productPageUrl = safeUrl(productUrl(product)), imageUrl = safeUrl(productImageUrl(product)), supplierUrl = safeUrl(first(product.supplierSiteUrl, plain(product.supplier).officialUrl)), supplierName = first(product.supplierName, plain(product.supplier).name);
@@ -2434,7 +2503,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
   function group(map, rows) { for (const row of rows) { const id = text(row && row.candidate_id); if (!map.has(id)) map.set(id, []); map.get(id).push(row); } }
   group(assignmentsByCandidate, assignmentRows); group(availabilityByCandidate, availabilityRows); group(revenuesByCandidate, revenueRows); group(evidenceByCandidate, evidenceRows);
 
-  const now = iso(), actor = text(actorId) || "administrator", candidateUpserts = [], assignmentUpserts = [], revenueUpserts = [], evidenceUpserts = [], availabilityInserts = [], items = [], preparedCandidateIds = [];
+  const now = iso(), actor = text(actorId) || "administrator", candidateUpserts = [], assignmentUpserts = [], revenueUpserts = [], evidenceUpserts = [], availabilityInserts = [], items = [], plannedCandidateIds = [];
   for (const candidateId of targetIds) {
     const target = plain(targetById.get(candidateId)), product = plain(productByCandidate.get(candidateId)), existing = plain(candidateById.get(candidateId));
     if (!Object.keys(product).length) { items.push({ candidateId, status: "blocked", queued: false, reason: "product_job_candidate_missing", assignmentId: null }); continue; }
@@ -2485,18 +2554,34 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
       note: "Official supplier identity and official product reference were confirmed by the administrator. Pending inspection or supplier-evidence warnings remain recorded in the candidate payload and must still pass the final build gate.",
       verified: true, created_at: now, created_by: actor
     });
-    preparedCandidateIds.push(candidateId);
+    plannedCandidateIds.push(candidateId);
     items.push({ candidateId, status: "prepared", queued: false, reason: "front_lifecycle_prepared", warnings: readiness.warnings || [], assignmentId });
   }
 
-  if (candidateUpserts.length) await frontSyncUpsert("gslot_candidates", candidateUpserts, "id");
-  if (assignmentUpserts.length) await frontSyncUpsert("gslot_slot_assignments", assignmentUpserts, "id");
-  if (availabilityInserts.length) for (const batch of frontSyncChunk(availabilityInserts, 80)) await SlotStore.insert("gslot_candidate_availability", batch, "return=representation");
-  if (revenueUpserts.length) await frontSyncUpsert("gslot_candidate_revenue", revenueUpserts, "id");
-  if (evidenceUpserts.length) await frontSyncUpsert("gslot_candidate_evidence", evidenceUpserts, "id");
+  const writeTrace = { schema: "igdc-product-front-lifecycle-write-trace.v1", requested: targetIds.length, policyEligible: plannedCandidateIds.length };
+  await frontSyncWriteStage(writeTrace, "candidates", candidateUpserts.length, () => frontSyncUpsert("gslot_candidates", candidateUpserts, "id"));
+  await frontSyncWriteStage(writeTrace, "assignments", assignmentUpserts.length, () => frontSyncUpsert("gslot_slot_assignments", assignmentUpserts, "id"));
+  await frontSyncWriteStage(writeTrace, "availability", availabilityInserts.length, async () => {
+    const output = [];
+    for (const batch of frontSyncChunk(availabilityInserts, 80)) output.push(...array(await SlotStore.insert("gslot_candidate_availability", batch, "return=representation")));
+    return output;
+  });
+  await frontSyncWriteStage(writeTrace, "revenue", revenueUpserts.length, () => frontSyncUpsert("gslot_candidate_revenue", revenueUpserts, "id"));
+  await frontSyncWriteStage(writeTrace, "evidence", evidenceUpserts.length, () => frontSyncUpsert("gslot_candidate_evidence", evidenceUpserts, "id"));
+  const verification = plannedCandidateIds.length ? await verifyProductFrontPreparation(plannedCandidateIds, scope, targetById) : { ok: true, requested: 0, verified: 0, failed: 0, verifiedCandidateIds: [], items: [] };
+  writeTrace.verification = { requested: verification.requested, verified: verification.verified, failed: verification.failed, ok: verification.ok };
+  const verificationById = new Map(array(verification.items).map((row) => [text(row && row.candidateId), row]));
+  const preparedCandidateIds = array(verification.verifiedCandidateIds);
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (!item || item.status !== "prepared") continue;
+    const verified = verificationById.get(text(item.candidateId));
+    if (verified && verified.verified === true) items[index] = Object.assign({}, item, { persisted: true, persistenceVerified: true, assignmentId: text(verified.assignmentId) || item.assignmentId, publicationStatus: text(verified.publicationStatus) || "audit_ready" });
+    else items[index] = Object.assign({}, item, { status: "blocked", persisted: false, persistenceVerified: false, reason: "front_lifecycle_persistence_unverified", reasons: array(verified && verified.reasons), assignmentId: text(verified && verified.assignmentId) || item.assignmentId || null });
+  }
   return {
     ok: true, schema: "igdc-product-front-lifecycle-preparation.v1", scope, requested: targetIds.length, prepared: preparedCandidateIds.length,
-    blocked: items.filter((item) => item.status === "blocked").length, preparedCandidateIds, items,
+    blocked: items.filter((item) => item.status === "blocked").length, preparedCandidateIds, items, writeTrace,
     policy: { explicitAdministratorConfirmationRequired: true, officialSellerExternalReferralOnly: true, trustThresholdWhenScored: TRUST_POLICY.minimumTrustScore, verifiedOfficialSupplierEvidenceMaySatisfyUnscoredTrust: true, noIgdcCheckout: true, noPaymentExecution: true, noCrossCountryFallback: true }
   };
 }
@@ -2505,19 +2590,21 @@ async function productFrontSyncTargets(input, jobInput) {
   const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   if (!array(job.products).length) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
-  const mode = lower(input && input.mode) === "section" ? "section" : "all", sectionKey = text(input && input.sectionKey);
+  const requestedMode = lower(input && input.mode), mode = requestedMode === "candidate" ? "candidate" : (requestedMode === "section" ? "section" : "all"), sectionKey = text(input && input.sectionKey), requestedProductId = text(input && input.productId), requestedCandidateId = text(input && input.candidateId);
   if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("프론트에 매칭할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
+  if (mode === "candidate" && !requestedProductId && !requestedCandidateId) { const error = new Error("프론트에 매칭할 상품 한 건을 선택하세요."); error.statusCode = 400; throw error; }
   const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match";
   const targets = array(job.products).filter((row) => {
     const key = productPlacementKey(row && (row.approvedPlacement || row.selectedPlacement || row.primaryPlacement));
     if (mode === "section" && key !== sectionKey) return false;
+    if (mode === "candidate" && text(row && row.id) !== requestedProductId && productCandidateId(scope, row) !== requestedCandidateId) return false;
     if (operation === "match") return lower(row && row.slotDecision) === "slot_candidate" && validProductSectionKey(key);
     const front = plain(row && row.frontPublication);
     return validProductSectionKey(key) && (lower(row && row.slotDecision) === "slot_candidate" || ["queued","publish_requested","matched","published","unpublish_failed"].includes(lower(front.status)));
   }).map((row) => ({
     productId: text(row.id), candidateId: productCandidateId(scope, row), title: first(row.productName, row.title), sectionKey: productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement), digest: sha256({ id: text(row.id), identity: ProductRanking.productIdentity(row), placement: productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement), updatedAt: row.updatedAt || row.decisionAt || null })
   }));
-  return { ok: true, scope, mode, sectionKey: mode === "section" ? sectionKey : null, operation, targets, productCount: array(job.products).length };
+  return { ok: true, scope, mode, sectionKey: mode === "section" ? sectionKey : (targets[0] && targets[0].sectionKey || null), productId: mode === "candidate" ? (requestedProductId || targets[0] && targets[0].productId || null) : null, candidateId: mode === "candidate" ? (requestedCandidateId || targets[0] && targets[0].candidateId || null) : null, operation, targets, productCount: array(job.products).length };
 }
 async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
   const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
@@ -2528,12 +2615,12 @@ async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
     if (!item) return row;
     const status = text(item.status) || (item.queued === true ? (operation === "match" ? "publish_requested" : "unpublish_requested") : "blocked");
     return Object.assign({}, row, {
-      frontPublication: { schema: "igdc-product-front-publication-control.v1", candidateId, operation, status, queued: item.queued === true, reason: text(item.reason) || null, assignmentId: text(item.assignmentId) || null, requestedAt: now, requestedBy: text(actorId) || "administrator", publicSnapshotConfirmed: false, buildVerificationRequired: true },
+      frontPublication: { schema: "igdc-product-front-publication-control.v1", candidateId, operation, status, queued: item.queued === true, persisted: item.persisted === true, pendingBuild: item.pendingBuild === true, persistenceVerified: item.persistenceVerified !== false && item.persisted === true, reason: text(item.reason) || null, assignmentId: text(item.assignmentId) || null, requestedAt: now, requestedBy: text(actorId) || "administrator", publicSnapshotConfirmed: false, buildVerificationRequired: true },
       publicPublication: false
     });
   });
   job.version = VERSION; job.updatedAt = now;
-  job.trace = array(job.trace).concat([{ at: now, source: "product-front-publication-control", operation, requested: Number(batchResult && batchResult.requested || 0), queued: Number(batchResult && batchResult.queued || 0), blocked: Number(batchResult && batchResult.blocked || 0), publicSnapshotConfirmed: false }]).slice(-240);
+  job.trace = array(job.trace).concat([{ at: now, source: "product-front-publication-control", operation, requested: Number(batchResult && batchResult.requested || 0), prepared: Number(batchResult && batchResult.preparation && batchResult.preparation.prepared || 0), persisted: Number(batchResult && batchResult.persisted || 0), queued: Number(batchResult && batchResult.queued || 0), pendingBuild: Number(batchResult && batchResult.pendingBuild || 0), blocked: Number(batchResult && batchResult.blocked || 0), publicSnapshotConfirmed: false }]).slice(-240);
   await saveProductJob(job, actorId);
   const result = publicProductJob(job);
   result.frontSyncResult = Object.assign({}, plain(batchResult), { operation, publicSnapshotConfirmed: false, buildVerificationRequired: true });
