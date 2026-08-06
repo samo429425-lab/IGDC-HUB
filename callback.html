@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>MARU Media Player Sign-in</title>
+  <title>MARU Sign-in</title>
   <style>
     html,body{margin:0;min-height:100%;background:#0b1119;color:#edf5ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
     body{display:grid;place-items:center;min-height:100vh}
@@ -13,9 +13,9 @@
 </head>
 <body>
 <main id="status" hidden>
-  <h1>MARU Media Player</h1>
-  <p>Returning to MARU Media Player…</p>
-  <p><a id="openPlayer" href="#">Open MARU Media Player</a></p>
+  <h1>MARU Player</h1>
+  <p>Returning to MARU Player…</p>
+  <p><a id="openPlayer" href="#">Open MARU Player</a></p>
 </main>
 <script>
 (function(){
@@ -34,33 +34,11 @@
     var playerTarget = playerCallback.toString();
     var link = document.getElementById('openPlayer');
     if (link) link.href = playerTarget;
-
-    // Chrome keeps the HTTPS callback tab open after handing a custom-protocol
-    // URL to Windows. Once MARU Media Player takes focus, close only this
-    // temporary callback tab. Never open or redirect to the IGDC website.
-    var callbackTabCleaned = false;
-    function closeCallbackTabAfterPlayerHandoff(){
-      if (callbackTabCleaned) return;
-      callbackTabCleaned = true;
-      setTimeout(function(){
-        try { window.close(); } catch(_) {}
-        // Chrome may block script-closing a regular tab. Keep that fallback
-        // neutral and empty; it must never become an IGDC website session.
-        setTimeout(function(){
-          if (!window.closed) location.replace('about:blank');
-        }, 350);
-      }, 250);
-    }
-    window.addEventListener('blur', closeCallbackTabAfterPlayerHandoff, {once:true});
-    document.addEventListener('visibilitychange', function(){
-      if (document.hidden) closeCallbackTabAfterPlayerHandoff();
-    }, {once:true});
     location.replace(playerTarget);
     setTimeout(function(){
-      if (callbackTabCleaned) return;
       var status = document.getElementById('status');
       if (status) status.hidden = false;
-    }, 5000);
+    }, 1200);
     return;
   }
 
