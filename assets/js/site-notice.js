@@ -78,6 +78,8 @@
       terms: true,
       privacy: true,
       refund: true,
+      'maru-download': true,
+      'maru-download.html': true,
       admin: true,
       'support.html': true,
       'admin.html': true,
