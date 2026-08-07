@@ -32,7 +32,7 @@ html[dir="rtl"] body{direction:rtl}html[dir="rtl"] .hero,html[dir="rtl"] .card{t
 <article class="card full">
 <h2 id="downloadsTitle"></h2><p id="downloadText"></p>
 <div class="downloadItem"><div><b>MARU Media Player · Windows</b><span>EXE installer / setup file</span></div><a class="btn" id="downloadBtn" href="https://github.com/samo429425-lab/IGDC-HUB/releases/download/v1.0.0/maru-media-player-setup.exe" download target="_blank" rel="noopener"></a></div>
-<div class="downloadItem"><div><b>IGDC Download Guide</b><span id="guideSub"></span></div><a class="btn" href="/support.html" id="guideBtn"></a></div>
+<div class="downloadItem" id="downloadGuide"><div><b>IGDC Download Guide</b><span id="guideSub"></span></div><a class="btn" href="#downloadGuide" id="guideBtn"></a></div>
 <div class="notice" id="downloadNotice"></div>
 <div class="policyInside"><h3 id="policyTitle"></h3><p id="policyText"></p><div class="policyActions"><a class="btn" id="termsBtn" href="/terms"></a><a class="btn" id="privacyBtn" href="/privacy"></a><a class="btn" id="refundBtn" href="/refund"></a></div></div>
 </article>
@@ -66,6 +66,13 @@ function render(lang){
  document.getElementById('emailNote').textContent=t.emailLabel||'Support email';
 }
 render((new URLSearchParams(location.search).get('lang')||'ko').toLowerCase());
+document.getElementById('guideBtn').addEventListener('click',function(ev){
+ ev.preventDefault();
+ var lang=(new URLSearchParams(location.search).get('lang')||'ko').toLowerCase();
+ var t=I18N[lang]||I18N.en||I18N.ko;
+ var text=[t.downloads||'Program downloads','',t.downloadText||'',t.notice||'','igdcplatform@gmail.com'].join('\n');
+ var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'})); a.download='IGDC_DOWNLOAD_GUIDE.txt'; a.click(); setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
+});
 </script>
 </body>
 </html>
