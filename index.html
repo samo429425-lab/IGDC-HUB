@@ -480,7 +480,6 @@ function changeLanguage(lang) {
 }
 
 function publicPageHref(page, index){
-  if (index === 9) return '/maru-download.html';
   if (index === 8) return '/help';
   if (index === 7) return '/admin';
   var clean = String(page || 'home.html').replace(/^\/+/, '').replace(/\.html(?=([?#]|$))/i, '');
@@ -1124,7 +1123,7 @@ html:not([data-igdc-donation-ready="1"]) nav [data-igdc-donation-nav="1"] { disp
 <a href="/donation" data-page-index="6" data-igdc-donation-nav="1" onclick="return loadPage(6,event)">💝 후원</a>
 <a href="/admin.html" data-page-index="7" data-role="admin" onclick="return loadPage(7,event)">🛠 Admin</a>
 <a href="/help" data-page-index="8" onclick="return loadPage(8,event)">❓ 도움말</a>
-<a href="/maru-download.html" data-page-index="9" onclick="return loadPage(9,event)">💾 프로그램 다운로드</a>
+<a href="/maru-download" data-page-index="9" onclick="return loadPage(9,event)">💾 프로그램 다운로드</a>
 </nav>
 <iframe id="mainFrame" name="mainFrame"></iframe>
 <!-- 🧠 자동 API 연동 및 도네이션 수익 로직 삽입 -->
