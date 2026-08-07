@@ -16,7 +16,8 @@ h1{margin:0 0 8px;color:#003b75;font-size:30px}.subtitle{margin:0;color:var(--mu
 .downloadItem{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px;border:1px solid #e0e8f2;background:#fbfdff;border-radius:12px;margin-top:10px}
 .downloadItem b{display:block;color:#183e63}.downloadItem span{color:var(--muted);font-size:13px}
 .btn{display:inline-block;padding:9px 12px;border:1px solid #b9d2ee;border-radius:9px;background:#eef7ff;color:#004080;text-decoration:none;font-weight:700}
-.policyActions{display:flex;gap:8px;flex-wrap:wrap}.notice{margin-top:12px;padding:10px 12px;color:#7a5600;background:#fff8e5;border:1px solid #f2dfad;border-radius:10px;font-size:14px}
+.policyInside{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.policyInside h3{margin:0 0 8px;color:var(--blue);font-size:18px}.policyActions{display:flex;gap:8px;flex-wrap:wrap}
+.notice{margin-top:12px;padding:10px 12px;color:#7a5600;background:#fff8e5;border:1px solid #f2dfad;border-radius:10px;font-size:14px}
 .email{text-align:center;margin-top:16px}.email a{color:#004080;font-weight:700}
 @media(max-width:760px){.grid{grid-template-columns:1fr}h1{font-size:25px}.card.full{grid-column:auto}}
 </style>
@@ -29,19 +30,6 @@ h1{margin:0 0 8px;color:#003b75;font-size:30px}.subtitle{margin:0;color:var(--mu
 <div class="operator">International General Trading Company · IGDC Global</div>
 </section>
 <section class="grid">
-<article class="card full">
-<h2 id="downloadsTitle">프로그램 다운로드</h2>
-<p id="downloadText">Windows 설치 파일은 공식 IGDC 다운로드 링크로 제공합니다. 다운로드 전에 설치 파일과 정책 안내를 확인해 주세요.</p>
-<div class="downloadItem">
-<div><b>MARU Media Player · Windows</b><span>EXE installer / setup file</span></div>
-<a class="btn" href="https://github.com/samo429425-lab/IGDC-HUB/releases/download/v1.0.0/maru-media-player-setup.exe" download target="_blank" rel="noopener">다운로드</a>
-</div>
-<div class="downloadItem">
-<div><b>IGDC Download Guide</b><span>설치 및 업데이트 안내</span></div>
-<a class="btn" href="/support.html#downloads">설치 안내 보기</a>
-</div>
-<div class="notice">Windows 설치 파일은 약 197MB의 대용량 파일입니다. 다운로드 후 실행하면 설치가 진행됩니다. 공식 IGDC 사이트에서 제공되는 파일인지 확인한 뒤 사용해 주세요.</div>
-</article>
 <article class="card">
 <h2 id="paymentTitle">결제 · 정기결제 · 환불 안내</h2>
 <ul>
@@ -56,12 +44,25 @@ h1{margin:0 0 8px;color:#003b75;font-size:30px}.subtitle{margin:0;color:var(--mu
 <p>IGDC는 상품, 콘텐츠, 서비스의 판매자·제공자를 연결하는 플랫폼입니다. 상품 상세, 가격, 배송, 환불, 이용 조건과 거래 이행 책임은 해당 판매자 또는 제공자와 이용자 사이의 조건을 우선 확인해야 합니다.</p>
 </article>
 <article class="card full">
-<h2>MARU 미디어 프로그램 정책</h2>
+<h2 id="downloadsTitle">프로그램 다운로드</h2>
+<p id="downloadText">Windows 설치 파일은 공식 IGDC 다운로드 링크로 제공합니다. 다운로드 전에 설치 파일과 정책 안내를 확인해 주세요.</p>
+<div class="downloadItem">
+<div><b>MARU Media Player · Windows</b><span>EXE installer / setup file</span></div>
+<a class="btn" href="https://github.com/samo429425-lab/IGDC-HUB/releases/download/v1.0.0/maru-media-player-setup.exe" download target="_blank" rel="noopener">다운로드</a>
+</div>
+<div class="downloadItem">
+<div><b>IGDC Download Guide</b><span>설치 및 업데이트 안내</span></div>
+<a class="btn" href="/support.html">설치 안내 보기</a>
+</div>
+<div class="notice">Windows 설치 파일은 약 197MB의 대용량 파일입니다. 다운로드 후 실행하면 설치가 진행됩니다. 공식 IGDC 사이트에서 제공되는 파일인지 확인한 뒤 사용해 주세요.</div>
+<div class="policyInside">
+<h3>MARU 미디어 프로그램 정책</h3>
 <p>MARU 미디어 프로그램과 유료 AI 미디어 서비스에 적용되는 공식 정책입니다.</p>
 <div class="policyActions">
 <a class="btn" href="/terms">이용약관</a>
 <a class="btn" href="/privacy">개인정보처리방침</a>
 <a class="btn" href="/refund">환불정책</a>
+</div>
 </div>
 </article>
 </section>
@@ -86,5 +87,3 @@ h1{margin:0 0 8px;color:#003b75;font-size:30px}.subtitle{margin:0;color:var(--mu
 </script>
 </body>
 </html>
-
-
