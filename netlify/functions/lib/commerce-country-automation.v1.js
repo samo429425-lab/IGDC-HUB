@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.7.0-front-publication-persistence-verified";
+const VERSION = "commerce-country-automation-v3.8.0-multi-section-product-front-control";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2198,6 +2198,15 @@ async function productAiAutomation(actorId, input) {
   const scope = researchScope(input), job = await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   if (!array(job.products).length) { const error = new Error("AI 자동 배치할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
+  let recoveredMissingPlacements = 0;
+  job.products = array(job.products).map((rowInput) => {
+    const row = plain(rowInput), decision = lower(row.slotDecision || "undecided"), key = productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement);
+    if (decision !== "slot_candidate" || validProductSectionKey(key) || productAdministratorLocked(row)) return row;
+    recoveredMissingPlacements += 1;
+    const next = Object.assign({}, row, { slotDecision: "undecided", decisionSource: "placement_integrity_recovery", publicPublication: false, automaticImport: false });
+    delete next.approvedPlacement; delete next.selectedPlacement;
+    return next;
+  });
   const mode = lower(input && input.mode) === "section" ? "section" : "all", sectionKey = text(input && input.sectionKey);
   if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("AI 자동 관리할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
   const unassignedPlacementOnly = mode === "all" && array(job.products).some((row) =>
@@ -2297,7 +2306,7 @@ async function productAiAutomation(actorId, input) {
   }
   const queueFailures = syncResults.filter((row) => row.ok !== true);
   job.version = VERSION; job.rankingVersion = ProductRanking.VERSION; job.updatedAt = iso();
-  job.trace = array(job.trace).concat([{ at: iso(), source: unassignedPlacementOnly ? "product-ai-unassigned-auto-section-placement" : "product-ai-private-placement-management", status: queueFailures.length ? "completed_with_queue_warnings" : "complete", runId, mode, sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, manualPreserved, queueFailures: queueFailures.length, queueSyncDeferred: unassignedPlacementOnly ? changed.length : 0, enrichmentAttempted: enrichment.attempted, enrichmentCompleted: enrichment.completed, enrichmentChanged: enrichment.changed, enrichmentRemaining: enrichment.remaining, automaticPublication: false, automaticProductImport: false }]).slice(-240);
+  job.trace = array(job.trace).concat([{ at: iso(), source: unassignedPlacementOnly ? "product-ai-unassigned-auto-section-placement" : "product-ai-private-placement-management", status: queueFailures.length ? "completed_with_queue_warnings" : "complete", runId, mode, sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, recoveredMissingPlacements, manualPreserved, queueFailures: queueFailures.length, queueSyncDeferred: unassignedPlacementOnly ? changed.length : 0, enrichmentAttempted: enrichment.attempted, enrichmentCompleted: enrichment.completed, enrichmentChanged: enrichment.changed, enrichmentRemaining: enrichment.remaining, automaticPublication: false, automaticProductImport: false }]).slice(-240);
   if (queueFailures.length) job.errors = array(job.errors).concat(queueFailures.slice(0, 30).map((row) => ({ at: iso(), stage: "product_ai_automation_queue_sync", productId: row.productId, message: row.error }))).slice(-60);
   await saveProductJob(job, actorId);
   const result = publicProductJob(job), finalRows = array(result.products);
@@ -2310,6 +2319,7 @@ async function productAiAutomation(actorId, input) {
   result.aiAutomationResult = {
     schema: "igdc-product-ai-private-placement-result.v3",
     runId, mode, sectionKey: mode === "section" ? sectionKey : null,
+    recoveredMissingPlacements,
     considered: unassignedPlacementOnly ? currentRows.filter((row) => lower(row && row.slotDecision || "undecided") === "undecided" && !productAdministratorLocked(row)).length : currentRows.length,
     changed: changed.length,
     assigned: unassignedPlacementOnly ? changed.filter((row) => lower(row.slotDecision) === "slot_candidate").length : resultScopeRows.filter((row) => lower(row.slotDecision) === "slot_candidate" && productAutomationManaged(row)).length,
@@ -2590,21 +2600,29 @@ async function productFrontSyncTargets(input, jobInput) {
   const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   if (!array(job.products).length) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
-  const requestedMode = lower(input && input.mode), mode = requestedMode === "candidate" ? "candidate" : (requestedMode === "section" ? "section" : "all"), sectionKey = text(input && input.sectionKey), requestedProductId = text(input && input.productId), requestedCandidateId = text(input && input.candidateId);
+  const requestedMode = lower(input && input.mode), mode = ["candidate","candidates","section","sections"].includes(requestedMode) ? requestedMode : "all", sectionKey = text(input && input.sectionKey), requestedProductId = text(input && input.productId), requestedCandidateId = text(input && input.candidateId);
+  const requestedSectionKeys = Array.from(new Set(array(input && input.sectionKeys).map(text).filter(validProductSectionKey))).slice(0, PRODUCT_SECTION_KEYS.length);
+  const requestedProductIds = Array.from(new Set(array(input && input.productIds).map(text).filter(Boolean))).slice(0, 500);
+  const requestedCandidateIds = Array.from(new Set(array(input && input.candidateIds).map(text).filter(Boolean))).slice(0, 500);
   if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("프론트에 매칭할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
+  if (mode === "sections" && !requestedSectionKeys.length) { const error = new Error("프론트에 매칭할 섹션을 하나 이상 선택하세요."); error.statusCode = 400; throw error; }
   if (mode === "candidate" && !requestedProductId && !requestedCandidateId) { const error = new Error("프론트에 매칭할 상품 한 건을 선택하세요."); error.statusCode = 400; throw error; }
+  if (mode === "candidates" && !requestedProductIds.length && !requestedCandidateIds.length) { const error = new Error("프론트에 매칭할 상품을 하나 이상 선택하세요."); error.statusCode = 400; throw error; }
   const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match";
+  if (operation === "match" && text(job.status) && job.status !== "complete") { const error = new Error("상품 조사와 비공개 대기열 등록을 완료한 뒤 프론트 매칭을 실행하세요."); error.statusCode = 409; throw error; }
   const targets = array(job.products).filter((row) => {
     const key = productPlacementKey(row && (row.approvedPlacement || row.selectedPlacement || row.primaryPlacement));
     if (mode === "section" && key !== sectionKey) return false;
+    if (mode === "sections" && !requestedSectionKeys.includes(key)) return false;
     if (mode === "candidate" && text(row && row.id) !== requestedProductId && productCandidateId(scope, row) !== requestedCandidateId) return false;
+    if (mode === "candidates" && !requestedProductIds.includes(text(row && row.id)) && !requestedCandidateIds.includes(productCandidateId(scope, row))) return false;
     if (operation === "match") return lower(row && row.slotDecision) === "slot_candidate" && validProductSectionKey(key);
     const front = plain(row && row.frontPublication);
-    return validProductSectionKey(key) && (lower(row && row.slotDecision) === "slot_candidate" || ["queued","publish_requested","matched","published","unpublish_failed"].includes(lower(front.status)));
+    return validProductSectionKey(key) && ["queued","publish_requested","matched","published","unpublish_failed"].includes(lower(front.status));
   }).map((row) => ({
     productId: text(row.id), candidateId: productCandidateId(scope, row), title: first(row.productName, row.title), sectionKey: productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement), digest: sha256({ id: text(row.id), identity: ProductRanking.productIdentity(row), placement: productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement), updatedAt: row.updatedAt || row.decisionAt || null })
   }));
-  return { ok: true, scope, mode, sectionKey: mode === "section" ? sectionKey : (targets[0] && targets[0].sectionKey || null), productId: mode === "candidate" ? (requestedProductId || targets[0] && targets[0].productId || null) : null, candidateId: mode === "candidate" ? (requestedCandidateId || targets[0] && targets[0].candidateId || null) : null, operation, targets, productCount: array(job.products).length };
+  return { ok: true, scope, mode, sectionKey: mode === "section" ? sectionKey : (targets[0] && targets[0].sectionKey || null), sectionKeys: mode === "sections" ? requestedSectionKeys : [], productId: mode === "candidate" ? (requestedProductId || targets[0] && targets[0].productId || null) : null, productIds: mode === "candidates" ? requestedProductIds : [], candidateId: mode === "candidate" ? (requestedCandidateId || targets[0] && targets[0].candidateId || null) : null, candidateIds: mode === "candidates" ? requestedCandidateIds : [], operation, targets, productCount: array(job.products).length };
 }
 async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
   const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);

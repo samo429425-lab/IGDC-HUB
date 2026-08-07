@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.6.1-product-visibility-regression-repair";
+const VERSION="regional-brokerage-autoselector-v2.6.2-resumable-product-inspection";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -665,11 +665,10 @@ async function runSelection(event,params){
   const adminPolicyHints=policyHints(requested.policyHints);
   const geo=explicitCountry?{country:explicitCountry,region:Core.normalizeRegion(requested.region||requested.targetRegion,explicitCountry),city:"",countryName:Core.COUNTRY_NAMES[explicitCountry]||explicitCountry,categoryWeights,signalPlanVersion:text(requested.signalPlanVersion),policyHints:adminPolicyHints}:Object.assign({},Core.parseGeo(event,requested),{categoryWeights,signalPlanVersion:text(requested.signalPlanVersion),policyHints:adminPolicyHints});
   const privateCollection=requested.privateCollection===true||String(requested.privateCollection||"").toLowerCase()==="true";
-  const noLiveDiscovery=requested.noLiveDiscovery===true||String(requested.noLiveDiscovery||"").toLowerCase()==="true";
   const privateLimit=Math.max(1,Math.min(50,Number(requested.privateLimit||requested.maxCandidates||20)||20));
   const key=cacheKey(geo,privateCollection?"private-supplier":"front");const cached=getCache(key);if(cached)return Object.assign({},cached,{meta:Object.assign({},cached.meta||{},{cache:"hit"})});
   const started=Date.now(),stored=Core.loadStoredCandidates();let selected=Core.selection(stored.items,geo),discovery={items:[],trace:[]},checked=[],privateReviewItems=[];
-  if(!noLiveDiscovery&&(privateCollection||selected.accepted.length<6)&&geo.country!=="GLOBAL"){
+  if((privateCollection||selected.accepted.length<6)&&geo.country!=="GLOBAL"){
     discovery=await runSanmaruDiscovery(event,geo,privateLimit);
     checked=await inspectLive(discovery.items,geo);
     if(privateCollection)privateReviewItems=privateReviewPool(discovery.items,checked,geo,privateLimit);
@@ -685,7 +684,7 @@ async function runSelection(event,params){
       marketSignals:{applied:Object.values(categoryWeights).some(value=>value!==0),categoryWeights,signalPlanVersion:text(requested.signalPlanVersion),categoryKeys:queryCategories(geo).map(index=>CATEGORY_KEYS[index])},
       administratorPolicy:{applied:adminPolicyHints.priorityDirections.length>0||adminPolicyHints.avoidDirections.length>0||adminPolicyHints.manualPriorityTargets.length>0||adminPolicyHints.manualBlockedTargets.length>0,priorityDirections:adminPolicyHints.priorityDirections,avoidDirections:adminPolicyHints.avoidDirections,manualPriorityTargets:adminPolicyHints.manualPriorityTargets,manualBlockedTargets:adminPolicyHints.manualBlockedTargets,manualPrecedence:true},
       privateReview:{enabled:privateCollection,entityKind:"supplier",raw:discovery.items.length,inspected:checked.length,count:privateReviewItems.length,researchEligible:privateReviewItems.filter(item=>plain(item&&item.brokerageVerification).supplierResearchEligible===true).length,evidenceReady:privateReviewItems.filter(item=>plain(item&&item.brokerageVerification).supplierReviewEligible===true).length,productPageImport:false,publicPublication:false},
-      liveDiscoveryAllowed:!noLiveDiscovery,elapsedMs:Date.now()-started,hasSnapshot:!!snapshot}
+      elapsedMs:Date.now()-started,hasSnapshot:!!snapshot}
   };
   return setCache(key,result);
 }
@@ -1046,6 +1045,23 @@ async function inspectProductCandidate(item){
   }finally{clearTimeout(timer);}
 }
 
-async function inspectProductResearchStep(rawItems){const items=array(rawItems).slice(0,4),settled=await Promise.all(items.map(inspectProductCandidate));return{ok:true,version:VERSION,items:settled};}
+async function inspectProductResearchStep(rawItems){
+  const items=array(rawItems).slice(0,4),results=await Promise.allSettled(items.map((item)=>withTimeout(inspectProductCandidate(item),16000)));
+  const inspected=results.map((result,index)=>{
+    if(result.status==="fulfilled")return result.value;
+    const row=plain(items[index]),error=result.reason;
+    return Object.assign({},row,{
+      researchStatus:"inspection_error",
+      productPageLive:false,
+      inspectionComplete:true,
+      inspectedAt:new Date().toISOString(),
+      inspectionError:{code:text(error&&error.code)||"INSPECTION_ERROR",message:text(error&&error.message||error)||"product inspection failed"},
+      slotDecision:text(row.slotDecision)||"undecided",
+      publicPublication:false,
+      automaticImport:false
+    });
+  });
+  return{ok:true,version:VERSION,items:inspected,failed:results.filter((result)=>result.status==="rejected").length};
+}
 
 module.exports={VERSION,runSelection,createSupplierResearchPlan,searchSupplierResearchStep,prepareSupplierInspectionPool,inspectSupplierResearchStep,buildSupplierReviewPool,discoverSupplierProductsStep,prepareProductInspectionPool,inspectProductResearchStep};
