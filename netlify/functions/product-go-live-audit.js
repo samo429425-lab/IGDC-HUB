@@ -901,6 +901,10 @@ async function requestPublicationBatch(event,actor,body,scope,liveDoc){
   }
   const active=already.concat(updated);
   if(!active.length)return batchSummary("request_publication_batch",candidateIds,items,{queued:false,reason:"no_eligible_products"});
+  if(body&&body.deferBuild===true){
+    for(const item of active)items.push({candidateId:item.candidateId,status:"publish_requested",queued:false,persisted:true,pendingBuild:true,deferredBuild:true,reason:"publication_persisted_build_deferred",assignmentId:item.assignment.id});
+    return batchSummary("request_publication_batch",candidateIds,items,{queued:false,reason:"publication_persisted_build_deferred",deferred:true});
+  }
   const firstItem=active[0];
   const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"publish",candidateCount:active.length,explicitAdminAuthorization:true});
   if(!dispatch.queued){

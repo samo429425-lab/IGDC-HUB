@@ -2633,11 +2633,17 @@ function frontSyncPublicReadiness(productInput, existingCandidate) {
   if (product.productPageLive === false || risk.explicitUnavailable === true) reasons.push("product_page_unavailable");
   if (product.sameSupplierSite === false) reasons.push("supplier_product_domain_mismatch");
   if (prohibited.length) reasons.push(...prohibited);
-  if (trustScore > 0 && trustScore < TRUST_POLICY.minimumTrustScore) reasons.push("supplier_trust_below_public_threshold");
+  /* An authenticated administrator front-match is the explicit publication
+     selection.  A low/unscored trust value by itself is not an explicit danger
+     signal; preserve it as a warning and keep only concrete unsafe/dead/mismatch
+     findings as blockers above.  This prevents ordinary evidence-pending rows
+     from being stranded before Registry/SearchBank while retaining hard safety
+     exclusions. */
+  if (trustScore > 0 && trustScore < TRUST_POLICY.minimumTrustScore) warnings.push("supplier_trust_below_public_threshold_admin_confirmed");
   if (ProductRanking.isGenericProductName(first(product.productName, product.title)) && !text(product.priorityLabel) && !supplierName) reasons.push("product_title_not_verified");
   if (product.inspectionComplete !== true) warnings.push("product_inspection_pending");
-  if (risk.gatePassed !== true) warnings.push("risk_review_pending");
-  if (!evidenceReady) warnings.push("supplier_evidence_pending");
+  if (risk.gatePassed !== true) warnings.push("risk_review_pending_admin_confirmed");
+  if (!evidenceReady) warnings.push("supplier_evidence_pending_admin_confirmed");
   warnings.push(...blockers.filter((item) => !prohibited.includes(item)));
   return {
     eligible: reasons.length === 0,
@@ -2691,15 +2697,15 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     payload.publicPublication = false;
     candidateUpserts.push({
       id: candidateId, kind: "product", title: first(payload.title, readiness.supplierName), official_url: readiness.productPageUrl, status: "revenue_ready", source_ref: PRODUCT_SOURCE_REF,
-      thumbnail_url: readiness.imageUrl, description: text(existing.description) || "Administrator-confirmed official external-seller product reference prepared for the existing go-live audit and build gate.",
-      owner_note: "Explicit front-match preparation only. IGDC remains discovery/referral intermediary; seller handles sale, payment, delivery, returns, refunds and support.",
+      thumbnail_url: readiness.imageUrl, description: text(existing.description) || "Administrator-confirmed external-seller product reference prepared for Registry/SearchBank publication routing; incomplete research warnings remain attached.",
+      owner_note: "Explicit front-match preparation. Incomplete trust/evidence warnings remain visible; concrete unsafe/dead/mismatch signals are still blocked. IGDC remains discovery/referral intermediary; seller handles sale, payment, delivery, returns, refunds and support.",
       source_payload: payload, created_at: text(existing.created_at) || now, updated_at: now, created_by: text(existing.created_by) || actor
     });
     assignmentUpserts.push({
       id: assignmentId, candidate_id: candidateId, hub_key: split.page, country_code: scope.country, region_code: scope.region === "NATIONWIDE" ? null : scope.region,
       slot_key: split.sectionKey, priority: Math.max(0, Number(target.priority || product.rankingScore || 0)), state: assignmentExisting && lower(assignmentExisting.state) === "pinned" ? "pinned" : "approved",
       publication_status: lower(assignmentExisting && assignmentExisting.publication_status) === "publish_requested" ? "publish_requested" : "audit_ready", manual_pinned: assignmentExisting && assignmentExisting.manual_pinned === true,
-      decision_note: "Prepared by explicit administrator front-match confirmation after product, image, supplier evidence and trust checks.",
+      decision_note: "Prepared by explicit administrator front-match confirmation. Required URL/image identity checks passed; incomplete research warnings remain recorded and concrete unsafe signals remain blocked.",
       created_at: text(assignmentExisting && assignmentExisting.created_at) || now, updated_at: now, updated_by: actor
     });
     const hasActiveAvailability = array(availabilityByCandidate.get(candidateId)).some((row) => normalizeCountry(row && row.country_code) === scope.country && (normalizeRegion(row && row.region_code || "NATIONWIDE", scope.country) || "NATIONWIDE") === scope.region && ["active","approved","ready"].includes(lower(row && row.availability_state)));
@@ -2747,7 +2753,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
   return {
     ok: true, schema: "igdc-product-front-lifecycle-preparation.v1", scope, requested: targetIds.length, prepared: preparedCandidateIds.length,
     blocked: items.filter((item) => item.status === "blocked").length, preparedCandidateIds, items, writeTrace,
-    policy: { explicitAdministratorConfirmationRequired: true, officialSellerExternalReferralOnly: true, trustThresholdWhenScored: TRUST_POLICY.minimumTrustScore, verifiedOfficialSupplierEvidenceMaySatisfyUnscoredTrust: true, noIgdcCheckout: true, noPaymentExecution: true, noCrossCountryFallback: true }
+    policy: { explicitAdministratorConfirmationRequired: true, officialSellerExternalReferralOnly: true, trustThresholdWhenScored: TRUST_POLICY.minimumTrustScore, trustScoreAdvisoryOnExplicitAdministratorMatch: true, incompleteEvidenceWarningsPreserved: true, hardUnsafeSignalsStillBlocking: true, noIgdcCheckout: true, noPaymentExecution: true, noCrossCountryFallback: true }
   };
 }
 
@@ -2766,9 +2772,22 @@ async function productFrontSyncTargets(input, jobInput) {
     const candidateRows = await frontSyncSelectCandidates(ids), targets = [];
     for (const candidate of candidateRows) {
       const product = restoredProductFromCandidate(candidate, scope); if (!product) continue;
+      const payload = plain(candidate && candidate.source_payload), queueControl = plain(payload.queueControl), candidateStatus = lower(candidate && candidate.status), sourceDecision = lower(payload.slotDecision || product.slotDecision || "undecided");
       const key = productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement), candidateId = text(candidate.id);
       if (!validProductSectionKey(key)) continue;
-      if (operation === "match" && lower(product.slotDecision) !== "slot_candidate") continue;
+      /* The candidate-review diagnostic can legitimately report
+         market_evidence_pending while the durable slotDecision field is absent
+         on older rows.  The administrator UI already selected these rows by
+         their valid 18-section placement.  For an explicit front-match request,
+         accept that placement as the selection authority unless the row is held,
+         rejected, permanently excluded or otherwise explicitly suppressed. */
+      if (operation === "match") {
+        const blockedDecision = ["hold","reject","purge"].includes(sourceDecision);
+        const blockedStatus = ["hold","suppressed","rejected"].includes(candidateStatus);
+        if (blockedDecision || blockedStatus || queueControl.permanentExcluded === true) continue;
+        product.slotDecision = "slot_candidate";
+        if (!product.approvedPlacement) product.approvedPlacement = Object.assign({}, product.placement || splitProductSectionKey(key), { page: splitProductSectionKey(key).page, sectionKey: splitProductSectionKey(key).sectionKey, section: splitProductSectionKey(key).sectionKey, country: scope.country, region: scope.region, administratorSelected: true, proposalOnly: false, publicPublication: false });
+      }
       targets.push({ productId: text(product.id) || candidateId, candidateId, title: first(product.productName, product.title, candidate.title), sectionKey: key, digest: sha256({ id:candidateId, placement:key, updatedAt:candidate.updated_at || null }) });
     }
     return { ok:true, candidateLedger:true, scope, mode, sectionKey:targets[0]&&targets[0].sectionKey||null, sectionKeys:requestedSectionKeys, productId:requestedProductId||null, productIds:requestedProductIds, candidateId:requestedCandidateId||null, candidateIds:ids, operation, targets, productCount:candidateRows.length };

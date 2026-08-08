@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.10.0
+/* IGDC Global/Region/Country Commerce Control v3.11.0
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -568,10 +568,18 @@
         var batch=targetIds.slice(offset,offset+batchSize);
         if(state){state.className='front-sync-state running';state.textContent=label+' · '+Math.min(offset+batch.length,targetIds.length)+'/'+targetIds.length+'건 처리 중';}
         try{
-          var part=await api(CONTROL,action,'POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',mode:'candidates',candidateIds:batch,ledgerMode:'candidate',confirmation:confirmation,compactResponse:true});
+          var part=await api(CONTROL,action,'POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',mode:'candidates',candidateIds:batch,ledgerMode:'candidate',confirmation:confirmation,compactResponse:true,deferBuild:!unmatch,totalRequested:targetIds.length});
           var r=part.frontSyncResult||{},p=r.preparation||{};
           aggregate.requested+=Number(r.requested||p.requested||batch.length);aggregate.queued+=Number(r.queued||0);aggregate.persisted+=Number(r.persisted||0);aggregate.pendingBuild+=Number(r.pendingBuild||0);aggregate.blocked+=Number(r.blocked||p.blocked||0);aggregate.items=aggregate.items.concat(Array.isArray(r.items)?r.items:[]);aggregate.preparation.requested+=Number(p.requested||0);aggregate.preparation.prepared+=Number(p.prepared||0);aggregate.preparation.blocked+=Number(p.blocked||0);aggregate.release=r.release||aggregate.release;
         }catch(batchFailure){batchError=batchFailure;break;}
+      }
+      if(!unmatch&&aggregate.persisted>0&&!batchError){
+        try{
+          var triggerItem=(aggregate.items||[]).find(function(item){return item&&item.persisted===true&&text(item.candidateId);})||{};
+          var releasePart=await api(CONTROL,'product_front_release','POST',{}, {confirmation:'SITE_PUBLISH',candidateId:text(triggerItem.candidateId),assignmentId:text(triggerItem.assignmentId),candidateCount:aggregate.persisted});
+          aggregate.release=releasePart.release||aggregate.release;
+          if(releasePart.queued===true){aggregate.queued=aggregate.persisted;aggregate.pendingBuild=0;}
+        }catch(releaseFailure){batchError=releaseFailure;}
       }
       try{await refreshCandidateLedgerProducts();}catch(_refreshFailure){}
       var result=aggregate,requested=Number(result.requested||0),prepared=Number(result.preparation&&result.preparation.prepared||0),queued=Number(result.queued||0),persisted=Number(result.persisted||0),pendingBuild=Number(result.pendingBuild||0),blocked=Number(result.blocked||0),reasonCounts={};

@@ -6,6 +6,7 @@ const MarketSignals = require("./lib/commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./lib/commerce-policy-discussion.v1");
 const ProductGoLiveAudit = require("./product-go-live-audit");
 const CandidateReview = require("./commerce-candidate-review");
+const ReleaseDispatch = require("./lib/commerce-release-dispatch.v1");
 
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
@@ -58,7 +59,7 @@ exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();if(method==="OPTIONS")return json(204,{});
     const body=method==="GET"?{}:parse(event),query=event&&event.queryStringParameters||{},action=lower(query.action||body.action||"catalog");
-    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_candidate_action","product_candidate_ledger_action","product_candidate_ai_recover","product_ai_automation","product_front_match","product_front_unmatch","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
+    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_candidate_action","product_candidate_ledger_action","product_candidate_ai_recover","product_ai_automation","product_front_match","product_front_unmatch","product_front_release","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
     const actorId=text(actor&&actor.sub);
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
@@ -126,7 +127,7 @@ exports.handler=async function(event){
           batchResult={ok:true,status:"blocked",action:"request_publication_batch",requested:plan.targets.length,queued:0,blocked:preparationBlocked.length,items:preparationBlocked,release:{queued:false,reason:"no_front_ready_products"},preparation};
         }else{
           const liveDoc=await CandidateReview.stage(process.cwd());
-          const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true},scope,liveDoc);
+          const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true,deferBuild:body.deferBuild===true,totalRequested:Number(body.totalRequested)||preparedIds.length},scope,liveDoc);
           const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
           const items=preparationBlocked.concat(publishItems);
           const queued=items.filter((item)=>item&&item.queued===true).length;
@@ -139,6 +140,12 @@ exports.handler=async function(event){
         batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope);
       }
       return json(200,await Automation.recordProductFrontSync(actorId,request,batchResult,loadedJob));
+    }
+    if(action==="product_front_release"){
+      if(text(body.confirmation)!=="SITE_PUBLISH"){const error=new Error("프론트 매칭 최종 빌드 확인 값이 일치하지 않습니다.");error.statusCode=409;throw error;}
+      const candidateId=text(body.candidateId),assignmentId=text(body.assignmentId);
+      const release=await ReleaseDispatch.dispatch({candidateId,assignmentId,actorId:actorId,operation:"publish",candidateCount:Math.max(1,Number(body.candidateCount)||1),explicitAdminAuthorization:true});
+      return json(200,{ok:true,action:"product_front_release",queued:release.queued===true,pendingBuild:release.queued!==true,release});
     }
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
     if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset));

@@ -46,12 +46,15 @@ function genericProductTitle(value){
 function explicitHardRisk(payload){
   const risk=plain(payload&&payload.riskAssessment);
   const supplier=plain(payload&&payload.supplierAssessment);
-  if(risk.gatePassed===false||risk.productGatePassed===false||risk.supplierGatePassed===false) return true;
+  /* A generic gatePassed=false / evidenceReady=false often means only that the
+     research ledger is incomplete.  Do not reinterpret incomplete evidence as
+     an explicit danger after an authenticated administrator publication request.
+     Concrete unsafe, dead-page, domain-mismatch and prohibited signals remain
+     hard blockers. */
   if(payload&&payload.productPageLive===false) return true;
   if(payload&&payload.sameSupplierSite===false||risk.supplierSiteMatched===false||risk.explicitUnavailable===true) return true;
-  if(supplier.reviewEligible===false||supplier.evidenceReady===false) return true;
   const blockers=unique([].concat(array(risk.blockers),array(supplier.blockers),array(payload&&payload.blockers),array(payload&&payload.hardBlockers))).map(lower).join(" ");
-  return /fraud|scam|phish|malware|illegal|counterfeit|forgery|adult|porn|sanction|blocked|prohibited|사기|악성|피싱|불법|위조|성인|음란|제재|금지/.test(blockers);
+  return /fraud|scam|phish|malware|illegal|counterfeit|forgery|adult|porn|sanction|blocked|prohibited|unsafe|product_page_unavailable|supplier_product_domain_mismatch|사기|악성|피싱|불법|위조|성인|음란|제재|금지/.test(blockers);
 }
 function explicitAdminReferralReady(candidate,assignment,availabilityRows){
   if(lower(assignment&&assignment.publication_status)!=="publish_requested") return false;
@@ -64,7 +67,8 @@ function explicitAdminReferralReady(candidate,assignment,availabilityRows){
   const seller=plain(payload.sellerResponsibility);
   const risk=plain(payload.riskAssessment);
   const supplier=plain(payload.supplierAssessment);
-  const trusted=bool(first(payload.officialSource,payload.producerVerified,seller.verified,risk.supplierGatePassed,supplier.evidenceReady));
+  const referral=plain(payload.outboundReferral);
+  const trusted=bool(first(payload.officialSource,payload.producerVerified,seller.verified,risk.supplierGatePassed,supplier.evidenceReady,referral.operatorApproved&&referral.approved&&referral.officialDestination));
   return trusted;
 }
 function explicitReferralRevenueRow(candidate,assignment){
