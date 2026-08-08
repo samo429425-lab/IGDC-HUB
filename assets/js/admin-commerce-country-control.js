@@ -508,7 +508,7 @@
         queuePrevious=queueRemaining;
       }
       if(queuePass>0){
-        try{var refreshed=await api(CONTROL,'product_research_status','GET',{country:selectedCountry,region:selectedSubdivision||'NATIONWIDE'});lastProductJson=refreshed;rememberReport('product',refreshed);renderProductProgress(refreshed);renderProducts(refreshed.products||[]);saveReviewSnapshot();}catch(_refreshError){}
+        try{var refreshed=await api(CONTROL,'product_research_status','GET',{country:selectedCountry,region:selectedSubdivision||'NATIONWIDE',fast:'1'});lastProductJson=refreshed;rememberReport('product',refreshed);renderProductProgress(refreshed);renderProducts(refreshed.products||[]);saveReviewSnapshot();}catch(_refreshError){}
       }
       result.queueSynced=queueSyncedTotal;result.queueSyncFailed=queueFailedTotal;result.queueSyncRemaining=queueRemaining;
       if(state){state.className='product-auto-state '+(queueFailedTotal||queueRemaining?'warn':'complete');state.textContent=automationResultText(result)+(queueSyncedTotal?' · 프론트 후보 연결 '+queueSyncedTotal+'건':'')+(queueRemaining?' · 후보 연결 대기 '+queueRemaining+'건':'')+(queueFailedTotal?' · 연결 재시도 필요 '+queueFailedTotal+'건':'')+' · 자동 공개·상품 수입·결제 없음';}
@@ -555,7 +555,7 @@
           aggregate.requested+=Number(r.requested||p.requested||batch.length);aggregate.queued+=Number(r.queued||0);aggregate.persisted+=Number(r.persisted||0);aggregate.pendingBuild+=Number(r.pendingBuild||0);aggregate.blocked+=Number(r.blocked||p.blocked||0);aggregate.items=aggregate.items.concat(Array.isArray(r.items)?r.items:[]);aggregate.preparation.requested+=Number(p.requested||0);aggregate.preparation.prepared+=Number(p.prepared||0);aggregate.preparation.blocked+=Number(p.blocked||0);aggregate.release=r.release||aggregate.release;
         }catch(batchFailure){batchError=batchFailure;break;}
       }
-      try{var data=await api(CONTROL,'product_research_status','GET',{country:selectedCountry,region:selectedSubdivision||'NATIONWIDE'});lastProductJson=data;rememberReport('product',data);renderProductProgress(data);renderProducts(data.products||[]);saveReviewSnapshot();}catch(_refreshFailure){}
+      try{var data=await api(CONTROL,'product_research_status','GET',{country:selectedCountry,region:selectedSubdivision||'NATIONWIDE',fast:'1'});lastProductJson=data;rememberReport('product',data);renderProductProgress(data);renderProducts(data.products||[]);saveReviewSnapshot();}catch(_refreshFailure){}
       var result=aggregate,requested=Number(result.requested||0),prepared=Number(result.preparation&&result.preparation.prepared||0),queued=Number(result.queued||0),persisted=Number(result.persisted||0),pendingBuild=Number(result.pendingBuild||0),blocked=Number(result.blocked||0),reasonCounts={};
       (Array.isArray(result.items)?result.items:[]).forEach(function(item){if(!item||item.queued===true||item.persisted===true)return;var reason=text(item.reason)||text(item.status)||'blocked';reasonCounts[reason]=(reasonCounts[reason]||0)+1;});
       var topReasons=Object.keys(reasonCounts).sort(function(a,b){return reasonCounts[b]-reasonCounts[a];}).slice(0,3).map(function(reason){return reason+' '+reasonCounts[reason]+'건';}),reasonText=topReasons.length?' · 주요 차단: '+topReasons.join(' / '):'';
@@ -582,7 +582,7 @@
         else{lastProductJson=data;if(Array.isArray(data.products))renderProducts(data.products);rememberReport('product',data);saveReviewSnapshot();}
         renderProductProgress(lastProductJson);
         if(data.status==='complete'){
-          if(data.compact===true){data=await api(CONTROL,'product_research_status','GET',{country:requested.country,region:requested.region});lastProductJson=data;renderProductProgress(data);renderProducts(data.products||[]);rememberReport('product',data);saveReviewSnapshot();}
+          if(data.compact===true){data=await api(CONTROL,'product_research_status','GET',{country:requested.country,region:requested.region,fast:'1'});lastProductJson=data;renderProductProgress(data);renderProducts(data.products||[]);rememberReport('product',data);saveReviewSnapshot();}
           var stageFailed=Number(data.pipeline&&data.pipeline.stageSummary&&data.pipeline.stageSummary.failed||0),completedProducts=Array.isArray(data.products)?data.products:productRows;
           show(completedProducts.length?(stageFailed?'상품 리서치는 완료됐지만 비공개 대기열 등록 실패 '+stageFailed+'건이 있습니다. 아래 등록 실패 수와 JSON 오류를 확인하세요.':'상품 리서치와 비공개 대기열 등록을 완료했습니다. 상품을 대기열 심사 후보로 지정한 뒤 후보·중개수익 대기열에서 시장·증빙·수익·PSOM 배정을 이어서 처리하세요.'):'상품 리서치는 끝났지만 확인 가능한 실제 상품 목록을 만들지 못했습니다. 업체 공식 사이트와 JSON 경로를 점검하세요.',completedProducts.length&&!stageFailed?'ok':'warn');break;
         }
@@ -596,7 +596,7 @@
           }catch(requestError){
             stepError=requestError;
             try{
-              var resumed=await api(CONTROL,'product_research_status','GET',{country:requested.country,region:requested.region});
+              var resumed=await api(CONTROL,'product_research_status','GET',{country:requested.country,region:requested.region,fast:'1'});
               if(resumed&&resumed.status!=='not_started'){
                 var beforeProgress=lastProductJson&&lastProductJson.progress||{},afterProgress=resumed.progress||{};
                 var beforeMark=[text(lastProductJson&&lastProductJson.status),Number(beforeProgress.discovery&&beforeProgress.discovery.done||0),Number(beforeProgress.inspection&&beforeProgress.inspection.done||0),Number(beforeProgress.privateQueue&&beforeProgress.privateQueue.done||0)].join('|');
@@ -614,7 +614,7 @@
         if(!stepCompleted)throw stepError||new Error('상품 조사 단계를 자동 재시도했지만 완료하지 못했습니다.');
       }
     }
-    catch(e){try{var saved=await api(CONTROL,'product_research_status','GET',{country:requested.country,region:requested.region});lastProductJson=saved;renderProductProgress(saved);renderProducts(saved.products||[]);if(saved.status!=='not_started')setButtonEnabled('productResearchDownloadBtn',true);saveReviewSnapshot();}catch(_statusError){}show((text(e&&e.message)||'상품 리서치 요청이 중단됐습니다.')+' 완료된 단계는 관리 DB에 보존됩니다.','fail');}
+    catch(e){try{var saved=await api(CONTROL,'product_research_status','GET',{country:requested.country,region:requested.region,fast:'1'});lastProductJson=saved;renderProductProgress(saved);renderProducts(saved.products||[]);if(saved.status!=='not_started')setButtonEnabled('productResearchDownloadBtn',true);saveReviewSnapshot();}catch(_statusError){}show((text(e&&e.message)||'상품 리서치 요청이 중단됐습니다.')+' 완료된 단계는 관리 DB에 보존됩니다.','fail');}
     finally{productLoopActive=false;button.disabled=false;renderProductProgress(lastProductJson||{});renderProducts(productRows);setButtonEnabled('productResearchPauseBtn',false);}
   }
 
@@ -728,7 +728,7 @@
       if((researchData.status==='complete'||researchData.status==='committed')&&((Array.isArray(researchData.candidates)&&researchData.candidates.length)||(Array.isArray(researchData.holdingCandidates)&&researchData.holdingCandidates.length)||(Array.isArray(researchData.blockedCandidates)&&researchData.blockedCandidates.length))){lastCountryPreview=researchData;lastCountryJson=researchData;setButtonEnabled('countryRunDownloadBtn',true);renderSummary(researchData,{candidates:researchData.candidates||[]},'완료된 단계별 검색 결과');}
       renderAi(researchData.candidates||[],researchData.holdingCandidates||[],researchData.blockedCandidates||[]);
 
-      var productPart=await readScopePart('상품 이미지·원본 링크 리서치',CONTROL,'product_research_status',requested,productFallback);if(scopeKey()!==requestedKey)return;
+      var productPart=await readScopePart('상품 이미지·원본 링크 리서치',CONTROL,'product_research_status',Object.assign({},requested,{fast:'1'}),productFallback);if(scopeKey()!==requestedKey)return;
       if(!productPart.ok)failures.push(productPart);var productData=productPart.data||productFallback;lastProductJson=productData.status!=='not_started'?productData:null;renderProductProgress(productData);renderProducts(productData.products||[]);setButtonEnabled('productResearchBtn',researchData.status==='complete'||researchData.status==='committed'||!!lastProductJson);if(lastProductJson)setButtonEnabled('productResearchDownloadBtn',true);
       lastScopeCache={scope:requested,scopeData:scopeData,summaryData:summaryPart.data||{summary:{}},queueData:queuePart.data||{candidates:[]},researchData:researchData,productData:productData};
       saveReviewSnapshot();

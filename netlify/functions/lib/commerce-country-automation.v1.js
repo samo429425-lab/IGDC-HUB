@@ -1594,6 +1594,26 @@ function compactProductResearchStep(job) {
   };
 }
 
+function fastProductResearchStatus(job) {
+  if (!job) return { ok: true, fast: true, reportType: "igdc-country-product-reference-research-status", version: VERSION, rankingVersion: ProductRanking.VERSION, status: "not_started", products: [], summary: {}, progress: {} };
+  const base = compactProductResearchStep(job);
+  const products = array(job.products).filter((row) => {
+    if (!row) return false;
+    const url = productUrl(row), image = productImageUrl(row), decision = lower(row.slotDecision || "undecided");
+    return !!url || !!image || decision !== "undecided" || row.inspectionComplete === true;
+  }).slice(0, PRODUCT_PORTFOLIO_LIMIT);
+  const settlement = products.map((row) => normalizeAffiliateSettlement(row && row.affiliateSettlement, { existing: row && row.affiliateSettlement }));
+  base.fast = true;
+  base.reportType = "igdc-country-product-reference-research-fast-status";
+  base.products = products;
+  base.summary = Object.assign({}, plain(base.summary), {
+    settlementReadyProducts: settlement.filter((row) => row.settlementReady === true).length,
+    onlineAffiliateActive: settlement.filter((row) => affiliateSettlementStage(row.stage) === "online_affiliate_active" && row.settlementReady === true).length,
+    formalPartners: settlement.filter((row) => affiliateSettlementStage(row.stage) === "formal_partner" && row.settlementReady === true).length
+  });
+  return base;
+}
+
 function productResearchStepResponse(job, input) {
   return input && input.compact === true ? compactProductResearchStep(job) : publicProductJob(job);
 }
@@ -1666,7 +1686,12 @@ function incrementalInspectionPool(job) {
   const newRows=array(job.rawProducts).filter((row)=>!preserved.has(ProductRanking.productIdentity(row)));
   return RegionalSelector.prepareProductInspectionPool(newRows,{limit:Math.max(120,Math.min(PRODUCT_PORTFOLIO_LIMIT,array(job.supplierSources).length*40))});
 }
-async function productResearchJobStatus(input) { return publicProductJob(await loadProductResearchJob(researchScope(input))); }
+async function productResearchJobStatus(input) {
+  const options = plain(input), job = await loadProductResearchJob(researchScope(options));
+  if (options.compact === true || options.compact === "1" || lower(options.compact) === "true") return compactProductResearchStep(job);
+  if (options.fast === true || options.fast === "1" || lower(options.fast) === "true") return fastProductResearchStatus(job);
+  return publicProductJob(job);
+}
 async function advanceProductResearchJob(actorId, input) {
   const scope = researchScope(input), job = await productJobRule(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("진행 중인 공식 상품 리서치 작업이 없습니다."); error.statusCode = 404; throw error; }
   if (["complete","cancelled"].includes(job.status)) return productResearchStepResponse(job, input);
