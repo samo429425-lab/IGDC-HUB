@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.6.2-resumable-product-inspection";
+const VERSION="regional-brokerage-autoselector-v2.6.1-product-visibility-regression-repair";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -1045,23 +1045,6 @@ async function inspectProductCandidate(item){
   }finally{clearTimeout(timer);}
 }
 
-async function inspectProductResearchStep(rawItems){
-  const items=array(rawItems).slice(0,4),results=await Promise.allSettled(items.map((item)=>withTimeout(inspectProductCandidate(item),16000)));
-  const inspected=results.map((result,index)=>{
-    if(result.status==="fulfilled")return result.value;
-    const row=plain(items[index]),error=result.reason;
-    return Object.assign({},row,{
-      researchStatus:"inspection_error",
-      productPageLive:false,
-      inspectionComplete:true,
-      inspectedAt:new Date().toISOString(),
-      inspectionError:{code:text(error&&error.code)||"INSPECTION_ERROR",message:text(error&&error.message||error)||"product inspection failed"},
-      slotDecision:text(row.slotDecision)||"undecided",
-      publicPublication:false,
-      automaticImport:false
-    });
-  });
-  return{ok:true,version:VERSION,items:inspected,failed:results.filter((result)=>result.status==="rejected").length};
-}
+async function inspectProductResearchStep(rawItems){const items=array(rawItems).slice(0,4),settled=await Promise.all(items.map(inspectProductCandidate));return{ok:true,version:VERSION,items:settled};}
 
 module.exports={VERSION,runSelection,createSupplierResearchPlan,searchSupplierResearchStep,prepareSupplierInspectionPool,inspectSupplierResearchStep,buildSupplierReviewPool,discoverSupplierProductsStep,prepareProductInspectionPool,inspectProductResearchStep};
