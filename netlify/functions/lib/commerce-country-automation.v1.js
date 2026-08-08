@@ -2299,11 +2299,8 @@ async function productAiAutomation(actorId, input) {
     nextRows.push(next);
   }
   job.products = nextRows.slice(0, PRODUCT_PORTFOLIO_LIMIT);
-  // Selected candidate/repair batches can be large. Persist the completed
-  // placement decision first; waiting for every optional queue mirror here
-  // made the whole repair roll back when the request exceeded its timeout.
-  const syncResults = [], queueSyncDeferred = unassignedPlacementOnly || selectionOnly;
-  if (!queueSyncDeferred) {
+  const syncResults = [];
+  if (!unassignedPlacementOnly || selectionOnly) {
     for (let offset = 0; offset < changed.length; offset += 8) {
       const batch = changed.slice(offset, offset + 8);
       const settled = await Promise.allSettled(batch.map((product) => syncProductCandidateQueue(actorId, scope, product, lower(product.slotDecision) || "undecided")));
@@ -2312,7 +2309,7 @@ async function productAiAutomation(actorId, input) {
   }
   const queueFailures = syncResults.filter((row) => row.ok !== true);
   job.version = VERSION; job.rankingVersion = ProductRanking.VERSION; job.updatedAt = iso();
-  job.trace = array(job.trace).concat([{ at: iso(), source: placementOnly ? "product-ai-stored-evidence-placement" : (unassignedPlacementOnly ? "product-ai-unassigned-auto-section-placement" : "product-ai-private-placement-management"), status: queueFailures.length ? "completed_with_queue_warnings" : "complete", runId, mode: placementOnly ? "placement" : mode, sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, recoveredMissingPlacements, manualPreserved, queueFailures: queueFailures.length, queueSyncDeferred: queueSyncDeferred ? changed.length : 0, enrichmentAttempted: enrichment.attempted, enrichmentCompleted: enrichment.completed, enrichmentChanged: enrichment.changed, enrichmentRemaining: enrichment.remaining, automaticPublication: false, automaticProductImport: false }]).slice(-240);
+  job.trace = array(job.trace).concat([{ at: iso(), source: placementOnly ? "product-ai-stored-evidence-placement" : (unassignedPlacementOnly ? "product-ai-unassigned-auto-section-placement" : "product-ai-private-placement-management"), status: queueFailures.length ? "completed_with_queue_warnings" : "complete", runId, mode: placementOnly ? "placement" : mode, sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, recoveredMissingPlacements, manualPreserved, queueFailures: queueFailures.length, queueSyncDeferred: unassignedPlacementOnly ? changed.length : 0, enrichmentAttempted: enrichment.attempted, enrichmentCompleted: enrichment.completed, enrichmentChanged: enrichment.changed, enrichmentRemaining: enrichment.remaining, automaticPublication: false, automaticProductImport: false }]).slice(-240);
   if (queueFailures.length) job.errors = array(job.errors).concat(queueFailures.slice(0, 30).map((row) => ({ at: iso(), stage: "product_ai_automation_queue_sync", productId: row.productId, message: row.error }))).slice(-60);
   await saveProductJob(job, actorId);
   const result = publicProductJob(job), finalRows = array(result.products);
@@ -2345,7 +2342,7 @@ async function productAiAutomation(actorId, input) {
     formalPartners: finalRows.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "formal_partner" && plain(row.affiliateSettlement).settlementReady === true).length,
     queueSynced: syncResults.filter((row) => row.ok === true).length,
     queueSyncFailed: queueFailures.length,
-    queueSyncDeferred: queueSyncDeferred ? changed.length : 0,
+    queueSyncDeferred: unassignedPlacementOnly ? changed.length : 0,
     sectionCapacity: PRODUCT_SECTION_CAPACITY,
     sectionsFilledForCount: false,
     maximumPrivatePlacementWithoutWeakeningPublicReleaseGate: true,
