@@ -1442,7 +1442,14 @@ async function persistedProductRows(scope) {
   return rows.map((row)=>restoredProductFromCandidate(row,scope)).filter(Boolean).slice(0,PRODUCT_PORTFOLIO_LIMIT);
 }
 async function loadProductResearchJob(input) {
-  const scope=input&&input.country&&input.region&&input.regionGroup?input:researchScope(input),stored=await productJobRule(scope),ledger=await persistedProductRows(scope);
+  const scope=input&&input.country&&input.region&&input.regionGroup?input:researchScope(input),stored=await productJobRule(scope);
+  const forceLedgerRecovery=plain(input).recoverCandidateLedger===true;
+  /* The saved product job is the primary working ledger.  Reading every
+     gslot candidate and its large source_payload on every status/front request
+     becomes a 502/504 risk once the private queue grows into the hundreds.
+     Keep that candidate scan only as an explicit/missing-job recovery path. */
+  if(stored&&stored.schema===PRODUCT_JOB_SCHEMA&&array(stored.products).length&&!forceLedgerRecovery)return stored;
+  const ledger=await persistedProductRows(scope);
   if(!stored&&!ledger.length)return null;
   const job=stored&&stored.schema===PRODUCT_JOB_SCHEMA?stored:{schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_recovered_"+sha256(scope.country+"|"+scope.region).slice(0,20),status:"complete",scope,startedAt:null,finishedAt:iso(),supplierSources:[],rankingContext:await productRankingContext(scope),discoveryCursor:0,rawProducts:[],inspectionPool:[],inspectCursor:0,products:[],stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:ledger.length,skipped:0,failed:0},trace:[],errors:[],lastError:null};
   const before=array(job.products).length;
@@ -2194,11 +2201,50 @@ async function productCandidateAction(actorId, input) {
   return result;
 }
 
+const PRODUCT_AI_QUEUE_SYNC_BATCH = 6;
+function productAiQueueSyncPending(rowInput) {
+  const row=plain(rowInput),state=plain(row.candidateQueueSync);
+  return state.pending===true&&lower(row.slotDecision)==="slot_candidate"&&validProductSectionKey(productPlacementKey(row.approvedPlacement||row.selectedPlacement||row.primaryPlacement));
+}
+async function syncPendingAiProductCandidates(actorId, scope, job, limitInput) {
+  const limit=Math.max(1,Math.min(12,Number(limitInput)||PRODUCT_AI_QUEUE_SYNC_BATCH));
+  const pending=array(job.products).filter(productAiQueueSyncPending).slice(0,limit),syncResults=[];
+  if(!pending.length)return{attempted:0,synced:0,failed:0,remaining:array(job.products).filter(productAiQueueSyncPending).length,results:[]};
+  const settled=await Promise.allSettled(pending.map((product)=>syncProductCandidateQueue(actorId,scope,product,"slot_candidate")));
+  const updates=new Map();
+  settled.forEach((entry,index)=>{
+    const product=pending[index],id=text(product&&product.id),prior=plain(product&&product.candidateQueueSync),attempts=Number(prior.attempts||0)+1,at=iso();
+    if(entry.status==="fulfilled"){
+      const result={ok:true,productId:id,status:text(entry.value&&entry.value.status),candidateId:text(entry.value&&entry.value.candidateId)};
+      syncResults.push(result);updates.set(id,{pending:false,attempts,lastAttemptAt:at,syncedAt:at,status:result.status,candidateId:result.candidateId,error:null});
+    }else{
+      const message=text(entry.reason&&entry.reason.message||entry.reason)||"candidate_queue_sync_failed";
+      syncResults.push({ok:false,productId:id,error:message});updates.set(id,{pending:true,attempts,lastAttemptAt:at,syncedAt:null,status:"failed",candidateId:null,error:message});
+    }
+  });
+  job.products=array(job.products).map((row)=>{
+    const update=updates.get(text(row&&row.id));
+    return update?Object.assign({},row,{candidateQueueSync:Object.assign({schema:"igdc-ai-product-candidate-queue-sync.v1"},plain(row.candidateQueueSync),update)}):row;
+  });
+  return{attempted:pending.length,synced:syncResults.filter((row)=>row.ok===true).length,failed:syncResults.filter((row)=>row.ok!==true).length,remaining:array(job.products).filter(productAiQueueSyncPending).length,results:syncResults};
+}
+
 async function productAiAutomation(actorId, input) {
   const scope = researchScope(input), job = await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   if (!array(job.products).length) { const error = new Error("AI 자동 배치할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
-  const requestedMode = lower(input && input.mode), repairProductIds = new Set(array(job.products).filter((rowInput) => {
+  const requestedMode = lower(input && input.mode);
+  if(requestedMode === "queue_sync") {
+    const queueBatch=await syncPendingAiProductCandidates(actorId,scope,job,input&&input.batchSize);
+    job.version=VERSION;job.rankingVersion=ProductRanking.VERSION;job.updatedAt=iso();
+    job.trace=array(job.trace).concat([{at:iso(),source:"product-ai-candidate-queue-sync",status:queueBatch.failed?(queueBatch.synced?"partial":"failed"):"complete",attempted:queueBatch.attempted,synced:queueBatch.synced,failed:queueBatch.failed,remaining:queueBatch.remaining,automaticPublication:false}]).slice(-240);
+    if(queueBatch.failed)job.errors=array(job.errors).concat(queueBatch.results.filter((row)=>row.ok!==true).slice(0,12).map((row)=>({at:iso(),stage:"product_ai_candidate_queue_sync",productId:row.productId,message:row.error}))).slice(-60);
+    await saveProductJob(job,actorId);
+    const compact=compactProductResearchStep(job);
+    compact.aiAutomationResult={schema:"igdc-product-ai-private-placement-result.v3",mode:"queue_sync",queueSyncAttempted:queueBatch.attempted,queueSynced:queueBatch.synced,queueSyncFailed:queueBatch.failed,queueSyncRemaining:queueBatch.remaining,queueSyncBatchSize:PRODUCT_AI_QUEUE_SYNC_BATCH,automaticPublication:false,automaticProductImport:false,checkout:false,paymentExecution:false};
+    return compact;
+  }
+  const repairProductIds = new Set(array(job.products).filter((rowInput) => {
     const row = plain(rowInput), decision = lower(row.slotDecision || "undecided"), key = productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement);
     return decision === "slot_candidate" && !validProductSectionKey(key) && !productAdministratorLocked(row);
   }).map((row) => text(row && row.id)).filter(Boolean));
@@ -2214,9 +2260,9 @@ async function productAiAutomation(actorId, input) {
   const placementOnly = requestedMode === "placement", selectedProductIds = new Set(array(input && input.productIds).map((id) => text(id)).filter(Boolean)), selectionOnly = requestedMode === "products", repairOnly = requestedMode === "repair", mode = requestedMode === "section" ? "section" : (repairOnly ? "repair" : (selectionOnly ? "products" : "all")), sectionKey = text(input && input.sectionKey);
   if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("AI 자동 관리할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
   if (selectionOnly && !selectedProductIds.size) { const error = new Error("AI 자동 배치할 선택 후보를 확인하세요."); error.statusCode = 400; throw error; }
-  const unassignedPlacementOnly = mode === "all" && array(job.products).some((row) =>
+  const unassignedPlacementOnly = placementOnly || (mode === "all" && array(job.products).some((row) =>
     lower(row && row.slotDecision || "undecided") === "undecided" && !productAdministratorLocked(row)
-  );
+  ));
   const runId = "product_ai_management_" + sha256(iso() + "|" + scope.country + "|" + scope.region + "|" + mode + "|" + sectionKey + "|" + Math.random()).slice(0, 20);
   const enrichment = (unassignedPlacementOnly || placementOnly || selectionOnly || repairOnly)
     ? { attempted: 0, completed: 0, changed: 0, remaining: 0 }
@@ -2298,27 +2344,35 @@ async function productAiAutomation(actorId, input) {
     }
     const now = iso(), control = automaticManagementControl(actorId, mode, runId, { sectionKey: mode === "section" ? sectionKey : null, holdReason: holdReason || null });
     next = Object.assign({}, next, { slotDecision: targetDecision, decisionAt: now, decisionBy: "ai-automation", decisionSource: "ai_automation", managementControl: control, publicPublication: false, automaticImport: false });
-    if (targetDecision === "slot_candidate" && targetPlacement) next.approvedPlacement = automaticPlacementRecord(targetPlacement, scope, actorId, mode, runId);
-    else { delete next.approvedPlacement; delete next.selectedPlacement; }
+    if (targetDecision === "slot_candidate" && targetPlacement) {
+      next.approvedPlacement = automaticPlacementRecord(targetPlacement, scope, actorId, mode, runId);
+      if (unassignedPlacementOnly) next.candidateQueueSync=Object.assign({schema:"igdc-ai-product-candidate-queue-sync.v1"},plain(next.candidateQueueSync),{pending:true,requestedAt:now,requestedBy:text(actorId)||"administrator",placementKey:productPlacementKey(next.approvedPlacement),error:null});
+    } else { delete next.approvedPlacement; delete next.selectedPlacement; if(unassignedPlacementOnly)delete next.candidateQueueSync; }
     const nextKey = productPlacementKey(next.approvedPlacement), priorSource = lower(plain(current.managementControl).source);
     if (priorDecision !== targetDecision || priorKey !== nextKey || priorSource !== "ai_automation") changed.push(next);
     nextRows.push(next);
   }
   job.products = nextRows.slice(0, PRODUCT_PORTFOLIO_LIMIT);
-  /* Persist the placement decision first.  Queue synchronisation is a follow-up
-     projection and must never prevent the 125-repair/unassigned result itself
-     from being saved. */
+  /* Persist the placement decision before the queue projection.  For the
+     unassigned-recovery path, project only a small batch and continue through
+     separate requests so a 300+ product scope never becomes one long function. */
   job.version = VERSION; job.rankingVersion = ProductRanking.VERSION; job.updatedAt = iso();
   await saveProductJob(job, actorId);
-  const syncResults = [], queueSyncDeferred = false;
-  for (let offset = 0; offset < changed.length; offset += 8) {
-    const batch = changed.slice(offset, offset + 8);
-    const settled = await Promise.allSettled(batch.map((product) => syncProductCandidateQueue(actorId, scope, product, lower(product.slotDecision) || "undecided")));
-    settled.forEach((entry, index) => syncResults.push(entry.status === "fulfilled" ? { ok: true, productId: text(batch[index].id), status: text(entry.value && entry.value.status) } : { ok: false, productId: text(batch[index].id), error: text(entry.reason && entry.reason.message || entry.reason) }));
+  const syncResults = [];
+  let boundedQueueSync={attempted:0,synced:0,failed:0,remaining:0,results:[]};
+  if(unassignedPlacementOnly){
+    boundedQueueSync=await syncPendingAiProductCandidates(actorId,scope,job,PRODUCT_AI_QUEUE_SYNC_BATCH);
+    syncResults.push(...boundedQueueSync.results);
+  }else{
+    for (let offset = 0; offset < changed.length; offset += 8) {
+      const batch = changed.slice(offset, offset + 8);
+      const settled = await Promise.allSettled(batch.map((product) => syncProductCandidateQueue(actorId, scope, product, lower(product.slotDecision) || "undecided")));
+      settled.forEach((entry, index) => syncResults.push(entry.status === "fulfilled" ? { ok: true, productId: text(batch[index].id), status: text(entry.value && entry.value.status) } : { ok: false, productId: text(batch[index].id), error: text(entry.reason && entry.reason.message || entry.reason) }));
+    }
   }
   const queueFailures = syncResults.filter((row) => row.ok !== true);
   job.version = VERSION; job.rankingVersion = ProductRanking.VERSION; job.updatedAt = iso();
-  job.trace = array(job.trace).concat([{ at: iso(), source: repairOnly ? "product-ai-assignment-repair" : (placementOnly ? "product-ai-stored-evidence-placement" : (unassignedPlacementOnly ? "product-ai-unassigned-auto-section-placement" : "product-ai-private-placement-management")), status: queueFailures.length ? "completed_with_queue_warnings" : "complete", runId, mode: placementOnly ? "placement" : mode, sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, recoveredMissingPlacements, manualPreserved, queueFailures: queueFailures.length, queueSyncDeferred: queueSyncDeferred ? changed.length : 0, enrichmentAttempted: enrichment.attempted, enrichmentCompleted: enrichment.completed, enrichmentChanged: enrichment.changed, enrichmentRemaining: enrichment.remaining, automaticPublication: false, automaticProductImport: false }]).slice(-240);
+  job.trace = array(job.trace).concat([{ at: iso(), source: repairOnly ? "product-ai-assignment-repair" : (placementOnly ? "product-ai-stored-evidence-placement" : (unassignedPlacementOnly ? "product-ai-unassigned-auto-section-placement" : "product-ai-private-placement-management")), status: queueFailures.length ? "completed_with_queue_warnings" : "complete", runId, mode: placementOnly ? "placement" : mode, sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, recoveredMissingPlacements, manualPreserved, queueFailures: queueFailures.length, queueSyncDeferred: unassignedPlacementOnly ? boundedQueueSync.remaining : 0, queueSyncAttempted: unassignedPlacementOnly ? boundedQueueSync.attempted : syncResults.length, queueSynced: syncResults.filter((row)=>row.ok===true).length, enrichmentAttempted: enrichment.attempted, enrichmentCompleted: enrichment.completed, enrichmentChanged: enrichment.changed, enrichmentRemaining: enrichment.remaining, automaticPublication: false, automaticProductImport: false }]).slice(-240);
   if (queueFailures.length) job.errors = array(job.errors).concat(queueFailures.slice(0, 30).map((row) => ({ at: iso(), stage: "product_ai_automation_queue_sync", productId: row.productId, message: row.error }))).slice(-60);
   await saveProductJob(job, actorId);
   const result = publicProductJob(job), finalRows = array(result.products);
@@ -2349,9 +2403,12 @@ async function productAiAutomation(actorId, input) {
     referralVerified: finalRows.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "referral_verified" && plain(row.affiliateSettlement).settlementReady === true).length,
     onlineAffiliateActive: finalRows.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "online_affiliate_active" && plain(row.affiliateSettlement).settlementReady === true).length,
     formalPartners: finalRows.filter((row) => affiliateSettlementStage(plain(row.affiliateSettlement).stage) === "formal_partner" && plain(row.affiliateSettlement).settlementReady === true).length,
+    queueSyncAttempted: unassignedPlacementOnly ? boundedQueueSync.attempted : syncResults.length,
     queueSynced: syncResults.filter((row) => row.ok === true).length,
     queueSyncFailed: queueFailures.length,
-    queueSyncDeferred: queueSyncDeferred ? changed.length : 0,
+    queueSyncDeferred: unassignedPlacementOnly ? boundedQueueSync.remaining : 0,
+    queueSyncRemaining: unassignedPlacementOnly ? boundedQueueSync.remaining : 0,
+    queueSyncBatchSize: PRODUCT_AI_QUEUE_SYNC_BATCH,
     sectionCapacity: PRODUCT_SECTION_CAPACITY,
     sectionsFilledForCount: false,
     maximumPrivatePlacementWithoutWeakeningPublicReleaseGate: true,
@@ -2650,7 +2707,7 @@ async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
   job.version = VERSION; job.updatedAt = now;
   job.trace = array(job.trace).concat([{ at: now, source: "product-front-publication-control", operation, requested: Number(batchResult && batchResult.requested || 0), prepared: Number(batchResult && batchResult.preparation && batchResult.preparation.prepared || 0), persisted: Number(batchResult && batchResult.persisted || 0), queued: Number(batchResult && batchResult.queued || 0), pendingBuild: Number(batchResult && batchResult.pendingBuild || 0), blocked: Number(batchResult && batchResult.blocked || 0), publicSnapshotConfirmed: false }]).slice(-240);
   await saveProductJob(job, actorId);
-  const result = publicProductJob(job);
+  const result = plain(input).compactResponse === true ? compactProductResearchStep(job) : publicProductJob(job);
   result.frontSyncResult = Object.assign({}, plain(batchResult), { operation, publicSnapshotConfirmed: false, buildVerificationRequired: true });
   return result;
 }
