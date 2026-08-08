@@ -2691,9 +2691,22 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
       verifiedAt: now, destinationUrl: readiness.productPageUrl, providerName: readiness.supplierName,
       approvalSource: "explicit_administrator_front_match", trafficValueOnly: true, guaranteedCommission: false
     });
-    payload.review = Object.assign({}, plain(payload.review), { state: "approved", decidedAt: now, decidedBy: actor, approvalSource: "explicit_front_match" });
-    payload.pipeline = Object.assign({}, plain(payload.pipeline), { stage: "registry_sync_ready", nextGate: "go_live_audit_and_explicit_publication_request", preparedAt: now, preparedBy: actor });
-    payload.commerceReview = Object.assign({}, plain(payload.commerceReview), { status: "approved", assignmentState: "approved", approvalId: assignmentId, approvedAt: now, approvedBy: actor });
+    payload.review = Object.assign({}, plain(payload.review), { state: "approved", decidedAt: now, decidedBy: actor, approvalSource: "explicit_front_match", publicationRequested: true });
+    /* The administrator has already pressed the explicit Front Match action. Persist
+       that authority in the durable candidate payload and assignment in this same
+       write.  Do not insert audit_ready and then depend on a second request to
+       promote it; that split left the candidate ledger matched while Registry and
+       SearchBank still saw zero publication requests. */
+    payload.pipeline = Object.assign({}, plain(payload.pipeline), { stage: "registry_sync_ready", nextGate: "publication_build_requested", preparedAt: now, preparedBy: actor, explicitPublicationRequested: true });
+    payload.commerceReview = Object.assign({}, plain(payload.commerceReview), {
+      status: "approved", assignmentState: "approved", approvalId: assignmentId,
+      approvedAt: now, approvedBy: actor, publicationStatus: "publish_requested",
+      explicitPublicationRequested: true, publicationRequested: true
+    });
+    payload.commerceCandidate = Object.assign({}, plain(payload.commerceCandidate), {
+      explicitPublicationRequested: true,
+      publicationScope: { country: scope.country, region: scope.region, page: split.page, section: split.sectionKey, crossCountryFallback: false }
+    });
     payload.publicPublication = false;
     candidateUpserts.push({
       id: candidateId, kind: "product", title: first(payload.title, readiness.supplierName), official_url: readiness.productPageUrl, status: "revenue_ready", source_ref: PRODUCT_SOURCE_REF,
@@ -2704,8 +2717,8 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     assignmentUpserts.push({
       id: assignmentId, candidate_id: candidateId, hub_key: split.page, country_code: scope.country, region_code: scope.region === "NATIONWIDE" ? null : scope.region,
       slot_key: split.sectionKey, priority: Math.max(0, Number(target.priority || product.rankingScore || 0)), state: assignmentExisting && lower(assignmentExisting.state) === "pinned" ? "pinned" : "approved",
-      publication_status: lower(assignmentExisting && assignmentExisting.publication_status) === "publish_requested" ? "publish_requested" : "audit_ready", manual_pinned: assignmentExisting && assignmentExisting.manual_pinned === true,
-      decision_note: "Prepared by explicit administrator front-match confirmation. Required URL/image identity checks passed; incomplete research warnings remain recorded and concrete unsafe signals remain blocked.",
+      publication_status: "publish_requested", manual_pinned: assignmentExisting && assignmentExisting.manual_pinned === true,
+      decision_note: "Explicit administrator front-match publication request. Required URL/image identity checks passed; incomplete research warnings remain recorded and concrete unsafe signals remain blocked.",
       created_at: text(assignmentExisting && assignmentExisting.created_at) || now, updated_at: now, updated_by: actor
     });
     const hasActiveAvailability = array(availabilityByCandidate.get(candidateId)).some((row) => normalizeCountry(row && row.country_code) === scope.country && (normalizeRegion(row && row.region_code || "NATIONWIDE", scope.country) || "NATIONWIDE") === scope.region && ["active","approved","ready"].includes(lower(row && row.availability_state)));
@@ -2748,12 +2761,12 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
     if (!item || item.status !== "prepared") continue;
-    items[index] = Object.assign({}, item, { persisted: true, persistenceVerified: true, publicationStatus: "audit_ready" });
+    items[index] = Object.assign({}, item, { persisted: true, persistenceVerified: true, publicationStatus: "publish_requested", pendingBuild: true });
   }
   return {
     ok: true, schema: "igdc-product-front-lifecycle-preparation.v1", scope, requested: targetIds.length, prepared: preparedCandidateIds.length,
     blocked: items.filter((item) => item.status === "blocked").length, preparedCandidateIds, items, writeTrace,
-    policy: { explicitAdministratorConfirmationRequired: true, officialSellerExternalReferralOnly: true, trustThresholdWhenScored: TRUST_POLICY.minimumTrustScore, trustScoreAdvisoryOnExplicitAdministratorMatch: true, incompleteEvidenceWarningsPreserved: true, hardUnsafeSignalsStillBlocking: true, noIgdcCheckout: true, noPaymentExecution: true, noCrossCountryFallback: true }
+    policy: { explicitAdministratorConfirmationRequired: true, durablePublicationRequestInSameWrite: true, officialSellerExternalReferralOnly: true, trustThresholdWhenScored: TRUST_POLICY.minimumTrustScore, trustScoreAdvisoryOnExplicitAdministratorMatch: true, incompleteEvidenceWarningsPreserved: true, hardUnsafeSignalsStillBlocking: true, noIgdcCheckout: true, noPaymentExecution: true, noCrossCountryFallback: true }
   };
 }
 

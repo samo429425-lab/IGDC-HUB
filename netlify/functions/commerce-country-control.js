@@ -126,15 +126,27 @@ exports.handler=async function(event){
         if(!preparedIds.length){
           batchResult={ok:true,status:"blocked",action:"request_publication_batch",requested:plan.targets.length,queued:0,blocked:preparationBlocked.length,items:preparationBlocked,release:{queued:false,reason:"no_front_ready_products"},preparation};
         }else{
-          const liveDoc=await CandidateReview.stage(process.cwd());
-          const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true,deferBuild:body.deferBuild===true,totalRequested:Number(body.totalRequested)||preparedIds.length},scope,liveDoc);
-          const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
-          const items=preparationBlocked.concat(publishItems);
-          const queued=items.filter((item)=>item&&item.queued===true).length;
-          const persisted=items.filter((item)=>item&&item.persisted===true).length;
-          const pendingBuild=items.filter((item)=>item&&item.pendingBuild===true).length;
-          const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
-          batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,persisted,pendingBuild,blocked,items,preparation,status:queued?(blocked?"partial":"queued"):(pendingBuild?(blocked?"partial":"pending_build"):(blocked?"blocked":"empty"))});
+          /* Front Match itself is the authenticated publication decision. The
+             preparation write now stores publish_requested directly in the DB,
+             together with the market/referral/evidence records Registry needs.
+             Do not perform a second CandidateReview -> GoLiveAudit promotion
+             read here: that split was the point where successfully matched
+             products were being stranded before Registry/SearchBank. */
+          const preparedItems=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status!=="blocked").map((item)=>Object.assign({},item,{
+            status:"publish_requested",queued:false,persisted:true,pendingBuild:true,
+            reason:"explicit_front_match_persisted",publicationStatus:"publish_requested"
+          }));
+          const items=preparationBlocked.concat(preparedItems);
+          const persisted=preparedItems.length;
+          const pendingBuild=preparedItems.length;
+          const blocked=preparationBlocked.length;
+          batchResult={
+            ok:true,status:persisted?(blocked?"partial":"pending_build"):(blocked?"blocked":"empty"),
+            action:"request_publication_batch",requested:plan.targets.length,queued:0,persisted,pendingBuild,blocked,items,preparation,
+            directPublicationCommit:true,
+            release:{queued:false,reason:"publication_persisted_build_deferred",deferred:true},
+            automaticPublication:false,publicSnapshotConfirmed:false,buildVerificationRequired:true
+          };
         }
       }else{
         batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope);

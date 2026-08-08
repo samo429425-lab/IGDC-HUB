@@ -556,7 +556,16 @@
       return true;
     });
     var targetIds=targetRows.map(function(row){return text(row.id);}).filter(Boolean);
-    if(!targetIds.length){show(unmatch?'선택 범위에 매칭 해제할 상품이 없습니다.':'선택 범위에 새로 프론트 매칭할 상품이 없습니다. 이미 처리된 상품은 다시 요청하지 않습니다.','warn');return;}
+    if(!targetIds.length&&!unmatch){
+      var activeRows=productRows.filter(function(row){var key=assignedSectionKey(row);if(!frontPublicationActive(row)||!key)return false;if(candidateMode)return text(row.id)===text(productId);if(candidatesMode)return selectedProductMap[text(row.id)]===true;if(sectionMode)return key===sectionKey;if(sectionsMode)return selectedSections.indexOf(key)>=0;return true;});
+      if(activeRows.length){
+        var active=activeRows[0],front=active.frontPublication||{};
+        if(!window.confirm(label+'은 이미 관리자 발행 원장에 저장되어 있습니다.\n\n프론트 Snapshot 빌드만 다시 호출하시겠습니까?'))return;
+        productFrontSyncActive=true;var retryState=$('productFrontSyncState');if(retryState){retryState.className='front-sync-state running';retryState.textContent=label+' · 저장된 발행 원장으로 프론트 빌드 재호출 중';}
+        try{var retry=await api(CONTROL,'product_front_release','POST',{}, {confirmation:'SITE_PUBLISH',candidateId:text(active.candidateId||active.id),assignmentId:text(front.assignmentId),candidateCount:activeRows.length});if(retryState){retryState.className='front-sync-state '+(retry.queued===true?'complete':'warn');retryState.textContent=retry.queued===true?label+' · 프론트 빌드 재호출 완료':label+' · 발행 원장은 유지됨 · 빌드 호출 대기';}show(retry.queued===true?'저장된 프론트 매칭 원장으로 Snapshot 빌드를 다시 호출했습니다.':'프론트 매칭 원장은 유지되어 있습니다. 빌드 훅 응답을 확인하세요.',retry.queued===true?'ok':'warn');}catch(retryError){if(retryState){retryState.className='front-sync-state warn';retryState.textContent=label+' · 원장 유지 · 빌드 재호출 실패';}show(text(retryError&&retryError.message)||'프론트 빌드 재호출에 실패했습니다.','fail');}finally{productFrontSyncActive=false;renderProducts(productRows);}return;
+      }
+    }
+    if(!targetIds.length){show(unmatch?'선택 범위에 매칭 해제할 상품이 없습니다.':'선택 범위에 새로 프론트 매칭할 상품이 없습니다.','warn');return;}
     var explanation=unmatch?label+'의 기존 프론트 매칭 해제를 요청합니다.':label+'을 기존 실상품 공개 안전 게이트와 빌드 대기열에 전달합니다. 검증·수익권·공개 조건을 통과하지 못한 상품은 자동으로 차단됩니다.';
     if(!window.confirm(explanation+'\n\n'+(unmatch?'프론트에서 해당 매칭을 해제하시겠습니까?\n상품 원장과 비공개 배치 예정 목록은 그대로 유지됩니다.':'프론트 실상품 매칭 절차를 실행하시겠습니까?\n확인을 누르면 6건씩 안전하게 나누어 저장하고, 완료된 묶음은 중간 오류가 나도 보존됩니다.')))return;
     productFrontSyncActive=true;var state=$('productFrontSyncState'),batchSize=6,aggregate={requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],preparation:{requested:0,prepared:0,blocked:0}},batchError=null;
