@@ -2675,101 +2675,115 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
   function group(map, rows) { for (const row of rows) { const id = text(row && row.candidate_id); if (!map.has(id)) map.set(id, []); map.get(id).push(row); } }
   group(assignmentsByCandidate, assignmentRows); group(availabilityByCandidate, availabilityRows); group(revenuesByCandidate, revenueRows); group(evidenceByCandidate, evidenceRows);
 
-  const now = iso(), actor = text(actorId) || "administrator", candidateUpserts = [], assignmentUpserts = [], revenueUpserts = [], evidenceUpserts = [], availabilityInserts = [], items = [], plannedCandidateIds = [];
+  const now = iso(), actor = text(actorId) || "administrator", assignmentUpserts = [], revenueUpserts = [], evidenceUpserts = [], availabilityInserts = [], availabilityUpdates = [], items = [], plannedCandidateIds = [];
   for (const candidateId of targetIds) {
     const target = plain(targetById.get(candidateId)), product = plain(productByCandidate.get(candidateId)), existing = plain(candidateById.get(candidateId));
-    if (!Object.keys(product).length) { items.push({ candidateId, status: "blocked", queued: false, reason: "product_job_candidate_missing", assignmentId: null }); continue; }
-    const sectionKey = text(target.sectionKey || productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement));
+    if (!Object.keys(product).length || !Object.keys(existing).length) { items.push({ candidateId, status: "blocked", queued: false, reason: "candidate_ledger_row_missing", assignmentId: null }); continue; }
+    const sectionKey = text(target.sectionKey || productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement));
     if (!validProductSectionKey(sectionKey)) { items.push({ candidateId, status: "blocked", queued: false, reason: "invalid_product_section", assignmentId: null }); continue; }
     const readiness = frontSyncPublicReadiness(product, existing);
     if (!readiness.eligible) { items.push({ candidateId, status: "blocked", queued: false, reason: readiness.reasons.join(","), reasons: readiness.reasons, assignmentId: null }); continue; }
-    const split = splitProductSectionKey(sectionKey), assignmentExisting = array(assignmentsByCandidate.get(candidateId)).find((row) => text(row && row.hub_key) === split.page && text(row && row.slot_key) === split.sectionKey && normalizeCountry(row && row.country_code) === scope.country && (normalizeRegion(row && row.region_code || "NATIONWIDE", scope.country) || "NATIONWIDE") === scope.region && ["approved","pinned"].includes(lower(row && row.state)));
+    const split = splitProductSectionKey(sectionKey);
+    /* Reuse any existing assignment for this exact route, regardless of its old
+       publication state.  The explicit administrator Front Match action is the
+       new authoritative decision for this route, and reusing the row prevents
+       duplicate assignment records during retries. */
+    const assignmentExisting = array(assignmentsByCandidate.get(candidateId)).find((row) =>
+      text(row && row.hub_key) === split.page && text(row && row.slot_key) === split.sectionKey &&
+      normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region
+    );
     const assignmentId = text(assignmentExisting && assignmentExisting.id) || frontSyncAssignmentId(candidateId, scope, sectionKey);
-    const freshPayload = productCandidatePayload(actor, scope, product, "slot_candidate"), existingPayload = plain(existing.source_payload), payload = Object.assign({}, existingPayload, freshPayload);
-    payload.outboundReferral = Object.assign({}, plain(existingPayload.outboundReferral), plain(freshPayload.outboundReferral), {
-      operatorApproved: true, approved: true, status: "approved", officialDestination: true, officialSeller: true, disclosureReady: true,
-      verifiedAt: now, destinationUrl: readiness.productPageUrl, providerName: readiness.supplierName,
-      approvalSource: "explicit_administrator_front_match", trafficValueOnly: true, guaranteedCommission: false
-    });
-    payload.review = Object.assign({}, plain(payload.review), { state: "approved", decidedAt: now, decidedBy: actor, approvalSource: "explicit_front_match", publicationRequested: true });
-    /* The administrator has already pressed the explicit Front Match action. Persist
-       that authority in the durable candidate payload and assignment in this same
-       write.  Do not insert audit_ready and then depend on a second request to
-       promote it; that split left the candidate ledger matched while Registry and
-       SearchBank still saw zero publication requests. */
-    payload.pipeline = Object.assign({}, plain(payload.pipeline), { stage: "registry_sync_ready", nextGate: "publication_build_requested", preparedAt: now, preparedBy: actor, explicitPublicationRequested: true });
-    payload.commerceReview = Object.assign({}, plain(payload.commerceReview), {
-      status: "approved", assignmentState: "approved", approvalId: assignmentId,
-      approvedAt: now, approvedBy: actor, publicationStatus: "publish_requested",
-      explicitPublicationRequested: true, publicationRequested: true
-    });
-    payload.commerceCandidate = Object.assign({}, plain(payload.commerceCandidate), {
-      explicitPublicationRequested: true,
-      publicationScope: { country: scope.country, region: scope.region, page: split.page, section: split.sectionKey, crossCountryFallback: false }
-    });
-    payload.publicPublication = false;
-    candidateUpserts.push({
-      id: candidateId, kind: "product", title: first(payload.title, readiness.supplierName), official_url: readiness.productPageUrl, status: "revenue_ready", source_ref: PRODUCT_SOURCE_REF,
-      thumbnail_url: readiness.imageUrl, description: text(existing.description) || "Administrator-confirmed external-seller product reference prepared for Registry/SearchBank publication routing; incomplete research warnings remain attached.",
-      owner_note: "Explicit front-match preparation. Incomplete trust/evidence warnings remain visible; concrete unsafe/dead/mismatch signals are still blocked. IGDC remains discovery/referral intermediary; seller handles sale, payment, delivery, returns, refunds and support.",
-      source_payload: payload, created_at: text(existing.created_at) || now, updated_at: now, created_by: text(existing.created_by) || actor
-    });
     assignmentUpserts.push({
       id: assignmentId, candidate_id: candidateId, hub_key: split.page, country_code: scope.country, region_code: scope.region === "NATIONWIDE" ? null : scope.region,
       slot_key: split.sectionKey, priority: Math.max(0, Number(target.priority || product.rankingScore || 0)), state: assignmentExisting && lower(assignmentExisting.state) === "pinned" ? "pinned" : "approved",
       publication_status: "publish_requested", manual_pinned: assignmentExisting && assignmentExisting.manual_pinned === true,
-      decision_note: "Explicit administrator front-match publication request. Required URL/image identity checks passed; incomplete research warnings remain recorded and concrete unsafe signals remain blocked.",
+      decision_note: "Explicit administrator Front Match. Candidate remains external-seller referral; IGDC does not sell, charge, ship, return, refund or provide after-sales service.",
       created_at: text(assignmentExisting && assignmentExisting.created_at) || now, updated_at: now, updated_by: actor
     });
-    const hasActiveAvailability = array(availabilityByCandidate.get(candidateId)).some((row) => normalizeCountry(row && row.country_code) === scope.country && (normalizeRegion(row && row.region_code || "NATIONWIDE", scope.country) || "NATIONWIDE") === scope.region && ["active","approved","ready"].includes(lower(row && row.availability_state)));
-    if (!hasActiveAvailability) availabilityInserts.push({
-      candidate_id: candidateId, country_code: scope.country, region_code: scope.region === "NATIONWIDE" ? null : scope.region, availability_state: "active",
-      legal_basis: "Administrator-confirmed official supplier product reference; external seller remains seller and merchant of record.",
-      delivery_or_access: "Official seller product page and supplier evidence were verified; delivery, returns, refunds and support remain the seller's responsibility.", updated_at: now, updated_by: actor
-    });
+
+    const scopeAvailability = array(availabilityByCandidate.get(candidateId)).find((row) =>
+      normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region
+    );
+    const availabilityPatch = {
+      availability_state: "active",
+      legal_basis: "Administrator-confirmed official seller product reference; external seller remains seller and merchant of record.",
+      delivery_or_access: "Official seller product page selected for referral. Sale, payment, delivery, returns, refunds and support remain the external seller's responsibility.",
+      updated_at: now, updated_by: actor
+    };
+    if (scopeAvailability) availabilityUpdates.push({ candidateId, countryCode: scope.country, regionCode: scope.region, patch: availabilityPatch });
+    else availabilityInserts.push(Object.assign({ candidate_id: candidateId, country_code: scope.country, region_code: scope.region === "NATIONWIDE" ? null : scope.region }, availabilityPatch));
+
     const hasApprovedExternalReferral = array(revenuesByCandidate.get(candidateId)).some((row) => lower(row && row.revenue_type) === "external_referral" && lower(row && row.status) === "approved");
     if (!hasApprovedExternalReferral) revenueUpserts.push({
       id: frontSyncRevenueId(candidateId), candidate_id: candidateId, revenue_type: "external_referral", status: "approved", affiliate_url: readiness.productPageUrl,
       provider_name: readiness.supplierName.slice(0, 240), currency: null,
-      note: "Verified official-seller external referral approved by the administrator. Traffic-value route only; no guaranteed commission or IGDC checkout.", updated_at: now, updated_by: actor
+      note: "Administrator-confirmed non-PG external seller referral route. No guaranteed commission and no IGDC checkout/payment.", updated_at: now, updated_by: actor
     });
     const hasVerifiedEvidence = array(evidenceByCandidate.get(candidateId)).some((row) => row && row.verified === true && safeUrl(row.evidence_url));
     if (!hasVerifiedEvidence) evidenceUpserts.push({
       id: frontSyncEvidenceId(candidateId), candidate_id: candidateId, evidence_type: "official_supplier_product_reference", evidence_url: readiness.supplierUrl,
-      note: "Official supplier identity and official product reference were confirmed by the administrator. Pending inspection or supplier-evidence warnings remain recorded in the candidate payload and must still pass the final build gate.",
-      verified: true, created_at: now, created_by: actor
+      note: "Administrator confirmed the official supplier identity and product destination used for this Front Match.", verified: true, created_at: now, created_by: actor
     });
     plannedCandidateIds.push(candidateId);
-    items.push({ candidateId, status: "prepared", queued: false, reason: "front_lifecycle_prepared", warnings: readiness.warnings || [], assignmentId });
+    items.push({ candidateId, status: "prepared", queued: false, reason: "front_bridge_relations_prepared", warnings: readiness.warnings || [], assignmentId, sectionKey });
   }
 
-  const writeTrace = { schema: "igdc-product-front-lifecycle-write-trace.v1", requested: targetIds.length, policyEligible: plannedCandidateIds.length };
-  await frontSyncWriteStage(writeTrace, "candidates", candidateUpserts.length, () => frontSyncUpsert("gslot_candidates", candidateUpserts, "id"));
+  const writeTrace = { schema: "igdc-product-front-lifecycle-write-trace.v2", requested: targetIds.length, policyEligible: plannedCandidateIds.length, mode: "relations-first-verified" };
+  /* V5 attempted to replace the full candidate source_payload before creating the
+     durable relation rows.  A failure in that first large write meant zero
+     assignments and therefore zero Registry/SearchBank input.  V6 deliberately
+     makes the small authoritative relations the critical path and only annotates
+     the large candidate payload afterward as a best-effort UI convenience. */
+  await frontSyncWriteStage(writeTrace, "candidate_status", plannedCandidateIds.length, async () => {
+    const output = [];
+    for (const ids of frontSyncChunk(plannedCandidateIds, 80)) {
+      if (!ids.length) continue;
+      const rows = await SlotStore.update("gslot_candidates", "id=in." + frontSyncInFilter(ids), { status: "revenue_ready", updated_at: now });
+      output.push(...array(rows));
+    }
+    return output;
+  });
   await frontSyncWriteStage(writeTrace, "assignments", assignmentUpserts.length, () => frontSyncUpsert("gslot_slot_assignments", assignmentUpserts, "id"));
-  await frontSyncWriteStage(writeTrace, "availability", availabilityInserts.length, async () => {
+  await frontSyncWriteStage(writeTrace, "availability_update", availabilityUpdates.length, async () => {
+    const output = [];
+    for (const row of availabilityUpdates) {
+      const regionQuery = row.regionCode === "NATIONWIDE" ? "region_code=is.null" : "region_code=eq." + encodeURIComponent(row.regionCode);
+      const query = "candidate_id=eq." + encodeURIComponent(row.candidateId) + "&country_code=eq." + encodeURIComponent(row.countryCode) + "&" + regionQuery;
+      output.push(...array(await SlotStore.update("gslot_candidate_availability", query, row.patch)));
+    }
+    return output;
+  });
+  await frontSyncWriteStage(writeTrace, "availability_insert", availabilityInserts.length, async () => {
     const output = [];
     for (const batch of frontSyncChunk(availabilityInserts, 80)) output.push(...array(await SlotStore.insert("gslot_candidate_availability", batch, "return=representation")));
     return output;
   });
   await frontSyncWriteStage(writeTrace, "revenue", revenueUpserts.length, () => frontSyncUpsert("gslot_candidate_revenue", revenueUpserts, "id"));
   await frontSyncWriteStage(writeTrace, "evidence", evidenceUpserts.length, () => frontSyncUpsert("gslot_candidate_evidence", evidenceUpserts, "id"));
-  /* The writes above already fail hard on an actual storage error.  Do not turn
-     a delayed replica/read-back into a zero-item front match; the publication
-     stage remains the authoritative gate. */
-  const preparedCandidateIds = plannedCandidateIds.slice();
-  writeTrace.verification = { requested: preparedCandidateIds.length, verified: preparedCandidateIds.length, failed: 0, ok: true, mode: "write-confirmed-publication-gate" };
+
+  const verification = await verifyProductFrontPreparation(plannedCandidateIds, scope, targetById);
+  writeTrace.verification = verification;
+  const verifiedSet = new Set(array(verification.verifiedCandidateIds));
+  const verifiedCandidateIds = plannedCandidateIds.filter((id) => verifiedSet.has(id));
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
     if (!item || item.status !== "prepared") continue;
-    items[index] = Object.assign({}, item, { persisted: true, persistenceVerified: true, publicationStatus: "publish_requested", pendingBuild: true });
+    const verified = verifiedSet.has(item.candidateId);
+    const verifyRow = array(verification.items).find((row) => row && row.candidateId === item.candidateId) || {};
+    items[index] = Object.assign({}, item, verified ? {
+      status: "publish_requested", persisted: true, persistenceVerified: true, publicationStatus: "publish_requested", pendingBuild: true,
+      reason: "front_bridge_verified", assignmentId: text(verifyRow.assignmentId) || item.assignmentId
+    } : {
+      status: "blocked", persisted: false, persistenceVerified: false, pendingBuild: false,
+      reason: array(verifyRow.reasons).join(",") || "front_bridge_verification_failed", reasons: array(verifyRow.reasons)
+    });
   }
   return {
-    ok: true, schema: "igdc-product-front-lifecycle-preparation.v1", scope, requested: targetIds.length, prepared: preparedCandidateIds.length,
-    blocked: items.filter((item) => item.status === "blocked").length, preparedCandidateIds, items, writeTrace,
-    policy: { explicitAdministratorConfirmationRequired: true, durablePublicationRequestInSameWrite: true, officialSellerExternalReferralOnly: true, trustThresholdWhenScored: TRUST_POLICY.minimumTrustScore, trustScoreAdvisoryOnExplicitAdministratorMatch: true, incompleteEvidenceWarningsPreserved: true, hardUnsafeSignalsStillBlocking: true, noIgdcCheckout: true, noPaymentExecution: true, noCrossCountryFallback: true }
+    ok: verification.ok === true, schema: "igdc-product-front-lifecycle-preparation.v2", scope, requested: targetIds.length, prepared: verifiedCandidateIds.length,
+    blocked: items.filter((item) => item.status === "blocked").length, preparedCandidateIds: verifiedCandidateIds, items, writeTrace,
+    policy: { explicitAdministratorConfirmationRequired: true, relationsFirst: true, readBackVerificationRequired: true, officialSellerExternalReferralOnly: true, trustScoreAdvisoryOnExplicitAdministratorMatch: true, incompleteEvidenceWarningsPreserved: true, hardUnsafeSignalsStillBlocking: true, noIgdcCheckout: true, noPaymentExecution: true, noCrossCountryFallback: true }
   };
 }
-
 async function productFrontSyncTargets(input, jobInput) {
   const scope = researchScope(input), requestedMode = lower(input && input.mode), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate", mode = ["candidate","candidates","section","sections"].includes(requestedMode) ? requestedMode : "all", sectionKey = text(input && input.sectionKey), requestedProductId = text(input && input.productId), requestedCandidateId = text(input && input.candidateId);
   const requestedSectionKeys = Array.from(new Set(array(input && input.sectionKeys).map(text).filter(validProductSectionKey))).slice(0, PRODUCT_SECTION_KEYS.length);
@@ -2825,8 +2839,24 @@ async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
   if (candidateLedgerMode) {
     const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match", now = iso(), actor = text(actorId) || "administrator", items = array(batchResult && batchResult.items), ids = Array.from(new Set(items.map((item) => text(item && item.candidateId)).filter(Boolean)));
     const rows = await frontSyncSelectCandidates(ids), byId = new Map(rows.map((row) => [text(row && row.id), row])), byItem = new Map(items.map((item) => [text(item && item.candidateId), plain(item)]));
-    for (const id of ids) { const row = plain(byId.get(id)), item = plain(byItem.get(id)); if (!Object.keys(row).length) continue; const payload = Object.assign({}, plain(row.source_payload)), status = text(item.status) || (item.queued === true ? (operation === "match" ? "publish_requested" : "unpublish_requested") : "blocked"); payload.frontPublication = { schema:"igdc-product-front-publication-control.v1", candidateId:id, operation, status, queued:item.queued===true, persisted:item.persisted===true, pendingBuild:item.pendingBuild===true, persistenceVerified:item.persistenceVerified!==false&&item.persisted===true, reason:text(item.reason)||null, assignmentId:text(item.assignmentId)||null, requestedAt:now, requestedBy:actor, publicSnapshotConfirmed:false, buildVerificationRequired:true }; payload.publicPublication=false; await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{source_payload:payload,updated_at:now}); }
-    return { ok:true, candidateLedger:true, compact:true, status:"candidate_ledger", frontSyncResult:Object.assign({},plain(batchResult),{operation,publicSnapshotConfirmed:false,buildVerificationRequired:true}) };
+    const annotationErrors = [];
+    for (const id of ids) {
+      const row = plain(byId.get(id)), item = plain(byItem.get(id)); if (!Object.keys(row).length) continue;
+      const payload = Object.assign({}, plain(row.source_payload)), status = text(item.status) || (item.queued === true ? (operation === "match" ? "publish_requested" : "unpublish_requested") : "blocked");
+      const key = text(item.sectionKey || productPlacementKey(payload.approvedPlacement || payload.selectedPlacement || payload.primaryPlacement || payload.placement));
+      const split = validProductSectionKey(key) ? splitProductSectionKey(key) : null;
+      payload.frontPublication = { schema:"igdc-product-front-publication-control.v2", candidateId:id, operation, status, queued:item.queued===true, persisted:item.persisted===true, pendingBuild:item.pendingBuild===true, persistenceVerified:item.persistenceVerified!==false&&item.persisted===true, reason:text(item.reason)||null, assignmentId:text(item.assignmentId)||null, requestedAt:now, requestedBy:actor, publicSnapshotConfirmed:false, buildVerificationRequired:true };
+      if (operation === "match" && item.persisted === true && split) {
+        payload.slotDecision = "slot_candidate";
+        payload.approvedPlacement = Object.assign({}, plain(payload.approvedPlacement), { page:split.page, section:split.sectionKey, sectionKey:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, aiSelected:false, proposalOnly:false, publicPublication:false, publicationPending:true });
+        payload.review = Object.assign({}, plain(payload.review), { state:"approved", decidedAt:now, decidedBy:actor, approvalSource:"explicit_front_match", publicationRequested:true });
+        payload.pipeline = Object.assign({}, plain(payload.pipeline), { stage:"registry_sync_ready", nextGate:"publication_build_requested", explicitPublicationRequested:true, preparedAt:now, preparedBy:actor });
+      }
+      payload.publicPublication=false;
+      try { await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{source_payload:payload,updated_at:now}); }
+      catch (error) { annotationErrors.push({candidateId:id,error:text(error&&error.message)||"candidate_annotation_failed"}); }
+    }
+    return { ok:true, candidateLedger:true, compact:true, status:"candidate_ledger", frontSyncResult:Object.assign({},plain(batchResult),{operation,publicSnapshotConfirmed:false,buildVerificationRequired:true,annotationErrors}) };
   }
   const job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
