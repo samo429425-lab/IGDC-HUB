@@ -58,7 +58,7 @@ exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();if(method==="OPTIONS")return json(204,{});
     const body=method==="GET"?{}:parse(event),query=event&&event.queryStringParameters||{},action=lower(query.action||body.action||"catalog");
-    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_candidate_action","product_ai_automation","product_front_match","product_front_unmatch","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
+    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_candidate_action","product_candidate_ledger_action","product_candidate_ai_recover","product_ai_automation","product_front_match","product_front_unmatch","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
     const actorId=text(actor&&actor.sub);
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
@@ -105,11 +105,14 @@ exports.handler=async function(event){
     if(action==="product_research_begin")return json(200,await Automation.beginProductResearchJob(actorId,body));
     if(action==="product_research_step")return json(200,await Automation.advanceProductResearchJob(actorId,body));
     if(action==="product_candidate_action")return json(200,await Automation.productCandidateAction(actorId,body));
+    if(action==="product_candidate_ledger_action")return json(200,await Automation.productCandidateLedgerAction(actorId,body));
+    if(action==="product_candidate_ai_recover")return json(200,await Automation.productCandidateAiRecover(actorId,body));
     if(action==="product_ai_automation")return json(200,await Automation.productAiAutomation(actorId,body));
     if(action==="product_front_match"||action==="product_front_unmatch"){
       const operation=action==="product_front_unmatch"?"unmatch":"match";
       const request=Object.assign({},body,{operation});
-      const loadedJob=await Automation.loadProductResearchJob(request);
+      const candidateLedgerMode=lower(request.ledgerMode)==="candidate";
+      const loadedJob=candidateLedgerMode?null:await Automation.loadProductResearchJob(request);
       const plan=await Automation.productFrontSyncTargets(request,loadedJob);
       const scope=ProductGoLiveAudit.selectedScope(plan.scope.country,plan.scope.region);
       let batchResult;

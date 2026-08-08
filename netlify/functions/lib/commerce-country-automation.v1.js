@@ -2226,6 +2226,68 @@ async function productCandidateAction(actorId, input) {
   return result;
 }
 
+
+function candidateLedgerPlacementRecord(scope, placementInput, actorId, source) {
+  const placement = plain(placementInput), key = productPlacementKey(placement), split = splitProductSectionKey(key), now = iso();
+  if (!validProductSectionKey(key)) return null;
+  return Object.assign({}, placement, {
+    key, page: split.page, section: split.sectionKey, sectionKey: split.sectionKey,
+    country: scope.country, region: scope.region, proposalOnly: false, reviewEligible: true,
+    administratorSelected: source === "administrator", aiSelected: source !== "administrator",
+    publicPublication: false, publicReleaseEvidencePending: true,
+    selectedAt: now, selectedBy: text(actorId) || "administrator", selectionSource: source || "candidate_ledger"
+  });
+}
+async function productCandidateLedgerAction(actorId, input) {
+  const scope = researchScope(input), candidateId = text(input && (input.candidateId || input.productId)), decision = lower(input && input.decision);
+  if (!candidateId) { const error = new Error("관리할 상품 후보를 선택하세요."); error.statusCode = 400; throw error; }
+  const rows = await frontSyncSelectCandidates([candidateId]), row = plain(rows[0]);
+  if (!Object.keys(row).length || text(row.source_ref) !== PRODUCT_SOURCE_REF) { const error = new Error("선택 상품 후보 원장을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
+  const payload = Object.assign({}, plain(row.source_payload)), now = iso(), actor = text(actorId) || "administrator";
+  let status = text(row.status) || "approval_pending", placement = null, effectiveDecision = decision;
+  if (decision === "slot_candidate") {
+    const key = text(input && input.placementKey), sourcePlacement = array(payload.proposedPlacements).find((item) => productPlacementKey(item) === key) || { key };
+    placement = candidateLedgerPlacementRecord(scope, sourcePlacement, actor, "administrator");
+    if (!placement) { const error = new Error("지정할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
+    payload.slotDecision = "slot_candidate"; payload.approvedPlacement = placement; payload.placement = placement; status = "approval_pending";
+    payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
+  } else if (decision === "undecided" || decision === "ai_reclassify") {
+    payload.slotDecision = "undecided"; delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement; status = "research_pending";
+    payload.managementControl = { schema: "igdc-product-management-control.v1", source: decision === "ai_reclassify" ? "administrator_ai_reclassify" : "administrator", administratorLocked: decision !== "ai_reclassify", aiReclassificationAllowed: decision === "ai_reclassify", decidedAt: now, decidedBy: actor };
+    effectiveDecision = "undecided";
+  } else if (decision === "hold") {
+    payload.slotDecision = "hold"; status = "hold"; payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
+  } else if (decision === "reject" || decision === "purge") {
+    payload.slotDecision = decision; status = decision === "purge" ? "suppressed" : "rejected"; payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
+  } else if (decision === "affiliate_settlement") {
+    payload.affiliateSettlement = normalizeAffiliateSettlement(input && input.affiliateSettlement, { existing: payload.affiliateSettlement }); effectiveDecision = lower(payload.slotDecision || "undecided");
+  } else { const error = new Error("지원하지 않는 상품 후보 관리 작업입니다."); error.statusCode = 400; throw error; }
+  payload.decisionAt = now; payload.decisionBy = actor; payload.decisionSource = "candidate_ledger_control"; payload.publicPublication = false; payload.automaticImport = false;
+  if (decision !== "affiliate_settlement") payload.review = Object.assign({}, plain(payload.review), { state: effectiveDecision === "slot_candidate" ? "pending" : effectiveDecision, decidedAt: now, decidedBy: actor });
+  await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: payload, updated_at: now });
+  return { ok: true, candidateLedger: true, candidateId, actionResult: { candidateId, decision, effectiveDecision, placement, status, publicPublication: false, paymentExecution: false } };
+}
+async function productCandidateAiRecover(actorId, input) {
+  const scope = researchScope(input), ids = Array.from(new Set(array(input && input.candidateIds).map(text).filter(Boolean))).slice(0, 12);
+  if (!ids.length) { const error = new Error("AI 복구할 미배정 상품 후보를 선택하세요."); error.statusCode = 400; throw error; }
+  const rows = await frontSyncSelectCandidates(ids), now = iso(), actor = text(actorId) || "administrator", results = [];
+  for (const rowInput of rows) {
+    const row = plain(rowInput), candidateId = text(row.id), payload = Object.assign({}, plain(row.source_payload)), control = plain(payload.managementControl), currentDecision = lower(payload.slotDecision || "undecided");
+    if (currentDecision !== "undecided" || control.administratorLocked === true) { results.push({ candidateId, status: "preserved", assigned: false, reason: "not_unassigned_or_administrator_locked" }); continue; }
+    const proposals = array(payload.proposedPlacements).filter((item) => validProductSectionKey(productPlacementKey(item)) && item && item.reviewEligible !== false && item.valueQualified !== false).sort((a,b) => Number(b && b.score || 0) - Number(a && a.score || 0) || PRODUCT_SECTION_KEYS.indexOf(productPlacementKey(a)) - PRODUCT_SECTION_KEYS.indexOf(productPlacementKey(b)));
+    const existingPlacement = plain(payload.approvedPlacement || payload.placement), picked = proposals[0] || (validProductSectionKey(productPlacementKey(existingPlacement)) ? existingPlacement : null);
+    const placement = picked ? candidateLedgerPlacementRecord(scope, picked, actor, "ai_automation") : null;
+    if (!placement) { results.push({ candidateId, status: "unassigned", assigned: false, reason: "no_valid_section_proposal" }); continue; }
+    payload.slotDecision = "slot_candidate"; payload.approvedPlacement = placement; payload.placement = placement; payload.decisionAt = now; payload.decisionBy = "ai-automation"; payload.decisionSource = "candidate_ledger_ai_recovery";
+    payload.managementControl = { schema: "igdc-product-management-control.v1", source: "ai_automation", administratorLocked: false, aiReclassificationAllowed: true, decidedAt: now, decidedBy: actor };
+    payload.review = Object.assign({}, plain(payload.review), { state: "pending", decidedAt: now, decidedBy: actor, approvalSource: "candidate_ledger_ai_recovery" }); payload.publicPublication = false; payload.automaticImport = false;
+    await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status: "approval_pending", source_payload: payload, updated_at: now });
+    results.push({ candidateId, status: "assigned", assigned: true, sectionKey: productPlacementKey(placement) });
+  }
+  const returned = new Set(rows.map((row) => text(row && row.id))); for (const id of ids) if (!returned.has(id)) results.push({ candidateId:id,status:"missing",assigned:false,reason:"candidate_not_found" });
+  return { ok: true, candidateLedger: true, requested: ids.length, assigned: results.filter((row) => row.assigned === true).length, unassigned: results.filter((row) => row.status === "unassigned").length, preserved: results.filter((row) => row.status === "preserved").length, missing: results.filter((row) => row.status === "missing").length, results, publicPublication: false, paymentExecution: false };
+}
+
 const PRODUCT_AI_QUEUE_SYNC_BATCH = 6;
 function productAiQueueSyncPending(rowInput) {
   const row=plain(rowInput),state=plain(row.candidateQueueSync);
@@ -2591,10 +2653,9 @@ function frontSyncAssignmentId(candidateId, scope, sectionKey) {
 function frontSyncRevenueId(candidateId) { return "front_referral_" + sha256(candidateId).slice(0, 24); }
 function frontSyncEvidenceId(candidateId) { return "front_evidence_" + sha256(candidateId).slice(0, 24); }
 async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput) {
-  const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
-  if (!job || job.schema !== PRODUCT_JOB_SCHEMA || !array(job.products).length) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
+  const scope = researchScope(input), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate", job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:(candidateLedgerMode?null:await loadProductResearchJob(scope));
+  if (!candidateLedgerMode && (!job || job.schema !== PRODUCT_JOB_SCHEMA || !array(job.products).length)) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
   const targets = array(targetsInput), targetIds = targets.map((row) => text(row && row.candidateId)).filter(Boolean), targetById = new Map(targets.map((row) => [text(row && row.candidateId), row]));
-  const productByCandidate = new Map(array(job.products).map((row) => [productCandidateId(scope, row), row]));
   const [candidateRows, assignmentRows, availabilityRows, revenueRows, evidenceRows] = await Promise.all([
     frontSyncSelectCandidates(targetIds),
     frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", targetIds),
@@ -2603,6 +2664,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     frontSyncSelectByCandidate("gslot_candidate_evidence", "id,candidate_id,evidence_type,evidence_url,note,verified,created_at", targetIds)
   ]);
   const candidateById = new Map(candidateRows.map((row) => [text(row && row.id), row]));
+  const productByCandidate = candidateLedgerMode ? new Map(candidateRows.map((row) => [text(row && row.id), restoredProductFromCandidate(row, scope)]).filter((entry) => entry[1])) : new Map(array(job.products).map((row) => [productCandidateId(scope, row), row]));
   const assignmentsByCandidate = new Map(), availabilityByCandidate = new Map(), revenuesByCandidate = new Map(), evidenceByCandidate = new Map();
   function group(map, rows) { for (const row of rows) { const id = text(row && row.candidate_id); if (!map.has(id)) map.set(id, []); map.get(id).push(row); } }
   group(assignmentsByCandidate, assignmentRows); group(availabilityByCandidate, availabilityRows); group(revenuesByCandidate, revenueRows); group(evidenceByCandidate, evidenceRows);
@@ -2690,10 +2752,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
 }
 
 async function productFrontSyncTargets(input, jobInput) {
-  const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
-  if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
-  if (!array(job.products).length) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
-  const requestedMode = lower(input && input.mode), mode = ["candidate","candidates","section","sections"].includes(requestedMode) ? requestedMode : "all", sectionKey = text(input && input.sectionKey), requestedProductId = text(input && input.productId), requestedCandidateId = text(input && input.candidateId);
+  const scope = researchScope(input), requestedMode = lower(input && input.mode), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate", mode = ["candidate","candidates","section","sections"].includes(requestedMode) ? requestedMode : "all", sectionKey = text(input && input.sectionKey), requestedProductId = text(input && input.productId), requestedCandidateId = text(input && input.candidateId);
   const requestedSectionKeys = Array.from(new Set(array(input && input.sectionKeys).map(text).filter(validProductSectionKey))).slice(0, PRODUCT_SECTION_KEYS.length);
   const requestedProductIds = Array.from(new Set(array(input && input.productIds).map(text).filter(Boolean))).slice(0, 500);
   const requestedCandidateIds = Array.from(new Set(array(input && input.candidateIds).map(text).filter(Boolean))).slice(0, 500);
@@ -2702,6 +2761,21 @@ async function productFrontSyncTargets(input, jobInput) {
   if (mode === "candidate" && !requestedProductId && !requestedCandidateId) { const error = new Error("프론트에 매칭할 상품 한 건을 선택하세요."); error.statusCode = 400; throw error; }
   if (mode === "candidates" && !requestedProductIds.length && !requestedCandidateIds.length) { const error = new Error("프론트에 매칭할 상품을 하나 이상 선택하세요."); error.statusCode = 400; throw error; }
   const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match";
+  if (candidateLedgerMode) {
+    const ids = mode === "candidate" ? [requestedCandidateId || requestedProductId].filter(Boolean) : requestedCandidateIds.length ? requestedCandidateIds : requestedProductIds;
+    const candidateRows = await frontSyncSelectCandidates(ids), targets = [];
+    for (const candidate of candidateRows) {
+      const product = restoredProductFromCandidate(candidate, scope); if (!product) continue;
+      const key = productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement), candidateId = text(candidate.id);
+      if (!validProductSectionKey(key)) continue;
+      if (operation === "match" && lower(product.slotDecision) !== "slot_candidate") continue;
+      targets.push({ productId: text(product.id) || candidateId, candidateId, title: first(product.productName, product.title, candidate.title), sectionKey: key, digest: sha256({ id:candidateId, placement:key, updatedAt:candidate.updated_at || null }) });
+    }
+    return { ok:true, candidateLedger:true, scope, mode, sectionKey:targets[0]&&targets[0].sectionKey||null, sectionKeys:requestedSectionKeys, productId:requestedProductId||null, productIds:requestedProductIds, candidateId:requestedCandidateId||null, candidateIds:ids, operation, targets, productCount:candidateRows.length };
+  }
+  const job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
+  if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
+  if (!array(job.products).length) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
   const targets = array(job.products).filter((row) => {
     const key = productPlacementKey(row && (row.approvedPlacement || row.selectedPlacement || row.primaryPlacement));
     if (mode === "section" && key !== sectionKey) return false;
@@ -2711,13 +2785,18 @@ async function productFrontSyncTargets(input, jobInput) {
     if (operation === "match") return lower(row && row.slotDecision) === "slot_candidate" && validProductSectionKey(key);
     const front = plain(row && row.frontPublication);
     return validProductSectionKey(key) && ["queued","publish_requested","matched","published","unpublish_failed"].includes(lower(front.status));
-  }).map((row) => ({
-    productId: text(row.id), candidateId: productCandidateId(scope, row), title: first(row.productName, row.title), sectionKey: productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement), digest: sha256({ id: text(row.id), identity: ProductRanking.productIdentity(row), placement: productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement), updatedAt: row.updatedAt || row.decisionAt || null })
-  }));
-  return { ok: true, scope, mode, sectionKey: mode === "section" ? sectionKey : (targets[0] && targets[0].sectionKey || null), sectionKeys: mode === "sections" ? requestedSectionKeys : [], productId: mode === "candidate" ? (requestedProductId || targets[0] && targets[0].productId || null) : null, productIds: mode === "candidates" ? requestedProductIds : [], candidateId: mode === "candidate" ? (requestedCandidateId || targets[0] && targets[0].candidateId || null) : null, candidateIds: mode === "candidates" ? requestedCandidateIds : [], operation, targets, productCount: array(job.products).length };
+  }).map((row) => ({ productId:text(row.id),candidateId:productCandidateId(scope,row),title:first(row.productName,row.title),sectionKey:productPlacementKey(row.approvedPlacement||row.selectedPlacement||row.primaryPlacement),digest:sha256({id:text(row.id),identity:ProductRanking.productIdentity(row),placement:productPlacementKey(row.approvedPlacement||row.selectedPlacement||row.primaryPlacement),updatedAt:row.updatedAt||row.decisionAt||null}) }));
+  return { ok:true, scope, mode, sectionKey:mode==="section"?sectionKey:(targets[0]&&targets[0].sectionKey||null), sectionKeys:mode==="sections"?requestedSectionKeys:[], productId:mode==="candidate"?(requestedProductId||targets[0]&&targets[0].productId||null):null, productIds:mode==="candidates"?requestedProductIds:[], candidateId:mode==="candidate"?(requestedCandidateId||targets[0]&&targets[0].candidateId||null):null, candidateIds:mode==="candidates"?requestedCandidateIds:[], operation, targets, productCount:array(job.products).length };
 }
 async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
-  const scope = researchScope(input), job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
+  const scope = researchScope(input), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate";
+  if (candidateLedgerMode) {
+    const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match", now = iso(), actor = text(actorId) || "administrator", items = array(batchResult && batchResult.items), ids = Array.from(new Set(items.map((item) => text(item && item.candidateId)).filter(Boolean)));
+    const rows = await frontSyncSelectCandidates(ids), byId = new Map(rows.map((row) => [text(row && row.id), row])), byItem = new Map(items.map((item) => [text(item && item.candidateId), plain(item)]));
+    for (const id of ids) { const row = plain(byId.get(id)), item = plain(byItem.get(id)); if (!Object.keys(row).length) continue; const payload = Object.assign({}, plain(row.source_payload)), status = text(item.status) || (item.queued === true ? (operation === "match" ? "publish_requested" : "unpublish_requested") : "blocked"); payload.frontPublication = { schema:"igdc-product-front-publication-control.v1", candidateId:id, operation, status, queued:item.queued===true, persisted:item.persisted===true, pendingBuild:item.pendingBuild===true, persistenceVerified:item.persistenceVerified!==false&&item.persisted===true, reason:text(item.reason)||null, assignmentId:text(item.assignmentId)||null, requestedAt:now, requestedBy:actor, publicSnapshotConfirmed:false, buildVerificationRequired:true }; payload.publicPublication=false; await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{source_payload:payload,updated_at:now}); }
+    return { ok:true, candidateLedger:true, compact:true, status:"candidate_ledger", frontSyncResult:Object.assign({},plain(batchResult),{operation,publicSnapshotConfirmed:false,buildVerificationRequired:true}) };
+  }
+  const job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match", now = iso(), byCandidate = new Map(array(batchResult && batchResult.items).map((item) => [text(item && item.candidateId), plain(item)]));
   job.products = array(job.products).map((row) => {
@@ -3058,5 +3137,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productAiAutomation, prepareProductFrontTargets, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateAiRecover, productAiAutomation, prepareProductFrontTargets, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
 };
