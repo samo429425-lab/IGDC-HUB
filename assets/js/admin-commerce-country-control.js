@@ -806,19 +806,9 @@
     panel.addEventListener('click',function(event){var selected=event.target&&event.target.closest?event.target.closest('[data-selected-products-front]'):null;if(!selected)return;event.preventDefault();event.stopPropagation();var sectionKey=selected.getAttribute('data-selected-products-front'),operation=selected.getAttribute('data-front-operation')==='unmatch'?'unmatch':'match';runProductFrontSync(operation,'candidates','','',selectedProductIds(sectionKey));});
     panel.addEventListener('change',function(event){var target=event.target;if(!target||!target.getAttribute)return;if(target.hasAttribute('data-section-front-select')){frontSelectedSections[target.value]=target.checked===true;syncFrontSelectionControls();return;}if(target.hasAttribute('data-product-front-select')){frontSelectedProducts[target.value]=target.checked===true;syncFrontSelectionControls();return;}var sectionKey=target.getAttribute('data-section-products-select-all');if(sectionKey){sectionRows(sectionKey).forEach(function(row){frontSelectedProducts[text(row.id)]=target.checked===true;});syncFrontSelectionControls();}});
   }
-  async function bootstrapIpScope(){
-    if(selectedCountry||sessionResumeActive)return;
-    try{
-      var fallback=await staticRegistry();
-      regions=(fallback&&fallback.regions)||regions;countries=(fallback&&fallback.countries)||countries;
-      if(!catalog)catalog={registry:{regions:regions},countries:countries,settings:[]};
-      if(!geo)geo=await geoData();
-      if(geo&&geo.country&&countries.length){var ipCountry=country(geo.country);if(ipCountry){geo.worldRegion=ipCountry.regionGroup;selectedCountry=ipCountry.code;selectedRegion=ipCountry.regionGroup||'';selectedSubdivision=validSubdivision(ipCountry,geo.region||'NATIONWIDE');selectionSource='ip-detected';mapSettings();renderAll();}}
-    }catch(_e){}
-  }
   async function boot(){
     prepareReviewReturn();wire();wireCandidateBulkControls();wireFrontSelectionControls();if($('runCurrentDiagnosticBtn'))$('runCurrentDiagnosticBtn').addEventListener('click',diagnostic);if(consumePendingExternalReview())return;
-    var restored=hydrateReviewSnapshot();restoreReviewReturn();if(!restored)await bootstrapIpScope();
+    var restored=hydrateReviewSnapshot();restoreReviewReturn();
     await reloadData(false,restored);
     var dataRestored=restored&&applySessionDataResume();
     if(!dataRestored)await loadScope(restored?'session-resume':'initial');
