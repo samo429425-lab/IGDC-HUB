@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.9.0-front-publication-marker-registry-bridge";
+const VERSION = "commerce-country-automation-v3.10.0-front-preflight-evidence-order-fix";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2518,11 +2518,18 @@ function frontSyncChunk(rowsInput, sizeInput) {
 function frontSyncInFilter(valuesInput) {
   return "(" + array(valuesInput).map((value) => encodeURIComponent(text(value))).filter(Boolean).join(",") + ")";
 }
+function frontSyncRelationOrderColumn(table) {
+  // gslot_candidate_evidence is append-oriented and has created_at, not
+  // updated_at.  Ordering it by updated_at makes PostgREST reject the entire
+  // Front Match preflight before the durable candidate publication marker can
+  // be written.
+  return text(table) === "gslot_candidate_evidence" ? "created_at" : "updated_at";
+}
 async function frontSyncSelectByCandidate(table, select, candidateIds) {
-  const rows = [];
+  const rows = [], orderColumn = frontSyncRelationOrderColumn(table);
   for (const ids of frontSyncChunk(candidateIds, 80)) {
     if (!ids.length) continue;
-    const found = await SlotStore.select(table, "select=" + select + "&candidate_id=in." + frontSyncInFilter(ids) + "&order=updated_at.desc&limit=5000");
+    const found = await SlotStore.select(table, "select=" + select + "&candidate_id=in." + frontSyncInFilter(ids) + "&order=" + orderColumn + ".desc&limit=5000");
     rows.push(...array(found));
   }
   return rows;
@@ -2718,12 +2725,23 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
   const scope = researchScope(input), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate", job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:(candidateLedgerMode?null:await loadProductResearchJob(scope));
   if (!candidateLedgerMode && (!job || job.schema !== PRODUCT_JOB_SCHEMA || !array(job.products).length)) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
   const targets = array(targetsInput), targetIds = targets.map((row) => text(row && row.candidateId)).filter(Boolean), targetById = new Map(targets.map((row) => [text(row && row.candidateId), row]));
-  const [candidateRows, assignmentRows, availabilityRows, revenueRows, evidenceRows] = await Promise.all([
-    frontSyncSelectCandidates(targetIds),
-    frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", targetIds),
-    frontSyncSelectByCandidate("gslot_candidate_availability", "candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at", targetIds),
-    frontSyncSelectByCandidate("gslot_candidate_revenue", "id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at", targetIds),
-    frontSyncSelectByCandidate("gslot_candidate_evidence", "id,candidate_id,evidence_type,evidence_url,note,verified,created_at", targetIds)
+  // The candidate ledger is authoritative and must load. Relation-table reads
+  // are mirrors: a transient relation read must not cancel an explicit
+  // administrator Front Match before its durable candidate marker is written.
+  const candidateRows = await frontSyncSelectCandidates(targetIds);
+  const preflightRelationErrors = [];
+  async function safeRelationRead(table, select) {
+    try { return await frontSyncSelectByCandidate(table, select, targetIds); }
+    catch (error) {
+      preflightRelationErrors.push({ table, error: text(error && (error.code || error.message)) || "front_relation_preflight_failed" });
+      return [];
+    }
+  }
+  const [assignmentRows, availabilityRows, revenueRows, evidenceRows] = await Promise.all([
+    safeRelationRead("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at"),
+    safeRelationRead("gslot_candidate_availability", "candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at"),
+    safeRelationRead("gslot_candidate_revenue", "id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at"),
+    safeRelationRead("gslot_candidate_evidence", "id,candidate_id,evidence_type,evidence_url,note,verified,created_at")
   ]);
   const candidateById = new Map(candidateRows.map((row) => [text(row && row.id), row]));
   const productByCandidate = candidateLedgerMode ? new Map(candidateRows.map((row) => [text(row && row.id), restoredProductFromCandidate(row, scope)]).filter((entry) => entry[1])) : new Map(array(job.products).map((row) => [productCandidateId(scope, row), row]));
@@ -2784,7 +2802,14 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     items.push({ candidateId, status: "prepared", queued: false, reason: "front_bridge_relations_prepared", warnings: readiness.warnings || [], assignmentId, sectionKey });
   }
 
-  const writeTrace = { schema: "igdc-product-front-lifecycle-write-trace.v3", requested: targetIds.length, policyEligible: plannedCandidateIds.length, mode: "candidate-marker-authoritative-with-relation-mirrors" };
+  const writeTrace = {
+    schema: "igdc-product-front-lifecycle-write-trace.v4",
+    requested: targetIds.length,
+    policyEligible: plannedCandidateIds.length,
+    mode: "candidate-marker-authoritative-with-relation-mirrors",
+    relationOrder: { default: "updated_at", gslot_candidate_evidence: "created_at" },
+    preflightRelationErrors
+  };
   /* The durable candidate marker is the authoritative publication request.
      Relation tables remain strongly preferred mirrors for the Registry and
      audit UI, but a transient relation-table/schema failure must not erase an
