@@ -10,6 +10,7 @@ const fs = require("fs");
 const path = require("path");
 const NonPgRevenue = require("./lib/nonpg-revenue-contract.core.v1");
 const PublicSnapshot = require("./lib/public-snapshot-sanitizer.v1");
+const PublicProductCard = require("./lib/commerce-public-product-card.v1");
 const crypto = require("crypto");
 
 const ROOT = process.cwd();
@@ -34,7 +35,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3-fail-loud-publication-report";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.4-canonical-psom-route-guard";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -150,8 +151,37 @@ function snapshotPaymentState(raw) {
   };
 }
 
+const MANAGED_PRODUCT_PSOM_SECTIONS = Object.freeze({
+  home: new Set(["home_1","home_2","home_3","home_4","home_5","home_right_top","home_right_middle","home_right_bottom"]),
+  network: new Set(["network-right"]),
+  distribution: new Set(["distribution-recommend","distribution-sponsor","distribution-trending","distribution-new","distribution-special","distribution-others","distribution-right"]),
+  social: new Set(["rightPanel"]),
+  tour: new Set(["tour"])
+});
+
+function managedProductCandidate(raw) {
+  raw = raw || {};
+  const id = String(raw.candidateId || raw.contentId || raw.snapshotRecordId || raw.id || "").trim();
+  return raw.type === "product" || raw.kind === "product" || !!raw.productId || /^country_product_/i.test(id);
+}
+
+function explicitManagedProductRoute(raw) {
+  raw = raw || {};
+  if (!managedProductCandidate(raw)) return null;
+  const canonical = raw.canonicalPublication && typeof raw.canonicalPublication === "object" ? raw.canonicalPublication : {};
+  const explicitPage = String(raw.page || raw?.bind?.page || raw.canonicalPage || "").trim();
+  const explicitSection = String(raw.psom_key || raw?.bind?.section || raw.section || raw.canonicalSection || "").trim();
+  const canonicalPublished = String(canonical.status || "").toLowerCase() === "published";
+  // New canonical product rows carry an exact page/section.  Previously merged
+  // product cards may have lost canonicalPublication, but their PSOM section
+  // still identifies the only legal front surface.
+  if (!canonicalPublished && !explicitPage && !explicitSection) return null;
+  return { page: explicitPage, section: explicitSection, canonicalPublished };
+}
+
 function snapshotCandidateAllowed(raw, context) {
   raw = raw || {};
+  context = context || {};
   const c = contractOf(raw);
   const d = raw.osaiDiscernment && typeof raw.osaiDiscernment === "object" ? raw.osaiDiscernment : {};
   const blockedReason = val(raw.blockedReason, c.blockedReason, d.blockedReason, raw?.sanmaruTrust?.blockedReason, "");
@@ -169,6 +199,20 @@ function snapshotCandidateAllowed(raw, context) {
   const illegal = String(val(raw.illegalSiteRisk, c.illegalSiteRisk, nestedValue(d, ["safety", "illegalSiteRisk"]), "low")).toLowerCase();
   const harmful = String(val(raw.harmfulContentRisk, c.harmfulContentRisk, nestedValue(d, ["safety", "harmfulContentRisk"]), "low")).toLowerCase();
   if ([unsafe, illegal, harmful].some(v => ["critical", "blocked", "illegal", "unsafe"].includes(v))) return false;
+
+  // Canonical commerce products are already assigned by PSOM.  Snapshot Engine
+  // must merge them only into that exact page/section; it may not reclassify a
+  // social/home/network product as a generic distribution/tour item.  Legacy
+  // non-product SearchBank rows keep their existing routing contract.
+  const route = explicitManagedProductRoute(raw);
+  const pageName = String(context.pageName || "").trim();
+  const sectionKey = String(context.sectionKey || "").trim();
+  if (route && pageName && pageName !== "snapshot") {
+    if (route.page && route.page !== pageName) return false;
+    const allowed = MANAGED_PRODUCT_PSOM_SECTIONS[pageName];
+    if (route.section && allowed && !allowed.has(route.section)) return false;
+    if (route.section && sectionKey && allowed && allowed.has(sectionKey) && route.section !== sectionKey) return false;
+  }
 
   return true;
 }
@@ -211,11 +255,20 @@ function sanitizeSnapshotArray(items, pageName, sectionKey) {
   const seen = new Set();
   for (const item of Array.isArray(items) ? items : []) {
     if (!item || typeof item !== "object") continue;
-    if (!snapshotCandidateAllowed(item, { pageName, sectionKey })) continue;
-    const id = val(item.id, item.contentId, item.slotId, stableId(JSON.stringify(item)));
+    let cleanItem = item;
+    if (managedProductCandidate(item)) {
+      // Re-sanitize managed product cards already present in a front snapshot.
+      // This removes legacy admin/evidence prose and drops stale internal or
+      // generic product cards before the new Canonical release is merged.
+      const normalized = PublicProductCard.apply(item, item);
+      if (!normalized.ok) continue;
+      cleanItem = normalized.item;
+    }
+    if (!snapshotCandidateAllowed(cleanItem, { pageName, sectionKey })) continue;
+    const id = val(cleanItem.id, cleanItem.contentId, cleanItem.slotId, stableId(JSON.stringify(cleanItem)));
     if (seen.has(id)) continue;
     seen.add(id);
-    out.push(enrichSnapshotCard(item, item));
+    out.push(enrichSnapshotCard(cleanItem, cleanItem));
   }
   return out;
 }
@@ -696,6 +749,21 @@ function buildTrackingMeta(raw, context) {
     snapshotRecordId,
     sourceType: "snapshot_seed"
   };
+
+  // Do not change front renderers. For managed commerce products, propagate the
+  // already-verified external seller detail URL using the aliases that the
+  // existing Home/Network/Social AutoMap contracts already understand.
+  if (managedProductCandidate(raw)) {
+    const publicCard = PublicProductCard.build(raw, raw);
+    if (publicCard.ok && publicCard.displayUrl) {
+      meta.externalOutboundUrl = publicCard.displayUrl;
+      meta.external_outbound_url = publicCard.displayUrl;
+      meta.productUrl = publicCard.displayUrl;
+      meta.detailUrl = publicCard.displayUrl;
+      meta.link = publicCard.displayUrl;
+      meta.href = publicCard.displayUrl;
+    }
+  }
 
   const contract = contractOf(raw);
   const pg = snapshotPaymentState(raw);
