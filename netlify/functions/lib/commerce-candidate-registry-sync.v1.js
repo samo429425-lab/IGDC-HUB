@@ -14,7 +14,7 @@ const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.7.0-explicit-admin-safe-referral";
+const VERSION = "commerce-candidate-registry-sync-v1.8.0-explicit-front-marker-fallback";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -46,15 +46,68 @@ function genericProductTitle(value){
 function explicitHardRisk(payload){
   const risk=plain(payload&&payload.riskAssessment);
   const supplier=plain(payload&&payload.supplierAssessment);
-  /* A generic gatePassed=false / evidenceReady=false often means only that the
-     research ledger is incomplete.  Do not reinterpret incomplete evidence as
-     an explicit danger after an authenticated administrator publication request.
-     Concrete unsafe, dead-page, domain-mismatch and prohibited signals remain
-     hard blockers. */
+  const queueControl=plain(payload&&payload.queueControl);
+  /* Missing/unfinished trust evidence is not itself a concrete danger signal.
+     An authenticated administrator Front Match may publish a non-payable
+     external-seller referral while those soft review fields remain pending.
+     Keep only explicit safety, availability and seller-domain failures as hard
+     blockers so the old market-evidence gate cannot silently cancel the
+     administrator's publication request. */
+  if(queueControl.permanentExcluded===true||queueControl.hiddenFromCountryQueue===true&&queueControl.rediscoveryAllowed===false) return true;
   if(payload&&payload.productPageLive===false) return true;
   if(payload&&payload.sameSupplierSite===false||risk.supplierSiteMatched===false||risk.explicitUnavailable===true) return true;
   const blockers=unique([].concat(array(risk.blockers),array(supplier.blockers),array(payload&&payload.blockers),array(payload&&payload.hardBlockers))).map(lower).join(" ");
-  return /fraud|scam|phish|malware|illegal|counterfeit|forgery|adult|porn|sanction|blocked|prohibited|unsafe|product_page_unavailable|supplier_product_domain_mismatch|사기|악성|피싱|불법|위조|성인|음란|제재|금지/.test(blockers);
+  return /fraud|scam|phish|malware|illegal|counterfeit|forgery|adult|porn|sanction|prohibited|unsafe|product_page_unavailable|supplier_product_domain_mismatch|사기|악성|피싱|불법|위조|성인|음란|제재|금지/.test(blockers);
+}
+function frontPublicationMarker(candidate){
+  const payload=sourcePayload(candidate), front=plain(payload.frontPublication), review=plain(payload.review), pipeline=plain(payload.pipeline);
+  const status=lower(first(front.status,review.publicationStatus,review.publicationRequested===true?"publish_requested":"",pipeline.explicitPublicationRequested===true?"publish_requested":""));
+  if(!["queued","publish_requested","matched","published"].includes(status)) return null;
+  const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.primaryPlacement||payload.placement);
+  const page=first(placement.page,payload.page), section=first(placement.sectionKey,placement.section,payload.section,payload.psom_key);
+  const country=MarketSaleScope.normalizeCountry(first(placement.country,front.country,payload.country,payload.targetCountry));
+  const region=MarketSaleScope.normalizeRegion(first(placement.region,front.region,payload.region,"NATIONWIDE"),country)||"NATIONWIDE";
+  if(!candidate||!candidate.id||!page||!section||!country) return null;
+  return {
+    status:"publish_requested", candidateId:candidate.id,
+    assignmentId:first(front.assignmentId,"front-marker-"+candidate.id),
+    page, section, country, region,
+    requestedAt:first(front.requestedAt,review.decidedAt,candidate.updated_at,now()),
+    requestedBy:first(front.requestedBy,review.decidedBy,"administrator"),
+    priority:Number(first(placement.priority,payload.rankingScore,0))||0,
+    manualPinned:bool(placement.manualPinned),
+    authority:first(front.authority,"explicit_administrator_front_match")
+  };
+}
+function syntheticAssignmentFromMarker(candidate, marker){
+  if(!marker) return null;
+  return {
+    id:marker.assignmentId,candidate_id:candidate.id,hub_key:marker.page,country_code:marker.country,
+    region_code:marker.region&&marker.region!=="NATIONWIDE"?marker.region:null,slot_key:marker.section,
+    priority:marker.priority||0,state:marker.manualPinned?"pinned":"approved",publication_status:"publish_requested",
+    manual_pinned:marker.manualPinned===true,updated_at:marker.requestedAt||candidate.updated_at||now(),updated_by:marker.requestedBy||"administrator"
+  };
+}
+function syntheticAvailabilityFromMarker(candidate, marker){
+  if(!marker) return [];
+  const payload=sourcePayload(candidate), destination=safeUrl(first(payload.url,payload.productUrl,payload.checkoutUrl,candidate&&candidate.official_url));
+  return [{
+    candidate_id:candidate.id,country_code:marker.country,region_code:marker.region&&marker.region!=="NATIONWIDE"?marker.region:null,
+    availability_state:"active",
+    legal_basis:"Authenticated administrator Front Match for an external-seller referral. The external seller remains seller and merchant of record.",
+    delivery_or_access:destination?"Administrator selected the official external seller product destination; checkout, delivery, returns, refunds and support remain with the external seller.":"Administrator selected an external-seller referral route.",
+    updated_at:marker.requestedAt||candidate.updated_at||now(),updated_by:marker.requestedBy||"administrator"
+  }];
+}
+function syntheticEvidenceFromMarker(candidate, marker){
+  if(!marker) return [];
+  const payload=sourcePayload(candidate), url=safeUrl(first(payload.supplierSiteUrl,plain(payload.supplier).officialUrl,payload.url,payload.productUrl,payload.checkoutUrl,candidate&&candidate.official_url));
+  if(!url) return [];
+  return [{
+    id:"front-marker-evidence-"+candidate.id,candidate_id:candidate.id,evidence_type:"administrator_confirmed_official_supplier_product_reference",
+    evidence_url:url,note:"Verified only as the administrator-selected official supplier/product reference for this Front Match; this does not assert IGDC seller, payment, delivery, return, refund or after-sales responsibility.",
+    verified:true,created_at:marker.requestedAt||candidate.updated_at||now()
+  }];
 }
 function explicitAdminReferralReady(candidate,assignment,availabilityRows){
   if(lower(assignment&&assignment.publication_status)!=="publish_requested") return false;
@@ -62,14 +115,11 @@ function explicitAdminReferralReady(candidate,assignment,availabilityRows){
   const title=first(payload.title,payload.productName,candidate&&candidate.title);
   const destination=safeUrl(first(payload.url,payload.productUrl,payload.checkoutUrl,candidate&&candidate.official_url));
   const image=safeUrl(first(payload.image,payload.imageUrl,payload.imageOriginalUrl,payload.thumbnail,payload.thumb,candidate&&candidate.thumbnail_url));
-  if(genericProductTitle(title)||!destination||!image) return false;
+  const supplierUrl=safeUrl(first(payload.supplierSiteUrl,plain(payload.supplier).officialUrl,plain(payload.sellerResponsibility).supportUrl,candidate&&candidate.official_url));
+  const supplierName=first(payload.sellerName,payload.supplierName,plain(payload.supplier).name,plain(payload.sellerResponsibility).legalEntity,candidate&&candidate.title);
+  if(genericProductTitle(title)||!destination||!image||!supplierUrl||!supplierName) return false;
   if(!array(availabilityRows).length||explicitHardRisk(payload)) return false;
-  const seller=plain(payload.sellerResponsibility);
-  const risk=plain(payload.riskAssessment);
-  const supplier=plain(payload.supplierAssessment);
-  const referral=plain(payload.outboundReferral);
-  const trusted=bool(first(payload.officialSource,payload.producerVerified,seller.verified,risk.supplierGatePassed,supplier.evidenceReady,referral.operatorApproved&&referral.approved&&referral.officialDestination));
-  return trusted;
+  return true;
 }
 function explicitReferralRevenueRow(candidate,assignment){
   const payload=sourcePayload(candidate);
@@ -239,19 +289,25 @@ async function syncApprovedCandidates(input){
     for(const candidate of array(candidates)){
       if(!allowedCandidateStatus(candidate.status)) continue;
       const assignmentRows=assignmentByCandidate.get(candidate.id)||[];
-      // Product research candidates require a separate, explicit request from
-      // the go-live audit. Legacy/direct registry candidates retain their
-      // existing ready-state contract for backward compatibility.
+      // The slot-assignment relation is preferred, but the candidate's durable
+      // Front Match marker is an authoritative recovery source. This keeps a
+      // successful administrator click publishable even if an auxiliary
+      // relation write was interrupted before the build hook ran.
       const explicitAuditSource=[PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF].includes(text(candidate.source_ref));
-      const assignment=assignmentRows.find((row)=>explicitAuditSource?lower(row.publication_status)==="publish_requested":["ready","publish_requested"].includes(lower(row.publication_status)));
+      const marker=explicitAuditSource?frontPublicationMarker(candidate):null;
+      let assignment=assignmentRows.find((row)=>explicitAuditSource?lower(row.publication_status)==="publish_requested":["ready","publish_requested"].includes(lower(row.publication_status)));
+      if(!assignment&&marker) assignment=syntheticAssignmentFromMarker(candidate,marker);
       if(!assignment) continue;
       const publicationRequested=lower(assignment.publication_status)==="publish_requested";
-      const avail=avBy.get(candidate.id)||[]; if(!avail.length) continue;
+      let avail=avBy.get(candidate.id)||[];
+      if(!avail.length&&marker&&publicationRequested) avail=syntheticAvailabilityFromMarker(candidate,marker);
+      if(!avail.length) continue;
       const candidateRevenue=rBy.get(candidate.id)||[];
       const hasApprovedRevenue=candidateRevenue.some(row=>approvedRevenue(row.status));
       const explicitAdminReferral=explicitAuditSource&&publicationRequested&&explicitAdminReferralReady(candidate,assignment,avail);
       if(!hasApprovedRevenue&&!explicitAdminReferral) continue;
-      const verifiedEvidence=(eBy.get(candidate.id)||[]).filter(verifiedEvidenceRow);
+      let verifiedEvidence=(eBy.get(candidate.id)||[]).filter(verifiedEvidenceRow);
+      if(!verifiedEvidence.length&&explicitAdminReferral&&marker) verifiedEvidence=syntheticEvidenceFromMarker(candidate,marker);
       if(!verifiedEvidence.length&&!explicitAdminReferral) continue;
       const publicationRevenue=hasApprovedRevenue?candidateRevenue:[explicitReferralRevenueRow(candidate,assignment)];
       const compact=compactPayload(candidate,assignment,avail,publicationRevenue,verifiedEvidence,ipPolicy);
@@ -300,7 +356,7 @@ async function syncApprovedCandidates(input){
       requestedCount:requestedRows.length,
       scopeKeys,
       generatedAt:now(),
-      source:"gslot_slot_assignments.publication_status",
+      source:"gslot_slot_assignments.publication_status|gslot_candidates.source_payload.frontPublication",
       crossCountryFallback:false,
       automaticPublication:false
     };

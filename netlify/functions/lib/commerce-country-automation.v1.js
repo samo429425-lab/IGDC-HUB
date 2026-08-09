@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.8.0-multi-section-product-front-control";
+const VERSION = "commerce-country-automation-v3.9.0-front-publication-marker-registry-bridge";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2658,6 +2658,62 @@ function frontSyncAssignmentId(candidateId, scope, sectionKey) {
 }
 function frontSyncRevenueId(candidateId) { return "front_referral_" + sha256(candidateId).slice(0, 24); }
 function frontSyncEvidenceId(candidateId) { return "front_evidence_" + sha256(candidateId).slice(0, 24); }
+async function persistFrontPublicationMarkers(actorId, scope, targetById, candidateById, candidateIdsInput, assignmentByCandidate) {
+  const actor = text(actorId) || "administrator", now = iso(), candidateIds = array(candidateIdsInput).map(text).filter(Boolean), items = [];
+  for (const candidateId of candidateIds) {
+    const existing = plain(candidateById.get(candidateId)), target = plain(targetById.get(candidateId));
+    if (!Object.keys(existing).length) { items.push({ candidateId, ok: false, reason: "candidate_ledger_row_missing" }); continue; }
+    const payload = Object.assign({}, plain(existing.source_payload));
+    const key = text(target.sectionKey || productPlacementKey(payload.approvedPlacement || payload.selectedPlacement || payload.primaryPlacement || payload.placement));
+    if (!validProductSectionKey(key)) { items.push({ candidateId, ok: false, reason: "invalid_product_section" }); continue; }
+    const split = splitProductSectionKey(key);
+    const relationAssignment = array(assignmentByCandidate && assignmentByCandidate.get(candidateId)).find((row) =>
+      text(row && row.hub_key) === split.page && text(row && row.slot_key) === split.sectionKey &&
+      normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region
+    );
+    const assignmentId = text(relationAssignment && relationAssignment.id) || frontSyncAssignmentId(candidateId, scope, key);
+    payload.slotDecision = "slot_candidate";
+    payload.approvedPlacement = Object.assign({}, plain(payload.approvedPlacement), {
+      key, page: split.page, section: split.sectionKey, sectionKey: split.sectionKey,
+      country: scope.country, region: scope.region, administratorSelected: true, aiSelected: false,
+      proposalOnly: false, publicPublication: false, publicationPending: true,
+      selectedAt: now, selectedBy: actor, selectionSource: "explicit_front_match"
+    });
+    payload.placement = Object.assign({}, plain(payload.placement), { page: split.page, section: split.sectionKey, sectionKey: split.sectionKey, country: scope.country, region: scope.region });
+    payload.review = Object.assign({}, plain(payload.review), {
+      state: "approved", decidedAt: now, decidedBy: actor, approvalSource: "explicit_front_match",
+      publicationRequested: true, explicitPublicationRequested: true
+    });
+    payload.frontPublication = {
+      schema: "igdc-product-front-publication-control.v3", candidateId, operation: "match",
+      status: "publish_requested", queued: false, persisted: true, pendingBuild: true,
+      persistenceVerified: true, authority: "explicit_administrator_front_match",
+      assignmentId, sectionKey: key, country: scope.country, region: scope.region,
+      requestedAt: now, requestedBy: actor, publicSnapshotConfirmed: false, buildVerificationRequired: true
+    };
+    payload.pipeline = Object.assign({}, plain(payload.pipeline), {
+      stage: "registry_sync_ready", nextGate: "registry_sync", explicitPublicationRequested: true,
+      publicationRequestedAt: now, publicationRequestedBy: actor
+    });
+    payload.publicPublication = false;
+    payload.automaticImport = false;
+    try {
+      const rows = array(await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status: "revenue_ready", source_payload: payload, updated_at: now }));
+      const saved = plain(rows[0]);
+      if (rows.length && lower(plain(saved.source_payload).frontPublication && plain(saved.source_payload).frontPublication.status) === "publish_requested") {
+        items.push({ candidateId, ok: true, assignmentId, sectionKey: key });
+      } else {
+        const verifyRows = array(await SlotStore.select("gslot_candidates", "select=id,status,source_payload&id=eq." + encodeURIComponent(candidateId) + "&limit=1"));
+        const verified = plain(verifyRows[0]), front = plain(plain(verified.source_payload).frontPublication);
+        items.push({ candidateId, ok: lower(verified.status) === "revenue_ready" && lower(front.status) === "publish_requested", assignmentId, sectionKey: key, reason: lower(verified.status) === "revenue_ready" && lower(front.status) === "publish_requested" ? null : "candidate_publication_marker_not_persisted" });
+      }
+    } catch (error) {
+      items.push({ candidateId, ok: false, assignmentId, sectionKey: key, reason: text(error && (error.code || error.message)) || "candidate_publication_marker_write_failed" });
+    }
+  }
+  const persistedCandidateIds = items.filter((item) => item.ok === true).map((item) => item.candidateId);
+  return { ok: persistedCandidateIds.length === candidateIds.length, requested: candidateIds.length, persisted: persistedCandidateIds.length, failed: candidateIds.length - persistedCandidateIds.length, persistedCandidateIds, items };
+}
 async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput) {
   const scope = researchScope(input), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate", job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:(candidateLedgerMode?null:await loadProductResearchJob(scope));
   if (!candidateLedgerMode && (!job || job.schema !== PRODUCT_JOB_SCHEMA || !array(job.products).length)) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
@@ -2728,60 +2784,80 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     items.push({ candidateId, status: "prepared", queued: false, reason: "front_bridge_relations_prepared", warnings: readiness.warnings || [], assignmentId, sectionKey });
   }
 
-  const writeTrace = { schema: "igdc-product-front-lifecycle-write-trace.v2", requested: targetIds.length, policyEligible: plannedCandidateIds.length, mode: "relations-first-verified" };
-  /* V5 attempted to replace the full candidate source_payload before creating the
-     durable relation rows.  A failure in that first large write meant zero
-     assignments and therefore zero Registry/SearchBank input.  V6 deliberately
-     makes the small authoritative relations the critical path and only annotates
-     the large candidate payload afterward as a best-effort UI convenience. */
-  await frontSyncWriteStage(writeTrace, "candidate_status", plannedCandidateIds.length, async () => {
+  const writeTrace = { schema: "igdc-product-front-lifecycle-write-trace.v3", requested: targetIds.length, policyEligible: plannedCandidateIds.length, mode: "candidate-marker-authoritative-with-relation-mirrors" };
+  /* The durable candidate marker is the authoritative publication request.
+     Relation tables remain strongly preferred mirrors for the Registry and
+     audit UI, but a transient relation-table/schema failure must not erase an
+     explicit administrator Front Match.  The build-time Registry can rebuild
+     the relation view from this marker without re-running product research. */
+  const marker = await persistFrontPublicationMarkers(actorId, scope, targetById, candidateById, plannedCandidateIds, assignmentsByCandidate);
+  writeTrace.candidateMarker = marker;
+  const markerSet = new Set(array(marker.persistedCandidateIds));
+  const relationErrors = [];
+  async function bestEffortStage(name, attempted, writer) {
+    try { return await frontSyncWriteStage(writeTrace, name, attempted, writer); }
+    catch (error) { relationErrors.push({ stage: name, error: text(error && (error.code || error.message)) || "relation_write_failed" }); return []; }
+  }
+  const markerCandidateIds = plannedCandidateIds.filter((id) => markerSet.has(id));
+  const markerAssignmentUpserts = assignmentUpserts.filter((row) => markerSet.has(text(row && row.candidate_id)));
+  const markerAvailabilityUpdates = availabilityUpdates.filter((row) => markerSet.has(text(row && row.candidateId)));
+  const markerAvailabilityInserts = availabilityInserts.filter((row) => markerSet.has(text(row && row.candidate_id)));
+  const markerRevenueUpserts = revenueUpserts.filter((row) => markerSet.has(text(row && row.candidate_id)));
+  const markerEvidenceUpserts = evidenceUpserts.filter((row) => markerSet.has(text(row && row.candidate_id)));
+  await bestEffortStage("candidate_status", markerCandidateIds.length, async () => {
     const output = [];
-    for (const ids of frontSyncChunk(plannedCandidateIds, 80)) {
+    for (const ids of frontSyncChunk(markerCandidateIds, 80)) {
       if (!ids.length) continue;
-      const rows = await SlotStore.update("gslot_candidates", "id=in." + frontSyncInFilter(ids), { status: "revenue_ready", updated_at: now });
-      output.push(...array(rows));
+      output.push(...array(await SlotStore.update("gslot_candidates", "id=in." + frontSyncInFilter(ids), { status: "revenue_ready", updated_at: now })));
     }
     return output;
   });
-  await frontSyncWriteStage(writeTrace, "assignments", assignmentUpserts.length, () => frontSyncUpsert("gslot_slot_assignments", assignmentUpserts, "id"));
-  await frontSyncWriteStage(writeTrace, "availability_update", availabilityUpdates.length, async () => {
+  await bestEffortStage("assignments", markerAssignmentUpserts.length, () => frontSyncUpsert("gslot_slot_assignments", markerAssignmentUpserts, "id"));
+  await bestEffortStage("availability_update", markerAvailabilityUpdates.length, async () => {
     const output = [];
-    for (const row of availabilityUpdates) {
+    for (const row of markerAvailabilityUpdates) {
       const regionQuery = row.regionCode === "NATIONWIDE" ? "region_code=is.null" : "region_code=eq." + encodeURIComponent(row.regionCode);
       const query = "candidate_id=eq." + encodeURIComponent(row.candidateId) + "&country_code=eq." + encodeURIComponent(row.countryCode) + "&" + regionQuery;
       output.push(...array(await SlotStore.update("gslot_candidate_availability", query, row.patch)));
     }
     return output;
   });
-  await frontSyncWriteStage(writeTrace, "availability_insert", availabilityInserts.length, async () => {
+  await bestEffortStage("availability_insert", markerAvailabilityInserts.length, async () => {
     const output = [];
-    for (const batch of frontSyncChunk(availabilityInserts, 80)) output.push(...array(await SlotStore.insert("gslot_candidate_availability", batch, "return=representation")));
+    for (const batch of frontSyncChunk(markerAvailabilityInserts, 80)) output.push(...array(await SlotStore.insert("gslot_candidate_availability", batch, "return=representation")));
     return output;
   });
-  await frontSyncWriteStage(writeTrace, "revenue", revenueUpserts.length, () => frontSyncUpsert("gslot_candidate_revenue", revenueUpserts, "id"));
-  await frontSyncWriteStage(writeTrace, "evidence", evidenceUpserts.length, () => frontSyncUpsert("gslot_candidate_evidence", evidenceUpserts, "id"));
+  await bestEffortStage("revenue", markerRevenueUpserts.length, () => frontSyncUpsert("gslot_candidate_revenue", markerRevenueUpserts, "id"));
+  await bestEffortStage("evidence", markerEvidenceUpserts.length, () => frontSyncUpsert("gslot_candidate_evidence", markerEvidenceUpserts, "id"));
 
-  const verification = await verifyProductFrontPreparation(plannedCandidateIds, scope, targetById);
+  let verification = { ok: false, requested: markerCandidateIds.length, verified: 0, failed: markerCandidateIds.length, verifiedCandidateIds: [], items: [] };
+  try { verification = await verifyProductFrontPreparation(markerCandidateIds, scope, targetById); }
+  catch (error) { relationErrors.push({ stage: "relation_readback", error: text(error && (error.code || error.message)) || "relation_readback_failed" }); }
   writeTrace.verification = verification;
+  writeTrace.relationErrors = relationErrors;
   const verifiedSet = new Set(array(verification.verifiedCandidateIds));
-  const verifiedCandidateIds = plannedCandidateIds.filter((id) => verifiedSet.has(id));
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
     if (!item || item.status !== "prepared") continue;
-    const verified = verifiedSet.has(item.candidateId);
+    const markerPersisted = markerSet.has(item.candidateId);
+    const relationVerified = verifiedSet.has(item.candidateId);
+    const markerRow = array(marker.items).find((row) => row && row.candidateId === item.candidateId) || {};
     const verifyRow = array(verification.items).find((row) => row && row.candidateId === item.candidateId) || {};
-    items[index] = Object.assign({}, item, verified ? {
+    items[index] = Object.assign({}, item, markerPersisted ? {
       status: "publish_requested", persisted: true, persistenceVerified: true, publicationStatus: "publish_requested", pendingBuild: true,
-      reason: "front_bridge_verified", assignmentId: text(verifyRow.assignmentId) || item.assignmentId
+      reason: relationVerified ? "front_bridge_relations_verified" : "front_bridge_candidate_marker_persisted",
+      assignmentId: text(verifyRow.assignmentId) || text(markerRow.assignmentId) || item.assignmentId,
+      relationVerified, relationWarnings: relationVerified ? [] : array(verifyRow.reasons)
     } : {
       status: "blocked", persisted: false, persistenceVerified: false, pendingBuild: false,
-      reason: array(verifyRow.reasons).join(",") || "front_bridge_verification_failed", reasons: array(verifyRow.reasons)
+      reason: text(markerRow.reason) || "candidate_publication_marker_write_failed", reasons: [text(markerRow.reason) || "candidate_publication_marker_write_failed"]
     });
   }
+  const preparedCandidateIds = markerCandidateIds;
   return {
-    ok: verification.ok === true, schema: "igdc-product-front-lifecycle-preparation.v2", scope, requested: targetIds.length, prepared: verifiedCandidateIds.length,
-    blocked: items.filter((item) => item.status === "blocked").length, preparedCandidateIds: verifiedCandidateIds, items, writeTrace,
-    policy: { explicitAdministratorConfirmationRequired: true, relationsFirst: true, readBackVerificationRequired: true, officialSellerExternalReferralOnly: true, trustScoreAdvisoryOnExplicitAdministratorMatch: true, incompleteEvidenceWarningsPreserved: true, hardUnsafeSignalsStillBlocking: true, noIgdcCheckout: true, noPaymentExecution: true, noCrossCountryFallback: true }
+    ok: preparedCandidateIds.length > 0 || targetIds.length === 0, schema: "igdc-product-front-lifecycle-preparation.v3", scope, requested: targetIds.length, prepared: preparedCandidateIds.length,
+    blocked: items.filter((item) => item.status === "blocked").length, preparedCandidateIds, items, writeTrace,
+    policy: { explicitAdministratorConfirmationRequired: true, candidatePublicationMarkerAuthoritative: true, relationRowsPreferredButRecoverable: true, readBackVerificationRequiredForRelations: false, officialSellerExternalReferralOnly: true, trustScoreAdvisoryOnExplicitAdministratorMatch: true, incompleteEvidenceWarningsPreserved: true, hardUnsafeSignalsStillBlocking: true, noIgdcCheckout: true, noPaymentExecution: true, noCrossCountryFallback: true }
   };
 }
 async function productFrontSyncTargets(input, jobInput) {
