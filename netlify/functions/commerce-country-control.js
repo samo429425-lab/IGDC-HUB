@@ -190,5 +190,10 @@ exports.handler=async function(event){
     if(action==="candidate_action")return json(200,await Automation.candidateAction(actorId,body));
     if(action==="research_candidate_action")return json(200,await Automation.researchCandidateAction(actorId,body));
     return json(404,{ok:false,error:"지원하지 않는 국가·지역 관제 요청입니다."});
-  }catch(error){return json(error&&error.statusCode||500,{ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null});}
+  }catch(error){
+    const diagnostic={ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null};
+    if(error&&error.frontSyncPhase) diagnostic.phase=text(error.frontSyncPhase);
+    if(error&&error.lifecycleTrace) diagnostic.lifecycleTrace=error.lifecycleTrace;
+    return json(error&&error.statusCode||500,diagnostic);
+  }
 };
