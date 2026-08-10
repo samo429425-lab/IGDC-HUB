@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.11.0-canonical-front-two-phase-commit";
+const VERSION = "commerce-country-automation-v3.10.0-front-preflight-evidence-order-fix";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2574,43 +2574,40 @@ async function verifyProductFrontPreparation(candidateIdsInput, scope, targetByI
   ]);
   const candidates = new Map(candidateRows.map((row) => [text(row && row.id), row]));
   const assignments = new Map(), availability = new Map(), revenues = new Map(), evidence = new Map();
-  function group(map, rows) { for (const row of array(rows)) { const id = text(row && row.candidate_id); if (!map.has(id)) map.set(id, []); map.get(id).push(row); } }
+  function group(map, rows) { for (const row of rows) { const id = text(row && row.candidate_id); if (!map.has(id)) map.set(id, []); map.get(id).push(row); } }
   group(assignments, assignmentRows); group(availability, availabilityRows); group(revenues, revenueRows); group(evidence, evidenceRows);
   const items = [], verifiedCandidateIds = [];
   for (const candidateId of candidateIds) {
     const target = plain(targetById.get(candidateId)), split = splitProductSectionKey(target.sectionKey), reasons = [];
     const candidate = candidates.get(candidateId);
-    const candidateStatus = lower(candidate && candidate.status);
-    if (!candidate || !["revenue_ready","enrollable"].includes(candidateStatus)) reasons.push("candidate_lifecycle_status_not_ready");
-    const candidateAssignments = array(assignments.get(candidateId));
-    const candidateMarkets = array(availability.get(candidateId));
-    const candidateRevenues = array(revenues.get(candidateId));
-    const candidateEvidence = array(evidence.get(candidateId));
-    const assignment = candidateAssignments.find((row) =>
+    if (!candidate || lower(candidate.status) !== "revenue_ready") reasons.push("candidate_revenue_ready_not_persisted");
+    const assignment = array(assignments.get(candidateId)).find((row) =>
       text(row && row.hub_key) === split.page && text(row && row.slot_key) === split.sectionKey &&
       normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region &&
       ["approved", "pinned"].includes(lower(row && row.state)) && frontSyncAssignmentStatusReady(row && row.publication_status)
     );
-    if (!assignment) reasons.push("ready_assignment_not_persisted");
-    const hasAvailability = candidateMarkets.some((row) =>
+    if (!assignment) reasons.push("audit_ready_assignment_not_persisted");
+    const hasAvailability = array(availability.get(candidateId)).some((row) =>
       normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region &&
       ["active", "approved", "ready"].includes(lower(row && row.availability_state))
     );
     if (!hasAvailability) reasons.push("active_availability_not_persisted");
-    const hasRevenue = candidateRevenues.some((row) => lower(row && row.revenue_type) === "external_referral" && lower(row && row.status) === "approved" && !!safeUrl(row && row.affiliate_url));
+    const hasRevenue = array(revenues.get(candidateId)).some((row) => lower(row && row.revenue_type) === "external_referral" && lower(row && row.status) === "approved");
     if (!hasRevenue) reasons.push("approved_referral_revenue_not_persisted");
-    const hasEvidence = candidateEvidence.some((row) => row && row.verified === true && !!safeUrl(row.evidence_url));
+    const hasEvidence = array(evidence.get(candidateId)).some((row) => row && row.verified === true && !!safeUrl(row.evidence_url));
     if (!hasEvidence) reasons.push("verified_supplier_evidence_not_persisted");
-    let lifecycle = null;
-    if (candidate) {
-      lifecycle = ProductPipeline.registryState(candidate,{assignments:candidateAssignments,markets:candidateMarkets,revenues:candidateRevenues,evidence:candidateEvidence});
-      if (text(lifecycle && lifecycle.stage) !== "registry_sync_ready") reasons.push("canonical_lifecycle_not_registry_sync_ready:" + (text(lifecycle && lifecycle.stage) || "unknown"));
-    }
     const verified = reasons.length === 0;
     if (verified) verifiedCandidateIds.push(candidateId);
-    items.push({ candidateId, verified, assignmentId:text(assignment && assignment.id)||null, publicationStatus:text(assignment && assignment.publication_status)||null, lifecycleStage:text(lifecycle && lifecycle.stage)||null, nextGate:text(lifecycle && lifecycle.nextGate)||null, reasons });
+    items.push({ candidateId, verified, assignmentId: text(assignment && assignment.id) || null, publicationStatus: text(assignment && assignment.publication_status) || null, reasons });
   }
-  return { ok:verifiedCandidateIds.length===candidateIds.length, requested:candidateIds.length, verified:verifiedCandidateIds.length, failed:candidateIds.length-verifiedCandidateIds.length, verifiedCandidateIds, items };
+  return {
+    ok: verifiedCandidateIds.length === candidateIds.length,
+    requested: candidateIds.length,
+    verified: verifiedCandidateIds.length,
+    failed: candidateIds.length - verifiedCandidateIds.length,
+    verifiedCandidateIds,
+    items
+  };
 }
 async function frontSyncWriteStage(trace, name, attempted, writer) {
   const stage = { attempted: Number(attempted || 0), returned: 0, ok: true };
@@ -2668,83 +2665,113 @@ function frontSyncAssignmentId(candidateId, scope, sectionKey) {
 }
 function frontSyncRevenueId(candidateId) { return "front_referral_" + sha256(candidateId).slice(0, 24); }
 function frontSyncEvidenceId(candidateId) { return "front_evidence_" + sha256(candidateId).slice(0, 24); }
+async function persistFrontPublicationMarkers(actorId, scope, targetById, candidateById, candidateIdsInput, assignmentByCandidate) {
+  const actor = text(actorId) || "administrator", now = iso(), candidateIds = array(candidateIdsInput).map(text).filter(Boolean), items = [];
+  for (const candidateId of candidateIds) {
+    const existing = plain(candidateById.get(candidateId)), target = plain(targetById.get(candidateId));
+    if (!Object.keys(existing).length) { items.push({ candidateId, ok: false, reason: "candidate_ledger_row_missing" }); continue; }
+    const payload = Object.assign({}, plain(existing.source_payload));
+    const key = text(target.sectionKey || productPlacementKey(payload.approvedPlacement || payload.selectedPlacement || payload.primaryPlacement || payload.placement));
+    if (!validProductSectionKey(key)) { items.push({ candidateId, ok: false, reason: "invalid_product_section" }); continue; }
+    const split = splitProductSectionKey(key);
+    const relationAssignment = array(assignmentByCandidate && assignmentByCandidate.get(candidateId)).find((row) =>
+      text(row && row.hub_key) === split.page && text(row && row.slot_key) === split.sectionKey &&
+      normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region
+    );
+    const assignmentId = text(relationAssignment && relationAssignment.id) || frontSyncAssignmentId(candidateId, scope, key);
+    payload.slotDecision = "slot_candidate";
+    payload.approvedPlacement = Object.assign({}, plain(payload.approvedPlacement), {
+      key, page: split.page, section: split.sectionKey, sectionKey: split.sectionKey,
+      country: scope.country, region: scope.region, administratorSelected: true, aiSelected: false,
+      proposalOnly: false, publicPublication: false, publicationPending: true,
+      selectedAt: now, selectedBy: actor, selectionSource: "explicit_front_match"
+    });
+    payload.placement = Object.assign({}, plain(payload.placement), { page: split.page, section: split.sectionKey, sectionKey: split.sectionKey, country: scope.country, region: scope.region });
+    payload.review = Object.assign({}, plain(payload.review), {
+      state: "approved", decidedAt: now, decidedBy: actor, approvalSource: "explicit_front_match",
+      publicationRequested: true, explicitPublicationRequested: true
+    });
+    payload.frontPublication = {
+      schema: "igdc-product-front-publication-control.v3", candidateId, operation: "match",
+      status: "publish_requested", queued: false, persisted: true, pendingBuild: true,
+      persistenceVerified: true, authority: "explicit_administrator_front_match",
+      assignmentId, sectionKey: key, country: scope.country, region: scope.region,
+      requestedAt: now, requestedBy: actor, publicSnapshotConfirmed: false, buildVerificationRequired: true
+    };
+    payload.pipeline = Object.assign({}, plain(payload.pipeline), {
+      stage: "registry_sync_ready", nextGate: "registry_sync", explicitPublicationRequested: true,
+      publicationRequestedAt: now, publicationRequestedBy: actor
+    });
+    payload.publicPublication = false;
+    payload.automaticImport = false;
+    try {
+      const rows = array(await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status: "revenue_ready", source_payload: payload, updated_at: now }));
+      const saved = plain(rows[0]);
+      if (rows.length && lower(plain(saved.source_payload).frontPublication && plain(saved.source_payload).frontPublication.status) === "publish_requested") {
+        items.push({ candidateId, ok: true, assignmentId, sectionKey: key });
+      } else {
+        const verifyRows = array(await SlotStore.select("gslot_candidates", "select=id,status,source_payload&id=eq." + encodeURIComponent(candidateId) + "&limit=1"));
+        const verified = plain(verifyRows[0]), front = plain(plain(verified.source_payload).frontPublication);
+        items.push({ candidateId, ok: lower(verified.status) === "revenue_ready" && lower(front.status) === "publish_requested", assignmentId, sectionKey: key, reason: lower(verified.status) === "revenue_ready" && lower(front.status) === "publish_requested" ? null : "candidate_publication_marker_not_persisted" });
+      }
+    } catch (error) {
+      items.push({ candidateId, ok: false, assignmentId, sectionKey: key, reason: text(error && (error.code || error.message)) || "candidate_publication_marker_write_failed" });
+    }
+  }
+  const persistedCandidateIds = items.filter((item) => item.ok === true).map((item) => item.candidateId);
+  return { ok: persistedCandidateIds.length === candidateIds.length, requested: candidateIds.length, persisted: persistedCandidateIds.length, failed: candidateIds.length - persistedCandidateIds.length, persistedCandidateIds, items };
+}
 async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput) {
   const scope = researchScope(input), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate", job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:(candidateLedgerMode?null:await loadProductResearchJob(scope));
   if (!candidateLedgerMode && (!job || job.schema !== PRODUCT_JOB_SCHEMA || !array(job.products).length)) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
-  const targets = array(targetsInput), targetIds = Array.from(new Set(targets.map((row) => text(row && row.candidateId)).filter(Boolean))), targetById = new Map(targets.map((row) => [text(row && row.candidateId), row]));
-  const actor = text(actorId) || "administrator", now = iso();
-  const writeTrace = {
-    schema: "igdc-product-front-lifecycle-write-trace.v5",
-    version: VERSION,
-    requested: targetIds.length,
-    mode: "canonical-relations-two-phase-publication-commit",
-    phases: [],
-    relationOrder: { default: "updated_at", gslot_candidate_evidence: "created_at" },
-    authoritativePublicationLedger: "gslot_slot_assignments.publication_status"
-  };
-  function phase(name, data) { writeTrace.phases.push(Object.assign({ name, at: iso() }, plain(data))); }
-  function attachTrace(error, phaseName) {
-    if (error && !error.lifecycleTrace) error.lifecycleTrace = writeTrace;
-    if (error && !error.frontSyncPhase) error.frontSyncPhase = phaseName;
-    if (error && !error.code) error.code = "front_sync_" + phaseName + "_failed";
-    if (error && !error.statusCode) error.statusCode = 502;
-    return error;
+  const targets = array(targetsInput), targetIds = targets.map((row) => text(row && row.candidateId)).filter(Boolean), targetById = new Map(targets.map((row) => [text(row && row.candidateId), row]));
+  // The candidate ledger is authoritative and must load. Relation-table reads
+  // are mirrors: a transient relation read must not cancel an explicit
+  // administrator Front Match before its durable candidate marker is written.
+  const candidateRows = await frontSyncSelectCandidates(targetIds);
+  const preflightRelationErrors = [];
+  async function safeRelationRead(table, select) {
+    try { return await frontSyncSelectByCandidate(table, select, targetIds); }
+    catch (error) {
+      preflightRelationErrors.push({ table, error: text(error && (error.code || error.message)) || "front_relation_preflight_failed" });
+      return [];
+    }
   }
-
-  if (!targetIds.length) return { ok:true, schema:"igdc-product-front-lifecycle-preparation.v4", scope, requested:0, prepared:0, blocked:0, preparedCandidateIds:[], items:[], writeTrace };
-
-  // 1) Strict preflight.  No write is attempted until the candidate ledger and
-  // all four canonical relation ledgers can be read successfully.  This avoids
-  // guessing whether an availability/assignment row already exists.
-  let candidateRows, assignmentRows, availabilityRows, revenueRows, evidenceRows;
-  try {
-    [candidateRows, assignmentRows, availabilityRows, revenueRows, evidenceRows] = await Promise.all([
-      frontSyncSelectCandidates(targetIds),
-      frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", targetIds),
-      frontSyncSelectByCandidate("gslot_candidate_availability", "candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at", targetIds),
-      frontSyncSelectByCandidate("gslot_candidate_revenue", "id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at", targetIds),
-      frontSyncSelectByCandidate("gslot_candidate_evidence", "id,candidate_id,evidence_type,evidence_url,note,verified,created_at", targetIds)
-    ]);
-    phase("preflight_read", { ok:true, candidates:array(candidateRows).length, assignments:array(assignmentRows).length, availability:array(availabilityRows).length, revenue:array(revenueRows).length, evidence:array(evidenceRows).length });
-  } catch (error) {
-    phase("preflight_read", { ok:false, error:text(error && (error.code || error.message)) || "preflight_read_failed" });
-    throw attachTrace(error, "preflight_read");
-  }
-
-  const candidateById = new Map(array(candidateRows).map((row) => [text(row && row.id), row]));
-  const productByCandidate = candidateLedgerMode
-    ? new Map(array(candidateRows).map((row) => [text(row && row.id), restoredProductFromCandidate(row, scope)]).filter((entry) => entry[1]))
-    : new Map(array(job.products).map((row) => [productCandidateId(scope, row), row]));
+  const [assignmentRows, availabilityRows, revenueRows, evidenceRows] = await Promise.all([
+    safeRelationRead("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at"),
+    safeRelationRead("gslot_candidate_availability", "candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at"),
+    safeRelationRead("gslot_candidate_revenue", "id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at"),
+    safeRelationRead("gslot_candidate_evidence", "id,candidate_id,evidence_type,evidence_url,note,verified,created_at")
+  ]);
+  const candidateById = new Map(candidateRows.map((row) => [text(row && row.id), row]));
+  const productByCandidate = candidateLedgerMode ? new Map(candidateRows.map((row) => [text(row && row.id), restoredProductFromCandidate(row, scope)]).filter((entry) => entry[1])) : new Map(array(job.products).map((row) => [productCandidateId(scope, row), row]));
   const assignmentsByCandidate = new Map(), availabilityByCandidate = new Map(), revenuesByCandidate = new Map(), evidenceByCandidate = new Map();
-  function group(map, rows) { for (const row of array(rows)) { const id = text(row && row.candidate_id); if (!map.has(id)) map.set(id, []); map.get(id).push(row); } }
+  function group(map, rows) { for (const row of rows) { const id = text(row && row.candidate_id); if (!map.has(id)) map.set(id, []); map.get(id).push(row); } }
   group(assignmentsByCandidate, assignmentRows); group(availabilityByCandidate, availabilityRows); group(revenuesByCandidate, revenueRows); group(evidenceByCandidate, evidenceRows);
 
-  const items = [], plannedCandidateIds = [], readinessByCandidate = new Map(), assignmentIdByCandidate = new Map();
-  const assignmentUpserts = [], availabilityUpdates = [], availabilityInserts = [], revenueUpserts = [], evidenceUpserts = [];
+  const now = iso(), actor = text(actorId) || "administrator", assignmentUpserts = [], revenueUpserts = [], evidenceUpserts = [], availabilityInserts = [], availabilityUpdates = [], items = [], plannedCandidateIds = [];
   for (const candidateId of targetIds) {
     const target = plain(targetById.get(candidateId)), product = plain(productByCandidate.get(candidateId)), existing = plain(candidateById.get(candidateId));
-    if (!Object.keys(product).length || !Object.keys(existing).length) { items.push({ candidateId, status:"blocked", queued:false, reason:"candidate_ledger_row_missing", assignmentId:null }); continue; }
+    if (!Object.keys(product).length || !Object.keys(existing).length) { items.push({ candidateId, status: "blocked", queued: false, reason: "candidate_ledger_row_missing", assignmentId: null }); continue; }
     const sectionKey = text(target.sectionKey || productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement));
-    if (!validProductSectionKey(sectionKey)) { items.push({ candidateId, status:"blocked", queued:false, reason:"invalid_product_section", assignmentId:null }); continue; }
+    if (!validProductSectionKey(sectionKey)) { items.push({ candidateId, status: "blocked", queued: false, reason: "invalid_product_section", assignmentId: null }); continue; }
     const readiness = frontSyncPublicReadiness(product, existing);
-    if (!readiness.eligible) { items.push({ candidateId, status:"blocked", queued:false, reason:readiness.reasons.join(","), reasons:readiness.reasons, assignmentId:null }); continue; }
+    if (!readiness.eligible) { items.push({ candidateId, status: "blocked", queued: false, reason: readiness.reasons.join(","), reasons: readiness.reasons, assignmentId: null }); continue; }
     const split = splitProductSectionKey(sectionKey);
+    /* Reuse any existing assignment for this exact route, regardless of its old
+       publication state.  The explicit administrator Front Match action is the
+       new authoritative decision for this route, and reusing the row prevents
+       duplicate assignment records during retries. */
     const assignmentExisting = array(assignmentsByCandidate.get(candidateId)).find((row) =>
       text(row && row.hub_key) === split.page && text(row && row.slot_key) === split.sectionKey &&
       normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region
     );
     const assignmentId = text(assignmentExisting && assignmentExisting.id) || frontSyncAssignmentId(candidateId, scope, sectionKey);
-    const alreadyPublicationRequested = lower(assignmentExisting && assignmentExisting.publication_status) === "publish_requested";
-    assignmentIdByCandidate.set(candidateId, assignmentId);
-    readinessByCandidate.set(candidateId, readiness);
     assignmentUpserts.push({
       id: assignmentId, candidate_id: candidateId, hub_key: split.page, country_code: scope.country, region_code: scope.region === "NATIONWIDE" ? null : scope.region,
       slot_key: split.sectionKey, priority: Math.max(0, Number(target.priority || product.rankingScore || 0)), state: assignmentExisting && lower(assignmentExisting.state) === "pinned" ? "pinned" : "approved",
-      // Phase 1 stores a non-public ready state.  A pre-existing explicit request
-      // is preserved on retry and is never rolled backwards.
-      publication_status: alreadyPublicationRequested ? "publish_requested" : "audit_ready",
-      manual_pinned: assignmentExisting && assignmentExisting.manual_pinned === true,
-      decision_note: "Explicit administrator Front Match prepared through canonical market/evidence/revenue/PSOM ledgers. External seller remains seller and merchant of record; IGDC does not execute checkout, payment, delivery, returns, refunds or after-sales service.",
+      publication_status: "publish_requested", manual_pinned: assignmentExisting && assignmentExisting.manual_pinned === true,
+      decision_note: "Explicit administrator Front Match. Candidate remains external-seller referral; IGDC does not sell, charge, ship, return, refund or provide after-sales service.",
       created_at: text(assignmentExisting && assignmentExisting.created_at) || now, updated_at: now, updated_by: actor
     });
 
@@ -2753,175 +2780,109 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     );
     const availabilityPatch = {
       availability_state: "active",
-      legal_basis: "Administrator-confirmed official external-seller product reference for this market. The external seller remains seller and merchant of record.",
-      delivery_or_access: "Administrator selected the official external-seller product destination. Checkout, delivery, returns, refunds, customer support and after-sales obligations remain with the external seller.",
+      legal_basis: "Administrator-confirmed official seller product reference; external seller remains seller and merchant of record.",
+      delivery_or_access: "Official seller product page selected for referral. Sale, payment, delivery, returns, refunds and support remain the external seller's responsibility.",
       updated_at: now, updated_by: actor
     };
-    if (scopeAvailability) availabilityUpdates.push({ candidateId, countryCode:scope.country, regionCode:scope.region, patch:availabilityPatch });
-    else availabilityInserts.push(Object.assign({ candidate_id:candidateId, country_code:scope.country, region_code:scope.region === "NATIONWIDE" ? null : scope.region }, availabilityPatch));
+    if (scopeAvailability) availabilityUpdates.push({ candidateId, countryCode: scope.country, regionCode: scope.region, patch: availabilityPatch });
+    else availabilityInserts.push(Object.assign({ candidate_id: candidateId, country_code: scope.country, region_code: scope.region === "NATIONWIDE" ? null : scope.region }, availabilityPatch));
 
-    const hasApprovedExternalReferral = array(revenuesByCandidate.get(candidateId)).some((row) => lower(row && row.revenue_type) === "external_referral" && lower(row && row.status) === "approved" && !!safeUrl(row && row.affiliate_url));
+    const hasApprovedExternalReferral = array(revenuesByCandidate.get(candidateId)).some((row) => lower(row && row.revenue_type) === "external_referral" && lower(row && row.status) === "approved");
     if (!hasApprovedExternalReferral) revenueUpserts.push({
-      id:frontSyncRevenueId(candidateId), candidate_id:candidateId, revenue_type:"external_referral", status:"approved", affiliate_url:readiness.productPageUrl,
-      provider_name:readiness.supplierName.slice(0,240), currency:null,
-      note:"Administrator-confirmed non-PG external-seller referral. Traffic/referral value only unless a separate payable affiliate or brokerage contract is verified.", updated_at:now, updated_by:actor
+      id: frontSyncRevenueId(candidateId), candidate_id: candidateId, revenue_type: "external_referral", status: "approved", affiliate_url: readiness.productPageUrl,
+      provider_name: readiness.supplierName.slice(0, 240), currency: null,
+      note: "Administrator-confirmed non-PG external seller referral route. No guaranteed commission and no IGDC checkout/payment.", updated_at: now, updated_by: actor
     });
-    const hasVerifiedEvidence = array(evidenceByCandidate.get(candidateId)).some((row) => row && row.verified === true && !!safeUrl(row.evidence_url));
+    const hasVerifiedEvidence = array(evidenceByCandidate.get(candidateId)).some((row) => row && row.verified === true && safeUrl(row.evidence_url));
     if (!hasVerifiedEvidence) evidenceUpserts.push({
-      id:frontSyncEvidenceId(candidateId), candidate_id:candidateId, evidence_type:"official_supplier_product_reference", evidence_url:readiness.supplierUrl,
-      note:"Administrator-confirmed official supplier/product reference for Front Match. This verifies the selected destination only and does not transfer seller, payment, delivery, return, refund or support responsibility to IGDC.", verified:true, created_at:now, created_by:actor
+      id: frontSyncEvidenceId(candidateId), candidate_id: candidateId, evidence_type: "official_supplier_product_reference", evidence_url: readiness.supplierUrl,
+      note: "Administrator confirmed the official supplier identity and product destination used for this Front Match.", verified: true, created_at: now, created_by: actor
     });
     plannedCandidateIds.push(candidateId);
-    items.push({ candidateId, status:"prepared", queued:false, reason:"canonical_front_lifecycle_planned", warnings:readiness.warnings || [], assignmentId, sectionKey, alreadyPublicationRequested });
-  }
-  writeTrace.policyEligible = plannedCandidateIds.length;
-  phase("policy", { ok:true, eligible:plannedCandidateIds.length, blocked:items.filter((item)=>item.status==="blocked").length });
-  if (!plannedCandidateIds.length) {
-    return { ok:true, schema:"igdc-product-front-lifecycle-preparation.v4", scope, requested:targetIds.length, prepared:0, blocked:items.filter((item)=>item.status==="blocked").length, preparedCandidateIds:[], items, writeTrace };
+    items.push({ candidateId, status: "prepared", queued: false, reason: "front_bridge_relations_prepared", warnings: readiness.warnings || [], assignmentId, sectionKey });
   }
 
-  // 2) Canonical relation preparation.  Assignment is deliberately last and is
-  // written as audit_ready/ready, not publish_requested.  Thus a partial phase-1
-  // failure can never become a public request by itself.
-  try {
-    await frontSyncWriteStage(writeTrace, "availability_update", availabilityUpdates.length, async () => {
-      const output=[];
-      for (const row of availabilityUpdates) {
-        const regionQuery = row.regionCode === "NATIONWIDE" ? "region_code=is.null" : "region_code=eq." + encodeURIComponent(row.regionCode);
-        const query = "candidate_id=eq." + encodeURIComponent(row.candidateId) + "&country_code=eq." + encodeURIComponent(row.countryCode) + "&" + regionQuery;
-        output.push(...array(await SlotStore.update("gslot_candidate_availability", query, row.patch)));
-      }
-      return output;
-    });
-    await frontSyncWriteStage(writeTrace, "availability_insert", availabilityInserts.length, async () => {
-      const output=[]; for (const batch of frontSyncChunk(availabilityInserts,80)) output.push(...array(await SlotStore.insert("gslot_candidate_availability", batch, "return=representation"))); return output;
-    });
-    await frontSyncWriteStage(writeTrace, "evidence", evidenceUpserts.length, () => frontSyncUpsert("gslot_candidate_evidence", evidenceUpserts, "id"));
-    await frontSyncWriteStage(writeTrace, "revenue", revenueUpserts.length, () => frontSyncUpsert("gslot_candidate_revenue", revenueUpserts, "id"));
-    await frontSyncWriteStage(writeTrace, "assignment_ready", assignmentUpserts.length, () => frontSyncUpsert("gslot_slot_assignments", assignmentUpserts, "id"));
-    phase("relation_prepare", { ok:true });
-  } catch (error) {
-    phase("relation_prepare", { ok:false, error:text(error && (error.code || error.message)) || "relation_prepare_failed" });
-    throw attachTrace(error, "relation_prepare");
+  const writeTrace = {
+    schema: "igdc-product-front-lifecycle-write-trace.v4",
+    requested: targetIds.length,
+    policyEligible: plannedCandidateIds.length,
+    mode: "candidate-marker-authoritative-with-relation-mirrors",
+    relationOrder: { default: "updated_at", gslot_candidate_evidence: "created_at" },
+    preflightRelationErrors
+  };
+  /* The durable candidate marker is the authoritative publication request.
+     Relation tables remain strongly preferred mirrors for the Registry and
+     audit UI, but a transient relation-table/schema failure must not erase an
+     explicit administrator Front Match.  The build-time Registry can rebuild
+     the relation view from this marker without re-running product research. */
+  const marker = await persistFrontPublicationMarkers(actorId, scope, targetById, candidateById, plannedCandidateIds, assignmentsByCandidate);
+  writeTrace.candidateMarker = marker;
+  const markerSet = new Set(array(marker.persistedCandidateIds));
+  const relationErrors = [];
+  async function bestEffortStage(name, attempted, writer) {
+    try { return await frontSyncWriteStage(writeTrace, name, attempted, writer); }
+    catch (error) { relationErrors.push({ stage: name, error: text(error && (error.code || error.message)) || "relation_write_failed" }); return []; }
   }
-
-  // 3) Align the candidate lifecycle with the canonical relations.  This is a
-  // normal lifecycle annotation, not the publication authority.  If one row
-  // cannot be annotated, that row is held out of the final publication commit.
-  const freshRows = await frontSyncSelectCandidates(plannedCandidateIds);
-  const freshById = new Map(freshRows.map((row)=>[text(row&&row.id),row]));
-  const candidatePreparedIds = [], candidatePrepareErrors = [];
-  for (const candidateId of plannedCandidateIds) {
-    const row = plain(freshById.get(candidateId)), target = plain(targetById.get(candidateId)), readiness = plain(readinessByCandidate.get(candidateId));
-    if (!Object.keys(row).length) { candidatePrepareErrors.push({candidateId,error:"candidate_missing_after_relation_prepare"}); continue; }
-    const payload = Object.assign({}, plain(row.source_payload)), key = text(target.sectionKey), split = splitProductSectionKey(key), assignmentId = text(assignmentIdByCandidate.get(candidateId));
-    payload.slotDecision = "slot_candidate";
-    payload.approvedPlacement = Object.assign({}, plain(payload.approvedPlacement), { key, page:split.page, section:split.sectionKey, sectionKey:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, aiSelected:false, proposalOnly:false, publicPublication:false, publicationPending:true, selectedAt:now, selectedBy:actor, selectionSource:"explicit_front_match" });
-    payload.placement = Object.assign({}, plain(payload.placement), { page:split.page, section:split.sectionKey, sectionKey:split.sectionKey, country:scope.country, region:scope.region });
-    payload.outboundReferral = Object.assign({}, plain(payload.outboundReferral), { operatorApproved:true, approved:true, status:"approved", officialDestination:true, officialSeller:true, disclosureReady:true, verifiedAt:now, destinationUrl:readiness.productPageUrl, providerName:readiness.supplierName, approvalSource:"explicit_front_match" });
-    payload.revenue = Object.assign({}, plain(payload.revenue), { type:"external_referral", monetizationState:"administrator_nonpayable_external_referral", trafficValueOnly:true, payableRevenueRightVerified:false, settlementExecution:false });
-    payload.review = Object.assign({}, plain(payload.review), { state:"approved", decidedAt:now, decidedBy:actor, approvalSource:"explicit_front_match", publicationRequested:false, explicitPublicationRequested:false });
-    payload.pipeline = Object.assign({}, plain(payload.pipeline), { stage:"registry_sync_ready", nextGate:"go_live_audit_and_explicit_publication_request", explicitPublicationRequested:false, preparedAt:now, preparedBy:actor });
-    payload.frontPublication = { schema:"igdc-product-front-publication-control.v4", candidateId, operation:"match", status:"ready", queued:false, persisted:true, pendingBuild:false, persistenceVerified:true, authority:"gslot_slot_assignments.publication_status", assignmentId, sectionKey:key, country:scope.country, region:scope.region, preparedAt:now, preparedBy:actor, publicSnapshotConfirmed:false, buildVerificationRequired:true };
-    payload.publicPublication=false; payload.automaticImport=false;
-    try {
-      await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status:"enrollable", source_payload:payload, updated_at:now });
-      candidatePreparedIds.push(candidateId);
-    } catch (error) {
-      candidatePrepareErrors.push({ candidateId, error:text(error && (error.code || error.message)) || "candidate_lifecycle_annotation_failed" });
+  const markerCandidateIds = plannedCandidateIds.filter((id) => markerSet.has(id));
+  const markerAssignmentUpserts = assignmentUpserts.filter((row) => markerSet.has(text(row && row.candidate_id)));
+  const markerAvailabilityUpdates = availabilityUpdates.filter((row) => markerSet.has(text(row && row.candidateId)));
+  const markerAvailabilityInserts = availabilityInserts.filter((row) => markerSet.has(text(row && row.candidate_id)));
+  const markerRevenueUpserts = revenueUpserts.filter((row) => markerSet.has(text(row && row.candidate_id)));
+  const markerEvidenceUpserts = evidenceUpserts.filter((row) => markerSet.has(text(row && row.candidate_id)));
+  await bestEffortStage("candidate_status", markerCandidateIds.length, async () => {
+    const output = [];
+    for (const ids of frontSyncChunk(markerCandidateIds, 80)) {
+      if (!ids.length) continue;
+      output.push(...array(await SlotStore.update("gslot_candidates", "id=in." + frontSyncInFilter(ids), { status: "revenue_ready", updated_at: now })));
     }
-  }
-  writeTrace.candidatePreparation = { attempted:plannedCandidateIds.length, prepared:candidatePreparedIds.length, failed:candidatePrepareErrors.length, errors:candidatePrepareErrors };
-  phase("candidate_prepare", { ok:candidatePrepareErrors.length===0, prepared:candidatePreparedIds.length, failed:candidatePrepareErrors.length });
-
-  // 4) Read back the complete standard lifecycle before committing publication.
-  // ProductPipeline.registryState must say registry_sync_ready; this catches a
-  // missing market/evidence/revenue/PSOM relation instead of silently building.
-  let preparationVerification = { ok:false, requested:candidatePreparedIds.length, verified:0, failed:candidatePreparedIds.length, verifiedCandidateIds:[], items:[] };
-  try {
-    preparationVerification = await verifyProductFrontPreparation(candidatePreparedIds, scope, targetById);
-  } catch (error) {
-    phase("canonical_readback", { ok:false, error:text(error && (error.code || error.message)) || "canonical_readback_failed" });
-    throw attachTrace(error, "canonical_readback");
-  }
-  writeTrace.preparationVerification = preparationVerification;
-  phase("canonical_readback", { ok:preparationVerification.ok, verified:preparationVerification.verified, failed:preparationVerification.failed });
-
-  const commitCandidateIds = array(preparationVerification.verifiedCandidateIds);
-  const commitAssignmentIds = assignmentUpserts.filter((row)=>commitCandidateIds.includes(text(row&&row.candidate_id))).map((row)=>text(row&&row.id)).filter(Boolean);
-  if (commitAssignmentIds.length) {
-    try {
-      await frontSyncWriteStage(writeTrace, "publication_commit", commitAssignmentIds.length, async () => {
-        const output=[];
-        for (const ids of frontSyncChunk(commitAssignmentIds,80)) {
-          output.push(...array(await SlotStore.update("gslot_slot_assignments", "id=in." + frontSyncInFilter(ids), { publication_status:"publish_requested", updated_at:iso(), updated_by:actor })));
-        }
-        return output;
-      });
-      phase("publication_commit", { ok:true, assignments:commitAssignmentIds.length });
-    } catch (error) {
-      phase("publication_commit", { ok:false, error:text(error && (error.code || error.message)) || "publication_commit_failed" });
-      throw attachTrace(error, "publication_commit");
+    return output;
+  });
+  await bestEffortStage("assignments", markerAssignmentUpserts.length, () => frontSyncUpsert("gslot_slot_assignments", markerAssignmentUpserts, "id"));
+  await bestEffortStage("availability_update", markerAvailabilityUpdates.length, async () => {
+    const output = [];
+    for (const row of markerAvailabilityUpdates) {
+      const regionQuery = row.regionCode === "NATIONWIDE" ? "region_code=is.null" : "region_code=eq." + encodeURIComponent(row.regionCode);
+      const query = "candidate_id=eq." + encodeURIComponent(row.candidateId) + "&country_code=eq." + encodeURIComponent(row.countryCode) + "&" + regionQuery;
+      output.push(...array(await SlotStore.update("gslot_candidate_availability", query, row.patch)));
     }
-  }
+    return output;
+  });
+  await bestEffortStage("availability_insert", markerAvailabilityInserts.length, async () => {
+    const output = [];
+    for (const batch of frontSyncChunk(markerAvailabilityInserts, 80)) output.push(...array(await SlotStore.insert("gslot_candidate_availability", batch, "return=representation")));
+    return output;
+  });
+  await bestEffortStage("revenue", markerRevenueUpserts.length, () => frontSyncUpsert("gslot_candidate_revenue", markerRevenueUpserts, "id"));
+  await bestEffortStage("evidence", markerEvidenceUpserts.length, () => frontSyncUpsert("gslot_candidate_evidence", markerEvidenceUpserts, "id"));
 
-  // 5) The assignment relation is the publication authority.  Verify it after
-  // the final commit and only those rows are reported as persisted to the UI,
-  // which is what triggers the single Netlify build hook call after batching.
-  let finalAssignmentRows=[];
-  try {
-    finalAssignmentRows = await frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", commitCandidateIds);
-  } catch (error) {
-    phase("publication_readback", { ok:false, error:text(error && (error.code || error.message)) || "publication_readback_failed" });
-    throw attachTrace(error, "publication_readback");
-  }
-  const finalByCandidate = new Map();
-  for (const row of array(finalAssignmentRows)) {
-    const candidateId=text(row&&row.candidate_id), target=plain(targetById.get(candidateId)); if(!target.sectionKey)continue;
-    const split=splitProductSectionKey(target.sectionKey);
-    if(text(row&&row.hub_key)===split.page && text(row&&row.slot_key)===split.sectionKey && normalizeCountry(row&&row.country_code)===scope.country && frontSyncExpectedRegion(row,scope.country)===scope.region && ["approved","pinned"].includes(lower(row&&row.state)) && lower(row&&row.publication_status)==="publish_requested") finalByCandidate.set(candidateId,row);
-  }
-  const persistedCandidateIds = commitCandidateIds.filter((id)=>finalByCandidate.has(id));
-  const persistedSet = new Set(persistedCandidateIds);
-  writeTrace.publicationReadback = { requested:commitCandidateIds.length, verified:persistedCandidateIds.length, failed:commitCandidateIds.length-persistedCandidateIds.length, assignmentIds:persistedCandidateIds.map((id)=>text(finalByCandidate.get(id)&&finalByCandidate.get(id).id)).filter(Boolean) };
-  phase("publication_readback", { ok:persistedCandidateIds.length===commitCandidateIds.length, verified:persistedCandidateIds.length, failed:commitCandidateIds.length-persistedCandidateIds.length });
-
-  // 6) Mirror the committed relation state back into source_payload for the
-  // administrator UI and diagnostics.  This annotation is secondary; the
-  // authoritative relation commit above is never rolled back or hidden by it.
-  const annotationErrors=[];
-  if (persistedCandidateIds.length) {
-    const rows = await frontSyncSelectCandidates(persistedCandidateIds), byId=new Map(rows.map((row)=>[text(row&&row.id),row]));
-    for (const candidateId of persistedCandidateIds) {
-      const row=plain(byId.get(candidateId)), target=plain(targetById.get(candidateId)), assignment=plain(finalByCandidate.get(candidateId)); if(!Object.keys(row).length)continue;
-      const payload=Object.assign({},plain(row.source_payload)), key=text(target.sectionKey);
-      payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"match",status:"publish_requested",queued:false,persisted:true,pendingBuild:true,persistenceVerified:true,authority:"gslot_slot_assignments.publication_status",assignmentId:text(assignment.id),sectionKey:key,country:scope.country,region:scope.region,requestedAt:iso(),requestedBy:actor,publicSnapshotConfirmed:false,buildVerificationRequired:true});
-      payload.review=Object.assign({},plain(payload.review),{state:"approved",publicationRequested:true,explicitPublicationRequested:true,decidedAt:first(plain(payload.review).decidedAt,now),decidedBy:first(plain(payload.review).decidedBy,actor)});
-      payload.pipeline=Object.assign({},plain(payload.pipeline),{stage:"registry_sync_ready",nextGate:"publication_build_requested",explicitPublicationRequested:true,publicationRequestedAt:iso(),publicationRequestedBy:actor});
-      try { await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{status:"enrollable",source_payload:payload,updated_at:iso()}); }
-      catch(error){annotationErrors.push({candidateId,error:text(error&&(error.code||error.message))||"publication_annotation_failed"});}
-    }
-  }
-  writeTrace.annotation = { attempted:persistedCandidateIds.length, failed:annotationErrors.length, errors:annotationErrors };
-
-  const verifyById = new Map(array(preparationVerification.items).map((row)=>[text(row&&row.candidateId),row]));
-  const prepareErrorById = new Map(candidatePrepareErrors.map((row)=>[text(row&&row.candidateId),row]));
-  for (let index=0; index<items.length; index+=1) {
-    const item=plain(items[index]); if(item.status!=="prepared")continue;
-    const id=text(item.candidateId), verified=persistedSet.has(id), verify=plain(verifyById.get(id)), prepErr=plain(prepareErrorById.get(id)), assignment=plain(finalByCandidate.get(id));
-    items[index]=Object.assign({},item,verified?{
-      status:"publish_requested",persisted:true,persistenceVerified:true,publicationStatus:"publish_requested",pendingBuild:true,reason:"canonical_publication_commit_verified",assignmentId:text(assignment.id)||item.assignmentId,relationVerified:true,relationWarnings:array(verify.reasons)
-    }:{
-      status:"blocked",persisted:false,persistenceVerified:false,pendingBuild:false,reason:text(prepErr.error)||array(verify.reasons)[0]||"canonical_publication_commit_not_verified",reasons:prepErr.error?[prepErr.error]:array(verify.reasons)
+  let verification = { ok: false, requested: markerCandidateIds.length, verified: 0, failed: markerCandidateIds.length, verifiedCandidateIds: [], items: [] };
+  try { verification = await verifyProductFrontPreparation(markerCandidateIds, scope, targetById); }
+  catch (error) { relationErrors.push({ stage: "relation_readback", error: text(error && (error.code || error.message)) || "relation_readback_failed" }); }
+  writeTrace.verification = verification;
+  writeTrace.relationErrors = relationErrors;
+  const verifiedSet = new Set(array(verification.verifiedCandidateIds));
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (!item || item.status !== "prepared") continue;
+    const markerPersisted = markerSet.has(item.candidateId);
+    const relationVerified = verifiedSet.has(item.candidateId);
+    const markerRow = array(marker.items).find((row) => row && row.candidateId === item.candidateId) || {};
+    const verifyRow = array(verification.items).find((row) => row && row.candidateId === item.candidateId) || {};
+    items[index] = Object.assign({}, item, markerPersisted ? {
+      status: "publish_requested", persisted: true, persistenceVerified: true, publicationStatus: "publish_requested", pendingBuild: true,
+      reason: relationVerified ? "front_bridge_relations_verified" : "front_bridge_candidate_marker_persisted",
+      assignmentId: text(verifyRow.assignmentId) || text(markerRow.assignmentId) || item.assignmentId,
+      relationVerified, relationWarnings: relationVerified ? [] : array(verifyRow.reasons)
+    } : {
+      status: "blocked", persisted: false, persistenceVerified: false, pendingBuild: false,
+      reason: text(markerRow.reason) || "candidate_publication_marker_write_failed", reasons: [text(markerRow.reason) || "candidate_publication_marker_write_failed"]
     });
   }
-
-  const blocked = items.filter((item)=>item&&item.status==="blocked").length;
+  const preparedCandidateIds = markerCandidateIds;
   return {
-    ok:persistedCandidateIds.length>0 || targetIds.length===0,
-    schema:"igdc-product-front-lifecycle-preparation.v4", scope, requested:targetIds.length, prepared:persistedCandidateIds.length, blocked,
-    preparedCandidateIds:persistedCandidateIds, items, writeTrace,
-    policy:{ explicitAdministratorConfirmationRequired:true, canonicalRelationLedgersRequired:true, assignmentPublicationStatusAuthoritative:true, twoPhasePublicationCommit:true, readBackVerificationRequired:true, candidateAnnotationSecondary:true, officialSellerExternalReferralOnly:true, hardUnsafeSignalsStillBlocking:true, noIgdcCheckout:true, noPaymentExecution:true, noCrossCountryFallback:true }
+    ok: preparedCandidateIds.length > 0 || targetIds.length === 0, schema: "igdc-product-front-lifecycle-preparation.v3", scope, requested: targetIds.length, prepared: preparedCandidateIds.length,
+    blocked: items.filter((item) => item.status === "blocked").length, preparedCandidateIds, items, writeTrace,
+    policy: { explicitAdministratorConfirmationRequired: true, candidatePublicationMarkerAuthoritative: true, relationRowsPreferredButRecoverable: true, readBackVerificationRequiredForRelations: false, officialSellerExternalReferralOnly: true, trustScoreAdvisoryOnExplicitAdministratorMatch: true, incompleteEvidenceWarningsPreserved: true, hardUnsafeSignalsStillBlocking: true, noIgdcCheckout: true, noPaymentExecution: true, noCrossCountryFallback: true }
   };
 }
 async function productFrontSyncTargets(input, jobInput) {
