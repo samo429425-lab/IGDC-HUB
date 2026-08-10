@@ -162,7 +162,7 @@
     card.appendChild(a);
 
     const cap = document.createElement('div');
-    cap.className = mobile ? 'cap' : 'ad-title';
+    cap.className = 'cap';
     cap.textContent = item.title || '';
     card.appendChild(cap);
 

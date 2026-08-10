@@ -1855,8 +1855,7 @@ function privateReviewFallbackAssignments(rowInput) {
   };
 
   if (outdoor) {
-    add("tour|tour", 90, "등산·캠핑·아웃도어 여행 장비 비공개 검토", "private_review_tour_outdoor");
-    add("home|home_4", 86, "여행·야외활동 상품 비공개 검토", "private_review_outdoor_home");
+    add("home|home_4", 86, "야외활동 상품 비공개 검토", "private_review_outdoor_home");
     add("home|home_right_bottom", 84, "아웃도어 발견 상품 우측 검토", "private_review_outdoor_right");
     add("distribution|distribution-special", 78, "테마형 아웃도어 상품 검토", "private_review_outdoor_special");
   } else if (category === "travel_local_services") {

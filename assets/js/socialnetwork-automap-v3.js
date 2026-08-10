@@ -522,6 +522,20 @@
     job.offset = end;
   }
 
+  function ensureRightCardCss() {
+    const id = "igdc-social-right-card-v1";
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = `
+[data-psom-key="rightPanel"] .ad-box.product-card{position:relative;line-height:normal!important;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a{position:relative;display:block;width:100%;height:100%;line-height:normal!important;overflow:hidden;border-radius:inherit;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a > img.social-right-card-thumb{display:block;width:100%;height:100%;object-fit:cover;object-position:center;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a > .social-right-card-title{position:absolute;left:0;right:0;bottom:0;padding:8px 10px;box-sizing:border-box;color:#fff;font-weight:700;font-size:.92rem;line-height:1.2;text-align:left;background:linear-gradient(to top,rgba(0,0,0,.64),rgba(0,0,0,0));text-shadow:0 1px 2px rgba(0,0,0,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+`;
+    document.head.appendChild(style);
+  }
+
   function getRightPanels() {
     return qsa('[data-psom-key="rightPanel"]');
   }
@@ -593,7 +607,22 @@
     a.href = url || "javascript:void(0)";
     a.target = url ? (isExternalUrl(url) ? "_blank" : "_self") : "_self";
     a.rel = "noopener";
-    a.textContent = title;
+    ensureRightCardCss();
+    a.textContent = "";
+    const thumb = pickThumb(it).trim();
+    if (thumb) {
+      const img = document.createElement("img");
+      img.className = "social-right-card-thumb";
+      img.src = thumb;
+      img.alt = title;
+      img.loading = "lazy";
+      img.decoding = "async";
+      a.appendChild(img);
+    }
+    const cap = document.createElement("div");
+    cap.className = "social-right-card-title";
+    cap.textContent = title;
+    a.appendChild(cap);
     a.dataset.productId = productId;
     a.dataset.productTitle = title;
     a.dataset.productLink = url;
