@@ -15,7 +15,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.8.1-clean-public-card-direct-destination";
+const VERSION = "commerce-candidate-registry-sync-v1.8.2-exact-product-card-destination";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -44,9 +44,23 @@ function genericProductTitle(value){
   const valueText=lower(value).replace(/&[a-z0-9#]+;/g," ").replace(/[^a-z0-9가-힣]+/g," ").trim();
   return !valueText || valueText.length<4 || /^(aside menu|menu|home|product|products|item|detail|details|상품|상품 상세|목록)$/.test(valueText);
 }
+function publicProductCards(payload){
+  payload=plain(payload);
+  const direct=plain(payload.productCard);
+  const research=plain(payload.researchReadiness), researchCard=plain(research.productCard);
+  const release=plain(payload.releaseReadiness), releaseCard=plain(release.productCard);
+  return [researchCard,direct,releaseCard];
+}
 function publicProductDestination(candidate,payload){
   payload=plain(payload);
-  const candidates=[payload.productUrl,payload.productPageUrl,payload.checkoutUrl,payload.detailUrl,payload.externalProductUrl,payload.externalOutboundUrl,candidate&&candidate.official_url,payload.url,payload.link,payload.href];
+  const cards=publicProductCards(payload);
+  /* The reviewed product card owns the exact product-detail destination.
+     Supplier/home/list pages are never promoted ahead of that deep link. */
+  const candidates=[];
+  for(const card of cards){
+    candidates.push(card.checkoutUrl,card.productUrl,card.productPageUrl,card.detailUrl,card.url,card.link,card.href);
+  }
+  candidates.push(payload.checkoutUrl,payload.productUrl,payload.productPageUrl,payload.detailUrl,payload.externalProductUrl,payload.url,payload.link,payload.href,payload.externalOutboundUrl,candidate&&candidate.official_url);
   for(const value of candidates){
     const url=safeUrl(value);
     if(url&&ProductRanking.isSpecificProductUrl(url)) return url;
@@ -55,7 +69,11 @@ function publicProductDestination(candidate,payload){
 }
 function publicProductImage(candidate,payload){
   payload=plain(payload);
-  const candidates=[payload.image,payload.imageUrl,payload.imageOriginalUrl,payload.thumbnail,payload.thumbnailUrl,payload.thumb,candidate&&candidate.thumbnail_url];
+  const cards=publicProductCards(payload), candidates=[];
+  for(const card of cards){
+    candidates.push(card.image,card.imageUrl,card.imageOriginalUrl,card.thumbnail,card.thumbnailUrl,card.thumb);
+  }
+  candidates.push(payload.image,payload.imageUrl,payload.imageOriginalUrl,payload.thumbnail,payload.thumbnailUrl,payload.thumb,candidate&&candidate.thumbnail_url);
   for(const value of candidates){
     const url=ProductRanking.safeProductImageUrl(value);
     if(url) return url;
@@ -64,19 +82,20 @@ function publicProductImage(candidate,payload){
 }
 function publicProductTitle(candidate,payload){
   payload=plain(payload);
-  return first(payload.productName,payload.title,candidate&&candidate.title);
+  const cards=publicProductCards(payload);
+  return first(cards[0].title,cards[0].productName,cards[1].title,cards[1].productName,cards[2].title,cards[2].productName,payload.productName,payload.title,candidate&&candidate.title);
 }
 function publicProductPrice(payload){
-  payload=plain(payload); const card=plain(payload.productCard);
-  return first(payload.price,payload.salePrice,payload.currentPrice,card.price,card.salePrice);
+  payload=plain(payload); const cards=publicProductCards(payload);
+  return first(cards[0].price,cards[0].salePrice,cards[1].price,cards[1].salePrice,cards[2].price,cards[2].salePrice,payload.price,payload.salePrice,payload.currentPrice);
 }
 function publicProductCurrency(payload){
-  payload=plain(payload); const card=plain(payload.productCard);
-  return first(payload.priceCurrency,payload.currency,card.priceCurrency,card.currency);
+  payload=plain(payload); const cards=publicProductCards(payload);
+  return first(cards[0].priceCurrency,cards[0].currency,cards[1].priceCurrency,cards[1].currency,cards[2].priceCurrency,cards[2].currency,payload.priceCurrency,payload.currency);
 }
 function publicProductTimestamp(candidate,payload){
-  payload=plain(payload); const mapping=plain(payload.productMapping), research=plain(payload.research), timestamps=plain(payload.timestamps);
-  return first(mapping.firstVerifiedAt,payload.firstVerifiedAt,payload.listedAt,payload.discoveredAt,research.discoveredAt,timestamps.discoveredAt,candidate&&candidate.created_at,candidate&&candidate.updated_at);
+  payload=plain(payload); const cards=publicProductCards(payload), mapping=plain(payload.productMapping), research=plain(payload.research), timestamps=plain(payload.timestamps);
+  return first(cards[0].lastVerifiedAt,cards[1].lastVerifiedAt,cards[2].lastVerifiedAt,mapping.firstVerifiedAt,payload.firstVerifiedAt,payload.listedAt,payload.discoveredAt,research.discoveredAt,timestamps.discoveredAt,candidate&&candidate.created_at,candidate&&candidate.updated_at);
 }
 function publicCardReady(candidate,payload){
   const title=publicProductTitle(candidate,payload);
