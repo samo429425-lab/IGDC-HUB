@@ -361,8 +361,8 @@ function makeCard(item, decision, market, region, registry) {
   return {
     id,
     title: first(item.title, item.name, "Verified external listing"),
-    summary: first(item.summary, item.description, item.snippet, "External seller listing with seller-side checkout, delivery and service."),
-    description: first(item.description, item.summary, item.snippet, ""),
+    summary: "",
+    description: "",
     price: item.price == null ? undefined : item.price,
     currency: item.currency || undefined,
     cta: first(item.cta, "View seller offer"),

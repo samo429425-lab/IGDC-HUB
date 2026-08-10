@@ -14,7 +14,7 @@ const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.8.0-explicit-front-marker-fallback";
+const VERSION = "commerce-candidate-registry-sync-v1.8.2-authoritative-route-product-detail";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -42,6 +42,48 @@ function verifiedEvidenceRow(row){ return !!row && bool(row.verified) && !!safeU
 function genericProductTitle(value){
   const valueText=lower(value).replace(/&[a-z0-9#]+;/g," ").replace(/[^a-z0-9가-힣]+/g," ").trim();
   return !valueText || valueText.length<4 || /^(aside menu|menu|home|product|products|item|detail|details|상품|상품 상세|목록)$/.test(valueText);
+}
+function productCardOf(payload){
+  payload=plain(payload);
+  const readiness=plain(payload.researchReadiness);
+  const researchCard=plain(readiness.productCard);
+  const directCard=plain(payload.productCard);
+  return Object.assign({},researchCard,directCard);
+}
+function exactProductTitle(candidate,payload){
+  payload=plain(payload); const card=productCardOf(payload);
+  const candidates=[card.title,card.sourceTitle,payload.productName,payload.sourceTitle,payload.title,candidate&&candidate.title];
+  for(const value of candidates){ if(value&&!genericProductTitle(value)) return text(value); }
+  return first.apply(null,candidates);
+}
+function exactProductImage(candidate,payload){
+  payload=plain(payload); const card=productCardOf(payload);
+  const candidates=[card.image,card.imageUrl,card.imageOriginalUrl,card.thumbnail,card.thumbnailUrl,card.thumb,payload.imageUrl,payload.imageOriginalUrl,payload.image,payload.thumbnail,payload.thumb,candidate&&candidate.thumbnail_url];
+  for(const value of candidates){ const url=safeUrl(value); if(url) return url; }
+  return "";
+}
+function normalizedUrlKey(value){
+  const url=safeUrl(value); if(!url) return "";
+  try{ const u=new URL(url); u.hash=""; if(u.pathname!=="/")u.pathname=u.pathname.replace(/\/+$/,""); return u.toString(); }catch(_e){return "";}
+}
+function isRootPageUrl(value){
+  const url=safeUrl(value); if(!url)return true;
+  try{ const u=new URL(url); return (!u.pathname||u.pathname==="/")&&!u.search; }catch(_e){return true;}
+}
+function exactProductDestination(candidate,payload){
+  payload=plain(payload); const card=productCardOf(payload);
+  const supplierCandidates=[card.supplierUrl,payload.supplierSiteUrl,plain(payload.supplier).officialUrl,plain(payload.sellerResponsibility).supportUrl].map(normalizedUrlKey).filter(Boolean);
+  const candidates=[payload.productUrl,card.checkoutUrl,payload.checkoutUrl,payload.productPageUrl,payload.detailUrl,payload.externalProductUrl,payload.externalOutboundUrl,payload.url,payload.link,payload.href,candidate&&candidate.official_url];
+  for(const value of candidates){
+    const url=safeUrl(value); if(!url||isRootPageUrl(url))continue;
+    const key=normalizedUrlKey(url); if(supplierCandidates.includes(key))continue;
+    return url;
+  }
+  return "";
+}
+function productFirstVerifiedAt(candidate,payload){
+  payload=plain(payload); const mapping=plain(payload.productMapping), timestamps=plain(payload.timestamps), research=plain(payload.research);
+  return first(mapping.firstVerifiedAt,payload.firstVerifiedAt,payload.lastVerifiedAt,payload.listedAt,payload.discoveredAt,timestamps.discoveredAt,research.discoveredAt,candidate&&candidate.created_at,candidate&&candidate.updated_at);
 }
 function explicitHardRisk(payload){
   const risk=plain(payload&&payload.riskAssessment);
@@ -112,9 +154,9 @@ function syntheticEvidenceFromMarker(candidate, marker){
 function explicitAdminReferralReady(candidate,assignment,availabilityRows){
   if(lower(assignment&&assignment.publication_status)!=="publish_requested") return false;
   const payload=sourcePayload(candidate);
-  const title=first(payload.title,payload.productName,candidate&&candidate.title);
-  const destination=safeUrl(first(payload.url,payload.productUrl,payload.checkoutUrl,candidate&&candidate.official_url));
-  const image=safeUrl(first(payload.image,payload.imageUrl,payload.imageOriginalUrl,payload.thumbnail,payload.thumb,candidate&&candidate.thumbnail_url));
+  const title=exactProductTitle(candidate,payload);
+  const destination=exactProductDestination(candidate,payload);
+  const image=exactProductImage(candidate,payload);
   const supplierUrl=safeUrl(first(payload.supplierSiteUrl,plain(payload.supplier).officialUrl,plain(payload.sellerResponsibility).supportUrl,candidate&&candidate.official_url));
   const supplierName=first(payload.sellerName,payload.supplierName,plain(payload.supplier).name,plain(payload.sellerResponsibility).legalEntity,candidate&&candidate.title);
   if(genericProductTitle(title)||!destination||!image||!supplierUrl||!supplierName) return false;
@@ -128,7 +170,7 @@ function explicitReferralRevenueRow(candidate,assignment){
     candidate_id:candidate&&candidate.id,
     revenue_type:"external_referral",
     status:"administrator_nonpayable_referral",
-    affiliate_url:first(payload.url,payload.productUrl,payload.checkoutUrl,candidate&&candidate.official_url),
+    affiliate_url:exactProductDestination(candidate,payload),
     provider_name:first(payload.sellerName,payload.supplierName,plain(payload.sellerResponsibility).legalEntity,candidate&&candidate.title),
     currency:null,
     note:"Authenticated administrator publication request; non-payable external seller referral",
@@ -208,18 +250,38 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   // gslot_slot_assignments.priority is ranking priority, not a physical slot.
   // Only a manually pinned assignment may request a concrete slot number.
   const requestedSlot=authoritativeRequestedSlot(payload,assignmentInfo);
+  const destination=exactProductDestination(candidate,payload);
+  const image=exactProductImage(candidate,payload);
+  const title=exactProductTitle(candidate,payload);
+  const firstVerifiedAt=productFirstVerifiedAt(candidate,payload);
+  const card=productCardOf(payload);
+  const rawPrice=first(card.price,payload.price,payload.salePrice,payload.currentPrice);
+  const rawCurrency=first(card.priceCurrency,card.currency,payload.priceCurrency,payload.currency);
   const item=Object.assign({},payload,{
     id:first(payload.id,candidate.id),
-    title:first(payload.title,candidate.title),
-    summary:first(payload.summary,candidate.description),
-    description:first(payload.description,candidate.description),
-    url:first(payload.url,candidate.official_url),
-    image:first(payload.image,candidate.thumbnail_url),
-    thumb:first(payload.thumb,candidate.thumbnail_url),
+    title,
+    name:title,
+    summary:"",
+    description:"",
+    url:destination,
+    link:destination,
+    href:destination,
+    externalProductUrl:destination,
+    externalOutboundUrl:trafficOnly?destination:payload.externalOutboundUrl,
+    image,
+    thumb:image,
+    thumbnail:image,
+    price:rawPrice||undefined,
+    currency:rawCurrency||undefined,
+    firstVerifiedAt:firstVerifiedAt||undefined,
     page,
     channel:page,
+    route:page,
     section,
     psom_key:section,
+    slotKey:section,
+    bind:Object.assign({},plain(payload.bind),{page,section,psom_key:section,slot:requestedSlot}),
+    layerPointer:Object.assign({},plain(payload.layerPointer),{page,section,slot:requestedSlot}),
     placement:Object.assign({},plain(payload.placement),{page,section,slot:requestedSlot}),
     source:{name:first(plain(payload.source).name,candidate.title,"Approved commerce member"),url:first(plain(payload.source).url,candidate.official_url)},
     searchBankContract:Object.assign({},plain(payload.searchBankContract),{frontSupplyAllowed:true,searchBankEligible:true,snapshotEligible:true,indexEligible:true,lastVerifiedAt:first(plain(payload.searchBankContract).lastVerifiedAt,candidate.updated_at),trustScore:Number(plain(payload.searchBankContract).trustScore||payload.trustScore||75),trustTier:first(plain(payload.searchBankContract).trustTier,payload.trustTier,"A"),officialSource:bool(first(plain(payload.searchBankContract).officialSource,payload.officialSource,true)),producerVerified:bool(first(plain(payload.searchBankContract).producerVerified,payload.producerVerified,true))}),
@@ -235,7 +297,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
       disclosureReady:directPayable,
       payoutBasisVerified:directPayable,
       settlementMode:first(plain(payload.directCommerceListing).settlementMode,settlementMode),
-      destinationUrl:first(plain(payload.directCommerceListing).destinationUrl,revenueUrl,candidate.official_url),
+      destinationUrl:first(revenueUrl,destination,plain(payload.directCommerceListing).destinationUrl),
       expectedNetRevenuePerOrder:first(plain(payload.directCommerceListing).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)
     }),
     commerceCandidate:Object.assign({},plain(payload.commerceCandidate),{sourceTier:"approved_commerce_member",origin:"global-slot-console",essentialClass:first(plain(payload.commerceCandidate).essentialClass,payload.essentialClass)}),
@@ -250,7 +312,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
       disclosureReady:directPayable,
       payoutBasisVerified:directPayable,
       settlementMode:first(plain(payload.brokerageContract).settlementMode,settlementMode),
-      destinationUrl:first(plain(payload.brokerageContract).destinationUrl,revenueUrl,candidate.official_url),
+      destinationUrl:first(revenueUrl,destination,plain(payload.brokerageContract).destinationUrl),
       currency:first(plain(payload.brokerageContract).currency,revenue.currency),
       approvalSource:"global-slot-console-approved-revenue-record",
       approvalRecordId:revenueId||null,
@@ -258,7 +320,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
       expectedNetRevenuePerOrder:first(plain(payload.brokerageContract).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)
     }),
     originCountry:first(payload.originCountry,payload.manufacturingCountry),
-    productMapping:Object.assign({},plain(payload.productMapping),{slotProfile,productClass:first(plain(payload.productMapping).productClass,payload.productClass,"physical_product"),productIdentity:first(plain(payload.productMapping).productIdentity,payload.productId,candidate.id),strategyId:first(slotStrategy.strategyId,slotProfile),strategyRole:first(slotStrategy.role),policyDerivedSlotProfile:!!slotStrategy.strategyId})
+    productMapping:Object.assign({},plain(payload.productMapping),{slotProfile,productClass:first(plain(payload.productMapping).productClass,payload.productClass,"physical_product"),productIdentity:first(plain(payload.productMapping).productIdentity,payload.productId,candidate.id),strategyId:first(slotStrategy.strategyId,slotProfile),strategyRole:first(slotStrategy.role),policyDerivedSlotProfile:!!slotStrategy.strategyId,firstVerifiedAt:firstVerifiedAt||undefined})
   });
   return item;
 }
