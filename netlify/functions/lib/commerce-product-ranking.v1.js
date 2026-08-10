@@ -12,7 +12,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "commerce-product-ranking-v1.9.1-tour-semantic-guard";
+const VERSION = "commerce-product-ranking-v1.9.0-category-enrichment-balanced-private-placement";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -375,7 +375,7 @@ function classifyCategory(rowInput) {
   addProduct("home_appliances_living", 75, /(가전|냉장고|세탁기|청소기|에어컨|공기청정기|가구|침구|조명|인테리어|온수매트|전기요|전기장판|카본매트|냉온수|난방|써큘레이터|선풍기|펫하우스|메밀베개|베개|매트커버|클린필터|에어펌프|수납장|테이블|의자|소파|책상|home appliance|furniture|living|vacuum|refrigerator|heated mat|electric blanket|circulator|fan|table|chair|sofa|desk)/i);
   addProduct("baby_family_education", 75, /(유아|아기|어린이|키즈|학생|교육|학습|도서|문구|장난감|아기물티슈|유아용|보솜이|baby|kids|child|education|book|toy)/i);
   addProduct("agriculture_fishery_forestry", 85, /(버섯|표고|느타리|목이|송이|고사리|산채|임산물|밤|대추|호두|잣|꿀|약초|쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|과일|채소|농산물|한우|돼지고기|닭고기|계란|우유|축산물|수산물|건어물|김|미역|젓갈|전복|굴|새우|agriculture|fishery|forestry|farm|seafood)/i);
-  addProduct("travel_local_services", 90, /(관광|숙박|호텔|리조트|투어|입장권|여행\s*(?:상품|패키지|예약|티켓|서비스|코스)|체험\s*(?:프로그램|권|티켓|예약|서비스|코스)|렌터카|지역서비스|travel\s*(?:package|booking|ticket|service|tour)|tour|hotel|resort|experience\s*(?:program|ticket|booking|service|tour)|admission|rental car)/i);
+  addProduct("travel_local_services", 90, /(여행(?!용)|관광|숙박|호텔|리조트|체험|투어|입장권|여행티켓|렌터카|지역서비스|travel(?!\s*size)|tour|hotel|resort|experience|admission|rental car)/i);
   addProduct("travel_local_services", 88, /(등산|캠핑|백패킹|트레킹|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|아웃도어|낚시|차박|outdoor|camping|hiking|trekking|tent|sleeping bag|backpacking|fishing)/i);
   addCombined("local_products", 55, /(로컬푸드|지역특산|특산품|향토|산지직송|농장|어촌|산촌|local product|regional specialty|farm direct)/i);
   addSupplier("manufacturer_brands", 50, /(공식몰|본사|제조사|제조업체|생산자|manufacturer|official store|producer|brand)/i);
@@ -808,7 +808,6 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const audience = plain(value.audience), revenueValue = plain(value.revenue);
   const baseScore = Number(value.portfolioPriorityScore || commercial.potentialScore || 0);
   const hay = lower([row.productName, row.title, row.supplierName, row.supplierType, row.description, row.summary, category.tags.join(" ")].join(" "));
-  const productHay = lower([row.productName, row.title, row.priorityLabel, row.badge, row.badges, row.labels, row.description, row.summary].map(text).join(" "));
   const has = function(names){
     return array(names).some(function(name){
       const direct = row[name], nested = evidence[name];
@@ -849,7 +848,7 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const marketplace = /(마켓|시장|유통|도매|총판|marketplace|market|distributor|wholesale)/i.test(hay);
   const localOrigin = cooperative || category.tags.includes("local_products") || category.tags.includes("agriculture_fishery_forestry");
   const recurringEssential = ["food_household_essentials","beauty_personal_care","baby_family_education","agriculture_fishery_forestry"].includes(category.primary) && Number(audience.repeatPurchaseScore || 0) >= 60;
-  const travel = category.primary === "travel_local_services" || /(관광|숙박|호텔|리조트|투어|입장권|여행\s*(?:상품|패키지|예약|티켓|서비스|코스)|체험\s*(?:프로그램|권|티켓|예약|서비스|코스)|ticket|tour|travel\s*(?:package|booking|ticket|service|tour)|hotel|resort|experience\s*(?:program|ticket|booking|service|tour))/i.test(productHay);
+  const travel = category.primary === "travel_local_services" || /(관광|숙박|호텔|리조트|체험|투어|여행|ticket|tour|travel|hotel|resort|experience)/i.test(hay);
   const localService = travel || /(지역서비스|방문서비스|예약|상담|local service)/i.test(hay);
   const highTrust = risk.gatePassed === true && supplier.approvalReady === true && Number(supplier.trustScore || 0) >= 82;
   const highestValue = highTrust && baseScore >= 72 && revenueValue.contractReady === true;
@@ -917,7 +916,7 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
     const networkScore = ["electronics_accessories","home_appliances_living","manufacturer_brands"].includes(category.primary) ? baseScore + 3 : baseScore - 1;
     add("network", "network-right", networkScore, "제조·생산·조합·마켓 공급망 연결 가치 상품", "market_hub_verified_offer", []);
   }
-  if ((travel || outdoorGear || (localOrigin && /(특산품|기념품|체험(?!\s*팩))/i.test(productHay))) && (outdoorGear || Number(audience.audienceDemandScore || 0) >= 42)) {
+  if ((travel || outdoorGear || (localOrigin && /(특산품|기념품|체험)/i.test(hay))) && (outdoorGear || Number(audience.audienceDemandScore || 0) >= 42)) {
     add("tour", "tour", baseScore + (outdoorGear ? 5 : -4), outdoorGear ? "등산·캠핑·아웃도어 여행 장비" : "여행·관광·지역 체험 수요 상품", outdoorGear ? "tour_outdoor_gear_offer" : "local_travel_or_tourism_offer", outdoorGear ? [] : (travelOperatorEvidence ? [] : ["travelOperatorEvidence"]));
   }
   if ((commercial.visual || commercial.promotional || localOrigin || socialLifestyle) && (socialLifestyle || Number(audience.audienceDemandScore || 0) >= 52)) {

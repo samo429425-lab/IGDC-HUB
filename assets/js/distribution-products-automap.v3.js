@@ -178,15 +178,7 @@
       root.style.cursor='pointer'; root.setAttribute('role','link'); root.tabIndex=0;
       const open=function(){
         revenue(item,'trackClick');
-        // The Distribution Hub can be hosted inside the shared shell iframe.
-        // External seller pages must replace the top document; otherwise sites
-        // that deny framing appear as a false "refused to connect" page.
-        if(/^https?:\/\//i.test(href)){
-          try{ (window.top||window).location.assign(href); }
-          catch(_e){ window.location.assign(href); }
-        }else{
-          window.location.assign(href);
-        }
+        window.location.assign(href);
       };
       root.addEventListener('click',open);
       root.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
