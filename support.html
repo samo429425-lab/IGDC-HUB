@@ -49,6 +49,19 @@
   .notice { margin-top:12px; color:#7a5600; background:#fff8e5; border:1px solid #f2dfad; border-radius:10px; padding:10px 12px; font-size:14px; }
   .full { grid-column:1/-1; }
   .footer { margin-top:18px; color:#6f7f8f; font-size:13px; text-align:center; }
+  .igdcCompanyFooter {
+    width:100%;
+    margin:18px 0 0;
+    padding:18px 20px 22px;
+    background:#074f93;
+    color:#ffffff;
+    text-align:center;
+    font-size:13px;
+    line-height:1.7;
+    font-weight:600;
+  }
+  .igdcCompanyFooter .companyName,
+  .igdcCompanyFooter .companyAddress { color:#ffffff; }
   /* The iframe document itself must remain LTR so Chrome keeps its vertical scrollbar on the physical right.
      RTL is applied only to the support content panels below. */
   html, body { direction:ltr !important; }
@@ -265,8 +278,11 @@ body.rtl .support-shell{direction:ltr !important;}
       </div>
     </div>
   </div>
-  <div class="footer" id="footer"></div>
 </div>
+<footer class="igdcCompanyFooter" aria-label="IGDC company information">
+  <div class="companyName">IGDC Global Hub © 2025 | International General Distribution Company</div>
+  <div class="companyAddress">50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea</div>
+</footer>
 </main>
 </div>
 <script>
