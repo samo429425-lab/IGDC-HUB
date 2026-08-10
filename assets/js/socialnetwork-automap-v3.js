@@ -162,6 +162,11 @@
   function resolveItemUrl(it) {
     if (!it || isPlaceholderItem(it)) return "";
 
+    const explicitOutbound = safeText(
+      it && (it.affiliateOutboundUrl || it.affiliate_outbound_url || it.externalOutboundUrl || it.external_outbound_url || "")
+    ).trim();
+    if (isValidSecondUrl(explicitOutbound)) return explicitOutbound;
+
     const id = pickProductId(it);
     const explicitInternal = safeText(
       it &&

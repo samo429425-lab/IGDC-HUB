@@ -13,8 +13,9 @@ const path = require("path");
 const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
+const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.8.0-explicit-front-marker-fallback";
+const VERSION = "commerce-candidate-registry-sync-v1.8.1-clean-public-card-direct-destination";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -42,6 +43,44 @@ function verifiedEvidenceRow(row){ return !!row && bool(row.verified) && !!safeU
 function genericProductTitle(value){
   const valueText=lower(value).replace(/&[a-z0-9#]+;/g," ").replace(/[^a-z0-9가-힣]+/g," ").trim();
   return !valueText || valueText.length<4 || /^(aside menu|menu|home|product|products|item|detail|details|상품|상품 상세|목록)$/.test(valueText);
+}
+function publicProductDestination(candidate,payload){
+  payload=plain(payload);
+  const candidates=[payload.productUrl,payload.productPageUrl,payload.checkoutUrl,payload.detailUrl,payload.externalProductUrl,payload.externalOutboundUrl,candidate&&candidate.official_url,payload.url,payload.link,payload.href];
+  for(const value of candidates){
+    const url=safeUrl(value);
+    if(url&&ProductRanking.isSpecificProductUrl(url)) return url;
+  }
+  return "";
+}
+function publicProductImage(candidate,payload){
+  payload=plain(payload);
+  const candidates=[payload.image,payload.imageUrl,payload.imageOriginalUrl,payload.thumbnail,payload.thumbnailUrl,payload.thumb,candidate&&candidate.thumbnail_url];
+  for(const value of candidates){
+    const url=ProductRanking.safeProductImageUrl(value);
+    if(url) return url;
+  }
+  return "";
+}
+function publicProductTitle(candidate,payload){
+  payload=plain(payload);
+  return first(payload.productName,payload.title,candidate&&candidate.title);
+}
+function publicProductPrice(payload){
+  payload=plain(payload); const card=plain(payload.productCard);
+  return first(payload.price,payload.salePrice,payload.currentPrice,card.price,card.salePrice);
+}
+function publicProductCurrency(payload){
+  payload=plain(payload); const card=plain(payload.productCard);
+  return first(payload.priceCurrency,payload.currency,card.priceCurrency,card.currency);
+}
+function publicProductTimestamp(candidate,payload){
+  payload=plain(payload); const mapping=plain(payload.productMapping), research=plain(payload.research), timestamps=plain(payload.timestamps);
+  return first(mapping.firstVerifiedAt,payload.firstVerifiedAt,payload.listedAt,payload.discoveredAt,research.discoveredAt,timestamps.discoveredAt,candidate&&candidate.created_at,candidate&&candidate.updated_at);
+}
+function publicCardReady(candidate,payload){
+  const title=publicProductTitle(candidate,payload);
+  return !ProductRanking.isGenericProductName(title) && !genericProductTitle(title) && !!publicProductDestination(candidate,payload) && !!publicProductImage(candidate,payload);
 }
 function explicitHardRisk(payload){
   const risk=plain(payload&&payload.riskAssessment);
@@ -117,7 +156,7 @@ function explicitAdminReferralReady(candidate,assignment,availabilityRows){
   const image=safeUrl(first(payload.image,payload.imageUrl,payload.imageOriginalUrl,payload.thumbnail,payload.thumb,candidate&&candidate.thumbnail_url));
   const supplierUrl=safeUrl(first(payload.supplierSiteUrl,plain(payload.supplier).officialUrl,plain(payload.sellerResponsibility).supportUrl,candidate&&candidate.official_url));
   const supplierName=first(payload.sellerName,payload.supplierName,plain(payload.supplier).name,plain(payload.sellerResponsibility).legalEntity,candidate&&candidate.title);
-  if(genericProductTitle(title)||!destination||!image||!supplierUrl||!supplierName) return false;
+  if(ProductRanking.isGenericProductName(title)||genericProductTitle(title)||!destination||!image||!supplierUrl||!supplierName) return false;
   if(!array(availabilityRows).length||explicitHardRisk(payload)) return false;
   return true;
 }
@@ -208,14 +247,30 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   // gslot_slot_assignments.priority is ranking priority, not a physical slot.
   // Only a manually pinned assignment may request a concrete slot number.
   const requestedSlot=authoritativeRequestedSlot(payload,assignmentInfo);
+  const destination=publicProductDestination(candidate,payload);
+  const image=publicProductImage(candidate,payload);
+  const title=publicProductTitle(candidate,payload);
+  const price=publicProductPrice(payload);
+  const currency=publicProductCurrency(payload);
+  const firstVerifiedAt=publicProductTimestamp(candidate,payload);
   const item=Object.assign({},payload,{
     id:first(payload.id,candidate.id),
-    title:first(payload.title,candidate.title),
-    summary:first(payload.summary,candidate.description),
-    description:first(payload.description,candidate.description),
-    url:first(payload.url,candidate.official_url),
-    image:first(payload.image,candidate.thumbnail_url),
-    thumb:first(payload.thumb,candidate.thumbnail_url),
+    title,
+    name:title,
+    // Public product cards are intentionally compact. Internal review/risk prose
+    // belongs in the administrator ledger and must never leak into front cards.
+    summary:"",
+    description:"",
+    url:destination,
+    link:destination,
+    href:destination,
+    image,
+    thumb:image,
+    thumbnail:image,
+    externalOutboundUrl:trafficOnly?destination:undefined,
+    price:price||undefined,
+    currency:currency||undefined,
+    firstVerifiedAt:firstVerifiedAt||undefined,
     page,
     channel:page,
     section,
@@ -235,7 +290,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
       disclosureReady:directPayable,
       payoutBasisVerified:directPayable,
       settlementMode:first(plain(payload.directCommerceListing).settlementMode,settlementMode),
-      destinationUrl:first(plain(payload.directCommerceListing).destinationUrl,revenueUrl,candidate.official_url),
+      destinationUrl:first(plain(payload.directCommerceListing).destinationUrl,revenueUrl,destination),
       expectedNetRevenuePerOrder:first(plain(payload.directCommerceListing).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)
     }),
     commerceCandidate:Object.assign({},plain(payload.commerceCandidate),{sourceTier:"approved_commerce_member",origin:"global-slot-console",essentialClass:first(plain(payload.commerceCandidate).essentialClass,payload.essentialClass)}),
@@ -250,7 +305,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
       disclosureReady:directPayable,
       payoutBasisVerified:directPayable,
       settlementMode:first(plain(payload.brokerageContract).settlementMode,settlementMode),
-      destinationUrl:first(plain(payload.brokerageContract).destinationUrl,revenueUrl,candidate.official_url),
+      destinationUrl:first(plain(payload.brokerageContract).destinationUrl,revenueUrl,destination),
       currency:first(plain(payload.brokerageContract).currency,revenue.currency),
       approvalSource:"global-slot-console-approved-revenue-record",
       approvalRecordId:revenueId||null,
@@ -258,7 +313,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
       expectedNetRevenuePerOrder:first(plain(payload.brokerageContract).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)
     }),
     originCountry:first(payload.originCountry,payload.manufacturingCountry),
-    productMapping:Object.assign({},plain(payload.productMapping),{slotProfile,productClass:first(plain(payload.productMapping).productClass,payload.productClass,"physical_product"),productIdentity:first(plain(payload.productMapping).productIdentity,payload.productId,candidate.id),strategyId:first(slotStrategy.strategyId,slotProfile),strategyRole:first(slotStrategy.role),policyDerivedSlotProfile:!!slotStrategy.strategyId})
+    productMapping:Object.assign({},plain(payload.productMapping),{slotProfile,productClass:first(plain(payload.productMapping).productClass,payload.productClass,"physical_product"),productIdentity:first(plain(payload.productMapping).productIdentity,payload.productId,candidate.id),strategyId:first(slotStrategy.strategyId,slotProfile),strategyRole:first(slotStrategy.role),policyDerivedSlotProfile:!!slotStrategy.strategyId,firstVerifiedAt:firstVerifiedAt||undefined})
   });
   return item;
 }
@@ -288,6 +343,11 @@ async function syncApprovedCandidates(input){
     const output=[];
     for(const candidate of array(candidates)){
       if(!allowedCandidateStatus(candidate.status)) continue;
+      const candidatePayload=sourcePayload(candidate);
+      // A revenue relation never overrides the public-card contract. Missing or
+      // generic titles, missing exact product destinations, and missing product
+      // images stay private instead of producing broken public cards.
+      if(!publicCardReady(candidate,candidatePayload)) continue;
       const assignmentRows=assignmentByCandidate.get(candidate.id)||[];
       // The slot-assignment relation is preferred, but the candidate's durable
       // Front Match marker is an authoritative recovery source. This keeps a

@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.11.0-canonical-front-two-phase-commit";
+const VERSION = "commerce-country-automation-v3.11.1-public-card-contract-stabilized";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2650,7 +2650,7 @@ function frontSyncPublicReadiness(productInput, existingCandidate) {
      from being stranded before Registry/SearchBank while retaining hard safety
      exclusions. */
   if (trustScore > 0 && trustScore < TRUST_POLICY.minimumTrustScore) warnings.push("supplier_trust_below_public_threshold_admin_confirmed");
-  if (ProductRanking.isGenericProductName(first(product.productName, product.title)) && !text(product.priorityLabel) && !supplierName) reasons.push("product_title_not_verified");
+  if (ProductRanking.isGenericProductName(first(product.productName, product.title))) reasons.push("product_title_not_verified");
   if (product.inspectionComplete !== true) warnings.push("product_inspection_pending");
   if (risk.gatePassed !== true) warnings.push("risk_review_pending_admin_confirmed");
   if (!evidenceReady) warnings.push("supplier_evidence_pending_admin_confirmed");

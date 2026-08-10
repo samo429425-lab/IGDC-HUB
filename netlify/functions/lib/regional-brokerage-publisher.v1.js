@@ -361,8 +361,10 @@ function makeCard(item, decision, market, region, registry) {
   return {
     id,
     title: first(item.title, item.name, "Verified external listing"),
-    summary: first(item.summary, item.description, item.snippet, "External seller listing with seller-side checkout, delivery and service."),
-    description: first(item.description, item.summary, item.snippet, ""),
+    // Public distribution cards intentionally expose only the product identity
+    // and an actual price when one exists. Administrator/review prose stays private.
+    summary: "",
+    description: "",
     price: item.price == null ? undefined : item.price,
     currency: item.currency || undefined,
     cta: first(item.cta, "View seller offer"),
@@ -520,7 +522,7 @@ function publishFromSearchBank(input) {
   const source = sourceBank(root);
   const templateInfo = sourceDistributionTemplate(root);
   const report = {
-    version: "regional-brokerage-publisher-v1.1",
+    version: "regional-brokerage-publisher-v1.1.1-clean-public-product-card",
     generatedAt: new Date().toISOString(),
     sourceBank: source.file ? path.relative(root, source.file) : null,
     canonicalPublicationVerified: !!(source.verification && source.verification.ok),
