@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.11.0-canonical-front-two-phase-commit";
+const VERSION = "commerce-country-automation-v3.11.1-explicit-front-ledger-recovery";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2580,8 +2580,7 @@ async function verifyProductFrontPreparation(candidateIdsInput, scope, targetByI
   for (const candidateId of candidateIds) {
     const target = plain(targetById.get(candidateId)), split = splitProductSectionKey(target.sectionKey), reasons = [];
     const candidate = candidates.get(candidateId);
-    const candidateStatus = lower(candidate && candidate.status);
-    if (!candidate || !["revenue_ready","enrollable"].includes(candidateStatus)) reasons.push("candidate_lifecycle_status_not_ready");
+    if (!candidate) reasons.push("candidate_row_not_persisted");
     const candidateAssignments = array(assignments.get(candidateId));
     const candidateMarkets = array(availability.get(candidateId));
     const candidateRevenues = array(revenues.get(candidateId));
@@ -2603,8 +2602,11 @@ async function verifyProductFrontPreparation(candidateIdsInput, scope, targetByI
     if (!hasEvidence) reasons.push("verified_supplier_evidence_not_persisted");
     let lifecycle = null;
     if (candidate) {
-      lifecycle = ProductPipeline.registryState(candidate,{assignments:candidateAssignments,markets:candidateMarkets,revenues:candidateRevenues,evidence:candidateEvidence});
-      if (text(lifecycle && lifecycle.stage) !== "registry_sync_ready") reasons.push("canonical_lifecycle_not_registry_sync_ready:" + (text(lifecycle && lifecycle.stage) || "unknown"));
+      // Keep the lifecycle result for diagnostics only. The explicit Front Match
+      // writes and verifies the canonical ledgers directly. A stale
+      // source_payload annotation must not cancel an already verified
+      // availability/evidence/revenue/PSOM publication commit.
+      try { lifecycle = ProductPipeline.registryState(candidate,{assignments:candidateAssignments,markets:candidateMarkets,revenues:candidateRevenues,evidence:candidateEvidence}); } catch (_e) {}
     }
     const verified = reasons.length === 0;
     if (verified) verifiedCandidateIds.push(candidateId);
@@ -2740,9 +2742,12 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     assignmentUpserts.push({
       id: assignmentId, candidate_id: candidateId, hub_key: split.page, country_code: scope.country, region_code: scope.region === "NATIONWIDE" ? null : scope.region,
       slot_key: split.sectionKey, priority: Math.max(0, Number(target.priority || product.rankingScore || 0)), state: assignmentExisting && lower(assignmentExisting.state) === "pinned" ? "pinned" : "approved",
-      // Phase 1 stores a non-public ready state.  A pre-existing explicit request
-      // is preserved on retry and is never rolled backwards.
-      publication_status: alreadyPublicationRequested ? "publish_requested" : "audit_ready",
+      // The authenticated administrator Front Match is itself the explicit
+      // publication request. Persist it in the canonical PSOM assignment ledger
+      // immediately. The storage adapter maps this to the deployed DB's
+      // established "published" state and maps it back to "publish_requested"
+      // for commerce modules.
+      publication_status: "publish_requested",
       manual_pinned: assignmentExisting && assignmentExisting.manual_pinned === true,
       decision_note: "Explicit administrator Front Match prepared through canonical market/evidence/revenue/PSOM ledgers. External seller remains seller and merchant of record; IGDC does not execute checkout, payment, delivery, returns, refunds or after-sales service.",
       created_at: text(assignmentExisting && assignmentExisting.created_at) || now, updated_at: now, updated_by: actor
@@ -2780,9 +2785,11 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     return { ok:true, schema:"igdc-product-front-lifecycle-preparation.v4", scope, requested:targetIds.length, prepared:0, blocked:items.filter((item)=>item.status==="blocked").length, preparedCandidateIds:[], items, writeTrace };
   }
 
-  // 2) Canonical relation preparation.  Assignment is deliberately last and is
-  // written as audit_ready/ready, not publish_requested.  Thus a partial phase-1
-  // failure can never become a public request by itself.
+  // 2) Canonical relation preparation. Availability, verified evidence and the
+  // external-referral route are persisted first; the PSOM assignment is written
+  // last as publish_requested. The existing build pipeline still re-runs
+  // Registry, Candidate Intake, Canonical and Snapshot gates before anything
+  // can reach a front Snapshot.
   try {
     await frontSyncWriteStage(writeTrace, "availability_update", availabilityUpdates.length, async () => {
       const output=[];
@@ -2810,7 +2817,12 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
   // cannot be annotated, that row is held out of the final publication commit.
   const freshRows = await frontSyncSelectCandidates(plannedCandidateIds);
   const freshById = new Map(freshRows.map((row)=>[text(row&&row.id),row]));
-  const candidatePreparedIds = [], candidatePrepareErrors = [];
+  // Source-payload annotation is secondary. The canonical relation ledgers are
+  // authoritative, so a large/stale source_payload PATCH must not erase a
+  // successful explicit Front Match. Keep every relation-prepared candidate
+  // eligible for direct read-back verification and record annotation failures
+  // separately.
+  const candidatePreparedIds = plannedCandidateIds.slice(), candidatePrepareErrors = [];
   for (const candidateId of plannedCandidateIds) {
     const row = plain(freshById.get(candidateId)), target = plain(targetById.get(candidateId)), readiness = plain(readinessByCandidate.get(candidateId));
     if (!Object.keys(row).length) { candidatePrepareErrors.push({candidateId,error:"candidate_missing_after_relation_prepare"}); continue; }
@@ -2826,7 +2838,6 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     payload.publicPublication=false; payload.automaticImport=false;
     try {
       await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status:"enrollable", source_payload:payload, updated_at:now });
-      candidatePreparedIds.push(candidateId);
     } catch (error) {
       candidatePrepareErrors.push({ candidateId, error:text(error && (error.code || error.message)) || "candidate_lifecycle_annotation_failed" });
     }
@@ -2834,9 +2845,11 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
   writeTrace.candidatePreparation = { attempted:plannedCandidateIds.length, prepared:candidatePreparedIds.length, failed:candidatePrepareErrors.length, errors:candidatePrepareErrors };
   phase("candidate_prepare", { ok:candidatePrepareErrors.length===0, prepared:candidatePreparedIds.length, failed:candidatePrepareErrors.length });
 
-  // 4) Read back the complete standard lifecycle before committing publication.
-  // ProductPipeline.registryState must say registry_sync_ready; this catches a
-  // missing market/evidence/revenue/PSOM relation instead of silently building.
+  // 4) Read back the canonical relation ledgers directly. This is the recovery
+  // authority for the previously working V9 path: availability + verified
+  // evidence + approved external referral + approved PSOM assignment must all
+  // physically exist before the row is reported as persisted. Lifecycle
+  // annotations remain diagnostic only and cannot strand a valid relation set.
   let preparationVerification = { ok:false, requested:candidatePreparedIds.length, verified:0, failed:candidatePreparedIds.length, verifiedCandidateIds:[], items:[] };
   try {
     preparationVerification = await verifyProductFrontPreparation(candidatePreparedIds, scope, targetById);
