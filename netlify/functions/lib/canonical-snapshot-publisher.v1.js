@@ -24,10 +24,9 @@ const IpSlotPolicy = require("./ip-slot-policy.v1");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
-const PublicProductCard = require("./commerce-public-product-card.v1");
 
-const VERSION = "canonical-snapshot-publisher-v1.7.0-public-product-card-contract";
-const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.7-public-product-card";
+const VERSION = "canonical-snapshot-publisher-v1.6.0-country-scoped-admin-publication-contract";
+const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.6-country-scoped-admin-publication";
 const UPSTREAM_FILE = "search-bank.upstream.snapshot.json";
 const PUBLIC_FILE = "search-bank.snapshot.json";
 const POLICY_FILE = "canonical-snapshot-policy.v1.json";
@@ -457,19 +456,6 @@ function validateCandidate(raw, index, context) {
   if (Number.isNaN(requested)) reasons.push("SLOT_MAPPING_CONFLICT");
   if (requested != null && requested > context.policy.slotCapacityDefault) reasons.push("SLOT_OUT_OF_CAPACITY");
 
-  // Commerce/IP product surfaces use a separate public display contract.  This
-  // does not grant publication eligibility; it only prevents unresolved titles,
-  // seller homepages, internal content routes and non-product images from
-  // crossing the Canonical boundary as product cards.
-  const managedProductSurface = ["home","network","distribution","tour"].includes(page) || (page === "social" && section === "rightPanel");
-  const productLike = managedProductSurface && (
-    lower(item.type) === "product" || lower(item.kind) === "product" ||
-    isObject(item.commerceCandidate) || isObject(item.candidateSelection) ||
-    !!str(item.productId || item.productUrl || item.displayUrl)
-  );
-  const publicCard = productLike ? PublicProductCard.build(item) : null;
-  if (productLike && publicCard && !publicCard.ok) reasons.push(...publicCard.reasons);
-
   const country = normalizeCountry(geo.countryRaw, geo.globalExplicit);
   const region = normalizeRegion(geo.regionRaw, geo.globalExplicit, geo.nationalExplicit, country);
   if (!country) reasons.push("COUNTRY_REQUIRES_ISO_3166_ALPHA2");
@@ -548,7 +534,6 @@ function validateCandidate(raw, index, context) {
     country,
     region,
     ipSlotMapping: ipSlot && ipSlot.mapping || null,
-    publicCard: publicCard && publicCard.ok ? publicCard : null,
     audit
   };
 }
@@ -678,41 +663,6 @@ function buildCanonicalItem(entry, releaseId) {
   item.image = entry.image;
   item.thumb = entry.image;
   item.thumbnail = entry.image;
-  if (entry.publicCard && entry.publicCard.ok) {
-    item.type = "product";
-    item.kind = "product";
-    item.productId = entry.publicCard.productId;
-    item.displayTitle = entry.publicCard.displayTitle;
-    item.displayImage = entry.publicCard.displayImage;
-    item.displayUrl = entry.publicCard.displayUrl;
-    item.displayMeta = entry.publicCard.displayMeta || "";
-    item.title = entry.publicCard.displayTitle;
-    item.name = entry.publicCard.displayTitle;
-    item.url = entry.publicCard.displayUrl;
-    item.productUrl = entry.publicCard.displayUrl;
-    item.externalOutboundUrl = entry.publicCard.displayUrl;
-    item.external_outbound_url = entry.publicCard.displayUrl;
-    item.link = entry.publicCard.displayUrl;
-    item.href = entry.publicCard.displayUrl;
-    item.detailUrl = entry.publicCard.displayUrl;
-    item.image = entry.publicCard.displayImage;
-    item.imageUrl = entry.publicCard.displayImage;
-    item.thumb = entry.publicCard.displayImage;
-    item.thumbnail = entry.publicCard.displayImage;
-    // Free-form administrator / evidence text never enters the shopper card.
-    item.summary = entry.publicCard.displayMeta || "";
-    item.description = entry.publicCard.displayMeta || "";
-    item.publicCard = {
-      version: PublicProductCard.VERSION,
-      type: "product",
-      productId: entry.publicCard.productId,
-      title: entry.publicCard.displayTitle,
-      image: entry.publicCard.displayImage,
-      url: entry.publicCard.displayUrl,
-      meta: entry.publicCard.displayMeta || "",
-      identityDigest: entry.publicCard.identityDigest
-    };
-  }
   item.canonicalSource = {
     name: entry.source.name,
     url: entry.source.url,
@@ -899,7 +849,6 @@ function publish(input) {
   const auditRows = [];
   const seenCandidate = new Map();
   const seenDestination = new Set();
-  const seenPublicProduct = new Set();
   for (let index = 0; index < expandedItems.length; index += 1) {
     const expanded = expandedItems[index];
     const result = validateCandidate(expanded.item, expanded.sourceIndex, context);
@@ -915,20 +864,8 @@ function publish(input) {
       auditRows.push(Object.assign({ status: "rejected", marketVariant: expanded.marketKey || null, reasons: ["DUPLICATE_DESTINATION_IN_MARKET_SECTION"] }, result.audit));
       continue;
     }
-    // Product identity is stronger than candidate row identity. The same seller
-    // product may be discovered more than once with different candidate IDs or
-    // tracking query strings; expose at most one card in the same market slot
-    // section while still allowing the same product on a different hub/section.
-    const productIdentity = result.publicCard && result.publicCard.productId
-      ? [result.page, result.section, result.country, result.region, result.publicCard.productId].join("|")
-      : "";
-    if (productIdentity && seenPublicProduct.has(productIdentity)) {
-      auditRows.push(Object.assign({ status: "rejected", marketVariant: expanded.marketKey || null, reasons: ["DUPLICATE_PUBLIC_PRODUCT_IN_MARKET_SECTION"] }, result.audit));
-      continue;
-    }
     seenCandidate.set(result.candidateId, expanded.sourceIndex);
     seenDestination.add(destinationKey);
-    if (productIdentity) seenPublicProduct.add(productIdentity);
     acceptedCandidates.push(result);
   }
   const ledger = loadLedger(root);
