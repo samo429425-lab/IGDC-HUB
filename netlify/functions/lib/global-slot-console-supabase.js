@@ -60,8 +60,16 @@ function normalizeAssignmentReadBody(path, body) {
     // "published" is the persistent active/front-matched state.  Existing
     // commerce modules call that state "publish_requested" until a build has
     // regenerated and verified the SearchBank/front snapshots.
-    if (clean(copy.publication_status).toLowerCase() === 'published') {
+    const storedStatus = clean(copy.publication_status).toLowerCase();
+    if (storedStatus === 'published') {
       copy.publication_status = 'publish_requested';
+    } else if (storedStatus === 'not_ready') {
+      // Read-side counterpart of normalizeAssignmentStatusForWrite().
+      // The deployed DB stores the in-memory audit_ready state as not_ready
+      // when an assignment is unpublished.  Without this reverse mapping, a
+      // correctly preserved PSOM assignment disappears from Registry/Go-Live
+      // reads after "전체 매칭 해제", even though the row still exists.
+      copy.publication_status = 'audit_ready';
     }
     return copy;
   };
