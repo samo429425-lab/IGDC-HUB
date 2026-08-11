@@ -108,19 +108,6 @@
     }
   }
 
-  function specificProductUrl(value) {
-    const raw = String(value || '').trim();
-    if (isBadUrl(raw) || isExampleUrl(raw)) return '';
-    try {
-      const parsed = new URL(raw);
-      if (parsed.protocol !== 'https:') return '';
-      if ((!parsed.pathname || parsed.pathname === '/') && !parsed.search && !parsed.hash) return '';
-      return parsed.toString();
-    } catch (e) {
-      return '';
-    }
-  }
-
   function pad3(n) {
     const x = Number(n);
     if (!Number.isFinite(x) || x <= 0) return '001';
@@ -151,21 +138,14 @@
     return id ? ('/content.html?id=' + encodeURIComponent(id)) : '';
   }
 
-  function directProductUrl(item) {
-    if (!item) return '';
-    return specificProductUrl(pick(item, ['externalProductUrl', 'officialProductUrl', 'productUrl', 'productPageUrl', 'detailUrl', 'checkoutUrl', 'purchaseUrl', 'orderUrl', 'productLink']));
-  }
-
   function resolveSlotHref(item) {
     if (!item) return '';
-    const direct = directProductUrl(item);
-    if (direct && !isBadUrl(direct) && !isExampleUrl(direct)) return direct;
-    const outbound = specificProductUrl(item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.outboundUrl || ''));
-    if (outbound) return outbound;
-    const url = specificProductUrl(item.url || '');
-    if (url) return url;
+    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.outboundUrl || '');
+    if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
     if (item.id) return contentHref(item.id);
-    return '';
+    const url = item.url || '';
+    if (isBadUrl(url) || isExampleUrl(url)) return '';
+    return url;
   }
 
   function applyAnchorDestination(a, item) {
@@ -206,8 +186,7 @@
 
     const page = src.page || fb.page || 'home';
     const section = src.section || fb.section || null;
-    const directUrl = directProductUrl(src);
-    const sourceUrl = directUrl || pick(src, ['affiliateOutboundUrl', 'affiliate_outbound_url', 'externalOutboundUrl', 'external_outbound_url', 'url', 'href', 'link', 'path', 'contentUrl', 'pageUrl']) || '#';
+    const sourceUrl = pick(src, ['affiliateOutboundUrl', 'affiliate_outbound_url', 'externalOutboundUrl', 'external_outbound_url', 'checkoutUrl', 'paymentUrl', 'productUrl', 'purchaseUrl', 'orderUrl', 'url', 'href', 'link', 'path', 'detailUrl', 'contentUrl', 'pageUrl']) || '#';
     const priority = (typeof src.priority === 'number')
       ? src.priority
       : (Number.isFinite(Number(src.priority)) ? Number(src.priority) : safeNumber(fb.priority, null));
@@ -220,10 +199,6 @@
       thumb: pick(src, ['thumb', 'image', 'image_url', 'img', 'photo', 'thumbnail', 'thumbnailUrl', 'cover', 'coverUrl']),
       url: sourceUrl,
       sourceUrl,
-      productUrl: directUrl,
-      externalProductUrl: pick(src, ['externalProductUrl']) || directUrl,
-      detailUrl: pick(src, ['detailUrl']) || directUrl,
-      checkoutUrl: pick(src, ['checkoutUrl']) || directUrl,
       affiliateOutboundUrl: pick(src, ['affiliateOutboundUrl', 'affiliate_outbound_url']),
       externalOutboundUrl: pick(src, ['externalOutboundUrl', 'external_outbound_url']),
       priority,
@@ -356,9 +331,15 @@
     cap.style.fontWeight = '700';
     cap.style.fontSize = '14px';
     cap.style.color = '#222';
-    cap.style.whiteSpace = 'nowrap';
+    cap.style.textAlign = 'center';
+    cap.style.whiteSpace = 'normal';
     cap.style.overflow = 'hidden';
-    cap.style.textOverflow = 'ellipsis';
+    cap.style.overflowWrap = 'anywhere';
+    cap.style.wordBreak = 'break-word';
+    cap.style.lineHeight = '1.35';
+    cap.style.display = '-webkit-box';
+    cap.style.webkitBoxOrient = 'vertical';
+    cap.style.webkitLineClamp = '2';
 
     a.style.display = 'grid';
     a.style.gridTemplateRows = '1fr auto';
@@ -378,8 +359,41 @@
     img.loading = 'lazy';
     img.decoding = 'async';
     img.src = item.thumb || '';
-    img.alt = item.title || '';
+    img.alt = '';
+
+    const showFallbackLabel = function () {
+      if (a.querySelector('.home-right-sample-label')) return;
+      img.style.display = 'none';
+
+      const label = document.createElement('div');
+      label.className = 'home-right-sample-label';
+      label.textContent = item.title || '';
+      label.style.width = '100%';
+      label.style.height = '100%';
+      label.style.boxSizing = 'border-box';
+      label.style.padding = '8px';
+      label.style.display = 'flex';
+      label.style.alignItems = 'center';
+      label.style.justifyContent = 'center';
+      label.style.textAlign = 'center';
+      label.style.whiteSpace = 'normal';
+      label.style.overflowWrap = 'anywhere';
+      label.style.wordBreak = 'break-word';
+      label.style.lineHeight = '1.35';
+      label.style.color = '#004080';
+      label.style.fontWeight = '600';
+      label.style.overflow = 'hidden';
+      a.appendChild(label);
+    };
+
+    img.addEventListener('error', showFallbackLabel, { once: true });
     a.appendChild(img);
+
+    // Snapshot seed cards use the known transparent sample GIF.
+    // Render their names as normal centered fallback content instead of browser ALT text.
+    if (/^data:image\/gif;base64,R0lGODlhAQABAAAAACw=/i.test(String(item.thumb || ''))) {
+      showFallbackLabel();
+    }
 
     return a;
   }
