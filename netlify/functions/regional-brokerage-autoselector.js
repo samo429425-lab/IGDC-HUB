@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.6.2-resumable-product-inspection";
+const VERSION="regional-brokerage-autoselector-v2.6.3-invalid-product-page-detection";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -1034,10 +1034,41 @@ function prepareProductInspectionPool(rawItems,params){
   for(const item of ranked){const url=ProductRanking.canonicalProductUrl(item&&item.productUrl),key=ProductRanking.productIdentity(item);if(!url||!key||seen.has(key)||!isProductDetailUrl(url))continue;seen.add(key);out.push(Object.assign({},item,{productUrl:url,url}));if(out.length>=limit)break;}return out;
 }
 
+function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
+  const body=stripHtml(String(html||"")).toLowerCase().slice(0,220000);
+  const explicitInvalid=[
+    "잘못된 접근입니다",
+    "상품이 존재하지 않습니다",
+    "존재하지 않는 상품",
+    "삭제된 상품",
+    "판매 종료된 상품",
+    "판매종료 상품",
+    "판매가 종료된 상품",
+    "상품을 찾을 수 없습니다",
+    "product not found",
+    "this product is no longer available",
+    "item not found"
+  ];
+  const matched=explicitInvalid.find((phrase)=>body.includes(phrase));
+  if(matched) return {invalid:true,reason:"product_page_explicit_invalid_message",detail:matched};
+  try{
+    const requested=new URL(String(requestedUrl||""));
+    const final=new URL(String(finalUrl||requestedUrl||""));
+    const supplier=supplierSiteUrl?new URL(String(supplierSiteUrl)):null;
+    const requestedSpecific=(requested.pathname&&requested.pathname!=="/")||!!requested.search;
+    const finalRoot=(!final.pathname||final.pathname==="/")&&!final.search&&!final.hash;
+    const sameSupplier=!supplier||final.hostname.replace(/^www\./,"")===supplier.hostname.replace(/^www\./,"");
+    if(requestedSpecific&&finalRoot&&sameSupplier) return {invalid:true,reason:"product_page_redirected_to_seller_home",detail:final.toString()};
+  }catch(_e){}
+  return {invalid:false,reason:"",detail:""};
+}
+
 async function inspectProductCandidate(item){
   const row=plain(item),productUrl=ProductRanking.canonicalProductUrl(absoluteHttpUrl(row.productUrl,row.productUrl)),supplierSiteUrl=absoluteHttpUrl(row.supplierSiteUrl,row.supplierSiteUrl);if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false,inspectionComplete:true});
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),14000);try{
     const page=await fetchProductHtml(productUrl,controller);if(!page.ok)return Object.assign({},row,{researchStatus:page.status,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString()});
+    const invalidPage=productPageInvalidState(page.html,productUrl,page.url,supplierSiteUrl);
+    if(invalidPage.invalid)return Object.assign({},row,{researchStatus:invalidPage.reason,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString(),inspectionError:{code:"PRODUCT_PAGE_INVALID",message:invalidPage.detail||invalidPage.reason},publicPublication:false,automaticImport:false});
     const supplierMeta={supplierId:row.supplierId,supplierName:row.supplierName,supplierSiteUrl:supplierSiteUrl||row.supplierSiteUrl,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady,evidenceReady:row.supplierEvidenceReady,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl};
     const parsed=productRowsFromHtml(page.html,page.url,supplierMeta,20),canonical=ProductRanking.canonicalProductUrl(canonicalPageUrl(page.html,page.url))||productUrl,exact=parsed.find(x=>ProductRanking.canonicalProductUrl(x.productUrl)===canonical)||parsed[0]||{},pageVideo=videoInfoFromHtml(page.html,page.url);
     const pageTitle=meaningfulProductName(metaContent(page.html,["og:title","twitter:title"])||stripHtml((String(page.html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1])),candidateNames=[exact.productName!=="상품명 확인 중"?exact.productName:"",pageTitle,row.productName].map(meaningfulProductName).filter(name=>name&&!ProductRanking.isGenericProductName(name)),resolvedName=candidateNames[0]||"",name=resolvedName||"상품명 확인 중",image=first(exact.imageUrl,row.imageUrl),same=supplierSiteUrl?sameSite(supplierSiteUrl,page.url):true,pagePrice=priceInfoFromHtml(page.html),pageAvailability=availabilityFromHtml(page.html),price=first(exact.price,pagePrice.price,row.price),priceCurrency=first(exact.priceCurrency,pagePrice.priceCurrency,row.priceCurrency),availability=first(exact.availability,pageAvailability,row.availability),ready=!!resolvedName&&!!image&&same&&ProductRanking.isSpecificProductUrl(canonical);
@@ -1064,4 +1095,4 @@ async function inspectProductResearchStep(rawItems){
   return{ok:true,version:VERSION,items:inspected,failed:results.filter((result)=>result.status==="rejected").length};
 }
 
-module.exports={VERSION,runSelection,createSupplierResearchPlan,searchSupplierResearchStep,prepareSupplierInspectionPool,inspectSupplierResearchStep,buildSupplierReviewPool,discoverSupplierProductsStep,prepareProductInspectionPool,inspectProductResearchStep};
+module.exports={VERSION,runSelection,createSupplierResearchPlan,searchSupplierResearchStep,prepareSupplierInspectionPool,inspectSupplierResearchStep,buildSupplierReviewPool,discoverSupplierProductsStep,prepareProductInspectionPool,inspectProductResearchStep,productPageInvalidState};
