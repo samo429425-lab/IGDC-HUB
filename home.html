@@ -2063,6 +2063,80 @@ a[id*="qna"]{
 }
 </style>
 
+
+<style id="igdc-home-main-rightpanel-final-balance-v2">
+/* HOME final nano patch
+   1) Right rail may shrink with the viewport; cards never exceed the section/title width.
+   2) Five home product rows use a balanced portrait slot close to 4:5.
+*/
+@media (min-width:1025px){
+  .ad-panel{
+    flex:0 1 260px !important;
+    width:auto !important;
+    min-width:0 !important;
+    max-width:260px !important;
+    box-sizing:border-box !important;
+    overflow-x:hidden !important;
+  }
+}
+.ad-panel .ad-section,
+.ad-panel .ad-section .ad-scroll,
+.ad-panel .ad-section .ad-list{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
+}
+.ad-panel .ad-section .ad-title{
+  width:100% !important;
+  max-width:100% !important;
+  box-sizing:border-box !important;
+}
+.ad-panel .ad-section .ad-list > .ad-box{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
+}
+
+/* Home main: all five product sections */
+.shop-row .shop-card,
+.thumb-grid[data-psom-key="home_1"] > *,
+.thumb-grid[data-psom-key="home_2"] > *,
+.thumb-grid[data-psom-key="home_3"] > *,
+.thumb-grid[data-psom-key="home_4"] > *,
+.thumb-grid[data-psom-key="home_5"] > *{
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  aspect-ratio:4 / 5 !important;
+  box-sizing:border-box !important;
+  overflow:hidden !important;
+}
+
+/* Preserve the existing card widths / horizontal row count; only make them taller. */
+.shop-row .shop-card{
+  width:250px !important;
+}
+.thumb-grid[data-psom-key="home_1"] > *,
+.thumb-grid[data-psom-key="home_2"] > *,
+.thumb-grid[data-psom-key="home_3"] > *,
+.thumb-grid[data-psom-key="home_4"] > *,
+.thumb-grid[data-psom-key="home_5"] > *{
+  flex-shrink:0 !important;
+}
+
+/* Give matched product media room while keeping title/details readable. */
+.thumb-grid[data-psom-key^="home_"] > * img,
+.thumb-grid[data-psom-key^="home_"] > * .thumb-img,
+.thumb-grid[data-psom-key^="home_"] > * .thumb,
+.shop-row .shop-card img{
+  width:100% !important;
+  max-width:100% !important;
+  object-fit:cover !important;
+}
+</style>
+
 </head>
 <body>
 <div class="container">
