@@ -2270,6 +2270,93 @@ a[id*="qna"]{
 }
 </style>
 
+
+<style id="igdc-home-rightpanel-broken-alt-center-final-v6">
+@media (min-width:1025px){
+  .ad-panel .ad-section .ad-list > .ad-box{
+    position:relative !important;
+  }
+
+  .ad-panel .ad-section .ad-list > .ad-box .igdc-broken-alt-label{
+    position:absolute !important;
+    left:8px !important;
+    right:8px !important;
+    top:50% !important;
+    transform:translateY(-50%) !important;
+    display:-webkit-box !important;
+    -webkit-box-orient:vertical !important;
+    -webkit-line-clamp:2 !important;
+    overflow:hidden !important;
+    width:auto !important;
+    max-width:none !important;
+    margin:0 !important;
+    padding:0 !important;
+    box-sizing:border-box !important;
+    text-align:center !important;
+    line-height:1.3 !important;
+    white-space:normal !important;
+    overflow-wrap:anywhere !important;
+    word-break:break-word !important;
+    color:#004080 !important;
+    font-weight:600 !important;
+    pointer-events:none !important;
+  }
+}
+</style>
+
+
+<style id="igdc-home-all-sample-name-center-final-v7">
+/* HOME sample-name alignment:
+   Main-page samples and right-panel samples are always centered.
+   Long labels wrap instead of overflowing. */
+@media (min-width:1025px){
+  /* Right panel sample labels */
+  .ad-panel .ad-section .ad-list > .ad-box .igdc-broken-alt-label,
+  .ad-panel .ad-section .ad-list > .ad-box .title,
+  .ad-panel .ad-section .ad-list > .ad-box [class*="title"]{
+    text-align:center !important;
+    justify-content:center !important;
+    align-items:center !important;
+    width:100% !important;
+    max-width:100% !important;
+    box-sizing:border-box !important;
+    margin-left:auto !important;
+    margin-right:auto !important;
+    padding-left:6px !important;
+    padding-right:6px !important;
+    white-space:normal !important;
+    overflow-wrap:anywhere !important;
+    word-break:break-word !important;
+  }
+
+  /* Main five home sections */
+  .thumb-grid[data-psom-key="home_1"] > * .title,
+  .thumb-grid[data-psom-key="home_2"] > * .title,
+  .thumb-grid[data-psom-key="home_3"] > * .title,
+  .thumb-grid[data-psom-key="home_4"] > * .title,
+  .thumb-grid[data-psom-key="home_5"] > * .title,
+  .thumb-grid[data-psom-key="home_1"] > * [class*="title"],
+  .thumb-grid[data-psom-key="home_2"] > * [class*="title"],
+  .thumb-grid[data-psom-key="home_3"] > * [class*="title"],
+  .thumb-grid[data-psom-key="home_4"] > * [class*="title"],
+  .thumb-grid[data-psom-key="home_5"] > * [class*="title"]{
+    text-align:center !important;
+    justify-content:center !important;
+    align-items:center !important;
+    width:100% !important;
+    max-width:100% !important;
+    box-sizing:border-box !important;
+    margin-left:auto !important;
+    margin-right:auto !important;
+    padding-left:6px !important;
+    padding-right:6px !important;
+    white-space:normal !important;
+    overflow-wrap:anywhere !important;
+    word-break:break-word !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div class="container">
@@ -4272,7 +4359,54 @@ window.addEventListener("message",function(ev){
   - window.__IGDC_ROLE 존재
  --------------------------------------------------
  삽입 위치:
-  - 각 페이지 </body> 바로 위
+  - 각 페이지 
+<script id="igdc-home-rightpanel-broken-alt-center-script-v6">
+(function(){
+  function fixBrokenRightPanelImages(root){
+    var scope = root || document;
+    scope.querySelectorAll('.ad-panel .ad-section .ad-list > .ad-box img').forEach(function(img){
+      if(img.dataset.igdcAltBound === '1') return;
+      img.dataset.igdcAltBound = '1';
+
+      function apply(){
+        if(img.complete && img.naturalWidth > 1) return;
+
+        var card = img.closest('.ad-box');
+        if(!card) return;
+
+        var alt = (img.getAttribute('alt') || '').trim();
+        if(!alt) return;
+
+        img.style.visibility = 'hidden';
+
+        var label = card.querySelector('.igdc-broken-alt-label');
+        if(!label){
+          label = document.createElement('div');
+          label.className = 'igdc-broken-alt-label';
+          card.appendChild(label);
+        }
+        label.textContent = alt;
+      }
+
+      img.addEventListener('error', apply, {once:false});
+      if(img.complete && img.naturalWidth <= 1) apply();
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){ fixBrokenRightPanelImages(document); });
+  } else {
+    fixBrokenRightPanelImages(document);
+  }
+
+  try{
+    new MutationObserver(function(){ fixBrokenRightPanelImages(document); })
+      .observe(document.documentElement, {childList:true, subtree:true});
+  }catch(_){}
+})();
+</script>
+
+</body> 바로 위
 */
 
 (function (window, document) {
