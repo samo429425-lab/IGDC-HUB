@@ -1030,6 +1030,79 @@ a[id*="qna"]{
 }
 </style>
 
+
+<style id="igdc-distribution-rightpanel-portrait-ratio-final-v1">
+/* Desktop-only nano patch: match Network/Tour/Social portrait card proportions.
+   Preserve the existing 4.5-card visible window by scaling the rail height with the new card size. */
+@media (min-width:1025px){
+  .brand-rail .thumb-grid[data-psom-key="distribution-right"]{
+    max-height:1446px !important; /* ~4.5 × 312.5px cards + existing 10px gaps */
+  }
+  .brand-rail .thumb-grid[data-psom-key="distribution-right"] > .thumb-card{
+    width:100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    aspect-ratio:4 / 5 !important;
+    flex:0 0 auto !important;
+    overflow:hidden !important;
+  }
+  .brand-rail .thumb-grid[data-psom-key="distribution-right"] > .thumb-card .thumb-img{
+    width:100% !important;
+    height:78% !important;
+    min-height:0 !important;
+    object-fit:cover !important;
+  }
+  .brand-rail .thumb-grid[data-psom-key="distribution-right"] > .thumb-card .thumb-title{
+    box-sizing:border-box !important;
+    min-height:22% !important;
+    margin-top:0 !important;
+    padding:6px 6px 4px !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+  }
+}
+</style>
+
+
+<style id="igdc-distribution-rightpanel-mobile-portrait-ratio-final-v1">
+/* Mobile/tablet only: preserve the existing mobile rail/scroller behavior,
+   while matching the desktop/right-panel card proportion at 4:5. */
+@media (max-width:1024px){
+  #mobile-ad-rail-list > .thumb-card,
+  .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"] > .thumb-card{
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    aspect-ratio:4 / 5 !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  #mobile-ad-rail-list > .thumb-card .thumb-img,
+  .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"] > .thumb-card .thumb-img{
+    width:100% !important;
+    height:78% !important;
+    min-height:0 !important;
+    max-height:none !important;
+    object-fit:cover !important;
+    aspect-ratio:auto !important;
+  }
+
+  #mobile-ad-rail-list > .thumb-card .thumb-title,
+  .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"] > .thumb-card .thumb-title{
+    box-sizing:border-box !important;
+    min-height:22% !important;
+    margin-top:0 !important;
+    padding:6px 6px 4px !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>

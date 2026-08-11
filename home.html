@@ -2017,6 +2017,52 @@ a[id*="qna"]{
 }
 </style>
 
+
+<style id="igdc-home-rightpanel-portrait-ratio-final-v1">
+/* Desktop-only nano patch: match the accepted right-panel portrait card ratio.
+   Keep section count/rotation/2.5-card viewport logic unchanged. */
+@media (min-width:1025px){
+  .ad-panel .ad-section .ad-list > .ad-box{
+    width:100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    aspect-ratio:4 / 5 !important;
+    flex:0 0 auto !important;
+  }
+  .ad-panel .ad-section .ad-list > .ad-box > a,
+  .ad-panel .ad-section .ad-list > .ad-box .thumb,
+  .ad-panel .ad-section .ad-list > .ad-box img{
+    width:100% !important;
+    height:100% !important;
+  }
+}
+</style>
+
+
+<style id="igdc-home-rightpanel-mobile-portrait-ratio-final-v1">
+/* Mobile/tablet only: keep the existing horizontal rail behavior and card count,
+   but use the same 4:5 portrait slot ratio as desktop. */
+@media (max-width:1024px){
+  html body .ad-panel .ad-section .ad-list > .ad-box{
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    aspect-ratio:4 / 5 !important;
+    overflow:hidden !important;
+  }
+  html body .ad-panel .ad-section .ad-list > .ad-box > a,
+  html body .ad-panel .ad-section .ad-list > .ad-box .thumb,
+  html body .ad-panel .ad-section .ad-list > .ad-box img{
+    width:100% !important;
+    height:100% !important;
+    max-height:none !important;
+    object-fit:cover !important;
+    aspect-ratio:auto !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div class="container">
