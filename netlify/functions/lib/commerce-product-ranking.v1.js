@@ -12,7 +12,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "commerce-product-ranking-v1.9.0-category-enrichment-balanced-private-placement";
+const VERSION = "commerce-product-ranking-v1.10.0-travel-detail-contract";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -114,7 +114,10 @@ const PRODUCT_ID_QUERY_KEYS = new Set([
   "goodsno", "goods_no", "goodsid", "goods_id", "goodscd", "goods_cd",
   "product_no", "productno", "productid", "product_id", "productseq", "product_seq",
   "prdno", "prd_no", "itemid", "item_id", "itemno", "item_no", "sku", "branduid",
-  "uid", "pid", "productcode", "product_code", "itemcode", "item_code"
+  "uid", "pid", "productcode", "product_code", "itemcode", "item_code",
+  "hotelid", "hotel_id", "roomid", "room_id", "activityid", "activity_id",
+  "attractionid", "attraction_id", "tourid", "tour_id", "ticketid", "ticket_id",
+  "packageid", "package_id", "bookingid", "booking_id"
 ]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -274,6 +277,14 @@ function isSpecificProductUrl(value) {
   if (productIdFromUrl(url)) return true;
   try {
     const path = lower(new URL(url).pathname);
+    // Travel inventory uses detail URL shapes that are different from retail
+    // goods pages (for example /hotel/kr/name.html or /activity/123-name).
+    // Treat only paths with an actual detail segment after the service family
+    // as specific; generic /hotel, /tour, /activity list pages stay excluded.
+    const travelDetail = /\/(?:hotels?)\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?[^/?#]{2,}(?:\.html?)?$/i.test(path) ||
+      /\/(?:activity|activities|attraction|attractions|experience|experiences|tour|tours|ticket|tickets|car-rental|cars)\/[^/?#]{2,}(?:\/[^/?#]{1,})?/i.test(path) ||
+      /\/(?:hotel-detail|hotel-information|property|properties)\/[^/?#]{2,}/i.test(path);
+    if (travelDetail) return true;
     if (/\.(?:php|html?|aspx?|jsp)$/i.test(path) && !/(?:goods_view|product_view|item_view|product_detail|goods_detail|shopdetail)/i.test(path)) return false;
     return /\/(?:dp\/prod|i\/item|goods\/view|product\/detail|products?\/[^/?#]{1,}|items?\/[^/?#]{1,}|detail\/[^/?#]{1,}|goods\/(?:view|detail)\/[^/?#]{1,}|prd\/[^/?#]{1,})/i.test(path);
   } catch (_error) { return false; }

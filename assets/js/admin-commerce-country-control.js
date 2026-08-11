@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.11.0
+/* IGDC Global/Region/Country Commerce Control v3.10.0
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -426,9 +426,9 @@
   function selectedProductIds(sectionKey){return productRows.filter(function(row){return frontSelectedProducts[text(row&&row.id)]===true&&(!sectionKey||assignedSectionKey(row)===sectionKey);}).map(function(row){return text(row.id);}).filter(Boolean);}
   function sectionRows(sectionKey){return productRows.filter(function(row){return productDecision(row)==='slot_candidate'&&assignedSectionKey(row)===sectionKey;});}
   function syncFrontSelectionControls(){
-    var busy=productLoopActive||productAutomationActive||productFrontSyncActive,matchBusy=busy,sections=selectedSectionKeys(),placed=productRows.filter(function(row){return productDecision(row)==='slot_candidate'&&!!assignedSectionKey(row);}),matchable=placed.filter(function(row){return!frontPublicationActive(row);}),active=placed.filter(frontPublicationActive);
+    var busy=productLoopActive||productAutomationActive||productFrontSyncActive,matchBusy=busy,sections=selectedSectionKeys(),placed=productRows.filter(function(row){return productDecision(row)==='slot_candidate'&&!!assignedSectionKey(row);}),active=productRows.filter(frontPublicationActive),refreshable=productRows.filter(function(row){return(productDecision(row)==='slot_candidate'&&!!assignedSectionKey(row))||frontPublicationActive(row);});
     if($('selectedSectionCount'))$('selectedSectionCount').textContent='선택 섹션 '+sections.length+'개';
-    setButtonEnabled('selectedSectionsMatchBtn',!matchBusy&&sections.some(function(key){return sectionRows(key).some(function(row){return!frontPublicationActive(row);});}));setButtonEnabled('allSectionsMatchBtn',!matchBusy&&matchable.length>0);setButtonEnabled('selectedSectionsUnmatchBtn',!busy&&sections.some(function(key){return sectionRows(key).some(frontPublicationActive);}));setButtonEnabled('allSectionsUnmatchBtn',!busy&&active.length>0);
+    setButtonEnabled('selectedSectionsMatchBtn',!matchBusy&&sections.some(function(key){return sectionRows(key).some(function(row){return productDecision(row)==='slot_candidate'||frontPublicationActive(row);});}));setButtonEnabled('allSectionsMatchBtn',!matchBusy&&refreshable.length>0);setButtonEnabled('selectedSectionsUnmatchBtn',!busy&&sections.some(function(key){return sectionRows(key).some(frontPublicationActive);}));setButtonEnabled('allSectionsUnmatchBtn',!busy&&active.length>0);
     Array.prototype.forEach.call(document.querySelectorAll('[data-section-front-select]'),function(box){box.checked=frontSelectedSections[box.value]===true;box.disabled=busy||sectionRows(box.value).length===0;});
     Array.prototype.forEach.call(document.querySelectorAll('[data-product-front-select]'),function(box){box.checked=frontSelectedProducts[box.value]===true;box.disabled=busy;});
     PRODUCT_SECTIONS.forEach(function(section){var ids=selectedProductIds(section.key),rows=sectionRows(section.key),all=$('sectionProductSelectAll-'+section.key.replace(/[^a-z0-9_-]/gi,'_')),count=$('sectionProductSelectedCount-'+section.key.replace(/[^a-z0-9_-]/gi,'_'));if(all){all.checked=rows.length>0&&ids.length===rows.length;all.indeterminate=ids.length>0&&ids.length<rows.length;all.disabled=busy||!rows.length;}if(count)count.textContent='선택 상품 '+ids.length+'건';Array.prototype.forEach.call(document.querySelectorAll('[data-selected-products-front="'+section.key+'"]'),function(button){var unmatch=button.getAttribute('data-front-operation')==='unmatch';button.disabled=(unmatch?busy:matchBusy)||!ids.length||(unmatch&&!rows.some(function(row){return ids.indexOf(text(row.id))>=0&&frontPublicationActive(row);}));});});
@@ -484,11 +484,11 @@
     if(!selectedCountry||productAutomationActive)return;
     if(!lastProductJson||!productRows.length){show('AI 자동 배치할 상품 조사 결과가 없습니다. 상품 조사를 먼저 실행해 주세요.','warn');return;}
     if(lastProductJson.candidateLedger===true){
-      var selectedModeLedger=mode==='products',selectedLedgerIds=Array.isArray(productIds)?productIds.map(text).filter(Boolean):[],targets=productRows.filter(function(row){if(row.ledgerSource!=='candidate')return false;if(selectedModeLedger&&selectedLedgerIds.indexOf(text(row.id))<0)return false;if(mode==='repair')return productDecision(row)==='slot_candidate'&&!assignedSectionKey(row);if(mode==='section')return productDecision(row)==='undecided'&&candidatePlacementKey(row)===sectionKey;return productDecision(row)==='undecided';}).map(function(row){return text(row.candidateId||row.id);}).filter(Boolean);
-      if(!targets.length){show('현재 범위에 AI 자동 복구할 미배정 후보가 없습니다.','warn');return;}
-      if(!window.confirm('미배정 후보 '+targets.length+'건을 저장된 섹션 추천 근거로 6건씩 안전하게 복구하시겠습니까?\n\n전체 상품 리서치 원장은 다시 읽지 않으며, 후보 배치만 저장합니다. 자동 공개·결제는 실행하지 않습니다.'))return;
-      productAutomationActive=true;var ledgerState=$('productAiAutomationState');if(ledgerState){ledgerState.className='product-auto-state running';ledgerState.textContent='미배정 후보 '+targets.length+'건을 후보 원장에서 6건씩 복구 중입니다.';}
-      try{var assignedTotal=0,unassignedTotal=0;for(var off=0;off<targets.length;off+=6){var batch=targets.slice(off,off+6);if(ledgerState)ledgerState.textContent='미배정 후보 복구 '+Math.min(off+batch.length,targets.length)+'/'+targets.length+'건';var part=await api(CONTROL,'product_candidate_ai_recover','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateIds:batch});assignedTotal+=Number(part.assigned||0);unassignedTotal+=Number(part.unassigned||0);}await refreshCandidateLedgerProducts();if(ledgerState){ledgerState.className='product-auto-state complete';ledgerState.textContent='미배정 후보 복구 완료 · 섹션 후보 '+assignedTotal+'건 · 미배정 유지 '+unassignedTotal+'건';}show('미배정 후보를 섹션 후보로 '+assignedTotal+'건 복구했습니다. 전체 상품 원장은 다시 렌더링하지 않았습니다.','ok');}catch(e){if(ledgerState){ledgerState.className='product-auto-state warn';ledgerState.textContent='후보 복구 중단 · 완료된 묶음은 보존됩니다.';}show((text(e&&e.message)||'미배정 후보 복구가 중단됐습니다.')+' 완료된 6건 단위 저장은 보존됩니다.','fail');}finally{productAutomationActive=false;renderProducts(productRows);}return;
+      var selectedModeLedger=mode==='products',selectedLedgerIds=Array.isArray(productIds)?productIds.map(text).filter(Boolean):[],targets=productRows.filter(function(row){if(row.ledgerSource!=='candidate')return false;if(selectedModeLedger&&selectedLedgerIds.indexOf(text(row.id))<0)return false;var decision=productDecision(row);if(decision==='reject'||decision==='purge')return false;if(mode==='repair')return decision==='slot_candidate'&&!assignedSectionKey(row);if(mode==='section')return assignedSectionKey(row)===sectionKey||candidatePlacementKey(row)===sectionKey;return decision==='undecided'||decision==='slot_candidate'||decision==='hold';}).map(function(row){return text(row.candidateId||row.id);}).filter(Boolean);
+      if(!targets.length){show('현재 범위에 재검증·자동 배치할 상품 후보가 없습니다.','warn');return;}
+      if(!window.confirm('상품 후보 '+targets.length+'건의 실제 상세페이지를 다시 확인하고, 살아 있는 상품만 섹션 후보로 재정렬하시겠습니까?\n\n삭제·잘못된 접근·판매처 홈 리다이렉트 상품은 후보에서 보류하고, 정상 예비상품을 다시 배치합니다. 이 단계에서는 프론트 공개·결제를 실행하지 않습니다.'))return;
+      productAutomationActive=true;var ledgerState=$('productAiAutomationState');if(ledgerState){ledgerState.className='product-auto-state running';ledgerState.textContent='상품 후보 '+targets.length+'건을 6건씩 실제 페이지 재검증·자동 배치 중입니다.';}
+      try{var assignedTotal=0,unassignedTotal=0,invalidTotal=0,inconclusiveTotal=0,changedTotal=0,revalidatedTotal=0,preservedTotal=0;for(var off=0;off<targets.length;off+=6){var batch=targets.slice(off,off+6);if(ledgerState)ledgerState.textContent='후보 실제 페이지 재검증 '+Math.min(off+batch.length,targets.length)+'/'+targets.length+'건';var part=await api(CONTROL,'product_candidate_ai_recover','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateIds:batch});assignedTotal+=Number(part.assigned||0);unassignedTotal+=Number(part.unassigned||0);invalidTotal+=Number(part.invalid||0);inconclusiveTotal+=Number(part.inconclusive||0);changedTotal+=Number(part.changedSection||0);revalidatedTotal+=Number(part.revalidated||0);preservedTotal+=Number(part.preserved||0);}await refreshCandidateLedgerProducts();if(ledgerState){ledgerState.className='product-auto-state '+(invalidTotal||inconclusiveTotal?'warn':'complete');ledgerState.textContent='후보 갱신 완료 · 재검증 '+revalidatedTotal+'건 · 정상 배치 '+assignedTotal+'건 · 삭제/불량 '+invalidTotal+'건 · 일시 확인보류 '+inconclusiveTotal+'건 · 섹션 재분류 '+changedTotal+'건 · 관리자 고정 유지 '+preservedTotal+'건';}show('실제 상품 페이지 '+revalidatedTotal+'건을 다시 확인했습니다. 삭제·잘못된 접근·홈 리다이렉트 '+invalidTotal+'건은 제거 대상으로 표시했고, 403·429·일시 서버오류처럼 삭제를 확정할 수 없는 '+inconclusiveTotal+'건은 기존 공개 상태를 보존하되 신규 공개는 보류합니다.',invalidTotal||inconclusiveTotal?'warn':'ok');}catch(e){if(ledgerState){ledgerState.className='product-auto-state warn';ledgerState.textContent='후보 재검증 중단 · 완료된 묶음은 보존됩니다.';}show((text(e&&e.message)||'후보 재검증이 중단됐습니다.')+' 완료된 6건 단위 갱신은 보존됩니다.','fail');}finally{productAutomationActive=false;renderProducts(productRows);}return;
     }
     var sectionMode=mode==='section',repairMode=mode==='repair',selectedMode=mode==='products',selectedIds=Array.isArray(productIds)?productIds.filter(Boolean):[],label=sectionMode?sectionLabel(sectionKey):(repairMode?'배정정보 복구 필요 후보':(selectedMode?'선택 후보 '+selectedIds.length+'건':'현재 국가 전체 18개 섹션'));
     if(selectedMode&&!selectedIds.length){show('AI 자동 배치할 후보를 선택해 주세요.','warn');return;}
@@ -547,7 +547,7 @@
     if(sectionsMode&&!selectedSections.length){show('매칭할 섹션을 먼저 선택해 주세요.','warn');return;}if(candidatesMode&&!selectedProducts.length){show('매칭할 상품을 먼저 선택해 주세요.','warn');return;}
     var selectedProductMap={};selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
     var targetRows=productRows.filter(function(row){
-      var key=assignedSectionKey(row),id=text(row&&row.id),eligible=unmatch?frontPublicationActive(row):(productDecision(row)==='slot_candidate'&&!!key&&!frontPublicationActive(row));
+      var key=assignedSectionKey(row),id=text(row&&row.id),eligible=unmatch?frontPublicationActive(row):((productDecision(row)==='slot_candidate'&&!!key)||frontPublicationActive(row));
       if(!eligible)return false;
       if(candidateMode)return id===text(productId);
       if(candidatesMode)return selectedProductMap[id]===true;
@@ -556,19 +556,10 @@
       return true;
     });
     var targetIds=targetRows.map(function(row){return text(row.id);}).filter(Boolean);
-    if(!targetIds.length&&!unmatch){
-      var activeRows=productRows.filter(function(row){var key=assignedSectionKey(row);if(!frontPublicationActive(row)||!key)return false;if(candidateMode)return text(row.id)===text(productId);if(candidatesMode)return selectedProductMap[text(row.id)]===true;if(sectionMode)return key===sectionKey;if(sectionsMode)return selectedSections.indexOf(key)>=0;return true;});
-      if(activeRows.length){
-        var active=activeRows[0],front=active.frontPublication||{};
-        if(!window.confirm(label+'은 이미 관리자 발행 원장에 저장되어 있습니다.\n\n프론트 Snapshot 빌드만 다시 호출하시겠습니까?'))return;
-        productFrontSyncActive=true;var retryState=$('productFrontSyncState');if(retryState){retryState.className='front-sync-state running';retryState.textContent=label+' · 저장된 발행 원장으로 프론트 빌드 재호출 중';}
-        try{var retry=await api(CONTROL,'product_front_release','POST',{}, {confirmation:'SITE_PUBLISH',candidateId:text(active.candidateId||active.id),assignmentId:text(front.assignmentId),candidateCount:activeRows.length});if(retryState){retryState.className='front-sync-state '+(retry.queued===true?'complete':'warn');retryState.textContent=retry.queued===true?label+' · 프론트 빌드 재호출 완료':label+' · 발행 원장은 유지됨 · 빌드 호출 대기';}show(retry.queued===true?'저장된 프론트 매칭 원장으로 Snapshot 빌드를 다시 호출했습니다.':'프론트 매칭 원장은 유지되어 있습니다. 빌드 훅 응답을 확인하세요.',retry.queued===true?'ok':'warn');}catch(retryError){if(retryState){retryState.className='front-sync-state warn';retryState.textContent=label+' · 원장 유지 · 빌드 재호출 실패';}show(text(retryError&&retryError.message)||'프론트 빌드 재호출에 실패했습니다.','fail');}finally{productFrontSyncActive=false;renderProducts(productRows);}return;
-      }
-    }
-    if(!targetIds.length){show(unmatch?'선택 범위에 매칭 해제할 상품이 없습니다.':'선택 범위에 새로 프론트 매칭할 상품이 없습니다.','warn');return;}
-    var explanation=unmatch?label+'의 기존 프론트 매칭 해제를 요청합니다.':label+'을 기존 실상품 공개 안전 게이트와 빌드 대기열에 전달합니다. 검증·수익권·공개 조건을 통과하지 못한 상품은 자동으로 차단됩니다.';
+    if(!targetIds.length){show(unmatch?'선택 범위에 매칭 해제할 상품이 없습니다.':'선택 범위에 최종 재검증·프론트 적용할 상품이 없습니다.','warn');return;}
+    var explanation=unmatch?label+'의 기존 프론트 매칭 해제를 요청합니다.':label+'의 실상품 상세페이지를 최종 재확인한 뒤 프론트에 갱신 적용합니다. 삭제·잘못된 접근·판매처 홈 리다이렉트 상품은 현재 매칭에서 제거하고, AI 자동 배치에서 확보한 정상 예비상품이 있으면 대신 적용합니다. 대체 후보가 없으면 기존 샘플 fallback이 유지됩니다.';
     if(!window.confirm(explanation+'\n\n'+(unmatch?'프론트에서 해당 매칭을 해제하시겠습니까?\n상품 원장과 비공개 배치 예정 목록은 그대로 유지됩니다.':'프론트 실상품 매칭 절차를 실행하시겠습니까?\n확인을 누르면 6건씩 안전하게 나누어 저장하고, 완료된 묶음은 중간 오류가 나도 보존됩니다.')))return;
-    productFrontSyncActive=true;var state=$('productFrontSyncState'),batchSize=6,aggregate={requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],preparation:{requested:0,prepared:0,blocked:0}},batchError=null;
+    productFrontSyncActive=true;var state=$('productFrontSyncState'),batchSize=6,aggregate={requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,revalidated:0,invalid:0,inconclusive:0,withdrawn:0,changedSection:0,items:[],preparation:{requested:0,prepared:0,blocked:0}},batchError=null;
     if(state){state.className='front-sync-state running';state.textContent=label+' '+(unmatch?'매칭 해제':'프론트 실상품 매칭')+' · '+targetIds.length+'건을 '+batchSize+'건씩 처리합니다.';}
     renderProducts(productRows);
     try{
@@ -577,26 +568,18 @@
         var batch=targetIds.slice(offset,offset+batchSize);
         if(state){state.className='front-sync-state running';state.textContent=label+' · '+Math.min(offset+batch.length,targetIds.length)+'/'+targetIds.length+'건 처리 중';}
         try{
-          var part=await api(CONTROL,action,'POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',mode:'candidates',candidateIds:batch,ledgerMode:'candidate',confirmation:confirmation,compactResponse:true,deferBuild:!unmatch,totalRequested:targetIds.length});
+          var part=await api(CONTROL,action,'POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',mode:'candidates',candidateIds:batch,ledgerMode:'candidate',confirmation:confirmation,compactResponse:true});
           var r=part.frontSyncResult||{},p=r.preparation||{};
-          aggregate.requested+=Number(r.requested||p.requested||batch.length);aggregate.queued+=Number(r.queued||0);aggregate.persisted+=Number(r.persisted||0);aggregate.pendingBuild+=Number(r.pendingBuild||0);aggregate.blocked+=Number(r.blocked||p.blocked||0);aggregate.items=aggregate.items.concat(Array.isArray(r.items)?r.items:[]);aggregate.preparation.requested+=Number(p.requested||0);aggregate.preparation.prepared+=Number(p.prepared||0);aggregate.preparation.blocked+=Number(p.blocked||0);aggregate.release=r.release||aggregate.release;
+          var refresh=r.refresh||{};aggregate.requested+=Number(r.requested||p.requested||batch.length);aggregate.queued+=Number(r.queued||0);aggregate.persisted+=Number(r.persisted||0);aggregate.pendingBuild+=Number(r.pendingBuild||0);aggregate.blocked+=Number(r.blocked||p.blocked||0);aggregate.revalidated+=Number(refresh.revalidated||0);aggregate.invalid+=Number(refresh.invalid||0);aggregate.inconclusive+=Number(refresh.inconclusive||0);aggregate.withdrawn+=Number(refresh.withdrawn||refresh.withdrawRequested||0);aggregate.changedSection+=Number(refresh.changedSection||0);aggregate.items=aggregate.items.concat(Array.isArray(r.items)?r.items:[]);aggregate.preparation.requested+=Number(p.requested||0);aggregate.preparation.prepared+=Number(p.prepared||0);aggregate.preparation.blocked+=Number(p.blocked||0);aggregate.release=r.release||aggregate.release;
         }catch(batchFailure){batchError=batchFailure;break;}
-      }
-      if(!unmatch&&aggregate.persisted>0&&!batchError){
-        try{
-          var triggerItem=(aggregate.items||[]).find(function(item){return item&&item.persisted===true&&text(item.candidateId);})||{};
-          var releasePart=await api(CONTROL,'product_front_release','POST',{}, {confirmation:'SITE_PUBLISH',candidateId:text(triggerItem.candidateId),assignmentId:text(triggerItem.assignmentId),candidateCount:aggregate.persisted});
-          aggregate.release=releasePart.release||aggregate.release;
-          if(releasePart.queued===true){aggregate.queued=aggregate.persisted;aggregate.pendingBuild=0;}
-        }catch(releaseFailure){batchError=releaseFailure;}
       }
       try{await refreshCandidateLedgerProducts();}catch(_refreshFailure){}
       var result=aggregate,requested=Number(result.requested||0),prepared=Number(result.preparation&&result.preparation.prepared||0),queued=Number(result.queued||0),persisted=Number(result.persisted||0),pendingBuild=Number(result.pendingBuild||0),blocked=Number(result.blocked||0),reasonCounts={};
       (Array.isArray(result.items)?result.items:[]).forEach(function(item){if(!item||item.queued===true||item.persisted===true)return;var reason=text(item.reason)||text(item.status)||'blocked';reasonCounts[reason]=(reasonCounts[reason]||0)+1;});
       var topReasons=Object.keys(reasonCounts).sort(function(a,b){return reasonCounts[b]-reasonCounts[a];}).slice(0,3).map(function(reason){return reason+' '+reasonCounts[reason]+'건';}),reasonText=topReasons.length?' · 주요 차단: '+topReasons.join(' / '):'';
-      var detail=' · 개방 준비 '+prepared+'건 · 관리자 발행 원장 저장 '+persisted+'건'+(queued?' · 빌드 호출 '+queued+'건':'')+(pendingBuild?' · 다음 배포 대기 '+pendingBuild+'건':'');
+      var detail=' · 최종 재검증 '+Number(result.revalidated||0)+'건 · 삭제/불량 '+Number(result.invalid||0)+'건 · 일시 확인보류 '+Number(result.inconclusive||0)+'건 · 기존 매칭 제거 '+Number(result.withdrawn||0)+'건 · 개방 준비 '+prepared+'건 · 관리자 발행 원장 저장 '+persisted+'건'+(queued?' · 빌드 호출 '+queued+'건':'')+(pendingBuild?' · 다음 배포 대기 '+pendingBuild+'건':'');
       if(state){state.className='front-sync-state '+(batchError||blocked||pendingBuild?'warn':'complete');state.textContent=label+' · 요청 '+requested+'/'+targetIds.length+'건 · 원장 저장 '+persisted+'건 · 빌드 호출 '+queued+'건 · 차단 '+blocked+'건'+detail+reasonText+(batchError?' · 중단 지점부터 재실행 가능':'');}
-      var message=(unmatch?'프론트 매칭 해제':'프론트 실상품 매칭')+' '+requested+'/'+targetIds.length+'건 처리 · 관리자 원장 '+persisted+'건 저장.';
+      var message=(unmatch?'프론트 매칭 해제':'프론트 실상품 갱신 적용')+' '+requested+'/'+targetIds.length+'건 처리 · 최종 재검증 '+Number(result.revalidated||0)+'건 · 삭제/불량 '+Number(result.invalid||0)+'건 · 일시 확인보류 '+Number(result.inconclusive||0)+'건 · 기존 매칭 제거 '+Number(result.withdrawn||0)+'건 · 관리자 원장 '+persisted+'건 저장.';
       if(queued)message+=' 스냅샷 빌드 호출 '+queued+'건.';if(pendingBuild)message+=' 다음 정상 배포 대기 '+pendingBuild+'건.';if(blocked)message+=' 안전 게이트 차단 '+blocked+'건.'+reasonText;if(batchError)message+=' 일부 묶음에서 '+(text(batchError&&batchError.message)||'응답 지연')+'이 발생했습니다. 완료된 묶음은 보존됐으며 같은 버튼을 누르면 미처리 상품만 이어서 처리합니다.';
       show(message,batchError||blocked||pendingBuild?'warn':'ok');
     }finally{productFrontSyncActive=false;renderProducts(productRows);}

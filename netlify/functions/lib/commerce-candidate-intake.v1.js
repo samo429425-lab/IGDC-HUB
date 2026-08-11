@@ -19,7 +19,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const AffiliateRegistry = require("./affiliate-program-registry.v1");
 
-const VERSION = "commerce-candidate-intake-v1.4.0-explicit-admin-safe-referral";
+const VERSION = "commerce-candidate-intake-v1.5.0-explicit-admin-withdrawal";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -389,20 +389,25 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
 }
 function build(input){
   const root=rootOf(input); const policyPack=loadPolicy(root); const policy=policyPack.policy; const affiliateRegistry=AffiliateRegistry.load(root); const environmentGate=releaseGate(policy,input); const queue=loadReviewQueue(root,policy);
-  const queueAuthorization=plain(queue.releaseAuthorization);
-  const authoritativeAdminQueue=!queue.stale && queueAuthorization.authoritative===true && lower(queueAuthorization.mode)==="explicit-admin-publication-request";
-  const explicitAdminRequest=authoritativeAdminQueue && queueAuthorization.explicitAdminRequest===true && Number(queueAuthorization.requestedCount||0)>0;
+  const queueAuthorization=plain(queue.releaseAuthorization), authorizationMode=lower(queueAuthorization.mode);
+  const explicitAdminRequest=queueAuthorization.explicitAdminRequest===true && Number(queueAuthorization.requestedCount||0)>0;
+  const explicitAdminWithdrawal=queueAuthorization.explicitAdminWithdrawal===true && Number(queueAuthorization.withdrawnCount||0)>0;
+  const recognizedAuthorizationMode=["explicit-admin-publication-request","explicit-admin-unpublication-request"].includes(authorizationMode);
+  const authoritativeAdminQueue=!queue.stale && queueAuthorization.authoritative===true && recognizedAuthorizationMode && (explicitAdminRequest||explicitAdminWithdrawal);
   const gate={
     enabled:environmentGate.enabled===true || authoritativeAdminQueue,
-    mode:environmentGate.enabled===true?"release_enabled":(explicitAdminRequest?"explicit_admin_publication_request":"authoritative_admin_queue_empty"),
-    reason:environmentGate.enabled===true?environmentGate.reason:(explicitAdminRequest?"authenticated-admin-publication-request-in-queue":"authoritative-admin-queue-empty"),
+    mode:environmentGate.enabled===true?"release_enabled":(explicitAdminRequest?"explicit_admin_publication_request":(explicitAdminWithdrawal?"explicit_admin_unpublication_request":"authoritative_admin_queue_empty")),
+    reason:environmentGate.enabled===true?environmentGate.reason:(explicitAdminRequest?"authenticated-admin-publication-request-in-queue":(explicitAdminWithdrawal?"authenticated-admin-unpublication-request-in-queue":"authoritative-admin-queue-empty")),
     keyPresent:environmentGate.keyPresent===true,
     keyLength:environmentGate.keyLength,
     environmentEnabled:environmentGate.enabled===true,
     authoritativeAdminQueue,
     explicitAdminRequest,
+    explicitAdminWithdrawal,
     requestedCount:Number(queueAuthorization.requestedCount||0),
+    withdrawnCount:Number(queueAuthorization.withdrawnCount||0),
     scopeKeys:array(queueAuthorization.scopeKeys).map(text).filter(Boolean),
+    withdrawalScopeKeys:array(queueAuthorization.withdrawalScopeKeys).map(text).filter(Boolean),
     crossCountryFallback:false
   };
   const raw=array(input&&input.items); const all=[]; let skippedNonCommerce=0;
@@ -445,9 +450,9 @@ function build(input){
     if(decision.sourceTier==="approved_commerce_member") candidate.managedPriority=true;
     return candidate;
   });
-  const summary={receivedSearchBank:raw.length,skippedNonCommerce,receivedReviewQueue:queue.stale?0:queue.items.length,queueStale:queue.stale,queueAuthoritative:authoritativeAdminQueue,explicitAdminRequested:Number(queueAuthorization.requestedCount||0),considered:decisions.length,eligibleForRelease:decisions.filter(x=>x.releaseEligible).length,releasedToCanonical:outputItems.length,held:decisions.filter(x=>!x.releaseEligible).length,bySource:{},byReason:{}};
+  const summary={receivedSearchBank:raw.length,skippedNonCommerce,receivedReviewQueue:queue.stale?0:queue.items.length,queueStale:queue.stale,queueAuthoritative:authoritativeAdminQueue,explicitAdminRequested:Number(queueAuthorization.requestedCount||0),explicitAdminWithdrawn:Number(queueAuthorization.withdrawnCount||0),considered:decisions.length,eligibleForRelease:decisions.filter(x=>x.releaseEligible).length,releasedToCanonical:outputItems.length,held:decisions.filter(x=>!x.releaseEligible).length,bySource:{},byReason:{}};
   decisions.forEach(x=>{ summary.bySource[x.sourceTier||"unknown"]=(summary.bySource[x.sourceTier||"unknown"]||0)+1; x.reasons.forEach(r=>summary.byReason[r]=(summary.byReason[r]||0)+1); });
-  const stageDoc={schema:"commerce-candidate-staging.snapshot.v1",version:VERSION,generatedAt:now(),policy:{version:policy.version,fingerprint:policyPack.fingerprint},affiliateRegistry:{version:affiliateRegistry.raw&&affiliateRegistry.raw.version||AffiliateRegistry.VERSION,fingerprint:affiliateRegistry.fingerprint,ok:affiliateRegistry.ok,problems:affiliateRegistry.problems},releaseGate:{enabled:gate.enabled,mode:gate.mode,reason:gate.reason,keyPresent:gate.keyPresent,environmentEnabled:gate.environmentEnabled,authoritativeAdminQueue:gate.authoritativeAdminQueue,explicitAdminRequest:gate.explicitAdminRequest,requestedCount:gate.requestedCount,scopeKeys:gate.scopeKeys,crossCountryFallback:false},source:{searchBankCount:raw.length,reviewQueueDigest:queue.digest,reviewQueueStale:queue.stale,reviewQueueAuthoritative:authoritativeAdminQueue},summary,candidates:decisions.map(x=>({candidateId:x.candidateId,sourceTier:x.sourceTier,origin:x.origin,stageStatus:x.stageStatus,releaseEligible:x.releaseEligible,reasons:x.reasons,essentialClass:x.essentialClass,placement:x.placement,marketKeys:x.marketKeys,heldMarketCount:x.heldMarketCount,heldMarketReasons:x.heldMarketReasons,revenue:x.revenue,review:x.review,ranking:x.ranking,destinationHost:x.destinationHost,digest:x.digest})),releaseCandidateIds:outputItems.map(x=>x.commerceCandidate.candidateId)};
+  const stageDoc={schema:"commerce-candidate-staging.snapshot.v1",version:VERSION,generatedAt:now(),policy:{version:policy.version,fingerprint:policyPack.fingerprint},affiliateRegistry:{version:affiliateRegistry.raw&&affiliateRegistry.raw.version||AffiliateRegistry.VERSION,fingerprint:affiliateRegistry.fingerprint,ok:affiliateRegistry.ok,problems:affiliateRegistry.problems},releaseGate:{enabled:gate.enabled,mode:gate.mode,reason:gate.reason,keyPresent:gate.keyPresent,environmentEnabled:gate.environmentEnabled,authoritativeAdminQueue:gate.authoritativeAdminQueue,explicitAdminRequest:gate.explicitAdminRequest,explicitAdminWithdrawal:gate.explicitAdminWithdrawal,requestedCount:gate.requestedCount,withdrawnCount:gate.withdrawnCount,scopeKeys:gate.scopeKeys,withdrawalScopeKeys:gate.withdrawalScopeKeys,crossCountryFallback:false},source:{searchBankCount:raw.length,reviewQueueDigest:queue.digest,reviewQueueStale:queue.stale,reviewQueueAuthoritative:authoritativeAdminQueue},summary,candidates:decisions.map(x=>({candidateId:x.candidateId,sourceTier:x.sourceTier,origin:x.origin,stageStatus:x.stageStatus,releaseEligible:x.releaseEligible,reasons:x.reasons,essentialClass:x.essentialClass,placement:x.placement,marketKeys:x.marketKeys,heldMarketCount:x.heldMarketCount,heldMarketReasons:x.heldMarketReasons,revenue:x.revenue,review:x.review,ranking:x.ranking,destinationHost:x.destinationHost,digest:x.digest})),releaseCandidateIds:outputItems.map(x=>x.commerceCandidate.candidateId)};
   const auditDoc={schema:"commerce-candidate-staging.audit.v1",version:VERSION,generatedAt:now(),policyFingerprint:policyPack.fingerprint,queueDigest:queue.digest,queueStale:queue.stale,releaseGate:{enabled:gate.enabled,mode:gate.mode,reason:gate.reason},summary,held:decisions.filter(x=>!x.releaseEligible).slice(0,50000).map(x=>({candidateId:x.candidateId,sourceTier:x.sourceTier,origin:x.origin,reasons:x.reasons,digest:x.digest}))};
   const digest=sha256({sourceItems:raw,queueDigest:queue.digest,policy:policyPack.fingerprint,affiliateRegistry:affiliateRegistry.fingerprint,stage:stageDoc.candidates,gate:{enabled:gate.enabled,mode:gate.mode}});
   if(input&&input.write!==false){ atomicWrite(outputPath(root,STAGING_FILE),stageDoc); atomicWrite(outputPath(root,AUDIT_FILE),auditDoc); }

@@ -148,25 +148,39 @@ function upstreamMirrorFiles() {
 }
 
 /*
- * Snapshot publication is allowed only with a confirmed, non-empty upstream
- * candidate set. Ordinary site/admin updates must preserve the committed
- * SearchBank and front Snapshot files exactly as they are.
+ * Snapshot publication normally requires an explicit administrator publication
+ * queue. The only authoritative empty queue is a durable, explicit
+ * administrator unpublication request written by the go-live audit flow. This
+ * distinction lets "no healthy replacement" restore sample fallbacks without
+ * allowing an ordinary empty queue to erase committed real-product snapshots.
  */
 function loadConfirmedUpstream(commerceRegistrySync) {
   const files = upstreamMirrorFiles();
   const mirrors = files.map(file => ({ path: path.relative(root, file).replace(/\\/g, "/"), present: fileExists(file) }));
+  const authorization = commerceRegistrySync && commerceRegistrySync.releaseAuthorization || {};
+  const requestedCount = Number(commerceRegistrySync && commerceRegistrySync.requestedCount || authorization.requestedCount || 0);
+  const withdrawnCount = Number(commerceRegistrySync && commerceRegistrySync.withdrawnCount || authorization.withdrawnCount || 0);
+  const explicitAdminRequest = authorization.explicitAdminRequest === true && requestedCount > 0;
+  const explicitAdminWithdrawal = authorization.explicitAdminWithdrawal === true && withdrawnCount > 0;
+  const recognizedMode = ["explicit-admin-publication-request", "explicit-admin-unpublication-request"].includes(String(authorization.mode || "").toLowerCase());
   const queueAuthoritative = !!(
     commerceRegistrySync &&
     commerceRegistrySync.ok === true &&
     commerceRegistrySync.status === "synchronized" &&
     commerceRegistrySync.authoritative === true &&
-    Number(commerceRegistrySync.requestedCount || 0) > 0
+    authorization.authoritative === true &&
+    recognizedMode &&
+    (explicitAdminRequest || explicitAdminWithdrawal)
   );
   const queueMeta = {
     authoritative: queueAuthoritative,
-    requestedCount: Number(commerceRegistrySync && commerceRegistrySync.requestedCount || 0),
+    requestedCount,
+    withdrawnCount,
+    explicitAdminRequest,
+    explicitAdminWithdrawal,
     scopeKeys: Array.isArray(commerceRegistrySync && commerceRegistrySync.scopeKeys) ? commerceRegistrySync.scopeKeys.slice() : [],
-    releaseAuthorization: commerceRegistrySync && commerceRegistrySync.releaseAuthorization || null
+    withdrawalScopeKeys: Array.isArray(commerceRegistrySync && commerceRegistrySync.withdrawalScopeKeys) ? commerceRegistrySync.withdrawalScopeKeys.slice() : [],
+    releaseAuthorization: authorization
   };
 
   if (queueAuthoritative) {
@@ -176,15 +190,19 @@ function loadConfirmedUpstream(commerceRegistrySync) {
       const requestedItems = Array.isArray(queueDoc && queueDoc.items)
         ? queueDoc.items.filter(item => item && item.publicationRequest && item.publicationRequest.requested === true)
         : [];
-      if (requestedItems.length !== queueMeta.requestedCount || requestedItems.length === 0) {
+      if (requestedItems.length !== queueMeta.requestedCount) {
         return { ok: false, reason: "authoritative-admin-queue-count-mismatch", mirrors, queueAuthoritative };
+      }
+      if (requestedItems.length === 0 && !explicitAdminWithdrawal) {
+        return { ok: false, reason: "authoritative-admin-queue-empty-without-withdrawal", mirrors, queueAuthoritative };
       }
       return {
         ok: true,
-        sourceMode: "authoritative-admin-review-queue",
+        sourceMode: requestedItems.length ? "authoritative-admin-review-queue" : "authoritative-admin-withdrawal-empty-queue",
         doc: Object.assign({}, queueDoc, { queue: queueMeta, items: requestedItems }),
         candidateCount: requestedItems.length,
         queueAuthoritative,
+        authoritativeWithdrawal: requestedItems.length === 0 && explicitAdminWithdrawal,
         mirrors
       };
     } catch (_error) {
@@ -219,7 +237,7 @@ function loadConfirmedUpstream(commerceRegistrySync) {
 
   return {
     ok: true,
-    sourceMode: queueAuthoritative ? "mirrored-sanmaru-searchbank-upstream+authoritative-admin-review-queue" : "mirrored-sanmaru-searchbank-upstream",
+    sourceMode: "mirrored-sanmaru-searchbank-upstream",
     doc: Object.assign({}, parsed[0].doc, { queue:queueMeta }),
     candidateCount: parsed[0].doc.items.length,
     queueAuthoritative,
@@ -380,18 +398,15 @@ async function main() {
   // never writes a public Snapshot and cannot by itself publish front cards.
   const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
 
-  // A publication queue is authoritative only when it contains at least one
-  // explicit administrator request. A zero-count queue is not a withdrawal
-  // command and must never erase the committed SearchBank/front snapshots.
+  // A generic zero-count queue is never authoritative. The sole exception is
+  // an explicit durable unpublication marker produced by the administrator
+  // refresh/repair flow; that intentional empty set restores sample fallback.
   const upstream = loadConfirmedUpstream(commerceRegistrySync);
   if (!upstream.ok) {
     writePreservedBuild(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors });
     return;
   }
-  const queueAuthoritative = upstream.queueAuthoritative === true || (
-    commerceRegistrySync && commerceRegistrySync.status === "synchronized" &&
-    commerceRegistrySync.authoritative === true && Number(commerceRegistrySync.requestedCount || 0) > 0
-  );
+  const queueAuthoritative = upstream.queueAuthoritative === true;
 
   // Capture the committed safe sample templates before Snapshot Engine writes
   // any real-product documents. They are restored at root whenever the request

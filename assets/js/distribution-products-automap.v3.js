@@ -66,25 +66,6 @@
   function pick(item,names){for(const name of names){const value=item&&item[name];if(value!==undefined&&value!==null&&value!=='')return value;}return '';}
   function escUrl(v){try{return String(v||'').replace(/'/g,'%27');}catch(_e){return '';}}
   function hasUsableDestination(value){const url=text(value).trim();return !!url&&url!=='#'&&!/^javascript:/i.test(url)&&!/\/pages\/coming-soon\.html/i.test(url)&&!/(?:^|\.)example\.com(?:[/:?#]|$)/i.test(url);}
-  function isSpecificProductDestination(value){
-    const url=text(value).trim(); if(!hasUsableDestination(url)) return false;
-    try{
-      const parsed=new URL(url,window.location.origin);
-      const internal=parsed.origin===window.location.origin;
-      if(!internal&&parsed.protocol!=='https:') return false;
-      if(parsed.pathname==='/'&&!parsed.search&&!parsed.hash) return false;
-      return true;
-    }catch(_e){ return url.charAt(0)==='/' && url!=='/'; }
-  }
-  function directProductDestination(item){
-    const direct=pick(item,['externalProductUrl','officialProductUrl','productUrl','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink']);
-    return isSpecificProductDestination(direct)?text(direct).trim():'';
-  }
-  function cardDestination(item){
-    const direct=directProductDestination(item); if(direct) return direct;
-    const routed=pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','url','href','link']);
-    return isSpecificProductDestination(routed)?text(routed).trim():'';
-  }
   function revenue(item,kind){
     try{
       if(window.MaruRevenueTracker&&typeof window.MaruRevenueTracker[kind]==='function'){
@@ -130,14 +111,9 @@
       description:pick(item,['description','summary']),
       thumb:pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']),
       image:pick(item,['image','thumbnail','thumb','imageUrl']),
-      url:pick(item,['url','href','link','affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url']),
-      href:pick(item,['href','url','link','affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url']),
-      link:pick(item,['link','url','href','affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url']),
-      externalProductUrl:pick(item,['externalProductUrl']),
-      officialProductUrl:pick(item,['officialProductUrl']),
-      productUrl:pick(item,['productUrl','productPageUrl']),
-      detailUrl:pick(item,['detailUrl']),
-      checkoutUrl:pick(item,['checkoutUrl']),
+      url:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','url','href','link']),
+      href:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','href','url','link']),
+      link:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','link','url','href']),
       affiliateOutboundUrl:pick(item,['affiliateOutboundUrl','affiliate_outbound_url']),
       externalOutboundUrl:pick(item,['externalOutboundUrl','external_outbound_url']),
       affiliate:item&&item.affiliate&&typeof item.affiliate==='object'?item.affiliate:null,
@@ -195,15 +171,14 @@
     const title=document.createElement('div'); title.className='thumb-title'; title.textContent=text(pick(item,['title','name','text'])||'Product');
     const meta=document.createElement('div'); meta.className='thumb-meta'; meta.textContent=text(pick(item,['meta','subtitle','summary','description']));
     root.appendChild(img); root.appendChild(title); root.appendChild(meta);
-    const href=cardDestination(item);
-    if(href){
+    const href=pick(item,['url','href','link']);
+    if(hasUsableDestination(href)){
       // Real product routes retain the renderer's original navigation path.
       root.dataset.igtcHooked='1';
       root.style.cursor='pointer'; root.setAttribute('role','link'); root.tabIndex=0;
       const open=function(){
         revenue(item,'trackClick');
-        try { (window.top || window).location.assign(href); }
-        catch(_e){ window.location.href=href; }
+        window.location.assign(href);
       };
       root.addEventListener('click',open);
       root.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
@@ -233,7 +208,7 @@
         const list=normalizeList(sections[cfg.key]||sections[ALIAS[cfg.key]]);
         hash=addHash(hash,cfg.key+':'+list.length+'|');
         list.forEach(function(item){
-          hash=addHash(hash,[pick(item,['id','uid','productId','contentId']),pick(item,['title','name','text']),pick(item,['meta','subtitle','summary','description']),pick(item,['thumb','thumbnail','image','imageUrl']),cardDestination(item)].join('\u001f'));
+          hash=addHash(hash,[pick(item,['id','uid','productId','contentId']),pick(item,['title','name','text']),pick(item,['meta','subtitle','summary','description']),pick(item,['thumb','thumbnail','image','imageUrl']),pick(item,['url','href','link'])].join('\u001f'));
         });
       });
       return (hash>>>0).toString(16);

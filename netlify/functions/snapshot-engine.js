@@ -34,7 +34,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.2-product-detail-contract";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.1-authoritative-page-route";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -263,51 +263,6 @@ function isPlaceholderUrlValue(url) {
   } catch (_e) {
     return false;
   }
-}
-
-function httpsProductDetailUrl(value) {
-  const raw = String(value || "").trim();
-  if (!raw || isPlaceholderUrlValue(raw)) return "";
-  try {
-    const u = new URL(raw);
-    if (u.protocol !== "https:") return "";
-    // A bare seller home page is not a product destination. Product pages may
-    // legitimately use the site root only when a query/hash identifies it.
-    if ((!u.pathname || u.pathname === "/") && !u.search && !u.hash) return "";
-    return u.toString();
-  } catch (_e) { return ""; }
-}
-
-function directProductUrlOf(raw) {
-  raw = raw || {};
-  const candidates = [
-    raw.externalProductUrl, raw.officialProductUrl, raw.productUrl, raw.productPageUrl,
-    raw.detailUrl, raw.checkoutUrl, raw.purchaseUrl, raw.orderUrl, raw.productLink,
-    raw?.productCard?.checkoutUrl, raw?.researchReadiness?.productCard?.checkoutUrl,
-    raw?.directCommerceListing?.destinationUrl, raw?.brokerageContract?.destinationUrl
-  ];
-  for (const candidate of candidates) {
-    const url = httpsProductDetailUrl(candidate);
-    if (url) return url;
-  }
-  return "";
-}
-
-function isQualifiedTourService(raw) {
-  if (!raw || typeof raw !== "object") return false;
-  if (raw.travelService === true || raw.tourService === true || raw.bookingService === true) return true;
-  // Use actual offer/service evidence only. Route-derived page/slot/product-class
-  // values can contain the very misclassification this defense is meant to catch.
-  const text = [
-    raw.title, raw.name, raw.summary, raw.description, raw.category, raw.type, raw.serviceType,
-    raw?.source?.name
-  ].filter(Boolean).join(" ").toLowerCase();
-  if (!text) return false;
-  // Physical travel accessories and generic "experience packs" are not Tour inventory.
-  if (/(여행용\s*(티슈|물티슈|휴지|세면|파우치)|포켓물티슈|체험팩|캠핑(의자|테이블|용품)|등산(스틱|용품)|아웃도어\s*(용품|장비)|travel\s*(size|tissue|wipe)|camping\s*gear|hiking\s*gear)/i.test(text)) return false;
-  if (/(숙박|호텔|리조트|관광|투어|입장권|여행티켓|여행패키지|여행상품|항공권|렌터카|렌트카|교통패스|철도패스|관광버스|크루즈|hotel|resort|tour\b|admission|travel\s*(?:ticket|package|booking)|flight\s*ticket|rental\s*car|rail\s*pass|transport\s*pass|cruise|booking)/i.test(text)) return true;
-  if (/(체험|experience|activity)/i.test(text) && /(예약|티켓|입장권|프로그램|관광|투어|현지|지역|booking|ticket|admission|program|tour|local)/i.test(text)) return true;
-  return false;
 }
 
 function isSampleAssetValue(src) {
@@ -742,17 +697,9 @@ function buildTrackingMeta(raw, context) {
     snapshotRecordId,
     sourceType: "snapshot_seed"
   };
-  // One public contract for every product-bearing front surface: preserve the
-  // exact seller product detail separately from tracking/outbound routes.
-  const directProductUrl = directProductUrlOf(raw);
-  if (directProductUrl) {
-    meta.productUrl = directProductUrl;
-    meta.externalProductUrl = directProductUrl;
-    meta.detailUrl = directProductUrl;
-    meta.checkoutUrl = directProductUrl;
-  }
-
   // Preserve only explicit outbound contracts already verified upstream.
+  // AutoMaps can then open the exact seller product page instead of falling
+  // back to an IGDC internal content route.
   const externalOutboundUrl = val(raw.externalOutboundUrl, raw.external_outbound_url);
   const affiliateOutboundUrl = val(raw.affiliateOutboundUrl, raw.affiliate_outbound_url);
   if (/^https:\/\//i.test(externalOutboundUrl)) meta.externalOutboundUrl = externalOutboundUrl;
@@ -1727,8 +1674,8 @@ function handleTourSnapshot(bank) {
   function isTour(item){
     if (!item || !pageMatches(item, "tour")) return false;
     const page = explicitPageOf(item);
-    if (page) return isQualifiedTourService(item);
-    return isQualifiedTourService(item) && (item.type === "tour" || item.category === "tour" || item.travel === true || item.travelService === true || item.tourService === true);
+    if (page) return true;
+    return item.type === "tour" || item.category === "tour" || item.travel === true;
   }
 
   /* ===== THUMB BUILDER ===== */

@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.11.0-canonical-front-two-phase-commit";
+const VERSION = "commerce-country-automation-v3.12.0-admin-refresh-repair";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2266,27 +2266,167 @@ async function productCandidateLedgerAction(actorId, input) {
   await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: payload, updated_at: now });
   return { ok: true, candidateLedger: true, candidateId, actionResult: { candidateId, decision, effectiveDecision, placement, status, publicPublication: false, paymentExecution: false } };
 }
-async function productCandidateAiRecover(actorId, input) {
-  const scope = researchScope(input), ids = Array.from(new Set(array(input && input.candidateIds).map(text).filter(Boolean))).slice(0, 12);
-  if (!ids.length) { const error = new Error("AI 복구할 미배정 상품 후보를 선택하세요."); error.statusCode = 400; throw error; }
-  const rows = await frontSyncSelectCandidates(ids), now = iso(), actor = text(actorId) || "administrator", results = [];
-  for (const rowInput of rows) {
-    const row = plain(rowInput), candidateId = text(row.id), payload = Object.assign({}, plain(row.source_payload)), control = plain(payload.managementControl), currentDecision = lower(payload.slotDecision || "undecided");
-    if (currentDecision !== "undecided" || control.administratorLocked === true) { results.push({ candidateId, status: "preserved", assigned: false, reason: "not_unassigned_or_administrator_locked" }); continue; }
-    const proposals = array(payload.proposedPlacements).filter((item) => validProductSectionKey(productPlacementKey(item)) && item && item.reviewEligible !== false && item.valueQualified !== false).sort((a,b) => Number(b && b.score || 0) - Number(a && a.score || 0) || PRODUCT_SECTION_KEYS.indexOf(productPlacementKey(a)) - PRODUCT_SECTION_KEYS.indexOf(productPlacementKey(b)));
-    const existingPlacement = plain(payload.approvedPlacement || payload.placement), picked = proposals[0] || (validProductSectionKey(productPlacementKey(existingPlacement)) ? existingPlacement : null);
-    const placement = picked ? candidateLedgerPlacementRecord(scope, picked, actor, "ai_automation") : null;
-    if (!placement) { results.push({ candidateId, status: "unassigned", assigned: false, reason: "no_valid_section_proposal" }); continue; }
-    payload.slotDecision = "slot_candidate"; payload.approvedPlacement = placement; payload.placement = placement; payload.decisionAt = now; payload.decisionBy = "ai-automation"; payload.decisionSource = "candidate_ledger_ai_recovery";
-    payload.managementControl = { schema: "igdc-product-management-control.v1", source: "ai_automation", administratorLocked: false, aiReclassificationAllowed: true, decidedAt: now, decidedBy: actor };
-    payload.review = Object.assign({}, plain(payload.review), { state: "pending", decidedAt: now, decidedBy: actor, approvalSource: "candidate_ledger_ai_recovery" }); payload.publicPublication = false; payload.automaticImport = false;
-    await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status: "approval_pending", source_payload: payload, updated_at: now });
-    results.push({ candidateId, status: "assigned", assigned: true, sectionKey: productPlacementKey(placement) });
-  }
-  const returned = new Set(rows.map((row) => text(row && row.id))); for (const id of ids) if (!returned.has(id)) results.push({ candidateId:id,status:"missing",assigned:false,reason:"candidate_not_found" });
-  return { ok: true, candidateLedger: true, requested: ids.length, assigned: results.filter((row) => row.assigned === true).length, unassigned: results.filter((row) => row.status === "unassigned").length, preserved: results.filter((row) => row.status === "preserved").length, missing: results.filter((row) => row.status === "missing").length, results, publicPublication: false, paymentExecution: false };
+function candidateRuntimeManualLock(payloadInput) {
+  const payload = plain(payloadInput), control = plain(payload.managementControl), placement = plain(payload.approvedPlacement || payload.placement), source = lower(control.source || payload.decisionSource);
+  return control.administratorLocked === true || control.aiReclassificationAllowed === false || source === "administrator" || (placement.administratorSelected === true && placement.aiSelected !== true);
 }
-
+function candidateRuntimeProduct(rowInput, scope) {
+  const row = plain(rowInput), payload = plain(row.source_payload), card = plain(payload.productCard), supplier = plain(payload.supplier), placement = plain(payload.approvedPlacement || payload.placement);
+  const url = safeUrl(first(payload.externalProductUrl, payload.productUrl, payload.url, row.official_url, card.checkoutUrl, card.productUrl));
+  if (!url) return null;
+  const image = safeUrl(first(payload.image, payload.thumb, payload.imageUrl, row.thumbnail_url, card.image, card.imageUrl));
+  return Object.assign({}, payload, {
+    candidateId: text(row.id), id: first(payload.originalProductId, row.id), productIdentity: first(payload.productIdentity, row.id),
+    productName: first(payload.title, row.title, card.title), title: first(payload.title, row.title, card.title), sourceTitle: first(payload.sourceTitle, card.sourceTitle),
+    productUrl: url, url, imageUrl: image, imageOriginalUrl: image, price: first(payload.price, card.price), priceCurrency: first(payload.priceCurrency, card.priceCurrency), availability: first(payload.availability, card.availability),
+    supplierId: first(supplier.id, payload.supplierId), supplierName: first(supplier.name, payload.supplierName, card.supplierName), supplierSiteUrl: first(supplier.officialUrl, payload.supplierSiteUrl, card.supplierUrl), supplierType: first(supplier.type, payload.supplierType), supplierTrustScore: Number(first(supplier.trustScore, payload.supplierTrustScore)) || 0, supplierEvidenceReady: supplier.evidenceReady === true || payload.supplierEvidenceReady === true,
+    productCategory: first(plain(payload.productRanking).category, payload.productCategory), productCategoryTags: array(plain(payload.productRanking).categoryTags).concat(array(payload.productCategoryTags)),
+    sectionAssignments: array(payload.proposedPlacements).map((item) => Object.assign({}, plain(item), { sectionKey: text(item && (item.sectionKey || item.section)) })),
+    approvedPlacement: Object.keys(placement).length ? placement : null, primaryPlacement: Object.keys(placement).length ? placement : null,
+    slotDecision: text(payload.slotDecision) || (["approved","revenue_ready","enrollable"].includes(lower(row.status)) ? "slot_candidate" : "undecided"),
+    inspectionComplete: payload.inspectionComplete === true, productPageLive: payload.productPageLive !== false, sameSupplierSite: payload.sameSupplierSite !== false,
+    researchStatus: first(payload.researchStatus, plain(payload.researchReadiness).stage, "research_review_ready"), publicPublication: false, automaticImport: false
+  });
+}
+function candidateRuntimeHealth(productInput) {
+  const product = plain(productInput), status = lower(product.researchStatus), risk = plain(product.riskAssessment), reasons = [];
+  const hardDeadStatuses = new Set(["http_404","http_410","http_401","invalid_product_url","product_page_explicit_invalid_message","product_page_redirected_to_seller_home"]);
+  const inconclusiveStatuses = new Set(["http_403","http_408","http_409","http_425","http_429","http_500","http_502","http_503","http_504","page_too_large","non_html","blocked","unavailable","inspection_error","timeout","aborterror","fetch_failed"]);
+  let hardDead = hardDeadStatuses.has(status), inconclusive = false;
+  if (!ProductRanking.isSpecificProductUrl(productUrl(product))) { reasons.push("specific_product_url_missing"); hardDead = true; }
+  if (!productImageUrl(product)) { reasons.push("actual_product_image_missing"); hardDead = true; }
+  if (product.sameSupplierSite === false) { reasons.push("supplier_product_domain_mismatch"); hardDead = true; }
+  if (risk.explicitUnavailable === true) { reasons.push("explicit_product_unavailable"); hardDead = true; }
+  if (product.productPageLive !== true) {
+    reasons.push(status || "product_page_unavailable");
+    if (!hardDead) inconclusive = inconclusiveStatuses.has(status) || /^http_5\d\d$/.test(status) || /^http_4\d\d$/.test(status);
+    if (!hardDead && !inconclusive) hardDead = true;
+  }
+  if (hardDeadStatuses.has(status)) reasons.push(status);
+  const state = hardDead ? "dead" : (inconclusive ? "inconclusive" : "live");
+  return { ok:state === "live", live:state === "live", dead:state === "dead", inconclusive:state === "inconclusive", state, reasons:Array.from(new Set(reasons.filter(Boolean))) };
+}
+function candidateRuntimePlacementOptions(productInput, payloadInput) {
+  const product = plain(productInput), payload = plain(payloadInput), category = ProductRanking.classifyCategory(product), travel = category.primary === "travel_local_services";
+  product.productCategory = category.primary; product.productCategoryTags = category.tags;
+  const byKey = new Map();
+  const source = array(payload.proposedPlacements).concat(array(product.sectionAssignments)).concat(privateReviewFallbackAssignments(product));
+  for (const itemInput of source) {
+    const item = plain(itemInput), key = productPlacementKey(item);
+    if (!validProductSectionKey(key)) continue;
+    if (key === "tour|tour" && !travel) continue;
+    if (item.reviewEligible === false || item.valueQualified === false) continue;
+    const prior = byKey.get(key), nextScore = Number(item.score || 0), priorScore = Number(prior && prior.score || 0);
+    if (!prior || nextScore > priorScore) byKey.set(key, Object.assign({}, item, { key }));
+  }
+  return { category, options: Array.from(byKey.values()).sort((a,b) => Number(b && b.score || 0) - Number(a && a.score || 0) || PRODUCT_SECTION_KEYS.indexOf(productPlacementKey(a)) - PRODUCT_SECTION_KEYS.indexOf(productPlacementKey(b))) };
+}
+function candidateRuntimePublishedStatus(value) { return ["publish_requested","published","matched","active","queued"].includes(lower(value)); }
+function candidateRuntimeAssignmentKey(rowInput) { const row = plain(rowInput); return text(row.hub_key) && text(row.slot_key) ? text(row.hub_key) + "|" + text(row.slot_key) : ""; }
+function candidateRuntimeCard(payloadInput, productInput) {
+  const payload = plain(payloadInput), product = plain(productInput), prior = plain(payload.productCard), url = productUrl(product), image = productImageUrl(product), title = first(product.productName, product.title, prior.title), supplierUrl = safeUrl(first(product.supplierSiteUrl, prior.supplierUrl)), supplierName = first(product.supplierName, prior.supplierName);
+  return Object.assign({}, prior, { title, sourceTitle:first(product.sourceTitle, prior.sourceTitle, title), checkoutUrl:url, productUrl:url, image, imageUrl:image, price:first(product.price, prior.price), priceCurrency:first(product.priceCurrency, prior.priceCurrency), availability:first(product.availability, prior.availability), supplierName, supplierUrl });
+}
+async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, optionsInput) {
+  const scope = researchScope(input), actor = text(actorId) || "administrator", options = plain(optionsInput), ids = Array.from(new Set(array(candidateIdsInput).map(text).filter(Boolean))).slice(0, 500);
+  if (!ids.length) return { ok:true, requested:0, revalidated:0, live:0, invalid:0, inconclusive:0, assigned:0, unassigned:0, held:0, preserved:0, lockedInvalid:0, changedSection:0, withdrawCandidateIds:[], withdrawAssignments:[], results:[] };
+  const [rows, assignments] = await Promise.all([
+    frontSyncSelectCandidates(ids),
+    frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", ids)
+  ]);
+  const rowById = new Map(array(rows).map((row) => [text(row && row.id), row])), assignmentByCandidate = new Map();
+  for (const assignment of array(assignments)) { const id = text(assignment && assignment.candidate_id); if (!assignmentByCandidate.has(id)) assignmentByCandidate.set(id, []); assignmentByCandidate.get(id).push(assignment); }
+  const inspectInputs = [], missingProducts = new Set();
+  for (const id of ids) {
+    const row = rowById.get(id), product = candidateRuntimeProduct(row, scope);
+    if (!row || !product) { missingProducts.add(id); continue; }
+    product.candidateId = id; product.id = id; inspectInputs.push(product);
+  }
+  const inspectedById = new Map();
+  const chunks = frontSyncChunk(inspectInputs, 4);
+  const settled = await Promise.allSettled(chunks.map((chunk) => RegionalSelector.inspectProductResearchStep(chunk)));
+  for (const entry of settled) {
+    if (entry.status !== "fulfilled") continue;
+    for (const inspected of array(entry.value && entry.value.items)) inspectedById.set(text(inspected && (inspected.candidateId || inspected.id)), inspected);
+  }
+  const results = [], withdrawAssignments = [], withdrawCandidateIds = new Set();
+  for (const id of ids) {
+    const row = plain(rowById.get(id)), existingPayload = Object.assign({}, plain(row.source_payload)), sourceProduct = candidateRuntimeProduct(row, scope), inspectedRaw = plain(inspectedById.get(id));
+    const activeAssignments = array(assignmentByCandidate.get(id)).filter((assignment) => normalizeCountry(assignment && assignment.country_code) === scope.country && frontSyncExpectedRegion(assignment, scope.country) === scope.region && candidateRuntimePublishedStatus(assignment && assignment.publication_status));
+    if (!Object.keys(row).length || !sourceProduct) {
+      for (const assignment of activeAssignments) { withdrawAssignments.push({ candidateId:id, assignmentId:text(assignment.id), sectionKey:candidateRuntimeAssignmentKey(assignment), reason:"candidate_product_reference_missing" }); withdrawCandidateIds.add(id); }
+      results.push({ candidateId:id, status:"invalid", live:false, assigned:false, reason:"candidate_product_reference_missing", activePublication:activeAssignments.length>0 });
+      continue;
+    }
+    const inspected = Object.keys(inspectedRaw).length ? Object.assign({}, sourceProduct, inspectedRaw, { candidateId:id, id:id }) : Object.assign({}, sourceProduct, { candidateId:id, id:id, productPageLive:false, inspectionComplete:true, researchStatus:"inspection_error" });
+    const health = candidateRuntimeHealth(inspected), placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), manualLocked = candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement);
+    let nextDecision = currentDecision, nextPlacement = currentPlacement, status = text(row.status) || "research_pending", assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey), changeReason = "runtime_revalidated";
+    if (health.dead) {
+      // An administrator placement lock preserves the historical decision, but
+      // it must never force a dead/redirected product back into the public
+      // Snapshot. Runtime validity is the final publication safety gate.
+      nextDecision = "hold"; nextPlacement = null; status = "hold"; assigned = false;
+      changeReason = manualLocked ? "runtime_product_unavailable_administrator_locked" : "runtime_product_unavailable";
+    } else if (health.inconclusive) {
+      // Anti-bot/429/temporary server failures are not proof that a product was
+      // removed. Preserve an existing public assignment, but never newly publish
+      // it until a later validation can prove the detail page is live.
+      assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey);
+      changeReason = "runtime_validation_inconclusive";
+    } else if (!manualLocked && options.reassign !== false) {
+      const compatibleCurrent = placementPlan.options.find((item) => productPlacementKey(item) === currentKey);
+      const picked = compatibleCurrent || placementPlan.options[0] || null;
+      if (picked) {
+        nextPlacement = candidateLedgerPlacementRecord(scope, picked, actor, "ai_automation"); nextDecision = "slot_candidate"; assigned = true;
+        if (!["revenue_ready","enrollable"].includes(lower(status))) status = "approval_pending";
+        changeReason = currentKey && currentKey !== productPlacementKey(nextPlacement) ? "runtime_reclassified" : "runtime_revalidated_and_assigned";
+      } else {
+        nextDecision = "undecided"; nextPlacement = null; assigned = false; status = "research_pending"; changeReason = "runtime_live_but_no_compatible_section";
+      }
+    }
+    const payload = Object.assign({}, existingPayload), card = candidateRuntimeCard(payload, inspected), category = placementPlan.category, now = iso();
+    payload.title = first(inspected.productName, inspected.title, payload.title, row.title); payload.productName = payload.title; payload.sourceTitle = first(inspected.sourceTitle, payload.sourceTitle, payload.title);
+    payload.url = productUrl(inspected); payload.externalProductUrl = productUrl(inspected); payload.productUrl = productUrl(inspected); payload.image = productImageUrl(inspected); payload.thumb = productImageUrl(inspected); payload.imageUrl = productImageUrl(inspected); payload.productCard = card;
+    payload.price = first(inspected.price, payload.price); payload.priceCurrency = first(inspected.priceCurrency, payload.priceCurrency); payload.availability = first(inspected.availability, payload.availability);
+    payload.productPageLive = inspected.productPageLive === true; payload.sameSupplierSite = inspected.sameSupplierSite !== false; payload.inspectionComplete = inspected.inspectionComplete === true; payload.researchStatus = first(inspected.researchStatus, payload.researchStatus);
+    payload.productCategory = category.primary; payload.productCategoryTags = category.tags; payload.productRanking = Object.assign({}, plain(payload.productRanking), { category:category.primary, categoryTags:category.tags });
+    payload.researchReadiness = Object.assign({}, plain(payload.researchReadiness), { stage:payload.researchStatus, productPageLive:payload.productPageLive, inspectionComplete:payload.inspectionComplete, productCard:card, lastVerifiedAt:now });
+    payload.runtimeValidation = { schema:"igdc-product-runtime-validation.v2", source:options.source || "administrator_refresh", checkedAt:now, checkedBy:actor, state:health.state, live:health.live, dead:health.dead, inconclusive:health.inconclusive, reasons:health.reasons, exactProductUrl:payload.url || null, imageUrl:payload.image || null, category:category.primary, previousSectionKey:currentKey || null, nextSectionKey:productPlacementKey(nextPlacement) || null };
+    payload.slotDecision = nextDecision; payload.publicPublication = false; payload.automaticImport = false;
+    if (nextPlacement && validProductSectionKey(productPlacementKey(nextPlacement))) {
+      payload.approvedPlacement = nextPlacement; payload.placement = nextPlacement;
+    } else if (!manualLocked || !health.ok) {
+      if (currentKey) payload.previousApprovedPlacement = Object.assign({}, currentPlacement, { removedAt:now, removedReason:changeReason });
+      delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement;
+    }
+    if (!manualLocked) payload.managementControl = Object.assign({}, plain(payload.managementControl), { schema:"igdc-product-management-control.v1", source:"ai_automation", administratorLocked:false, aiReclassificationAllowed:true, automationMode:"runtime_refresh", updatedAt:now, decidedBy:actor });
+    if (health.dead) payload.review = Object.assign({}, plain(payload.review), { state:"hold", runtimeValidation:"failed", runtimeReasons:health.reasons, runtimeCheckedAt:now });
+    else if (health.inconclusive) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"inconclusive", runtimeReasons:health.reasons, runtimeCheckedAt:now });
+    else payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"passed", runtimeReasons:[], runtimeCheckedAt:now });
+    await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(id), { title:payload.title || row.title, official_url:payload.url || row.official_url, thumbnail_url:payload.image || row.thumbnail_url, status, source_payload:payload, updated_at:now });
+    const nextKey = productPlacementKey(payload.approvedPlacement || payload.placement);
+    for (const assignment of activeAssignments) {
+      const assignmentKey = candidateRuntimeAssignmentKey(assignment), shouldWithdraw = health.dead || (!health.inconclusive && (nextDecision !== "slot_candidate" || !validProductSectionKey(nextKey) || assignmentKey !== nextKey));
+      if (shouldWithdraw) { withdrawAssignments.push({ candidateId:id, assignmentId:text(assignment.id), sectionKey:assignmentKey, reason:health.dead?"runtime_product_unavailable":"runtime_section_changed" }); withdrawCandidateIds.add(id); }
+    }
+    results.push({ candidateId:id, status:health.dead?"invalid":(health.inconclusive?"inconclusive":(assigned?"assigned":"unassigned")), live:health.live, invalid:health.dead, inconclusive:health.inconclusive, assigned, manualLocked, reason:changeReason, reasons:health.reasons, previousSectionKey:currentKey || null, sectionKey:nextKey || null, changedSection:!!(currentKey && nextKey && currentKey !== nextKey), activePublication:activeAssignments.length>0 });
+  }
+  return {
+    ok:true, requested:ids.length, revalidated:results.filter((row)=>row.status!=="missing").length, live:results.filter((row)=>row.live===true).length, invalid:results.filter((row)=>row.invalid===true).length, inconclusive:results.filter((row)=>row.inconclusive===true).length,
+    assigned:results.filter((row)=>row.assigned===true).length, unassigned:results.filter((row)=>row.status==="unassigned").length, held:results.filter((row)=>row.status==="invalid").length, preserved:results.filter((row)=>row.manualLocked===true&&row.live===true).length, lockedInvalid:results.filter((row)=>row.manualLocked===true&&row.invalid===true).length,
+    changedSection:results.filter((row)=>row.changedSection===true).length, withdrawCandidateIds:Array.from(withdrawCandidateIds), withdrawAssignments, results, publicPublication:false, paymentExecution:false
+  };
+}
+async function productCandidateAiRecover(actorId, input) {
+  const ids = Array.from(new Set(array(input && input.candidateIds).map(text).filter(Boolean))).slice(0, 12);
+  if (!ids.length) { const error = new Error("AI 자동 배치·갱신할 상품 후보를 선택하세요."); error.statusCode = 400; throw error; }
+  const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:"ai_auto_placement_refresh", reassign:true });
+  return Object.assign({ candidateLedger:true }, result);
+}
+async function revalidateProductFrontTargets(actorId, input, targetsInput) {
+  const ids = Array.from(new Set(array(targetsInput).map((row)=>text(row && row.candidateId)).filter(Boolean))).slice(0,500);
+  return revalidateCandidateLedgerRows(actorId, input, ids, { source:"front_apply_final_check", reassign:true });
+}
 const PRODUCT_AI_QUEUE_SYNC_BATCH = 6;
 function productAiQueueSyncPending(rowInput) {
   const row=plain(rowInput),state=plain(row.candidateQueueSync);
@@ -2629,13 +2769,15 @@ async function frontSyncWriteStage(trace, name, attempted, writer) {
   }
 }
 function frontSyncPublicReadiness(productInput, existingCandidate) {
-  const product = plain(productInput), existingPayload = plain(existingCandidate && existingCandidate.source_payload), risk = plain(product.riskAssessment), supplier = plain(product.supplierAssessment), reasons = [], warnings = [];
+  const product = plain(productInput), existingPayload = plain(existingCandidate && existingCandidate.source_payload), runtimeValidation = plain(existingPayload.runtimeValidation || product.runtimeValidation), risk = plain(product.riskAssessment), supplier = plain(product.supplierAssessment), reasons = [], warnings = [];
   const productPageUrl = safeUrl(productUrl(product)), imageUrl = safeUrl(productImageUrl(product)), supplierUrl = safeUrl(first(product.supplierSiteUrl, plain(product.supplier).officialUrl)), supplierName = first(product.supplierName, plain(product.supplier).name);
   const trustScore = Number(first(product.supplierTrustScore, supplier.trustScore, plain(product.supplier).trustScore)) || 0;
   const evidenceReady = product.supplierEvidenceReady === true || supplier.evidenceReady === true || plain(product.supplier).evidenceReady === true;
   const blockers = array(risk.blockers).map(lower).filter(Boolean);
   const prohibited = blockers.filter((item) => /(malware|phishing|fraud|illegal|prohibited|sanction|counterfeit|adult|unsafe|product_page_unavailable|supplier_product_domain_mismatch)/.test(item));
   if (plain(existingPayload.queueControl).permanentExcluded === true) reasons.push("permanently_excluded");
+  if (lower(runtimeValidation.state) === "inconclusive") reasons.push("runtime_validation_inconclusive");
+  if (lower(runtimeValidation.state) === "dead" || runtimeValidation.dead === true) reasons.push("runtime_product_unavailable");
   if (!productPageUrl || !ProductRanking.isSpecificProductUrl(productPageUrl)) reasons.push("specific_product_url_missing");
   if (!imageUrl) reasons.push("actual_product_image_missing");
   if (!supplierUrl || !supplierName) reasons.push("official_supplier_identity_missing");
@@ -2935,26 +3077,21 @@ async function productFrontSyncTargets(input, jobInput) {
   const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match";
   if (candidateLedgerMode) {
     const ids = mode === "candidate" ? [requestedCandidateId || requestedProductId].filter(Boolean) : requestedCandidateIds.length ? requestedCandidateIds : requestedProductIds;
-    const candidateRows = await frontSyncSelectCandidates(ids), targets = [];
+    const [candidateRows, assignmentRows] = await Promise.all([frontSyncSelectCandidates(ids), frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", ids)]), targets = [];
+    const assignmentsByCandidate = new Map();
+    for (const assignment of array(assignmentRows)) { const id=text(assignment&&assignment.candidate_id); if(!assignmentsByCandidate.has(id))assignmentsByCandidate.set(id,[]); assignmentsByCandidate.get(id).push(assignment); }
     for (const candidate of candidateRows) {
-      const product = restoredProductFromCandidate(candidate, scope); if (!product) continue;
-      const payload = plain(candidate && candidate.source_payload), queueControl = plain(payload.queueControl), candidateStatus = lower(candidate && candidate.status), sourceDecision = lower(payload.slotDecision || product.slotDecision || "undecided");
-      const key = productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement), candidateId = text(candidate.id);
+      const product = candidateRuntimeProduct(candidate, scope); if (!product) continue;
+      const payload = plain(candidate && candidate.source_payload), queueControl = plain(payload.queueControl), candidateStatus = lower(candidate && candidate.status), sourceDecision = lower(payload.slotDecision || product.slotDecision || "undecided"), candidateId = text(candidate.id);
+      const activeAssignment = array(assignmentsByCandidate.get(candidateId)).find((row)=>normalizeCountry(row&&row.country_code)===scope.country&&frontSyncExpectedRegion(row,scope.country)===scope.region&&candidateRuntimePublishedStatus(row&&row.publication_status));
+      const payloadKey = productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement), activeKey = candidateRuntimeAssignmentKey(activeAssignment), key = validProductSectionKey(payloadKey) ? payloadKey : activeKey;
       if (!validProductSectionKey(key)) continue;
-      /* The candidate-review diagnostic can legitimately report
-         market_evidence_pending while the durable slotDecision field is absent
-         on older rows.  The administrator UI already selected these rows by
-         their valid 18-section placement.  For an explicit front-match request,
-         accept that placement as the selection authority unless the row is held,
-         rejected, permanently excluded or otherwise explicitly suppressed. */
       if (operation === "match") {
-        const blockedDecision = ["hold","reject","purge"].includes(sourceDecision);
-        const blockedStatus = ["hold","suppressed","rejected"].includes(candidateStatus);
-        if (blockedDecision || blockedStatus || queueControl.permanentExcluded === true) continue;
-        product.slotDecision = "slot_candidate";
-        if (!product.approvedPlacement) product.approvedPlacement = Object.assign({}, product.placement || splitProductSectionKey(key), { page: splitProductSectionKey(key).page, sectionKey: splitProductSectionKey(key).sectionKey, section: splitProductSectionKey(key).sectionKey, country: scope.country, region: scope.region, administratorSelected: true, proposalOnly: false, publicPublication: false });
+        const blockedDecision = ["hold","reject","purge"].includes(sourceDecision), blockedStatus = ["hold","suppressed","rejected"].includes(candidateStatus), blocked = blockedDecision || blockedStatus || queueControl.permanentExcluded === true;
+        if (blocked && !activeAssignment) continue;
+        if (!blocked) { product.slotDecision = "slot_candidate"; if (!product.approvedPlacement) { const split=splitProductSectionKey(key); product.approvedPlacement = { page:split.page, sectionKey:split.sectionKey, section:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, proposalOnly:false, publicPublication:false }; } }
       }
-      targets.push({ productId: text(product.id) || candidateId, candidateId, title: first(product.productName, product.title, candidate.title), sectionKey: key, digest: sha256({ id:candidateId, placement:key, updatedAt:candidate.updated_at || null }) });
+      targets.push({ productId:text(product.id)||candidateId, candidateId, title:first(product.productName,product.title,candidate.title), sectionKey:key, existingPublicationActive:!!activeAssignment, digest:sha256({id:candidateId,placement:key,updatedAt:candidate.updated_at||null}) });
     }
     return { ok:true, candidateLedger:true, scope, mode, sectionKey:targets[0]&&targets[0].sectionKey||null, sectionKeys:requestedSectionKeys, productId:requestedProductId||null, productIds:requestedProductIds, candidateId:requestedCandidateId||null, candidateIds:ids, operation, targets, productCount:candidateRows.length };
   }
@@ -3338,5 +3475,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateAiRecover, productAiAutomation, prepareProductFrontTargets, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateAiRecover, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
 };

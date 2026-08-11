@@ -14,7 +14,7 @@ const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.9.1-route-detail-tour-class-contract";
+const VERSION = "commerce-candidate-registry-sync-v1.11.0-explicit-withdrawal-refresh";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -139,6 +139,28 @@ function frontPublicationMarker(candidate){
     authority:first(front.authority,"explicit_administrator_front_match")
   };
 }
+function frontWithdrawalMarker(candidate){
+  const payload=sourcePayload(candidate), front=plain(payload.frontPublication), review=plain(payload.review), pipeline=plain(payload.pipeline);
+  const status=lower(first(front.status,review.publicationStatus,pipeline.publicationStatus));
+  const operation=lower(front.operation);
+  // Only the durable marker written by the authenticated unpublication flow is
+  // allowed to make an empty administrator queue authoritative. A generic empty
+  // queue must never erase committed real-product snapshots.
+  if(status!=="unpublish_requested"||operation!=="unmatch") return null;
+  const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.primaryPlacement||payload.placement), previous=plain(payload.previousApprovedPlacement);
+  const page=first(front.page,placement.page,previous.page,payload.page), section=first(front.section,front.sectionKey,placement.sectionKey,placement.section,previous.sectionKey,previous.section,payload.section,payload.psom_key);
+  const country=MarketSaleScope.normalizeCountry(first(front.country,placement.country,previous.country,payload.country,payload.targetCountry));
+  const region=MarketSaleScope.normalizeRegion(first(front.region,placement.region,previous.region,payload.region,"NATIONWIDE"),country)||"NATIONWIDE";
+  if(!candidate||!candidate.id||!country) return null;
+  return {
+    status:"unpublish_requested", operation:"unmatch", candidateId:candidate.id,
+    assignmentId:first(front.assignmentId,"front-marker-"+candidate.id),
+    page:page||null, section:section||null, country, region,
+    requestedAt:first(front.requestedAt,candidate.updated_at,now()),
+    requestedBy:first(front.requestedBy,"administrator"),
+    reason:first(front.reason,"administrator_unmatch")
+  };
+}
 function syntheticAssignmentFromMarker(candidate, marker){
   if(!marker) return null;
   return {
@@ -254,6 +276,29 @@ function marketRecord(candidate, availability, evidenceRows){
   };
 }
 function unique(values){ return Array.from(new Set((values||[]).map(text).filter(Boolean))); }
+function runtimeTravelOperatorEvidence(candidate,payload,assignment){
+  payload=plain(payload); assignment=plain(assignment);
+  if(lower(assignment.hub_key)!=="tour" || !qualifiedTourServiceCandidate(candidate,payload)) return plain(payload.travelOperator);
+  const runtime=plain(payload.runtimeValidation), prior=plain(payload.travelOperator), supplier=plain(payload.supplier), seller=plain(payload.sellerResponsibility);
+  const liveVerified=lower(runtime.state)==="live" || (payload.productPageLive===true && payload.inspectionComplete===true && !runtime.state);
+  const operatorName=first(prior.name,prior.operatorName,payload.supplierName,supplier.name,seller.legalEntity);
+  const supplierUrl=safeUrl(first(prior.supportUrl,prior.bookingPolicyUrl,payload.supportUrl,supplier.supportUrl,supplier.officialUrl,payload.supplierSiteUrl,seller.supportUrl));
+  const bookingUrl=exactProductDestination(candidate,payload);
+  if(!liveVerified || !operatorName || !(supplierUrl||bookingUrl)) return prior;
+  // This is not a licence assertion. It records only that the authenticated
+  // administrator selected a live booking/service detail page whose external
+  // operator identity and service URL were revalidated immediately before
+  // publication. The external operator remains responsible for the service.
+  return Object.assign({},prior,{
+    responsibleOperatorVerified:true,
+    name:operatorName,operatorName,
+    supportUrl:first(prior.supportUrl,supplierUrl,bookingUrl),
+    bookingPolicyUrl:first(prior.bookingPolicyUrl,bookingUrl),
+    evidenceSource:"administrator_live_travel_detail_validation",
+    verifiedAt:first(runtime.checkedAt,payload.inspectedAt,candidate&&candidate.updated_at,now()),
+    externalOperator:true,igdcOperator:false
+  });
+}
 function compactPayload(candidate, assignment, availabilityRows, revenueRows, evidenceRows, ipPolicy){
   const payload=sourcePayload(candidate);
   const assignmentInfo=assignment||{};
@@ -359,7 +404,8 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
       expectedNetRevenuePerOrder:first(plain(payload.brokerageContract).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)
     }),
     originCountry:first(payload.originCountry,payload.manufacturingCountry),
-    productMapping:Object.assign({},plain(payload.productMapping),{slotProfile,productClass,productIdentity:first(plain(payload.productMapping).productIdentity,payload.productId,candidate.id),strategyId:first(slotStrategy.strategyId,slotProfile),strategyRole:first(slotStrategy.role),policyDerivedSlotProfile:!!slotStrategy.strategyId,firstVerifiedAt:firstVerifiedAt||undefined})
+    productMapping:Object.assign({},plain(payload.productMapping),{slotProfile,productClass,productIdentity:first(plain(payload.productMapping).productIdentity,payload.productId,candidate.id),strategyId:first(slotStrategy.strategyId,slotProfile),strategyRole:first(slotStrategy.role),policyDerivedSlotProfile:!!slotStrategy.strategyId,firstVerifiedAt:firstVerifiedAt||undefined}),
+    travelOperator:runtimeTravelOperatorEvidence(candidate,payload,assignmentInfo)
   });
   return item;
 }
@@ -386,6 +432,20 @@ async function syncApprovedCandidates(input){
     array(availability).forEach(row=>{ if(!approvedAvailability(row.availability_state)) return; if(!avBy.has(row.candidate_id)) avBy.set(row.candidate_id,[]); avBy.get(row.candidate_id).push(row); });
     array(revenue).forEach(row=>{ if(!rBy.has(row.candidate_id)) rBy.set(row.candidate_id,[]); rBy.get(row.candidate_id).push(row); });
     array(evidence).forEach(row=>{ if(!eBy.has(row.candidate_id)) eBy.set(row.candidate_id,[]); eBy.get(row.candidate_id).push(row); });
+    const withdrawalRows=[];
+    for(const candidate of array(candidates)){
+      const explicitAuditSource=[PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF].includes(text(candidate&&candidate.source_ref));
+      if(!explicitAuditSource) continue;
+      const marker=frontWithdrawalMarker(candidate);
+      if(!marker) continue;
+      const currentAssignments=assignmentByCandidate.get(candidate.id)||[];
+      // A new publication request wins over an older withdrawal marker for the
+      // same candidate. Otherwise the explicit withdrawal remains a durable
+      // rebuild authorization, including when runtime revalidation put the
+      // candidate into HOLD before the build hook executes.
+      if(currentAssignments.some((row)=>lower(row&&row.publication_status)==="publish_requested")) continue;
+      withdrawalRows.push(marker);
+    }
     const output=[];
     for(const candidate of array(candidates)){
       if(!allowedCandidateStatus(candidate.status)) continue;
@@ -447,27 +507,39 @@ async function syncApprovedCandidates(input){
     }
     const expires=new Date(Date.now()+7*86400000).toISOString();
     const requestedRows=output.filter((entry)=>entry&&entry.publicationRequest&&entry.publicationRequest.requested===true);
-    const scopeKeys=unique(requestedRows.map((entry)=>{
+    const requestedScopeKeys=unique(requestedRows.map((entry)=>{
       const request=plain(entry.publicationRequest);
       const country=MarketSaleScope.normalizeCountry(request.country);
       const region=MarketSaleScope.normalizeRegion(request.region||"NATIONWIDE",country)||"NATIONWIDE";
       return country?country+"|"+region:"";
     }));
-    const explicitAdminRequest=requestedRows.length>0;
+    const withdrawalScopeKeys=unique(withdrawalRows.map((entry)=>{
+      const country=MarketSaleScope.normalizeCountry(entry&&entry.country);
+      const region=MarketSaleScope.normalizeRegion(entry&&entry.region||"NATIONWIDE",country)||"NATIONWIDE";
+      return country?country+"|"+region:"";
+    }));
+    const scopeKeys=unique(requestedScopeKeys.concat(withdrawalScopeKeys));
+    const explicitAdminRequest=requestedRows.length>0, explicitAdminWithdrawal=withdrawalRows.length>0;
+    const authoritative=explicitAdminRequest||explicitAdminWithdrawal;
+    const mode=explicitAdminRequest?"explicit-admin-publication-request":"explicit-admin-unpublication-request";
     const releaseAuthorization={
-      authoritative:explicitAdminRequest,
-      mode:"explicit-admin-publication-request",
+      authoritative,
+      mode,
       explicitAdminRequest,
+      explicitAdminWithdrawal,
       requestedCount:requestedRows.length,
+      withdrawnCount:withdrawalRows.length,
       scopeKeys,
+      withdrawalScopeKeys,
+      withdrawalCandidateIds:unique(withdrawalRows.map((row)=>row&&row.candidateId)),
       generatedAt:now(),
       source:"gslot_slot_assignments.publication_status|gslot_candidates.source_payload.frontPublication",
       crossCountryFallback:false,
       automaticPublication:false
     };
-    const doc={schema:"commerce-candidate-review-queue.v1",version:VERSION,generatedAt:now(),expiresAt:expires,source:"global-slot-console-approved-candidates",sourceDigest:sha256({candidates,assignments,availability,revenue,evidence}),authoritative:explicitAdminRequest,mode:"explicit-admin-publication-request",explicitAdminRequest,requestedCount:requestedRows.length,scopeKeys,releaseAuthorization,items:output};
+    const doc={schema:"commerce-candidate-review-queue.v1",version:VERSION,generatedAt:now(),expiresAt:expires,source:"global-slot-console-approved-candidates",sourceDigest:sha256({candidates,assignments,availability,revenue,evidence}),authoritative,mode,explicitAdminRequest,explicitAdminWithdrawal,requestedCount:requestedRows.length,withdrawnCount:withdrawalRows.length,scopeKeys,withdrawalScopeKeys,releaseAuthorization,items:output};
     const digest=atomicWrite(file,doc);
-    return {ok:true,status:"synchronized",version:VERSION,wrote:true,file,digest,count:output.length,requestedCount:requestedRows.length,scopeKeys,authoritative:explicitAdminRequest,releaseAuthorization,expiresAt:expires};
+    return {ok:true,status:"synchronized",version:VERSION,wrote:true,file,digest,count:output.length,requestedCount:requestedRows.length,withdrawnCount:withdrawalRows.length,scopeKeys,withdrawalScopeKeys,authoritative,releaseAuthorization,expiresAt:expires};
   } catch(error){
     return {ok:false,status:"blocked",version:VERSION,wrote:false,file,reason:"registry-sync-failed-existing-queue-preserved",error:String(error&&error.message||error)};
   }

@@ -6,7 +6,6 @@ const MarketSignals = require("./lib/commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./lib/commerce-policy-discussion.v1");
 const ProductGoLiveAudit = require("./product-go-live-audit");
 const CandidateReview = require("./commerce-candidate-review");
-const ReleaseDispatch = require("./lib/commerce-release-dispatch.v1");
 
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
@@ -59,7 +58,7 @@ exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();if(method==="OPTIONS")return json(204,{});
     const body=method==="GET"?{}:parse(event),query=event&&event.queryStringParameters||{},action=lower(query.action||body.action||"catalog");
-    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_candidate_action","product_candidate_ledger_action","product_candidate_ai_recover","product_ai_automation","product_front_match","product_front_unmatch","product_front_release","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
+    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_candidate_action","product_candidate_ledger_action","product_candidate_ai_recover","product_ai_automation","product_front_match","product_front_unmatch","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
     const actorId=text(actor&&actor.sub);
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
@@ -120,44 +119,39 @@ exports.handler=async function(event){
       if(!plan.targets.length){
         batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
       }else if(operation==="match"){
-        const preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets,loadedJob);
+        /* Front Apply is the second safety checkpoint. Revalidate the actual
+           external product detail pages first, remove stale/dead published
+           assignments, then rebuild the target plan from the refreshed ledger.
+           A missing replacement is intentionally left empty so the existing
+           front Snapshot sample fallback remains authoritative. */
+        const refresh=await Automation.revalidateProductFrontTargets(actorId,request,plan.targets);
+        const withdrawAssignments=Array.isArray(refresh&&refresh.withdrawAssignments)?refresh.withdrawAssignments:[];
+        let withdrawal={ok:true,status:"empty",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:"no_stale_public_assignments"}};
+        if(withdrawAssignments.length){
+          withdrawal=await ProductGoLiveAudit.requestUnpublicationAssignments(event,actor,{mode:"production",confirmation:"SITE_UNPUBLISH",assignments:withdrawAssignments},scope);
+        }
+        const refreshedPlan=await Automation.productFrontSyncTargets(request,loadedJob);
+        const preparation=refreshedPlan.targets.length?await Automation.prepareProductFrontTargets(actorId,request,refreshedPlan.targets,loadedJob):{ok:true,requested:0,prepared:0,blocked:0,preparedCandidateIds:[],items:[],writeTrace:{mode:"runtime_refresh_no_live_targets"}};
         const preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds:[];
         const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked");
-        if(!preparedIds.length){
-          batchResult={ok:true,status:"blocked",action:"request_publication_batch",requested:plan.targets.length,queued:0,blocked:preparationBlocked.length,items:preparationBlocked,release:{queued:false,reason:"no_front_ready_products"},preparation};
-        }else{
-          /* Front Match itself is the authenticated publication decision. The
-             preparation write now stores publish_requested directly in the DB,
-             together with the market/referral/evidence records Registry needs.
-             Do not perform a second CandidateReview -> GoLiveAudit promotion
-             read here: that split was the point where successfully matched
-             products were being stranded before Registry/SearchBank. */
-          const preparedItems=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status!=="blocked").map((item)=>Object.assign({},item,{
-            status:"publish_requested",queued:false,persisted:true,pendingBuild:true,
-            reason:"explicit_front_match_persisted",publicationStatus:"publish_requested"
-          }));
-          const items=preparationBlocked.concat(preparedItems);
-          const persisted=preparedItems.length;
-          const pendingBuild=preparedItems.length;
-          const blocked=preparationBlocked.length;
-          batchResult={
-            ok:true,status:persisted?(blocked?"partial":"pending_build"):(blocked?"blocked":"empty"),
-            action:"request_publication_batch",requested:plan.targets.length,queued:0,persisted,pendingBuild,blocked,items,preparation,
-            directPublicationCommit:true,
-            release:{queued:false,reason:"publication_persisted_build_deferred",deferred:true},
-            automaticPublication:false,publicSnapshotConfirmed:false,buildVerificationRequired:true
-          };
+        let publishResult={ok:true,status:"empty",action:"request_publication_batch",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:preparedIds.length?"publication_not_requested":"no_front_ready_products"}};
+        if(preparedIds.length){
+          const liveDoc=await CandidateReview.stage(process.cwd());
+          publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true},scope,liveDoc);
         }
+        const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
+        const items=preparationBlocked.concat(publishItems);
+        const queued=Number(publishResult&&publishResult.queued||0)+Number(withdrawal&&withdrawal.queued||0);
+        const persisted=Number(publishResult&&publishResult.persisted||0)+Number(withdrawal&&withdrawal.persisted||0);
+        const pendingBuild=Number(publishResult&&publishResult.pendingBuild||0)+Number(withdrawal&&withdrawal.pendingBuild||0);
+        const blocked=Number(publishResult&&publishResult.blocked||0)+Number(withdrawal&&withdrawal.blocked||0)+preparationBlocked.length;
+        const withdrawn=(Array.isArray(withdrawal&&withdrawal.items)?withdrawal.items:[]).filter((item)=>item&&(item.status==="unpublish_requested"||item.status==="unmatched")).length;
+        const status=queued?(blocked?"partial":"queued"):(pendingBuild?(blocked?"partial":"pending_build"):(blocked?"blocked":(withdrawn?"refreshed_to_fallback":"empty")));
+        batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,persisted,pendingBuild,blocked,items,preparation,refresh:Object.assign({},refresh,{withdrawRequested:withdrawAssignments.length,withdrawn,withdrawal}),status,release:publishResult&&publishResult.release&&publishResult.release.queued?publishResult.release:withdrawal.release||publishResult.release});
       }else{
         batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope);
       }
       return json(200,await Automation.recordProductFrontSync(actorId,request,batchResult,loadedJob));
-    }
-    if(action==="product_front_release"){
-      if(text(body.confirmation)!=="SITE_PUBLISH"){const error=new Error("프론트 매칭 최종 빌드 확인 값이 일치하지 않습니다.");error.statusCode=409;throw error;}
-      const candidateId=text(body.candidateId),assignmentId=text(body.assignmentId);
-      const release=await ReleaseDispatch.dispatch({candidateId,assignmentId,actorId:actorId,operation:"publish",candidateCount:Math.max(1,Number(body.candidateCount)||1),explicitAdminAuthorization:true});
-      return json(200,{ok:true,action:"product_front_release",queued:release.queued===true,pendingBuild:release.queued!==true,release});
     }
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
     if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset));
@@ -190,10 +184,5 @@ exports.handler=async function(event){
     if(action==="candidate_action")return json(200,await Automation.candidateAction(actorId,body));
     if(action==="research_candidate_action")return json(200,await Automation.researchCandidateAction(actorId,body));
     return json(404,{ok:false,error:"지원하지 않는 국가·지역 관제 요청입니다."});
-  }catch(error){
-    const diagnostic={ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null};
-    if(error&&error.frontSyncPhase) diagnostic.phase=text(error.frontSyncPhase);
-    if(error&&error.lifecycleTrace) diagnostic.lifecycleTrace=error.lifecycleTrace;
-    return json(error&&error.statusCode||500,diagnostic);
-  }
+  }catch(error){return json(error&&error.statusCode||500,{ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null});}
 };
