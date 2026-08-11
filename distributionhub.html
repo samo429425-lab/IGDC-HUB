@@ -1170,6 +1170,68 @@ a[id*="qna"]{
 }
 </style>
 
+
+<style id="igdc-distribution-realproduct-card-fill-final-v3">
+/* Main six sections: keep the 4:5 card, but let real product media occupy
+   the unused vertical area and keep text/meta calmly anchored below. */
+#sec-reco .thumb-scroller > .thumb-card,
+#sec-ads .thumb-scroller > .thumb-card,
+#sec-trend .thumb-scroller > .thumb-card,
+#sec-new .thumb-scroller > .thumb-card,
+#sec-special .thumb-scroller > .thumb-card,
+#sec-others .thumb-scroller > .thumb-card{
+  display:grid !important;
+  grid-template-rows:minmax(0,1fr) auto auto !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  aspect-ratio:4 / 5 !important;
+  overflow:hidden !important;
+  box-sizing:border-box !important;
+}
+
+#sec-reco .thumb-card .thumb-img,
+#sec-ads .thumb-card .thumb-img,
+#sec-trend .thumb-card .thumb-img,
+#sec-new .thumb-card .thumb-img,
+#sec-special .thumb-card .thumb-img,
+#sec-others .thumb-card .thumb-img{
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  max-height:none !important;
+  aspect-ratio:auto !important;
+  object-fit:cover !important;
+  align-self:stretch !important;
+}
+
+#sec-reco .thumb-card > .thumb-title,
+#sec-ads .thumb-card > .thumb-title,
+#sec-trend .thumb-card > .thumb-title,
+#sec-new .thumb-card > .thumb-title,
+#sec-special .thumb-card > .thumb-title,
+#sec-others .thumb-card > .thumb-title{
+  margin:0 !important;
+  padding:9px 9px 5px !important;
+  line-height:1.35 !important;
+  box-sizing:border-box !important;
+  background:#fff !important;
+}
+
+#sec-reco .thumb-card > .thumb-meta,
+#sec-ads .thumb-card > .thumb-meta,
+#sec-trend .thumb-card > .thumb-meta,
+#sec-new .thumb-card > .thumb-meta,
+#sec-special .thumb-card > .thumb-meta,
+#sec-others .thumb-card > .thumb-meta{
+  margin:0 !important;
+  padding:0 9px 9px !important;
+  min-height:0 !important;
+  box-sizing:border-box !important;
+  background:#fff !important;
+}
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
