@@ -22,7 +22,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const SlotOverlay = require("./sample-slot-overlay.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.1-policy-digest-bound-scoped-output";
+const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.2-exact-product-destination-preservation";
 const MANIFEST_FILE = "ip-slot-manifest.json";
 const AUTO_ROOT = ["data", "auto"];
 const ROUTES = Object.freeze({
@@ -140,6 +140,15 @@ function cloneCard(item) {
     description: text(item.description || item.summary),
     url: text(item.url),
     link: text(item.link || item.url),
+    externalProductUrl: text(item.externalProductUrl || "") || undefined,
+    officialProductUrl: text(item.officialProductUrl || "") || undefined,
+    productUrl: text(item.productUrl || item.productPageUrl || "") || undefined,
+    productPageUrl: text(item.productPageUrl || item.productUrl || "") || undefined,
+    detailUrl: text(item.detailUrl || "") || undefined,
+    checkoutUrl: text(item.checkoutUrl || "") || undefined,
+    purchaseUrl: text(item.purchaseUrl || "") || undefined,
+    orderUrl: text(item.orderUrl || "") || undefined,
+    productLink: text(item.productLink || "") || undefined,
     thumb: text(item.thumb || item.thumbnail || item.image),
     image: text(item.image || item.thumb || item.thumbnail),
     thumbnail: text(item.thumbnail || item.thumb || item.image),

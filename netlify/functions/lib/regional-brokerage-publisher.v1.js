@@ -204,16 +204,34 @@ function sourceDistributionTemplate(root) {
   ]);
   return { file, data: file ? safeRead(file) : null };
 }
+function specificProductUrl(value) {
+  const url = httpUrl(value);
+  if (!url) return "";
+  try {
+    const parsed = new URL(url);
+    if ((!parsed.pathname || parsed.pathname === "/") && !parsed.search) return "";
+    return parsed.toString();
+  } catch (_e) { return ""; }
+}
 function targetUrl(item) {
-  return httpUrl(first(
+  const candidates = [
     item && item.externalProductUrl,
     item && item.officialProductUrl,
     item && item.productUrl,
-    item && item.landingUrl,
-    item && item.externalSellerUrl,
+    item && item.productPageUrl,
+    item && item.detailUrl,
+    item && item.checkoutUrl,
+    item && item.purchaseUrl,
+    item && item.orderUrl,
+    item && item.productLink,
     item && item.url,
     item && item.link && (item.link.url || item.link.href || item.link)
-  ));
+  ];
+  for (const candidate of candidates) {
+    const url = specificProductUrl(candidate);
+    if (url) return url;
+  }
+  return "";
 }
 function sectionMap(sections) {
   const out = Object.create(null);
@@ -367,7 +385,13 @@ function makeCard(item, decision, market, region, registry) {
     currency: item.currency || undefined,
     cta: first(item.cta, "View seller offer"),
     url: outboundUrl,
+    // Keep the exact seller product detail as a first-class front contract.
+    // `url` may remain a measurement redirect, but every AutoMap can now use
+    // the same verified product destination without guessing from section data.
     externalProductUrl: destination,
+    productUrl: destination,
+    detailUrl: destination,
+    checkoutUrl: destination,
     affiliateOutboundUrl: item && item.affiliateOutboundUrl || undefined,
     externalOutboundUrl: item && item.externalOutboundUrl || undefined,
     outboundRoute,
@@ -520,7 +544,7 @@ function publishFromSearchBank(input) {
   const source = sourceBank(root);
   const templateInfo = sourceDistributionTemplate(root);
   const report = {
-    version: "regional-brokerage-publisher-v1.1",
+    version: "regional-brokerage-publisher-v1.2-exact-product-destination",
     generatedAt: new Date().toISOString(),
     sourceBank: source.file ? path.relative(root, source.file) : null,
     canonicalPublicationVerified: !!(source.verification && source.verification.ok),

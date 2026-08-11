@@ -25,7 +25,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-snapshot-publisher-v1.6.0-country-scoped-admin-publication-contract";
+const VERSION = "canonical-snapshot-publisher-v1.6.1-exact-product-destination-contract";
 const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.6-country-scoped-admin-publication";
 const UPSTREAM_FILE = "search-bank.upstream.snapshot.json";
 const PUBLIC_FILE = "search-bank.snapshot.json";
@@ -325,9 +325,41 @@ function evidenceOf(item, contract) {
   const tier = str(firstValue(item.trustTier, discernment.trustTier, evidence.trustTier, contract.trustTier)).toUpperCase();
   return { trusted, source, verificationAt, trustScore, tier };
 }
+function specificProductUrl(value) {
+  const normalized = normalizeUrl(value);
+  if (!normalized) return "";
+  try {
+    const url = new URL(normalized);
+    if ((!url.pathname || url.pathname === "/") && !url.search) return "";
+    return url.toString();
+  } catch (_e) { return ""; }
+}
+function directProductUrlOf(item) {
+  if (!item || typeof item !== "object") return "";
+  const card = isObject(item.productCard) ? item.productCard : {};
+  const readinessCard = isObject(objectAt(item, ["researchReadiness", "productCard"])) ? objectAt(item, ["researchReadiness", "productCard"]) : {};
+  const listing = isObject(item.directCommerceListing) ? item.directCommerceListing : {};
+  const contract = isObject(item.brokerageContract) ? item.brokerageContract : {};
+  const values = [
+    item.externalProductUrl, item.officialProductUrl, item.productUrl, item.productPageUrl,
+    item.detailUrl, item.checkoutUrl, item.purchaseUrl, item.orderUrl, item.productLink,
+    card.checkoutUrl, card.productUrl, readinessCard.checkoutUrl, readinessCard.productUrl,
+    listing.destinationUrl, contract.destinationUrl
+  ];
+  for (const value of values) {
+    const url = specificProductUrl(value);
+    if (url) return url;
+  }
+  return "";
+}
+function productBearingRoute(page, section) {
+  return ["home", "distribution", "network", "tour"].includes(page) || (page === "social" && section === "rightPanel");
+}
 function urlOf(item) {
+  const directProductUrl = directProductUrlOf(item);
+  if (directProductUrl) return directProductUrl;
   const link = item && item.link;
-  const source = firstValue(item && item.url, item && item.externalProductUrl, item && item.homepage, isObject(link) ? firstValue(link.url, link.href) : link, objectAt(item, ["org", "homepage"]));
+  const source = firstValue(item && item.url, item && item.homepage, isObject(link) ? firstValue(link.url, link.href) : link, objectAt(item, ["org", "homepage"]));
   return str(source);
 }
 function sourceTraceOf(item, url) {
@@ -453,6 +485,7 @@ function validateCandidate(raw, index, context) {
   if (sections.length !== 1) reasons.push(sections.length ? "SECTION_MAPPING_CONFLICT" : "SECTION_MAPPING_MISSING");
   const section = sections[0] || "";
   if (page && section && !(context.registry.pages.get(page) || new Set()).has(section)) reasons.push("SECTION_NOT_IN_PSOM_PAGE");
+  if (page && section && productBearingRoute(page, section) && !specificProductUrl(destination)) reasons.push("PRODUCT_DETAIL_DESTINATION_REQUIRED");
   if (Number.isNaN(requested)) reasons.push("SLOT_MAPPING_CONFLICT");
   if (requested != null && requested > context.policy.slotCapacityDefault) reasons.push("SLOT_OUT_OF_CAPACITY");
 
@@ -660,6 +693,15 @@ function buildCanonicalItem(entry, releaseId) {
   item.country = entry.country;
   item.region = entry.region;
   item.url = entry.destination;
+  const isProductRoute = productBearingRoute(entry.page, entry.section);
+  const directProductUrl = directProductUrlOf(entry.raw) || (isProductRoute ? specificProductUrl(entry.destination) : "");
+  if (directProductUrl) {
+    item.externalProductUrl = directProductUrl;
+    item.productUrl = directProductUrl;
+    item.productPageUrl = directProductUrl;
+    item.detailUrl = directProductUrl;
+    item.checkoutUrl = directProductUrl;
+  }
   item.image = entry.image;
   item.thumb = entry.image;
   item.thumbnail = entry.image;

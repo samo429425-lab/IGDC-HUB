@@ -14,7 +14,7 @@ const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.8.2-authoritative-route-product-detail";
+const VERSION = "commerce-candidate-registry-sync-v1.9.1-route-detail-tour-class-contract";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -73,13 +73,31 @@ function isRootPageUrl(value){
 function exactProductDestination(candidate,payload){
   payload=plain(payload); const card=productCardOf(payload);
   const supplierCandidates=[card.supplierUrl,payload.supplierSiteUrl,plain(payload.supplier).officialUrl,plain(payload.sellerResponsibility).supportUrl].map(normalizedUrlKey).filter(Boolean);
-  const candidates=[payload.productUrl,card.checkoutUrl,payload.checkoutUrl,payload.productPageUrl,payload.detailUrl,payload.externalProductUrl,payload.externalOutboundUrl,payload.url,payload.link,payload.href,candidate&&candidate.official_url];
+  const candidates=[
+    payload.externalProductUrl,payload.officialProductUrl,payload.productUrl,payload.productPageUrl,
+    card.productUrl,card.checkoutUrl,payload.detailUrl,payload.checkoutUrl,payload.purchaseUrl,payload.orderUrl,payload.productLink,
+    plain(payload.directCommerceListing).destinationUrl,plain(payload.brokerageContract).destinationUrl,
+    payload.url,payload.link,payload.href,candidate&&candidate.official_url
+  ];
   for(const value of candidates){
     const url=safeUrl(value); if(!url||isRootPageUrl(url))continue;
     const key=normalizedUrlKey(url); if(supplierCandidates.includes(key))continue;
     return url;
   }
   return "";
+}
+function qualifiedTourServiceCandidate(candidate,payload){
+  payload=plain(payload);
+  if(payload.travelService===true||payload.tourService===true||payload.bookingService===true) return true;
+  const card=productCardOf(payload);
+  // Qualification must come from the actual offer/service, never from a page or
+  // slot label that may itself be the stale misclassification we are checking.
+  const hay=[exactProductTitle(candidate,payload),payload.summary,payload.description,payload.category,payload.type,payload.serviceType,plain(payload.source).name,card.sourceTitle].map(lower).filter(Boolean).join(" ");
+  if(!hay) return false;
+  if(/(여행용\s*(티슈|물티슈|휴지|세면|파우치)|포켓물티슈|체험팩|캠핑(의자|테이블|용품)|등산(스틱|용품)|아웃도어\s*(용품|장비)|travel\s*(size|tissue|wipe)|camping\s*gear|hiking\s*gear)/i.test(hay)) return false;
+  if(/(숙박|호텔|리조트|관광|투어|입장권|여행티켓|여행패키지|여행상품|항공권|렌터카|렌트카|교통패스|철도패스|관광버스|크루즈|hotel|resort|tour\b|admission|travel\s*(?:ticket|package|booking)|flight\s*ticket|rental\s*car|rail\s*pass|transport\s*pass|cruise|booking)/i.test(hay)) return true;
+  if(/(체험|experience|activity)/i.test(hay)&&/(예약|티켓|입장권|프로그램|관광|투어|현지|지역|booking|ticket|admission|program|tour|local)/i.test(hay)) return true;
+  return false;
 }
 function productFirstVerifiedAt(candidate,payload){
   payload=plain(payload); const mapping=plain(payload.productMapping), timestamps=plain(payload.timestamps), research=plain(payload.research);
@@ -183,6 +201,22 @@ function authoritativeSlotProfile(payload, slotStrategy){
   if(existing&&required.includes(existing)) return existing;
   return first(required[0],slotStrategy&&slotStrategy.strategyId,existing);
 }
+function authoritativeProductClass(candidate,payload,page,slotStrategy){
+  payload=plain(payload);
+  const allowed=array(slotStrategy&&slotStrategy.allowedProductClasses).map(lower).filter(Boolean);
+  const existing=lower(first(plain(payload.productMapping).productClass,payload.productClass));
+  if(existing&&allowed.includes(existing)) return existing;
+  // Tour is a service-only route. Do not let the generic physical-product
+  // default turn an otherwise valid travel service into an IP policy mismatch.
+  // Qualification still does not fabricate operator/licence evidence: that
+  // remains a separate fail-closed requirement in the canonical policy.
+  if(page==="tour"&&qualifiedTourServiceCandidate(candidate,payload)){
+    if(allowed.includes("travel_service")) return "travel_service";
+    if(allowed.includes("travel_product")) return "travel_product";
+  }
+  if(allowed.includes("physical_product")) return "physical_product";
+  return existing&&allowed.includes(existing)?existing:first(allowed[0],existing);
+}
 function authoritativeRequestedSlot(payload, assignment){
   if(!bool(assignment&&assignment.manual_pinned)) return "";
   const raw=first(plain(payload&&payload.placement).slot,payload&&payload.slot,assignment&&assignment.priority);
@@ -247,6 +281,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   const pageStrategies=plain(plain(policyDoc.slotStrategies)[page]);
   const slotStrategy=plain(pageStrategies[section]);
   const slotProfile=authoritativeSlotProfile(payload,slotStrategy);
+  const productClass=authoritativeProductClass(candidate,payload,page,slotStrategy);
   // gslot_slot_assignments.priority is ranking priority, not a physical slot.
   // Only a manually pinned assignment may request a concrete slot number.
   const requestedSlot=authoritativeRequestedSlot(payload,assignmentInfo);
@@ -267,6 +302,10 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
     link:destination,
     href:destination,
     externalProductUrl:destination,
+    productUrl:destination,
+    productPageUrl:destination,
+    detailUrl:destination,
+    checkoutUrl:destination,
     externalOutboundUrl:trafficOnly?destination:payload.externalOutboundUrl,
     image,
     thumb:image,
@@ -320,7 +359,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
       expectedNetRevenuePerOrder:first(plain(payload.brokerageContract).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)
     }),
     originCountry:first(payload.originCountry,payload.manufacturingCountry),
-    productMapping:Object.assign({},plain(payload.productMapping),{slotProfile,productClass:first(plain(payload.productMapping).productClass,payload.productClass,"physical_product"),productIdentity:first(plain(payload.productMapping).productIdentity,payload.productId,candidate.id),strategyId:first(slotStrategy.strategyId,slotProfile),strategyRole:first(slotStrategy.role),policyDerivedSlotProfile:!!slotStrategy.strategyId,firstVerifiedAt:firstVerifiedAt||undefined})
+    productMapping:Object.assign({},plain(payload.productMapping),{slotProfile,productClass,productIdentity:first(plain(payload.productMapping).productIdentity,payload.productId,candidate.id),strategyId:first(slotStrategy.strategyId,slotProfile),strategyRole:first(slotStrategy.role),policyDerivedSlotProfile:!!slotStrategy.strategyId,firstVerifiedAt:firstVerifiedAt||undefined})
   });
   return item;
 }
@@ -360,6 +399,10 @@ async function syncApprovedCandidates(input){
       let assignment=assignmentRows.find((row)=>explicitAuditSource?lower(row.publication_status)==="publish_requested":["ready","publish_requested"].includes(lower(row.publication_status)));
       if(!assignment&&marker) assignment=syntheticAssignmentFromMarker(candidate,marker);
       if(!assignment) continue;
+      // Old assignments created before the Tour classifier fix must not become
+      // public merely because their persisted page says `tour`. Only actual
+      // booking/travel services may enter the Tour SearchBank route.
+      if(lower(assignment.hub_key)==="tour"&&!qualifiedTourServiceCandidate(candidate,sourcePayload(candidate))) continue;
       const publicationRequested=lower(assignment.publication_status)==="publish_requested";
       let avail=avBy.get(candidate.id)||[];
       if(!avail.length&&marker&&publicationRequested) avail=syntheticAvailabilityFromMarker(candidate,marker);
