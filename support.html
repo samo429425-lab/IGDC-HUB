@@ -52,16 +52,41 @@
   .igdcCompanyFooter {
     width:100%;
     margin:18px 0 0;
-    padding:18px 20px 22px;
+    padding:28px 20px 38px;
     background:#074f93;
     color:#ffffff;
     text-align:center;
-    font-size:13px;
+    font-size:14px;
     line-height:1.7;
     font-weight:600;
+    box-sizing:border-box;
+    position:static !important;
+    overflow:visible !important;
+    min-height:0;
   }
   .igdcCompanyFooter .companyName,
   .igdcCompanyFooter .companyAddress { color:#ffffff; }
+
+  /* Match the visible company/address footer area of MARU Download on mobile.
+     No policy-button area is reserved on Help. */
+  @media (max-width:1024px){
+    .support-shell,
+    .support-main{
+      height:auto !important;
+      min-height:0 !important;
+      overflow:visible !important;
+    }
+    .wrap{
+      padding-bottom:18px !important;
+    }
+    .igdcCompanyFooter{
+      margin-top:18px;
+      padding-top:40px;
+      padding-left:20px;
+      padding-right:20px;
+      padding-bottom:92px;
+    }
+  }
   /* The iframe document itself must remain LTR so Chrome keeps its vertical scrollbar on the physical right.
      RTL is applied only to the support content panels below. */
   html, body { direction:ltr !important; }
