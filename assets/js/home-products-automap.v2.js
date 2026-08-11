@@ -108,6 +108,19 @@
     }
   }
 
+  function specificProductUrl(value) {
+    const raw = String(value || '').trim();
+    if (isBadUrl(raw) || isExampleUrl(raw)) return '';
+    try {
+      const parsed = new URL(raw);
+      if (parsed.protocol !== 'https:') return '';
+      if ((!parsed.pathname || parsed.pathname === '/') && !parsed.search && !parsed.hash) return '';
+      return parsed.toString();
+    } catch (e) {
+      return '';
+    }
+  }
+
   function pad3(n) {
     const x = Number(n);
     if (!Number.isFinite(x) || x <= 0) return '001';
@@ -138,14 +151,21 @@
     return id ? ('/content.html?id=' + encodeURIComponent(id)) : '';
   }
 
+  function directProductUrl(item) {
+    if (!item) return '';
+    return specificProductUrl(pick(item, ['externalProductUrl', 'officialProductUrl', 'productUrl', 'productPageUrl', 'detailUrl', 'checkoutUrl', 'purchaseUrl', 'orderUrl', 'productLink']));
+  }
+
   function resolveSlotHref(item) {
     if (!item) return '';
-    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.outboundUrl || '');
-    if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
+    const direct = directProductUrl(item);
+    if (direct && !isBadUrl(direct) && !isExampleUrl(direct)) return direct;
+    const outbound = specificProductUrl(item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.outboundUrl || ''));
+    if (outbound) return outbound;
+    const url = specificProductUrl(item.url || '');
+    if (url) return url;
     if (item.id) return contentHref(item.id);
-    const url = item.url || '';
-    if (isBadUrl(url) || isExampleUrl(url)) return '';
-    return url;
+    return '';
   }
 
   function applyAnchorDestination(a, item) {
@@ -186,7 +206,8 @@
 
     const page = src.page || fb.page || 'home';
     const section = src.section || fb.section || null;
-    const sourceUrl = pick(src, ['affiliateOutboundUrl', 'affiliate_outbound_url', 'externalOutboundUrl', 'external_outbound_url', 'checkoutUrl', 'paymentUrl', 'productUrl', 'purchaseUrl', 'orderUrl', 'url', 'href', 'link', 'path', 'detailUrl', 'contentUrl', 'pageUrl']) || '#';
+    const directUrl = directProductUrl(src);
+    const sourceUrl = directUrl || pick(src, ['affiliateOutboundUrl', 'affiliate_outbound_url', 'externalOutboundUrl', 'external_outbound_url', 'url', 'href', 'link', 'path', 'contentUrl', 'pageUrl']) || '#';
     const priority = (typeof src.priority === 'number')
       ? src.priority
       : (Number.isFinite(Number(src.priority)) ? Number(src.priority) : safeNumber(fb.priority, null));
@@ -199,6 +220,10 @@
       thumb: pick(src, ['thumb', 'image', 'image_url', 'img', 'photo', 'thumbnail', 'thumbnailUrl', 'cover', 'coverUrl']),
       url: sourceUrl,
       sourceUrl,
+      productUrl: directUrl,
+      externalProductUrl: pick(src, ['externalProductUrl']) || directUrl,
+      detailUrl: pick(src, ['detailUrl']) || directUrl,
+      checkoutUrl: pick(src, ['checkoutUrl']) || directUrl,
       affiliateOutboundUrl: pick(src, ['affiliateOutboundUrl', 'affiliate_outbound_url']),
       externalOutboundUrl: pick(src, ['externalOutboundUrl', 'external_outbound_url']),
       priority,

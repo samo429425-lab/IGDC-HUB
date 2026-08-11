@@ -15,7 +15,8 @@
   const LIMIT = 100;
 
   const MOBILE_ID = 'nh-mobile-rail-list';
-  const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v2';
+  const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v3';
+  const CARD_CSS_ID = 'nh-product-card-layout-v3';
 
   function $(id){ return document.getElementById(id); }
 
@@ -29,7 +30,15 @@
   }
 
   function pickId(it){ return pick(it, ['id','contentId','productId','itemId','sku','code','pid']); }
-  function pickLink(it){ return pick(it, ['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','contentUrl','pageUrl','detailUrl','checkoutUrl','paymentUrl','productUrl','purchaseUrl','orderUrl','link','url','href']) || '#'; }
+  function pickDirectProductUrl(it){ return specificProductUrl(pick(it, ['externalProductUrl','officialProductUrl','productUrl','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink'])); }
+  function pickLegacyProductUrl(it){
+    for (const key of ['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','contentUrl','pageUrl','link','url','href']) {
+      const url = specificProductUrl(it && it[key]);
+      if (url) return url;
+    }
+    return '';
+  }
+  function pickLink(it){ return pickDirectProductUrl(it) || pickLegacyProductUrl(it) || '#'; }
   function pickThumb(it){ return pick(it, ['thumb','image','thumbnail','img','photo','cover','coverUrl','thumbnailUrl']); }
   function pickTitle(it){ return pick(it, ['title','name','label','caption']); }
 
@@ -44,14 +53,26 @@
     try { return /(^|\.)example\.(com|org|net)$/i.test(new URL(u, window.location.origin).hostname); }
     catch(e){ return /example\.(com|org|net)/i.test(u); }
   }
+  function specificProductUrl(value){
+    const raw = String(value || '').trim();
+    if (isBadUrl(raw) || isExampleUrl(raw)) return '';
+    try {
+      const u = new URL(raw);
+      if (u.protocol !== 'https:') return '';
+      if ((!u.pathname || u.pathname === '/') && !u.search && !u.hash) return '';
+      return u.toString();
+    } catch(e){ return ''; }
+  }
   function contentHref(id){ return id ? ('/content.html?id=' + encodeURIComponent(id)) : ''; }
   function resolveItemHref(item){
-    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || '');
-    if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
+    const direct = pickDirectProductUrl(item);
+    if (direct && !isBadUrl(direct) && !isExampleUrl(direct)) return direct;
+    const outbound = specificProductUrl(item && (item.affiliateOutboundUrl || item.externalOutboundUrl || ''));
+    if (outbound) return outbound;
+    const link = specificProductUrl(item && item.link);
+    if (link) return link;
     if (item && item.id) return contentHref(item.id);
-    const link = item && item.link;
-    if (isBadUrl(link) || isExampleUrl(link)) return '';
-    return link || '';
+    return '';
   }
 
   function applyAnchor(a, item){
@@ -90,6 +111,39 @@
       try { (window.top || window).location.assign(href); }
       catch(e){ window.location.href = href; }
     }, true);
+  }
+
+  function ensureCardCss(){
+    if (document.getElementById(CARD_CSS_ID)) return;
+    const style = document.createElement('style');
+    style.id = CARD_CSS_ID;
+    style.textContent = `
+/* Real Network product cards: image above, product name below. */
+#rightAutoPanel .ad-box.igdc-real-product-card{
+  display:flex!important; flex-direction:column!important; align-items:stretch!important; justify-content:flex-start!important;
+  overflow:hidden!important; background:#fff!important;
+}
+#rightAutoPanel .ad-box.igdc-real-product-card > a{
+  position:relative!important; display:block!important; width:100%!important; height:auto!important;
+  flex:1 1 auto!important; min-height:0!important; padding:0!important; overflow:hidden!important;
+}
+#rightAutoPanel .ad-box.igdc-real-product-card > a > img{
+  display:block!important; width:100%!important; height:100%!important; min-height:0!important;
+  object-fit:contain!important; object-position:center!important; background:#fff!important;
+}
+#rightAutoPanel .ad-box.igdc-real-product-card > .cap{
+  position:static!important; left:auto!important; right:auto!important; bottom:auto!important;
+  flex:0 0 auto!important; box-sizing:border-box!important; min-height:42px!important; max-height:52px!important;
+  padding:7px 8px!important; margin:0!important; color:#222!important; background:#fff!important;
+  text-shadow:none!important; font-size:12px!important; font-weight:600!important; line-height:1.3!important;
+  white-space:normal!important; overflow:hidden!important; display:-webkit-box!important; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+}
+#nh-mobile-rail .card.igdc-real-product-card{display:flex!important;flex-direction:column!important;background:#fff!important;overflow:hidden!important;}
+#nh-mobile-rail .card.igdc-real-product-card > a{position:relative!important;display:block!important;width:100%!important;height:auto!important;flex:1 1 auto!important;min-height:0!important;overflow:hidden!important;}
+#nh-mobile-rail .card.igdc-real-product-card > a > img{display:block!important;width:100%!important;height:100%!important;object-fit:contain!important;background:#fff!important;}
+#nh-mobile-rail .card.igdc-real-product-card > .cap{position:static!important;flex:0 0 auto!important;padding:7px 9px!important;color:#222!important;background:#fff!important;text-shadow:none!important;font-size:.88rem!important;line-height:1.25!important;white-space:normal!important;overflow:hidden!important;display:-webkit-box!important;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+`;
+    document.head.appendChild(style);
   }
 
   function ensureMobileCss(){
@@ -131,12 +185,17 @@
       const thumb = pickThumb(it);
       const title = pickTitle(it);
       if (!thumb || !title) continue;
+      const directProductUrl = pickDirectProductUrl(it);
       out.push({
         id: pickId(it),
         title,
         thumb,
         link: pickLink(it),
         sourceUrl: pickLink(it),
+        productUrl: directProductUrl,
+        externalProductUrl: pick(it, ['externalProductUrl']) || directProductUrl,
+        detailUrl: pick(it, ['detailUrl']) || directProductUrl,
+        checkoutUrl: pick(it, ['checkoutUrl']) || directProductUrl,
         affiliateOutboundUrl: pick(it, ['affiliateOutboundUrl','affiliate_outbound_url']),
         externalOutboundUrl: pick(it, ['externalOutboundUrl','external_outbound_url'])
       });
@@ -147,7 +206,8 @@
 
   function createCard(item, mobile){
     const card = document.createElement('div');
-    card.className = mobile ? 'card' : 'ad-box';
+    card.className = mobile ? 'card igdc-real-product-card' : 'ad-box igdc-real-product-card';
+    ensureCardCss();
 
     const a = document.createElement('a');
     applyAnchor(a, item);
