@@ -2259,6 +2259,73 @@ window.addEventListener("message",function(ev){
 window.__MARU_WINDOWS_POLICY_LINKS_V1__ = true;
 </script>
 <script defer src="/assets/js/igdc-qna-storage-bridge.js?v=20260628qa3-final7"></script>
+
+<!-- IGDC mobile child-scroll bridge: same response points as the front pages -->
+<script id="igdc-mobile-child-scroll-bridge">
+(function(){
+  try{
+    function notify(top){
+      parent.postMessage({ IGDC_SCROLL:true, top: !!top }, '*');
+    }
+    function atTop(){
+      var se=document.scrollingElement||document.documentElement||document.body;
+      return (window.scrollY||window.pageYOffset||0)<=0 &&
+             (se ? (se.scrollTop||0)<=0 : true);
+    }
+
+    function onAnyScroll(){ notify(atTop()); }
+    window.addEventListener('scroll', onAnyScroll, {passive:true});
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
+    document.addEventListener('wheel', function(e){
+      if((e.deltaY||0)>0) notify(false);
+    }, {passive:true, capture:true});
+
+    var startX=0, startY=0, maxPull=0, hideSent=false, active=false;
+    var HIDE_THRESHOLD=14;  /* same front-page upward response point */
+    var SHOW_THRESHOLD=44;  /* same front-page pull-down response point */
+
+    document.addEventListener('touchstart', function(e){
+      var t=e.touches&&e.touches.length===1&&e.touches[0];
+      if(!t) return;
+      startX=t.clientX;
+      startY=t.clientY;
+      maxPull=0;
+      hideSent=false;
+      active=true;
+    }, {passive:true, capture:true});
+
+    document.addEventListener('touchmove', function(e){
+      if(!active) return;
+      var t=e.touches&&e.touches.length===1&&e.touches[0];
+      if(!t) return;
+
+      var dx=t.clientX-startX;
+      var dy=t.clientY-startY;
+
+      if(dy>maxPull) maxPull=dy;
+
+      if(!hideSent &&
+         dy<=-HIDE_THRESHOLD &&
+         Math.abs(dy)>Math.abs(dx)*1.15){
+        hideSent=true;
+        notify(false);
+      }
+    }, {passive:true, capture:true});
+
+    document.addEventListener('touchend', function(){
+      if(active && maxPull>=SHOW_THRESHOLD && atTop()){
+        notify(true);
+      }
+      active=false;
+      maxPull=0;
+      hideSent=false;
+    }, {passive:true, capture:true});
+
+    setTimeout(function(){ notify(atTop()); }, 50);
+  }catch(_){}
+})();
+</script>
+
 </body>
 </html>
 
