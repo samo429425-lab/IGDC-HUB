@@ -2185,6 +2185,71 @@ a[id*="qna"]{
 }
 </style>
 
+
+<style id="igdc-home-rightpanel-width-final-v4">
+/* HOME desktop final: make the right-panel slot visually close to the main product-card width,
+   while keeping all title/text contained inside the rail. */
+@media (min-width:1281px){
+  .ad-panel{
+    flex:0 0 252px !important;
+    width:252px !important;
+    min-width:252px !important;
+    max-width:252px !important;
+    box-sizing:border-box !important;
+    overflow-x:hidden !important;
+  }
+}
+@media (min-width:1181px) and (max-width:1280px){
+  .ad-panel{
+    flex:0 0 232px !important;
+    width:232px !important;
+    min-width:232px !important;
+    max-width:232px !important;
+    box-sizing:border-box !important;
+    overflow-x:hidden !important;
+  }
+}
+@media (min-width:1025px) and (max-width:1180px){
+  .ad-panel{
+    flex:0 0 210px !important;
+    width:210px !important;
+    min-width:210px !important;
+    max-width:210px !important;
+    box-sizing:border-box !important;
+    overflow-x:hidden !important;
+  }
+}
+
+@media (min-width:1025px){
+  .ad-panel .ad-section,
+  .ad-panel .ad-section .ad-scroll,
+  .ad-panel .ad-section .ad-list,
+  .ad-panel .ad-section .ad-title,
+  .ad-panel .ad-section .ad-list > .ad-box{
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    box-sizing:border-box !important;
+  }
+
+  .ad-panel .ad-section .ad-list > .ad-box{
+    aspect-ratio:4 / 5 !important;
+    overflow:hidden !important;
+  }
+
+  .ad-panel .ad-section .ad-list > .ad-box .title,
+  .ad-panel .ad-section .ad-list > .ad-box [class*="title"],
+  .ad-panel .ad-section .ad-list > .ad-box span,
+  .ad-panel .ad-section .ad-list > .ad-box div{
+    max-width:100% !important;
+    overflow-wrap:anywhere !important;
+    word-break:break-word !important;
+    white-space:normal !important;
+    box-sizing:border-box !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div class="container">
