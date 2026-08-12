@@ -15,7 +15,7 @@ const path = require("path");
 const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 
-const VERSION = "ip-slot-policy-runtime-v1.3.0-social-right-market-evidence-integrity";
+const VERSION = "ip-slot-policy-runtime-v1.4.0-tour-product-class-aware";
 const POLICY_FILE = "ip-slot-policy.v1.json";
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -377,7 +377,7 @@ function validateCandidate(item, details) {
   if (strategy.requires === "trendEvidence" && validation.requireTrendEvidenceForTrending !== false && !trendVerified(item, contract, mapping)) reasons.push("IP_TREND_EVIDENCE_MISSING");
   if (strategy.requires === "newnessEvidence" && validation.requireNewnessEvidenceForNew !== false && !newnessVerified(item, contract, mapping, validation)) reasons.push("IP_NEWNESS_EVIDENCE_MISSING_OR_STALE");
   if (strategy.requires === "specialEvidence" && validation.requireSpecialEvidenceForSpecial !== false && !specialVerified(item, contract, mapping)) reasons.push("IP_SPECIAL_EVIDENCE_MISSING");
-  if (strategy.requires === "travelOperatorEvidence" && validation.requireTravelOperatorEvidence !== false && !travelVerified(item, contract, mapping)) reasons.push("IP_TRAVEL_OPERATOR_EVIDENCE_MISSING");
+  if (strategy.requires === "travelOperatorEvidence" && validation.requireTravelOperatorEvidence !== false && classes.includes("travel_service") && !travelVerified(item, contract, mapping)) reasons.push("IP_TRAVEL_OPERATOR_EVIDENCE_MISSING");
 
   return {
     ok: reasons.length === 0,

@@ -12,7 +12,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "commerce-product-ranking-v1.10.0-travel-detail-contract";
+const VERSION = "commerce-product-ranking-v1.11.0-tour-right-recreation";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -890,7 +890,11 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const responsibilityEvidence = has(["marketResponsibilityEvidence","sellerResponsibilityEvidence","localResponsibilityEvidence"]) || (row.supplierEvidenceReady === true && supplier.reviewEligible === true);
   const socialMarketEvidence = has(["marketEvidenceReady","sameMarketEvidence","socialMarketEvidence"]);
   const manufacturerBrand = manufacturer && !cooperative;
-  const outdoorGear = /(등산|캠핑|백패킹|트레킹|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|아웃도어|낚시|차박|outdoor|camping|hiking|trekking|tent|sleeping bag|backpacking|fishing)/i.test(hay);
+  const recreationHay = lower([row.productName, row.title, row.description, row.summary, category.tags.join(" ")].join(" "));
+  const outdoorGear = /(등산|캠핑|백패킹|트레킹|하이킹|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|아웃도어|낚시|차박|클라이밍|등산화|트레킹화|outdoor|camping|hiking|trekking|tent|sleeping bag|backpacking|fishing|climbing)/i.test(recreationHay);
+  const golfGear = /(골프|골프채|골프공|골프백|골프웨어|골프화|퍼터|드라이버|아이언|웨지|golf|putter|driver|iron set|golf ball|golf bag)/i.test(recreationHay);
+  const sportsGear = /(스포츠|운동용품|자전거|사이클|러닝|조깅|테니스|배드민턴|수영|스키|스노보드|서핑|카약|sports?\s*gear|sporting goods|bicycle|cycling|running|jogging|tennis|badminton|swimming|ski|snowboard|surf|kayak)/i.test(recreationHay);
+  const tourRecreationProduct = outdoorGear || golfGear || sportsGear;
   const industrialTool = /(전동공구|공구세트|드릴|해머드릴|임팩트|그라인더|절단기|샌더|용접기|콤프레샤|에어공구|작업대|측정공구|수공구|톱날|비트세트|공업용|산업재|power tool|drill|grinder|welder|compressor|sander|impact driver)/i.test(hay);
   const electronicsUtility = category.primary === "electronics_accessories" || /(배터리|충전기|인버터|계측기|측정기|멀티미터|전자부품|센서|컨트롤러|battery|charger|inverter|multimeter|sensor|controller)/i.test(hay);
   const socialLifestyle = ["beauty_personal_care","fashion","baby_family_education"].includes(category.primary) || /(뷰티|패션|의류|신발|가방|주얼리|화장품|스킨케어|키즈|유아|beauty|fashion|apparel|cosmetic|kids)/i.test(hay);
@@ -940,6 +944,9 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   if (travel && Number(audience.audienceDemandScore || 0) >= 42) {
     add("tour", "tour", baseScore - 4, "여행·관광·숙박·교통·예약 서비스", "local_travel_or_tourism_service", travelOperatorEvidence ? [] : ["travelOperatorEvidence"]);
   }
+  if (tourRecreationProduct && risk.gatePassed === true) {
+    add("tour", "tour", baseScore + 3, "등산·캠핑·골프·스포츠 등 여행·레저 연계 실상품", "tour_right_recreation_product", []);
+  }
   if ((commercial.visual || commercial.promotional || localOrigin || socialLifestyle) && (socialLifestyle || Number(audience.audienceDemandScore || 0) >= 52)) {
     add("social", "rightPanel", baseScore + (socialLifestyle ? 2 : -3), socialLifestyle ? "패션·뷰티·가족 소비재의 소셜 반응 검토" : "소셜 반응 가능성과 실제 수요가 함께 확인된 상품", socialLifestyle ? "social_lifestyle_offer" : "social_context_market_offer", socialLifestyle ? [] : (socialMarketEvidence ? [] : ["socialMarketEvidence"]));
   }
@@ -951,6 +958,7 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   // weakening the separate public release gate.
   if (risk.gatePassed === true && !out.length) {
     if (travel) add("tour", "tour", baseScore, "검증 완료 여행·지역 서비스의 비공개 검토 배치", "private_review_travel_fit", []);
+    else if (tourRecreationProduct) add("tour", "tour", baseScore + 2, "검증 완료 여행·레저 연계 실상품의 투어 우측 비공개 검토 배치", "private_review_tour_recreation_fit", []);
     else if (["electronics_accessories", "home_appliances_living", "manufacturer_brands"].includes(category.primary) || manufacturerBrand) add("network", "network-right", baseScore + 1, "검증 완료 제조·전자·가전 상품의 비공개 공급망 검토 배치", "private_review_supply_network_fit", []);
     else if (["food_household_essentials", "beauty_personal_care", "fashion", "baby_family_education", "agriculture_fishery_forestry", "local_products"].includes(category.primary) || localOrigin) add("distribution", "distribution-others", baseScore, "검증 완료 생활·소비재 상품의 비공개 일반 유통 검토 배치", "private_review_general_distribution_fit", []);
     else add("distribution", "distribution-others", baseScore - 1, "검증 완료 상품의 비공개 일반 유통 검토 배치", "private_review_fallback_distribution_fit", []);

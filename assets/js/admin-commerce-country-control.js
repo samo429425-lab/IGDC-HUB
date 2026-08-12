@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.10.2
+/* IGDC Global/Region/Country Commerce Control v3.10.3
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -21,7 +21,7 @@
   var PRODUCT_SECTIONS=Object.freeze([
     {key:'home|home_1',page:'home',section:'home_1',label:'홈 · home_1'},{key:'home|home_2',page:'home',section:'home_2',label:'홈 · home_2'},{key:'home|home_3',page:'home',section:'home_3',label:'홈 · home_3'},{key:'home|home_4',page:'home',section:'home_4',label:'홈 · home_4'},{key:'home|home_5',page:'home',section:'home_5',label:'홈 · home_5'},{key:'home|home_right_top',page:'home',section:'home_right_top',label:'홈 · 우측 상단'},{key:'home|home_right_middle',page:'home',section:'home_right_middle',label:'홈 · 우측 중단'},{key:'home|home_right_bottom',page:'home',section:'home_right_bottom',label:'홈 · 우측 하단'},
     {key:'distribution|distribution-recommend',page:'distribution',section:'distribution-recommend',label:'유통 · 오늘의 추천'},{key:'distribution|distribution-sponsor',page:'distribution',section:'distribution-sponsor',label:'유통 · 스폰서'},{key:'distribution|distribution-trending',page:'distribution',section:'distribution-trending',label:'유통 · 실시간 인기'},{key:'distribution|distribution-new',page:'distribution',section:'distribution-new',label:'유통 · 신규'},{key:'distribution|distribution-special',page:'distribution',section:'distribution-special',label:'유통 · 특별'},{key:'distribution|distribution-others',page:'distribution',section:'distribution-others',label:'유통 · 기타'},{key:'distribution|distribution-right',page:'distribution',section:'distribution-right',label:'유통 · 우측'},
-    {key:'network|network-right',page:'network',section:'network-right',label:'네트워크 · 우측'},{key:'social|rightPanel',page:'social',section:'rightPanel',label:'소셜 · 우측'},{key:'tour|tour',page:'tour',section:'tour',label:'투어'}
+    {key:'network|network-right',page:'network',section:'network-right',label:'네트워크 · 우측'},{key:'social|rightPanel',page:'social',section:'rightPanel',label:'소셜 · 우측'},{key:'tour|tour',page:'tour',section:'tour',label:'투어 · 우측'}
   ]);
   var PRODUCT_SECTION_MAP=PRODUCT_SECTIONS.reduce(function(map,row){map[row.key]=row;return map;},{});
   var REVIEW_RETURN_KEY='igdc.country.control.review.return.v2';

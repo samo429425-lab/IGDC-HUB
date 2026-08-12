@@ -14,7 +14,7 @@ const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.11.0-explicit-withdrawal-refresh";
+const VERSION = "commerce-candidate-registry-sync-v1.12.0-tour-right-recreation";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -86,18 +86,28 @@ function exactProductDestination(candidate,payload){
   }
   return "";
 }
+function tourOfferHay(candidate,payload){
+  payload=plain(payload); const card=productCardOf(payload);
+  // Only the actual offer text participates. Supplier/page labels are excluded
+  // so an unrelated seller name cannot force a product into the Tour rail.
+  return [exactProductTitle(candidate,payload),payload.summary,payload.description,payload.category,payload.type,payload.serviceType,card.sourceTitle].map(lower).filter(Boolean).join(" ");
+}
 function qualifiedTourServiceCandidate(candidate,payload){
   payload=plain(payload);
   if(payload.travelService===true||payload.tourService===true||payload.bookingService===true) return true;
-  const card=productCardOf(payload);
-  // Qualification must come from the actual offer/service, never from a page or
-  // slot label that may itself be the stale misclassification we are checking.
-  const hay=[exactProductTitle(candidate,payload),payload.summary,payload.description,payload.category,payload.type,payload.serviceType,plain(payload.source).name,card.sourceTitle].map(lower).filter(Boolean).join(" ");
-  if(!hay) return false;
-  if(/(여행용\s*(티슈|물티슈|휴지|세면|파우치)|포켓물티슈|체험팩|캠핑(의자|테이블|용품)|등산(스틱|용품)|아웃도어\s*(용품|장비)|travel\s*(size|tissue|wipe)|camping\s*gear|hiking\s*gear)/i.test(hay)) return false;
+  const hay=tourOfferHay(candidate,payload); if(!hay) return false;
+  if(/(여행용\s*(티슈|물티슈|휴지|세면|파우치)|포켓물티슈|체험팩|travel\s*(size|tissue|wipe))/i.test(hay)) return false;
   if(/(숙박|호텔|리조트|관광|투어|입장권|여행티켓|여행패키지|여행상품|항공권|렌터카|렌트카|교통패스|철도패스|관광버스|크루즈|hotel|resort|tour\b|admission|travel\s*(?:ticket|package|booking)|flight\s*ticket|rental\s*car|rail\s*pass|transport\s*pass|cruise|booking)/i.test(hay)) return true;
   if(/(체험|experience|activity)/i.test(hay)&&/(예약|티켓|입장권|프로그램|관광|투어|현지|지역|booking|ticket|admission|program|tour|local)/i.test(hay)) return true;
   return false;
+}
+function qualifiedTourRecreationProductCandidate(candidate,payload){
+  const hay=tourOfferHay(candidate,payload); if(!hay) return false;
+  if(/(여행용\s*(티슈|물티슈|휴지|세면|파우치)|포켓물티슈|캠핑용?\s*(물티슈|휴지)|체험팩|travel\s*(size|tissue|wipe))/i.test(hay)) return false;
+  return /(등산|캠핑|백패킹|트레킹|하이킹|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|아웃도어|낚시|차박|클라이밍|등산화|트레킹화|골프|골프채|골프공|골프백|골프웨어|골프화|퍼터|드라이버|아이언|웨지|스포츠|운동용품|자전거|사이클|러닝|조깅|테니스|배드민턴|수영|스키|스노보드|서핑|카약|outdoor|camping|hiking|trekking|tent|sleeping bag|backpacking|fishing|climbing|golf|putter|sports?\s*gear|sporting goods|bicycle|cycling|running|jogging|tennis|badminton|swimming|ski|snowboard|surf|kayak)/i.test(hay);
+}
+function qualifiedTourCandidate(candidate,payload){
+  return qualifiedTourServiceCandidate(candidate,payload)||qualifiedTourRecreationProductCandidate(candidate,payload);
 }
 function productFirstVerifiedAt(candidate,payload){
   payload=plain(payload); const mapping=plain(payload.productMapping), timestamps=plain(payload.timestamps), research=plain(payload.research);
@@ -228,13 +238,12 @@ function authoritativeProductClass(candidate,payload,page,slotStrategy){
   const allowed=array(slotStrategy&&slotStrategy.allowedProductClasses).map(lower).filter(Boolean);
   const existing=lower(first(plain(payload.productMapping).productClass,payload.productClass));
   if(existing&&allowed.includes(existing)) return existing;
-  // Tour is a service-only route. Do not let the generic physical-product
-  // default turn an otherwise valid travel service into an IP policy mismatch.
-  // Qualification still does not fabricate operator/licence evidence: that
-  // remains a separate fail-closed requirement in the canonical policy.
-  if(page==="tour"&&qualifiedTourServiceCandidate(candidate,payload)){
-    if(allowed.includes("travel_service")) return "travel_service";
-    if(allowed.includes("travel_product")) return "travel_product";
+  // Tour accepts both travel/booking services and travel-recreation products.
+  // Services keep the operator-evidence requirement; physical recreation goods
+  // are represented as travel_product and remain external-seller referrals.
+  if(page==="tour"){
+    if(qualifiedTourServiceCandidate(candidate,payload)&&allowed.includes("travel_service")) return "travel_service";
+    if(qualifiedTourRecreationProductCandidate(candidate,payload)&&allowed.includes("travel_product")) return "travel_product";
   }
   if(allowed.includes("physical_product")) return "physical_product";
   return existing&&allowed.includes(existing)?existing:first(allowed[0],existing);
@@ -333,6 +342,8 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   const destination=exactProductDestination(candidate,payload);
   const image=exactProductImage(candidate,payload);
   const title=exactProductTitle(candidate,payload);
+  const runtimeState=lower(plain(payload.runtimeValidation).state);
+  const administratorValidatedOrderPath=!!destination && (runtimeState==="live" || (payload.productPageLive===true && payload.inspectionComplete===true));
   const firstVerifiedAt=productFirstVerifiedAt(candidate,payload);
   const card=productCardOf(payload);
   const rawPrice=first(card.price,payload.price,payload.salePrice,payload.currentPrice);
@@ -368,7 +379,8 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
     layerPointer:Object.assign({},plain(payload.layerPointer),{page,section,slot:requestedSlot}),
     placement:Object.assign({},plain(payload.placement),{page,section,slot:requestedSlot}),
     source:{name:first(plain(payload.source).name,candidate.title,"Approved commerce member"),url:first(plain(payload.source).url,candidate.official_url)},
-    searchBankContract:Object.assign({},plain(payload.searchBankContract),{frontSupplyAllowed:true,searchBankEligible:true,snapshotEligible:true,indexEligible:true,lastVerifiedAt:first(plain(payload.searchBankContract).lastVerifiedAt,candidate.updated_at),trustScore:Number(plain(payload.searchBankContract).trustScore||payload.trustScore||75),trustTier:first(plain(payload.searchBankContract).trustTier,payload.trustTier,"A"),officialSource:bool(first(plain(payload.searchBankContract).officialSource,payload.officialSource,true)),producerVerified:bool(first(plain(payload.searchBankContract).producerVerified,payload.producerVerified,true))}),
+    orderReady:bool(first(payload.orderReady,administratorValidatedOrderPath)),
+    searchBankContract:Object.assign({},plain(payload.searchBankContract),{frontSupplyAllowed:true,searchBankEligible:true,snapshotEligible:true,indexEligible:true,orderReady:bool(first(plain(payload.searchBankContract).orderReady,administratorValidatedOrderPath)),lastVerifiedAt:first(plain(payload.searchBankContract).lastVerifiedAt,candidate.updated_at),trustScore:Number(plain(payload.searchBankContract).trustScore||payload.trustScore||75),trustTier:first(plain(payload.searchBankContract).trustTier,payload.trustTier,"A"),officialSource:bool(first(plain(payload.searchBankContract).officialSource,payload.officialSource,true)),producerVerified:bool(first(plain(payload.searchBankContract).producerVerified,payload.producerVerified,true))}),
     marketAvailability:{markets},
     directCommerceListing:Object.assign({},plain(payload.directCommerceListing),{
       sourceTier:"approved_commerce_member",
@@ -462,7 +474,7 @@ async function syncApprovedCandidates(input){
       // Old assignments created before the Tour classifier fix must not become
       // public merely because their persisted page says `tour`. Only actual
       // booking/travel services may enter the Tour SearchBank route.
-      if(lower(assignment.hub_key)==="tour"&&!qualifiedTourServiceCandidate(candidate,sourcePayload(candidate))) continue;
+      if(lower(assignment.hub_key)==="tour"&&!qualifiedTourCandidate(candidate,sourcePayload(candidate))) continue;
       const publicationRequested=lower(assignment.publication_status)==="publish_requested";
       let avail=avBy.get(candidate.id)||[];
       if(!avail.length&&marker&&publicationRequested) avail=syntheticAvailabilityFromMarker(candidate,marker);

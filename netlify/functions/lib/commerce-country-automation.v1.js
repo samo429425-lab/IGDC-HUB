@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.13.0-scope-repair-review-resume";
+const VERSION = "commerce-country-automation-v3.14.0-tour-right-recreation";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1823,7 +1823,10 @@ function privateReviewFallbackAssignments(rowInput) {
   const newness = /(신제품|신상품|신규출시|새상품|new_arrival|new_product|new_release)/i.test(titleHay);
   const trending = /(베스트|인기상품|판매상위|핫딜|best_seller|most_popular)/i.test(titleHay);
   const special = /(특산|한정|인증|유기농|무농약|수상|limited|certified)/i.test(titleHay);
-  const outdoor = /(등산|캠핑|백패킹|트레킹|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|아웃도어|낚시|차박|outdoor|camping|hiking|trekking|tent|sleeping bag|backpacking|fishing)/i.test(titleHay);
+  const outdoor = /(등산|캠핑|백패킹|트레킹|하이킹|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|아웃도어|낚시|차박|클라이밍|등산화|트레킹화|outdoor|camping|hiking|trekking|tent|sleeping bag|backpacking|fishing|climbing)/i.test(titleHay);
+  const golf = /(골프|골프채|골프공|골프백|골프웨어|골프화|퍼터|드라이버|아이언|웨지|golf|putter|driver|iron set|golf ball|golf bag)/i.test(titleHay);
+  const sports = /(스포츠|운동용품|자전거|사이클|러닝|조깅|테니스|배드민턴|수영|스키|스노보드|서핑|카약|sports?\s*gear|sporting goods|bicycle|cycling|running|jogging|tennis|badminton|swimming|ski|snowboard|surf|kayak)/i.test(titleHay);
+  const tourRecreation = outdoor || golf || sports;
   const industrialTool = /(전동공구|공구세트|드릴|해머드릴|임팩트|그라인더|절단기|샌더|용접기|콤프레샤|에어공구|작업대|측정공구|수공구|톱날|비트세트|공업용|산업재|power tool|drill|grinder|welder|compressor|sander|impact driver)/i.test(titleHay);
   const electronics = category === "electronics_accessories" || /(전자|충전기|배터리|인버터|계측기|멀티미터|센서|컨트롤러|electronics|charger|battery|inverter|multimeter|sensor|controller)/i.test(titleHay);
   const living = category === "home_appliances_living";
@@ -1854,10 +1857,11 @@ function privateReviewFallbackAssignments(rowInput) {
     });
   };
 
-  if (outdoor) {
-    add("home|home_4", 86, "야외활동 상품 비공개 검토", "private_review_outdoor_home");
-    add("home|home_right_bottom", 84, "아웃도어 발견 상품 우측 검토", "private_review_outdoor_right");
-    add("distribution|distribution-special", 78, "테마형 아웃도어 상품 검토", "private_review_outdoor_special");
+  if (tourRecreation) {
+    add("tour|tour", 90, "등산·캠핑·골프·스포츠 등 투어 우측 연계 상품 비공개 검토", "private_review_tour_recreation");
+    add("home|home_4", 86, "여행·레저 연계 상품 비공개 검토", "private_review_outdoor_home");
+    add("home|home_right_bottom", 84, "여행·레저 발견 상품 우측 검토", "private_review_outdoor_right");
+    add("distribution|distribution-special", 78, "테마형 여행·레저 상품 검토", "private_review_outdoor_special");
   } else if (category === "travel_local_services") {
     add("tour|tour", 88, "여행·관광·지역 서비스 비공개 검토", "private_review_travel");
     add("home|home_4", 80, "현지 서비스·관광 검토", "private_review_local_service");
@@ -2320,13 +2324,15 @@ function candidateRuntimeHealth(productInput) {
 }
 function candidateRuntimePlacementOptions(productInput, payloadInput) {
   const product = plain(productInput), payload = plain(payloadInput), category = ProductRanking.classifyCategory(product), travel = category.primary === "travel_local_services";
+  const tourHay = lower([product.productName, product.title, product.description, product.summary, array(category.tags).join(" ")].map(text).join(" "));
+  const tourRecreation = /(등산|캠핑|백패킹|트레킹|하이킹|텐트|타프|침낭|코펠|버너|등산스틱|아웃도어|낚시|차박|클라이밍|골프|골프채|골프공|골프백|골프웨어|골프화|스포츠|운동용품|자전거|사이클|러닝|조깅|테니스|배드민턴|수영|스키|스노보드|서핑|카약|outdoor|camping|hiking|trekking|backpacking|fishing|climbing|golf|sports?\s*gear|sporting goods|bicycle|cycling|running|jogging|tennis|badminton|swimming|ski|snowboard|surf|kayak)/i.test(tourHay);
   product.productCategory = category.primary; product.productCategoryTags = category.tags;
   const byKey = new Map();
   const source = array(payload.proposedPlacements).concat(array(product.sectionAssignments)).concat(privateReviewFallbackAssignments(product));
   for (const itemInput of source) {
     const item = plain(itemInput), key = productPlacementKey(item);
     if (!validProductSectionKey(key)) continue;
-    if (key === "tour|tour" && !travel) continue;
+    if (key === "tour|tour" && !(travel || tourRecreation)) continue;
     if (item.reviewEligible === false || item.valueQualified === false) continue;
     const prior = byKey.get(key), nextScore = Number(item.score || 0), priorScore = Number(prior && prior.score || 0);
     if (!prior || nextScore > priorScore) byKey.set(key, Object.assign({}, item, { key }));
