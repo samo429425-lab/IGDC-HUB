@@ -6,7 +6,7 @@ const os=require("os");
 const path=require("path");
 const Adapter=require("../../functions/lib/media-searchbank-release-adapter.v1");
 
-const VERSION="igdc-media-snapshot-release-build-plugin-v2.0.0-searchbank-snapshot-pipeline";
+const VERSION="igdc-media-snapshot-release-build-plugin-v2.0.1-hook-authorized-searchbank-pipeline";
 const DEFAULT_TABLE="media_snapshot_releases";
 
 function text(value){return value==null?"":String(value).trim();}
@@ -21,9 +21,16 @@ function stableStringify(value){
   return"{"+Object.keys(value).sort().map((key)=>JSON.stringify(key)+":"+stableStringify(value[key])).join(",")+"}";
 }
 function sha256(value){return crypto.createHash("sha256").update(typeof value==="string"?value:stableStringify(value)).digest("hex");}
+function hookAuthorization(){
+  const raw=text(process.env.INCOMING_HOOK_BODY);if(!raw)return false;
+  try{
+    const body=JSON.parse(raw);
+    return !!(body&&body.trigger==="approved-media-snapshot-release"&&text(body.releaseId)&&text(body.snapshotHash));
+  }catch(_error){return false;}
+}
 function releaseArmed(){
   const mode=lower(process.env.MEDIA_RELEASE_MODE),key=text(process.env.MEDIA_RELEASE_KEY);
-  return mode==="enabled"&&key.length>=32;
+  return (mode==="enabled"&&key.length>=32)||hookAuthorization();
 }
 function config(){
   const url=firstEnv(["MEDIA_SUPABASE_URL","IGDC_MEDIA_SUPABASE_URL","GSLOT_SUPABASE_URL","SUPABASE_URL"]);

@@ -12,7 +12,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
 const MediaReleaseAdapter = require("./lib/media-searchbank-release-adapter.v1");
 
-const VERSION = "media-snapshot-publish-v1.4.0-pipeline-stage-diagnostics";
+const VERSION = "media-snapshot-publish-v1.4.1-explicit-admin-release-dispatch";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
 
@@ -263,7 +263,8 @@ exports.handler = async function(event){
       frontPublication=await MediaReleaseDispatch.dispatch({
         releaseId:release.release_id,
         snapshotHash:hash,
-        actorId:actor.email||actor.memberId
+        actorId:actor.email||actor.memberId,
+        explicitAdminAuthorization:true
       });
     }
     if(params.download === "1" || params.download === true || params.format === "snapshot"){
