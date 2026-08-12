@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.14.0-tour-right-recreation";
+const VERSION = "commerce-country-automation-v3.17.0-front-policy-aware-balanced-auto-placement";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -50,8 +50,64 @@ const PRODUCT_SECTION_KEYS = Object.freeze([
   "distribution|distribution-special", "distribution|distribution-others",
   "distribution|distribution-right", "network|network-right", "social|rightPanel", "tour|tour"
 ]);
+const AI_AUTO_BALANCE_GROUPS = ProductRanking.AI_AUTO_BALANCE_GROUPS || Object.freeze({
+  homeMain: Object.freeze(["home|home_1", "home|home_2", "home|home_3", "home|home_4", "home|home_5"]),
+  homeRight: Object.freeze(["home|home_right_top", "home|home_right_middle", "home|home_right_bottom"]),
+  distributionMain: Object.freeze([
+    "distribution|distribution-recommend", "distribution|distribution-sponsor",
+    "distribution|distribution-trending", "distribution|distribution-new",
+    "distribution|distribution-special", "distribution|distribution-others"
+  ])
+});
 const AFFILIATE_SETTLEMENT_STAGES = Object.freeze(["connection_required", "referral_verified", "online_affiliate_active", "formal_partner"]);
 const AFFILIATE_STAGE_PRIORITY = Object.freeze({ connection_required: 0, referral_verified: 1, online_affiliate_active: 2, formal_partner: 3 });
+const TOUR_RIGHT_RESEARCH_PHRASES = Object.freeze({
+  ko: Object.freeze([
+    "공식 호텔 리조트 크루즈 여행 투어 관광 티켓 렌터카 예약",
+    "공식 캠핑 등산 아웃도어 골프 스포츠 용품 온라인 구매",
+    "공식 맛집 레스토랑 카페 다이닝 예약 메뉴"
+  ]),
+  en: Object.freeze([
+    "official hotel resort cruise travel tour attraction ticket car rental booking",
+    "official camping hiking outdoor golf sports gear online store",
+    "official local restaurant cafe dining reservation menu"
+  ]),
+  ja: Object.freeze([
+    "公式 ホテル リゾート クルーズ 旅行 ツアー 観光 チケット レンタカー 予約",
+    "公式 キャンプ 登山 アウトドア ゴルフ スポーツ用品 オンライン購入",
+    "公式 レストラン カフェ ダイニング 予約 メニュー"
+  ]),
+  "zh-hans": Object.freeze([
+    "官方 酒店 度假村 邮轮 旅游 景点 门票 租车 预订",
+    "官方 露营 徒步 户外 高尔夫 体育用品 在线购买",
+    "官方 餐厅 咖啡馆 餐饮 预订 菜单"
+  ]),
+  "zh-hant": Object.freeze([
+    "官方 飯店 度假村 郵輪 旅遊 景點 門票 租車 預訂",
+    "官方 露營 健行 戶外 高爾夫 運動用品 線上購買",
+    "官方 餐廳 咖啡館 餐飲 預訂 菜單"
+  ]),
+  es: Object.freeze([
+    "oficial hotel resort crucero viaje tour atracción entradas alquiler coche reserva",
+    "oficial camping senderismo aire libre golf artículos deportivos tienda online",
+    "oficial restaurante cafetería gastronomía reserva menú"
+  ]),
+  pt: Object.freeze([
+    "oficial hotel resort cruzeiro viagem tour atração ingresso aluguel carro reserva",
+    "oficial camping trilha outdoor golfe artigos esportivos loja online",
+    "oficial restaurante café gastronomia reserva menu"
+  ]),
+  fr: Object.freeze([
+    "officiel hôtel resort croisière voyage visite attraction billet location voiture réservation",
+    "officiel camping randonnée plein air golf articles de sport boutique en ligne",
+    "officiel restaurant café gastronomie réservation menu"
+  ]),
+  de: Object.freeze([
+    "offiziell hotel resort kreuzfahrt reise tour attraktion ticket mietwagen buchung",
+    "offiziell camping wandern outdoor golf sportartikel online shop",
+    "offiziell restaurant café gastronomie reservierung speisekarte"
+  ])
+});
 const PRIVATE_REVIEW_SOFT_BLOCKERS = Object.freeze(new Set(["inspection_incomplete", "not_ready_for_admin_review"]));
 const PRIVATE_REVIEW_UNASSIGNED_BLOCKERS = Object.freeze(new Set(["missing_https_product_image", "generic_or_unresolved_product_name"]));
 const PRIVATE_REVIEW_HARD_STATUSES = Object.freeze(new Set(["http_404", "non_html", "blocked", "unavailable"]));
@@ -1356,10 +1412,40 @@ async function researchContext(scope) {
   let policyControl = null; try { policyControl = await PolicyDiscussion.effectivePolicy({ scopeType: "country", regionGroup: scope.regionGroup, countryCode: scope.country, subdivisionCode: scope.region }); } catch (error) { policyControl = { active: false, categoryWeights: {}, priorityDirections: [], avoidDirections: [], manualPriorityTargets: [], manualBlockedTargets: [], sources: [], error: text(error && error.message) }; }
   return { marketSignalPlan, policyControl, effectiveCategoryWeights: PolicyDiscussion.mergeWithAutomaticWeights(plain(marketSignalPlan.categoryWeights), policyControl) };
 }
+function tourRightResearchLocale(value) {
+  const raw=text(value).trim(), low=raw.toLowerCase();
+  if(TOUR_RIGHT_RESEARCH_PHRASES[low]) return low;
+  if(low.startsWith("zh")) return /hant|tw|hk/.test(low)?"zh-hant":"zh-hans";
+  const short=low.split(/[-_]/)[0];
+  return TOUR_RIGHT_RESEARCH_PHRASES[short]?short:"en";
+}
+function augmentTourRightResearchPlan(planInput, scopeInput) {
+  const plan=Object.assign({},plain(planInput)), scope=plain(scopeInput), rows=array(plan.rows).slice(), tasks=array(plan.tasks).slice();
+  const locale=tourRightResearchLocale(first(rows[0]&&rows[0].locale,array(plan.locales)[0],scope.country==="KR"?"ko":"en"));
+  const localName=first(rows[0]&&rows[0].localName,scope.country);
+  const phrases=array(TOUR_RIGHT_RESEARCH_PHRASES[locale]||TOUR_RIGHT_RESEARCH_PHRASES.en);
+  const seen=new Set(rows.map((row)=>lower(row&&row.query)));
+  let added=0;
+  for(const phrase of phrases){
+    const query=(localName+" "+text(phrase)).replace(/\s+/g," ").trim().slice(0,880), key=lower(query);
+    if(!query||seen.has(key)) continue;
+    seen.add(key);
+    const rowIndex=rows.length,row={query,locale,origin:"administrator-policy-tour-right",lane:"tour-right",localName};
+    rows.push(row);
+    if(scope.country==="KR") tasks.push({lane:"naver",rowIndex,query,locale,origin:row.origin,supplyLane:row.lane,attempt:0});
+    else tasks.push({lane:"google",rowIndex,query,locale,origin:row.origin,supplyLane:row.lane,attempt:0});
+    tasks.push({lane:"sanmaru",rowIndex,query,locale,origin:row.origin,supplyLane:row.lane,attempt:0});
+    if(scope.country==="KR") tasks.push({lane:"google",rowIndex,query,locale,origin:row.origin,supplyLane:row.lane,attempt:0});
+    added+=1;
+  }
+  plan.rows=rows;plan.tasks=tasks;plan.diagnostics=Object.assign({},plain(plan.diagnostics),{tourRightCommercialPolicy:true,tourRightQueriesAdded:added,tourRightLocale:locale,tourRightDiningAuxiliary:true});
+  return plan;
+}
+
 async function beginResearchJob(actorId, input, event) {
   const raw=plain(input),scope=researchScope(raw),state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region),existing=await researchJobRule(scope);
   if(existing&&existing.schema===RESEARCH_JOB_SCHEMA&&raw.restart!==true&&existing.manualOnly!==true&&!["cancelled","failed"].includes(existing.status))return publicResearchJob(existing);
-  const context=await researchContext(scope),selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},plan=RegionalSelector.createSupplierResearchPlan(selectorInput),now=iso(),persistentBlockedKeys=await persistentSupplierSuppressionKeys(scope),blockedSupplierKeys=Array.from(new Set(array(existing&&existing.blockedSupplierKeys).concat(persistentBlockedKeys).map(text).filter(Boolean))),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry),allSeeds=manualSeeds.concat(array(plan.seeds));
+  const context=await researchContext(scope),selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},plan=augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope),now=iso(),persistentBlockedKeys=await persistentSupplierSuppressionKeys(scope),blockedSupplierKeys=Array.from(new Set(array(existing&&existing.blockedSupplierKeys).concat(persistentBlockedKeys).map(text).filter(Boolean))),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry),allSeeds=manualSeeds.concat(array(plan.seeds));
   const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),status:array(plan.tasks).length?"searching":"inspecting",startedAt:now,createdAt:now,scope,effective,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length}),searchTasks:array(plan.tasks),searchCursor:0,blockedSupplierKeys,manualSupplierCount:manualSeeds.length,manualOnly:false,rawCandidates:mergeResearchItems([],allSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding([],allSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked([],allSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],candidates:[],trace:[{source:"research-job",status:"started",at:now,queries:array(plan.rows).length,tasks:array(plan.tasks).length,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets)}};
   if(!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,effective.maxCandidates*4))}));job.status="inspecting";}
   await saveResearchJob(job,actorId);return publicResearchJob(job);
@@ -1478,6 +1564,10 @@ function merchandisePriority(value) {
   if (/(공구|산업용품|기계|부품|금속|철강|플라스틱|고무|목재|포장재|전기자재|전자부품|자동차부품|건축자재|설비|안전용품|industrial|machinery|machine|tool|component|parts|metal|steel|plastic|rubber|packaging|electrical|hardware)/i.test(hay)) labels.push("공업·산업재");
   if (/(의류|섬유|패션|신발|가방|완구|교육용품|문구|유아용품|가구|조명|침구|apparel|textile|fashion|footwear|toy|stationery|furniture|lighting|bedding)/i.test(hay)) labels.push("소비재·제조상품");
   if (/(농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|로컬푸드|생산자|농장|어촌|산촌)/i.test(hay)) labels.push("생산자·조합");
+  const tourProfile=ProductRanking.tourRightProfile({productName:hay,title:hay,productUrl:hay});
+  if (tourProfile.service) labels.push("여행·관광·레저 서비스");
+  else if (tourProfile.recreationProduct) labels.push("스포츠·캠핑·아웃도어");
+  else if (tourProfile.diningAuxiliary) labels.push("지역 맛집·다이닝");
   return { score: labels.length * 40, label: labels[0] || "" };
 }
 function mergeProductRows(existing, incoming, max) {
@@ -1817,22 +1907,33 @@ function manualPrivatePlacementAssessment(rowInput) {
 function privateReviewFallbackAssignments(rowInput) {
   const row = plain(rowInput), assessment = productPrivateReviewAssessment(row);
   if (!assessment.eligible) return [];
-  const category = text(row.productCategory);
-  const titleHay = lower([row.productName, row.title, row.priorityLabel, row.description, row.summary, row.supplierName, row.supplierType].map(text).join(" "));
+  const category = text(row.productCategory || plain(ProductRanking.classifyCategory(row)).primary);
+  const titleHay = lower([row.productName, row.title, row.priorityLabel, row.description, row.summary, row.supplierName, row.supplierType, row.productUrl].map(text).join(" "));
   const manufacturer = category === "manufacturer_brands" || /(제조|브랜드|공식몰|공업|산업재|manufacturer|official_store|industrial)/i.test(titleHay);
-  const newness = /(신제품|신상품|신규출시|새상품|new_arrival|new_product|new_release)/i.test(titleHay);
-  const trending = /(베스트|인기상품|판매상위|핫딜|best_seller|most_popular)/i.test(titleHay);
-  const special = /(특산|한정|인증|유기농|무농약|수상|limited|certified)/i.test(titleHay);
-  const outdoor = /(등산|캠핑|백패킹|트레킹|하이킹|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|아웃도어|낚시|차박|클라이밍|등산화|트레킹화|outdoor|camping|hiking|trekking|tent|sleeping bag|backpacking|fishing|climbing)/i.test(titleHay);
-  const golf = /(골프|골프채|골프공|골프백|골프웨어|골프화|퍼터|드라이버|아이언|웨지|golf|putter|driver|iron set|golf ball|golf bag)/i.test(titleHay);
-  const sports = /(스포츠|운동용품|자전거|사이클|러닝|조깅|테니스|배드민턴|수영|스키|스노보드|서핑|카약|sports?\s*gear|sporting goods|bicycle|cycling|running|jogging|tennis|badminton|swimming|ski|snowboard|surf|kayak)/i.test(titleHay);
-  const tourRecreation = outdoor || golf || sports;
+  const newness = /(신제품|신상품|신규출시|신규\s*출시|새상품|new\s*(?:arrival|product|release)|newly\s*launched)/i.test(titleHay);
+  const trending = /(베스트(?:셀러)?|인기상품|인기\s*상품|판매\s*상위|핫딜|best\s*seller|most\s*popular)/i.test(titleHay);
+  const special = /(특산|한정|인증|유기농|무농약|수상|리미티드|special\s*edition|limited|certified)/i.test(titleHay);
+  const tourProfile = ProductRanking.tourRightProfile(row);
+  const tourRecreation = tourProfile.recreationProduct === true;
+  const tourService = tourProfile.service === true || category === "travel_local_services";
+  const tourDiningAuxiliary = tourProfile.diningAuxiliary === true;
   const industrialTool = /(전동공구|공구세트|드릴|해머드릴|임팩트|그라인더|절단기|샌더|용접기|콤프레샤|에어공구|작업대|측정공구|수공구|톱날|비트세트|공업용|산업재|power tool|drill|grinder|welder|compressor|sander|impact driver)/i.test(titleHay);
   const electronics = category === "electronics_accessories" || /(전자|충전기|배터리|인버터|계측기|멀티미터|센서|컨트롤러|electronics|charger|battery|inverter|multimeter|sensor|controller)/i.test(titleHay);
   const living = category === "home_appliances_living";
-  const essential = ["food_household_essentials", "baby_family_education"].includes(category);
   const socialLifestyle = ["beauty_personal_care", "fashion", "baby_family_education"].includes(category);
   const localOrigin = ["local_products", "agriculture_fishery_forestry"].includes(category);
+  const fashionFit = category === "fashion" || /(패션|의류|옷|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|안경|fashion|apparel|clothing|shoes|bag|jewelry|watch)/i.test(titleHay);
+  const automotiveFit = /(자동차|차량|자동차용품|차량용품|타이어|휠|블랙박스|대시캠|카케어|모빌리티|전기차|오토바이|모터사이클|car\b|vehicle|automotive|tire|wheel|dashcam|car care|mobility|motorcycle)/i.test(titleHay);
+  const webtoonFit = /(웹툰|만화|코믹|그래픽노블|webtoon|webcomic|comic(?:s)?|graphic novel|manga)/i.test(titleHay);
+  const bookFit = /(도서|책방|서점|책\b|출판|전자책|bookstore|book\b|books\b|publishing|ebook)/i.test(titleHay);
+  const foodLivingFit = ["food_household_essentials", "agriculture_fishery_forestry", "home_appliances_living", "local_products"].includes(category) || /(푸드|식품|식료품|농산물|수산물|축산물|리빙|생활용품|주방|가구|침구|인테리어|food|grocery|produce|seafood|living|household|kitchen|furniture|interior)/i.test(titleHay);
+  const knowledgeHealthFit = category === "baby_family_education" || category === "beauty_personal_care" || /(지식|교육|학습|강의|자격증|건강|헬스|피트니스|영양제|비타민|건강식품|웰니스|knowledge|education|learning|course|health|fitness|supplement|vitamin|wellness)/i.test(titleHay);
+  const topRightFit = automotiveFit || webtoonFit || fashionFit;
+  const middleRightFit = foodLivingFit || bookFit;
+  const bottomRightFit = !topRightFit && !middleRightFit;
+  const commercial = plain(row.commercialAssessment), sponsorSignal = commercial.sponsorReady === true || /(스폰서|협찬|sponsor(?:ed)?)/i.test(titleHay);
+  const candidateStamp = first(row.candidateRegisteredAt, row.firstVerifiedAt, row.listedAt, row.discoveredAt, row.createdAt, row.inspectedAt);
+  const stamp = Date.parse(candidateStamp), recentRegistration = Number.isFinite(stamp) && Date.now() - stamp <= 45 * 86400000;
   const map = [];
   const add = (key, score, reason, role) => {
     if (!validProductSectionKey(key) || map.some((item) => item.key === key)) return;
@@ -1857,79 +1958,52 @@ function privateReviewFallbackAssignments(rowInput) {
     });
   };
 
-  if (tourRecreation) {
-    add("tour|tour", 90, "등산·캠핑·골프·스포츠 등 투어 우측 연계 상품 비공개 검토", "private_review_tour_recreation");
-    add("home|home_4", 86, "여행·레저 연계 상품 비공개 검토", "private_review_outdoor_home");
-    add("home|home_right_bottom", 84, "여행·레저 발견 상품 우측 검토", "private_review_outdoor_right");
-    add("distribution|distribution-special", 78, "테마형 여행·레저 상품 검토", "private_review_outdoor_special");
-  } else if (category === "travel_local_services") {
-    add("tour|tour", 88, "여행·관광·지역 서비스 비공개 검토", "private_review_travel");
-    add("home|home_4", 80, "현지 서비스·관광 검토", "private_review_local_service");
-    add("home|home_right_bottom", 73, "여행·지역 발견 상품 우측 검토", "private_review_travel_right");
-  }
+  // Home main rows share one front policy (쇼핑 핫템 추천). Keeping all five
+  // as equal-fit choices lets the balancing allocator spread thumbnails rather
+  // than concentrating every candidate in the first row.
+  ["home_1", "home_2", "home_3", "home_4", "home_5"].forEach((section) => add("home|" + section, 82, "홈 쇼핑 핫템 추천 공통 정책 적합", "private_review_home_hot_item"));
+  if (topRightFit) add("home|home_right_top", 84, "자동차·웹툰·패션 우측 상단 정책 적합", "private_review_home_right_auto_webtoon_fashion");
+  if (middleRightFit) add("home|home_right_middle", 84, "푸드·리빙·책방 우측 중단 정책 적합", "private_review_home_right_food_living_books");
+  if (bottomRightFit) add("home|home_right_bottom", 80, "지식·건강·기타 우측 하단 정책 적합", "private_review_home_right_knowledge_health_other");
+
+  // Tour right: travel/tourism + leisure/sports/outdoor commercial spectrum.
+  // Dining is intentionally lower priority and separately capped by the AI
+  // allocator, so it remains only a one/two-item auxiliary presence.
+  if (tourService) add("tour|tour", 91, "여행·관광·숙박·크루즈·예약 서비스 투어 우측 검토", "private_review_tour_service");
+  if (tourRecreation) add("tour|tour", 92, "등산·캠핑·골프·스포츠·아웃도어 투어 우측 검토", "private_review_tour_recreation");
+  if (tourDiningAuxiliary) add("tour|tour", 70, "지역 맛집·레스토랑·카페 보조 후보", "private_review_tour_dining_auxiliary");
 
   if (industrialTool) {
     add("network|network-right", 88, "전동공구·산업재 공급망 상품 비공개 검토", "private_review_industrial_network");
     add("distribution|distribution-right", 84, "공구·산업재 우측 유통 검토", "private_review_industrial_distribution_right");
-    add("home|home_right_middle", 82, "산업 효용 상품 우측 중단 검토", "private_review_industrial_home_right");
-    add("distribution|distribution-others", 76, "공구·산업재 일반 유통 검토", "private_review_industrial_distribution");
   } else if (electronics || living) {
-    add("home|home_1", 86, "전자·가전·생활 효용 상품 비공개 검토", "private_review_electronics_living");
-    add("home|home_right_top", 85, "전자·가전 대표 효용 상품 우측 상단 검토", "private_review_utility_right_top");
     add("network|network-right", 80, "제조·공급망 연결 상품 비공개 검토", "private_review_supply_network");
     add("distribution|distribution-right", 77, "전자·가전 우측 유통 검토", "private_review_utility_distribution_right");
-    add("distribution|distribution-recommend", 73, "생활 효용 중심 추천 검토", "private_review_utility_recommend");
   }
-
-  if (essential) {
-    add("home|home_2", 86, "생활필수·반복구매 상품 비공개 검토", "private_review_essential");
-    add("distribution|distribution-recommend", 82, "대중 수요 생활상품 추천 검토", "private_review_essential_recommend");
-    add("home|home_right_middle", 79, "반복구매 생활상품 우측 검토", "private_review_essential_right");
-  }
-
-  if (socialLifestyle) {
-    add("social|rightPanel", 86, "패션·뷰티·가족 소비재 소셜 반응 검토", "private_review_social_lifestyle");
-    add("home|home_1", 80, "대중 생활·뷰티·패션 상품 비공개 검토", "private_review_lifestyle");
-    add("home|home_right_top", 80, "소셜 반응형 생활상품 우측 검토", "private_review_lifestyle_right");
-    add("distribution|distribution-recommend", 73, "대중 반응형 상품 추천 검토", "private_review_lifestyle_recommend");
-  }
-
-  if (localOrigin) {
-    add("home|home_3", 86, "지역 생산·원산지 상품 비공개 검토", "private_review_local_origin");
-    add("distribution|distribution-special", 82, "지역 특산 상품 비공개 검토", "private_review_local_special");
-    add("home|home_right_middle", 75, "지역 가치 상품 우측 검토", "private_review_local_right");
-    add("network|network-right", 71, "생산자·조합 공급망 검토", "private_review_local_network");
-  }
-
-  if (manufacturer && !industrialTool && !electronics && !living && !essential && !socialLifestyle && !localOrigin && category !== "travel_local_services") {
+  if (socialLifestyle) add("social|rightPanel", 86, "패션·뷰티·가족 소비재 소셜 반응 검토", "private_review_social_lifestyle");
+  if (localOrigin) add("network|network-right", 71, "생산자·조합 공급망 검토", "private_review_local_network");
+  if (manufacturer && !industrialTool && !electronics && !living && !socialLifestyle && !localOrigin && category !== "travel_local_services") {
     add("network|network-right", 84, "공식 제조사·브랜드 공급망 상품 비공개 검토", "private_review_manufacturer_network");
     add("distribution|distribution-right", 80, "공식 제조사·브랜드 우측 유통 검토", "private_review_manufacturer_distribution_right");
-    add("home|home_right_middle", 80, "제조·브랜드 효용 상품 우측 검토", "private_review_manufacturer_home_right");
   }
 
-  if (newness) {
-    add("distribution|distribution-new", 84, "공식 상품명에서 신규성이 확인된 비공개 검토 상품", "private_review_new_product");
-    add("home|home_5", 78, "신규 발견 상품 비공개 검토", "private_review_new_discovery");
-    add("home|home_right_bottom", 80, "신규 상품 우측 검토 후보", "private_review_new_right");
-  }
-  if (trending) {
-    add("distribution|distribution-trending", 82, "인기·판매상위 문구가 확인된 비공개 검토 상품", "private_review_trending");
-    add("home|home_right_top", 77, "인기 신호 상품 우측 상단 검토", "private_review_trending_right");
-  }
-  if (special) add("distribution|distribution-special", 80, "특산·인증·한정 신호가 확인된 비공개 검토 상품", "private_review_special");
-
-  if (!map.length) {
-    add("home|home_5", 72, "새로 발견한 일반 상품 비공개 검토", "private_review_general_discovery");
-    add("home|home_right_bottom", 68, "일반 발견 상품 우측 검토", "private_review_general_right");
-  }
-  add("distribution|distribution-others", 66, "일반 유통 비공개 검토", "private_review_general_distribution");
+  // Distribution six main rails. Broad recommendation/others are available to
+  // normal qualified goods; the evidence-gated rails are offered only when the
+  // corresponding policy signal exists.
+  add("distribution|distribution-recommend", 78, "대중 수요·효용 중심 추천 검토", "private_review_distribution_recommend");
+  if (sponsorSignal && commercial.contractReady === true) add("distribution|distribution-sponsor", 88, "스폰서 신호와 승인 계약이 함께 확인된 상품", "private_review_distribution_sponsor");
+  if (trending) add("distribution|distribution-trending", 83, "인기·판매상위 신호 상품", "private_review_distribution_trending");
+  if (newness || recentRegistration) add("distribution|distribution-new", 81, "신규 또는 최근 등록·확인 상품", "private_review_distribution_new");
+  if (special || localOrigin || tourRecreation) add("distribution|distribution-special", 82, "특산·인증·한정·지역·레저 테마 상품", "private_review_distribution_special");
+  add("distribution|distribution-others", 74, "정책 적격 일반·롱테일 상품", "private_review_distribution_others");
   return map;
 }
 function combinedProductAssignments(rowInput) {
-  const row = plain(rowInput), byKey = new Map();
-  for (const assignmentInput of array(row.sectionAssignments).concat(privateReviewFallbackAssignments(row))) {
+  const row = plain(rowInput), byKey = new Map(), fallback = privateReviewFallbackAssignments(row);
+  const allowedKeys = new Set(fallback.map(productPlacementKey).filter(validProductSectionKey));
+  for (const assignmentInput of array(row.sectionAssignments).concat(fallback)) {
     const assignment = plain(assignmentInput), key = productPlacementKey(assignment);
-    if (!validProductSectionKey(key)) continue;
+    if (!validProductSectionKey(key) || !allowedKeys.has(key)) continue;
     const prior = byKey.get(key);
     if (!prior) { byKey.set(key, assignment); continue; }
     const priorScore = Number(prior.score || 0), nextScore = Number(assignment.score || 0);
@@ -1991,6 +2065,49 @@ function productAutomaticPlacementScore(rowInput, assignmentInput) {
   const approvalBonus = assignment.approvalEligible === true ? 18 : (assignment.reviewEligible === true ? 8 : 0);
   const value = plain(row.valueAssessment);
   return Number(assignment.score || 0) * 10 + Number(row.rankingScore || 0) + Number(value.portfolioPriorityScore || 0) + affiliateBonus + approvalBonus;
+}
+
+function normalizeProductSectionCounts(input) {
+  const source = plain(input), out = {};
+  for (const key of PRODUCT_SECTION_KEYS) out[key] = Math.max(0, Math.min(PRODUCT_SECTION_CAPACITY * 20, Math.floor(Number(source[key] || 0) || 0)));
+  return out;
+}
+function automaticBalanceGroupName(keyInput) {
+  const key = text(keyInput);
+  for (const name of Object.keys(AI_AUTO_BALANCE_GROUPS)) if (array(AI_AUTO_BALANCE_GROUPS[name]).includes(key)) return name;
+  return "";
+}
+function automaticBalancedPlacement(rowInput, optionsInput, countsInput) {
+  const row = plain(rowInput), counts = normalizeProductSectionCounts(countsInput);
+  const available = array(optionsInput).filter((assignment) => {
+    const key = productPlacementKey(assignment);
+    return validProductSectionKey(key) && Number(counts[key] || 0) < PRODUCT_SECTION_CAPACITY;
+  });
+  if (!available.length) return null;
+  const bestFit = Math.max(...available.map((assignment) => Number(assignment && assignment.score || 0)));
+  const closeFit = available.filter((assignment) => Number(assignment && assignment.score || 0) >= bestFit - 14);
+  const pool = closeFit.length ? closeFit : available;
+  function adjustedScore(assignment) {
+    const key = productPlacementKey(assignment), group = automaticBalanceGroupName(key), count = Number(counts[key] || 0);
+    // Absolute load keeps one eligible page/rail from monopolising the run.
+    // The 14-point policy-fit window above is still authoritative, so balancing
+    // never turns an unrelated section into a valid destination.
+    let balancePenalty = count * 8;
+    if (group) {
+      const sameGroup = pool.filter((item) => automaticBalanceGroupName(productPlacementKey(item)) === group);
+      const minimum = sameGroup.length ? Math.min(...sameGroup.map((item) => Number(counts[productPlacementKey(item)] || 0))) : count;
+      // Inside Home main/right and Distribution main, prefer the least-loaded
+      // compatible section more strongly so thumbnails spread across the slots.
+      balancePenalty += Math.max(0, count - minimum) * 25;
+    }
+    return productAutomaticPlacementScore(row, assignment) - balancePenalty;
+  }
+  return pool.slice().sort((a, b) => {
+    const aKey = productPlacementKey(a), bKey = productPlacementKey(b);
+    return adjustedScore(b) - adjustedScore(a) ||
+      Number(counts[aKey] || 0) - Number(counts[bKey] || 0) ||
+      PRODUCT_SECTION_KEYS.indexOf(aKey) - PRODUCT_SECTION_KEYS.indexOf(bKey);
+  })[0] || null;
 }
 function productAutomaticUnassignedReason(rowInput) {
   const row = plain(rowInput), assessment = productPrivateReviewAssessment(row);
@@ -2280,7 +2397,7 @@ function candidateRuntimeProduct(rowInput, scope) {
   if (!url) return null;
   const image = safeUrl(first(payload.image, payload.thumb, payload.imageUrl, row.thumbnail_url, card.image, card.imageUrl));
   return Object.assign({}, payload, {
-    candidateId: text(row.id), id: first(payload.originalProductId, row.id), productIdentity: first(payload.productIdentity, row.id),
+    candidateId: text(row.id), id: first(payload.originalProductId, row.id), productIdentity: first(payload.productIdentity, row.id), candidateRegisteredAt: first(payload.candidateRegisteredAt, payload.createdAt, row.created_at),
     productName: first(payload.title, row.title, card.title), title: first(payload.title, row.title, card.title), sourceTitle: first(payload.sourceTitle, card.sourceTitle),
     productUrl: url, url, imageUrl: image, imageOriginalUrl: image, price: first(payload.price, card.price), priceCurrency: first(payload.priceCurrency, card.priceCurrency), availability: first(payload.availability, card.availability),
     supplierId: first(supplier.id, payload.supplierId), supplierName: first(supplier.name, payload.supplierName, card.supplierName), supplierSiteUrl: first(supplier.officialUrl, payload.supplierSiteUrl, card.supplierUrl), supplierType: first(supplier.type, payload.supplierType), supplierTrustScore: Number(first(supplier.trustScore, payload.supplierTrustScore)) || 0, supplierEvidenceReady: supplier.evidenceReady === true || payload.supplierEvidenceReady === true,
@@ -2323,16 +2440,17 @@ function candidateRuntimeHealth(productInput) {
   return { ok:state === "live", live:state === "live", dead:state === "dead", inconclusive:state === "inconclusive", state, reasons:Array.from(new Set(reasons.filter(Boolean))) };
 }
 function candidateRuntimePlacementOptions(productInput, payloadInput) {
-  const product = plain(productInput), payload = plain(payloadInput), category = ProductRanking.classifyCategory(product), travel = category.primary === "travel_local_services";
-  const tourHay = lower([product.productName, product.title, product.description, product.summary, array(category.tags).join(" ")].map(text).join(" "));
-  const tourRecreation = /(등산|캠핑|백패킹|트레킹|하이킹|텐트|타프|침낭|코펠|버너|등산스틱|아웃도어|낚시|차박|클라이밍|골프|골프채|골프공|골프백|골프웨어|골프화|스포츠|운동용품|자전거|사이클|러닝|조깅|테니스|배드민턴|수영|스키|스노보드|서핑|카약|outdoor|camping|hiking|trekking|backpacking|fishing|climbing|golf|sports?\s*gear|sporting goods|bicycle|cycling|running|jogging|tennis|badminton|swimming|ski|snowboard|surf|kayak)/i.test(tourHay);
+  const product = plain(productInput), payload = plain(payloadInput), category = ProductRanking.classifyCategory(product), tourProfile = ProductRanking.tourRightProfile(product);
+  const tourEligible = category.primary === "travel_local_services" || tourProfile.eligible;
   product.productCategory = category.primary; product.productCategoryTags = category.tags;
-  const byKey = new Map();
-  const source = array(payload.proposedPlacements).concat(array(product.sectionAssignments)).concat(privateReviewFallbackAssignments(product));
+  const byKey = new Map(), fallback = privateReviewFallbackAssignments(product);
+  const allowedKeys = new Set(fallback.map(productPlacementKey).filter(validProductSectionKey));
+  const source = array(payload.proposedPlacements).concat(array(product.sectionAssignments)).concat(fallback);
   for (const itemInput of source) {
     const item = plain(itemInput), key = productPlacementKey(item);
-    if (!validProductSectionKey(key)) continue;
-    if (key === "tour|tour" && !(travel || tourRecreation)) continue;
+    if (!validProductSectionKey(key) || !allowedKeys.has(key)) continue;
+    if (key === "tour|tour" && !tourEligible) continue;
+    if (key === "distribution|distribution-sponsor" && !(plain(product.commercialAssessment).contractReady === true || plain(payload.commercialAssessment).contractReady === true)) continue;
     if (item.reviewEligible === false || item.valueQualified === false) continue;
     const prior = byKey.get(key), nextScore = Number(item.score || 0), priorScore = Number(prior && prior.score || 0);
     if (!prior || nextScore > priorScore) byKey.set(key, Object.assign({}, item, { key }));
@@ -2347,13 +2465,25 @@ function candidateRuntimeCard(payloadInput, productInput) {
 }
 async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, optionsInput) {
   const scope = researchScope(input), actor = text(actorId) || "administrator", options = plain(optionsInput), ids = Array.from(new Set(array(candidateIdsInput).map(text).filter(Boolean))).slice(0, 500);
-  if (!ids.length) return { ok:true, requested:0, revalidated:0, live:0, invalid:0, inconclusive:0, assigned:0, unassigned:0, held:0, preserved:0, lockedInvalid:0, changedSection:0, withdrawCandidateIds:[], withdrawAssignments:[], results:[] };
+  const rebalance = options.rebalance === true, suppliedBalanceCounts = Object.keys(plain(options.balanceCounts)).length > 0;
+  let workingCounts = normalizeProductSectionCounts(options.balanceCounts);
+  let tourDiningAutomaticCount = Math.max(0, Math.floor(Number(options.tourDiningAutomaticCount || 0) || 0));
+  if (!ids.length) return { ok:true, requested:0, revalidated:0, live:0, invalid:0, inconclusive:0, assigned:0, unassigned:0, held:0, preserved:0, lockedInvalid:0, changedSection:0, balanceCounts:workingCounts, tourDiningAutomaticCount, withdrawCandidateIds:[], withdrawAssignments:[], results:[] };
   const [rows, assignments] = await Promise.all([
     frontSyncSelectCandidates(ids),
     frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", ids)
   ]);
   const rowById = new Map(array(rows).map((row) => [text(row && row.id), row])), assignmentByCandidate = new Map();
   for (const assignment of array(assignments)) { const id = text(assignment && assignment.candidate_id); if (!assignmentByCandidate.has(id)) assignmentByCandidate.set(id, []); assignmentByCandidate.get(id).push(assignment); }
+  if (rebalance && !suppliedBalanceCounts) {
+    for (const candidateRow of array(rows)) {
+      const payload = plain(candidateRow && candidateRow.source_payload), product = candidateRuntimeProduct(candidateRow, scope), decision = lower(payload.slotDecision || product && product.slotDecision || "undecided");
+      const key = productPlacementKey(payload.approvedPlacement || payload.placement || product && product.approvedPlacement);
+      if (decision !== "slot_candidate" || !validProductSectionKey(key)) continue;
+      workingCounts[key] = Number(workingCounts[key] || 0) + 1;
+      if (key === "tour|tour" && product && ProductRanking.tourRightProfile(product).diningAuxiliary === true) tourDiningAutomaticCount += 1;
+    }
+  }
   const inspectInputs = [], missingProducts = new Set();
   for (const id of ids) {
     const row = rowById.get(id), product = candidateRuntimeProduct(row, scope);
@@ -2377,12 +2507,19 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       continue;
     }
     const inspected = Object.keys(inspectedRaw).length ? Object.assign({}, sourceProduct, inspectedRaw, { candidateId:id, id:id }) : Object.assign({}, sourceProduct, { candidateId:id, id:id, productPageLive:false, inspectionComplete:true, researchStatus:"inspection_error" });
-    const health = candidateRuntimeHealth(inspected), priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), manualLocked = candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement);
-    let nextDecision = currentDecision, nextPlacement = currentPlacement, status = text(row.status) || "research_pending", assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey), changeReason = "runtime_revalidated";
+    const health = candidateRuntimeHealth(inspected), priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), manualLocked = candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement), tourProfile = ProductRanking.tourRightProfile(inspected);
+    let nextDecision = currentDecision, nextPlacement = currentPlacement, status = text(row.status) || "research_pending", assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey), changeReason = "runtime_revalidated", currentBalanceReleased = false;
+    const releaseCurrentBalance = () => {
+      if (!rebalance || currentBalanceReleased || currentDecision !== "slot_candidate" || !validProductSectionKey(currentKey)) return;
+      workingCounts[currentKey] = Math.max(0, Number(workingCounts[currentKey] || 0) - 1);
+      if (currentKey === "tour|tour" && tourProfile.diningAuxiliary === true) tourDiningAutomaticCount = Math.max(0, tourDiningAutomaticCount - 1);
+      currentBalanceReleased = true;
+    };
     if (health.dead) {
       // An administrator placement lock preserves the historical decision, but
       // it must never force a dead/redirected product back into the public
       // Snapshot. Runtime validity is the final publication safety gate.
+      releaseCurrentBalance();
       nextDecision = "hold"; nextPlacement = null; status = "hold"; assigned = false;
       changeReason = manualLocked ? "runtime_product_unavailable_administrator_locked" : "runtime_product_unavailable";
     } else if (health.inconclusive) {
@@ -2398,11 +2535,26 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       changeReason = assigned ? "runtime_live_administrator_placement_preserved" : "runtime_live_administrator_control_preserved";
     } else if (options.reassign !== false) {
       const compatibleCurrent = placementPlan.options.find((item) => productPlacementKey(item) === currentKey);
-      const picked = compatibleCurrent || placementPlan.options[0] || null;
+      let picked = compatibleCurrent || placementPlan.options[0] || null;
+      if (rebalance) {
+        releaseCurrentBalance();
+        const balancedOptions = placementPlan.options.filter((item) => {
+          const key = productPlacementKey(item);
+          if (Number(workingCounts[key] || 0) >= PRODUCT_SECTION_CAPACITY) return false;
+          if (key === "tour|tour" && tourProfile.diningAuxiliary === true && tourDiningAutomaticCount >= Number(ProductRanking.POLICY.tourRightPolicy && ProductRanking.POLICY.tourRightPolicy.diningAutomaticCap || 2)) return false;
+          return true;
+        });
+        picked = automaticBalancedPlacement(inspected, balancedOptions, workingCounts);
+      }
       if (picked) {
         nextPlacement = candidateLedgerPlacementRecord(scope, picked, actor, "ai_automation"); nextDecision = "slot_candidate"; assigned = true;
+        const pickedKey = productPlacementKey(nextPlacement);
+        if (rebalance) {
+          workingCounts[pickedKey] = Number(workingCounts[pickedKey] || 0) + 1;
+          if (pickedKey === "tour|tour" && tourProfile.diningAuxiliary === true) tourDiningAutomaticCount += 1;
+        }
         if (!["revenue_ready","enrollable"].includes(lower(status))) status = "approval_pending";
-        changeReason = currentKey && currentKey !== productPlacementKey(nextPlacement) ? "runtime_reclassified" : "runtime_revalidated_and_assigned";
+        changeReason = currentKey && currentKey !== pickedKey ? "runtime_policy_balanced_reclassified" : "runtime_revalidated_and_assigned";
       } else {
         nextDecision = "undecided"; nextPlacement = null; assigned = false; status = "research_pending"; changeReason = "runtime_live_but_no_compatible_section";
       }
@@ -2437,13 +2589,18 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
   return {
     ok:true, requested:ids.length, revalidated:results.filter((row)=>row.status!=="missing").length, live:results.filter((row)=>row.live===true).length, invalid:results.filter((row)=>row.invalid===true).length, inconclusive:results.filter((row)=>row.inconclusive===true).length,
     assigned:results.filter((row)=>row.assigned===true).length, unassigned:results.filter((row)=>row.status==="unassigned").length, held:results.filter((row)=>row.status==="invalid").length, preserved:results.filter((row)=>row.manualLocked===true&&row.live===true).length, lockedInvalid:results.filter((row)=>row.manualLocked===true&&row.invalid===true).length,
-    changedSection:results.filter((row)=>row.changedSection===true).length, withdrawCandidateIds:Array.from(withdrawCandidateIds), withdrawAssignments, results, publicPublication:false, paymentExecution:false
+    changedSection:results.filter((row)=>row.changedSection===true).length, balanceCounts:workingCounts, tourDiningAutomaticCount, policyAwareBalancing:rebalance, balancedSectionGroups:AI_AUTO_BALANCE_GROUPS,
+    withdrawCandidateIds:Array.from(withdrawCandidateIds), withdrawAssignments, results, publicPublication:false, paymentExecution:false
   };
 }
 async function productCandidateAiRecover(actorId, input) {
   const ids = Array.from(new Set(array(input && input.candidateIds).map(text).filter(Boolean))).slice(0, 12);
   if (!ids.length) { const error = new Error("AI 자동 배치·갱신할 상품 후보를 선택하세요."); error.statusCode = 400; throw error; }
-  const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:"ai_auto_placement_refresh", reassign:true });
+  const result = await revalidateCandidateLedgerRows(actorId, input, ids, {
+    source:"ai_auto_placement_refresh", reassign:true, rebalance:true,
+    balanceCounts:plain(input && input.balanceCounts),
+    tourDiningAutomaticCount:Number(input && input.tourDiningAutomaticCount || 0) || 0
+  });
   return Object.assign({ candidateLedger:true }, result);
 }
 async function scopePublishedCandidateIds(input) {
@@ -2546,6 +2703,12 @@ async function productAiAutomation(actorId, input) {
     if (productAdministratorLocked(row)) manualPreserved += 1;
     if ((unassignedPlacementOnly || productAdministratorLocked(row)) && decision === "slot_candidate" && validProductSectionKey(key)) manualCounts[key] += 1;
   }
+  let tourDiningAutomaticCount = currentRows.filter((row) => {
+    const decision=lower(row&&row.slotDecision||"undecided"), key=productPlacementKey(row&&(row.approvedPlacement||row.selectedPlacement||row.primaryPlacement));
+    if(decision!=="slot_candidate"||key!=="tour|tour") return false;
+    if(!(productAdministratorLocked(row)||unassignedPlacementOnly)) return false;
+    return ProductRanking.tourRightProfile(row).diningAuxiliary===true;
+  }).length;
   const selectedPlacementByIdentity = new Map(), workingCounts = Object.assign({}, manualCounts), allocationReasons = new Map();
   const automationCandidates = currentRows.map((current) => {
     if (repairOnly && !repairProductIds.has(text(current && current.id))) return null;
@@ -2563,20 +2726,19 @@ async function productAiAutomation(actorId, input) {
   }).filter(Boolean).sort((a, b) => Number(b.best || 0) - Number(a.best || 0) || Number(b.evaluated && b.evaluated.rankingScore || 0) - Number(a.evaluated && a.evaluated.rankingScore || 0) || a.identity.localeCompare(b.identity));
   for (const candidate of automationCandidates) {
     if (!candidate.options.length) continue;
-    const available = candidate.options.filter((assignment) => Number(workingCounts[productPlacementKey(assignment)] || 0) < PRODUCT_SECTION_CAPACITY);
+    const candidateTourProfile=ProductRanking.tourRightProfile(candidate.evaluated);
+    const available = candidate.options.filter((assignment) => {
+      const key=productPlacementKey(assignment);
+      if(Number(workingCounts[key]||0)>=PRODUCT_SECTION_CAPACITY) return false;
+      if(key==="tour|tour"&&candidateTourProfile.diningAuxiliary===true&&tourDiningAutomaticCount>=Number(ProductRanking.POLICY.tourRightPolicy&&ProductRanking.POLICY.tourRightPolicy.diningAutomaticCap||2)) return false;
+      return true;
+    });
     if (!available.length) { allocationReasons.set(candidate.identity, "all_compatible_sections_full"); continue; }
-    const bestSectionFit = Math.max(...available.map((assignment) => Number(assignment && assignment.score || 0)));
-    const closeFit = available.filter((assignment) => Number(assignment && assignment.score || 0) >= bestSectionFit - 14);
-    const pool = closeFit.length ? closeFit : available;
-    const picked = pool.slice().sort((a, b) => {
-      const aKey = productPlacementKey(a), bKey = productPlacementKey(b);
-      const aLoad = Number(workingCounts[aKey] || 0) / PRODUCT_SECTION_CAPACITY * 240;
-      const bLoad = Number(workingCounts[bKey] || 0) / PRODUCT_SECTION_CAPACITY * 240;
-      return (productAutomaticPlacementScore(candidate.evaluated, b) - bLoad) - (productAutomaticPlacementScore(candidate.evaluated, a) - aLoad) || PRODUCT_SECTION_KEYS.indexOf(aKey) - PRODUCT_SECTION_KEYS.indexOf(bKey);
-    })[0];
+    const picked = automaticBalancedPlacement(candidate.evaluated, available, workingCounts);
     const pickedKey = productPlacementKey(picked);
     selectedPlacementByIdentity.set(candidate.identity, picked);
     workingCounts[pickedKey] = Number(workingCounts[pickedKey] || 0) + 1;
+    if(pickedKey==="tour|tour"&&candidateTourProfile.diningAuxiliary===true) tourDiningAutomaticCount+=1;
   }
   const nextRows = [], changed = [];
   for (const current of currentRows) {
@@ -2677,6 +2839,9 @@ async function productAiAutomation(actorId, input) {
     queueSyncBatchSize: PRODUCT_AI_QUEUE_SYNC_BATCH,
     sectionCapacity: PRODUCT_SECTION_CAPACITY,
     sectionsFilledForCount: false,
+    policyAwareBalancedAutoPlacement: true,
+    balancedSectionGroups: AI_AUTO_BALANCE_GROUPS,
+    balancedSectionCounts: workingCounts,
     maximumPrivatePlacementWithoutWeakeningPublicReleaseGate: true,
     incompleteInspectionIsWarningNotAutomaticRejection: true,
     administratorDecisionPrecedence: true,

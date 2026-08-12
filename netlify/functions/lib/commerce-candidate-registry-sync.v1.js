@@ -13,8 +13,9 @@ const path = require("path");
 const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
+const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.12.0-tour-right-recreation";
+const VERSION = "commerce-candidate-registry-sync-v1.13.0-tour-right-commercial-spectrum";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -86,28 +87,31 @@ function exactProductDestination(candidate,payload){
   }
   return "";
 }
-function tourOfferHay(candidate,payload){
+function tourCommercialProfile(candidate,payload){
   payload=plain(payload); const card=productCardOf(payload);
-  // Only the actual offer text participates. Supplier/page labels are excluded
-  // so an unrelated seller name cannot force a product into the Tour rail.
-  return [exactProductTitle(candidate,payload),payload.summary,payload.description,payload.category,payload.type,payload.serviceType,card.sourceTitle].map(lower).filter(Boolean).join(" ");
+  return ProductRanking.tourRightProfile({
+    productName:exactProductTitle(candidate,payload),
+    title:exactProductTitle(candidate,payload),
+    summary:first(payload.summary,card.summary),
+    description:first(payload.description,card.description),
+    priorityLabel:first(payload.category,payload.type,payload.serviceType),
+    productUrl:exactProductDestination(candidate,payload),
+    url:exactProductDestination(candidate,payload)
+  });
 }
 function qualifiedTourServiceCandidate(candidate,payload){
   payload=plain(payload);
   if(payload.travelService===true||payload.tourService===true||payload.bookingService===true) return true;
-  const hay=tourOfferHay(candidate,payload); if(!hay) return false;
-  if(/(여행용\s*(티슈|물티슈|휴지|세면|파우치)|포켓물티슈|체험팩|travel\s*(size|tissue|wipe))/i.test(hay)) return false;
-  if(/(숙박|호텔|리조트|관광|투어|입장권|여행티켓|여행패키지|여행상품|항공권|렌터카|렌트카|교통패스|철도패스|관광버스|크루즈|hotel|resort|tour\b|admission|travel\s*(?:ticket|package|booking)|flight\s*ticket|rental\s*car|rail\s*pass|transport\s*pass|cruise|booking)/i.test(hay)) return true;
-  if(/(체험|experience|activity)/i.test(hay)&&/(예약|티켓|입장권|프로그램|관광|투어|현지|지역|booking|ticket|admission|program|tour|local)/i.test(hay)) return true;
-  return false;
+  return tourCommercialProfile(candidate,payload).service===true;
 }
 function qualifiedTourRecreationProductCandidate(candidate,payload){
-  const hay=tourOfferHay(candidate,payload); if(!hay) return false;
-  if(/(여행용\s*(티슈|물티슈|휴지|세면|파우치)|포켓물티슈|캠핑용?\s*(물티슈|휴지)|체험팩|travel\s*(size|tissue|wipe))/i.test(hay)) return false;
-  return /(등산|캠핑|백패킹|트레킹|하이킹|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|아웃도어|낚시|차박|클라이밍|등산화|트레킹화|골프|골프채|골프공|골프백|골프웨어|골프화|퍼터|드라이버|아이언|웨지|스포츠|운동용품|자전거|사이클|러닝|조깅|테니스|배드민턴|수영|스키|스노보드|서핑|카약|outdoor|camping|hiking|trekking|tent|sleeping bag|backpacking|fishing|climbing|golf|putter|sports?\s*gear|sporting goods|bicycle|cycling|running|jogging|tennis|badminton|swimming|ski|snowboard|surf|kayak)/i.test(hay);
+  return tourCommercialProfile(candidate,payload).recreationProduct===true;
+}
+function qualifiedTourDiningCandidate(candidate,payload){
+  return tourCommercialProfile(candidate,payload).diningAuxiliary===true;
 }
 function qualifiedTourCandidate(candidate,payload){
-  return qualifiedTourServiceCandidate(candidate,payload)||qualifiedTourRecreationProductCandidate(candidate,payload);
+  return tourCommercialProfile(candidate,payload).eligible===true;
 }
 function productFirstVerifiedAt(candidate,payload){
   payload=plain(payload); const mapping=plain(payload.productMapping), timestamps=plain(payload.timestamps), research=plain(payload.research);
@@ -238,12 +242,13 @@ function authoritativeProductClass(candidate,payload,page,slotStrategy){
   const allowed=array(slotStrategy&&slotStrategy.allowedProductClasses).map(lower).filter(Boolean);
   const existing=lower(first(plain(payload.productMapping).productClass,payload.productClass));
   if(existing&&allowed.includes(existing)) return existing;
-  // Tour accepts both travel/booking services and travel-recreation products.
-  // Services keep the operator-evidence requirement; physical recreation goods
-  // are represented as travel_product and remain external-seller referrals.
+  // Tour accepts travel/booking services plus recreation goods and a small
+  // auxiliary dining layer. Only actual travel/leisure services require the
+  // travel-operator evidence gate; recreation goods and dining offers stay on
+  // the external-seller/referral travel_product contract.
   if(page==="tour"){
     if(qualifiedTourServiceCandidate(candidate,payload)&&allowed.includes("travel_service")) return "travel_service";
-    if(qualifiedTourRecreationProductCandidate(candidate,payload)&&allowed.includes("travel_product")) return "travel_product";
+    if((qualifiedTourRecreationProductCandidate(candidate,payload)||qualifiedTourDiningCandidate(candidate,payload))&&allowed.includes("travel_product")) return "travel_product";
   }
   if(allowed.includes("physical_product")) return "physical_product";
   return existing&&allowed.includes(existing)?existing:first(allowed[0],existing);
