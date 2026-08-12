@@ -8,12 +8,21 @@ const MediaStore = require("./lib/media-candidate-store.v1");
 const MediaPolicy = require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "media-candidate-action-v1.6.0-optional-nonrelease-notes";
+const VERSION = "media-candidate-action-v1.7.0-bulk-final-approval";
 const ACTIONS = new Set([
-  "approve","hold","block","reject","reset","delete",
+  "approve","approve_all","hold","block","reject","reset","delete",
   "restore_hold","release_exclusion","restore","permanent_block","forget"
 ]);
 const EXCLUSION_RECORD_VERSION = "media-candidate-exclusion-v1";
+
+const APPROVABLE_REVIEW_STATUSES = Object.freeze([
+  "pending","hold","safety_quarantine","rights_quarantine","classification_quarantine","quality_quarantine"
+]);
+async function loadAllApprovableRows(){
+  const query="select=*&review_status=in.("+APPROVABLE_REVIEW_STATUSES.join(",")+")&order=section_key.asc,updated_at.desc&limit=10000";
+  const rows=await MediaStore.selectCandidates(query);
+  return Array.isArray(rows)?rows:[];
+}
 
 async function actorFor(event){
   const actor=await SharedAdminAuth.resolveUser(event);
@@ -211,7 +220,7 @@ async function updateRowsIndividually(rows,patcher){
   return updated;
 }
 function requireNote(action,note){
-  if(action==="approve"&&MediaStore.text(note).length<3){
+  if((action==="approve"||action==="approve_all")&&MediaStore.text(note).length<3){
     const error=new Error("공개 승인에는 3자 이상의 관리자 검토 메모가 필요합니다.");
     error.statusCode=400;error.code="administrator_review_note_required";throw error;
   }
@@ -304,10 +313,28 @@ exports.handler=async function(event){
     const action=MediaStore.lower(body.action);
     if(!ACTIONS.has(action))return MediaStore.response(400,{ok:false,error:"invalid_action",allowed:Array.from(ACTIONS)});
     const ids=idsFrom(body);
+    requireNote(action,body.note||body.reason);
+    if(action==="approve_all"){
+      if(body.confirmRightsSafe!==true&&body.confirmRightsSafe!=="true")return MediaStore.response(400,{ok:false,error:"rights_confirmation_required",message:"전체 최종 승인에는 원본 권리 확인이 필요합니다."});
+      if(body.confirmContentSafe!==true&&body.confirmContentSafe!=="true")return MediaStore.response(400,{ok:false,error:"content_safety_confirmation_required",message:"전체 최종 승인에는 실제 콘텐츠 안전 확인이 필요합니다."});
+      const reviewable=await loadAllApprovableRows();
+      const blocked=[];
+      const safe=[];
+      reviewable.forEach((row)=>{
+        const assessment=MediaPolicy.assessSafety(row);
+        if(assessment.decision==="hard_block")blocked.push({id:MediaStore.text(row&&row.id),reasons:assessment.reasons});
+        else safe.push(row);
+      });
+      const updated=safe.length?await approveRows(safe,body,actor):[];
+      return MediaStore.response(200,{
+        ok:true,version:VERSION,action,requested:reviewable.length,updated:updated.length,
+        skippedHardBlocked:blocked.length,blocked,items:updated,sourceMediaDeleted:false,recollectAllowed:false,
+        publicationGate:MediaPolicy.VERSION,bulkScope:"all_reviewable_sections"
+      });
+    }
     if(!ids.length)return MediaStore.response(400,{ok:false,error:"candidate_ids_required"});
     const rows=await loadRows(ids);
     validateTransitions(action,rows);
-    requireNote(action,body.note||body.reason);
     if(action==="delete"&&(body.confirmQueueDelete!==true&&body.confirmQueueDelete!=="true")){
       return MediaStore.response(400,{ok:false,error:"queue_delete_confirmation_required",message:"검색 제외 목록 이동 확인값이 필요합니다."});
     }

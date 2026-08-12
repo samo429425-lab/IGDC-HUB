@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v3.2 - final approval + independent section/front controls */
+/* IGDC Media Candidate Queue v3.3 - bulk final approval + independent section/front controls */
 (function(){
   'use strict';
 
@@ -796,42 +796,31 @@
     for(var i=0;i<bars.length;i++)if(text(bars[i].dataset.sectionKey)===sectionKey)return bars[i];
     return null;
   }
-  async function finalApproveSelected(){
-    var groups=[];
-    SECTION_ORDER.forEach(function(sectionKey){
-      if(sectionKey==='media-trending')return;
-      var ids=Array.from(selectedBySection[sectionKey]||[]);
-      if(!ids.length)return;
-      var bar=sectionActionBar(sectionKey);
-      var noteInput=bar&&bar.querySelector('.section-note');
-      var rightsConfirm=bar&&bar.querySelector('.sectionRightsConfirm');
-      var contentConfirm=bar&&bar.querySelector('.sectionContentConfirm');
-      var subtitleConfirm=bar&&bar.querySelector('.sectionSubtitleConfirm');
-      var note=text(noteInput&&noteInput.value);
-      if(!rightsConfirm||!rightsConfirm.checked||!contentConfirm||!contentConfirm.checked){
-        groups.push({error:(SECTION_LABELS[sectionKey]||sectionKey)+' 섹션의 콘텐츠 안전·원본 권리 확인이 필요합니다.'});return;
-      }
-      if(note.length<3){groups.push({error:(SECTION_LABELS[sectionKey]||sectionKey)+' 섹션의 승인 메모를 3자 이상 입력해 주세요.'});return;}
-      groups.push({sectionKey:sectionKey,ids:ids,note:note,confirmRightsSafe:true,confirmContentSafe:true,confirmSubtitlesChecked:!!(subtitleConfirm&&subtitleConfirm.checked)});
-    });
-    if(!groups.length){show('최종 승인할 후보를 각 섹션에서 먼저 선택해 주세요.','warn');return;}
-    var invalid=groups.find(function(group){return group.error;});
-    if(invalid){show(invalid.error,'warn');return;}
-    var total=groups.reduce(function(sum,group){return sum+group.ids.length;},0);
-    if(!window.confirm('선택한 '+total+'개 후보를 최종 승인할까요?\n\n승인된 후보는 전체 또는 해당 섹션의 프론트 반영 실행 때 SearchBank 공급 대상으로 사용됩니다.'))return;
+  async function finalApproveAll(){
+    var approvableStatuses=new Set(['pending','hold','safety_quarantine','rights_quarantine','classification_quarantine','quality_quarantine']);
+    var approvable=activeRows().filter(function(row){return approvableStatuses.has(lower(row.reviewStatus));});
+    if(!approvable.length){
+      var alreadyApproved=activeRows().filter(function(row){return lower(row.reviewStatus)==='approved'&&lower(row.verificationStatus)==='approved_for_snapshot';}).length;
+      show(alreadyApproved?'전체 후보가 이미 최종 승인 상태입니다. 이제 전체 또는 섹션별 프론트 반영 실행을 눌러 주세요.':'최종 승인할 활성 후보가 없습니다.','ok');
+      return;
+    }
+    var bySection={};
+    approvable.forEach(function(row){var key=text(row.sectionKey)||'unknown';bySection[key]=(bySection[key]||0)+1;});
+    var sectionSummary=Object.keys(bySection).map(function(key){return (SECTION_LABELS[key]||key)+' '+bySection[key]+'개';}).join(' · ');
+    var confirmText='전체 활성 후보 '+approvable.length+'개를 한 번에 최종 승인할까요?\n\n'+sectionSummary+'\n\n이 실행은 검색 제외·영구 차단 항목은 건드리지 않으며, 명백한 금지 콘텐츠는 서버에서 자동 제외합니다. 확인을 누르면 실제 콘텐츠 안전 및 원본·권리 검토를 완료한 관리자의 최종 승인으로 기록됩니다.';
+    if(!window.confirm(confirmText))return;
     var button=$('storeReleaseBtn');
     if(button)button.disabled=true;
     try{
-      var updated=0;
-      for(var i=0;i<groups.length;i++){
-        var group=groups[i];
-        var data=await post(ACT,{action:'approve',ids:group.ids,note:group.note,confirmRightsSafe:true,confirmContentSafe:true,confirmSubtitlesChecked:group.confirmSubtitlesChecked});
-        updated+=Number(data.updated||0);
-        selectedBySection[group.sectionKey]=new Set();
-      }
+      var data=await post(ACT,{
+        action:'approve_all',note:'전체 최종 승인 실행',
+        confirmRightsSafe:true,confirmContentSafe:true,confirmSubtitlesChecked:false
+      });
+      Object.keys(selectedBySection).forEach(function(sectionKey){selectedBySection[sectionKey]=new Set();});
       await refresh();
-      show('최종 승인 '+updated+'건 완료 · 이제 전체 또는 해당 섹션의 프론트 반영 실행을 사용할 수 있습니다.','ok');
-    }catch(error){show('최종 승인 실패: '+error.message,'warn');}
+      var skipped=Number(data.skippedHardBlocked||0);
+      show('전체 최종 승인 '+Number(data.updated||0)+'건 완료'+(skipped?' · 금지 신호 '+skipped+'건 자동 제외':'')+' · 이제 전체 또는 섹션별 프론트 반영 실행이 가능합니다.','ok');
+    }catch(error){show('전체 최종 승인 실패: '+error.message,'warn');}
     finally{if(button)button.disabled=false;}
   }
   async function publish(store){
@@ -1116,7 +1105,7 @@
     $('permanentBlockExcludedBtn').onclick=function(){exclusionAction('permanent_block',selectedIds('.excludedCheck'));};
     $('forgetExcludedBtn').onclick=function(){exclusionAction('forget',selectedIds('.excludedCheck'));};
     $('publishPreviewBtn').onclick=function(){publish(false);};
-    $('storeReleaseBtn').onclick=finalApproveSelected;
+    $('storeReleaseBtn').onclick=finalApproveAll;
     $('downloadSnapshotBtn').onclick=async function(){
       try{
         var response=await fetch(PUB+'?download=1',{headers:headers(false),credentials:'same-origin'});
