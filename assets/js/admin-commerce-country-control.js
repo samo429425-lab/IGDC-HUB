@@ -26,6 +26,7 @@
   var PRODUCT_SECTION_MAP=PRODUCT_SECTIONS.reduce(function(map,row){map[row.key]=row;return map;},{});
   var REVIEW_RETURN_KEY='igdc.country.control.review.return.v2';
   var REVIEW_SNAPSHOT_KEY='igdc.country.control.review.snapshot.v3';
+  var REVIEW_DATA_CACHE_KEY='igdc.country.control.review.data.v1';
   var REVIEW_SNAPSHOT_LEGACY_KEY='igdc.country.control.review.snapshot.v2';
   var REVIEW_EXTERNAL_PENDING_KEY='igdc.country.control.review.external.pending.v1';
   var TOKEN_KEYS=['osauth.tokens.v2','osauth.tokens.v1','igdc.tokens','igdc_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token'];
@@ -341,7 +342,7 @@
   function safeExternalVideoUrl(value){var url=safeExternalUrl(value);return /^https:\/\//i.test(url)?url:'';}
   function externalReviewAnchor(url,label,className){var safe=safeExternalUrl(url);if(!safe)return'';return'<a href="'+esc(safe)+'" target="_top" class="'+esc(className||'')+'" data-review-link="1" rel="noreferrer external nofollow">'+esc(label)+'</a>';}
   function reviewReturnValue(){var row=null;try{row=parseJson(sessionStorage.getItem(REVIEW_RETURN_KEY)||'');}catch(_e){}if(!row||row.path!==(location.pathname+location.search)||Date.now()-Number(row.at||0)>21600000)return null;return row;}
-  function compactProductSnapshot(data){if(!data||typeof data!=='object')return null;return{ok:true,reportType:data.reportType||'igdc-country-product-reference-persisted-research',version:data.version||'',jobId:data.jobId||null,jobVersion:data.jobVersion||'',needsRefresh:data.needsRefresh===true,status:data.status||'not_started',startedAt:data.startedAt||null,finishedAt:data.finishedAt||null,updatedAt:data.updatedAt||null,scope:data.scope||scopeSnapshot('review-return-cache'),safety:data.safety||{},progress:data.progress||{},summary:data.summary||{},pipeline:data.pipeline||{},sectionQueues:data.sectionQueues||{},products:Array.isArray(data.products)?data.products.slice(0,300):[],trace:Array.isArray(data.trace)?data.trace.slice(-30):[],errors:Array.isArray(data.errors)?data.errors.slice(-30):[],lastError:data.lastError||null};}
+  function compactProductSnapshot(data){if(!data||typeof data!=='object')return null;return{ok:true,reportType:data.reportType||'igdc-country-product-reference-persisted-research',version:data.version||'',jobId:data.jobId||null,jobVersion:data.jobVersion||'',needsRefresh:data.needsRefresh===true,status:data.status||'not_started',startedAt:data.startedAt||null,finishedAt:data.finishedAt||null,updatedAt:data.updatedAt||null,scope:data.scope||scopeSnapshot('review-return-cache'),safety:data.safety||{},progress:data.progress||{},summary:data.summary||{},pipeline:data.pipeline||{},sectionQueues:data.sectionQueues||{},products:Array.isArray(data.products)?data.products.slice(0,600):[],trace:Array.isArray(data.trace)?data.trace.slice(-30):[],errors:Array.isArray(data.errors)?data.errors.slice(-30):[],lastError:data.lastError||null};}
   function compactCountrySnapshot(data){if(!data||typeof data!=='object')return null;return{ok:true,reportType:data.reportType||'igdc-country-responsible-supplier-persisted-research',version:data.version||'',jobId:data.jobId||null,status:data.status||'not_started',startedAt:data.startedAt||null,finishedAt:data.finishedAt||null,updatedAt:data.updatedAt||null,scope:data.scope||scopeSnapshot('review-return-cache'),progress:data.progress||{},summary:data.summary||{},candidates:Array.isArray(data.candidates)?data.candidates.slice(0,80):[],holdingCandidates:Array.isArray(data.holdingCandidates)?data.holdingCandidates.slice(0,160):[],blockedCandidates:Array.isArray(data.blockedCandidates)?data.blockedCandidates.slice(0,160):[],blockedSupplierKeys:Array.isArray(data.blockedSupplierKeys)?data.blockedSupplierKeys.slice(0,300):[],lastError:data.lastError||null};}
   function compactScopeCache(data){if(!data||typeof data!=='object')return null;return{scope:data.scope||scopeSnapshot('review-return-cache'),scopeData:data.scopeData?{candidates:Array.isArray(data.scopeData.candidates)?data.scopeData.candidates.slice(0,80):[],marketSignals:data.scopeData.marketSignals||{},effective:data.scopeData.effective||{}}:null,summaryData:data.summaryData||null,queueData:data.queueData?{candidates:Array.isArray(data.queueData.candidates)?data.queueData.candidates.slice(0,120):[]}:null,researchData:compactCountrySnapshot(data.researchData),productData:compactProductSnapshot(data.productData)};}
   function openDetailKeys(){return Array.prototype.slice.call(document.querySelectorAll('details[open]')).map(function(el){return el.id||el.getAttribute('data-product-group')||el.getAttribute('data-heavy-panel')||'';}).filter(Boolean).slice(0,80);}
@@ -351,11 +352,32 @@
     try{sessionMemoryHost().__IGDC_COUNTRY_CONTROL_RUNTIME_V1__={schema:'igdc-country-control-runtime.v1',savedAt:Date.now(),path:location.pathname+location.search,scope:snapshot.scope,ui:snapshot,scopeCache:lastScopeCache,country:lastCountryPreview||lastCountryJson||null,product:lastProductJson||null,signal:lastSignalReport||null,auditKind:activeScopeAudit||'',audit:lastScopeAuditJson||null};}catch(_e){}
   }
   function sessionMemoryClear(){try{delete sessionMemoryHost().__IGDC_COUNTRY_CONTROL_RUNTIME_V1__;}catch(_e){}}
+  function reviewDataCachePayload(snapshot){
+    var scopeCache=compactScopeCache(lastScopeCache);
+    if(scopeCache){scopeCache.productData=null;scopeCache.researchData=null;}
+    return{schema:'igdc-country-control-review-data.v1',savedAt:Date.now(),path:location.pathname+location.search,scope:snapshot.scope,scopeCache:scopeCache,country:compactCountrySnapshot(lastCountryPreview||lastCountryJson),product:compactProductSnapshot(lastProductJson),signal:lastSignalReport||null,auditKind:activeScopeAudit||'',audit:lastScopeAuditJson||null};
+  }
+  function saveReviewDataCache(snapshot){
+    try{
+      var payload=reviewDataCachePayload(snapshot),raw=JSON.stringify(payload);
+      if(raw.length>4200000){payload.audit=null;payload.scopeCache=null;raw=JSON.stringify(payload);}
+      if(raw.length>4200000){payload.signal=null;payload.country=null;raw=JSON.stringify(payload);}
+      if(raw.length<=4200000)sessionStorage.setItem(REVIEW_DATA_CACHE_KEY,raw);
+    }catch(_e){}
+  }
+  function readReviewDataCache(resumeScope){
+    var row=null;try{row=parseJson(sessionStorage.getItem(REVIEW_DATA_CACHE_KEY)||'');}catch(_e){}
+    if(!row||row.schema!=='igdc-country-control-review-data.v1'||Date.now()-Number(row.savedAt||0)>21600000)return null;
+    if(row.path&&row.path!==(location.pathname+location.search))return null;
+    if(!row.scope||!resumeScope||scopeKey(row.scope)!==scopeKey(resumeScope))return null;
+    return row;
+  }
   function saveReviewSnapshot(){
     try{
-      var snapshot={schema:'igdc-country-control-ui-state.v7-candidate-bulk',path:location.pathname+location.search,scope:scopeSnapshot('session-resume-cache'),savedAt:Date.now(),scrollY:Math.max(0,Math.round(window.scrollY||0)),openDetails:openDetailKeys(),candidateSelectedProducts:candidateSelectedProducts,frontSelectedSections:frontSelectedSections,frontSelectedProducts:frontSelectedProducts,productPlacementSelections:productPlacementSelections,panels:{summary:!$('summaryPanel').classList.contains('hidden'),queue:!$('queuePanel').classList.contains('hidden'),ai:!$('aiPanel').classList.contains('hidden'),product:!$('productResearchPanel').classList.contains('hidden'),json:!$('jsonPanel').classList.contains('hidden')}};
+      var snapshot={schema:'igdc-country-control-ui-state.v8-review-data-cache',path:location.pathname+location.search,scope:scopeSnapshot('session-resume-cache'),savedAt:Date.now(),scrollY:Math.max(0,Math.round(window.scrollY||0)),openDetails:openDetailKeys(),candidateSelectedProducts:candidateSelectedProducts,frontSelectedSections:frontSelectedSections,frontSelectedProducts:frontSelectedProducts,productPlacementSelections:productPlacementSelections,panels:{summary:!$('summaryPanel').classList.contains('hidden'),queue:!$('queuePanel').classList.contains('hidden'),ai:!$('aiPanel').classList.contains('hidden'),product:!$('productResearchPanel').classList.contains('hidden'),json:!$('jsonPanel').classList.contains('hidden')}};
       sessionStorage.setItem(REVIEW_SNAPSHOT_KEY,JSON.stringify(snapshot));
       try{sessionStorage.removeItem(REVIEW_SNAPSHOT_LEGACY_KEY);}catch(_legacyError){}
+      saveReviewDataCache(snapshot);
       sessionMemoryWrite(snapshot);
       persistScope();
     }catch(_e){try{persistScope();}catch(_scopeError){}}
@@ -375,7 +397,14 @@
     geo={country:detected.country||null,region:detected.region||null,worldRegion:detected.regionGroup||null,resolved:detected.resolved===true,excluded:detected.excluded===true,source:detected.source||'session-resume'};
     if(memory&&memory.scope&&scopeKey(memory.scope)===scopeKey(resumeScope)){
       lastScopeCache=memory.scopeCache||null;lastCountryPreview=memory.country||null;lastCountryJson=memory.country||null;lastProductJson=memory.product||null;lastSignalReport=memory.signal||null;activeScopeAudit=memory.auditKind||'';lastScopeAuditJson=memory.audit||null;
-    }else memory=null;
+    }else{
+      memory=null;
+      var persisted=readReviewDataCache(resumeScope);
+      if(persisted){
+        lastScopeCache=persisted.scopeCache||null;lastCountryPreview=persisted.country||null;lastCountryJson=persisted.country||null;lastProductJson=persisted.product||null;lastSignalReport=persisted.signal||null;activeScopeAudit=persisted.auditKind||'';lastScopeAuditJson=persisted.audit||null;
+        memory={persistent:true};
+      }
+    }
     candidateSelectedProducts=Object.assign({},snapshot.candidateSelectedProducts||{});frontSelectedSections=Object.assign({},snapshot.frontSelectedSections||{});frontSelectedProducts=Object.assign({},snapshot.frontSelectedProducts||{});productPlacementSelections=Object.assign({},snapshot.productPlacementSelections||{});sessionResumeActive=true;sessionUiResume=snapshot;sessionDataResumeAvailable=!!memory;lastPassiveRestoreAt=Date.now();
     return !!selectedCountry;
   }
@@ -577,7 +606,7 @@
         var batch=targetIds.slice(offset,offset+batchSize);
         if(state){state.className='front-sync-state running';state.textContent=label+' · '+Math.min(offset+batch.length,targetIds.length)+'/'+targetIds.length+'건 처리 중';}
         try{
-          var part=await api(CONTROL,action,'POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',mode:'candidates',candidateIds:batch,ledgerMode:'candidate',confirmation:confirmation,deferRelease:true,compactResponse:true});
+          var part=await api(CONTROL,action,'POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',mode:'candidates',candidateIds:batch,ledgerMode:'candidate',confirmation:confirmation,deferRelease:true,scopeRefresh:!unmatch&&mode==='all'&&offset===0,compactResponse:true});
           var r=part.frontSyncResult||{},p=r.preparation||{};
           var refresh=r.refresh||{};aggregate.requested+=Number(r.requested||p.requested||batch.length);aggregate.queued+=Number(r.queued||0);aggregate.persisted+=Number(r.persisted||0);aggregate.pendingBuild+=Number(r.pendingBuild||0);aggregate.blocked+=Number(r.blocked||p.blocked||0);aggregate.revalidated+=Number(refresh.revalidated||0);aggregate.invalid+=Number(refresh.invalid||0);aggregate.inconclusive+=Number(refresh.inconclusive||0);aggregate.withdrawn+=Number(refresh.withdrawn||refresh.withdrawRequested||0);aggregate.changedSection+=Number(refresh.changedSection||0);aggregate.items=aggregate.items.concat(Array.isArray(r.items)?r.items:[]);aggregate.preparation.requested+=Number(p.requested||0);aggregate.preparation.prepared+=Number(p.prepared||0);aggregate.preparation.blocked+=Number(p.blocked||0);aggregate.release=r.release||aggregate.release;
         }catch(batchFailure){batchError=batchFailure;break;}

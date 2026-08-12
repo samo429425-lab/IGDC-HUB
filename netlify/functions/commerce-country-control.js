@@ -131,7 +131,7 @@ exports.handler=async function(event){
            assignments, then rebuild the target plan from the refreshed ledger.
            A missing replacement is intentionally left empty so the existing
            front Snapshot sample fallback remains authoritative. */
-        const refresh=await Automation.revalidateProductFrontTargets(actorId,request,plan.targets);
+        const refresh=await Automation.revalidateProductFrontTargets(actorId,request,plan.targets,{includePublishedScope:request.scopeRefresh===true});
         const withdrawAssignments=Array.isArray(refresh&&refresh.withdrawAssignments)?refresh.withdrawAssignments:[];
         let withdrawal={ok:true,status:"empty",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:"no_stale_public_assignments"}};
         if(withdrawAssignments.length){

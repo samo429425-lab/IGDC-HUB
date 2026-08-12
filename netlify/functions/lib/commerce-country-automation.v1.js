@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.12.0-admin-refresh-repair";
+const VERSION = "commerce-country-automation-v3.13.0-scope-repair-review-resume";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2294,7 +2294,7 @@ function candidateRuntimePriorLiveProof(payloadInput, productInput) {
   const currentUrl = safeUrl(productUrl(product));
   const priorImage = safeUrl(first(card.image, card.imageUrl, payload.image, payload.imageUrl, payload.thumb));
   const verifiedAt = first(card.lastVerifiedAt, readiness.lastVerifiedAt, payload.inspectedAt);
-  const stamp = Date.parse(verifiedAt), maxAge = 7 * 86400000, now = Date.now();
+  const stamp = Date.parse(verifiedAt), maxAge = 30 * 86400000, now = Date.now();
   let sameProduct = false;
   try { sameProduct = !!priorUrl && !!currentUrl && ProductRanking.canonicalProductUrl(priorUrl) === ProductRanking.canonicalProductUrl(currentUrl); } catch (_error) { sameProduct = priorUrl === currentUrl; }
   const fresh = Number.isFinite(stamp) && stamp <= now + 300000 && stamp >= now - maxAge;
@@ -2381,11 +2381,16 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       changeReason = manualLocked ? "runtime_product_unavailable_administrator_locked" : "runtime_product_unavailable";
     } else if (health.inconclusive) {
       // Anti-bot/429/temporary server failures are not proof that a product was
-      // removed. Preserve an existing public assignment, but never newly publish
-      // it until a later validation can prove the detail page is live.
+      // removed. A recent, exact prior detail-page verification may preserve an
+      // administrator-selected external referral without inventing new evidence.
       assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey);
-      changeReason = "runtime_validation_inconclusive";
-    } else if (!manualLocked && options.reassign !== false) {
+      if (priorLiveFallback && assigned && ["hold","research_pending","approval_pending"].includes(lower(status))) status = "approval_pending";
+      changeReason = priorLiveFallback ? "runtime_validation_inconclusive_prior_verified" : "runtime_validation_inconclusive";
+    } else if (manualLocked) {
+      assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey);
+      if (assigned && ["hold","research_pending","approval_pending"].includes(lower(status))) status = "approval_pending";
+      changeReason = assigned ? "runtime_live_administrator_placement_preserved" : "runtime_live_administrator_control_preserved";
+    } else if (options.reassign !== false) {
       const compatibleCurrent = placementPlan.options.find((item) => productPlacementKey(item) === currentKey);
       const picked = compatibleCurrent || placementPlan.options[0] || null;
       if (picked) {
@@ -2435,9 +2440,26 @@ async function productCandidateAiRecover(actorId, input) {
   const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:"ai_auto_placement_refresh", reassign:true });
   return Object.assign({ candidateLedger:true }, result);
 }
-async function revalidateProductFrontTargets(actorId, input, targetsInput) {
-  const ids = Array.from(new Set(array(targetsInput).map((row)=>text(row && row.candidateId)).filter(Boolean))).slice(0,500);
-  return revalidateCandidateLedgerRows(actorId, input, ids, { source:"front_apply_final_check", reassign:true });
+async function scopePublishedCandidateIds(input) {
+  const scope = researchScope(input);
+  const rows = await SlotStore.select("gslot_slot_assignments", [
+    "select=candidate_id,country_code,region_code,state,publication_status",
+    "country_code=eq." + encodeURIComponent(scope.country),
+    "limit=2000"
+  ].join("&"));
+  return Array.from(new Set(array(rows).filter((row) => {
+    if (!row || !candidateRuntimePublishedStatus(row.publication_status)) return false;
+    if (!["approved","pinned"].includes(lower(row.state))) return false;
+    return frontSyncExpectedRegion(row, scope.country) === scope.region;
+  }).map((row) => text(row.candidate_id)).filter(Boolean)));
+}
+async function revalidateProductFrontTargets(actorId, input, targetsInput, optionsInput) {
+  const options = plain(optionsInput);
+  const selectedIds = array(targetsInput).map((row)=>text(row && row.candidateId)).filter(Boolean);
+  const publishedIds = options.includePublishedScope === true ? await scopePublishedCandidateIds(input) : [];
+  const ids = Array.from(new Set(selectedIds.concat(publishedIds))).slice(0,500);
+  const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:options.includePublishedScope === true ? "front_apply_scope_refresh" : "front_apply_final_check", reassign:true });
+  return Object.assign({}, result, { selectedRequested:selectedIds.length, publishedScopeRequested:publishedIds.length, scopeRefresh:options.includePublishedScope === true });
 }
 const PRODUCT_AI_QUEUE_SYNC_BATCH = 6;
 function productAiQueueSyncPending(rowInput) {
