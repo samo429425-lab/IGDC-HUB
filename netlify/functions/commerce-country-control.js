@@ -110,14 +110,17 @@ exports.handler=async function(event){
     if(action==="product_ai_automation")return json(200,await Automation.productAiAutomation(actorId,body));
     if(action==="product_front_finalize"){
       const operation=lower(body.operation)==="unmatch"?"unmatch":"match";
-      const scope=ProductGoLiveAudit.selectedScope(body.countryCode,body.subdivisionCode||"NATIONWIDE");
-      const result=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",confirmation:text(body.confirmation),operation,candidateCount:Number(body.candidateCount||0)},scope);
-      return json(200,{ok:true,frontSyncResult:result});
+      if(operation!=="match"){const error=new Error("프론트 최종 갱신 요청은 상품 매칭에만 사용합니다.");error.statusCode=400;error.code="front_finalize_operation_invalid";throw error;}
+      const candidateIds=Array.from(new Set((Array.isArray(body.candidateIds)?body.candidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
+      if(!candidateIds.length)return json(200,{ok:true,compact:true,status:"empty",frontSyncResult:{ok:true,status:"empty",action:"finalize_publication_batch",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"},publicSnapshotConfirmed:false,buildVerificationRequired:true}});
+      const scope=ProductGoLiveAudit.selectedScope(text(body.countryCode||body.country).toUpperCase(),text(body.subdivisionCode||body.regionCode||body.region||"NATIONWIDE").toUpperCase());
+      const liveDoc=await CandidateReview.stage(process.cwd());
+      const finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
+      return json(200,await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null));
     }
     if(action==="product_front_match"||action==="product_front_unmatch"){
       const operation=action==="product_front_unmatch"?"unmatch":"match";
       const request=Object.assign({},body,{operation});
-      const deferRelease=body.deferRelease===true;
       const candidateLedgerMode=lower(request.ledgerMode)==="candidate";
       const loadedJob=candidateLedgerMode?null:await Automation.loadProductResearchJob(request);
       const plan=await Automation.productFrontSyncTargets(request,loadedJob);
@@ -126,37 +129,30 @@ exports.handler=async function(event){
       if(!plan.targets.length){
         batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
       }else if(operation==="match"){
-        /* Front Apply is the second safety checkpoint. Revalidate the actual
-           external product detail pages first, remove stale/dead published
-           assignments, then rebuild the target plan from the refreshed ledger.
-           A missing replacement is intentionally left empty so the existing
-           front Snapshot sample fallback remains authoritative. */
-        const refresh=await Automation.revalidateProductFrontTargets(actorId,request,plan.targets,{includePublishedScope:request.scopeRefresh===true});
-        const withdrawAssignments=Array.isArray(refresh&&refresh.withdrawAssignments)?refresh.withdrawAssignments:[];
-        let withdrawal={ok:true,status:"empty",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:"no_stale_public_assignments"}};
-        if(withdrawAssignments.length){
-          withdrawal=await ProductGoLiveAudit.requestUnpublicationAssignments(event,actor,{mode:"production",confirmation:"SITE_UNPUBLISH",assignments:withdrawAssignments,deferRelease},scope);
-        }
-        const refreshedPlan=await Automation.productFrontSyncTargets(request,loadedJob);
-        const preparation=refreshedPlan.targets.length?await Automation.prepareProductFrontTargets(actorId,request,refreshedPlan.targets,loadedJob):{ok:true,requested:0,prepared:0,blocked:0,preparedCandidateIds:[],items:[],writeTrace:{mode:"runtime_refresh_no_live_targets"}};
+        const preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets,loadedJob);
         const preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds:[];
         const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked");
-        let publishResult={ok:true,status:"empty",action:"request_publication_batch",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:preparedIds.length?"publication_not_requested":"no_front_ready_products"}};
-        if(preparedIds.length){
+        if(!preparedIds.length){
+          batchResult={ok:true,status:"blocked",action:"request_publication_batch",requested:plan.targets.length,queued:0,blocked:preparationBlocked.length,items:preparationBlocked,release:{queued:false,reason:"no_front_ready_products"},preparation};
+        }else if(request.deferRelease===true){
+          const preparedItems=Array.isArray(preparation&&preparation.items)?preparation.items:[];
+          const items=preparationBlocked.concat(preparedItems.filter((item)=>item&&item.status!=="blocked"));
+          const persisted=items.filter((item)=>item&&item.persisted===true).length;
+          const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
+          batchResult={ok:true,status:persisted?(blocked?"partial":"pending_finalize"):(blocked?"blocked":"empty"),action:"prepare_publication_batch",requested:plan.targets.length,queued:0,persisted,pendingBuild:persisted,blocked,items,preparation,release:{queued:false,reason:"deferred_single_build_finalize"},automaticPublication:false,publicSnapshotConfirmed:false,buildVerificationRequired:true};
+        }else{
           const liveDoc=await CandidateReview.stage(process.cwd());
-          publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true,deferRelease},scope,liveDoc);
+          const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true},scope,liveDoc);
+          const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
+          const items=preparationBlocked.concat(publishItems);
+          const queued=items.filter((item)=>item&&item.queued===true).length;
+          const persisted=items.filter((item)=>item&&item.persisted===true).length;
+          const pendingBuild=items.filter((item)=>item&&item.pendingBuild===true).length;
+          const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
+          batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,persisted,pendingBuild,blocked,items,preparation,status:queued?(blocked?"partial":"queued"):(pendingBuild?(blocked?"partial":"pending_build"):(blocked?"blocked":"empty"))});
         }
-        const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
-        const items=preparationBlocked.concat(publishItems);
-        const queued=Number(publishResult&&publishResult.queued||0)+Number(withdrawal&&withdrawal.queued||0);
-        const persisted=Number(publishResult&&publishResult.persisted||0)+Number(withdrawal&&withdrawal.persisted||0);
-        const pendingBuild=Number(publishResult&&publishResult.pendingBuild||0)+Number(withdrawal&&withdrawal.pendingBuild||0);
-        const blocked=Number(publishResult&&publishResult.blocked||0)+Number(withdrawal&&withdrawal.blocked||0)+preparationBlocked.length;
-        const withdrawn=(Array.isArray(withdrawal&&withdrawal.items)?withdrawal.items:[]).filter((item)=>item&&(item.status==="unpublish_requested"||item.status==="unmatched")).length;
-        const status=queued?(blocked?"partial":"queued"):(pendingBuild?(blocked?"partial":"pending_build"):(blocked?"blocked":(withdrawn?"refreshed_to_fallback":"empty")));
-        batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,persisted,pendingBuild,blocked,items,preparation,refresh:Object.assign({},refresh,{withdrawRequested:withdrawAssignments.length,withdrawn,withdrawal}),status,release:publishResult&&publishResult.release&&publishResult.release.queued?publishResult.release:withdrawal.release||publishResult.release});
       }else{
-        batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId),deferRelease},scope);
+        batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope);
       }
       return json(200,await Automation.recordProductFrontSync(actorId,request,batchResult,loadedJob));
     }
