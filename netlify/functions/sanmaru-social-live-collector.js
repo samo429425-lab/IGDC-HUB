@@ -16,8 +16,9 @@ const AdminAuth = require("./lib/commerce-candidate-auth.v1");
 const MaruSearch = require("./maru-search");
 const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
+const CountryContentPolicy = require("./lib/social-country-content-policy.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.7.0-influencer-content-split";
+const VERSION = "sanmaru-social-live-collector-v1.8.0-country-content-policy";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -262,10 +263,13 @@ function rejectionSummary(entries) {
   });
   return out;
 }
-function sectionPlan(sectionKey) {
+function sectionPlan(sectionKey, route) {
   const platform = Policy.PLATFORM_BY_SECTION[sectionKey];
-  const policy = Policy.PLATFORM_POLICIES[platform];
-  return platform && policy ? { sectionKey, platform, policy } : null;
+  const basePolicy = Policy.PLATFORM_POLICIES[platform];
+  if (!platform || !basePolicy) return null;
+  const countryCode = SocialStore.text(route && route.countryCode).toUpperCase();
+  const policy = CountryContentPolicy.applyToPlatformPolicy(basePolicy, countryCode, platform);
+  return { sectionKey, platform, policy };
 }
 function flattenKeyValues(value, output) {
   const out = output || {};
@@ -1253,12 +1257,12 @@ exports.handler = async function(event) {
     const actor = await requireCollectorActor(event);
     const body = SocialStore.parseBody(event);
     const sectionKey = Policy.normalizeSectionKey(body.sectionKey || body.section || body.targetSection);
-    const plan = sectionPlan(sectionKey);
+    const route = CountryRouting.resolve(event, body);
+    const plan = sectionPlan(sectionKey, route);
     if (!plan) return SocialStore.response(400, { ok: false, version: VERSION, error: "invalid_social_section", allowedSections: Policy.SECTION_KEYS });
 
     const dryRun = flag(body.dryRun || body.dry_run);
     const batchSize = Math.max(1, Math.min(MAX_BATCH_SIZE, Number(body.batchSize || body.batch_size || body.limit || DEFAULT_BATCH_SIZE) || DEFAULT_BATCH_SIZE));
-    const route = CountryRouting.resolve(event, body);
 
     if (/^(intake_channels|intake_urls|direct_intake)$/i.test(SocialStore.text(body.action))) {
       const intake = await intakeCandidates(body, plan, route);

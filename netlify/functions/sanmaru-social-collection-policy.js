@@ -5,7 +5,7 @@
  * Shows what Sanmaru/Maru Search should collect broadly before the candidate gateway filters it.
  */
 const Policy = require("./lib/social-candidate-policy.v1");
-const VERSION = "sanmaru-social-collection-policy-v1.0.0-readonly";
+const VERSION = "sanmaru-social-collection-policy-v1.1.0-country-aware-readonly";
 
 function json(statusCode, body) {
   return {
@@ -29,7 +29,7 @@ exports.handler = async function(event) {
     ok: true,
     version: VERSION,
     policy: Policy.VERSION,
-    collectionPlan: Policy.buildCollectionPlan({ perSection, languages }),
+    collectionPlan: Policy.buildCollectionPlan({ perSection, languages, countryCode: qs.countryCode || qs.country }),
     safety: {
       readOnly: true,
       writes: false,

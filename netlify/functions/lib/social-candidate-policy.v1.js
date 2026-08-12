@@ -8,7 +8,8 @@
  * from SearchBank core engines: SearchBank remains a broad ledger, and this
  * policy is applied only when copying social candidates into social_candidates.
  */
-const VERSION = "social-candidate-policy-v1.0.2-sample-preserve-candidate-only";
+const VERSION = "social-candidate-policy-v1.1.0-country-content-policy";
+const CountryContentPolicy = require("./social-country-content-policy.v1");
 
 const POOL_TARGET_PER_SECTION = 300;
 const POOL_MIN_PER_SECTION = 250;
@@ -175,7 +176,7 @@ const HARD_BLOCK_TERMS = Object.freeze([
 ]);
 
 const SOFT_RISK_TERMS = Object.freeze([
-  "politics", "election", "war", "geopolitics", "religious conflict", "protest", "conspiracy", "breaking controversy"
+  "religious conflict", "conspiracy", "breaking controversy", "unverified claim", "graphic conflict footage"
 ]);
 
 const REVENUE_HINTS = Object.freeze([
@@ -388,6 +389,7 @@ function validationReasons(row, normalized) {
 }
 function buildCollectionPlan(options) {
   const opts = plain(options);
+  const countryCode = text(opts.countryCode || opts.country).toUpperCase();
   const languages = array(opts.languages || opts.lang || opts.language || LANGUAGES_30).map(text).filter(Boolean);
   const perSection = clamp(Number(opts.perSection || POOL_TARGET_PER_SECTION), POOL_MIN_PER_SECTION, POOL_MAX_PER_SECTION);
   return {
@@ -408,7 +410,7 @@ function buildCollectionPlan(options) {
     },
     sections: SECTION_KEYS.map((sectionKey) => {
       const platform = PLATFORM_BY_SECTION[sectionKey];
-      const policy = PLATFORM_POLICIES[platform];
+      const policy = CountryContentPolicy.applyToPlatformPolicy(PLATFORM_POLICIES[platform], countryCode, platform);
       return {
         sectionKey,
         platform,
@@ -417,7 +419,9 @@ function buildCollectionPlan(options) {
         categories: policy.categories,
         publicPreference: policy.publicPreference,
         collectionQueries: policy.collectionQueries,
-        languages
+        languages,
+        countryCode: countryCode || null,
+        countryContentPolicy: policy.countryContentPolicy
       };
     })
   };
@@ -458,5 +462,6 @@ module.exports = {
   scoreCandidate,
   classifyCandidate,
   validationReasons,
-  buildCollectionPlan
+  buildCollectionPlan,
+  CountryContentPolicy
 };
