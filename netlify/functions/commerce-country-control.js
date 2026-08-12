@@ -58,7 +58,7 @@ exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();if(method==="OPTIONS")return json(204,{});
     const body=method==="GET"?{}:parse(event),query=event&&event.queryStringParameters||{},action=lower(query.action||body.action||"catalog");
-    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_candidate_action","product_candidate_ledger_action","product_candidate_ai_recover","product_ai_automation","product_front_match","product_front_unmatch","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
+    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_candidate_action","product_candidate_ledger_action","product_candidate_ai_recover","product_ai_automation","product_front_match","product_front_unmatch","product_front_finalize","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
     const actorId=text(actor&&actor.sub);
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
@@ -108,9 +108,16 @@ exports.handler=async function(event){
     if(action==="product_candidate_ledger_action")return json(200,await Automation.productCandidateLedgerAction(actorId,body));
     if(action==="product_candidate_ai_recover")return json(200,await Automation.productCandidateAiRecover(actorId,body));
     if(action==="product_ai_automation")return json(200,await Automation.productAiAutomation(actorId,body));
+    if(action==="product_front_finalize"){
+      const operation=lower(body.operation)==="unmatch"?"unmatch":"match";
+      const scope=ProductGoLiveAudit.selectedScope(body.countryCode,body.subdivisionCode||"NATIONWIDE");
+      const result=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",confirmation:text(body.confirmation),operation,candidateCount:Number(body.candidateCount||0)},scope);
+      return json(200,{ok:true,frontSyncResult:result});
+    }
     if(action==="product_front_match"||action==="product_front_unmatch"){
       const operation=action==="product_front_unmatch"?"unmatch":"match";
       const request=Object.assign({},body,{operation});
+      const deferRelease=body.deferRelease===true;
       const candidateLedgerMode=lower(request.ledgerMode)==="candidate";
       const loadedJob=candidateLedgerMode?null:await Automation.loadProductResearchJob(request);
       const plan=await Automation.productFrontSyncTargets(request,loadedJob);
@@ -128,7 +135,7 @@ exports.handler=async function(event){
         const withdrawAssignments=Array.isArray(refresh&&refresh.withdrawAssignments)?refresh.withdrawAssignments:[];
         let withdrawal={ok:true,status:"empty",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:"no_stale_public_assignments"}};
         if(withdrawAssignments.length){
-          withdrawal=await ProductGoLiveAudit.requestUnpublicationAssignments(event,actor,{mode:"production",confirmation:"SITE_UNPUBLISH",assignments:withdrawAssignments},scope);
+          withdrawal=await ProductGoLiveAudit.requestUnpublicationAssignments(event,actor,{mode:"production",confirmation:"SITE_UNPUBLISH",assignments:withdrawAssignments,deferRelease},scope);
         }
         const refreshedPlan=await Automation.productFrontSyncTargets(request,loadedJob);
         const preparation=refreshedPlan.targets.length?await Automation.prepareProductFrontTargets(actorId,request,refreshedPlan.targets,loadedJob):{ok:true,requested:0,prepared:0,blocked:0,preparedCandidateIds:[],items:[],writeTrace:{mode:"runtime_refresh_no_live_targets"}};
@@ -137,7 +144,7 @@ exports.handler=async function(event){
         let publishResult={ok:true,status:"empty",action:"request_publication_batch",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:preparedIds.length?"publication_not_requested":"no_front_ready_products"}};
         if(preparedIds.length){
           const liveDoc=await CandidateReview.stage(process.cwd());
-          publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true},scope,liveDoc);
+          publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true,deferRelease},scope,liveDoc);
         }
         const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
         const items=preparationBlocked.concat(publishItems);
@@ -149,7 +156,7 @@ exports.handler=async function(event){
         const status=queued?(blocked?"partial":"queued"):(pendingBuild?(blocked?"partial":"pending_build"):(blocked?"blocked":(withdrawn?"refreshed_to_fallback":"empty")));
         batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,persisted,pendingBuild,blocked,items,preparation,refresh:Object.assign({},refresh,{withdrawRequested:withdrawAssignments.length,withdrawn,withdrawal}),status,release:publishResult&&publishResult.release&&publishResult.release.queued?publishResult.release:withdrawal.release||publishResult.release});
       }else{
-        batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope);
+        batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId),deferRelease},scope);
       }
       return json(200,await Automation.recordProductFrontSync(actorId,request,batchResult,loadedJob));
     }

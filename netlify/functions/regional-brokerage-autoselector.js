@@ -1013,7 +1013,14 @@ function catalogPageUrls(html,baseUrl){
   return out;
 }
 async function fetchProductHtml(url,controller){
-  try{const response=await fetch(url,{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-ProductReferenceResearch/1.0 (+https://igdcglobal.com)"}});if(!response.ok)return{ok:false,status:"http_"+response.status,url,html:""};const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return{ok:false,status:"non_html",url:response.url||url,html:""};const length=Number(response.headers.get("content-length")||0);if(length>1800000)return{ok:false,status:"page_too_large",url:response.url||url,html:""};return{ok:true,status:"ok",url:response.url||url,html:(await response.text()).slice(0,1400000)};}catch(error){return{ok:false,status:providerErrorCode(error),url,html:"",detail:providerErrorDetail(error)};}
+  const headers={
+    "user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0 Safari/537.36 IGDC-MARU-ProductReferenceResearch/1.0",
+    "accept":"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "accept-language":"ko-KR,ko;q=0.9,en-US;q=0.7,en;q=0.6",
+    "cache-control":"no-cache",
+    "pragma":"no-cache"
+  };
+  try{const response=await fetch(url,{redirect:"follow",signal:controller.signal,headers});if(!response.ok)return{ok:false,status:"http_"+response.status,url:response.url||url,html:""};const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return{ok:false,status:"non_html",url:response.url||url,html:""};const length=Number(response.headers.get("content-length")||0);if(length>1800000)return{ok:false,status:"page_too_large",url:response.url||url,html:""};return{ok:true,status:"ok",url:response.url||url,html:(await response.text()).slice(0,1400000)};}catch(error){return{ok:false,status:providerErrorCode(error),url,html:"",detail:providerErrorDetail(error)};}
 }
 async function discoverSupplierProductsStep(supplier,params){
   const source=plain(supplier),supplierSiteUrl=absoluteHttpUrl(first(source.url,source.supplierSiteUrl),first(source.url,source.supplierSiteUrl));if(!supplierSiteUrl)return{ok:true,items:[],trace:{source:"supplier-product-discovery",status:"supplier_url_missing",count:0}};
@@ -1034,8 +1041,15 @@ function prepareProductInspectionPool(rawItems,params){
   for(const item of ranked){const url=ProductRanking.canonicalProductUrl(item&&item.productUrl),key=ProductRanking.productIdentity(item);if(!url||!key||seen.has(key)||!isProductDetailUrl(url))continue;seen.add(key);out.push(Object.assign({},item,{productUrl:url,url}));if(out.length>=limit)break;}return out;
 }
 
+function decodePageTextEscapes(value){
+  return String(value||"")
+    .replace(/\\u([0-9a-f]{4})/gi,function(_m,hex){try{return String.fromCharCode(parseInt(hex,16));}catch(_e){return _m;}})
+    .replace(/\\x([0-9a-f]{2})/gi,function(_m,hex){try{return String.fromCharCode(parseInt(hex,16));}catch(_e){return _m;}})
+    .replace(/&(?:#x([0-9a-f]+)|#(\d+));/gi,function(_m,hex,dec){try{return String.fromCodePoint(parseInt(hex||dec,hex?16:10));}catch(_e){return _m;}});
+}
 function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
-  const body=stripHtml(String(html||"")).toLowerCase().slice(0,220000);
+  const raw=String(html||"");
+  const body=stripHtml(raw+" "+decodePageTextEscapes(raw)).toLowerCase().slice(0,300000);
   const explicitInvalid=[
     "잘못된 접근입니다",
     "상품이 존재하지 않습니다",
@@ -1045,6 +1059,9 @@ function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
     "판매종료 상품",
     "판매가 종료된 상품",
     "상품을 찾을 수 없습니다",
+    "요청하신 상품을 찾을 수 없습니다",
+    "해당 상품은 판매하지 않습니다",
+    "판매중지된 상품",
     "product not found",
     "this product is no longer available",
     "item not found"

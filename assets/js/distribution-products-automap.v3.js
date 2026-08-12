@@ -61,11 +61,31 @@
   let regionalRetryCount=0;
   let renderGeneration=0;
   const incrementalJobs=new WeakMap();
+  const ownershipObservers=new WeakMap();
 
   function text(v){return v==null?'':String(v);}
   function pick(item,names){for(const name of names){const value=item&&item[name];if(value!==undefined&&value!==null&&value!=='')return value;}return '';}
   function escUrl(v){try{return String(v||'').replace(/'/g,'%27');}catch(_e){return '';}}
   function hasUsableDestination(value){const url=text(value).trim();return !!url&&url!=='#'&&!/^javascript:/i.test(url)&&!/\/pages\/coming-soon\.html/i.test(url)&&!/(?:^|\.)example\.com(?:[/:?#]|$)/i.test(url);}
+  function isSpecificProductDestination(value){
+    const url=text(value).trim(); if(!hasUsableDestination(url)) return false;
+    try{
+      const parsed=new URL(url,window.location.origin);
+      const internal=parsed.origin===window.location.origin;
+      if(!internal&&parsed.protocol!=='https:') return false;
+      if(parsed.pathname==='/'&&!parsed.search&&!parsed.hash) return false;
+      return true;
+    }catch(_e){ return url.charAt(0)==='/' && url!=='/'; }
+  }
+  function directProductDestination(item){
+    const direct=pick(item,['externalProductUrl','officialProductUrl','productUrl','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink']);
+    return isSpecificProductDestination(direct)?text(direct).trim():'';
+  }
+  function cardDestination(item){
+    const direct=directProductDestination(item); if(direct) return direct;
+    const routed=pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','url','href','link']);
+    return isSpecificProductDestination(routed)?text(routed).trim():'';
+  }
   function revenue(item,kind){
     try{
       if(window.MaruRevenueTracker&&typeof window.MaruRevenueTracker[kind]==='function'){
@@ -111,9 +131,14 @@
       description:pick(item,['description','summary']),
       thumb:pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']),
       image:pick(item,['image','thumbnail','thumb','imageUrl']),
-      url:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','url','href','link']),
-      href:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','href','url','link']),
-      link:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','link','url','href']),
+      url:pick(item,['url','href','link','affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url']),
+      href:pick(item,['href','url','link','affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url']),
+      link:pick(item,['link','url','href','affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url']),
+      externalProductUrl:pick(item,['externalProductUrl']),
+      officialProductUrl:pick(item,['officialProductUrl']),
+      productUrl:pick(item,['productUrl','productPageUrl']),
+      detailUrl:pick(item,['detailUrl']),
+      checkoutUrl:pick(item,['checkoutUrl']),
       affiliateOutboundUrl:pick(item,['affiliateOutboundUrl','affiliate_outbound_url']),
       externalOutboundUrl:pick(item,['externalOutboundUrl','external_outbound_url']),
       affiliate:item&&item.affiliate&&typeof item.affiliate==='object'?item.affiliate:null,
@@ -154,6 +179,7 @@
 
   function makeCard(item,track){
     const root=document.createElement('div'); root.className='thumb-card';
+    root.setAttribute('data-distribution-canonical','1');
     // This renderer already emits its own exact tracker calls. Keep the global
     // autohook from duplicating the same signals on Distribution Hub cards.
     root.setAttribute('data-igdc-revenue-manual','1');
@@ -171,14 +197,15 @@
     const title=document.createElement('div'); title.className='thumb-title'; title.textContent=text(pick(item,['title','name','text'])||'Product');
     const meta=document.createElement('div'); meta.className='thumb-meta'; meta.textContent=text(pick(item,['meta','subtitle','summary','description']));
     root.appendChild(img); root.appendChild(title); root.appendChild(meta);
-    const href=pick(item,['url','href','link']);
-    if(hasUsableDestination(href)){
+    const href=cardDestination(item);
+    if(href){
       // Real product routes retain the renderer's original navigation path.
       root.dataset.igtcHooked='1';
       root.style.cursor='pointer'; root.setAttribute('role','link'); root.tabIndex=0;
       const open=function(){
         revenue(item,'trackClick');
-        window.location.assign(href);
+        try { (window.top || window).location.assign(href); }
+        catch(_e){ window.location.href=href; }
       };
       root.addEventListener('click',open);
       root.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
@@ -208,7 +235,7 @@
         const list=normalizeList(sections[cfg.key]||sections[ALIAS[cfg.key]]);
         hash=addHash(hash,cfg.key+':'+list.length+'|');
         list.forEach(function(item){
-          hash=addHash(hash,[pick(item,['id','uid','productId','contentId']),pick(item,['title','name','text']),pick(item,['meta','subtitle','summary','description']),pick(item,['thumb','thumbnail','image','imageUrl']),pick(item,['url','href','link'])].join('\u001f'));
+          hash=addHash(hash,[pick(item,['id','uid','productId','contentId']),pick(item,['title','name','text']),pick(item,['meta','subtitle','summary','description']),pick(item,['thumb','thumbnail','image','imageUrl']),cardDestination(item)].join('\u001f'));
         });
       });
       return (hash>>>0).toString(16);
@@ -253,14 +280,37 @@
       return Number.isFinite(stamp)&&stamp>0?stamp:0;
     }catch(_e){return 0;}
   }
+  function removeForeignCards(box,node){
+    if(!box||!node||node.nodeType!==1) return;
+    const cards=[];
+    if(node.matches&&node.matches('.thumb-card')) cards.push(node);
+    if(node.querySelectorAll) node.querySelectorAll('.thumb-card').forEach(function(card){cards.push(card);});
+    cards.forEach(function(card){
+      if(card.getAttribute('data-distribution-canonical')==='1') return;
+      if(card.parentNode) card.parentNode.removeChild(card);
+    });
+  }
+  function enforceCanonicalOwnership(box){
+    if(!box||ownershipObservers.has(box)||typeof MutationObserver==='undefined') return;
+    const observer=new MutationObserver(function(records){
+      records.forEach(function(record){record.addedNodes.forEach(function(node){removeForeignCards(box,node);});});
+    });
+    observer.observe(box,{childList:true,subtree:true});
+    ownershipObservers.set(box,observer);
+    Array.from(box.querySelectorAll('.thumb-card')).forEach(function(card){
+      if(card.getAttribute('data-distribution-canonical')!=='1'&&card.parentNode) card.parentNode.removeChild(card);
+    });
+  }
   function controlHosts(){
     SECTION_MAP.forEach(function(cfg){
       const box=document.querySelector(cfg.selector);
       if(box){
-        // thumbnail-loader.compat.min.js honours this flag on Distribution Hub.
-        // It must not append a late network feed after this renderer owns the slots.
+        // The canonical Snapshot/AutoMap owns this PSOM host. Legacy inline
+        // recommend-fillers are prevented from appending a second click route
+        // (which otherwise opens external sellers inside the child iframe).
         box.dataset.mounted='1';
         box.dataset.distributionAutomap='v8';
+        enforceCanonicalOwnership(box);
       }
     });
   }
