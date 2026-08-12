@@ -2288,6 +2288,18 @@ function candidateRuntimeProduct(rowInput, scope) {
     researchStatus: first(payload.researchStatus, plain(payload.researchReadiness).stage, "research_review_ready"), publicPublication: false, automaticImport: false
   });
 }
+function candidateRuntimePriorLiveProof(payloadInput, productInput) {
+  const payload = plain(payloadInput), readiness = plain(payload.researchReadiness), card = plain(readiness.productCard), product = plain(productInput);
+  const priorUrl = safeUrl(first(card.checkoutUrl, card.productUrl, payload.externalProductUrl, payload.productUrl, payload.url));
+  const currentUrl = safeUrl(productUrl(product));
+  const priorImage = safeUrl(first(card.image, card.imageUrl, payload.image, payload.imageUrl, payload.thumb));
+  const verifiedAt = first(card.lastVerifiedAt, readiness.lastVerifiedAt, payload.inspectedAt);
+  const stamp = Date.parse(verifiedAt), maxAge = 7 * 86400000, now = Date.now();
+  let sameProduct = false;
+  try { sameProduct = !!priorUrl && !!currentUrl && ProductRanking.canonicalProductUrl(priorUrl) === ProductRanking.canonicalProductUrl(currentUrl); } catch (_error) { sameProduct = priorUrl === currentUrl; }
+  const fresh = Number.isFinite(stamp) && stamp <= now + 300000 && stamp >= now - maxAge;
+  return { ok:!!(fresh && sameProduct && priorImage && ProductRanking.isSpecificProductUrl(priorUrl)), verifiedAt:verifiedAt||null, productUrl:priorUrl||null, imageUrl:priorImage||null };
+}
 function candidateRuntimeHealth(productInput) {
   const product = plain(productInput), status = lower(product.researchStatus), risk = plain(product.riskAssessment), reasons = [];
   const hardDeadStatuses = new Set(["http_404","http_410","http_401","invalid_product_url","product_page_explicit_invalid_message","product_page_redirected_to_seller_home"]);
@@ -2359,7 +2371,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       continue;
     }
     const inspected = Object.keys(inspectedRaw).length ? Object.assign({}, sourceProduct, inspectedRaw, { candidateId:id, id:id }) : Object.assign({}, sourceProduct, { candidateId:id, id:id, productPageLive:false, inspectionComplete:true, researchStatus:"inspection_error" });
-    const health = candidateRuntimeHealth(inspected), placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), manualLocked = candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement);
+    const health = candidateRuntimeHealth(inspected), priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), manualLocked = candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement);
     let nextDecision = currentDecision, nextPlacement = currentPlacement, status = text(row.status) || "research_pending", assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey), changeReason = "runtime_revalidated";
     if (health.dead) {
       // An administrator placement lock preserves the historical decision, but
@@ -2388,10 +2400,10 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
     payload.title = first(inspected.productName, inspected.title, payload.title, row.title); payload.productName = payload.title; payload.sourceTitle = first(inspected.sourceTitle, payload.sourceTitle, payload.title);
     payload.url = productUrl(inspected); payload.externalProductUrl = productUrl(inspected); payload.productUrl = productUrl(inspected); payload.image = productImageUrl(inspected); payload.thumb = productImageUrl(inspected); payload.imageUrl = productImageUrl(inspected); payload.productCard = card;
     payload.price = first(inspected.price, payload.price); payload.priceCurrency = first(inspected.priceCurrency, payload.priceCurrency); payload.availability = first(inspected.availability, payload.availability);
-    payload.productPageLive = inspected.productPageLive === true; payload.sameSupplierSite = inspected.sameSupplierSite !== false; payload.inspectionComplete = inspected.inspectionComplete === true; payload.researchStatus = first(inspected.researchStatus, payload.researchStatus);
+    payload.productPageLive = priorLiveFallback ? true : inspected.productPageLive === true; payload.sameSupplierSite = inspected.sameSupplierSite !== false; payload.inspectionComplete = inspected.inspectionComplete === true; payload.researchStatus = first(inspected.researchStatus, payload.researchStatus);
     payload.productCategory = category.primary; payload.productCategoryTags = category.tags; payload.productRanking = Object.assign({}, plain(payload.productRanking), { category:category.primary, categoryTags:category.tags });
     payload.researchReadiness = Object.assign({}, plain(payload.researchReadiness), { stage:payload.researchStatus, productPageLive:payload.productPageLive, inspectionComplete:payload.inspectionComplete, productCard:card, lastVerifiedAt:now });
-    payload.runtimeValidation = { schema:"igdc-product-runtime-validation.v2", source:options.source || "administrator_refresh", checkedAt:now, checkedBy:actor, state:health.state, live:health.live, dead:health.dead, inconclusive:health.inconclusive, reasons:health.reasons, exactProductUrl:payload.url || null, imageUrl:payload.image || null, category:category.primary, previousSectionKey:currentKey || null, nextSectionKey:productPlacementKey(nextPlacement) || null };
+    payload.runtimeValidation = { schema:"igdc-product-runtime-validation.v3", source:options.source || "administrator_refresh", checkedAt:now, checkedBy:actor, state:health.state, live:health.live, dead:health.dead, inconclusive:health.inconclusive, priorLiveFallbackAllowed:priorLiveFallback, priorLiveVerifiedAt:priorLiveFallback?priorLiveProof.verifiedAt:null, reasons:health.reasons, exactProductUrl:payload.url || null, imageUrl:payload.image || null, category:category.primary, previousSectionKey:currentKey || null, nextSectionKey:productPlacementKey(nextPlacement) || null };
     payload.slotDecision = nextDecision; payload.publicPublication = false; payload.automaticImport = false;
     if (nextPlacement && validProductSectionKey(productPlacementKey(nextPlacement))) {
       payload.approvedPlacement = nextPlacement; payload.placement = nextPlacement;
@@ -2776,7 +2788,7 @@ function frontSyncPublicReadiness(productInput, existingCandidate) {
   const blockers = array(risk.blockers).map(lower).filter(Boolean);
   const prohibited = blockers.filter((item) => /(malware|phishing|fraud|illegal|prohibited|sanction|counterfeit|adult|unsafe|product_page_unavailable|supplier_product_domain_mismatch)/.test(item));
   if (plain(existingPayload.queueControl).permanentExcluded === true) reasons.push("permanently_excluded");
-  if (lower(runtimeValidation.state) === "inconclusive") reasons.push("runtime_validation_inconclusive");
+  if (lower(runtimeValidation.state) === "inconclusive") { if (runtimeValidation.priorLiveFallbackAllowed === true) warnings.push("runtime_validation_inconclusive_recent_live_detail_preserved"); else reasons.push("runtime_validation_inconclusive"); }
   if (lower(runtimeValidation.state) === "dead" || runtimeValidation.dead === true) reasons.push("runtime_product_unavailable");
   if (!productPageUrl || !ProductRanking.isSpecificProductUrl(productPageUrl)) reasons.push("specific_product_url_missing");
   if (!imageUrl) reasons.push("actual_product_image_missing");
@@ -3121,12 +3133,22 @@ async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
       const payload = Object.assign({}, plain(row.source_payload)), status = text(item.status) || (item.queued === true ? (operation === "match" ? "publish_requested" : "unpublish_requested") : "blocked");
       const key = text(item.sectionKey || productPlacementKey(payload.approvedPlacement || payload.selectedPlacement || payload.primaryPlacement || payload.placement));
       const split = validProductSectionKey(key) ? splitProductSectionKey(key) : null;
-      payload.frontPublication = { schema:"igdc-product-front-publication-control.v2", candidateId:id, operation, status, queued:item.queued===true, persisted:item.persisted===true, pendingBuild:item.pendingBuild===true, persistenceVerified:item.persistenceVerified!==false&&item.persisted===true, reason:text(item.reason)||null, assignmentId:text(item.assignmentId)||null, requestedAt:now, requestedBy:actor, publicSnapshotConfirmed:false, buildVerificationRequired:true };
+      const previousPlacement = plain(payload.approvedPlacement || payload.selectedPlacement || payload.primaryPlacement || payload.placement), previousFront = plain(payload.frontPublication);
+      payload.frontPublication = Object.assign({}, previousFront, { schema:"igdc-product-front-publication-control.v4", candidateId:id, operation, status, queued:item.queued===true, persisted:item.persisted===true, pendingBuild:item.pendingBuild===true, persistenceVerified:item.persistenceVerified!==false&&item.persisted===true, reason:text(item.reason)||null, assignmentId:text(item.assignmentId)||text(previousFront.assignmentId)||null, page:split&&split.page||text(previousFront.page)||null, section:split&&split.sectionKey||text(previousFront.section)||null, sectionKey:split&&split.sectionKey||text(previousFront.sectionKey)||null, country:scope.country, region:scope.region, requestedAt:now, requestedBy:actor, publicSnapshotConfirmed:false, buildVerificationRequired:true });
       if (operation === "match" && item.persisted === true && split) {
         payload.slotDecision = "slot_candidate";
         payload.approvedPlacement = Object.assign({}, plain(payload.approvedPlacement), { page:split.page, section:split.sectionKey, sectionKey:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, aiSelected:false, proposalOnly:false, publicPublication:false, publicationPending:true });
         payload.review = Object.assign({}, plain(payload.review), { state:"approved", decidedAt:now, decidedBy:actor, approvalSource:"explicit_front_match", publicationRequested:true });
         payload.pipeline = Object.assign({}, plain(payload.pipeline), { stage:"registry_sync_ready", nextGate:"publication_build_requested", explicitPublicationRequested:true, preparedAt:now, preparedBy:actor });
+      }
+      const unmatchCompleted = operation === "unmatch" && ["unpublish_requested","unmatched","already_unmatched"].includes(lower(status));
+      if (unmatchCompleted) {
+        if (Object.keys(previousPlacement).length) payload.previousApprovedPlacement = Object.assign({}, previousPlacement, { removedAt:now, removedReason:"administrator_front_unmatch" });
+        payload.slotDecision = "undecided";
+        delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.primaryPlacement; delete payload.placement;
+        payload.managementControl = Object.assign({}, plain(payload.managementControl), { schema:"igdc-product-management-control.v1", source:"administrator_front_unmatch", administratorLocked:false, aiReclassificationAllowed:true, decidedAt:now, decidedBy:actor });
+        payload.review = Object.assign({}, plain(payload.review), { state:"research_pending", publicationRequested:false, explicitPublicationRequested:false, publicationStatus:"unpublish_requested", decidedAt:now, decidedBy:actor });
+        payload.pipeline = Object.assign({}, plain(payload.pipeline), { stage:"private_research_queue", nextGate:"administrator_product_selection", explicitPublicationRequested:false, publicationStatus:"unpublish_requested", updatedAt:now, updatedBy:actor });
       }
       payload.publicPublication=false;
       try { await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{source_payload:payload,updated_at:now}); }

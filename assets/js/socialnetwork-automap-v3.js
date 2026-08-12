@@ -38,6 +38,23 @@
     return safeText(it && (it.title || it.name || it.text || it.label));
   }
 
+  function pickDirectProductUrl(it) {
+    const raw = safeText(
+      it &&
+        (it.externalProductUrl ||
+          it.officialProductUrl ||
+          it.productUrl ||
+          it.productPageUrl ||
+          it.detailUrl ||
+          it.checkoutUrl ||
+          it.purchaseUrl ||
+          it.orderUrl ||
+          it.productLink ||
+          ""),
+    ).trim();
+    return specificProductUrl(raw);
+  }
+
   function pickUrl(it) {
     return (
       safeText(
@@ -127,6 +144,19 @@
     return false;
   }
 
+  function specificProductUrl(value) {
+    const raw = safeText(value).trim();
+    if (isBadPlaceholderUrl(raw)) return "";
+    try {
+      const parsed = new URL(raw);
+      if (parsed.protocol !== "https:") return "";
+      if ((!parsed.pathname || parsed.pathname === "/") && !parsed.search && !parsed.hash) return "";
+      return parsed.toString();
+    } catch (_e) {
+      return "";
+    }
+  }
+
   function isValidSecondUrl(url) {
     url = safeText(url).trim();
     if (isBadPlaceholderUrl(url)) return false;
@@ -162,6 +192,9 @@
   function resolveItemUrl(it) {
     if (!it || isPlaceholderItem(it)) return "";
 
+    const directProductUrl = pickDirectProductUrl(it);
+    if (isValidSecondUrl(directProductUrl)) return directProductUrl;
+
     const explicitOutbound = safeText(
       it && (it.affiliateOutboundUrl || it.affiliate_outbound_url || it.externalOutboundUrl || it.external_outbound_url || "")
     ).trim();
@@ -194,6 +227,21 @@
     const raw = pickUrl(it).trim();
     if (isValidSecondUrl(raw)) return raw;
 
+    return "";
+  }
+
+  function resolveRightProductUrl(it) {
+    if (!it || isPlaceholderItem(it)) return "";
+    const candidates = [
+      pickDirectProductUrl(it),
+      it.affiliateOutboundUrl, it.affiliate_outbound_url,
+      it.externalOutboundUrl, it.external_outbound_url,
+      it.url, it.href, it.link
+    ];
+    for (const value of candidates) {
+      const url = specificProductUrl(value);
+      if (url && isValidSecondUrl(url)) return url;
+    }
     return "";
   }
 
@@ -386,8 +434,8 @@
     const thumb = pickThumb(it);
 
     card.href = url || "#";
-    card.target = url && url !== "#" ? "_blank" : "_self";
-    card.rel = "noopener";
+    card.target = "_self";
+    card.removeAttribute("rel");
     card.removeAttribute("data-dummy");
 
     const pic = qs(".pic", card);
@@ -523,15 +571,15 @@
   }
 
   function ensureRightCardCss() {
-    const id = "igdc-social-right-card-v1";
+    const id = "igdc-social-right-card-v2";
     if (document.getElementById(id)) return;
     const style = document.createElement("style");
     style.id = id;
     style.textContent = `
-[data-psom-key="rightPanel"] .ad-box.product-card{position:relative;line-height:normal!important;}
-[data-psom-key="rightPanel"] .ad-box.product-card > a{position:relative;display:block;width:100%;height:100%;line-height:normal!important;overflow:hidden;border-radius:inherit;}
-[data-psom-key="rightPanel"] .ad-box.product-card > a > img.social-right-card-thumb{display:block;width:100%;height:100%;object-fit:cover;object-position:center;}
-[data-psom-key="rightPanel"] .ad-box.product-card > a > .social-right-card-title{position:absolute;left:0;right:0;bottom:0;padding:8px 10px;box-sizing:border-box;color:#fff;font-weight:700;font-size:.92rem;line-height:1.2;text-align:left;background:linear-gradient(to top,rgba(0,0,0,.64),rgba(0,0,0,0));text-shadow:0 1px 2px rgba(0,0,0,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+[data-psom-key="rightPanel"] .ad-box.product-card{position:relative;line-height:normal!important;overflow:hidden!important;background:#fff!important;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a{position:relative;display:flex!important;flex-direction:column!important;width:100%;height:100%;line-height:normal!important;overflow:hidden;border-radius:inherit;text-decoration:none!important;background:#fff!important;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a > img.social-right-card-thumb{display:block;width:100%;height:auto!important;flex:1 1 auto!important;min-height:0!important;object-fit:contain;object-position:center;background:#fff;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a > .social-right-card-title{position:static!important;left:auto!important;right:auto!important;bottom:auto!important;flex:0 0 auto!important;box-sizing:border-box;min-height:42px;max-height:52px;padding:7px 9px;color:#222!important;font-weight:600;font-size:.88rem;line-height:1.3;text-align:left;background:#fff!important;text-shadow:none!important;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
 `;
     document.head.appendChild(style);
   }
@@ -577,7 +625,7 @@
       return;
     }
 
-    const url = resolveItemUrl(it);
+    const url = resolveRightProductUrl(it);
     const title = pickTitle(it) || "Item";
     const productId = pickProductId(it);
     const rawUrl = pickUrl(it).trim();
@@ -591,8 +639,8 @@
     box.dataset.productId = productId;
     box.dataset.productTitle = title;
     box.dataset.productLink = url;
-    box.dataset.productUrl = url;
-    box.dataset.detailUrl = url;
+    box.dataset.productUrl = pickDirectProductUrl(it) || url;
+    box.dataset.detailUrl = pickDirectProductUrl(it) || url;
     box.dataset.href = url;
     if (externalUrl) box.dataset.externalUrl = externalUrl;
     else delete box.dataset.externalUrl;
@@ -605,8 +653,8 @@
     }
 
     a.href = url || "javascript:void(0)";
-    a.target = url ? (isExternalUrl(url) ? "_blank" : "_self") : "_self";
-    a.rel = "noopener";
+    a.target = "_self";
+    a.removeAttribute("rel");
     ensureRightCardCss();
     a.textContent = "";
     const thumb = pickThumb(it).trim();
@@ -626,8 +674,8 @@
     a.dataset.productId = productId;
     a.dataset.productTitle = title;
     a.dataset.productLink = url;
-    a.dataset.productUrl = url;
-    a.dataset.detailUrl = url;
+    a.dataset.productUrl = pickDirectProductUrl(it) || url;
+    a.dataset.detailUrl = pickDirectProductUrl(it) || url;
     if (it && it.affiliateOutboundUrl) a.dataset.affiliateOutbound = "1";
     if (it && it.externalOutboundUrl) a.dataset.externalOutbound = "1";
     a.dataset.href = url;
@@ -724,7 +772,11 @@
         e.stopPropagation();
 
         if (isExternalUrl(url)) {
-          window.open(url, "_blank", "noopener");
+          try {
+            (window.top || window).location.assign(url);
+          } catch (_e) {
+            window.location.href = url;
+          }
         } else {
           window.location.assign(url);
         }
@@ -755,10 +807,13 @@
       if (isPlaceholderItem(it)) return false;
 
       const title = pickTitle(it).trim();
-      const url = resolveItemUrl(it);
+      const url = resolveRightProductUrl(it);
       const thumb = pickThumb(it).trim();
 
-      return !!(title || thumb || url);
+      // A right-panel real product card must arrive as one complete contract.
+      // Incomplete rows fall back to the existing RIGHT SAMPLE card instead of
+      // rendering a title-only or dead-link product.
+      return !!(title && thumb && url);
     });
 
     const displayItems = usable.slice(0, RIGHT_LIMIT);
