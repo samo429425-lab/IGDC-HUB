@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.10.0
+/* IGDC Global/Region/Country Commerce Control v3.10.2
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -28,7 +28,6 @@
   var REVIEW_SNAPSHOT_KEY='igdc.country.control.review.snapshot.v3';
   var REVIEW_DATA_CACHE_KEY='igdc.country.control.review.data.v1';
   var REVIEW_SNAPSHOT_LEGACY_KEY='igdc.country.control.review.snapshot.v2';
-  var REVIEW_EXTERNAL_PENDING_KEY='igdc.country.control.review.external.pending.v1';
   var TOKEN_KEYS=['osauth.tokens.v2','osauth.tokens.v1','igdc.tokens','igdc_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token'];
 
   function show(message,kind){notice.className='notice '+(kind==='ok'?'ok':kind==='warn'?'warn':kind==='fail'?'fail':'');notice.textContent=message;notice.classList.remove('hidden');}
@@ -433,10 +432,18 @@
   }
   function prepareReviewReturn(){var row=reviewReturnValue();if(!row)return null;returnRestoreActive=true;returnRestoreRow=row;if(row.country)selectedCountry=text(row.country).toUpperCase();if(row.region)selectedSubdivision=text(row.region).toUpperCase()||'NATIONWIDE';if(row.regionGroup)selectedRegion=text(row.regionGroup);if(row.source)selectionSource=row.source;return row;}
   function rememberReviewReturn(target){try{var anchor=target&&target.closest?target.closest('[data-review-anchor]'):null,group=target&&target.closest?target.closest('details[data-product-group]'):null,heavy=target&&target.closest?target.closest('[data-heavy-panel]'):null,rect=anchor&&anchor.getBoundingClientRect?anchor.getBoundingClientRect():null;saveReviewSnapshot();sessionStorage.setItem(REVIEW_RETURN_KEY,JSON.stringify({path:location.pathname+location.search,scrollY:Math.max(0,Math.round(window.scrollY||0)),anchor:anchor&&anchor.getAttribute('data-review-anchor')||'',anchorOffset:rect?Math.round(window.scrollY-(rect.top+window.scrollY)):0,productGroup:group&&group.getAttribute('data-product-group')||'',productGroupKind:group&&group.getAttribute('data-product-group-kind')||'',heavyPanel:heavy&&heavy.id||'',country:selectedCountry,region:selectedSubdivision||'NATIONWIDE',regionGroup:selectedRegion,source:selectionSource||'saved-scope',at:Date.now()}));}catch(_e){}}
-  function reviewPagePath(){try{var u=new URL(location.href);return u.pathname+u.search+u.hash;}catch(_e){return location.pathname+location.search+location.hash;}}
-  function stageExternalReviewNavigation(url){try{var topWindow=window.top||window;if(topWindow===window||!topWindow.location)return false;var reviewPath=reviewPagePath();sessionStorage.setItem(REVIEW_EXTERNAL_PENDING_KEY,JSON.stringify({schema:'igdc-country-control-external-review-pending.v1',target:url,reviewPath:reviewPath,at:Date.now()}));topWindow.location.assign(reviewPath);return true;}catch(_e){try{sessionStorage.removeItem(REVIEW_EXTERNAL_PENDING_KEY);}catch(_ignore){}return false;}}
-  function consumePendingExternalReview(){var row=null;try{row=parseJson(sessionStorage.getItem(REVIEW_EXTERNAL_PENDING_KEY)||'');}catch(_e){}if(!row)return false;var target=safeExternalUrl(row.target),reviewPath=text(row.reviewPath),currentPath=reviewPagePath(),fresh=Date.now()-Number(row.at||0)<=120000;if(!target||!fresh||reviewPath!==currentPath){try{sessionStorage.removeItem(REVIEW_EXTERNAL_PENDING_KEY);}catch(_ignore){}return false;}try{sessionStorage.removeItem(REVIEW_EXTERNAL_PENDING_KEY);}catch(_ignore){}setTimeout(function(){window.location.assign(target);},60);return true;}
-  function navigateReviewLink(anchor,event){var url=safeExternalUrl(anchor&&anchor.href);if(!url)return;if(event&&(event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||event.button>0))return;event&&event.preventDefault();rememberReviewReturn(anchor);if(stageExternalReviewNavigation(url))return;window.location.assign(url);}
+  function navigateReviewLink(anchor,event){
+    var url=safeExternalUrl(anchor&&anchor.href);if(!url)return;
+    if(event&&(event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||event.button>0))return;
+    event&&event.preventDefault();
+    rememberReviewReturn(anchor);
+    /* Keep a single browser-history hop. When this control runs inside the admin shell,
+       navigate the top browsing context straight to the product. Do not first promote
+       commerce-country-control.html into the top context; that duplicate intermediate
+       page loses the live admin runtime and forces a second Back click. */
+    try{var topWindow=window.top||window;if(topWindow!==window&&topWindow.location){topWindow.location.assign(url);return;}}catch(_e){}
+    window.location.assign(url);
+  }
   function openReviewReturnGroup(row){if(!row)return;var heavy=row.heavyPanel&&$(row.heavyPanel);if(heavy&&typeof heavy.open==='boolean'&&!heavy.open)heavy.open=true;if(row.productGroup){var root=row.productGroupKind==='candidate'?$('productGrid'):$('productSectionList');if(row.productGroupKind==='candidate'&&$('productCandidatePanel')&&!$('productCandidatePanel').open)$('productCandidatePanel').open=true;var selector='details[data-product-group="'+String(row.productGroup).replace(/["\\]/g,'\\$&')+'"]',group=root&&root.querySelector(selector);if(group&&!group.open)group.open=true;}}
   function restoreReviewReturn(){var row=returnRestoreRow||reviewReturnValue();if(!row)return;if(returnRestoreTimer)clearInterval(returnRestoreTimer);returnRestoreActive=true;returnRestoreRow=row;openReviewReturnGroup(row);var started=Date.now(),stable=0,lastTop=-1;returnRestoreTimer=setInterval(function(){openReviewReturnGroup(row);var target=row.anchor?document.querySelector('[data-review-anchor="'+String(row.anchor).replace(/["\\]/g,'\\$&')+'"]'):null,y=Math.max(0,Number(row.scrollY||0));if(target){var rect=target.getBoundingClientRect(),top=Math.max(0,Math.round(rect.top+window.scrollY+Number(row.anchorOffset||0)));window.scrollTo({top:top,left:0,behavior:'auto'});y=top;}else if(document.documentElement.scrollHeight>=Math.min(y+200,document.documentElement.scrollHeight)){window.scrollTo({top:y,left:0,behavior:'auto'});}var nowTop=Math.round(window.scrollY||0);stable=nowTop===lastTop?stable+1:0;lastTop=nowTop;if((target&&stable>=2)||(Date.now()-started>12000)){clearInterval(returnRestoreTimer);returnRestoreTimer=null;returnRestoreActive=false;returnRestoreRow=null;try{sessionStorage.removeItem(REVIEW_RETURN_KEY);}catch(_e){}}},140);}
   function directVideoUrl(value){var url=safeExternalVideoUrl(value);return /\.(?:mp4|webm|ogv|ogg)(?:$|[?#])/i.test(url)?url:'';}
@@ -903,7 +910,7 @@
     panel.addEventListener('change',function(event){var target=event.target;if(!target||!target.getAttribute)return;if(target.hasAttribute('data-section-front-select')){frontSelectedSections[target.value]=target.checked===true;syncFrontSelectionControls();return;}if(target.hasAttribute('data-product-front-select')){frontSelectedProducts[target.value]=target.checked===true;syncFrontSelectionControls();return;}var sectionKey=target.getAttribute('data-section-products-select-all');if(sectionKey){sectionRows(sectionKey).forEach(function(row){frontSelectedProducts[text(row.id)]=target.checked===true;});syncFrontSelectionControls();}});
   }
   async function boot(){
-    prepareReviewReturn();wire();wireCandidateBulkControls();wireFrontSelectionControls();if($('runCurrentDiagnosticBtn'))$('runCurrentDiagnosticBtn').addEventListener('click',diagnostic);keepJsonPanelVisible('통합 점검 JSON을 실행하면 이 영역에 요약이 표시되고 전체 원문 다운로드가 활성화됩니다.');if(consumePendingExternalReview())return;
+    prepareReviewReturn();wire();wireCandidateBulkControls();wireFrontSelectionControls();if($('runCurrentDiagnosticBtn'))$('runCurrentDiagnosticBtn').addEventListener('click',diagnostic);keepJsonPanelVisible('통합 점검 JSON을 실행하면 이 영역에 요약이 표시되고 전체 원문 다운로드가 활성화됩니다.');
     var restored=hydrateReviewSnapshot();restoreReviewReturn();
     await reloadData(false,restored);
     var dataRestored=restored&&applySessionDataResume();

@@ -2227,7 +2227,7 @@ async function productCandidateAction(actorId, input) {
 
 
 function candidateLedgerPlacementRecord(scope, placementInput, actorId, source) {
-  const placement = plain(placementInput), key = productPlacementKey(placement), split = splitProductSectionKey(key), now = iso();
+  const placement = plain(placementInput), directKey = text(placement.key), key = validProductSectionKey(directKey) ? directKey : productPlacementKey(placement), split = splitProductSectionKey(key), now = iso();
   if (!validProductSectionKey(key)) return null;
   return Object.assign({}, placement, {
     key, page: split.page, section: split.sectionKey, sectionKey: split.sectionKey,
