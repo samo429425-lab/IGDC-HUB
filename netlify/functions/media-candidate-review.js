@@ -11,7 +11,7 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
 const MediaReleaseDispatch=require("./lib/media-release-dispatch.v1");
 
-const VERSION="media-candidate-review-api-v1.6.1-regional-release-diagnostics";
+const VERSION="media-candidate-review-api-v1.6.2-admin-front-apply-diagnostics";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","media_manager","commerce_manager"]);
 
 function text(value){return value==null?"":String(value).trim();}
@@ -293,7 +293,8 @@ function diagnosticDoc(stage,publicDigest,member){
   if((publicDigest&&publicDigest.seededInPublic||0)>0)blockers.push("candidate_seed_found_in_public_media_snapshot");
   if(summary.promotableCount===0)blockers.push("no_verified_promotable_media_yet");
   const releaseGate=MediaReleaseDispatch.releaseArmed();
-  const releaseHook=MediaReleaseDispatch.validHook(process.env[MediaReleaseDispatch.HOOK_ENV]);
+  const configuredReleaseHook=typeof MediaReleaseDispatch.configuredHook==="function"?MediaReleaseDispatch.configuredHook():{name:MediaReleaseDispatch.HOOK_ENV,value:process.env[MediaReleaseDispatch.HOOK_ENV]};
+  const releaseHook=MediaReleaseDispatch.validHook(configuredReleaseHook&&configuredReleaseHook.value);
   return{
     ok:true,
     reportType:"igdc-media-candidate-queue-diagnostic",
@@ -314,7 +315,9 @@ function diagnosticDoc(stage,publicDigest,member){
         mode:text(releaseGate.mode),
         keyPresent:releaseGate.keyPresent===true,
         buildHookConfigured:!!releaseHook,
-        actionAvailable:releaseGate.armed===true&&!!releaseHook,
+        actionAvailable:!!releaseHook,
+        explicitAdminActionAvailable:!!releaseHook,
+        hookSource:releaseHook&&configuredReleaseHook?configuredReleaseHook.name:null,
         buildAdapter:"netlify/plugins/media-snapshot-release"
       },
       collectionResearch:{

@@ -62,7 +62,7 @@
     <button id="refreshBtn">대기열 새로고침</button>
     <button id="diagnosticBtn" class="secondary">미디어 점검 JSON</button>
     <button id="publishPreviewBtn" class="publish">승격 미리보기</button>
-    <button id="storeReleaseBtn" class="publish">최종 릴리스 저장</button>
+    <button id="storeReleaseBtn" class="publish">최종 승인 실행</button>
     <button id="downloadSnapshotBtn" class="secondary">스냅샷 다운로드</button>
     <button id="downloadAllCandidateListBtn" class="secondary">전체 10개 섹션 후보 JSON</button>
     <button id="downloadPipelineStatusBtn" class="secondary">공개 파이프라인 단계 JSON</button>
@@ -89,7 +89,7 @@
         <button id="autoCurateBtn" class="secondary">AI 전자동 후보 정리 적용</button>
         <button id="publishFrontBtn" class="publish">프론트 미디어 허브 반영 실행</button>
         <button id="stopFrontBtn" class="danger">전체 프론트 반영 취소·중지</button>
-        <span id="frontReleaseState" class="state">프론트 릴리스 확인 전</span>
+        <span id="frontReleaseState" class="state">프론트 반영 상태 확인 전</span>
       </div>
     </div>
     <div id="collectorProgress" class="progressbox hidden">
@@ -145,7 +145,7 @@
       <div class="tablewrap"><table><thead><tr><th>순번</th><th><input id="selectAllExcluded" type="checkbox"></th><th>현재 섹션</th><th>상태</th><th>영상</th><th>복원 목표</th><th>제외 사유</th><th>출처</th><th>제외일</th></tr></thead><tbody id="excludedRows"></tbody></table></div>
     </div>
   </section>
-  <p class="foot">검증 완료 후보만 최종 릴리스 절차를 통해 미디어 허브에 반영됩니다.</p>
+  <p class="foot">검증 완료 후보만 최종 승인 후 프론트 반영 실행을 통해 미디어 허브에 적용됩니다.</p>
 </main>
 
 <div id="previewModal" class="modal hidden" role="dialog" aria-modal="true">

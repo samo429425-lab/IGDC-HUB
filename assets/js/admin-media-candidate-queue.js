@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v3.1 - verified front release pipeline diagnostics */
+/* IGDC Media Candidate Queue v3.2 - final approval + independent section/front controls */
 (function(){
   'use strict';
 
@@ -218,7 +218,7 @@
     var controls=readOnly?
       '<div class="read-only-note">지금 뜨는 콘텐츠는 영화·드라마·버라이어티·음악 후보의 최신성·랭킹을 자동 조합한 점검용 미리보기입니다. 수동 고정이나 일괄 상태 변경은 하지 않습니다. <button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>':
       '<div class="section-actionbar" data-section-key="'+esc(key)+'">'+
-        '<div class="section-front-control"><span class="pill section">마지막 프론트 릴리스 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 취소·중지</button><button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>'+
+        '<div class="section-front-control"><span class="pill section">마지막 프론트 반영 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 취소·중지</button><button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>'+
         '<button type="button" class="secondary sectionSelectAllBtn">전체 선택</button><button type="button" class="secondary sectionClearSelectionBtn">선택 해제</button>'+
         '<button type="button" class="sectionActionBtn" data-action="approve">선택 승인</button><button type="button" class="sectionActionBtn" data-action="hold">선택 보류</button><button type="button" class="sectionActionBtn" data-action="reset">선택 재검토</button>'+
         '<button type="button" class="danger sectionActionBtn" data-action="reject">선택 반려</button><button type="button" class="danger sectionActionBtn" data-action="block">선택 영구 차단</button><button type="button" class="danger sectionActionBtn" data-action="delete">선택 삭제→검색 제외</button>'+
@@ -321,8 +321,8 @@
       var live=data.sourceMode==='supabase';
       state.textContent=live?'실시간 저장소 연결 정상':'정적 점검본 대체 표시';
       if($('frontReleaseState'))$('frontReleaseState').textContent=frontReleaseState.hasRelease?
-        (frontReleaseState.pipelineApplied?'프론트 적용 완료 ':'릴리스 저장·배포 대기 ')+Number(frontReleaseState.totalManagedSlots||0)+'개':
-        '저장된 프론트 릴리스 없음';
+        (frontReleaseState.pipelineApplied?'프론트 적용 완료 ':'프론트 반영 저장·배포 대기 ')+Number(frontReleaseState.totalManagedSlots||0)+'개':
+        '저장된 프론트 반영 없음';
       show(
         live?'정책·섹션·랭킹 기준으로 실시간 후보 대기열을 읽었습니다.':'실시간 저장소에 연결하지 못해 정적 점검본을 표시합니다. 이 상태에서는 최신 변경을 확정하지 마십시오.',
         live?'ok':'warn'
@@ -791,10 +791,53 @@
       await refresh();
     }catch(error){show(error.message,'warn');}
   }
+  function sectionActionBar(sectionKey){
+    var bars=document.querySelectorAll('.section-actionbar[data-section-key]');
+    for(var i=0;i<bars.length;i++)if(text(bars[i].dataset.sectionKey)===sectionKey)return bars[i];
+    return null;
+  }
+  async function finalApproveSelected(){
+    var groups=[];
+    SECTION_ORDER.forEach(function(sectionKey){
+      if(sectionKey==='media-trending')return;
+      var ids=Array.from(selectedBySection[sectionKey]||[]);
+      if(!ids.length)return;
+      var bar=sectionActionBar(sectionKey);
+      var noteInput=bar&&bar.querySelector('.section-note');
+      var rightsConfirm=bar&&bar.querySelector('.sectionRightsConfirm');
+      var contentConfirm=bar&&bar.querySelector('.sectionContentConfirm');
+      var subtitleConfirm=bar&&bar.querySelector('.sectionSubtitleConfirm');
+      var note=text(noteInput&&noteInput.value);
+      if(!rightsConfirm||!rightsConfirm.checked||!contentConfirm||!contentConfirm.checked){
+        groups.push({error:(SECTION_LABELS[sectionKey]||sectionKey)+' 섹션의 콘텐츠 안전·원본 권리 확인이 필요합니다.'});return;
+      }
+      if(note.length<3){groups.push({error:(SECTION_LABELS[sectionKey]||sectionKey)+' 섹션의 승인 메모를 3자 이상 입력해 주세요.'});return;}
+      groups.push({sectionKey:sectionKey,ids:ids,note:note,confirmRightsSafe:true,confirmContentSafe:true,confirmSubtitlesChecked:!!(subtitleConfirm&&subtitleConfirm.checked)});
+    });
+    if(!groups.length){show('최종 승인할 후보를 각 섹션에서 먼저 선택해 주세요.','warn');return;}
+    var invalid=groups.find(function(group){return group.error;});
+    if(invalid){show(invalid.error,'warn');return;}
+    var total=groups.reduce(function(sum,group){return sum+group.ids.length;},0);
+    if(!window.confirm('선택한 '+total+'개 후보를 최종 승인할까요?\n\n승인된 후보는 전체 또는 해당 섹션의 프론트 반영 실행 때 SearchBank 공급 대상으로 사용됩니다.'))return;
+    var button=$('storeReleaseBtn');
+    if(button)button.disabled=true;
+    try{
+      var updated=0;
+      for(var i=0;i<groups.length;i++){
+        var group=groups[i];
+        var data=await post(ACT,{action:'approve',ids:group.ids,note:group.note,confirmRightsSafe:true,confirmContentSafe:true,confirmSubtitlesChecked:group.confirmSubtitlesChecked});
+        updated+=Number(data.updated||0);
+        selectedBySection[group.sectionKey]=new Set();
+      }
+      await refresh();
+      show('최종 승인 '+updated+'건 완료 · 이제 전체 또는 해당 섹션의 프론트 반영 실행을 사용할 수 있습니다.','ok');
+    }catch(error){show('최종 승인 실패: '+error.message,'warn');}
+    finally{if(button)button.disabled=false;}
+  }
   async function publish(store){
     try{
       var data=await post(PUB,{storeRelease:!!store,includeSnapshot:store?'0':'1',includeBlocked:'1'});
-      show('승격 가능 '+data.eligibleRows+'건 · 정책 차단 '+Number(data.policyBlockedRows||0)+'건'+(store?' · 릴리스 저장 완료':''),'ok');
+      show('승격 가능 '+data.eligibleRows+'건 · 정책 차단 '+Number(data.policyBlockedRows||0)+'건'+(store?' · 승인 상태 저장 완료':''),'ok');
       if(!store&&data.snapshot){
         diagnosticCache=data;
         $('diagnosticJson').textContent=JSON.stringify(data,null,2);
@@ -855,14 +898,14 @@
     var label=frontActionLabel(action,sectionKey);
     var stopping=action==='stop_all'||action==='stop_section';
     var detail=stopping?
-      '후보 대기열·승인·점검 기록은 삭제하지 않고 프론트 공개 릴리스에서만 내립니다. 원본 샘플 슬롯은 유지되며, 새 중지 릴리스가 이전 반영보다 우선 적용됩니다.':
+      '후보 대기열·승인·점검 기록은 삭제하지 않고 프론트 반영 대상에서만 내립니다. 원본 샘플 슬롯은 유지되며, 새 중지 상태가 이전 반영보다 우선 적용됩니다.':
       '승인·권리확인·공개검증을 모두 통과한 후보만 반영됩니다. 후보·시드·미검증·격리 항목은 공개되지 않습니다.';
     if(!window.confirm(label+'을 실행할까요?\n\n'+detail))return;
     var mainButton=action==='stop_all'?$('stopFrontBtn'):action==='publish_all'?$('publishFrontBtn'):null;
     var originalText=mainButton&&mainButton.textContent;
     setFrontButtonsDisabled(true);
     try{
-      if(mainButton)mainButton.textContent='프론트 릴리스 요청 중';
+      if(mainButton)mainButton.textContent='프론트 반영 요청 중';
       var data=await post(PUB,{
         storeRelease:true,publishFront:true,frontAction:action,sectionKey:sectionKey||'',
         includeSnapshot:'0',includeBlocked:'1'
@@ -871,10 +914,10 @@
       if(data.releaseStored===true&&dispatch.queued===true){
         frontReleaseState=data.frontState||frontReleaseState;
         renderRows();
-        if($('frontReleaseState'))$('frontReleaseState').textContent='마지막 프론트 릴리스 '+Number(frontReleaseState.totalManagedSlots||0)+'개 · 배포 요청됨';
+        if($('frontReleaseState'))$('frontReleaseState').textContent='마지막 프론트 반영 '+Number(frontReleaseState.totalManagedSlots||0)+'개 · 배포 요청됨';
         show(label+' 배포를 시작했습니다.'+(stopping?' 후보 기록은 보존됩니다.':' 공개 가능 '+Number(data.eligibleRows||0)+'건 · 정책 차단 '+Number(data.policyBlockedRows||0)+'건'),'ok');
       }else{
-        show(label+' 릴리스는 저장됐지만 프론트 배포는 시작되지 않았습니다: '+frontPublishReason(dispatch.reason),'warn');
+        show(label+' 프론트 반영 정보는 저장됐지만 배포는 시작되지 않았습니다: '+frontPublishReason(dispatch.reason),'warn');
       }
     }catch(error){
       show(label+' 실패: '+error.message,'warn');
@@ -1073,7 +1116,7 @@
     $('permanentBlockExcludedBtn').onclick=function(){exclusionAction('permanent_block',selectedIds('.excludedCheck'));};
     $('forgetExcludedBtn').onclick=function(){exclusionAction('forget',selectedIds('.excludedCheck'));};
     $('publishPreviewBtn').onclick=function(){publish(false);};
-    $('storeReleaseBtn').onclick=function(){publish(true);};
+    $('storeReleaseBtn').onclick=finalApproveSelected;
     $('downloadSnapshotBtn').onclick=async function(){
       try{
         var response=await fetch(PUB+'?download=1',{headers:headers(false),credentials:'same-origin'});
