@@ -737,6 +737,12 @@ html, body {
 </style>
 
 <style id="tour-mobile-rail-style">
+/* Desktop: right rail only. AutoMap inline display:block cannot revive the bottom rail. */
+@media (min-width:1025px){
+  #tour-mobile-rail{ display:none !important; }
+}
+
+
 @media (max-width:1024px){
   #tour-mobile-rail{ 
     display:block !important;
@@ -2277,5 +2283,84 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
 })();
 </script>
+
+<script id="igdc-tour-rightpanel-visible-count-sync-v2">
+(function(){
+  'use strict';
+
+  var TARGET_VISIBLE = 5.5;
+  var timer = 0;
+  var observer = null;
+
+  function syncRightPanelHeight(){
+    if(!window.matchMedia('(min-width:1025px)').matches) return;
+
+    var panel = document.getElementById('rightAutoPanel');
+    if(!panel) return;
+
+    var card = panel.querySelector('.ad-box');
+    if(!card) return;
+
+    var panelStyle = getComputedStyle(panel);
+    var cardH = card.getBoundingClientRect().height;
+    if(!(cardH > 0)) return;
+
+    var gap = parseFloat(panelStyle.rowGap || panelStyle.gap || '0') || 0;
+    var padTop = parseFloat(panelStyle.paddingTop || '0') || 0;
+    var padBottom = parseFloat(panelStyle.paddingBottom || '0') || 0;
+    var borderTop = parseFloat(panelStyle.borderTopWidth || '0') || 0;
+    var borderBottom = parseFloat(panelStyle.borderBottomWidth || '0') || 0;
+
+    var full = Math.floor(TARGET_VISIBLE);
+    var partial = TARGET_VISIBLE - full;
+    var total =
+      (full * cardH) +
+      (partial * cardH) +
+      (full * gap) +
+      padTop + padBottom +
+      borderTop + borderBottom;
+
+    total = Math.round(total);
+
+    panel.style.setProperty('height', total + 'px', 'important');
+    panel.style.setProperty('min-height', total + 'px', 'important');
+    panel.style.setProperty('max-height', total + 'px', 'important');
+  }
+
+  function schedule(){
+    clearTimeout(timer);
+    timer = setTimeout(syncRightPanelHeight, 80);
+  }
+
+  function startObserver(){
+    var panel = document.getElementById('rightAutoPanel');
+    if(!panel || observer || !('MutationObserver' in window)) return;
+    observer = new MutationObserver(schedule);
+    observer.observe(panel, {childList:true, subtree:true});
+  }
+
+  function boot(){
+    startObserver();
+    schedule();
+    setTimeout(schedule, 250);
+    setTimeout(schedule, 700);
+    setTimeout(schedule, 1300);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot, {once:true});
+  }else{
+    boot();
+  }
+
+  window.addEventListener('load', schedule, {once:true});
+  window.addEventListener('resize', schedule, {passive:true});
+
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', schedule, {passive:true});
+  }
+})();
+</script>
+
 </body>
 </html>
