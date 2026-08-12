@@ -1076,10 +1076,10 @@
 </style>
 <style id="igdc-distribution-rightpanel-portrait-ratio-final-v1">
 /* Desktop-only nano patch: match Network/Tour/Social portrait card proportions.
-   Preserve the existing 4.5-card visible window by scaling the rail height with the new card size. */
+   Show about 6.45 cards in the existing responsive rail while preserving its current resize behavior. */
 @media (min-width:1025px){
   .brand-rail .thumb-grid[data-psom-key="distribution-right"]{
-    max-height:1446px !important; /* ~4.5 × 312.5px cards + existing 10px gaps */
+    max-height:2076px !important; /* final: ~6.45-card visible window; existing responsive behavior preserved */
   }
   .brand-rail .thumb-grid[data-psom-key="distribution-right"] > .thumb-card{
     width:100% !important;

@@ -1556,5 +1556,78 @@ window.addEventListener('resize', function(){
 </script>
 
   <script id="socialnetwork-stable-note">window.__SOCIALNETWORK_STABLE_BUILD__ = '2026-04-04-psom-twin';</script>
+
+<script id="igdc-social-rightpanel-visible-count-sync-v1">
+(function(){
+  'use strict';
+
+  var TARGET_VISIBLE = 5.6;
+  var timer = 0;
+  var observer = null;
+
+  function isDesktop(){
+    return window.matchMedia && window.matchMedia('(min-width:1024px)').matches;
+  }
+
+  function sync(){
+    if(!isDesktop()) return;
+
+    var panel = document.getElementById('rightAutoPanel');
+    if(!panel) return;
+
+    var card = panel.querySelector('.ad-box');
+    if(!card) return;
+
+    var ps = getComputedStyle(panel);
+    var cardH = card.getBoundingClientRect().height;
+    if(!(cardH > 0)) return;
+
+    var gap = parseFloat(ps.rowGap || ps.gap || '0') || 0;
+    var pt = parseFloat(ps.paddingTop || '0') || 0;
+    var pb = parseFloat(ps.paddingBottom || '0') || 0;
+    var bt = parseFloat(ps.borderTopWidth || '0') || 0;
+    var bb = parseFloat(ps.borderBottomWidth || '0') || 0;
+
+    var full = Math.floor(TARGET_VISIBLE);      // 5
+    var partial = TARGET_VISIBLE - full;        // 0.3
+    var total = (TARGET_VISIBLE * cardH) + (full * gap) + pt + pb + bt + bb;
+    total = Math.round(total);
+
+    panel.style.setProperty('height', total + 'px', 'important');
+    panel.style.setProperty('min-height', total + 'px', 'important');
+    panel.style.setProperty('max-height', total + 'px', 'important');
+  }
+
+  function schedule(){
+    clearTimeout(timer);
+    timer = setTimeout(sync, 80);
+  }
+
+  function boot(){
+    var panel = document.getElementById('rightAutoPanel');
+    if(panel && !observer && 'MutationObserver' in window){
+      observer = new MutationObserver(schedule);
+      observer.observe(panel, {childList:true, subtree:true});
+    }
+    schedule();
+    [250,700,1300].forEach(function(ms){ setTimeout(schedule, ms); });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot, {once:true});
+  } else {
+    boot();
+  }
+
+  window.addEventListener('load', schedule, {once:true});
+  window.addEventListener('resize', schedule, {passive:true});
+  window.addEventListener('orientationchange', schedule, {passive:true});
+
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', schedule, {passive:true});
+  }
+})();
+</script>
+
 </body>
 </html>
