@@ -244,7 +244,6 @@ html, body { overflow-x: hidden !important; }
 })();
 </script>
 
-<style id="adpanel-visible-7">/* Show ~7 cards before scroll (7 full + 20% of 8th) */</style>
 <style id="responsive-main-first">:root{
   --ad-slide: 0px;
   --sidebar-slide: 0px;
@@ -319,7 +318,6 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
  /* keep left fixed (no shrinking) */</style>
 
-<style id="panel-slides-vars"></style>
 <style id="lock-panels-until-main-50">:root {
     --left-col: 210px;
     --right-col: 274px;
@@ -1978,50 +1976,7 @@ window.addEventListener("message",function(ev){
   - window.__IGDC_ROLE 존재
  --------------------------------------------------
  삽입 위치:
-  - 각 페이지 
-<style id="igdc-tour-exclusive-rail-and-4half-final-v1">
-/* TOUR final pin patch
-   - Desktop/wide: right rail only
-   - Tablet/mobile: bottom rail only
-   - Desktop right panel viewport: ~4.5 cards (285px cards, 7px gaps, 12px panel padding)
-*/
-@media (min-width:1025px){
-  .right-rail{
-    display:block !important;
-  }
-
-  #tour-mobile-rail{
-    display:none !important;
-  }
-
-  .right-rail .ad-panel,
-  #rightAutoPanel{
-    display:flex !important;
-    height:1335px !important;
-    min-height:1335px !important;
-    max-height:1335px !important;
-    overflow-y:auto !important;
-    overflow-x:hidden !important;
-  }
-}
-
-@media (max-width:1024px){
-  .right-rail,
-  .right-rail .ad-panel,
-  #rightAutoPanel,
-  body.right-panel-open .right-rail,
-  body.right-panel-open .ad-panel,
-  body.right-panel-open #rightAutoPanel{
-    display:none !important;
-  }
-
-  #tour-mobile-rail{
-    display:block !important;
-  }
-}
-</style>
-
-</body> 바로 위
+  - 각 페이지 </body> 바로 위
 */
 
 (function (window, document) {
