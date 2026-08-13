@@ -8,6 +8,7 @@
  * SearchBank media contract and verifies the Snapshot Engine result.
  */
 const crypto=require("crypto");
+const SearchBankEngine=require("../search-bank-engine.js");
 
 const VERSION="media-searchbank-release-adapter-v1.0.0";
 const OWNER="media-release-searchbank-adapter";
@@ -97,6 +98,13 @@ function searchBankItem(slot,sectionKey,info,index){
       action:info.action,eligible:true
     },
     releaseContract:clone(releaseContract),
+    media:{
+      kind:"video",
+      duration:Number(slot.durationSeconds||0)||null,
+      preview:{poster:text(slot.thumb),start:0,duration:5},
+      videoUrl:text(slot.video)||url,
+      embedUrl:text(slot.embedUrl)||null
+    },
     rights:clone(slot.rights),captions:clone(slot.captions||[]),subtitleLanguages:clone(slot.subtitleLanguages||[]),
     durationSeconds:Number(slot.durationSeconds||0)||null,year:Number(slot.year||0)||null,
     requestedSection:text(slot.requestedSection),classifiedSection:text(slot.classifiedSection)||sectionKey,
@@ -122,16 +130,29 @@ function buildSearchBankDocument(existingBank,release){
       items.push(searchBankItem(slot,sectionKey,info,index));
     });
   });
+  // The adapter no longer writes approved media straight into SearchBank Snapshot.
+  // Every approved media item must first pass SearchBank Engine's internal contract/policy layer.
+  const enginePass=SearchBankEngine.prepareApprovedMediaReleaseItems(items);
+  const accepted=Array.isArray(enginePass&&enginePass.accepted)?enginePass.accepted:[];
+  const rejected=Array.isArray(enginePass&&enginePass.rejected)?enginePass.rejected:[];
+  if(items.length&&accepted.length!==items.length){
+    const error=new Error("media_release_searchbank_contract_rejected:"+rejected.length);
+    error.code="media_release_searchbank_policy_rejected";
+    error.rejected=rejected;
+    throw error;
+  }
   const bank=clone(existingBank),existing=Array.isArray(bank.items)?bank.items:[];
-  bank.items=existing.filter((item)=>!isOwnedSearchBankItem(item)).concat(items);
+  bank.items=existing.filter((item)=>!isOwnedSearchBankItem(item)).concat(accepted);
   bank.meta=Object.assign({},plain(bank.meta),{
     mediaReleasePipeline:{
       version:VERSION,owner:OWNER,releaseId:info.releaseId,requestHash:info.requestHash,
       action:info.action,sectionKey:info.sectionKey,generatedAt:new Date().toISOString(),
-      mediaItemCount:items.length,sections:Object.fromEntries(MANUAL_SECTIONS.map((key)=>[key,desired[key].length]))
+      searchBankEngineVersion:text(enginePass&&enginePass.version),
+      searchBankEngineAccepted:accepted.length,searchBankEngineRejected:rejected.length,
+      mediaItemCount:accepted.length,sections:Object.fromEntries(MANUAL_SECTIONS.map((key)=>[key,accepted.filter((item)=>text(item.section||item.psom_key||item.category)===key).length]))
     }
   });
-  return{bank,mediaItems:items,info,desired,hash:sha256(bank)};
+  return{bank,mediaItems:accepted,rejected,enginePass,info,desired,hash:sha256(bank)};
 }
 
 function ownedItems(bank,releaseId){

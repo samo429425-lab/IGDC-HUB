@@ -266,6 +266,12 @@ exports.handler = async function(event){
         actorId:actor.email||actor.memberId,
         explicitAdminAuthorization:true
       });
+      if(!frontPublication||frontPublication.ok!==true||frontPublication.queued!==true){
+        const error=new Error("프론트 반영 배포가 실제로 시작되지 않았습니다: "+MediaStore.text(frontPublication&&frontPublication.reason||"build_hook_not_queued"));
+        error.statusCode=503;
+        error.code="media_front_publication_not_queued";
+        throw error;
+      }
     }
     if(params.download === "1" || params.download === true || params.format === "snapshot"){
       return {statusCode:200,headers:{"content-type":"application/json; charset=utf-8","cache-control":"private, no-store, max-age=0","content-disposition":"attachment; filename=media.snapshot.generated.json"},body:JSON.stringify(snapshot,null,2)+"\n"};

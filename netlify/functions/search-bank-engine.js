@@ -2419,6 +2419,53 @@ exports.buildSearchBankContract = buildSearchBankContract;
 exports.applyUnifiedSupplyContract = applyUnifiedSupplyContract;
 exports.summarizeSearchBankContracts = summarizeSearchBankContracts;
 
+// Internal-only ingest contract for administrator-approved Media Hub content.
+// Public HTTP POST remains disabled. The build pipeline calls this function in-process
+// so approved media must pass the same SearchBank normalization/contract/policy checks
+// before it can be written to search-bank.snapshot.json.
+function prepareApprovedMediaReleaseItems(items){
+  const rows = Array.isArray(items) ? items : [];
+  const ctx = {
+    event:{httpMethod:"INTERNAL"},
+    params:{channel:"media",type:"video",snapshotWrite:true,writeSnapshot:true,frontSupply:true,slotSupply:true},
+    q:"", queryIntent:{}, geoContext:{}, ipGeo:{},
+    slotContext:{channel:"media",autoFill:true}, operationalPolicy:null, slotDeficiency:null,
+    channel:"media", type:"video", lang:""
+  };
+  const accepted=[];
+  const rejected=[];
+  for(const raw of rows){
+    if(!raw || typeof raw!=="object"){
+      rejected.push({id:null,reasons:["not_object"]});
+      continue;
+    }
+    const item=cloneJsonish(raw);
+    const section=canonicalFrontSectionKey(item.section||item.psom_key||item.category||(item.bind&&item.bind.section)||"");
+    if(section){
+      item.channel="media";
+      item.page="media";
+      item.section=section;
+      item.psom_key=section;
+      item.bind=Object.assign({},item.bind||{},{page:"media",section,psom_key:section});
+    }
+    applyUnifiedSupplyContract(item,ctx);
+    applyOperationalPolicy(item,ctx);
+    const validation=validateBankItem(item);
+    const policyIssues=policyIssuesForItem(item,ctx).filter(x=>!["high_risk_tld","stale_item"].includes(x));
+    const contract=item.searchBankContract||buildSearchBankContract(item,ctx);
+    const reasons=[...new Set([...(validation.issues||[]),...policyIssues])];
+    if(contract.blocked || contract.searchBankEligible===false || contract.snapshotEligible===false || reasons.length){
+      rejected.push({id:item.id||null,title:item.title||null,reasons});
+      continue;
+    }
+    item.searchBankEngineAccepted=true;
+    item.searchBankEngineVersion=SEARCH_BANK_ENGINE_VERSION;
+    accepted.push(item);
+  }
+  return {ok:true,engine:"search-bank",version:SEARCH_BANK_ENGINE_VERSION,accepted,rejected};
+}
+exports.prepareApprovedMediaReleaseItems = prepareApprovedMediaReleaseItems;
+
 exports.handler = async function(event){
   try{
     const method = (event.httpMethod || "GET").toUpperCase();
