@@ -3471,11 +3471,11 @@ window.addEventListener("message",function(ev){
 </script>
 
 
-<script id="igdc-distribution-mobile-touch-3zone-controller-v7">
+<script id="igdc-distribution-mobile-touch-controller-v8">
 (function(){
   'use strict';
-  if(window.__IGDC_DISTRIBUTION_TOUCH_3ZONE_V7__) return;
-  window.__IGDC_DISTRIBUTION_TOUCH_3ZONE_V7__=true;
+  if(window.__IGDC_DISTRIBUTION_TOUCH_V8__) return;
+  window.__IGDC_DISTRIBUTION_TOUCH_V8__=true;
 
   function mobile(){
     return matchMedia('(max-width:1024px) and (pointer:coarse)').matches;
@@ -3487,14 +3487,12 @@ window.addEventListener("message",function(ev){
   function clamp(el,x){
     return Math.max(0,Math.min(Math.max(0,el.scrollWidth-el.clientWidth),x));
   }
-
   function go(el,x,smooth){
     x=clamp(el,x);
     try{ el.scrollTo({left:x,behavior:smooth?'smooth':'auto'}); }
     catch(e){ el.scrollLeft=x; }
   }
-
-  function itemStep(el){
+  function step(el){
     var items=el.querySelectorAll('.thumb-card');
     if(items.length>1){
       var d=Math.abs((items[1].offsetLeft||0)-(items[0].offsetLeft||0));
@@ -3511,8 +3509,8 @@ window.addEventListener("message",function(ev){
   }
 
   function bindMain(el){
-    if(!el || el.dataset.igdcDistMainV7==='1') return;
-    el.dataset.igdcDistMainV7='1';
+    if(!el || el.dataset.igdcDistMainV8==='1') return;
+    el.dataset.igdcDistMainV8='1';
 
     var sx=0, sy=0, lx=0, st=0, lt=0, start=0, horizontal=false;
 
@@ -3539,56 +3537,50 @@ window.addEventListener("message",function(ev){
       var dx=lx-sx;
       var dt=Math.max(16,lt-st);
       var speed=Math.abs(dx)/dt;
-      var travel=Math.abs(dx);
-      var step=itemStep(el);
       var dir=dx<0?1:-1;
+      var cardStep=step(el);
 
-      /* PORTRAIT MAIN — less sensitive than V6 */
       if(!landscape()){
-        if(speed<0.62 && travel<step*0.70){
+        /* PORTRAIT MAIN:
+           Wider natural zone; no quick jump.
+           Only clearly strong flick receives multi-card travel. */
+        if(speed < 1.10){
           go(el,start-dx,false);
-          return;
-        }
-        if(speed<1.00){
-          go(el,start+dir*step,true);
           return;
         }
 
         var pcards=3;
-        if(speed>=1.82) pcards=7;
-        else if(speed>=1.52) pcards=6;
-        else if(speed>=1.28) pcards=5;
+        if(speed>=1.95) pcards=7;
+        else if(speed>=1.65) pcards=6;
+        else if(speed>=1.38) pcards=5;
         else pcards=4;
 
-        go(el,el.scrollLeft+dir*step*pcards,true);
+        go(el,el.scrollLeft+dir*cardStep*pcards,true);
         return;
       }
 
-      /* LANDSCAPE MAIN — less sensitive than V6 */
-      var viewport=Math.max(1,el.clientWidth);
-
-      if(speed<0.62 && travel<viewport*0.46){
+      /* LANDSCAPE MAIN:
+         remove page-sized jump completely.
+         Gentle/medium = finger-distance movement.
+         Strong only = multi-card. */
+      if(speed < 1.22){
         go(el,start-dx,false);
-        return;
-      }
-      if(speed<1.08){
-        go(el,start+dir*viewport,true);
         return;
       }
 
       var lcards=3;
-      if(speed>=1.88) lcards=7;
-      else if(speed>=1.58) lcards=6;
-      else if(speed>=1.32) lcards=5;
+      if(speed>=2.00) lcards=7;
+      else if(speed>=1.70) lcards=6;
+      else if(speed>=1.45) lcards=5;
       else lcards=4;
 
-      go(el,el.scrollLeft+dir*step*lcards,true);
+      go(el,el.scrollLeft+dir*cardStep*lcards,true);
     },{passive:true});
   }
 
   function bindRightPortrait(el){
-    if(!el || el.dataset.igdcDistRightPortraitV7==='1') return;
-    el.dataset.igdcDistRightPortraitV7='1';
+    if(!el || el.dataset.igdcDistRightPortraitV8==='1') return;
+    el.dataset.igdcDistRightPortraitV8='1';
 
     var sx=0, sy=0, lx=0, st=0, lt=0, horizontal=false;
 
@@ -3615,32 +3607,31 @@ window.addEventListener("message",function(ev){
       var dt=Math.max(16,lt-st);
       var speed=Math.abs(dx)/dt;
 
-      /* Gentle/normal portrait behavior stays native (one-card feel).
-         Only clearly strong flick gets multi-card travel. */
-      if(Math.abs(dx)<24 || speed<0.92) return;
+      /* Keep normal one-card feel.
+         Only strong portrait flick releases snap and travels several cards. */
+      if(Math.abs(dx)<24 || speed<1.02) return;
+
+      var cardStep=step(el);
+      var dir=dx<0?1:-1;
 
       var cards=3;
-      if(speed>=1.75) cards=7;
-      else if(speed>=1.48) cards=6;
-      else if(speed>=1.24) cards=5;
+      if(speed>=1.85) cards=7;
+      else if(speed>=1.58) cards=6;
+      else if(speed>=1.32) cards=5;
       else cards=4;
-
-      var step=itemStep(el);
-      var dir=dx<0?1:-1;
 
       var oldSnap=el.style.getPropertyValue('scroll-snap-type');
       var oldPriority=el.style.getPropertyPriority('scroll-snap-type');
       el.style.setProperty('scroll-snap-type','none','important');
 
-      go(el,el.scrollLeft+dir*step*cards,true);
+      requestAnimationFrame(function(){
+        go(el,el.scrollLeft+dir*cardStep*cards,true);
+      });
 
       setTimeout(function(){
-        if(oldSnap){
-          el.style.setProperty('scroll-snap-type',oldSnap,oldPriority||'');
-        }else{
-          el.style.removeProperty('scroll-snap-type');
-        }
-      },450);
+        if(oldSnap) el.style.setProperty('scroll-snap-type',oldSnap,oldPriority||'');
+        else el.style.removeProperty('scroll-snap-type');
+      },500);
     },{passive:true});
   }
 
@@ -3655,7 +3646,7 @@ window.addEventListener("message",function(ev){
     ].forEach(function(sel){ bindMain(document.querySelector(sel)); });
 
     /* PORTRAIT RIGHT ONLY.
-       LANDSCAPE RIGHT remains exactly as-is from the previous file. */
+       LANDSCAPE RIGHT is intentionally untouched. */
     bindRightPortrait(document.getElementById('mobile-ad-rail-list'));
     bindRightPortrait(
       document.querySelector('.brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"]')

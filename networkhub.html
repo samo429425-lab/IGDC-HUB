@@ -2075,18 +2075,14 @@ window.addEventListener("message",function(ev){
 <script src="/assets/js/maru-searchbank-sync.js"></script>
 
 
-<script id="igdc-network-mobile-right-touch-3stage-controller-v6">
+<script id="igdc-network-mobile-right-natural-controller-v7">
 (function(){
   'use strict';
-  if(window.__IGDC_NETWORK_TOUCH_3STAGE_V6__) return;
-  window.__IGDC_NETWORK_TOUCH_3STAGE_V6__=true;
+  if(window.__IGDC_NETWORK_NATURAL_V7__) return;
+  window.__IGDC_NETWORK_NATURAL_V7__=true;
 
   function active(){
     return matchMedia('(max-width:1024px) and (pointer:coarse)').matches;
-  }
-
-  function isLandscape(){
-    return matchMedia('(orientation:landscape)').matches;
   }
 
   function items(list){
@@ -2121,17 +2117,17 @@ window.addEventListener("message",function(ev){
 
   function bind(){
     var list=document.querySelector('#nh-mobile-rail .list');
-    if(!list || list.dataset.igdcNetwork3stageV6==='1') return;
-    list.dataset.igdcNetwork3stageV6='1';
+    if(!list || list.dataset.igdcNetworkNaturalV7==='1') return;
+    list.dataset.igdcNetworkNaturalV7='1';
 
-    var sx=0, sy=0, lx=0, st=0, lt=0, startScroll=0, horizontal=false;
+    var sx=0, sy=0, lx=0, st=0, lt=0, start=0, horizontal=false;
 
     list.addEventListener('touchstart',function(ev){
       if(!active() || !ev.touches || ev.touches.length!==1) return;
       var t=ev.touches[0];
       sx=lx=t.clientX; sy=t.clientY;
       st=lt=performance.now();
-      startScroll=list.scrollLeft;
+      start=list.scrollLeft;
       horizontal=false;
     },{passive:true});
 
@@ -2149,54 +2145,19 @@ window.addEventListener("message",function(ev){
       var dx=lx-sx;
       var dt=Math.max(16,lt-st);
       var speed=Math.abs(dx)/dt;
-      var dir=dx<0?1:-1;
       var step=cardStep(list);
-      var viewport=Math.max(1,list.clientWidth);
-      var travel=Math.abs(dx);
+      var dir=dx<0?1:-1;
 
-      if(!isLandscape()){
-        /* PORTRAIT — sensitivity reduced from V5:
-           gentle drag stays free longer;
-           medium goes about one card;
-           only clearly strong flick goes multi-card. */
-        if(speed<0.58 && travel<step*0.62){
-          go(list,startScroll-dx,false);
-          return;
-        }
-        if(speed<0.96){
-          go(list,startScroll+dir*step,true);
-          return;
-        }
-
-        var pcards=3;
-        if(speed>=1.75) pcards=6;
-        else if(speed>=1.45) pcards=5;
-        else if(speed>=1.18) pcards=4;
-        else pcards=3;
-
-        go(list,list.scrollLeft+dir*step*pcards,true);
-        return;
-      }
-
-      /* LANDSCAPE — sensitivity reduced from V5:
-         gentle drag stays finger-distance;
-         medium goes about one viewport;
-         only stronger flick goes multi-card. */
-      if(speed<0.58 && travel<viewport*0.42){
-        go(list,startScroll-dx,false);
-        return;
-      }
-
-      if(speed<1.05){
-        go(list,startScroll+dir*viewport,true);
+      if(speed < 1.28){
+        go(list,start-dx,false);
         return;
       }
 
       var cards=3;
-      if(speed>=1.82) cards=7;
-      else if(speed>=1.52) cards=6;
-      else if(speed>=1.26) cards=5;
-      else cards=4;
+      if(speed>=2.05) cards=6;
+      else if(speed>=1.75) cards=5;
+      else if(speed>=1.50) cards=4;
+      else cards=3;
 
       go(list,list.scrollLeft+dir*step*cards,true);
     },{passive:true});

@@ -12,7 +12,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "commerce-product-ranking-v1.14.0-front-policy-aware-balanced-auto-placement";
+const VERSION = "commerce-product-ranking-v1.14.1-explicit-admin-placement-only";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -29,7 +29,7 @@ const CATEGORY_KEYS = Object.freeze([
 
 const FRONT_SECTION_KEYS = Object.freeze({
   home: Object.freeze(["home_1", "home_2", "home_3", "home_4", "home_5", "home_right_top", "home_right_middle", "home_right_bottom"]),
-  distribution: Object.freeze(["distribution-recommend", "distribution-new", "distribution-trending", "distribution-special", "distribution-sponsor", "distribution-others", "distribution-right"]),
+  distribution: Object.freeze(["distribution-recommend", "distribution-sponsor", "distribution-trending", "distribution-new", "distribution-special", "distribution-others", "distribution-right"]),
   network: Object.freeze(["network-right"]),
   tour: Object.freeze(["tour"]),
   social: Object.freeze(["rightPanel"])
@@ -1215,13 +1215,31 @@ function deterministicFraction(seed) {
   return parseInt(hex, 16) / 0xffffffff;
 }
 
+// Only an explicit administrator decision is immutable. Older AI runs also
+// persisted their result in approvedPlacement; treating every approvedPlacement
+// as manual caused stale AI sponsor/trending/special placements to survive later
+// policy upgrades and then fail only at the public Snapshot gate.
+function explicitAdministratorPlacement(rowInput) {
+  const row = plain(rowInput);
+  const control = plain(row.managementControl);
+  const candidates = [plain(row.approvedPlacement), plain(row.selectedPlacement)];
+  for (const placement of candidates) {
+    if (!assignmentKey(placement)) continue;
+    if (placement.administratorSelected === true || placement.manualPinned === true || control.administratorLocked === true || control.aiReclassificationAllowed === false) return placement;
+    if (placement.aiSelected === true || placement.administratorSelected === false || lower(control.source) === "ai_automation") continue;
+    // Legacy approved placements without an AI marker are preserved as manual.
+    return placement;
+  }
+  return {};
+}
+
 function allocatePrimaryPlacements(rowsInput) {
   const rows = array(rowsInput), counts = Object.fromEntries(SECTION_ORDER.map((key) => [key, 0]));
   const tourAuxiliaryCounts = { dining: 0 };
   const resultByRow = new Map();
   const ordered = rows.slice().sort((a, b) => {
-    const aManual = assignmentKey(a && (a.approvedPlacement || a.selectedPlacement)) ? 1 : 0;
-    const bManual = assignmentKey(b && (b.approvedPlacement || b.selectedPlacement)) ? 1 : 0;
+    const aManual = assignmentKey(explicitAdministratorPlacement(a)) ? 1 : 0;
+    const bManual = assignmentKey(explicitAdministratorPlacement(b)) ? 1 : 0;
     const aValue = plain(a && a.valueAssessment).privatePlacementEligible === true ? 1 : 0;
     const bValue = plain(b && b.valueAssessment).privatePlacementEligible === true ? 1 : 0;
     return bManual - aManual || bValue - aValue ||
@@ -1236,7 +1254,7 @@ function allocatePrimaryPlacements(rowsInput) {
     if (["hold", "reject", "purge"].includes(decision)) {
       return Object.assign({}, row, { primaryPlacement: null, placementCapacityState: "excluded_from_active_section_capacity" });
     }
-    const manual = plain(row.approvedPlacement || row.selectedPlacement), manualKey = assignmentKey(manual);
+    const manual = explicitAdministratorPlacement(row), manualKey = assignmentKey(manual);
     const proposals = array(row.sectionAssignments).filter((item) => SECTION_ORDER.includes(assignmentKey(item)));
     const eligible = proposals.filter((item) => item.approvalEligible === true);
     let candidates = eligible;

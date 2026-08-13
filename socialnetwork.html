@@ -1802,11 +1802,11 @@ window.addEventListener('resize', function(){
 
 
 
-<script id="igdc-social-portrait-right-multicard-controller-v4">
+<script id="igdc-social-portrait-right-natural-controller-v5">
 (function(){
   'use strict';
-  if(window.__IGDC_SOCIAL_PORTRAIT_RIGHT_MULTI_V4__) return;
-  window.__IGDC_SOCIAL_PORTRAIT_RIGHT_MULTI_V4__=true;
+  if(window.__IGDC_SOCIAL_PORTRAIT_RIGHT_NATURAL_V5__) return;
+  window.__IGDC_SOCIAL_PORTRAIT_RIGHT_NATURAL_V5__=true;
 
   function active(){
     return matchMedia('(max-width:768px) and (orientation:portrait) and (pointer:coarse)').matches;
@@ -1841,8 +1841,8 @@ window.addEventListener('resize', function(){
 
   function bind(){
     var scroller=document.getElementById('rpMobileScroller');
-    if(!scroller || scroller.dataset.igdcSocialPortraitMultiV4==='1') return;
-    scroller.dataset.igdcSocialPortraitMultiV4='1';
+    if(!scroller || scroller.dataset.igdcSocialPortraitNaturalV5==='1') return;
+    scroller.dataset.igdcSocialPortraitNaturalV5='1';
 
     var sx=0, sy=0, lx=0, st=0, lt=0, start=0, horizontal=false;
 
@@ -1869,28 +1869,22 @@ window.addEventListener('resize', function(){
       var dx=lx-sx;
       var dt=Math.max(16,lt-st);
       var speed=Math.abs(dx)/dt;
-      var travel=Math.abs(dx);
       var step=stepFor(scroller);
       var dir=dx<0?1:-1;
 
-      /* Gentle: preserve the current natural small movement. */
-      if(speed<0.58 && travel<step*0.58){
+      /* Wider natural zone:
+         gentle + medium gestures stop near finger travel.
+         No one-card snap is forced here. */
+      if(speed < 1.22){
         go(scroller,start-dx,false);
         return;
       }
 
-      /* Medium: one-card movement. */
-      if(speed<1.10){
-        go(scroller,start+dir*step,true);
-        return;
-      }
-
-      /* Strong only: several cards.
-         Threshold is intentionally higher than V3 to avoid over-sensitivity. */
+      /* Only clearly strong flick gets multi-card travel. */
       var cards=3;
-      if(speed>=1.95) cards=6;
-      else if(speed>=1.65) cards=5;
-      else if(speed>=1.38) cards=4;
+      if(speed>=2.05) cards=6;
+      else if(speed>=1.72) cards=5;
+      else if(speed>=1.45) cards=4;
       else cards=3;
 
       var oldSnap=scroller.style.getPropertyValue('scroll-snap-type');
@@ -1905,7 +1899,7 @@ window.addEventListener('resize', function(){
         }else{
           scroller.style.removeProperty('scroll-snap-type');
         }
-      },450);
+      },480);
     },{passive:true});
   }
 

@@ -15,7 +15,7 @@ const path = require("path");
 const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 
-const VERSION = "ip-slot-policy-runtime-v1.3.1-tour-service-evidence-scope";
+const VERSION = "ip-slot-policy-runtime-v1.3.2-admin-editorial-placement-scope";
 const POLICY_FILE = "ip-slot-policy.v1.json";
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -302,6 +302,19 @@ function travelVerified(item, contract, mapping) {
   const service = first(evidence.supportUrl, evidence.bookingPolicyUrl, evidence.cancellationPolicyUrl);
   return verified && !!operator && !!service;
 }
+function explicitAdministratorPublication(item, page, section) {
+  const review = isObject(item && item.commerceReview) ? item.commerceReview : {};
+  const candidate = isObject(item && item.commerceCandidate) ? item.commerceCandidate : {};
+  const request = isObject(review.publicationRequest) ? review.publicationRequest : {};
+  const scope = isObject(candidate.publicationScope) ? candidate.publicationScope : {};
+  const tier = lower(first(candidate.sourceTier, review.sourceTier));
+  const requested = request.requested === true || truthy(review.explicitPublicationRequested) || truthy(candidate.explicitPublicationRequested) || lower(review.publicationStatus) === "publish_requested";
+  const requestedPage = lower(first(request.page, scope.page));
+  const requestedSection = text(first(request.section, scope.section));
+  if (requestedPage && requestedPage !== lower(page)) return false;
+  if (requestedSection && requestedSection !== text(section)) return false;
+  return requested && tier === "approved_commerce_member";
+}
 
 function validateCandidate(item, details) {
   const page = text(details && details.page);
@@ -332,6 +345,7 @@ function validateCandidate(item, details) {
   const regionCode = explicitRegionCode(item, contract, mapping, country);
   const allowedClasses = array(strategy.allowedProductClasses).map(lower);
   const requiredProfiles = array(strategy.requiredSlotProfiles).map(lower);
+  const administratorPublication = explicitAdministratorPublication(item, page, section);
 
   if (validation.requireExplicitSlotProfile !== false && (!profile || !requiredProfiles.includes(profile))) reasons.push("IP_SLOT_PROFILE_MISMATCH");
   if (allowedClasses.length && !classes.some(value => allowedClasses.includes(value))) reasons.push("IP_PRODUCT_CLASS_MISMATCH");
@@ -374,9 +388,9 @@ function validateCandidate(item, details) {
   if (validation.requireFreshAvailabilityVerification !== false && !fresh(verifiedAt, validation.maxAvailabilityVerificationAgeDays || 30)) reasons.push("IP_MARKET_AVAILABILITY_VERIFICATION_MISSING_OR_STALE");
   if (validation.requireSellerResponsibility !== false && !hasSellerResponsibility(seller)) reasons.push("IP_SELLER_RESPONSIBILITY_EVIDENCE_MISSING");
   if (strategy.requires === "sponsorDisclosure" && validation.requireSponsorDisclosure !== false && !sponsorDisclosed(item, contract, mapping)) reasons.push("IP_SPONSOR_DISCLOSURE_MISSING");
-  if (strategy.requires === "trendEvidence" && validation.requireTrendEvidenceForTrending !== false && !trendVerified(item, contract, mapping)) reasons.push("IP_TREND_EVIDENCE_MISSING");
+  if (strategy.requires === "trendEvidence" && validation.requireTrendEvidenceForTrending !== false && !administratorPublication && !trendVerified(item, contract, mapping)) reasons.push("IP_TREND_EVIDENCE_MISSING");
   if (strategy.requires === "newnessEvidence" && validation.requireNewnessEvidenceForNew !== false && !newnessVerified(item, contract, mapping, validation)) reasons.push("IP_NEWNESS_EVIDENCE_MISSING_OR_STALE");
-  if (strategy.requires === "specialEvidence" && validation.requireSpecialEvidenceForSpecial !== false && !specialVerified(item, contract, mapping)) reasons.push("IP_SPECIAL_EVIDENCE_MISSING");
+  if (strategy.requires === "specialEvidence" && validation.requireSpecialEvidenceForSpecial !== false && !administratorPublication && !specialVerified(item, contract, mapping)) reasons.push("IP_SPECIAL_EVIDENCE_MISSING");
   // Tour travel-service offers need a responsible operator/booking-service
   // evidence record. Physical/recreation/dining products mapped to the same
   // Tour rail remain external-seller products and are already protected by the

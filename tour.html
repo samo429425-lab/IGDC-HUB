@@ -2424,11 +2424,11 @@ window.addEventListener("message",function(ev){
 </script>
 
 
-<script id="igdc-tour-landscape-right-sensitivity-controller-v8">
+<script id="igdc-tour-landscape-right-natural-controller-v9">
 (function(){
   'use strict';
-  if(window.__IGDC_TOUR_LANDSCAPE_RIGHT_SENSITIVITY_V8__) return;
-  window.__IGDC_TOUR_LANDSCAPE_RIGHT_SENSITIVITY_V8__=true;
+  if(window.__IGDC_TOUR_LANDSCAPE_RIGHT_NATURAL_V9__) return;
+  window.__IGDC_TOUR_LANDSCAPE_RIGHT_NATURAL_V9__=true;
 
   function active(){
     return matchMedia('(max-width:1024px) and (orientation:landscape) and (pointer:coarse)').matches;
@@ -2462,15 +2462,16 @@ window.addEventListener("message",function(ev){
 
   function bind(){
     var list=document.querySelector('#tour-mobile-rail .list');
-    if(!list || list.dataset.igdcTourSensitivityV8==='1') return;
-    list.dataset.igdcTourSensitivityV8='1';
+    if(!list || list.dataset.igdcTourNaturalV9==='1') return;
+    list.dataset.igdcTourNaturalV9='1';
 
     var sx=0, sy=0, lx=0, st=0, lt=0, start=0, horizontal=false;
 
     list.addEventListener('touchstart',function(ev){
       if(!active() || !ev.touches || ev.touches.length!==1) return;
       var t=ev.touches[0];
-      sx=lx=t.clientX; sy=t.clientY;
+      sx=lx=t.clientX;
+      sy=t.clientY;
       st=lt=performance.now();
       start=list.scrollLeft;
       horizontal=false;
@@ -2481,7 +2482,8 @@ window.addEventListener("message",function(ev){
       var t=ev.touches[0];
       var dx=t.clientX-sx, dy=t.clientY-sy;
       if(Math.abs(dx)>Math.abs(dy)+4) horizontal=true;
-      lx=t.clientX; lt=performance.now();
+      lx=t.clientX;
+      lt=performance.now();
     },{passive:true});
 
     list.addEventListener('touchend',function(){
@@ -2490,31 +2492,21 @@ window.addEventListener("message",function(ev){
       var dx=lx-sx;
       var dt=Math.max(16,lt-st);
       var speed=Math.abs(dx)/dt;
-      var travel=Math.abs(dx);
-      var viewport=Math.max(1,list.clientWidth);
-      var step=stepFor(list);
       var dir=dx<0?1:-1;
+      var step=stepFor(list);
 
-      /* Wider gentle zone:
-         keep finger-distance movement longer before any page-sized jump. */
-      if(speed < 0.88 && travel < viewport*0.58){
+      /* No page-sized jump stage at all.
+         Gentle + medium = natural finger-distance travel. */
+      if(speed < 1.35){
         go(list,start-dx,false);
         return;
       }
 
-      /* Medium swipe:
-         page-sized movement now requires a clearer gesture than V7. */
-      if(speed < 1.32){
-        go(list,start+dir*viewport,true);
-        return;
-      }
-
-      /* Strong flick:
-         several cards, proportional to velocity. */
-      var cards=4;
-      if(speed>=1.95) cards=7;
-      else if(speed>=1.68) cards=6;
-      else if(speed>=1.48) cards=5;
+      /* Only clearly strong flick = multi-card travel. */
+      var cards=3;
+      if(speed>=2.05) cards=7;
+      else if(speed>=1.75) cards=6;
+      else if(speed>=1.52) cards=5;
       else cards=4;
 
       go(list,list.scrollLeft+dir*step*cards,true);

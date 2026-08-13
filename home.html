@@ -4754,11 +4754,11 @@ window.addEventListener("message",function(ev){
 </script>
 
 
-<script id="igdc-home-landscape-right-multicard-controller-v6">
+<script id="igdc-home-landscape-right-multicard-controller-v7">
 (function(){
   'use strict';
-  if(window.__IGDC_HOME_LANDSCAPE_RIGHT_MULTI_V6__) return;
-  window.__IGDC_HOME_LANDSCAPE_RIGHT_MULTI_V6__=true;
+  if(window.__IGDC_HOME_LANDSCAPE_RIGHT_MULTI_V7__) return;
+  window.__IGDC_HOME_LANDSCAPE_RIGHT_MULTI_V7__=true;
 
   function active(){
     return matchMedia('(max-width:1024px) and (orientation:landscape) and (pointer:coarse)').matches;
@@ -4788,13 +4788,16 @@ window.addEventListener("message",function(ev){
     var oldSnap=scroller.style.getPropertyValue('scroll-snap-type');
     var oldPriority=scroller.style.getPropertyPriority('scroll-snap-type');
 
-    /* Strong flick only: release snap briefly so it can travel across cards. */
+    /* Strong flick only: release snap long enough for real multi-card travel. */
     scroller.style.setProperty('scroll-snap-type','none','important');
 
     var target=clamp(scroller,scroller.scrollLeft+distance);
 
-    try{ scroller.scrollTo({left:target,behavior:'smooth'}); }
-    catch(e){ scroller.scrollLeft=target; }
+    try{
+      scroller.scrollTo({left:target,behavior:'smooth'});
+    }catch(e){
+      scroller.scrollLeft=target;
+    }
 
     setTimeout(function(){
       if(oldSnap){
@@ -4802,12 +4805,12 @@ window.addEventListener("message",function(ev){
       }else{
         scroller.style.removeProperty('scroll-snap-type');
       }
-    },480);
+    },700);
   }
 
   function bind(scroller){
-    if(!scroller || scroller.dataset.igdcLandscapeRightMultiV6==='1') return;
-    scroller.dataset.igdcLandscapeRightMultiV6='1';
+    if(!scroller || scroller.dataset.igdcLandscapeRightMultiV7==='1') return;
+    scroller.dataset.igdcLandscapeRightMultiV7='1';
 
     var sx=0, sy=0, lx=0, st=0, lt=0, horizontal=false;
 
@@ -4836,16 +4839,16 @@ window.addEventListener("message",function(ev){
       var dt=Math.max(16,lt-st);
       var speed=Math.abs(dx)/dt;
 
-      /* Gentle/normal swipe is intentionally left untouched.
-         Only a clearly strong flick gets extra multi-card travel. */
-      if(Math.abs(dx)<28 || speed<0.95) return;
+      /* Gentle/normal swipe remains untouched.
+         Only clearly strong flick receives much longer travel. */
+      if(Math.abs(dx)<30 || speed<0.98) return;
 
-      var cards=3;
-      if(speed>=1.80) cards=8;
-      else if(speed>=1.55) cards=7;
-      else if(speed>=1.35) cards=6;
-      else if(speed>=1.15) cards=5;
-      else cards=4;
+      var cards=5;
+      if(speed>=2.00) cards=12;
+      else if(speed>=1.70) cards=10;
+      else if(speed>=1.45) cards=8;
+      else if(speed>=1.20) cards=7;
+      else cards=5;
 
       var dir=dx<0?1:-1;
       var step=stepFor(scroller);

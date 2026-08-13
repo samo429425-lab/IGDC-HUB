@@ -34,7 +34,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.3-home-tour-slot-order-stable";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.3-distribution-section-order";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -305,52 +305,14 @@ function snapshotIdOf(item, fields) {
   return item ? stableId(JSON.stringify(item)) : "";
 }
 
-function orderedHomeTourSeedSlot(item, pageName) {
-  if (isSeedLikeSnapshotSlot(item)) return true;
-  if (pageName !== "home") return false;
-
-  const title = String(item && (item.title || item.name) || "").trim();
-  const image = String(imageOfSnapshotItem(item) || "").trim();
-
-  // Home seed snapshots use names such as `home_2 Product 17` and a known
-  // transparent GIF instead of the generic sample/placeholder flags.
-  // Treat only those declared Home seed shapes as replaceable.
-  if (/^home(?:_[a-z0-9]+)+\s+product\s+\d+$/i.test(title)) return true;
-  if (/^data:image\/gif;base64,R0lGODlhAQABAAAAACw=/i.test(image)) return true;
-  return false;
-}
-
-function inheritOrderedSlotMeta(card, previous) {
-  if (!card || !previous) return card;
-  for (const key of ["slotId", "priority", "order", "weight"]) {
-    if (previous[key] !== undefined && previous[key] !== null) card[key] = previous[key];
-  }
-  return card;
-}
-
 function pushOrReplaceSnapshotSlot(list, card, raw, opts) {
   if (!Array.isArray(list) || !card || typeof card !== "object") return false;
   opts = opts || {};
-  const pageName = String(opts.pageName || "").trim().toLowerCase();
-  const orderedPage = pageName === "home" || pageName === "tour";
   const limit = sectionSlotLimit(opts.pageName, opts.sectionKey, opts.limit || SECTION_SLOT_LIMIT);
   const idFields = opts.idFields || ["id"];
   const incomingId = snapshotIdOf(card, idFields);
 
   if (list.some(existing => snapshotIdOf(existing, idFields) === incomingId)) return false;
-
-  // Home/Tour are slot-order authoritative. A real item must occupy the first
-  // replaceable seed slot before any append is considered, otherwise a later
-  // renderer sees the real card at the tail of the 1..N sequence.
-  if (orderedPage && isRealIncomingCandidate(raw)) {
-    const replaceIndex = list.findIndex(item => orderedHomeTourSeedSlot(item, pageName));
-    if (replaceIndex >= 0) {
-      const previous = list[replaceIndex] || {};
-      inheritOrderedSlotMeta(card, previous);
-      list[replaceIndex] = card;
-      return true;
-    }
-  }
 
   if (list.length < limit) {
     list.push(card);
@@ -477,25 +439,26 @@ function resolveLimitSectionKey(pageName, raw, sections) {
       "distribution_1": "distribution-recommend",
       "distribution1": "distribution-recommend",
       "distribution-recommend": "distribution-recommend",
-      "dist_2": "distribution-new",
-      "dist2": "distribution-new",
-      "distribution_2": "distribution-new",
-      "distribution2": "distribution-new",
+      // visual section 2: sponsor
+      "dist_2": "distribution-sponsor",
+      "dist2": "distribution-sponsor",
+      "distribution_2": "distribution-sponsor",
+      "distribution2": "distribution-sponsor",
       "distribution-new": "distribution-new",
       "dist_3": "distribution-trending",
       "dist3": "distribution-trending",
       "distribution_3": "distribution-trending",
       "distribution3": "distribution-trending",
       "distribution-trending": "distribution-trending",
-      "dist_4": "distribution-special",
-      "dist4": "distribution-special",
-      "distribution_4": "distribution-special",
-      "distribution4": "distribution-special",
+      "dist_4": "distribution-new",
+      "dist4": "distribution-new",
+      "distribution_4": "distribution-new",
+      "distribution4": "distribution-new",
       "distribution-special": "distribution-special",
-      "dist_5": "distribution-sponsor",
-      "dist5": "distribution-sponsor",
-      "distribution_5": "distribution-sponsor",
-      "distribution5": "distribution-sponsor",
+      "dist_5": "distribution-special",
+      "dist5": "distribution-special",
+      "distribution_5": "distribution-special",
+      "distribution5": "distribution-special",
       "distribution-sponsor": "distribution-sponsor",
       "dist_6": "distribution-others",
       "dist6": "distribution-others",
@@ -1108,10 +1071,10 @@ snapshot.pages.distribution.sections = sections;
 
 const REQUIRED_SECTION_KEYS = [
   "distribution-recommend",
-  "distribution-new",
-  "distribution-trending",
-  "distribution-special",
   "distribution-sponsor",
+  "distribution-trending",
+  "distribution-new",
+  "distribution-special",
   "distribution-others",
   "distribution-right"
 ];
@@ -1207,10 +1170,10 @@ REQUIRED_SECTION_KEYS.forEach(key => {
       null;
     const MAP = {
       "dist_1": "distribution-recommend", "dist1": "distribution-recommend", "distribution_1": "distribution-recommend", "distribution1": "distribution-recommend", "distribution-recommend": "distribution-recommend",
-      "dist_2": "distribution-new", "dist2": "distribution-new", "distribution_2": "distribution-new", "distribution2": "distribution-new", "distribution-new": "distribution-new",
+      "dist_2": "distribution-sponsor", "dist2": "distribution-sponsor", "distribution_2": "distribution-sponsor", "distribution2": "distribution-sponsor", "distribution-new": "distribution-new",
       "dist_3": "distribution-trending", "dist3": "distribution-trending", "distribution_3": "distribution-trending", "distribution3": "distribution-trending", "distribution-trending": "distribution-trending",
-      "dist_4": "distribution-special", "dist4": "distribution-special", "distribution_4": "distribution-special", "distribution4": "distribution-special", "distribution-special": "distribution-special",
-      "dist_5": "distribution-sponsor", "dist5": "distribution-sponsor", "distribution_5": "distribution-sponsor", "distribution5": "distribution-sponsor", "distribution-sponsor": "distribution-sponsor",
+      "dist_4": "distribution-new", "dist4": "distribution-new", "distribution_4": "distribution-new", "distribution4": "distribution-new", "distribution-special": "distribution-special",
+      "dist_5": "distribution-special", "dist5": "distribution-special", "distribution_5": "distribution-special", "distribution5": "distribution-special", "distribution-sponsor": "distribution-sponsor",
       "dist_6": "distribution-others", "dist6": "distribution-others", "distribution_6": "distribution-others", "distribution6": "distribution-others", "distribution-others": "distribution-others",
       "dist_7": "distribution-right", "dist7": "distribution-right", "distribution_7": "distribution-right", "distribution7": "distribution-right", "distribution-right": "distribution-right"
     };
@@ -1249,11 +1212,11 @@ REQUIRED_SECTION_KEYS.forEach(key => {
   "distribution1": "distribution-recommend",
   "distribution-recommend": "distribution-recommend",
 
-  // ===== new =====
-  "dist_2": "distribution-new",
-  "dist2": "distribution-new",
-  "distribution_2": "distribution-new",
-  "distribution2": "distribution-new",
+  // ===== sponsor (visual section 2) =====
+  "dist_2": "distribution-sponsor",
+  "dist2": "distribution-sponsor",
+  "distribution_2": "distribution-sponsor",
+  "distribution2": "distribution-sponsor",
   "distribution-new": "distribution-new",
 
   // ===== trending =====
@@ -1263,18 +1226,18 @@ REQUIRED_SECTION_KEYS.forEach(key => {
   "distribution3": "distribution-trending",
   "distribution-trending": "distribution-trending",
 
-  // ===== special =====
-  "dist_4": "distribution-special",
-  "dist4": "distribution-special",
-  "distribution_4": "distribution-special",
-  "distribution4": "distribution-special",
+  // ===== new (visual section 4) =====
+  "dist_4": "distribution-new",
+  "dist4": "distribution-new",
+  "distribution_4": "distribution-new",
+  "distribution4": "distribution-new",
   "distribution-special": "distribution-special",
 
-  // ===== sponsor =====
-  "dist_5": "distribution-sponsor",
-  "dist5": "distribution-sponsor",
-  "distribution_5": "distribution-sponsor",
-  "distribution5": "distribution-sponsor",
+  // ===== special (visual section 5) =====
+  "dist_5": "distribution-special",
+  "dist5": "distribution-special",
+  "distribution_5": "distribution-special",
+  "distribution5": "distribution-special",
   "distribution-sponsor": "distribution-sponsor",
 
   // ===== others =====
@@ -1765,17 +1728,10 @@ function handleTourSnapshot(bank) {
     }
   }
 
-  /* ===== 슬롯 순서 유지 =====
-   * Tour snapshot priority is the visible slot number (1,2,3...).
-   * Do not rank-sort it descending after replacement: that moves freshly
-   * mapped real cards behind seed cards. Keep the authoritative slot order.
-   */
+  /* ===== 정렬 (최신 + 우선순위) ===== */
   items.sort((a, b) => {
-    const ap = Number(a && a.priority);
-    const bp = Number(b && b.priority);
-    const av = Number.isFinite(ap) && ap > 0 ? ap : Number.MAX_SAFE_INTEGER;
-    const bv = Number.isFinite(bp) && bp > 0 ? bp : Number.MAX_SAFE_INTEGER;
-    return av - bv;
+    return (b.priority || 0) - (a.priority || 0) ||
+           (b.createdAt || 0) - (a.createdAt || 0);
   });
 
   /* ===== LIMIT ===== */
