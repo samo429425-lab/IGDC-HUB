@@ -24,7 +24,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const CandidateReview = require("./commerce-candidate-review");
 const ReleaseDispatch = require("./lib/commerce-release-dispatch.v1");
 
-const VERSION = "product-go-live-audit-v1.7.0-runtime-refresh-unpublish-marker";
+const VERSION = "product-go-live-audit-v1.8.0-exact-front-build-batch";
 const MAX_ROWS = 120;
 
 const SNAPSHOT_SPECS = [
@@ -934,7 +934,7 @@ async function requestPublicationBatch(event,actor,body,scope,liveDoc){
     return batchSummary("request_publication_batch",candidateIds,items,{ok:true,queued:false,deferred:true,reason:"release_dispatch_deferred",hookConfigured:!!ReleaseDispatch.configuredHook().value});
   }
   const firstItem=active[0];
-  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"publish",candidateCount:active.length,explicitAdminAuthorization:true});
+  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,candidateIds:active.map((item)=>item.candidateId),assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"publish",candidateCount:active.length,explicitAdminAuthorization:true});
   if(!dispatch.queued){
     for(const item of active)items.push({candidateId:item.candidateId,status:"publish_requested",queued:false,persisted:true,pendingBuild:true,reason:text(dispatch.reason)||"publication_build_pending",assignmentId:item.assignment.id});
     return batchSummary("request_publication_batch",candidateIds,items,dispatch);
@@ -980,7 +980,7 @@ async function requestUnpublicationAssignments(event,actor,body,scope){
     return batchSummary("request_unpublication_assignments",candidateIds,items,{ok:true,queued:false,deferred:true,reason:"release_dispatch_deferred",hookConfigured:!!ReleaseDispatch.configuredHook().value});
   }
   const firstItem=active[0];
-  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:active.length,explicitAdminAuthorization:true});
+  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,candidateIds:active.map((item)=>item.candidateId),assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:active.length,explicitAdminAuthorization:true});
   for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:dispatch.queued===true,persisted:true,pendingBuild:dispatch.queued!==true,reason:text(dispatch.reason)||(dispatch.queued?"build_hook_queued":"unpublication_build_pending"),assignmentId:item.assignment.id,repairReason:item.reason||"runtime_refresh"});
   return batchSummary("request_unpublication_assignments",candidateIds,items,dispatch);
 }
@@ -1023,7 +1023,7 @@ async function requestUnpublicationBatch(event,actor,body,scope){
     return batchSummary("request_unpublication_batch",candidateIds,items,{ok:true,queued:false,deferred:true,reason:"release_dispatch_deferred",hookConfigured:!!ReleaseDispatch.configuredHook().value});
   }
   const firstItem=active[0];
-  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:active.length,explicitAdminAuthorization:true});
+  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,candidateIds:active.map((item)=>item.candidateId),assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:active.length,explicitAdminAuthorization:true});
   if(!dispatch.queued){
     for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:false,persisted:true,pendingBuild:true,reason:text(dispatch.reason)||"unpublication_build_pending",assignmentId:item.assignment.id});
     return batchSummary("request_unpublication_batch",candidateIds,items,dispatch);

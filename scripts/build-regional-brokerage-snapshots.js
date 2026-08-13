@@ -135,6 +135,22 @@ function fileExists(file) {
   try { return fs.existsSync(file) && fs.statSync(file).isFile(); } catch (_error) { return false; }
 }
 
+function incomingCommerceHookIntent() {
+  const raw = String(process.env.INCOMING_HOOK_BODY || "").trim();
+  if (!raw) return { explicit:false, operation:null, candidateIds:[], candidateCount:0, rawAvailable:false };
+  try {
+    const body = JSON.parse(raw);
+    const operation = String(body && body.operation || "").toLowerCase();
+    const trigger = String(body && body.trigger || "").toLowerCase();
+    const authorization = String(body && body.authorization || "").toLowerCase();
+    const ids = Array.from(new Set((Array.isArray(body && body.candidateIds) ? body.candidateIds : [body && body.candidateId]).map(value => String(value || "").trim()).filter(Boolean))).slice(0,1800);
+    const explicit = authorization === "explicit_admin_confirmation" && ["publish","unpublish"].includes(operation) && ["approved-commerce-assignment","approved-commerce-unpublication"].includes(trigger);
+    return { explicit, operation: operation || null, candidateIds: ids, candidateCount: Math.max(ids.length, Number(body && body.candidateCount || 0)), rawAvailable:true };
+  } catch (error) {
+    return { explicit:false, operation:null, candidateIds:[], candidateCount:0, rawAvailable:true, parseError:String(error && error.message || error) };
+  }
+}
+
 function sha256File(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
@@ -350,6 +366,8 @@ function writePreservedBuild(reason, details) {
 }
 
 async function main() {
+  const incomingCommerceIntent = incomingCommerceHookIntent();
+  let explicitAdminPublicationInBuild = incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish";
   // Social publication is an independent build-time SearchBank contract.
   // It targets only the existing Social Snapshot Engine path and does not
   // replace or bypass the commerce, country/region or IP-slot pipeline below.
@@ -403,10 +421,29 @@ async function main() {
   // refresh/repair flow; that intentional empty set restores sample fallback.
   const upstream = loadConfirmedUpstream(commerceRegistrySync);
   if (!upstream.ok) {
-    writePreservedBuild(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors });
+    if (incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish") {
+      throw new Error("Explicit administrator Front Match reached the Netlify build, but the authoritative Global Slot publication queue could not be loaded: " + upstream.reason + " | " + JSON.stringify({commerceRegistrySync,incomingCommerceIntent}));
+    }
+    writePreservedBuild(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors, incomingCommerceIntent });
     return;
   }
   const queueAuthoritative = upstream.queueAuthoritative === true;
+  if (queueAuthoritative && incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish" && incomingCommerceIntent.candidateIds.length) {
+    const exactIds = new Set(incomingCommerceIntent.candidateIds);
+    const exactItems = Array.isArray(upstream.doc && upstream.doc.items) ? upstream.doc.items.filter((entry) => {
+      const candidate = entry && entry.candidate || {};
+      const id = String(candidate.id || entry && entry.candidateId || "").trim();
+      return exactIds.has(id);
+    }) : [];
+    if (!exactItems.length) {
+      throw new Error("Explicit administrator Front Match build found no matching authoritative queue rows for the selected candidate ids.");
+    }
+    const releaseAuthorization = Object.assign({}, upstream.doc && upstream.doc.releaseAuthorization || {}, {
+      authoritative:true, mode:"explicit-admin-publication-request", explicitAdminRequest:true, requestedCount:exactItems.length
+    });
+    upstream.doc = Object.assign({}, upstream.doc, { items: exactItems, requestedCount:exactItems.length, releaseAuthorization });
+    upstream.candidateCount = exactItems.length;
+  }
 
   // Capture the committed safe sample templates before Snapshot Engine writes
   // any real-product documents. They are restored at root whenever the request
@@ -431,6 +468,7 @@ async function main() {
       root,
       items: upstream.doc.items,
       trigger: "netlify-build-private-candidate-stage",
+      reviewQueueDoc: queueAuthoritative ? upstream.doc : undefined,
       write: true
     });
   } catch (error) {
@@ -461,9 +499,10 @@ async function main() {
   }
 
   const releaseItems = Array.isArray(intake.releaseItems) ? intake.releaseItems : [];
-  const administratorRequestedCount = Number(commerceRegistrySync && commerceRegistrySync.requestedCount || 0);
+  const administratorRequestedCount = Number(intake && intake.releaseGate && intake.releaseGate.requestedCount || commerceRegistrySync && commerceRegistrySync.requestedCount || 0);
   if (releaseItems.length === 0 && administratorRequestedCount > 0) {
-    throw new Error("Administrator publication queue contained " + administratorRequestedCount + " requested products, but Commerce Candidate Intake released none: " + JSON.stringify(intake.summary || {}));
+    const held = Array.isArray(intake && intake.stage && intake.stage.candidates) ? intake.stage.candidates.filter(row => row && row.releaseEligible !== true).slice(0,25).map(row => ({candidateId:row.candidateId,reasons:row.reasons,administratorFrontMatch:row.administratorFrontMatch||null})) : [];
+    throw new Error("Administrator publication queue contained " + administratorRequestedCount + " requested products, but Commerce Candidate Intake released none: " + JSON.stringify({summary:intake.summary||{},heldSample:held}));
   }
   if (releaseItems.length === 0 && !queueAuthoritative) {
     writePreservedBuild("no-release-ready-candidates", {
@@ -531,6 +570,7 @@ async function main() {
 
   process.stdout.write(JSON.stringify({
     commerceRegistrySync,
+    incomingCommerceIntent,
     upstream: { candidateCount: upstream.candidateCount, sourceMode: upstream.sourceMode || null, warning: upstream.warning || null, queueAuthoritative, mirrors: upstream.mirrors },
     intake: { releaseGate: intake.releaseGate, summary: intake.summary, releaseItemCount: releaseItems.length },
     publicationInput: { source: publicationBank.source, itemCount: publicationBank.items.length },
@@ -561,7 +601,7 @@ async function main() {
       restored,
       rollbackError
     }) + "\n");
-    if (rollbackError) throw error;
+    if (rollbackError || explicitAdminPublicationInBuild) throw error;
   } finally {
     removeCommerceCheckpoint(commerceCheckpoint);
   }
