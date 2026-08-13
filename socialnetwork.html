@@ -359,6 +359,71 @@ a[id*="qna"]{
 }
 </style>
 
+
+
+<style id="igdc-social-mobile-portrait-rightpanel-onecard-final-v1">
+/* Mobile portrait ONLY: Popular Items = one full-width card, horizontal swipe.
+   Landscape/tablet/desktop behavior remains untouched. */
+@media (max-width:768px) and (orientation:portrait){
+
+  #rpMobileBox{
+    width:100% !important;
+    max-width:100% !important;
+    box-sizing:border-box !important;
+  }
+
+  #rpMobileScroller{
+    width:100% !important;
+    max-width:100% !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-snap-type:x mandatory !important;
+    overscroll-behavior-x:contain !important;
+    scrollbar-width:none !important;
+    box-sizing:border-box !important;
+  }
+
+  #rpMobileGrid{
+    display:grid !important;
+    grid-auto-flow:column !important;
+    grid-template-rows:1fr !important;
+    grid-template-columns:none !important;
+    grid-auto-columns:100% !important;
+    width:100% !important;
+    max-width:100% !important;
+    gap:10px !important;
+    margin:0 !important;
+    padding:0 !important;
+    box-sizing:border-box !important;
+  }
+
+  #rpMobileGrid > .ad-box{
+    width:100% !important;
+    min-width:100% !important;
+    max-width:100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    aspect-ratio:4 / 5 !important;
+    line-height:normal !important;
+    margin:0 !important;
+    box-sizing:border-box !important;
+    scroll-snap-align:start !important;
+    scroll-snap-stop:always !important;
+  }
+
+  #rpMobileGrid > .ad-box > a,
+  #rpMobileGrid > .ad-box img,
+  #rpMobileGrid > .ad-box video{
+    width:100% !important;
+    height:100% !important;
+    max-width:100% !important;
+    object-fit:cover !important;
+  }
+}
+</style>
+
 </head>
 <body>
   <div id="hero"><div class="hero-title"></div></div>

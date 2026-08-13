@@ -2250,6 +2250,66 @@ a[id*="qna"]{
 }
 </style>
 
+
+
+<style id="igdc-home-mobile-portrait-onecard-fullwidth-final-v1">
+/* Mobile portrait ONLY: restore one full-width card per Home main product section.
+   Landscape/tablet/desktop rules remain untouched. */
+@media (max-width:768px) and (orientation:portrait){
+
+  section.shopping-section .shop-scroller{
+    width:100% !important;
+    max-width:100% !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-snap-type:x mandatory !important;
+    overscroll-behavior-x:contain !important;
+    box-sizing:border-box !important;
+  }
+
+  /* Existing fallback row + AutoMap/Snapshot row: same one-card viewport rule. */
+  section.shopping-section .shop-row,
+  section.shopping-section .thumb-grid[data-psom-key="home_1"],
+  section.shopping-section .thumb-grid[data-psom-key="home_2"],
+  section.shopping-section .thumb-grid[data-psom-key="home_3"],
+  section.shopping-section .thumb-grid[data-psom-key="home_4"],
+  section.shopping-section .thumb-grid[data-psom-key="home_5"]{
+    display:grid !important;
+    grid-auto-flow:column !important;
+    grid-template-rows:1fr !important;
+    grid-template-columns:none !important;
+    grid-auto-columns:100% !important;
+    width:100% !important;
+    max-width:100% !important;
+    gap:10px !important;
+    margin:0 !important;
+    box-sizing:border-box !important;
+  }
+
+  section.shopping-section .shop-row > .shop-card,
+  section.shopping-section .thumb-grid[data-psom-key="home_1"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_2"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_3"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_4"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_5"] > *{
+    width:100% !important;
+    min-width:100% !important;
+    max-width:100% !important;
+    flex:0 0 100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    aspect-ratio:4 / 5 !important;
+    margin:0 !important;
+    box-sizing:border-box !important;
+    scroll-snap-align:start !important;
+    scroll-snap-stop:always !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div class="container">
