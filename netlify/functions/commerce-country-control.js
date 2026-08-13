@@ -109,52 +109,78 @@ exports.handler=async function(event){
     if(action==="product_candidate_ai_recover")return json(200,await Automation.productCandidateAiRecover(actorId,body));
     if(action==="product_ai_automation")return json(200,await Automation.productAiAutomation(actorId,body));
     if(action==="product_front_finalize"){
-      const operation=lower(body.operation)==="unmatch"?"unmatch":"match";
-      if(operation!=="match"){const error=new Error("프론트 최종 갱신 요청은 상품 매칭에만 사용합니다.");error.statusCode=400;error.code="front_finalize_operation_invalid";throw error;}
+      const operation=lower(body.operation)==="unmatch"?"unmatch":(lower(body.operation)==="refresh"?"refresh":"match");
       const candidateIds=Array.from(new Set((Array.isArray(body.candidateIds)?body.candidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
-      if(!candidateIds.length)return json(200,{ok:true,compact:true,status:"empty",frontSyncResult:{ok:true,status:"empty",action:"finalize_publication_batch",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"},publicSnapshotConfirmed:false,buildVerificationRequired:true}});
       const scope=ProductGoLiveAudit.selectedScope(text(body.countryCode||body.country).toUpperCase(),text(body.subdivisionCode||body.regionCode||body.region||"NATIONWIDE").toUpperCase());
-      const liveDoc=await CandidateReview.stage(process.cwd());
-      const finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
-      return json(200,await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null));
+      // All match/unmatch/revalidation batches persist their canonical lifecycle
+      // changes first.  Finalize is the *single* build dispatch for the whole
+      // administrator action.  A refresh may therefore be required even when
+      // no new candidate was publishable (for example, every previously live
+      // product in a section was found dead and was withdrawn).
+      if(operation==="match"&&candidateIds.length){
+        const liveDoc=await CandidateReview.stage(process.cwd());
+        const finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
+        return json(200,await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null));
+      }
+      const confirmation=operation==="unmatch"?"SITE_UNPUBLISH":"SITE_PUBLISH";
+      const refreshResult=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:operation==="unmatch"?"unmatch":"refresh",confirmation:text(body.confirmation)||confirmation,candidateId:candidateIds[0]||null,candidateCount:Math.max(1,Number(body.changedCount)||candidateIds.length||1)},scope);
+      return json(200,await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:operation==="unmatch"?"unmatch":"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),refreshResult,null));
     }
     if(action==="product_front_match"||action==="product_front_unmatch"){
       const operation=action==="product_front_unmatch"?"unmatch":"match";
       const request=Object.assign({},body,{operation});
       const candidateLedgerMode=lower(request.ledgerMode)==="candidate";
       const loadedJob=candidateLedgerMode?null:await Automation.loadProductResearchJob(request);
-      const plan=await Automation.productFrontSyncTargets(request,loadedJob);
+      let plan=await Automation.productFrontSyncTargets(request,loadedJob);
       const scope=ProductGoLiveAudit.selectedScope(plan.scope.country,plan.scope.region);
-      let batchResult;
+      let batchResult, refresh=null, repairUnpublish=null;
       if(!plan.targets.length){
-        batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
+        batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
       }else if(operation==="match"){
+        // The front-match button is also the runtime maintenance pass.  Recheck
+        // selected rows and, on a full-scope run, every currently published row.
+        // Dead/redirected products are durably withdrawn first; valid rows keep
+        // their assignment and are then prepared through the canonical four
+        // relation ledgers.  All dispatches are deferred to one final build.
+        refresh=await Automation.revalidateProductFrontTargets(actorId,request,plan.targets,{includePublishedScope:request.scopeRefresh===true});
+        const withdrawAssignments=Array.isArray(refresh&&refresh.withdrawAssignments)?refresh.withdrawAssignments:[];
+        if(withdrawAssignments.length){
+          repairUnpublish=await ProductGoLiveAudit.requestUnpublicationAssignments(event,actor,{mode:"production",confirmation:"SITE_UNPUBLISH",assignments:withdrawAssignments,deferRelease:true},scope);
+        }
+        refresh=Object.assign({},refresh,{withdrawn:withdrawAssignments.length,withdrawRequested:withdrawAssignments.length,withdrawPersisted:Array.isArray(repairUnpublish&&repairUnpublish.items)?repairUnpublish.items.filter((item)=>item&&item.persisted===true).length:0});
+        // Re-read targets because runtime validation may have removed or moved a
+        // placement.  Never prepare a stale pre-validation section assignment.
+        plan=await Automation.productFrontSyncTargets(request,loadedJob);
         const preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets,loadedJob);
         const preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds:[];
         const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked");
+        const repairItems=Array.isArray(repairUnpublish&&repairUnpublish.items)?repairUnpublish.items:[];
         if(!preparedIds.length){
-          batchResult={ok:true,status:"blocked",action:"request_publication_batch",requested:plan.targets.length,queued:0,blocked:preparationBlocked.length,items:preparationBlocked,release:{queued:false,reason:"no_front_ready_products"},preparation};
-        }else if(request.deferRelease===true){
-          const preparedItems=Array.isArray(preparation&&preparation.items)?preparation.items:[];
-          const items=preparationBlocked.concat(preparedItems.filter((item)=>item&&item.status!=="blocked"));
+          const items=repairItems.concat(preparationBlocked);
           const persisted=items.filter((item)=>item&&item.persisted===true).length;
           const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
-          batchResult={ok:true,status:persisted?(blocked?"partial":"pending_finalize"):(blocked?"blocked":"empty"),action:"prepare_publication_batch",requested:plan.targets.length,queued:0,persisted,pendingBuild:persisted,blocked,items,preparation,release:{queued:false,reason:"deferred_single_build_finalize"},automaticPublication:false,publicSnapshotConfirmed:false,buildVerificationRequired:true};
+          batchResult={ok:true,status:persisted?"pending_finalize":(blocked?"blocked":"empty"),action:"prepare_publication_batch",requested:plan.targets.length,queued:0,persisted,pendingBuild:persisted,blocked,items,release:{queued:false,reason:persisted?"deferred_single_build_finalize":"no_front_ready_products"},preparation,refresh,repairUnpublish};
+        }else if(request.deferRelease===true){
+          const preparedItems=Array.isArray(preparation&&preparation.items)?preparation.items:[];
+          const items=repairItems.concat(preparationBlocked,preparedItems.filter((item)=>item&&item.status!=="blocked"));
+          const persisted=items.filter((item)=>item&&item.persisted===true).length;
+          const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
+          batchResult={ok:true,status:persisted?(blocked?"partial":"pending_finalize"):(blocked?"blocked":"empty"),action:"prepare_publication_batch",requested:plan.targets.length,queued:0,persisted,pendingBuild:persisted,blocked,items,preparation,refresh,repairUnpublish,release:{queued:false,reason:"deferred_single_build_finalize"},automaticPublication:false,publicSnapshotConfirmed:false,buildVerificationRequired:true};
         }else{
           const liveDoc=await CandidateReview.stage(process.cwd());
           const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true},scope,liveDoc);
           const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
-          const items=preparationBlocked.concat(publishItems);
+          const items=repairItems.concat(preparationBlocked,publishItems);
           const queued=items.filter((item)=>item&&item.queued===true).length;
           const persisted=items.filter((item)=>item&&item.persisted===true).length;
           const pendingBuild=items.filter((item)=>item&&item.pendingBuild===true).length;
           const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
-          batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,persisted,pendingBuild,blocked,items,preparation,status:queued?(blocked?"partial":"queued"):(pendingBuild?(blocked?"partial":"pending_build"):(blocked?"blocked":"empty"))});
+          batchResult=Object.assign({},publishResult,{requested:plan.targets.length,queued,persisted,pendingBuild,blocked,items,preparation,refresh,repairUnpublish,status:queued?(blocked?"partial":"queued"):(pendingBuild?(blocked?"partial":"pending_build"):(blocked?"blocked":"empty"))});
         }
       }else{
-        batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId)},scope);
+        batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId),deferRelease:request.deferRelease===true},scope);
       }
-      return json(200,await Automation.recordProductFrontSync(actorId,request,batchResult,loadedJob));
+      return json(200,await Automation.recordProductFrontSync(actorId,request,Object.assign({},batchResult,{refresh:refresh||batchResult.refresh||null,repairUnpublish:repairUnpublish||batchResult.repairUnpublish||null}),loadedJob));
     }
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
     if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset));

@@ -605,45 +605,64 @@
     });
     var targetIds=targetRows.map(function(row){return text(row.id);}).filter(Boolean);
     if(!targetIds.length){show(unmatch?'선택 범위에 매칭 해제할 상품이 없습니다.':'선택 범위에 최종 재검증·프론트 적용할 상품이 없습니다.','warn');return;}
-    var explanation=unmatch?label+'의 기존 프론트 매칭 해제를 요청합니다.':label+'의 실상품 상세페이지를 최종 재확인한 뒤 프론트에 갱신 적용합니다. 삭제·잘못된 접근·판매처 홈 리다이렉트 상품은 현재 매칭에서 제거하고, AI 자동 배치에서 확보한 정상 예비상품이 있으면 대신 적용합니다. 대체 후보가 없으면 기존 샘플 fallback이 유지됩니다.';
-    if(!window.confirm(explanation+'\n\n'+(unmatch?'프론트에서 해당 매칭을 해제하시겠습니까?\n해제된 상품은 해당 섹션 배치에서 빠지고 미배정 후보로 돌아갑니다. 대체 실상품이 없으면 기존 샘플 fallback이 유지됩니다.':'프론트 실상품 매칭 절차를 실행하시겠습니까?\n확인을 누르면 6건씩 안전하게 나누어 저장하고, 완료된 묶음은 중간 오류가 나도 보존됩니다.')))return;
-    productFrontSyncActive=true;var state=$('productFrontSyncState'),batchSize=6,aggregate={requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,revalidated:0,invalid:0,inconclusive:0,withdrawn:0,changedSection:0,items:[],persistedCandidateIds:[],preparation:{requested:0,prepared:0,blocked:0}},batchError=null,persistedCandidateMap={};
+    var explanation=unmatch?label+'의 기존 프론트 매칭 해제를 요청합니다.':label+'의 실상품 상세페이지와 기존 프론트 상품을 함께 재확인한 뒤 프론트에 갱신 적용합니다. 살아 있는 기존 상품은 유지하고, 삭제·잘못된 접근·판매처 홈 리다이렉트 상품은 현재 매칭에서 제거합니다. AI 자동 배치에서 확보한 정상 예비상품이 있으면 대신 적용하고, 대체 후보가 없으면 기존 샘플 fallback이 유지됩니다.';
+    if(!window.confirm(explanation+'\n\n'+(unmatch?'프론트에서 해당 매칭을 해제하시겠습니까?\n변경은 6건씩 원장에 안전하게 저장한 뒤 마지막에 스냅샷 빌드를 1회만 실행합니다.':'프론트 실상품 매칭 절차를 실행하시겠습니까?\n6건씩 원장에 안전하게 저장하고, 한 상품/묶음의 오류가 나도 나머지는 계속 처리하며, 전체 변경분은 마지막 빌드 1회로 반영합니다.')))return;
+    productFrontSyncActive=true;
+    var state=$('productFrontSyncState'),batchSize=6,aggregate={requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,revalidated:0,invalid:0,inconclusive:0,withdrawn:0,changedSection:0,items:[],persistedCandidateIds:[],changedCandidateIds:[],preparation:{requested:0,prepared:0,blocked:0},batchErrors:[]},publishPersistedMap={},changedMap={};
     if(state){state.className='front-sync-state running';state.textContent=label+' '+(unmatch?'매칭 해제':'프론트 실상품 매칭')+' · '+targetIds.length+'건을 '+batchSize+'건씩 처리합니다.';}
     renderProducts(productRows);
     try{
       var action=unmatch?'product_front_unmatch':'product_front_match';
       for(var offset=0;offset<targetIds.length;offset+=batchSize){
         var batch=targetIds.slice(offset,offset+batchSize);
-        if(state){state.className='front-sync-state running';state.textContent=label+' · '+Math.min(offset+batch.length,targetIds.length)+'/'+targetIds.length+'건 처리 중';}
+        if(state){state.className='front-sync-state running';state.textContent=label+' · '+Math.min(offset+batch.length,targetIds.length)+'/'+targetIds.length+'건 처리 중 · 오류가 있는 묶음은 기록하고 다음 묶음을 계속 처리합니다.';}
         try{
-          var part=await api(CONTROL,action,'POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',mode:'candidates',candidateIds:batch,ledgerMode:'candidate',confirmation:confirmation,deferRelease:!unmatch,scopeRefresh:!unmatch&&mode==='all'&&offset===0,compactResponse:true});
-          var r=part.frontSyncResult||{},p=r.preparation||{};
-          var refresh=r.refresh||{};aggregate.requested+=Number(r.requested||p.requested||batch.length);aggregate.queued+=Number(r.queued||0);aggregate.persisted+=Number(r.persisted||0);aggregate.pendingBuild+=Number(r.pendingBuild||0);aggregate.blocked+=Number(r.blocked||p.blocked||0);aggregate.revalidated+=Number(refresh.revalidated||0);aggregate.invalid+=Number(refresh.invalid||0);aggregate.inconclusive+=Number(refresh.inconclusive||0);aggregate.withdrawn+=Number(refresh.withdrawn||refresh.withdrawRequested||0);aggregate.changedSection+=Number(refresh.changedSection||0);aggregate.items=aggregate.items.concat(Array.isArray(r.items)?r.items:[]);aggregate.preparation.requested+=Number(p.requested||0);aggregate.preparation.prepared+=Number(p.prepared||0);aggregate.preparation.blocked+=Number(p.blocked||0);aggregate.release=r.release||aggregate.release;(Array.isArray(r.items)?r.items:[]).forEach(function(item){var id=text(item&&item.candidateId);if(id&&item&&item.persisted===true)persistedCandidateMap[id]=true;});
-        }catch(batchFailure){batchError=batchFailure;break;}
+          var part=await api(CONTROL,action,'POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',mode:'candidates',candidateIds:batch,ledgerMode:'candidate',confirmation:confirmation,deferRelease:true,scopeRefresh:false,compactResponse:true});
+          var r=part.frontSyncResult||{},p=r.preparation||{},refresh=r.refresh||{};
+          aggregate.requested+=Number(r.requested||p.requested||batch.length);aggregate.queued+=Number(r.queued||0);aggregate.persisted+=Number(r.persisted||0);aggregate.pendingBuild+=Number(r.pendingBuild||0);aggregate.blocked+=Number(r.blocked||p.blocked||0);aggregate.revalidated+=Number(refresh.revalidated||0);aggregate.invalid+=Number(refresh.invalid||0);aggregate.inconclusive+=Number(refresh.inconclusive||0);aggregate.withdrawn+=Number(refresh.withdrawn||refresh.withdrawRequested||0);aggregate.changedSection+=Number(refresh.changedSection||0);aggregate.items=aggregate.items.concat(Array.isArray(r.items)?r.items:[]);aggregate.preparation.requested+=Number(p.requested||0);aggregate.preparation.prepared+=Number(p.prepared||0);aggregate.preparation.blocked+=Number(p.blocked||0);aggregate.release=r.release||aggregate.release;
+          (Array.isArray(r.items)?r.items:[]).forEach(function(item){
+            var id=text(item&&item.candidateId),status=text(item&&item.status).toLowerCase();
+            if(!id||!item||item.persisted!==true)return;
+            changedMap[id]=true;
+            if(!unmatch&&status==='publish_requested')publishPersistedMap[id]=true;
+          });
+          (Array.isArray(refresh.withdrawCandidateIds)?refresh.withdrawCandidateIds:[]).forEach(function(id){id=text(id);if(id)changedMap[id]=true;});
+        }catch(batchFailure){
+          aggregate.batchErrors.push({offset:offset,candidateIds:batch.slice(),message:text(batchFailure&&batchFailure.message)||'batch_failed'});
+          aggregate.blocked+=batch.length;
+          aggregate.items.push.apply(aggregate.items,batch.map(function(id){return{candidateId:id,status:'batch_failed',queued:false,persisted:false,reason:text(batchFailure&&batchFailure.message)||'batch_failed'};}));
+          // Do not break. One malformed/dead/temporarily failing product must
+          // never prevent every other selected section from reaching Front.
+          continue;
+        }
       }
-      aggregate.persistedCandidateIds=Object.keys(persistedCandidateMap);
-      if(!unmatch&&aggregate.persistedCandidateIds.length>0){
+      aggregate.persistedCandidateIds=Object.keys(publishPersistedMap);
+      aggregate.changedCandidateIds=Object.keys(changedMap);
+      var needsFinalize=aggregate.persistedCandidateIds.length>0||aggregate.changedCandidateIds.length>0||aggregate.withdrawn>0;
+      if(needsFinalize){
         try{
-          if(state){state.className='front-sync-state running';state.textContent=label+' · 원장 저장 완료 · 전체 스냅샷 갱신을 1회 요청 중';}
-          var finalized=await api(CONTROL,'product_front_finalize','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',operation:'match',confirmation:confirmation,candidateIds:aggregate.persistedCandidateIds,ledgerMode:'candidate',compactResponse:true});
+          if(state){state.className='front-sync-state running';state.textContent=label+' · 원장 변경 저장 완료 · 전체 변경분 스냅샷 갱신을 마지막에 1회 요청 중';}
+          var finalizeOperation=unmatch?'unmatch':(aggregate.persistedCandidateIds.length?'match':'refresh');
+          var finalizeIds=aggregate.persistedCandidateIds.length?aggregate.persistedCandidateIds:aggregate.changedCandidateIds;
+          var finalized=await api(CONTROL,'product_front_finalize','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',operation:finalizeOperation,confirmation:unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH',candidateIds:finalizeIds,changedCount:Math.max(aggregate.changedCandidateIds.length,aggregate.withdrawn,aggregate.persistedCandidateIds.length),ledgerMode:'candidate',compactResponse:true});
           var finalResult=finalized.frontSyncResult||{},finalRelease=finalResult.release||{};
           aggregate.finalize=finalResult;aggregate.release=finalRelease;
           if(finalRelease.queued===true){aggregate.queued=1;aggregate.pendingBuild=0;}
-          else{aggregate.queued=0;aggregate.pendingBuild=Math.max(1,Number(finalResult.pendingBuild||aggregate.persistedCandidateIds.length||1));}
+          else{aggregate.queued=0;aggregate.pendingBuild=Math.max(1,Number(finalResult.pendingBuild||aggregate.changedCandidateIds.length||aggregate.persistedCandidateIds.length||1));}
         }catch(finalizeFailure){
-          aggregate.queued=0;aggregate.pendingBuild=Math.max(1,aggregate.pendingBuild||aggregate.persistedCandidateIds.length||0);
-          batchError=batchError||finalizeFailure;
+          aggregate.queued=0;aggregate.pendingBuild=Math.max(1,aggregate.pendingBuild||aggregate.changedCandidateIds.length||aggregate.persistedCandidateIds.length||1);
+          aggregate.batchErrors.push({offset:'finalize',candidateIds:aggregate.changedCandidateIds.slice(),message:text(finalizeFailure&&finalizeFailure.message)||'finalize_failed'});
         }
       }
       try{await refreshCandidateLedgerProducts();}catch(_refreshFailure){}
       var result=aggregate,requested=Number(result.requested||0),prepared=Number(result.preparation&&result.preparation.prepared||0),queued=Number(result.queued||0),persisted=Number(result.persisted||0),pendingBuild=Number(result.pendingBuild||0),blocked=Number(result.blocked||0),reasonCounts={};
       (Array.isArray(result.items)?result.items:[]).forEach(function(item){if(!item||item.queued===true||item.persisted===true)return;var reason=text(item.reason)||text(item.status)||'blocked';reasonCounts[reason]=(reasonCounts[reason]||0)+1;});
-      var topReasons=Object.keys(reasonCounts).sort(function(a,b){return reasonCounts[b]-reasonCounts[a];}).slice(0,3).map(function(reason){return reason+' '+reasonCounts[reason]+'건';}),reasonText=topReasons.length?' · 주요 차단: '+topReasons.join(' / '):'';
-      var detail=' · 최종 재검증 '+Number(result.revalidated||0)+'건 · 삭제/불량 '+Number(result.invalid||0)+'건 · 일시 확인보류 '+Number(result.inconclusive||0)+'건 · 기존 매칭 제거 '+Number(result.withdrawn||0)+'건 · 개방 준비 '+prepared+'건 · 관리자 발행 원장 저장 '+persisted+'건'+(queued?' · 최종 스냅샷 빌드 호출 1회':'')+(pendingBuild?' · 다음 배포 대기 '+pendingBuild+'건':'');
-      if(state){state.className='front-sync-state '+(batchError||blocked||pendingBuild?'warn':'complete');state.textContent=label+' · 요청 '+requested+'/'+targetIds.length+'건 · 원장 저장 '+persisted+'건 · 빌드 호출 '+queued+'건 · 차단 '+blocked+'건'+detail+reasonText+(batchError?' · 중단 지점부터 재실행 가능':'');}
-      var message=(unmatch?'프론트 매칭 해제':'프론트 실상품 갱신 적용')+' '+requested+'/'+targetIds.length+'건 처리 · 최종 재검증 '+Number(result.revalidated||0)+'건 · 삭제/불량 '+Number(result.invalid||0)+'건 · 일시 확인보류 '+Number(result.inconclusive||0)+'건 · 기존 매칭 제거 '+Number(result.withdrawn||0)+'건 · 관리자 원장 '+persisted+'건 저장.';
-      if(queued)message+=' 전체 변경분을 반영하는 스냅샷 빌드를 마지막에 1회 호출했습니다.';if(pendingBuild)message+=' 다음 정상 배포 대기 '+pendingBuild+'건.';if(blocked)message+=' 안전 게이트 차단 '+blocked+'건.'+reasonText;if(batchError)message+=' 일부 묶음에서 '+(text(batchError&&batchError.message)||'응답 지연')+'이 발생했습니다. 완료된 묶음은 보존됐으며 같은 버튼을 누르면 미처리 상품만 이어서 처리합니다.';
-      show(message,batchError||blocked||pendingBuild?'warn':'ok');
+      var topReasons=Object.keys(reasonCounts).sort(function(a,b){return reasonCounts[b]-reasonCounts[a];}).slice(0,3).map(function(reason){return reason+' '+reasonCounts[reason]+'건';}),reasonText=topReasons.length?' · 주요 차단: '+topReasons.join(' / '):'',batchErrorCount=result.batchErrors.length;
+      var detail=' · 최종 재검증 '+Number(result.revalidated||0)+'건 · 삭제/불량 '+Number(result.invalid||0)+'건 · 일시 확인보류 '+Number(result.inconclusive||0)+'건 · 기존 매칭 제거 '+Number(result.withdrawn||0)+'건 · 개방 준비 '+prepared+'건 · 원장 변경 '+result.changedCandidateIds.length+'건'+(queued?' · 최종 스냅샷 빌드 호출 1회':'')+(pendingBuild?' · 다음 배포 대기 '+pendingBuild+'건':'');
+      if(state){state.className='front-sync-state '+(batchErrorCount||blocked||pendingBuild?'warn':'complete');state.textContent=label+' · 요청 '+requested+'/'+targetIds.length+'건 · 원장 변경 '+result.changedCandidateIds.length+'건 · 빌드 호출 '+queued+'건 · 차단 '+blocked+'건'+detail+reasonText+(batchErrorCount?' · 묶음 오류 '+batchErrorCount+'건(나머지는 계속 처리됨)':'');}
+      var message=(unmatch?'프론트 매칭 해제':'프론트 실상품 갱신 적용')+' '+requested+'/'+targetIds.length+'건 처리 · 최종 재검증 '+Number(result.revalidated||0)+'건 · 삭제/불량 '+Number(result.invalid||0)+'건 · 기존 매칭 제거 '+Number(result.withdrawn||0)+'건 · 원장 변경 '+result.changedCandidateIds.length+'건.';
+      if(queued)message+=' 전체 변경분을 반영하는 스냅샷 빌드를 마지막에 1회 호출했습니다.';if(pendingBuild)message+=' 다음 정상 배포 대기 '+pendingBuild+'건.';if(blocked)message+=' 안전 게이트/묶음 차단 '+blocked+'건.'+reasonText;if(batchErrorCount)message+=' 묶음 오류 '+batchErrorCount+'건은 기록했으며 다른 상품 처리는 중단하지 않았습니다.';
+      show(message,batchErrorCount||blocked||pendingBuild?'warn':'ok');
     }finally{productFrontSyncActive=false;renderProducts(productRows);}
   }
 
