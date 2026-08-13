@@ -19,7 +19,7 @@
 
   const MOBILE_RAIL_ID = "tour-mobile-rail";
   const MOBILE_LIST_SEL = "#tour-mobile-rail .list";
-  const MOBILE_LIMIT = 30;
+  const MOBILE_LIMIT = 100;
 
   const MOBILE_CSS_ID = "tour-mobile-rail-cap-v2";
 
@@ -36,15 +36,7 @@
   }
 
   function pickId(it){ return pick(it, ["id", "contentId", "productId", "itemId", "sku", "code", "pid"]); }
-  function pickDirectProductUrl(it){ return specificProductUrl(pick(it, ["externalProductUrl", "officialProductUrl", "productUrl", "productPageUrl", "detailUrl", "checkoutUrl", "purchaseUrl", "orderUrl", "productLink"])); }
-  function pickLegacyProductUrl(it){
-    for (const key of ["affiliateOutboundUrl", "affiliate_outbound_url", "externalOutboundUrl", "external_outbound_url", "contentUrl", "pageUrl", "link", "url", "href"]) {
-      const url = specificProductUrl(it && it[key]);
-      if (url) return url;
-    }
-    return "";
-  }
-  function pickLink(it){ return pickDirectProductUrl(it) || pickLegacyProductUrl(it) || "#"; }
+  function pickLink(it){ return pick(it, ["affiliateOutboundUrl", "affiliate_outbound_url", "externalOutboundUrl", "external_outbound_url", "contentUrl", "pageUrl", "detailUrl", "checkoutUrl", "paymentUrl", "productUrl", "purchaseUrl", "orderUrl", "link", "url", "href"]) || "#"; }
 
   function isExternal(url){ return /^https?:\/\//i.test(String(url || "")); }
   function isBadUrl(url){
@@ -57,26 +49,14 @@
     try { return /(^|\.)example\.(com|org|net)$/i.test(new URL(u, window.location.origin).hostname); }
     catch(e){ return /example\.(com|org|net)/i.test(u); }
   }
-  function specificProductUrl(value){
-    const raw = String(value || "").trim();
-    if (isBadUrl(raw) || isExampleUrl(raw)) return "";
-    try {
-      const u = new URL(raw);
-      if (u.protocol !== "https:") return "";
-      if ((!u.pathname || u.pathname === "/") && !u.search && !u.hash) return "";
-      return u.toString();
-    } catch(e){ return ""; }
-  }
   function contentHref(id){ return id ? ("/content.html?id=" + encodeURIComponent(id)) : ""; }
   function resolveItemHref(item){
-    const direct = pickDirectProductUrl(item);
-    if (direct && !isBadUrl(direct) && !isExampleUrl(direct)) return direct;
-    const outbound = specificProductUrl(item && (item.affiliateOutboundUrl || item.externalOutboundUrl || ''));
-    if (outbound) return outbound;
-    const link = specificProductUrl(item && item.link);
-    if (link) return link;
+    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || '');
+    if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
     if (item && item.id) return contentHref(item.id);
-    return "";
+    const link = item && item.link;
+    if (isBadUrl(link) || isExampleUrl(link)) return "";
+    return link || "";
   }
 
   function normalizeItems(raw) {
@@ -88,8 +68,7 @@
       const link = pickLink(it);
       const id = pickId(it);
       if (!title || !thumb) continue;
-      const directProductUrl = pickDirectProductUrl(it);
-      out.push({ id, title, thumb, link, sourceUrl: link, productUrl: directProductUrl, externalProductUrl: pick(it,["externalProductUrl"]) || directProductUrl, detailUrl: pick(it,["detailUrl"]) || directProductUrl, checkoutUrl: pick(it,["checkoutUrl"]) || directProductUrl, affiliateOutboundUrl: pick(it, ["affiliateOutboundUrl","affiliate_outbound_url"]), externalOutboundUrl: pick(it, ["externalOutboundUrl","external_outbound_url"]) });
+      out.push({ id, title, thumb, link, sourceUrl: link, affiliateOutboundUrl: pick(it, ["affiliateOutboundUrl","affiliate_outbound_url"]), externalOutboundUrl: pick(it, ["externalOutboundUrl","external_outbound_url"]) });
       if (out.length >= RIGHT_SLOT_COUNT) break;
     }
     return out;
