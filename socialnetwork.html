@@ -426,19 +426,19 @@ a[id*="qna"]{
 
 
 
-<style id="igdc-social-portrait-rightpanel-fling-final-integrated-v1">
-/* SOCIAL MOBILE PORTRAIT ONLY
-   Popular Items / right-panel mobile rail only.
-   Main 9 social rows and landscape behavior are intentionally untouched. */
-@media (max-width:768px) and (orientation:portrait) and (pointer:coarse){
+<style id="igdc-social-landscape-right-only-sensitivity-v2">
+/* SOCIAL: MOBILE LANDSCAPE RIGHT POPULAR-ITEM RAIL ONLY.
+   Main 9 social sections and portrait right rail are untouched. */
+@media (max-width:1023px) and (orientation:landscape) and (pointer:coarse){
   #rpMobileScroller{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
     -webkit-overflow-scrolling:touch !important;
     scroll-behavior:auto !important;
     scroll-snap-type:x proximity !important;
-    touch-action:pan-x pan-y !important;
     overscroll-behavior-x:contain !important;
+    touch-action:pan-x pan-y !important;
   }
-
   #rpMobileGrid > .ad-box{
     scroll-snap-stop:normal !important;
   }
@@ -1726,6 +1726,77 @@ window.addEventListener('resize', function(){
   if(window.visualViewport){
     window.visualViewport.addEventListener('resize', schedule, {passive:true});
   }
+})();
+</script>
+
+
+
+<script id="igdc-social-landscape-right-only-controller-v2">
+(function(){
+  'use strict';
+  if(window.__IGDC_SOCIAL_LANDSCAPE_RIGHT_ONLY_V2__) return;
+  window.__IGDC_SOCIAL_LANDSCAPE_RIGHT_ONLY_V2__ = true;
+
+  function active(){
+    return matchMedia('(max-width:1023px) and (orientation:landscape) and (pointer:coarse)').matches;
+  }
+
+  function bind(){
+    var scroller = document.getElementById('rpMobileScroller');
+    if(!scroller || scroller.dataset.igdcLandscapeRightOnlyV2 === '1') return;
+    scroller.dataset.igdcLandscapeRightOnlyV2 = '1';
+
+    var sx=0, sy=0, lx=0, st=0, lt=0, startScroll=0, horizontal=false;
+
+    scroller.addEventListener('touchstart', function(ev){
+      if(!active() || !ev.touches || ev.touches.length !== 1) return;
+      var t=ev.touches[0];
+      sx=lx=t.clientX; sy=t.clientY;
+      st=lt=performance.now();
+      startScroll=scroller.scrollLeft;
+      horizontal=false;
+    }, {passive:true});
+
+    scroller.addEventListener('touchmove', function(ev){
+      if(!active() || !ev.touches || ev.touches.length !== 1) return;
+      var t=ev.touches[0];
+      var dx=t.clientX-sx, dy=t.clientY-sy;
+      if(Math.abs(dx)>Math.abs(dy)+4) horizontal=true;
+      lx=t.clientX; lt=performance.now();
+    }, {passive:true});
+
+    scroller.addEventListener('touchend', function(){
+      if(!active() || !horizontal) return;
+
+      var dx=lx-sx;
+      var dt=Math.max(16, lt-st);
+      var speed=Math.abs(dx)/dt;
+      var viewport=Math.max(1, scroller.clientWidth);
+
+      /* Strong flick: keep native momentum for multi-card travel. */
+      if(speed >= 1.05 || Math.abs(dx) >= viewport*0.60) return;
+
+      /* Light/normal swipe: cap over-sensitive travel to about one viewport. */
+      var dir=dx<0 ? 1 : -1;
+      var target=startScroll + dir*viewport;
+      var current=scroller.scrollLeft;
+
+      if(dir>0 && current>target){
+        scroller.scrollTo({left:target, behavior:'smooth'});
+      }else if(dir<0 && current<target){
+        scroller.scrollTo({left:Math.max(0,target), behavior:'smooth'});
+      }
+    }, {passive:true});
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', bind, {once:true});
+  }else{
+    bind();
+  }
+
+  addEventListener('resize', bind, {passive:true});
+  addEventListener('orientationchange', bind, {passive:true});
 })();
 </script>
 

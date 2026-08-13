@@ -1267,6 +1267,59 @@ a[id*="qna"]{
 }
 </style>
 
+
+
+<style id="igdc-distribution-main-both-right-landscape-fling-v5">
+/* DISTRIBUTION MOBILE
+   MAIN 6 sections: portrait + landscape
+   RIGHT panel: landscape only (portrait is intentionally untouched)
+   Card geometry and 100-slot capacity are untouched. */
+
+@media (max-width:1024px) and (pointer:coarse){
+  #sec-reco .thumb-scroller,
+  #sec-ads .thumb-scroller,
+  #sec-trend .thumb-scroller,
+  #sec-new .thumb-scroller,
+  #sec-special .thumb-scroller,
+  #sec-others .thumb-scroller{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:x proximity !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  #sec-reco .thumb-scroller > *,
+  #sec-ads .thumb-scroller > *,
+  #sec-trend .thumb-scroller > *,
+  #sec-new .thumb-scroller > *,
+  #sec-special .thumb-scroller > *,
+  #sec-others .thumb-scroller > *{
+    scroll-snap-stop:normal !important;
+  }
+}
+
+@media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
+  #mobile-ad-rail-list,
+  .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"]{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:x proximity !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  #mobile-ad-rail-list > *,
+  .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"] > *{
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -3606,6 +3659,130 @@ window.addEventListener("message",function(ev){
   else arm();
   window.addEventListener('resize', arm, {passive:true});
   window.addEventListener('orientationchange', arm, {passive:true});
+})();
+</script>
+
+
+
+<script id="igdc-distribution-velocity-fling-booster-v5">
+(function(){
+  'use strict';
+  if(window.__IGDC_DISTRIBUTION_VELOCITY_FLING_V5__) return;
+  window.__IGDC_DISTRIBUTION_VELOCITY_FLING_V5__=true;
+
+  function mobile(){ return matchMedia('(max-width:1024px) and (pointer:coarse)').matches; }
+  function landscape(){ return matchMedia('(max-width:1024px) and (orientation:landscape) and (pointer:coarse)').matches; }
+
+  function stepFor(scroller){
+    var items=scroller.querySelectorAll('.thumb-card');
+    if(items.length>1){
+      var d=Math.abs((items[1].offsetLeft||0)-(items[0].offsetLeft||0));
+      if(d>8) return d;
+    }
+    var first=items[0];
+    if(first){
+      var w=first.getBoundingClientRect().width;
+      var cs=getComputedStyle(scroller);
+      var gap=parseFloat(cs.columnGap||cs.gap||'0')||0;
+      if(w>8) return w+gap;
+    }
+    return Math.max(120, scroller.clientWidth*0.75);
+  }
+
+  function glide(scroller, distance){
+    var oldSnap=scroller.style.getPropertyValue('scroll-snap-type');
+    var oldPriority=scroller.style.getPropertyPriority('scroll-snap-type');
+
+    scroller.style.setProperty('scroll-snap-type','none','important');
+
+    try{
+      scroller.scrollTo({
+        left:Math.max(0,Math.min(scroller.scrollWidth-scroller.clientWidth, scroller.scrollLeft+distance)),
+        behavior:'smooth'
+      });
+    }catch(e){
+      scroller.scrollLeft+=distance;
+    }
+
+    setTimeout(function(){
+      if(oldSnap){
+        scroller.style.setProperty('scroll-snap-type',oldSnap,oldPriority||'');
+      }else{
+        scroller.style.removeProperty('scroll-snap-type');
+      }
+    },420);
+  }
+
+  function bind(scroller, mode){
+    if(!scroller) return;
+    var flag='igdcFlingV5'+mode;
+    if(scroller.dataset[flag]==='1') return;
+    scroller.dataset[flag]='1';
+
+    var sx=0, sy=0, lx=0, st=0, lt=0, horizontal=false;
+
+    scroller.addEventListener('touchstart',function(ev){
+      if(!mobile() || (mode==='right' && !landscape()) || !ev.touches || ev.touches.length!==1) return;
+      var t=ev.touches[0];
+      sx=lx=t.clientX; sy=t.clientY;
+      st=lt=performance.now();
+      horizontal=false;
+    },{passive:true});
+
+    scroller.addEventListener('touchmove',function(ev){
+      if(!mobile() || (mode==='right' && !landscape()) || !ev.touches || ev.touches.length!==1) return;
+      var t=ev.touches[0];
+      var dx=t.clientX-sx, dy=t.clientY-sy;
+      if(Math.abs(dx)>Math.abs(dy)+4) horizontal=true;
+      lx=t.clientX;
+      lt=performance.now();
+    },{passive:true});
+
+    scroller.addEventListener('touchend',function(){
+      if(!mobile() || (mode==='right' && !landscape()) || !horizontal) return;
+
+      var dx=lx-sx;
+      var dt=Math.max(16,lt-st);
+      var speed=Math.abs(dx)/dt;
+
+      /* Light/normal swipes keep existing behavior.
+         Only a strong flick gets multi-card travel. */
+      if(Math.abs(dx)<24 || speed<0.55) return;
+
+      var extra=1;
+      if(speed>=1.55) extra=5;
+      else if(speed>=1.15) extra=4;
+      else if(speed>=0.85) extra=3;
+      else if(speed>=0.55) extra=2;
+
+      var step=stepFor(scroller);
+      var dir=dx<0?1:-1;
+      requestAnimationFrame(function(){
+        glide(scroller,dir*step*extra);
+      });
+    },{passive:true});
+  }
+
+  function arm(){
+    [
+      '#sec-reco .thumb-scroller',
+      '#sec-ads .thumb-scroller',
+      '#sec-trend .thumb-scroller',
+      '#sec-new .thumb-scroller',
+      '#sec-special .thumb-scroller',
+      '#sec-others .thumb-scroller'
+    ].forEach(function(sel){ bind(document.querySelector(sel),'main'); });
+
+    /* Right panel: LANDSCAPE ONLY */
+    bind(document.getElementById('mobile-ad-rail-list'),'right');
+    bind(document.querySelector('.brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"]'),'right');
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',arm,{once:true});
+  else arm();
+
+  addEventListener('resize',arm,{passive:true});
+  addEventListener('orientationchange',arm,{passive:true});
 })();
 </script>
 

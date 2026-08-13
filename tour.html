@@ -962,6 +962,29 @@ a[id*="qna"]{
 }
 </style>
 
+
+
+<style id="igdc-tour-landscape-multicard-fling-v6">
+/* TOUR MOBILE LANDSCAPE RIGHT RAIL ONLY.
+   Portrait remains untouched.
+   Card geometry and 100-slot capacity remain unchanged. */
+@media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
+  #tour-mobile-rail .list{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:x proximity !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  #tour-mobile-rail .list > *{
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
+
 </head>
 
 <body>
@@ -2491,6 +2514,122 @@ window.addEventListener("message",function(ev){
   else arm();
   window.addEventListener('resize', arm, {passive:true});
   window.addEventListener('orientationchange', arm, {passive:true});
+})();
+</script>
+
+
+
+<script id="igdc-tour-landscape-multicard-fling-controller-v6">
+(function(){
+  'use strict';
+  if(window.__IGDC_TOUR_LANDSCAPE_MULTICARD_FLING_V6__) return;
+  window.__IGDC_TOUR_LANDSCAPE_MULTICARD_FLING_V6__=true;
+
+  function active(){
+    return matchMedia('(max-width:1024px) and (orientation:landscape) and (pointer:coarse)').matches;
+  }
+
+  function stepFor(list){
+    var items=list.querySelectorAll('.card, .ad-box');
+    if(items.length>1){
+      var d=Math.abs((items[1].offsetLeft||0)-(items[0].offsetLeft||0));
+      if(d>8) return d;
+    }
+    var first=items[0];
+    if(first){
+      var w=first.getBoundingClientRect().width;
+      var cs=getComputedStyle(list);
+      var gap=parseFloat(cs.columnGap||cs.gap||'0')||0;
+      if(w>8) return w+gap;
+    }
+    return Math.max(120,list.clientWidth*0.75);
+  }
+
+  function glide(list, distance){
+    var oldSnap=list.style.getPropertyValue('scroll-snap-type');
+    var oldPriority=list.style.getPropertyPriority('scroll-snap-type');
+
+    list.style.setProperty('scroll-snap-type','none','important');
+
+    var maxLeft=Math.max(0,list.scrollWidth-list.clientWidth);
+    var target=Math.max(0,Math.min(maxLeft,list.scrollLeft+distance));
+
+    try{
+      list.scrollTo({left:target,behavior:'smooth'});
+    }catch(e){
+      list.scrollLeft=target;
+    }
+
+    setTimeout(function(){
+      if(oldSnap){
+        list.style.setProperty('scroll-snap-type',oldSnap,oldPriority||'');
+      }else{
+        list.style.removeProperty('scroll-snap-type');
+      }
+    },460);
+  }
+
+  function bind(){
+    var list=document.querySelector('#tour-mobile-rail .list');
+    if(!list || list.dataset.igdcTourMulticardFlingV6==='1') return;
+    list.dataset.igdcTourMulticardFlingV6='1';
+
+    var sx=0, sy=0, lx=0, st=0, lt=0, horizontal=false;
+
+    list.addEventListener('touchstart',function(ev){
+      if(!active() || !ev.touches || ev.touches.length!==1) return;
+      var t=ev.touches[0];
+      sx=lx=t.clientX;
+      sy=t.clientY;
+      st=lt=performance.now();
+      horizontal=false;
+    },{passive:true});
+
+    list.addEventListener('touchmove',function(ev){
+      if(!active() || !ev.touches || ev.touches.length!==1) return;
+      var t=ev.touches[0];
+      var dx=t.clientX-sx;
+      var dy=t.clientY-sy;
+      if(Math.abs(dx)>Math.abs(dy)+4) horizontal=true;
+      lx=t.clientX;
+      lt=performance.now();
+    },{passive:true});
+
+    list.addEventListener('touchend',function(){
+      if(!active() || !horizontal) return;
+
+      var dx=lx-sx;
+      var dt=Math.max(16,lt-st);
+      var speed=Math.abs(dx)/dt;
+
+      /* Light swipe stays native.
+         Stronger flick travels several cards according to velocity. */
+      if(Math.abs(dx)<24 || speed<0.72) return;
+
+      var cards=2;
+      if(speed>=1.65) cards=7;
+      else if(speed>=1.35) cards=6;
+      else if(speed>=1.10) cards=5;
+      else if(speed>=0.90) cards=4;
+      else if(speed>=0.72) cards=3;
+
+      var step=stepFor(list);
+      var dir=dx<0?1:-1;
+
+      requestAnimationFrame(function(){
+        glide(list,dir*step*cards);
+      });
+    },{passive:true});
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',bind,{once:true});
+  }else{
+    bind();
+  }
+
+  addEventListener('resize',bind,{passive:true});
+  addEventListener('orientationchange',bind,{passive:true});
 })();
 </script>
 

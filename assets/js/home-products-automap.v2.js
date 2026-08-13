@@ -5,6 +5,7 @@
 // 2) Read the public front.snapshot.json first as the normal operating source.
 // 3) Keep the current feed contract only as a fallback when the Snapshot is unavailable.
 // 4) Preserve empty-state i18n, priority sorting, incremental rendering, and right-panel safety.
+// 5) Keep exactly 100 slot cards per Home section/right panel; never collapse the slot array.
 
 (function () {
   'use strict';
@@ -313,6 +314,10 @@
     const a = document.createElement('a');
     a.className = 'shop-card';
     applyAnchorDestination(a, item);
+    if (item && item.__igdcFallbackSlot) {
+      a.setAttribute('data-igdc-slot-placeholder', '1');
+      a.setAttribute('aria-hidden', 'true');
+    }
 
     if (item.thumb) {
       a.style.backgroundImage = 'url("' + escAttr(item.thumb) + '")';
@@ -354,6 +359,10 @@
     const a = document.createElement('a');
     a.className = 'ad-box news-btn';
     applyAnchorDestination(a, item);
+    if (item && item.__igdcFallbackSlot) {
+      a.setAttribute('data-igdc-slot-placeholder', '1');
+      a.setAttribute('aria-hidden', 'true');
+    }
 
     const img = document.createElement('img');
     img.loading = 'lazy';
@@ -398,6 +407,37 @@
     return a;
   }
 
+  function makeFallbackSlotItem(key, index, isRight) {
+    const slotNo = index + 1;
+    return {
+      id: key + '-slot-' + pad3(slotNo),
+      title: '',
+      thumb: '',
+      url: '#',
+      sourceUrl: '#',
+      affiliateOutboundUrl: '',
+      externalOutboundUrl: '',
+      priority: slotNo,
+      weight: 0,
+      order: slotNo,
+      enabled: true,
+      lang: [],
+      page: 'home',
+      section: key,
+      __igdcFallbackSlot: true,
+      __igdcRight: !!isRight
+    };
+  }
+
+  function ensureExactSlotCount(items, key, isRight) {
+    const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
+    const out = toArray(items).slice(0, limit);
+    while (out.length < limit) {
+      out.push(makeFallbackSlotItem(key, out.length, isRight));
+    }
+    return out;
+  }
+
   function indexSectionsFromFeed(payload) {
     const map = Object.create(null);
     if (!payload || !Array.isArray(payload.sections)) return map;
@@ -420,8 +460,11 @@
     }
 
     for (const key of ALL_KEYS) {
-      out[key] = sortItems(
-        toArray(sectionsMap[key]).map((item) => normalizeItem(item, { page: 'home', section: key }))
+      // Snapshot Engine already publishes the authoritative slot order.
+      // Preserve that order exactly so real products stay in slots 1,2,3...
+      // instead of being re-ranked to the end by front-side weight/order sorting.
+      out[key] = toArray(sectionsMap[key]).map((item) =>
+        normalizeItem(item, { page: 'home', section: key })
       );
     }
 
@@ -497,7 +540,7 @@ function bindIncremental(target, items) {
   }, { passive: true });
 }
 
-  function renderSlot(key, rawItems) {
+  function renderSlot(key, rawItems, preserveSnapshotOrder) {
     const psomEl = qs('[data-psom-key="' + key + '"]');
     if (!psomEl) return;
 
@@ -513,15 +556,17 @@ function bindIncremental(target, items) {
     }
 
     const isRight = target.isRight;
-    const list = sortItems(
-      toArray(rawItems)
-        .map((item) => normalizeItem(item, { page: 'home', section: key }))
-        .filter((x) => {
-          if (!x) return false;
-          if (isRight) return true;
-          return !!x.thumb;
-        })
-    );
+    const normalized = toArray(rawItems)
+      .map((item) => normalizeItem(item, { page: 'home', section: key }))
+      .filter(Boolean);
+
+    // Snapshot order is authoritative. Never discard a published slot merely
+    // because its thumbnail is temporarily blank; that would collapse the
+    // 100-slot contract and shift every following card. Legacy/feed input may
+    // still use the historical sort, but both sources are padded/truncated to
+    // exactly 100 slots per section.
+    const ordered = preserveSnapshotOrder ? normalized : sortItems(normalized);
+    const list = ensureExactSlotCount(ordered, key, isRight);
 
     if (!list.length) {
       showEmpty(target);
@@ -596,12 +641,14 @@ function bindIncremental(target, items) {
       const loaded = await loadSections();
       const sections = loaded.sections || Object.create(null);
 
+      const preserveSnapshotOrder = loaded.source === 'snapshot';
+
       for (const key of KEYS_MAIN) {
-        renderSlot(key, resolveSectionItems(sections, key));
+        renderSlot(key, resolveSectionItems(sections, key), preserveSnapshotOrder);
       }
 
       for (const key of KEYS_RIGHT) {
-        renderSlot(key, resolveSectionItems(sections, key));
+        renderSlot(key, resolveSectionItems(sections, key), preserveSnapshotOrder);
       }
 
       window.__HOME_PRODUCTS_AUTOMAP_V2_SOURCE__ = loaded.source;
