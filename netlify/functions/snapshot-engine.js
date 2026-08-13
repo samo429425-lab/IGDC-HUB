@@ -34,7 +34,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3-fail-loud-publication-report";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.1-authoritative-page-route";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -503,6 +503,7 @@ function enforceSnapshotFileLimit(pageName, bankItems) {
   for (const raw of (Array.isArray(bankItems) ? bankItems : [])) {
     const id = raw?.id || stableId(JSON.stringify(raw));
     if (usedIds.has(id)) continue;
+    if (!pageMatches(raw, pageName)) continue;
 
     const sectionKey = resolveLimitSectionKey(pageName, raw, sections);
     if (!sectionKey || !sections[sectionKey]) continue;
@@ -696,6 +697,13 @@ function buildTrackingMeta(raw, context) {
     snapshotRecordId,
     sourceType: "snapshot_seed"
   };
+  // Preserve only explicit outbound contracts already verified upstream.
+  // AutoMaps can then open the exact seller product page instead of falling
+  // back to an IGDC internal content route.
+  const externalOutboundUrl = val(raw.externalOutboundUrl, raw.external_outbound_url);
+  const affiliateOutboundUrl = val(raw.affiliateOutboundUrl, raw.affiliate_outbound_url);
+  if (/^https:\/\//i.test(externalOutboundUrl)) meta.externalOutboundUrl = externalOutboundUrl;
+  if (affiliateOutboundUrl) meta.affiliateOutboundUrl = affiliateOutboundUrl;
 
   const contract = contractOf(raw);
   const pg = snapshotPaymentState(raw);
@@ -762,6 +770,30 @@ function resolveSection(item, defaultSection) {
   if (item.psom_key) return item.psom_key;
   if (item.category) return item.category;
   return defaultSection;
+}
+
+function explicitPageOf(item) {
+  item = item || {};
+  return String(
+    item.page ||
+    item.channel ||
+    item?.bind?.page ||
+    item?.placement?.page ||
+    item?.layerPointer?.page ||
+    ""
+  ).trim().toLowerCase();
+}
+function pageMatches(item, expected) {
+  const page = explicitPageOf(item);
+  if (!page) return true; // legacy unscoped rows keep their old section routing.
+  const aliases = {
+    home: ["home"],
+    distribution: ["distribution", "distributionhub", "distribution-hub", "commerce"],
+    network: ["network", "networkhub", "network-hub"],
+    social: ["social", "socialnetwork", "social-network"],
+    tour: ["tour", "travel"]
+  };
+  return (aliases[expected] || [expected]).includes(page);
 }
 
 function getSlotLimit(snapshot, sectionKey) {
@@ -856,6 +888,8 @@ function mergeFrontFromSearchBank(frontSnap, searchbankSnap) {
   const items = Array.isArray(searchbankSnap?.items) ? searchbankSnap.items : [];
 
   for (const item of items) {
+
+    if (!pageMatches(item, "home")) continue;
 
  const rawSectionKey =
   item?.bind?.section ||
@@ -964,6 +998,8 @@ function handleNetworkSnapshot(bank) {
   let count = snapshot.items.length;
 
   for (const item of bankItems) {
+
+    if (!pageMatches(item, "network")) continue;
 
     const rawKey =
       item?.psom_key ||
@@ -1141,8 +1177,8 @@ REQUIRED_SECTION_KEYS.forEach(key => {
   }
 
   function belongsToDistribution(raw) {
-    const pageLike = String(raw?.page || raw?.channel || raw?.route || raw?.bind?.page || "").toLowerCase();
-    if (["distribution", "distributionhub", "distribution-hub", "commerce"].includes(pageLike)) return true;
+    const pageLike = explicitPageOf(raw);
+    if (pageLike) return pageMatches(raw, "distribution");
     const mapped = distributionSectionOf(raw);
     if (mapped && sections[mapped]) return true;
     const nonDistribution = /^(network|network-right|social|media|tour|donation|home)/i.test(String(mapped || ""));
@@ -1309,6 +1345,7 @@ function handleSocialSnapshot(bank) {
     const existingIds = new Set(existing.map(i => i.id));
 
     const supply = bankItems.filter(item => {
+      if (!pageMatches(item, "social")) return false;
       const sec =
         item?.bind?.section ||
         item?.psom_key ||
@@ -1635,13 +1672,10 @@ function handleTourSnapshot(bank) {
 
   /* ===== TOUR FILTER ===== */
   function isTour(item){
-    return (
-      item.type === "tour" ||
-      item.category === "tour" ||
-      item.travel ||
-      item.location ||
-      item.region
-    );
+    if (!item || !pageMatches(item, "tour")) return false;
+    const page = explicitPageOf(item);
+    if (page) return true;
+    return item.type === "tour" || item.category === "tour" || item.travel === true;
   }
 
   /* ===== THUMB BUILDER ===== */
