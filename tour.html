@@ -743,22 +743,31 @@ html, body {
 }
 
 @media (max-width:1024px){
-  #tour-mobile-rail{ 
+  #tour-mobile-rail{
     display:block !important;
     background:#f7f9fb; border:1px solid #d6dce0; border-radius:10px;
     padding:10px 10px 14px; box-shadow:0 1px 4px rgba(0,0,0,.06);
   }
   #tour-mobile-rail .list{
-    display:flex; gap:10px; overflow-x:auto; padding:6px 4px;
-    scroll-snap-type:x mandatory;
+    display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding:6px 4px;
+    -webkit-overflow-scrolling:touch;
+    scroll-behavior:auto;
+    scroll-snap-type:x proximity;
+    touch-action:pan-x pan-y;
+    overscroll-behavior-x:contain;
+    scrollbar-width:none; -ms-overflow-style:none;
+  }
+  #tour-mobile-rail .list > .card,
+  #tour-mobile-rail .list > .ad-box{
+    scroll-snap-align:start;
+    scroll-snap-stop:normal;
   }
   #tour-mobile-rail .list::-webkit-scrollbar{ display:none; width:0; height:0; }
-  #tour-mobile-rail .list{ scrollbar-width:none; -ms-overflow-style:none; }
 }
 @media (max-width:1024px) and (orientation:portrait){
   #tour-mobile-rail .list > .card,
   #tour-mobile-rail .list > .ad-box{
-    flex: 0 0 100% !important; max-width:100% !important;
+    flex:0 0 100% !important; max-width:100% !important;
     height:auto !important; min-height:0 !important; max-height:none !important;
   }
   #tour-mobile-rail .list img,
@@ -948,24 +957,6 @@ a[id*="qna"]{
   }
 }
 </style>
-
-
-<style id="igdc-mobile-motion-unified-style-v1">
-/* Touch-only unified motion. Desktop / Windows pointer-mouse behavior is untouched. */
-@media (max-width:1180px) and (pointer:coarse){
-  [data-igdc-motion-profile]{
-    overflow-x:auto !important;
-    overflow-y:hidden !important;
-    -webkit-overflow-scrolling:auto !important;
-    scroll-behavior:auto !important;
-    scroll-snap-type:none !important;
-    scroll-snap-stop:normal !important;
-    overscroll-behavior-x:contain !important;
-    touch-action:pan-y !important;
-  }
-}
-</style>
-
 </head>
 
 <body>
@@ -2419,224 +2410,5 @@ window.addEventListener("message",function(ev){
   }
 })();
 </script>
-
-
-<script id="igdc-mobile-motion-unified-v1">
-(function(){
-  'use strict';
-  if(window.__IGDC_MOBILE_MOTION_UNIFIED_V1__) return;
-  window.__IGDC_MOBILE_MOTION_UNIFIED_V1__=true;
-
-  var CONFIG = {"main":[],"right":["#tour-mobile-rail .list"]};
-
-  /* Two stable profiles only:
-     MAIN: Home-main-like natural motion.
-     RIGHT: Tour-like motion; portrait gentle release settles one card.
-     Distances are normalized to each scroller's actual card step, not viewport width. */
-  var PROFILE = {
-    main: {
-      releaseMin:0.22,
-      multi1:0.72,
-      multi2:1.05,
-      multi3:1.35,
-      multi4:1.70,
-      multi5:2.05,
-      maxCards:11,
-      decay:0.93
-    },
-    right: {
-      releaseMin:0.20,
-      multi1:0.68,
-      multi2:1.00,
-      multi3:1.30,
-      multi4:1.62,
-      multi5:1.95,
-      maxCards:11,
-      decay:0.93
-    }
-  };
-
-  function touchEnv(){
-    return matchMedia('(max-width:1180px) and (pointer:coarse)').matches;
-  }
-  function portrait(){
-    return matchMedia('(orientation:portrait)').matches;
-  }
-
-  function clamp(el,x){
-    return Math.max(0,Math.min(Math.max(0,el.scrollWidth-el.clientWidth),x));
-  }
-
-  function getChildren(el){
-    var candidates = el.querySelectorAll(
-      ':scope > .ad-box, :scope > .card, :scope > .thumb-card, ' +
-      ':scope > * > .ad-box, :scope > * > .card, :scope > * > .thumb-card'
-    );
-    if(candidates.length) return candidates;
-
-    candidates = el.querySelectorAll('.ad-box, .card, .thumb-card');
-    return candidates;
-  }
-
-  function cardStep(el){
-    var items=getChildren(el);
-    if(items.length>1){
-      var a=items[0].getBoundingClientRect();
-      var b=items[1].getBoundingClientRect();
-      var d=Math.abs(b.left-a.left);
-      if(d>8) return d;
-    }
-    if(items.length){
-      var r=items[0].getBoundingClientRect();
-      var cs=getComputedStyle(el);
-      var gap=parseFloat(cs.columnGap||cs.gap||'0')||0;
-      if(r.width>8) return r.width+gap;
-    }
-    return Math.max(120,el.clientWidth*0.72);
-  }
-
-  function nearestStep(el,x){
-    var s=cardStep(el);
-    if(s<1) return x;
-    return Math.round(x/s)*s;
-  }
-
-  function flingCards(speed,p){
-    if(speed < p.multi1) return 0;
-    if(speed < p.multi2) return 2;
-    if(speed < p.multi3) return 3;
-    if(speed < p.multi4) return 4;
-    if(speed < p.multi5) return 6;
-    /* Very strong flick can naturally reach about 8-11 cards, capped. */
-    return Math.min(p.maxCards, 8 + Math.floor((speed-p.multi5)/0.32));
-  }
-
-  function animateDecay(el,velocityPxPerMs,p){
-    var last=performance.now();
-    var v=velocityPxPerMs;
-    var stopped=false;
-
-    function frame(now){
-      if(stopped) return;
-      var dt=Math.min(32,Math.max(8,now-last));
-      last=now;
-
-      el.scrollLeft=clamp(el,el.scrollLeft+v*dt);
-      v*=Math.pow(p.decay,dt/16.67);
-
-      if(Math.abs(v)<0.025 || el.scrollLeft<=0 ||
-         el.scrollLeft>=Math.max(0,el.scrollWidth-el.clientWidth)){
-        stopped=true;
-        return;
-      }
-      requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
-  }
-
-  function bind(el,type){
-    if(!el || el.dataset.igdcMotionBound==='1') return;
-    el.dataset.igdcMotionBound='1';
-    el.dataset.igdcMotionProfile=type;
-
-    var p=PROFILE[type];
-    var sx=0, sy=0, px=0, lastX=0, lastT=0, startScroll=0;
-    var locked=null;
-    var velocity=0;
-
-    el.addEventListener('touchstart',function(e){
-      if(!touchEnv() || !e.touches || e.touches.length!==1) return;
-      var t=e.touches[0], now=performance.now();
-      sx=px=lastX=t.clientX;
-      sy=t.clientY;
-      lastT=now;
-      startScroll=el.scrollLeft;
-      locked=null;
-      velocity=0;
-    },{passive:true});
-
-    el.addEventListener('touchmove',function(e){
-      if(!touchEnv() || !e.touches || e.touches.length!==1) return;
-      var t=e.touches[0], now=performance.now();
-      var totalX=t.clientX-sx, totalY=t.clientY-sy;
-
-      if(locked===null){
-        if(Math.abs(totalX)<7 && Math.abs(totalY)<7) return;
-        locked=Math.abs(totalX)>Math.abs(totalY)*1.12 ? 'x' : 'y';
-      }
-      if(locked!=='x') return;
-
-      var dx=t.clientX-px;
-      var dt=Math.max(8,now-lastT);
-      var instant=-dx/dt; /* scroll direction velocity */
-      velocity=velocity*0.68 + instant*0.32;
-
-      /* Finger-following movement. No viewport/page jump. */
-      el.scrollLeft=clamp(el,el.scrollLeft-dx);
-
-      px=t.clientX;
-      lastX=t.clientX;
-      lastT=now;
-    },{passive:true});
-
-    el.addEventListener('touchend',function(){
-      if(!touchEnv() || locked!=='x') return;
-
-      var speed=Math.abs(velocity);
-      var dir=velocity>=0 ? 1 : -1;
-      var s=cardStep(el);
-
-      /* Portrait right rail: a gentle release settles to the nearest card,
-         matching the desired one-thumbnail-at-a-time feel. */
-      if(type==='right' && portrait() && speed < p.multi1){
-        var target=nearestStep(el,el.scrollLeft);
-        try{ el.scrollTo({left:clamp(el,target),behavior:'smooth'}); }
-        catch(_){ el.scrollLeft=clamp(el,target); }
-        return;
-      }
-
-      var cards=flingCards(speed,p);
-
-      if(cards===0){
-        /* Low/medium movement: continue with a short natural decay only. */
-        if(speed>=p.releaseMin){
-          animateDecay(el,velocity*0.75,p);
-        }
-        return;
-      }
-
-      /* Multi-card fling scales with real card width. No viewport-width stage. */
-      var target=clamp(el,el.scrollLeft + dir*s*cards);
-      var distance=target-el.scrollLeft;
-      var effectiveV = distance>=0 ? Math.max(0.55,speed) : -Math.max(0.55,speed);
-
-      /* Seed enough velocity to reach the requested card range, then decay. */
-      var desiredMs=420;
-      var seed=distance/desiredMs;
-      if(Math.abs(seed)>Math.abs(effectiveV)) effectiveV=seed;
-      animateDecay(el,effectiveV,p);
-    },{passive:true});
-  }
-
-  function arm(){
-    CONFIG.main.forEach(function(sel){
-      document.querySelectorAll(sel).forEach(function(el){ bind(el,'main'); });
-    });
-    CONFIG.right.forEach(function(sel){
-      document.querySelectorAll(sel).forEach(function(el){ bind(el,'right'); });
-    });
-  }
-
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',arm,{once:true});
-  }else{
-    arm();
-  }
-
-  addEventListener('resize',arm,{passive:true});
-  addEventListener('orientationchange',arm,{passive:true});
-})();
-</script>
-
 </body>
 </html>
