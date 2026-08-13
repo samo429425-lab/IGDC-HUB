@@ -12,7 +12,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "commerce-product-ranking-v1.14.1-explicit-admin-placement-only";
+const VERSION = "commerce-product-ranking-v1.14.2-optional-sponsorship-rail";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -948,6 +948,9 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const recentDiscovery = !!row.inspectedAt && Number.isFinite(Date.parse(row.inspectedAt)) && Date.now() - Date.parse(row.inspectedAt) <= 45 * 86400000;
   const officialProductText = row.productPageLive !== false && isSpecificProductUrl(first(row.productUrl, row.url)) && (row.sameSupplierSite === true || sameSite(first(row.productUrl, row.url), first(row.supplierSiteUrl, row.supplierOfficialUrl)));
   const titleHay = lower([row.productName, row.title, row.priorityLabel, row.badge, row.badges, row.labels].map(text).join(" "));
+  const sponsorship = plain(row.sponsorship);
+  const sponsorshipMode = lower(sponsorship.mode || sponsorship.state || sponsorship.status);
+  const sponsorshipActive = bool(sponsorship.active) || bool(sponsorship.enabled) || bool(sponsorship.required) || ["sponsored","sponsorship","contracted","paid_sponsor","paid-sponsor"].includes(sponsorshipMode);
   const sponsorEvidence = commercial.sponsorReady === true || has(["sponsorDisclosure","sponsorContractVerified","sponsorEvidence"]);
   const trendEvidence = has(["trendEvidence","marketDemandEvidence","verifiedDemandEvidence","serverVerifiedDemand"]);
   const newnessEvidence = has(["newnessEvidence","newListingEvidence","verifiedNewness"]);
@@ -998,10 +1001,15 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
     add("home", "home_right_bottom", baseScore, "지식·건강·기타 우측 하단 정책 적합", "home_right_knowledge_health_other", []);
   }
 
-  // DISTRIBUTION. Six main rails are balanced only after their own front
-  // policy is satisfied. Sponsor/trending/new/special are never populated only
-  // because another section currently has fewer thumbnails.
-  if (sponsorEvidence && revenueValue.contractReady === true) add("distribution", "distribution-sponsor", baseScore + 6, "승인된 스폰서 계약 및 공개 근거 상품", "disclosed_sponsored_offer", []);
+  // DISTRIBUTION. The Sponsor rail is a normal product rail by default.
+  // If sponsorship mode is explicitly activated, verified sponsor evidence
+  // boosts the placement; missing sponsorship evidence is handled by the
+  // publication policy rather than making the rail unusable in normal mode.
+  const distributionStandardEligible = risk.gatePassed === true && (value.privatePlacementEligible === true || Number(audience.audienceDemandScore || 0) >= 40 || recurringEssential || socialLifestyle || electronicsUtility || officialProductText);
+  if (distributionStandardEligible) {
+    const sponsorBoost = sponsorshipActive && sponsorEvidence && revenueValue.contractReady === true ? 6 : 2;
+    add("distribution", "distribution-sponsor", baseScore + sponsorBoost, sponsorshipActive ? "스폰서십 적용 가능 상품" : "유통 스폰서 일반 운영 상품", sponsorshipActive ? "optional_sponsorship_offer" : "distribution_sponsor_standard_offer", []);
+  }
   if (verifiedTrend && Number(audience.audienceDemandScore || 0) >= 55) add("distribution", "distribution-trending", baseScore + 5, "검증된 수요·인기 신호가 높은 상품", "verified_market_demand", []);
   if ((verifiedNewness || recentDiscovery) && risk.gatePassed === true) add("distribution", "distribution-new", baseScore + 2, "신규 상품 또는 최근 공식 상세페이지 확인 상품", "recently_verified_or_registered_listing", []);
   if ((verifiedSpecial || localOrigin || tourRecreationProduct) && risk.gatePassed === true) add("distribution", "distribution-special", baseScore + 3, "특산·인증·한정·지역·레저 테마 상품", "special_local_or_theme_offer", []);

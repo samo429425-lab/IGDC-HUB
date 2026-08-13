@@ -15,7 +15,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.9.1-canonical-nationwide-region-key";
+const VERSION = "commerce-candidate-review-api-v1.9.2-optional-sponsorship-mode";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -459,7 +459,11 @@ async function recordRevenue(member, body){
     await patchSourcePayload(id,function(payload){payload.outboundReferral=Object.assign({},plain(payload.outboundReferral),{operatorApproved:true,approved:true,status:"approved",officialDestination:true,officialSeller:true,disclosureReady:true,verifiedAt:checkedAt,destinationUrl:url,providerName});return payload;});
   }else{
     if(!contractId||!disclosureReady||!payoutBasisVerified||!settlementMode){const err=new Error("직접 광고·중개·추천·리드·스폰서 경로에는 계약 ID, 표시·고지 승인, 지급 근거 확인, 정산 방식이 모두 필요합니다.");err.statusCode=400;throw err;}
-    await patchSourcePayload(id,function(payload){payload.brokerageContract=Object.assign({},plain(payload.brokerageContract),{id:contractId,type,providerName,counterparty:providerName,approved:true,status:"approved",destinationUrl:url,disclosureReady:true,payoutBasisVerified:true,settlementMode,policyStatus:policyConfirmed?"policy_ok":"contract_verified",policyCheckedAt:checkedAt,currency:text(revenue.currency)||null,note:text(revenue.note)||null});return payload;});
+    await patchSourcePayload(id,function(payload){
+      payload.brokerageContract=Object.assign({},plain(payload.brokerageContract),{id:contractId,type,providerName,counterparty:providerName,approved:true,status:"approved",destinationUrl:url,disclosureReady:true,payoutBasisVerified:true,settlementMode,policyStatus:policyConfirmed?"policy_ok":"contract_verified",policyCheckedAt:checkedAt,currency:text(revenue.currency)||null,note:text(revenue.note)||null});
+      if(type==="sponsor") payload.sponsorship=Object.assign({},plain(payload.sponsorship),{active:true,enabled:true,required:true,mode:"sponsored",disclosed:true,verified:true,sponsorName:providerName,provider:providerName,contractId,disclosureSource:"administrator_approved_sponsor_revenue"});
+      return payload;
+    });
   }
   const rows=await SlotStore.insert("gslot_candidate_revenue",{id:"revenue_"+require("crypto").randomBytes(12).toString("hex"),candidate_id:id,revenue_type:type,status:"approved",affiliate_url:url,provider_name:providerName.slice(0,240),currency:text(revenue.currency).slice(0,16)||null,note:text(revenue.note).slice(0,4000)||null,updated_at:new Date().toISOString(),updated_by:member.memberId},"return=representation");
   await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"revenue_ready",updated_at:new Date().toISOString()});
@@ -478,10 +482,8 @@ function validateAssignmentPolicy(state, hub, section){
   if(required.length&&!required.some((needle)=>types.some((type)=>type.includes(needle)))){
     const err=new Error("선택한 섹션에는 전용 검증 증빙이 필요합니다. 필요한 증빙 유형: "+required.join(", "));err.statusCode=409;err.code="SECTION_EVIDENCE_REQUIRED";throw err;
   }
-  if(section==="distribution-sponsor"){
-    const sponsor=(state&&state.relations&&Array.isArray(state.relations.revenues)?state.relations.revenues:[]).some((row)=>lower(row&&row.revenue_type)==="sponsor"&&lower(row&&row.status)==="approved");
-    if(!sponsor){const err=new Error("스폰서 섹션은 승인된 sponsor 수익 계약과 고지 정보가 필요합니다.");err.statusCode=409;err.code="SPONSOR_CONTRACT_REQUIRED";throw err;}
-  }
+  // distribution-sponsor is selectable in normal product mode.
+  // A verified sponsor revenue record activates sponsorship metadata separately.
   return page;
 }
 

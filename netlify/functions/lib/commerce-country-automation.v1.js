@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.17.2-canonical-nationwide-region-key";
+const VERSION = "commerce-country-automation-v3.17.3-optional-sponsorship-rail";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2012,7 +2012,9 @@ function privateReviewFallbackAssignments(rowInput) {
   // normal qualified goods; the evidence-gated rails are offered only when the
   // corresponding policy signal exists.
   add("distribution|distribution-recommend", 78, "대중 수요·효용 중심 추천 검토", "private_review_distribution_recommend");
-  if (sponsorSignal && commercial.contractReady === true) add("distribution|distribution-sponsor", 88, "스폰서 신호와 승인 계약이 함께 확인된 상품", "private_review_distribution_sponsor");
+  // Sponsor is a normal Distribution rail. A real sponsorship contract is
+  // optional and, when present, only raises priority / activates disclosure.
+  add("distribution|distribution-sponsor", sponsorSignal && commercial.contractReady === true ? 88 : 79, sponsorSignal && commercial.contractReady === true ? "스폰서십 적용 상품" : "유통 스폰서 일반 운영 검토", "private_review_distribution_sponsor");
   if (trending) add("distribution|distribution-trending", 83, "인기·판매상위 신호 상품", "private_review_distribution_trending");
   if (newness || recentRegistration) add("distribution|distribution-new", 81, "신규 또는 최근 등록·확인 상품", "private_review_distribution_new");
   if (special || localOrigin || tourRecreation) add("distribution|distribution-special", 82, "특산·인증·한정·지역·레저 테마 상품", "private_review_distribution_special");
@@ -2067,7 +2069,6 @@ function productAutomaticAssignmentEligible(rowInput, requestedSectionKey) {
   if (!validProductSectionKey(key)) return false;
   const assignment = productAutomaticPlacement(row, key);
   if (!assignment) return false;
-  if (key === "distribution|distribution-sponsor" && !(row.commercialAssessment && row.commercialAssessment.contractReady === true)) return false;
   return true;
 }
 function productAutomaticPlacementOptions(rowInput, requestedSectionKey) {
@@ -2076,7 +2077,6 @@ function productAutomaticPlacementOptions(rowInput, requestedSectionKey) {
     const key = productPlacementKey(assignment);
     if (!validProductSectionKey(key) || (onlyKey && key !== onlyKey)) return false;
     if (assignment.approvalEligible !== true && assignment.reviewEligible !== true) return false;
-    if (key === "distribution|distribution-sponsor" && !(row.commercialAssessment && row.commercialAssessment.contractReady === true)) return false;
     return productAutomaticAssignmentEligible(row, key);
   });
 }
@@ -2320,7 +2320,6 @@ async function productCandidateAction(actorId, input) {
     if (!privateReview.eligible && !manualReview.eligible) { const error = new Error("비공개 섹션 후보로 지정할 수 없는 상품입니다. 보완 사항: " + (manualReview.reason || privateReview.reason)); error.statusCode = 409; throw error; }
     const requestedKey = text(input && input.placementKey);
     if (requestedKey && !validProductSectionKey(requestedKey)) { const error = new Error("18개 관리 섹션 중 하나를 선택해 주세요."); error.statusCode = 400; throw error; }
-    if (requestedKey === "distribution|distribution-sponsor" && !(evaluated.commercialAssessment && evaluated.commercialAssessment.contractReady === true)) { const error = new Error("유통 스폰서 섹션은 승인된 스폰서 계약 증빙이 있는 상품만 선택할 수 있습니다."); error.statusCode = 409; throw error; }
     const eligibleAssignments = array(evaluated.sectionAssignments).concat(privateReviewFallbackAssignments(evaluated)).filter((row) => row && (row.approvalEligible === true || row.reviewEligible === true));
     const fallbackKey = productPlacementKey(evaluated.approvedPlacement || evaluated.primaryPlacement || eligibleAssignments[0]);
     const selectedKey = requestedKey || fallbackKey;
@@ -2481,7 +2480,6 @@ function candidateRuntimePlacementOptions(productInput, payloadInput) {
     const item = plain(itemInput), key = productPlacementKey(item);
     if (!validProductSectionKey(key) || !allowedKeys.has(key)) continue;
     if (key === "tour|tour" && !tourEligible) continue;
-    if (key === "distribution|distribution-sponsor" && !(plain(product.commercialAssessment).contractReady === true || plain(payload.commercialAssessment).contractReady === true)) continue;
     if (item.reviewEligible === false || item.valueQualified === false) continue;
     const prior = byKey.get(key), nextScore = Number(item.score || 0), priorScore = Number(prior && prior.score || 0);
     if (!prior || nextScore > priorScore) byKey.set(key, Object.assign({}, item, { key }));

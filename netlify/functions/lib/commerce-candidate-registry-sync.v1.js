@@ -15,7 +15,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.13.3-distribution-publication-contract";
+const VERSION = "commerce-candidate-registry-sync-v1.13.4-optional-sponsorship-mode";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -413,6 +413,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
     sellerResponsibility:Object.assign({},plain(payload.sellerResponsibility),{verified:true,legalEntity:first(plain(payload.sellerResponsibility).legalEntity,payload.sellerLegalEntity,payload.sellerName,candidate.title),supportUrl:first(plain(payload.sellerResponsibility).supportUrl,payload.supportUrl,candidate.official_url)}),
     sponsorship:Object.assign({},plain(payload.sponsorship),
       revenueType==="sponsor" && directPayable ? {
+        active:true, enabled:true, required:true, mode:"sponsored",
         disclosed:true, verified:true, sponsorName:revenueProvider, provider:revenueProvider, contractId:revenueId,
         disclosureSource:"approved_sponsor_revenue_record"
       } : {}

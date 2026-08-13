@@ -15,7 +15,7 @@ const path = require("path");
 const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 
-const VERSION = "ip-slot-policy-runtime-v1.3.2-admin-editorial-placement-scope";
+const VERSION = "ip-slot-policy-runtime-v1.3.3-optional-sponsorship-mode";
 const POLICY_FILE = "ip-slot-policy.v1.json";
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -268,8 +268,22 @@ function hasSellerResponsibility(seller) {
   const service = first(seller && seller.supportUrl, seller && seller.customerServiceUrl, seller && seller.returnsUrl, seller && seller.servicePolicyUrl);
   return verified && !!entity && !!service;
 }
+function sponsorshipOf(item, contract, mapping) {
+  return (mapping && isObject(mapping.sponsorship) && mapping.sponsorship)
+    || (contract && isObject(contract.sponsorship) && contract.sponsorship)
+    || (item && isObject(item.sponsorship) && item.sponsorship)
+    || {};
+}
+function sponsorshipModeActive(item, contract, mapping) {
+  const sponsor = sponsorshipOf(item, contract, mapping);
+  const mode = lower(first(sponsor.mode, sponsor.state, sponsor.status));
+  return truthy(sponsor.active)
+    || truthy(sponsor.enabled)
+    || truthy(sponsor.required)
+    || ["sponsored","sponsorship","contracted","paid_sponsor","paid-sponsor"].includes(mode);
+}
 function sponsorDisclosed(item, contract, mapping) {
-  const sponsor = (mapping && mapping.sponsorship) || (contract && contract.sponsorship) || (item && item.sponsorship) || {};
+  const sponsor = sponsorshipOf(item, contract, mapping);
   return truthy(sponsor.disclosed) && truthy(sponsor.verified) && !!first(sponsor.sponsorName, sponsor.provider, sponsor.contractId);
 }
 function trendVerified(item, contract, mapping) {
@@ -387,7 +401,10 @@ function validateCandidate(item, details) {
   if (validation.requireIpRegionCodeForRegionalSupply !== false && region !== "NATIONWIDE" && regionCode !== region) reasons.push("IP_REGION_CODE_MISSING_OR_MISMATCH");
   if (validation.requireFreshAvailabilityVerification !== false && !fresh(verifiedAt, validation.maxAvailabilityVerificationAgeDays || 30)) reasons.push("IP_MARKET_AVAILABILITY_VERIFICATION_MISSING_OR_STALE");
   if (validation.requireSellerResponsibility !== false && !hasSellerResponsibility(seller)) reasons.push("IP_SELLER_RESPONSIBILITY_EVIDENCE_MISSING");
-  if (strategy.requires === "sponsorDisclosure" && validation.requireSponsorDisclosure !== false && !sponsorDisclosed(item, contract, mapping)) reasons.push("IP_SPONSOR_DISCLOSURE_MISSING");
+  // The Distribution Sponsor rail is a normal product rail by default.
+  // Sponsorship-specific disclosure/contract evidence becomes mandatory only
+  // when the product explicitly activates sponsorship mode.
+  if (strategy.requires === "sponsorDisclosure" && validation.requireSponsorDisclosure !== false && sponsorshipModeActive(item, contract, mapping) && !sponsorDisclosed(item, contract, mapping)) reasons.push("IP_SPONSOR_DISCLOSURE_MISSING");
   if (strategy.requires === "trendEvidence" && validation.requireTrendEvidenceForTrending !== false && !administratorPublication && !trendVerified(item, contract, mapping)) reasons.push("IP_TREND_EVIDENCE_MISSING");
   if (strategy.requires === "newnessEvidence" && validation.requireNewnessEvidenceForNew !== false && !newnessVerified(item, contract, mapping, validation)) reasons.push("IP_NEWNESS_EVIDENCE_MISSING_OR_STALE");
   if (strategy.requires === "specialEvidence" && validation.requireSpecialEvidenceForSpecial !== false && !administratorPublication && !specialVerified(item, contract, mapping)) reasons.push("IP_SPECIAL_EVIDENCE_MISSING");
