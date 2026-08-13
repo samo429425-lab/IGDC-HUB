@@ -601,21 +601,15 @@ a[id*="qna"]{
 </style>
 
 
-
-<style id="igdc-network-mobile-rightpanel-fling-final-integrated-v1">
-/* NETWORK MOBILE — right-panel bottom rail, portrait + landscape. */
-@media (max-width:1024px) and (pointer:coarse){
+<style id="igdc-network-landscape-right-fling-final-v3">
+@media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
   #nh-mobile-rail .list{
     -webkit-overflow-scrolling:touch !important;
     scroll-behavior:auto !important;
     scroll-snap-type:x proximity !important;
     touch-action:pan-x pan-y !important;
-    overscroll-behavior-x:contain !important;
   }
-
-  #nh-mobile-rail .list > *{
-    scroll-snap-stop:normal !important;
-  }
+  #nh-mobile-rail .list > *{ scroll-snap-stop:normal !important; }
 }
 </style>
 
@@ -2071,6 +2065,84 @@ window.addEventListener("message",function(ev){
 
 <script src="/assets/js/maru-search.js"></script>
 <script src="/assets/js/maru-searchbank-sync.js"></script>
+
+
+<script id="igdc-network-landscape-right-fling-booster-v3">
+(function(){
+  'use strict';
+  if(window['__IGDC_NETWORK_LANDSCAPE_RIGHT_FLING_BOOSTER_V3__']) return;
+  window['__IGDC_NETWORK_LANDSCAPE_RIGHT_FLING_BOOSTER_V3__'] = true;
+
+  function activeMode(){ return window.matchMedia('(max-width:1024px) and (orientation:landscape) and (pointer:coarse)').matches; }
+
+  function getStep(scroller, itemSelector){
+    var items = scroller.querySelectorAll(itemSelector);
+    if(items.length >= 2){
+      var d = Math.abs((items[1].offsetLeft||0) - (items[0].offsetLeft||0));
+      if(d > 8) return d;
+    }
+    var first = items[0];
+    if(first){
+      var r = first.getBoundingClientRect();
+      var cs = getComputedStyle(scroller);
+      var gap = parseFloat(cs.columnGap || cs.gap || '0') || 0;
+      if(r.width > 8) return r.width + gap;
+    }
+    return Math.max(120, scroller.clientWidth * 0.75);
+  }
+
+  function bind(scroller, itemSelector){
+    if(!scroller || scroller.dataset.igdcFlingBound === '1') return;
+    scroller.dataset.igdcFlingBound = '1';
+    var sx=0, sy=0, st=0, lx=0, lt=0, horizontal=false;
+
+    scroller.addEventListener('touchstart', function(ev){
+      if(!activeMode() || !ev.touches || ev.touches.length !== 1) return;
+      var t=ev.touches[0];
+      sx=lx=t.clientX; sy=t.clientY; st=lt=performance.now(); horizontal=false;
+    }, {passive:true});
+
+    scroller.addEventListener('touchmove', function(ev){
+      if(!activeMode() || !ev.touches || ev.touches.length !== 1) return;
+      var t=ev.touches[0], dx=t.clientX-sx, dy=t.clientY-sy;
+      if(Math.abs(dx) > Math.abs(dy)+5) horizontal=true;
+      lx=t.clientX; lt=performance.now();
+    }, {passive:true});
+
+    scroller.addEventListener('touchend', function(){
+      if(!activeMode() || !horizontal) return;
+      var now=performance.now();
+      var dx=lx-sx;
+      var totalDt=Math.max(16, lt-st);
+      var speed=Math.abs(dx)/totalDt; // px/ms
+      if(Math.abs(dx) < 24) return;
+
+      // Slow/normal drag remains native. Only a strong flick gets extra pages.
+      var extra=0;
+      if(speed >= 1.45) extra=3;
+      else if(speed >= 1.00) extra=2;
+      else if(speed >= 0.68) extra=1;
+      if(extra===0) return;
+
+      var step=getStep(scroller,itemSelector);
+      var dir = dx < 0 ? 1 : -1;
+      requestAnimationFrame(function(){
+        try{ scroller.scrollBy({left:dir*step*extra, behavior:'smooth'}); }
+        catch(e){ scroller.scrollLeft += dir*step*extra; }
+      });
+    }, {passive:true});
+  }
+
+  function arm(){
+    document.querySelectorAll('#nh-mobile-rail .list').forEach(function(el){ bind(el, '.card, .ad-box'); });
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', arm, {once:true});
+  else arm();
+  window.addEventListener('resize', arm, {passive:true});
+  window.addEventListener('orientationchange', arm, {passive:true});
+})();
+</script>
 
 </body>
 </html>
