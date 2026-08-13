@@ -599,7 +599,14 @@
   async function runProductFrontSync(operation,mode,sectionKey,productId,selection){
     if(!selectedCountry||productFrontSyncActive)return;
     if(!lastProductJson||!productRows.length){show('프론트에 매칭할 상품 조사 결과가 없습니다. 상품 조사를 먼저 실행해 주세요.','warn');return;}
-    var unmatch=operation==='unmatch',sectionMode=mode==='section',sectionsMode=mode==='sections',candidateMode=mode==='candidate',candidatesMode=mode==='candidates',selectedSections=sectionsMode?(Array.isArray(selection)?selection:[]):[],selectedProducts=candidatesMode?(Array.isArray(selection)?selection:[]):[],selectedProduct=candidateMode?productById(productId):null,label=candidateMode?(text(selectedProduct&&selectedProduct.productName||selectedProduct&&selectedProduct.title||productId)+' · 상품 1건'):(candidatesMode?'선택 상품 '+selectedProducts.length+'건':(sectionsMode?'선택 섹션 '+selectedSections.length+'개':(sectionMode?sectionLabel(sectionKey):'18개 전체 섹션'))),confirmation=unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH';
+    // Front MATCH has one authoritative section pipeline.
+    // The selected-sections path is the proven path that persists the current
+    // section assignments and then finalizes the public Snapshot once.
+    // Normalize the one-section and all-section buttons into that exact path so
+    // they cannot keep using stale/current-only all/section branches.
+    if(operation!=='unmatch'&&mode==='section'){selection=[sectionKey];mode='sections';sectionKey='';}
+    else if(operation!=='unmatch'&&mode==='all'){selection=PRODUCT_SECTIONS.map(function(row){return row.key;});mode='sections';sectionKey='';}
+    var unmatch=operation==='unmatch',sectionMode=mode==='section',sectionsMode=mode==='sections',candidateMode=mode==='candidate',candidatesMode=mode==='candidates',selectedSections=sectionsMode?(Array.isArray(selection)?selection:[]):[],selectedProducts=candidatesMode?(Array.isArray(selection)?selection:[]):[],selectedProduct=candidateMode?productById(productId):null,label=candidateMode?(text(selectedProduct&&selectedProduct.productName||selectedProduct&&selectedProduct.title||productId)+' · 상품 1건'):(candidatesMode?'선택 상품 '+selectedProducts.length+'건':(sectionsMode?(selectedSections.length===1?sectionLabel(selectedSections[0]):'선택 섹션 '+selectedSections.length+'개'):(sectionMode?sectionLabel(sectionKey):'18개 전체 섹션'))),confirmation=unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH';
     if(sectionsMode&&!selectedSections.length){show('매칭할 섹션을 먼저 선택해 주세요.','warn');return;}if(candidatesMode&&!selectedProducts.length){show('매칭할 상품을 먼저 선택해 주세요.','warn');return;}
     var selectedProductMap={};selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
     var targetRows=productRows.filter(function(row){

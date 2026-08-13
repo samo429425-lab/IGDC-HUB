@@ -2424,11 +2424,11 @@ window.addEventListener("message",function(ev){
 </script>
 
 
-<script id="igdc-tour-landscape-right-sensitivity-controller-v7">
+<script id="igdc-tour-landscape-right-sensitivity-controller-v8">
 (function(){
   'use strict';
-  if(window.__IGDC_TOUR_LANDSCAPE_RIGHT_SENSITIVITY_V7__) return;
-  window.__IGDC_TOUR_LANDSCAPE_RIGHT_SENSITIVITY_V7__=true;
+  if(window.__IGDC_TOUR_LANDSCAPE_RIGHT_SENSITIVITY_V8__) return;
+  window.__IGDC_TOUR_LANDSCAPE_RIGHT_SENSITIVITY_V8__=true;
 
   function active(){
     return matchMedia('(max-width:1024px) and (orientation:landscape) and (pointer:coarse)').matches;
@@ -2462,8 +2462,8 @@ window.addEventListener("message",function(ev){
 
   function bind(){
     var list=document.querySelector('#tour-mobile-rail .list');
-    if(!list || list.dataset.igdcTourSensitivityV7==='1') return;
-    list.dataset.igdcTourSensitivityV7='1';
+    if(!list || list.dataset.igdcTourSensitivityV8==='1') return;
+    list.dataset.igdcTourSensitivityV8='1';
 
     var sx=0, sy=0, lx=0, st=0, lt=0, start=0, horizontal=false;
 
@@ -2495,27 +2495,26 @@ window.addEventListener("message",function(ev){
       var step=stepFor(list);
       var dir=dx<0?1:-1;
 
-      /* 1) Very light / light drag:
-         keep the exact finger-distance feel for a wider range.
-         This is intentionally less sensitive than v6. */
-      if(speed < 0.72 && travel < viewport*0.48){
+      /* Wider gentle zone:
+         keep finger-distance movement longer before any page-sized jump. */
+      if(speed < 0.88 && travel < viewport*0.58){
         go(list,start-dx,false);
         return;
       }
 
-      /* 2) Medium swipe:
-         only after a clearly stronger gesture, move about one viewport. */
-      if(speed < 1.18){
+      /* Medium swipe:
+         page-sized movement now requires a clearer gesture than V7. */
+      if(speed < 1.32){
         go(list,start+dir*viewport,true);
         return;
       }
 
-      /* 3) Strong flick:
+      /* Strong flick:
          several cards, proportional to velocity. */
       var cards=4;
-      if(speed>=1.85) cards=7;
-      else if(speed>=1.55) cards=6;
-      else if(speed>=1.35) cards=5;
+      if(speed>=1.95) cards=7;
+      else if(speed>=1.68) cards=6;
+      else if(speed>=1.48) cards=5;
       else cards=4;
 
       go(list,list.scrollLeft+dir*step*cards,true);

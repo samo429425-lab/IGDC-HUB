@@ -1802,11 +1802,11 @@ window.addEventListener('resize', function(){
 
 
 
-<script id="igdc-social-portrait-right-multicard-controller-v3">
+<script id="igdc-social-portrait-right-multicard-controller-v4">
 (function(){
   'use strict';
-  if(window.__IGDC_SOCIAL_PORTRAIT_RIGHT_MULTI_V3__) return;
-  window.__IGDC_SOCIAL_PORTRAIT_RIGHT_MULTI_V3__=true;
+  if(window.__IGDC_SOCIAL_PORTRAIT_RIGHT_MULTI_V4__) return;
+  window.__IGDC_SOCIAL_PORTRAIT_RIGHT_MULTI_V4__=true;
 
   function active(){
     return matchMedia('(max-width:768px) and (orientation:portrait) and (pointer:coarse)').matches;
@@ -1829,44 +1829,29 @@ window.addEventListener('resize', function(){
     return Math.max(120,scroller.clientWidth);
   }
 
-  function glide(scroller,distance){
-    var oldSnap=scroller.style.getPropertyValue('scroll-snap-type');
-    var oldPriority=scroller.style.getPropertyPriority('scroll-snap-type');
+  function clamp(scroller,x){
+    return Math.max(0,Math.min(Math.max(0,scroller.scrollWidth-scroller.clientWidth),x));
+  }
 
-    /* Only strong flick: temporarily release mandatory snap. */
-    scroller.style.setProperty('scroll-snap-type','none','important');
-
-    var maxLeft=Math.max(0,scroller.scrollWidth-scroller.clientWidth);
-    var target=Math.max(0,Math.min(maxLeft,scroller.scrollLeft+distance));
-
-    try{
-      scroller.scrollTo({left:target,behavior:'smooth'});
-    }catch(e){
-      scroller.scrollLeft=target;
-    }
-
-    setTimeout(function(){
-      if(oldSnap){
-        scroller.style.setProperty('scroll-snap-type',oldSnap,oldPriority||'');
-      }else{
-        scroller.style.removeProperty('scroll-snap-type');
-      }
-    },440);
+  function go(scroller,x,smooth){
+    x=clamp(scroller,x);
+    try{ scroller.scrollTo({left:x,behavior:smooth?'smooth':'auto'}); }
+    catch(e){ scroller.scrollLeft=x; }
   }
 
   function bind(){
     var scroller=document.getElementById('rpMobileScroller');
-    if(!scroller || scroller.dataset.igdcSocialPortraitMultiV3==='1') return;
-    scroller.dataset.igdcSocialPortraitMultiV3='1';
+    if(!scroller || scroller.dataset.igdcSocialPortraitMultiV4==='1') return;
+    scroller.dataset.igdcSocialPortraitMultiV4='1';
 
-    var sx=0, sy=0, lx=0, st=0, lt=0, horizontal=false;
+    var sx=0, sy=0, lx=0, st=0, lt=0, start=0, horizontal=false;
 
     scroller.addEventListener('touchstart',function(ev){
       if(!active() || !ev.touches || ev.touches.length!==1) return;
       var t=ev.touches[0];
-      sx=lx=t.clientX;
-      sy=t.clientY;
+      sx=lx=t.clientX; sy=t.clientY;
       st=lt=performance.now();
+      start=scroller.scrollLeft;
       horizontal=false;
     },{passive:true});
 
@@ -1875,8 +1860,7 @@ window.addEventListener('resize', function(){
       var t=ev.touches[0];
       var dx=t.clientX-sx, dy=t.clientY-sy;
       if(Math.abs(dx)>Math.abs(dy)+4) horizontal=true;
-      lx=t.clientX;
-      lt=performance.now();
+      lx=t.clientX; lt=performance.now();
     },{passive:true});
 
     scroller.addEventListener('touchend',function(){
@@ -1885,24 +1869,43 @@ window.addEventListener('resize', function(){
       var dx=lx-sx;
       var dt=Math.max(16,lt-st);
       var speed=Math.abs(dx)/dt;
-
-      /* Gentle swipe stays fully native -> existing one-card behavior remains.
-         Only stronger flick receives extra multi-card travel. */
-      if(Math.abs(dx)<24 || speed<0.78) return;
-
-      var cards=3;
-      if(speed>=1.60) cards=7;
-      else if(speed>=1.30) cards=6;
-      else if(speed>=1.05) cards=5;
-      else if(speed>=0.90) cards=4;
-      else cards=3;
-
+      var travel=Math.abs(dx);
       var step=stepFor(scroller);
       var dir=dx<0?1:-1;
 
-      requestAnimationFrame(function(){
-        glide(scroller,dir*step*cards);
-      });
+      /* Gentle: preserve the current natural small movement. */
+      if(speed<0.58 && travel<step*0.58){
+        go(scroller,start-dx,false);
+        return;
+      }
+
+      /* Medium: one-card movement. */
+      if(speed<1.10){
+        go(scroller,start+dir*step,true);
+        return;
+      }
+
+      /* Strong only: several cards.
+         Threshold is intentionally higher than V3 to avoid over-sensitivity. */
+      var cards=3;
+      if(speed>=1.95) cards=6;
+      else if(speed>=1.65) cards=5;
+      else if(speed>=1.38) cards=4;
+      else cards=3;
+
+      var oldSnap=scroller.style.getPropertyValue('scroll-snap-type');
+      var oldPriority=scroller.style.getPropertyPriority('scroll-snap-type');
+      scroller.style.setProperty('scroll-snap-type','none','important');
+
+      go(scroller,scroller.scrollLeft+dir*step*cards,true);
+
+      setTimeout(function(){
+        if(oldSnap){
+          scroller.style.setProperty('scroll-snap-type',oldSnap,oldPriority||'');
+        }else{
+          scroller.style.removeProperty('scroll-snap-type');
+        }
+      },450);
     },{passive:true});
   }
 
