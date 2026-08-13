@@ -10,7 +10,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 let SocialStore = null;
 try { SocialStore = require("./lib/social-candidate-store.v1"); } catch (_error) { SocialStore = null; }
 
-const VERSION = "social-candidate-review-api-v1.0.2-sample-preserve-candidate-only";
+const VERSION = "social-candidate-review-api-v1.0.3-lightweight-diagnostics";
 const READ_ROLES = new Set(["owner", "admin", "super_admin", "site_manager", "site_manager_director", "director", "social_manager", "media_manager", "commerce_manager"]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -94,6 +94,77 @@ async function candidateSnapshot(root) {
 }
 function rowsFrom(doc) { return Array.isArray(doc && doc.items) ? doc.items : []; }
 function normalizeRows(rows) { return rows.map((row) => SocialStore && SocialStore.normalizeDbRow ? SocialStore.normalizeDbRow(row) : row); }
+
+function assetClass(row) {
+  const raw = row && row.raw || {};
+  return text(row && (row.assetClass || row.asset_class) || raw.assetClass || (raw.latestContentAsset === true ? "latest_content" : "influencer_registry"));
+}
+function reviewStatus(row) { return lower(row && (row.reviewStatus || row.review_status)); }
+function isExcluded(row) { return /^(search_excluded|permanent_blocked|blocked)$/.test(reviewStatus(row)); }
+function isBlocked(row) { return /^(permanent_blocked|blocked)$/.test(reviewStatus(row)); }
+function rowCountryScopes(row) {
+  const raw = row && row.raw || {};
+  const values = row && (row.countryScopes || row.country_scopes) || raw.countryScopes || [];
+  return Array.isArray(values) ? values.map((v) => text(v).toUpperCase()).filter(Boolean) : [];
+}
+function scopedRows(rows, countryCode) {
+  const code = text(countryCode).toUpperCase();
+  if (!code) return rows.slice();
+  return rows.filter((row) => {
+    const scopes = rowCountryScopes(row);
+    return !scopes.length || scopes.includes(code);
+  });
+}
+function diagnosticSectionSummary(rows) {
+  const result = {};
+  (SocialStore && SocialStore.Policy && SocialStore.Policy.SECTION_KEYS || []).forEach((sectionKey) => {
+    const sectionRows = rows.filter((row) => text(row && (row.sectionKey || row.section_key)) === sectionKey);
+    result[sectionKey] = {
+      total: sectionRows.length,
+      active: sectionRows.filter((row) => !isExcluded(row)).length,
+      influencers: sectionRows.filter((row) => assetClass(row) === "influencer_registry" && !isExcluded(row)).length,
+      latestContents: sectionRows.filter((row) => assetClass(row) === "latest_content" && !isExcluded(row)).length,
+      approved: sectionRows.filter((row) => reviewStatus(row) === "approved" && !isExcluded(row)).length,
+      searchExcluded: sectionRows.filter((row) => reviewStatus(row) === "search_excluded").length,
+      blocked: sectionRows.filter(isBlocked).length
+    };
+  });
+  return result;
+}
+function lightweightDiagnostic(base, rows, kind, countryCode) {
+  const scoped = scopedRows(rows, countryCode);
+  const wanted = kind === "registry" ? "influencer_registry" : kind === "latest" ? "latest_content" : "";
+  const filtered = wanted ? scoped.filter((row) => assetClass(row) === wanted) : scoped;
+  return {
+    ok: true,
+    reportType: kind === "registry" ? "igdc-social-influencer-registry-diagnostic" : kind === "latest" ? "igdc-social-latest-content-diagnostic" : "igdc-social-candidate-queue-diagnostic",
+    version: VERSION,
+    generatedAt: new Date().toISOString(),
+    scope: { countryCode: text(countryCode).toUpperCase() || null, mode: text(countryCode) ? "country" : "global" },
+    source: base.source,
+    queue: {
+      schema: "social_candidates.supabase.v1",
+      libraryVersion: base.libraryVersion,
+      renderPolicy: "private_review_only",
+      rowPayloadIncluded: false,
+      rowCount: filtered.length,
+      rotationPolicy: base.rotationPolicy
+    },
+    counts: {
+      total: filtered.length,
+      active: filtered.filter((row) => !isExcluded(row)).length,
+      approved: filtered.filter((row) => reviewStatus(row) === "approved" && !isExcluded(row)).length,
+      excluded: filtered.filter((row) => reviewStatus(row) === "search_excluded").length,
+      blocked: filtered.filter(isBlocked).length
+    },
+    sections: diagnosticSectionSummary(wanted ? scoped.filter((row) => assetClass(row) === wanted) : scoped),
+    summary: base.summary,
+    blockingConditions: base.blockingConditions,
+    safety: base.safety,
+    note: "진단 화면에는 전체 후보 rows를 포함하지 않습니다. 전체 원문은 후보 목록 JSON에서 별도로 내려받습니다."
+  };
+}
+
 function publicSnapshotDigest(root) {
   const files = [path.join(root, "data", "social.snapshot.json"), path.join(__dirname, "data", "social.snapshot.json")];
   for (const file of files) {
@@ -127,45 +198,36 @@ exports.handler = async function(event) {
     const blockingConditions = [];
     if (!rows.length) blockingConditions.push("social_candidate_queue_empty");
     if (!summary.promotableCount) blockingConditions.push("no_verified_promotable_social_yet");
+    const rotationPolicy = source.doc && source.doc.rotationPolicy || {
+      targetPerSection: SocialStore.POOL_TARGET_PER_SECTION,
+      minPerSection: SocialStore.POOL_MIN_PER_SECTION,
+      maxPerSection: SocialStore.POOL_MAX_PER_SECTION,
+      publicSlotsPerSection: SocialStore.ROTATION_LIMIT_PER_SECTION
+    };
+    const safety = {
+      readOnly: true, writes: false, publicSnapshotPublication: false, socialSnapshotMutation: false,
+      externalProviderCalls: false, externalMembershipOverride: false, paymentOrRevenueMutation: false, secretsExcluded: true
+    };
+    const sourceInfo = {
+      candidateFileLoaded: !!source.doc, candidateFile: source.file, candidateSourceMode: source.sourceMode,
+      supabaseStoreError: source.storeError || null, publicSnapshotChecked: publicSnapshot.checked,
+      publicSnapshotSections: publicSnapshot.sectionKeys, publicSnapshotSectionCounts: publicSnapshot.sectionCounts
+    };
+    const base = {
+      source: sourceInfo, libraryVersion: source.doc && source.doc.version || null, rotationPolicy, summary, blockingConditions, safety
+    };
+    const params = event.queryStringParameters || {};
+    const action = lower(params.action || "candidates");
+    const countryCode = text(params.countryCode || params.country).toUpperCase();
+    if (action === "diagnostic") return json(200, Object.assign(lightweightDiagnostic(base, rows, "all", countryCode), { administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode } }));
+    if (action === "registry_diagnostic" || action === "influencer_registry_diagnostic") return json(200, Object.assign(lightweightDiagnostic(base, rows, "registry", countryCode), { administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode } }));
+    if (action === "latest_content_diagnostic" || action === "waiting_diagnostic") return json(200, Object.assign(lightweightDiagnostic(base, rows, "latest", countryCode), { administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode } }));
     return json(200, {
-      ok: true,
-      reportType: "igdc-social-candidate-queue-diagnostic",
-      version: VERSION,
-      generatedAt: new Date().toISOString(),
-      safety: {
-        readOnly: true,
-        writes: false,
-        publicSnapshotPublication: false,
-        socialSnapshotMutation: false,
-        externalProviderCalls: false,
-        externalMembershipOverride: false,
-        paymentOrRevenueMutation: false,
-        secretsExcluded: true
-      },
-      administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode },
-      source: {
-        candidateFileLoaded: !!source.doc,
-        candidateFile: source.file,
-        candidateSourceMode: source.sourceMode,
-        supabaseStoreError: source.storeError || null,
-        publicSnapshotChecked: publicSnapshot.checked,
-        publicSnapshotSections: publicSnapshot.sectionKeys,
-        publicSnapshotSectionCounts: publicSnapshot.sectionCounts
-      },
-      queue: {
-        schema: "social_candidates.supabase.v1",
-        libraryVersion: source.doc && source.doc.version || null,
-        renderPolicy: "private_review_only",
-        rotationPolicy: source.doc && source.doc.rotationPolicy || {
-          targetPerSection: SocialStore.POOL_TARGET_PER_SECTION,
-          minPerSection: SocialStore.POOL_MIN_PER_SECTION,
-          maxPerSection: SocialStore.POOL_MAX_PER_SECTION,
-          publicSlotsPerSection: SocialStore.ROTATION_LIMIT_PER_SECTION
-        },
-        rows
-      },
-      summary,
-      blockingConditions
+      ok: true, reportType: "igdc-social-candidate-queue", version: VERSION, generatedAt: new Date().toISOString(),
+      safety, administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode },
+      source: sourceInfo,
+      queue: { schema: "social_candidates.supabase.v1", libraryVersion: source.doc && source.doc.version || null, renderPolicy: "private_review_only", rotationPolicy, rows },
+      summary, blockingConditions
     });
   } catch (error) {
     return json(error.statusCode || 500, { ok: false, version: VERSION, error: error.code || "social_candidate_review_failed", message: error.message || String(error) });

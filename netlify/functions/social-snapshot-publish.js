@@ -11,9 +11,10 @@ const path = require("path");
 const SocialStore = require("./lib/social-candidate-store.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const CountryRouting = require("./lib/social-country-routing.v1");
+const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.4.0-canonical-searchbank-build-pipeline";
+  "social-snapshot-publish-v1.4.1-runtime-pipeline-diagnostic";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -126,10 +127,16 @@ function candidateIdsFrom(params) {
   ).slice(0, 1000);
 }
 function buildHookSetting() {
+  // The Social publisher triggers the same site build that runs the canonical
+  // Social release -> SearchBank adapter -> Snapshot Engine chain. Reuse an
+  // already configured site-level Commerce hook when a Social-specific hook
+  // is not present; this avoids silently stopping at release_stored_waiting_for_build.
   const names = [
     "SOCIAL_NETLIFY_BUILD_HOOK_URL",
     "IGDC_NETLIFY_BUILD_HOOK_URL",
     "NETLIFY_BUILD_HOOK_URL",
+    "COMMERCE_RELEASE_BUILD_HOOK_URL",
+    "BUILD_HOOK_URL",
   ];
   for (const name of names) {
     const value = text(process.env[name]);
@@ -142,6 +149,13 @@ function buildHookStatus() {
   return {
     configured: !!setting.value,
     environment: setting.value ? setting.name : "SOCIAL_NETLIFY_BUILD_HOOK_URL",
+    acceptedEnvironmentNames: [
+      "SOCIAL_NETLIFY_BUILD_HOOK_URL",
+      "IGDC_NETLIFY_BUILD_HOOK_URL",
+      "NETLIFY_BUILD_HOOK_URL",
+      "COMMERCE_RELEASE_BUILD_HOOK_URL",
+      "BUILD_HOOK_URL",
+    ],
   };
 }
 async function triggerCanonicalBuild(release, operation) {
@@ -150,9 +164,16 @@ async function triggerCanonicalBuild(release, operation) {
     return {
       ok: false,
       status: "not_configured",
-      requiredEnvironment: "SOCIAL_NETLIFY_BUILD_HOOK_URL",
+      requiredEnvironment: "SOCIAL_NETLIFY_BUILD_HOOK_URL (or existing site build hook)",
+      acceptedEnvironmentNames: [
+        "SOCIAL_NETLIFY_BUILD_HOOK_URL",
+        "IGDC_NETLIFY_BUILD_HOOK_URL",
+        "NETLIFY_BUILD_HOOK_URL",
+        "COMMERCE_RELEASE_BUILD_HOOK_URL",
+        "BUILD_HOOK_URL",
+      ],
       message:
-        "승인본은 저장됐지만 정식 정적 스냅샷 배포를 시작할 Netlify Build Hook이 설정되지 않았습니다.",
+        "승인본은 저장됐지만 정식 정적 스냅샷 배포를 시작할 Netlify Build Hook을 찾지 못했습니다.",
     };
   }
   let parsed;
@@ -218,6 +239,75 @@ async function triggerCanonicalBuild(release, operation) {
     clearTimeout(timeout);
   }
 }
+
+async function latestStoredReleaseForRoute(route) {
+  const token = scopeToken(route);
+  const exactRows = await SocialStore.selectReleases(
+    "select=release_id,status,snapshot_hash,snapshot,created_at,notes&status=eq.stored&notes=like." +
+      encodeURIComponent("scope=" + token + ";%") +
+      "&order=created_at.desc&limit=1",
+  );
+  let latest = Array.isArray(exactRows) && exactRows[0];
+  if (!latest && token !== "GLOBAL") {
+    const globalRows = await SocialStore.selectReleases(
+      "select=release_id,status,snapshot_hash,snapshot,created_at,notes&status=eq.stored&notes=like." +
+        encodeURIComponent("scope=GLOBAL;%") +
+        "&order=created_at.desc&limit=1",
+    );
+    latest = Array.isArray(globalRows) && globalRows[0];
+  }
+  return latest || null;
+}
+function releasedIdsBySection(snapshot) {
+  const sections = snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections || {};
+  const result = {};
+  SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
+    result[sectionKey] = (Array.isArray(sections[sectionKey]) ? sections[sectionKey] : [])
+      .filter((slot) => text(slot && slot.type) === "external_social" && text(slot && slot.audit && slot.audit.origin) === "social_candidates")
+      .map((slot) => text(slot && (slot.contentId || slot.candidateId || slot.id || slot.audit && slot.audit.candidate_id)))
+      .filter(Boolean);
+  });
+  return result;
+}
+async function runtimePipelineDiagnostic(route) {
+  const base = baseSnapshot();
+  const release = await latestStoredReleaseForRoute(route);
+  const finalIds = releasedIdsBySection(base.doc);
+  const finalFlat = Object.keys(finalIds).reduce((all, key) => all.concat(finalIds[key] || []), []);
+  const out = {
+    ok: false,
+    reportType: "igdc-social-canonical-pipeline-verification",
+    version: VERSION,
+    generatedAt: SocialStore.nowIso(),
+    scope: { countryCode: text(route && route.countryCode).toUpperCase() || null, mode: text(route && route.countryCode) ? "country" : "global" },
+    canonicalPipeline: ["stored_social_release","social_searchbank_release_adapter","existing_snapshot_engine","data/social.snapshot.json","existing_social_automap"],
+    buildHook: buildHookStatus(),
+    release: release ? { releaseId: text(release.release_id), status: text(release.status), snapshotHash: text(release.snapshot_hash), createdAt: text(release.created_at), notes: text(release.notes) } : null,
+    searchBankRelease: null,
+    finalSocialSnapshot: { source: base.file, candidateCount: finalFlat.length, idsBySection: finalIds },
+    comparison: { expectedSearchBankItems: 0, finalCandidateItems: finalFlat.length, missingIds: [], extraIds: [] },
+    pipeline: { storedRelease: release ? "passed" : "missing", searchBankAdapter: "not_run", finalSnapshotReadback: base.doc ? "passed" : "missing" },
+    safety: { readOnly: true, runtimeFileWrite: false, socialSnapshotMutation: false, buildTrigger: false }
+  };
+  if (!release || !release.snapshot) {
+    out.reason = "stored_social_release_not_found";
+    return out;
+  }
+  const converted = SocialSearchBankReleaseAdapter.releaseToBank(release);
+  const expectedIds = (converted.bank && Array.isArray(converted.bank.items) ? converted.bank.items : []).map((item) => text(item && item.id)).filter(Boolean);
+  const finalSet = new Set(finalFlat);
+  const expectedSet = new Set(expectedIds);
+  const missingIds = expectedIds.filter((id) => !finalSet.has(id));
+  const extraIds = finalFlat.filter((id) => !expectedSet.has(id));
+  out.searchBankRelease = { adapterVersion: SocialSearchBankReleaseAdapter.VERSION, itemCount: expectedIds.length, counts: converted.counts || {}, hash: SocialSearchBankReleaseAdapter.sha256(converted.bank) };
+  out.comparison = { expectedSearchBankItems: expectedIds.length, finalCandidateItems: finalFlat.length, missingIds, extraIds };
+  out.pipeline.searchBankAdapter = "passed";
+  out.ok = missingIds.length === 0 && expectedIds.length === finalFlat.length;
+  out.pipeline.finalSnapshotReadback = out.ok ? "passed" : "mismatch";
+  if (!out.ok) out.reason = "final_social_snapshot_readback_mismatch";
+  return out;
+}
+
 exports.handler = async function (event) {
   if (event && event.httpMethod === "OPTIONS")
     return SocialStore.response(204, {});
@@ -291,6 +381,10 @@ exports.handler = async function (event) {
       });
     }
     const route = CountryRouting.resolve(event, params);
+    if (operation === "pipeline_diagnostic" || operation === "pipeline_verification") {
+      const report = await runtimePipelineDiagnostic(route);
+      return SocialStore.response(200, report);
+    }
     const base = await latestStoredBase(route);
     let rows = [];
     let unpublish = null;

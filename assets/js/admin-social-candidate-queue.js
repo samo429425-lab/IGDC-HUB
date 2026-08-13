@@ -1,4 +1,4 @@
-/* IGDC Social Hub Influencer Registry + Latest Content Control v2.5.0 */
+/* IGDC Social Hub Influencer Registry + Latest Content Control v2.5.1 - lightweight diagnostics */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -9,8 +9,6 @@
     ROTATION = "/.netlify/functions/social-rotation-selector",
     PUBLISH = "/.netlify/functions/social-snapshot-publish",
     STATIC_SOCIAL_SNAPSHOT = "/data/social.snapshot.json",
-    PIPELINE_REPORT = "/data/social-pipeline.report.json",
-    SEARCHBANK_SOCIAL_RELEASE = "/data/social-searchbank.release.snapshot.json",
     COUNTRY = "/.netlify/functions/social-country-route";
   var SECTIONS = [
     ["social-youtube", "YouTube", "youtube"],
@@ -1097,7 +1095,11 @@
         ok: true,
         reportType: "igdc-social-latest-content-collection-progress",
         generatedAt: now.toISOString(),
-        scope: currentScope(),
+        scope: Object.assign({}, currentScope(), {
+          selectedCountryCode: selectedCountry() || null,
+          detectedCountryCode: text(detectedCountry && detectedCountry.countryCode).toUpperCase() || null,
+          detectionAvailable: !!text(detectedCountry && detectedCountry.countryCode)
+        }),
         selectedSection: text($("collectorSection").value),
         selectedBatchSize: Number($("collectorBatchSize").value) || 10,
         collectorState: text($("collectorState").textContent),
@@ -2000,65 +2002,22 @@
   }
   async function downloadPipelineVerification() {
     try {
-      var documents = await Promise.all([
-          staticJson(PIPELINE_REPORT),
-          staticJson(SEARCHBANK_SOCIAL_RELEASE),
-          staticJson(STATIC_SOCIAL_SNAPSHOT),
-        ]),
-        report = documents[0],
-        searchBankRelease = documents[1],
-        finalSnapshot = documents[2],
-        idsBySection = releasedCandidateIds(finalSnapshot),
-        finalCount = Object.keys(idsBySection).reduce(function (sum, key) {
-          return sum + idsBySection[key].length;
-        }, 0),
-        expected = Number(
-          report &&
-            report.searchBankRelease &&
-            report.searchBankRelease.itemCount,
-        ),
-        verification = {
-          ok:
-            report &&
-            report.status === "published" &&
-            finalCount === expected &&
-            !(
-              report.finalSocialSnapshot &&
-              report.finalSocialSnapshot.missingIds &&
-              report.finalSocialSnapshot.missingIds.length
-            ),
-          reportType: "igdc-social-canonical-pipeline-verification",
-          generatedAt: new Date().toISOString(),
-          canonicalPipeline: [
-            "stored_social_release",
-            "social_searchbank_release_adapter",
-            "existing_snapshot_engine",
-            "data/social.snapshot.json",
-            "existing_social_automap",
-          ],
-          comparison: {
-            expectedSearchBankItems: expected,
-            finalCandidateItems: finalCount,
-            idsBySection: idsBySection,
-          },
-          pipelineReport: report,
-          socialSearchBankRelease: searchBankRelease,
-          finalSocialSnapshot: finalSnapshot,
-        };
+      var q = new URLSearchParams({
+          action: "pipeline_diagnostic",
+          countryCode: selectedCountry(),
+          scopeMode: scopeMode(),
+        }),
+        verification = await get(PUBLISH + "?" + q.toString());
       download("igdc-social-canonical-pipeline-verification.json", verification);
       diagnostic(verification);
       show(
         verification.ok
           ? "정식 파이프라인 단계별 검증 JSON을 다운로드했습니다."
-          : "파이프라인 불일치가 포함된 점검 JSON을 다운로드했습니다.",
+          : "현재 배포 상태와 저장 승인본 사이의 불일치가 포함된 점검 JSON을 다운로드했습니다.",
         verification.ok ? "ok" : "warn",
       );
     } catch (error) {
-      show(
-        (error.message || "파이프라인 JSON을 읽지 못했습니다.") +
-          " 배포 빌드가 완료된 뒤 다시 확인해 주세요.",
-        "warn",
-      );
+      show(error.message || "파이프라인 검증을 실행하지 못했습니다.", "warn");
     }
   }
   async function autoCurate(sectionKey) {
@@ -2422,25 +2381,34 @@
       }
     });
   }
+  async function runQueueDiagnostic(action, successMessage) {
+    try {
+      var q = new URLSearchParams({
+          action: action,
+          countryCode: selectedCountry(),
+          scopeMode: scopeMode(),
+        }),
+        d = await get(REVIEW + "?" + q.toString());
+      diagnostic(d);
+      show(successMessage, "ok");
+    } catch (e) {
+      show(e.message || "점검 JSON을 읽지 못했습니다.", "warn");
+    }
+  }
   function bind() {
     options();
     $("refreshBtn").onclick = refresh;
-    $("diagnosticBtn").onclick = async function () {
-      try {
-        var d = await get(REVIEW + "?action=diagnostic");
-        diagnostic(d);
-        if (d.queue && d.queue.rows) {
-          rows = d.queue.rows;
-          renderSummary(d.summary);
-          filters(d.summary);
-          renderSections();
-          renderExclusions();
-        }
-        show("소셜 후보 점검 JSON을 읽었습니다.", "ok");
-      } catch (e) {
-        show(e.message, "warn");
-      }
+    $("diagnosticBtn").onclick = function () {
+      runQueueDiagnostic("diagnostic", "소셜 종합 점검 JSON을 읽었습니다.");
     };
+    if ($("registryDiagnosticBtn"))
+      $("registryDiagnosticBtn").onclick = function () {
+        runQueueDiagnostic("registry_diagnostic", "인플루언서 등록부 점검 JSON을 읽었습니다.");
+      };
+    if ($("latestContentDiagnosticBtn"))
+      $("latestContentDiagnosticBtn").onclick = function () {
+        runQueueDiagnostic("latest_content_diagnostic", "최신 콘텐츠 후보·교체 대기열 점검 JSON을 읽었습니다.");
+      };
     $("downloadJsonBtn").onclick = function () {
       if (diagnosticCache)
         download(

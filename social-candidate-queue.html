@@ -440,7 +440,7 @@
       </p>
       <div class="bar">
         <button id="refreshBtn">대기열 새로고침</button
-        ><button id="diagnosticBtn" class="secondary">소셜 점검 JSON</button
+        ><button id="diagnosticBtn" class="secondary">소셜 종합 점검 JSON</button
         ><button id="rotationBtn" class="secondary">최종 100개 다시 정리</button
         ><button id="publishPreviewBtn" class="publish">
           실제 적용 전 미리보기</button
@@ -453,7 +453,7 @@
         ><button id="pipelineVerificationJsonBtn" class="secondary">
           파이프라인 검증 JSON</button
         ><button id="downloadJsonBtn" class="secondary" disabled>
-          점검 JSON</button
+          현재 점검 JSON</button
         ><button id="downloadCandidateListBtn" class="secondary">
           후보 목록 JSON</button
         ><button id="returnBtn" class="secondary">관리자 화면으로</button
@@ -618,7 +618,8 @@
           <span id="candidateCapacityState" class="state"></span>
         </div>
         <div class="reviewbar">
-          <button id="selectAllFinalBtn" class="secondary">
+          <button id="registryDiagnosticBtn" class="secondary">인플루언서 등록부 점검 JSON</button
+          ><button id="selectAllFinalBtn" class="secondary">
             현재 조회 전체 선택</button
           ><button id="clearFinalSelectionBtn" class="secondary">
             선택 전체 해제</button
@@ -652,7 +653,8 @@
           <span id="waitingCapacityState" class="state"></span>
         </div>
         <div class="reviewbar">
-          <button id="selectAllWaitingBtn" class="secondary">
+          <button id="latestContentDiagnosticBtn" class="secondary">최신 콘텐츠 대기열 점검 JSON</button
+          ><button id="selectAllWaitingBtn" class="secondary">
             현재 조회 전체 선택</button
           ><button id="clearWaitingSelectionBtn" class="secondary">
             선택 전체 해제</button
