@@ -15,7 +15,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.13.1-canonical-nationwide-region-key";
+const VERSION = "commerce-candidate-registry-sync-v1.13.2-tour-assignment-authoritative";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -247,8 +247,12 @@ function authoritativeProductClass(candidate,payload,page,slotStrategy){
   // travel-operator evidence gate; recreation goods and dining offers stay on
   // the external-seller/referral travel_product contract.
   if(page==="tour"){
+    // Tour policy compatibility is decided before the Front Match is persisted.
+    // At publication time, preserve that authoritative page/section decision
+    // instead of reclassifying the same item again. Only genuine booking/service
+    // offers use travel_service; every other approved Tour offer is travel_product.
     if(qualifiedTourServiceCandidate(candidate,payload)&&allowed.includes("travel_service")) return "travel_service";
-    if((qualifiedTourRecreationProductCandidate(candidate,payload)||qualifiedTourDiningCandidate(candidate,payload))&&allowed.includes("travel_product")) return "travel_product";
+    if(allowed.includes("travel_product")) return "travel_product";
   }
   if(allowed.includes("physical_product")) return "physical_product";
   return existing&&allowed.includes(existing)?existing:first(allowed[0],existing);
@@ -480,10 +484,10 @@ async function syncApprovedCandidates(input){
       let assignment=assignmentRows.find((row)=>explicitAuditSource?lower(row.publication_status)==="publish_requested":["ready","publish_requested"].includes(lower(row.publication_status)));
       if(!assignment&&marker) assignment=syntheticAssignmentFromMarker(candidate,marker);
       if(!assignment) continue;
-      // Old assignments created before the Tour classifier fix must not become
-      // public merely because their persisted page says `tour`. Only actual
-      // booking/travel services may enter the Tour SearchBank route.
-      if(lower(assignment.hub_key)==="tour"&&!qualifiedTourCandidate(candidate,sourcePayload(candidate))) continue;
+      // A persisted Front Match is the authoritative publication route. Do not
+      // run the Tour classifier a second time here: reclassification belongs to
+      // candidate selection, not to the publish bridge, and could otherwise
+      // cancel an already matched Tour item before it reaches SearchBank.
       const publicationRequested=lower(assignment.publication_status)==="publish_requested";
       let avail=avBy.get(candidate.id)||[];
       if(!avail.length&&marker&&publicationRequested) avail=syntheticAvailabilityFromMarker(candidate,marker);

@@ -15,7 +15,7 @@ const path = require("path");
 const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 
-const VERSION = "ip-slot-policy-runtime-v1.4.0-tour-product-class-aware";
+const VERSION = "ip-slot-policy-runtime-v1.3.1-tour-service-evidence-scope";
 const POLICY_FILE = "ip-slot-policy.v1.json";
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -377,6 +377,11 @@ function validateCandidate(item, details) {
   if (strategy.requires === "trendEvidence" && validation.requireTrendEvidenceForTrending !== false && !trendVerified(item, contract, mapping)) reasons.push("IP_TREND_EVIDENCE_MISSING");
   if (strategy.requires === "newnessEvidence" && validation.requireNewnessEvidenceForNew !== false && !newnessVerified(item, contract, mapping, validation)) reasons.push("IP_NEWNESS_EVIDENCE_MISSING_OR_STALE");
   if (strategy.requires === "specialEvidence" && validation.requireSpecialEvidenceForSpecial !== false && !specialVerified(item, contract, mapping)) reasons.push("IP_SPECIAL_EVIDENCE_MISSING");
+  // Tour travel-service offers need a responsible operator/booking-service
+  // evidence record. Physical/recreation/dining products mapped to the same
+  // Tour rail remain external-seller products and are already protected by the
+  // market/seller-responsibility gates above; do not require a travel operator
+  // licence-style record from those product cards.
   if (strategy.requires === "travelOperatorEvidence" && validation.requireTravelOperatorEvidence !== false && classes.includes("travel_service") && !travelVerified(item, contract, mapping)) reasons.push("IP_TRAVEL_OPERATOR_EVIDENCE_MISSING");
 
   return {

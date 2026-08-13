@@ -601,25 +601,9 @@ a[id*="qna"]{
 </style>
 
 
-<style id="igdc-network-landscape-right-fling-final-v3">
-@media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
-  #nh-mobile-rail .list{
-    -webkit-overflow-scrolling:touch !important;
-    scroll-behavior:auto !important;
-    scroll-snap-type:x proximity !important;
-    touch-action:pan-x pan-y !important;
-  }
-  #nh-mobile-rail .list > *{ scroll-snap-stop:normal !important; }
-}
-</style>
-
-
-
-<style id="igdc-network-mobile-right-fling-repair-v4">
-/* NETWORK / MARKET HUB — MOBILE RIGHT PANEL ONLY
-   Portrait + landscape:
-   - normal drag keeps the existing natural page/card movement
-   - fast flick may travel across multiple cards
+<style id="igdc-network-mobile-right-touch-3stage-v5">
+/* NETWORK / MARKET HUB — MOBILE RIGHT RAIL ONLY.
+   Portrait and landscape use free drag; controller decides the final travel.
    Main content and card geometry are untouched. */
 @media (max-width:1024px) and (pointer:coarse){
   #nh-mobile-rail .list{
@@ -627,11 +611,10 @@ a[id*="qna"]{
     overflow-y:hidden !important;
     -webkit-overflow-scrolling:touch !important;
     scroll-behavior:auto !important;
-    scroll-snap-type:x proximity !important;
+    scroll-snap-type:none !important;
     touch-action:pan-x pan-y !important;
     overscroll-behavior-x:contain !important;
   }
-
   #nh-mobile-rail .list > *{
     scroll-snap-stop:normal !important;
   }
@@ -1636,7 +1619,7 @@ window.addEventListener("message",function(ev){
     if(!src||!dst) return;
     var cards=src.querySelectorAll('.ad-box');
     if(!cards.length) return;
-    var max=20, frag=document.createDocumentFragment();
+    var max=100, frag=document.createDocumentFragment();
     for(var i=0;i<Math.min(cards.length,max);i++){
       var c=cards[i].cloneNode(true);
       c.classList.add('card');
@@ -2092,122 +2075,63 @@ window.addEventListener("message",function(ev){
 <script src="/assets/js/maru-searchbank-sync.js"></script>
 
 
-<script id="igdc-network-landscape-right-fling-booster-v3">
+<script id="igdc-network-mobile-right-touch-3stage-controller-v5">
 (function(){
   'use strict';
-  if(window['__IGDC_NETWORK_LANDSCAPE_RIGHT_FLING_BOOSTER_V3__']) return;
-  window['__IGDC_NETWORK_LANDSCAPE_RIGHT_FLING_BOOSTER_V3__'] = true;
-
-  function activeMode(){ return window.matchMedia('(max-width:1024px) and (orientation:landscape) and (pointer:coarse)').matches; }
-
-  function getStep(scroller, itemSelector){
-    var items = scroller.querySelectorAll(itemSelector);
-    if(items.length >= 2){
-      var d = Math.abs((items[1].offsetLeft||0) - (items[0].offsetLeft||0));
-      if(d > 8) return d;
-    }
-    var first = items[0];
-    if(first){
-      var r = first.getBoundingClientRect();
-      var cs = getComputedStyle(scroller);
-      var gap = parseFloat(cs.columnGap || cs.gap || '0') || 0;
-      if(r.width > 8) return r.width + gap;
-    }
-    return Math.max(120, scroller.clientWidth * 0.75);
-  }
-
-  function bind(scroller, itemSelector){
-    if(!scroller || scroller.dataset.igdcFlingBound === '1') return;
-    scroller.dataset.igdcFlingBound = '1';
-    var sx=0, sy=0, st=0, lx=0, lt=0, horizontal=false;
-
-    scroller.addEventListener('touchstart', function(ev){
-      if(!activeMode() || !ev.touches || ev.touches.length !== 1) return;
-      var t=ev.touches[0];
-      sx=lx=t.clientX; sy=t.clientY; st=lt=performance.now(); horizontal=false;
-    }, {passive:true});
-
-    scroller.addEventListener('touchmove', function(ev){
-      if(!activeMode() || !ev.touches || ev.touches.length !== 1) return;
-      var t=ev.touches[0], dx=t.clientX-sx, dy=t.clientY-sy;
-      if(Math.abs(dx) > Math.abs(dy)+5) horizontal=true;
-      lx=t.clientX; lt=performance.now();
-    }, {passive:true});
-
-    scroller.addEventListener('touchend', function(){
-      if(!activeMode() || !horizontal) return;
-      var now=performance.now();
-      var dx=lx-sx;
-      var totalDt=Math.max(16, lt-st);
-      var speed=Math.abs(dx)/totalDt; // px/ms
-      if(Math.abs(dx) < 24) return;
-
-      // Slow/normal drag remains native. Only a strong flick gets extra pages.
-      var extra=0;
-      if(speed >= 1.45) extra=3;
-      else if(speed >= 1.00) extra=2;
-      else if(speed >= 0.68) extra=1;
-      if(extra===0) return;
-
-      var step=getStep(scroller,itemSelector);
-      var dir = dx < 0 ? 1 : -1;
-      requestAnimationFrame(function(){
-        try{ scroller.scrollBy({left:dir*step*extra, behavior:'smooth'}); }
-        catch(e){ scroller.scrollLeft += dir*step*extra; }
-      });
-    }, {passive:true});
-  }
-
-  function arm(){
-    document.querySelectorAll('#nh-mobile-rail .list').forEach(function(el){ bind(el, '.card, .ad-box'); });
-  }
-
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', arm, {once:true});
-  else arm();
-  window.addEventListener('resize', arm, {passive:true});
-  window.addEventListener('orientationchange', arm, {passive:true});
-})();
-</script>
-
-
-
-<script id="igdc-network-mobile-right-fling-booster-v4">
-(function(){
-  'use strict';
-  if(window.__IGDC_NETWORK_MOBILE_RIGHT_FLING_V4__) return;
-  window.__IGDC_NETWORK_MOBILE_RIGHT_FLING_V4__=true;
+  if(window.__IGDC_NETWORK_TOUCH_3STAGE_V5__) return;
+  window.__IGDC_NETWORK_TOUCH_3STAGE_V5__=true;
 
   function active(){
     return matchMedia('(max-width:1024px) and (pointer:coarse)').matches;
   }
 
-  function stepFor(list){
-    var items=list.querySelectorAll('.card, .ad-box');
-    if(items.length>1){
-      var d=Math.abs((items[1].offsetLeft||0)-(items[0].offsetLeft||0));
-      if(d>8) return d;
-    }
-    var first=items[0];
-    if(first){
-      var w=first.getBoundingClientRect().width;
-      var cs=getComputedStyle(list);
-      var gap=parseFloat(cs.columnGap||cs.gap||'0')||0;
-      if(w>8) return w+gap;
-    }
-    return Math.max(120,list.clientWidth*0.8);
+  function isLandscape(){
+    return matchMedia('(orientation:landscape)').matches;
   }
 
-  function bind(list){
-    if(!list || list.dataset.igdcNetworkFlingV4==='1') return;
-    list.dataset.igdcNetworkFlingV4='1';
+  function items(list){
+    return list.querySelectorAll('.card, .ad-box');
+  }
 
-    var sx=0, sy=0, lx=0, st=0, lt=0, horizontal=false;
+  function cardStep(list){
+    var a=items(list);
+    if(a.length>1){
+      var d=Math.abs((a[1].offsetLeft||0)-(a[0].offsetLeft||0));
+      if(d>8) return d;
+    }
+    var first=a[0];
+    if(first){
+      var r=first.getBoundingClientRect();
+      var cs=getComputedStyle(list);
+      var gap=parseFloat(cs.columnGap||cs.gap||'0')||0;
+      if(r.width>8) return r.width+gap;
+    }
+    return Math.max(120,list.clientWidth);
+  }
+
+  function clamp(list,x){
+    return Math.max(0,Math.min(Math.max(0,list.scrollWidth-list.clientWidth),x));
+  }
+
+  function go(list,x,smooth){
+    x=clamp(list,x);
+    try{ list.scrollTo({left:x,behavior:smooth?'smooth':'auto'}); }
+    catch(e){ list.scrollLeft=x; }
+  }
+
+  function bind(){
+    var list=document.querySelector('#nh-mobile-rail .list');
+    if(!list || list.dataset.igdcNetwork3stageV5==='1') return;
+    list.dataset.igdcNetwork3stageV5='1';
+
+    var sx=0, sy=0, lx=0, st=0, lt=0, startScroll=0, horizontal=false;
 
     list.addEventListener('touchstart',function(ev){
       if(!active() || !ev.touches || ev.touches.length!==1) return;
       var t=ev.touches[0];
       sx=lx=t.clientX; sy=t.clientY;
       st=lt=performance.now();
+      startScroll=list.scrollLeft;
       horizontal=false;
     },{passive:true});
 
@@ -2216,8 +2140,7 @@ window.addEventListener("message",function(ev){
       var t=ev.touches[0];
       var dx=t.clientX-sx, dy=t.clientY-sy;
       if(Math.abs(dx)>Math.abs(dy)+4) horizontal=true;
-      lx=t.clientX;
-      lt=performance.now();
+      lx=t.clientX; lt=performance.now();
     },{passive:true});
 
     list.addEventListener('touchend',function(){
@@ -2226,42 +2149,66 @@ window.addEventListener("message",function(ev){
       var dx=lx-sx;
       var dt=Math.max(16,lt-st);
       var speed=Math.abs(dx)/dt;
-      if(Math.abs(dx)<22) return;
-
-      /* Slow/normal swipe remains browser-native.
-         Only a strong flick receives extra multi-card travel. */
-      var extra=0;
-      if(speed>=1.45) extra=4;
-      else if(speed>=1.00) extra=3;
-      else if(speed>=0.68) extra=2;
-      else if(speed>=0.46) extra=1;
-      if(!extra) return;
-
-      var step=stepFor(list);
       var dir=dx<0?1:-1;
+      var step=cardStep(list);
+      var viewport=Math.max(1,list.clientWidth);
+      var travel=Math.abs(dx);
 
-      requestAnimationFrame(function(){
-        try{
-          list.scrollBy({left:dir*step*extra,behavior:'smooth'});
-        }catch(e){
-          list.scrollLeft+=dir*step*extra;
+      if(!isLandscape()){
+        /* PORTRAIT
+           Very light drag: stop roughly where the finger left it (half-card is possible).
+           Normal light swipe: one card.
+           Strong flick: several cards. */
+        if(speed<0.42 && travel<step*0.48){
+          go(list,startScroll-dx,false);
+          return;
         }
-      });
+        if(speed<0.78){
+          go(list,startScroll+dir*step,true);
+          return;
+        }
+
+        var pcards=2;
+        if(speed>=1.55) pcards=6;
+        else if(speed>=1.25) pcards=5;
+        else if(speed>=1.00) pcards=4;
+        else pcards=3;
+        go(list,list.scrollLeft+dir*step*pcards,true);
+        return;
+      }
+
+      /* LANDSCAPE — three-stage feel
+         1) very light: move only as much as the finger actually moved
+         2) medium: about one viewport
+         3) strong: several cards, proportional to velocity */
+      if(speed<0.40 && travel<viewport*0.32){
+        go(list,startScroll-dx,false);
+        return;
+      }
+
+      if(speed<0.92){
+        go(list,startScroll+dir*viewport,true);
+        return;
+      }
+
+      var cards=3;
+      if(speed>=1.70) cards=7;
+      else if(speed>=1.40) cards=6;
+      else if(speed>=1.15) cards=5;
+      else cards=4;
+
+      go(list,list.scrollLeft+dir*step*cards,true);
     },{passive:true});
   }
 
-  function arm(){
-    bind(document.querySelector('#nh-mobile-rail .list'));
-  }
-
   if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',arm,{once:true});
+    document.addEventListener('DOMContentLoaded',bind,{once:true});
   }else{
-    arm();
+    bind();
   }
 
-  window.addEventListener('resize',arm,{passive:true});
-  window.addEventListener('orientationchange',arm,{passive:true});
+  addEventListener('resize',bind,{passive:true});
+  addEventListener('orientationchange',bind,{passive:true});
 })();
 </script>
 

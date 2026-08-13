@@ -2324,15 +2324,10 @@ a[id*="qna"]{
 </style>
 
 
-
-<style id="igdc-home-portrait-main-right-fling-repair-v4">
-/* HOME MOBILE PORTRAIT ONLY
-   A) MAIN 5 sections: release hard one-card snap stop.
-   B) RIGHT top/middle/bottom: keep card geometry, but remove viewport-width paging feel.
-   Landscape rules are intentionally untouched. */
+<style id="igdc-home-portrait-main-gentle-onecard-v5">
+/* HOME MOBILE PORTRAIT — MAIN 5 ONLY.
+   Right panel is intentionally untouched. */
 @media (max-width:1024px) and (orientation:portrait) and (pointer:coarse){
-
-  /* MAIN 5 */
   section.shopping-section .shop-scroller{
     overflow-x:auto !important;
     overflow-y:hidden !important;
@@ -2342,28 +2337,12 @@ a[id*="qna"]{
     touch-action:pan-x pan-y !important;
     overscroll-behavior-x:contain !important;
   }
-
   section.shopping-section .shop-row > .shop-card,
   section.shopping-section .thumb-grid[data-psom-key="home_1"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_2"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_3"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_4"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_5"] > *{
-    scroll-snap-stop:normal !important;
-  }
-
-  /* RIGHT top / middle / bottom */
-  html body .ad-panel .ad-section .ad-scroll{
-    overflow-x:auto !important;
-    overflow-y:hidden !important;
-    -webkit-overflow-scrolling:touch !important;
-    scroll-behavior:auto !important;
-    scroll-snap-type:x proximity !important;
-    touch-action:pan-x pan-y !important;
-    overscroll-behavior-x:contain !important;
-  }
-
-  html body .ad-panel .ad-section .ad-list > *{
     scroll-snap-stop:normal !important;
   }
 }
@@ -4674,97 +4653,25 @@ window.addEventListener("message",function(ev){
 })();
 </script>
 
-<script id="igdc-home-landscape-right-fling-booster-v3">
+
+<script id="igdc-home-portrait-main-gentle-onecard-controller-v5">
 (function(){
   'use strict';
-  if(window['__IGDC_HOME_LANDSCAPE_RIGHT_FLING_BOOSTER_V3__']) return;
-  window['__IGDC_HOME_LANDSCAPE_RIGHT_FLING_BOOSTER_V3__'] = true;
-
-  function activeMode(){ return window.matchMedia('(max-width:1024px) and (orientation:landscape) and (pointer:coarse)').matches; }
-
-  function getStep(scroller, itemSelector){
-    var items = scroller.querySelectorAll(itemSelector);
-    if(items.length >= 2){
-      var d = Math.abs((items[1].offsetLeft||0) - (items[0].offsetLeft||0));
-      if(d > 8) return d;
-    }
-    var first = items[0];
-    if(first){
-      var r = first.getBoundingClientRect();
-      var cs = getComputedStyle(scroller);
-      var gap = parseFloat(cs.columnGap || cs.gap || '0') || 0;
-      if(r.width > 8) return r.width + gap;
-    }
-    return Math.max(120, scroller.clientWidth * 0.75);
-  }
-
-  function bind(scroller, itemSelector){
-    if(!scroller || scroller.dataset.igdcFlingBound === '1') return;
-    scroller.dataset.igdcFlingBound = '1';
-    var sx=0, sy=0, st=0, lx=0, lt=0, horizontal=false;
-
-    scroller.addEventListener('touchstart', function(ev){
-      if(!activeMode() || !ev.touches || ev.touches.length !== 1) return;
-      var t=ev.touches[0];
-      sx=lx=t.clientX; sy=t.clientY; st=lt=performance.now(); horizontal=false;
-    }, {passive:true});
-
-    scroller.addEventListener('touchmove', function(ev){
-      if(!activeMode() || !ev.touches || ev.touches.length !== 1) return;
-      var t=ev.touches[0], dx=t.clientX-sx, dy=t.clientY-sy;
-      if(Math.abs(dx) > Math.abs(dy)+5) horizontal=true;
-      lx=t.clientX; lt=performance.now();
-    }, {passive:true});
-
-    scroller.addEventListener('touchend', function(){
-      if(!activeMode() || !horizontal) return;
-      var now=performance.now();
-      var dx=lx-sx;
-      var totalDt=Math.max(16, lt-st);
-      var speed=Math.abs(dx)/totalDt; // px/ms
-      if(Math.abs(dx) < 24) return;
-
-      // Slow/normal drag remains native. Only a strong flick gets extra pages.
-      var extra=0;
-      if(speed >= 1.45) extra=3;
-      else if(speed >= 1.00) extra=2;
-      else if(speed >= 0.68) extra=1;
-      if(extra===0) return;
-
-      var step=getStep(scroller,itemSelector);
-      var dir = dx < 0 ? 1 : -1;
-      requestAnimationFrame(function(){
-        try{ scroller.scrollBy({left:dir*step*extra, behavior:'smooth'}); }
-        catch(e){ scroller.scrollLeft += dir*step*extra; }
-      });
-    }, {passive:true});
-  }
-
-  function arm(){
-    document.querySelectorAll('.ad-panel .ad-section .ad-scroll').forEach(function(el){ bind(el, '.ad-list > .ad-box, .ad-list > *'); });
-  }
-
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', arm, {once:true});
-  else arm();
-  window.addEventListener('resize', arm, {passive:true});
-  window.addEventListener('orientationchange', arm, {passive:true});
-})();
-</script>
-
-
-
-<script id="igdc-home-portrait-fling-booster-v4">
-(function(){
-  'use strict';
-  if(window.__IGDC_HOME_PORTRAIT_FLING_V4__) return;
-  window.__IGDC_HOME_PORTRAIT_FLING_V4__=true;
+  if(window.__IGDC_HOME_PORTRAIT_MAIN_GENTLE_V5__) return;
+  window.__IGDC_HOME_PORTRAIT_MAIN_GENTLE_V5__=true;
 
   function active(){
     return matchMedia('(max-width:1024px) and (orientation:portrait) and (pointer:coarse)').matches;
   }
 
-  function stepFor(scroller, itemSel){
-    var items=scroller.querySelectorAll(itemSel);
+  function getItems(scroller){
+    var list=scroller.querySelectorAll('.shop-card');
+    if(list.length) return list;
+    return scroller.querySelectorAll('.thumb-grid[data-psom-key] > *');
+  }
+
+  function stepFor(scroller){
+    var items=getItems(scroller);
     if(items.length>1){
       var d=Math.abs((items[1].offsetLeft||0)-(items[0].offsetLeft||0));
       if(d>8) return d;
@@ -4776,12 +4683,123 @@ window.addEventListener("message",function(ev){
       var gap=parseFloat(cs.columnGap||cs.gap||'0')||0;
       if(w>8) return w+gap;
     }
-    return Math.max(120, scroller.clientWidth*0.7);
+    return Math.max(120,scroller.clientWidth);
   }
 
-  function bind(scroller,itemSel){
-    if(!scroller || scroller.dataset.igdcPortraitFlingV4==='1') return;
-    scroller.dataset.igdcPortraitFlingV4='1';
+  function bind(scroller){
+    if(!scroller || scroller.dataset.igdcPortraitMainGentleV5==='1') return;
+    scroller.dataset.igdcPortraitMainGentleV5='1';
+
+    var sx=0, sy=0, lx=0, st=0, lt=0, startScroll=0, horizontal=false;
+
+    scroller.addEventListener('touchstart',function(ev){
+      if(!active() || !ev.touches || ev.touches.length!==1) return;
+      var t=ev.touches[0];
+      sx=lx=t.clientX; sy=t.clientY;
+      st=lt=performance.now();
+      startScroll=scroller.scrollLeft;
+      horizontal=false;
+    },{passive:true});
+
+    scroller.addEventListener('touchmove',function(ev){
+      if(!active() || !ev.touches || ev.touches.length!==1) return;
+      var t=ev.touches[0];
+      var dx=t.clientX-sx, dy=t.clientY-sy;
+      if(Math.abs(dx)>Math.abs(dy)+4) horizontal=true;
+      lx=t.clientX; lt=performance.now();
+    },{passive:true});
+
+    scroller.addEventListener('touchend',function(){
+      if(!active() || !horizontal) return;
+
+      var dx=lx-sx;
+      var dt=Math.max(16,lt-st);
+      var speed=Math.abs(dx)/dt;
+      if(Math.abs(dx)<18) return;
+
+      /* Gentle/normal swipe: cap movement to ONE card.
+         Strong flick is left native so it may travel farther. */
+      if(speed > 0.82) return;
+
+      var step=stepFor(scroller);
+      var dir=dx<0 ? 1 : -1;
+      var base=Math.round(startScroll/step)*step;
+      var target=Math.max(0,Math.min(scroller.scrollWidth-scroller.clientWidth, base+dir*step));
+
+      var oldSnap=scroller.style.getPropertyValue('scroll-snap-type');
+      var oldPriority=scroller.style.getPropertyPriority('scroll-snap-type');
+      scroller.style.setProperty('scroll-snap-type','none','important');
+
+      requestAnimationFrame(function(){
+        try{ scroller.scrollTo({left:target,behavior:'smooth'}); }
+        catch(e){ scroller.scrollLeft=target; }
+      });
+
+      setTimeout(function(){
+        if(oldSnap) scroller.style.setProperty('scroll-snap-type',oldSnap,oldPriority||'');
+        else scroller.style.removeProperty('scroll-snap-type');
+      },380);
+    },{passive:true});
+  }
+
+  function arm(){
+    document.querySelectorAll('section.shopping-section .shop-scroller').forEach(bind);
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',arm,{once:true});
+  else arm();
+  addEventListener('resize',arm,{passive:true});
+  addEventListener('orientationchange',arm,{passive:true});
+})();
+</script>
+
+
+<script id="igdc-home-landscape-right-multicard-controller-v5">
+(function(){
+  'use strict';
+  if(window.__IGDC_HOME_LANDSCAPE_RIGHT_MULTI_V5__) return;
+  window.__IGDC_HOME_LANDSCAPE_RIGHT_MULTI_V5__=true;
+
+  function active(){
+    return matchMedia('(max-width:1024px) and (orientation:landscape) and (pointer:coarse)').matches;
+  }
+
+  function stepFor(scroller){
+    var items=scroller.querySelectorAll('.ad-list > .ad-box, .ad-list > *');
+    if(items.length>1){
+      var d=Math.abs((items[1].offsetLeft||0)-(items[0].offsetLeft||0));
+      if(d>8) return d;
+    }
+    var first=items[0];
+    if(first){
+      var w=first.getBoundingClientRect().width;
+      var cs=getComputedStyle(scroller);
+      var gap=parseFloat(cs.columnGap||cs.gap||'0')||0;
+      if(w>8) return w+gap;
+    }
+    return Math.max(120,scroller.clientWidth*0.7);
+  }
+
+  function glide(scroller,distance){
+    var oldSnap=scroller.style.getPropertyValue('scroll-snap-type');
+    var oldPriority=scroller.style.getPropertyPriority('scroll-snap-type');
+    scroller.style.setProperty('scroll-snap-type','none','important');
+
+    var maxLeft=Math.max(0,scroller.scrollWidth-scroller.clientWidth);
+    var target=Math.max(0,Math.min(maxLeft,scroller.scrollLeft+distance));
+
+    try{ scroller.scrollTo({left:target,behavior:'smooth'}); }
+    catch(e){ scroller.scrollLeft=target; }
+
+    setTimeout(function(){
+      if(oldSnap) scroller.style.setProperty('scroll-snap-type',oldSnap,oldPriority||'');
+      else scroller.style.removeProperty('scroll-snap-type');
+    },450);
+  }
+
+  function bind(scroller){
+    if(!scroller || scroller.dataset.igdcLandscapeRightMultiV5==='1') return;
+    scroller.dataset.igdcLandscapeRightMultiV5='1';
 
     var sx=0, sy=0, lx=0, st=0, lt=0, horizontal=false;
 
@@ -4803,43 +4821,36 @@ window.addEventListener("message",function(ev){
 
     scroller.addEventListener('touchend',function(){
       if(!active() || !horizontal) return;
+
       var dx=lx-sx;
       var dt=Math.max(16,lt-st);
       var speed=Math.abs(dx)/dt;
-      if(Math.abs(dx)<22) return;
 
-      /* Ordinary drag stays native. Strong flick alone receives extra card travel. */
-      var extra=0;
-      if(speed>=1.40) extra=4;
-      else if(speed>=0.95) extra=3;
-      else if(speed>=0.62) extra=2;
-      else if(speed>=0.42) extra=1;
-      if(!extra) return;
+      /* Gentle swipe stays exactly as it is now.
+         Strong flick receives extra travel proportional to velocity. */
+      if(Math.abs(dx)<24 || speed<0.82) return;
 
-      var step=stepFor(scroller,itemSel);
+      var cards=2;
+      if(speed>=1.65) cards=7;
+      else if(speed>=1.35) cards=6;
+      else if(speed>=1.10) cards=5;
+      else if(speed>=0.95) cards=4;
+      else if(speed>=0.82) cards=3;
+
       var dir=dx<0?1:-1;
+      var step=stepFor(scroller);
       requestAnimationFrame(function(){
-        try{ scroller.scrollBy({left:dir*step*extra,behavior:'smooth'}); }
-        catch(e){ scroller.scrollLeft+=dir*step*extra; }
+        glide(scroller,dir*step*cards);
       });
     },{passive:true});
   }
 
   function arm(){
-    document.querySelectorAll('section.shopping-section .shop-scroller')
-      .forEach(function(el){
-        bind(el,'.shop-card, .thumb-grid[data-psom-key] > *');
-      });
-
-    document.querySelectorAll('.ad-panel .ad-section .ad-scroll')
-      .forEach(function(el){
-        bind(el,'.ad-list > .ad-box, .ad-list > *');
-      });
+    document.querySelectorAll('.ad-panel .ad-section .ad-scroll').forEach(bind);
   }
 
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',arm,{once:true});
   else arm();
-
   addEventListener('resize',arm,{passive:true});
   addEventListener('orientationchange',arm,{passive:true});
 })();

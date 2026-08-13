@@ -950,35 +950,19 @@ a[id*="qna"]{
 </style>
 
 
-<style id="igdc-tour-landscape-right-fling-final-v3">
-@media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
-  #tour-mobile-rail .list{
-    -webkit-overflow-scrolling:touch !important;
-    scroll-behavior:auto !important;
-    scroll-snap-type:x proximity !important;
-    touch-action:pan-x pan-y !important;
-  }
-  #tour-mobile-rail .list > *{ scroll-snap-stop:normal !important; }
-}
-</style>
-
-
-
-<style id="igdc-tour-landscape-multicard-fling-v6">
-/* TOUR MOBILE LANDSCAPE RIGHT RAIL ONLY.
-   Portrait remains untouched.
-   Card geometry and 100-slot capacity remain unchanged. */
+<style id="igdc-tour-landscape-right-sensitivity-v7">
+/* TOUR — MOBILE LANDSCAPE RIGHT RAIL ONLY.
+   Portrait and geometry remain untouched. */
 @media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
   #tour-mobile-rail .list{
     overflow-x:auto !important;
     overflow-y:hidden !important;
     -webkit-overflow-scrolling:touch !important;
     scroll-behavior:auto !important;
-    scroll-snap-type:x proximity !important;
+    scroll-snap-type:none !important;
     touch-action:pan-x pan-y !important;
     overscroll-behavior-x:contain !important;
   }
-
   #tour-mobile-rail .list > *{
     scroll-snap-stop:normal !important;
   }
@@ -2440,90 +2424,11 @@ window.addEventListener("message",function(ev){
 </script>
 
 
-<script id="igdc-tour-landscape-right-fling-booster-v3">
+<script id="igdc-tour-landscape-right-sensitivity-controller-v7">
 (function(){
   'use strict';
-  if(window['__IGDC_TOUR_LANDSCAPE_RIGHT_FLING_BOOSTER_V3__']) return;
-  window['__IGDC_TOUR_LANDSCAPE_RIGHT_FLING_BOOSTER_V3__'] = true;
-
-  function activeMode(){ return window.matchMedia('(max-width:1024px) and (orientation:landscape) and (pointer:coarse)').matches; }
-
-  function getStep(scroller, itemSelector){
-    var items = scroller.querySelectorAll(itemSelector);
-    if(items.length >= 2){
-      var d = Math.abs((items[1].offsetLeft||0) - (items[0].offsetLeft||0));
-      if(d > 8) return d;
-    }
-    var first = items[0];
-    if(first){
-      var r = first.getBoundingClientRect();
-      var cs = getComputedStyle(scroller);
-      var gap = parseFloat(cs.columnGap || cs.gap || '0') || 0;
-      if(r.width > 8) return r.width + gap;
-    }
-    return Math.max(120, scroller.clientWidth * 0.75);
-  }
-
-  function bind(scroller, itemSelector){
-    if(!scroller || scroller.dataset.igdcFlingBound === '1') return;
-    scroller.dataset.igdcFlingBound = '1';
-    var sx=0, sy=0, st=0, lx=0, lt=0, horizontal=false;
-
-    scroller.addEventListener('touchstart', function(ev){
-      if(!activeMode() || !ev.touches || ev.touches.length !== 1) return;
-      var t=ev.touches[0];
-      sx=lx=t.clientX; sy=t.clientY; st=lt=performance.now(); horizontal=false;
-    }, {passive:true});
-
-    scroller.addEventListener('touchmove', function(ev){
-      if(!activeMode() || !ev.touches || ev.touches.length !== 1) return;
-      var t=ev.touches[0], dx=t.clientX-sx, dy=t.clientY-sy;
-      if(Math.abs(dx) > Math.abs(dy)+5) horizontal=true;
-      lx=t.clientX; lt=performance.now();
-    }, {passive:true});
-
-    scroller.addEventListener('touchend', function(){
-      if(!activeMode() || !horizontal) return;
-      var now=performance.now();
-      var dx=lx-sx;
-      var totalDt=Math.max(16, lt-st);
-      var speed=Math.abs(dx)/totalDt; // px/ms
-      if(Math.abs(dx) < 24) return;
-
-      // Slow/normal drag remains native. Only a strong flick gets extra pages.
-      var extra=0;
-      if(speed >= 1.45) extra=3;
-      else if(speed >= 1.00) extra=2;
-      else if(speed >= 0.68) extra=1;
-      if(extra===0) return;
-
-      var step=getStep(scroller,itemSelector);
-      var dir = dx < 0 ? 1 : -1;
-      requestAnimationFrame(function(){
-        try{ scroller.scrollBy({left:dir*step*extra, behavior:'smooth'}); }
-        catch(e){ scroller.scrollLeft += dir*step*extra; }
-      });
-    }, {passive:true});
-  }
-
-  function arm(){
-    document.querySelectorAll('#tour-mobile-rail .list').forEach(function(el){ bind(el, '.card, .ad-box'); });
-  }
-
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', arm, {once:true});
-  else arm();
-  window.addEventListener('resize', arm, {passive:true});
-  window.addEventListener('orientationchange', arm, {passive:true});
-})();
-</script>
-
-
-
-<script id="igdc-tour-landscape-multicard-fling-controller-v6">
-(function(){
-  'use strict';
-  if(window.__IGDC_TOUR_LANDSCAPE_MULTICARD_FLING_V6__) return;
-  window.__IGDC_TOUR_LANDSCAPE_MULTICARD_FLING_V6__=true;
+  if(window.__IGDC_TOUR_LANDSCAPE_RIGHT_SENSITIVITY_V7__) return;
+  window.__IGDC_TOUR_LANDSCAPE_RIGHT_SENSITIVITY_V7__=true;
 
   function active(){
     return matchMedia('(max-width:1024px) and (orientation:landscape) and (pointer:coarse)').matches;
@@ -2545,54 +2450,38 @@ window.addEventListener("message",function(ev){
     return Math.max(120,list.clientWidth*0.75);
   }
 
-  function glide(list, distance){
-    var oldSnap=list.style.getPropertyValue('scroll-snap-type');
-    var oldPriority=list.style.getPropertyPriority('scroll-snap-type');
+  function clamp(list,x){
+    return Math.max(0,Math.min(Math.max(0,list.scrollWidth-list.clientWidth),x));
+  }
 
-    list.style.setProperty('scroll-snap-type','none','important');
-
-    var maxLeft=Math.max(0,list.scrollWidth-list.clientWidth);
-    var target=Math.max(0,Math.min(maxLeft,list.scrollLeft+distance));
-
-    try{
-      list.scrollTo({left:target,behavior:'smooth'});
-    }catch(e){
-      list.scrollLeft=target;
-    }
-
-    setTimeout(function(){
-      if(oldSnap){
-        list.style.setProperty('scroll-snap-type',oldSnap,oldPriority||'');
-      }else{
-        list.style.removeProperty('scroll-snap-type');
-      }
-    },460);
+  function go(list,x,smooth){
+    x=clamp(list,x);
+    try{ list.scrollTo({left:x,behavior:smooth?'smooth':'auto'}); }
+    catch(e){ list.scrollLeft=x; }
   }
 
   function bind(){
     var list=document.querySelector('#tour-mobile-rail .list');
-    if(!list || list.dataset.igdcTourMulticardFlingV6==='1') return;
-    list.dataset.igdcTourMulticardFlingV6='1';
+    if(!list || list.dataset.igdcTourSensitivityV7==='1') return;
+    list.dataset.igdcTourSensitivityV7='1';
 
-    var sx=0, sy=0, lx=0, st=0, lt=0, horizontal=false;
+    var sx=0, sy=0, lx=0, st=0, lt=0, start=0, horizontal=false;
 
     list.addEventListener('touchstart',function(ev){
       if(!active() || !ev.touches || ev.touches.length!==1) return;
       var t=ev.touches[0];
-      sx=lx=t.clientX;
-      sy=t.clientY;
+      sx=lx=t.clientX; sy=t.clientY;
       st=lt=performance.now();
+      start=list.scrollLeft;
       horizontal=false;
     },{passive:true});
 
     list.addEventListener('touchmove',function(ev){
       if(!active() || !ev.touches || ev.touches.length!==1) return;
       var t=ev.touches[0];
-      var dx=t.clientX-sx;
-      var dy=t.clientY-sy;
+      var dx=t.clientX-sx, dy=t.clientY-sy;
       if(Math.abs(dx)>Math.abs(dy)+4) horizontal=true;
-      lx=t.clientX;
-      lt=performance.now();
+      lx=t.clientX; lt=performance.now();
     },{passive:true});
 
     list.addEventListener('touchend',function(){
@@ -2601,24 +2490,35 @@ window.addEventListener("message",function(ev){
       var dx=lx-sx;
       var dt=Math.max(16,lt-st);
       var speed=Math.abs(dx)/dt;
-
-      /* Light swipe stays native.
-         Stronger flick travels several cards according to velocity. */
-      if(Math.abs(dx)<24 || speed<0.72) return;
-
-      var cards=2;
-      if(speed>=1.65) cards=7;
-      else if(speed>=1.35) cards=6;
-      else if(speed>=1.10) cards=5;
-      else if(speed>=0.90) cards=4;
-      else if(speed>=0.72) cards=3;
-
+      var travel=Math.abs(dx);
+      var viewport=Math.max(1,list.clientWidth);
       var step=stepFor(list);
       var dir=dx<0?1:-1;
 
-      requestAnimationFrame(function(){
-        glide(list,dir*step*cards);
-      });
+      /* 1) Very light / light drag:
+         keep the exact finger-distance feel for a wider range.
+         This is intentionally less sensitive than v6. */
+      if(speed < 0.72 && travel < viewport*0.48){
+        go(list,start-dx,false);
+        return;
+      }
+
+      /* 2) Medium swipe:
+         only after a clearly stronger gesture, move about one viewport. */
+      if(speed < 1.18){
+        go(list,start+dir*viewport,true);
+        return;
+      }
+
+      /* 3) Strong flick:
+         several cards, proportional to velocity. */
+      var cards=4;
+      if(speed>=1.85) cards=7;
+      else if(speed>=1.55) cards=6;
+      else if(speed>=1.35) cards=5;
+      else cards=4;
+
+      go(list,list.scrollLeft+dir*step*cards,true);
     },{passive:true});
   }
 
