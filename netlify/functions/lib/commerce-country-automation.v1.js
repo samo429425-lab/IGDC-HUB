@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.17.0-front-policy-aware-balanced-auto-placement";
+const VERSION = "commerce-country-automation-v3.17.1-bounded-front-match-fresh-validation-reuse";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2442,6 +2442,16 @@ function candidateRuntimePriorLiveProof(payloadInput, productInput) {
   const fresh = Number.isFinite(stamp) && stamp <= now + 300000 && stamp >= now - maxAge;
   return { ok:!!(fresh && sameProduct && priorImage && ProductRanking.isSpecificProductUrl(priorUrl)), verifiedAt:verifiedAt||null, productUrl:priorUrl||null, imageUrl:priorImage||null };
 }
+function candidateRuntimeFreshValidation(payloadInput, productInput, maxAgeMinutesInput) {
+  const payload = plain(payloadInput), product = plain(productInput), runtime = plain(payload.runtimeValidation), readiness = plain(payload.researchReadiness), card = plain(readiness.productCard);
+  const maxAgeMinutes = Math.max(5, Math.min(1440, Number(maxAgeMinutesInput) || 720));
+  const verifiedAt = first(runtime.checkedAt, readiness.lastVerifiedAt, card.lastVerifiedAt, payload.inspectedAt, payload.updatedAt);
+  const stamp = Date.parse(verifiedAt), now = Date.now(), fresh = Number.isFinite(stamp) && stamp <= now + 300000 && stamp >= now - maxAgeMinutes * 60000;
+  const health = candidateRuntimeHealth(product);
+  const specific = ProductRanking.isSpecificProductUrl(productUrl(product));
+  const image = !!productImageUrl(product);
+  return { ok:!!(fresh && health.live && specific && image && product.inspectionComplete === true && product.sameSupplierSite !== false), verifiedAt:verifiedAt||null, ageMinutes:Number.isFinite(stamp)?Math.max(0,Math.round((now-stamp)/60000)):null };
+}
 function candidateRuntimeHealth(productInput) {
   const product = plain(productInput), status = lower(product.researchStatus), risk = plain(product.riskAssessment), reasons = [];
   const hardDeadStatuses = new Set(["http_404","http_410","http_401","invalid_product_url","product_page_explicit_invalid_message","product_page_redirected_to_seller_home"]);
@@ -2505,13 +2515,17 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       if (key === "tour|tour" && product && ProductRanking.tourRightProfile(product).diningAuxiliary === true) tourDiningAutomaticCount += 1;
     }
   }
-  const inspectInputs = [], missingProducts = new Set();
+  const inspectInputs = [], missingProducts = new Set(), reusedFreshById = new Map();
+  const reuseFreshValidation = options.reuseFreshValidation === true, freshValidationMinutes = Math.max(5, Math.min(1440, Number(options.freshValidationMinutes) || 720));
   for (const id of ids) {
     const row = rowById.get(id), product = candidateRuntimeProduct(row, scope);
     if (!row || !product) { missingProducts.add(id); continue; }
-    product.candidateId = id; product.id = id; inspectInputs.push(product);
+    product.candidateId = id; product.id = id;
+    const fresh = reuseFreshValidation ? candidateRuntimeFreshValidation(plain(row.source_payload), product, freshValidationMinutes) : {ok:false};
+    if (fresh.ok) reusedFreshById.set(id, Object.assign({}, product, { candidateId:id, id:id, runtimeFreshReuse:true, runtimeFreshVerifiedAt:fresh.verifiedAt }));
+    else inspectInputs.push(product);
   }
-  const inspectedById = new Map();
+  const inspectedById = new Map(reusedFreshById);
   const chunks = frontSyncChunk(inspectInputs, 4);
   const settled = await Promise.allSettled(chunks.map((chunk) => RegionalSelector.inspectProductResearchStep(chunk)));
   for (const entry of settled) {
@@ -2610,7 +2624,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
   return {
     ok:true, requested:ids.length, revalidated:results.filter((row)=>row.status!=="missing").length, live:results.filter((row)=>row.live===true).length, invalid:results.filter((row)=>row.invalid===true).length, inconclusive:results.filter((row)=>row.inconclusive===true).length,
     assigned:results.filter((row)=>row.assigned===true).length, unassigned:results.filter((row)=>row.status==="unassigned").length, held:results.filter((row)=>row.status==="invalid").length, preserved:results.filter((row)=>row.manualLocked===true&&row.live===true).length, lockedInvalid:results.filter((row)=>row.manualLocked===true&&row.invalid===true).length,
-    changedSection:results.filter((row)=>row.changedSection===true).length, balanceCounts:workingCounts, tourDiningAutomaticCount, policyAwareBalancing:rebalance, balancedSectionGroups:AI_AUTO_BALANCE_GROUPS,
+    changedSection:results.filter((row)=>row.changedSection===true).length, remoteChecked:inspectInputs.length, freshReused:reusedFreshById.size, freshValidationMinutes, balanceCounts:workingCounts, tourDiningAutomaticCount, policyAwareBalancing:rebalance, balancedSectionGroups:AI_AUTO_BALANCE_GROUPS,
     withdrawCandidateIds:Array.from(withdrawCandidateIds), withdrawAssignments, results, publicPublication:false, paymentExecution:false
   };
 }
@@ -2642,7 +2656,7 @@ async function revalidateProductFrontTargets(actorId, input, targetsInput, optio
   const selectedIds = array(targetsInput).map((row)=>text(row && row.candidateId)).filter(Boolean);
   const publishedIds = options.includePublishedScope === true ? await scopePublishedCandidateIds(input) : [];
   const ids = Array.from(new Set(selectedIds.concat(publishedIds))).slice(0,500);
-  const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:options.includePublishedScope === true ? "front_apply_scope_refresh" : "front_apply_final_check", reassign:true });
+  const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:options.includePublishedScope === true ? "front_apply_scope_refresh" : "front_apply_final_check", reassign:true, reuseFreshValidation:input&&input.reuseFreshValidation===true, freshValidationMinutes:Number(input&&input.freshValidationMinutes)||720 });
   return Object.assign({}, result, { selectedRequested:selectedIds.length, publishedScopeRequested:publishedIds.length, scopeRefresh:options.includePublishedScope === true });
 }
 const PRODUCT_AI_QUEUE_SYNC_BATCH = 6;

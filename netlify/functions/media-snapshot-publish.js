@@ -12,7 +12,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
 const MediaReleaseAdapter = require("./lib/media-searchbank-release-adapter.v1");
 
-const VERSION = "media-snapshot-publish-v1.4.1-explicit-admin-release-dispatch";
+const VERSION = "media-snapshot-publish-v1.5.0-canonical-release-hash";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
 
@@ -63,7 +63,7 @@ function managedCounts(snapshot){
   });
   return{sections,total};
 }
-function stampReleaseControl(snapshot, action, sectionKey, actor){
+function stampReleaseControl(snapshot, action, sectionKey, actor, publicationRequested){
   const next=clone(snapshot),counts=managedCounts(next);
   next.meta=Object.assign({},next.meta||{}, {
     generatedAt:MediaStore.nowIso(),
@@ -72,7 +72,8 @@ function stampReleaseControl(snapshot, action, sectionKey, actor){
     releaseControl:{
       action,sectionKey:sectionKey||null,
       requestedAt:MediaStore.nowIso(),
-      requestedBy:MediaStore.compact(actor&&actor.email||actor&&actor.memberId||"admin",200)
+      requestedBy:MediaStore.compact(actor&&actor.email||actor&&actor.memberId||"admin",200),
+      publicationRequested:publicationRequested===true
     }
   });
   return next;
@@ -238,7 +239,11 @@ exports.handler = async function(event){
     }else{
       snapshot=MediaStore.buildSnapshot(cleanBase,Array.isArray(rows)?rows:[],buildOptions);
     }
-    snapshot=stampReleaseControl(snapshot,frontAction,sectionKey,actor);
+    snapshot=stampReleaseControl(snapshot,frontAction,sectionKey,actor,publishFront);
+    // Hash exactly the JSON document that will be persisted. JSON persistence drops
+    // undefined-valued properties; hashing the pre-serialization object makes the
+    // build-time integrity check fail even though the release itself is valid.
+    snapshot=JSON.parse(JSON.stringify(snapshot));
     const hash=MediaStore.sha256(snapshot);
     const eligible=Array.isArray(rows)?rows.filter(MediaStore.snapshotEligible).length:0;
     const blocked=Array.isArray(rows)?rows.filter((row)=>!MediaStore.snapshotEligible(row)).map((row)=>({id:MediaStore.text(row&&row.id),reasons:MediaStore.MediaPolicy.releaseEligibility(row).reasons})):[]; 

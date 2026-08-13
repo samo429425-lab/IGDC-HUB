@@ -6,7 +6,7 @@ const os=require("os");
 const path=require("path");
 const Adapter=require("../../functions/lib/media-searchbank-release-adapter.v1");
 
-const VERSION="igdc-media-snapshot-release-build-plugin-v2.0.1-hook-authorized-searchbank-pipeline";
+const VERSION="igdc-media-snapshot-release-build-plugin-v2.1.0-db-authoritative-pending-release";
 const DEFAULT_TABLE="media_snapshot_releases";
 
 function text(value){return value==null?"":String(value).trim();}
@@ -74,20 +74,31 @@ async function request(settings,resource,init){
     return body;
   }finally{clearTimeout(timer);}
 }
+function isPublicationRequest(release){
+  const control=release&&release.snapshot&&release.snapshot.meta&&release.snapshot.meta.releaseControl||{};
+  const action=text(control.action);
+  return control.publicationRequested===true||["publish_all","publish_section","stop_section","stop_all"].includes(action);
+}
 async function loadRelease(settings,expected){
   const query=new URLSearchParams();
   query.set("select","release_id,snapshot_hash,snapshot,status,created_at,created_by");
-  if(expected.releaseId)query.set("release_id","eq."+expected.releaseId);
-  else query.set("status","in.(stored,applied)");
-  query.set("order","created_at.desc");query.set("limit","1");
+  if(expected.releaseId){
+    query.set("release_id","eq."+expected.releaseId);
+    query.set("status","eq.stored");
+    query.set("limit","1");
+  }else{
+    query.set("status","eq.stored");
+    query.set("order","created_at.desc");
+    query.set("limit","25");
+  }
   const body=await request(settings,"/rest/v1/"+encodeURIComponent(settings.table)+"?"+query.toString(),{method:"GET"});
-  const release=Array.isArray(body)&&body[0];if(!release)throw new Error("stored_media_snapshot_release_not_found");
-  return release;
+  const rows=Array.isArray(body)?body:[];
+  return rows.find(isPublicationRequest)||null;
 }
 async function markApplied(settings,release,snapshot,hash){
   const query="release_id=eq."+encodeURIComponent(text(release.release_id));
   const body=await request(settings,"/rest/v1/"+encodeURIComponent(settings.table)+"?"+query,{
-    method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({snapshot_hash:hash,snapshot})
+    method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({snapshot_hash:hash,snapshot,status:"applied"})
   });
   if(!Array.isArray(body)||!body.length)throw new Error("media_snapshot_release_applied_audit_not_saved");
   return body[0];
@@ -122,13 +133,13 @@ function runSnapshotEngineIsolated(publishRoot,bank,template,releaseId){
 
 module.exports={
   onPostBuild:async({constants,utils})=>{
-    if(!releaseArmed()){
-      utils.status.show({title:"IGDC 미디어 스냅샷",summary:"공개 게이트 비활성 — 기존 배포 스냅샷 유지"});
-      return;
-    }
     try{
       const publishRoot=path.resolve(constants.PUBLISH_DIR||process.cwd());
       const settings=config(),expected=incomingReleaseExpectation(),release=await loadRelease(settings,expected);
+      if(!release){
+        utils.status.show({title:"IGDC 미디어 스냅샷",summary:"미적용 프론트 공급 요청 없음 — 기존 배포 스냅샷 유지"});
+        return;
+      }
       safeManagedSlots(release.snapshot);
       const requestHash=sha256(release.snapshot);
       if(requestHash!==text(release.snapshot_hash))throw new Error("media_snapshot_release_hash_mismatch");
