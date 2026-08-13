@@ -23,8 +23,8 @@
 
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 20;
-  const RIGHT_LIMIT = 80;
-  const RIGHT_BATCH = 20;
+  const RIGHT_LIMIT = 100;
+  const RIGHT_BATCH = 100;
 
   const EMPTY_I18N = {
     de: 'Inhalte werden vorbereitet.',
@@ -485,8 +485,11 @@ function bindIncremental(target, items) {
 
     if (offset >= items.length || offset >= limit) return;
 
+    const rightUsesHorizontalScroll = isRight && (scroller.scrollWidth > scroller.clientWidth + 1);
     const nearEnd = isRight
-      ? (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 20)
+      ? (rightUsesHorizontalScroll
+          ? (scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 20)
+          : (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 20))
       : (scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 20);
 
     if (nearEnd) renderMore();
