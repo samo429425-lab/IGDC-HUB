@@ -949,6 +949,25 @@ a[id*="qna"]{
 }
 </style>
 
+
+
+<style id="igdc-tour-mobile-rightpanel-fling-final-integrated-v1">
+/* TOUR MOBILE — right-panel bottom rail, portrait + landscape. */
+@media (max-width:1024px) and (pointer:coarse){
+  #tour-mobile-rail .list{
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:x proximity !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  #tour-mobile-rail .list > *{
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
+
 </head>
 
 <body>

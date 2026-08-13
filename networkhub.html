@@ -600,6 +600,25 @@ a[id*="qna"]{
 }
 </style>
 
+
+
+<style id="igdc-network-mobile-rightpanel-fling-final-integrated-v1">
+/* NETWORK MOBILE — right-panel bottom rail, portrait + landscape. */
+@media (max-width:1024px) and (pointer:coarse){
+  #nh-mobile-rail .list{
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:x proximity !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  #nh-mobile-rail .list > *{
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>

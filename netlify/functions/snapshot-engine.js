@@ -34,7 +34,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.2-channel-safe-authoritative-page-route";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.3-home-tour-slot-order-stable";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -305,14 +305,52 @@ function snapshotIdOf(item, fields) {
   return item ? stableId(JSON.stringify(item)) : "";
 }
 
+function orderedHomeTourSeedSlot(item, pageName) {
+  if (isSeedLikeSnapshotSlot(item)) return true;
+  if (pageName !== "home") return false;
+
+  const title = String(item && (item.title || item.name) || "").trim();
+  const image = String(imageOfSnapshotItem(item) || "").trim();
+
+  // Home seed snapshots use names such as `home_2 Product 17` and a known
+  // transparent GIF instead of the generic sample/placeholder flags.
+  // Treat only those declared Home seed shapes as replaceable.
+  if (/^home(?:_[a-z0-9]+)+\s+product\s+\d+$/i.test(title)) return true;
+  if (/^data:image\/gif;base64,R0lGODlhAQABAAAAACw=/i.test(image)) return true;
+  return false;
+}
+
+function inheritOrderedSlotMeta(card, previous) {
+  if (!card || !previous) return card;
+  for (const key of ["slotId", "priority", "order", "weight"]) {
+    if (previous[key] !== undefined && previous[key] !== null) card[key] = previous[key];
+  }
+  return card;
+}
+
 function pushOrReplaceSnapshotSlot(list, card, raw, opts) {
   if (!Array.isArray(list) || !card || typeof card !== "object") return false;
   opts = opts || {};
+  const pageName = String(opts.pageName || "").trim().toLowerCase();
+  const orderedPage = pageName === "home" || pageName === "tour";
   const limit = sectionSlotLimit(opts.pageName, opts.sectionKey, opts.limit || SECTION_SLOT_LIMIT);
   const idFields = opts.idFields || ["id"];
   const incomingId = snapshotIdOf(card, idFields);
 
   if (list.some(existing => snapshotIdOf(existing, idFields) === incomingId)) return false;
+
+  // Home/Tour are slot-order authoritative. A real item must occupy the first
+  // replaceable seed slot before any append is considered, otherwise a later
+  // renderer sees the real card at the tail of the 1..N sequence.
+  if (orderedPage && isRealIncomingCandidate(raw)) {
+    const replaceIndex = list.findIndex(item => orderedHomeTourSeedSlot(item, pageName));
+    if (replaceIndex >= 0) {
+      const previous = list[replaceIndex] || {};
+      inheritOrderedSlotMeta(card, previous);
+      list[replaceIndex] = card;
+      return true;
+    }
+  }
 
   if (list.length < limit) {
     list.push(card);
@@ -1727,10 +1765,17 @@ function handleTourSnapshot(bank) {
     }
   }
 
-  /* ===== 정렬 (최신 + 우선순위) ===== */
+  /* ===== 슬롯 순서 유지 =====
+   * Tour snapshot priority is the visible slot number (1,2,3...).
+   * Do not rank-sort it descending after replacement: that moves freshly
+   * mapped real cards behind seed cards. Keep the authoritative slot order.
+   */
   items.sort((a, b) => {
-    return (b.priority || 0) - (a.priority || 0) ||
-           (b.createdAt || 0) - (a.createdAt || 0);
+    const ap = Number(a && a.priority);
+    const bp = Number(b && b.priority);
+    const av = Number.isFinite(ap) && ap > 0 ? ap : Number.MAX_SAFE_INTEGER;
+    const bv = Number.isFinite(bp) && bp > 0 ? bp : Number.MAX_SAFE_INTEGER;
+    return av - bv;
   });
 
   /* ===== LIMIT ===== */

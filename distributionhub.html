@@ -1232,6 +1232,48 @@ a[id*="qna"]{
 }
 </style>
 
+
+
+<style id="igdc-distribution-mobile-allrails-fling-final-integrated-v1">
+/* DISTRIBUTION MOBILE — portrait + landscape, all horizontal thumbnail rails. */
+@media (max-width:1024px) and (pointer:coarse){
+  .content-box > .scroller-wrap > .thumb-scroller,
+  .content-box > .thumb-list,
+  .thumb-scroller,
+  .thumb-list,
+  .thumb-row,
+  .cards-row,
+  .hscroll,
+  #mobile-ad-rail-list,
+  .brand-rail[data-mobile-in-main="1"] .ad-scroll,
+  .brand-rail[data-mobile-in-main="1"] .ad-list,
+  .brand-rail[data-mobile-in-main="1"] .cards,
+  .brand-rail[data-mobile-in-main="1"] .items,
+  .brand-rail[data-mobile-in-main="1"] .thumbs{
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:x proximity !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  .content-box > .scroller-wrap > .thumb-scroller > *,
+  .content-box > .thumb-list > *,
+  .thumb-scroller > *,
+  .thumb-list > *,
+  .thumb-row > *,
+  .cards-row > *,
+  .hscroll > *,
+  #mobile-ad-rail-list > *,
+  .brand-rail[data-mobile-in-main="1"] .ad-list > *,
+  .brand-rail[data-mobile-in-main="1"] .cards > *,
+  .brand-rail[data-mobile-in-main="1"] .items > *,
+  .brand-rail[data-mobile-in-main="1"] .thumbs > *{
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>

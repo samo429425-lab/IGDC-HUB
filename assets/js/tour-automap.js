@@ -115,7 +115,7 @@
     style.id = MOBILE_CSS_ID;
     style.textContent = `
 /* Mobile rail cards should look IDENTICAL to right panel cards */
-#${MOBILE_RAIL_ID} .list{ display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; }
+#${MOBILE_RAIL_ID} .list{ display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch; }
 #${MOBILE_RAIL_ID} .ad-box{ position:relative; flex:0 0 220px; aspect-ratio: 4 / 5; border-radius:8px; overflow:hidden; background:#fff; border:1px solid #d7dce1; scroll-snap-align:start; }
 #${MOBILE_RAIL_ID} .ad-box > a{ display:block; width:100%; height:100%; text-decoration:none; color:inherit; position:relative; }
 #${MOBILE_RAIL_ID} .ad-box img{ display:block; width:100%; height:100%; object-fit:cover; }

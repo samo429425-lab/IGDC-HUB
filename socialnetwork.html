@@ -424,6 +424,27 @@ a[id*="qna"]{
 }
 </style>
 
+
+
+<style id="igdc-social-portrait-rightpanel-fling-final-integrated-v1">
+/* SOCIAL MOBILE PORTRAIT ONLY
+   Popular Items / right-panel mobile rail only.
+   Main 9 social rows and landscape behavior are intentionally untouched. */
+@media (max-width:768px) and (orientation:portrait) and (pointer:coarse){
+  #rpMobileScroller{
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:x proximity !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  #rpMobileGrid > .ad-box{
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
+
 </head>
 <body>
   <div id="hero"><div class="hero-title"></div></div>

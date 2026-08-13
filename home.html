@@ -2310,6 +2310,48 @@ a[id*="qna"]{
 }
 </style>
 
+
+
+<style id="igdc-home-mobile-fling-final-integrated-v1">
+/* HOME MOBILE ONLY
+   Portrait  : MAIN 5 shopping sections only.
+   Landscape : RIGHT PANEL top/middle/bottom only.
+   Existing card geometry/layout is untouched. */
+
+@media (max-width:1024px) and (orientation:portrait) and (pointer:coarse){
+  section.shopping-section .shop-scroller{
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:x proximity !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  section.shopping-section .shop-row > .shop-card,
+  section.shopping-section .thumb-grid[data-psom-key="home_1"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_2"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_3"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_4"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_5"] > *{
+    scroll-snap-stop:normal !important;
+  }
+}
+
+@media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
+  .ad-panel .ad-section .ad-scroll{
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:x proximity !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  .ad-panel .ad-section .ad-list > .ad-box{
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div class="container">
