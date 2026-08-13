@@ -34,7 +34,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.1-authoritative-page-route";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.2-channel-safe-authoritative-page-route";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -774,9 +774,12 @@ function resolveSection(item, defaultSection) {
 
 function explicitPageOf(item) {
   item = item || {};
+  // `channel` is a content/platform dimension (youtube, instagram, etc.),
+  // not an authoritative front-page route.  Treating it as a page caused valid
+  // Social rows to fail pageMatches().  Only explicit page-bearing fields
+  // participate in cross-page isolation.
   return String(
     item.page ||
-    item.channel ||
     item?.bind?.page ||
     item?.placement?.page ||
     item?.layerPointer?.page ||

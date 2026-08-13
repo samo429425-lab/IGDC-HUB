@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.17.1-bounded-front-match-fresh-validation-reuse";
+const VERSION = "commerce-country-automation-v3.17.2-canonical-nationwide-region-key";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -3119,7 +3119,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     assignmentIdByCandidate.set(candidateId, assignmentId);
     readinessByCandidate.set(candidateId, readiness);
     assignmentUpserts.push({
-      id: assignmentId, candidate_id: candidateId, hub_key: split.page, country_code: scope.country, region_code: scope.region === "NATIONWIDE" ? null : scope.region,
+      id: assignmentId, candidate_id: candidateId, hub_key: split.page, country_code: scope.country, region_code: scope.region || "NATIONWIDE",
       slot_key: split.sectionKey, priority: Math.max(0, Number(target.priority || product.rankingScore || 0)), state: assignmentExisting && lower(assignmentExisting.state) === "pinned" ? "pinned" : "approved",
       // Phase 1 stores a non-public ready state.  A pre-existing explicit request
       // is preserved on retry and is never rolled backwards.
@@ -3138,8 +3138,8 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
       delivery_or_access: "Administrator selected the official external-seller product destination. Checkout, delivery, returns, refunds, customer support and after-sales obligations remain with the external seller.",
       updated_at: now, updated_by: actor
     };
-    if (scopeAvailability) availabilityUpdates.push({ candidateId, countryCode:scope.country, regionCode:scope.region, patch:availabilityPatch });
-    else availabilityInserts.push(Object.assign({ candidate_id:candidateId, country_code:scope.country, region_code:scope.region === "NATIONWIDE" ? null : scope.region }, availabilityPatch));
+    if (scopeAvailability) availabilityUpdates.push({ candidateId, countryCode:scope.country, regionCode:scope.region, storedRegionCode:text(scopeAvailability.region_code), patch:availabilityPatch });
+    else availabilityInserts.push(Object.assign({ candidate_id:candidateId, country_code:scope.country, region_code:scope.region || "NATIONWIDE" }, availabilityPatch));
 
     const hasApprovedExternalReferral = array(revenuesByCandidate.get(candidateId)).some((row) => lower(row && row.revenue_type) === "external_referral" && lower(row && row.status) === "approved" && !!safeUrl(row && row.affiliate_url));
     if (!hasApprovedExternalReferral) revenueUpserts.push({
@@ -3168,9 +3168,18 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     await frontSyncWriteStage(writeTrace, "availability_update", availabilityUpdates.length, async () => {
       const output=[];
       for (const row of availabilityUpdates) {
-        const regionQuery = row.regionCode === "NATIONWIDE" ? "region_code=is.null" : "region_code=eq." + encodeURIComponent(row.regionCode);
+        // Production gslot_candidate_availability.region_code is NOT NULL.
+        // New nationwide rows use the explicit NATIONWIDE sentinel.  When an
+        // older row still carries a legacy NULL, update that exact row once and
+        // migrate it to the canonical sentinel without creating a duplicate.
+        const storedRegion = text(row.storedRegionCode);
+        const regionQuery = storedRegion
+          ? "region_code=eq." + encodeURIComponent(storedRegion)
+          : "region_code=is.null";
         const query = "candidate_id=eq." + encodeURIComponent(row.candidateId) + "&country_code=eq." + encodeURIComponent(row.countryCode) + "&" + regionQuery;
-        output.push(...array(await SlotStore.update("gslot_candidate_availability", query, row.patch)));
+        const patch = Object.assign({}, row.patch);
+        if (!storedRegion && row.regionCode === "NATIONWIDE") patch.region_code = "NATIONWIDE";
+        output.push(...array(await SlotStore.update("gslot_candidate_availability", query, patch)));
       }
       return output;
     });

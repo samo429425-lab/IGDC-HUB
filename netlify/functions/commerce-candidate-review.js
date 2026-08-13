@@ -15,7 +15,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.9.0-explicit-go-live-audit-before-publication";
+const VERSION = "commerce-candidate-review-api-v1.9.1-canonical-nationwide-region-key";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -428,7 +428,7 @@ async function recordMarket(member, body){
   const country=text(market.countryCode).toUpperCase();const region=text(market.regionCode).toUpperCase();
   const delivery=text(market.deliveryOrAccess);const basis=text(market.legalBasis);
   if(!/^[A-Z]{2}$/.test(country)||!delivery||!basis){const err=new Error("판매국(ISO 2자리), 배송·접근 근거, 법적/판매 근거가 필요합니다.");err.statusCode=400;throw err;}
-  const row={candidate_id:id,country_code:country,region_code:region||null,availability_state:"active",legal_basis:basis.slice(0,4000),delivery_or_access:delivery.slice(0,4000),updated_at:new Date().toISOString(),updated_by:member.memberId};
+  const row={candidate_id:id,country_code:country,region_code:region||"NATIONWIDE",availability_state:"active",legal_basis:basis.slice(0,4000),delivery_or_access:delivery.slice(0,4000),updated_at:new Date().toISOString(),updated_by:member.memberId};
   const rows=await SlotStore.insert("gslot_candidate_availability",row,"return=representation");
   return {ok:true,candidateId:id,market:(rows||[])[0]||row,note:"시장 근거는 배송·반품·지원·책임 증빙과 함께 Canonical 단계에서 다시 검증됩니다."};
 }
@@ -504,7 +504,7 @@ async function decide(member, body){
   await patchSourcePayload(id,function(payload){payload.slotDecision="slot_candidate";payload.review=Object.assign({},plain(payload.review),{state:"approved",decidedAt:approvedAt,decidedBy:member.memberId});payload.pipeline=Object.assign({},plain(payload.pipeline),{stage:"registry_sync_ready",nextGate:"go_live_audit_and_explicit_publication_request"});return payload;});
   await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"enrollable",owner_note:text(body.note).slice(0,3000)||null,updated_at:approvedAt});
   const assignmentId="assignment_"+require("crypto").randomBytes(12).toString("hex");
-  const rows=await SlotStore.insert("gslot_slot_assignments",{id:assignmentId,candidate_id:id,hub_key:hub,country_code:country,region_code:text(assignment.regionCode).toUpperCase()||null,slot_key:section,priority:Math.max(-1000000,Math.min(1000000,Number(assignment.priority)||0)),state:assignment.pinned===true?"pinned":"approved",publication_status:"audit_ready",manual_pinned:assignment.pinned===true,decision_note:text(body.note).slice(0,3000)||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),updated_by:member.memberId},"return=representation");
+  const rows=await SlotStore.insert("gslot_slot_assignments",{id:assignmentId,candidate_id:id,hub_key:hub,country_code:country,region_code:text(assignment.regionCode).toUpperCase()||"NATIONWIDE",slot_key:section,priority:Math.max(-1000000,Math.min(1000000,Number(assignment.priority)||0)),state:assignment.pinned===true?"pinned":"approved",publication_status:"audit_ready",manual_pinned:assignment.pinned===true,decision_note:text(body.note).slice(0,3000)||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),updated_by:member.memberId},"return=representation");
   return {ok:true,candidateId:id,status:"enrollable",assignment:(rows||[])[0]||null,note:"시장·검증 증빙·수익 경로·PSOM 승인이 완료되어 실상품 공급 개방 점검 대상으로 확정됐습니다. 아직 원장 동기화나 사이트 게재는 실행되지 않으며, 개방 점검에서 별도의 최종 게재 요청이 필요합니다."};
 }
 

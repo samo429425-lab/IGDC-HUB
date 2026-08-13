@@ -15,7 +15,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.13.0-tour-right-commercial-spectrum";
+const VERSION = "commerce-candidate-registry-sync-v1.13.1-canonical-nationwide-region-key";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -179,7 +179,7 @@ function syntheticAssignmentFromMarker(candidate, marker){
   if(!marker) return null;
   return {
     id:marker.assignmentId,candidate_id:candidate.id,hub_key:marker.page,country_code:marker.country,
-    region_code:marker.region&&marker.region!=="NATIONWIDE"?marker.region:null,slot_key:marker.section,
+    region_code:marker.region||"NATIONWIDE",slot_key:marker.section,
     priority:marker.priority||0,state:marker.manualPinned?"pinned":"approved",publication_status:"publish_requested",
     manual_pinned:marker.manualPinned===true,updated_at:marker.requestedAt||candidate.updated_at||now(),updated_by:marker.requestedBy||"administrator"
   };
@@ -188,7 +188,7 @@ function syntheticAvailabilityFromMarker(candidate, marker){
   if(!marker) return [];
   const payload=sourcePayload(candidate), destination=safeUrl(first(payload.url,payload.productUrl,payload.checkoutUrl,candidate&&candidate.official_url));
   return [{
-    candidate_id:candidate.id,country_code:marker.country,region_code:marker.region&&marker.region!=="NATIONWIDE"?marker.region:null,
+    candidate_id:candidate.id,country_code:marker.country,region_code:marker.region||"NATIONWIDE",
     availability_state:"active",
     legal_basis:"Authenticated administrator Front Match for an external-seller referral. The external seller remains seller and merchant of record.",
     delivery_or_access:destination?"Administrator selected the official external seller product destination; checkout, delivery, returns, refunds and support remain with the external seller.":"Administrator selected an external-seller referral route.",
@@ -269,6 +269,7 @@ function marketRecord(candidate, availability, evidenceRows){
   const payload=sourcePayload(candidate);
   const country=MarketSaleScope.normalizeCountry(availability.country_code);
   const region=MarketSaleScope.normalizeRegion(availability.region_code,country);
+  const nationwide=!region || region==="NATIONWIDE";
   const legalBasis=text(availability.legal_basis);
   const deliveryEvidence=text(availability.delivery_or_access);
   const evidenceUrl=safeUrl(first(payload.marketEvidenceUrl,payload.shippingPolicyUrl,payload.returnsPolicyUrl,payload.supportUrl,candidate.official_url));
@@ -277,8 +278,11 @@ function marketRecord(candidate, availability, evidenceRows){
   const seller=plain(payload.sellerResponsibility);
   return {
     country,
+    // The DB stores nationwide as the explicit NATIONWIDE sentinel.  Preserve
+    // the market-sale contract's boolean as well so validation does not mistake
+    // a nationwide record for a region-scoped record with no regions.
     region:region||"NATIONWIDE",
-    nationwide:!region,
+    nationwide,
     active:true,
     verifiedAt:first(availability.updated_at,candidate.updated_at),
     shipping:serviceProof(first(payload.shippingPolicyUrl,commonUrl),first(deliveryEvidence,legalBasis)),

@@ -6,7 +6,7 @@ const os=require("os");
 const path=require("path");
 const Adapter=require("../../functions/lib/media-searchbank-release-adapter.v1");
 
-const VERSION="igdc-media-snapshot-release-build-plugin-v2.1.0-db-authoritative-pending-release";
+const VERSION="igdc-media-snapshot-release-build-plugin-v2.1.1-gated-db-authoritative-pending-release";
 const DEFAULT_TABLE="media_snapshot_releases";
 
 function text(value){return value==null?"":String(value).trim();}
@@ -133,6 +133,10 @@ function runSnapshotEngineIsolated(publishRoot,bank,template,releaseId){
 
 module.exports={
   onPostBuild:async({constants,utils})=>{
+    if(!releaseArmed()){
+      utils.status.show({title:"IGDC 미디어 스냅샷",summary:"미디어 프론트 공급 요청 없음 — 기존 배포 스냅샷 유지"});
+      return;
+    }
     try{
       const publishRoot=path.resolve(constants.PUBLISH_DIR||process.cwd());
       const settings=config(),expected=incomingReleaseExpectation(),release=await loadRelease(settings,expected);

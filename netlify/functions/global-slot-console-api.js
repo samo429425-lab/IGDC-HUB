@@ -166,7 +166,7 @@ async function saveAvailability(actor, body) {
   const candidateId = clean(body.candidateId, 180);
   const countryCode = clean(body.countryCode, 3).toUpperCase();
   if (!candidateId || !/^[A-Z]{2,3}$/.test(countryCode)) { const e = new Error('후보와 국가 코드가 필요합니다.'); e.statusCode = 400; throw e; }
-  const row = { candidate_id: candidateId, country_code: countryCode, region_code: clean(body.regionCode, 32).toUpperCase() || null, availability_state: clean(body.state, 40) || 'unknown', legal_basis: clean(body.legalBasis, 2000) || null, delivery_or_access: clean(body.deliveryOrAccess, 500) || null, updated_at: iso(), updated_by: actor.sub };
+  const row = { candidate_id: candidateId, country_code: countryCode, region_code: clean(body.regionCode, 32).toUpperCase() || 'NATIONWIDE', availability_state: clean(body.state, 40) || 'unknown', legal_basis: clean(body.legalBasis, 2000) || null, delivery_or_access: clean(body.deliveryOrAccess, 500) || null, updated_at: iso(), updated_by: actor.sub };
   const rows = await sb.insert('gslot_candidate_availability', row, 'resolution=merge-duplicates,return=representation');
   await audit(actor, 'upsert_availability', 'candidate', candidateId, row);
   return { ok: true, row: (rows || [row])[0] };
@@ -190,7 +190,7 @@ async function saveAssignment(actor, body) {
   const assignmentId = clean(body.id, 180) || sb.id('assignment');
   const state = inSet(body.state, ASSIGNMENT_STATES, 'draft');
   const pub = inSet(body.publicationStatus, PUBLICATION_STATES, 'not_ready');
-  const row = { id: assignmentId, candidate_id: candidateId, hub_key: hubKey, country_code: countryCode, region_code: clean(body.regionCode, 32).toUpperCase() || null, slot_key: slotKey, priority: Math.max(-1000000, Math.min(1000000, Number(body.priority) || 0)), state, publication_status: pub, manual_pinned: bool(body.manualPinned), decision_note: clean(body.note, 3000) || null, updated_at: iso(), updated_by: actor.sub };
+  const row = { id: assignmentId, candidate_id: candidateId, hub_key: hubKey, country_code: countryCode, region_code: clean(body.regionCode, 32).toUpperCase() || 'NATIONWIDE', slot_key: slotKey, priority: Math.max(-1000000, Math.min(1000000, Number(body.priority) || 0)), state, publication_status: pub, manual_pinned: bool(body.manualPinned), decision_note: clean(body.note, 3000) || null, updated_at: iso(), updated_by: actor.sub };
   if (!body.id) row.created_at = iso();
   const rows = await sb.insert('gslot_slot_assignments', row, 'resolution=merge-duplicates,return=representation');
   await audit(actor, body.id ? 'update_assignment' : 'create_assignment', 'assignment', assignmentId, { candidateId, hubKey, countryCode, slotKey, state, publicationStatus: pub });
