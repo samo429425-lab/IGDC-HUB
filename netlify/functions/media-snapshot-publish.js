@@ -12,7 +12,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
 const MediaReleaseAdapter = require("./lib/media-searchbank-release-adapter.v1");
 
-const VERSION = "media-snapshot-publish-v1.6.0-item-section-all-front-control";
+const VERSION = "media-snapshot-publish-v1.7.0-front-trigger-diagnostics";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
 
@@ -181,12 +181,13 @@ async function pipelineStatusDocument(release,rows,probePublic){
   const publicBankHash=publicBank.ok?MediaReleaseAdapter.sha256(publicBank.document):null;
   const publicBankMatches=publicBank.ok===true&&MediaStore.text(pipeline.searchBankHash)===publicBankHash;
   const publicMatches=publicReleaseMatches&&publicSectionsMatch&&publicBankMatches;
+  const publicationTrigger=typeof MediaReleaseDispatch.configurationStatus==="function"?MediaReleaseDispatch.configurationStatus():{version:MediaReleaseDispatch.VERSION||null};
   return{
     ok:true,reportType:"igdc-media-front-pipeline-status",version:VERSION,adapterVersion:MediaReleaseAdapter.VERSION,generatedAt:MediaStore.nowIso(),
     pipelineComplete:releaseApplied&&(!probePublic||publicMatches),
     stages:{
       candidates:{source:"supabase.media_candidates",approvedRows:Array.isArray(rows)?rows.length:0,eligibleRows:(Array.isArray(rows)?rows:[]).filter(MediaStore.snapshotEligible).length,sections:candidateSections},
-      release:{present:!!release,releaseId,status:MediaStore.text(release&&release.status)||null,requestHash:MediaStore.text(pipeline.requestHash||release&&release.snapshot_hash)||null,outputHash:MediaStore.text(release&&release.snapshot_hash)||null,action:MediaStore.text(releaseSnapshot&&releaseSnapshot.meta&&releaseSnapshot.meta.releaseControl&&releaseSnapshot.meta.releaseControl.action)||null,totalManagedSlots:releaseState.totalManaged},
+      release:{present:!!release,releaseId,status:MediaStore.text(release&&release.status)||null,requestHash:MediaStore.text(pipeline.requestHash||release&&release.snapshot_hash)||null,outputHash:MediaStore.text(release&&release.snapshot_hash)||null,action:MediaStore.text(releaseSnapshot&&releaseSnapshot.meta&&releaseSnapshot.meta.releaseControl&&releaseSnapshot.meta.releaseControl.action)||null,totalManagedSlots:releaseState.totalManaged,publicationTrigger},
       searchBank:{applied:releaseApplied&&!!MediaStore.text(pipeline.searchBankHash),hash:MediaStore.text(pipeline.searchBankHash)||null,releaseMediaItemCount:Number(pipeline.searchBankMediaCount||0),publicProbeChecked:publicBank.checked,publicProbeOk:publicBank.ok,publicProbeReason:publicBank.reason,publicHash:publicBankHash,publicHashMatches:publicBank.checked?publicBankMatches:null,publicReleaseMediaItemCount:publicBank.ok?publicBankItems.length:null},
       snapshotEngine:{applied:releaseApplied,version:MediaStore.text(pipeline.snapshotEngineVersion)||null,completedHandlers:Array.isArray(pipeline.snapshotEngineCompletedHandlers)?pipeline.snapshotEngineCompletedHandlers:[],appliedAt:MediaStore.text(pipeline.appliedAt)||null},
       publicMediaSnapshot:{checked:publicMedia.checked,ok:publicMedia.ok,reason:publicMedia.reason,releaseId:MediaStore.text(publicPipeline.releaseId)||null,releaseIdMatches:publicMedia.checked?publicReleaseMatches:null,sectionContentIdsMatch:publicMedia.checked?publicSectionsMatch:null,totalManagedSlots:publicMedia.ok?publicState.totalManaged:null}

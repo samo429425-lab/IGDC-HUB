@@ -804,7 +804,7 @@
     return({candidate:'후보',active:'활성',paused:'중지',archived:'보관'})[lower(status)]||status||'-';
   }
   function supplierTypeLabel(type){
-    return({production:'프로덕션',distributor:'배급사',studio:'스튜디오',rights_holder:'권리보유사',agency:'에이전시',archive:'아카이브',other:'기타'})[lower(type)]||type||'-';
+    return({production:'프로덕션',distributor:'배급사·콘텐츠 배포사',studio:'스튜디오',rights_holder:'권리보유사',agency:'에이전시·국제세일즈',archive:'아카이브',other:'기타'})[lower(type)]||type||'-';
   }
   function renderSupplierSummary(summary){
     summary=summary||{};
@@ -813,7 +813,7 @@
   }
   function renderSuppliers(){
     var body=$('supplierRows');if(!body)return;
-    if(!supplierCache.length){body.innerHTML='<tr><td colspan="8" class="small">등록된 공급사가 없습니다. 수동 추가 또는 자동 리서치를 실행하세요.</td></tr>';return;}
+    if(!supplierCache.length){body.innerHTML='<tr><td colspan="9" class="small">등록된 공급사가 없습니다. 수동 추가 또는 AI 전체 공급사 자동 리서치를 실행하세요.</td></tr>';updateSupplierBulkState();return;}
     body.innerHTML=supplierCache.map(function(row){
       var status=lower(row.status),active=status==='active';
       var terms=Array.isArray(row.searchTerms)?row.searchTerms.join(', '):'';
@@ -825,9 +825,15 @@
       if(status==='archived')management+='<button type="button" class="secondary supplierActionBtn" data-action="restore" data-id="'+esc(row.id)+'">후보 복원</button>';
       if(active)management+='<button type="button" class="supplierCollectBtn" data-id="'+esc(row.id)+'">영상 후보 수집</button>';
       management+='<button type="button" class="danger supplierActionBtn" data-action="delete" data-id="'+esc(row.id)+'">삭제</button>';
-      return '<tr><td><strong class="supplier-status-'+esc(status)+'">'+esc(supplierStatusLabel(status))+'</strong></td><td><strong>'+esc(row.name)+'</strong><div class="mono small">'+esc(row.id)+'</div></td><td>'+esc(supplierTypeLabel(row.supplierType))+'</td><td>'+esc(row.country||'-')+'</td><td>'+(website?'<a href="'+esc(website)+'" target="_blank" rel="noopener noreferrer" style="color:#9fdcff">'+esc(row.websiteHost||website)+'</a>':'-')+'</td><td>'+esc(terms||'-')+'</td><td>'+esc(row.updatedAt||'-')+'</td><td><div class="supplier-row-actions">'+management+'</div></td></tr>';
+      return '<tr><td><input type="checkbox" class="supplierSelectRow" data-id="'+esc(row.id)+'" aria-label="'+esc(row.name)+' 선택"></td><td><strong class="supplier-status-'+esc(status)+'">'+esc(supplierStatusLabel(status))+'</strong></td><td><strong>'+esc(row.name)+'</strong><div class="mono small">'+esc(row.id)+'</div></td><td>'+esc(supplierTypeLabel(row.supplierType))+'</td><td>'+esc(row.country||'-')+'</td><td>'+(website?'<a href="'+esc(website)+'" target="_blank" rel="noopener noreferrer" style="color:#9fdcff">'+esc(row.websiteHost||website)+'</a>':'-')+'</td><td>'+esc(terms||'-')+'</td><td>'+esc(row.updatedAt||'-')+'</td><td><div class="supplier-row-actions">'+management+'</div></td></tr>';
     }).join('');
+    updateSupplierBulkState();
   }
+  function selectedSupplierIds(){return Array.prototype.slice.call(document.querySelectorAll('.supplierSelectRow:checked')).map(function(x){return text(x.dataset.id);}).filter(Boolean);}
+  function updateSupplierBulkState(){var ids=selectedSupplierIds();if($('supplierBulkState'))$('supplierBulkState').textContent='선택 '+ids.length+'개';if($('supplierSelectAll')){$('supplierSelectAll').checked=!!supplierCache.length&&ids.length===supplierCache.length;$('supplierSelectAll').indeterminate=ids.length>0&&ids.length<supplierCache.length;}}
+  function toggleSupplierManagement(){var bar=$('supplierBulkBar');if(!bar)return;bar.classList.toggle('hidden');$('supplierManageBtn').textContent=bar.classList.contains('hidden')?'공급사 목록 관리':'목록 관리 닫기';updateSupplierBulkState();}
+  function selectAllSuppliers(checked){Array.prototype.forEach.call(document.querySelectorAll('.supplierSelectRow'),function(x){x.checked=!!checked;});updateSupplierBulkState();}
+  async function supplierBulkStatus(status){var ids=selectedSupplierIds();if(!ids.length){show('관리할 공급사를 먼저 선택해 주세요.','warn');return;}var label={active:'활성',paused:'중지',candidate:'후보 복원',archived:'보관'}[status]||status;if(!window.confirm('선택한 공급사 '+ids.length+'개를 '+label+' 처리할까요?'))return;try{var data=await post(SUP,{action:'bulk_status',ids:ids,status:status});await refreshSuppliers();show('선택 공급사 '+Number(data.updated||0)+'개 '+label+' 완료','ok');}catch(error){show('공급사 일괄 '+label+' 실패: '+error.message,'warn');}}
   async function refreshSuppliers(){
     if(!$('supplierRows'))return;
     $('supplierState').textContent='공급사 목록 확인 중';
@@ -853,16 +859,18 @@
     }catch(error){show('공급사 추가 실패: '+error.message,'warn');}
     finally{$('supplierAddBtn').disabled=false;}
   }
-  async function researchSuppliers(){
-    if(!window.confirm('미디어 공급사 전용 다중 검색 정책으로 프로덕션·배급사·스튜디오·권리보유사 후보를 탐색할까요?\n\n소비자 스트리밍·SNS 플랫폼은 제외하고, 결과는 공급사 후보로만 저장됩니다. 자동 활성·프론트 공개는 하지 않습니다.'))return;
-    var button=$('supplierResearchBtn');button.disabled=true;$('supplierState').textContent='공급사 정책 리서치 준비 중';
+  async function researchSuppliers(mode){
+    mode=mode==='all'?'all':'targeted';
+    var allMode=mode==='all';
+    if(!window.confirm((allMode?'프로덕션·배급사·콘텐츠 배포사·스튜디오·권리보유사·국제세일즈 에이전시·아카이브를 전체 탐색':'선택한 유형 중심으로 공급사를 탐색')+'할까요?\n\n소비자 스트리밍·SNS 플랫폼은 제외하고, 결과는 공급사 후보로만 저장됩니다. 자동 활성·프론트 공개는 하지 않습니다.'))return;
+    var button=allMode?$('supplierResearchAllBtn'):$('supplierResearchBtn');button.disabled=true;$('supplierState').textContent=allMode?'AI 전체 공급사 리서치 준비 중':'공급사 정책 리서치 준비 중';
     try{
-      var data=await post(SUP,{action:'research',query:text($('supplierResearchQuery').value),country:text($('supplierCountry').value),limit:50});
+      var data=await post(SUP,{action:'research',mode:mode,query:text($('supplierResearchQuery').value),country:text($('supplierCountry').value),supplierType:allMode?'other':$('supplierType').value,limit:allMode?120:60});
       var lanes=Array.isArray(data.laneResults)?data.laneResults:[];
       var okLanes=lanes.filter(function(x){return x&&x.ok===true;}).length;
       var failedLanes=lanes.length-okLanes;
       await refreshSuppliers();
-      $('supplierState').textContent='리서치 '+okLanes+'/'+lanes.length+' 경로 · 검색 '+Number(data.searched||0)+' · 적격 '+Number(data.qualified||0)+' · 저장 '+Number(data.saved||0);
+      var byType=data.byType||{};var typeText=Object.keys(byType).map(function(k){return supplierTypeLabel(k)+' '+Number(byType[k]||0);}).join(' · ');$('supplierState').textContent='리서치 '+okLanes+'/'+lanes.length+' 경로 · 검색 '+Number(data.searched||0)+' · 적격 '+Number(data.qualified||0)+' · 저장 '+Number(data.saved||0)+(typeText?' · '+typeText:'');
       if(Number(data.saved||0)>0)show('공급사 자동 리서치 완료 · 검색 '+Number(data.searched||0)+'건 · 정책 적격 '+Number(data.qualified||0)+'건 · 후보 '+Number(data.saved||0)+'건 저장','ok');
       else show('공급사 검색은 실행됐지만 저장된 적격 공급사가 0건입니다. 검색 경로 '+okLanes+'/'+lanes.length+(failedLanes?' · 실패 '+failedLanes+'경로':'')+' · 검색 '+Number(data.searched||0)+'건. 공급사 점검 JSON에서 researchPolicy를 확인해 주세요.','warn');
     }catch(error){$('supplierState').textContent='공급사 자동 리서치 실패';show('공급사 자동 리서치 실패: '+error.message,'warn');}
@@ -1237,9 +1245,17 @@
     $('refreshBtn').onclick=refresh;
     $('supplierRefreshBtn').onclick=refreshSuppliers;
     $('supplierAddBtn').onclick=addSupplier;
-    $('supplierResearchBtn').onclick=researchSuppliers;
+    $('supplierResearchBtn').onclick=function(){researchSuppliers('targeted');};
+    $('supplierResearchAllBtn').onclick=function(){researchSuppliers('all');};
+    $('supplierManageBtn').onclick=toggleSupplierManagement;
+    $('supplierSelectAll').onchange=function(){selectAllSuppliers(this.checked);};
+    $('supplierBulkActivateBtn').onclick=function(){supplierBulkStatus('active');};
+    $('supplierBulkPauseBtn').onclick=function(){supplierBulkStatus('paused');};
+    $('supplierBulkRestoreBtn').onclick=function(){supplierBulkStatus('candidate');};
+    $('supplierBulkArchiveBtn').onclick=function(){supplierBulkStatus('archived');};
     $('supplierDiagnosticBtn').onclick=supplierDiagnostic;
     $('supplierDownloadJsonBtn').onclick=downloadSupplierJson;
+    $('supplierRows').addEventListener('change',function(event){if(event.target&&event.target.classList.contains('supplierSelectRow'))updateSupplierBulkState();});
     $('supplierRows').addEventListener('click',function(event){
       var actionButton=event.target.closest('.supplierActionBtn');
       if(actionButton){supplierAction(text(actionButton.dataset.action),text(actionButton.dataset.id));return;}

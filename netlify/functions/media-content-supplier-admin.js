@@ -11,7 +11,7 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 const MaruSearch=require("./maru-search");
 
-const VERSION="media-content-supplier-admin-v1.1.0-research-policy";
+const VERSION="media-content-supplier-admin-v1.2.0-all-supplier-research-and-bulk-control";
 const TABLE=process.env.MEDIA_CONTENT_SUPPLIER_TABLE||"media_content_suppliers";
 const SUPPLIER_TYPES=new Set(["production","distributor","studio","rights_holder","agency","archive","other"]);
 const STATUSES=new Set(["candidate","active","paused","archived"]);
@@ -85,10 +85,28 @@ function summary(rows){
   rows.forEach((row)=>{const st=normalizeStatus(row.status);result[st]=(result[st]||0)+1;const t=normalizeType(row.supplier_type);result.byType[t]=(result.byType[t]||0)+1;});
   return result;
 }
-function resultUrl(item){return safeUrl(item&&(
-  item.officialUrl||item.homepage||item.website||item.url||item.link&&item.link.url||item.link||item.sourceUrl
-));}
-function resultName(item){return compact(item&&(item.organization&&item.organization.name||item.publisher||item.provider||item.sourceName||item.title||item.name),200);}
+function resultUrl(item){
+  item=plain(item);
+  const link=plain(item.link),entity=plain(item.entity),organization=plain(item.organization);
+  return safeUrl(item.officialUrl||item.official_url||item.homepage||item.homepageUrl||item.website||item.websiteUrl||item.canonicalUrl||item.canonical_url||item.sourceUrl||item.source_url||item.pageUrl||item.href||item.url||link.url||link.href||entity.url||organization.url);
+}
+function resultName(item){
+  item=plain(item);const entity=plain(item.entity),organization=plain(item.organization);
+  return compact(organization.name||entity.name||item.company||item.organizationName||item.publisher||item.provider||item.sourceName||item.title||item.name,200);
+}
+function inferSupplierType(item,url,name){
+  const raw=plain(item);
+  const signal=[name,url,raw.title,raw.summary,raw.description,raw.publisher,raw.provider,raw.sourceName,raw.category,raw.type].filter(Boolean).join(" ").toLowerCase();
+  if(/archive|film archive|audiovisual archive|cinematheque|cinémathèque|library collection/.test(signal))return"archive";
+  if(/rights holder|rights management|licensor|licensing company|content rights|copyright owner/.test(signal))return"rights_holder";
+  if(/international sales|sales agent|sales agency|world sales|sales company/.test(signal))return"agency";
+  if(/content distributor|digital distribution|content distribution|distribution platform|aggregator/.test(signal))return"distributor";
+  if(/distributor|distribution company|film distribution|television distribution|theatrical distribution|distribution/.test(signal))return"distributor";
+  if(/studio|studios/.test(signal))return"studio";
+  if(/production|productions|producer|production company|production house/.test(signal))return"production";
+  if(/agency|agent|representation/.test(signal))return"agency";
+  return"other";
+}
 function researchCandidates(items,actor,query){
   const seen=new Set(),out=[];
   for(const item of Array.isArray(items)?items:[]){
@@ -103,32 +121,36 @@ function researchCandidates(items,actor,query){
   return out;
 }
 const SUPPLIER_RESEARCH_POLICY=Object.freeze({
-  version:"media-supplier-research-policy-v1.1",
+  version:"media-supplier-research-policy-v1.2",
   targetTypes:["production","distributor","studio","rights_holder","agency","archive"],
-  requiredSignals:["official company/studio/distributor/licensor identity","https website","production/distribution/rights signal"],
+  requiredSignals:["official organization identity","https official/representative website","production/distribution/licensing/rights/archive signal"],
   excludedKinds:["consumer streaming platform","social network","video sharing platform","retail marketplace"],
   queryLanes:[
-    "film production company official website",
-    "film distributor international sales official website",
-    "content licensor rights holder official website",
-    "television production studio distributor official website",
-    "independent film production distribution company official",
-    "animation studio distributor licensing official website",
-    "music performance production distributor licensing official",
-    "documentary production distributor rights official website"
+    {type:"production",query:"film television documentary music production company official website"},
+    {type:"production",query:"independent production company producer official website"},
+    {type:"distributor",query:"film television distributor distribution company official website"},
+    {type:"distributor",query:"digital content distributor aggregator audiovisual distribution official website"},
+    {type:"studio",query:"film television animation studio official website"},
+    {type:"rights_holder",query:"content licensor rights holder licensing company official website"},
+    {type:"agency",query:"international film television sales agent world sales official website"},
+    {type:"agency",query:"media rights agency talent content representation official website"},
+    {type:"archive",query:"film audiovisual archive cinematheque licensing collection official website"},
+    {type:"other",query:"documentary production distribution rights official website"},
+    {type:"other",query:"music performance production distribution licensing official website"},
+    {type:"other",query:"animation production distribution licensing official website"}
   ]
 });
 function supplierSignalScore(item,url,name){
   const raw=plain(item),host=hostOf(url);
-  const textSignal=lower([name,raw.title,raw.summary,raw.description,raw.publisher,raw.provider,raw.sourceName,raw.organization&&raw.organization.name,url].filter(Boolean).join(" "));
+  const textSignal=[name,raw.title,raw.summary,raw.description,raw.publisher,raw.provider,raw.sourceName,raw.organization&&raw.organization.name,raw.entity&&raw.entity.name,url].filter(Boolean).join(" ").toLowerCase();
   let score=0;
   if(host)score+=2;
-  if(/production|productions|producer|studio|studios|distribut|sales|licens|rights|films|pictures|television|animation|documentary|media company|entertainment/.test(textSignal))score+=2;
-  if(/official|company|corporation|corp\b|ltd\b|limited|inc\b|gmbh|sas\b|sarl\b/.test(textSignal))score+=1;
+  if(/production|productions|producer|studio|studios|distribut|sales agent|world sales|licens|rights holder|rights management|archive|cinematheque|aggregator|films|pictures|television|animation|documentary|media company|entertainment/.test(textSignal))score+=2;
+  if(/official|company|corporation|corp\b|ltd\b|limited|inc\b|gmbh|sas\b|sarl\b|plc\b/.test(textSignal))score+=1;
   if(blockedConsumerHost(host))score=-100;
   return score;
 }
-function researchCandidatesStrict(items,actor,query){
+function researchCandidatesStrict(items,actor,query,laneType){
   const seen=new Set(),out=[];
   for(const item of Array.isArray(items)?items:[]){
     const url=resultUrl(item),host=hostOf(url),name=resultName(item);
@@ -137,43 +159,60 @@ function researchCandidatesStrict(items,actor,query){
     if(score<3)continue;
     seen.add(host);
     try{
-      out.push(normalizeSupplier({name,websiteUrl:url,supplierType:"other",status:"candidate",searchTerms:[query],researchEvidence:{title:text(item.title),source:text(item.source||item.provider),url,score,policyVersion:SUPPLIER_RESEARCH_POLICY.version}},actor,"maru-search-research"));
+      const inferred=inferSupplierType(item,url,name);
+      const supplierType=inferred!=="other"?inferred:(normalizeType(laneType)!=="other"?normalizeType(laneType):"other");
+      out.push(normalizeSupplier({name,websiteUrl:url,supplierType,status:"candidate",searchTerms:[query],researchEvidence:{title:text(item.title),source:text(item.source||item.provider),url,score,inferredType:inferred,queryLaneType:laneType||null,policyVersion:SUPPLIER_RESEARCH_POLICY.version}},actor,"maru-search-research"));
     }catch(_e){}
-    if(out.length>=100)break;
+    if(out.length>=120)break;
   }
   return out;
 }
 function buildSupplierResearchPlan(body){
-  const custom=compact(body.query||"",500),country=compact(body.country||body.region||"",80);
+  const custom=compact(body.query||"",500),country=compact(body.country||body.region||"",80),requestedType=normalizeType(body.supplierType||body.type||"other");
   const lanes=[];
-  if(custom)lanes.push(custom);
-  for(const base of SUPPLIER_RESEARCH_POLICY.queryLanes){
-    lanes.push(compact([country,base].filter(Boolean).join(" "),500));
+  if(custom)lanes.push({type:requestedType,query:compact([country,custom,"official website"].filter(Boolean).join(" "),500)});
+  for(const lane of SUPPLIER_RESEARCH_POLICY.queryLanes){
+    if(body.mode!=="all"&&requestedType!=="other"&&lane.type!==requestedType)continue;
+    lanes.push({type:lane.type,query:compact([country,lane.query].filter(Boolean).join(" "),500)});
   }
-  return Array.from(new Set(lanes.filter(Boolean))).slice(0,12);
+  const seen=new Set();
+  return lanes.filter((lane)=>{const key=lane.type+"|"+lane.query;if(!lane.query||seen.has(key))return false;seen.add(key);return true;}).slice(0,16);
+}
+async function researchLane(lane,event,perLane){
+  try{
+    const result=await MaruSearch.runEngine(event||{}, {q:lane.query,limit:perLane,deep:true,external:"deep",useExternalSources:true,type:"all"});
+    const items=Array.isArray(result&&result.items)?result.items:Array.isArray(result&&result.results)?result.results:[];
+    return{lane,items,meta:{type:lane.type,query:lane.query,searched:items.length,ok:true,source:text(result&&result.source),servedFrom:text(result&&result.served_from),externalMode:result&&result.meta&&result.meta.externalMode||null}};
+  }catch(error){
+    return{lane,items:[],meta:{type:lane.type,query:lane.query,searched:0,ok:false,error:compact(error&&error.message||error,300)}};
+  }
 }
 async function researchSuppliers(body,actor,event){
   const plan=buildSupplierResearchPlan(body);
-  const limit=Math.max(10,Math.min(100,Number(body.limit)||50));
+  const limit=Math.max(10,Math.min(160,Number(body.limit)||80));
   const perLane=Math.max(8,Math.min(30,Math.ceil(limit/Math.max(1,plan.length))+6));
-  const pooled=[];
-  const laneResults=[];
-  for(const query of plan){
-    try{
-      const result=await MaruSearch.runEngine(event||{}, {q:query,limit:perLane,deep:true,external:"deep",noMedia:true,type:"all"});
-      const items=Array.isArray(result&&result.items)?result.items:Array.isArray(result&&result.results)?result.results:[];
-      pooled.push(...items);
-      laneResults.push({query,searched:items.length,ok:true,source:text(result&&result.source)});
-    }catch(error){
-      laneResults.push({query,searched:0,ok:false,error:compact(error&&error.message||error,300)});
+  const laneResults=[],allCandidates=[];
+  for(let i=0;i<plan.length;i+=3){
+    const group=await Promise.all(plan.slice(i,i+3).map((lane)=>researchLane(lane,event,perLane)));
+    for(const result of group){
+      laneResults.push(result.meta);
+      allCandidates.push(...researchCandidatesStrict(result.items,actor,result.lane.query,result.lane.type));
     }
   }
-  const queryLabel=plan.join(" | ");
-  const candidates=researchCandidatesStrict(pooled,actor,queryLabel).slice(0,limit);
+  const byHost=new Map();
+  for(const row of allCandidates){
+    const host=lower(row.website_host);if(!host)continue;
+    const existing=byHost.get(host);
+    if(!existing){byHost.set(host,row);continue;}
+    existing.search_terms=Array.from(new Set([...(existing.search_terms||[]),...(row.search_terms||[])])).slice(0,30);
+    if(normalizeType(existing.supplier_type)==="other"&&normalizeType(row.supplier_type)!=="other")existing.supplier_type=row.supplier_type;
+  }
+  const candidates=Array.from(byHost.values()).slice(0,limit);
   const saved=candidates.length?await upsertSuppliers(candidates):[];
+  const byType={};for(const row of candidates){const t=normalizeType(row.supplier_type);byType[t]=(byType[t]||0)+1;}
   return{
-    policy:SUPPLIER_RESEARCH_POLICY,plan,laneResults,
-    searched:pooled.length,qualified:candidates.length,saved:Array.isArray(saved)?saved.length:0,
+    policy:SUPPLIER_RESEARCH_POLICY,mode:body.mode==="all"?"all":"targeted",plan,laneResults,
+    searched:laneResults.reduce((n,x)=>n+Number(x.searched||0),0),qualified:candidates.length,saved:Array.isArray(saved)?saved.length:0,byType,
     items:(Array.isArray(saved)?saved:candidates).map(publicSupplier)
   };
 }
@@ -199,7 +238,7 @@ function candidateFromSearch(item,supplier,section,actor){
     sourceMetadata:{supplierManaged:true,supplierId:supplier.id,supplierWebsite:supplier.website_url,searchResult:raw}
   },actor);
 }
-async function collectSupplierContents(body,actor){
+async function collectSupplierContents(body,actor,event){
   const id=text(body.id||body.supplierId),section=MediaStore.normalizeSection(body.section||body.sectionKey);
   if(!id){const e=new Error("공급사를 선택하세요.");e.statusCode=400;e.code="supplier_id_required";throw e;}
   if(!section){const e=new Error("콘텐츠를 보낼 미디어 섹션을 선택하세요.");e.statusCode=400;e.code="supplier_content_section_required";throw e;}
@@ -210,7 +249,7 @@ async function collectSupplierContents(body,actor){
   const terms=Array.isArray(supplier.search_terms)?supplier.search_terms:[];
   const query=compact(body.query||[supplier.name,supplier.website_host,terms.slice(0,4).join(" "),"video film series official"].filter(Boolean).join(" "),500);
   const limit=Math.max(5,Math.min(80,Number(body.limit)||30));
-  const result=await MaruSearch.runEngine({}, {q:query,limit,deep:true,external:"force",noMedia:true,type:"all"});
+  const result=await MaruSearch.runEngine(event||{}, {q:query,limit,deep:true,external:"deep",useExternalSources:true,type:"all"});
   const items=Array.isArray(result&&result.items)?result.items:Array.isArray(result&&result.results)?result.results:[];
   const normalized=[];
   for(const item of items){
@@ -247,7 +286,22 @@ exports.handler=async function(event){
       return MediaStore.response(200,{ok:true,version:VERSION,action,updated:Array.isArray(saved)?saved.length:0,suppliers:(saved||[]).map(publicSupplier)});
     }
     if(action==="research")return MediaStore.response(200,Object.assign({ok:true,version:VERSION,action},await researchSuppliers(body,actor,event)));
-    if(action==="collect_contents")return MediaStore.response(200,Object.assign({ok:true,version:VERSION,action},await collectSupplierContents(body,actor)));
+    if(action==="collect_contents")return MediaStore.response(200,Object.assign({ok:true,version:VERSION,action},await collectSupplierContents(body,actor,event)));
+    if(action==="bulk_status"){
+      const ids=Array.from(new Set(array(body.ids).map(text).filter(Boolean))).slice(0,500);
+      const requested=lower(body.status);
+      const status=({active:"active",activate:"active",paused:"paused",pause:"paused",archived:"archived",archive:"archived",candidate:"candidate",restore:"candidate"})[requested];
+      if(!ids.length)return MediaStore.response(400,{ok:false,error:"supplier_ids_required"});
+      if(!status)return MediaStore.response(400,{ok:false,error:"supplier_bulk_status_invalid"});
+      let updated=0;
+      for(let i=0;i<ids.length;i+=25){
+        const batch=ids.slice(i,i+25);
+        const query="id=in.("+batch.map((id)=>encodeURIComponent(id)).join(",")+")";
+        const saved=await MediaStore.supabase(rest(query),{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify({status,updated_by:compact(actor.email||actor.memberId||"admin",200),updated_at:now()})});
+        updated+=Array.isArray(saved)?saved.length:0;
+      }
+      return MediaStore.response(200,{ok:true,version:VERSION,action,status,requested:ids.length,updated});
+    }
     if(["activate","pause","archive","restore"].includes(action)){
       const id=text(body.id||body.supplierId);if(!id)return MediaStore.response(400,{ok:false,error:"supplier_id_required"});
       const status={activate:"active",pause:"paused",archive:"archived",restore:"candidate"}[action];
@@ -265,4 +319,4 @@ exports.handler=async function(event){
   }
 };
 
-exports._test={normalizeSupplier,researchCandidates,researchCandidatesStrict,buildSupplierResearchPlan,supplierSignalScore,blockedConsumerHost,summary,matchesSupplier,candidateFromSearch,SUPPLIER_RESEARCH_POLICY};
+exports._test={normalizeSupplier,researchCandidates,researchCandidatesStrict,buildSupplierResearchPlan,supplierSignalScore,inferSupplierType,resultUrl,resultName,blockedConsumerHost,summary,matchesSupplier,candidateFromSearch,SUPPLIER_RESEARCH_POLICY};

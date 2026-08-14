@@ -5,7 +5,7 @@
  * the existing Netlify production build pipeline. The hook URL and release
  * key remain server-only.
  */
-const VERSION="media-release-dispatch-v1.1.0-admin-authorized-hook-alias-compatible";
+const VERSION="media-release-dispatch-v1.2.0-admin-authorized-hook-diagnostics";
 const HOOK_ENVS=Object.freeze([
   "MEDIA_RELEASE_BUILD_HOOK_URL",
   "NETLIFY_BUILD_HOOK_URL",
@@ -39,6 +39,22 @@ function releaseArmed(input){
     explicitAdminAuthorization
   };
 }
+
+function configurationStatus(){
+  const configured=configuredHook();
+  const envGate=releaseArmed({explicitAdminAuthorization:false});
+  return {
+    version:VERSION,
+    environmentArmed:!!envGate.environmentArmed,
+    explicitAdminActionSupported:true,
+    hookConfigured:!!configured.value,
+    hookSource:configured.value?configured.name:null,
+    hookValid:!!validHook(configured.value),
+    mode:envGate.mode||"",
+    keyPresent:!!envGate.keyPresent
+  };
+}
+
 function validHook(raw){
   try{
     const url=new URL(text(raw));
@@ -96,4 +112,4 @@ async function dispatch(input){
   }finally{clearTimeout(timeout);}
 }
 
-module.exports={VERSION,HOOK_ENVS,HOOK_ENV,MODE_ENV,KEY_ENV,configuredHook,releaseArmed,validHook,dispatch};
+module.exports={VERSION,HOOK_ENVS,HOOK_ENV,MODE_ENV,KEY_ENV,configuredHook,configurationStatus,releaseArmed,validHook,dispatch};

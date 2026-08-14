@@ -69,7 +69,7 @@
     <button id="storeReleaseBtn" class="publish">전체 최종 승인 실행</button>
     <button id="downloadSnapshotBtn" class="secondary">스냅샷 다운로드</button>
     <button id="downloadAllCandidateListBtn" class="secondary">전체 10개 섹션 후보 JSON</button>
-    <button id="downloadPipelineStatusBtn" class="secondary">공개 파이프라인 단계 JSON</button>
+    <button id="downloadPipelineStatusBtn" class="secondary">프론트 매칭 정밀 점검 JSON</button>
     <button id="returnBtn" class="secondary">관리자 화면으로</button>
     <span id="state" class="state"></span>
   </div>
@@ -92,7 +92,7 @@
     <div class="supplier-form">
       <input id="supplierName" placeholder="공급사명 / 프로덕션·배급사명">
       <input id="supplierWebsite" class="wide" placeholder="https:// 공식 또는 대표 웹주소">
-      <select id="supplierType"><option value="production">프로덕션</option><option value="distributor">배급사</option><option value="studio">스튜디오</option><option value="rights_holder">권리보유사</option><option value="agency">에이전시</option><option value="archive">아카이브</option><option value="other">기타</option></select>
+      <select id="supplierType"><option value="production">프로덕션</option><option value="distributor">배급사·콘텐츠 배포사</option><option value="studio">스튜디오</option><option value="rights_holder">권리보유사</option><option value="agency">에이전시·국제세일즈</option><option value="archive">아카이브</option><option value="other">기타</option></select>
       <input id="supplierCountry" placeholder="국가/지역 (선택)">
       <input id="supplierSearchTerms" class="wide" placeholder="검색 키워드, 쉼표로 구분">
       <input id="supplierNotes" class="wide" placeholder="계약·제휴·관리 메모 (선택)">
@@ -100,11 +100,14 @@
     </div>
     <div class="supplier-actions">
       <input id="supplierResearchQuery" placeholder="자동 리서치 키워드 (비우면 프로덕션·배급사·스튜디오·권리보유사 다중 탐색)" style="min-width:340px;flex:1">
-      <button id="supplierResearchBtn">AI/검색 기반 공급사 자동 리서치</button>
+      <button id="supplierResearchBtn">선택 유형 공급사 리서치</button>
+      <button id="supplierResearchAllBtn" class="publish">AI 전체 공급사 자동 리서치</button>
+      <button id="supplierManageBtn" class="secondary">공급사 목록 관리</button>
       <select id="supplierContentSection"><option value="media-movie">영화</option><option value="media-drama">드라마·TV</option><option value="media-thriller">스릴러·미스터리</option><option value="media-romance">로맨스</option><option value="media-variety">버라이어티·토크</option><option value="media-documentary">다큐멘터리</option><option value="media-animation">애니메이션</option><option value="media-music">음악·공연</option><option value="media-shorts">쇼츠·단편</option></select>
       <span class="small">탐색 정책: 공식 프로덕션·배급사·스튜디오·국제세일즈·라이선서·권리보유사·아카이브를 여러 검색 경로로 교차 탐색하고, HTTPS 공식/대표 사이트와 공급·배급·권리 신호가 확인된 후보만 저장합니다. 넷플릭스·프라임비디오·유튜브·SNS·소비자 플랫폼은 제외합니다. 활성 공급사의 콘텐츠 수집은 아래 목록의 ‘영상 후보 수집’에서 실행합니다.</span>
     </div>
-    <div class="tablewrap"><table class="supplier-table"><thead><tr><th>상태</th><th>공급사</th><th>유형</th><th>국가</th><th>웹주소</th><th>탐색어</th><th>최근 갱신</th><th>관리</th></tr></thead><tbody id="supplierRows"><tr><td colspan="8" class="small">공급사 목록을 불러오는 중입니다.</td></tr></tbody></table></div>
+    <div id="supplierBulkBar" class="supplier-actions hidden"><label class="small"><input type="checkbox" id="supplierSelectAll"> 전체 선택</label><button id="supplierBulkActivateBtn" class="publish">선택 활성</button><button id="supplierBulkPauseBtn" class="secondary">선택 중지</button><button id="supplierBulkRestoreBtn" class="secondary">선택 후보 복원</button><button id="supplierBulkArchiveBtn" class="danger">선택 보관</button><span id="supplierBulkState" class="state">선택 0개</span></div>
+    <div class="tablewrap"><table class="supplier-table"><thead><tr><th class="supplier-select-col">선택</th><th>상태</th><th>공급사</th><th>유형</th><th>국가</th><th>웹주소</th><th>탐색어</th><th>최근 갱신</th><th>관리</th></tr></thead><tbody id="supplierRows"><tr><td colspan="9" class="small">공급사 목록을 불러오는 중입니다.</td></tr></tbody></table></div>
     <pre id="supplierDiagnosticJson" class="json hidden"></pre>
   </section>
 
