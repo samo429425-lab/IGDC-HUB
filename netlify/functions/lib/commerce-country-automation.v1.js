@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.17.3-optional-sponsorship-rail";
+const VERSION = "commerce-country-automation-v3.17.4-front-match-scope-isolation";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2654,7 +2654,11 @@ async function revalidateProductFrontTargets(actorId, input, targetsInput, optio
   const selectedIds = array(targetsInput).map((row)=>text(row && row.candidateId)).filter(Boolean);
   const publishedIds = options.includePublishedScope === true ? await scopePublishedCandidateIds(input) : [];
   const ids = Array.from(new Set(selectedIds.concat(publishedIds))).slice(0,500);
-  const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:options.includePublishedScope === true ? "front_apply_scope_refresh" : "front_apply_final_check", reassign:true, reuseFreshValidation:input&&input.reuseFreshValidation===true, freshValidationMinutes:Number(input&&input.freshValidationMinutes)||720 });
+  // Front Match is a publication check, not another placement pass. Preserve the
+  // exact 18-section assignment selected on the administrator screen; only a
+  // hard runtime failure may hold/withdraw the product. AI reclassification is
+  // reserved for the explicit AI placement controls.
+  const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:options.includePublishedScope === true ? "front_apply_scope_refresh" : "front_apply_final_check", reassign:false, reuseFreshValidation:input&&input.reuseFreshValidation===true, freshValidationMinutes:Number(input&&input.freshValidationMinutes)||720 });
   return Object.assign({}, result, { selectedRequested:selectedIds.length, publishedScopeRequested:publishedIds.length, scopeRefresh:options.includePublishedScope === true });
 }
 const PRODUCT_AI_QUEUE_SYNC_BATCH = 6;
@@ -3373,7 +3377,7 @@ async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
       const itemOperation = ["unpublish_requested","unmatched","already_unmatched"].includes(lower(status)) ? "unmatch" : operation;
       const key = text(item.sectionKey || productPlacementKey(payload.approvedPlacement || payload.selectedPlacement || payload.primaryPlacement || payload.placement));
       const split = validProductSectionKey(key) ? splitProductSectionKey(key) : null;
-      const previousPlacement = plain(payload.approvedPlacement || payload.selectedPlacement || payload.primaryPlacement || payload.placement), previousFront = plain(payload.frontPublication);
+      const previousFront = plain(payload.frontPublication);
       payload.frontPublication = Object.assign({}, previousFront, { schema:"igdc-product-front-publication-control.v4", candidateId:id, operation:itemOperation, status, queued:item.queued===true, persisted:item.persisted===true, pendingBuild:item.pendingBuild===true, persistenceVerified:item.persistenceVerified!==false&&item.persisted===true, reason:text(item.reason)||null, assignmentId:text(item.assignmentId)||text(previousFront.assignmentId)||null, page:split&&split.page||text(previousFront.page)||null, section:split&&split.sectionKey||text(previousFront.section)||null, sectionKey:split&&split.sectionKey||text(previousFront.sectionKey)||null, country:scope.country, region:scope.region, requestedAt:now, requestedBy:actor, publicSnapshotConfirmed:false, buildVerificationRequired:true });
       if (itemOperation === "match" && item.persisted === true && split) {
         payload.slotDecision = "slot_candidate";
@@ -3383,12 +3387,15 @@ async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
       }
       const unmatchCompleted = itemOperation === "unmatch" && ["unpublish_requested","unmatched","already_unmatched"].includes(lower(status));
       if (unmatchCompleted) {
-        if (Object.keys(previousPlacement).length) payload.previousApprovedPlacement = Object.assign({}, previousPlacement, { removedAt:now, removedReason:"administrator_front_unmatch" });
-        payload.slotDecision = "undecided";
-        delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.primaryPlacement; delete payload.placement;
-        payload.managementControl = Object.assign({}, plain(payload.managementControl), { schema:"igdc-product-management-control.v1", source:"administrator_front_unmatch", administratorLocked:false, aiReclassificationAllowed:true, decidedAt:now, decidedBy:actor });
-        payload.review = Object.assign({}, plain(payload.review), { state:"research_pending", publicationRequested:false, explicitPublicationRequested:false, publicationStatus:"unpublish_requested", decidedAt:now, decidedBy:actor });
-        payload.pipeline = Object.assign({}, plain(payload.pipeline), { stage:"private_research_queue", nextGate:"administrator_product_selection", explicitPublicationRequested:false, publicationStatus:"unpublish_requested", updatedAt:now, updatedBy:actor });
+        // Front unmatch is intentionally reversible and must not erase the
+        // administrator/AI section placement. Unassigning a product is a
+        // separate management action (undecided/hold/reject). Keeping the
+        // placement here lets one product, one section, selected sections or all
+        // sections be matched and unmatched independently without rebuilding the
+        // 18-section allocation first.
+        const existingReview=plain(payload.review), existingPipeline=plain(payload.pipeline);
+        payload.review = Object.assign({}, existingReview, { publicationRequested:false, explicitPublicationRequested:false, publicationStatus:"unpublish_requested", nextGate:"administrator_front_match", decidedAt:now, decidedBy:actor });
+        payload.pipeline = Object.assign({}, existingPipeline, { nextGate:"administrator_front_match", explicitPublicationRequested:false, publicationStatus:"unpublish_requested", updatedAt:now, updatedBy:actor });
       }
       payload.publicPublication=false;
       try { await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{source_payload:payload,updated_at:now}); }

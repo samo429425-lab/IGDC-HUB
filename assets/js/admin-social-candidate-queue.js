@@ -1,4 +1,4 @@
-/* IGDC Social Hub Influencer Registry + Latest Content Control v2.5.1 - lightweight diagnostics */
+/* IGDC Social Hub Influencer Registry + Latest Content Control v2.6.0 - SearchBank handoff diagnostics */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -2008,12 +2008,12 @@
           scopeMode: scopeMode(),
         }),
         verification = await get(PUBLISH + "?" + q.toString());
-      download("igdc-social-canonical-pipeline-verification.json", verification);
+      download("igdc-social-searchbank-handoff-verification.json", verification);
       diagnostic(verification);
       show(
         verification.ok
-          ? "정식 파이프라인 단계별 검증 JSON을 다운로드했습니다."
-          : "현재 배포 상태와 저장 승인본 사이의 불일치가 포함된 점검 JSON을 다운로드했습니다.",
+          ? "승인 콘텐츠가 SearchBank Snapshot까지 정상 인계된 것을 확인했습니다."
+          : "승인 콘텐츠와 SearchBank Snapshot 사이의 인계 불일치가 포함된 점검 JSON을 다운로드했습니다.",
         verification.ok ? "ok" : "warn",
       );
     } catch (error) {
@@ -2103,7 +2103,7 @@
           scopeName +
             " 범위의 " +
             target +
-            " 승인본을 저장했고 정식 배포 빌드를 접수했습니다. 배포가 끝나면 SearchBank 어댑터→기존 Snapshot Engine→정적 소셜 스냅샷 순서로 반영됩니다.",
+            " 승인본을 저장했고 정식 배포 빌드를 접수했습니다. 정책·PSOM 검증을 통과한 콘텐츠가 기존 SearchBank Snapshot에 들어가면 이후 Snapshot Engine→소셜 Snapshot→AutoMap 경로는 기존 구조대로 이어집니다.",
           "ok",
         );
       } else {

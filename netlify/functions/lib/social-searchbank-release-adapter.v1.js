@@ -1,13 +1,19 @@
 "use strict";
 
 /**
- * Social SearchBank Release Adapter v1
+ * Social -> SearchBank Snapshot handoff bridge.
  *
- * Build-time contract bridge only:
- * approved Social candidate release -> SearchBank-shaped release document ->
- * existing Snapshot Engine -> data/social.snapshot.json.
+ * Purpose:
+ *   approved Social release -> strict Social/PSOM policy gate -> existing
+ *   SearchBank Snapshot mirrors -> existing Snapshot Engine -> Social Snapshot.
  *
- * It never serves a front feed and never edits Social HTML or Automap files.
+ * Safety:
+ * - SearchBank Engine code is not modified.
+ * - Snapshot Engine code is not modified.
+ * - Social HTML / Automap files are not modified.
+ * - Existing SearchBank sample/placeholder rows are never deleted.
+ * - Only prior real rows previously published by this social-candidate bridge
+ *   are replaced by the latest authoritative stored Social release.
  */
 const fs = require("fs");
 const path = require("path");
@@ -15,12 +21,16 @@ const crypto = require("crypto");
 const SocialStore = require("./social-candidate-store.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "social-searchbank-release-adapter-v1.0.0";
+const VERSION = "social-searchbank-release-adapter-v1.1.0-main-searchbank-handoff";
 const RELEASE_FILE = "social-searchbank.release.snapshot.json";
 const REPORT_FILE = "social-pipeline.report.json";
+const SEARCH_BANK_FILE = "search-bank.snapshot.json";
 
 function text(value) {
   return value == null ? "" : String(value).trim();
+}
+function lower(value) {
+  return text(value).toLowerCase();
 }
 function rootOf(input) {
   return path.resolve((input && input.root) || process.cwd());
@@ -45,7 +55,7 @@ function sha256(value) {
 }
 function atomicWriteJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temporary = file + ".tmp-" + process.pid;
+  const temporary = file + ".tmp-" + process.pid + "-" + Date.now();
   fs.writeFileSync(temporary, JSON.stringify(value, null, 2) + "\n", "utf8");
   fs.renameSync(temporary, file);
 }
@@ -58,6 +68,13 @@ function readJson(file) {
 }
 function outputPath(root, file) {
   return path.join(root, "data", file);
+}
+function searchBankPaths(root) {
+  return [
+    path.join(root, "data", SEARCH_BANK_FILE),
+    path.join(root, "netlify", "functions", "data", SEARCH_BANK_FILE),
+    path.join(root, "netlify", "functions", SEARCH_BANK_FILE),
+  ];
 }
 function socialSections(snapshot) {
   return (
@@ -89,6 +106,12 @@ function sourceItem(slot, sectionKey, release) {
     slot &&
       (slot.thumbnailUrl || slot.thumbnail || slot.thumb || slot.imageUrl || slot.image),
   );
+  const countries = Array.isArray(social.countryScopes)
+    ? social.countryScopes.map((v) => text(v).toUpperCase()).filter(Boolean)
+    : [];
+  const languages = Array.isArray(social.languageScopes)
+    ? social.languageScopes.map(text).filter(Boolean)
+    : [];
   return {
     id,
     contentId: id,
@@ -103,9 +126,10 @@ function sourceItem(slot, sectionKey, release) {
     image: thumbnail,
     page: "social",
     channel: "social",
+    section: sectionKey,
     psom_key: sectionKey,
     category: sectionKey,
-    bind: { page: "social", section: sectionKey },
+    bind: { page: "social", section: sectionKey, psom_key: sectionKey, route: "social." + sectionKey },
     type: "external_social",
     description: text(slot.description || slot.summary),
     creator: text(slot.creator || slot.creatorName || slot.creatorHandle),
@@ -123,12 +147,16 @@ function sourceItem(slot, sectionKey, release) {
     accessStatus: "public",
     verified: true,
     realContent: true,
+    sample: false,
+    placeholder: false,
     snapshotEligible: true,
     frontSupplyAllowed: true,
     searchBankEligible: true,
     indexEligible: true,
     riskLevel: "low",
     blockedReason: "",
+    geo: countries.length ? { country: countries[0] } : undefined,
+    lang: languages.length ? languages[0] : undefined,
     source: {
       name: text(source.provider || source.platform || social.platform) || "social_candidates",
       platform: text(social.platform || source.platform),
@@ -141,12 +169,8 @@ function sourceItem(slot, sectionKey, release) {
       channelUrl: text(social.channelUrl),
       latestContentUrl: url,
       contentPublishedAt: text(social.contentPublishedAt),
-      countryScopes: Array.isArray(social.countryScopes)
-        ? social.countryScopes.slice()
-        : [],
-      languageScopes: Array.isArray(social.languageScopes)
-        ? social.languageScopes.slice()
-        : [],
+      countryScopes: countries,
+      languageScopes: languages,
     },
     signals: Object.assign({}, slot.signals || {}),
     audit: {
@@ -168,13 +192,14 @@ function sourceItem(slot, sectionKey, release) {
       producerVerified: false,
     },
     socialCandidatePublication: {
+      bridgeVersion: VERSION,
       releaseId: text(release.release_id),
       releaseHash: text(release.snapshot_hash),
       candidateId: id,
       approvedAt: text(audit.approved_at),
       createdAt: text(release.created_at),
     },
-    snapshotSource: "data/" + RELEASE_FILE,
+    snapshotSource: "data/" + SEARCH_BANK_FILE,
   };
 }
 function releaseToBank(release) {
@@ -204,6 +229,180 @@ function releaseToBank(release) {
     items,
   });
   return { bank, counts };
+}
+function psomSocialSections(root) {
+  const candidates = [
+    path.join(root, "data", "psom.json"),
+    path.join(root, "netlify", "functions", "data", "psom.json"),
+  ];
+  for (const file of candidates) {
+    const doc = readJson(file);
+    const rows = doc && doc.pages && doc.pages.social && doc.pages.social.sections;
+    if (Array.isArray(rows) && rows.length) {
+      return { file, sections: new Set(rows.map(text).filter(Boolean)) };
+    }
+  }
+  return { file: null, sections: new Set() };
+}
+function validHttps(value) {
+  try {
+    const u = new URL(text(value));
+    return u.protocol === "https:" && !!u.hostname;
+  } catch (_error) {
+    return false;
+  }
+}
+function isPlaceholderImage(value) {
+  const v = lower(value);
+  return !v || v.includes("placeholder") || v.includes("/assets/sample/");
+}
+function policyGate(root, bank) {
+  const psom = psomSocialSections(root);
+  const allowed = new Set(SocialStore.Policy.SECTION_KEYS);
+  const accepted = [];
+  const rejected = [];
+  const seenIds = new Set();
+  const seenUrls = new Set();
+  const counts = {};
+  SocialStore.Policy.SECTION_KEYS.forEach((key) => { counts[key] = 0; });
+
+  for (const raw of Array.isArray(bank && bank.items) ? bank.items : []) {
+    const item = raw || {};
+    const section = text(item.psom_key || item.section || (item.bind && item.bind.section));
+    const id = text(item.id || item.contentId || item.candidateId);
+    const url = text(item.url || item.link);
+    const image = text(item.thumbnail || item.thumb || item.image);
+    const reasons = [];
+    if (!allowed.has(section)) reasons.push("SOCIAL_SECTION_NOT_ALLOWED");
+    if (psom.sections.size && !psom.sections.has(section)) reasons.push("SOCIAL_SECTION_NOT_IN_PSOM");
+    if (section === "social-maru" || section === "rightPanel") reasons.push("RESERVED_SOCIAL_SECTION");
+    if (text(item.page || (item.bind && item.bind.page)).toLowerCase() !== "social") reasons.push("PAGE_NOT_SOCIAL");
+    if (!id) reasons.push("CANDIDATE_ID_MISSING");
+    if (!text(item.title)) reasons.push("TITLE_MISSING");
+    if (!validHttps(url)) reasons.push("PUBLIC_HTTPS_URL_REQUIRED");
+    if (!image || isPlaceholderImage(image)) reasons.push("REAL_THUMBNAIL_REQUIRED");
+    if (item.publicAccess !== true) reasons.push("PUBLIC_ACCESS_REQUIRED");
+    if (item.searchBankEligible === false || item.snapshotEligible === false || item.frontSupplyAllowed === false) reasons.push("SEARCHBANK_OR_SNAPSHOT_NOT_ELIGIBLE");
+    if (["blocked", "critical", "illegal", "unsafe", "rejected"].includes(lower(item.riskLevel))) reasons.push("RISK_BLOCKED");
+    if (id && seenIds.has(id)) reasons.push("DUPLICATE_ID");
+    if (url && seenUrls.has(url.toLowerCase())) reasons.push("DUPLICATE_URL");
+    if (reasons.length) {
+      rejected.push({ id: id || null, section: section || null, url: url || null, reasons });
+      continue;
+    }
+    seenIds.add(id);
+    seenUrls.add(url.toLowerCase());
+    counts[section] = (counts[section] || 0) + 1;
+    accepted.push(item);
+  }
+  return {
+    // Bad rows are held out individually; one bad candidate must not block every
+    // valid candidate in the same release. A truly empty release is allowed so
+    // an explicit unpublish can fall back to preserved sample slots.
+    ok: accepted.length > 0 || (Array.isArray(bank && bank.items) && bank.items.length === 0),
+    clean: rejected.length === 0,
+    psomFile: psom.file ? path.relative(root, psom.file).replace(/\\/g, "/") : null,
+    accepted,
+    rejected,
+    counts,
+  };
+}
+function isPriorSocialCandidateItem(item) {
+  if (!item || typeof item !== "object") return false;
+  const audit = item.audit && typeof item.audit === "object" ? item.audit : {};
+  return (
+    text(audit.origin) === "social_candidates" ||
+    !!(item.socialCandidatePublication && item.socialCandidatePublication.candidateId)
+  );
+}
+function isSocialSampleItem(item) {
+  if (!item || typeof item !== "object") return false;
+  const section = text(item.psom_key || item.section || (item.bind && item.bind.section));
+  if (!section.startsWith("social-")) return false;
+  if (isPriorSocialCandidateItem(item)) return false;
+  const url = lower(item.url || item.link || item.href);
+  const title = lower(item.title || item.name);
+  return (
+    item.sample === true ||
+    item.placeholder === true ||
+    item.replaceableSlot === true ||
+    title.includes("seed placeholder") ||
+    url === "#" ||
+    url.includes("example.com") ||
+    lower(item.thumbnail || item.thumb || item.image).includes("placeholder")
+  );
+}
+function loadSearchBankSnapshot(root) {
+  const paths = searchBankPaths(root);
+  const docs = paths.map((file) => ({ file, doc: readJson(file) })).filter((row) => row.doc && Array.isArray(row.doc.items));
+  if (!docs.length) {
+    const error = new Error("SEARCH_BANK_SNAPSHOT_NOT_FOUND");
+    error.code = "search_bank_snapshot_not_found";
+    throw error;
+  }
+  const primary = docs[0];
+  return {
+    file: primary.file,
+    doc: primary.doc,
+    mirrors: paths.map((file) => ({ file, present: !!readJson(file) })),
+  };
+}
+function mergeIntoSearchBankSnapshot(input) {
+  const root = rootOf(input);
+  const release = input && input.release;
+  const converted = input && input.converted ? input.converted : releaseToBank(release);
+  const gate = policyGate(root, converted.bank);
+  if (!gate.ok) {
+    const error = new Error("SOCIAL_SEARCHBANK_POLICY_GATE_REJECTED");
+    error.code = "social_searchbank_policy_gate_rejected";
+    error.details = { rejected: gate.rejected.slice(0, 100), counts: gate.counts };
+    throw error;
+  }
+  const loaded = loadSearchBankSnapshot(root);
+  const current = loaded.doc;
+  const oldItems = Array.isArray(current.items) ? current.items : [];
+  const preserved = oldItems.filter((item) => !isPriorSocialCandidateItem(item));
+  const previousRealCount = oldItems.length - preserved.length;
+  const sampleSocialCountBefore = oldItems.filter(isSocialSampleItem).length;
+  const incoming = gate.accepted;
+  const merged = PublicSnapshot.sanitizeDocument(Object.assign({}, current, {
+    items: preserved.concat(incoming),
+    meta: Object.assign({}, current.meta || {}, {
+      generated_at: (current.meta && current.meta.generated_at) || undefined,
+      socialCandidateHandoff: {
+        version: VERSION,
+        mode: "replace-prior-social-candidate-real-items-preserve-samples",
+        releaseId: text(release && release.release_id),
+        releaseHash: text(release && release.snapshot_hash),
+        updatedAt: new Date().toISOString(),
+        previousRealSocialCandidateItems: previousRealCount,
+        insertedRealSocialCandidateItems: incoming.length,
+        sampleSocialItemsPreserved: sampleSocialCountBefore,
+        sectionCounts: gate.counts,
+        psomFile: gate.psomFile,
+      },
+    }),
+  }));
+  const digest = sha256(merged);
+  const writes = [];
+  for (const file of searchBankPaths(root)) {
+    atomicWriteJson(file, merged);
+    writes.push({ path: path.relative(root, file).replace(/\\/g, "/"), sha256: digest, itemCount: merged.items.length });
+  }
+  return {
+    ok: true,
+    releaseId: text(release && release.release_id),
+    hash: digest,
+    previousTotalItems: oldItems.length,
+    finalTotalItems: merged.items.length,
+    previousRealSocialCandidateItems: previousRealCount,
+    insertedRealSocialCandidateItems: incoming.length,
+    sampleSocialItemsPreserved: sampleSocialCountBefore,
+    counts: gate.counts,
+    psomFile: gate.psomFile,
+    writes,
+    bank: merged,
+  };
 }
 async function latestStoredRelease() {
   const rows = await SocialStore.selectReleases(
@@ -244,7 +443,8 @@ async function publish(input) {
     status: "preserved",
     pipeline: {
       releaseRead: "not_started",
-      searchBankReleaseBuild: "not_started",
+      policyAndPsomGate: "not_started",
+      searchBankSnapshotHandoff: "not_started",
       snapshotEngine: "not_started",
       finalSocialSnapshotReadback: "not_started",
     },
@@ -266,25 +466,75 @@ async function publish(input) {
   report.pipeline.releaseRead = "passed";
   report.releaseId = text(release.release_id);
   report.releaseHash = text(release.snapshot_hash);
+
   const converted = releaseToBank(release);
-  const bankHash = sha256(converted.bank);
-  atomicWriteJson(outputPath(root, RELEASE_FILE), converted.bank);
-  report.pipeline.searchBankReleaseBuild = "passed";
-  report.searchBankRelease = {
-    file: "data/" + RELEASE_FILE,
-    hash: bankHash,
-    itemCount: converted.bank.items.length,
-    counts: converted.counts,
+  const gate = policyGate(root, converted.bank);
+  report.policyGate = {
+    ok: gate.ok,
+    psomFile: gate.psomFile,
+    acceptedCount: gate.accepted.length,
+    rejectedCount: gate.rejected.length,
+    counts: gate.counts,
+    rejected: gate.rejected.slice(0, 100),
   };
-  if (!snapshotEngine || typeof snapshotEngine.run !== "function") {
-    const error = new Error("SOCIAL_SNAPSHOT_ENGINE_RUNNER_MISSING");
-    error.code = "social_snapshot_engine_runner_missing";
-    throw error;
+  if (!gate.ok) {
+    report.status = "blocked";
+    report.reason = "social_searchbank_policy_gate_rejected";
+    report.pipeline.policyAndPsomGate = "failed";
+    atomicWriteJson(outputPath(root, REPORT_FILE), report);
+    return report;
   }
+  report.pipeline.policyAndPsomGate = "passed";
+
+  // Keep a small dedicated handoff audit file for administrators, but the
+  // authoritative downstream source is the ordinary SearchBank Snapshot.
+  const auditBank = PublicSnapshot.sanitizeDocument(Object.assign({}, converted.bank, {
+    meta: Object.assign({}, converted.bank.meta || {}, {
+      note: "Audit mirror only. Authoritative handoff is data/search-bank.snapshot.json.",
+    }),
+  }));
+  atomicWriteJson(outputPath(root, RELEASE_FILE), auditBank);
+
+  let handoff;
+  try {
+    handoff = mergeIntoSearchBankSnapshot({ root, release, converted });
+  } catch (error) {
+    report.status = "blocked";
+    report.reason = error.code || "searchbank_snapshot_handoff_failed";
+    report.error = text(error && error.message) || String(error);
+    report.details = error.details || null;
+    report.pipeline.searchBankSnapshotHandoff = "failed";
+    atomicWriteJson(outputPath(root, REPORT_FILE), report);
+    return report;
+  }
+  report.pipeline.searchBankSnapshotHandoff = "passed";
+  report.searchBankSnapshot = {
+    file: "data/" + SEARCH_BANK_FILE,
+    hash: handoff.hash,
+    previousTotalItems: handoff.previousTotalItems,
+    finalTotalItems: handoff.finalTotalItems,
+    previousRealSocialCandidateItems: handoff.previousRealSocialCandidateItems,
+    insertedRealSocialCandidateItems: handoff.insertedRealSocialCandidateItems,
+    sampleSocialItemsPreserved: handoff.sampleSocialItemsPreserved,
+    counts: handoff.counts,
+    psomFile: handoff.psomFile,
+    writes: handoff.writes,
+  };
+
+  if (!snapshotEngine || typeof snapshotEngine.run !== "function") {
+    // SearchBank handoff is complete. A caller may deliberately let the
+    // existing downstream build stage perform Snapshot Engine publication.
+    report.pipeline.snapshotEngine = "deferred_existing_pipeline";
+    report.pipeline.finalSocialSnapshotReadback = "deferred_existing_pipeline";
+    report.status = "searchbank_handoff_complete";
+    atomicWriteJson(outputPath(root, REPORT_FILE), report);
+    return report;
+  }
+
   const engineReport = snapshotEngine.run({
     targetPage: "social",
-    bank: converted.bank,
-    trigger: "netlify-build-social-approved-release",
+    bank: handoff.bank,
+    trigger: "netlify-build-social-searchbank-snapshot-handoff",
   });
   if (engineReport && engineReport.ok === false) {
     const error = new Error("SOCIAL_SNAPSHOT_ENGINE_REPORTED_FAILURE");
@@ -293,7 +543,7 @@ async function publish(input) {
   }
   report.pipeline.snapshotEngine = "passed";
   report.snapshotEngineReport = engineReport || null;
-  const expectedIds = new Set(converted.bank.items.map((item) => text(item.id)).filter(Boolean));
+  const expectedIds = new Set(gate.accepted.map((item) => text(item.id)).filter(Boolean));
   const final = finalSocialSummary(root, expectedIds);
   report.finalSocialSnapshot = final;
   report.pipeline.finalSocialSnapshotReadback =
@@ -313,7 +563,12 @@ module.exports = {
   VERSION,
   RELEASE_FILE,
   REPORT_FILE,
+  SEARCH_BANK_FILE,
+  searchBankPaths,
   releaseToBank,
+  policyGate,
+  mergeIntoSearchBankSnapshot,
+  isPriorSocialCandidateItem,
   publish,
   sha256,
 };

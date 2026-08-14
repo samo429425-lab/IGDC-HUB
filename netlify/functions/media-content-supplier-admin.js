@@ -1,0 +1,202 @@
+"use strict";
+
+/**
+ * IGDC Media Content Supplier Admin
+ * Dedicated supplier registry for productions/distributors/content licensors.
+ * This module never writes SearchBank or front snapshots directly.
+ * Supplier research/collection only creates supplier candidates or media candidates;
+ * front publication remains the existing administrator approval -> SearchBank pipeline.
+ */
+const MediaStore=require("./lib/media-candidate-store.v1");
+const SharedAdminAuth=require("./lib/global-slot-console-auth");
+const MaruSearch=require("./maru-search");
+
+const VERSION="media-content-supplier-admin-v1.0.0";
+const TABLE=process.env.MEDIA_CONTENT_SUPPLIER_TABLE||"media_content_suppliers";
+const SUPPLIER_TYPES=new Set(["production","distributor","studio","rights_holder","agency","archive","other"]);
+const STATUSES=new Set(["candidate","active","paused","archived"]);
+const BLOCKED_CONSUMER_HOSTS=[
+  "netflix.com","primevideo.com","amazon.com","disneyplus.com","hulu.com","max.com","hbomax.com",
+  "youtube.com","youtu.be","tiktok.com","instagram.com","facebook.com","x.com","twitter.com",
+  "vimeo.com","dailymotion.com","twitch.tv","apple.com","tv.apple.com"
+];
+
+function plain(v){return MediaStore.plain(v);}
+function text(v){return MediaStore.text(v);}
+function lower(v){return MediaStore.lower(v);}
+function now(){return MediaStore.nowIso();}
+function compact(v,n){return MediaStore.compact(v,n);}
+function safeUrl(v){return MediaStore.normalizeUrl(v);}
+function hostOf(v){return MediaStore.hostOf(v);}
+function bool(v){return v===true||v==="true"||v===1||v==="1";}
+function array(v){return MediaStore.array(v);}
+function supplierId(name,url){return "supplier_"+MediaStore.shortHash({name:lower(name),host:hostOf(url)});}
+function normalizeType(v){const x=lower(v);return SUPPLIER_TYPES.has(x)?x:"other";}
+function normalizeStatus(v){const x=lower(v);return STATUSES.has(x)?x:"candidate";}
+function blockedConsumerHost(host){host=lower(host).replace(/^www\./,"");return BLOCKED_CONSUMER_HOSTS.some((d)=>host===d||host.endsWith("."+d));}
+function rest(query){return MediaStore.rest(TABLE,query||"");}
+function encodeEq(v){return "eq."+encodeURIComponent(text(v));}
+
+async function actorFor(event,write){
+  const actor=await SharedAdminAuth.resolveUser(event);
+  SharedAdminAuth.requireCapability(actor,write?"mediaEdit":"mediaRead");
+  MediaStore.requireRole(actor,write?"write":"read");
+  return actor;
+}
+async function selectSuppliers(query){return MediaStore.supabase(rest(query||"select=*&order=status.asc,name.asc&limit=1000"),{method:"GET",headers:{Prefer:"count=exact"}});}
+async function upsertSuppliers(rows){
+  if(!rows.length)return[];
+  return MediaStore.supabase(rest("on_conflict=id"),{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=representation"},body:JSON.stringify(rows)});
+}
+async function patchSupplier(id,patch){return MediaStore.supabase(rest("id="+encodeEq(id)),{method:"PATCH",headers:{Prefer:"return=representation"},body:JSON.stringify(patch)});}
+async function deleteSupplier(id){return MediaStore.supabase(rest("id="+encodeEq(id)),{method:"DELETE",headers:{Prefer:"return=representation"}});}
+
+function normalizeSupplier(input,actor,source){
+  const row=plain(input),name=compact(row.name||row.title||row.provider||row.organization,200);
+  const website=safeUrl(row.website_url||row.websiteUrl||row.url||row.source_url||row.sourceUrl||row.link);
+  const host=hostOf(website);
+  if(!name){const e=new Error("공급사 이름이 필요합니다.");e.statusCode=400;e.code="supplier_name_required";throw e;}
+  if(!website){const e=new Error("공급사의 HTTPS 공식/대표 주소가 필요합니다.");e.statusCode=400;e.code="supplier_https_url_required";throw e;}
+  if(blockedConsumerHost(host)){
+    const e=new Error("소비자 스트리밍·SNS 플랫폼은 이 공급사 관리대상이 아닙니다: "+host);
+    e.statusCode=409;e.code="consumer_platform_not_supplier_registry_target";throw e;
+  }
+  const stamp=now(),by=compact(actor&&actor.email||actor&&actor.memberId||"admin",200);
+  return{
+    id:text(row.id)||supplierId(name,website),name,website_url:website,website_host:host,
+    supplier_type:normalizeType(row.supplier_type||row.supplierType||row.type),status:normalizeStatus(row.status),
+    country:compact(row.country||row.region||"",80),contact_url:safeUrl(row.contact_url||row.contactUrl),
+    search_terms:Array.from(new Set(array(row.search_terms||row.searchTerms||row.keywords).map((x)=>compact(x,120)).filter(Boolean))).slice(0,30),
+    notes:compact(row.notes||row.note||"",1500),source_mode:compact(source||row.source_mode||row.sourceMode||"manual",80),
+    raw:Object.assign({},plain(row.raw),{sourceRecord:row.sourceRecord||null,researchEvidence:row.researchEvidence||null}),
+    updated_by:by,updated_at:stamp,created_by:compact(row.created_by||by,200),created_at:text(row.created_at)||stamp
+  };
+}
+function publicSupplier(row){
+  return{
+    id:text(row.id),name:text(row.name),websiteUrl:text(row.website_url),websiteHost:text(row.website_host),
+    supplierType:text(row.supplier_type),status:text(row.status),country:text(row.country),contactUrl:text(row.contact_url),
+    searchTerms:Array.isArray(row.search_terms)?row.search_terms:[],notes:text(row.notes),sourceMode:text(row.source_mode),
+    updatedAt:text(row.updated_at),createdAt:text(row.created_at),raw:plain(row.raw)
+  };
+}
+function summary(rows){
+  const result={total:rows.length,candidate:0,active:0,paused:0,archived:0,byType:{}};
+  rows.forEach((row)=>{const st=normalizeStatus(row.status);result[st]=(result[st]||0)+1;const t=normalizeType(row.supplier_type);result.byType[t]=(result.byType[t]||0)+1;});
+  return result;
+}
+function resultUrl(item){return safeUrl(item&&(
+  item.officialUrl||item.homepage||item.website||item.url||item.link&&item.link.url||item.link||item.sourceUrl
+));}
+function resultName(item){return compact(item&&(item.organization&&item.organization.name||item.publisher||item.provider||item.sourceName||item.title||item.name),200);}
+function researchCandidates(items,actor,query){
+  const seen=new Set(),out=[];
+  for(const item of Array.isArray(items)?items:[]){
+    const url=resultUrl(item),host=hostOf(url),name=resultName(item);
+    if(!url||!host||!name||blockedConsumerHost(host)||seen.has(host))continue;
+    seen.add(host);
+    try{
+      out.push(normalizeSupplier({name,websiteUrl:url,supplierType:"other",status:"candidate",searchTerms:[query],researchEvidence:{title:text(item.title),source:text(item.source||item.provider),url}},actor,"maru-search-research"));
+    }catch(_e){}
+    if(out.length>=80)break;
+  }
+  return out;
+}
+async function researchSuppliers(body,actor){
+  const query=compact(body.query||"film production company distributor content rights holder official",500);
+  const limit=Math.max(10,Math.min(100,Number(body.limit)||50));
+  const result=await MaruSearch.runEngine({}, {q:query,limit,deep:true,external:"force",noMedia:true,type:"all"});
+  const items=Array.isArray(result&&result.items)?result.items:Array.isArray(result&&result.results)?result.results:[];
+  const candidates=researchCandidates(items,actor,query);
+  const saved=candidates.length?await upsertSuppliers(candidates):[];
+  return{query,searched:items.length,qualified:candidates.length,saved:Array.isArray(saved)?saved.length:0,items:(Array.isArray(saved)?saved:candidates).map(publicSupplier)};
+}
+function matchesSupplier(item,supplier){
+  const raw=plain(item),url=resultUrl(raw),host=hostOf(url),supplierHost=lower(supplier&&supplier.website_host).replace(/^www\./,"");
+  if(host&&supplierHost&&(host===supplierHost||host.endsWith("."+supplierHost)))return true;
+  const supplierName=lower(supplier&&supplier.name).replace(/[^a-z0-9가-힣]+/g," ").trim();
+  if(!supplierName)return false;
+  const signal=lower([raw.provider,raw.publisher,raw.organization&&raw.organization.name,raw.sourceName,raw.source,raw.title].filter(Boolean).join(" ")).replace(/[^a-z0-9가-힣]+/g," ");
+  return signal.includes(supplierName);
+}
+function candidateFromSearch(item,supplier,section,actor){
+  const raw=plain(item),media=plain(raw.media),link=plain(raw.link);
+  const sourceUrl=safeUrl(raw.url||raw.sourceUrl||raw.pageUrl||link.url||supplier.website_url);
+  const videoUrl=safeUrl(raw.videoUrl||raw.video_url||media.videoUrl||media.url||media.mp4||media.webm);
+  const embedUrl=safeUrl(raw.embedUrl||raw.embed_url||media.embedUrl);
+  const thumb=safeUrl(raw.thumbnail||raw.thumb||raw.image||media.poster||media.thumbnail);
+  return MediaStore.normalizeCandidate({
+    section_key:section,title:raw.title||raw.name,provider:supplier.name,source_url:sourceUrl,video_url:videoUrl,embed_url:embedUrl,thumb_url:thumb,
+    rights_status:"web_verification_required",priority:"B2",sanmaru_query:"supplier:"+supplier.name,
+    notes:"공급사 관리 페이지에서 자동 리서치된 후보. 관리자 권리·재생 검증 전에는 공개 금지.",
+    supplierId:supplier.id,supplierName:supplier.name,supplierType:supplier.supplier_type,supplierWebsite:supplier.website_url,
+    sourceMetadata:{supplierManaged:true,supplierId:supplier.id,supplierWebsite:supplier.website_url,searchResult:raw}
+  },actor);
+}
+async function collectSupplierContents(body,actor){
+  const id=text(body.id||body.supplierId),section=MediaStore.normalizeSection(body.section||body.sectionKey);
+  if(!id){const e=new Error("공급사를 선택하세요.");e.statusCode=400;e.code="supplier_id_required";throw e;}
+  if(!section){const e=new Error("콘텐츠를 보낼 미디어 섹션을 선택하세요.");e.statusCode=400;e.code="supplier_content_section_required";throw e;}
+  const rows=await selectSuppliers("select=*&id="+encodeEq(id)+"&limit=1");
+  const supplier=Array.isArray(rows)&&rows[0];
+  if(!supplier){const e=new Error("공급사를 찾지 못했습니다.");e.statusCode=404;e.code="supplier_not_found";throw e;}
+  if(normalizeStatus(supplier.status)!=="active"){const e=new Error("활성 공급사만 콘텐츠를 수집할 수 있습니다.");e.statusCode=409;e.code="supplier_not_active";throw e;}
+  const terms=Array.isArray(supplier.search_terms)?supplier.search_terms:[];
+  const query=compact(body.query||[supplier.name,supplier.website_host,terms.slice(0,4).join(" "),"video film series official"].filter(Boolean).join(" "),500);
+  const limit=Math.max(5,Math.min(80,Number(body.limit)||30));
+  const result=await MaruSearch.runEngine({}, {q:query,limit,deep:true,external:"force",noMedia:true,type:"all"});
+  const items=Array.isArray(result&&result.items)?result.items:Array.isArray(result&&result.results)?result.results:[];
+  const normalized=[];
+  for(const item of items){
+    if(!matchesSupplier(item,supplier))continue;
+    try{
+      const candidate=candidateFromSearch(item,supplier,section,actor),validation=MediaStore.validateCandidate(candidate);
+      if(validation.ok)normalized.push(candidate);
+    }catch(_e){}
+    if(normalized.length>=limit)break;
+  }
+  const saved=normalized.length?await MediaStore.upsertCandidates(normalized):[];
+  return{supplier:publicSupplier(supplier),section,query,searched:items.length,qualified:normalized.length,saved:Array.isArray(saved)?saved.length:0,candidateIds:(Array.isArray(saved)?saved:normalized).map((x)=>text(x.id))};
+}
+async function diagnostic(){
+  const rows=await selectSuppliers("select=*&order=status.asc,name.asc&limit=5000");
+  return{ok:true,reportType:"igdc-media-content-supplier-diagnostic",version:VERSION,generatedAt:now(),table:TABLE,summary:summary(rows),suppliers:rows.map(publicSupplier),rules:{consumerPlatformsExcluded:BLOCKED_CONSUMER_HOSTS,researchCreatesCandidatesOnly:true,contentCollectionCreatesMediaCandidatesOnly:true,directFrontPublish:false,searchBankDirectWrite:false}};
+}
+
+exports.handler=async function(event){
+  if(event&&event.httpMethod==="OPTIONS")return MediaStore.response(204,{});
+  try{
+    if(!["GET","POST"].includes(event.httpMethod))return MediaStore.response(405,{ok:false,error:"method_not_allowed"});
+    const body=event.httpMethod==="POST"?MediaStore.parseBody(event):Object.assign({},event.queryStringParameters||{});
+    const action=lower(body.action||"list"),write=event.httpMethod==="POST"&&action!=="diagnostic";
+    const actor=await actorFor(event,write);
+    if(action==="list"){
+      const rows=await selectSuppliers("select=*&order=status.asc,name.asc&limit=2000");
+      return MediaStore.response(200,{ok:true,version:VERSION,summary:summary(rows),suppliers:rows.map(publicSupplier)});
+    }
+    if(action==="diagnostic")return MediaStore.response(200,await diagnostic());
+    if(action==="add"||action==="update"){
+      const row=normalizeSupplier(body.supplier||body,actor,action==="add"?"manual":"manual-update");
+      const saved=await upsertSuppliers([row]);
+      return MediaStore.response(200,{ok:true,version:VERSION,action,updated:Array.isArray(saved)?saved.length:0,suppliers:(saved||[]).map(publicSupplier)});
+    }
+    if(action==="research")return MediaStore.response(200,Object.assign({ok:true,version:VERSION,action},await researchSuppliers(body,actor)));
+    if(action==="collect_contents")return MediaStore.response(200,Object.assign({ok:true,version:VERSION,action},await collectSupplierContents(body,actor)));
+    if(["activate","pause","archive","restore"].includes(action)){
+      const id=text(body.id||body.supplierId);if(!id)return MediaStore.response(400,{ok:false,error:"supplier_id_required"});
+      const status={activate:"active",pause:"paused",archive:"archived",restore:"candidate"}[action];
+      const saved=await patchSupplier(id,{status,updated_by:compact(actor.email||actor.memberId||"admin",200),updated_at:now()});
+      return MediaStore.response(200,{ok:true,version:VERSION,action,updated:Array.isArray(saved)?saved.length:0,suppliers:(saved||[]).map(publicSupplier)});
+    }
+    if(action==="delete"){
+      if(!bool(body.confirmDelete))return MediaStore.response(400,{ok:false,error:"supplier_delete_confirmation_required",message:"공급사 기록 완전 삭제 확인값이 필요합니다."});
+      const removed=await deleteSupplier(body.id||body.supplierId);
+      return MediaStore.response(200,{ok:true,version:VERSION,action,deleted:Array.isArray(removed)?removed.length:0});
+    }
+    return MediaStore.response(400,{ok:false,error:"supplier_action_invalid"});
+  }catch(error){
+    return MediaStore.response(error.statusCode||500,{ok:false,version:VERSION,error:error.code||"media_content_supplier_admin_failed",message:error.message||String(error)});
+  }
+};
+
+exports._test={normalizeSupplier,researchCandidates,blockedConsumerHost,summary,matchesSupplier,candidateFromSearch};

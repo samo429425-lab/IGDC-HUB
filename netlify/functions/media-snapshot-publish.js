@@ -12,7 +12,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
 const MediaReleaseAdapter = require("./lib/media-searchbank-release-adapter.v1");
 
-const VERSION = "media-snapshot-publish-v1.5.0-canonical-release-hash";
+const VERSION = "media-snapshot-publish-v1.6.0-item-section-all-front-control";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
 
@@ -39,6 +39,10 @@ function queryApproved(limit){
   return "select=*&review_status=eq.approved&verification_status=eq.approved_for_snapshot&candidate_only=eq.false&seed_content=eq.false&order=section_key.asc,approved_at.desc,title.asc&limit="+safeLimit;
 }
 function clone(value){return JSON.parse(JSON.stringify(value==null?{}:value));}
+function frontContentEnabled(row){
+  const raw=MediaStore.plain(row&&row.raw),control=MediaStore.plain(raw.frontControl);
+  return control.enabled!==false;
+}
 function sectionSlots(section){return Array.isArray(section)?section:(section&&Array.isArray(section.slots)?section.slots:[]);}
 function blankSlot(slot,index){
   return{slotId:Number(slot&&slot.slotId)||index+1,contentId:null,title:null,thumb:"#",provider:null};
@@ -105,10 +109,11 @@ function statusPayload(release){
   };
 }
 function eligibleCounts(rows){
-  const sections=Object.fromEntries(MANUAL_SECTIONS.map((key)=>[key,{approved:0,eligible:0,blocked:0}]));
+  const sections=Object.fromEntries(MANUAL_SECTIONS.map((key)=>[key,{approved:0,eligible:0,frontDisabled:0,blocked:0}]));
   (Array.isArray(rows)?rows:[]).forEach((row)=>{
     const key=MediaStore.normalizeSection(row&&row.section_key);if(!sections[key])return;
     sections[key].approved+=1;
+    if(!frontContentEnabled(row)){sections[key].frontDisabled+=1;return;}
     if(MediaStore.snapshotEligible(row))sections[key].eligible+=1;else sections[key].blocked+=1;
   });
   return sections;
@@ -149,6 +154,7 @@ async function pipelineStatusDocument(release,rows,probePublic){
     sections[key]={
       approvedCandidates:candidateSections[key].approved,
       eligibleCandidates:candidateSections[key].eligible,
+      frontDisabledCandidates:candidateSections[key].frontDisabled,
       policyBlockedCandidates:candidateSections[key].blocked,
       releaseManagedSlots:releaseState.sections[key].managedCount,
       releaseContentIds:releaseState.sections[key].contentIds,
@@ -218,8 +224,10 @@ exports.handler = async function(event){
       error.statusCode=400;error.code="media_release_action_invalid";throw error;
     }
     const needsCandidates=!frontAction.startsWith("stop_");
-    const allRows=needsCandidates?await MediaStore.selectCandidates(queryApproved(params.limit)):[];
-    const rows=sectionKey?allRows.filter((row)=>MediaStore.normalizeSection(row&&row.section_key)===sectionKey):allRows;
+    const allApprovedRows=needsCandidates?await MediaStore.selectCandidates(queryApproved(params.limit)):[];
+    const scopedApprovedRows=sectionKey?allApprovedRows.filter((row)=>MediaStore.normalizeSection(row&&row.section_key)===sectionKey):allApprovedRows;
+    const rows=scopedApprovedRows.filter(frontContentEnabled);
+    const frontDisabledRows=scopedApprovedRows.filter((row)=>!frontContentEnabled(row));
     const base=baseSnapshot();
     const cleanBase=cleanBaseSnapshot(base.doc);
     const previous=publishFront?await latestStoredRelease():null;
@@ -247,7 +255,8 @@ exports.handler = async function(event){
     const hash=MediaStore.sha256(snapshot);
     const eligible=Array.isArray(rows)?rows.filter(MediaStore.snapshotEligible).length:0;
     const blocked=Array.isArray(rows)?rows.filter((row)=>!MediaStore.snapshotEligible(row)).map((row)=>({id:MediaStore.text(row&&row.id),reasons:MediaStore.MediaPolicy.releaseEligibility(row).reasons})):[]; 
-    if(publishFront&&needsCandidates&&eligible===0){
+    const allowEmptySection=params.allowEmptySection===true||params.allowEmptySection==="true";
+    if(publishFront&&needsCandidates&&eligible===0&&!(frontAction==="publish_section"&&allowEmptySection&&scopedApprovedRows.length>0)){
       const error=new Error("프론트에 반영할 승인·권리확인·공개검증 완료 후보가 없습니다.");
       error.statusCode=409;error.code="no_verified_promotable_media";throw error;
     }
@@ -257,7 +266,7 @@ exports.handler = async function(event){
       snapshot,
       status: storeRelease ? "stored" : "preview",
       policyVersion:MediaStore.MediaPolicy.VERSION,
-      counts:{approvedRows:Array.isArray(rows)?rows.length:0,eligibleRows:eligible,policyBlockedRows:blocked.length,sections:snapshot.meta&&snapshot.meta.filled||{},frontAction,sectionKey:sectionKey||null},
+      counts:{approvedRows:Array.isArray(scopedApprovedRows)?scopedApprovedRows.length:0,eligibleRows:eligible,frontDisabledRows:frontDisabledRows.length,policyBlockedRows:blocked.length,sections:snapshot.meta&&snapshot.meta.filled||{},frontAction,sectionKey:sectionKey||null},
       created_by:MediaStore.compact(actor.email || actor.memberId || "admin",200),
       created_at:MediaStore.nowIso()
     };
@@ -283,8 +292,8 @@ exports.handler = async function(event){
     }
     return MediaStore.response(200,{
       ok:true,version:VERSION,policyVersion:MediaStore.MediaPolicy.VERSION,
-      baseFile:base.file,hash,approvedRows:Array.isArray(rows)?rows.length:0,
-      eligibleRows:eligible,policyBlockedRows:blocked.length,
+      baseFile:base.file,hash,approvedRows:Array.isArray(scopedApprovedRows)?scopedApprovedRows.length:0,
+      eligibleRows:eligible,frontDisabledRows:frontDisabledRows.length,policyBlockedRows:blocked.length,
       frontAction,sectionKey:sectionKey||null,frontState:statusPayload(Object.assign({},release,{snapshot})),
       blocked:params.includeBlocked==="1"?blocked:undefined,
       releaseStored:!!stored,stored,

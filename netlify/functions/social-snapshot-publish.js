@@ -3,8 +3,9 @@
 /**
  * Builds and validates a Social release from approved Supabase candidates.
  * Runtime functions never write deployed static files. A confirmed release is
- * stored first, then the configured Netlify build hook runs the canonical line:
- * Social release -> SearchBank adapter -> Snapshot Engine -> social.snapshot.json.
+ * stored first, then the configured Netlify build hook runs the existing line:
+ * Social release -> Social/PSOM policy gate -> ordinary SearchBank Snapshot ->
+ * existing Snapshot Engine -> social.snapshot.json.
  */
 const fs = require("fs");
 const path = require("path");
@@ -14,7 +15,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.4.1-runtime-pipeline-diagnostic";
+  "social-snapshot-publish-v1.5.0-searchbank-handoff-diagnostic";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -223,7 +224,7 @@ async function triggerCanonicalBuild(release, operation) {
       httpStatus: response.status,
       releaseId: text(release.release_id),
       message:
-        "정식 빌드가 접수됐습니다. 빌드에서 SearchBank 어댑터와 기존 Snapshot Engine이 실행됩니다.",
+        "정식 빌드가 접수됐습니다. 승인 소셜 콘텐츠는 정책·PSOM 검증을 거쳐 기존 SearchBank Snapshot에 인계되고, 이후 기존 Snapshot Engine 경로가 이어집니다.",
     };
   } catch (error) {
     return {
@@ -269,42 +270,157 @@ function releasedIdsBySection(snapshot) {
   });
   return result;
 }
+function searchBankSnapshotState(root, expectedIds) {
+  const files = SocialSearchBankReleaseAdapter.searchBankPaths(root);
+  const mirrorRows = [];
+  let primary = null;
+  for (const file of files) {
+    const doc = readJson(file);
+    const valid = !!(doc && Array.isArray(doc.items));
+    const hash = valid ? SocialSearchBankReleaseAdapter.sha256(doc) : null;
+    const rel = path.relative(root, file).replace(/\\/g, "/");
+    mirrorRows.push({ file: rel, present: valid, hash, itemCount: valid ? doc.items.length : 0 });
+    if (!primary && valid) primary = { file: rel, doc, hash };
+  }
+  const expected = new Set(Array.isArray(expectedIds) ? expectedIds : []);
+  const idsBySection = {};
+  const presentIds = new Set();
+  let candidateCount = 0;
+  let sampleCount = 0;
+  let socialTotal = 0;
+  if (primary) {
+    for (const item of primary.doc.items) {
+      const section = text(item && (item.psom_key || item.section || item.bind && item.bind.section));
+      if (!section.startsWith("social-")) continue;
+      socialTotal += 1;
+      const auditOrigin = text(item && item.audit && item.audit.origin);
+      const socialCandidate = auditOrigin === "social_candidates" || !!(item && item.socialCandidatePublication && item.socialCandidatePublication.candidateId);
+      if (socialCandidate) {
+        candidateCount += 1;
+        const id = text(item && (item.id || item.contentId || item.candidateId));
+        if (id) {
+          if (!idsBySection[section]) idsBySection[section] = [];
+          idsBySection[section].push(id);
+          if (expected.has(id)) presentIds.add(id);
+        }
+      } else {
+        const url = text(item && (item.url || item.link || item.href)).toLowerCase();
+        const image = text(item && (item.thumbnail || item.thumb || item.image)).toLowerCase();
+        const title = text(item && (item.title || item.name)).toLowerCase();
+        if (item && (item.sample === true || item.placeholder === true || item.replaceableSlot === true) || url === "#" || url.includes("example.com") || image.includes("placeholder") || title.includes("seed placeholder")) sampleCount += 1;
+      }
+    }
+  }
+  const hashes = mirrorRows.filter((row) => row.present).map((row) => row.hash);
+  const mirrorConsensus = hashes.length === files.length && new Set(hashes).size === 1;
+  return {
+    checked: true,
+    source: primary ? primary.file : null,
+    mirrors: mirrorRows,
+    mirrorConsensus,
+    totalItems: primary ? primary.doc.items.length : 0,
+    socialItems: socialTotal,
+    socialCandidateItems: candidateCount,
+    socialSampleItemsPreserved: sampleCount,
+    idsBySection,
+    presentExpectedIds: Array.from(presentIds),
+  };
+}
 async function runtimePipelineDiagnostic(route) {
-  const base = baseSnapshot();
+  const root = process.cwd();
   const release = await latestStoredReleaseForRoute(route);
-  const finalIds = releasedIdsBySection(base.doc);
-  const finalFlat = Object.keys(finalIds).reduce((all, key) => all.concat(finalIds[key] || []), []);
   const out = {
     ok: false,
-    reportType: "igdc-social-canonical-pipeline-verification",
+    reportType: "igdc-social-searchbank-handoff-verification",
     version: VERSION,
     generatedAt: SocialStore.nowIso(),
-    scope: { countryCode: text(route && route.countryCode).toUpperCase() || null, mode: text(route && route.countryCode) ? "country" : "global" },
-    canonicalPipeline: ["stored_social_release","social_searchbank_release_adapter","existing_snapshot_engine","data/social.snapshot.json","existing_social_automap"],
+    scope: {
+      countryCode: text(route && route.countryCode).toUpperCase() || null,
+      mode: text(route && route.countryCode) ? "country" : "global",
+    },
+    pipelineModel: [
+      "stored_social_release",
+      "social_policy_and_psom_gate",
+      "data/search-bank.snapshot.json",
+      "existing_snapshot_engine",
+      "data/social.snapshot.json",
+      "existing_social_automap",
+    ],
     buildHook: buildHookStatus(),
-    release: release ? { releaseId: text(release.release_id), status: text(release.status), snapshotHash: text(release.snapshot_hash), createdAt: text(release.created_at), notes: text(release.notes) } : null,
-    searchBankRelease: null,
-    finalSocialSnapshot: { source: base.file, candidateCount: finalFlat.length, idsBySection: finalIds },
-    comparison: { expectedSearchBankItems: 0, finalCandidateItems: finalFlat.length, missingIds: [], extraIds: [] },
-    pipeline: { storedRelease: release ? "passed" : "missing", searchBankAdapter: "not_run", finalSnapshotReadback: base.doc ? "passed" : "missing" },
-    safety: { readOnly: true, runtimeFileWrite: false, socialSnapshotMutation: false, buildTrigger: false }
+    release: release
+      ? {
+          releaseId: text(release.release_id),
+          status: text(release.status),
+          snapshotHash: text(release.snapshot_hash),
+          createdAt: text(release.created_at),
+          notes: text(release.notes),
+        }
+      : null,
+    policyGate: null,
+    searchBankSnapshot: null,
+    comparison: {
+      expectedApprovedItems: 0,
+      presentInSearchBankSnapshot: 0,
+      missingIds: [],
+    },
+    pipeline: {
+      storedRelease: release ? "passed" : "missing",
+      policyAndPsomGate: "not_run",
+      searchBankSnapshotHandoff: "not_run",
+      downstream: "existing_automatic_pipeline_not_mutated",
+    },
+    safety: {
+      readOnly: true,
+      runtimeFileWrite: false,
+      searchBankEngineMutation: false,
+      snapshotEngineMutation: false,
+      socialSnapshotMutation: false,
+      frontOrAutomapMutation: false,
+      buildTrigger: false,
+    },
   };
   if (!release || !release.snapshot) {
     out.reason = "stored_social_release_not_found";
     return out;
   }
+
   const converted = SocialSearchBankReleaseAdapter.releaseToBank(release);
-  const expectedIds = (converted.bank && Array.isArray(converted.bank.items) ? converted.bank.items : []).map((item) => text(item && item.id)).filter(Boolean);
-  const finalSet = new Set(finalFlat);
-  const expectedSet = new Set(expectedIds);
-  const missingIds = expectedIds.filter((id) => !finalSet.has(id));
-  const extraIds = finalFlat.filter((id) => !expectedSet.has(id));
-  out.searchBankRelease = { adapterVersion: SocialSearchBankReleaseAdapter.VERSION, itemCount: expectedIds.length, counts: converted.counts || {}, hash: SocialSearchBankReleaseAdapter.sha256(converted.bank) };
-  out.comparison = { expectedSearchBankItems: expectedIds.length, finalCandidateItems: finalFlat.length, missingIds, extraIds };
-  out.pipeline.searchBankAdapter = "passed";
-  out.ok = missingIds.length === 0 && expectedIds.length === finalFlat.length;
-  out.pipeline.finalSnapshotReadback = out.ok ? "passed" : "mismatch";
-  if (!out.ok) out.reason = "final_social_snapshot_readback_mismatch";
+  const gate = SocialSearchBankReleaseAdapter.policyGate(root, converted.bank);
+  out.policyGate = {
+    ok: gate.ok,
+    psomFile: gate.psomFile,
+    acceptedCount: gate.accepted.length,
+    rejectedCount: gate.rejected.length,
+    counts: gate.counts,
+    rejected: gate.rejected.slice(0, 100),
+  };
+  out.pipeline.policyAndPsomGate = gate.ok ? "passed" : "failed";
+  if (!gate.ok) {
+    out.reason = "social_searchbank_policy_gate_rejected";
+    return out;
+  }
+
+  const expectedIds = gate.accepted.map((item) => text(item && item.id)).filter(Boolean);
+  const searchBank = searchBankSnapshotState(root, expectedIds);
+  const present = new Set(searchBank.presentExpectedIds || []);
+  const missingIds = expectedIds.filter((id) => !present.has(id));
+  out.searchBankSnapshot = searchBank;
+  out.comparison = {
+    expectedApprovedItems: expectedIds.length,
+    presentInSearchBankSnapshot: expectedIds.length - missingIds.length,
+    missingIds,
+  };
+  out.pipeline.searchBankSnapshotHandoff =
+    searchBank.mirrorConsensus && missingIds.length === 0 ? "passed" : "mismatch";
+  out.ok =
+    gate.ok &&
+    searchBank.mirrorConsensus &&
+    missingIds.length === 0;
+  if (!out.ok) {
+    out.reason = !searchBank.mirrorConsensus
+      ? "search_bank_snapshot_mirror_mismatch"
+      : "approved_social_items_missing_from_search_bank_snapshot";
+  }
   return out;
 }
 
@@ -537,7 +653,8 @@ exports.handler = async function (event) {
         publicSnapshotSource: "/data/social.snapshot.json",
         pipelineOrder: [
           "stored_social_release",
-          "social_searchbank_release_adapter",
+          "social_policy_and_psom_gate",
+          "data/search-bank.snapshot.json",
           "existing_snapshot_engine",
           "data/social.snapshot.json",
           "existing_social_automap",

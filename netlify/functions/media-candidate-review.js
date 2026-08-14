@@ -11,7 +11,7 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
 const MediaReleaseDispatch=require("./lib/media-release-dispatch.v1");
 
-const VERSION="media-candidate-review-api-v1.6.2-admin-front-apply-diagnostics";
+const VERSION="media-candidate-review-api-v1.6.3-item-front-control-diagnostics";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","media_manager","commerce_manager"]);
 
 function text(value){return value==null?"":String(value).trim();}
@@ -218,6 +218,8 @@ function normalizeRow(row){
     thumb:thumbUrl,
     candidateOnly,
     seedContent,
+    frontEnabled:plain(rawStored.frontControl).enabled!==false,
+    frontControl:plain(rawStored.frontControl),
     trendingEligible:database.trendingEligible===true||boolValue(database.trending_eligible),
     replacementPolicy:text(database.replacementPolicy||database.replacement_policy),
     rankingScore:Number(database.rankingScore||database.ranking_score||detail.rankingScore||0),
