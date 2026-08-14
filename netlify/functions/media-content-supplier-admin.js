@@ -11,7 +11,7 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 const MaruSearch=require("./maru-search");
 
-const VERSION="media-content-supplier-admin-v1.0.0";
+const VERSION="media-content-supplier-admin-v1.1.0-research-policy";
 const TABLE=process.env.MEDIA_CONTENT_SUPPLIER_TABLE||"media_content_suppliers";
 const SUPPLIER_TYPES=new Set(["production","distributor","studio","rights_holder","agency","archive","other"]);
 const STATUSES=new Set(["candidate","active","paused","archived"]);
@@ -102,14 +102,80 @@ function researchCandidates(items,actor,query){
   }
   return out;
 }
-async function researchSuppliers(body,actor){
-  const query=compact(body.query||"film production company distributor content rights holder official",500);
+const SUPPLIER_RESEARCH_POLICY=Object.freeze({
+  version:"media-supplier-research-policy-v1.1",
+  targetTypes:["production","distributor","studio","rights_holder","agency","archive"],
+  requiredSignals:["official company/studio/distributor/licensor identity","https website","production/distribution/rights signal"],
+  excludedKinds:["consumer streaming platform","social network","video sharing platform","retail marketplace"],
+  queryLanes:[
+    "film production company official website",
+    "film distributor international sales official website",
+    "content licensor rights holder official website",
+    "television production studio distributor official website",
+    "independent film production distribution company official",
+    "animation studio distributor licensing official website",
+    "music performance production distributor licensing official",
+    "documentary production distributor rights official website"
+  ]
+});
+function supplierSignalScore(item,url,name){
+  const raw=plain(item),host=hostOf(url);
+  const textSignal=lower([name,raw.title,raw.summary,raw.description,raw.publisher,raw.provider,raw.sourceName,raw.organization&&raw.organization.name,url].filter(Boolean).join(" "));
+  let score=0;
+  if(host)score+=2;
+  if(/production|productions|producer|studio|studios|distribut|sales|licens|rights|films|pictures|television|animation|documentary|media company|entertainment/.test(textSignal))score+=2;
+  if(/official|company|corporation|corp\b|ltd\b|limited|inc\b|gmbh|sas\b|sarl\b/.test(textSignal))score+=1;
+  if(blockedConsumerHost(host))score=-100;
+  return score;
+}
+function researchCandidatesStrict(items,actor,query){
+  const seen=new Set(),out=[];
+  for(const item of Array.isArray(items)?items:[]){
+    const url=resultUrl(item),host=hostOf(url),name=resultName(item);
+    if(!url||!host||!name||blockedConsumerHost(host)||seen.has(host))continue;
+    const score=supplierSignalScore(item,url,name);
+    if(score<3)continue;
+    seen.add(host);
+    try{
+      out.push(normalizeSupplier({name,websiteUrl:url,supplierType:"other",status:"candidate",searchTerms:[query],researchEvidence:{title:text(item.title),source:text(item.source||item.provider),url,score,policyVersion:SUPPLIER_RESEARCH_POLICY.version}},actor,"maru-search-research"));
+    }catch(_e){}
+    if(out.length>=100)break;
+  }
+  return out;
+}
+function buildSupplierResearchPlan(body){
+  const custom=compact(body.query||"",500),country=compact(body.country||body.region||"",80);
+  const lanes=[];
+  if(custom)lanes.push(custom);
+  for(const base of SUPPLIER_RESEARCH_POLICY.queryLanes){
+    lanes.push(compact([country,base].filter(Boolean).join(" "),500));
+  }
+  return Array.from(new Set(lanes.filter(Boolean))).slice(0,12);
+}
+async function researchSuppliers(body,actor,event){
+  const plan=buildSupplierResearchPlan(body);
   const limit=Math.max(10,Math.min(100,Number(body.limit)||50));
-  const result=await MaruSearch.runEngine({}, {q:query,limit,deep:true,external:"force",noMedia:true,type:"all"});
-  const items=Array.isArray(result&&result.items)?result.items:Array.isArray(result&&result.results)?result.results:[];
-  const candidates=researchCandidates(items,actor,query);
+  const perLane=Math.max(8,Math.min(30,Math.ceil(limit/Math.max(1,plan.length))+6));
+  const pooled=[];
+  const laneResults=[];
+  for(const query of plan){
+    try{
+      const result=await MaruSearch.runEngine(event||{}, {q:query,limit:perLane,deep:true,external:"deep",noMedia:true,type:"all"});
+      const items=Array.isArray(result&&result.items)?result.items:Array.isArray(result&&result.results)?result.results:[];
+      pooled.push(...items);
+      laneResults.push({query,searched:items.length,ok:true,source:text(result&&result.source)});
+    }catch(error){
+      laneResults.push({query,searched:0,ok:false,error:compact(error&&error.message||error,300)});
+    }
+  }
+  const queryLabel=plan.join(" | ");
+  const candidates=researchCandidatesStrict(pooled,actor,queryLabel).slice(0,limit);
   const saved=candidates.length?await upsertSuppliers(candidates):[];
-  return{query,searched:items.length,qualified:candidates.length,saved:Array.isArray(saved)?saved.length:0,items:(Array.isArray(saved)?saved:candidates).map(publicSupplier)};
+  return{
+    policy:SUPPLIER_RESEARCH_POLICY,plan,laneResults,
+    searched:pooled.length,qualified:candidates.length,saved:Array.isArray(saved)?saved.length:0,
+    items:(Array.isArray(saved)?saved:candidates).map(publicSupplier)
+  };
 }
 function matchesSupplier(item,supplier){
   const raw=plain(item),url=resultUrl(raw),host=hostOf(url),supplierHost=lower(supplier&&supplier.website_host).replace(/^www\./,"");
@@ -160,7 +226,7 @@ async function collectSupplierContents(body,actor){
 }
 async function diagnostic(){
   const rows=await selectSuppliers("select=*&order=status.asc,name.asc&limit=5000");
-  return{ok:true,reportType:"igdc-media-content-supplier-diagnostic",version:VERSION,generatedAt:now(),table:TABLE,summary:summary(rows),suppliers:rows.map(publicSupplier),rules:{consumerPlatformsExcluded:BLOCKED_CONSUMER_HOSTS,researchCreatesCandidatesOnly:true,contentCollectionCreatesMediaCandidatesOnly:true,directFrontPublish:false,searchBankDirectWrite:false}};
+  return{ok:true,reportType:"igdc-media-content-supplier-diagnostic",version:VERSION,generatedAt:now(),table:TABLE,summary:summary(rows),suppliers:rows.map(publicSupplier),researchPolicy:SUPPLIER_RESEARCH_POLICY,ai:{configured:!!text(process.env.OPENAI_API_KEY||process.env.OPENAI_KEY),note:"공급사 탐색은 Maru Search 다중 검색 + 미디어 전용 공급사 정책 검증을 기본으로 하며, 후보 공개 승인 권한은 갖지 않습니다."},rules:{consumerPlatformsExcluded:BLOCKED_CONSUMER_HOSTS,researchCreatesCandidatesOnly:true,contentCollectionCreatesMediaCandidatesOnly:true,directFrontPublish:false,searchBankDirectWrite:false}};
 }
 
 exports.handler=async function(event){
@@ -180,7 +246,7 @@ exports.handler=async function(event){
       const saved=await upsertSuppliers([row]);
       return MediaStore.response(200,{ok:true,version:VERSION,action,updated:Array.isArray(saved)?saved.length:0,suppliers:(saved||[]).map(publicSupplier)});
     }
-    if(action==="research")return MediaStore.response(200,Object.assign({ok:true,version:VERSION,action},await researchSuppliers(body,actor)));
+    if(action==="research")return MediaStore.response(200,Object.assign({ok:true,version:VERSION,action},await researchSuppliers(body,actor,event)));
     if(action==="collect_contents")return MediaStore.response(200,Object.assign({ok:true,version:VERSION,action},await collectSupplierContents(body,actor)));
     if(["activate","pause","archive","restore"].includes(action)){
       const id=text(body.id||body.supplierId);if(!id)return MediaStore.response(400,{ok:false,error:"supplier_id_required"});
@@ -199,4 +265,4 @@ exports.handler=async function(event){
   }
 };
 
-exports._test={normalizeSupplier,researchCandidates,blockedConsumerHost,summary,matchesSupplier,candidateFromSearch};
+exports._test={normalizeSupplier,researchCandidates,researchCandidatesStrict,buildSupplierResearchPlan,supplierSignalScore,blockedConsumerHost,summary,matchesSupplier,candidateFromSearch,SUPPLIER_RESEARCH_POLICY};

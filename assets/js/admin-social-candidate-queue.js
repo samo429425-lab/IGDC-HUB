@@ -99,19 +99,33 @@
         (assetClass(r) === "influencer_registry" && r && r.sourceUrl),
     );
   }
+  function candidateCountryScopes(r) {
+    var raw = (r && r.raw) || {},
+      scopes = (r && r.countryScopes) || raw.countryScopes || [];
+    return (Array.isArray(scopes) ? scopes : [])
+      .map(function (value) { return text(value).toUpperCase(); })
+      .filter(Boolean);
+  }
+  function regionOfCountry(code) {
+    var row = countryCatalog.filter(function (item) {
+      return text(item.code).toUpperCase() === text(code).toUpperCase();
+    })[0];
+    return row ? text(row.regionGroup) : "";
+  }
+  function scopeAffinityScore(r) {
+    var scope = currentScope(),
+      scopes = candidateCountryScopes(r),
+      routeRegion = scope.regionId || regionOfCountry(scope.countryCode),
+      regions = scopes.map(regionOfCountry).filter(Boolean);
+    if (scope.scopeMode === "global") return scopes.length ? 18 : 34;
+    if (scope.countryCode && scopes.indexOf(scope.countryCode) >= 0) return 120;
+    if (routeRegion && regions.indexOf(routeRegion) >= 0) return 58;
+    if (!scopes.length) return 34;
+    return 6;
+  }
   function countryScopedActive() {
-    var countryCode = selectedCountry();
-    return active().filter(function (r) {
-      var scopes = r.countryScopes || (r.raw && r.raw.countryScopes) || [];
-      return (
-        !countryCode ||
-        !scopes.length ||
-        scopes
-          .map(function (value) {
-            return text(value).toUpperCase();
-          })
-          .includes(countryCode)
-      );
+    return active().slice().sort(function (a, b) {
+      return scopeAffinityScore(b) - scopeAffinityScore(a);
     });
   }
   var ADMIN_BEARER_KEY = "igdc.socialCandidateQueue.adminBearer";
@@ -426,11 +440,21 @@
         return '<option value="' + x[2] + '">' + x[1] + "</option>";
       }).join("");
   }
+  function rawCountrySelection() {
+    return text($("collectorCountry").value);
+  }
+  function explicitGlobalSelected() {
+    return rawCountrySelection() === "__GLOBAL__";
+  }
   function selectedCountry() {
-    return text($("collectorCountry").value).toUpperCase();
+    var raw = rawCountrySelection();
+    return raw === "__GLOBAL__" ? "" : raw.toUpperCase();
   }
   function scopeMode() {
-    return selectedCountry() ? "country" : "global";
+    if (explicitGlobalSelected()) return "global";
+    if (selectedCountry()) return "country";
+    if (text($("collectorRegion").value)) return "region";
+    return "auto";
   }
   function currentScope() {
     var code = selectedCountry();
@@ -438,10 +462,19 @@
       return text(row.code).toUpperCase() === code;
     })[0];
     return {
+      scopeMode: scopeMode(),
       countryCode: code,
       regionId: text($("collectorRegion").value),
       country: country || null,
+      explicitGlobal: explicitGlobalSelected(),
     };
+  }
+  function appendScope(target) {
+    var scope = currentScope();
+    target.countryCode = scope.countryCode;
+    target.regionId = scope.regionId;
+    target.scopeMode = scope.scopeMode;
+    return target;
   }
   function renderCountryOptions() {
     var region = text($("collectorRegion").value),
@@ -463,8 +496,12 @@
           );
         })
         .join("");
-    el.innerHTML = '<option value="">전 세계 공통</option>' + list;
-    if (
+    el.innerHTML =
+      '<option value="">IP 자동 우선</option>' +
+      '<option value="__GLOBAL__">전 세계 공통</option>' +
+      list;
+    if (old === "__GLOBAL__") el.value = old;
+    else if (
       old &&
       filtered.some(function (row) {
         return row.code === old;
@@ -476,17 +513,19 @@
   function renderScopeState() {
     var scope = currentScope(),
       detected = detectedCountry && detectedCountry.countryCode,
-      countryName =
-        (scope.country &&
-          (scope.country.nameKo ||
-            scope.country.nameEn ||
-            scope.country.code)) ||
-        "전 세계 공통";
+      region = regionCatalog.filter(function (row) { return text(row.id) === scope.regionId; })[0],
+      scopeName = scope.scopeMode === "global"
+        ? "전 세계 공통"
+        : scope.country
+          ? (scope.country.nameKo || scope.country.nameEn || scope.country.code) + " (" + scope.countryCode + ")"
+          : scope.scopeMode === "region" && region
+            ? (region.nameKo || region.nameEn || region.id)
+            : "IP 자동 우선";
     $("countryScopeState").textContent =
-      "현재 관리·수집·실제 적용 범위: " +
-      countryName +
-      (scope.countryCode ? " (" + scope.countryCode + ")" : "") +
-      " · 접속 국가 자동 확인: " +
+      "현재 관리·수집·실제 적용 기준: " +
+      scopeName +
+      " · 후보는 해당 국가 소비성향 → 같은 권역 → 글로벌 순으로 가중치 적용" +
+      " · 접속 국가: " +
       (detected || "확인되지 않음");
     $("collectorLanguages").value = "";
   }
@@ -610,6 +649,7 @@
       .sort(function (a, b) {
         return (
           idx(a.sectionKey) - idx(b.sectionKey) ||
+          scopeAffinityScore(b) - scopeAffinityScore(a) ||
           score(b) - score(a) ||
           text(a.title).localeCompare(text(b.title))
         );
@@ -1149,8 +1189,9 @@
     try {
       var q = new URLSearchParams({
           includeRows: "1",
-          countryCode: text($("collectorCountry").value),
+          countryCode: selectedCountry(),
           scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
           languages: text($("collectorLanguages").value),
         }),
         d = await get(ROTATION + "?" + q.toString());
@@ -1396,7 +1437,8 @@
       queryPasses: 1,
       queryCursor: j.queryCursor || 0,
       countryCode: j.countryCode || "",
-      scopeMode: j.scopeMode || (j.countryCode ? "country" : "global"),
+      regionId: j.regionId || "",
+      scopeMode: j.scopeMode || (j.countryCode ? "country" : (j.regionId ? "region" : "auto")),
       languages: j.languages || "",
     });
     liveReports.push(d);
@@ -1530,8 +1572,9 @@
       section: section,
       target: 100,
       batchSize: batchSize,
-      countryCode: text($("collectorCountry").value).toUpperCase(),
+      countryCode: selectedCountry(),
       scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
       languages: text($("collectorLanguages").value),
       batch: 0,
       queryCursor: 0,
@@ -1643,7 +1686,8 @@
             8,
             Math.min(12, Number($("collectorBatchSize").value) || 10),
           );
-          j.countryCode = text($("collectorCountry").value).toUpperCase();
+          j.countryCode = selectedCountry();
+          j.regionId = text($("collectorRegion").value);
           j.scopeMode = scopeMode();
           j.languages = text($("collectorLanguages").value);
           j.sectionCount = sectionCount(j.section);
@@ -1751,8 +1795,9 @@
         action: "intake_channels",
         dryRun: !!dryRun,
         sectionKey: section,
-        countryCode: text($("collectorCountry").value).toUpperCase(),
+        countryCode: selectedCountry(),
         scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
         languages: text($("collectorLanguages").value),
         rawText: raw,
       });
@@ -1869,6 +1914,7 @@
           note: note,
           countryCode: selectedCountry(),
           scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
         },
         (extra && extra.body) || {},
       );
@@ -1913,6 +1959,7 @@
           includeSnapshot: "0",
           countryCode: selectedCountry(),
           scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
         }),
         d = await get(PUBLISH + "?" + q.toString());
       diagnostic(d);
@@ -1932,6 +1979,7 @@
           download: "1",
           countryCode: selectedCountry(),
           scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
         }),
         r = await fetch(PUBLISH + "?" + q.toString(), {
           headers: headers(false),
@@ -1952,6 +2000,7 @@
           includeSnapshot: "1",
           countryCode: selectedCountry(),
           scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
         }),
         result = await get(PUBLISH + "?" + q.toString());
       download("igdc-social-application-validation.json", {
@@ -2006,6 +2055,7 @@
           action: "pipeline_diagnostic",
           countryCode: selectedCountry(),
           scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
         }),
         verification = await get(PUBLISH + "?" + q.toString());
       download("igdc-social-searchbank-handoff-verification.json", verification);
@@ -2044,6 +2094,7 @@
         sectionKey: sectionKey || "",
         countryCode: scope.countryCode,
         scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
       });
       diagnostic(d);
       await refresh();
@@ -2082,6 +2133,7 @@
           sectionKey: sectionKey || "",
           countryCode: scope.countryCode,
           scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
         }),
         preview = await get(PUBLISH + "?" + previewQuery.toString());
       if (Number(preview.eligibleRows || 0) < 1) {
@@ -2096,6 +2148,7 @@
         sectionKey: sectionKey || "",
         countryCode: scope.countryCode,
         scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
       });
       diagnostic(d);
       if (d.buildTrigger && d.buildTrigger.ok) {
@@ -2161,6 +2214,7 @@
         note: "selected_front_unpublish",
         countryCode: scope.countryCode,
         scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
       });
       completed += batch.length;
       $("waitingCapacityState").textContent =
@@ -2203,6 +2257,7 @@
         sectionKey: sectionKey || "",
         countryCode: scope.countryCode,
         scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
       });
       diagnostic(d);
       ids.forEach(function (id) {
@@ -2387,6 +2442,7 @@
           action: action,
           countryCode: selectedCountry(),
           scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
         }),
         d = await get(REVIEW + "?" + q.toString());
       diagnostic(d);

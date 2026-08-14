@@ -9,8 +9,9 @@ const path = require("path");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 let SocialStore = null;
 try { SocialStore = require("./lib/social-candidate-store.v1"); } catch (_error) { SocialStore = null; }
+const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-candidate-review-api-v1.0.3-lightweight-diagnostics";
+const VERSION = "social-candidate-review-api-v1.1.0-consumption-scope-diagnostics";
 const READ_ROLES = new Set(["owner", "admin", "super_admin", "site_manager", "site_manager_director", "director", "social_manager", "media_manager", "commerce_manager"]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -102,18 +103,21 @@ function assetClass(row) {
 function reviewStatus(row) { return lower(row && (row.reviewStatus || row.review_status)); }
 function isExcluded(row) { return /^(search_excluded|permanent_blocked|blocked)$/.test(reviewStatus(row)); }
 function isBlocked(row) { return /^(permanent_blocked|blocked)$/.test(reviewStatus(row)); }
-function rowCountryScopes(row) {
-  const raw = row && row.raw || {};
-  const values = row && (row.countryScopes || row.country_scopes) || raw.countryScopes || [];
-  return Array.isArray(values) ? values.map((v) => text(v).toUpperCase()).filter(Boolean) : [];
+function routeBucket(row, route) {
+  return CountryRouting.matchTier(row, route);
 }
-function scopedRows(rows, countryCode) {
-  const code = text(countryCode).toUpperCase();
-  if (!code) return rows.slice();
-  return rows.filter((row) => {
-    const scopes = rowCountryScopes(row);
-    return !scopes.length || scopes.includes(code);
+function scopeBreakdown(rows, route) {
+  const out = { country_exact: 0, region_match: 0, global_unscoped: 0, global_scoped: 0, cross_region: 0 };
+  (rows || []).forEach((row) => {
+    const key = routeBucket(row, route);
+    out[key] = (out[key] || 0) + 1;
   });
+  return out;
+}
+function scopedRows(rows, route) {
+  return (rows || []).slice().sort((a, b) =>
+    CountryRouting.matchScore(b, route) - CountryRouting.matchScore(a, route)
+  );
 }
 function diagnosticSectionSummary(rows) {
   const result = {};
@@ -131,8 +135,8 @@ function diagnosticSectionSummary(rows) {
   });
   return result;
 }
-function lightweightDiagnostic(base, rows, kind, countryCode) {
-  const scoped = scopedRows(rows, countryCode);
+function lightweightDiagnostic(base, rows, kind, route) {
+  const scoped = scopedRows(rows, route);
   const wanted = kind === "registry" ? "influencer_registry" : kind === "latest" ? "latest_content" : "";
   const filtered = wanted ? scoped.filter((row) => assetClass(row) === wanted) : scoped;
   return {
@@ -140,7 +144,12 @@ function lightweightDiagnostic(base, rows, kind, countryCode) {
     reportType: kind === "registry" ? "igdc-social-influencer-registry-diagnostic" : kind === "latest" ? "igdc-social-latest-content-diagnostic" : "igdc-social-candidate-queue-diagnostic",
     version: VERSION,
     generatedAt: new Date().toISOString(),
-    scope: { countryCode: text(countryCode).toUpperCase() || null, mode: text(countryCode) ? "country" : "global" },
+    scope: {
+      mode: text(route && route.scopeMode) || null,
+      countryCode: text(route && route.countryCode).toUpperCase() || null,
+      worldRegion: text(route && (route.worldRegion || route.regionId)) || null,
+      source: text(route && route.source) || null
+    },
     source: base.source,
     queue: {
       schema: "social_candidates.supabase.v1",
@@ -157,6 +166,7 @@ function lightweightDiagnostic(base, rows, kind, countryCode) {
       excluded: filtered.filter((row) => reviewStatus(row) === "search_excluded").length,
       blocked: filtered.filter(isBlocked).length
     },
+    consumptionScopeBreakdown: scopeBreakdown(filtered, route),
     sections: diagnosticSectionSummary(wanted ? scoped.filter((row) => assetClass(row) === wanted) : scoped),
     summary: base.summary,
     blockingConditions: base.blockingConditions,
@@ -218,10 +228,10 @@ exports.handler = async function(event) {
     };
     const params = event.queryStringParameters || {};
     const action = lower(params.action || "candidates");
-    const countryCode = text(params.countryCode || params.country).toUpperCase();
-    if (action === "diagnostic") return json(200, Object.assign(lightweightDiagnostic(base, rows, "all", countryCode), { administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode } }));
-    if (action === "registry_diagnostic" || action === "influencer_registry_diagnostic") return json(200, Object.assign(lightweightDiagnostic(base, rows, "registry", countryCode), { administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode } }));
-    if (action === "latest_content_diagnostic" || action === "waiting_diagnostic") return json(200, Object.assign(lightweightDiagnostic(base, rows, "latest", countryCode), { administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode } }));
+    const route = CountryRouting.resolve(event, params);
+    if (action === "diagnostic") return json(200, Object.assign(lightweightDiagnostic(base, rows, "all", route), { administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode } }));
+    if (action === "registry_diagnostic" || action === "influencer_registry_diagnostic") return json(200, Object.assign(lightweightDiagnostic(base, rows, "registry", route), { administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode } }));
+    if (action === "latest_content_diagnostic" || action === "waiting_diagnostic") return json(200, Object.assign(lightweightDiagnostic(base, rows, "latest", route), { administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode } }));
     return json(200, {
       ok: true, reportType: "igdc-social-candidate-queue", version: VERSION, generatedAt: new Date().toISOString(),
       safety, administrator: { roles: roleValues, access: "validated-social-candidate-read", authMode: actor.authMode },

@@ -8,7 +8,7 @@ const MediaStore = require("./lib/media-candidate-store.v1");
 const MediaPolicy = require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "media-candidate-action-v1.8.0-item-front-control";
+const VERSION = "media-candidate-action-v1.8.1-bulk-approval-batched";
 const ACTIONS = new Set([
   "approve","approve_all","hold","block","reject","reset","delete","front_enable","front_disable",
   "restore_hold","release_exclusion","restore","permanent_block","forget"
@@ -288,7 +288,9 @@ async function approveRows(rows,body,actor){
     error.statusCode=409;error.code="prohibited_content_cannot_be_approved";error.blocked=blocked;throw error;
   }
   const updated=[];
-  for(const row of rows){
+  const failures=[];
+  const batchSize=8;
+  async function approveOne(row){
     const raw=Object.assign({},MediaStore.plain(row.raw));
     raw.policyAssessment=MediaPolicy.assessCandidate(row);
     raw.administratorReview={
@@ -301,7 +303,7 @@ async function approveRows(rows,body,actor){
       reviewedAt:info.now,
       previousReviewStatus:statusOf(row)
     };
-    const saved=await MediaStore.updateCandidates([row.id],{
+    return await MediaStore.updateCandidates([row.id],{
       review_status:"approved",
       verification_status:"approved_for_snapshot",
       rights_status:"rights_verified_by_admin",
@@ -317,7 +319,22 @@ async function approveRows(rows,body,actor){
       updated_at:info.now,
       blocked_reason:null
     });
-    if(Array.isArray(saved))updated.push(...saved);
+  }
+  for(let offset=0;offset<rows.length;offset+=batchSize){
+    const batch=rows.slice(offset,offset+batchSize);
+    const results=await Promise.all(batch.map(async(row)=>{
+      try{return{row,saved:await approveOne(row)};}
+      catch(error){return{row,error};}
+    }));
+    for(const result of results){
+      if(result.error){failures.push({id:MediaStore.text(result.row&&result.row.id),error:MediaStore.compact(result.error&&result.error.message||result.error,300)});continue;}
+      if(Array.isArray(result.saved))updated.push(...result.saved);
+    }
+  }
+  if(failures.length){
+    const error=new Error("일부 후보 승인 저장에 실패했습니다: "+failures.length+"건");
+    error.statusCode=502;error.code="media_candidate_bulk_approval_partial_failure";
+    error.updated=updated.length;error.failures=failures.slice(0,50);throw error;
   }
   return updated;
 }

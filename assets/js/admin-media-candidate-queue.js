@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v3.4 - supplier registry + item/section/all front controls */
+/* IGDC Media Candidate Queue v3.5 - supplier research policy + front preflight diagnostics */
 (function(){
   'use strict';
 
@@ -854,13 +854,19 @@
     finally{$('supplierAddBtn').disabled=false;}
   }
   async function researchSuppliers(){
-    if(!window.confirm('외부 검색 게이트를 사용해 프로덕션·배급사·권리보유사 후보를 자동 탐색할까요?\n\n탐색 결과는 공급사 후보로만 저장되며 자동 활성·프론트 공개는 하지 않습니다.'))return;
-    $('supplierResearchBtn').disabled=true;$('supplierState').textContent='공급사 자동 리서치 중';
+    if(!window.confirm('미디어 공급사 전용 다중 검색 정책으로 프로덕션·배급사·스튜디오·권리보유사 후보를 탐색할까요?\n\n소비자 스트리밍·SNS 플랫폼은 제외하고, 결과는 공급사 후보로만 저장됩니다. 자동 활성·프론트 공개는 하지 않습니다.'))return;
+    var button=$('supplierResearchBtn');button.disabled=true;$('supplierState').textContent='공급사 정책 리서치 준비 중';
     try{
-      var data=await post(SUP,{action:'research',query:text($('supplierResearchQuery').value),limit:50});
-      await refreshSuppliers();show('공급사 자동 리서치 완료 · 검색 '+Number(data.searched||0)+'건 · 공급사 후보 '+Number(data.saved||0)+'건 저장','ok');
-    }catch(error){show('공급사 자동 리서치 실패: '+error.message,'warn');}
-    finally{$('supplierResearchBtn').disabled=false;}
+      var data=await post(SUP,{action:'research',query:text($('supplierResearchQuery').value),country:text($('supplierCountry').value),limit:50});
+      var lanes=Array.isArray(data.laneResults)?data.laneResults:[];
+      var okLanes=lanes.filter(function(x){return x&&x.ok===true;}).length;
+      var failedLanes=lanes.length-okLanes;
+      await refreshSuppliers();
+      $('supplierState').textContent='리서치 '+okLanes+'/'+lanes.length+' 경로 · 검색 '+Number(data.searched||0)+' · 적격 '+Number(data.qualified||0)+' · 저장 '+Number(data.saved||0);
+      if(Number(data.saved||0)>0)show('공급사 자동 리서치 완료 · 검색 '+Number(data.searched||0)+'건 · 정책 적격 '+Number(data.qualified||0)+'건 · 후보 '+Number(data.saved||0)+'건 저장','ok');
+      else show('공급사 검색은 실행됐지만 저장된 적격 공급사가 0건입니다. 검색 경로 '+okLanes+'/'+lanes.length+(failedLanes?' · 실패 '+failedLanes+'경로':'')+' · 검색 '+Number(data.searched||0)+'건. 공급사 점검 JSON에서 researchPolicy를 확인해 주세요.','warn');
+    }catch(error){$('supplierState').textContent='공급사 자동 리서치 실패';show('공급사 자동 리서치 실패: '+error.message,'warn');}
+    finally{button.disabled=false;}
   }
   async function supplierAction(action,id){
     var row=supplierCache.find(function(item){return text(item.id)===text(id);});
@@ -885,17 +891,24 @@
     }catch(error){show('공급사 영상 후보 수집 실패: '+error.message,'warn');}
   }
   async function supplierDiagnostic(){
+    var button=$('supplierDiagnosticBtn');button.disabled=true;$('supplierState').textContent='공급사 점검 JSON 생성 중';
     try{
       var data=await get(SUP+'?action=diagnostic');supplierDiagnosticCache=data;
       $('supplierDiagnosticJson').textContent=JSON.stringify(data,null,2);$('supplierDiagnosticJson').classList.remove('hidden');
-      show('공급사 점검 JSON을 생성했습니다.','ok');
-    }catch(error){show('공급사 점검 실패: '+error.message,'warn');}
+      $('supplierState').textContent='공급사 점검 JSON 생성 완료 · '+Number(data.summary&&data.summary.total||0)+'개';
+      show('공급사 점검 JSON을 화면에 생성했습니다.','ok');
+    }catch(error){$('supplierState').textContent='공급사 점검 실패';show('공급사 점검 실패: '+error.message,'warn');}
+    finally{button.disabled=false;}
   }
-  async function downloadSupplierJson(){
-    try{
-      var data=supplierDiagnosticCache||await get(SUP+'?action=diagnostic');supplierDiagnosticCache=data;
-      download(JSON.stringify(data,null,2)+'\n','igdc-media-content-suppliers-diagnostic.json');
-    }catch(error){show('공급사 JSON 다운로드 실패: '+error.message,'warn');}
+  function downloadSupplierJson(){
+    var payload={
+      ok:true,reportType:'igdc-media-content-supplier-registry',generatedAt:new Date().toISOString(),
+      total:supplierCache.length,suppliers:supplierCache,
+      diagnostic:supplierDiagnosticCache||null
+    };
+    download(JSON.stringify(payload,null,2)+'\n','igdc-media-content-suppliers.json');
+    $('supplierState').textContent='공급사 JSON 다운로드 '+supplierCache.length+'개';
+    show('현재 화면의 공급사 목록 '+supplierCache.length+'개를 JSON으로 저장했습니다.','ok');
   }
   async function setContentFrontState(id,sectionKey,enabled){
     var row=rowsCache.find(function(item){return text(item.contentId||item.id)===text(id);});
@@ -935,8 +948,12 @@
       });
       Object.keys(selectedBySection).forEach(function(sectionKey){selectedBySection[sectionKey]=new Set();});
       await refresh();
-      var skipped=Number(data.skippedHardBlocked||0);
-      show('전체 최종 승인 '+Number(data.updated||0)+'건 완료'+(skipped?' · 금지 신호 '+skipped+'건 자동 제외':'')+' · 이제 전체 또는 섹션별 프론트 반영 실행이 가능합니다.','ok');
+      var skipped=Number(data.skippedHardBlocked||0),updated=Number(data.updated||0);
+      if(updated===0&&approvable.length>0)throw new Error('서버가 최종 승인 저장 0건을 반환했습니다. 프론트 반영을 진행하지 않고 승인 저장 단계를 다시 점검해야 합니다.');
+      var verify=await get(PUB+'?pipelineStatus=1&probePublic=0');
+      var verifiedApproved=Number(verify&&verify.stages&&verify.stages.candidates&&verify.stages.candidates.approvedRows||0);
+      if(updated>0&&verifiedApproved===0)throw new Error('최종 승인 응답은 '+updated+'건이지만 재조회 결과 approvedRows가 0건입니다. 승인 DB 저장이 확정되지 않아 프론트 반영을 중단합니다.');
+      show('전체 최종 승인 '+updated+'건 완료 · 재조회 승인 '+verifiedApproved+'건'+(skipped?' · 금지 신호 '+skipped+'건 자동 제외':'')+' · 이제 전체 또는 섹션별 프론트 반영 실행이 가능합니다.','ok');
     }catch(error){show('전체 최종 승인 실패: '+error.message,'warn');}
     finally{if(button)button.disabled=false;}
   }
@@ -1000,6 +1017,25 @@
       publish_section:section+' 섹션 프론트 반영',stop_section:section+' 섹션 반영 취소·중지'
     })[action]||action;
   }
+  async function frontMappingPreflight(action,sectionKey){
+    if(action==='stop_all'||action==='stop_section')return null;
+    var report=await get(PUB+'?pipelineStatus=1&probePublic=0');
+    var approved=Number(report&&report.stages&&report.stages.candidates&&report.stages.candidates.approvedRows||0);
+    var eligible=Number(report&&report.stages&&report.stages.candidates&&report.stages.candidates.eligibleRows||0);
+    if(sectionKey){
+      var sec=report&&report.stages&&report.stages.candidates&&report.stages.candidates.sections&&report.stages.candidates.sections[sectionKey]||{};
+      approved=Number(sec.approved||0);eligible=Number(sec.eligible||0);
+    }
+    if(approved===0){
+      var e=new Error((sectionKey?(SECTION_LABELS[sectionKey]||sectionKey)+' 섹션':'전체')+'의 최종 승인 후보가 0건입니다. 먼저 상단 ‘전체 최종 승인 실행’ 또는 해당 후보 승인을 완료해야 합니다. 현재 단계는 SearchBank 이전에서 중단되어 있습니다.');
+      e.code='front_preflight_no_approved_rows';throw e;
+    }
+    if(eligible===0){
+      var e2=new Error('최종 승인 '+approved+'건은 있으나 SearchBank로 보낼 공개 적격 후보가 0건입니다. 점검 JSON의 권리·안전·frontEnabled 상태를 확인해 주세요.');
+      e2.code='front_preflight_no_eligible_rows';throw e2;
+    }
+    return{approved:approved,eligible:eligible,report:report};
+  }
   async function publishFrontAction(action,sectionKey){
     var label=frontActionLabel(action,sectionKey);
     var stopping=action==='stop_all'||action==='stop_section';
@@ -1011,6 +1047,8 @@
     var originalText=mainButton&&mainButton.textContent;
     setFrontButtonsDisabled(true);
     try{
+      if(mainButton)mainButton.textContent='프론트 반영 사전 점검 중';
+      var preflight=await frontMappingPreflight(action,sectionKey);
       if(mainButton)mainButton.textContent='프론트 반영 요청 중';
       var data=await post(PUB,{
         storeRelease:true,publishFront:true,frontAction:action,sectionKey:sectionKey||'',

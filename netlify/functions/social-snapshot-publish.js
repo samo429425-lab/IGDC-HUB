@@ -71,18 +71,25 @@ function releaseCountry(row) {
   ).toUpperCase();
 }
 function scopeToken(route) {
-  return text(route && route.countryCode).toUpperCase() || "GLOBAL";
+  const country = text(route && route.countryCode).toUpperCase();
+  const region = text(route && (route.worldRegion || route.regionId));
+  const mode = text(route && route.scopeMode).toLowerCase();
+  if (mode === "global") return "GLOBAL";
+  if (country) return country;
+  if (region) return "REGION:" + region;
+  return "GLOBAL";
 }
 async function latestStoredBase(route) {
   try {
     const countryCode = text(route && route.countryCode).toUpperCase();
+    const regionId = text(route && (route.worldRegion || route.regionId));
     const exactRows = await SocialStore.selectReleases(
       "select=release_id,snapshot,created_at,notes&status=eq.stored&notes=like." +
         encodeURIComponent("scope=" + scopeToken(route) + ";%") +
         "&order=created_at.desc&limit=1",
     );
     let latest = Array.isArray(exactRows) && exactRows[0];
-    if (!latest && countryCode) {
+    if (!latest && (countryCode || regionId)) {
       const globalRows = await SocialStore.selectReleases(
         "select=release_id,snapshot,created_at,notes&status=eq.stored&notes=like." +
           encodeURIComponent("scope=GLOBAL;%") +
@@ -97,7 +104,7 @@ async function latestStoredBase(route) {
       const list = Array.isArray(legacyRows) ? legacyRows : [];
       const exact = list.find((row) => releaseCountry(row) === countryCode);
       const global = list.find((row) => !releaseCountry(row));
-      latest = exact || (countryCode ? global : null);
+      latest = exact || ((countryCode || regionId) ? global : null);
     }
     if (latest && latest.snapshot)
       return {
@@ -336,7 +343,8 @@ async function runtimePipelineDiagnostic(route) {
     generatedAt: SocialStore.nowIso(),
     scope: {
       countryCode: text(route && route.countryCode).toUpperCase() || null,
-      mode: text(route && route.countryCode) ? "country" : "global",
+      worldRegion: text(route && (route.worldRegion || route.regionId)) || null,
+      mode: text(route && route.scopeMode) || (text(route && route.countryCode) ? "country" : "global"),
     },
     pipelineModel: [
       "stored_social_release",

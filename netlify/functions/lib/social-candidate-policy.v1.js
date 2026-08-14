@@ -389,8 +389,16 @@ function validationReasons(row, normalized) {
 }
 function buildCollectionPlan(options) {
   const opts = plain(options);
-  const countryCode = text(opts.countryCode || opts.country).toUpperCase();
-  const languages = array(opts.languages || opts.lang || opts.language || LANGUAGES_30).map(text).filter(Boolean);
+  const countryCode = text(opts.countryCode || opts.country || (opts.route && opts.route.countryCode)).toUpperCase();
+  const route = opts.route && typeof opts.route === "object"
+    ? opts.route
+    : {
+        scopeMode: opts.scopeMode,
+        countryCode,
+        worldRegion: opts.worldRegion || opts.regionId || opts.region,
+        languages: opts.languages || opts.lang || opts.language
+      };
+  const languages = array(opts.languages || opts.lang || opts.language || route.languages || LANGUAGES_30).map(text).filter(Boolean);
   const perSection = clamp(Number(opts.perSection || POOL_TARGET_PER_SECTION), POOL_MIN_PER_SECTION, POOL_MAX_PER_SECTION);
   return {
     version: VERSION,
@@ -410,7 +418,7 @@ function buildCollectionPlan(options) {
     },
     sections: SECTION_KEYS.map((sectionKey) => {
       const platform = PLATFORM_BY_SECTION[sectionKey];
-      const policy = CountryContentPolicy.applyToPlatformPolicy(PLATFORM_POLICIES[platform], countryCode, platform);
+      const policy = CountryContentPolicy.applyToPlatformPolicy(PLATFORM_POLICIES[platform], route, platform);
       return {
         sectionKey,
         platform,
@@ -421,6 +429,8 @@ function buildCollectionPlan(options) {
         collectionQueries: policy.collectionQueries,
         languages,
         countryCode: countryCode || null,
+        worldRegion: text(route.worldRegion || route.regionId) || null,
+        scopeMode: text(route.scopeMode) || null,
         countryContentPolicy: policy.countryContentPolicy
       };
     })

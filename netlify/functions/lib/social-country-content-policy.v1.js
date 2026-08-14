@@ -9,7 +9,7 @@
  * - Do not mutate SearchBank, Snapshot Engine, AutoMap, or front HTML.
  * - Topic preference is soft guidance, never an absolute exclusion rule.
  */
-const VERSION = "social-country-content-policy-v1.0.0";
+const VERSION = "social-country-content-policy-v1.1.0-consumption-weighted";
 
 const GLOBAL_TOPICS = Object.freeze([
   { key: "music", weight: 100, terms: ["music", "singer", "artist", "live performance", "concert", "official music"] },
@@ -96,6 +96,58 @@ const COUNTRY_OVERRIDES = Object.freeze({
   }
 });
 
+
+const REGION_OVERRIDES = Object.freeze({
+  east_asia_pacific: {
+    topics: [
+      { key: "music", weight: 104, terms: ["East Asia popular music", "Asia live performance", "regional music trend"] },
+      { key: "travel", weight: 103, terms: ["East Asia travel", "Southeast Asia travel", "Pacific tourism"] },
+      { key: "world", weight: 94, terms: ["Asia international news", "regional economy", "Asia science technology"] }
+    ]
+  },
+  south_central_asia: {
+    topics: [
+      { key: "music", weight: 102, terms: ["South Asia music", "Central Asia music", "live performance"] },
+      { key: "travel", weight: 101, terms: ["South Asia travel", "Central Asia travel", "heritage tourism"] },
+      { key: "world", weight: 94, terms: ["South Asia international news", "Central Asia economy"] }
+    ]
+  },
+  middle_east_north_africa: {
+    topics: [
+      { key: "travel", weight: 103, terms: ["Middle East travel", "North Africa tourism", "regional culture"] },
+      { key: "music", weight: 98, terms: ["Middle East music", "Arab live performance", "North Africa music"] },
+      { key: "world", weight: 96, terms: ["Middle East international news", "North Africa economy"] }
+    ]
+  },
+  europe: {
+    topics: [
+      { key: "travel", weight: 104, terms: ["Europe travel", "European tourism", "heritage destination"] },
+      { key: "music", weight: 101, terms: ["European music", "live performance Europe", "official artist"] },
+      { key: "world", weight: 98, terms: ["Europe international news", "European economy", "science Europe"] }
+    ]
+  },
+  sub_saharan_africa: {
+    topics: [
+      { key: "music", weight: 103, terms: ["African music", "live performance Africa", "Afrobeats"] },
+      { key: "travel", weight: 101, terms: ["Africa travel", "safari tourism", "African culture"] },
+      { key: "world", weight: 92, terms: ["Africa international news", "African economy"] }
+    ]
+  },
+  north_america: {
+    topics: [
+      { key: "music", weight: 103, terms: ["North America music", "live performance", "official artist"] },
+      { key: "travel", weight: 101, terms: ["North America travel", "national parks", "tourism"] },
+      { key: "world", weight: 98, terms: ["North America international news", "global economy", "science news"] }
+    ]
+  },
+  latin_america_caribbean: {
+    topics: [
+      { key: "music", weight: 105, terms: ["Latin music", "música latina", "live performance"] },
+      { key: "travel", weight: 103, terms: ["Latin America travel", "Caribbean tourism", "regional destination"] },
+      { key: "sports", weight: 96, terms: ["Latin America football", "regional sports"] }
+    ]
+  }
+});
 const PLATFORM_TOPIC_BIAS = Object.freeze({
   youtube: ["music", "travel", "world", "education", "sports", "culture"],
   instagram: ["travel", "music", "culture", "sports"],
@@ -123,18 +175,34 @@ function mergeTopics(base, override) {
   });
   return Array.from(map.values()).sort((a, b) => b.weight - a.weight);
 }
-function profile(countryCode) {
-  const code = text(countryCode).toUpperCase();
+function routeInput(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  return { countryCode: value };
+}
+function profile(value) {
+  const route = routeInput(value);
+  const code = text(route.countryCode || route.country).toUpperCase();
+  const regionId = text(route.worldRegion || route.regionId || route.region);
   const specific = COUNTRY_OVERRIDES[code] || {};
+  const regional = REGION_OVERRIDES[regionId] || {};
+  const topics = mergeTopics(
+    mergeTopics(specific.topics || [], regional.topics || []),
+    GLOBAL_TOPICS
+  );
   return {
     version: VERSION,
     countryCode: code || null,
-    mode: code && COUNTRY_OVERRIDES[code] ? "country_override_plus_global" : "global_fallback",
-    topics: mergeTopics(specific.topics || [], GLOBAL_TOPICS)
+    regionId: regionId || null,
+    mode: code
+      ? "country_consumption_plus_region_plus_global"
+      : regionId
+        ? "region_consumption_plus_global"
+        : "global_consumption",
+    topics
   };
 }
-function topicQueries(countryCode, platform, maxTerms) {
-  const p = profile(countryCode);
+function topicQueries(routeOrCountry, platform, maxTerms) {
+  const p = profile(routeOrCountry);
   const bias = PLATFORM_TOPIC_BIAS[text(platform).toLowerCase()] || [];
   const ranked = p.topics.slice().sort((a, b) => {
     const ai = bias.indexOf(a.key), bi = bias.indexOf(b.key);
@@ -160,9 +228,10 @@ function topicQueries(countryCode, platform, maxTerms) {
   }
   return unique(out);
 }
-function applyToPlatformPolicy(basePolicy, countryCode, platform) {
+function applyToPlatformPolicy(basePolicy, routeOrCountry, platform) {
   const base = basePolicy && typeof basePolicy === "object" ? basePolicy : {};
-  const topicTerms = topicQueries(countryCode, platform, 18);
+  const p = profile(routeOrCountry);
+  const topicTerms = topicQueries(routeOrCountry, platform, 18);
   const baseQueries = base.collectionQueries || [];
   const topicSearchQueries = topicTerms.map((term) =>
     [platform, term, "official public latest high quality"].filter(Boolean).join(" ")
@@ -178,23 +247,56 @@ function applyToPlatformPolicy(basePolicy, countryCode, platform) {
     if (baseQuery) queries.push(baseQuery);
   }
   return Object.assign({}, base, {
-    categories: unique((base.categories || []).concat(profile(countryCode).topics.map((t) => t.key))),
+    categories: unique((base.categories || []).concat(p.topics.map((t) => t.key))),
     collectionQueries: queries,
     countryContentPolicy: {
       version: VERSION,
-      countryCode: text(countryCode).toUpperCase() || null,
-      strategy: "broad_search_strict_selection",
-      topics: profile(countryCode).topics
+      countryCode: p.countryCode,
+      regionId: p.regionId,
+      strategy: "broad_search_consumption_weighted_strict_selection",
+      topics: p.topics
     }
   });
+}
+
+function contentText(row) {
+  const source = row && typeof row === "object" ? row : {};
+  const raw = source.raw && typeof source.raw === "object" ? source.raw : {};
+  const values = [
+    source.title, source.description, source.category, source.creatorName, source.creator_name,
+    raw.title, raw.description, raw.category, raw.discoveryQuery,
+    ...(Array.isArray(raw.tags) ? raw.tags : []),
+    ...(Array.isArray(source.tags) ? source.tags : [])
+  ];
+  return values.map(text).filter(Boolean).join(" ").toLowerCase();
+}
+function contentAffinityScore(row, routeOrCountry) {
+  const haystack = contentText(row);
+  if (!haystack) return 0;
+  const p = profile(routeOrCountry);
+  let best = 0;
+  let matchedTopics = 0;
+  p.topics.forEach((topic) => {
+    const terms = (topic.terms || []).map((term) => text(term).toLowerCase()).filter((term) => term.length >= 3);
+    const key = text(topic.key).toLowerCase();
+    const keyMatched = key.length >= 5 && new RegExp("(^|[^a-z0-9])" + key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^a-z0-9]|$)", "i").test(haystack);
+    const matched = terms.some((term) => haystack.includes(term)) || keyMatched;
+    if (!matched) return;
+    matchedTopics += 1;
+    best = Math.max(best, Number(topic.weight || 0));
+  });
+  if (!best) return 0;
+  return Math.min(42, Math.round(best * 0.30 + Math.min(10, matchedTopics * 3)));
 }
 
 module.exports = {
   VERSION,
   GLOBAL_TOPICS,
   COUNTRY_OVERRIDES,
+  REGION_OVERRIDES,
   PLATFORM_TOPIC_BIAS,
   profile,
   topicQueries,
-  applyToPlatformPolicy
+  applyToPlatformPolicy,
+  contentAffinityScore
 };

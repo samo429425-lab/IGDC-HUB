@@ -99,10 +99,10 @@
       <div class="supplier-actions full"><button id="supplierAddBtn" class="publish">수동 공급사 추가</button><span id="supplierState" class="state">대기</span></div>
     </div>
     <div class="supplier-actions">
-      <input id="supplierResearchQuery" placeholder="자동 리서치 키워드 (비우면 프로덕션·배급사 기본 탐색)" style="min-width:340px;flex:1">
+      <input id="supplierResearchQuery" placeholder="자동 리서치 키워드 (비우면 프로덕션·배급사·스튜디오·권리보유사 다중 탐색)" style="min-width:340px;flex:1">
       <button id="supplierResearchBtn">AI/검색 기반 공급사 자동 리서치</button>
       <select id="supplierContentSection"><option value="media-movie">영화</option><option value="media-drama">드라마·TV</option><option value="media-thriller">스릴러·미스터리</option><option value="media-romance">로맨스</option><option value="media-variety">버라이어티·토크</option><option value="media-documentary">다큐멘터리</option><option value="media-animation">애니메이션</option><option value="media-music">음악·공연</option><option value="media-shorts">쇼츠·단편</option></select>
-      <span class="small">활성 공급사의 콘텐츠 수집은 아래 목록의 ‘영상 후보 수집’에서 실행합니다.</span>
+      <span class="small">탐색 정책: 공식 프로덕션·배급사·스튜디오·국제세일즈·라이선서·권리보유사·아카이브를 여러 검색 경로로 교차 탐색하고, HTTPS 공식/대표 사이트와 공급·배급·권리 신호가 확인된 후보만 저장합니다. 넷플릭스·프라임비디오·유튜브·SNS·소비자 플랫폼은 제외합니다. 활성 공급사의 콘텐츠 수집은 아래 목록의 ‘영상 후보 수집’에서 실행합니다.</span>
     </div>
     <div class="tablewrap"><table class="supplier-table"><thead><tr><th>상태</th><th>공급사</th><th>유형</th><th>국가</th><th>웹주소</th><th>탐색어</th><th>최근 갱신</th><th>관리</th></tr></thead><tbody id="supplierRows"><tr><td colspan="8" class="small">공급사 목록을 불러오는 중입니다.</td></tr></tbody></table></div>
     <pre id="supplierDiagnosticJson" class="json hidden"></pre>

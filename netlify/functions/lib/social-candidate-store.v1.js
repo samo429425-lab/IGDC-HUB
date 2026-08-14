@@ -9,6 +9,7 @@
 const crypto = require("crypto");
 const Policy = require("./social-candidate-policy.v1");
 const CountryRouting = require("./social-country-routing.v1");
+const CountryContentPolicy = require("./social-country-content-policy.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
 const VERSION =
@@ -792,6 +793,38 @@ function isApprovedForSnapshot(row) {
     !!text(r.source_url || r.sourceUrl)
   );
 }
+function contentPublishedValue(row) {
+  const r = plain(row);
+  const raw = plain(r.raw);
+  const evidence = plain(r.evidence);
+  const timestamps = plain(r.timestamps);
+  const value = Date.parse(
+    text(
+      raw.contentPublishedAt ||
+        raw.content_published_at ||
+        raw.publishedAt ||
+        raw.published_at ||
+        evidence.contentPublishedAt ||
+        evidence.publishedAt ||
+        timestamps.published ||
+        r.content_published_at ||
+        r.contentPublishedAt,
+    ),
+  );
+  return Number.isFinite(value) ? value : 0;
+}
+function freshnessScore(row) {
+  const published = contentPublishedValue(row);
+  if (!published) return 0;
+  const ageDays = Math.max(0, (Date.now() - published) / 86400000);
+  if (ageDays <= 2) return 24;
+  if (ageDays <= 7) return 20;
+  if (ageDays <= 14) return 16;
+  if (ageDays <= 30) return 12;
+  if (ageDays <= 60) return 8;
+  if (ageDays <= 120) return 4;
+  return 0;
+}
 function rowScore(row) {
   const r = plain(row);
   return (
@@ -801,11 +834,14 @@ function rowScore(row) {
     Number(r.engagement_score || r.engagementScore || 0) * 1.1 +
     Number(r.trust_score || r.trustScore || 0) +
     Number(r.safety_score || r.safetyScore || 0) +
-    Number(r.locale_score || r.localeScore || 0) * 0.7
+    Number(r.locale_score || r.localeScore || 0) * 0.7 +
+    freshnessScore(r)
   );
 }
 function dateValue(row) {
   const r = plain(row);
+  const contentDate = contentPublishedValue(r);
+  if (contentDate) return contentDate;
   const value = Date.parse(
     text(
       r.approved_at ||
@@ -949,8 +985,11 @@ function byRouteRank(route, salt) {
   return function (a, b) {
     const d =
       rowScore(b) +
-      CountryRouting.matchScore(b, route) -
-      (rowScore(a) + CountryRouting.matchScore(a, route));
+      CountryRouting.matchScore(b, route) +
+      CountryContentPolicy.contentAffinityScore(b, route) -
+      (rowScore(a) +
+        CountryRouting.matchScore(a, route) +
+        CountryContentPolicy.contentAffinityScore(a, route));
     if (d) return d;
     return byRank(salt)(a, b);
   };
@@ -994,14 +1033,7 @@ function selectRotation(rows, options) {
           countryCode: opts.countryCode || opts.country,
           languages: opts.languages || opts.language || opts.lang,
         };
-  const routeCountry = text(route.countryCode || route.country).toUpperCase();
-  const groups = groupRowsBySection(
-    approvedContentRows(rows)
-      .filter((row) => {
-        const scopes = CountryRouting.scopesFrom(row).countries;
-        return !routeCountry || !scopes.length || scopes.includes(routeCountry);
-      }),
-  );
+  const groups = groupRowsBySection(approvedContentRows(rows));
   const selected = {};
   const replacement = {};
   const counts = {};
@@ -1060,13 +1092,22 @@ function selectRotation(rows, options) {
     rotationSalt: salt,
     limitPerSection: limit,
     route: {
+      scopeMode: text(route.scopeMode) || null,
       countryCode:
         text(route.countryCode || route.country).toUpperCase() || null,
+      worldRegion: text(route.worldRegion || route.regionId) || null,
       languages: CountryRouting.normalizeLanguages(
         route.languages || route.language || route.lang,
       ),
     },
-    policy: { stablePercent: 70, refreshPercent: 20, discoveryPercent: 10 },
+    policy: {
+      stablePercent: 70,
+      refreshPercent: 20,
+      discoveryPercent: 10,
+      scopeStrategy: "consumption_weighted_country_region_global",
+      countryHardFilter: false,
+      freshnessBoost: true,
+    },
   };
 }
 function publicSocialSlot(row, slotId, defaults) {
@@ -1193,15 +1234,7 @@ function buildSnapshot(baseSnapshot, rows, options) {
       ? [requestedSection]
       : Policy.SECTION_KEYS;
   const rotation = selectRotation(rows, opts);
-  const routeCountry = text(
-    opts.route &&
-      (opts.route.countryCode || opts.route.country),
-  ).toUpperCase();
-  const approvedRows = approvedContentRows(rows)
-    .filter((row) => {
-      const scopes = CountryRouting.scopesFrom(row).countries;
-      return !routeCountry || !scopes.length || scopes.includes(routeCountry);
-    });
+  const approvedRows = approvedContentRows(rows);
   const filled = {};
   targetSections.forEach((sectionKey) => {
     const current = Array.isArray(sections[sectionKey])
@@ -1241,16 +1274,20 @@ function buildSnapshot(baseSnapshot, rows, options) {
   targetSections.forEach((sectionKey) => {
     candidatePool[sectionKey] = poolGroups[sectionKey]
       .slice()
-      .sort(byRank(rotation.rotationSalt))
+      .sort(byRouteRank(opts.route || {}, rotation.rotationSalt))
       .slice(0, POOL_MAX_PER_SECTION)
       .map((row, index) => publicSocialSlot(row, index + 1, {}));
   });
   base.pages.social.candidatePool = candidatePool;
   base.pages.social.countryRouting = {
     version: CountryRouting.VERSION,
-    scope: "country_only",
+    scope: "country_region_global_consumption_weighted",
     ipStorage: "none",
     selectedCountryPrecedence: true,
+    ipCountryFallback: true,
+    regionFallback: true,
+    globalFallback: true,
+    countryHardFilter: false,
     languageFallback: true,
     publicSlotsPerSection: ROTATION_LIMIT_PER_SECTION,
     poolTargetPerSection: POOL_TARGET_PER_SECTION,
@@ -1265,13 +1302,17 @@ function buildSnapshot(baseSnapshot, rows, options) {
     excludedSections: ["social-maru", "rightPanel"],
     appliedSections: targetSections,
     applicationScope: {
+      scopeMode: text(rotation.route && rotation.route.scopeMode) || null,
       countryCode:
         text(rotation.route && rotation.route.countryCode).toUpperCase() ||
         null,
       languages: CountryRouting.normalizeLanguages(
         rotation.route && rotation.route.languages,
       ),
-      worldRegion: text(opts.route && opts.route.worldRegion) || null,
+      worldRegion:
+        text(rotation.route && rotation.route.worldRegion) ||
+        text(opts.route && (opts.route.worldRegion || opts.route.regionId)) ||
+        null,
       ipMatchedAtRead: true,
       rawIpStored: false,
     },

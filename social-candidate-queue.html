@@ -463,10 +463,12 @@
       <section class="panel" id="countryScopePanel">
         <h2>전 세계 권역 · 국가 · 접속 국가(IP) 관리 범위</h2>
         <div class="small">
-          소셜 허브는 주·성 단위로 나누지 않고 국가 단위로 관리합니다. 권역은
-          국가 목록을 빠르게 찾기 위한 분류이며, 선택한 국가는 후보 수집·최종
-          100개 정리·실제 프론트 적용에 함께 사용됩니다. 언어는 프론트의 기존
-          30개 언어 전환 체계를 그대로 사용합니다.
+          소셜 허브는 주·성 단위로 나누지 않습니다. 국가를 직접 선택하면 해당
+          국가의 실제 소비 성향을 우선하고, 국가를 선택하지 않으면 접속 IP 국가를
+          우선합니다. 권역만 선택하면 같은 권역을 우선하며, 전 세계 공통을 직접
+          선택한 경우에만 글로벌 기준으로 동작합니다. 모든 모드에서 같은 권역과
+          글로벌 인기 콘텐츠는 보완 후보로 유지하며 국적만으로 후보를 차단하지
+          않습니다.
         </div>
         <div class="scope-grid">
           <div class="scope-field">
@@ -478,7 +480,8 @@
           <div class="scope-field">
             <label for="collectorCountry">관리·적용 국가</label>
             <select id="collectorCountry">
-              <option value="">전 세계 공통</option>
+              <option value="">IP 자동 우선</option>
+              <option value="__GLOBAL__">전 세계 공통</option>
             </select>
           </div>
           <div class="scope-field">
@@ -494,8 +497,9 @@
           <div class="scope-field">
             <label>국가 관리자 위임 준비</label>
             <div class="small">
-              현재 선택한 권역·국가가 관리 작업 범위로 전달됩니다. 향후 관리자
-              계정에는 같은 국가 범위만 연결하면 됩니다.
+              선택한 국가·권역 또는 IP 자동 기준이 후보 수집·정리·실제 적용까지
+              그대로 승계됩니다. 후보는 현지 소비성향 → 같은 권역 → 글로벌 순으로
+              가중치를 적용합니다.
             </div>
           </div>
         </div>

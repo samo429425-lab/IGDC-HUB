@@ -22,7 +22,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const SlotOverlay = require("./sample-slot-overlay.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.2-exact-product-destination-preservation";
+const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.2-social-thumbnail-alias-preservation";
 const MANIFEST_FILE = "ip-slot-manifest.json";
 const AUTO_ROOT = ["data", "auto"];
 const ROUTES = Object.freeze({
@@ -131,6 +131,26 @@ function cloneCard(item) {
   const placement = clone(item.placement);
   const publication = clone(item.canonicalPublication);
   const ipSlot = clone(item.ipSlot);
+  const productCard = isObject(item && item.productCard) ? item.productCard : {};
+  const image = text(
+    item &&
+      (item.thumb ||
+        item.thumbnail ||
+        item.image ||
+        item.imageUrl ||
+        item.thumbnailUrl ||
+        item.image_url ||
+        item.thumbnail_url ||
+        item.imageOriginalUrl ||
+        item.image_original_url ||
+        productCard.thumb ||
+        productCard.thumbnail ||
+        productCard.image ||
+        productCard.imageUrl ||
+        productCard.thumbnailUrl ||
+        productCard.image_url ||
+        productCard.thumbnail_url),
+  );
   const card = {
     id: item.id || publication.candidateId,
     contentId: item.contentId || item.id || publication.candidateId,
@@ -140,18 +160,15 @@ function cloneCard(item) {
     description: text(item.description || item.summary),
     url: text(item.url),
     link: text(item.link || item.url),
-    externalProductUrl: text(item.externalProductUrl || "") || undefined,
-    officialProductUrl: text(item.officialProductUrl || "") || undefined,
-    productUrl: text(item.productUrl || item.productPageUrl || "") || undefined,
-    productPageUrl: text(item.productPageUrl || item.productUrl || "") || undefined,
-    detailUrl: text(item.detailUrl || "") || undefined,
-    checkoutUrl: text(item.checkoutUrl || "") || undefined,
-    purchaseUrl: text(item.purchaseUrl || "") || undefined,
-    orderUrl: text(item.orderUrl || "") || undefined,
-    productLink: text(item.productLink || "") || undefined,
-    thumb: text(item.thumb || item.thumbnail || item.image),
-    image: text(item.image || item.thumb || item.thumbnail),
-    thumbnail: text(item.thumbnail || item.thumb || item.image),
+    // Keep all common image aliases in the scoped snapshot. Social's right
+    // panel is a thumbnail surface, and older/newer SearchBank cards may expose
+    // the same verified image under different aliases. Dropping those aliases
+    // can leave a valid title/link with a blank white card.
+    thumb: image,
+    image: image,
+    thumbnail: image,
+    imageUrl: image,
+    thumbnailUrl: image,
     price: item.price == null ? undefined : item.price,
     currency: item.currency || undefined,
     priority: candidatePriority(item),

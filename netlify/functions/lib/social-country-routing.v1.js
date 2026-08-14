@@ -8,7 +8,7 @@
  */
 const Registry = require("../data/country-region-registry.v1.json");
 
-const VERSION = "social-country-routing-v1.1.0-region-country-ip-scope";
+const VERSION = "social-country-routing-v1.2.0-consumption-weighted-scope";
 const SUPPORTED = new Set([
   "ko",
   "en",
@@ -231,39 +231,95 @@ function edgeCountry(event) {
   ).toUpperCase();
   return countryRow(raw) ? raw : "";
 }
+function regionRow(value) {
+  const id = text(value);
+  if (!id) return null;
+  return (
+    regionCatalog().find((row) => text(row && row.id) === id) || null
+  );
+}
+function regionForCountry(value) {
+  const row = countryRow(value);
+  return row ? text(row.regionGroup) : "";
+}
+function countriesInRegion(value) {
+  const id = text(value);
+  if (!id) return [];
+  return countries()
+    .filter((row) => row && row.enabled !== false && text(row.regionGroup) === id)
+    .map((row) => text(row.code).toUpperCase())
+    .filter(Boolean);
+}
 function resolve(event, input) {
   const source = plain(input);
   const explicit = text(
     source.countryCode || source.country || source.country_code,
   ).toUpperCase();
-  const forceGlobal = /^(global|world|all)$/i.test(
-    text(source.scopeMode || source.countryScope || source.managementScope),
+  const requestedMode = text(
+    source.scopeMode || source.countryScope || source.managementScope,
+  ).toLowerCase();
+  const explicitRegion = text(
+    source.regionId || source.region || source.worldRegion || source.regionGroup,
   );
-  const selected = forceGlobal ? "" : countryRow(explicit) ? explicit : "";
-  const edge = forceGlobal ? "" : edgeCountry(event);
-  const code = selected || edge;
+  const forceGlobal = /^(global|world|all)$/.test(requestedMode);
+  const forceRegion = /^(region|regional)$/.test(requestedMode);
+  const forceCountry = /^(country|local)$/.test(requestedMode);
+  const autoMode = !requestedMode || /^(auto|ip|edge)$/.test(requestedMode);
+  const selected = !forceGlobal && countryRow(explicit) ? explicit : "";
+  const edge = !forceGlobal ? edgeCountry(event) : "";
+  const code = selected || (!forceRegion && !forceGlobal ? edge : "");
   const row = countryRow(code);
+  const inferredRegion = row ? text(row.regionGroup) : "";
+  const region = forceGlobal
+    ? ""
+    : regionRow(explicitRegion)
+      ? explicitRegion
+      : inferredRegion;
   const languages = localesForCountry(
     code,
     source.languages || source.language || source.lang,
   );
+  const mode = forceGlobal
+    ? "global"
+    : selected || forceCountry
+      ? "country"
+      : forceRegion && region
+        ? "region"
+        : edge
+          ? "auto_country"
+          : region
+            ? "region"
+            : "global_fallback";
   return {
     version: VERSION,
+    scopeMode: mode,
     countryCode: row ? row.code : null,
     countryNameKo: row ? row.nameKo : null,
     countryNameEn: row ? row.nameEn : null,
-    worldRegion: row ? row.regionGroup : null,
+    worldRegion: region || null,
+    regionId: region || null,
+    regionCountries: countriesInRegion(region),
     languages,
     source: forceGlobal
       ? "explicit_global"
       : selected
         ? "explicit_country"
-        : edge
-          ? "edge_country"
-          : "language_fallback",
+        : forceRegion && region
+          ? "explicit_region"
+          : edge
+            ? "edge_country"
+            : region
+              ? "region_fallback"
+              : autoMode
+                ? "language_global_fallback"
+                : "global_fallback",
     stateProvinceUsed: false,
     ipStored: false,
-    fallback: row ? "country_language_then_global" : "language_then_global",
+    fallback: row
+      ? "country_consumption_then_region_then_global"
+      : region
+        ? "region_consumption_then_global"
+        : "global_consumption",
   };
 }
 function scopesFrom(row) {
@@ -314,33 +370,53 @@ function scopesFrom(row) {
     languages: normalizeLanguages(languageValues),
   };
 }
-function matchScore(row, route) {
+function matchTier(row, route) {
   const scopes = scopesFrom(row);
   const country = text(route && route.countryCode).toUpperCase();
+  const region = text(route && (route.worldRegion || route.regionId));
+  const mode = text(route && route.scopeMode).toLowerCase();
+  const rowRegions = unique(scopes.countries.map(regionForCountry).filter(Boolean));
+  if (mode === "global" || mode === "global_fallback" || (!country && !region)) {
+    return scopes.countries.length ? "global_scoped" : "global_unscoped";
+  }
+  if (country && scopes.countries.includes(country)) return "country_exact";
+  if (region && rowRegions.includes(region)) return "region_match";
+  if (!scopes.countries.length) return "global_unscoped";
+  return "cross_region";
+}
+function matchScore(row, route) {
+  const scopes = scopesFrom(row);
   const languages = normalizeLanguages(route && route.languages);
   const rowLanguage = normalizeLanguage(row && (row.language || row.lang));
+  const tier = matchTier(row, route);
   let score = 0;
-  // Country fit outranks generic popularity: a visitor should first see
-  // candidates explicitly researched for that country, then fall back.
-  if (country && scopes.countries.includes(country)) score += 120;
-  else if (scopes.countries.length) score -= 60;
+  if (tier === "country_exact") score += 120;
+  else if (tier === "region_match") score += 58;
+  else if (tier === "global_unscoped") score += 34;
+  else if (tier === "global_scoped") score += 18;
+  else if (tier === "cross_region") score += 6;
   if (rowLanguage && languages.includes(rowLanguage))
-    score += 16 - languages.indexOf(rowLanguage) * 2;
+    score += 18 - languages.indexOf(rowLanguage) * 2;
   else if (scopes.languages.some((language) => languages.includes(language)))
-    score += 10;
+    score += 11;
   return score;
 }
+
 
 module.exports = {
   VERSION,
   catalog,
   regionCatalog,
   countryRow,
+  regionRow,
+  regionForCountry,
+  countriesInRegion,
   normalizeLanguage,
   normalizeLanguages,
   localesForCountry,
   edgeCountry,
   resolve,
   scopesFrom,
+  matchTier,
   matchScore,
 };

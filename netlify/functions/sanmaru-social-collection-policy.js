@@ -5,7 +5,8 @@
  * Shows what Sanmaru/Maru Search should collect broadly before the candidate gateway filters it.
  */
 const Policy = require("./lib/social-candidate-policy.v1");
-const VERSION = "sanmaru-social-collection-policy-v1.1.0-country-aware-readonly";
+const CountryRouting = require("./lib/social-country-routing.v1");
+const VERSION = "sanmaru-social-collection-policy-v1.2.0-consumption-scope-readonly";
 
 function json(statusCode, body) {
   return {
@@ -25,11 +26,13 @@ exports.handler = async function(event) {
   const qs = event && event.queryStringParameters || {};
   const perSection = Number(qs.perSection || qs.pool || Policy.POOL_TARGET_PER_SECTION) || Policy.POOL_TARGET_PER_SECTION;
   const languages = qs.languages ? String(qs.languages).split(/[|,\s]+/).filter(Boolean) : Policy.LANGUAGES_30;
+  const route = CountryRouting.resolve(event, Object.assign({}, qs, { languages }));
   return json(200, {
     ok: true,
     version: VERSION,
     policy: Policy.VERSION,
-    collectionPlan: Policy.buildCollectionPlan({ perSection, languages, countryCode: qs.countryCode || qs.country }),
+    route,
+    collectionPlan: Policy.buildCollectionPlan({ perSection, languages, route }),
     safety: {
       readOnly: true,
       writes: false,
