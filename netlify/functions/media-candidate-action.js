@@ -8,7 +8,7 @@ const MediaStore = require("./lib/media-candidate-store.v1");
 const MediaPolicy = require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "media-candidate-action-v1.8.1-bulk-approval-batched";
+const VERSION = "media-candidate-action-v1.9.0-bulk-upsert-verified";
 const ACTIONS = new Set([
   "approve","approve_all","hold","block","reject","reset","delete","front_enable","front_disable",
   "restore_hold","release_exclusion","restore","permanent_block","forget"
@@ -287,11 +287,14 @@ async function approveRows(rows,body,actor){
     const error=new Error("명백한 금지 콘텐츠 신호가 있는 후보는 승인할 수 없습니다.");
     error.statusCode=409;error.code="prohibited_content_cannot_be_approved";error.blocked=blocked;throw error;
   }
-  const updated=[];
-  const failures=[];
-  const batchSize=8;
-  async function approveOne(row){
-    const raw=Object.assign({},MediaStore.plain(row.raw));
+
+  // A full approval can contain 100+ candidates. Do not PATCH every row separately:
+  // that turns one administrator action into hundreds of network round-trips and can
+  // time out before the approval state is durable. Reuse the rows already loaded from
+  // Supabase, preserve every table field, change only the media approval columns/raw
+  // audit payload, then upsert in small batches.
+  const prepared=rows.map((row)=>{
+    const raw=Object.assign({},MediaStore.plain(row&&row.raw));
     raw.policyAssessment=MediaPolicy.assessCandidate(row);
     raw.administratorReview={
       contentSafe:true,
@@ -303,7 +306,7 @@ async function approveRows(rows,body,actor){
       reviewedAt:info.now,
       previousReviewStatus:statusOf(row)
     };
-    return await MediaStore.updateCandidates([row.id],{
+    return Object.assign({},row,{
       review_status:"approved",
       verification_status:"approved_for_snapshot",
       rights_status:"rights_verified_by_admin",
@@ -319,22 +322,46 @@ async function approveRows(rows,body,actor){
       updated_at:info.now,
       blocked_reason:null
     });
-  }
-  for(let offset=0;offset<rows.length;offset+=batchSize){
-    const batch=rows.slice(offset,offset+batchSize);
-    const results=await Promise.all(batch.map(async(row)=>{
-      try{return{row,saved:await approveOne(row)};}
-      catch(error){return{row,error};}
-    }));
-    for(const result of results){
-      if(result.error){failures.push({id:MediaStore.text(result.row&&result.row.id),error:MediaStore.compact(result.error&&result.error.message||result.error,300)});continue;}
-      if(Array.isArray(result.saved))updated.push(...result.saved);
+  });
+
+  const updated=[];
+  const failures=[];
+  const batchSize=20;
+  for(let offset=0;offset<prepared.length;offset+=batchSize){
+    const batch=prepared.slice(offset,offset+batchSize);
+    try{
+      const saved=await MediaStore.upsertCandidates(batch);
+      if(!Array.isArray(saved)||saved.length!==batch.length){
+        failures.push({offset,requested:batch.length,saved:Array.isArray(saved)?saved.length:0,error:"approval_batch_return_count_mismatch"});
+      }
+      if(Array.isArray(saved))updated.push(...saved);
+    }catch(error){
+      failures.push({offset,requested:batch.length,saved:0,error:MediaStore.compact(error&&error.message||error,300)});
     }
   }
   if(failures.length){
-    const error=new Error("일부 후보 승인 저장에 실패했습니다: "+failures.length+"건");
+    const error=new Error("일부 후보 승인 저장에 실패했습니다: "+failures.length+"개 묶음");
     error.statusCode=502;error.code="media_candidate_bulk_approval_partial_failure";
     error.updated=updated.length;error.failures=failures.slice(0,50);throw error;
+  }
+
+  // Do not trust only the mutation response. Re-read the exact IDs and prove that the
+  // publication gate columns survived persistence before the UI is allowed to proceed.
+  const ids=prepared.map((row)=>MediaStore.text(row&&row.id)).filter(Boolean);
+  const verified=[];
+  for(let offset=0;offset<ids.length;offset+=100){
+    const part=ids.slice(offset,offset+100);
+    const query="select=id,review_status,verification_status,candidate_only,seed_content,rights_status,allowed_use,approved_at&"+
+      "id="+MediaStore.encodeIn(part)+"&review_status=eq.approved&verification_status=eq.approved_for_snapshot&candidate_only=eq.false&seed_content=eq.false&limit=200";
+    const rows2=await MediaStore.selectCandidates(query);
+    if(Array.isArray(rows2))verified.push(...rows2);
+  }
+  if(verified.length!==ids.length){
+    const verifiedIds=new Set(verified.map((row)=>MediaStore.text(row&&row.id)));
+    const missing=ids.filter((id)=>!verifiedIds.has(id));
+    const error=new Error("최종 승인 저장 후 재조회 검증이 일치하지 않습니다. 승인 "+ids.length+"건 중 "+verified.length+"건만 확정되었습니다.");
+    error.statusCode=502;error.code="media_candidate_approval_persistence_mismatch";
+    error.updated=updated.length;error.verified=verified.length;error.missing=missing.slice(0,100);throw error;
   }
   return updated;
 }

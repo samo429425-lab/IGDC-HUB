@@ -302,6 +302,33 @@
       true,
     );
   }
+  // Report endpoints can return HTTP 200 with ok:false when a diagnostic finds a mismatch.
+  // Treat that as a valid report result instead of a transport failure.
+  async function getReport(url) {
+    var firstToken = adminBearer(false),
+      config = {
+        headers: headers(false, firstToken),
+        credentials: "same-origin",
+        cache: "no-store",
+      },
+      r = await fetch(url, config),
+      d;
+    if (r.status === 401) {
+      clearDedicatedBearer();
+      var replacementToken = adminBearer(true);
+      if (replacementToken && replacementToken !== firstToken) {
+        config.headers = headers(false, replacementToken);
+        r = await fetch(url, config);
+      }
+    }
+    try { d = await r.json(); } catch (_e) {}
+    if (!r.ok || !d) {
+      var e = new Error((d && (d.message || d.error)) || "점검 요청 실패: HTTP " + r.status);
+      e.status = r.status;
+      throw e;
+    }
+    return d;
+  }
   async function staticJson(url) {
     var separator = url.indexOf("?") >= 0 ? "&" : "?",
       response = await fetch(url + separator + "_=" + Date.now(), {
@@ -841,6 +868,20 @@
       "ok",
     );
   }
+  function updateMasterSelectionState() {
+    [["registry", selectedInfluencers, "selectAllFinalMaster"], ["content", selectedContents, "selectAllWaitingMaster"]].forEach(function (entry) {
+      var list = queueRows(entry[0], ""), el = $(entry[2]);
+      if (!el) return;
+      var count = list.filter(function (row) { return entry[1].has(text(row.id)); }).length;
+      el.checked = list.length > 0 && count === list.length;
+      el.indeterminate = count > 0 && count < list.length;
+      el.disabled = list.length === 0;
+    });
+  }
+  function toggleWholeQueue(queue, checked) {
+    selectQueue(queue, "", checked);
+    updateMasterSelectionState();
+  }
   function pruneSelections() {
     var ids = new Set(
       rows.map(function (row) {
@@ -999,6 +1040,7 @@
     );
     $("tablePanel").classList.remove("hidden");
     $("waitingPanel").classList.remove("hidden");
+    updateMasterSelectionState();
   }
   function excludedRow(r, n) {
     var restore =
@@ -1079,8 +1121,14 @@
   function diagnostic(data) {
     diagnosticCache = data;
     $("diagnosticJson").textContent = JSON.stringify(data, null, 2);
-    $("diagnosticPanel").classList.remove("hidden");
     $("downloadJsonBtn").disabled = false;
+  }
+  function toggleDiagnosticPanel(forceOpen) {
+    var body = $("diagnosticBody"), button = $("toggleDiagnosticPanelBtn");
+    if (!body || !button) return;
+    var open = forceOpen === true || (forceOpen !== false && body.classList.contains("hidden"));
+    body.classList.toggle("hidden", !open);
+    button.textContent = open ? "점검창 접기" : "점검창 펼치기";
   }
   function download(name, value) {
     var b = new Blob(
@@ -2017,9 +2065,17 @@
   }
   async function downloadActualApplied() {
     try {
-      var snapshot = await staticJson(STATIC_SOCIAL_SNAPSHOT);
-      download("igdc-social-actual-applied.snapshot.json", snapshot);
-      show("현재 배포된 최종 소셜 스냅샷 JSON을 다운로드했습니다.", "ok");
+      var separator = STATIC_SOCIAL_SNAPSHOT.indexOf("?") >= 0 ? "&" : "?",
+        response = await fetch(STATIC_SOCIAL_SNAPSHOT + separator + "_=" + Date.now(), {
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        }),
+        raw = await response.text();
+      if (!response.ok || !/^\s*[\[{]/.test(raw))
+        throw new Error("최종 적용 JSON을 읽지 못했습니다: HTTP " + response.status);
+      download("igdc-social-actual-applied.snapshot.json", raw);
+      show("현재 배포된 최종 소셜 스냅샷 JSON을 원문 그대로 다운로드했습니다.", "ok");
     } catch (error) {
       show(error.message || "최종 적용 JSON을 읽지 못했습니다.", "warn");
     }
@@ -2057,7 +2113,7 @@
           scopeMode: scopeMode(),
           regionId: text($("collectorRegion").value),
         }),
-        verification = await get(PUBLISH + "?" + q.toString());
+        verification = await getReport(PUBLISH + "?" + q.toString());
       download("igdc-social-searchbank-handoff-verification.json", verification);
       diagnostic(verification);
       show(
@@ -2433,10 +2489,11 @@
         event.target
           .closest(".candidate-card")
           .classList.toggle("selected", event.target.checked);
+        updateMasterSelectionState();
       }
     });
   }
-  async function runQueueDiagnostic(action, successMessage) {
+  async function runQueueDiagnostic(action, successMessage, downloadName) {
     try {
       var q = new URLSearchParams({
           action: action,
@@ -2444,9 +2501,10 @@
           scopeMode: scopeMode(),
           regionId: text($("collectorRegion").value),
         }),
-        d = await get(REVIEW + "?" + q.toString());
+        d = await getReport(REVIEW + "?" + q.toString());
       diagnostic(d);
-      show(successMessage, "ok");
+      if (downloadName) download(downloadName, d);
+      show(successMessage + (downloadName ? " · 다운로드 완료" : ""), d.ok === false ? "warn" : "ok");
     } catch (e) {
       show(e.message || "점검 JSON을 읽지 못했습니다.", "warn");
     }
@@ -2459,11 +2517,11 @@
     };
     if ($("registryDiagnosticBtn"))
       $("registryDiagnosticBtn").onclick = function () {
-        runQueueDiagnostic("registry_diagnostic", "인플루언서 등록부 점검 JSON을 읽었습니다.");
+        runQueueDiagnostic("registry_diagnostic", "인플루언서 등록부 점검 JSON을 읽었습니다.", "igdc-social-influencer-registry-diagnostic.json");
       };
     if ($("latestContentDiagnosticBtn"))
       $("latestContentDiagnosticBtn").onclick = function () {
-        runQueueDiagnostic("latest_content_diagnostic", "최신 콘텐츠 후보·교체 대기열 점검 JSON을 읽었습니다.");
+        runQueueDiagnostic("latest_content_diagnostic", "최신 콘텐츠 후보·교체 대기열 점검 JSON을 읽었습니다.", "igdc-social-latest-content-diagnostic.json");
       };
     $("downloadJsonBtn").onclick = function () {
       if (diagnosticCache)
@@ -2474,6 +2532,7 @@
           diagnosticCache,
         );
     };
+    if ($("toggleDiagnosticPanelBtn")) $("toggleDiagnosticPanelBtn").onclick = function () { toggleDiagnosticPanel(); };
     $("downloadCandidateListBtn").onclick = function () {
       download("igdc-social-candidate-visible-list.json", {
         ok: true,
@@ -2520,7 +2579,10 @@
       run("approve", selected(".finalCheck"));
     };
     $("selectAllFinalBtn").onclick = function () {
-      selectQueue("registry", "", true);
+      toggleWholeQueue("registry", true);
+    };
+    if ($("selectAllFinalMaster")) $("selectAllFinalMaster").onchange = function () {
+      toggleWholeQueue("registry", this.checked);
     };
     $("clearFinalSelectionBtn").onclick = function () {
       selectQueue("registry", "", false);
@@ -2556,7 +2618,10 @@
       run("promote_candidate", selected(".waitingCheck"));
     };
     $("selectAllWaitingBtn").onclick = function () {
-      selectQueue("content", "", true);
+      toggleWholeQueue("content", true);
+    };
+    if ($("selectAllWaitingMaster")) $("selectAllWaitingMaster").onchange = function () {
+      toggleWholeQueue("content", this.checked);
     };
     $("clearWaitingSelectionBtn").onclick = function () {
       selectQueue("content", "", false);

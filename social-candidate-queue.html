@@ -605,9 +605,14 @@
           섹션을 펼치면 해당 섹션 후보 카드만 표시합니다.
         </div>
       </section>
-      <section id="diagnosticPanel" class="panel hidden">
-        <h2>소셜 후보 점검 JSON</h2>
-        <pre id="diagnosticJson" class="json"></pre>
+      <section id="diagnosticPanel" class="panel">
+        <div class="modal-head">
+          <h2 style="margin: 0">소셜 후보 점검 JSON</h2>
+          <button id="toggleDiagnosticPanelBtn" class="secondary" type="button">점검창 펼치기</button>
+        </div>
+        <div id="diagnosticBody" class="hidden" style="margin-top: 10px">
+          <pre id="diagnosticJson" class="json"></pre>
+        </div>
       </section>
       <section id="tablePanel" class="panel hidden">
         <div class="modal-head">
@@ -623,6 +628,7 @@
         </div>
         <div class="reviewbar">
           <button id="registryDiagnosticBtn" class="secondary">인플루언서 등록부 점검 JSON</button
+          ><label class="small"><input id="selectAllFinalMaster" type="checkbox" /> 전체 섹션 선택</label
           ><button id="selectAllFinalBtn" class="secondary">
             현재 조회 전체 선택</button
           ><button id="clearFinalSelectionBtn" class="secondary">
@@ -658,6 +664,7 @@
         </div>
         <div class="reviewbar">
           <button id="latestContentDiagnosticBtn" class="secondary">최신 콘텐츠 대기열 점검 JSON</button
+          ><label class="small"><input id="selectAllWaitingMaster" type="checkbox" /> 전체 섹션 선택</label
           ><button id="selectAllWaitingBtn" class="secondary">
             현재 조회 전체 선택</button
           ><button id="clearWaitingSelectionBtn" class="secondary">
@@ -733,6 +740,6 @@
       </p>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=20"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=21"></script>
   </body>
 </html>

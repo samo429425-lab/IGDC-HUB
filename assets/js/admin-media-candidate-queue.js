@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v3.5 - supplier research policy + front preflight diagnostics */
+/* IGDC Media Candidate Queue v3.6 - verified bulk approval persistence + front preflight */
 (function(){
   'use strict';
 
@@ -953,7 +953,7 @@
       var verify=await get(PUB+'?pipelineStatus=1&probePublic=0');
       var verifiedApproved=Number(verify&&verify.stages&&verify.stages.candidates&&verify.stages.candidates.approvedRows||0);
       if(updated>0&&verifiedApproved===0)throw new Error('최종 승인 응답은 '+updated+'건이지만 재조회 결과 approvedRows가 0건입니다. 승인 DB 저장이 확정되지 않아 프론트 반영을 중단합니다.');
-      show('전체 최종 승인 '+updated+'건 완료 · 재조회 승인 '+verifiedApproved+'건'+(skipped?' · 금지 신호 '+skipped+'건 자동 제외':'')+' · 이제 전체 또는 섹션별 프론트 반영 실행이 가능합니다.','ok');
+      show('전체 최종 승인 '+updated+'건 완료 · 재조회 승인 '+verifiedApproved+'건 · 승인 API '+text(data.version||'-')+(skipped?' · 금지 신호 '+skipped+'건 자동 제외':'')+' · 이제 전체 또는 섹션별 프론트 반영 실행이 가능합니다.','ok');
     }catch(error){show('전체 최종 승인 실패: '+error.message,'warn');}
     finally{if(button)button.disabled=false;}
   }

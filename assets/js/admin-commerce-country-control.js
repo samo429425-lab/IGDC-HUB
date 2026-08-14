@@ -618,7 +618,10 @@
       // matching requires a placed row; unmatching requires that same placed
       // row to have an active/pending publication marker.
       if(!key)return false;
-      var eligible=unmatch?(placed&&frontPublicationActive(row)):placed;
+      // Matching may also repair a row whose durable publication marker is
+      // already live/pending.  Scope selection is still exact because a valid
+      // assigned section key is required above.
+      var eligible=unmatch?(placed&&frontPublicationActive(row)):(placed||frontPublicationLive(row));
       if(!eligible)return false;
       if(candidateMode)return id===text(productId);
       if(candidatesMode)return selectedProductMap[id]===true;
@@ -645,6 +648,10 @@
           var r=part.frontSyncResult||{},p=r.preparation||{},refresh=r.refresh||{};
           aggregate.requested+=Number(r.requested||p.requested||batch.length);aggregate.queued+=Number(r.queued||0);aggregate.persisted+=Number(r.persisted||0);aggregate.pendingBuild+=Number(r.pendingBuild||0);aggregate.blocked+=Number(r.blocked||p.blocked||0);aggregate.revalidated+=Number(refresh.revalidated||0);aggregate.remoteChecked+=Number(refresh.remoteChecked||0);aggregate.freshReused+=Number(refresh.freshReused||0);aggregate.invalid+=Number(refresh.invalid||0);aggregate.inconclusive+=Number(refresh.inconclusive||0);aggregate.withdrawn+=Number(refresh.withdrawn||refresh.withdrawRequested||0);aggregate.changedSection+=Number(refresh.changedSection||0);aggregate.items=aggregate.items.concat(Array.isArray(r.items)?r.items:[]);aggregate.preparation.requested+=Number(p.requested||0);aggregate.preparation.prepared+=Number(p.prepared||0);aggregate.preparation.blocked+=Number(p.blocked||0);aggregate.release=r.release||aggregate.release;
           (Array.isArray(r.items)?r.items:[]).forEach(function(item){var id=text(item&&item.candidateId),status=text(item&&item.status).toLowerCase();if(!id||!item||item.persisted!==true)return;changedMap[id]=true;if(!unmatch&&status==='publish_requested')publishPersistedMap[id]=true;});
+          // The preparation ledger is the durable authority.  Do not let a
+          // compact/repair response omit the final build simply because its
+          // item array used a different status label.
+          (Array.isArray(p.preparedCandidateIds)?p.preparedCandidateIds:[]).forEach(function(id){id=text(id);if(!id)return;changedMap[id]=true;if(!unmatch)publishPersistedMap[id]=true;});
           (Array.isArray(refresh.withdrawCandidateIds)?refresh.withdrawCandidateIds:[]).forEach(function(id){id=text(id);if(id)changedMap[id]=true;});
         }catch(batchFailure){
           aggregate.batchErrors.push({offset:batchInfo.offset,candidateIds:batch.slice(),message:text(batchFailure&&batchFailure.message)||'batch_failed'});aggregate.blocked+=batch.length;aggregate.items.push.apply(aggregate.items,batch.map(function(id){return{candidateId:id,status:'batch_failed',queued:false,persisted:false,reason:text(batchFailure&&batchFailure.message)||'batch_failed'};}));

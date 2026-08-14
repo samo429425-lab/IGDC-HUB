@@ -15,7 +15,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.13.4-optional-sponsorship-mode";
+const VERSION = "commerce-candidate-registry-sync-v1.13.5-admin-front-match-market-authority";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -269,8 +269,8 @@ function sourcePayload(candidate){
   return Object.assign({},payload);
 }
 function serviceProof(url, evidence){ return { verified:true, evidenceUrl:safeUrl(url)||null, evidence:[text(evidence)].filter(Boolean) }; }
-function marketRecord(candidate, availability, evidenceRows){
-  const payload=sourcePayload(candidate);
+function marketRecord(candidate, availability, evidenceRows, options){
+  const payload=sourcePayload(candidate), adminExternalSeller=plain(options).administratorExternalSeller===true;
   const country=MarketSaleScope.normalizeCountry(availability.country_code);
   const region=MarketSaleScope.normalizeRegion(availability.region_code,country);
   const nationwide=!region || region==="NATIONWIDE";
@@ -292,7 +292,11 @@ function marketRecord(candidate, availability, evidenceRows){
     shipping:serviceProof(first(payload.shippingPolicyUrl,commonUrl),first(deliveryEvidence,legalBasis)),
     returns:serviceProof(first(payload.returnsPolicyUrl,commonUrl),first(legalBasis,deliveryEvidence)),
     support:serviceProof(first(payload.supportUrl,commonUrl),first(legalBasis,deliveryEvidence)),
-    sellerResponsibility:{verified:bool(first(seller.verified,true)),legalEntity:first(seller.legalEntity,payload.sellerLegalEntity,payload.sellerName,candidate.title),supportUrl:safeUrl(first(seller.supportUrl,payload.supportUrl,commonUrl))||null},
+    // explicitAdminReferralReady() has already verified the exact seller
+    // identity, product destination, image, scope availability and hard-risk
+    // state.  That authenticated Front Match is authoritative evidence that
+    // the external seller (not IGDC) remains responsible for this listing.
+    sellerResponsibility:{verified:adminExternalSeller?true:bool(first(seller.verified,true)),legalEntity:first(seller.legalEntity,payload.sellerLegalEntity,payload.sellerName,plain(payload.supplier).name,candidate.title),supportUrl:safeUrl(first(seller.supportUrl,payload.supportUrl,commonUrl))||null},
     source:{name:"global-slot-console",url:safeUrl(candidate.official_url)||null},
     evidence:unique([legalBasis,deliveryEvidence].concat(verifiedEvidence))
   };
@@ -321,8 +325,8 @@ function runtimeTravelOperatorEvidence(candidate,payload,assignment){
     externalOperator:true,igdcOperator:false
   });
 }
-function compactPayload(candidate, assignment, availabilityRows, revenueRows, evidenceRows, ipPolicy){
-  const payload=sourcePayload(candidate);
+function compactPayload(candidate, assignment, availabilityRows, revenueRows, evidenceRows, ipPolicy, options){
+  const payload=sourcePayload(candidate), adminExternalSeller=plain(options).administratorExternalSeller===true;
   const assignmentInfo=assignment||{};
   const revenue=(revenueRows||[]).find(row=>approvedRevenue(row.status)) || (revenueRows||[]).find(row=>lower(row.status)==="administrator_nonpayable_referral") || {};
   const revenueType=lower(revenue.revenue_type);
@@ -337,7 +341,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   const storedSettlementMode=lower(first(payloadContract.settlementMode,payloadDirect.settlementMode));
   const directPayable=["advertising","brokerage","lead","referral","sponsor"].includes(revenueType) && !!revenueProvider && !!revenueId && disclosureReady && payoutBasisVerified && !!storedSettlementMode;
   const settlementMode=directPayable?storedSettlementMode:(trafficOnly?"traffic_only":"provider_program");
-  const markets=(availabilityRows||[]).map(row=>marketRecord(candidate,row,evidenceRows));
+  const markets=(availabilityRows||[]).map(row=>marketRecord(candidate,row,evidenceRows,{administratorExternalSeller:adminExternalSeller}));
   const pageMap={home:"home",distribution:"distribution",network:"network",tour:"tour",social:"social"};
   const page=pageMap[text(assignmentInfo.hub_key)]||text(payload.page);
   // The selected Global Slot assignment is the authoritative publication
@@ -393,7 +397,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
     placement:Object.assign({},plain(payload.placement),{page,section,slot:requestedSlot}),
     source:{name:first(plain(payload.source).name,candidate.title,"Approved commerce member"),url:first(plain(payload.source).url,candidate.official_url)},
     orderReady:bool(first(payload.orderReady,administratorValidatedOrderPath)),
-    searchBankContract:Object.assign({},plain(payload.searchBankContract),{frontSupplyAllowed:true,searchBankEligible:true,snapshotEligible:true,indexEligible:true,orderReady:bool(first(plain(payload.searchBankContract).orderReady,administratorValidatedOrderPath)),lastVerifiedAt:first(plain(payload.searchBankContract).lastVerifiedAt,candidate.updated_at),trustScore:Number(plain(payload.searchBankContract).trustScore||payload.trustScore||75),trustTier:first(plain(payload.searchBankContract).trustTier,payload.trustTier,"A"),officialSource:bool(first(plain(payload.searchBankContract).officialSource,payload.officialSource,true)),producerVerified:bool(first(plain(payload.searchBankContract).producerVerified,payload.producerVerified,true))}),
+    searchBankContract:Object.assign({},plain(payload.searchBankContract),{frontSupplyAllowed:true,searchBankEligible:true,snapshotEligible:true,indexEligible:true,orderReady:bool(first(plain(payload.searchBankContract).orderReady,administratorValidatedOrderPath)),lastVerifiedAt:first(plain(payload.runtimeValidation).checkedAt,candidate.updated_at,plain(payload.searchBankContract).lastVerifiedAt),trustScore:Number(plain(payload.searchBankContract).trustScore||payload.trustScore||75),trustTier:first(plain(payload.searchBankContract).trustTier,payload.trustTier,"A"),officialSource:adminExternalSeller?true:bool(first(plain(payload.searchBankContract).officialSource,payload.officialSource,true)),producerVerified:bool(first(plain(payload.searchBankContract).producerVerified,payload.producerVerified,true))}),
     marketAvailability:{markets},
     directCommerceListing:Object.assign({},plain(payload.directCommerceListing),{
       sourceTier:"approved_commerce_member",
@@ -507,7 +511,7 @@ async function syncApprovedCandidates(input){
       if(!verifiedEvidence.length&&explicitAdminReferral&&marker) verifiedEvidence=syntheticEvidenceFromMarker(candidate,marker);
       if(!verifiedEvidence.length&&!explicitAdminReferral) continue;
       const publicationRevenue=hasApprovedRevenue?candidateRevenue:[explicitReferralRevenueRow(candidate,assignment)];
-      const compact=compactPayload(candidate,assignment,avail,publicationRevenue,verifiedEvidence,ipPolicy);
+      const compact=compactPayload(candidate,assignment,avail,publicationRevenue,verifiedEvidence,ipPolicy,{administratorExternalSeller:explicitAdminReferral});
       const row=publicationRevenue.find(entry=>approvedRevenue(entry.status))||publicationRevenue[0]||{};
       const type=lower(row.revenue_type)||"external_referral";
       const contract=plain(compact.brokerageContract);

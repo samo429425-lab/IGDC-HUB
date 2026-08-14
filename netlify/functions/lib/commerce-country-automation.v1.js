@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.17.4-front-match-scope-isolation";
+const VERSION = "commerce-country-automation-v3.17.5-front-match-durable-bridge";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -3338,7 +3338,13 @@ async function productFrontSyncTargets(input, jobInput) {
       const payloadKey = productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement), activeKey = candidateRuntimeAssignmentKey(activeAssignment), key = validProductSectionKey(payloadKey) ? payloadKey : activeKey;
       if (!validProductSectionKey(key)) continue;
       if (operation === "match") {
-        const blockedDecision = ["hold","reject","purge"].includes(sourceDecision), blockedStatus = ["hold","suppressed","rejected"].includes(candidateStatus), blocked = blockedDecision || blockedStatus || queueControl.permanentExcluded === true;
+        const blockedDecision = ["hold","reject","purge"].includes(sourceDecision);
+        // source_payload.slotDecision is the administrator's current board
+        // decision.  A legacy candidate.status="hold" left by an earlier
+        // research stage must not disconnect a later slot_candidate match.
+        // Permanent/rejected states still fail closed.
+        const blockedStatus = ["suppressed","rejected"].includes(candidateStatus) || (candidateStatus === "hold" && sourceDecision !== "slot_candidate");
+        const blocked = blockedDecision || blockedStatus || queueControl.permanentExcluded === true;
         if (blocked && !activeAssignment) continue;
         if (!blocked) { product.slotDecision = "slot_candidate"; if (!product.approvedPlacement) { const split=splitProductSectionKey(key); product.approvedPlacement = { page:split.page, sectionKey:split.sectionKey, section:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, proposalOnly:false, publicPublication:false }; } }
       }
