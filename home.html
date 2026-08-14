@@ -2314,20 +2314,20 @@ a[id*="qna"]{
 <style id="igdc-home-landscape-right-fling-final-v3">
 @media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
   /* One horizontal scroll owner only: ad-scroll.
-     This keeps gentle dragging unchanged and lets native momentum skip
-     multiple cards on a stronger fling without a second nested scroller
-     catching the gesture. */
+     Landscape snap capture is released so stronger native fling momentum
+     can coast across multiple cards, matching the working Network/
+     Distribution/Tour landscape rails. */
   html body .ad-panel .ad-section .ad-scroll{
     overflow-x:auto !important;
     overflow-y:hidden !important;
     -webkit-overflow-scrolling:touch !important;
     scroll-behavior:auto !important;
-    scroll-snap-type:x proximity !important;
+    scroll-snap-type:none !important;
     touch-action:pan-x pan-y !important;
     overscroll-behavior-x:contain !important;
   }
 
-  /* ad-list is layout only, never a second horizontal scroller. */
+  /* ad-list remains layout only, never a second horizontal scroller. */
   html body .ad-panel .ad-section .ad-list{
     overflow-x:visible !important;
     overflow-y:visible !important;
