@@ -26,6 +26,80 @@ const FILE_TO_PAGE = Object.freeze({
   "social.snapshot.json": "social"
 });
 
+// Request-time validation stays authoritative. A fully verified, exact-hash
+// snapshot may be reused briefly inside the same Edge isolate so repeated
+// navigation does not re-parse and re-hash multi-megabyte JSON on every hit.
+// The cache key binds origin + release + policy + scope + path + exact SHA-256,
+// so a new build/release/policy/file automatically misses this cache.
+const VERIFIED_CACHE_TTL_MS = 60 * 1000;
+const VERIFIED_CACHE_MAX_ENTRIES = 12;
+const VERIFIED_CACHE_MAX_BYTES = 16 * 1024 * 1024;
+const verifiedSnapshotCache = new Map();
+let verifiedSnapshotCacheBytes = 0;
+
+function verifiedCacheKey(url, selected, manifest) {
+  const row = selected && selected.row || {};
+  return [
+    url.origin,
+    manifest && manifest.canonicalReleaseId || "",
+    manifest && manifest.ipSlotPolicyDigest || "",
+    row.page || "", row.country || "", row.region || "",
+    row.path || "", row.sha256 || ""
+  ].join("|");
+}
+function removeVerifiedCacheEntry(key, entry) {
+  if (!verifiedSnapshotCache.has(key)) return;
+  verifiedSnapshotCache.delete(key);
+  verifiedSnapshotCacheBytes = Math.max(0, verifiedSnapshotCacheBytes - Number(entry && entry.byteLength || 0));
+}
+function getVerifiedCacheEntry(key) {
+  const entry = verifiedSnapshotCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    removeVerifiedCacheEntry(key, entry);
+    return null;
+  }
+  // Refresh LRU order without extending the validation TTL.
+  verifiedSnapshotCache.delete(key);
+  verifiedSnapshotCache.set(key, entry);
+  return entry;
+}
+function putVerifiedCacheEntry(key, published) {
+  const bytes = published && published.bytes;
+  const byteLength = bytes && Number(bytes.byteLength || 0);
+  if (!bytes || !byteLength || byteLength > VERIFIED_CACHE_MAX_BYTES) return;
+
+  const existing = verifiedSnapshotCache.get(key);
+  if (existing) removeVerifiedCacheEntry(key, existing);
+
+  const entry = {
+    bytes: new Uint8Array(bytes),
+    byteLength,
+    headers: Array.from(published.response.headers.entries()),
+    status: published.response.status,
+    statusText: published.response.statusText,
+    expiresAt: Date.now() + VERIFIED_CACHE_TTL_MS
+  };
+  verifiedSnapshotCache.set(key, entry);
+  verifiedSnapshotCacheBytes += byteLength;
+
+  while (verifiedSnapshotCache.size > VERIFIED_CACHE_MAX_ENTRIES || verifiedSnapshotCacheBytes > VERIFIED_CACHE_MAX_BYTES) {
+    const oldest = verifiedSnapshotCache.entries().next().value;
+    if (!oldest) break;
+    removeVerifiedCacheEntry(oldest[0], oldest[1]);
+  }
+}
+function cachedPublished(entry) {
+  return {
+    response: {
+      headers: new Headers(entry.headers),
+      status: entry.status,
+      statusText: entry.statusText
+    },
+    bytes: entry.bytes
+  };
+}
+
 function normalizedCountry(value) {
   const code = String(value || "").trim().toUpperCase();
   return /^[A-Z]{2}$/.test(code) ? code : "";
@@ -115,7 +189,9 @@ async function sha256Hex(bytes) {
 async function loadManifest(url) {
   try {
     const target = new URL(MANIFEST_PATH, url);
-    const response = await fetch(target.toString(), { method: "GET", headers: { Accept: "application/json", "Cache-Control": "no-cache" } });
+    // This is a deploy artifact. Do not force an origin revalidation on every
+    // front request; the deployment URL/content cache remains the authority.
+    const response = await fetch(target.toString(), { method: "GET", headers: { Accept: "application/json" } });
     const contentType = String(response.headers.get("content-type") || "").toLowerCase();
     if (!response.ok || !contentType.includes("application/json")) return null;
     const manifest = await response.json();
@@ -224,11 +300,17 @@ async function documentMatchesPublishedScope(doc, selected, manifest) {
   }
   return realCount > 0;
 }
-async function fetchPublishedSnapshot(url, request, relative) {
+async function fetchPublishedSnapshot(url, relative) {
   try {
     const target = new URL(relative, url);
     target.search = url.search;
-    const response = await fetch(new Request(target.toString(), request));
+    // Fetch only the immutable deploy artifact. Forwarding the visitor Request
+    // carries cookies/headers into an internal static fetch and can defeat CDN
+    // reuse. It is unnecessary for the already-selected country scope.
+    const response = await fetch(target.toString(), {
+      method: "GET",
+      headers: { Accept: "application/json" }
+    });
     const type = String(response.headers.get("content-type") || "").toLowerCase();
     if (!response.ok || !type.includes("application/json")) return null;
     const bytes = await response.arrayBuffer();
@@ -248,10 +330,21 @@ export default async function canonicalIpSlotSnapshotRouter(request, context) {
   if (!manifest) return context.next();
   const selected = matchingSnapshot(manifest, file, country, regionCode(context, country));
   if (!selected) return context.next(); // never cross country or use a global fallback
-  const published = await fetchPublishedSnapshot(url, request, selected.row.path);
-  if (!published) return context.next();
-  if (await sha256Hex(published.bytes) !== selected.row.sha256) return context.next();
-  if (!(await documentMatchesPublishedScope(published.doc, selected, manifest))) return context.next();
+
+  const cacheKey = verifiedCacheKey(url, selected, manifest);
+  const cached = getVerifiedCacheEntry(cacheKey);
+  let published = cached ? cachedPublished(cached) : null;
+  let verificationCacheState = cached ? "hit" : "miss";
+
+  if (!published) {
+    published = await fetchPublishedSnapshot(url, selected.row.path);
+    if (!published) return context.next();
+    if (await sha256Hex(published.bytes) !== selected.row.sha256) return context.next();
+    if (!(await documentMatchesPublishedScope(published.doc, selected, manifest))) return context.next();
+    putVerifiedCacheEntry(cacheKey, published);
+    verificationCacheState = "fill";
+  }
+
   const headers = new Headers(published.response.headers);
   headers.set("Cache-Control", "private, no-store, max-age=0");
   headers.set("Vary", "x-nf-geo, cf-ipcountry, x-country, x-region");
@@ -259,6 +352,7 @@ export default async function canonicalIpSlotSnapshotRouter(request, context) {
   headers.set("X-IGDC-IP-Slot-Scope", selected.scope);
   headers.set("X-IGDC-IP-Slot-Page", FILE_TO_PAGE[file]);
   headers.set("X-IGDC-IP-Slot-Policy", String(manifest.ipSlotPolicyDigest || ""));
+  headers.set("X-IGDC-IP-Slot-Verify-Cache", verificationCacheState);
   return new Response(request.method === "HEAD" ? null : published.bytes, {
     status: published.response.status,
     statusText: published.response.statusText,
