@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.17.3-optional-sponsorship-rail";
+const VERSION = "commerce-country-automation-v3.17.4-front-match-section-preserve";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2654,7 +2654,11 @@ async function revalidateProductFrontTargets(actorId, input, targetsInput, optio
   const selectedIds = array(targetsInput).map((row)=>text(row && row.candidateId)).filter(Boolean);
   const publishedIds = options.includePublishedScope === true ? await scopePublishedCandidateIds(input) : [];
   const ids = Array.from(new Set(selectedIds.concat(publishedIds))).slice(0,500);
-  const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:options.includePublishedScope === true ? "front_apply_scope_refresh" : "front_apply_final_check", reassign:true, reuseFreshValidation:input&&input.reuseFreshValidation===true, freshValidationMinutes:Number(input&&input.freshValidationMinutes)||720 });
+  // Front Match publishes the section layout currently shown to the
+  // administrator. Runtime validation may withdraw a dead destination, but it
+  // must not AI-reassign a healthy selected product to another section during
+  // the publication click itself. AI placement remains a separate operation.
+  const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:options.includePublishedScope === true ? "front_apply_scope_refresh" : "front_apply_final_check", reassign:false, reuseFreshValidation:input&&input.reuseFreshValidation===true, freshValidationMinutes:Number(input&&input.freshValidationMinutes)||720 });
   return Object.assign({}, result, { selectedRequested:selectedIds.length, publishedScopeRequested:publishedIds.length, scopeRefresh:options.includePublishedScope === true });
 }
 const PRODUCT_AI_QUEUE_SYNC_BATCH = 6;

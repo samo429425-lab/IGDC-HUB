@@ -777,8 +777,19 @@ html, body {
   }
 }
 @media (max-width:1024px) and (orientation:landscape){
+  #tour-mobile-rail .list{
+    /* Landscape only: release card-by-card snap capture so a stronger
+       native fling can coast across multiple thumbnails naturally. */
+    scroll-snap-type:none !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+  }
   #tour-mobile-rail .list > .card,
-  #tour-mobile-rail .list > .ad-box{ flex:0 0 min(300px,80%); max-width:min(300px,80%); }
+  #tour-mobile-rail .list > .ad-box{
+    flex:0 0 min(300px,80%);
+    max-width:min(300px,80%);
+    scroll-snap-stop:normal !important;
+  }
 }
 </style>
 

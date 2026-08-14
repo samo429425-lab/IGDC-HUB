@@ -430,14 +430,16 @@ a[id*="qna"]{
 
 <style id="igdc-social-landscape-right-only-sensitivity-v2">
 /* SOCIAL: MOBILE LANDSCAPE RIGHT POPULAR-ITEM RAIL ONLY.
-   Main 9 social sections and portrait right rail are untouched. */
+   Main 9 social sections and portrait right rail are untouched.
+   Slightly firmer snap than proximity to reduce over-sensitive fling,
+   while scroll-snap-stop:normal still allows multi-card movement. */
 @media (max-width:1023px) and (orientation:landscape) and (pointer:coarse){
   #rpMobileScroller{
     overflow-x:auto !important;
     overflow-y:hidden !important;
     -webkit-overflow-scrolling:touch !important;
     scroll-behavior:auto !important;
-    scroll-snap-type:x proximity !important;
+    scroll-snap-type:x mandatory !important;
     overscroll-behavior-x:contain !important;
     touch-action:pan-x pan-y !important;
   }

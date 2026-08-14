@@ -151,6 +151,42 @@ function incomingCommerceHookIntent() {
   }
 }
 
+// A section/single-section Front Match is a delta request, not a replacement
+// SearchBank document. Validate that every clicked candidate is present in the
+// authoritative publication queue, but keep the complete queue intact so the
+// canonical publisher can rebuild all unchanged sections alongside the delta.
+function validateExplicitCommerceSelection(upstream, intent) {
+  const selectedIds = Array.from(new Set((Array.isArray(intent && intent.candidateIds) ? intent.candidateIds : []).map(value => String(value || "").trim()).filter(Boolean))).slice(0,1800);
+  const applicable = !!(
+    upstream && upstream.queueAuthoritative === true &&
+    intent && intent.explicit === true && intent.operation === "publish" &&
+    selectedIds.length
+  );
+  const authoritativeItems = Array.isArray(upstream && upstream.doc && upstream.doc.items) ? upstream.doc.items : [];
+  if (!applicable) {
+    return { applied:false, selectedCandidateIds:selectedIds, selectedCount:selectedIds.length, authoritativeCount:authoritativeItems.length, fullQueuePreserved:true, missingCandidateIds:[] };
+  }
+  const authoritativeIds = new Set(authoritativeItems.map(entry => {
+    const candidate = entry && entry.candidate || {};
+    return String(candidate.id || entry && entry.candidateId || "").trim();
+  }).filter(Boolean));
+  const missingCandidateIds = selectedIds.filter(id => !authoritativeIds.has(id));
+  if (missingCandidateIds.length) {
+    const error = new Error("Explicit administrator Front Match candidates are missing from the authoritative publication queue: " + missingCandidateIds.join(","));
+    error.code = "FRONT_MATCH_SELECTION_NOT_IN_AUTHORITATIVE_QUEUE";
+    error.missingCandidateIds = missingCandidateIds;
+    throw error;
+  }
+  return {
+    applied:true,
+    selectedCandidateIds:selectedIds,
+    selectedCount:selectedIds.length,
+    authoritativeCount:authoritativeItems.length,
+    fullQueuePreserved:true,
+    missingCandidateIds:[]
+  };
+}
+
 function sha256File(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
@@ -428,22 +464,12 @@ async function main() {
     return;
   }
   const queueAuthoritative = upstream.queueAuthoritative === true;
-  if (queueAuthoritative && incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish" && incomingCommerceIntent.candidateIds.length) {
-    const exactIds = new Set(incomingCommerceIntent.candidateIds);
-    const exactItems = Array.isArray(upstream.doc && upstream.doc.items) ? upstream.doc.items.filter((entry) => {
-      const candidate = entry && entry.candidate || {};
-      const id = String(candidate.id || entry && entry.candidateId || "").trim();
-      return exactIds.has(id);
-    }) : [];
-    if (!exactItems.length) {
-      throw new Error("Explicit administrator Front Match build found no matching authoritative queue rows for the selected candidate ids.");
-    }
-    const releaseAuthorization = Object.assign({}, upstream.doc && upstream.doc.releaseAuthorization || {}, {
-      authoritative:true, mode:"explicit-admin-publication-request", explicitAdminRequest:true, requestedCount:exactItems.length
-    });
-    upstream.doc = Object.assign({}, upstream.doc, { items: exactItems, requestedCount:exactItems.length, releaseAuthorization });
-    upstream.candidateCount = exactItems.length;
-  }
+  // candidateIds from the clicked button identify the delta that was just
+  // changed. They must never truncate the authoritative queue: Canonical writes
+  // a complete public document, so filtering here turns a one-section match
+  // into an invalid partial replacement. Validate the delta and rebuild from
+  // the full durable publication queue instead.
+  const incomingCommerceSelection = validateExplicitCommerceSelection(upstream, incomingCommerceIntent);
 
   // Capture the committed safe sample templates before Snapshot Engine writes
   // any real-product documents. They are restored at root whenever the request
@@ -571,6 +597,7 @@ async function main() {
   process.stdout.write(JSON.stringify({
     commerceRegistrySync,
     incomingCommerceIntent,
+    incomingCommerceSelection,
     upstream: { candidateCount: upstream.candidateCount, sourceMode: upstream.sourceMode || null, warning: upstream.warning || null, queueAuthoritative, mirrors: upstream.mirrors },
     intake: { releaseGate: intake.releaseGate, summary: intake.summary, releaseItemCount: releaseItems.length },
     publicationInput: { source: publicationBank.source, itemCount: publicationBank.items.length },

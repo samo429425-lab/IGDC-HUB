@@ -1235,8 +1235,9 @@ a[id*="qna"]{
 
 <style id="igdc-distribution-mobile-touch-3zone-v6">
 /* DISTRIBUTION HUB — native touch motion only.
-   MAIN 6 + RIGHT recommended-brand rail use the same native momentum/proximity rule.
-   Card geometry and 100-slot capacity are untouched. */
+   Portrait keeps the current proximity behavior.
+   Landscape releases snap so stronger native momentum can pass
+   multiple cards naturally. */
 @media (max-width:1024px) and (pointer:coarse){
   #sec-reco .thumb-scroller,
   #sec-ads .thumb-scroller,
@@ -1263,6 +1264,21 @@ a[id*="qna"]{
   #mobile-ad-rail-list > *,
   .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"] > *{
     scroll-snap-stop:normal !important;
+  }
+}
+
+@media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
+  #sec-reco .thumb-scroller,
+  #sec-ads .thumb-scroller,
+  #sec-trend .thumb-scroller,
+  #sec-new .thumb-scroller,
+  #sec-special .thumb-scroller,
+  #sec-others .thumb-scroller,
+  #mobile-ad-rail-list,
+  .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"]{
+    scroll-snap-type:none !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
   }
 }
 </style>

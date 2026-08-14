@@ -603,7 +603,9 @@ a[id*="qna"]{
 
 <style id="igdc-network-mobile-right-touch-3stage-v5">
 /* NETWORK / MARKET HUB — MOBILE RIGHT RAIL ONLY.
-   Native momentum + proximity snap. No JS touchend repositioning. */
+   Keep portrait behavior as-is.
+   Landscape uses one native horizontal scroller with snap released so
+   a strong fling can coast across multiple cards naturally. */
 @media (max-width:1024px) and (pointer:coarse){
   #nh-mobile-rail .list{
     overflow-x:auto !important;
@@ -616,6 +618,18 @@ a[id*="qna"]{
   }
   #nh-mobile-rail .list > *{
     scroll-snap-stop:normal !important;
+  }
+}
+
+@media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
+  /* No viewport/card forced jump in landscape.
+     Gentle drags still follow the finger; stronger flicks keep native
+     momentum and may pass several cards according to release velocity. */
+  #nh-mobile-rail .list{
+    scroll-snap-type:none !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    touch-action:pan-x pan-y !important;
   }
 }
 </style>
