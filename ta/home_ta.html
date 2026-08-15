@@ -2317,6 +2317,81 @@ a[href=""], a:not([href]).center-donation-disabled, button.center-donation-disab
   }
 }
 </style>
+
+<style id="igdc-product-card-caption-unified-home-v1">
+/* Product-card presentation only: image above, readable title below.
+   Does not alter Snapshot/AutoMap selection, slot counts, or navigation. */
+.shop-row .shop-card,
+.thumb-grid[data-psom-key^="home_"] > .shop-card{
+  display:grid !important;
+  grid-template-rows:minmax(0,1fr) auto !important;
+  align-items:stretch !important;
+  background-color:#fff !important;
+}
+.shop-row .shop-card > .shop-card-cap,
+.thumb-grid[data-psom-key^="home_"] > .shop-card > .shop-card-cap{
+  grid-row:2 !important;
+  align-self:stretch !important;
+  width:100% !important;
+  min-height:48px !important;
+  max-height:none !important;
+  margin:0 !important;
+  padding:7px 9px !important;
+  box-sizing:border-box !important;
+  display:block !important;
+  overflow:visible !important;
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+  word-break:keep-all !important;
+  -webkit-line-clamp:unset !important;
+  color:#222 !important;
+  background:#fff !important;
+  font-size:14px !important;
+  font-weight:600 !important;
+  line-height:1.35 !important;
+  text-align:left !important;
+}
+/* Home right rail uses the same lower-caption structure as the other product rails. */
+.ad-panel .ad-section .ad-list > a.ad-box{
+  display:grid !important;
+  grid-template-rows:minmax(0,1fr) auto !important;
+  align-items:stretch !important;
+  background:#fff !important;
+  line-height:normal !important;
+}
+.ad-panel .ad-section .ad-list > a.ad-box > img{
+  grid-row:1 !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  object-fit:cover !important;
+  object-position:center !important;
+  display:block !important;
+}
+.ad-panel .ad-section .ad-list > a.ad-box > .home-right-sample-label{
+  grid-row:1 !important;
+  min-height:0 !important;
+}
+.ad-panel .ad-section .ad-list > a.ad-box > .home-right-card-title{
+  grid-row:2 !important;
+  width:100% !important;
+  min-height:48px !important;
+  margin:0 !important;
+  padding:7px 9px !important;
+  box-sizing:border-box !important;
+  display:block !important;
+  color:#222 !important;
+  background:#fff !important;
+  font-size:14px !important;
+  font-weight:600 !important;
+  line-height:1.35 !important;
+  text-align:left !important;
+  white-space:normal !important;
+  overflow:visible !important;
+  overflow-wrap:anywhere !important;
+  word-break:keep-all !important;
+}
+</style>
 </head>
 <body>
 <div class="container">
