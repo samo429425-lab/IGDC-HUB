@@ -2021,50 +2021,15 @@ window.addEventListener("message",function(ev){
 
     panel.innerHTML = '';
 
+    // Keep the real slot geometry visible immediately, but do not paint
+    // synthetic Loading/number/gradient content. The Network Snapshot
+    // automap replaces these shells in-place by clearing the panel once
+    // the authoritative sample/real cards arrive.
     for(let i=1;i<=DUMMY_CNT;i++){
-
       const card = document.createElement('div');
-
       card.className = 'ad-box dummy-card';
       card.dataset.dummy = '1';
-
-      card.innerHTML = `
-        <div class="dummy-thumb"
-             style="
-               width:100%;
-               height:100%;
-               border-radius:12px;
-               background:linear-gradient(135deg,#eef2f7,#dbe4f0);
-               display:flex;
-               flex-direction:column;
-               justify-content:center;
-               align-items:center;
-               box-shadow:0 2px 6px rgba(0,0,0,.08);
-               border:1px solid rgba(0,0,0,.05);
-               font-family:system-ui;
-             ">
-
-          <div style="
-               font-size:26px;
-               font-weight:700;
-               color:#4a6fa5;
-               line-height:1;
-               margin-bottom:4px;
-             ">
-            ${i}
-          </div>
-
-          <div style="
-               font-size:11px;
-               color:#7a8da8;
-               letter-spacing:.5px;
-             ">
-            Loading
-          </div>
-
-        </div>
-      `;
-
+      card.setAttribute('aria-hidden','true');
       panel.appendChild(card);
     }
   }
@@ -2119,10 +2084,10 @@ window.addEventListener("message",function(ev){
      초기 실행
   =============================== */
 
-  // Synthetic Loading cards are intentionally NOT rendered here.
-  // Leave the panel untouched so the existing SearchBank/Network snapshot
-  // sample path can remain visible until the dedicated Network Automap
-  // replaces it with the authoritative snapshot content.
+  // Reserve the real right-panel slots immediately. These are empty shells
+  // only; the existing Network Snapshot automap replaces them with sample
+  // cards first, then real products whenever the published snapshot changes.
+  buildDummy();
 
 
   /* ===============================
