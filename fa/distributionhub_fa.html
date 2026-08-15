@@ -1599,6 +1599,100 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   background:#fff !important;
 }
 </style>
+
+<style id="igdc-product-card-caption-unified-distribution-v1">
+/* Product-card presentation only: preserve all slot/rendering pipelines. */
+#sec-reco .thumb-scroller > .thumb-card,
+#sec-ads .thumb-scroller > .thumb-card,
+#sec-trend .thumb-scroller > .thumb-card,
+#sec-new .thumb-scroller > .thumb-card,
+#sec-special .thumb-scroller > .thumb-card,
+#sec-others .thumb-scroller > .thumb-card{
+  display:grid !important;
+  grid-template-rows:minmax(0,1fr) auto auto !important;
+  align-items:stretch !important;
+}
+#sec-reco .thumb-card > .thumb-title,
+#sec-ads .thumb-card > .thumb-title,
+#sec-trend .thumb-card > .thumb-title,
+#sec-new .thumb-card > .thumb-title,
+#sec-special .thumb-card > .thumb-title,
+#sec-others .thumb-card > .thumb-title{
+  min-height:48px !important;
+  max-height:none !important;
+  margin:0 !important;
+  padding:7px 9px !important;
+  box-sizing:border-box !important;
+  display:block !important;
+  overflow:visible !important;
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+  word-break:keep-all !important;
+  color:#222 !important;
+  background:#fff !important;
+  font-size:14px !important;
+  font-weight:600 !important;
+  line-height:1.35 !important;
+  text-align:left !important;
+}
+#sec-reco .thumb-card > .thumb-meta:empty,
+#sec-ads .thumb-card > .thumb-meta:empty,
+#sec-trend .thumb-card > .thumb-meta:empty,
+#sec-new .thumb-card > .thumb-meta:empty,
+#sec-special .thumb-card > .thumb-meta:empty,
+#sec-others .thumb-card > .thumb-meta:empty{
+  display:none !important;
+}
+/* Distribution right rail: match the 14px lower-caption pattern used by the other hubs. */
+.brand-rail .thumb-grid[data-psom-key="distribution-right"] > .thumb-card{
+  display:grid !important;
+  grid-template-rows:minmax(0,1fr) auto auto !important;
+  align-items:stretch !important;
+  background:#fff !important;
+}
+.brand-rail .thumb-grid[data-psom-key="distribution-right"] > .thumb-card .thumb-img{
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  max-height:none !important;
+  object-fit:cover !important;
+  aspect-ratio:auto !important;
+}
+.brand-rail .thumb-grid[data-psom-key="distribution-right"] > .thumb-card > .thumb-title{
+  min-height:48px !important;
+  max-height:none !important;
+  margin:0 !important;
+  padding:7px 9px !important;
+  box-sizing:border-box !important;
+  display:block !important;
+  overflow:visible !important;
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+  word-break:keep-all !important;
+  color:#222 !important;
+  background:#fff !important;
+  font-size:14px !important;
+  font-weight:600 !important;
+  line-height:1.35 !important;
+  text-align:left !important;
+}
+.brand-rail .thumb-grid[data-psom-key="distribution-right"] > .thumb-card > .thumb-meta:empty{
+  display:none !important;
+}
+</style>
+<style id="igdc-product-card-caption-rtl-guard-v1">
+/* Preserve fa RTL reading direction while keeping the new card geometry unchanged. */
+#sec-reco .thumb-card > .thumb-title,
+#sec-ads .thumb-card > .thumb-title,
+#sec-trend .thumb-card > .thumb-title,
+#sec-new .thumb-card > .thumb-title,
+#sec-special .thumb-card > .thumb-title,
+#sec-others .thumb-card > .thumb-title,
+.brand-rail .thumb-grid[data-psom-key="distribution-right"] > .thumb-card > .thumb-title{
+  direction:rtl !important;
+  text-align:right !important;
+}
+</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>

@@ -590,6 +590,59 @@ html, body {
   }
 }
 </style>
+
+<style id="igdc-product-card-caption-unified-network-v1">
+/* Network right product rail: image above, readable title below. */
+#rightAutoPanel.ad-panel > .ad-box,
+#nh-mobile-rail .card{
+  display:grid !important;
+  grid-template-rows:minmax(0,1fr) auto !important;
+  align-items:stretch !important;
+  background:#fff !important;
+}
+#rightAutoPanel.ad-panel > .ad-box > a,
+#nh-mobile-rail .card > a{
+  grid-row:1 !important;
+  display:block !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  padding:0 !important;
+  line-height:normal !important;
+}
+#rightAutoPanel.ad-panel > .ad-box > a > img,
+#nh-mobile-rail .card > a > img{
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  object-fit:cover !important;
+  object-position:center !important;
+  display:block !important;
+}
+#rightAutoPanel.ad-panel > .ad-box > .cap,
+#nh-mobile-rail .card > .cap{
+  position:static !important;
+  grid-row:2 !important;
+  width:100% !important;
+  min-height:48px !important;
+  max-height:none !important;
+  margin:0 !important;
+  padding:7px 9px !important;
+  box-sizing:border-box !important;
+  display:block !important;
+  overflow:visible !important;
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+  word-break:keep-all !important;
+  color:#222 !important;
+  background:#fff !important;
+  text-shadow:none !important;
+  font-size:14px !important;
+  font-weight:600 !important;
+  line-height:1.35 !important;
+  text-align:left !important;
+}
+</style>
 </head>
 <body>
 <div id="hero"><div class="hero-title"></div></div>
@@ -1718,50 +1771,15 @@ window.addEventListener("message",function(ev){
 
     panel.innerHTML = '';
 
+    // Keep the real slot geometry visible immediately, but do not paint
+    // synthetic Loading/number/gradient content. The Network Snapshot
+    // automap replaces these shells in-place by clearing the panel once
+    // the authoritative sample/real cards arrive.
     for(let i=1;i<=DUMMY_CNT;i++){
-
       const card = document.createElement('div');
-
       card.className = 'ad-box dummy-card';
       card.dataset.dummy = '1';
-
-      card.innerHTML = `
-        <div class="dummy-thumb"
-             style="
-               width:100%;
-               height:100%;
-               border-radius:12px;
-               background:linear-gradient(135deg,#eef2f7,#dbe4f0);
-               display:flex;
-               flex-direction:column;
-               justify-content:center;
-               align-items:center;
-               box-shadow:0 2px 6px rgba(0,0,0,.08);
-               border:1px solid rgba(0,0,0,.05);
-               font-family:system-ui;
-             ">
-
-          <div style="
-               font-size:26px;
-               font-weight:700;
-               color:#4a6fa5;
-               line-height:1;
-               margin-bottom:4px;
-             ">
-            ${i}
-          </div>
-
-          <div style="
-               font-size:11px;
-               color:#7a8da8;
-               letter-spacing:.5px;
-             ">
-            Loading
-          </div>
-
-        </div>
-      `;
-
+      card.setAttribute('aria-hidden','true');
       panel.appendChild(card);
     }
   }
