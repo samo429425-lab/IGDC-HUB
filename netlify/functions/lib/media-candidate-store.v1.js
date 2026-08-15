@@ -10,10 +10,11 @@
 const crypto = require("crypto");
 const MediaPolicy = require("./media-candidate-policy.v2");
 
-const VERSION = "media-candidate-store-v1.2.0-quality-ranked-primary-reserve";
+const VERSION = "media-candidate-store-v1.3.0-release-minimal-insert-verified";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE = process.env.MEDIA_CANDIDATE_TABLE || "media_candidates";
 const RELEASE_TABLE = process.env.MEDIA_SNAPSHOT_RELEASE_TABLE || "media_snapshot_releases";
+const RELEASE_WRITE_COLUMNS = Object.freeze(["release_id","snapshot_hash","snapshot","status","created_at","created_by"]);
 const ALLOWED_SECTIONS = new Set([
   "media-movie",
   "media-drama",
@@ -129,7 +130,35 @@ async function deleteCandidates(ids){
   if(!list.length) return [];
   return supabase(rest(CANDIDATE_TABLE,"id="+encodeIn(list)), {method:"DELETE",headers:{Prefer:"return=representation"}});
 }
-async function insertRelease(row){return supabase(rest(RELEASE_TABLE), {method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify([row])});}
+function canonicalReleaseRow(row){
+  const source=plain(row);
+  const output={};
+  for(const key of RELEASE_WRITE_COLUMNS){
+    if(source[key]!==undefined)output[key]=source[key];
+  }
+  return output;
+}
+async function insertRelease(row){
+  const payload=canonicalReleaseRow(row);
+  // Snapshot payloads can be hundreds of KB. Do not request the same JSON back from
+  // PostgREST after INSERT; the caller performs an authoritative select-by-id check.
+  await supabase(rest(RELEASE_TABLE), {method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify([payload])});
+  return {inserted:true,release_id:text(payload.release_id),snapshot_hash:text(payload.snapshot_hash)};
+}
+async function selectReleaseById(releaseId){
+  const id=text(releaseId);
+  if(!id)return null;
+  const query=new URLSearchParams();
+  query.set("select",RELEASE_WRITE_COLUMNS.join(","));
+  query.set("release_id",encodeEq(id));
+  query.set("limit","1");
+  const body=await supabase(rest(RELEASE_TABLE,query.toString()),{method:"GET"});
+  return Array.isArray(body)&&body[0]?body[0]:null;
+}
+function releaseStorageContract(){
+  const cfg=config();
+  return{version:VERSION,table:cfg.releaseTable,writeColumns:RELEASE_WRITE_COLUMNS.slice(),urlSource:cfg.urlSource,keySource:cfg.keySource};
+}
 function normalizeCandidate(input, actor){
   const row=plain(input);
   const section=normalizeSection(row.section_key || row.sectionKey || row.section || row.targetSection || row.category);
@@ -319,8 +348,8 @@ function buildSnapshot(baseSnapshot, rows, opts){
   });
 }
 module.exports={
-  VERSION, CANDIDATE_TABLE, RELEASE_TABLE, ALLOWED_SECTIONS,
+  VERSION, CANDIDATE_TABLE, RELEASE_TABLE, RELEASE_WRITE_COLUMNS, ALLOWED_SECTIONS,
   text, lower, compact, bool, plain, array, nowIso, sha256, shortHash, normalizeUrl, hostOf, normalizeSection, roleList, requireRole,
-  response, parseBody, config, supabase, rest, encodeEq, encodeIn, selectCandidates, upsertCandidates, updateCandidates, deleteCandidates, insertRelease,
+  response, parseBody, config, supabase, rest, encodeEq, encodeIn, selectCandidates, upsertCandidates, updateCandidates, deleteCandidates, canonicalReleaseRow, insertRelease, selectReleaseById, releaseStorageContract,
   normalizeCandidate, validateCandidate, snapshotEligible, publicSlot, buildSnapshot, MediaPolicy
 };

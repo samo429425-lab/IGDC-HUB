@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.17.7-cumulative-supplier-dedupe";
+const VERSION = "commerce-country-automation-v3.17.8-product-source-delta-front-uniform";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1673,6 +1673,9 @@ function publicProductJob(job) {
     summary: {
       suppliers: array(job.supplierSources).length,
       suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
+      currentSupplierSources: Number(job.currentSupplierSourceCount||array(job.supplierSources).length),
+      newSupplierSources: Number(job.newSupplierSourceCount==null?array(job.supplierSources).length:job.newSupplierSourceCount),
+      previouslyResearchedSuppliers: Number(job.priorResearchedSupplierCount||0),
       discovered: visibleProducts.length,
       discoveredRaw: array(job.rawProducts).length,
       discoveredThisCycle:Math.max(0,array(job.rawProducts).length-Number(job.preservedRawCount||0)),
@@ -1743,6 +1746,9 @@ function compactProductResearchStep(job) {
     summary: Object.assign({
       suppliers: array(job.supplierSources).length,
       suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
+      currentSupplierSources: Number(job.currentSupplierSourceCount||array(job.supplierSources).length),
+      newSupplierSources: Number(job.newSupplierSourceCount==null?array(job.supplierSources).length:job.newSupplierSourceCount),
+      previouslyResearchedSuppliers: Number(job.priorResearchedSupplierCount||0),
       discovered: products.length,
       discoveredRaw: array(job.rawProducts).length,
       inspected: products.filter((row) => row && row.inspectionComplete === true).length,
@@ -1796,6 +1802,24 @@ function productSupplierSource(row) {
   const affiliateSettlement=normalizeAffiliateSettlement(row&&row.affiliateSettlement,{existing:row&&row.affiliateSettlement});
   return{supplierId:text(row&&[row.id,row.candidateId,row.manualSupplierId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl,url:supplierSiteUrl,supplierType:text(row&&row.supplierType||evidence.supplierType),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),approvalReady:row&&row.approvalReady===true,sourceCandidateUrl,productPageUrl:sourceCandidateUrl,evidenceReady:evidence.supplierReviewEligible===true,supplyLane:text(evidence.supplyLane)||"general",discoverySource:text(evidence.discoverySource),officialDirectoryUrl:text(evidence.officialDirectoryUrl),adminPinned:row&&row.adminPinned===true,manualRegistered:row&&row.manualRegistered===true,affiliateSettlement,affiliateStage:affiliateSettlement.stage,affiliatePriority:affiliateSettlement.stageRank,priorityScore:priority.score+affiliateSettlement.stageRank*400,priorityLabel:affiliateSettlement.stageRank>0?affiliateSettlement.stage+" · "+(priority.label||"제휴 사이트"):priority.label};
 }
+function productSupplierSourceKey(source) {
+  const raw=safeUrl(first(source&&source.supplierSiteUrl,source&&source.url,source&&source.sourceCandidateUrl));
+  if(!raw)return "";
+  try{const u=new URL(raw);u.hash="";u.search="";u.pathname=(u.pathname||"/").replace(/\/{2,}/g,"/").replace(/\/$/,"")||"/";return lower(u.protocol+"//"+u.hostname+(u.port?":"+u.port:"")+u.pathname);}
+  catch(_error){return lower(raw).replace(/\/$/,"");}
+}
+function productSupplierSourceFingerprint(sources) {
+  return sha256(array(sources).map(productSupplierSourceKey).filter(Boolean).sort());
+}
+function researchedProductSupplierKeys(existing) {
+  if(!existing||existing.schema!==PRODUCT_JOB_SCHEMA)return new Set();
+  const explicit=array(existing.researchedSupplierKeys).map(text).filter(Boolean);
+  if(explicit.length)return new Set(explicit);
+  const sources=array(existing.supplierSources);
+  const done=existing.status==="complete"?sources.length:Math.max(0,Math.min(sources.length,Number(existing.discoveryCursor||0)));
+  return new Set(sources.slice(0,done).map(productSupplierSourceKey).filter(Boolean));
+}
+
 async function productRankingContext(scope) {
   let signalStatus = null, policyControl = null;
   try { signalStatus = await MarketSignals.signalStatus(scope.regionGroup); }
@@ -1815,33 +1839,36 @@ async function productRankingContext(scope) {
   };
 }
 async function beginProductResearchJob(actorId, input) {
-  const raw = plain(input), scope = researchScope(raw), existing = await loadProductResearchJob(scope);
-  if (existing && existing.schema === PRODUCT_JOB_SCHEMA && raw.retryStaging === true) {
-    const portfolio = ProductRanking.buildPortfolio(array(existing.rawProducts).concat(array(existing.products)), plain(existing.rankingContext));
-    existing.version = VERSION;
-    existing.rankingVersion = ProductRanking.VERSION;
-    existing.stagePool = array(portfolio.products).filter((row) => ProductPipeline.researchReadiness(row).queueEligible === true).slice(0, PRODUCT_PORTFOLIO_LIMIT);
-    existing.stageCursor = 0;
-    existing.stageSummary = { eligible: existing.stagePool.length, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 };
-    existing.status = "staging";
-    existing.finishedAt = null;
-    existing.lastError = null;
-    existing.trace = array(existing.trace).concat([{ at: iso(), source: "private-product-research-queue", status: "restage_started", products: existing.stagePool.length, reason: "administrator_retry_after_storage_failure" }]).slice(-240);
-    await saveProductJob(existing, actorId);
-    return publicProductJob(existing);
+  const raw=plain(input),scope=researchScope(raw),existing=await loadProductResearchJob(scope);
+  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&raw.retryStaging===true){
+    const portfolio=ProductRanking.buildPortfolio(array(existing.rawProducts).concat(array(existing.products)),plain(existing.rankingContext));
+    existing.version=VERSION;existing.rankingVersion=ProductRanking.VERSION;existing.stagePool=array(portfolio.products).filter((row)=>ProductPipeline.researchReadiness(row).queueEligible===true).slice(0,PRODUCT_PORTFOLIO_LIMIT);existing.stageCursor=0;existing.stageSummary={eligible:existing.stagePool.length,created:0,updated:0,preserved:0,skipped:0,failed:0};existing.status="staging";existing.finishedAt=null;existing.lastError=null;existing.trace=array(existing.trace).concat([{at:iso(),source:"private-product-research-queue",status:"restage_started",products:existing.stagePool.length,reason:"administrator_retry_after_storage_failure"}]).slice(-240);await saveProductJob(existing,actorId);return publicProductJob(existing);
   }
-  if (existing && existing.schema === PRODUCT_JOB_SCHEMA && existing.version === VERSION && raw.restart !== true && !["cancelled","failed"].includes(existing.status)) return publicProductJob(existing);
-  const supplierJob = await researchJobRule(scope);
-  if (!supplierJob || !["complete","committed"].includes(supplierJob.status) || !array(supplierJob.candidates).length) { const error = new Error("책임 공급업체 단계별 리서치를 먼저 완료해야 공식 상품 목록을 조사할 수 있습니다."); error.statusCode = 409; throw error; }
-  const sourcePool = []; const seenSupplierSites = new Set();
-  for (const row of array(supplierJob.candidates)) { const source=productSupplierSource(row); if(!source)continue; const key=lower(source.supplierSiteUrl); if(seenSupplierSites.has(key))continue; seenSupplierSites.add(key); sourcePool.push(source); }
-  const supplierSources = sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,PRODUCT_SUPPLIER_LIMIT);
-  if(!supplierSources.length){const error=new Error("완료된 공급업체 후보 중 공식 판매 사이트·법적 신원·직접 판매 증빙을 갖춘 상품 조사 출처가 없습니다. 공급업체 후보의 잡음과 증빙 상태를 먼저 정리하세요.");error.statusCode=409;throw error;}
-  const rankingContext = await productRankingContext(scope);
+
+  const supplierJob=await researchJobRule(scope);
+  if(!supplierJob||!["complete","committed"].includes(supplierJob.status)||!array(supplierJob.candidates).length){const error=new Error("책임 공급업체 단계별 리서치를 먼저 완료해야 공식 상품 목록을 조사할 수 있습니다.");error.statusCode=409;throw error;}
+  const sourcePool=[],seenSupplierSites=new Set();
+  for(const row of array(supplierJob.candidates)){const source=productSupplierSource(row);if(!source)continue;const key=productSupplierSourceKey(source);if(!key||seenSupplierSites.has(key))continue;seenSupplierSites.add(key);sourcePool.push(source);}
+  const allSupplierSources=sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,PRODUCT_SUPPLIER_LIMIT);
+  if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 공식 판매 사이트·법적 신원·직접 판매 증빙을 갖춘 상품 조사 출처가 없습니다. 공급업체 후보의 잡음과 증빙 상태를 먼저 정리하세요.");error.statusCode=409;throw error;}
+
+  // A running product job is resumed exactly where it stopped. New suppliers
+  // discovered while it is active are picked up by the next cumulative cycle;
+  // restarting the same suppliers in parallel would duplicate network work.
+  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!["complete","cancelled","failed"].includes(existing.status))return publicProductJob(existing);
+
+  const researchedKeys=researchedProductSupplierKeys(existing),supplierSourceFingerprint=productSupplierSourceFingerprint(allSupplierSources);
+  const supplierSources=allSupplierSources.filter((source)=>!researchedKeys.has(productSupplierSourceKey(source)));
+  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&existing.status==="complete"&&!supplierSources.length){
+    const view=Object.assign({},existing,{version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchJobId:supplierJob.jobId,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:0,priorResearchedSupplierCount:researchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(researchedKeys)});
+    return publicProductJob(view);
+  }
+
+  const rankingContext=await productRankingContext(scope);
   const preservedProducts=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.products):[],preservedRaw=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.rawProducts):[];
   const preservedProductIdentities=Array.from(new Set(preservedProducts.map((row)=>ProductRanking.productIdentity(row)).filter(Boolean))).slice(0,PRODUCT_PORTFOLIO_LIMIT);
-  const now = iso(), job = { schema: PRODUCT_JOB_SCHEMA, version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: "country_product_research_" + sha256(now + "|" + scope.country + "|" + scope.region + "|" + Math.random()).slice(0, 20), previousJobId:existing&&existing.jobId||null, preservedFromPreviousCycle:preservedProducts.length, preservedRawCount:preservedRaw.length, status: "discovering", scope, startedAt: now, finishedAt: null, supplierResearchJobId: supplierJob.jobId, supplierSources, rankingContext, discoveryCursor: 0, rawProducts: preservedRaw, inspectionPool: [], inspectCursor: 0, products: preservedProducts, preservedProductIdentities, stagePool: [], stageCursor: 0, stageSummary: { eligible: 0, created: 0, updated: 0, preserved: preservedProducts.length, skipped: 0, failed: 0 }, trace: [{ at: now, source: "product-research-job", status: "cumulative_started", suppliers: supplierSources.length, preservedProducts:preservedProducts.length, sourcePolicy: "preserve_existing_products_and_administrator_decisions; discover_and_inspect_new_products; merge_exact_duplicates; official_direct_sales_legal_identity_only; administrator_approval_before_publication" }], errors: [], lastError: null };
-  await saveProductJob(job, actorId); return publicProductJob(job);
+  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:preservedProducts.length,preservedRawCount:preservedRaw.length,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierJob.jobId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:supplierSources.length,priorResearchedSupplierCount:researchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(researchedKeys),rankingContext,discoveryCursor:0,rawProducts:preservedRaw,inspectionPool:[],inspectCursor:0,products:preservedProducts,preservedProductIdentities,stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:preservedProducts.length,skipped:0,failed:0},trace:[{at:now,source:"product-research-job",status:"cumulative_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previouslyResearchedSuppliers:researchedKeys.size,preservedProducts:preservedProducts.length,sourcePolicy:"preserve_existing_products_and_administrator_decisions; research_only_new_supplier_sources; merge_exact_duplicates; official_direct_sales_legal_identity_only; administrator_approval_before_publication"}],errors:[],lastError:null};
+  await saveProductJob(job,actorId);return publicProductJob(job);
 }
 
 function incrementalInspectionPool(job) {
@@ -1866,7 +1893,9 @@ async function advanceProductResearchJob(actorId, input) {
         const result = await RegionalSelector.discoverSupplierProductsStep(source, { country: scope.country, region: scope.region, limit: 100 });
         const sourceSettlement = normalizeAffiliateSettlement(source.affiliateSettlement, { existing: source.affiliateSettlement });
         const discoveredItems = array(result.items).map((row) => Object.assign({}, row, { affiliateSettlement: sourceSettlement, affiliateStage: sourceSettlement.stage, supplierAdminPinned: source.adminPinned === true, supplierAffiliatePriority: sourceSettlement.stageRank }));
-        job.rawProducts = mergeProductRows(job.rawProducts, discoveredItems, PRODUCT_PORTFOLIO_LIMIT); job.discoveryCursor = Number(job.discoveryCursor || 0) + 1; job.trace = array(job.trace).concat([Object.assign({ at: iso(), supplierIndex: job.discoveryCursor - 1 }, plain(result.trace))]);
+        job.rawProducts = mergeProductRows(job.rawProducts, discoveredItems, PRODUCT_PORTFOLIO_LIMIT);
+        const researchedKey=productSupplierSourceKey(source);if(researchedKey&&!array(job.researchedSupplierKeys).includes(researchedKey))job.researchedSupplierKeys=array(job.researchedSupplierKeys).concat([researchedKey]);
+        job.discoveryCursor = Number(job.discoveryCursor || 0) + 1; job.trace = array(job.trace).concat([Object.assign({ at: iso(), supplierIndex: job.discoveryCursor - 1, supplierKey:researchedKey||null }, plain(result.trace))]);
         if (job.discoveryCursor >= array(job.supplierSources).length) { job.inspectionPool = incrementalInspectionPool(job); job.status = "inspecting"; job.inspectCursor = 0; }
       }
     } else if (job.status === "inspecting") {
@@ -2976,10 +3005,14 @@ async function frontSyncSelectCandidates(candidateIds) {
   }
   return rows;
 }
+function frontSyncUniformBatches(rowsInput, size) {
+  const groups=new Map();
+  for(const raw of array(rowsInput)){const row=plain(raw),signature=Object.keys(row).sort().join("\u001f");if(!groups.has(signature))groups.set(signature,[]);groups.get(signature).push(row);}
+  const batches=[];for(const rows of groups.values())for(const batch of frontSyncChunk(rows,size||80))if(batch.length)batches.push(batch);return batches;
+}
 async function frontSyncUpsert(table, rowsInput, conflictColumns) {
-  const rows = array(rowsInput), output = [];
-  for (const batch of frontSyncChunk(rows, 80)) {
-    if (!batch.length) continue;
+  const output = [];
+  for (const batch of frontSyncUniformBatches(rowsInput, 80)) {
     const query = "on_conflict=" + encodeURIComponent(text(conflictColumns));
     const result = await SlotStore.request(SlotStore.rest(table, query), {
       method: "POST",
@@ -3155,7 +3188,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
   group(assignmentsByCandidate, assignmentRows); group(availabilityByCandidate, availabilityRows); group(revenuesByCandidate, revenueRows); group(evidenceByCandidate, evidenceRows);
 
   const items = [], plannedCandidateIds = [], readinessByCandidate = new Map(), assignmentIdByCandidate = new Map();
-  const assignmentUpserts = [], availabilityUpdates = [], availabilityInserts = [], revenueUpserts = [], evidenceUpserts = [];
+  const assignmentUpserts = [], staleAssignmentIds = [], availabilityUpdates = [], availabilityInserts = [], revenueUpserts = [], evidenceUpserts = [];
   for (const candidateId of targetIds) {
     const target = plain(targetById.get(candidateId)), product = plain(productByCandidate.get(candidateId)), existing = plain(candidateById.get(candidateId));
     if (!Object.keys(product).length || !Object.keys(existing).length) { items.push({ candidateId, status:"blocked", queued:false, reason:"candidate_ledger_row_missing", assignmentId:null }); continue; }
@@ -3172,6 +3205,10 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     const alreadyPublicationRequested = lower(assignmentExisting && assignmentExisting.publication_status) === "publish_requested";
     assignmentIdByCandidate.set(candidateId, assignmentId);
     readinessByCandidate.set(candidateId, readiness);
+    for(const oldAssignment of array(assignmentsByCandidate.get(candidateId))){
+      const oldId=text(oldAssignment&&oldAssignment.id),sameScope=normalizeCountry(oldAssignment&&oldAssignment.country_code)===scope.country&&frontSyncExpectedRegion(oldAssignment,scope.country)===scope.region,samePlacement=text(oldAssignment&&oldAssignment.hub_key)===split.page&&text(oldAssignment&&oldAssignment.slot_key)===split.sectionKey,oldPublication=lower(oldAssignment&&oldAssignment.publication_status);
+      if(oldId&&sameScope&&!samePlacement&&["publish_requested","published"].includes(oldPublication))staleAssignmentIds.push(oldId);
+    }
     assignmentUpserts.push({
       id: assignmentId, candidate_id: candidateId, hub_key: split.page, country_code: scope.country, region_code: scope.region || "NATIONWIDE",
       slot_key: split.sectionKey, priority: Math.max(0, Number(target.priority || product.rankingScore || 0)), state: assignmentExisting && lower(assignmentExisting.state) === "pinned" ? "pinned" : "approved",
@@ -3238,10 +3275,13 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
       return output;
     });
     await frontSyncWriteStage(writeTrace, "availability_insert", availabilityInserts.length, async () => {
-      const output=[]; for (const batch of frontSyncChunk(availabilityInserts,80)) output.push(...array(await SlotStore.insert("gslot_candidate_availability", batch, "return=representation"))); return output;
+      const output=[]; for (const batch of frontSyncUniformBatches(availabilityInserts,80)) output.push(...array(await SlotStore.insert("gslot_candidate_availability", batch, "return=representation"))); return output;
     });
     await frontSyncWriteStage(writeTrace, "evidence", evidenceUpserts.length, () => frontSyncUpsert("gslot_candidate_evidence", evidenceUpserts, "id"));
     await frontSyncWriteStage(writeTrace, "revenue", revenueUpserts.length, () => frontSyncUpsert("gslot_candidate_revenue", revenueUpserts, "id"));
+    await frontSyncWriteStage(writeTrace, "stale_assignment_demote", staleAssignmentIds.length, async () => {
+      const output=[];for(const ids of frontSyncChunk(Array.from(new Set(staleAssignmentIds)),80))output.push(...array(await SlotStore.update("gslot_slot_assignments","id=in."+frontSyncInFilter(ids),{publication_status:"not_ready",updated_at:iso(),updated_by:actor})));return output;
+    });
     await frontSyncWriteStage(writeTrace, "assignment_ready", assignmentUpserts.length, () => frontSyncUpsert("gslot_slot_assignments", assignmentUpserts, "id"));
     phase("relation_prepare", { ok:true });
   } catch (error) {

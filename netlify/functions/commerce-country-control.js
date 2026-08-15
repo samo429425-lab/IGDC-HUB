@@ -118,7 +118,11 @@ exports.handler=async function(event){
       // no new candidate was publishable (for example, every previously live
       // product in a section was found dead and was withdrawn).
       if(operation==="match"&&candidateIds.length){
-        const liveDoc=await CandidateReview.stage(process.cwd());
+        // The batch phase already performed the canonical relation preflight and
+        // durable assignment commit. requestPublicationBatch explicitly accepts
+        // preparedByFrontLifecycle without requiring a second full CandidateReview
+        // staging pass; avoiding that duplicate scan prevents finalizer 502/504s.
+        const liveDoc={candidates:[]};
         const finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
         return json(200,await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null));
       }

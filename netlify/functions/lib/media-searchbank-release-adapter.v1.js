@@ -10,7 +10,7 @@
 const crypto=require("crypto");
 const SearchBankEngine=require("../search-bank-engine.js");
 
-const VERSION="media-searchbank-release-adapter-v1.0.0";
+const VERSION="media-searchbank-release-adapter-v1.2.0-core-api-compatibility-gate";
 const OWNER="media-release-searchbank-adapter";
 const SLOT_OWNER="media-snapshot-publish";
 const MANUAL_SECTIONS=Object.freeze([
@@ -117,7 +117,22 @@ function isOwnedSearchBankItem(item){
   return item&&item.managedBy===OWNER||contract.owner===OWNER||contract.adapterVersion===VERSION;
 }
 
+
+function assertSearchBankCoreApi(){
+  const required=[
+    "resolveSlotPolicy","resolveOperationalPolicy","normalizeItem","applySlotContract",
+    "enforceFrontSectionContract","applyUnifiedSupplyContract","validateBankItem","policyAcceptsItem"
+  ];
+  const missing=required.filter((name)=>typeof SearchBankEngine[name]!=="function");
+  if(missing.length){
+    const error=new Error("media_searchbank_core_api_missing:"+missing.join(","));
+    error.code="media_searchbank_core_api_missing";error.missing=missing;throw error;
+  }
+  return{engineVersion:text(SearchBankEngine.SEARCH_BANK_ENGINE_VERSION),contractVersion:text(SearchBankEngine.SEARCH_BANK_CONTRACT_VERSION)};
+}
+
 function buildSearchBankDocument(existingBank,release){
+  const coreApi=assertSearchBankCoreApi();
   const info=releaseInfo(release),snapshot=plain(release&&release.snapshot);
   if(!info.releaseId||!info.requestHash)throw new Error("media_release_identity_missing");
   const desired=desiredBySection(snapshot),items=[];
@@ -130,11 +145,38 @@ function buildSearchBankDocument(existingBank,release){
       items.push(searchBankItem(slot,sectionKey,info,index));
     });
   });
-  // The adapter no longer writes approved media straight into SearchBank Snapshot.
-  // Every approved media item must first pass SearchBank Engine's internal contract/policy layer.
-  const enginePass=SearchBankEngine.prepareApprovedMediaReleaseItems(items);
-  const accepted=Array.isArray(enginePass&&enginePass.accepted)?enginePass.accepted:[];
-  const rejected=Array.isArray(enginePass&&enginePass.rejected)?enginePass.rejected:[];
+  // Media-only bridge: use the existing public SearchBank core API without modifying the shared engine.
+  // The adapter normalizes and validates approved media through the core contract/policy functions,
+  // then returns only accepted items to the build-local SearchBank snapshot stage.
+  const accepted=[];
+  const rejected=[];
+  items.forEach((raw)=>{
+    const sectionKey=text(raw.section||raw.psom_key||raw.category);
+    const params={
+      channel:"media",page:"media",section:sectionKey,psom_key:sectionKey,
+      frontSupply:true,snapshotWrite:true,strictFrontSection:true,
+      external:"off",noExternal:true
+    };
+    const ctx={params};
+    ctx.slotContext=SearchBankEngine.resolveSlotPolicy(params,{});
+    ctx.operationalPolicy=SearchBankEngine.resolveOperationalPolicy(ctx,[]);
+    let item=SearchBankEngine.normalizeItem(raw,ctx);
+    if(!item){rejected.push({id:text(raw.id),section:sectionKey,issues:["normalize_failed"]});return;}
+    item=SearchBankEngine.applySlotContract(item,ctx);
+    item=SearchBankEngine.enforceFrontSectionContract(item,{section:sectionKey,psom_key:sectionKey,strictFrontSection:true});
+    item=SearchBankEngine.applyUnifiedSupplyContract(item,ctx);
+    const validation=SearchBankEngine.validateBankItem(item);
+    const policyOk=SearchBankEngine.policyAcceptsItem(item,ctx);
+    const issues=Array.isArray(validation&&validation.issues)?validation.issues.slice():[];
+    if(!policyOk)issues.push("searchbank_policy_rejected");
+    if(validation&&validation.ok&&policyOk)accepted.push(item);
+    else rejected.push({id:text(item.id||raw.id),section:sectionKey,issues:[...new Set(issues)]});
+  });
+  const enginePass={
+    version:text(SearchBankEngine.SEARCH_BANK_ENGINE_VERSION),
+    contractVersion:text(SearchBankEngine.SEARCH_BANK_CONTRACT_VERSION),
+    accepted,rejected
+  };
   if(items.length&&accepted.length!==items.length){
     const error=new Error("media_release_searchbank_contract_rejected:"+rejected.length);
     error.code="media_release_searchbank_policy_rejected";
@@ -147,7 +189,7 @@ function buildSearchBankDocument(existingBank,release){
     mediaReleasePipeline:{
       version:VERSION,owner:OWNER,releaseId:info.releaseId,requestHash:info.requestHash,
       action:info.action,sectionKey:info.sectionKey,generatedAt:new Date().toISOString(),
-      searchBankEngineVersion:text(enginePass&&enginePass.version),
+      searchBankEngineVersion:text(enginePass&&enginePass.version)||coreApi.engineVersion,
       searchBankEngineAccepted:accepted.length,searchBankEngineRejected:rejected.length,
       mediaItemCount:accepted.length,sections:Object.fromEntries(MANUAL_SECTIONS.map((key)=>[key,accepted.filter((item)=>text(item.section||item.psom_key||item.category)===key).length]))
     }
@@ -193,9 +235,13 @@ function decorateEngineSnapshot(engineSnapshot,release,engineReport,searchBankHa
       });
     });
     trusted.forEach((slot,id)=>{if(!found.has(id))problems.push("snapshot_engine_missing_media:"+sectionKey+":"+id);});
-    const expectedPositions=desired[sectionKey].map((slot)=>[slotIdOf(slot),Number(slot.slotId)||null]);
-    const actualPositions=section.slots.filter(managedSlot).map((slot)=>[slotIdOf(slot),Number(slot.slotId)||null]);
-    if(stableStringify(expectedPositions)!==stableStringify(actualPositions))problems.push("snapshot_engine_slot_order_mismatch:"+sectionKey);
+    // Snapshot Engine / PSOM may legitimately reorder approved real content inside a
+    // section (ranking, sample replacement, capacity policy).  The media bridge must
+    // verify membership, not freeze the upstream slot number/order.  Enforce that the
+    // exact approved content-id set survives in the same section with no duplicates.
+    const expectedIds=desired[sectionKey].map(slotIdOf).filter(Boolean).sort();
+    const actualIds=section.slots.filter(managedSlot).map(slotIdOf).filter(Boolean).sort();
+    if(stableStringify(expectedIds)!==stableStringify(actualIds))problems.push("snapshot_engine_section_membership_mismatch:"+sectionKey);
     next.sections[sectionKey]=section;
   });
   if(problems.length){const error=new Error(problems.join(","));error.code="media_snapshot_engine_verification_failed";error.problems=problems;throw error;}
@@ -233,6 +279,6 @@ function buildPipelineReport(input){
 
 module.exports={
   VERSION,OWNER,SLOT_OWNER,MANUAL_SECTIONS,text,plain,clone,sha256,slotsOf,managedSlot,slotIdOf,
-  releaseInfo,desiredBySection,buildEngineTemplate,buildSearchBankDocument,ownedItems,sectionState,
+  releaseInfo,desiredBySection,assertSearchBankCoreApi,buildEngineTemplate,buildSearchBankDocument,ownedItems,sectionState,
   decorateEngineSnapshot,buildPipelineReport
 };

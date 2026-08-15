@@ -6,7 +6,7 @@ const os=require("os");
 const path=require("path");
 const Adapter=require("../../functions/lib/media-searchbank-release-adapter.v1");
 
-const VERSION="igdc-media-snapshot-release-build-plugin-v2.1.1-gated-db-authoritative-pending-release";
+const VERSION="igdc-media-snapshot-release-build-plugin-v2.3.0-coherent-searchbank-entry";
 const DEFAULT_TABLE="media_snapshot_releases";
 
 function text(value){return value==null?"":String(value).trim();}
@@ -133,17 +133,48 @@ function runSnapshotEngineIsolated(publishRoot,bank,template,releaseId){
 
 module.exports={
   onPostBuild:async({constants,utils})=>{
-    if(!releaseArmed()){
-      utils.status.show({title:"IGDC 미디어 스냅샷",summary:"미디어 프론트 공급 요청 없음 — 기존 배포 스냅샷 유지"});
-      return;
-    }
+    try{Adapter.assertSearchBankCoreApi();}
+    catch(error){utils.build.failBuild("미디어 SearchBank 연결 어댑터와 공통 SearchBank Engine의 공개 API가 맞지 않습니다.",{error});return;}
+    const expected=incomingReleaseExpectation();
+    let settings=null;
     try{
-      const publishRoot=path.resolve(constants.PUBLISH_DIR||process.cwd());
-      const settings=config(),expected=incomingReleaseExpectation(),release=await loadRelease(settings,expected);
-      if(!release){
-        utils.status.show({title:"IGDC 미디어 스냅샷",summary:"미적용 프론트 공급 요청 없음 — 기존 배포 스냅샷 유지"});
+      settings=config();
+    }catch(error){
+      if(expected.releaseId){
+        utils.build.failBuild("미디어 프론트 반영 요청이 있으나 미디어 공급 저장소 설정을 확인할 수 없습니다.",{error});
         return;
       }
+      console.warn("["+VERSION+"] media release storage unavailable; keeping current snapshots:",error&&error.message||error);
+      utils.status.show({title:"IGDC 미디어 스냅샷",summary:"미디어 공급 저장소 미설정 — 기존 배포 스냅샷 유지"});
+      return;
+    }
+
+    let release=null;
+    try{
+      // The durable DB row is the authoritative trigger. Build-hook request bodies are
+      // not required to appear as build environment variables. A normal build simply
+      // sees no stored publication request and leaves the existing snapshots intact.
+      release=await loadRelease(settings,expected);
+    }catch(error){
+      if(expected.releaseId){
+        utils.build.failBuild("명시된 미디어 프론트 반영 요청을 읽지 못해 배포를 중단했습니다.",{error});
+        return;
+      }
+      // Do not take down an unrelated site deployment because the media control DB is
+      // temporarily unreachable. The stored request remains pending and a later build
+      // can retry it; no SearchBank/Media snapshot is modified in this branch.
+      console.warn("["+VERSION+"] pending media release lookup failed; keeping current snapshots:",error&&error.message||error);
+      utils.status.show({title:"IGDC 미디어 스냅샷",summary:"미디어 공급 요청 조회 실패 — 기존 배포 스냅샷 유지",text:text(error&&error.message||error)});
+      return;
+    }
+
+    if(!release){
+      utils.status.show({title:"IGDC 미디어 스냅샷",summary:"미적용 프론트 공급 요청 없음 — 기존 배포 스냅샷 유지"});
+      return;
+    }
+
+    try{
+      const publishRoot=path.resolve(constants.PUBLISH_DIR||process.cwd());
       safeManagedSlots(release.snapshot);
       const requestHash=sha256(release.snapshot);
       if(requestHash!==text(release.snapshot_hash))throw new Error("media_snapshot_release_hash_mismatch");
@@ -183,6 +214,8 @@ module.exports={
       });
       console.log("["+VERSION+"]",JSON.stringify(report));
     }catch(error){
+      // Once a pending publication row has been loaded, remain fail-closed: do not
+      // deploy a partially converted SearchBank/Media snapshot.
       utils.build.failBuild("승인 미디어의 SearchBank → Snapshot Engine → Media Snapshot 연결을 검증하지 못해 배포를 중단했습니다.",{error});
     }
   }

@@ -12,9 +12,20 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
 const MediaReleaseAdapter = require("./lib/media-searchbank-release-adapter.v1");
 
-const VERSION = "media-snapshot-publish-v1.7.0-front-trigger-diagnostics";
+const VERSION = "media-snapshot-publish-v1.9.0-coherent-searchbank-entry";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
+
+function componentStatus(){
+  let storage=null;
+  try{storage=MediaStore.releaseStorageContract();}catch(error){storage={ok:false,error:MediaStore.text(error&&error.message||error)};}
+  let core=null;
+  try{core=MediaReleaseAdapter.assertSearchBankCoreApi();}catch(error){core={ok:false,error:MediaStore.text(error&&error.message||error)};}
+  return{
+    publishVersion:VERSION,storeVersion:MediaStore.VERSION,adapterVersion:MediaReleaseAdapter.VERSION,
+    dispatchVersion:MediaReleaseDispatch.VERSION,searchBankCore:core,releaseStorage:storage
+  };
+}
 
 async function actorFor(event, storeRelease){
   const actor = await SharedAdminAuth.resolveUser(event);
@@ -183,9 +194,10 @@ async function pipelineStatusDocument(release,rows,probePublic){
   const publicMatches=publicReleaseMatches&&publicSectionsMatch&&publicBankMatches;
   const publicationTrigger=typeof MediaReleaseDispatch.configurationStatus==="function"?MediaReleaseDispatch.configurationStatus():{version:MediaReleaseDispatch.VERSION||null};
   return{
-    ok:true,reportType:"igdc-media-front-pipeline-status",version:VERSION,adapterVersion:MediaReleaseAdapter.VERSION,generatedAt:MediaStore.nowIso(),
+    ok:true,reportType:"igdc-media-front-pipeline-status",version:VERSION,adapterVersion:MediaReleaseAdapter.VERSION,components:componentStatus(),generatedAt:MediaStore.nowIso(),
     pipelineComplete:releaseApplied&&(!probePublic||publicMatches),
     stages:{
+      releaseStorage:Object.assign({readable:true,latestReleasePresent:!!release,contract:"media-release-row-v1-canonical-columns-only"},componentStatus().releaseStorage||{}),
       candidates:{source:"supabase.media_candidates",approvedRows:Array.isArray(rows)?rows.length:0,eligibleRows:(Array.isArray(rows)?rows:[]).filter(MediaStore.snapshotEligible).length,sections:candidateSections},
       release:{present:!!release,releaseId,status:MediaStore.text(release&&release.status)||null,requestHash:MediaStore.text(pipeline.requestHash||release&&release.snapshot_hash)||null,outputHash:MediaStore.text(release&&release.snapshot_hash)||null,action:MediaStore.text(releaseSnapshot&&releaseSnapshot.meta&&releaseSnapshot.meta.releaseControl&&releaseSnapshot.meta.releaseControl.action)||null,totalManagedSlots:releaseState.totalManaged,publicationTrigger},
       searchBank:{applied:releaseApplied&&!!MediaStore.text(pipeline.searchBankHash),hash:MediaStore.text(pipeline.searchBankHash)||null,releaseMediaItemCount:Number(pipeline.searchBankMediaCount||0),publicProbeChecked:publicBank.checked,publicProbeOk:publicBank.ok,publicProbeReason:publicBank.reason,publicHash:publicBankHash,publicHashMatches:publicBank.checked?publicBankMatches:null,publicReleaseMediaItemCount:publicBank.ok?publicBankItems.length:null},
@@ -272,7 +284,22 @@ exports.handler = async function(event){
       created_at:MediaStore.nowIso()
     };
     let stored=null;
-    if(storeRelease) stored=await MediaStore.insertRelease(release);
+    if(storeRelease){
+      try{
+        const inserted=await MediaStore.insertRelease(release);
+        const confirmed=await MediaStore.selectReleaseById(release.release_id);
+        if(!confirmed||MediaStore.text(confirmed.release_id)!==release.release_id||MediaStore.text(confirmed.snapshot_hash)!==hash||MediaStore.text(confirmed.status)!=="stored"){
+          const verifyError=new Error("미디어 프론트 공급 요청 저장 후 재조회 검증에 실패했습니다.");
+          verifyError.statusCode=502;verifyError.code="media_release_store_verify_failed";throw verifyError;
+        }
+        stored={insertedRows:inserted&&inserted.inserted===true?1:(Array.isArray(inserted)?inserted.length:0),verified:true,releaseId:release.release_id,status:confirmed.status,snapshotHash:confirmed.snapshot_hash,table:MediaStore.RELEASE_TABLE,writeColumns:Array.from(MediaStore.RELEASE_WRITE_COLUMNS||[]),storeVersion:MediaStore.VERSION};
+      }catch(storageError){
+        const error=new Error("승인 콘텐츠는 준비됐지만 미디어 프론트 공급 요청을 release 저장소에 기록하지 못했습니다: "+MediaStore.text(storageError&&storageError.message||storageError));
+        error.statusCode=storageError&&storageError.statusCode||502;
+        error.code="media_release_storage_failed";
+        throw error;
+      }
+    }
     let frontPublication=null;
     if(publishFront){
       frontPublication=await MediaReleaseDispatch.dispatch({
@@ -292,7 +319,7 @@ exports.handler = async function(event){
       return {statusCode:200,headers:{"content-type":"application/json; charset=utf-8","cache-control":"private, no-store, max-age=0","content-disposition":"attachment; filename=media.snapshot.generated.json"},body:JSON.stringify(snapshot,null,2)+"\n"};
     }
     return MediaStore.response(200,{
-      ok:true,version:VERSION,policyVersion:MediaStore.MediaPolicy.VERSION,
+      ok:true,version:VERSION,policyVersion:MediaStore.MediaPolicy.VERSION,components:componentStatus(),
       baseFile:base.file,hash,approvedRows:Array.isArray(scopedApprovedRows)?scopedApprovedRows.length:0,
       eligibleRows:eligible,frontDisabledRows:frontDisabledRows.length,policyBlockedRows:blocked.length,
       frontAction,sectionKey:sectionKey||null,frontState:statusPayload(Object.assign({},release,{snapshot})),

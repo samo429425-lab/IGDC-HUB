@@ -15,7 +15,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.5.0-searchbank-handoff-diagnostic";
+  "social-snapshot-publish-v1.7.0-actual-apply-store-gate";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -454,8 +454,10 @@ exports.handler = async function (event) {
       operation === "unpublish_selected" ||
       operation === "selected_front_unpublish";
     const candidateIds = candidateIdsFrom(params);
+    const actualApplyOperation =
+      operation === "actual_front_apply" || operation === "publish_actual" || operation === "apply_actual";
     const storeRelease =
-      params.storeRelease === true || params.storeRelease === "true";
+      actualApplyOperation || params.storeRelease === true || params.storeRelease === "true";
     if (
       storeRelease &&
       !unpublishSelected &&
@@ -593,6 +595,13 @@ exports.handler = async function (event) {
     };
     let stored = null;
     if (storeRelease) stored = await SocialStore.insertRelease(release);
+    if (storeRelease && (!stored || (Array.isArray(stored) && stored.length < 1))) {
+      return SocialStore.response(502, {
+        ok: false, version: VERSION, error: "social_release_store_failed",
+        message: "실제 적용 승인본을 저장하지 못해 SearchBank 인계 전에 중단했습니다.",
+        releaseId: release.release_id, eligibleRows: eligible, buildHook: buildHookStatus()
+      });
+    }
     let buildTrigger = null;
     if (storeRelease && stored) {
       buildTrigger = await triggerCanonicalBuild(
@@ -638,6 +647,8 @@ exports.handler = async function (event) {
         !!stored && !!buildTrigger && buildTrigger.ok && !unpublishSelected,
       actualFrontUnpublishQueued:
         !!stored && !!buildTrigger && buildTrigger.ok && unpublishSelected,
+      actualApplyRequested: actualApplyOperation,
+      storeReleaseRequested: storeRelease,
       frontPublicationStatus: !storeRelease
         ? "preview_only"
         : buildTrigger && buildTrigger.ok

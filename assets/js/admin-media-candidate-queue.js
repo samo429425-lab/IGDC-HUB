@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v3.6 - verified bulk approval persistence + front preflight */
+/* IGDC Media Candidate Queue v3.7 - coherent media front pipeline client */
 (function(){
   'use strict';
 
@@ -73,7 +73,10 @@
     try{data=await response.json();}catch(_error){}
     if(!response.ok||!data||data.ok!==true){
       var error=new Error(data&&data.message||data&&data.error||'HTTP '+response.status);
-      error.status=response.status;throw error;
+      error.status=response.status;
+      error.code=data&&data.error||'';
+      error.serverVersion=data&&data.version||'';
+      throw error;
     }
     return data;
   }
@@ -83,7 +86,10 @@
     try{data=await response.json();}catch(_error){}
     if(!response.ok||!data||data.ok!==true){
       var error=new Error(data&&data.message||data&&data.error||'HTTP '+response.status);
-      error.status=response.status;throw error;
+      error.status=response.status;
+      error.code=data&&data.error||'';
+      error.serverVersion=data&&data.version||'';
+      throw error;
     }
     return data;
   }
@@ -1076,7 +1082,7 @@
         show(label+' 프론트 반영 정보는 저장됐지만 배포는 시작되지 않았습니다: '+frontPublishReason(dispatch.reason),'warn');
       }
     }catch(error){
-      show(label+' 실패: '+error.message,'warn');
+      show(label+' 실패: '+error.message+(error.code?' · '+error.code:'')+(error.serverVersion?' · '+error.serverVersion:''),'warn');
     }finally{
       if(mainButton)mainButton.textContent=originalText;
       setFrontButtonsDisabled(false);

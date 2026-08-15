@@ -20,8 +20,9 @@ const path = require("path");
 const crypto = require("crypto");
 const SocialStore = require("./social-candidate-store.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
+const SearchBankEngine = require("../search-bank-engine");
 
-const VERSION = "social-searchbank-release-adapter-v1.1.0-main-searchbank-handoff";
+const VERSION = "social-searchbank-release-adapter-v1.2.0-searchbank-engine-contract-handoff";
 const RELEASE_FILE = "social-searchbank.release.snapshot.json";
 const REPORT_FILE = "social-pipeline.report.json";
 const SEARCH_BANK_FILE = "search-bank.snapshot.json";
@@ -230,6 +231,88 @@ function releaseToBank(release) {
   });
   return { bank, counts };
 }
+
+function searchBankEngineContext(item) {
+  const section = text(item && (item.psom_key || item.section || (item.bind && item.bind.section)));
+  return {
+    event: { httpMethod: "GET", headers: {}, queryStringParameters: {} },
+    params: {
+      page: "social",
+      channel: "social",
+      route: "social",
+      section,
+      psom_key: section,
+      slotKey: section,
+      list: "1"
+    },
+    limit: 120,
+    q: "social",
+    queryIntent: { raw: "social" },
+    geoContext: {},
+    ipGeo: {},
+    slotContext: {
+      channel: "social",
+      section,
+      psom_key: section,
+      autoFill: true,
+      policy: { persist: true }
+    },
+    operationalPolicy: {},
+    slotDeficiency: {},
+    channel: "social",
+    type: "external_social",
+    lang: ""
+  };
+}
+
+function passThroughSearchBankEngineContract(items) {
+  const accepted = [];
+  const rejected = [];
+  for (const raw of Array.isArray(items) ? items : []) {
+    const item = JSON.parse(JSON.stringify(raw || {}));
+    const ctx = searchBankEngineContext(item);
+    let contracted;
+    try {
+      contracted = SearchBankEngine.applyUnifiedSupplyContract(item, ctx);
+    } catch (error) {
+      rejected.push({
+        id: text(item.id || item.contentId || item.candidateId),
+        section: text(item.psom_key || item.section || (item.bind && item.bind.section)),
+        reasons: ["SEARCHBANK_CONTRACT_EXCEPTION"],
+        error: text(error && error.message) || String(error)
+      });
+      continue;
+    }
+    const validation = SearchBankEngine.validateBankItem(contracted);
+    const slotAccepted = SearchBankEngine.slotAcceptsItem(contracted, ctx);
+    const policyAccepted = SearchBankEngine.policyAcceptsItem(contracted, ctx);
+    const contract = contracted.searchBankContract || {};
+    const reasons = [];
+    if (!validation || validation.ok !== true) reasons.push(...((validation && validation.issues) || ["SEARCHBANK_VALIDATE_FAILED"]));
+    if (!slotAccepted) reasons.push("SEARCHBANK_SOCIAL_SLOT_REJECTED");
+    if (!policyAccepted) reasons.push("SEARCHBANK_POLICY_REJECTED");
+    if (contract.searchBankEligible === false) reasons.push("SEARCHBANK_NOT_ELIGIBLE");
+    if (contract.snapshotEligible === false) reasons.push("SEARCHBANK_SNAPSHOT_NOT_ELIGIBLE");
+    if (contract.frontSupplyAllowed === false) reasons.push("SEARCHBANK_FRONT_SUPPLY_NOT_ALLOWED");
+    if (reasons.length) {
+      rejected.push({
+        id: text(contracted.id || contracted.contentId || contracted.candidateId),
+        section: text(contracted.psom_key || contracted.section || (contracted.bind && contracted.bind.section)),
+        reasons
+      });
+      continue;
+    }
+    accepted.push(contracted);
+  }
+  return {
+    ok: rejected.length === 0 && accepted.length > 0,
+    engineVersion: SearchBankEngine.SEARCH_BANK_ENGINE_VERSION,
+    contractVersion: SearchBankEngine.SEARCH_BANK_CONTRACT_VERSION,
+    accepted,
+    rejected
+  };
+}
+
 function psomSocialSections(root) {
   const candidates = [
     path.join(root, "data", "psom.json"),
@@ -358,20 +441,35 @@ function mergeIntoSearchBankSnapshot(input) {
     error.details = { rejected: gate.rejected.slice(0, 100), counts: gate.counts };
     throw error;
   }
+  const engineGate = passThroughSearchBankEngineContract(gate.accepted);
+  if (!engineGate.ok) {
+    const error = new Error("SOCIAL_SEARCHBANK_ENGINE_CONTRACT_REJECTED");
+    error.code = "social_searchbank_engine_contract_rejected";
+    error.details = {
+      engineVersion: engineGate.engineVersion,
+      contractVersion: engineGate.contractVersion,
+      acceptedCount: engineGate.accepted.length,
+      rejected: engineGate.rejected.slice(0, 100)
+    };
+    throw error;
+  }
   const loaded = loadSearchBankSnapshot(root);
   const current = loaded.doc;
   const oldItems = Array.isArray(current.items) ? current.items : [];
   const preserved = oldItems.filter((item) => !isPriorSocialCandidateItem(item));
   const previousRealCount = oldItems.length - preserved.length;
   const sampleSocialCountBefore = oldItems.filter(isSocialSampleItem).length;
-  const incoming = gate.accepted;
+  const incoming = engineGate.accepted;
+  const mergedItems = SearchBankEngine.mergeBankItems(preserved, incoming);
   const merged = PublicSnapshot.sanitizeDocument(Object.assign({}, current, {
-    items: preserved.concat(incoming),
+    items: mergedItems,
     meta: Object.assign({}, current.meta || {}, {
       generated_at: (current.meta && current.meta.generated_at) || undefined,
       socialCandidateHandoff: {
         version: VERSION,
-        mode: "replace-prior-social-candidate-real-items-preserve-samples",
+        mode: "searchbank-engine-contract-merge-preserve-samples",
+        searchBankEngineVersion: engineGate.engineVersion,
+        searchBankContractVersion: engineGate.contractVersion,
         releaseId: text(release && release.release_id),
         releaseHash: text(release && release.snapshot_hash),
         updatedAt: new Date().toISOString(),
@@ -400,6 +498,12 @@ function mergeIntoSearchBankSnapshot(input) {
     sampleSocialItemsPreserved: sampleSocialCountBefore,
     counts: gate.counts,
     psomFile: gate.psomFile,
+    searchBankEngine: {
+      version: engineGate.engineVersion,
+      contractVersion: engineGate.contractVersion,
+      accepted: engineGate.accepted.length,
+      rejected: engineGate.rejected.length
+    },
     writes,
     bank: merged,
   };
@@ -518,6 +622,7 @@ async function publish(input) {
     sampleSocialItemsPreserved: handoff.sampleSocialItemsPreserved,
     counts: handoff.counts,
     psomFile: handoff.psomFile,
+    searchBankEngine: handoff.searchBankEngine,
     writes: handoff.writes,
   };
 
@@ -567,6 +672,7 @@ module.exports = {
   searchBankPaths,
   releaseToBank,
   policyGate,
+  passThroughSearchBankEngineContract,
   mergeIntoSearchBankSnapshot,
   isPriorSocialCandidateItem,
   publish,

@@ -19,7 +19,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const AffiliateRegistry = require("./affiliate-program-registry.v1");
 
-const VERSION = "commerce-candidate-intake-v1.6.1-exact-admin-front-authority";
+const VERSION = "commerce-candidate-intake-v1.6.2-authoritative-admin-queue-fallback";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -316,21 +316,19 @@ function administratorFrontSafety(item){
   return {ok:reasons.length===0,reasons:unique(reasons),softBlockers:blockers.filter(value=>!hardPattern.test(value))};
 }
 
-function administratorFrontAuthority(item,pos,market){
-  const authority=plain(item&&item.administratorFrontMatchAuthority), publicationScope=plain(plain(item&&item.commerceCandidate).publicationScope);
-  const country=normalizeCountry(authority.country), scopeCountry=normalizeCountry(publicationScope.country);
-  const region=normalizeRegion(first(authority.region,"NATIONWIDE"),country)||"NATIONWIDE";
-  const scopeRegion=normalizeRegion(first(publicationScope.region,"NATIONWIDE"),scopeCountry)||"NATIONWIDE";
-  const placementMatches=text(authority.page)===text(pos&&pos.page) && text(authority.section)===text(pos&&pos.section);
-  const scopeMatches=!!country && country===scopeCountry && region===scopeRegion;
-  const marketMatches=array(market&&market.validRecords).some((record)=>{
-    if(normalizeCountry(record&&record.country)!==country) return false;
-    if(region==="NATIONWIDE") return record&&record.nationwide===true;
-    return array(record&&record.regions).map((value)=>normalizeRegion(value,country)).includes(region);
-  });
-  const ok=authority.verified===true && !!text(authority.assignmentId) && lower(authority.publicationStatus)==="publish_requested" &&
-    authority.externalSeller===true && authority.noIgdcCheckout===true && authority.noIgdcPayment===true && placementMatches && scopeMatches && marketMatches;
-  return {ok,assignmentId:text(authority.assignmentId)||null,country:country||null,region:region||null,placementMatches,scopeMatches,marketMatches};
+function administratorFrontAuthority(item,pos,market,origin){
+  const authority=plain(item&&item.administratorFrontMatchAuthority),review=plain(item&&item.commerceReview),publicationRequest=plain(review.publicationRequest),publicationScope=plain(plain(item&&item.commerceCandidate).publicationScope);
+  const authorityCountry=normalizeCountry(authority.country),scopeCountry=normalizeCountry(first(publicationScope.country,publicationRequest.country));
+  const country=authorityCountry||scopeCountry,authorityRegion=normalizeRegion(first(authority.region,"NATIONWIDE"),country)||"NATIONWIDE",scopeRegion=normalizeRegion(first(publicationScope.region,publicationRequest.region,"NATIONWIDE"),scopeCountry||country)||"NATIONWIDE";
+  const requestedPage=first(publicationScope.page,publicationRequest.page),requestedSection=first(publicationScope.section,publicationRequest.section);
+  const strictPlacementMatches=text(authority.page)===text(pos&&pos.page)&&text(authority.section)===text(pos&&pos.section);
+  const queuePlacementMatches=text(requestedPage)===text(pos&&pos.page)&&text(requestedSection)===text(pos&&pos.section);
+  const strictScopeMatches=!!authorityCountry&&authorityCountry===scopeCountry&&authorityRegion===scopeRegion;
+  const queueScopeMatches=!!scopeCountry&&country===scopeCountry&&scopeRegion===(normalizeRegion(first(publicationRequest.region,publicationScope.region,"NATIONWIDE"),scopeCountry)||"NATIONWIDE");
+  const marketMatches=array(market&&market.validRecords).some((record)=>{if(normalizeCountry(record&&record.country)!==country)return false;if(scopeRegion==="NATIONWIDE")return record&&record.nationwide===true;return array(record&&record.regions).map((value)=>normalizeRegion(value,country)).includes(scopeRegion);});
+  const strictOk=authority.verified===true&&!!text(authority.assignmentId)&&lower(authority.publicationStatus)==="publish_requested"&&authority.externalSeller===true&&authority.noIgdcCheckout===true&&authority.noIgdcPayment===true&&strictPlacementMatches&&strictScopeMatches&&marketMatches;
+  const queueFallbackOk=(origin||"")==="admin_review_queue"&&review.explicitPublicationRequested===true&&!!text(review.approvalId)&&lower(review.publicationStatus)==="publish_requested"&&queuePlacementMatches&&queueScopeMatches&&marketMatches&&!!safeHttpsUrl(productDestination(item));
+  return {ok:strictOk||queueFallbackOk,mode:strictOk?"explicit_authority_marker":(queueFallbackOk?"authoritative_admin_review_queue":null),assignmentId:text(authority.assignmentId||review.approvalId)||null,country:country||null,region:scopeRegion||null,placementMatches:strictOk?strictPlacementMatches:queuePlacementMatches,scopeMatches:strictOk?strictScopeMatches:queueScopeMatches,marketMatches};
 }
 
 function administratorReferralRevenue(item,revenue,market){
@@ -429,7 +427,7 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   const approval=reviewApproval(item,tier,policy); if(!approval.ok) reasons.push("DIRECT_LISTING_ADMIN_APPROVAL_OR_ASSIGNMENT_MISSING");
   const adminSafety=administratorFrontSafety(item);
   if(!adminSafety.ok) adminSafety.reasons.forEach(reason=>reasons.push(reason));
-  const adminAuthority=administratorFrontAuthority(item,pos,market), trustedForExplicitFront=trust.ok===true||adminAuthority.ok===true;
+  const adminAuthority=administratorFrontAuthority(item,pos,market,origin), trustedForExplicitFront=trust.ok===true||adminAuthority.ok===true;
   if(!trustedForExplicitFront) reasons.push("TRUSTED_SELLER_OR_PRODUCER_EVIDENCE_MISSING");
 
   const explicitAdministratorFrontMatch=(origin||"searchbank")==="admin_review_queue" && tier==="approved_commerce_member" &&
