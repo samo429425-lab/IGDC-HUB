@@ -2119,7 +2119,10 @@ window.addEventListener("message",function(ev){
      초기 실행
   =============================== */
 
-  buildDummy();
+  // Synthetic Loading cards are intentionally NOT rendered here.
+  // Leave the panel untouched so the existing SearchBank/Network snapshot
+  // sample path can remain visible until the dedicated Network Automap
+  // replaces it with the authoritative snapshot content.
 
 
   /* ===============================
