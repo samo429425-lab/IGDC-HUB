@@ -6,7 +6,7 @@
  * snapshot itself and it never exposes the build hook URL.
  */
 
-const VERSION = "commerce-release-dispatch-v1.3.0-front-match-hook-retry";
+const VERSION = "commerce-release-dispatch-v1.3.1-patient-front-match-hook-retry";
 const HOOK_ENVS = Object.freeze([
   "COMMERCE_RELEASE_BUILD_HOOK_URL",
   "NETLIFY_BUILD_HOOK_URL",
@@ -83,7 +83,7 @@ async function dispatch(input) {
   let lastReason="build_hook_request_failed",lastStatus=null,lastError=null;
   for(let attempt=1;attempt<=2;attempt+=1){
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
+    const timeout = setTimeout(() => controller.abort(), 9000);
     try {
       const response = await fetchImpl(hook.toString(), {
         method: "POST",

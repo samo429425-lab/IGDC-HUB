@@ -121,20 +121,12 @@
 
   async function fetchJson(url){
     try{
-      const r = await fetch(url, { cache:'no-store', priority:'high' });
+      const r = await fetch(url, { cache:'no-store' });
       if (!r.ok) return null;
       return await r.json();
     }catch{
       return null;
     }
-  }
-
-  let initialSnapshotPromise = null;
-  let runInFlight = null;
-  let initialApplied = false;
-  function getInitialSnapshotPromise(){
-    if (!initialSnapshotPromise) initialSnapshotPromise = fetchJson(SNAPSHOT_URL);
-    return initialSnapshotPromise;
   }
 
   function normalizeItems(raw){
@@ -158,7 +150,7 @@
     return out;
   }
 
-  function createCard(item, mobile, index){
+  function createCard(item, mobile){
     const card = document.createElement('div');
     card.className = mobile ? 'card' : 'ad-box';
 
@@ -168,12 +160,8 @@
     const img = document.createElement('img');
     img.src = item.thumb;
     img.alt = item.title || '';
-    const firstView = Number(index) >= 0 && Number(index) < 8;
-    img.loading = firstView ? 'eager' : 'lazy';
+    img.loading = 'lazy';
     img.decoding = 'async';
-    if (firstView) {
-      try { img.fetchPriority = 'high'; } catch (_) {}
-    }
 
     a.appendChild(img);
     card.appendChild(a);
@@ -205,9 +193,9 @@
     list.innerHTML = '';
 
     const frag = document.createDocumentFragment();
-    items.forEach(function(item, index){
-      frag.appendChild(createCard(item, true, index));
-    });
+    for (const item of items){
+      frag.appendChild(createCard(item, true));
+    }
     list.appendChild(frag);
   }
 
@@ -218,45 +206,27 @@
 
     panel.innerHTML = '';
     const frag = document.createDocumentFragment();
-    items.forEach(function(item, index){
-      frag.appendChild(createCard(item, false, index));
-    });
+    for (const item of items){
+      frag.appendChild(createCard(item, false));
+    }
     panel.appendChild(frag);
   }
 
   async function run(){
-    if (initialApplied) return;
-    if (runInFlight) return runInFlight;
+    disablePsomThumbGrid();
+    installExternalTopNavigation();
+    const snap = await fetchJson(SNAPSHOT_URL);
 
-    runInFlight = (async function(){
-      disablePsomThumbGrid();
-      installExternalTopNavigation();
+    let items = snap && Array.isArray(snap.items)
+      ? normalizeItems(snap.items)
+      : [];
 
-      // Await the same early-started request with no client-side timeout.
-      // A slow canonical response is allowed to finish; we do not mistake delay for no product.
-      const snap = await getInitialSnapshotPromise();
-      if (!snap) {
-        // Keep the already-visible slot shells/sample state. A later load event may retry
-        // only after a real network/HTTP failure; elapsed time alone never cancels the request.
-        initialSnapshotPromise = null;
-        return;
-      }
-
-      const items = Array.isArray(snap.items) ? normalizeItems(snap.items) : [];
-
-      // No generic feed fallback: it has no canonical country/region scope.
-      renderMobile(items);
-      renderDesktopDirect(items);
-      initialApplied = true;
-    })().finally(function(){ runInFlight = null; });
-
-    return runInFlight;
+    // No generic feed fallback: it has no canonical country/region scope.
+    renderMobile(items);
+    renderDesktopDirect(items);
   }
 
   disablePsomThumbGrid();
-
-  // Begin the canonical snapshot request immediately. DOMContentLoaded/load both reuse it.
-  getInitialSnapshotPromise();
 
   if (document.readyState === 'complete' || document.readyState === 'interactive'){
     setTimeout(run, 0);

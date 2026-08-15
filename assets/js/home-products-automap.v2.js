@@ -25,7 +25,7 @@
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 20;
   const RIGHT_LIMIT = 100;
-  const RIGHT_BATCH = 20;
+  const RIGHT_BATCH = 100;
 
   const EMPTY_I18N = {
     de: 'Inhalte werden vorbereitet.',
@@ -141,9 +141,12 @@
 
   function resolveSlotHref(item) {
     if (!item) return '';
+    // Keep product-card navigation inside IGDC first.  The internal content page
+    // owns the external seller hand-off; outbound URLs are fallback only when a
+    // legacy card has no stable IGDC product id.
+    if (item.id) return contentHref(item.id);
     const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.outboundUrl || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
-    if (item.id) return contentHref(item.id);
     const url = item.url || '';
     if (isBadUrl(url) || isExampleUrl(url)) return '';
     return url;
@@ -153,6 +156,9 @@
     const href = resolveSlotHref(item);
     a.removeAttribute('target');
     a.removeAttribute('rel');
+    a.removeAttribute('data-igdc-external');
+    a.removeAttribute('data-affiliate-outbound');
+    a.removeAttribute('data-external-outbound');
 
     if (!href) {
       a.href = '#';
@@ -166,10 +172,10 @@
     a.href = href;
     if (item && item.id) a.setAttribute('data-igdc-content-id', item.id);
     if (item && item.sourceUrl) a.setAttribute('data-igdc-source-url', item.sourceUrl);
-    if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound', '1');
-    if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound', '1');
 
     if (isExternal(href)) {
+      if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound', '1');
+      if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound', '1');
       a.target = '_top';
       a.rel = 'noopener';
       a.setAttribute('data-igdc-external', 'top');
@@ -332,11 +338,6 @@
     cap.style.alignSelf = 'end';
     cap.style.width = '100%';
     cap.style.background = 'rgba(255,255,255,.88)';
-    cap.style.position = 'absolute';
-    cap.style.left = '0';
-    cap.style.right = '0';
-    cap.style.bottom = '0';
-    cap.style.boxSizing = 'border-box';
     cap.style.padding = '6px 8px';
     cap.style.fontWeight = '700';
     cap.style.fontSize = '14px';
@@ -351,7 +352,6 @@
     cap.style.webkitBoxOrient = 'vertical';
     cap.style.webkitLineClamp = '2';
 
-    a.style.position = 'relative';
     a.style.display = 'grid';
     a.style.gridTemplateRows = '1fr auto';
     a.style.alignItems = 'stretch';
@@ -361,7 +361,7 @@
     return a;
   }
 
-  function buildRightCard(item, index) {
+  function buildRightCard(item) {
     const a = document.createElement('a');
     a.className = 'ad-box news-btn';
     applyAnchorDestination(a, item);
@@ -371,18 +371,10 @@
     }
 
     const img = document.createElement('img');
-    const firstView = Number(index) >= 0 && Number(index) < 8;
-    img.loading = firstView ? 'eager' : 'lazy';
+    img.loading = 'lazy';
     img.decoding = 'async';
-    if (firstView) {
-      try { img.fetchPriority = 'high'; } catch (_) {}
-    }
     img.src = item.thumb || '';
     img.alt = '';
-
-    const title = document.createElement('div');
-    title.className = 'home-right-card-title';
-    title.textContent = item.title || '';
 
     const showFallbackLabel = function () {
       if (a.querySelector('.home-right-sample-label')) return;
@@ -406,17 +398,14 @@
       label.style.color = '#004080';
       label.style.fontWeight = '600';
       label.style.overflow = 'hidden';
-      label.style.gridRow = '1';
-      if (title.parentNode === a) a.insertBefore(label, title);
-      else a.appendChild(label);
+      a.appendChild(label);
     };
 
     img.addEventListener('error', showFallbackLabel, { once: true });
     a.appendChild(img);
-    a.appendChild(title);
 
     // Snapshot seed cards use the known transparent sample GIF.
-    // Keep their placeholder label in the media area and the normal title below.
+    // Render their names as normal centered fallback content instead of browser ALT text.
     if (/^data:image\/gif;base64,R0lGODlhAQABAAAAACw=/i.test(String(item.thumb || ''))) {
       showFallbackLabel();
     }
@@ -526,7 +515,7 @@ function bindIncremental(target, items) {
 
     for (let i = offset; i < end; i++) {
       const it = items[i];
-      frag.appendChild(isRight ? buildRightCard(it, i) : buildMainCard(it));
+      frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
     }
 
     target.list.appendChild(frag);
@@ -599,7 +588,7 @@ function bindIncremental(target, items) {
   }
 
   async function fetchJSON(url) {
-    const res = await fetch(url, { cache: 'no-store', priority: 'high' });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) {
       throw new Error('HTTP ' + res.status + ' @ ' + url);
     }
@@ -653,15 +642,9 @@ function bindIncremental(target, items) {
     }, true);
   }
 
-  let initialLoadPromise = null;
-  function getInitialLoadPromise() {
-    if (!initialLoadPromise) initialLoadPromise = loadSections();
-    return initialLoadPromise;
-  }
-
   async function boot() {
     try {
-      const loaded = await getInitialLoadPromise();
+      const loaded = await loadSections();
       const sections = loaded.sections || Object.create(null);
 
       const preserveSnapshotOrder = loaded.source === 'snapshot';
@@ -689,11 +672,6 @@ function bindIncremental(target, items) {
   }
 
   installHomeNewsTopNavigation();
-
-  // Start the canonical snapshot request as soon as this automap executes.
-  // Do not race it against a timer or cancel it just because first response is slow.
-  // boot() awaits this exact same promise, so no duplicate initial snapshot request is made.
-  getInitialLoadPromise().catch(function(){ /* boot() owns the visible error state. */ });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function(){

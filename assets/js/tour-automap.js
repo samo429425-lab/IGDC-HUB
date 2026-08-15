@@ -78,20 +78,12 @@
 
   async function fetchJson(url) {
     try {
-      const r = await fetch(url, { cache: "no-store", priority: "high" });
+      const r = await fetch(url, { cache: "no-store" });
       if (!r.ok) return null;
       return await r.json();
     } catch {
       return null;
     }
-  }
-
-  let initialSnapshotPromise = null;
-  let runInFlight = null;
-  let initialApplied = false;
-  function getInitialSnapshotPromise() {
-    if (!initialSnapshotPromise) initialSnapshotPromise = fetchJson(SNAPSHOT_URL);
-    return initialSnapshotPromise;
   }
 
   function disablePsomThumbGrid() {
@@ -173,7 +165,7 @@
     }
   }
 
-  function createRightBox(item, index) {
+  function createRightBox(item) {
     const box = document.createElement("div");
     box.className = "ad-box";
 
@@ -183,12 +175,8 @@
     const img = document.createElement("img");
     img.src = item.thumb;
     img.alt = item.title || "";
-    const firstView = Number(index) >= 0 && Number(index) < 8;
-    img.loading = firstView ? "eager" : "lazy";
+    img.loading = "lazy";
     img.decoding = "async";
-    if (firstView) {
-      try { img.fetchPriority = "high"; } catch (_) {}
-    }
 
     const cap = document.createElement("div");
     cap.className = "tour-card-title";
@@ -207,7 +195,7 @@
     panel.innerHTML = "";
     if (!items || !items.length) return;
     const frag = document.createDocumentFragment();
-    items.slice(0, RIGHT_SLOT_COUNT).forEach(function(it, index){ frag.appendChild(createRightBox(it, index)); });
+    for (const it of items.slice(0, RIGHT_SLOT_COUNT)) frag.appendChild(createRightBox(it));
     panel.appendChild(frag);
   }
 
@@ -224,48 +212,32 @@
     list.innerHTML = "";
     const frag = document.createDocumentFragment();
 
-    items.slice(0, MOBILE_LIMIT).forEach(function(it, index) {
-      const card = createRightBox(it, index);
+    for (const it of items.slice(0, MOBILE_LIMIT)) {
+      const card = createRightBox(it);
       card.classList.add("card");
       frag.appendChild(card);
-    });
+    }
 
     list.appendChild(frag);
   }
 
   async function run() {
-    if (initialApplied) return;
-    if (runInFlight) return runInFlight;
+    disablePsomThumbGrid();
+    installExternalTopNavigation();
 
-    runInFlight = (async function(){
-      disablePsomThumbGrid();
-      installExternalTopNavigation();
+    const snap = await fetchJson(SNAPSHOT_URL);
+    let items = [];
 
-      // Await the same early-started request with no client-side timeout.
-      // A slow canonical response is allowed to finish instead of being treated as empty.
-      const snap = await getInitialSnapshotPromise();
-      if (!snap) {
-        initialSnapshotPromise = null;
-        return;
-      }
+    items = normalizeItems((snap && (snap.items || snap.slots)) || []);
 
-      const items = normalizeItems((snap && (snap.items || snap.slots)) || []);
-
-      // No generic feed fallback: only the Edge-routed canonical IP snapshot is
-      // allowed to populate the tour right panel and mobile rail.
-      disablePsomThumbGrid();
-      renderMobileRail(items);
-      renderRightPanel(items);
-      initialApplied = true;
-    })().finally(function(){ runInFlight = null; });
-
-    return runInFlight;
+    // No generic feed fallback: only the Edge-routed canonical IP snapshot is
+    // allowed to populate the tour right panel and mobile rail.
+    disablePsomThumbGrid();
+    renderMobileRail(items);
+    renderRightPanel(items);
   }
 
   disablePsomThumbGrid();
-
-  // Begin the canonical snapshot request immediately. DOMContentLoaded/load reuse it.
-  getInitialSnapshotPromise();
 
   if (document.readyState === "complete" || document.readyState === "interactive") {
     setTimeout(run, 0);
