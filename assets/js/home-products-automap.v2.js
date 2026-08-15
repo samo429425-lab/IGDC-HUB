@@ -376,6 +376,10 @@
     img.src = item.thumb || '';
     img.alt = '';
 
+    const title = document.createElement('div');
+    title.className = 'home-right-card-title';
+    title.textContent = item.title || '';
+
     const showFallbackLabel = function () {
       if (a.querySelector('.home-right-sample-label')) return;
       img.style.display = 'none';
@@ -398,14 +402,17 @@
       label.style.color = '#004080';
       label.style.fontWeight = '600';
       label.style.overflow = 'hidden';
-      a.appendChild(label);
+      label.style.gridRow = '1';
+      if (title.parentNode === a) a.insertBefore(label, title);
+      else a.appendChild(label);
     };
 
     img.addEventListener('error', showFallbackLabel, { once: true });
     a.appendChild(img);
+    a.appendChild(title);
 
     // Snapshot seed cards use the known transparent sample GIF.
-    // Render their names as normal centered fallback content instead of browser ALT text.
+    // Keep their placeholder label in the media area and the normal title below.
     if (/^data:image\/gif;base64,R0lGODlhAQABAAAAACw=/i.test(String(item.thumb || ''))) {
       showFallbackLabel();
     }
