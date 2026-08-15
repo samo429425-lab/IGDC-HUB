@@ -332,6 +332,11 @@
     cap.style.alignSelf = 'end';
     cap.style.width = '100%';
     cap.style.background = 'rgba(255,255,255,.88)';
+    cap.style.position = 'absolute';
+    cap.style.left = '0';
+    cap.style.right = '0';
+    cap.style.bottom = '0';
+    cap.style.boxSizing = 'border-box';
     cap.style.padding = '6px 8px';
     cap.style.fontWeight = '700';
     cap.style.fontSize = '14px';
@@ -345,11 +350,10 @@
     cap.style.display = '-webkit-box';
     cap.style.webkitBoxOrient = 'vertical';
     cap.style.webkitLineClamp = '2';
-    // Keep the product title in the second grid row so the thumbnail renders above it.
-    cap.style.setProperty('grid-row', '2', 'important');
 
+    a.style.position = 'relative';
     a.style.display = 'grid';
-    a.style.gridTemplateRows = 'minmax(0, 1fr) auto';
+    a.style.gridTemplateRows = '1fr auto';
     a.style.alignItems = 'stretch';
     a.style.justifyItems = 'stretch';
     a.appendChild(cap);
