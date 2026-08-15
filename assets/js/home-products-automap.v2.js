@@ -25,7 +25,7 @@
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 20;
   const RIGHT_LIMIT = 100;
-  const RIGHT_BATCH = 100;
+  const RIGHT_BATCH = 20;
 
   const EMPTY_I18N = {
     de: 'Inhalte werden vorbereitet.',
@@ -361,7 +361,7 @@
     return a;
   }
 
-  function buildRightCard(item) {
+  function buildRightCard(item, index) {
     const a = document.createElement('a');
     a.className = 'ad-box news-btn';
     applyAnchorDestination(a, item);
@@ -371,8 +371,12 @@
     }
 
     const img = document.createElement('img');
-    img.loading = 'lazy';
+    const firstView = Number(index) >= 0 && Number(index) < 8;
+    img.loading = firstView ? 'eager' : 'lazy';
     img.decoding = 'async';
+    if (firstView) {
+      try { img.fetchPriority = 'high'; } catch (_) {}
+    }
     img.src = item.thumb || '';
     img.alt = '';
 
@@ -522,7 +526,7 @@ function bindIncremental(target, items) {
 
     for (let i = offset; i < end; i++) {
       const it = items[i];
-      frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
+      frag.appendChild(isRight ? buildRightCard(it, i) : buildMainCard(it));
     }
 
     target.list.appendChild(frag);
@@ -595,7 +599,7 @@ function bindIncremental(target, items) {
   }
 
   async function fetchJSON(url) {
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetch(url, { cache: 'no-store', priority: 'high' });
     if (!res.ok) {
       throw new Error('HTTP ' + res.status + ' @ ' + url);
     }
@@ -649,9 +653,15 @@ function bindIncremental(target, items) {
     }, true);
   }
 
+  let initialLoadPromise = null;
+  function getInitialLoadPromise() {
+    if (!initialLoadPromise) initialLoadPromise = loadSections();
+    return initialLoadPromise;
+  }
+
   async function boot() {
     try {
-      const loaded = await loadSections();
+      const loaded = await getInitialLoadPromise();
       const sections = loaded.sections || Object.create(null);
 
       const preserveSnapshotOrder = loaded.source === 'snapshot';
@@ -679,6 +689,11 @@ function bindIncremental(target, items) {
   }
 
   installHomeNewsTopNavigation();
+
+  // Start the canonical snapshot request as soon as this automap executes.
+  // Do not race it against a timer or cancel it just because first response is slow.
+  // boot() awaits this exact same promise, so no duplicate initial snapshot request is made.
+  getInitialLoadPromise().catch(function(){ /* boot() owns the visible error state. */ });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function(){

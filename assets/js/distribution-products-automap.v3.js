@@ -353,15 +353,15 @@
     return true;
   }
   async function fetchJson(url,timeout,cacheMode){
-    const controller=typeof AbortController!=='undefined'?new AbortController():null;
-    const timer=controller?setTimeout(function(){controller.abort();},timeout):null;
-    try{
-      const response=await fetch(url,{cache:cacheMode||'default',credentials:'same-origin',signal:controller&&controller.signal});
-      const etag=response.headers&&typeof response.headers.get==='function'?response.headers.get('etag')||'':'';
-      if(response.status===204) return {empty:true,status:204,etag:etag,payload:null};
-      if(!response.ok) throw new Error('HTTP '+response.status);
-      return {empty:false,status:response.status,etag:etag,payload:await response.json()};
-    }finally{if(timer)clearTimeout(timer);}
+    // timeout is intentionally retained in the function signature for call-site compatibility,
+    // but the canonical snapshot request is not aborted merely because it is slow.
+    // A slow first response is allowed to finish so a real-product snapshot can still replace
+    // the already-visible sample/slot state when it arrives.
+    const response=await fetch(url,{cache:cacheMode||'default',credentials:'same-origin',priority:'high'});
+    const etag=response.headers&&typeof response.headers.get==='function'?response.headers.get('etag')||'':'';
+    if(response.status===204) return {empty:true,status:204,etag:etag,payload:null};
+    if(!response.ok) throw new Error('HTTP '+response.status);
+    return {empty:false,status:response.status,etag:etag,payload:await response.json()};
   }
   function idle(task,delay){
     const run=function(){
@@ -410,17 +410,28 @@
     // different selection contract or cross-scope overlay.
     return Promise.resolve(false);
   }
+  let initialStaticRequest=null;
+  function startInitialStaticRequest(){
+    if(!initialStaticRequest) initialStaticRequest=refreshStatic();
+    return initialStaticRequest;
+  }
   function boot(){
     controlHosts();
     // Never restore session-cached product cards: an IP scope can change
     // between visits and a cached card has no request-time geo proof.
-    baseSnapshot=null;
     regionalSnapshot=null;
-    nextFrame(function(){refreshStatic();});
+    // Reuse the canonical request that was already started as soon as this automap executed.
+    // It is never cancelled on a client-side elapsed-time threshold.
+    startInitialStaticRequest();
     document.addEventListener('visibilitychange',function(){
       if(document.hidden===false) nextFrame(function(){refreshStatic();});
     });
   }
+
+  // Start the first canonical snapshot request immediately; keep current HTML/sample cards visible
+  // until the response completes, then the existing renderer replaces them in the normal path.
+  startInitialStaticRequest();
+
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true});
   else boot();
 })();

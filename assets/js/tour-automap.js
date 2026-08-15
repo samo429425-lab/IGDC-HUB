@@ -51,9 +51,11 @@
   }
   function contentHref(id){ return id ? ("/content.html?id=" + encodeURIComponent(id)) : ""; }
   function resolveItemHref(item){
+    // A Tour product with an IGDC id opens the local content detail first.  The
+    // external booking/seller destination remains available from that detail.
+    if (item && item.id) return contentHref(item.id);
     const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
-    if (item && item.id) return contentHref(item.id);
     const link = item && item.link;
     if (isBadUrl(link) || isExampleUrl(link)) return "";
     return link || "";
@@ -76,12 +78,20 @@
 
   async function fetchJson(url) {
     try {
-      const r = await fetch(url, { cache: "no-store" });
+      const r = await fetch(url, { cache: "no-store", priority: "high" });
       if (!r.ok) return null;
       return await r.json();
     } catch {
       return null;
     }
+  }
+
+  let initialSnapshotPromise = null;
+  let runInFlight = null;
+  let initialApplied = false;
+  function getInitialSnapshotPromise() {
+    if (!initialSnapshotPromise) initialSnapshotPromise = fetchJson(SNAPSHOT_URL);
+    return initialSnapshotPromise;
   }
 
   function disablePsomThumbGrid() {
@@ -140,6 +150,9 @@
     const href = resolveItemHref(item);
     a.removeAttribute('target');
     a.removeAttribute('rel');
+    a.removeAttribute('data-igdc-external');
+    a.removeAttribute('data-affiliate-outbound');
+    a.removeAttribute('data-external-outbound');
     if (!href){
       a.href = '#';
       a.tabIndex = -1;
@@ -151,16 +164,16 @@
     a.href = href;
     if (item && item.id) a.setAttribute('data-igdc-content-id', item.id);
     if (item && item.sourceUrl) a.setAttribute('data-igdc-source-url', item.sourceUrl);
-    if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound','1');
-    if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound','1');
     if (isExternal(href)){
+      if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound','1');
+      if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound','1');
       a.target = '_top';
       a.rel = 'noopener';
       a.setAttribute('data-igdc-external','top');
     }
   }
 
-  function createRightBox(item) {
+  function createRightBox(item, index) {
     const box = document.createElement("div");
     box.className = "ad-box";
 
@@ -170,8 +183,12 @@
     const img = document.createElement("img");
     img.src = item.thumb;
     img.alt = item.title || "";
-    img.loading = "lazy";
+    const firstView = Number(index) >= 0 && Number(index) < 8;
+    img.loading = firstView ? "eager" : "lazy";
     img.decoding = "async";
+    if (firstView) {
+      try { img.fetchPriority = "high"; } catch (_) {}
+    }
 
     const cap = document.createElement("div");
     cap.className = "tour-card-title";
@@ -190,7 +207,7 @@
     panel.innerHTML = "";
     if (!items || !items.length) return;
     const frag = document.createDocumentFragment();
-    for (const it of items.slice(0, RIGHT_SLOT_COUNT)) frag.appendChild(createRightBox(it));
+    items.slice(0, RIGHT_SLOT_COUNT).forEach(function(it, index){ frag.appendChild(createRightBox(it, index)); });
     panel.appendChild(frag);
   }
 
@@ -207,32 +224,48 @@
     list.innerHTML = "";
     const frag = document.createDocumentFragment();
 
-    for (const it of items.slice(0, MOBILE_LIMIT)) {
-      const card = createRightBox(it);
+    items.slice(0, MOBILE_LIMIT).forEach(function(it, index) {
+      const card = createRightBox(it, index);
       card.classList.add("card");
       frag.appendChild(card);
-    }
+    });
 
     list.appendChild(frag);
   }
 
   async function run() {
-    disablePsomThumbGrid();
-    installExternalTopNavigation();
+    if (initialApplied) return;
+    if (runInFlight) return runInFlight;
 
-    const snap = await fetchJson(SNAPSHOT_URL);
-    let items = [];
+    runInFlight = (async function(){
+      disablePsomThumbGrid();
+      installExternalTopNavigation();
 
-    items = normalizeItems((snap && (snap.items || snap.slots)) || []);
+      // Await the same early-started request with no client-side timeout.
+      // A slow canonical response is allowed to finish instead of being treated as empty.
+      const snap = await getInitialSnapshotPromise();
+      if (!snap) {
+        initialSnapshotPromise = null;
+        return;
+      }
 
-    // No generic feed fallback: only the Edge-routed canonical IP snapshot is
-    // allowed to populate the tour right panel and mobile rail.
-    disablePsomThumbGrid();
-    renderMobileRail(items);
-    renderRightPanel(items);
+      const items = normalizeItems((snap && (snap.items || snap.slots)) || []);
+
+      // No generic feed fallback: only the Edge-routed canonical IP snapshot is
+      // allowed to populate the tour right panel and mobile rail.
+      disablePsomThumbGrid();
+      renderMobileRail(items);
+      renderRightPanel(items);
+      initialApplied = true;
+    })().finally(function(){ runInFlight = null; });
+
+    return runInFlight;
   }
 
   disablePsomThumbGrid();
+
+  // Begin the canonical snapshot request immediately. DOMContentLoaded/load reuse it.
+  getInitialSnapshotPromise();
 
   if (document.readyState === "complete" || document.readyState === "interactive") {
     setTimeout(run, 0);
