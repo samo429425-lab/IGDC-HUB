@@ -8,10 +8,10 @@ const MediaStore = require("./lib/media-candidate-store.v1");
 const MediaPolicy = require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "media-candidate-action-v1.9.0-bulk-upsert-verified";
+const VERSION = "media-candidate-action-v1.10.0-canonical-lifecycle";
 const ACTIONS = new Set([
   "approve","approve_all","hold","block","reject","reset","delete","front_enable","front_disable",
-  "restore_hold","release_exclusion","restore","permanent_block","forget"
+  "restore_hold","release_exclusion","restore","resume","permanent_block","forget"
 ]);
 const EXCLUSION_RECORD_VERSION = "media-candidate-exclusion-v1";
 
@@ -233,7 +233,8 @@ function validateTransitions(action,rows){
     if(action==="approve")ok=["pending","hold","safety_quarantine","rights_quarantine","classification_quarantine","quality_quarantine"].includes(status);
     else if(action==="restore")ok=["search_excluded","exclusion_released"].includes(status);
     else if(action==="restore_hold"||action==="release_exclusion")ok=["search_excluded","exclusion_released"].includes(status);
-    else if(action==="forget")ok=["search_excluded","exclusion_released","permanent_blocked"].includes(status);
+    else if(action==="forget")ok=true;
+    else if(action==="resume")ok=status==="hold";
     else if(action==="front_enable"||action==="front_disable")ok=status==="approved";
     else if(action==="reset")ok=!["search_excluded","exclusion_released","permanent_blocked"].includes(status);
     else if(action==="hold"||action==="reject"||action==="delete")ok=!["search_excluded","exclusion_released","permanent_blocked"].includes(status);
@@ -251,6 +252,59 @@ function patchFor(action,body,actor){
   if(action==="reset")return {review_status:"pending",verification_status:"web_verification_required",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null,blocked_reason:null};
   if(action==="block"||action==="permanent_block")return {review_status:"permanent_blocked",verification_status:"permanent_blocked",rights_status:"blocked",allowed_use:"blocked",blocked_reason:note||"permanent_blocked_by_admin",review_note:note,reviewed_by:by,reviewed_at:now,updated_by:by,updated_at:now,candidate_only:true,seed_content:true,approved_at:null};
   return {};
+}
+function holdPatch(row,body,actor){
+  const info=audit(actor,body);
+  const raw=rawWithHistory(row,info,"hold",{toReviewStatus:"hold",toVerificationStatus:"hold"});
+  const existing=MediaStore.plain(raw.candidateHoldRestore);
+  if(statusOf(row)!=="hold" || !Object.keys(existing).length){
+    raw.candidateHoldRestore={
+      version:"media-candidate-hold-restore-v1",
+      heldAt:info.now,heldBy:info.by,
+      previous:{
+        reviewStatus:nullable(row.review_status),verificationStatus:nullable(row.verification_status),
+        candidateOnly:nullable(row.candidate_only),seedContent:nullable(row.seed_content),
+        rightsStatus:nullable(row.rights_status),allowedUse:nullable(row.allowed_use),approvedAt:nullable(row.approved_at),
+        blockedReason:nullable(row.blocked_reason),reviewNote:nullable(row.review_note),reviewedBy:nullable(row.reviewed_by),reviewedAt:nullable(row.reviewed_at)
+      }
+    };
+  }
+  return {review_status:"hold",verification_status:"hold",review_note:info.note,reviewed_by:info.by,reviewed_at:info.now,updated_by:info.by,updated_at:info.now,candidate_only:true,seed_content:true,approved_at:null,raw};
+}
+function holdRestoreSource(row){
+  const raw=MediaStore.plain(row&&row.raw);
+  const exact=MediaStore.plain(raw.candidateHoldRestore);
+  if(Object.keys(exact).length)return {exact:true,previous:MediaStore.plain(exact.previous)};
+  const legacy=MediaStore.plain(raw.poolLifecycle);
+  if(MediaStore.lower(legacy.state)==="hold")return {exact:true,legacy:true,previous:{
+    reviewStatus:legacy.previousReviewStatus,verificationStatus:legacy.previousVerificationStatus,
+    candidateOnly:legacy.previousCandidateOnly,seedContent:legacy.previousSeedContent,
+    rightsStatus:legacy.previousRightsStatus,allowedUse:legacy.previousAllowedUse,approvedAt:legacy.previousApprovedAt,
+    blockedReason:legacy.previousBlockedReason
+  }};
+  return {exact:false,previous:{reviewStatus:"pending",verificationStatus:"web_verification_required",candidateOnly:true,seedContent:true,approvedAt:null,blockedReason:null}};
+}
+function resumeHoldPatch(row,body,actor){
+  const info=audit(actor,body),source=holdRestoreSource(row),previous=MediaStore.plain(source.previous);
+  const raw=rawWithHistory(row,info,"resume_hold",{exactOriginalState:source.exact,toReviewStatus:previous.reviewStatus||"pending",toVerificationStatus:previous.verificationStatus||"web_verification_required"});
+  delete raw.candidateHoldRestore;
+  if(source.legacy){delete raw.poolLifecycle;}
+  const reviewStatus=MediaStore.lower(previous.reviewStatus)||"pending";
+  const verificationStatus=MediaStore.lower(previous.verificationStatus)||"web_verification_required";
+  const wasApproved=reviewStatus==="approved"&&verificationStatus==="approved_for_snapshot";
+  return {
+    review_status:reviewStatus,verification_status:verificationStatus,
+    candidate_only:previous.candidateOnly===false?false:!wasApproved,
+    seed_content:previous.seedContent===false?false:!wasApproved,
+    rights_status:previous.rightsStatus||row.rights_status,
+    allowed_use:previous.allowedUse||row.allowed_use,
+    approved_at:wasApproved?(previous.approvedAt||info.now):null,
+    blocked_reason:nullable(previous.blockedReason),
+    review_note:source.exact?nullable(previous.reviewNote):null,
+    reviewed_by:source.exact?nullable(previous.reviewedBy):null,
+    reviewed_at:source.exact?nullable(previous.reviewedAt):null,
+    updated_by:info.by,updated_at:info.now,raw
+  };
 }
 function frontControlPatch(row,body,actor,enabled){
   const info=audit(actor,body);
@@ -402,7 +456,7 @@ exports.handler=async function(event){
     }
     if(action==="forget"){
       if(body.confirmPermanentDelete!==true&&body.confirmPermanentDelete!=="true"){
-        return MediaStore.response(400,{ok:false,error:"permanent_delete_confirmation_required",message:"검색 제외 기록 완전 삭제 확인값이 필요합니다."});
+        return MediaStore.response(400,{ok:false,error:"permanent_delete_confirmation_required",message:"후보/기록 삭제 확인값이 필요합니다. 삭제 후에는 이후 리서치에서 다시 발견될 수 있습니다."});
       }
       const deleted=await deleteMany(ids);
       return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,deleted:Array.isArray(deleted)?deleted.length:0,items:deleted,sourceMediaDeleted:false,recollectAllowed:true});
@@ -410,6 +464,14 @@ exports.handler=async function(event){
     if(action==="approve"){
       const updated=await approveRows(rows,body,actor);
       return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,updated:updated.length,items:updated,sourceMediaDeleted:false,recollectAllowed:false,publicationGate:MediaPolicy.VERSION});
+    }
+    if(action==="hold"){
+      const updated=await updateRowsIndividually(rows,(row)=>holdPatch(row,body,actor));
+      return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,updated:updated.length,items:updated,holdRestorable:true,recollectAllowed:false});
+    }
+    if(action==="resume"){
+      const updated=await updateRowsIndividually(rows,(row)=>resumeHoldPatch(row,body,actor));
+      return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,updated:updated.length,items:updated,resumedFromHold:true,recollectAllowed:false});
     }
     if(action==="front_enable"||action==="front_disable"){
       const enabled=action==="front_enable",updated=await updateRowsIndividually(rows,(row)=>frontControlPatch(row,body,actor,enabled));

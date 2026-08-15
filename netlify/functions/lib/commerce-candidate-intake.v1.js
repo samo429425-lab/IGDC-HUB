@@ -19,7 +19,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const AffiliateRegistry = require("./affiliate-program-registry.v1");
 
-const VERSION = "commerce-candidate-intake-v1.6.0-authoritative-admin-front-match";
+const VERSION = "commerce-candidate-intake-v1.6.1-exact-admin-front-authority";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -305,15 +305,32 @@ function marketCountries(records){ return unique((records||[]).map(record=>norma
 // is still pending.  Hard product/seller/market safety remains mandatory.
 function administratorFrontSafety(item){
   const reasons=[];
-  const payload=plain(item), risk=plain(payload.risk), runtime=plain(payload.runtimeValidation), queueControl=plain(payload.queueControl);
-  const blockers=unique([].concat(array(risk.blockers),array(payload.riskBlockers),array(plain(payload.commerceCandidate).riskBlockers)).map(lower).filter(Boolean));
+  const payload=plain(item), risk=plain(payload.risk), assessmentRisk=plain(payload.riskAssessment), runtime=plain(payload.runtimeValidation), queueControl=plain(payload.queueControl);
+  const blockers=unique([].concat(array(risk.blockers),array(assessmentRisk.blockers),array(payload.riskBlockers),array(plain(payload.commerceCandidate).riskBlockers)).map(lower).filter(Boolean));
   if(queueControl.permanentExcluded===true) reasons.push("PERMANENTLY_EXCLUDED");
   if(lower(runtime.state)==="dead" || runtime.dead===true) reasons.push("RUNTIME_PRODUCT_UNAVAILABLE");
-  if(payload.productPageLive===false || risk.explicitUnavailable===true) reasons.push("PRODUCT_PAGE_UNAVAILABLE");
-  if(payload.sameSupplierSite===false) reasons.push("SUPPLIER_PRODUCT_DOMAIN_MISMATCH");
+  if(payload.productPageLive===false || risk.explicitUnavailable===true || assessmentRisk.explicitUnavailable===true) reasons.push("PRODUCT_PAGE_UNAVAILABLE");
+  if(payload.sameSupplierSite===false || risk.supplierSiteMatched===false || assessmentRisk.supplierSiteMatched===false) reasons.push("SUPPLIER_PRODUCT_DOMAIN_MISMATCH");
   const hardPattern=/(malware|phishing|fraud|illegal|prohibited|sanction|counterfeit|adult|unsafe|product_page_unavailable|supplier_product_domain_mismatch)/;
   blockers.filter(value=>hardPattern.test(value)).forEach(value=>reasons.push("HARD_RISK:"+value));
   return {ok:reasons.length===0,reasons:unique(reasons),softBlockers:blockers.filter(value=>!hardPattern.test(value))};
+}
+
+function administratorFrontAuthority(item,pos,market){
+  const authority=plain(item&&item.administratorFrontMatchAuthority), publicationScope=plain(plain(item&&item.commerceCandidate).publicationScope);
+  const country=normalizeCountry(authority.country), scopeCountry=normalizeCountry(publicationScope.country);
+  const region=normalizeRegion(first(authority.region,"NATIONWIDE"),country)||"NATIONWIDE";
+  const scopeRegion=normalizeRegion(first(publicationScope.region,"NATIONWIDE"),scopeCountry)||"NATIONWIDE";
+  const placementMatches=text(authority.page)===text(pos&&pos.page) && text(authority.section)===text(pos&&pos.section);
+  const scopeMatches=!!country && country===scopeCountry && region===scopeRegion;
+  const marketMatches=array(market&&market.validRecords).some((record)=>{
+    if(normalizeCountry(record&&record.country)!==country) return false;
+    if(region==="NATIONWIDE") return record&&record.nationwide===true;
+    return array(record&&record.regions).map((value)=>normalizeRegion(value,country)).includes(region);
+  });
+  const ok=authority.verified===true && !!text(authority.assignmentId) && lower(authority.publicationStatus)==="publish_requested" &&
+    authority.externalSeller===true && authority.noIgdcCheckout===true && authority.noIgdcPayment===true && placementMatches && scopeMatches && marketMatches;
+  return {ok,assignmentId:text(authority.assignmentId)||null,country:country||null,region:region||null,placementMatches,scopeMatches,marketMatches};
 }
 
 function administratorReferralRevenue(item,revenue,market){
@@ -400,7 +417,7 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   if(!pos.page || !pos.section) reasons.push("PSOM_PLACEMENT_MISSING");
   const eligibilityFlagsOk=plain(policy.eligibility).requireSearchBankEligibilityFlags===false || hasExplicitFlags(item);
   if(!eligibilityFlagsOk) reasons.push("SEARCHBANK_ELIGIBILITY_FLAGS_MISSING");
-  const trust=trustedSeller(item); if(!trust.ok) reasons.push("TRUSTED_SELLER_OR_PRODUCER_EVIDENCE_MISSING");
+  const trust=trustedSeller(item);
   const essential=detectedEssentialClass(item,policy);
   const exception=array(plain(policy.essentialGoods).allowNonEssentialOnlyWhen).map(lower).includes(tier);
   if(!essential && !exception) reasons.push("LIFE_ESSENTIAL_CATEGORY_NOT_CONFIRMED");
@@ -412,10 +429,12 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   const approval=reviewApproval(item,tier,policy); if(!approval.ok) reasons.push("DIRECT_LISTING_ADMIN_APPROVAL_OR_ASSIGNMENT_MISSING");
   const adminSafety=administratorFrontSafety(item);
   if(!adminSafety.ok) adminSafety.reasons.forEach(reason=>reasons.push(reason));
+  const adminAuthority=administratorFrontAuthority(item,pos,market), trustedForExplicitFront=trust.ok===true||adminAuthority.ok===true;
+  if(!trustedForExplicitFront) reasons.push("TRUSTED_SELLER_OR_PRODUCER_EVIDENCE_MISSING");
 
   const explicitAdministratorFrontMatch=(origin||"searchbank")==="admin_review_queue" && tier==="approved_commerce_member" &&
     approval.ok===true && approval.explicitPublicationRequested===true && titlePresent && !!destination && !!image &&
-    !!pos.page && !!pos.section && eligibilityFlagsOk && trust.ok===true && market.ok===true && adminSafety.ok===true;
+    !!pos.page && !!pos.section && eligibilityFlagsOk && trustedForExplicitFront && market.ok===true && adminSafety.ok===true;
 
   // Revenue/affiliate readiness is a monetization concern, not a reason to
   // discard an administrator-approved, verified external seller card.  For the
@@ -434,6 +453,7 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
     stageStatus:releaseEligible?"eligible_for_release":(effectiveRevenue.potential?"revenue_review_required":"hold"), reasons:effectiveReasons,
     administratorFrontMatch:{
       explicit:explicitAdministratorFrontMatch, safety:adminSafety.ok, safetyReasons:adminSafety.reasons,
+      authority:adminAuthority, trustedSeller:trust.ok===true, trustedForExplicitFront,
       softRiskWarnings:adminSafety.softBlockers, nonPayableReferral:explicitAdministratorFrontMatch&&effectiveRevenue.payable!==true,
       removedSoftRevenueReasons:explicitAdministratorFrontMatch?reasons.filter(reason=>adminSoftReasons.has(reason)):[]
     },

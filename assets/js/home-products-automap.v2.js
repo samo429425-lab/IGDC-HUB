@@ -141,9 +141,12 @@
 
   function resolveSlotHref(item) {
     if (!item) return '';
+    // Keep product-card navigation inside IGDC first.  The internal content page
+    // owns the external seller hand-off; outbound URLs are fallback only when a
+    // legacy card has no stable IGDC product id.
+    if (item.id) return contentHref(item.id);
     const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.outboundUrl || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
-    if (item.id) return contentHref(item.id);
     const url = item.url || '';
     if (isBadUrl(url) || isExampleUrl(url)) return '';
     return url;
@@ -153,6 +156,9 @@
     const href = resolveSlotHref(item);
     a.removeAttribute('target');
     a.removeAttribute('rel');
+    a.removeAttribute('data-igdc-external');
+    a.removeAttribute('data-affiliate-outbound');
+    a.removeAttribute('data-external-outbound');
 
     if (!href) {
       a.href = '#';
@@ -166,10 +172,10 @@
     a.href = href;
     if (item && item.id) a.setAttribute('data-igdc-content-id', item.id);
     if (item && item.sourceUrl) a.setAttribute('data-igdc-source-url', item.sourceUrl);
-    if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound', '1');
-    if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound', '1');
 
     if (isExternal(href)) {
+      if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound', '1');
+      if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound', '1');
       a.target = '_top';
       a.rel = 'noopener';
       a.setAttribute('data-igdc-external', 'top');

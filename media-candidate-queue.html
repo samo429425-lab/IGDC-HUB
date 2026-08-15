@@ -53,6 +53,8 @@
     .supplier-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.supplier-summary{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
     .supplier-form{display:grid;grid-template-columns:minmax(180px,1.2fr) minmax(260px,2fr) minmax(150px,.8fr) minmax(110px,.6fr);gap:8px;margin-top:12px}.supplier-form .wide{grid-column:span 2}.supplier-form .full{grid-column:1/-1}
     .supplier-actions{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-top:10px}.supplier-table{min-width:1180px}.supplier-table td,.supplier-table th{vertical-align:middle}.supplier-row-actions{display:flex;gap:5px;flex-wrap:wrap}.supplier-row-actions button{font-size:11px;padding:6px 8px}.supplier-status-active{color:#9ff3c8}.supplier-status-paused{color:#ffe1a5}.supplier-status-archived{color:#ffb7c0}.supplier-status-candidate{color:#b8d7f5}
+
+    .pool-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0}.pool-summary .card{padding:10px}.pool-table{min-width:1250px}.pool-actions{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:10px 0}.pool-status-primary{color:#9ff3c8}.pool-status-reserve{color:#ffe1a5}.pool-status-latest{color:#b8d7f5}.pool-status-held{color:#ffb7c0}
     @media(max-width:900px){.supplier-form{grid-template-columns:1fr 1fr}.supplier-form .wide{grid-column:span 2}}@media(max-width:620px){.supplier-form{grid-template-columns:1fr}.supplier-form .wide,.supplier-form .full{grid-column:1}}
     @media(max-width:980px){.collector-release-actions{width:100%;margin-left:0;padding:10px 0 0;border-left:0;border-top:1px solid #35516f}}
     @media(max-width:700px){main{padding:16px 10px}table{min-width:1200px}.modal{padding:6px}.player-shell video{max-height:58vh}}
@@ -113,7 +115,7 @@
 
   <section class="panel">
     <h2>품질 중심 공개 영상 수집</h2>
-    <div class="small">최신·인기·권리표시 장편과 중국권·동남아권·유럽권·남미권·북미권 자료를 독립 경로로 교차 탐색하고, 2000년 이후 실제 1080p 이상, 섹션별 전체 길이, 최소 비트레이트, 분류 확신도와 실제 원본 응답속도를 함께 검사합니다. 섹션 본선 정원을 채우면 12개 탐색 경로를 한 번 더 확인해 더 좋은 후보를 본선에 우선 배치하고, 남은 우수 후보는 본선과 같은 수까지 예비 대기열로 유지합니다. 명백한 포르노·헨타이·불법 신호는 차단하고, 애매한 성인성·권리·분류 신호는 관리자 검토로 격리합니다. 일반 로맨스는 차단하지 않습니다.</div>
+    <div class="small">최신·인기·권리표시 장편과 중국권·동남아권·유럽권·남미권·북미권 자료를 독립 경로로 교차 탐색하고, 2000년 이후 실제 1080p 이상, 섹션별 전체 길이, 최소 비트레이트, 분류 확신도와 실제 원본 응답속도를 함께 검사합니다. 섹션 본선 정원을 채우면 12개 탐색 경로를 한 번 더 확인해 더 좋은 후보를 본선에 우선 배치하고, 남은 우수 후보는 각 섹션별 예비 20개까지만 유지합니다. 새로 수집된 후보는 기존 운영·예비 후보와 분리된 최신 리서치 후보 목록에서 비교·승격합니다. 명백한 포르노·헨타이·불법 신호는 차단하고, 애매한 성인성·권리·분류 신호는 관리자 검토로 격리합니다. 일반 로맨스는 차단하지 않습니다.</div>
     <div class="collect-controls">
       <select id="collectorSection">
         <option value="media-movie">영화</option><option value="media-drama">드라마·TV</option><option value="media-thriller">스릴러·미스터리</option>
@@ -140,6 +142,35 @@
       <input id="adminOverrideReason" placeholder="예외 지정 사유(연도 기준만 예외)" style="min-width:250px;flex:1">
       <button id="collectAdminExceptionBtn" class="publish">관리자 지정 수집</button>
     </div>
+  </section>
+
+
+  <section class="panel" id="candidatePoolPanel">
+    <div class="supplier-head">
+      <div>
+        <h2 style="margin:0">운영 후보 · 예비 후보 · 최신 리서치 후보 관리</h2>
+        <div class="small">기존 운영 후보와 새로 리서치된 후보를 분리해 관리합니다. 일반 섹션은 실제 운영 100개 + 예비 20개, 음악·쇼츠는 기존 슬롯 50개 + 예비 20개를 유지합니다. 최신 후보는 별도 목록에서 기존 운영 후보와 품질·인기·최신성·재생 안정성·섹션 적합도를 비교한 뒤 승격합니다. 상태는 보류(보관·복구 가능), 삭제(현재 후보에서 제거·향후 재검색 허용), 영구 제외·차단(일반 재수집 차단)으로 분리합니다. AI 자동 치환은 관리자 승인·권리검증을 이미 통과한 후보끼리만 실행하며, 수동 보류·영구 제외 콘텐츠는 자동 복원하지 않습니다.</div>
+      </div>
+      <div class="pool-actions">
+        <button id="poolRefreshBtn" class="secondary">후보 운영 현황 새로고침</button>
+        <button id="poolResearchLatestBtn">최신 후보 전체 리서치</button>
+        <button id="poolAutoRebalanceBtn" class="publish">AI 전자동 비교·치환</button>
+        <button id="poolDownloadBtn" class="secondary">후보 운영 JSON</button>
+      </div>
+    </div>
+    <div class="pool-actions">
+      <select id="poolSectionFilter"><option value="">전체 섹션</option><option value="media-movie">영화</option><option value="media-drama">드라마·TV</option><option value="media-thriller">스릴러·미스터리</option><option value="media-romance">로맨스</option><option value="media-variety">버라이어티·토크</option><option value="media-documentary">다큐멘터리</option><option value="media-animation">애니메이션</option><option value="media-music">음악·공연</option><option value="media-shorts">쇼츠·단편</option></select>
+      <select id="poolBucketFilter"><option value="latest">최신 리서치 후보</option><option value="reserve">예비 후보 20</option><option value="primary">현재 운영 후보</option><option value="held">보류 후보</option><option value="overflow">교체 대기/초과 후보</option><option value="all">전체 보기</option></select>
+      <label class="small"><input id="poolSelectAll" type="checkbox"> 표시 후보 전체 선택</label>
+      <button id="poolPromoteBtn" class="publish">선택 운영풀 승격</button>
+      <button id="poolHoldBtn" class="secondary">선택 보류</button>
+      <button id="poolDeleteBtn" class="danger">선택 삭제(재검색 허용)</button>
+      <button id="poolPermanentBlockBtn" class="danger">선택 영구 제외·차단</button>
+      <button id="poolAutoBtn" class="secondary">선택 복구·자동관리</button>
+      <span id="poolState" class="state">후보 운영 현황 확인 전</span>
+    </div>
+    <div id="poolSummary" class="pool-summary"></div>
+    <div class="tablewrap"><table class="pool-table"><thead><tr><th>선택</th><th>섹션</th><th>구분</th><th>콘텐츠</th><th>점수</th><th>연도</th><th>인기</th><th>화질</th><th>승인/검증</th><th>현재 프론트</th></tr></thead><tbody id="poolRows"><tr><td colspan="10" class="small">최신 리서치 후보 목록을 불러오는 중입니다.</td></tr></tbody></table></div>
   </section>
 
   <section id="summaryGrid" class="grid hidden"></section>
@@ -170,7 +201,7 @@
 
   <section id="exclusionPanel" class="panel hidden">
     <div class="modal-head">
-      <div><h2 style="margin:0">검색 제외 목록</h2><div class="small">보류 복원은 후보 본문·점검 이력을 보존한 채 보류 대기열로 돌려놓고 제외 기록만 해제합니다. 원상 복원은 제외 직전 상태·섹션·정렬 위치로 되돌립니다. 영구 차단과 기록 완전 삭제는 별도 작업입니다.</div></div>
+      <div><h2 style="margin:0">기존 제외 기록 · 영구 차단 목록</h2><div class="small">새 운영 규칙에서는 보류·삭제·영구 제외를 분리합니다. 이 영역은 이전 버전에서 생성된 검색 제외 기록과 영구 차단 항목을 관리하기 위한 호환 영역입니다. 보류는 후보 운영 목록에서 직접 복구할 수 있고, 삭제는 향후 재검색을 허용합니다.</div></div>
       <button id="toggleExclusionBtn" class="secondary">목록 펼치기</button>
     </div>
     <div id="exclusionSummary" class="small" style="margin-top:8px"></div>

@@ -1,11 +1,11 @@
-/* IGDC Commerce Candidate Pipeline Admin View v1.9.0
+/* IGDC Commerce Candidate Pipeline Admin View v1.10.0
  * Ordered private research/staging workflow and commerce queue diagnostic.
  * It reuses the existing administrator session.  No second commerce login,
  * provider call, seller navigation, publication, payment, or browser secret.
  */
 (function(){
   'use strict';
-  var ENDPOINT='/.netlify/functions/commerce-candidate-review';
+  var ENDPOINT='/.netlify/functions/commerce-candidate-review', CONTROL_ENDPOINT='/.netlify/functions/commerce-country-control';
   var $=function(id){return document.getElementById(id);};
   var esc=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(ch){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];});};
   var text=function(v){return String(v==null?'':v).trim();};
@@ -123,6 +123,23 @@
       if(Number(error&&error.status)===401){acceptedToken='';acceptedSession=null;await ensureSession(true);return request(action,acceptedToken,method||'GET',body||null);}
       throw error;
     }}
+  function controlScope(){
+    var country=text(ACTIVE_SCOPE.country).toUpperCase(),region=text(ACTIVE_SCOPE.region||'NATIONWIDE').toUpperCase();
+    if(country==='GLOBAL'||!/^[A-Z]{2}$/.test(country))return null;
+    if(!region||region==='ALL')region='NATIONWIDE';
+    return {country:country,region:region};
+  }
+  async function controlRequest(action,method,body){
+    await ensureSession(false);var scope=controlScope();if(!scope){var missing=new Error('실상품 프론트 매칭은 국가 범위를 먼저 확정해야 합니다.');missing.status=400;throw missing;}
+    async function send(){
+      var u=new URL(CONTROL_ENDPOINT,location.origin);u.searchParams.set('action',action);u.searchParams.set('country',scope.country);u.searchParams.set('region',scope.region);
+      var verb=method||'POST',headers={Authorization:'Bearer '+acceptedToken,Accept:'application/json'},init={method:verb,headers:headers,credentials:'same-origin',cache:'no-store'};
+      if(verb!=='GET'){headers['Content-Type']='application/json';init.body=JSON.stringify(Object.assign({action:action,countryCode:scope.country,subdivisionCode:scope.region},body||{}));}
+      var response=await fetch(u.pathname+u.search,init),data=null;try{data=await response.json();}catch(_e){}
+      if(!response.ok||!data||data.ok!==true){var error=new Error((data&&data.error)||('요청 실패: HTTP '+response.status));error.code=data&&data.code;error.status=response.status;throw error;}return data;
+    }
+    try{return await send();}catch(error){if(Number(error&&error.status)===401){acceptedToken='';acceptedSession=null;await ensureSession(true);return send();}throw error;}
+  }
   function authErrorMessage(error){
     var message=text(error&&error.message);
     if(Number(error&&error.status)===401||/session|token|로그인/i.test(message))return '관리자 공통 세션을 아직 찾지 못했습니다. 이 화면은 상위 사이트의 기존 관리자 세션을 자동 승계하며, 별도 로그인은 필요하지 않습니다.';
@@ -145,7 +162,7 @@
       +gridCard('발행 전 통과',s.eligibleForRelease||0,'최종 게재 요청은 개방 점검에서만');
     g.classList.remove('hidden');
     var gate=summary.releaseGate||{};var panel=$('policyPanel');var release=gate.enabled===true;
-    panel.innerHTML='<h2>공개 전 안전 상태</h2><div class="notice '+(release?'ok':'warn')+'"><strong>'+esc(release?'발행 키가 배포 환경에서 확인됨':'현재는 비공개 대기열 상태')+'</strong><br>'+esc(release?'그래도 각 후보는 실상품 공급 개방 점검과 Canonical·IP·판매시장 검증을 다시 통과해야 합니다.':'상품 리서치 후보는 이곳에서 검토하고, 관리자 선택→시장 근거→검증 증빙→수익 경로→PSOM 승인까지 끝난 후보만 실상품 공급 개방 점검으로 이동합니다.')+'</div><div class="small" style="margin-top:9px">이 대기열에는 사이트 게재 기능이 없습니다. 섹션 제안 후보: '+esc(number(s.proposedSectionCandidates))+'건 · 개방 점검 후보: '+esc(number(s.registrySyncReady))+'건 · stage: '+esc(summary.generatedAt||'아직 생성되지 않음')+'</div>';
+    panel.innerHTML='<h2>공개 전 안전 상태</h2><div class="notice '+(release?'ok':'warn')+'"><strong>'+esc(release?'발행 키가 배포 환경에서 확인됨':'현재는 비공개 대기열 상태')+'</strong><br>'+esc(release?'그래도 각 후보는 실상품 공급업체·상품 개방 점검과 Canonical·IP·판매시장 검증을 다시 통과해야 합니다.':'상품 리서치 후보는 이곳에서 검토하고, 관리자 선택→시장 근거→검증 증빙→수익 경로→PSOM 승인까지 끝난 후보만 실상품 공급업체·상품 개방 점검으로 이동합니다.')+'</div><div class="small" style="margin-top:9px">이 대기열에는 사이트 게재 기능이 없습니다. 섹션 제안 후보: '+esc(number(s.proposedSectionCandidates))+'건 · 개방 점검 후보: '+esc(number(s.registrySyncReady))+'건 · stage: '+esc(summary.generatedAt||'아직 생성되지 않음')+'</div>';
     panel.classList.remove('hidden');
   }
   function proposalHtml(c,p){
@@ -198,11 +215,14 @@
     var gaps=[].concat(Array.isArray(ready.blockers)?ready.blockers:[],Array.isArray(ready.reviewGaps)?ready.reviewGaps:[]);
     var auditReady=text(row.stageStatus)==='registry_sync_ready'||text(row.lifecycle&&row.lifecycle.stage)==='registry_sync_ready';
     $('selectedCandidateMeta').className='notice '+(auditReady?'ok':'');
-    $('selectedCandidateMeta').innerHTML='<strong>'+esc(card.title||row.title||id)+'</strong><br>현재 단계: '+esc(stageLabel(row.stageStatus))+' · 다음 게이트: '+esc(review.nextGate||ready.nextGate||'-')+(auditReady?'<br><strong>시장·증빙·수익·PSOM 승인이 완료되어 실상품 공급 개방 점검 대상으로 확정됐습니다. 사이트 게재는 아직 실행되지 않았습니다.</strong>':'')+'<br><span class="small">추천 배정: '+esc((Array.isArray(row.proposedPlacements)?row.proposedPlacements:[]).map(function(x){return text(x.page)+'/'+text(x.sectionKey||x.section);}).filter(Boolean).join(', ')||'없음')+'</span>'+(gaps.length?'<br><span class="small">승인 전 보완: '+esc(gaps.join(', '))+'</span>':'')+'<br><span class="small">외부 판매처 결제 구조이며, 이 관리 작업은 IGDC 공개·결제·배송 책임을 생성하지 않습니다.</span>';
+    $('selectedCandidateMeta').innerHTML='<strong>'+esc(card.title||row.title||id)+'</strong><br>현재 단계: '+esc(stageLabel(row.stageStatus))+' · 다음 게이트: '+esc(review.nextGate||ready.nextGate||'-')+(auditReady?'<br><strong>시장·증빙·수익·PSOM 승인이 완료되어 실상품 공급업체·상품 개방 점검 대상으로 확정됐습니다. 사이트 게재는 아직 실행되지 않았습니다.</strong>':'')+'<br><span class="small">추천 배정: '+esc((Array.isArray(row.proposedPlacements)?row.proposedPlacements:[]).map(function(x){return text(x.page)+'/'+text(x.sectionKey||x.section);}).filter(Boolean).join(', ')||'없음')+'</span>'+(gaps.length?'<br><span class="small">승인 전 보완: '+esc(gaps.join(', '))+'</span>':'')+'<br><span class="small">외부 판매처 결제 구조이며, 이 관리 작업은 IGDC 공개·결제·배송 책임을 생성하지 않습니다.</span>';
     $('selectProductBtn').disabled=ready.promotionEligible!==true;
     $('selectProductBtn').title=ready.promotionEligible===true?'관리자 승인 절차를 시작합니다.':'상품명·이미지·공급업체·위험 검증을 먼저 보완해야 합니다.';
     setValue('marketCountry',p.country||ACTIVE_SCOPE.country||'');setValue('marketRegion',p.region||ACTIVE_SCOPE.region||'NATIONWIDE');
     setValue('assignCountry',p.country||ACTIVE_SCOPE.country||'');setValue('assignRegion',p.region||ACTIVE_SCOPE.region||'NATIONWIDE');setValue('assignHub',p.page||'distribution');setValue('assignSlot',p.section||p.slot||'');
+    var placementKey=text(p.sectionKey||p.section||p.slot),frontStatus=text(p.publicationStatus||row.frontPublication&&row.frontPublication.status||'');
+    if($('frontMatchState'))$('frontMatchState').textContent='현재 배정: '+(placementKey?((text(p.page)||'-')+' / '+placementKey):'배정 미완료')+' · 프론트 상태: '+(frontStatus||'미매칭');
+    if($('frontMatchBtn'))$('frontMatchBtn').disabled=!placementKey;if($('frontUnmatchBtn'))$('frontUnmatchBtn').disabled=!placementKey;
     $('candidateActionPanel').scrollIntoView({behavior:'smooth',block:'start'});
   }
   async function runWrite(action,body,success){
@@ -212,14 +232,35 @@
   }
   function formText(id){return text($(id)&&$(id).value);}
   function formBool(id){return !!($(id)&&$(id).checked);}
+  function openSectionManager(){
+    var scope=controlScope();if(!scope){show('18개 섹션 관리는 국가 범위를 먼저 확정해야 합니다.','warn');return;}
+    var target=new URL('/commerce-country-control.html',location.origin);target.searchParams.set('country',scope.country);target.searchParams.set('region',scope.region);target.searchParams.set('returnPath',location.pathname+location.search);location.href=target.pathname+target.search;
+  }
+  async function runSelectedFront(operation){
+    var row=selectedCandidate();if(!row||!selectedCandidateId){show('먼저 관리할 상품 후보를 선택해 주세요.','warn');return;}
+    var p=row.placement||{},section=text(p.sectionKey||p.section||p.slot);if(!section){show('이 상품은 아직 PSOM 섹션 배정이 없습니다. 먼저 PSOM 승인·배정을 완료하거나 18개 섹션 관리 화면에서 배정하세요.','warn');return;}
+    var match=operation==='match',label=match?'실상품 프론트 매칭':'실상품 프론트 매칭 해제';
+    if(!window.confirm((row.productCard&&row.productCard.title||row.title||selectedCandidateId)+'\n\n'+label+'을 실행하시겠습니까?\n현재 PSOM 배정은 '+(match?'그대로 사용됩니다.':'삭제하지 않고 보존됩니다.')))return;
+    var btn=$(match?'frontMatchBtn':'frontUnmatchBtn'),other=$(match?'frontUnmatchBtn':'frontMatchBtn');if(btn)btn.disabled=true;if(other)other.disabled=true;show(label+'을 처리하는 중입니다.','warn');
+    try{
+      var result=await controlRequest(match?'product_front_match':'product_front_unmatch','POST',{ledgerMode:'candidate',mode:'candidates',candidateIds:[selectedCandidateId],confirmation:match?'SITE_PUBLISH':'SITE_UNPUBLISH',deferRelease:false,scopeRefresh:false,compactResponse:true,reuseFreshValidation:true,freshValidationMinutes:720});
+      var fs=result.frontSyncResult||result,requested=Number(fs.requested||0),persisted=Number(fs.persisted||0),queued=Number(fs.queued||0),blocked=Number(fs.blocked||0);
+      if(!requested){show(label+' 대상이 0건입니다. 현재 PSOM 배정·보류/제외 상태를 18개 섹션 관리 화면에서 확인해 주세요.','warn');}
+      else if(blocked&&!persisted&&!queued){show(label+'이 안전 게이트에서 차단되었습니다. 차단 사유를 점검해 주세요.','warn');}
+      else show(label+' 완료 · 요청 '+requested+' · 저장 '+persisted+' · 빌드 '+queued+(blocked?' · 차단 '+blocked:''),'ok');
+      await refresh(true);
+    }catch(error){show(authErrorMessage(error),'warn');}
+    finally{var active=selectedCandidate();var ap=active&&active.placement||{},hasPlacement=!!text(ap.sectionKey||ap.section||ap.slot);if(btn)btn.disabled=!hasPlacement;if(other)other.disabled=!hasPlacement;}
+  }
   function wireCandidateActions(){
+    $('frontMatchBtn').addEventListener('click',function(){runSelectedFront('match');});$('frontUnmatchBtn').addEventListener('click',function(){runSelectedFront('unmatch');});$('openSectionManagerBtn').addEventListener('click',openSectionManager);
     $('selectProductBtn').addEventListener('click',function(){runWrite('select_product',{},'상품을 검토 후보로 선택했습니다. 다음으로 판매시장·배송 근거를 등록하세요.');});
     $('holdProductBtn').addEventListener('click',function(){runWrite('decide',{decision:'hold',note:'관리자 보류'},'상품 후보를 보류했습니다.');});
     $('rejectProductBtn').addEventListener('click',function(){if(window.confirm('이 상품 후보를 제외하시겠습니까?'))runWrite('decide',{decision:'rejected',note:'관리자 제외'},'상품 후보를 제외했습니다.');});
     $('marketForm').addEventListener('submit',function(event){event.preventDefault();runWrite('record_market',{market:{countryCode:formText('marketCountry').toUpperCase(),regionCode:formText('marketRegion').toUpperCase(),deliveryOrAccess:formText('marketDelivery'),legalBasis:formText('marketBasis')}},'판매시장·배송·반품·지원 근거를 저장했습니다.');});
     $('evidenceForm').addEventListener('submit',function(event){event.preventDefault();runWrite('record_evidence',{evidence:{type:formText('evidenceType'),url:formText('evidenceUrl'),note:formText('evidenceNote')}},'검증 증빙을 저장했습니다.');});
     $('revenueForm').addEventListener('submit',function(event){event.preventDefault();var type=formText('revenueType');runWrite('record_revenue',{revenue:{type:type,providerName:formText('revenueProvider'),destinationUrl:formText('revenueUrl'),affiliateUrl:formText('revenueUrl'),programId:formText('revenueProgram'),contractId:formText('revenueProgram'),settlementMode:formText('revenueSettlement'),disclosureReady:formBool('revenueDisclosure'),officialDestination:formBool('revenueOfficial'),providerGenerated:formBool('revenueProviderGenerated'),manualLinkApproved:formBool('revenueManualApproved'),policyConfirmed:formBool('revenuePolicy'),payoutBasisVerified:formBool('revenuePayout'),note:formText('revenueNote')}},'수익·외부 연결 경로를 저장했습니다.');});
-    $('assignmentForm').addEventListener('submit',function(event){event.preventDefault();runWrite('decide',{decision:'approved',note:formText('assignNote'),assignment:{hubKey:formText('assignHub'),slotKey:formText('assignSlot'),countryCode:formText('assignCountry').toUpperCase(),regionCode:formText('assignRegion').toUpperCase(),priority:Number(formText('assignPriority')||0),pinned:false}},'PSOM 승인을 저장했습니다. 이 후보는 실상품 공급 개방 점검 대상입니다. 사이트 게재는 아직 실행되지 않았습니다.');});
+    $('assignmentForm').addEventListener('submit',function(event){event.preventDefault();runWrite('decide',{decision:'approved',note:formText('assignNote'),assignment:{hubKey:formText('assignHub'),slotKey:formText('assignSlot'),countryCode:formText('assignCountry').toUpperCase(),regionCode:formText('assignRegion').toUpperCase(),priority:Number(formText('assignPriority')||0),pinned:false}},'PSOM 승인을 저장했습니다. 이 후보는 실상품 공급업체·상품 개방 점검 대상입니다. 사이트 게재는 아직 실행되지 않았습니다.');});
   }
 
   function compactDiagnosticView(doc){
@@ -281,7 +322,7 @@
   }
   function back(){var q=new URLSearchParams(location.search);var p=q.get('returnPath');location.href=p&&p.charAt(0)==='/'?p:'/admin.html';}
   function init(){
-    $('refreshBtn').addEventListener('click',function(){refresh(true).catch(function(){});});$('diagnosticBtn').addEventListener('click',diagnostic);$('downloadDiagnosticBtn').addEventListener('click',downloadDiagnostic);$('goLiveAuditBtn').addEventListener('click',goLiveAudit);$('returnBtn').addEventListener('click',back);wireCandidateActions();
+    $('refreshBtn').addEventListener('click',function(){refresh(true).catch(function(){});});$('diagnosticBtn').addEventListener('click',diagnostic);$('downloadDiagnosticBtn').addEventListener('click',downloadDiagnostic);$('goLiveAuditBtn').addEventListener('click',goLiveAudit);$('sectionManagerBtn').addEventListener('click',openSectionManager);$('returnBtn').addEventListener('click',back);wireCandidateActions();
     document.addEventListener('igdc:member-auth-ready',function(){acceptedToken='';acceptedSession=null;if(Date.now()-lastRefreshAt>3000)refresh(false).catch(function(){});});
     window.addEventListener('pageshow',function(event){if(event.persisted===true){acceptedToken='';acceptedSession=null;refresh(false).catch(function(){});}});
     refresh(true).catch(function(){});

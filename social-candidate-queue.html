@@ -444,12 +444,14 @@
         ><button id="rotationBtn" class="secondary">최종 100개 다시 정리</button
         ><button id="publishPreviewBtn" class="publish">
           실제 적용 전 미리보기</button
+        ><button id="topActualApplyBtn" class="publish">
+          전체 실콘텐츠 실제 적용 실행</button
         ><button id="snapshotDownloadBtn" class="secondary">
           적용 예정 JSON</button
         ><button id="applicationValidationJsonBtn" class="secondary">
           후보 검증 JSON</button
         ><button id="actualAppliedJsonBtn" class="secondary">
-          최종 적용 JSON</button
+          현재 프론트 적용본 JSON</button
         ><button id="pipelineVerificationJsonBtn" class="secondary">
           SearchBank 인계 검증 JSON</button
         ><button id="downloadJsonBtn" class="secondary" disabled>
@@ -508,30 +510,42 @@
           국가 목록과 접속 국가를 확인하는 중입니다.
         </div>
       </section>
+      <section class="panel" id="aiAutomationPanel">
+        <h2>AI 전자동 소셜 운영</h2>
+        <div class="small">
+          현재 선택 국가·권역·IP 소비성향을 그대로 승계해 최신 콘텐츠 수집 → 정책·품질 재평가 → 교체 예정 갱신을 순서대로 실행합니다.
+          기본값은 관리자 검토용 교체 대기열까지만 만들며, 아래 체크를 켠 경우에만 마지막 실제 적용까지 진행합니다.
+        </div>
+        <div class="collect-controls">
+          <button id="aiFullCycleBtn" class="publish" type="button">AI 전자동 관리 1회 실행</button>
+          <label class="small"><input id="aiAutomationApply" type="checkbox" /> 검토 후 실제 적용 단계까지 자동 실행</label>
+          <span id="aiAutomationState" class="state">대기</span>
+        </div>
+      </section>
       <section class="panel">
         <h2>섹션별 공개 SNS 최신 콘텐츠 수집</h2>
         <div class="small">
           한 번에 100개를 검색하지 않습니다. 선택한 섹션을 8~10개 단위로
           조사·검증·저장합니다. 국가별 선호 언어를 검색어와 배치 기준에
           반영하고, 한 인플루언서당 최신 공개 콘텐츠 1건을 후보로 유지합니다.
-          100개에 도달하면 인기·품질·활동성 중심의 보강
+          120개 후보 풀에 도달하면 인기·품질·활동성 중심의 보강
           검색을 공개 디렉터리·직접 검색 API·산마루 검색의 세 경로로 나누어
-          실행하고, 전체 비교 후보에서 상위 100개를 공개 배치 대상으로
-          정리합니다. 100개 전에 연속 검색에서 신규 후보가 더 이상
+          실행하고, 전체 비교 후보에서 상위 100개를 공개 배치 대상으로, 다음 20개를 예비 교체 후보로
+          정리합니다. 120개 전에 연속 검색에서 신규 후보가 더 이상
           나오거나 보강 검색이 소진되면 다음 섹션으로 넘어갑니다. 국가는 소셜
           전용 국가 단위이며 주·성은 사용하지 않습니다. 검색 결과 페이지·플랫폼
           홈·소셜마루·우측 패널·seed·placeholder는 후보로 반입하지 않습니다.
         </div>
         <div class="collect-controls">
           <select id="collectorSection"></select
-          ><span class="state">공개 배치 100개 + 품질 보강</span
+          ><span class="state">콘텐츠 후보 120개 = 공개 100 + 예비 20</span
           ><select id="collectorBatchSize">
             <option value="8">묶음 8개</option>
             <option value="10" selected>묶음 10개</option>
             <option value="12">묶음 12개</option></select
           ><button id="collectDryRunBtn" class="secondary">
             선택 섹션 1묶음 점검</button
-          ><button id="collectSectionBtn">선택 섹션 100개+보강</button
+          ><button id="collectSectionBtn">선택 섹션 120개 후보 수집</button
           ><button id="collectAllBtn" class="publish">
             전체 9개 섹션 순차 수집</button
           ><button id="collectorStopBtn" class="secondary" disabled>
@@ -621,7 +635,7 @@
             <div class="small">
               인플루언서를 기업 목록처럼 채널 링크 단위로 관리합니다. 최신
               콘텐츠는 아래 후보·교체 대기열에서 별도로 관리하며, 한 번에 한
-              섹션만 펼쳐 과도한 이미지 로딩을 막습니다.
+              섹션만 펼쳐 과도한 이미지 로딩을 막습니다. 인플루언서 등록부와 최신 콘텐츠 대기열을 통틀어 한 번에 하나의 섹션만 열립니다.
             </div>
           </div>
           <span id="candidateCapacityState" class="state"></span>
@@ -648,6 +662,24 @@
         </div>
         <div id="sectionAccordion" class="section-accordion"></div>
       </section>
+      <section id="replacementControlPanel" class="panel">
+        <div class="modal-head">
+          <div>
+            <h2 style="margin:0">최신 콘텐츠 교체 운영</h2>
+            <div class="small">새로 수집된 콘텐츠, 현재 공개 후보, 교체 대기를 분리해서 보고 선택적으로 승격·교체·제외합니다. 기존 샘플은 삭제하지 않습니다.</div>
+          </div>
+          <span id="replacementControlState" class="state">대기열을 읽는 중</span>
+        </div>
+        <div class="reviewbar">
+          <button id="replacementViewAllBtn" class="secondary" type="button">전체 최신 콘텐츠</button>
+          <button id="replacementViewNewBtn" class="secondary" type="button">새로 수집된 후보</button>
+          <button id="replacementViewPublicBtn" class="secondary" type="button">현재 공개 후보</button>
+          <button id="replacementViewWaitingBtn" class="secondary" type="button">밀려난·교체 대기</button>
+          <button id="replacementPromoteBtn" type="button">선택 최종 후보로</button>
+          <button id="replacementDemoteBtn" class="secondary" type="button">선택 교체 대기로</button>
+          <button id="replacementExcludeBtn" class="danger" type="button">선택 검색 제외</button>
+        </div>
+      </section>
       <section id="waitingPanel" class="panel hidden">
         <div class="modal-head">
           <div>
@@ -656,7 +688,7 @@
             </h2>
             <div class="small">
               등록된 인플루언서별 최신 공개 영상·게시물 1건을 표시합니다.
-              공개 100개와 초과 교체 후보 수를 함께 확인하며, 콘텐츠 기록을
+              섹션별 콘텐츠 후보는 최대 120개(공개 100개 + 예비 20개)로 유지하며, 콘텐츠 기록을
               삭제해도 인플루언서 등록부는 별도로 유지됩니다.
             </div>
           </div>
@@ -681,6 +713,30 @@
           ><button id="waitingBlockBtn" class="danger">선택 영구 차단</button>
         </div>
         <div id="waitingAccordion" class="section-accordion"></div>
+      </section>
+      <section id="holdPanel" class="panel hidden">
+        <div class="modal-head">
+          <div>
+            <h2 style="margin: 0">콘텐츠 보류 대기 · 9개 SNS 섹션</h2>
+            <div class="small">
+              실제 공개·적용 목록에서 내린 콘텐츠는 바로 삭제하지 않고 먼저 이곳에 보관합니다.
+              보류 수량은 섹션별 120개 제한과 별도로 유지할 수 있으며, 필요하면 다시 후보 리스트로 복구할 수 있습니다.
+              리스트 삭제는 현재 후보 기록만 지우므로 향후 재수집될 수 있고, 완전 차단은 관리자가 해제하기 전에는 다시 후보로 반입하지 않습니다.
+              인플루언서 등록부는 이 보류 대기에 포함하지 않습니다.
+            </div>
+          </div>
+          <span id="holdCapacityState" class="state"></span>
+        </div>
+        <div class="reviewbar">
+          <button id="restoreHeldBtn" type="button">선택 리스트 복구</button>
+          <button id="deleteHeldBtn" class="secondary" type="button">선택 리스트 삭제</button>
+          <button id="blockHeldBtn" class="danger" type="button">선택 완전 차단</button>
+          <button id="clearHeldSelectionBtn" class="secondary" type="button">선택 전체 해제</button>
+        </div>
+        <div class="small" style="margin-bottom:10px">
+          복구 = 후보 리스트로 되돌림 · 리스트 삭제 = 현재 기록만 삭제(재수집 가능) · 완전 차단 = 관리자 해제 전 재수집 금지
+        </div>
+        <div id="holdAccordion" class="section-accordion"></div>
       </section>
       <section id="exclusionPanel" class="panel hidden">
         <div class="modal-head">
@@ -740,6 +796,6 @@
       </p>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=21"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=24"></script>
   </body>
 </html>

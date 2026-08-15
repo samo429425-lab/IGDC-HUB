@@ -1,4 +1,4 @@
-/* IGDC Social Hub Influencer Registry + Latest Content Control v2.6.0 - SearchBank handoff diagnostics */
+/* IGDC Social Hub Influencer Registry + Latest Content Control v2.8.0 - content hold queue + single-open rendering + content pool 120 */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -26,8 +26,8 @@
     }),
     rows = [],
     diagnosticCache = null,
-    openFinalSection = null,
-    openWaitingSection = null,
+    openDetailQueue = "",
+    openDetailSection = "",
     stopRequested = false,
     liveReports = [],
     placementById = {},
@@ -37,7 +37,9 @@
     detectedCountry = null,
     previewWindow = null,
     selectedInfluencers = new Set(),
-    selectedContents = new Set();
+    selectedContents = new Set(),
+    selectedHoldContents = new Set(),
+    waitingViewMode = "all";
   var $ = function (id) {
       return document.getElementById(id);
     },
@@ -75,6 +77,9 @@
   }
   function blocked(r) {
     return /^(permanent_blocked|blocked)$/i.test(text(r.reviewStatus));
+  }
+  function contentHold(r) {
+    return assetClass(r) === "latest_content" && /^(hold|content_hold|held)$/i.test(text(r.reviewStatus));
   }
   function active() {
     return rows.filter(function (r) {
@@ -412,7 +417,7 @@
       card(
         "최종 공개 배치",
         placementStats.selected || 0,
-        "승인 후보 중 상위 100/섹션",
+        "상위 100 공개/섹션",
         "safe",
       ),
       card(
@@ -447,8 +452,8 @@
       ),
       card(
         "섹션별 후보 풀",
-        p.targetPerSection || 300,
-        "공개 슬롯 " + (p.publicSlotsPerSection || 100) + "개",
+        p.targetPerSection || 120,
+        "공개 " + (p.publicSlotsPerSection || 100) + "개 + 예비 " + (p.replacementReservePerSection || 20) + "개",
       ),
     ].join("");
     $("summaryGrid").classList.remove("hidden");
@@ -749,8 +754,9 @@
       primaryUrl = registry
         ? text(r.channelUrl || raw.channelUrl || r.sourceUrl)
         : text(r.latestContentUrl || r.sourceUrl),
+      holdQueue = queue === "hold",
       checked = (
-        registry ? selectedInfluencers : selectedContents
+        registry ? selectedInfluencers : holdQueue ? selectedHoldContents : selectedContents
       ).has(text(r.id)),
       policy = [
         "공개 " + (r.publicAccess ? "확인" : "확인 필요"),
@@ -763,7 +769,7 @@
       '<article class="candidate-card' +
       (checked ? " selected" : "") +
       '"><input class="candidate-card-check rowcheck ' +
-      (registry ? "finalCheck" : "waitingCheck") +
+      (registry ? "finalCheck" : holdQueue ? "holdCheck" : "waitingCheck") +
       '" type="checkbox" data-candidate-id="' +
       id +
       '"' +
@@ -837,7 +843,9 @@
     var source =
       checkboxClass === "finalCheck"
         ? selectedInfluencers
-        : selectedContents;
+        : checkboxClass === "holdCheck"
+          ? selectedHoldContents
+          : selectedContents;
     return Array.from(source).filter(function (id) {
       return rows.some(function (row) {
         return text(row.id) === id && row.sectionKey === section;
@@ -846,16 +854,16 @@
   }
   function queueRows(queue, section) {
     return visible().filter(function (row) {
-      return (
-        assetClass(row) ===
-          (queue === "registry" ? "influencer_registry" : "latest_content") &&
-        (!section || row.sectionKey === section)
-      );
+      var kindOk = assetClass(row) === (queue === "registry" ? "influencer_registry" : "latest_content");
+      if (!kindOk) return false;
+      if (queue === "hold" && !contentHold(row)) return false;
+      if (queue === "waiting" && contentHold(row)) return false;
+      return !section || row.sectionKey === section;
     });
   }
   function selectQueue(queue, section, checked) {
     var target =
-      queue === "registry" ? selectedInfluencers : selectedContents;
+      queue === "registry" ? selectedInfluencers : queue === "hold" ? selectedHoldContents : selectedContents;
     queueRows(queue, section).forEach(function (row) {
       if (checked) target.add(text(row.id));
       else target.delete(text(row.id));
@@ -888,7 +896,7 @@
         return text(row.id);
       }),
     );
-    [selectedInfluencers, selectedContents].forEach(function (selection) {
+    [selectedInfluencers, selectedContents, selectedHoldContents].forEach(function (selection) {
       Array.from(selection).forEach(function (id) {
         if (!ids.has(id)) selection.delete(id);
       })
@@ -916,7 +924,7 @@
   }
   function waitingActions(key) {
     return (
-      '<div class="section-actionbar"><span class="section-note small">각 인플루언서의 최신 콘텐츠 1건만 유지하며 공개 100개와 교체 후보를 함께 관리합니다.</span>' +
+      '<div class="section-actionbar"><span class="section-note small">최신 콘텐츠 후보는 섹션당 최대 120개(공개 100 + 예비 20)를 유지합니다.</span>' +
       '<button class="secondary" type="button" data-waiting-select-all="' +
       esc(key) +
       '">섹션 전체 선택</button>' +
@@ -943,15 +951,24 @@
       '">선택 영구 차단</button></div>'
     );
   }
+  function holdActions(key) {
+    return (
+      '<div class="section-actions">' +
+      '<button type="button" data-hold-restore="' + esc(key) + '">선택 리스트 복구</button>' +
+      '<button class="secondary" type="button" data-hold-delete="' + esc(key) + '">선택 리스트 삭제</button>' +
+      '<button class="danger" type="button" data-hold-block="' + esc(key) + '">선택 완전 차단</button></div>'
+    );
+  }
   function accordionHtml(list, queue, openKey) {
     return order
       .map(function (key) {
         var part = list.filter(function (r) {
             return r.sectionKey === key;
-          }),
-          isOpen = openKey === key,
+          });
+        if (queue === "waiting" && part.length > 120) part = part.slice(0, 120);
+        var isOpen = openKey === key,
           toggleAttribute =
-            queue === "registry" ? "data-final-toggle" : "data-waiting-toggle";
+            queue === "registry" ? "data-final-toggle" : queue === "hold" ? "data-hold-toggle" : "data-waiting-toggle";
         return (
           '<section class="candidate-section ' +
           (isOpen ? "open" : "") +
@@ -969,7 +986,7 @@
           '</span></span><span class="section-chevron">⌄</span></button>' +
           (isOpen
             ? '<div class="section-body">' +
-              (queue === "registry" ? finalActions(key) : waitingActions(key)) +
+              (queue === "registry" ? finalActions(key) : queue === "hold" ? holdActions(key) : waitingActions(key)) +
               (part.length
                 ? '<div class="candidate-card-grid">' +
                   part
@@ -986,14 +1003,39 @@
       })
       .join("");
   }
+  function waitingPlacement(row) {
+    return text(placementById[text(row && row.id)]);
+  }
+  function waitingViewAccept(row) {
+    var placement = waitingPlacement(row);
+    if (waitingViewMode === "public") return placement === "public_selected";
+    if (waitingViewMode === "replacement") return placement === "replacement_waiting";
+    if (waitingViewMode === "new") return !placement;
+    return true;
+  }
+  function updateReplacementControl(waitingAll, waitingVisible) {
+    var el = $("replacementControlState");
+    if (!el) return;
+    var fresh = waitingAll.filter(function (r) { return !waitingPlacement(r); }).length,
+      current = waitingAll.filter(function (r) { return waitingPlacement(r) === "public_selected"; }).length,
+      replacement = waitingAll.filter(function (r) { return waitingPlacement(r) === "replacement_waiting"; }).length;
+    el.textContent = "신규 수집 " + fresh + "개 · 현재 공개 후보 " + current + "개 · 교체 대기 " + replacement + "개 · 현재 보기 " + waitingVisible.length + "개";
+    ["replacementViewAllBtn","replacementViewNewBtn","replacementViewPublicBtn","replacementViewWaitingBtn"].forEach(function (id) {
+      var b=$(id); if (b) b.classList.remove("publish");
+    });
+    var activeId = waitingViewMode === "new" ? "replacementViewNewBtn" : waitingViewMode === "public" ? "replacementViewPublicBtn" : waitingViewMode === "replacement" ? "replacementViewWaitingBtn" : "replacementViewAllBtn";
+    if ($(activeId)) $(activeId).classList.add("publish");
+  }
   function renderSections() {
     var list = visible(),
       finalList = list.filter(function (row) {
         return assetClass(row) === "influencer_registry";
       }),
-      waitingList = list.filter(function (row) {
-        return assetClass(row) === "latest_content";
-      });
+      waitingAll = list.filter(function (row) {
+        return assetClass(row) === "latest_content" && !contentHold(row);
+      }),
+      holdList = list.filter(contentHold),
+      waitingList = waitingAll.filter(waitingViewAccept);
     $("filterState").textContent =
       "표시 " +
       list.length +
@@ -1002,44 +1044,42 @@
       "개 / 제외·차단 " +
       rows.filter(excluded).length +
       "개";
-    if (openFinalSection === null) {
-      openFinalSection =
-        order.filter(function (k) {
-          return finalList.some(function (r) {
-            return r.sectionKey === k;
-          });
-        })[0] || order[0];
-    }
-    if (openWaitingSection === null) {
-      openWaitingSection =
-        order.filter(function (k) {
-          return waitingList.some(function (r) {
-            return r.sectionKey === k;
-          });
-        })[0] || order[0];
+    // 인플루언서/콘텐츠 전체에서 상세 썸네일 목록은 항상 하나만 렌더링한다.
+    // 초기 상태는 모두 접힘으로 두어 이미지/DOM 과부하를 막는다.
+    if (openDetailSection && order.indexOf(openDetailSection) < 0) {
+      openDetailQueue = "";
+      openDetailSection = "";
     }
     $("candidateCapacityState").textContent =
       "인플루언서 " + finalList.length + "명 · 채널 링크 등록부";
     $("waitingCapacityState").textContent =
       "최신 콘텐츠 " +
-      waitingList.length +
+      waitingAll.length +
       "개 · 공개 " +
       placementStats.selected +
       "개 · 교체 " +
       placementStats.replacement +
       "개";
+    if ($("holdCapacityState")) $("holdCapacityState").textContent = "보류 " + holdList.length + "개 · 삭제·차단 전 임시 보관";
+    updateReplacementControl(waitingAll, waitingList);
     $("sectionAccordion").innerHTML = accordionHtml(
       finalList,
       "registry",
-      openFinalSection,
+      openDetailQueue === "registry" ? openDetailSection : "",
     );
     $("waitingAccordion").innerHTML = accordionHtml(
       waitingList,
       "waiting",
-      openWaitingSection,
+      openDetailQueue === "content" ? openDetailSection : "",
+    );
+    if ($("holdAccordion")) $("holdAccordion").innerHTML = accordionHtml(
+      holdList,
+      "hold",
+      openDetailQueue === "hold" ? openDetailSection : "",
     );
     $("tablePanel").classList.remove("hidden");
     $("waitingPanel").classList.remove("hidden");
+    if ($("holdPanel")) $("holdPanel").classList.remove("hidden");
     updateMasterSelectionState();
   }
   function excludedRow(r, n) {
@@ -1665,7 +1705,12 @@
           return x.liveCollection || x;
         }),
       });
-      if (!dry) await refresh();
+      if (!dry) {
+        waitingViewMode = "new";
+        openDetailQueue = "content";
+        openDetailSection = key;
+        await refresh();
+      }
       show(
         label(key) +
           " " +
@@ -1702,9 +1747,9 @@
           : "수집 대기";
     }
   }
-  async function collectAll() {
+  async function collectAll(skipConfirm) {
     if (
-      !confirm(
+      !skipConfirm && !confirm(
         "각 SNS 섹션을 " +
           $("collectorBatchSize").value +
           "개 단위로 100개까지 수집한 뒤 인기·품질 보강 검색과 상위 100개 정리를 거쳐 다음 섹션으로 진행할까요?",
@@ -1762,6 +1807,9 @@
         );
       } else {
         clearJob();
+        waitingViewMode = "new";
+        openDetailQueue = "content";
+        openDetailSection = order[0] || "";
         await refresh();
         diagnostic({
           reportType: "igdc-social-batch-collection-report",
@@ -1801,6 +1849,7 @@
           ? "일시정지됨"
           : "수집 대기";
     }
+    return !failed && !j.paused;
   }
   async function importSearchBank() {
     try {
@@ -1886,6 +1935,7 @@
   function selected(sel) {
     if (sel === ".finalCheck") return Array.from(selectedInfluencers);
     if (sel === ".waitingCheck") return Array.from(selectedContents);
+    if (sel === ".holdCheck") return Array.from(selectedHoldContents);
     return Array.from(document.querySelectorAll(sel + ":checked"))
       .map(function (e) {
         return text(e.dataset.candidateId);
@@ -1913,11 +1963,12 @@
         forget: "기록 완전 삭제",
         move_to_replacement: "교체 후보 대기열로 이동",
         promote_candidate: "최종 후보로 올리기",
-        delete_waiting: "교체 후보 기록 완전 삭제",
+        delete_waiting: "리스트 기록 삭제",
       },
       name = names[action] || action;
     if (
       (action === "approve" || action === "promote_candidate") &&
+      !(extra && extra.skipSafeCheck) &&
       !$("socialConfirm").checked
     ) {
       show(
@@ -1935,7 +1986,7 @@
       action === "delete_waiting" &&
       !confirm(
         ids.length +
-          "개 교체 후보 기록을 완전히 삭제할까요? 나중에 다시 검색되면 후보로 들어올 수 있습니다.",
+          "개 후보 기록을 현재 리스트에서 삭제할까요? 나중에 다시 검색되면 후보로 들어올 수 있습니다.",
       )
     )
       return;
@@ -1947,13 +1998,13 @@
       )
         return;
     }
-    var note =
-      action === "delete" ||
+    var note = (extra && extra.body && extra.body.note) ||
+      (action === "delete" ||
       action === "approve" ||
       action === "hold" ||
       action === "reject"
         ? prompt(name + " 처리 메모를 입력하세요. 비워도 됩니다.", "") || ""
-        : name;
+        : name);
     try {
       var body = Object.assign(
         {
@@ -1975,9 +2026,10 @@
       ids.forEach(function (id) {
         selectedInfluencers.delete(text(id));
         selectedContents.delete(text(id));
+        selectedHoldContents.delete(text(id));
       });
       $("socialConfirm").checked = false;
-      await refresh();
+      if (!(extra && extra.skipRefresh)) await refresh();
       show(
         name + " 처리 " + Number(d.updated || d.deleted || 0) + "건 완료",
         "ok",
@@ -1993,7 +2045,7 @@
       if (!d) throw new Error("배치·교체 후보를 읽지 못했습니다.");
       diagnostic(d);
       renderSections();
-      show("최종 공개 100개와 교체 후보 대기열을 다시 계산했습니다.", "ok");
+      show("공개 100개 + 예비 20개 후보 풀을 다시 계산했습니다.", "ok");
     } catch (e) {
       show(e.message, "warn");
     } finally {
@@ -2126,7 +2178,7 @@
       show(error.message || "파이프라인 검증을 실행하지 못했습니다.", "warn");
     }
   }
-  async function autoCurate(sectionKey) {
+  async function autoCurate(sectionKey, skipConfirm) {
     var target = sectionKey ? label(sectionKey) : "전체 9개 섹션",
       scope = currentScope(),
       scopeName =
@@ -2135,15 +2187,10 @@
             scope.country.nameEn ||
             scope.country.code)) ||
         "전 세계 공통";
-    if (
-      !confirm(
-        scopeName +
-          " 범위의 " +
-          target +
-          " 후보를 공개성·안전성·품질 점수 기준으로 자동 정리할까요? 실제 화면 적용은 별도 버튼입니다.",
-      )
-    )
-      return;
+    if (!skipConfirm && !confirm(
+      scopeName + " 범위의 " + target +
+      " 후보를 공개성·안전성·품질 점수 기준으로 자동 정리할까요? 실제 화면 적용은 별도 버튼입니다."
+    )) return false;
     try {
       var d = await post(AUTO, {
         confirmAutoCurate: true,
@@ -2161,11 +2208,13 @@
           "개. 아직 실제 화면에는 적용하지 않았습니다.",
         "ok",
       );
+      return true;
     } catch (e) {
       show(e.message || "자동 정리를 완료하지 못했습니다.", "warn");
+      return false;
     }
   }
-  async function actualApply(sectionKey) {
+  async function actualApply(sectionKey, skipConfirm) {
     var target = sectionKey ? label(sectionKey) : "전체 9개 섹션",
       scope = currentScope(),
       scopeName =
@@ -2174,15 +2223,10 @@
             scope.country.nameEn ||
             scope.country.code)) ||
         "전 세계 공통";
-    if (
-      !confirm(
-        scopeName +
-          " 방문자에게 보일 " +
-          target +
-          " 인플루언서들의 최종 최신 콘텐츠를 실제 프론트 슬롯에 적용할까요?",
-      )
-    )
-      return;
+    if (!skipConfirm && !confirm(
+      scopeName + " 방문자에게 보일 " + target +
+      " 인플루언서들의 최종 최신 콘텐츠를 실제 프론트 슬롯에 적용할까요?"
+    )) return false;
     try {
       var previewQuery = new URLSearchParams({
           includeSnapshot: "0",
@@ -2198,6 +2242,7 @@
         );
       }
       var d = await post(PUBLISH, {
+        operation: "actual_front_apply",
         storeRelease: true,
         confirmPublish: true,
         includeSnapshot: 0,
@@ -2206,7 +2251,16 @@
         scopeMode: scopeMode(),
           regionId: text($("collectorRegion").value),
       });
+      if (!d.releaseStored) throw new Error("실제 적용 요청은 처리됐지만 stored social release가 생성되지 않았습니다. SearchBank 인계 전 단계에서 중단되었습니다.");
       diagnostic(d);
+      var verifyQ = new URLSearchParams({
+        action: "pipeline_diagnostic",
+        countryCode: scope.countryCode,
+        scopeMode: scopeMode(),
+        regionId: text($("collectorRegion").value)
+      });
+      var verify = await getReport(PUBLISH + "?" + verifyQ.toString());
+      diagnostic({ actualApply: d, searchBankHandoff: verify });
       if (d.buildTrigger && d.buildTrigger.ok) {
         show(
           scopeName +
@@ -2222,8 +2276,10 @@
           "warn",
         );
       }
+      return true;
     } catch (e) {
       show(e.message || "실제 화면 적용을 완료하지 못했습니다.", "warn");
+      return false;
     }
   }
   function publishedCandidateId(slot) {
@@ -2297,12 +2353,12 @@
           target +
           "에서 실제 적용을 취소할 " +
           ids.length +
-          "개 콘텐츠를 프론트에서 내리고 교체 후보 대기열로 되돌릴까요?",
+          "개 콘텐츠를 프론트에서 내리고 콘텐츠 보류 대기창으로 이동할까요?",
       )
     )
       return;
     try {
-      await moveToReplacementInBatches(ids, scope);
+      await run("hold", ids, { skipConfirm: true, skipRefresh: true, body: { note: "actual_unpublish_to_content_hold" } });
       movedToWaiting = true;
       var d = await post(PUBLISH, {
         operation: "unpublish_selected",
@@ -2325,19 +2381,19 @@
           scopeName +
             " 범위의 선택 콘텐츠 " +
             ids.length +
-            "개를 대기열로 복귀시켰고, 실제 적용 취소 정식 빌드를 접수했습니다. 배포 완료 후 프론트에서 내려갑니다.",
+            "개를 콘텐츠 보류 대기창으로 이동했고, 실제 적용 취소 정식 빌드를 접수했습니다. 배포 완료 후 프론트에서 내려갑니다.",
           "ok",
         );
       } else {
         show(
-          "선택 콘텐츠는 대기열로 복귀했고 적용 취소본도 저장됐지만, SOCIAL_NETLIFY_BUILD_HOOK_URL 미설정으로 정식 배포가 시작되지 않았습니다.",
+          "선택 콘텐츠는 보류 대기창으로 이동했고 적용 취소본도 저장됐지만, SOCIAL_NETLIFY_BUILD_HOOK_URL 미설정으로 정식 배포가 시작되지 않았습니다.",
           "warn",
         );
       }
     } catch (e) {
       show(
         movedToWaiting
-          ? "선택 콘텐츠는 대기열로 복귀했지만 프론트 적용 취소 저장을 완료하지 못했습니다. 같은 항목을 다시 선택해 적용 취소를 실행해 주세요. · " +
+          ? "선택 콘텐츠는 보류 대기창으로 이동했지만 프론트 적용 취소 저장을 완료하지 못했습니다. 같은 항목을 다시 선택해 적용 취소를 실행해 주세요. · " +
               (e.message || "저장 실패")
           : e.message || "선택 콘텐츠 적용 취소를 완료하지 못했습니다.",
         "warn",
@@ -2370,6 +2426,53 @@
         e.message || target + "의 현재 실제 적용 목록을 읽지 못했습니다.",
         "warn",
       );
+    }
+  }
+  function setWaitingView(mode) {
+    waitingViewMode = mode || "all";
+    openDetailQueue = "content";
+    if (!openDetailSection) openDetailSection = order[0] || "";
+    renderSections();
+  }
+  async function moveSelectedToReplacement() {
+    var ids = selected(".waitingCheck");
+    if (!ids.length) return show("교체 대기로 이동할 최신 콘텐츠를 선택해 주세요.", "warn");
+    await run("move_to_replacement", ids);
+    waitingViewMode = "replacement";
+  }
+  async function restoreHeld(ids) {
+    if (!ids.length) return show("복구할 보류 콘텐츠를 선택해 주세요.", "warn");
+    await run("approve", ids, { skipSafeCheck: true, body: { confirmSocialSafe: true, note: "restore_from_content_hold" } });
+  }
+  async function deleteHeld(ids) {
+    if (!ids.length) return show("리스트에서 삭제할 보류 콘텐츠를 선택해 주세요.", "warn");
+    await run("delete_waiting", ids);
+  }
+  async function blockHeld(ids) {
+    if (!ids.length) return show("완전 차단할 보류 콘텐츠를 선택해 주세요.", "warn");
+    await run("permanent_block", ids);
+  }
+  async function aiFullCycle() {
+    if (!confirm("현재 국가·권역 소비정책을 기준으로 9개 SNS 최신 콘텐츠 수집 → AI 후보 정리 → 교체 예정 갱신을 순서대로 실행할까요? 실제 적용은 아래 체크를 켠 경우에만 마지막에 실행됩니다.")) return;
+    var statusEl = $("aiAutomationState");
+    try {
+      if (statusEl) statusEl.textContent = "1/3 최신 콘텐츠 수집 중";
+      var collected = await collectAll(true);
+      if (!collected) throw new Error("수집이 중단 또는 일시정지되어 자동 운영을 멈췄습니다.");
+      if (statusEl) statusEl.textContent = "2/3 정책·품질 기준 자동 정리 중";
+      var curated = await autoCurate("", true);
+      if (!curated) throw new Error("AI 후보 정리를 완료하지 못했습니다.");
+      waitingViewMode = "replacement";
+      await refresh();
+      if ($("aiAutomationApply") && $("aiAutomationApply").checked) {
+        if (statusEl) statusEl.textContent = "3/3 SearchBank 인계용 실제 적용 실행 중";
+        var applied = await actualApply("", true);
+        if (!applied) throw new Error("실제 적용 단계가 완료되지 않았습니다.");
+      }
+      if (statusEl) statusEl.textContent = "자동 운영 완료 · 교체 대기열 확인 가능";
+    } catch (e) {
+      if (statusEl) statusEl.textContent = "자동 운영 중단 · " + (e.message || "오류");
+      show(e.message || "AI 전자동 관리를 완료하지 못했습니다.", "warn");
     }
   }
   function openPreview(url) {
@@ -2423,21 +2526,28 @@
     );
   }
   function bindAccordion(container, queue) {
+    if (!container) return;
     container.addEventListener("click", function (event) {
-      var toggle = event.target.closest(
-        queue === "final" ? "[data-final-toggle]" : "[data-waiting-toggle]",
-      );
+      var toggleSelector = queue === "final"
+        ? "[data-final-toggle]"
+        : queue === "hold"
+          ? "[data-hold-toggle]"
+          : "[data-waiting-toggle]";
+      var toggle = event.target.closest(toggleSelector);
       if (toggle) {
-        if (queue === "final")
-          openFinalSection =
-            openFinalSection === toggle.dataset.finalToggle
-              ? ""
-              : toggle.dataset.finalToggle;
-        else
-          openWaitingSection =
-            openWaitingSection === toggle.dataset.waitingToggle
-              ? ""
-              : toggle.dataset.waitingToggle;
+        var requestedQueue = queue === "final" ? "registry" : queue === "hold" ? "hold" : "content";
+        var requestedSection = queue === "final"
+          ? toggle.dataset.finalToggle
+          : queue === "hold"
+            ? toggle.dataset.holdToggle
+            : toggle.dataset.waitingToggle;
+        if (openDetailQueue === requestedQueue && openDetailSection === requestedSection) {
+          openDetailQueue = "";
+          openDetailSection = "";
+        } else {
+          openDetailQueue = requestedQueue;
+          openDetailSection = requestedSection;
+        }
         renderSections();
         return;
       }
@@ -2461,6 +2571,12 @@
         selectQueue("content", key, true);
       else if ((key = event.target.dataset.waitingClearAll))
         selectQueue("content", key, false);
+      else if ((key = event.target.dataset.holdRestore))
+        restoreHeld(sectionIds(container, key, "holdCheck"));
+      else if ((key = event.target.dataset.holdDelete))
+        deleteHeld(sectionIds(container, key, "holdCheck"));
+      else if ((key = event.target.dataset.holdBlock))
+        blockHeld(sectionIds(container, key, "holdCheck"));
       else if ((key = event.target.dataset.sectionApprove))
         run("approve", sectionIds(container, key, "finalCheck"));
       else if ((key = event.target.dataset.sectionAi)) autoCurate(key);
@@ -2482,7 +2598,9 @@
       if (event.target.matches(".rowcheck")) {
         var target = event.target.matches(".finalCheck")
           ? selectedInfluencers
-          : selectedContents;
+          : event.target.matches(".holdCheck")
+            ? selectedHoldContents
+            : selectedContents;
         if (event.target.checked)
           target.add(text(event.target.dataset.candidateId));
         else target.delete(text(event.target.dataset.candidateId));
@@ -2605,9 +2723,16 @@
     $("aiAutoBtn").onclick = function () {
       autoCurate("");
     };
-    $("publishAllBtn").onclick = function () {
-      actualApply("");
-    };
+    $("publishAllBtn").onclick = function () { actualApply(""); };
+    if ($("topActualApplyBtn")) $("topActualApplyBtn").onclick = function () { actualApply(""); };
+    if ($("replacementViewAllBtn")) $("replacementViewAllBtn").onclick = function () { setWaitingView("all"); };
+    if ($("replacementViewNewBtn")) $("replacementViewNewBtn").onclick = function () { setWaitingView("new"); };
+    if ($("replacementViewPublicBtn")) $("replacementViewPublicBtn").onclick = function () { setWaitingView("public"); };
+    if ($("replacementViewWaitingBtn")) $("replacementViewWaitingBtn").onclick = function () { setWaitingView("replacement"); };
+    if ($("replacementPromoteBtn")) $("replacementPromoteBtn").onclick = function () { run("promote_candidate", selected(".waitingCheck")); };
+    if ($("replacementDemoteBtn")) $("replacementDemoteBtn").onclick = moveSelectedToReplacement;
+    if ($("replacementExcludeBtn")) $("replacementExcludeBtn").onclick = function () { run("delete", selected(".waitingCheck")); };
+    if ($("aiFullCycleBtn")) $("aiFullCycleBtn").onclick = aiFullCycle;
     $("unpublishAllScopeBtn").onclick = function () {
       actualUnapplyAll("");
     };
@@ -2632,6 +2757,10 @@
     $("waitingBlockBtn").onclick = function () {
       run("permanent_block", selected(".waitingCheck"));
     };
+    if ($("restoreHeldBtn")) $("restoreHeldBtn").onclick = function () { restoreHeld(selected(".holdCheck")); };
+    if ($("deleteHeldBtn")) $("deleteHeldBtn").onclick = function () { deleteHeld(selected(".holdCheck")); };
+    if ($("blockHeldBtn")) $("blockHeldBtn").onclick = function () { blockHeld(selected(".holdCheck")); };
+    if ($("clearHeldSelectionBtn")) $("clearHeldSelectionBtn").onclick = function () { selectQueue("hold", "", false); };
     $("toggleExclusionBtn").onclick = function () {
       var b = $("exclusionBody"),
         open = b.classList.contains("hidden");
@@ -2680,6 +2809,7 @@
     };
     bindAccordion($("sectionAccordion"), "final");
     bindAccordion($("waitingAccordion"), "waiting");
+    bindAccordion($("holdAccordion"), "hold");
     $("selectAllExcluded").onchange = function () {
       document.querySelectorAll(".excludedCheck").forEach(function (e) {
         e.checked = this.checked;

@@ -23,7 +23,8 @@
     <button id="refreshBtn" type="button">대기열 새로고침</button>
     <button id="diagnosticBtn" type="button" class="secondary">후보·수익 점검 JSON</button>
     <button id="downloadDiagnosticBtn" type="button" class="secondary" disabled>JSON 다운로드</button>
-    <button id="goLiveAuditBtn" type="button" class="secondary">실상품 공급 개방 점검</button>
+    <button id="goLiveAuditBtn" type="button" class="secondary">실상품 공급업체·상품 개방 점검</button>
+    <button id="sectionManagerBtn" type="button" class="secondary">18개 섹션 배치·매칭 관리</button>
     <button id="returnBtn" type="button" class="secondary">관리자 화면으로</button>
     <span id="state" class="state">관리자 공통 세션을 확인하는 중입니다.</span>
   </div>
@@ -34,15 +35,15 @@
       <div><strong>1. 후보 확인</strong><span>상품명·이미지·가격·공급업체·추천 섹션 확인</span></div>
       <div><strong>2. 검토·보완</strong><span>시장·배송·반품·지원·검증 증빙과 수익 경로 저장</span></div>
       <div><strong>3. PSOM 승인</strong><span>실제 허브·섹션 배정과 최종 관리자 승인</span></div>
-      <div><strong>4. 개방 점검 이동</strong><span>완료 후보만 실상품 공급 개방 점검에서 공개 직전 감사</span></div>
+      <div><strong>4. 프론트 매칭·개방 점검</strong><span>선택 상품은 이 화면에서 직접 매칭·해제하고, 전체 섹션 관리는 전용 관리 화면에서 처리</span></div>
     </div>
-    <div class="small" style="margin-top:9px">사이트 게재 버튼은 이 대기열에 두지 않습니다. 공개 직전의 실상품 공급 개방 점검에서만 별도 확인 절차로 실행합니다.</div>
+    <div class="small" style="margin-top:9px">PSOM 배정이 끝난 선택 상품은 아래에서 실상품 프론트 매칭·해제를 직접 실행할 수 있습니다. 여러 상품·여러 섹션·전체 섹션의 배치와 매칭은 18개 섹션 전용 관리 화면을 단일 원장으로 사용합니다.</div>
   </section>
   <section id="summaryGrid" class="grid hidden"></section>
   <section id="policyPanel" class="panel hidden"></section>
   <section id="diagnosticPanel" class="panel hidden">
     <h2>상품 후보·중개수익 점검 JSON</h2>
-    <div class="small">후보 리서치 결과를 비공개로 관리하며, 관리자 선택 → 판매시장·배송 근거 → 검증 증빙 → 승인 수익 경로 → PSOM 배정 순서가 완료된 후보만 다음 빌드의 실상품 공급 개방 점검으로 넘깁니다. 공개와 결제는 여기서 실행하지 않습니다.</div>
+    <div class="small">후보 리서치 결과를 비공개로 관리하며, 관리자 선택 → 판매시장·배송 근거 → 검증 증빙 → 승인 수익 경로 → PSOM 배정 순서가 완료된 후보만 다음 단계의 실상품 공급업체·상품 개방 점검으로 넘깁니다. 선택 상품의 명시적 프론트 매칭·해제 외에는 자동 공개나 결제를 실행하지 않습니다.</div>
     <pre id="diagnosticJson" class="json"></pre>
   </section>
   <section id="tablePanel" class="panel hidden">
@@ -56,6 +57,7 @@
     <div id="selectedCandidateMeta" class="notice">후보를 선택해 다음 게이트를 처리하세요.</div>
     <div class="manage-grid" style="margin-top:12px">
       <div class="manage-box"><h3>1. 관리자 상품 선택</h3><div class="small">리서치 후보를 실제 검토 대상으로 선택합니다. 공개나 결제는 실행하지 않습니다.</div><div class="manage-actions"><button id="selectProductBtn" type="button">상품 후보 선택</button><button id="holdProductBtn" type="button">보류</button><button id="rejectProductBtn" type="button" class="danger">제외</button></div></div>
+      <div class="manage-box"><h3>선택 상품 실상품 프론트 매칭</h3><div class="small">현재 선택 상품의 이미 승인된 PSOM 배정을 그대로 사용합니다. 섹션 재배정은 하지 않으며, 매칭 해제도 기존 배정 자체는 보존합니다.</div><div id="frontMatchState" class="small" style="margin-top:7px">상품을 선택하면 현재 배정·프론트 상태를 확인합니다.</div><div class="manage-actions"><button id="frontMatchBtn" type="button">실상품 프론트 매칭</button><button id="frontUnmatchBtn" type="button" class="danger">실상품 프론트 매칭 해제</button><button id="openSectionManagerBtn" type="button">18개 섹션 관리</button></div></div>
       <form id="marketForm" class="manage-box"><h3>2. 판매시장·배송 근거</h3><label>판매국</label><input id="marketCountry" maxlength="2" placeholder="KR" required><label>지역</label><input id="marketRegion" placeholder="NATIONWIDE"><label>배송·반품·지원 근거</label><textarea id="marketDelivery" required></textarea><label>법적·판매 근거</label><textarea id="marketBasis" required></textarea><button type="submit">시장 근거 저장</button></form>
       <form id="evidenceForm" class="manage-box"><h3>3. 검증 증빙</h3><label>증빙 종류</label><input id="evidenceType" value="market_sale"><label>HTTPS 증빙 URL</label><input id="evidenceUrl" type="url" required><label>증빙 설명</label><textarea id="evidenceNote" required></textarea><button type="submit">검증 증빙 저장</button></form>
       <form id="revenueForm" class="manage-box"><h3>4. 수익·연결 경로</h3><label>유형</label><select id="revenueType"><option value="external_referral">외부 판매처 연결</option><option value="affiliate">제휴</option><option value="manual_affiliate">수동 제휴</option><option value="brokerage">중개</option><option value="referral">추천</option><option value="lead">리드</option><option value="advertising">광고</option><option value="sponsor">스폰서</option></select><label>제공자·계약 상대</label><input id="revenueProvider" required><label>추적·목적지 URL</label><input id="revenueUrl" type="url" required><label>프로그램·계약 ID</label><input id="revenueProgram"><label>정산 방식</label><select id="revenueSettlement"><option value="provider_program">제휴사 프로그램 정산</option><option value="invoice">정산명세·청구서</option><option value="revenue_share">매출 배분</option><option value="per_lead">리드당 정산</option><option value="fixed_fee">고정 광고·스폰서 비용</option></select><label><input id="revenueDisclosure" type="checkbox" style="width:auto"> 표시·고지 승인</label><label><input id="revenueOfficial" type="checkbox" style="width:auto"> 공식 판매처 확인</label><label><input id="revenueProviderGenerated" type="checkbox" style="width:auto"> 제공자 생성 링크</label><label><input id="revenueManualApproved" type="checkbox" style="width:auto"> 수동 링크 운영 승인</label><label><input id="revenuePolicy" type="checkbox" style="width:auto"> 정책 확인</label><label><input id="revenuePayout" type="checkbox" style="width:auto"> 지급·정산 근거 확인</label><label>메모</label><textarea id="revenueNote"></textarea><button type="submit">수익 경로 저장</button></form>
@@ -65,6 +67,6 @@
   <p class="foot">이 목록은 관리자·운영진 검토용입니다. 이 화면은 별도 로그인을 만들지 않으며, 관리자 페이지에서 이미 확인된 공통 세션만 자동 승계합니다. 실제 판매처·제휴·광고·직접중개 계약의 등록과 수정은 기존 상품 관리/운영 절차에서 처리합니다.</p>
 </main>
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-candidate-pipeline.js?v=51"></script>
+<script src="/assets/js/admin-commerce-candidate-pipeline.js?v=52"></script>
 </body>
 </html>

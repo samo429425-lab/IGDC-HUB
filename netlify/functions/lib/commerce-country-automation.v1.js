@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.17.5-front-match-durable-bridge";
+const VERSION = "commerce-country-automation-v3.17.7-cumulative-supplier-dedupe";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1344,6 +1344,45 @@ function mergeResearchItems(existing, incoming, max, blockedKeys) {
   }
   return out;
 }
+
+function supplierResearchRootKey(item) {
+  const disposition=supplierSurfaceDisposition(typeof item==="string"?{url:item}:item,[]);
+  return disposition.normalizedUrl ? disposition.normalizedUrl.toLowerCase() : "";
+}
+function filterKnownSupplierItems(items, knownKeysInput) {
+  const known=knownKeysInput instanceof Set?knownKeysInput:new Set(array(knownKeysInput).map(text).filter(Boolean));
+  const out=[],seen=new Set();
+  for(const item of array(items)){
+    const key=supplierResearchRootKey(item);
+    if(!key||known.has(key)||seen.has(key))continue;
+    seen.add(key);out.push(item);
+  }
+  return out;
+}
+function persistedSupplierActive(row){
+  const status=lower(row&&row.status);
+  return !!safeUrl(row&&row.url)&&!["hold","suppressed","rejected","blocked","disabled","purged"].includes(status);
+}
+function persistedSupplierResearchRow(rowInput){
+  const row=plain(rowInput),evidence=plain(row.evidence),supplier=plain(row.supplier),trust=plain(row.trust),ai=plain(row.ai),url=safeUrl(row.url);
+  if(!url)return null;
+  const recommendation=text(first(ai.recommendation,trust.recommendation))||"verification_candidate",score=Number(first(trust.trustScore,trust.score,ai.trustScore,ai.score,0))||0,rating10=Number(first(ai.rating10,trust.rating10,trustRating10(score)))||trustRating10(score);
+  return {
+    rank:Number(row.rank||0)||null,candidateId:text(row.id)||null,entityKind:"supplier",supplierType:text(first(row.supplierType,supplier.type,evidence.supplierType))||"unclassified",title:text(row.title)||text(supplier.name)||url,url,
+    collectionStage:"responsible_supplier_preserved_existing",productImport:false,transactionAtSupplier:true,decision:"candidate",score,trustScore:score,commercialScore:Number(first(ai.commercialScore,trust.commercialScore,0))||0,trustTier:text(first(trust.trustTier,ai.trustTier)),rating10,recommendation,recommendationLabel:text(first(ai.recommendationLabel,trust.recommendationLabel))||recommendationLabel(recommendation),assessmentConfidence:Number(first(ai.assessmentConfidence,ai.confidence,trust.assessmentConfidence,0))||0,assessmentMode:"preserved_existing_no_duplicate_research",
+    aiSummary:text(first(ai.aiSummary,ai.summary,trust.aiSummary)),strengths:clampList(first(ai.strengths,trust.strengths),5,180),concerns:clampList(first(ai.concerns,trust.concerns),5,180),nextChecks:clampList(first(ai.nextChecks,trust.nextChecks),5,180),
+    aiAssessment:{scale:"1_to_10",rating10,recommendation,recommendationLabel:text(first(ai.recommendationLabel,trust.recommendationLabel))||recommendationLabel(recommendation),confidence:Number(first(ai.assessmentConfidence,ai.confidence,0))||0,mode:"preserved_existing_no_duplicate_research",summary:text(first(ai.aiSummary,ai.summary,trust.aiSummary)),strengths:clampList(first(ai.strengths,trust.strengths),5,180),concerns:clampList(first(ai.concerns,trust.concerns),5,180),nextChecks:clampList(first(ai.nextChecks,trust.nextChecks),5,180)},
+    hardGatePassed:trust.hardGatePassed===true||evidence.supplierReviewEligible===true,approvalReady:trust.approvalReady===true,evidence:Object.assign({},evidence),missingEvidence:array(first(ai.missingEvidence,trust.missingEvidence)),performanceMissing:array(first(ai.performanceMissing,trust.performanceMissing)),reason:"existing_supplier_preserved_without_duplicate_research",
+    adminPinned:row.adminPinned===true,manualPinned:row.manualPinned===true,manualRegistered:row.manualRegistered===true,manualSupplierId:text(row.manualSupplierId),affiliateSettlement:plain(row.affiliateSettlement),productPageUrl:safeUrl(row.productPageUrl)||null,sourceCandidateUrl:safeUrl(row.sourceCandidateUrl)||null,persistence:"existing_preserved",preservedExisting:true,preservedCandidateId:text(row.id)||null,preservedAt:text(row.updatedAt)||null
+  };
+}
+function mergePreservedSupplierRows(previousCandidates,persistedRows){
+  const out=[],seen=new Set();
+  function add(row){const key=supplierResearchRootKey(row);if(!key||seen.has(key))return;seen.add(key);out.push(Object.assign({},row,{preservedExisting:true,persistence:"existing_preserved"}));}
+  for(const row of array(previousCandidates)){if(!row)continue;const decision=lower(row.decision),status=lower(row.persistence);if(decision==="reject"||decision==="exclude"||status==="blocked")continue;add(row);}
+  for(const row of array(persistedRows)){if(!persistedSupplierActive(row))continue;const converted=persistedSupplierResearchRow(row);if(converted)add(converted);}
+  return reindexCandidateRows(out);
+}
 function mergeSupplierHolding(existing,incoming,blockedKeys,max){
   const out=[],seen=new Set();
   for(const row of array(existing)){const key=text(row&&row.url).toLowerCase();if(key&&!seen.has(key)){seen.add(key);out.push(row);}}
@@ -1399,10 +1438,10 @@ function publicResearchJob(job) {
   return {
     ok: true, reportType: "igdc-country-responsible-supplier-persisted-research", version: VERSION, jobId: job.jobId, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null,
     scope: job.scope, effective: job.effective, trustPolicy: TRUST_POLICY,
-    safety: { persistedWorkspaceOnly: true, privateCandidateQueueOnly: true, noSingleRequestDeadlineRace: true, restartSafe: true, productImport: false, publicPublication: false, payment: false, manualPinnedOverwrite: false },
+    safety: { persistedWorkspaceOnly: true, privateCandidateQueueOnly: true, noSingleRequestDeadlineRace: true, restartSafe: true, productImport: false, publicPublication: false, payment: false, manualPinnedOverwrite: false, preserveExistingSuppliers: true, skipDuplicateSupplierResearch: true },
     researchPlan: { version: job.researchPlanVersion || null, queryCount: array(job.planRows).length, taskCount: array(job.searchTasks).length, diagnostics: plain(job.planDiagnostics) },
     progress: researchProgress(job),
-    summary: { collected: array(job.rawCandidates).length + array(job.supplierHoldingCandidates).length + array(job.supplierBlockedCandidates).length, considered: array(job.inspectionPool).length, inspected: array(job.inspectedCandidates).length, researchCandidates: array(job.reviewPool).length, evidenceReady: array(job.reviewPool).filter((item) => plain(item && item.brokerageVerification).supplierReviewEligible === true).length, ranked: candidates.length, trustGatePassed: candidates.filter((row) => row.hardGatePassed === true).length, approvalReady: candidates.filter((row) => row.approvalReady === true).length, previewed: candidates.length, held: array(job.supplierHoldingCandidates).length, blocked: array(job.supplierBlockedCandidates).length, created: 0, updated: 0, manualPreserved: candidates.filter((row) => row.adminPinned === true).length, skipped: 0, persistenceFailed: 0 },
+    summary: { collected: array(job.rawCandidates).length + array(job.supplierHoldingCandidates).length + array(job.supplierBlockedCandidates).length, considered: array(job.inspectionPool).length, inspected: array(job.inspectedCandidates).length, researchCandidates: array(job.reviewPool).length, evidenceReady: array(job.reviewPool).filter((item) => plain(item && item.brokerageVerification).supplierReviewEligible === true).length, ranked: candidates.length, newRanked: candidates.filter((row)=>row&&row.preservedExisting!==true).length, preservedExisting: candidates.filter((row)=>row&&row.preservedExisting===true).length, targetTotalCandidates:Number(job.targetTotalCandidates||job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES), newCandidateTarget:Number(job.newCandidateTarget||0), duplicateResearchSkipped:true, trustGatePassed: candidates.filter((row) => row.hardGatePassed === true).length, approvalReady: candidates.filter((row) => row.approvalReady === true).length, previewed: candidates.length, held: array(job.supplierHoldingCandidates).length, blocked: array(job.supplierBlockedCandidates).length, created: 0, updated: 0, manualPreserved: candidates.filter((row) => row.adminPinned === true).length, skipped: 0, persistenceFailed: 0 },
     candidates, holdingCandidates: array(job.supplierHoldingCandidates), blockedCandidates: array(job.supplierBlockedCandidates), blockedSupplierKeys: array(job.blockedSupplierKeys), trace: array(job.trace).slice(-120), errors: array(job.errors).slice(-30), lastError: job.lastError || null, commit: plain(job.commit)
   };
 }
@@ -1443,32 +1482,37 @@ function augmentTourRightResearchPlan(planInput, scopeInput) {
 }
 
 async function beginResearchJob(actorId, input, event) {
-  const raw=plain(input),scope=researchScope(raw),state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region),existing=await researchJobRule(scope);
-  if(existing&&existing.schema===RESEARCH_JOB_SCHEMA&&raw.restart!==true&&existing.manualOnly!==true&&!["cancelled","failed"].includes(existing.status))return publicResearchJob(existing);
-  const context=await researchContext(scope),selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},plan=augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope),now=iso(),persistentBlockedKeys=await persistentSupplierSuppressionKeys(scope),blockedSupplierKeys=Array.from(new Set(array(existing&&existing.blockedSupplierKeys).concat(persistentBlockedKeys).map(text).filter(Boolean))),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry);
-  // A new supplier research cycle is cumulative, but it must also *revalidate*
-  // the existing line-up instead of only discovering additions.  Feed the
-  // least-recently-checked persisted suppliers back into the normal inspection
-  // path. Operator/manual states are still preserved later by persistCandidateBatch,
-  // so revalidation can correct stale evidence without silently overriding a
-  // hold/reject/pin decision.  The bounded oldest-first slice rotates naturally
-  // across cycles and does not crowd new discovery out of the inspection pool.
+  const raw=plain(input),scope=researchScope(raw),state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region),existing=await researchJobRule(scope),context=await researchContext(scope);
+  // A run may resume only when the operating/policy signature is unchanged.
+  // Completed runs are historical.  A new run is cumulative: previously
+  // researched suppliers stay in the private ledger and are NOT searched or
+  // inspected again merely to fill a larger operator quota.
+  const researchSignature=sha256(JSON.stringify({
+    scope:{country:scope.country,region:scope.region},
+    effective:{mode:effective.mode,enabled:effective.enabled===true,intervalDays:Number(effective.intervalDays||0),maxCandidates:Number(effective.maxCandidates||DEFAULT_MAX_CANDIDATES),expandSubdivisions:effective.expandSubdivisions===true},
+    categoryWeights:plain(context.effectiveCategoryWeights),
+    policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},
+    marketSignal:{active:context.marketSignalPlan&&context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan&&context.marketSignalPlan.categoryWeights)}
+  }));
+  const existingStatus=lower(existing&&existing.status);
+  const resumableExisting=existing&&existing.schema===RESEARCH_JOB_SCHEMA&&existing.manualOnly!==true&&!["complete","committed","cancelled","failed"].includes(existingStatus)&&text(existing.researchSignature)===researchSignature;
+  if(resumableExisting&&raw.restart!==true)return publicResearchJob(existing);
+
   let persistedSupplierRows=[];
   try{persistedSupplierRows=await listAutomationCandidates(scope.country,scope.region);}catch(_persistedSupplierReadError){persistedSupplierRows=[];}
-  const persistedRevalidationLimit=Math.max(6,Math.min(40,Number(effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*2));
-  const persistedRevalidationSeeds=array(persistedSupplierRows)
-    .filter((row)=>safeUrl(row&&row.url))
-    .sort((a,b)=>Date.parse(text(a&&a.updatedAt)||0)-Date.parse(text(b&&b.updatedAt)||0)||text(a&&a.id).localeCompare(text(b&&b.id)))
-    .slice(0,persistedRevalidationLimit)
-    .map((row)=>({
-      title:text(row&&row.title),name:text(row&&row.title),url:safeUrl(row&&row.url),link:safeUrl(row&&row.url),supplierOfficialUrl:safeUrl(row&&row.url),
-      persistedSupplierId:text(row&&row.id),persistedSupplierRevalidation:true,existingSupplierStatus:text(row&&row.status),existingSupplierUpdatedAt:text(row&&row.updatedAt),
-      supplierProfile:Object.assign({},plain(row&&row.supplier),{officialUrl:safeUrl(row&&row.url),targetCountry:scope.country,targetRegion:scope.region}),
-      brokerageVerification:Object.assign({},plain(row&&row.evidence)),supplierTrust:Object.assign({},plain(row&&row.trust)),aiAutomation:Object.assign({},plain(row&&row.ai))
-    }));
-  const allSeeds=manualSeeds.concat(persistedRevalidationSeeds,array(plan.seeds));
-  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),status:array(plan.tasks).length?"searching":"inspecting",startedAt:now,createdAt:now,scope,effective,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,persistedSupplierRevalidation:true,persistedSupplierRevalidationSeedCount:persistedRevalidationSeeds.length,persistedSupplierRevalidationLimit}),searchTasks:array(plan.tasks),searchCursor:0,blockedSupplierKeys,manualSupplierCount:manualSeeds.length,manualOnly:false,rawCandidates:mergeResearchItems([],allSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding([],allSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked([],allSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],candidates:[],trace:[{source:"research-job",status:"started",at:now,queries:array(plan.rows).length,tasks:array(plan.tasks).length,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,persistedRevalidationSeeds:persistedRevalidationSeeds.length}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets)}};
-  if(!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,effective.maxCandidates*4))}));job.status="inspecting";}
+  // Load durable URL/domain suppression before rebuilding the preserved active
+  // line-up.  This prevents a legacy DB row that still says approval_pending
+  // from being resurrected after the operator blocked/purged that supplier.
+  const persistentBlockedKeys=await persistentSupplierSuppressionKeys(scope),blockedSupplierKeys=Array.from(new Set(array(existing&&existing.blockedSupplierKeys).concat(persistentBlockedKeys).map(text).filter(Boolean)));
+  const preservedCandidates=mergePreservedSupplierRows(array(existing&&existing.candidates),persistedSupplierRows).filter((row)=>supplierSurfaceDisposition(row,blockedSupplierKeys).state==="active"),preservedHolding=array(existing&&existing.supplierHoldingCandidates),preservedBlocked=array(existing&&existing.supplierBlockedCandidates),knownSupplierKeys=new Set();
+  for(const row of array(persistedSupplierRows).concat(array(existing&&existing.candidates),preservedHolding,preservedBlocked)){const key=supplierResearchRootKey(row);if(key)knownSupplierKeys.add(key);}
+  const targetTotal=Math.max(1,Number(effective.maxCandidates||DEFAULT_MAX_CANDIDATES)),newCandidateTarget=Math.max(0,targetTotal-preservedCandidates.length);
+
+  const selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},plan=augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope),now=iso(),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry);
+  const novelSeeds=filterKnownSupplierItems(manualSeeds.concat(array(plan.seeds)),knownSupplierKeys);
+  const initialStatus=newCandidateTarget<=0?"complete":(array(plan.tasks).length?"searching":"inspecting");
+  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,newCandidateTarget}),searchTasks:newCandidateTarget>0?array(plan.tasks):[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?array(plan.tasks).length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets)}};
+  if(newCandidateTarget>0&&!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,newCandidateTarget*4))}));job.status="inspecting";}
   await saveResearchJob(job,actorId);return publicResearchJob(job);
 }
 async function researchJobStatus(input) { const scope = researchScope(input); return publicResearchJob(await researchJobRule(scope)); }
@@ -1482,7 +1526,8 @@ async function advanceResearchJob(actorId, input, event) {
       if (!task) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 4)) })); job.status = "inspecting"; job.inspectCursor = 0; }
       else {
         const result = await RegionalSelector.searchSupplierResearchStep(event || {}, Object.assign({}, selectorInput, { task, limit: Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) }));
-        job.supplierHoldingCandidates=mergeSupplierHolding(job.supplierHoldingCandidates,result.items,job.blockedSupplierKeys,300); job.supplierBlockedCandidates=mergeSupplierBlocked(job.supplierBlockedCandidates,result.items,job.blockedSupplierKeys,300); job.rawCandidates = mergeResearchItems(job.rawCandidates, result.items, SUPPLIER_RAW_LIMIT, job.blockedSupplierKeys); job.trace = array(job.trace).concat([Object.assign({ at: iso(), attempt: Number(task.attempt || 0) }, plain(result.trace))]); job.searchCursor = Number(job.searchCursor || 0) + 1;
+        const novelItems=filterKnownSupplierItems(result.items,new Set(array(job.knownSupplierKeys)));
+        job.supplierHoldingCandidates=mergeSupplierHolding(job.supplierHoldingCandidates,novelItems,job.blockedSupplierKeys,300); job.supplierBlockedCandidates=mergeSupplierBlocked(job.supplierBlockedCandidates,novelItems,job.blockedSupplierKeys,300); job.rawCandidates = mergeResearchItems(job.rawCandidates, novelItems, SUPPLIER_RAW_LIMIT, job.blockedSupplierKeys); job.trace = array(job.trace).concat([Object.assign({ at: iso(), attempt: Number(task.attempt || 0), returned:Number(array(result.items).length), novel:Number(novelItems.length), duplicateExistingSkipped:Math.max(0,array(result.items).length-novelItems.length) }, plain(result.trace))]); job.searchCursor = Number(job.searchCursor || 0) + 1;
         if (retryableResearchStatus(result.status) && Number(task.attempt || 0) < 1) job.searchTasks.push(Object.assign({}, task, { attempt: Number(task.attempt || 0) + 1, retryOf: Number(job.searchCursor || 0) - 1 }));
         if (job.searchCursor >= array(job.searchTasks).length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 4)) })); job.status = "inspecting"; job.inspectCursor = 0; }
       }
@@ -1490,10 +1535,10 @@ async function advanceResearchJob(actorId, input, event) {
       const batch = array(job.inspectionPool).slice(Number(job.inspectCursor || 0), Number(job.inspectCursor || 0) + 3);
       if (!batch.length) {
         job.reviewPool=preservePinnedReviewPool(RegionalSelector.buildSupplierReviewPool(job.rawCandidates,job.inspectedCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_REVIEW_LIMIT,Math.max(Number(job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*3,60))})),array(job.inspectedCandidates).concat(array(job.rawCandidates)));
-        job.rankQueue=supplierRankEntries(job.reviewPool,Number(job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)).map((row)=>row.item);job.status="ranking";job.rankCursor=0;job.rankAttempt=0;
+        job.rankQueue=supplierRankEntries(job.reviewPool,Math.max(0,Number(job.newCandidateTarget!=null?job.newCandidateTarget:(job.effective&&job.effective.maxCandidates)||DEFAULT_MAX_CANDIDATES))).map((row)=>row.item);job.status="ranking";job.rankCursor=0;job.rankAttempt=0;
       } else {
         const inspected = await RegionalSelector.inspectSupplierResearchStep(batch, selectorInput); job.inspectedCandidates = mergeResearchItems(job.inspectedCandidates, inspected.items, 300); job.inspectCursor = Number(job.inspectCursor || 0) + batch.length; job.trace = array(job.trace).concat([{ source: "page-evidence-inspection", status: "ok", at: iso(), count: array(inspected.items).length, done: job.inspectCursor, total: array(job.inspectionPool).length }]);
-        if(job.inspectCursor>=array(job.inspectionPool).length){job.reviewPool=preservePinnedReviewPool(RegionalSelector.buildSupplierReviewPool(job.rawCandidates,job.inspectedCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_REVIEW_LIMIT,Math.max(Number(job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*3,60))})),array(job.inspectedCandidates).concat(array(job.rawCandidates)));job.rankQueue=supplierRankEntries(job.reviewPool,Number(job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)).map((row)=>row.item);job.status="ranking";job.rankCursor=0;job.rankAttempt=0;}
+        if(job.inspectCursor>=array(job.inspectionPool).length){job.reviewPool=preservePinnedReviewPool(RegionalSelector.buildSupplierReviewPool(job.rawCandidates,job.inspectedCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_REVIEW_LIMIT,Math.max(Number(job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*3,60))})),array(job.inspectedCandidates).concat(array(job.rawCandidates)));job.rankQueue=supplierRankEntries(job.reviewPool,Math.max(0,Number(job.newCandidateTarget!=null?job.newCandidateTarget:(job.effective&&job.effective.maxCandidates)||DEFAULT_MAX_CANDIDATES))).map((row)=>row.item);job.status="ranking";job.rankCursor=0;job.rankAttempt=0;}
       }
     } else if (job.status === "ranking") {
       const start = Number(job.rankCursor || 0), batch = array(job.rankQueue).slice(start, start + 3);
@@ -1503,7 +1548,7 @@ async function advanceResearchJob(actorId, input, event) {
         if (ai.error && retryableResearchStatus(ai.error) && Number(job.rankAttempt || 0) < 1) { job.rankAttempt = Number(job.rankAttempt || 0) + 1; job.trace = array(job.trace).concat([{ source: "openai-ranking", status: "retry_scheduled", at: iso(), batchStart: start, error: ai.error }]); }
         else { for (let index = 0; index < batch.length; index += 1) job.rankedEntries.push({ item: batch[index], originalIndex: start + index, assessment: Object.assign({ provider: ai.provider, model: ai.model }, ai.assessments[index] || deterministicAssessment([batch[index]])[0]) }); job.rankCursor = start + batch.length; job.rankAttempt = 0; job.trace = array(job.trace).concat([{ source: "openai-ranking", status: ai.error ? "deterministic_fallback_after_retry" : "ok", at: iso(), batchStart: start, count: batch.length, error: ai.error || null }]); if (job.rankCursor >= array(job.rankQueue).length) job.status = "complete"; }
       }
-      if(job.status==="complete"){const rankedAll=array(job.rankedEntries).sort((a,b)=>Number(b.item&&b.item.adminPinned===true)-Number(a.item&&a.item.adminPinned===true)||Number(b.assessment.approvalReady===true)-Number(a.assessment.approvalReady===true)||Number(b.assessment.hardGatePassed===true)-Number(a.assessment.hardGatePassed===true)||Number(b.assessment.trustScore||b.assessment.score||0)-Number(a.assessment.trustScore||a.assessment.score||0)||Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0)||itemTitle(a.item).localeCompare(itemTitle(b.item))),seenRanked=new Set(),ranked=rankedAll.filter((entry)=>{const key=lower(researchCandidateUrl(entry&&entry.item));if(!key||seenRanked.has(key))return false;seenRanked.add(key);return true;});job.candidates=ranked.map((entry,index)=>stagedCandidateRow(entry,index+1));job.finishedAt=iso();}
+      if(job.status==="complete"){const rankedAll=array(job.rankedEntries).sort((a,b)=>Number(b.item&&b.item.adminPinned===true)-Number(a.item&&a.item.adminPinned===true)||Number(b.assessment.approvalReady===true)-Number(a.assessment.approvalReady===true)||Number(b.assessment.hardGatePassed===true)-Number(a.assessment.hardGatePassed===true)||Number(b.assessment.trustScore||b.assessment.score||0)-Number(a.assessment.trustScore||a.assessment.score||0)||Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0)||itemTitle(a.item).localeCompare(itemTitle(b.item))),seenRanked=new Set(),known=new Set(array(job.knownSupplierKeys)),ranked=rankedAll.filter((entry)=>{const key=supplierResearchRootKey(entry&&entry.item);if(!key||known.has(key)||seenRanked.has(key))return false;seenRanked.add(key);return true;}).slice(0,Math.max(0,Number(job.newCandidateTarget||0)));job.newCandidates=ranked.map((entry,index)=>stagedCandidateRow(entry,index+1));job.candidates=reindexCandidateRows(array(job.preservedCandidates).concat(job.newCandidates));job.finishedAt=iso();}
     }
     job.lastError = null; await saveResearchJob(job, actorId); return publicResearchJob(job);
   } catch (error) {
@@ -1515,7 +1560,14 @@ async function advanceResearchJob(actorId, input, event) {
 async function commitResearchJob(actorId, input) {
   const scope = researchScope(input), job = await researchJobRule(scope); if (!job || !["complete","committed"].includes(job.status) || !array(job.candidates).length) { const error = new Error("실행 가능한 완료 리서치 결과가 없습니다. 단계별 검색·증빙·AI 평가를 먼저 완료하세요."); error.statusCode = 409; throw error; }
   if (job.status === "committed" && job.commit && job.commit.result) return job.commit.result;
-  const result = await commitPreviewCandidates(actorId, { countryCode: scope.country, subdivisionCode: scope.region, candidates: job.candidates, sourceRunId: job.jobId, sourceStartedAt: job.startedAt });
+  const newCandidates=array(job.candidates).filter((row)=>row&&row.preservedExisting!==true);
+  let result;
+  if(newCandidates.length){
+    result = await commitPreviewCandidates(actorId, { countryCode: scope.country, subdivisionCode: scope.region, candidates: newCandidates, sourceRunId: job.jobId, sourceStartedAt: job.startedAt });
+    result=Object.assign({},result,{preservedExistingSuppliers:array(job.candidates).length-newCandidates.length,newSuppliersCommitted:newCandidates.length,duplicateResearchSkipped:true});
+  }else{
+    result={ok:true,reportType:"igdc-country-responsible-supplier-preview-commit",version:VERSION,runId:job.jobId,sourceRunId:job.jobId,scope,summary:{collected:0,considered:0,researchCandidates:0,evidenceReady:0,ranked:array(job.candidates).length,trustGatePassed:array(job.candidates).filter((row)=>row&&row.hardGatePassed===true).length,approvalReady:array(job.candidates).filter((row)=>row&&row.approvalReady===true).length,previewed:array(job.candidates).length,created:0,updated:0,held:0,manualPreserved:array(job.candidates).length,skipped:0,persistenceFailed:0},candidates:[],preservedExistingSuppliers:array(job.candidates).length,newSuppliersCommitted:0,duplicateResearchSkipped:true,note:"기존 조사 업체가 목표 수량을 이미 충족하여 중복 리서치·중복 저장 없이 기존 원장을 그대로 보존했습니다."};
+  }
   job.status = "committed"; job.commit = { committedAt: iso(), committedBy: text(actorId), result }; await saveResearchJob(job, actorId); return result;
 }
 
@@ -3618,6 +3670,30 @@ async function manualSupplierRegister(actorId,input){
   await saveResearchJob(job,actorId);const result=publicResearchJob(job);result.manualRegistration={id,officialUrl,productPageUrl:entry.productPageUrl,adminPinned:true,affiliateSettlement:entry.affiliateSettlement,verificationStatus,publicPublication:false,productImport:false,settlementExecution:false};return result;
 }
 
+async function persistSupplierResearchDecision(scope,targetRow,action,actorId,options){
+  options=plain(options);const exactRoot=supplierRootUrl(supplierRowUrl(targetRow)),targetHost=supplierRowHost(targetRow),matchHost=options.matchHost===true;
+  if(!exactRoot&&!targetHost)return{updated:0};
+  let rows=[];try{rows=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,official_url,source_payload&source_ref=eq."+encodeURIComponent(SOURCE_REF)+"&limit=1000"));}catch(_error){return{updated:0};}
+  let updated=0;const now=iso(),actor=text(actorId)||"administrator";
+  for(const entry of rows){
+    const payload=plain(entry&&entry.source_payload),automation=plain(payload.aiAutomation);
+    if(normalizeCountry(automation.country)!==scope.country||normalizeRegion(automation.region||"NATIONWIDE",scope.country)!==scope.region)continue;
+    if(text(payload.entityKind)==="supplier_control_tombstone")continue;
+    const rowRoot=supplierRootUrl(first(entry&&entry.official_url,payload.supplierOfficialUrl,payload.url)),rowHost=(()=>{try{return new URL(rowRoot).hostname.toLowerCase().replace(/^www\./,"");}catch(_e){return"";}})();
+    if(matchHost?(!!targetHost&&rowHost===targetHost):(!!exactRoot&&rowRoot===exactRoot)){
+      let status=lower(entry&&entry.status)||"approval_pending";
+      if(action==="hold"||action==="dismiss"||action==="unblock")status="hold";
+      else if(action==="restore"||action==="keep")status="approval_pending";
+      else if(action==="purge"||action==="block"||action==="remove_from_list")status="suppressed";
+      payload.aiAutomation=Object.assign({},automation,{operatorDecision:action,operatorDecisionAt:now,operatorDecisionBy:actor,publicPublication:false,productImport:false});
+      payload.supplierProfile=Object.assign({},plain(payload.supplierProfile),{operatorReviewState:action,productCatalogImportAllowed:false});
+      payload.supplierTrust=Object.assign({},plain(payload.supplierTrust),{operatorReviewState:action,automaticProductImport:false,automaticPublicPromotion:false});
+      await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(text(entry.id)),{status,source_payload:payload,updated_at:now});updated+=1;
+    }
+  }
+  return{updated};
+}
+
 async function researchCandidateAction(actorId,input){
   const scope=researchScope(input),job=await researchJobRule(scope);if(!job||job.schema!==RESEARCH_JOB_SCHEMA){const error=new Error("책임 공급업체 단계별 리서치 작업을 찾을 수 없습니다.");error.statusCode=404;throw error;}
   const action=lower(input&&input.decision),requested=Array.from(new Set(array(input&&input.urls).concat([first(input&&input.url,input&&input.supplierUrl)]).map((value)=>researchCandidateUrl({url:value})).filter(Boolean))).slice(0,500),allowed=["keep","hold","unpin","restore","dismiss","purge","block","unblock","remove_from_list"];
@@ -3638,7 +3714,11 @@ async function researchCandidateAction(actorId,input){
     }else if(action==="block"){if(hostKey)keys.add(hostKey);const affected=allRows().filter((row)=>supplierRowHost(row)===host);active=active.filter((row)=>supplierRowHost(row)!==host);holding=holding.filter((row)=>supplierRowHost(row)!==host);blocked=blocked.filter((row)=>supplierRowHost(row)!==host);for(const row of affected)blocked=addUnique(blocked,Object.assign({},row,{adminPinned:false,manualPinned:false,queueState:"blocked",holdReason:"operator_domain_block",operatorDecision:"block",updatedAt:iso()}));await persistSupplierSuppression(scope,target,actorId,"block",hostKey);removeManualHost(host);
     }else if(action==="unblock"){keys.delete(urlKey);if(hostKey)keys.delete(hostKey);const same=blocked.filter((row)=>sameSupplierUrl(row,targetUrl)||supplierRowHost(row)===host);blocked=blocked.filter((row)=>!same.includes(row));for(const row of same)holding=addUnique(holding,Object.assign({},row,{adminPinned:false,manualPinned:false,queueState:"holding",holdReason:"operator_unblocked_review_required",operatorDecision:"unblock",updatedAt:iso()}));await removeSupplierSuppression(scope,target,hostKey||urlKey,{matchHost:true});
     }else if(action==="remove_from_list"){active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);removeManualExact(targetUrl);}
-    results.push({url:targetUrl,host,status:action});
+    // Keep the persisted private supplier ledger aligned with the research
+    // workspace so hold/restore/block states survive a new cumulative run.
+    let durable={updated:0};
+    try{durable=await persistSupplierResearchDecision(scope,target,action,actorId,{matchHost:action==="block"});}catch(_durableError){}
+    results.push({url:targetUrl,host,status:action,durableUpdated:Number(durable&&durable.updated||0)});
   }
   if(manualChanged){registry.suppliers=manualRows;await saveManualSupplierRegistry(scope,registry,actorId);}job.candidates=reindexCandidateRows(active);job.supplierHoldingCandidates=holding;job.supplierBlockedCandidates=blocked;job.blockedSupplierKeys=Array.from(keys);job.manualSupplierCount=manualRows.filter((row)=>row&&row.adminPinned===true&&row.state!=="disabled").length;job.trace=array(job.trace).concat(results.map((row)=>({source:"supplier-candidate-control",status:row.status,at:iso(),url:row.url,host:row.host||null,actor:text(actorId)||"administrator"}))).slice(-160);await saveResearchJob(job,actorId);
   const result=publicResearchJob(job);result.candidateAction={action,requested:requested.length,processed:results.filter((row)=>row.status!=="not_found").length,notFound:results.filter((row)=>row.status==="not_found").length,results,blockedKeyCount:job.blockedSupplierKeys.length,manualRegistryUpdated:manualChanged,publicPublication:false,productImport:false};return result;
@@ -3662,9 +3742,13 @@ async function listAutomationCandidates(countryCode, regionCode) {
         returns: evidence.returns === true, refund: evidence.refund === true, service: evidence.service === true, contactChannel: evidence.contactChannel === true,
         warranty: evidence.warranty === true, termsPrivacy: evidence.termsPrivacy === true,
         legalIdentity: evidence.legalIdentity === true, marketplace: evidence.marketplace === true,
+        supplierReviewEligible: evidence.supplierReviewEligible === true, supplierResearchEligible: evidence.supplierResearchEligible === true,
+        trustEvidenceReady: evidence.trustEvidenceReady === true, researchStatus: text(evidence.researchStatus) || null,
         policyPagesInspected: Number(evidence.policyPagesInspected || 0)
       },
       intermediary: contract, productImport: false, ai: automation,
+      supplierType:text(profile.type||evidence.supplierType)||"unclassified", trustScore:Number(trust.trustScore||trust.score||automation.trustScore||automation.score||0), score:Number(trust.trustScore||trust.score||automation.trustScore||automation.score||0), commercialScore:Number(trust.commercialScore||automation.commercialScore||0), hardGatePassed:trust.hardGatePassed===true||evidence.supplierReviewEligible===true, approvalReady:trust.approvalReady===true, recommendation:text(automation.recommendation||trust.recommendation)||null,
+      adminPinned:automation.adminPinned===true||profile.adminPinned===true, manualPinned:automation.manualPinned===true||profile.manualPinned===true, manualRegistered:automation.manualRegistered===true||profile.manualRegistered===true, manualSupplierId:text(automation.manualSupplierId||profile.manualSupplierId)||null, affiliateSettlement:plain(payload.affiliateSettlement), productPageUrl:safeUrl(payload.productPageUrl)||null, sourceCandidateUrl:safeUrl(payload.sourceCandidateUrl)||null,
       createdAt: text(row.created_at) || null, updatedAt: text(row.updated_at) || null
     };
   });
