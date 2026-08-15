@@ -344,12 +344,12 @@
     cap.style.lineHeight = '1.35';
     cap.style.display = '-webkit-box';
     cap.style.webkitBoxOrient = 'vertical';
-    cap.style.webkitLineClamp = '3';
-    cap.style.gridRow = '2';
-    cap.style.alignSelf = 'stretch';
+    cap.style.webkitLineClamp = '2';
+    // Keep the product title in the second grid row so the thumbnail renders above it.
+    cap.style.setProperty('grid-row', '2', 'important');
 
     a.style.display = 'grid';
-    a.style.gridTemplateRows = 'minmax(0,1fr) auto';
+    a.style.gridTemplateRows = 'minmax(0, 1fr) auto';
     a.style.alignItems = 'stretch';
     a.style.justifyItems = 'stretch';
     a.appendChild(cap);
@@ -371,10 +371,6 @@
     img.decoding = 'async';
     img.src = item.thumb || '';
     img.alt = '';
-
-    const title = document.createElement('div');
-    title.className = 'home-right-card-title';
-    title.textContent = item.title || '';
 
     const showFallbackLabel = function () {
       if (a.querySelector('.home-right-sample-label')) return;
@@ -398,17 +394,14 @@
       label.style.color = '#004080';
       label.style.fontWeight = '600';
       label.style.overflow = 'hidden';
-      label.style.gridRow = '1';
-      if (title.parentNode === a) a.insertBefore(label, title);
-      else a.appendChild(label);
+      a.appendChild(label);
     };
 
     img.addEventListener('error', showFallbackLabel, { once: true });
     a.appendChild(img);
-    a.appendChild(title);
 
     // Snapshot seed cards use the known transparent sample GIF.
-    // Keep their placeholder label in the media area and the normal title below.
+    // Render their names as normal centered fallback content instead of browser ALT text.
     if (/^data:image\/gif;base64,R0lGODlhAQABAAAAACw=/i.test(String(item.thumb || ''))) {
       showFallbackLabel();
     }
