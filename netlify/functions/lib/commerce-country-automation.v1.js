@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.17.8-product-source-delta-front-uniform";
+const VERSION = "commerce-country-automation-v3.17.9-private-source-delta-json-uniform";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1789,18 +1789,24 @@ function productResearchStepResponse(job, input) {
 
 function productSupplierSource(row) {
   const url=researchCandidateUrl(row),evidence=plain(row&&row.evidence),title=text(row&&row.title),recommendation=lower(row&&row.recommendation),decision=lower(row&&row.decision);
-  if(!url||recommendation==="exclude"||decision==="reject")return null;
+  // Product discovery is a PRIVATE research stage.  A supplier that the
+  // supplier engine explicitly marked research-eligible must be allowed to
+  // contribute product references even while its stronger release evidence is
+  // still incomplete.  Public release continues to use the downstream trust,
+  // market, evidence, revenue and explicit administrator Front Match gates.
+  if(!url||decision==="reject")return null;
   let parsed=null;try{parsed=new URL(url);}catch(_error){return null;}
   const host=lower(parsed.hostname),pathName=lower(parsed.pathname),combined=lower(title+" "+url);
   if(/\.(?:pdf|hwp|hwpx|docx?|xlsx?|pptx?|zip|rar|7z)(?:$|[?#])/i.test(url))return null;
   if(/(?:\/attachment\/|\/filedownload|\/download(?:\/|\?|$)|\/board(?:\/|\?|$)|\/article(?:\/|\?|$)|\/news(?:\/|\?|$)|\/press(?:\/|\?|$)|\/blog(?:\/|\?|$)|bo_table=|boardid=)/i.test(pathName+parsed.search))return null;
   if(/(?:hera\d+\.|magicseller\.|tistory\.|blogspot\.|wordpress\.|news\.|press\.|media\.)/i.test(host))return null;
   if(/(?:뉴스|기사|보도자료|리포트|보고서|연구자료|질문|꿈해몽|위키|news|press release|report|research paper|wiki)/i.test(combined))return null;
-  const strict=evidence.supplierReviewEligible===true||(evidence.official===true&&evidence.responsibleEntity===true&&evidence.directSales===true&&evidence.legalIdentity===true&&evidence.contactChannel===true&&evidence.marketplace!==true);
-  if(!strict)return null;
+  const privateResearchEligible=evidence.supplierResearchEligible===true&&evidence.secureTransport===true&&evidence.marketplace!==true;
+  if(!privateResearchEligible)return null;
+  const releaseEvidenceReady=evidence.supplierReviewEligible===true||(evidence.official===true&&evidence.responsibleEntity===true&&evidence.directSales===true&&evidence.legalIdentity===true&&evidence.contactChannel===true&&evidence.marketplace!==true);
   const designated=safeUrl(first(row&&row.productPageUrl,row&&row.sourceCandidateUrl));parsed.pathname="/";parsed.search="";parsed.hash="";const supplierSiteUrl=parsed.toString(),sourceCandidateUrl=designated&&sameSupplierSite(supplierSiteUrl,designated)?designated:supplierSiteUrl,priority=merchandisePriority(title+" "+url+" "+parsed.hostname);
   const affiliateSettlement=normalizeAffiliateSettlement(row&&row.affiliateSettlement,{existing:row&&row.affiliateSettlement});
-  return{supplierId:text(row&&[row.id,row.candidateId,row.manualSupplierId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl,url:supplierSiteUrl,supplierType:text(row&&row.supplierType||evidence.supplierType),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),approvalReady:row&&row.approvalReady===true,sourceCandidateUrl,productPageUrl:sourceCandidateUrl,evidenceReady:evidence.supplierReviewEligible===true,supplyLane:text(evidence.supplyLane)||"general",discoverySource:text(evidence.discoverySource),officialDirectoryUrl:text(evidence.officialDirectoryUrl),adminPinned:row&&row.adminPinned===true,manualRegistered:row&&row.manualRegistered===true,affiliateSettlement,affiliateStage:affiliateSettlement.stage,affiliatePriority:affiliateSettlement.stageRank,priorityScore:priority.score+affiliateSettlement.stageRank*400,priorityLabel:affiliateSettlement.stageRank>0?affiliateSettlement.stage+" · "+(priority.label||"제휴 사이트"):priority.label};
+  return{supplierId:text(row&&[row.id,row.candidateId,row.manualSupplierId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl,url:supplierSiteUrl,supplierType:text(row&&row.supplierType||evidence.supplierType),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),supplierRecommendation:recommendation,approvalReady:row&&row.approvalReady===true,sourceCandidateUrl,productPageUrl:sourceCandidateUrl,evidenceReady:releaseEvidenceReady,privateResearchOnly:releaseEvidenceReady!==true,supplyLane:text(evidence.supplyLane)||"general",discoverySource:text(evidence.discoverySource),officialDirectoryUrl:text(evidence.officialDirectoryUrl),adminPinned:row&&row.adminPinned===true,manualRegistered:row&&row.manualRegistered===true,affiliateSettlement,affiliateStage:affiliateSettlement.stage,affiliatePriority:affiliateSettlement.stageRank,priorityScore:priority.score+affiliateSettlement.stageRank*400,priorityLabel:affiliateSettlement.stageRank>0?affiliateSettlement.stage+" · "+(priority.label||"제휴 사이트"):priority.label};
 }
 function productSupplierSourceKey(source) {
   const raw=safeUrl(first(source&&source.supplierSiteUrl,source&&source.url,source&&source.sourceCandidateUrl));
@@ -1850,14 +1856,29 @@ async function beginProductResearchJob(actorId, input) {
   const sourcePool=[],seenSupplierSites=new Set();
   for(const row of array(supplierJob.candidates)){const source=productSupplierSource(row);if(!source)continue;const key=productSupplierSourceKey(source);if(!key||seenSupplierSites.has(key))continue;seenSupplierSites.add(key);sourcePool.push(source);}
   const allSupplierSources=sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))).slice(0,PRODUCT_SUPPLIER_LIMIT);
-  if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 공식 판매 사이트·법적 신원·직접 판매 증빙을 갖춘 상품 조사 출처가 없습니다. 공급업체 후보의 잡음과 증빙 상태를 먼저 정리하세요.");error.statusCode=409;throw error;}
-
-  // A running product job is resumed exactly where it stopped. New suppliers
-  // discovered while it is active are picked up by the next cumulative cycle;
-  // restarting the same suppliers in parallel would duplicate network work.
-  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!["complete","cancelled","failed"].includes(existing.status))return publicProductJob(existing);
+  if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 비공개 상품 조사에 사용할 수 있는 공식 HTTPS 판매 출처가 없습니다. 공급업체 후보의 URL·보안·마켓플레이스 상태를 먼저 확인하세요.");error.statusCode=409;throw error;}
 
   const researchedKeys=researchedProductSupplierKeys(existing),supplierSourceFingerprint=productSupplierSourceFingerprint(allSupplierSources);
+
+  // A running discovery job may outlive the supplier-search cycle that created
+  // it.  Refresh ONLY its still-unresearched source list from the current
+  // supplier ledger.  Already researched suppliers and already discovered
+  // products remain untouched, so clicking research again never duplicates
+  // work and newly registered suppliers are not stranded behind an old job.
+  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!["complete","cancelled","failed"].includes(existing.status)){
+    if(existing.status==="discovering"){
+      const pendingSources=allSupplierSources.filter((source)=>!researchedKeys.has(productSupplierSourceKey(source)));
+      const priorPendingKeys=array(existing.supplierSources).slice(Math.max(0,Number(existing.discoveryCursor||0))).map(productSupplierSourceKey).filter(Boolean).sort();
+      const nextPendingKeys=pendingSources.map(productSupplierSourceKey).filter(Boolean).sort();
+      const sourceSetChanged=priorPendingKeys.join("\u001f")!==nextPendingKeys.join("\u001f")||text(existing.supplierResearchJobId)!==text(supplierJob.jobId);
+      if(sourceSetChanged){
+        existing.version=VERSION;existing.rankingVersion=ProductRanking.VERSION;existing.supplierResearchJobId=supplierJob.jobId;existing.supplierSources=pendingSources;existing.discoveryCursor=0;existing.currentSupplierSourceCount=allSupplierSources.length;existing.newSupplierSourceCount=pendingSources.length;existing.priorResearchedSupplierCount=researchedKeys.size;existing.supplierSourceFingerprint=supplierSourceFingerprint;existing.researchedSupplierKeys=Array.from(researchedKeys);existing.finishedAt=null;existing.lastError=null;
+        existing.trace=array(existing.trace).concat([{at:iso(),source:"product-research-job",status:"running_source_delta_refreshed",currentSupplierSources:allSupplierSources.length,alreadyResearchedSuppliers:researchedKeys.size,pendingSupplierSources:pendingSources.length,supplierResearchJobId:supplierJob.jobId,sourcePolicy:"preserve_existing_products_and_researched_suppliers; append_only_current_unresearched_supplier_sources"}]).slice(-240);
+        await saveProductJob(existing,actorId);
+      }
+    }
+    return publicProductJob(existing);
+  }
   const supplierSources=allSupplierSources.filter((source)=>!researchedKeys.has(productSupplierSourceKey(source)));
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&existing.status==="complete"&&!supplierSources.length){
     const view=Object.assign({},existing,{version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchJobId:supplierJob.jobId,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:0,priorResearchedSupplierCount:researchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(researchedKeys)});
@@ -1867,7 +1888,7 @@ async function beginProductResearchJob(actorId, input) {
   const rankingContext=await productRankingContext(scope);
   const preservedProducts=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.products):[],preservedRaw=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.rawProducts):[];
   const preservedProductIdentities=Array.from(new Set(preservedProducts.map((row)=>ProductRanking.productIdentity(row)).filter(Boolean))).slice(0,PRODUCT_PORTFOLIO_LIMIT);
-  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:preservedProducts.length,preservedRawCount:preservedRaw.length,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierJob.jobId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:supplierSources.length,priorResearchedSupplierCount:researchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(researchedKeys),rankingContext,discoveryCursor:0,rawProducts:preservedRaw,inspectionPool:[],inspectCursor:0,products:preservedProducts,preservedProductIdentities,stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:preservedProducts.length,skipped:0,failed:0},trace:[{at:now,source:"product-research-job",status:"cumulative_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previouslyResearchedSuppliers:researchedKeys.size,preservedProducts:preservedProducts.length,sourcePolicy:"preserve_existing_products_and_administrator_decisions; research_only_new_supplier_sources; merge_exact_duplicates; official_direct_sales_legal_identity_only; administrator_approval_before_publication"}],errors:[],lastError:null};
+  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:preservedProducts.length,preservedRawCount:preservedRaw.length,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierJob.jobId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:supplierSources.length,priorResearchedSupplierCount:researchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(researchedKeys),rankingContext,discoveryCursor:0,rawProducts:preservedRaw,inspectionPool:[],inspectCursor:0,products:preservedProducts,preservedProductIdentities,stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:preservedProducts.length,skipped:0,failed:0},trace:[{at:now,source:"product-research-job",status:"cumulative_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previouslyResearchedSuppliers:researchedKeys.size,preservedProducts:preservedProducts.length,sourcePolicy:"preserve_existing_products_and_administrator_decisions; research_only_new_supplier_sources; supplier_research_eligible_private_only; merge_exact_duplicates; downstream_release_evidence_gate_unchanged; administrator_approval_before_publication"}],errors:[],lastError:null};
   await saveProductJob(job,actorId);return publicProductJob(job);
 }
 
@@ -3005,9 +3026,18 @@ async function frontSyncSelectCandidates(candidateIds) {
   }
   return rows;
 }
+function frontSyncJsonSafeRow(raw) {
+  // PostgREST bulk writes require every JSON object in one request to expose
+  // the same top-level key set. Object.keys() sees properties whose value is
+  // undefined, but JSON.stringify() silently removes those properties.  Group
+  // the exact serialized shape instead of the pre-serialization JS shape.
+  const source=plain(raw),clean={};
+  for(const key of Object.keys(source)){if(source[key]!==undefined)clean[key]=source[key];}
+  try{return JSON.parse(JSON.stringify(clean));}catch(_error){return clean;}
+}
 function frontSyncUniformBatches(rowsInput, size) {
   const groups=new Map();
-  for(const raw of array(rowsInput)){const row=plain(raw),signature=Object.keys(row).sort().join("\u001f");if(!groups.has(signature))groups.set(signature,[]);groups.get(signature).push(row);}
+  for(const raw of array(rowsInput)){const row=frontSyncJsonSafeRow(raw),signature=Object.keys(row).sort().join("\u001f");if(!groups.has(signature))groups.set(signature,[]);groups.get(signature).push(row);}
   const batches=[];for(const rows of groups.values())for(const batch of frontSyncChunk(rows,size||80))if(batch.length)batches.push(batch);return batches;
 }
 async function frontSyncUpsert(table, rowsInput, conflictColumns) {
