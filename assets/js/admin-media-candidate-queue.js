@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v3.8 - downloadable diagnostics + supplier trace + stable media front controls */
+/* IGDC Media Candidate Queue v3.9 - visible global/section front controls + stable media front actions */
 (function(){
   'use strict';
 
@@ -231,7 +231,7 @@
     var controls=readOnly?
       '<div class="read-only-note">지금 뜨는 콘텐츠는 영화·드라마·버라이어티·음악 후보의 최신성·랭킹을 자동 조합한 점검용 미리보기입니다. 수동 고정이나 일괄 상태 변경은 하지 않습니다. <button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>':
       '<div class="section-actionbar" data-section-key="'+esc(key)+'">'+
-        '<div class="section-front-control"><span class="pill section">마지막 프론트 반영 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 취소·중지</button><button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>'+
+        '<div class="section-front-control"><span class="pill section">마지막 프론트 반영 '+released+'개</span><button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>'+
         '<button type="button" class="secondary sectionSelectAllBtn">전체 선택</button><button type="button" class="secondary sectionClearSelectionBtn">선택 해제</button>'+
         '<button type="button" class="sectionActionBtn" data-action="approve">선택 승인</button><button type="button" class="sectionActionBtn" data-action="hold">선택 보류</button><button type="button" class="sectionActionBtn" data-action="reset">선택 재검토</button>'+
         '<button type="button" class="danger sectionActionBtn" data-action="reject">선택 반려</button><button type="button" class="danger sectionActionBtn" data-action="block">선택 영구 제외·차단</button><button type="button" class="danger sectionActionBtn" data-action="delete">선택 삭제(재검색 허용)</button>'+
@@ -257,8 +257,11 @@
         '본선 '+primaryCount+'/'+capacity+' · 예비 '+reserveCount+'/'+sectionReserveCapacity(key)+(overflowCount?' · 최신/추가 '+overflowCount:'');
       if(list.length!==fullCount)countLabel+=' · 표시 '+list.length;
       if(key!=='media-trending')countLabel+=' · 프론트 '+released;
+      var headerActions=key==='media-trending'?
+        '<div class="section-header-actions"><span class="pill section">자동 조합 섹션</span></div>':
+        '<div class="section-header-actions" data-section-key="'+esc(key)+'"><span class="pill section">프론트 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">중지</button></div>';
       return '<section class="candidate-section'+(open?' open':'')+'" data-section-key="'+esc(key)+'">'+
-        '<button type="button" class="section-toggle" data-section-key="'+esc(key)+'" aria-expanded="'+(open?'true':'false')+'"><span class="section-toggle-main"><span class="section-toggle-title">'+esc(SECTION_LABELS[key]||key)+'</span><span class="section-count">'+countLabel+'</span></span><span class="section-chevron">⌄</span></button>'+
+        '<div class="section-header"><button type="button" class="section-toggle" data-section-key="'+esc(key)+'" aria-expanded="'+(open?'true':'false')+'"><span class="section-toggle-main"><span class="section-toggle-title">'+esc(SECTION_LABELS[key]||key)+'</span><span class="section-count">'+countLabel+'</span></span><span class="section-chevron">⌄</span></button>'+headerActions+'</div>'+
         (open?'<div class="section-body">'+sectionBodyHtml(key,list)+'</div>':'')+
       '</section>';
     }).join('');
@@ -1011,7 +1014,8 @@
       var verify=await get(PUB+'?pipelineStatus=1&probePublic=0');
       var verifiedApproved=Number(verify&&verify.stages&&verify.stages.candidates&&verify.stages.candidates.approvedRows||0);
       if(updated>0&&verifiedApproved===0)throw new Error('최종 승인 응답은 '+updated+'건이지만 재조회 결과 approvedRows가 0건입니다. 승인 DB 저장이 확정되지 않아 프론트 반영을 중단합니다.');
-      show('전체 최종 승인 '+updated+'건 완료 · 재조회 승인 '+verifiedApproved+'건 · 승인 API '+text(data.version||'-')+(skipped?' · 금지 신호 '+skipped+'건 자동 제외':'')+' · 이제 전체 또는 섹션별 프론트 반영 실행이 가능합니다.','ok');
+      show('전체 최종 승인 '+updated+'건 완료 · 재조회 승인 '+verifiedApproved+'건 · 승인 API '+text(data.version||'-')+(skipped?' · 금지 신호 '+skipped+'건 자동 제외':'')+' · 상단 ‘전체 섹션 프론트 반영 실행’ 또는 각 섹션 제목줄의 ‘이 섹션 프론트 반영’을 눌러 주세요.','ok');
+      var frontBtn=$('publishFrontBtn');if(frontBtn){frontBtn.focus({preventScroll:true});}
     }catch(error){show('전체 최종 승인 실패: '+error.message,'warn');}
     finally{if(button)button.disabled=false;}
   }

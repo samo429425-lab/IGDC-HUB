@@ -4286,26 +4286,105 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
 
 <script id="thumbline-drag-script">
-/* Desktop mouse drag only. Touch/pen are deliberately left to native momentum scrolling. */
+/* Desktop mouse drag with momentum. Touch/pen stay 100% native so a strong flick
+   can travel across multiple cards without JavaScript stealing the gesture. */
 (function(){
   "use strict";
-  const THRESHOLD=7;
+  const THRESHOLD=6;
+  const MIN_MOMENTUM=0.06; // px/ms
+  const FRICTION_PER_16MS=0.95;
+  const RELEASE_BOOST=2.35;
+
   function enableMouseDrag(scroller){
-    if(!scroller||scroller.dataset.mouseDragBound==='1')return;
-    let down=false,dragging=false,startX=0,startY=0,startLeft=0,pendingLeft=null,raf=0;
-    function flush(){raf=0;if(pendingLeft!=null){scroller.scrollLeft=pendingLeft;pendingLeft=null;}}
-    scroller.addEventListener('pointerdown',function(e){if(e.pointerType&&e.pointerType!=='mouse')return;down=true;dragging=false;startX=e.clientX;startY=e.clientY;startLeft=scroller.scrollLeft;});
+    if(!scroller||scroller.dataset.mouseDragBound==='2')return;
+    let down=false,dragging=false,startX=0,startY=0,lastX=0,lastTs=0;
+    let velocity=0,pendingLeft=null,writeRaf=0,momentumRaf=0,lastMomentumTs=0;
+    let suppressClickUntil=0;
+
+    function maxLeft(){return Math.max(0,scroller.scrollWidth-scroller.clientWidth);}
+    function clamp(v){return Math.max(0,Math.min(maxLeft(),v));}
+    function flush(){
+      writeRaf=0;
+      if(pendingLeft!=null){
+        scroller.scrollLeft=clamp(pendingLeft);
+        pendingLeft=null;
+      }
+    }
+    function cancelMomentum(){
+      if(momentumRaf)cancelAnimationFrame(momentumRaf);
+      momentumRaf=0;lastMomentumTs=0;
+    }
+    function momentumFrame(ts){
+      if(!lastMomentumTs)lastMomentumTs=ts;
+      const dt=Math.min(34,Math.max(1,ts-lastMomentumTs));
+      lastMomentumTs=ts;
+      const before=scroller.scrollLeft;
+      const next=clamp(before+velocity*dt);
+      scroller.scrollLeft=next;
+      velocity*=Math.pow(FRICTION_PER_16MS,dt/16.667);
+      const hitEdge=(next<=0&&velocity<0)||(next>=maxLeft()&&velocity>0);
+      if(hitEdge||Math.abs(velocity)<MIN_MOMENTUM){cancelMomentum();return;}
+      momentumRaf=requestAnimationFrame(momentumFrame);
+    }
+    function startMomentum(){
+      cancelMomentum();
+      if(Math.abs(velocity)<MIN_MOMENTUM)return;
+      velocity=Math.max(-4.2,Math.min(4.2,velocity*RELEASE_BOOST));
+      momentumRaf=requestAnimationFrame(momentumFrame);
+    }
+
+    scroller.addEventListener('pointerdown',function(e){
+      if((e.pointerType&&e.pointerType!=='mouse')||e.button!==0)return;
+      cancelMomentum();
+      down=true;dragging=false;velocity=0;
+      startX=lastX=e.clientX;startY=e.clientY;lastTs=performance.now();
+      try{scroller.setPointerCapture(e.pointerId);}catch(_error){}
+    });
     scroller.addEventListener('pointermove',function(e){
-      if(!down||(e.pointerType&&e.pointerType!=='mouse'))return;const dx=e.clientX-startX,dy=e.clientY-startY;
-      if(!dragging){if(Math.abs(dx)<=THRESHOLD||Math.abs(dx)<=Math.abs(dy)+2)return;dragging=true;}
-      e.preventDefault();pendingLeft=startLeft-dx;if(!raf)raf=requestAnimationFrame(flush);
+      if(!down||(e.pointerType&&e.pointerType!=='mouse'))return;
+      const now=performance.now(),dxTotal=e.clientX-startX,dyTotal=e.clientY-startY;
+      if(!dragging){
+        if(Math.abs(dxTotal)<=THRESHOLD||Math.abs(dxTotal)<=Math.abs(dyTotal)+2)return;
+        dragging=true;scroller.classList.add('is-mouse-dragging');
+      }
+      e.preventDefault();
+      const dx=e.clientX-lastX,dt=Math.max(1,now-lastTs);
+      const instant=(-dx)/dt;
+      velocity=velocity*0.68+instant*0.32;
+      lastX=e.clientX;lastTs=now;
+      pendingLeft=scroller.scrollLeft-dx;
+      if(!writeRaf)writeRaf=requestAnimationFrame(flush);
     },{passive:false});
-    function end(){down=false;dragging=false;pendingLeft=null;if(raf)cancelAnimationFrame(raf);raf=0;}
-    scroller.addEventListener('pointerup',end,{passive:true});scroller.addEventListener('pointercancel',end,{passive:true});
-    scroller.dataset.mouseDragBound='1';
+
+    function end(e){
+      if(!down)return;
+      const wasDragging=dragging;
+      down=false;dragging=false;scroller.classList.remove('is-mouse-dragging');
+      if(writeRaf){cancelAnimationFrame(writeRaf);writeRaf=0;flush();}
+      if(wasDragging){suppressClickUntil=performance.now()+180;startMomentum();}
+      try{if(e&&e.pointerId!=null)scroller.releasePointerCapture(e.pointerId);}catch(_error){}
+    }
+    scroller.addEventListener('pointerup',end,{passive:true});
+    scroller.addEventListener('pointercancel',end,{passive:true});
+    scroller.addEventListener('lostpointercapture',end,{passive:true});
+    scroller.addEventListener('click',function(e){
+      if(performance.now()<suppressClickUntil){e.preventDefault();e.stopPropagation();}
+    },true);
+    scroller.dataset.mouseDragBound='2';
   }
-  function boot(){document.querySelectorAll('.thumb-line').forEach((line)=>enableMouseDrag(line.querySelector(':scope > .scroll-content')||line));}
+
+  function boot(){
+    document.querySelectorAll('.thumb-line').forEach((line)=>{
+      const scroller=line.querySelector(':scope > .scroll-content')||line;
+      enableMouseDrag(scroller);
+    });
+  }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+  let queued=false;
+  new MutationObserver(()=>{
+    if(queued)return;queued=true;
+    requestAnimationFrame(()=>{queued=false;boot();});
+  }).observe(document.documentElement,{childList:true,subtree:true});
 })();
 </script>
 <script id="igdc-qa-modal-script">
@@ -4593,6 +4672,72 @@ window.addEventListener("message",function(ev){
   }
 })();
 </script>
+
+<style id="mediahub-slot-number-and-momentum-final">
+/* Media-only horizontal rail finalizer. One native horizontal scroll owner per row. */
+.thumb-line.scroll-wrapper{
+  overflow:visible !important;
+  scroll-snap-type:none !important;
+  scroll-behavior:auto !important;
+  touch-action:auto !important;
+}
+.thumb-line.scroll-wrapper > .scroll-content{
+  display:flex !important;
+  flex:1 1 auto !important;
+  min-width:0 !important;
+  width:auto !important;
+  flex-wrap:nowrap !important;
+  overflow-x:auto !important;
+  overflow-y:hidden !important;
+  scroll-behavior:auto !important;
+  scroll-snap-type:none !important;
+  -webkit-overflow-scrolling:touch !important;
+  overscroll-behavior-x:contain !important;
+  touch-action:pan-x pan-y pinch-zoom !important;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+  counter-reset:mediaSlot;
+}
+.thumb-line.scroll-wrapper > .scroll-content::-webkit-scrollbar{display:none;}
+.thumb-line.scroll-wrapper > .scroll-content > .card{
+  position:relative !important;
+  flex:0 0 auto !important;
+  scroll-snap-align:none !important;
+  scroll-snap-stop:normal !important;
+  counter-increment:mediaSlot;
+}
+.thumb-line.scroll-wrapper > .scroll-content.is-mouse-dragging{cursor:grabbing !important;user-select:none !important;}
+.thumb-line.scroll-wrapper > .scroll-content > .card img{-webkit-user-drag:none;user-select:none;}
+
+/* Slot number is a CSS overlay, not a DOM mutation. It stays stable while AutoMap
+   replaces sample content and adds no MutationObserver work during scrolling. */
+.thumb-line[data-psom-key].scroll-wrapper > .scroll-content > .card::before{
+  position:absolute;top:7px;left:7px;z-index:12;min-width:46px;height:23px;padding:0 7px;
+  display:flex;align-items:center;justify-content:center;box-sizing:border-box;border-radius:7px;
+  background:rgba(0,0,0,.76);color:#fff;border:1px solid rgba(255,255,255,.55);
+  font:700 11px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.03em;
+  pointer-events:none;user-select:none;box-shadow:0 1px 4px rgba(0,0,0,.28);
+  content:"SLOT-" counter(mediaSlot, decimal-leading-zero);
+}
+.thumb-line[data-psom-key="media-trending"].scroll-wrapper > .scroll-content > .card::before{content:"HOT-" counter(mediaSlot, decimal-leading-zero);}
+.thumb-line[data-psom-key="media-movie"].scroll-wrapper > .scroll-content > .card::before{content:"MOV-" counter(mediaSlot, decimal-leading-zero);}
+.thumb-line[data-psom-key="media-drama"].scroll-wrapper > .scroll-content > .card::before{content:"DRA-" counter(mediaSlot, decimal-leading-zero);}
+.thumb-line[data-psom-key="media-thriller"].scroll-wrapper > .scroll-content > .card::before{content:"THR-" counter(mediaSlot, decimal-leading-zero);}
+.thumb-line[data-psom-key="media-romance"].scroll-wrapper > .scroll-content > .card::before{content:"ROM-" counter(mediaSlot, decimal-leading-zero);}
+.thumb-line[data-psom-key="media-variety"].scroll-wrapper > .scroll-content > .card::before{content:"VAR-" counter(mediaSlot, decimal-leading-zero);}
+.thumb-line[data-psom-key="media-documentary"].scroll-wrapper > .scroll-content > .card::before{content:"DOC-" counter(mediaSlot, decimal-leading-zero);}
+.thumb-line[data-psom-key="media-animation"].scroll-wrapper > .scroll-content > .card::before{content:"ANI-" counter(mediaSlot, decimal-leading-zero);}
+.thumb-line[data-psom-key="media-music"].scroll-wrapper > .scroll-content > .card::before{content:"MUS-" counter(mediaSlot, decimal-leading-zero);}
+.thumb-line[data-psom-key="media-shorts"].scroll-wrapper > .scroll-content > .card::before{content:"SHO-" counter(mediaSlot, decimal-leading-zero);}
+@media (max-width:1024px),(hover:none) and (pointer:coarse){
+  .thumb-line.scroll-wrapper{overflow:visible !important;}
+  .thumb-line.scroll-wrapper > .scroll-content{
+    scroll-snap-type:none !important;scroll-behavior:auto !important;
+    touch-action:pan-x pan-y pinch-zoom !important;-webkit-overflow-scrolling:touch !important;
+  }
+}
+</style>
+
 
 </body>
 </html>
