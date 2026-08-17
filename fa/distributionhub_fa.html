@@ -1,7 +1,7 @@
 <!-- patched: ad-* classes renamed to brand-* to avoid adblock; media query hiding adjusted only via class rename. -->
 <!DOCTYPE html>
 
-<html class="prelayout" lang="fa">
+<html class="prelayout" lang="fa" dir="ltr">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -18,7 +18,7 @@
     .sidebar a{
       display:block;background:#fff4e0;color:#804000;text-decoration:none;
       padding:12px 18px;font-weight:bold;font-size:0.9rem;border:1px solid #f3d9b0;border-radius:8px;
-      margin: 10px 12px;transition:background-color .3s, text-decoration .3s;
+      margin:18px 12px;transition:background-color .3s, text-decoration .3s;
     }
     .sidebar a:hover{ background:#ffe5b4; text-decoration:underline; }
 
@@ -131,8 +131,74 @@
   .scroller-btn { width: 36px; height: 36px; font-size: 18.0px; }
 }
 </style>
-
-
+<style id="igdc-qa-style">
+:root{
+  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
+  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
+  --qa-left:260px;
+  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
+  --blue:#2563eb; --muted:#9ca3af;
+}
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+#qnaOpenBtn{ display:block; text-decoration:none; }
+/* Modal near the left sidebar, with smooth transitions */
+.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
+.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
+.igdc-qa-panel{
+  position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
+  max-height:min(82vh,900px); display:flex; flex-direction:column;
+  background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
+  overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
+  transition:opacity .18s ease, transform .18s ease;
+  border:1px solid var(--old-border);
+}
+.igdc-qa-modal.open{pointer-events:auto}
+.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
+.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
+/* Old-style header tint */
+.igdc-qa-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid var(--old-border);
+  background:var(--old-bg);
+}
+.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
+.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
+.igdc-qa-body{display:flex; flex-direction:column; gap:10px; padding:12px; overflow:auto}
+.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
+.igdc-qa-text{
+  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
+  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
+  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
+}
+.igdc-qa-text.q{ min-height: 96px; }
+.igdc-qa-text.a{ min-height: 128px; }
+.igdc-qa-actions{display:flex; gap:8px; align-items:center}
+.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
+.igdc-qa-btn.primary{background:var(--blue); color:#fff}
+.igdc-qa-btn.muted{background:var(--muted); color:#fff}
+.igdc-qa-threads{display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px}
+.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
+.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
+.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
+.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
+.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
+.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
+@media (max-width:900px){
+  .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
+}
+</style>
+<style id="qna-brand-only">
+/* === Q&A sidebar link color only (no other changes) === */
+:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
+.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
+  display:block;
+  background: var(--qa-brand);
+  color:#fff !important;
+  border:1px solid var(--qa-brand-border);
+  border-radius:10px;
+}
+.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
+</style>
 <style id="prelayout-guard">.prelayout *{transition:none!important}</style>
 <script>window.IGDC_PAGE = window.IGDC_PAGE || { project:"IGDC", pageId:"distributionhub", title:(document.title||"") };</script>
 <link href="/assets/css/mobile-fix.css" rel="stylesheet"/>
@@ -248,7 +314,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "هنوز هیچ مورد پرسش و پاسخی ثبت نشده است";
+  content: "아직 등록된 QnA가 없습니다";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -266,7 +332,7 @@
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "هنوز هیچ مورد پرسش و پاسخی ثبت نشده است";
+  content: "아직 등록된 QnA가 없습니다";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -932,471 +998,19 @@
 }
 </style>
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
-
-<style id="ar-distribution-final-mirror-fix">
-/* Final AR mirror fix: Q&A modal + sidebar labels + top title only */
+<style id="ko-sidebar-spacing-unified">
+/* KO sidebar spacing: unify only button-to-button vertical spacing */
+.sidebar{
+  padding-top: 20px !important;
+}
 .sidebar a,
 .sidebar a#qnaOpenBtn,
-#qnaOpenBtn{
-  direction: rtl !important;
-  text-align: right !important;
-}
-.page-title{
-  direction: rtl !important;
-  text-align: right !important;
-}
-.igdc-qa-panel,
-.igdc-qa-body,
-.igdc-qa-field label,
-.igdc-qa-body label,
-.igdc-qa-text,
-.igdc-qa-note,
-.igdc-qa-threads,
-.igdc-qa-thread,
-.igdc-qa-thread-q,
-.igdc-qa-thread-a,
-.contact-email{
-  direction: rtl !important;
-  text-align: right !important;
-}
-.igdc-qa-actions{
-  justify-content: flex-start !important;
-}
-.igdc-qa-text::placeholder{
-  direction: rtl !important;
-  text-align: right !important;
+#qnaOpenBtn,
+.sidebar a[id*="qna"],
+a[id*="qna"]{
+  margin: 10px 12px !important;
 }
 </style>
-
-<style id="igdc-qa-style">
-:root{
-  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
-  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
-  --qa-left:260px;
-  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
-  --blue:#2563eb; --muted:#9ca3af;
-}
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
-#qnaOpenBtn{ display:block; text-decoration:none; }
-/* Modal near the left sidebar, with smooth transitions */
-.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
-.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
-.igdc-qa-panel{
-position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
-max-height:min(82vh,900px); display:flex; flex-direction:column;
-background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
-overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
-transition:opacity .18s ease, transform .18s ease;
-border:1px solid var(--old-border);
-}
-.igdc-qa-modal.open{pointer-events:auto}
-.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
-.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
-/* Old-style header tint */
-.igdc-qa-header{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px 14px; border-bottom:1px solid var(--old-border);
-  background:var(--old-bg);
-}
-.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
-.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
-.igdc-qa-body{
-display:flex; flex-direction:column; gap:10px; padding:12px; overflow:auto
-}
-.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
-.igdc-qa-text{
-  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
-  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
-  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
-}
-.igdc-qa-text.q{ min-height: 96px; }
-.igdc-qa-text.a{ min-height: 128px; }
-.igdc-qa-actions{display:flex; gap:8px; align-items:center}
-.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
-.igdc-qa-btn.primary{background:var(--blue); color:#fff}
-.igdc-qa-btn.muted{background:var(--muted); color:#fff}
-.igdc-qa-threads{
-display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px
-}
-.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
-.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
-.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
-.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
-.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
-.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
-@media (max-width:900px){
-  .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
-}
-.igdc-qa-threads{
-  display:flex; flex-direction:column; gap:10px; overflow:auto;
-  border-top:1px solid var(--old-border);
-  padding-top:10px;
-  padding-bottom:4px; }
-a[href^="mailto:"] {
-  color: #007bff;           /* 밝은 파란색 (Bootstrap 기본 블루톤) */
-  text-decoration: underline;
-}
-a[href^="mailto:"]:hover {
-  color: #0056b3;           /* hover 시 조금 더 짙은 파랑 */
-  text-decoration: underline;
-}
-
-.igdc-qa-threads:empty::before{
-  content:"لم يتم نشر أي إدخالات سؤال وجواب بعد";
-  display:block; padding:10px 12px; color:#666;
-  background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px;
-  margin-top:4px; font-size:.95rem;
-}
-.contact-email{
-  margin-top: 6px;
-  margin-bottom: 0;}
-</style>
-<style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
-:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
-.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
-  display:block;
-  background: var(--qa-brand);
-  color:#fff !important;
-  border:1px solid var(--qa-brand-border);
-  border-radius:10px;
-}
-.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
-</style>
-<script id="igdc-qa-config">
-  (function () {
-    // 1) 민감정보 없는 기본 설정
-    const baseConfig = {
-      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
-      project: "IGDC",
-      pageId: null,
-      aiEndpoint: null
-    };
-
-    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
-    function applyConfig(env) {
-      const url =
-        (env && env.SUPABASE_URL) ||
-        baseConfig.url;
-
-      const anonKey =
-        (env && env.SUPABASE_ANON_KEY) ||
-        "";
-
-      if (!anonKey) {
-        console.warn("[IGDC] Supabase anonKey is not configured.");
-      }
-
-      window.SUPER_VARSAR = Object.assign(
-        window.SUPER_VARSAR || {},
-        baseConfig,
-        {
-          url: url,
-          anonKey: anonKey
-        }
-      );
-    }
-
-    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
-    if (window.IGDC_ENV &&
-        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
-      applyConfig(window.IGDC_ENV);
-      return;
-    }
-
-    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
-    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
-
-    fetch(endpoint, { cache: "no-store" })
-      .then(function (res) {
-        if (!res.ok) {
-          throw new Error("http " + res.status);
-        }
-        return res.json();
-      })
-      .then(function (data) {
-        var env = data && (data.env || data);
-        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
-        applyConfig(window.IGDC_ENV);
-        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
-      })
-      .catch(function (err) {
-        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
-        applyConfig(null);
-      });
-  })();
-</script>
-<script id="igdc-qa-script">
-(function(){
-  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
-  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
-  let isOpen=false, isAnimating=false;
-
-  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
-  const fmtDate = (s)=> new Date(s).toLocaleString();
-  const nowISO = ()=> new Date().toISOString();
-  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
-
-  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
-  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
-
-  async function ensureSupabase(){
-    if(STATE.sb) return STATE.sb;
-    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
-    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
-    if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
-      return null;
-    }
-    STATE.sb = window.supabase.createClient(url, key);
-    return STATE.sb;
-  }
-  async function ensureAuth(){
-    const sb = await ensureSupabase(); if(!sb) return;
-    let { data: { session } } = await sb.auth.getSession();
-    if(!session){
-      try{ await sb.auth.signInناشناسly(); }catch(e){}
-      ({ data: { session } } = await sb.auth.getSession());
-    }
-    if(session){
-      const uid = session.user.id;
-      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
-      STATE.user = session.user;
-      STATE.isAdmin = Array.isArray(data) && data.length>0;
-    }
-  }
-
-  function mountUI(){
-    const modal = el("div","igdc-qa-modal");
-    const backdrop = el("div","igdc-qa-backdrop");
-    const panel = el("div","igdc-qa-panel");
-    const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "پرسش و پاسخ";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","بستن");
-    header.append(title, close);
-
-    const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="سؤال";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="لطفاً سؤال خود را وارد کنید...";
-    const lA = el("label"); lA.textContent="پاسخ";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="يرجى الانتظار قليلاً. سنرد عليك قريبًا.";
-    const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="ارسال";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="پاک کردن";
-    const note = el("div","igdc-qa-note"); note.textContent="※ به پرسش‌های ساده، هوش مصنوعی فوراً پاسخ می‌دهد. موضوعات فنی، خطاها یا مسائل عملیاتی به‌صورت خودکار به بخش پرسش و پاسخ مدیر ارسال می‌شوند.";
-    const list = el("div","igdc-qa-threads");
-
-    body.append(lQ,tQ,lA,tA,actions,note,list);
-    actions.append(btnSubmit, btnClear);
-    panel.append(header, body);
-    modal.append(backdrop, panel);
-    document.body.append(modal);
-
-    // position near sidebar
-    function positionNearSidebar(){
-      try{
-        const sb = document.querySelector('.sidebar');
-        if(sb){
-          const rect = sb.getBoundingClientRect();
-          const left = Math.round(rect.right + 12);
-          panel.style.left = left + "px";
-        }
-      }catch(e){}
-    }
-    positionNearSidebar();
-    window.addEventListener('resize', positionNearSidebar);
-    window.addEventListener('scroll', positionNearSidebar, { passive:true });
-
-    function openModal(){
-      if(isAnimating || isOpen) return;
-      isAnimating = true;
-      modal.style.display = "block";
-      requestAnimationFrame(()=>{
-        modal.classList.add('open');
-        isOpen = true;
-        setTimeout(()=>{ isAnimating = false; }, 220);
-      });
-    }
-    function closeModal(){
-      if(isAnimating || !isOpen) return;
-      isAnimating = true;
-      modal.classList.remove('open');
-      setTimeout(()=>{
-        modal.style.display = "none";
-        isOpen = false;
-        isAnimating = false;
-      }, 220);
-    }
-
-    // Sidebar trigger
-    const sideBtn = document.querySelector('#qnaOpenBtn');
-    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
-    close.addEventListener("click", closeModal);
-    backdrop.addEventListener("click", closeModal);
-    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
-
-    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
-
-    async function fetchThreads(){
-      const sb = await ensureSupabase(); if(!sb) return;
-      const { data, error } = await sb.from("igdc_qna_threads")
-        .select("*")
-        .eq("project", STATE.project)
-        .eq("page_id", STATE.pageId)
-        .order("created_at", { ascending:false }).limit(100);
-      if(error){ console.error(error); return; }
-      renderList(data||[]);
-    }
-    function renderList(rows){
-      list.innerHTML="";
-      rows.forEach(row=>{
-        const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"پاسخ در انتظار";
-        const meta = el("div","igdc-qa-thread-meta");
-        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "درخواست مدیریتی":"عمومی";
-        const actions = el("div","igdc-qa-thread-actions");
-        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
-        if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="حذف";
-          del.addEventListener("click", async ()=>{
-            const sb = await ensureSupabase(); if(!sb) return;
-            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("حذف ناموفق بود (مجوز/سیاست)."); return; }
-            await fetchThreads();
-          });
-          actions.append(del);
-        }
-        meta.append(time, tag, actions);
-        box.append(q,a,meta);
-        list.append(box);
-      });
-    }
-
-    async function autoAnswerIfNeeded(text){
-      const technical = classifyTech(text);
-      let answer = null;
-      if(!technical){
-        const ep = getAIEndpoint();
-        if(ep){
-          try{
-            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
-            const j = await res.json(); answer = j && (j.answer||j.text||null);
-          }catch(e){}
-        }
-        if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="پرسش‌های مربوط به عملیات توسط مدیر بررسی می‌شود و سپس پاسخ داده خواهد شد.";
-          else if(/가격|비용|요금/.test(text)) answer="برای قیمت‌ها و کارمزدها به اطلاعات این صفحه مراجعه کنید. در صورت نیاز پرسش دیگری ثبت کنید.";
-          else answer="از پرسش شما سپاسگزاریم. آن را سریع بررسی کرده و به شما کمک خواهیم کرد.";
-        }
-      }
-      return { technical, answer };
-    }
-
-    async function submit(){
-      const q = (tQ.value||"").trim();
-      let a = (tA.value||"").trim();
-      if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await autoAnswerIfNeeded(q);
-      if(!a && answer) a = answer;
-      const sb = await ensureSupabase();
-      if(!sb){
-        alert("ذخیره‌سازی سمت سرور غیرفعال است زیرا تنظیمات ذخیره‌سازی (Supabase url/key) هنوز متصل نیستند. در زمان استقرار روی وب، اگر SUPER_VARSAR.url/anonKey پیکربندی شود، به‌طور خودکار متصل خواهد شد.");
-        return;
-      }
-      const record = {
-        project: STATE.project, page_id: STATE.pageId,
-        user_id: (STATE.user && STATE.user.id) || null,
-        question: q, answer: a || null, is_admin: technical,
-        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
-      };
-      const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("ارسال ناموفق بود"); return; }
-      tQ.value=""; tA.value = a || "";
-      await fetchThreads();
-    }
-    btnSubmit.addEventListener("click", submit);
-
-    // realtime refresh
-    (async()=>{ try{
-      const sb = await ensureSupabase(); if(!sb) return;
-      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
-    }catch(e){} })();
-
-    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
-    fetchThreads();
-  }
-
-  async function boot(){
-  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
-  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
-  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
-  // 1) Always mount UI so the popup can open
-  mountUI();
-  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
-}
-if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
-})();
-</script>
-<script id="igdc-qa-safety-bootstrap">
-// Ensures the Q&A popup opens when clicking the sidebar link,
-// even if Supabase URL/Key are not configured yet.
-(function(){
-  if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
-
-  function ensureButton(){
-    var btn = document.getElementById('qnaOpenBtn');
-    if(!btn) return;
-
-    btn.addEventListener('click', function(){
-      if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
-        window.IGDC_QA.open();
-        return;
-      }
-
-      var modal = document.querySelector('.igdc-qa-modal');
-      if(!modal){
-        var m = document.createElement('div'); m.className='igdc-qa-modal';
-        var b = document.createElement('div'); b.className='igdc-qa-backdrop';
-        var p = document.createElement('div'); p.className='igdc-qa-panel';
-        var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='پرسش‌وپاسخ';
-        var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-        h.appendChild(t); h.appendChild(x);
-
-        var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after the save settings (Supabase url/key) are connected.</div>';
-
-
-        p.appendChild(h); p.appendChild(body);
-        m.appendChild(b); m.appendChild(p);
-        document.body.appendChild(m);
-
-        function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-        function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
-        x.addEventListener('click', close);
-        b.addEventListener('click', close);
-
-        window.IGDC_QA = window.IGDC_QA || {};
-        window.IGDC_QA.open = open;
-      }
-
-      if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
-    }, { passive:false });
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', ensureButton, { once:true });
-  } else {
-    ensureButton();
-  }
-})();
-</script>
 <style id="igdc-desktop-footer-bottom-space-v1">
 /* Footer-only desktop nano patch: keep mobile layout unchanged. */
 @media (min-width:1025px){
@@ -1599,7 +1213,55 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   background:#fff !important;
 }
 </style>
+<style id="igdc-distribution-mobile-touch-3zone-v6">
+/* DISTRIBUTION HUB — native touch motion only.
+   Portrait keeps the current proximity behavior.
+   Landscape releases snap so stronger native momentum can pass
+   multiple cards naturally. */
+@media (max-width:1024px) and (pointer:coarse){
+  #sec-reco .thumb-scroller,
+  #sec-ads .thumb-scroller,
+  #sec-trend .thumb-scroller,
+  #sec-new .thumb-scroller,
+  #sec-special .thumb-scroller,
+  #sec-others .thumb-scroller,
+  #mobile-ad-rail-list,
+  .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"]{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:x proximity !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+  #sec-reco .thumb-scroller > *,
+  #sec-ads .thumb-scroller > *,
+  #sec-trend .thumb-scroller > *,
+  #sec-new .thumb-scroller > *,
+  #sec-special .thumb-scroller > *,
+  #sec-others .thumb-scroller > *,
+  #mobile-ad-rail-list > *,
+  .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"] > *{
+    scroll-snap-stop:normal !important;
+  }
+}
 
+@media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
+  #sec-reco .thumb-scroller,
+  #sec-ads .thumb-scroller,
+  #sec-trend .thumb-scroller,
+  #sec-new .thumb-scroller,
+  #sec-special .thumb-scroller,
+  #sec-others .thumb-scroller,
+  #mobile-ad-rail-list,
+  .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"]{
+    scroll-snap-type:none !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+  }
+}
+</style>
 <style id="igdc-product-card-caption-unified-distribution-v1">
 /* Product-card presentation only: preserve all slot/rendering pipelines. */
 #sec-reco .thumb-scroller > .thumb-card,
@@ -1680,18 +1342,32 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   display:none !important;
 }
 </style>
-<style id="igdc-product-card-caption-rtl-guard-v1">
-/* Preserve fa RTL reading direction while keeping the new card geometry unchanged. */
-#sec-reco .thumb-card > .thumb-title,
-#sec-ads .thumb-card > .thumb-title,
-#sec-trend .thumb-card > .thumb-title,
-#sec-new .thumb-card > .thumb-title,
-#sec-special .thumb-card > .thumb-title,
-#sec-others .thumb-card > .thumb-title,
-.brand-rail .thumb-grid[data-psom-key="distribution-right"] > .thumb-card > .thumb-title{
-  direction:rtl !important;
-  text-align:right !important;
-}
+
+<style id="igdc-rtl-language-layer-v1">
+/* RTL language layer only. Keeps the latest IGDC physical layout intact. */
+html[dir="ltr"] { direction: ltr; }
+html[dir="ltr"] > body { direction: ltr; }
+html[dir="ltr"] > body > :not(script):not(style) { direction: rtl; }
+/* Preserve the latest three-column/front physical layout order. */
+html[dir="ltr"] > body > .container { direction: ltr !important; }
+html[dir="ltr"] > body > .container > .sidebar,
+html[dir="ltr"] > body > .container > .main-content,
+html[dir="ltr"] > body > .container > .right-panel,
+html[dir="ltr"] > body > .container > aside { direction: rtl; }
+/* RTL reading/input behavior; no width/grid/position changes. */
+html[dir="ltr"] input:not([type="number"]):not([type="range"]),
+html[dir="ltr"] textarea,
+html[dir="ltr"] select,
+html[dir="ltr"] option { direction: rtl; text-align: right; }
+html[dir="ltr"] .igdc-qa-panel,
+html[dir="ltr"] .igdc-qa-body,
+html[dir="ltr"] .igdc-qa-field,
+html[dir="ltr"] .igdc-qa-field label,
+html[dir="ltr"] .igdc-qa-text,
+html[dir="ltr"] .igdc-qa-note,
+html[dir="ltr"] .igdc-qa-thread,
+html[dir="ltr"] .igdc-qa-thread-q,
+html[dir="ltr"] .igdc-qa-thread-a { direction: rtl; text-align: right; }
 </style>
 </head>
 <body>
@@ -1754,7 +1430,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <!-- ===== RIGHT COLUMN ===== -->
 <aside class="right-col">
 <div class="brand-rail">
-<h4 class="ad-headline">💎 نشان‌های تجاری پیشنهادی 💎</h4>
+<h3 class="ad-headline">💎 نشان‌های تجاری پیشنهادی 💎</h3>
 <div class="thumb-grid thumb-scroller vertical" data-psom-key="distribution-right">
 </div>
 </div>
@@ -1765,14 +1441,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 (function(){
 
   const MAIN_COUNT = 100;
-  const RIGHT_COUNT = 80;
+  const RIGHT_COUNT = 100;
 
   function makeSlot(){
     const d = document.createElement('div');
     d.className = 'thumb-card placeholder';
     d.innerHTML = `
       <div class="thumb-img"></div>
-      <div class="thumb-title">به‌صورت خودکار تکمیل شد</div>
+      <div class="thumb-title">Auto-filled</div>
     `;
     return d;
   }
@@ -1813,7 +1489,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
-    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Korea<br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Korea <br/>
 </footer>
 <!-- 내부 로직은 숨김 처리(코드 최소 노출) -->
 <script>
@@ -1936,7 +1612,52 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   else init();
 })();
 </script>
-
+<script id="igdc-qa-safety-bootstrap">
+// Ensures the Q&A popup opens when clicking the sidebar link,
+// even if Supabase URL/Key are not configured yet.
+(function(){
+  if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
+  function ensureButton(){
+    var btn = document.getElementById('qnaOpenBtn');
+    if(!btn) return;
+    // If the main script exposed IGDC_QA, use it
+    btn.addEventListener('click', function(){
+      if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
+        window.IGDC_QA.open();
+        return;
+      }
+      // Fallback: if modal not in DOM, create a very small stub so user sees something
+      var modal = document.querySelector('.igdc-qa-modal');
+      if(!modal){
+        // create minimal skeleton matching the CSS already present
+        var m = document.createElement('div'); m.className='igdc-qa-modal';
+        var b = document.createElement('div'); b.className='igdc-qa-backdrop';
+        var p = document.createElement('div'); p.className='igdc-qa-panel';
+        var h = document.createElement('div'); h.className='igdc-qa-header';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
+        h.appendChild(t); h.appendChild(x);
+        var body = document.createElement('div'); body.className='igdc-qa-body';
+        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
+        p.appendChild(h); p.appendChild(body);
+        m.appendChild(b); m.appendChild(p);
+        document.body.appendChild(m);
+        function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
+        function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+        x.addEventListener('click', close);
+        b.addEventListener('click', close);
+        // expose temporary open so later main script can reuse
+        window.IGDC_QA = window.IGDC_QA || {};
+        window.IGDC_QA.open = open;
+      }
+      // open (either stub or full impl)
+      if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
+    }, { passive:false });
+  }
+  if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', ensureButton, { once:true }); }
+  else { ensureButton(); }
+})();
+</script>
 <script id="igdc-scroller-position-fix-v1">// neutralized by igdc-scroller-outside-v1 (replaced igdc-scroller-position-fix-v1)</script>
 <script id="igdc-scroller-position-final-v2">// neutralized by igdc-scroller-outside-v1 (replaced igdc-scroller-position-final-v2)</script>
 <script id="igdc-scroller-smooth-v3">// neutralized: IGDC Scroller Smooth v3</script>
@@ -1997,17 +1718,17 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   const modal = document.createElement('div'); modal.className='igtc-modal igtc-hidden'; modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true'); modal.setAttribute('aria-labelledby','igtc-modal-title');
   modal.innerHTML = `
     <header>
-      <h3 id="igtc-modal-title">جارٍ التحميل…</h3>
-      <button class="igtc-close" aria-label="بستن">✕</button>
+      <h3 id="igtc-modal-title">Loading…</h3>
+      <button class="igtc-close" aria-label="Close">✕</button>
     </header>
     <div class="igtc-content" tabindex="0">
       <div class="igtc-media"><img alt=""></div>
       <div class="igtc-body">
         <p class="igtc-desc" style="opacity:.9"></p>
         <div class="igtc-actions">
-          <button class="igtc-btn" data-act="cta">انتقال مباشر</button>
-          <button class="igtc-btn secondary" data-act="like">پسندیدن</button>
-          <button class="igtc-btn ghost" data-act="recommend">توصیه</button>
+          <button class="igtc-btn" data-act="cta">바로가기</button>
+          <button class="igtc-btn secondary" data-act="like">좋아요</button>
+          <button class="igtc-btn ghost" data-act="recommend">추천</button>
         </div>
       </div>
     </div>`;
@@ -2103,11 +1824,11 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     // Feedback handlers (optional)
     el.btnLike.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ if(window.IGDCEngagement && window.IGDCEngagement.toggle){ await window.IGDCEngagement.toggle(id, 'like', true); } else { await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); } this.textContent='پسندیده شد'; this.disabled=true; }catch(_){}
+      try{ if(window.IGDCEngagement && window.IGDCEngagement.toggle){ await window.IGDCEngagement.toggle(id, 'like', true); } else { await postJSON('/api/feedback', { id, type:'like', ts: Date.now() }); } this.textContent='좋아요 완료'; this.disabled=true; }catch(_){}
     };
     el.btnRec.onclick = async function(){
       const id = this.dataset.itemId || info.id; if(!id) return;
-      try{ if(window.IGDCEngagement && window.IGDCEngagement.toggle){ await window.IGDCEngagement.toggle(id, 'recommend', true); } else { await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); } this.textContent='پیشنهادی'; this.disabled=true; }catch(_){}
+      try{ if(window.IGDCEngagement && window.IGDCEngagement.toggle){ await window.IGDCEngagement.toggle(id, 'recommend', true); } else { await postJSON('/api/feedback', { id, type:'recommend', ts: Date.now() }); } this.textContent='추천 완료'; this.disabled=true; }catch(_){}
     };
   }
 
@@ -2156,8 +1877,286 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script id="igdc-qa-config">
+  (function () {
+    // 1) 민감정보 없는 기본 설정
+    const baseConfig = {
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
 
+    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
 
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
+
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
+      }
+
+      window.SUPER_VARSAR = Object.assign(
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
+
+    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var env = data && (data.env || data);
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        applyConfig(null);
+      });
+  })();
+</script>
+<script id="igdc-qa-script">
+(function(){
+  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
+  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
+  let isOpen=false, isAnimating=false;
+
+  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+  const fmtDate = (s)=> new Date(s).toLocaleString();
+  const nowISO = ()=> new Date().toISOString();
+  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
+  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+
+  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
+  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
+
+  async function ensureSupabase(){
+    if(STATE.sb) return STATE.sb;
+    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
+    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+    if(!url || !key || !window.supabase || !window.supabase.createClient){
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      return null;
+    }
+    STATE.sb = window.supabase.createClient(url, key);
+    return STATE.sb;
+  }
+  async function ensureAuth(){
+    const sb = await ensureSupabase(); if(!sb) return;
+    let { data: { session } } = await sb.auth.getSession();
+    if(!session){
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      ({ data: { session } } = await sb.auth.getSession());
+    }
+    if(session){
+      const uid = session.user.id;
+      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
+      STATE.user = session.user;
+      STATE.isAdmin = Array.isArray(data) && data.length>0;
+    }
+  }
+
+  function mountUI(){
+    const modal = el("div","igdc-qa-modal");
+    const backdrop = el("div","igdc-qa-backdrop");
+    const panel = el("div","igdc-qa-panel");
+    const header = el("div","igdc-qa-header");
+    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
+    header.append(title, close);
+
+    const body = el("div","igdc-qa-body");
+    const lQ = el("label"); lQ.textContent="질문";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="질문을 입력하세요...";
+    const lA = el("label"); lA.textContent="답변";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="조금만 기다리시면 금방 답변을 드리겠습니다.";
+    const actions = el("div","igdc-qa-actions");
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="등록하기";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="지우기";
+    const note = el("div","igdc-qa-note"); note.textContent="※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.";
+    const list = el("div","igdc-qa-threads");
+
+    body.append(lQ,tQ,lA,tA,actions,note,list);
+    actions.append(btnSubmit, btnClear);
+    panel.append(header, body);
+    modal.append(backdrop, panel);
+    document.body.append(modal);
+
+    // position near sidebar
+    function positionNearSidebar(){
+      try{
+        const sb = document.querySelector('.sidebar');
+        if(sb){
+          const rect = sb.getBoundingClientRect();
+          const left = Math.round(rect.right + 12);
+          panel.style.left = left + "px";
+        }
+      }catch(e){}
+    }
+    positionNearSidebar();
+    window.addEventListener('resize', positionNearSidebar);
+    window.addEventListener('scroll', positionNearSidebar, { passive:true });
+
+    function openModal(){
+      if(isAnimating || isOpen) return;
+      isAnimating = true;
+      modal.style.display = "block";
+      requestAnimationFrame(()=>{
+        modal.classList.add('open');
+        isOpen = true;
+        setTimeout(()=>{ isAnimating = false; }, 220);
+      });
+    }
+    function closeModal(){
+      if(isAnimating || !isOpen) return;
+      isAnimating = true;
+      modal.classList.remove('open');
+      setTimeout(()=>{
+        modal.style.display = "none";
+        isOpen = false;
+        isAnimating = false;
+      }, 220);
+    }
+
+    // Sidebar trigger
+    const sideBtn = document.querySelector('#qnaOpenBtn');
+    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
+    close.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
+
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+
+    async function fetchThreads(){
+      const sb = await ensureSupabase(); if(!sb) return;
+      const { data, error } = await sb.from("igdc_qna_threads")
+        .select("*")
+        .eq("project", STATE.project)
+        .eq("page_id", STATE.pageId)
+        .order("created_at", { ascending:false }).limit(100);
+      if(error){ console.error(error); return; }
+      renderList(data||[]);
+    }
+    function renderList(rows){
+      list.innerHTML="";
+      rows.forEach(row=>{
+        const box = el("div","igdc-qa-thread");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
+        const meta = el("div","igdc-qa-thread-meta");
+        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
+        const tag = el("span"); tag.textContent = row.is_admin? "관리요청":"일반";
+        const actions = el("div","igdc-qa-thread-actions");
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
+          del.addEventListener("click", async ()=>{
+            const sb = await ensureSupabase(); if(!sb) return;
+            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
+            if(error){ alert("삭제 실패(권한/정책)"); return; }
+            await fetchThreads();
+          });
+          actions.append(del);
+        }
+        meta.append(time, tag, actions);
+        box.append(q,a,meta);
+        list.append(box);
+      });
+    }
+
+    async function autoAnswerIfNeeded(text){
+      const technical = classifyTech(text);
+      let answer = null;
+      if(!technical){
+        const ep = getAIEndpoint();
+        if(ep){
+          try{
+            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
+            const j = await res.json(); answer = j && (j.answer||j.text||null);
+          }catch(e){}
+        }
+        if(!answer){
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
+          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
+          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
+        }
+      }
+      return { technical, answer };
+    }
+
+    async function submit(){
+      const q = (tQ.value||"").trim();
+      let a = (tA.value||"").trim();
+      if(!q){ tQ.focus(); return; }
+      const { technical, answer } = await autoAnswerIfNeeded(q);
+      if(!a && answer) a = answer;
+      const sb = await ensureSupabase();
+      if(!sb){
+        alert("저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
+        return;
+      }
+      const record = {
+        project: STATE.project, page_id: STATE.pageId,
+        user_id: (STATE.user && STATE.user.id) || null,
+        question: q, answer: a || null, is_admin: technical,
+        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
+      };
+      const { error } = await sb.from("igdc_qna_threads").insert(record);
+      if(error){ alert("등록 실패"); return; }
+      tQ.value=""; tA.value = a || "";
+      await fetchThreads();
+    }
+    btnSubmit.addEventListener("click", submit);
+
+    // realtime refresh
+    (async()=>{ try{
+      const sb = await ensureSupabase(); if(!sb) return;
+      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
+    }catch(e){} })();
+
+    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
+    fetchThreads();
+  }
+
+  async function boot(){
+  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
+  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
+  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
+  // 1) Always mount UI so the popup can open
+  mountUI();
+  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+}
+if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
+})();
+</script>
 <!-- IGDC: order/settlement wiring + AI fallback rotation (safe, same-origin) -->
 <script>
 (function(){
@@ -2179,22 +2178,22 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
     try{
       const res = await postJSON("/api/order", { itemId, qty: qty||1 });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"order_request", itemId, qty: qty||1, ok: res.ok });
-      if (res.ok){ alert("درخواست خرید شما دریافت شد."); }
-      else { alert("درخواست خرید ناموفق بود."); }
-    }catch(e){ console.warn(e); alert("خطای شبکه."); }
+      if (res.ok){ alert("구매 요청이 접수되었습니다."); }
+      else { alert("구매 요청 실패"); }
+    }catch(e){ console.warn(e); alert("네트워크 오류"); }
   };
 
   window.requestSettlement = async function(amount, currency){
     try{
       const res = await postJSON("/api/settlement", { amount, currency: currency||"KRW" });
       if (window.IGDC && IGDC.log) IGDC.log({ event:"settlement_request", amount, currency: currency||"KRW", ok: res.ok });
-      if (res.ok){ alert("درخواست تسویه شما دریافت شد."); }
-      else { alert("درخواست تسویه ناموفق بود."); }
-    }catch(e){ console.warn(e); alert("خطای شبکه."); }
+      if (res.ok){ alert("정산 요청이 접수되었습니다."); }
+      else { alert("정산 요청 실패"); }
+    }catch(e){ console.warn(e); alert("네트워크 오류"); }
   };
 
-  // ===== 2) AI Recommend·회전(로테이션) 보강 =====
-  // 조건: محصول 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 Recommend을 요청해 채움.
+  // ===== 2) AI 추천·회전(로테이션) 보강 =====
+  // 조건: 상품 카드가 거의 없거나(3개 미만) 썸네일이 비어 있으면 → 서버 추천을 요청해 채움.
   document.addEventListener('DOMContentLoaded', function(){
     try{
       // 컨테이너 후보 탐색
@@ -2217,7 +2216,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 
       if(!needFill) return;
 
-      // 서버 Recommend 시도 (동일 도메인)
+      // 서버 추천 시도 (동일 도메인)
       fetch('/api/recommendations?limit=12', { credentials:'include' })
         .then(function(r){ if(!r.ok) throw new Error('recommendations failed'); return r.json(); })
         .then(function(list){
@@ -2239,7 +2238,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || item.name || 'محصول';
+              t.textContent = item.title || item.name || '상품';
 
               a.appendChild(img);
               a.appendChild(t);
@@ -2265,7 +2264,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'محصول';
+              t.textContent = item.title || '상품';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -2278,7 +2277,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
 </script>
 <script src="/assets/js/igdc-core.min.js"></script>
 <script src="/assets/js/igdc-pay.min.js"></script>
-<!-- @SAFE-PATCH: hide 'Literature & Academic Exchange' sidebar/menu entry -->
+<!-- @SAFE-PATCH: hide '문학 학술교류' sidebar/menu entry -->
 <script>
 (function(){
   function hideLiteratureAcademic(){
@@ -2304,8 +2303,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   } else {
     hideLiteratureAcademic();
   }
-})();
-</script>
+})(
 <!-- Minimal runtime to toggle off-canvas; no bindings to existing logic -->
 <script id="ml-offcanvas-js">
 (function(){
@@ -2435,10 +2433,10 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       }
       var title = document.createElement("div");
       title.className = "thumb-title";
-      title.textContent = (item && item.title) ? item.title : "پیشنهادی";
+      title.textContent = (item && item.title) ? item.title : "Recommended";
       var meta = document.createElement("div");
       meta.className = "thumb-meta";
-      meta.textContent = (item && item.meta) ? item.meta : "به‌صورت خودکار تکمیل شد";
+      meta.textContent = (item && item.meta) ? item.meta : "Auto-filled";
       card.appendChild(img);
       card.appendChild(title);
       card.appendChild(meta);
@@ -2738,12 +2736,12 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='پرسش‌وپاسخ';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after the save settings (Supabase url/key) are connected.</div>';
+      body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
 
       // ensure the "대표 이메일" is shown only inside the modal
 
@@ -2752,7 +2750,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 
@@ -2818,7 +2816,7 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "ایمیل اصلی: ..." remnants
+        // Remove any plain-text "대표 이메일: ..." remnants
         f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
@@ -2832,13 +2830,13 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='پرسش‌وپاسخ';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = 'All features will be enabled after the save settings (Supabase url/key) are connected.';
+      note.textContent = '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.';
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
@@ -3158,7 +3156,7 @@ window.addEventListener("message",function(ev){
       var title = document.querySelector('#mobile-ad-rail-wrap .rail-title, #mobile-ad-rail-wrap h3, #mobile-ad-rail-wrap header h3');
       if (title){
         var t=(title.textContent||'').trim();
-        if (t.length>8) title.textContent='💎 برندهای پیشنهادی 💎';
+        if (t.length>8) title.textContent='💎 추천 브랜드 💎';
       }
       // Capture-phase guard to preserve native vertical scroll
       var zone = list || wrap;
@@ -3212,8 +3210,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>کد QR پرداخت</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">بستن</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -3248,11 +3246,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('با موفقیت ارسال شد.');
+    ta.value=''; alert('전송되었습니다.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('ارسال ناموفق بود.'));});
-  const btn=document.querySelector('#qnaOpenBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('ارسال ناموفق بود.'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
+  const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
 })();
 </script>
 <script>
@@ -3294,12 +3292,12 @@ window.addEventListener("message",function(ev){
 </script>
 <script id="igdc-product-review-script">
 /*
- IGDC محصول Review – Auto Hook Version
+ IGDC Product Review – Auto Hook Version
  - Distribution page thumbnail click auto-detect
- - محصول detail review auto-mount (Coupang-style)
+ - Product detail review auto-mount (Coupang-style)
  *
  * Requirement:
- *  - محصول thumbnail or detail container must have: data-product-id="..."
+ *  - Product thumbnail or detail container must have: data-product-id="..."
  *  - window.__IGDC_ROLE (guest | member | admin ...)
  */
 
@@ -3334,7 +3332,7 @@ window.addEventListener("message",function(ev){
         const productId = card.dataset.productId;
         if (!productId) return;
 
-        // 상세 محصول이 열릴 시간을 약간 준 뒤 마운트
+        // 상세 상품이 열릴 시간을 약간 준 뒤 마운트
         setTimeout(() => {
           this.mount(productId);
         }, 50);
@@ -3361,7 +3359,7 @@ window.addEventListener("message",function(ev){
         root = document.createElement('div');
         root.id = this.config.rootId;
 
-        // 상세 محصول 영역 하단에 삽입
+        // 상세 상품 영역 하단에 삽입
         const detail =
           document.querySelector('.product-detail') ||
           document.querySelector('.product-modal') ||
@@ -3376,8 +3374,8 @@ window.addEventListener("message",function(ev){
       const canWrite = this.state.role !== 'guest';
       return `
         <section class="igdc-review">
-          <h3 class="igdc-review-title">مراجعات المنتجات</h3>
-          <div id="igdc-review-list" class="igdc-review-list">در حال بارگذاری...</div>
+          <h3 class="igdc-review-title">상품 리뷰</h3>
+          <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
           ${canWrite ? this.renderForm() : this.renderLoginHint()}
         </section>
       `;
@@ -3387,12 +3385,12 @@ window.addEventListener("message",function(ev){
       return `
         <form id="igdc-review-form" class="igdc-review-form">
           <textarea
-            placeholder="شارك تجربتك مع المنتج"
+            placeholder="상품 사용 경험을 공유해 주세요"
             minlength="${this.config.minChars}"
             maxlength="${this.config.maxChars}"
             required></textarea>
           <div class="igdc-review-actions">
-            <button type="submit">ارسال بررسی</button>
+            <button type="submit">리뷰 등록</button>
           </div>
         </form>
       `;
@@ -3400,7 +3398,7 @@ window.addEventListener("message",function(ev){
 
     renderLoginHint() {
       return `<div class="igdc-review-login-hint">
-        كتابة المراجعة متاحة بعد تسجيل الدخول.
+        리뷰 작성은 로그인 후 가능합니다.
       </div>`;
     },
 
@@ -3414,7 +3412,7 @@ window.addEventListener("message",function(ev){
         const content = textarea.value.trim();
 
         if (content.length < this.config.minChars) {
-          alert(`بررسی باید حداقل ${this.config.minChars} نویسه داشته باشد.`);
+          alert(`리뷰는 최소 ${this.config.minChars}자 이상 작성해 주세요.`);
           return;
         }
 
@@ -3423,7 +3421,7 @@ window.addEventListener("message",function(ev){
             textarea.value = '';
             this.loadReviews();
           })
-          .catch(() => alert('ارسال بررسی ناموفق بود'));
+          .catch(() => alert('리뷰 등록 실패'));
       });
     },
 
@@ -3431,7 +3429,7 @@ window.addEventListener("message",function(ev){
       const list = document.getElementById('igdc-review-list');
       if (!list) return;
 
-      list.textContent = 'در حال بارگذاری...';
+      list.textContent = '로딩 중...';
 
       try {
         const res = await fetch(
@@ -3440,13 +3438,13 @@ window.addEventListener("message",function(ev){
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
-          list.innerHTML = '<div class="igdc-review-empty">لا توجد مراجعات بعد.</div>';
+          list.innerHTML = '<div class="igdc-review-empty">아직 리뷰가 없습니다.</div>';
           return;
         }
 
         list.innerHTML = data.map(this.renderItem).join('');
       } catch {
-        list.textContent = 'تعذر تحميل المراجعات.';
+        list.textContent = '리뷰를 불러오지 못했습니다.';
       }
     },
 
@@ -3468,7 +3466,7 @@ window.addEventListener("message",function(ev){
       return `
         <div class="igdc-review-item">
           <div class="igdc-review-meta">
-            <span>${esc(item.user || 'ناشناس')}</span>
+            <span>${esc(item.user || '익명')}</span>
             <span>${esc(item.date || '')}</span>
           </div>
           <div class="igdc-review-content">${esc(item.content)}</div>
@@ -3494,12 +3492,56 @@ window.addEventListener("message",function(ev){
   document.head.appendChild(style);
 
   Review.init();
-  window.IGDCمحصولReview = Review;
+  window.IGDCProductReview = Review;
 
 })(window, document);
 </script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 <script defer="" src="/assets/js/distribution-products-automap.v3.js"></script>
+<script id="igdc-distribution-right-100-sync-final-v3">
+(function(){
+  'use strict';
+  if(window.__IGDC_DISTRIBUTION_RIGHT_100_SYNC_V3__) return;
+  window.__IGDC_DISTRIBUTION_RIGHT_100_SYNC_V3__=true;
+
+  var syncing=false, timer=0;
+  function placeholder(){
+    var d=document.createElement('div');
+    d.className='thumb-card placeholder';
+    d.innerHTML='<div class="thumb-img"></div><div class="thumb-title">Auto-filled</div>';
+    return d;
+  }
+  function source(){ return document.querySelector('.thumb-grid[data-psom-key="distribution-right"]'); }
+  function ensure100(src){
+    if(!src) return;
+    while(src.children.length < 100) src.appendChild(placeholder());
+    while(src.children.length > 100) src.removeChild(src.lastElementChild);
+  }
+  function mirror(){
+    if(syncing) return; syncing=true;
+    try{
+      var src=source(); if(!src) return;
+      ensure100(src);
+      var dst=document.getElementById('mobile-ad-rail-list');
+      if(dst){
+        dst.innerHTML='';
+        var frag=document.createDocumentFragment();
+        Array.prototype.slice.call(src.children,0,100).forEach(function(card){ frag.appendChild(card.cloneNode(true)); });
+        dst.appendChild(frag);
+      }
+    }finally{ syncing=false; }
+  }
+  function schedule(){ clearTimeout(timer); timer=setTimeout(mirror,30); }
+  function boot(){
+    var src=source(); if(!src) return;
+    mirror();
+    if('MutationObserver' in window){ new MutationObserver(schedule).observe(src,{childList:true}); }
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true}); else boot();
+  window.addEventListener('load',schedule,{once:true});
+  window.addEventListener('resize',schedule,{passive:true});
+})();
+</script>
 </body>
 </html>

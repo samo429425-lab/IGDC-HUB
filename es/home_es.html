@@ -32,12 +32,12 @@
       background-color: #fff4e0;
       color: #804000;
       text-decoration: none;
-      padding: 12px 12px;
+      padding: 12px 8px;
       font-weight: bold;
       font-size: 1rem;
       border: 1px solid #f3d9b0;
       border-radius: 8px;
-      margin: 10px 12px;
+      margin: 10px 5px;
       transition: background-color 0.3s, text-decoration 0.3s;
     }
     .sidebar a:hover {
@@ -494,7 +494,7 @@
   flex-shrink: 0;
 }
 </style>
-<!-- Invisible fingerprint (fingerprint) for shopping lines -->
+<!-- Invisible fingerprint (지문) for shopping lines -->
 <script id="shopping-fingerprint" type="application/json">{"version": "1.0.0", "lines": {"1": {"category": "beauty", "notes": "cosmetics & premium trending beauty"}, "2": {"category": "apparel", "notes": "hot brands; women-major; include men"}, "3": {"category": "home_bedding_interior", "notes": "premium but value; high purchase volume"}, "4": {"category": ["electronics", "cars"], "mix_ratio_default": "3:1", "mix_ratio_fallback": "4:1"}, "5": {"category": ["furniture", "outdoor_sportswear"], "notes": "premium furniture + outdoor/sportswear"}}, "personalization": {"by_ip_region": true, "by_language": true, "language_fallback": "en"}}</script>
 <style>
 /* Utility only (screen-reader), no visual impact */
@@ -545,7 +545,7 @@
   -ms-overflow-style: none;         /* IE/Edge scrollbar hidden */
   scrollbar-width: none;            /* Firefox scrollbar hidden */
   -webkit-overflow-scrolling: touch;/* iOS momentum scroll */
-  touch-action: pan-y;              /* touch scroll vertical */
+  touch-action: pan-x pan-y;              /* touch scroll vertical */
   overscroll-behavior: contain;     /* avoid page stealing wheel */
   pointer-events: auto;             /* ensure it catches events */
   position: relative;
@@ -570,7 +570,7 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
+  touch-action: pan-x pan-y;
   overscroll-behavior: contain;
   pointer-events: auto;
   position: relative;
@@ -965,7 +965,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Aún no hay contenidos de preguntas y respuestas.";
+  content: "아직 등록된 QnA가 없습니다";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -983,7 +983,7 @@ html, body {
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Aún no hay contenidos de preguntas y respuestas.";
+  content: "아직 등록된 QnA가 없습니다";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -1026,43 +1026,6 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 </style>
 <link href="/assets/css/thumbs.standard.css?v=20250914" rel="stylesheet"/>
 <!-- Mobile Optimization Patch v1 -->
-<style id="igdc-mobile-patch">
-@media (max-width: 768px){
-  .sidebar,
-  .right,
-  .right-panel,
-  .ad-panel,
-  .bottom-nav,
-  .bottom-bar,
-  .mobile-dock { display:none !important; }
-
-  .container,
-  .layout { display:block !important; padding:0 !important; margin:0 !important; }
-  .main, .main-content, main, .content-area {
-    max-width:none !important;
-    width:100% !important;
-    margin:0 !important;
-    padding:16px !important;
-    box-shadow:none !important;
-  }
-
-  .scroll-btn, .btn-scroll-left, .btn-scroll-right { display:none !important; }
-  .scroll-wrapper { padding:0 !important; }
-
-  .grid {
-    display:grid !important;
-    grid-template-columns:repeat(2, minmax(0,1fr)) !important;
-    gap:10px 10px !important;
-  }
-}
-@media (max-width: 768px) and (orientation: landscape){
-  .grid { grid-template-columns:repeat(3, minmax(0,1fr)) !important; }
-}
-@media (max-width: 768px){
-  nav a { padding:8px 10px !important; font-size:.95rem !important; }
-  .language-select { top:10px !important; right:12px !important; transform:none !important; }
-}
-</style>
 <script defer="" id="igdc-mobile-qna">
 (function(){
   var isMobile = matchMedia("(max-width:768px)").matches;
@@ -1085,57 +1048,19 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var btn = document.createElement("button");
   btn.id = "qna-fab";
   btn.type = "button";
-  btn.setAttribute("aria-label","Preguntas y respuestas");
+  btn.setAttribute("aria-label","Q&A");
   btn.style.cssText = [
     "position:fixed","z-index:99999","top:10px","right:10px",
     "padding:10px 14px","border-radius:999px","border:1px solid rgba(0,0,0,.1)",
     "background:#004080","color:#fff","font-weight:700","box-shadow:0 2px 8px rgba(0,0,0,.2)"
   ].join(";");
-  btn.textContent = "P&R";
+  btn.textContent = "Q&A";
   btn.addEventListener("click", openQnA, {passive:true});
 
   var hdr = document.querySelector("header") || document.body;
   hdr.appendChild(btn);
 })();
 </script>
-<!-- Mobile Ad Drawer v3 (push layout: stage shifts left while right drawer appears) -->
-<style id="igdc-mobile-ad-drawer">
-@media (max-width:768px){
-  :root{ --adw: min(86vw, 320px); }
-  #ad-stage{ transition: transform .25s ease; }
-  html.ad-open #ad-stage{ transform: translateX(calc(-1 * var(--adw))); }
-
-  #ad-drawer{
-    position:fixed; top:0; right:0; height:100vh; width:var(--adw);
-    background:#fff; box-shadow:-4px 0 16px rgba(0,0,0,.18);
-    transform:translateX(100%); transition:transform .25s ease;
-    z-index:99998; display:flex; flex-direction:column;
-  }
-  #ad-drawer.open{ transform:translateX(0); }
-
-  #ad-drawer-header{
-    padding:10px 12px; border-bottom:1px solid rgba(0,0,0,.06);
-    display:flex; align-items:center; justify-content:space-between;
-  }
-  #ad-drawer-title{ font-weight:800; }
-  #ad-drawer-close{ border:none; background:transparent; font-size:22px; line-height:1; padding:6px; }
-  #ad-drawer-body{ flex:1; overflow:auto; -webkit-overflow-scrolling:touch; padding:10px; }
-
-  #ad-backdrop{
-    position:fixed; inset:0; background:rgba(0,0,0,.15);
-    opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:99997;
-  }
-  #ad-backdrop.show{ opacity:1; pointer-events:auto; }
-
-  #ad-tab{
-    position:fixed; top:50%; right:0; transform:translate(42%, -50%) rotate(-90deg);
-    background:#004080; color:#fff; border:1px solid rgba(0,0,0,.1); border-radius:10px;
-    padding:6px 10px; font-weight:800; letter-spacing:.02em; z-index:99996;
-    box-shadow:0 2px 8px rgba(0,0,0,.25);
-  }
-  .ad-panel{ display:none !important; }
-}
-</style>
 <style id="notice-hero-style">
 /* === Notice Hero (정리된 최종 버전) === */
 .notice-hero {
@@ -1355,45 +1280,6 @@ section.shopping-section, section.shopping-section .shopping-rows {
 </style>
 <style id="news-hotfix-20250926-v18-stamplabel">
 .news-section .continent-tag .label{ letter-spacing:.04em; }
-</style>
-<style id="igdc-home-mobile-hotfix-20251009">
-  /* 1) Mobile: hide any shopping sections that accidentally render *after* the footer */
-  @media (max-width: 768px){
-    footer ~ .shopping-section,
-    footer ~ section.shopping-section,
-    body > footer ~ .shopping-section { display: none !important; }
-  }
-
-  /* 2) Right panel as swipe drawer (mobile only) */
-  @media (max-width: 768px){
-    :root{ --drawerW: min(86vw, 320px); }
-
-    /* Ensure the original .ad-panel content is not displayed inline on mobile */
-    .ad-panel { display: none !important; }
-
-    /* Drawer container (we will move .ad-panel into this) */
-    #ad-drawer-right{
-      position: fixed; top: 0; right: 0; height: 100vh; width: var(--drawerW);
-      background: #ffffff; transform: translateX(100%); transition: transform .25s ease;
-      z-index: 2147483000; box-shadow: -4px 0 16px rgba(0,0,0,.18); overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-    html.pv-open-right #ad-drawer-right{ transform: translateX(0); }
-
-    /* Backdrop */
-    #ad-backdrop-right{
-      position: fixed; inset: 0; background: rgba(0,0,0,.35);
-      opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 2147482999;
-    }
-    html.pv-open-right #ad-backdrop-right{ opacity: 1; pointer-events: auto; }
-
-    /* Edge hotspot */
-    #edge-right-hotspot{
-      position: fixed; top: 0; right: 0; width: 16px; height: 100vh; z-index: 2147483001;
-      /* transparent; acts as swipe area */
-    }
-    html.pv-open-right #edge-right-hotspot{ right: var(--drawerW); }
-  }
 </style>
 <style>
 /* Others (desktop & landscape): keep original behavior */
@@ -1804,8 +1690,8 @@ section.shopping-section, section.shopping-section .shopping-rows {
       overflow-x: auto !important;
       overflow-y: hidden !important;
       -webkit-overflow-scrolling: touch !important;
-      scroll-snap-type: x mandatory !important;
-      touch-action: pan-x !important;              /* allow finger horizontal drag */
+      scroll-snap-type: x proximity !important;
+      touch-action: pan-x pan-y !important;              /* allow finger horizontal drag */
       overscroll-behavior-x: contain !important;  /* prevent viewport scroll hijack */
     }
 
@@ -1866,29 +1752,31 @@ section.shopping-section, section.shopping-section .shopping-rows {
     min-width: 25vw !important;
   }
   /* 강한 스냅은 유지하되 세로 제스처는 통과 */
-  .ad-panel[data-mobile-in-main="1"] .ad-scroll{ scroll-snap-type: x mandatory !important; }
+  .ad-panel[data-mobile-in-main="1"] .ad-scroll{ scroll-snap-type: x proximity !important; }
 }
 </style>
 <style id="vdrag-mobile-ad-sections-fix-20251028">
-/* Precise fix: enable vertical dragging/scroll on the 3 migrated sections */
 @media (max-width: 1024px){
-  /* Allow Y scroll on the wrapper and its ancestors */
-  .ad-panel .ad-section, 
+
   .ad-panel .ad-section .ad-scroll{
-    touch-action: pan-y !important;
-    -ms-touch-action: pan-y !important;
-    pointer-events: auto !important;
-    overscroll-behavior: contain !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    touch-action: pan-x pan-y !important;
+    -webkit-overflow-scrolling: touch !important;
   }
-  /* Prevent horizontal-only override from winning in this range */
-  html body .ad-panel .ad-section .ad-scroll{
-    overflow-y: auto !important;
+
+  .ad-panel .ad-section .ad-list{
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 10px !important;
   }
-  /* Make the whole block draggable to scroll the page (fallback) */
-  .ad-panel .ad-section{
-    user-select: none;
-    -webkit-user-drag: none;
+
+  .ad-panel .ad-section .ad-list > *{
+    flex: 0 0 47vw !important;
+    min-width: 47vw !important;
   }
+
 }
 </style>
 <style id="mobile-tidy-fix2">
@@ -1908,7 +1796,6 @@ section.shopping-section, section.shopping-section .shopping-rows {
 
   /* make sure the scroller is actually the x-axis container (to ensure above works) */
   .ad-panel .ad-section .ad-scroll{ overflow-x: auto !important; overflow-y: hidden !important; }
-  .ad-panel .ad-section .ad-list{ overflow-x: auto !important; overflow-y: hidden !important; }
 
   /* ---- B. Remove the one-card-tall vertical gap between sections ---- */
   /* Neutralize margins/paddings/min-heights on all relevant wrappers */
@@ -1947,35 +1834,43 @@ section.shopping-section, section.shopping-section .shopping-rows {
 <!-- mrp-mobile-fix-strong: final mobile overrides (appended last) -->
 <style id="mrp-mobile-fix-strong">
 @media (max-width:1024px){
-  /* Ensure the scroll wrapper allows horizontal scroll */
+
+  /* 1. 스크롤은 ad-scroll 하나만 */
   html body .ad-panel .ad-section .ad-scroll{
     overflow-x: auto !important;
     overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch !important;
-    scroll-snap-type: x mandatory !important;
-    touch-action: pan-x !important;
+    touch-action: pan-x pan-y !important;
     overscroll-behavior-x: contain !important;
   }
-  /* Force the list to be horizontal, beating earlier !important column rules */
+
+  /* 2. 리스트는 단순 flex (스크롤 X) */
   html body .ad-panel .ad-section .ad-list{
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: nowrap !important;
-    gap: 12px !important;
-    padding: 10px 8px 16px !important;
+    gap: 10px !important;
+    padding: 8px !important;
   }
-  /* Each child acts as a card with snap and width */
+
+  /* 3. 카드: 한 장씩 나오게 (핵심) */
   html body .ad-panel .ad-section .ad-list > *{
-    scroll-snap-align: start !important;
+    flex: 0 0 92vw !important;
     min-width: 92vw !important;
     box-sizing: border-box !important;
   }
+
 }
+
+/* 가로모드만 2장 */
 @media (max-width:1024px) and (orientation:landscape){
   html body .ad-panel .ad-section .ad-list > *{
+    flex: 0 0 47vw !important;
     min-width: 47vw !important;
   }
 }
+
+/* 이미지 안정화 */
 @media (max-width:1024px){
   html body .ad-panel .ad-section img{
     width: 100% !important;
@@ -1984,6 +1879,24 @@ section.shopping-section, section.shopping-section .shopping-rows {
     object-fit: cover !important;
     aspect-ratio: 16/9 !important;
   }
+}
+</style>
+<style id="final-mobile-scroll-fix">
+@media (max-width:1024px){
+
+  /* 스크롤은 ad-scroll만 담당 */
+  html body .ad-panel .ad-section .ad-scroll{
+    touch-action: pan-x pan-y !important;
+    -ms-touch-action: pan-x pan-y !important;
+    overscroll-behavior-y: auto !important;
+    scroll-snap-type: x proximity !important;
+  }
+
+  /* ad-list는 터치 제거 (핵심) */
+  html body .ad-panel .ad-section .ad-list{
+    touch-action: auto !important;
+  }
+
 }
 </style>
 <style id="news-arrows-layer-guard-20251112-clean">
@@ -2038,14 +1951,6 @@ section.shopping-section, section.shopping-section .shopping-rows {
   footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; position: static !important; }
 </style>
 <link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
-
-<style id="donation-center-disabled-style">
-a[href=""], a:not([href]).center-donation-disabled, button.center-donation-disabled{
-  pointer-events:none !important;
-  cursor:default !important;
-}
-</style>
-
 <style id="hero-search-style">
   .hero-search{ padding: 14px 0 18px; }
   .hero-search-inner{ max-width: 1100px; margin: 0 auto; padding: 0 14px; }
@@ -2058,6 +1963,33 @@ a[href=""], a:not([href]).center-donation-disabled, button.center-donation-disab
   #homeSearchInput{ flex:1; border:none; outline:none; font-size: 16px; padding: 8px 6px; background:transparent; }
   #homeSearchBtn{ border:none; cursor:pointer; padding: 10px 14px; border-radius: 12px; background:#2563eb; color:#fff; font-weight:700; }
   .hero-search-hint{ margin-top: 8px; color:#6b7280; font-size: 12.5px; }
+</style>
+<style id="center-donation-disabled-style">
+.center-donation-disabled{
+  pointer-events:none !important;
+  cursor:default !important;
+  text-decoration:none !important;
+}
+</style>
+<style id="ko-sidebar-spacing-unified">
+/* KO sidebar spacing: unify only button-to-button vertical spacing */
+.sidebar{
+  padding-top: 20px !important;
+}
+.sidebar a,
+.sidebar a#qnaOpenBtn,
+#qnaOpenBtn,
+.sidebar a[id*="qna"],
+a[id*="qna"]{
+  margin: 10px 12px !important;
+}
+</style>
+<!-- Korean home only: Q&A panel must open directly below the Index header. -->
+<style id="igdc-qa-panel-position-kr-home">
+.igdc-qa-panel{
+  top:16px !important;
+  bottom:auto !important;
+}
 </style>
 <!-- Home Q&A: match the Korean reference inside the index-frame, directly below the host header. -->
 <style id="igdc-qa-panel-position-home-header-anchor">
@@ -2297,7 +2229,113 @@ a[href=""], a:not([href]).center-donation-disabled, button.center-donation-disab
   }
 }
 </style>
+<style id="igdc-home-mobile-portrait-onecard-fullwidth-final-v1">
+/* Mobile portrait ONLY: restore one full-width card per Home main product section.
+   Landscape/tablet/desktop rules remain untouched. */
+@media (max-width:768px) and (orientation:portrait){
 
+  section.shopping-section .shop-scroller{
+    width:100% !important;
+    max-width:100% !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-snap-type:x mandatory !important;
+    overscroll-behavior-x:contain !important;
+    box-sizing:border-box !important;
+  }
+
+  /* Existing fallback row + AutoMap/Snapshot row: same one-card viewport rule. */
+  section.shopping-section .shop-row,
+  section.shopping-section .thumb-grid[data-psom-key="home_1"],
+  section.shopping-section .thumb-grid[data-psom-key="home_2"],
+  section.shopping-section .thumb-grid[data-psom-key="home_3"],
+  section.shopping-section .thumb-grid[data-psom-key="home_4"],
+  section.shopping-section .thumb-grid[data-psom-key="home_5"]{
+    display:grid !important;
+    grid-auto-flow:column !important;
+    grid-template-rows:1fr !important;
+    grid-template-columns:none !important;
+    grid-auto-columns:100% !important;
+    width:100% !important;
+    max-width:100% !important;
+    gap:10px !important;
+    margin:0 !important;
+    box-sizing:border-box !important;
+  }
+
+  section.shopping-section .shop-row > .shop-card,
+  section.shopping-section .thumb-grid[data-psom-key="home_1"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_2"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_3"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_4"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_5"] > *{
+    width:100% !important;
+    min-width:100% !important;
+    max-width:100% !important;
+    flex:0 0 100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    aspect-ratio:4 / 5 !important;
+    margin:0 !important;
+    box-sizing:border-box !important;
+    scroll-snap-align:start !important;
+    scroll-snap-stop:always !important;
+  }
+}
+</style>
+<style id="igdc-home-landscape-right-fling-final-v3">
+@media (max-width:1024px) and (orientation:landscape) and (pointer:coarse){
+  /* One horizontal scroll owner only: ad-scroll.
+     Landscape snap capture is released so stronger native fling momentum
+     can coast across multiple cards, matching the working Network/
+     Distribution/Tour landscape rails. */
+  html body .ad-panel .ad-section .ad-scroll{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:none !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  /* ad-list remains layout only, never a second horizontal scroller. */
+  html body .ad-panel .ad-section .ad-list{
+    overflow-x:visible !important;
+    overflow-y:visible !important;
+  }
+
+  html body .ad-panel .ad-section .ad-list > *{
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
+<style id="igdc-home-portrait-main-gentle-onecard-v5">
+/* HOME MOBILE PORTRAIT — MAIN 5 ONLY.
+   Right panel is intentionally untouched. */
+@media (max-width:1024px) and (orientation:portrait) and (pointer:coarse){
+  section.shopping-section .shop-scroller{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+    scroll-snap-type:x proximity !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+  }
+  section.shopping-section .shop-row > .shop-card,
+  section.shopping-section .thumb-grid[data-psom-key="home_1"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_2"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_3"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_4"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_5"] > *{
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
 <style id="igdc-product-card-caption-unified-home-v1">
 /* Product-card presentation only: image above, readable title below.
    Does not alter Snapshot/AutoMap selection, slot counts, or navigation. */
@@ -2375,7 +2413,7 @@ a[href=""], a:not([href]).center-donation-disabled, button.center-donation-disab
 </head>
 <body>
 <div class="container">
-<!-- Left fixed navigation (unchanged) -->
+<!-- 좌측 고정 내비게이션 (unchanged) -->
 <div class="sidebar">
 <a href="home_es.html">🏠 Inicio</a>
 <a href="networkhub_es.html">🛒 Centro de Mercado</a>
@@ -2386,7 +2424,7 @@ a[href=""], a:not([href]).center-donation-disabled, button.center-donation-disab
 <a href="literature_academic">📚 Intercambio Literario y Académico</a>
 <a href="javascript:void(0)" id="qnaOpenBtn">💬 Preguntas y respuestas</a>
 </div>
-<!-- Main content (inner changes only) -->
+<!-- 메인 컨텐츠 (inner only changes) -->
 <div class="main-content">
 <div class="notice-hero" id="notice-hero">
 <div class="hero-top">
@@ -2396,27 +2434,17 @@ a[href=""], a:not([href]).center-donation-disabled, button.center-donation-disab
 </div>
 </div>
 <!-- ========== HERO SEARCH BAR (FINAL) ========== -->
-<section class="hero-search" aria-label="Búsqueda del sitio">
-  <div class="hero-search-inner">
-    <div class="hero-search-bar" role="search">
-      <input
-        id="homeSearchInput"
-        type="search"
-        placeholder="Ingrese su término de búsqueda"
-        autocomplete="off"
-      />
-      <button
-        id="homeSearchBtn"
-        type="button"
-        aria-label="Ejecutar búsqueda"
-      >
+<section aria-label="Búsqueda del sitio" class="hero-search">
+<div class="hero-search-inner">
+<div class="hero-search-bar" role="search">
+<input autocomplete="off" id="homeSearchInput" placeholder="Ingrese su término de búsqueda" type="search"/>
+<button aria-label="Ejecutar búsqueda" id="homeSearchBtn" type="button">
         Buscar
       </button>
-    </div>
-    <div class="hero-search-hint">Los resultados de búsqueda se abrirán en una nueva ventana.</div>
-  </div>
+</div>
+<div class="hero-search-hint">Los resultados de búsqueda se abrirán en una nueva ventana.</div>
+</div>
 </section>
-
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const input = document.getElementById('homeSearchInput');
@@ -2466,12 +2494,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script>
-
 <!-- ========== NEWS (Middle) ========== -->
 <section aria-label="Noticias por región" class="news-section">
 <div class="news-row-wrap" data-row="1">
 <div class="news-row" id="newsRow1"><button aria-expanded="false" aria-label="Mostrar u ocultar sellos regionales" class="stamp-handle" title="Sellos regionales" type="button">◀</button><button aria-label="scroll left" class="row-arrow left" id="rowLeft1">‹</button>
-<span class="continent-tag">🌏 Gran Asia</span>
+<span class="continent-tag">🌏 Gran Asia </span>
 <!-- KR majors -->
 <!-- Central Asia -->
 <a class="news-btn" data-cc="KR" data-region="AS" href="https://news.kbs.co.kr/" rel="noopener noreferrer" target="_blank">KBS</a>
@@ -2600,7 +2627,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <a class="our-site-btn" href="socialnetwork_es.html">📢 Red Social</a>
 <a class="our-site-btn" href="mediahub_es.html">🎬 Centro de Medios</a>
 <a class="our-site-btn" href="tour_es.html">🧳 Viajes · Turismo · Alojamiento</a>
-<a class="our-site-btn" >&nbsp;</a>
+<a class="our-site-btn center-donation-disabled"> </a>
 </div>
 </section>
 <section aria-label="Recomendaciones de compras destacadas" class="shopping-section">
@@ -2644,20 +2671,18 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 </section>
 </div>
-<!-- Right ad panel (unchanged width) -->
-<div class="ad-panel"><div class="ad-section" data-max="10" data-section="top" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">Automóviles · Webtoons · Moda</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_top"></div></div><div class="ad-section" data-max="10" data-section="middle" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">
+<!-- 우측 광고 패널 (unchanged width) -->
+<div class="ad-panel"><div class="ad-section" data-max="100" data-section="top" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">Automóviles · Webtoons · Moda</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_top"></div></div><div class="ad-section" data-max="100" data-section="middle" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">
   Comida · Hogar · Librería
-</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_middle"></div></div><div class="ad-section" data-max="7" data-section="bottom" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">
+</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_middle"></div></div><div class="ad-section" data-max="100" data-section="bottom" data-visible="4"><h4 class="ad-title" style="text-align:center; width:100%; margin:0; padding:0; font-weight:600; font-size:1rem;">
   Conocimiento · Salud · Otros
-</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_bottom"></div></div></div>
+</h4><div class="ad-scroll"><div class="ad-list"><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a><a class="ad-box" href="#" rel="noopener" target="_blank"><div class="thumb"></div></a></div></div><div class="thumb-grid thumb-scroller" data-psom-key="home_right_bottom"></div></div></div>
 </div>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.home.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
 <footer>
     IGDC Global Hub © 2025 | International General Trading Company<br/>
-    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea<br/>
+    50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea <br/>
 </footer>
-<!-- 🔒 Keep original script (API hook, ledger, etc.) -->
-
 <!-- removed stray text:  -->
 <script>
 // ===== AI/Backend-driven ad auto-update (thumb-only) =====
@@ -2826,15 +2851,17 @@ function reorderRow(rowId){
 <script>
 (function(){
   const ROWS = 5;
-  const ITEMS_PER_ROW = 80; // can be increased
+
+  /* 메인 섹션 카드 수 */
+  const ITEMS_PER_ROW = 50;
 
   function makeCard(i, row){
     const a = document.createElement('a');
     a.className = 'shop-card';
-    a// href left unset by default; set only when URL exists;
-    a.textContent = `Artículo ${i+1}`;
+    a.textContent = `아이템 ${i+1}`;
     return a;
   }
+
 
   function fillRows(){
     for(let r=1;r<=ROWS;r++){
@@ -3055,13 +3082,22 @@ function reorderRow(rowId){
         const list = sec.querySelector('.ad-list');
         if(list){
           list.innerHTML = '';
-          data.forEach(item=> list.appendChild(buildCard(item)));
+         data.slice(0,80).forEach(item=>{
+         list.appendChild(buildCard(item));
+    });
+
         }
       }
     }catch(_){ /* ignore */ }
+	// 모바일에서는 숨겨진 카드 강제 복구
+if (window.matchMedia('(max-width:1024px)').matches) {
+  const items = sec.querySelectorAll('.ad-list > *');
+  items.forEach(el => el.style.display = '');
+}
   }
 
   function startRotator(sec){
+   if (window.matchMedia('(max-width:1024px)').matches) return;
     const list = sec.querySelector('.ad-list');
     if(!list) return;
     const items = Array.from(list.children).filter(el => el.classList && el.classList.contains('ad-box'));
@@ -3086,7 +3122,9 @@ function reorderRow(rowId){
     const sections = document.querySelectorAll('.ad-panel .ad-section');
     for(const sec of sections){
       await hydrateSection(sec); // optional, fast-fail
-      startRotator(sec);
+      if (!window.matchMedia('(max-width:1024px)').matches) {
+  startRotator(sec);
+}
     }
   });
 })();
@@ -3433,7 +3471,7 @@ function reorderRow(row, cc, region){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -3459,19 +3497,19 @@ function reorderRow(row, cc, region){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Preguntas y Respuestas";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Cerrar");
+    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="Pregunta";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Escriba su pregunta...";
-    const lA = el("label"); lA.textContent="Respuesta";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Espere un momento. Se proporcionará una respuesta en breve.";
+    const lQ = el("label"); lQ.textContent="질문";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="질문을 입력하세요...";
+    const lA = el("label"); lA.textContent="답변";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="조금만 기다리시면 금방 답변을 드리겠습니다.";
     const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Enviar";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Borrar";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Las preguntas simples son respondidas inmediatamente por la IA. Los problemas técnicos, de error u operación se envían automáticamente a Preguntas y Respuestas del administrador.";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="등록하기";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="지우기";
+    const note = el("div","igdc-qa-note"); note.textContent="※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -3541,19 +3579,19 @@ function reorderRow(row, cc, region){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="P. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("R. "+row.answer):"R. (Pendiente)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "Solicitud al administrador":"General";
+        const tag = el("span"); tag.textContent = row.is_admin? "관리요청":"일반";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="Eliminar";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Error al eliminar (permisos/política)."); return; }
+            if(error){ alert("삭제 실패(권한/정책)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -3576,9 +3614,9 @@ function reorderRow(row, cc, region){
           }catch(e){}
         }
         if(!answer){
-          if(/horario|abierto|contacto|contact|tiempo|시간|운영시간|오픈/i.test(text)) answer="Las consultas relacionadas con la operación serán revisadas por un administrador y respondidas posteriormente.";
-          else if(/precio|precios|costo|coste|tarifa|tarifas|가격|비용|요금/i.test(text)) answer="Para información sobre precios y tarifas, consulte la guía de esta página y deje cualquier consulta adicional.";
-          else answer="Gracias por su consulta. La revisaremos con prontitud y le ayudaremos.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
+          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
+          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
         }
       }
       return { technical, answer };
@@ -3592,7 +3630,7 @@ function reorderRow(row, cc, region){
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("La configuración de guardado (URL/clave de Supabase) aún no está conectada, por lo que el guardado en el servidor está deshabilitado. Al desplegar en la web, configure SUPER_VARSAR.url/anonKey y se conectará automáticamente.");
+        alert("저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
         return;
       }
       const record = {
@@ -3602,7 +3640,7 @@ function reorderRow(row, cc, region){
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Error de registro"); return; }
+      if(error){ alert("등록 실패"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -3625,7 +3663,7 @@ function reorderRow(row, cc, region){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -3671,7 +3709,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
             var t = document.createElement('div');
             t.className = 'title';
-            t.textContent = item.title || item.name || 'Producto';
+            t.textContent = item.title || item.name || '상품';
 
             a.appendChild(img);
             a.appendChild(t);
@@ -3694,7 +3732,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
               img.src = item.thumb || (window.IGDC_RECO_PLACEHOLDER || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=');
               var t = document.createElement('div');
               t.className = 'title';
-              t.textContent = item.title || 'Producto';
+              t.textContent = item.title || '상품';
               a.appendChild(img); a.appendChild(t);
               grid.appendChild(a);
             });
@@ -3705,7 +3743,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   });
 })();
 </script>
-<!-- removed stray text: <! end: migration > --><!-- removed stray text:  --><!-- removed stray text:  -->
+<!-- removed stray text: <! end: migration > -->
+<!-- removed stray text:  -->
+<!-- removed stray text:  -->
 <script>
 (function(){
   try{
@@ -3842,12 +3882,12 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   if(!q('.edge-top')) document.body.insertAdjacentHTML('beforeend','<div class="edge-top"></div><div class="edge-left"></div><div class="edge-right"></div>');
   if(top) document.body.classList.add('hide-top'); if(left) document.body.classList.add('hide-left'); if(right) document.body.classList.add('hide-right');
   const S=44; let drag=null,sx=0,sy=0,dx=0,dy=0;
-  function bind(sel,dir,showCls){
-    const edge=q(sel); if(!edge) return;
-    const down=e=>{const t=e.touches?e.touches[0]:e; drag=dir; sx=t.clientX; sy=t.clientY; dx=0; dy=0;
-      addEventListener('pointermove',move,{passive:true}); addEventListener('touchmove',move,{passive:true});
-      addEventListener('pointerup',up); addEventListener('touchend',up);
-    };
+ function bind(sel,dir,showCls){
+  const edge=q(sel); if(!edge) return;
+  const down=e=>{const t=e.touches?e.touches[0]:e; drag=dir; sx=t.clientX; sy=t.clientY; dx=0; dy=0;
+    addEventListener('pointermove',move,{passive:false}); addEventListener('touchmove',move,{passive:false});
+    addEventListener('pointerup',up); addEventListener('touchend',up);
+  };
     const move=e=>{const t=e.touches?e.touches[0]:e; dx=t.clientX-sx; dy=t.clientY-sy;
       if(drag==='top'&&dy>8) document.body.classList.add(showCls);
       if(drag==='left'&&dx>8) document.body.classList.add(showCls);
@@ -3924,7 +3964,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       left = document.createElement('button');
       left.type = 'button';
       left.className = 'row-arrow left';
-      left.setAttribute('aria-label', 'Previous');
+      left.setAttribute('aria-label', '이전');
       left.textContent = '‹';
       row.appendChild(left);
     }
@@ -3932,7 +3972,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       right = document.createElement('button');
       right.type = 'button';
       right.className = 'row-arrow right';
-      right.setAttribute('aria-label', 'Next');
+      right.setAttribute('aria-label', '다음');
       right.textContent = '›';
       row.appendChild(right);
     }
@@ -4094,7 +4134,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     var right = row.querySelector('.arrow-layer .row-arrow.right, .row-arrow.right');
     if(!track || (!left && !right)) return;
 
-    var STEP_FACTOR = 0.80; // 보이는 개수의 약 80%
+    var STEP_FACTOR = 8.0; 
     function stepCount(){
       var avg = avgItemWidth(track);
       var n = Math.floor((track.clientWidth * STEP_FACTOR) / Math.max(1, avg));
@@ -4125,7 +4165,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <!-- removed stray text:  -->
 <script src="/assets/js/igdc-core.min.js"></script>
-
 <button aria-controls="news-stamp" aria-expanded="false" class="stamp-handle" title="Mostrar u ocultar sellos de noticias" type="button"></button>
 <script>(()=>{const h=document.querySelector(".stamp-handle"),s=document.querySelector("#news-stamp")||document.querySelector(".news-stamp"),m=window.matchMedia("(orientation:portrait) and (max-width:900px) and (pointer:coarse)");if(!h||!s)return;let t=null;const open=a=>{clearTimeout(t);s.classList.add("is-open");h.setAttribute("aria-expanded","true");if(a)t=setTimeout(close,1200)},close=()=>{clearTimeout(t);s.classList.remove("is-open");h.setAttribute("aria-expanded","false")};h.addEventListener("click",()=>{if(!m.matches)return;s.classList.contains("is-open")?close():open(true)});document.addEventListener("click",e=>{if(!m.matches)return;const x=e.target; if(!h.contains(x)&&!s.contains(x))close()},{capture:true});m.addEventListener("change",()=>{m.matches?close():(clearTimeout(t),s.classList.add("is-open"),h.setAttribute("aria-expanded","true"))});})();</script>
 <script>
@@ -4141,11 +4180,14 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }, {passive:true});
 })();
 </script>
+<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
+<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
+<script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 <!-- IGTC SIMPLE QNA AUTO-OPENER (Home) -->
 <style id="mobile-hide-row-arrows">
 /* Desktop은 기존 상태 유지, Mobile만 버튼 숨김 */
 @media (max-width: 1024px){
-/* Home: 쇼핑/뉴스/행별 스크롤 화살표들 */
+/* 홈: 쇼핑/뉴스/행별 스크롤 화살표들 */
 .row-arrow, .srow-arrow, .scroll-left, .scroll-right { display:none !important; }
 /* 보조: 드래그 스크롤만 남기고, 네이티브 바는 숨김 */
 .row-scroller, .thumb-scroller, .shop-scroller{
@@ -4228,35 +4270,6 @@ window.addEventListener("message",function(ev){
   }catch(e){}
 })();
 </script>
-<script id="vdrag-3sections-20251028">
-(function(){
-  const MIN_DRAG = 6;
-  function bind(el){
-    if(!el || el.__vdragBound) return;
-    el.__vdragBound = true;
-    let dragging=false, y0=0, moved=0;
-    const down = e => { dragging=true; moved=0; y0=(e.touches?e.touches[0].clientY:e.clientY); };
-    const move = e => {
-      if(!dragging) return;
-      const y=(e.touches?e.touches[0].clientY:e.clientY);
-      const dy=y-y0; moved+=Math.abs(dy);
-      window.scrollBy(0,-dy);
-      y0=y; e.preventDefault();
-    };
-    const up = ()=> dragging=false;
-    el.addEventListener('mousedown', down, {passive:false});
-    el.addEventListener('mousemove', move, {passive:false});
-    window.addEventListener('mouseup', up, {passive:true});
-    el.addEventListener('touchstart', down, {passive:false});
-    el.addEventListener('touchmove', move, {passive:false});
-    el.addEventListener('touchend', up, {passive:true});
-    el.addEventListener('click', evt=>{ if(moved>MIN_DRAG) evt.preventDefault(); }, true);
-  }
-  document.querySelectorAll('.ad-panel .ad-section').forEach(bind);
-  const mo=new MutationObserver(m=>m.forEach(x=>x.addedNodes&&x.addedNodes.forEach(n=>{ if(n.nodeType===1) n.matches&&n.matches('.ad-panel .ad-section')&&bind(n); })));
-  mo.observe(document.body,{childList:true,subtree:true});
-})();
-</script>
 <script id="igtc-checkout-trigger-v1">
 (function(){
   if (window.__IGTC_CHECKOUT_READY__) return;
@@ -4284,8 +4297,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>QR de pago</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Cerrar</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -4320,11 +4333,11 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('Enviado correctamente.');
+    ta.value=''; alert('전송되었습니다.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('No se pudo enviar.'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('No se pudo enviar.'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
 })();
 </script>
 <script>
@@ -4364,12 +4377,216 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
-<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
-<script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+<script id="igdc-unified-commerce-script">
+/*
+ IGDC Unified Commerce Script
+ --------------------------------------------------
+ 적용 대상:
+  - Distribution (이미 적용 가능)
+  - 나머지 4개 사이트 (Donation 제외, Media 제외)
+ 목적:
+  - 썸네일 클릭 자동 감지
+  - 상세 상품 자동 오픈 훅
+  - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
+  - 상세 하단에 리뷰 시스템 자동 장착 (쿠팡 방식)
+ --------------------------------------------------
+ 전제:
+  - 썸네일 카드 또는 상세 컨테이너에 data-product-id 존재
+  - IGTC.checkout(...) 기존 결제 로직 존재
+  - window.__IGDC_ROLE 존재
+ --------------------------------------------------
+ 삽입 위치:
+  - 각 페이지 </body> 바로 위
+*/
 
+(function (window, document) {
+  'use strict';
+
+  const IGDCCommerce = {
+    config: {
+      reviewApi: '/.netlify/functions/reviews',
+      reviewRootId: 'igdc-review-root',
+      minReviewChars: 10,
+      maxReviewChars: 2000
+    },
+
+    state: {
+      role: 'guest',
+      activeProductId: null
+    },
+
+    init() {
+      this.state.role = window.__IGDC_ROLE || 'guest';
+      this.bindThumbnailAutoHook();
+    },
+
+    /* 1️⃣ 썸네일 카드 클릭 자동 감지 */
+    bindThumbnailAutoHook() {
+      document.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-product-id]');
+        if (!card) return;
+
+        const productId = card.dataset.productId;
+        if (!productId) return;
+
+        // 기존 상세 상품 오픈 로직은 이미 각 페이지에 있음
+        // 여기서는 리뷰만 자동 부착
+        setTimeout(() => {
+          this.mountReview(productId);
+        }, 50);
+      });
+    },
+
+    /* 2️⃣ 리뷰 시스템 장착 */
+    mountReview(productId) {
+      if (this.state.activeProductId === productId) return;
+      this.state.activeProductId = productId;
+
+      let root = document.getElementById(this.config.reviewRootId);
+      if (!root) {
+        root = document.createElement('div');
+        root.id = this.config.reviewRootId;
+
+        const detailContainer =
+          document.querySelector('.product-detail') ||
+          document.querySelector('.product-modal') ||
+          document.querySelector('.detail-view') ||
+          document.body;
+
+        detailContainer.appendChild(root);
+      }
+
+      root.innerHTML = this.renderReviewShell();
+      this.bindReviewForm(root, productId);
+      this.loadReviews(productId);
+    },
+
+    /* 3️⃣ 리뷰 UI */
+    renderReviewShell() {
+      const canWrite = this.state.role !== 'guest';
+      return `
+        <section class="igdc-review">
+          <h3 class="igdc-review-title">상품 리뷰</h3>
+          <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
+          ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
+        </section>
+      `;
+    },
+
+    renderReviewForm() {
+      return `
+        <form id="igdc-review-form" class="igdc-review-form">
+          <textarea
+            placeholder="상품 사용 경험을 공유해 주세요"
+            minlength="${this.config.minReviewChars}"
+            maxlength="${this.config.maxReviewChars}"
+            required></textarea>
+          <div class="igdc-review-actions">
+            <button type="submit">리뷰 등록</button>
+          </div>
+        </form>
+      `;
+    },
+
+    renderLoginHint() {
+      return `<div class="igdc-review-login-hint">
+        리뷰 작성은 로그인 후 가능합니다.
+      </div>`;
+    },
+
+    /* 4️⃣ 리뷰 이벤트 */
+    bindReviewForm(root, productId) {
+      const form = root.querySelector('#igdc-review-form');
+      if (!form) return;
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const textarea = form.querySelector('textarea');
+        const content = textarea.value.trim();
+
+        if (content.length < this.config.minReviewChars) {
+          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          return;
+        }
+
+        this.submitReview(productId, content)
+          .then(() => {
+            textarea.value = '';
+            this.loadReviews(productId);
+          })
+          .catch(() => alert('리뷰 등록 실패'));
+      });
+    },
+
+    /* 5️⃣ 리뷰 로딩 */
+    async loadReviews(productId) {
+      const list = document.getElementById('igdc-review-list');
+      if (!list) return;
+
+      list.textContent = '로딩 중...';
+
+      try {
+        const res = await fetch(
+          `${this.config.reviewApi}?productId=${encodeURIComponent(productId)}`
+        );
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          list.innerHTML = '<div class="igdc-review-empty">아직 리뷰가 없습니다.</div>';
+          return;
+        }
+
+        list.innerHTML = data.map(this.renderReviewItem).join('');
+      } catch {
+        list.textContent = '리뷰를 불러오지 못했습니다.';
+      }
+    },
+
+    async submitReview(productId, content) {
+      const res = await fetch(this.config.reviewApi, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, content })
+      });
+      if (!res.ok) throw new Error('submit failed');
+    },
+
+    renderReviewItem(item) {
+      const esc = (v) => String(v || '').replace(/[<>]/g, '');
+      return `
+        <div class="igdc-review-item">
+          <div class="igdc-review-meta">
+            <span>${esc(item.user || '익명')}</span>
+            <span>${esc(item.date || '')}</span>
+          </div>
+          <div class="igdc-review-content">${esc(item.content)}</div>
+        </div>
+      `;
+    }
+  };
+
+  /* 6️⃣ 기본 스타일 */
+  const style = document.createElement('style');
+  style.textContent = `
+    .igdc-review { margin-top:24px; border-top:1px solid #eee; padding-top:16px; }
+    .igdc-review-title { margin:0 0 12px; font-size:1.05rem; }
+    .igdc-review-list { display:flex; flex-direction:column; gap:10px; }
+    .igdc-review-item { border:1px solid #eee; border-radius:10px; padding:10px; background:#fafafa; }
+    .igdc-review-meta { font-size:.8rem; color:#666; display:flex; gap:8px; }
+    .igdc-review-content { margin-top:6px; line-height:1.5; }
+    .igdc-review-form textarea { width:100%; min-height:90px; padding:10px; border-radius:10px; border:1px solid #ddd; }
+    .igdc-review-actions { margin-top:8px; text-align:right; }
+    .igdc-review-actions button { padding:8px 14px; border-radius:10px; border:none; background:#2563eb; color:#fff; }
+    .igdc-review-empty, .igdc-review-login-hint { color:#666; }
+  `;
+  document.head.appendChild(style);
+
+  IGDCCommerce.init();
+  window.IGDCCommerce = IGDCCommerce;
+
+})(window, document);
+</script>
 <script src="/assets/js/home-products-automap.v2.js?v=20260811b"></script>
-
 <script id="news-arrow-final-fix-20260420">
 (function(){
   if (window.__NEWS_ARROW_FINAL_FIX_20260420__) return;
@@ -4477,6 +4694,104 @@ window.addEventListener("message",function(ev){
     if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
     handleArrowClick(btn);
   }, true);
+})();
+</script>
+<script id="igdc-home-portrait-main-gentle-onecard-controller-v5">
+(function(){
+  'use strict';
+  if(window.__IGDC_HOME_PORTRAIT_MAIN_GENTLE_V5__) return;
+  window.__IGDC_HOME_PORTRAIT_MAIN_GENTLE_V5__=true;
+
+  function active(){
+    return matchMedia('(max-width:1024px) and (orientation:portrait) and (pointer:coarse)').matches;
+  }
+
+  function getItems(scroller){
+    var list=scroller.querySelectorAll('.shop-card');
+    if(list.length) return list;
+    return scroller.querySelectorAll('.thumb-grid[data-psom-key] > *');
+  }
+
+  function stepFor(scroller){
+    var items=getItems(scroller);
+    if(items.length>1){
+      var d=Math.abs((items[1].offsetLeft||0)-(items[0].offsetLeft||0));
+      if(d>8) return d;
+    }
+    var first=items[0];
+    if(first){
+      var w=first.getBoundingClientRect().width;
+      var cs=getComputedStyle(scroller);
+      var gap=parseFloat(cs.columnGap||cs.gap||'0')||0;
+      if(w>8) return w+gap;
+    }
+    return Math.max(120,scroller.clientWidth);
+  }
+
+  function bind(scroller){
+    if(!scroller || scroller.dataset.igdcPortraitMainGentleV5==='1') return;
+    scroller.dataset.igdcPortraitMainGentleV5='1';
+
+    var sx=0, sy=0, lx=0, st=0, lt=0, startScroll=0, horizontal=false;
+
+    scroller.addEventListener('touchstart',function(ev){
+      if(!active() || !ev.touches || ev.touches.length!==1) return;
+      var t=ev.touches[0];
+      sx=lx=t.clientX; sy=t.clientY;
+      st=lt=performance.now();
+      startScroll=scroller.scrollLeft;
+      horizontal=false;
+    },{passive:true});
+
+    scroller.addEventListener('touchmove',function(ev){
+      if(!active() || !ev.touches || ev.touches.length!==1) return;
+      var t=ev.touches[0];
+      var dx=t.clientX-sx, dy=t.clientY-sy;
+      if(Math.abs(dx)>Math.abs(dy)+4) horizontal=true;
+      lx=t.clientX; lt=performance.now();
+    },{passive:true});
+
+    scroller.addEventListener('touchend',function(){
+      if(!active() || !horizontal) return;
+
+      var dx=lx-sx;
+      var dt=Math.max(16,lt-st);
+      var speed=Math.abs(dx)/dt;
+      if(Math.abs(dx)<18) return;
+
+      /* Gentle/normal swipe: cap movement to ONE card.
+         Strong flick is left native so it may travel farther. */
+      if(speed > 0.82) return;
+
+      var step=stepFor(scroller);
+      var dir=dx<0 ? 1 : -1;
+      var base=Math.round(startScroll/step)*step;
+      var target=Math.max(0,Math.min(scroller.scrollWidth-scroller.clientWidth, base+dir*step));
+
+      var oldSnap=scroller.style.getPropertyValue('scroll-snap-type');
+      var oldPriority=scroller.style.getPropertyPriority('scroll-snap-type');
+      scroller.style.setProperty('scroll-snap-type','none','important');
+
+      requestAnimationFrame(function(){
+        try{ scroller.scrollTo({left:target,behavior:'smooth'}); }
+        catch(e){ scroller.scrollLeft=target; }
+      });
+
+      setTimeout(function(){
+        if(oldSnap) scroller.style.setProperty('scroll-snap-type',oldSnap,oldPriority||'');
+        else scroller.style.removeProperty('scroll-snap-type');
+      },380);
+    },{passive:true});
+  }
+
+  function arm(){
+    document.querySelectorAll('section.shopping-section .shop-scroller').forEach(bind);
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',arm,{once:true});
+  else arm();
+  addEventListener('resize',arm,{passive:true});
+  addEventListener('orientationchange',arm,{passive:true});
 })();
 </script>
 </body>
