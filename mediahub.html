@@ -4451,10 +4451,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   function enableDrag(scroller){
     if(!scroller) return;
-
-    // Mobile/tablet: keep native inertial swipe.
-    // Manual scrollLeft dragging kills fling momentum on strong landscape swipes.
-    if(window.matchMedia && window.matchMedia('(pointer:coarse)').matches) return;
+    if(window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return;
 
     let isDown = false;
     let isDraggingX = false;
@@ -4792,7 +4789,7 @@ window.addEventListener("message",function(ev){
 
 <!-- Media Hub AutoMap (정본) -->
 <script defer src="/assets/js/igdc-engagement-storage-bridge.js?v=20260629-media-v2"></script>
-<script defer src="/assets/js/mediahub-automap-v3.js?v=20260629-media-v2"></script>
+<script defer src="/assets/js/mediahub-automap-v3.js?v=20260817-original-restore-2"></script>
 <script defer src="/assets/js/mediahub-ott-inline.v1.js?v=20260701-ott-stage7-10"></script>
 <script defer src="/assets/js/mediahub-playback-controller.v2.js?v=20260629-media-v2"></script>
 
@@ -4852,73 +4849,39 @@ window.addEventListener("message",function(ev){
 </script>
 
 
-<style id="mediahub-mobile-orientation-scroll-final-20260817">
-/*
-  Pin-point mobile behavior fix
-  - Portrait: one thumbnail card fills the usable row width.
-  - Landscape: native inertial swipe; a strong flick may pass several cards.
-  - No change to Media Snapshot / AutoMap / desktop layout.
-*/
-@media (max-width:1024px) and (orientation:portrait){
-  .thumb-line[data-psom-key^="media-"],
+<style id="igdc-mediahub-touch-orientation-final-2">
+/* Portrait touch device: one media card = full visible row width. */
+@media (orientation:portrait) and (pointer:coarse){
+  body{padding-left:0!important;padding-right:0!important;}
+  main,.content-area,.layout{width:100%!important;max-width:100%!important;margin-left:0!important;margin-right:0!important;padding-left:0!important;padding-right:0!important;}
+  .thumb-line[data-psom-key^="media-"]{
+    width:100%!important;max-width:100%!important;margin:0!important;padding:0!important;gap:0!important;
+    overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch!important;
+    scroll-snap-type:x mandatory!important;
+  }
   .thumb-line[data-psom-key^="media-"] > .scroll-content{
-    width:100% !important;
-    max-width:100% !important;
-    padding-left:0 !important;
-    padding-right:0 !important;
-    margin-left:0 !important;
-    margin-right:0 !important;
-    gap:0 !important;
-    scroll-snap-type:x mandatory !important;
-    touch-action:pan-x pan-y !important;
+    width:100%!important;max-width:none!important;margin:0!important;padding:0!important;gap:0!important;
   }
-
-  .thumb-line[data-psom-key^="media-"] .card,
-  .thumb-line[data-psom-key^="media-"] .media-card{
-    width:100% !important;
-    min-width:100% !important;
-    max-width:100% !important;
-    flex:0 0 100% !important;
-    height:auto !important;
-    min-height:0 !important;
-    max-height:none !important;
-    aspect-ratio:16 / 9 !important;
-    margin-left:0 !important;
-    margin-right:0 !important;
-    scroll-snap-align:start !important;
-    scroll-snap-stop:normal !important;
+  .thumb-line[data-psom-key^="media-"] > a.card.media-card,
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card{
+    width:100%!important;min-width:100%!important;max-width:100%!important;
+    flex:0 0 100%!important;height:auto!important;min-height:0!important;max-height:none!important;
+    aspect-ratio:16/9!important;margin:0!important;border-radius:0!important;
+    scroll-snap-align:start!important;
   }
-
-  .thumb-line[data-psom-key^="media-"] .thumb,
-  .thumb-line[data-psom-key^="media-"] .card img,
-  .thumb-line[data-psom-key^="media-"] .media-card img{
-    width:100% !important;
-    height:100% !important;
-    aspect-ratio:16 / 9 !important;
-    object-fit:cover !important;
+  .thumb-line[data-psom-key^="media-"] a.card.media-card .thumb{
+    width:100%!important;height:auto!important;aspect-ratio:16/9!important;
   }
 }
 
-@media (max-width:1024px) and (orientation:landscape){
+/* Landscape touch device: preserve native fling across several cards. */
+@media (orientation:landscape) and (pointer:coarse){
   .thumb-line[data-psom-key^="media-"],
   .thumb-line[data-psom-key^="media-"] > .scroll-content{
-    overflow-x:auto !important;
-    overflow-y:hidden !important;
-    -webkit-overflow-scrolling:touch !important;
-    touch-action:pan-x pan-y !important;
-    overscroll-behavior-x:contain !important;
-
-    /* Important: mandatory snapping arrests a strong flick after 1–2 cards.
-       Let native momentum determine distance, then settle naturally. */
-    scroll-snap-type:none !important;
-    scroll-behavior:auto !important;
+    overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch!important;
+    touch-action:pan-x pan-y!important;scroll-snap-type:none!important;scroll-behavior:auto!important;
   }
-
-  .thumb-line[data-psom-key^="media-"] .card,
-  .thumb-line[data-psom-key^="media-"] .media-card{
-    scroll-snap-align:none !important;
-    scroll-snap-stop:normal !important;
-  }
+  .thumb-line[data-psom-key^="media-"] a.card{scroll-snap-align:none!important;}
 }
 </style>
 

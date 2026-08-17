@@ -1,188 +1,446 @@
 /**
- * mediahub-automap-v3.js
- * Persistent single-pass renderer.
- * - Front capacity: 100 cards per media section.
- * - Real content atomically replaces its sample; never overlays it.
- * - Media Snapshot sample/fallbackSample stays available in memory and is restored on media/thumbnail failure.
- * - One DocumentFragment commit per section to avoid observer-driven render storms.
+ * mediahub-automap.v3.js (PRODUCTION SAFE / SINGLE VERSION)
+ * ------------------------------------------------------------
+ * 목적:
+ *  - MediaHub 메인 10섹션(data-psom-key="media-*")에 "미디어 콘텐츠"를 슬롯-우선(slot-first)으로 꽂는다.
+ *  - 우선순위: /data/media.snapshot*.json 단일 경로(feed-media legacy fallback 비활성)
+ *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
+ *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
+ *  - 우측 패널 없음(처리하지 않음)
+ *  - Hero는 snapshot.hero.rotateFrom 순서로 1개 썸네일을 골라 img src에 적용(가능한 경우)
  */
 (function () {
   'use strict';
+
   if (window.__MEDIAHUB_AUTOMAP_V3_PROD__) return;
   window.__MEDIAHUB_AUTOMAP_V3_PROD__ = true;
 
   const D = document;
-  const LIMIT = 100;
-  const EAGER_BUDGET = 8;
-  let eagerIssued = 0;
+
+  const LIMIT = 50;
+
+  // Legacy feed-media fallback is disabled.
+  // Keep the original snapshot -> automap -> front sample/real-content rendering process unchanged.
+  const ENABLE_FEED_MEDIA_FALLBACK = false;
+
   const SNAPSHOT_URLS = [
     '/data/media.snapshot.json',
     '/data/media.snapshot.v6.keys.json',
     '/data/media.snapshot.v5.slots.json',
     '/data/media.snapshot.v4.ott.full.json'
   ];
-  const KEY_ALIAS = {
-    trending_now:'media-trending', latest_movie:'media-movie', latest_drama:'media-drama',
-    section_1:'media-thriller', section_2:'media-romance', section_3:'media-variety',
-    section_4:'media-documentary', section_5:'media-animation', section_6:'media-music', section_7:'media-shorts'
-  };
-  const fallbackRegistry = new Map();
 
-  function q(sel,root){ return (root||D).querySelector(sel); }
-  function qa(sel,root){ return Array.prototype.slice.call((root||D).querySelectorAll(sel)); }
-  function text(v){ return v==null?'':String(v).trim(); }
-  function canonKey(k){ k=text(k); return k.indexOf('media-')===0?k:(KEY_ALIAS[k]||k); }
-  function cloneData(v){ try{return JSON.parse(JSON.stringify(v||{}));}catch(_e){return{};} }
-  function usableUrl(v){ const s=text(v); return /^https?:\/\//i.test(s); }
-  function imageOf(x){ return text(x&&(x.thumbnail||x.thumb||x.image||x.imageUrl||x.thumbnailUrl||x.poster)); }
-  function imageCandidates(x){
-    const out=[];function add(v){v=text(v);if(usableUrl(v)&&!out.includes(v))out.push(v);}
-    if(!x||typeof x!=='object')return out;
-    ['thumbnail','thumb','thumb_url','image','imageUrl','thumbnailUrl','poster'].forEach(k=>add(x[k]));
-    const raw=x.raw&&typeof x.raw==='object'?x.raw:{};const sm=raw.sourceMetadata&&typeof raw.sourceMetadata==='object'?raw.sourceMetadata:(x.sourceMetadata&&typeof x.sourceMetadata==='object'?x.sourceMetadata:{});
-    ['thumbnail','thumb','thumb_url','image','imageUrl','thumbnailUrl','poster'].forEach(k=>{add(raw[k]);add(sm[k]);});
-    const ident=text(sm.identifier||x.identifier||(idOf(x).match(/^ia:(.+)$/i)||[])[1]);if(ident)add('https://archive.org/services/img/'+encodeURIComponent(ident));
-    const src=[x.url,x.sourceUrl,x.video,x.videoUrl,x.embedUrl,raw.url,raw.source_url,raw.video_url,raw.embed_url].map(text).join(' ');
-    const ym=src.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/))([A-Za-z0-9_-]{6,20})/i);if(ym)add('https://i.ytimg.com/vi/'+encodeURIComponent(ym[1])+'/hqdefault.jpg');
-    const fb=x.fallbackSample&&typeof x.fallbackSample==='object'?x.fallbackSample:null;if(fb)['thumbnail','thumb','image','imageUrl','thumbnailUrl','poster'].forEach(k=>add(fb[k]));
-    return out;
+  const KEY_ALIAS = {
+    'trending_now': 'media-trending',
+    'latest_movie': 'media-movie',
+    'latest_drama': 'media-drama',
+    'section_1': 'media-thriller',
+    'section_2': 'media-romance',
+    'section_3': 'media-variety',
+    'section_4': 'media-documentary',
+    'section_5': 'media-animation',
+    'section_6': 'media-music',
+    'section_7': 'media-shorts'
+  };
+
+  function q(sel, root){ return (root||D).querySelector(sel); }
+  function qa(sel, root){ return Array.prototype.slice.call((root||D).querySelectorAll(sel)); }
+
+  function canonKey(k){
+    if(!k) return '';
+    if(k.indexOf('media-') === 0) return k;
+    return KEY_ALIAS[k] || k;
   }
-  function tuneImage(img,index){const eager=eagerIssued<EAGER_BUDGET&&index<8;if(eager)eagerIssued++;img.loading=eager?'eager':'lazy';img.decoding='async';if(!eager)try{img.fetchPriority='low';}catch(_e){}}
-  function urlOf(x){ return text(x&&(x.url||x.link||x.href||x.video||x.videoUrl||x.embedUrl)); }
-  function idOf(x){ return text(x&&(x.contentId||x.id||x._id||x.videoId||x.slug)); }
-  function getContainer(line){ return q(':scope > .scroll-content',line)||line; }
 
   async function fetchJson(url){
-    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),2600);
-    try{const r=await fetch(url,{cache:'default',signal:controller.signal});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}
-    finally{clearTimeout(timer);}
+    const r = await fetch(url, { cache: 'no-store' });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
   }
+
   async function loadSnapshotAny(){
-    for(const url of SNAPSHOT_URLS){try{return await fetchJson(url);}catch(_e){}}
+    for (const url of SNAPSHOT_URLS){
+      try { return await fetchJson(url); } catch(e){ /* continue */ }
+    }
     return null;
   }
+
   function normalizeSectionMap(snapshot){
-    const map={}; if(!snapshot)return map;
-    const sections=snapshot.sections;
-    if(sections&&!Array.isArray(sections)&&typeof sections==='object')Object.keys(sections).forEach(k=>map[canonKey(k)]=sections[k]||{});
-    else if(Array.isArray(sections))sections.forEach(s=>{if(s)map[canonKey(s.key||s.section||'')]=s;});
+    const map = {};
+    if(!snapshot) return map;
+
+    // object sections
+    if(snapshot.sections && !Array.isArray(snapshot.sections) && typeof snapshot.sections === 'object'){
+      Object.keys(snapshot.sections).forEach((k)=>{
+        map[canonKey(k)] = snapshot.sections[k] || {};
+      });
+      return map;
+    }
+
+    // array sections
+    if(Array.isArray(snapshot.sections)){
+      snapshot.sections.forEach((s)=>{
+        if(!s) return;
+        map[canonKey(s.key || '')] = s;
+      });
+    }
     return map;
   }
-  function slotsOf(section){
-    if(!section)return[];
-    if(Array.isArray(section.slots))return section.slots;
-    if(Array.isArray(section.items))return section.items;
-    if(Array.isArray(section))return section;
-    return[];
+
+  function slotsToItems(section){
+    const slots = section && Array.isArray(section.slots) ? section.slots : [];
+    return slots.map((slot)=>({
+      title: slot.title || '',
+      thumbnail: slot.thumb || '',
+      url: slot.url || slot.video || '',
+      video: slot.video || '',
+      provider: slot.provider || ''
+    }));
   }
-  function sampleLike(item){
-    if(!item||typeof item!=='object')return true;
-    if(item.sample===true||item.isSample===true||item.placeholder===true||item.replaceableSlot===true||item.candidateOnly===true||item.seedContent===true)return true;
-    const source=typeof item.source==='object'?item.source.name:item.source;
-    if(text(source).toLowerCase()==='seed'||(item.extension&&item.extension.placeholder))return true;
-    if(item.managedBy==='media-snapshot-publish')return false;
-    const title=text(item.title||item.name),url=urlOf(item),img=imageOf(item).toLowerCase();
-    if(/^media\s+(?:item|slot)\s+\d+$/i.test(title))return true;
-    if(img.includes('/assets/sample/')||img.includes('placeholder'))return true;
-    if(!usableUrl(url)&&!idOf(item))return true;
-    return false;
+
+  function extractItems(section){
+    if(!section) return [];
+    if(Array.isArray(section.items)) return section.items;
+    if(Array.isArray(section.slots)) return slotsToItems(section);
+    return [];
   }
-  function realItem(item){
-    if(!item||sampleLike(item))return false;
-    if(item.managedBy==='media-snapshot-publish')return true;
-    return !!(idOf(item)&&(usableUrl(urlOf(item))||usableUrl(text(item.video||item.mediaSource)))&&usableUrl(imageOf(item)));
+
+  async function loadFeedItems(key){
+    if(!ENABLE_FEED_MEDIA_FALLBACK) return [];
+    const url = `/.netlify/functions/feed-media?key=${encodeURIComponent(key)}&limit=500`;
+    try{
+      const data = await fetchJson(url);
+      if(data && Array.isArray(data.items)) return data.items;
+      if(data && Array.isArray(data.sections)){
+        const found = data.sections.find(s => s && canonKey(s.key) === key);
+        if(found && Array.isArray(found.items)) return found.items;
+      }
+    }catch(e){ /* ignore */ }
+    return [];
   }
-  function staticTemplates(line){
-    const container=getContainer(line);
-    return qa(':scope > a.card',container).slice(0,LIMIT).map(card=>card.cloneNode(true));
-  }
-  function genericSample(){
-    const a=D.createElement('a');a.className='card media-card';a.dataset.placeholder='true';a.href='javascript:void(0)';
-    const thumb=D.createElement('div');thumb.className='thumb ph';
-    const meta=D.createElement('div');meta.className='meta';meta.textContent='Coming Soon';a.append(thumb,meta);return a;
-  }
-  function makeSampleCard(sample,template,index){
-    const data=sample&&typeof sample==='object'?sample:{};
-    if((!data||!Object.keys(data).length)&&template){const clone=template.cloneNode(true);clone.dataset.placeholder='true';return clone;}
-    const title=text(data.title||data.name)||'Coming Soon',imgUrl=imageOf(data);
-    if(!title&&!imgUrl&&template){const clone=template.cloneNode(true);clone.dataset.placeholder='true';return clone;}
-    const a=D.createElement('a');a.className='card media-card';a.dataset.placeholder='true';a.dataset.mediaSlot=String(Number(data.slotId)||index+1);a.href='javascript:void(0)';
-    const thumb=D.createElement('div');thumb.className='thumb';
-    if(usableUrl(imgUrl)){const img=D.createElement('img');img.src=imgUrl;img.alt=title;tuneImage(img,index);thumb.appendChild(img);}else thumb.classList.add('ph');
-    const meta=D.createElement('div');meta.className='meta';meta.textContent=title;a.append(thumb,meta);return a;
-  }
-  function fallbackData(item){
-    return item&&item.fallbackSample&&typeof item.fallbackSample==='object'?cloneData(item.fallbackSample):null;
-  }
-  function cardKey(sectionKey,index){return sectionKey+':'+index;}
-  function makeRealCard(item,sectionKey,index,template){
-    const title=text(item.title||item.name||item.text)||'Media',thumbUrl=imageOf(item),id=idOf(item),slotId=Number(item.slotId)||index+1;
-    const a=D.createElement('a');a.className='card media-card';a.dataset.mediaSlot=String(slotId);a.dataset.mediaSection=sectionKey;
-    if(id){a.dataset.igdcContentId=id;a.dataset.contentId=id;a.href='/media/watch.html?id='+encodeURIComponent(id);}else a.href=urlOf(item)||'#';
-    a.dataset.mediaTitle=title;if(item.provider)a.dataset.provider=text(item.provider);
-    const direct=/\.(mp4|webm|ogv|ogg|m4v)(?:[?#].*)?$/i.test(urlOf(item))?urlOf(item):'';
-    const source=text(item.video||item.streamUrl||item.mediaUrl||item.playbackUrl||item.sourceUrl||direct);
-    if(source)a.dataset.mediaSource=source;
-    const captions=item.captions||item.subtitleTracks||item.subtitles;if(Array.isArray(captions)&&captions.length)try{a.dataset.captions=JSON.stringify(captions);}catch(_e){}
-    ['windowsPlayerUrl','androidPlayerUrl','maruAppUrl'].forEach(k=>{if(item[k])a.dataset[k]=text(item[k]);});
-    const thumb=D.createElement('div');thumb.className='thumb';
-    const img=D.createElement('img');img.alt=title;tuneImage(img,index);
-    const candidates=imageCandidates(item);let thumbAttempt=0;
-    function tryNextThumb(){
-      if(thumbAttempt<candidates.length){img.src=candidates[thumbAttempt++];return;}
-      restoreCard(a,'thumbnail_error');
-    }
-    img.addEventListener('error',tryNextThumb);
-    if(candidates.length)tryNextThumb();else img.removeAttribute('src');thumb.appendChild(img);
-    const meta=D.createElement('div');meta.className='meta';meta.textContent=title;a.append(thumb,meta);
-    const key=cardKey(sectionKey,index),fallback=fallbackData(item);
-    fallbackRegistry.set(key,{sample:fallback,template:template?template.cloneNode(true):null,index,sectionKey});
-    a.dataset.mediaFallbackKey=key;
-    if(!candidates.length)queueMicrotask(()=>restoreCard(a,'thumbnail_missing'));
+
+  function makePlaceholder(){
+    const a = D.createElement('a');
+    a.className = 'card media-card';
+    a.setAttribute('data-placeholder','true');
+    a.href = 'javascript:void(0)';
+    const thumb = D.createElement('div');
+    thumb.className = 'thumb ph';
+    const meta = D.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = 'Coming Soon';
+    a.appendChild(thumb);
+    a.appendChild(meta);
     return a;
   }
-  function restoreCard(card,reason){
-    if(!card||!card.parentNode)return false;
-    const key=text(card.dataset&&card.dataset.mediaFallbackKey),rec=fallbackRegistry.get(key);if(!rec)return false;
-    const replacement=makeSampleCard(rec.sample,rec.template,rec.index);replacement.dataset.mediaFallbackReason=reason||'source_failure';
-    card.replaceWith(replacement);return true;
+
+  function getContainer(line){
+    // Some pages wrap cards in .scroll-content. If not, cards are directly inside .thumb-line.
+    return q('.scroll-content', line) || line;
   }
-  function renderLine(line,sectionKey,section){
-    const container=getContainer(line),templates=staticTemplates(line),slots=slotsOf(section),frag=D.createDocumentFragment();
-    for(let i=0;i<LIMIT;i++){
-      const item=slots[i]&&typeof slots[i]==='object'?slots[i]:null,template=templates[i]||null;
-      if(item&&realItem(item))frag.appendChild(makeRealCard(item,sectionKey,i,template));
-      else frag.appendChild(makeSampleCard(item,template,i));
+
+  function ensurePlaceholders(line){
+    const container = getContainer(line);
+
+    // collect existing placeholders (preferred)
+    let ph = qa('a[data-placeholder="true"]', container);
+
+    // mark empty anchors as placeholders (non-destructive)
+    if(ph.length === 0){
+      const anchors = qa('a.card', container);
+      anchors.forEach((a)=>{
+        const hasImg = !!q('img', a);
+        const hasText = (a.textContent || '').trim().length > 0;
+        if(!hasImg && !hasText) a.setAttribute('data-placeholder','true');
+      });
+      ph = qa('a[data-placeholder="true"]', container);
     }
-    container.replaceChildren(frag);
+
+    // add up to LIMIT
+    if(ph.length < LIMIT){
+      const frag = D.createDocumentFragment();
+      for(let i=ph.length;i<LIMIT;i++){
+        frag.appendChild(makePlaceholder());
+      }
+      container.appendChild(frag);
+      ph = qa('a[data-placeholder="true"]', container);
+    }
+
+    // if too many, keep first LIMIT as fill targets
+    if(ph.length > LIMIT) ph = ph.slice(0, LIMIT);
+
+    return ph;
   }
-  function score(item){
-    const views=Number(item&& (item.views||item.viewCount)||0),rank=Number(item&&(item.rankingScore||item.score||item.popularity)||0),rating=Number(item&&(item.rating||item.voteAverage)||0);
-    const time=Date.parse(text(item&&(item.publishedAt||item.releaseDate||item.createdAt||item.date)));const rec=Number.isFinite(time)?Math.max(0,1-(Date.now()-time)/(30*86400000)):0;
-    return views*.5+rank*.2+rating*.1+rec*20;
+
+  
+ function ensureContentId(item){
+  if(!item) return '';
+
+  const hasRealContent =
+    !!(item.title || item.name || item.text || item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || item.url || item.video || item.link || item.href);
+
+  if(!hasRealContent) return '';
+
+  return (
+    item.id ||
+    item._id ||
+    item.contentId ||
+    item.videoId ||
+    item.slug ||
+    (item.url ? btoa(item.url).replace(/=/g,'') : '')
+  );
+}
+
+  function fillAnchor(a, item){
+    const title = (item && (item.title || item.name || item.text || '')) || '';
+    const thumb = (item && (item.thumbnail || item.thumb || item.image || item.imageUrl || item.thumbnailUrl || '')) || '';
+    const url = (item && (item.url || item.video || item.link || item.href || '#')) || '#';
+
+    
+    const videoId = ensureContentId(item);
+
+    if(videoId){
+      a.href = `/media/watch.html?id=${encodeURIComponent(videoId)}`;
+      a.removeAttribute('target');
+      a.removeAttribute('rel');
+    }else{
+      a.href = "javascript:void(0)";
+      a.onclick = function(){ alert("콘텐츠 준비 중입니다."); };
+    }
+
+
+    if(item && item.provider) a.dataset.provider = item.provider;
+
+    // Media playback handoff contract. Keep the card renderer slot-first, but
+    // carry the normalized media fields needed by the existing inline player.
+    // No seller/product pipeline fields are touched here.
+    if(title) a.dataset.mediaTitle = title;
+    if(videoId){
+      a.dataset.igdcContentId = String(videoId);
+      a.dataset.contentId = String(videoId);
+    }
+    if(item){
+      const directUrl = /\.(mp4|webm|ogv|ogg|m4v)(?:[?#].*)?$/i.test(String(item.url || '')) || /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/)/i.test(String(item.url || '')) ? item.url : '';
+      const mediaSource = item.video || item.streamUrl || item.mediaUrl || item.playbackUrl || item.sourceUrl || directUrl || '';
+      if(mediaSource) a.dataset.mediaSource = String(mediaSource);
+      const captions = item.captions || item.subtitleTracks || item.subtitles;
+      if(Array.isArray(captions) && captions.length){
+        try { a.dataset.captions = JSON.stringify(captions); } catch(_e){}
+      }
+      // Native-player launch URLs are accepted only when the verified catalog
+      // explicitly supplies them. The website never fabricates an app scheme.
+      if(item.windowsPlayerUrl) a.dataset.windowsPlayerUrl = String(item.windowsPlayerUrl);
+      if(item.androidPlayerUrl) a.dataset.androidPlayerUrl = String(item.androidPlayerUrl);
+      if(item.maruAppUrl) a.dataset.maruAppUrl = String(item.maruAppUrl);
+    }
+
+    let thumbBox = q('.thumb', a);
+    if(!thumbBox){
+      thumbBox = D.createElement('div');
+      thumbBox.className = 'thumb';
+      a.insertBefore(thumbBox, a.firstChild);
+    }
+
+    let img = q('img', thumbBox);
+    if(!img){
+      img = D.createElement('img');
+      thumbBox.appendChild(img);
+    }
+    img.alt = title || '';
+    img.loading = 'lazy';
+    if(thumb) img.src = thumb;
+
+    let metaBox = q('.meta', a);
+    if(!metaBox){
+      metaBox = D.createElement('div');
+      metaBox.className = 'meta';
+      a.appendChild(metaBox);
+    }
+    metaBox.textContent = title;
+
+    a.removeAttribute('data-placeholder');
   }
-  function buildTrending(sectionMap){
-    if(slotsOf(sectionMap['media-trending']).some(realItem))return;
-    const merged=[];['media-movie','media-drama','media-variety','media-music'].forEach(k=>slotsOf(sectionMap[k]).forEach(item=>{if(realItem(item))merged.push(item);}));
-    const seen=new Set(),items=merged.sort((a,b)=>score(b)-score(a)).filter(item=>{const k=idOf(item)||urlOf(item);if(!k||seen.has(k))return false;seen.add(k);return true;}).slice(0,LIMIT);
-    sectionMap['media-trending']={key:'media-trending',slots:items};
+
+  function applyLine(line, items){
+    if(!Array.isArray(items) || items.length === 0) return; // keep dummy
+    const ph = ensurePlaceholders(line);
+    const n = Math.min(LIMIT, ph.length, items.length);
+    for(let i=0;i<n;i++){
+      fillAnchor(ph[i], items[i]);
+    }
   }
-  function applyHero(snapshot,sectionMap){
-    const img=q('.hero img');if(!img)return;const keys=((snapshot&&snapshot.hero&&(snapshot.hero.rotateFrom||snapshot.hero.source))||[]);const list=Array.isArray(keys)?keys.map(canonKey):[];
-    for(const key of list){const first=slotsOf(sectionMap[key]).find(realItem);if(first&&usableUrl(imageOf(first))){img.src=imageOf(first);break;}}
+
+  async function applyHero(heroRotateKeys, sectionMap){
+    const heroImg = q('.hero img');
+    if(!heroImg) return;
+
+    const keys = Array.isArray(heroRotateKeys) ? heroRotateKeys.map(canonKey) : [];
+    if(keys.length === 0) return;
+
+    // snapshot first
+    for(const k of keys){
+      const items = extractItems(sectionMap[k]);
+      const first = items && items[0];
+      const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
+      if(thumb){
+        heroImg.src = thumb;
+        return;
+      }
+    }
+
+    // fallback feed (best-effort)
+    for(const k of keys){
+      const items = await loadFeedItems(k);
+      const first = items && items[0];
+      const thumb = first && (first.thumbnail || first.thumb || first.image || first.imageUrl || first.thumbnailUrl || '');
+      if(thumb){
+        heroImg.src = thumb;
+        return;
+      }
+    }
   }
+
   async function main(){
-    const lines=qa('.thumb-line[data-psom-key]');if(!lines.length)return;
-    const snapshot=await loadSnapshotAny();if(!snapshot)return; // keep committed HTML samples untouched if snapshot is unavailable
-    eagerIssued=0;const sectionMap=normalizeSectionMap(snapshot);buildTrending(sectionMap);
-    lines.forEach(line=>{const key=canonKey(line.getAttribute('data-psom-key'));if(key&&key.indexOf('media-')===0)renderLine(line,key,sectionMap[key]);});
-    applyHero(snapshot,sectionMap);
-    D.dispatchEvent(new CustomEvent('igdc:media-render-complete',{detail:{sections:lines.length,capacity:LIMIT}}));
+    const lines = qa('.thumb-line[data-psom-key]');
+    if(lines.length === 0) return;
+
+    // stabilize layout first
+    lines.forEach(ensurePlaceholders);
+
+    const snapshot = await loadSnapshotAny();
+    const sectionMap = normalizeSectionMap(snapshot);
+	
+// ===== MEDIA TRENDING AUTO-COMBINE (FINAL PRO) =====
+(function(){
+
+  if(!sectionMap) return;
+
+  const existing = extractItems(sectionMap["media-trending"]);
+  if(Array.isArray(existing) && existing.length > 0){
+    return;
   }
-  window.IGDCMediaFallback={restoreCard,restoreByContentId:function(contentId,reason){const card=q('a.card[data-content-id="'+CSS.escape(text(contentId))+'"]');return restoreCard(card,reason);}};
-  D.addEventListener('igdc:media-source-failed',function(event){const d=event&&event.detail||{};if(d.card)restoreCard(d.card,d.reason||'media_source_failed');else if(d.contentId)window.IGDCMediaFallback.restoreByContentId(d.contentId,d.reason);});
-  if(D.readyState==='loading')D.addEventListener('DOMContentLoaded',main,{once:true});else main();
+
+  const sourceKeys = [
+    "media-movie",
+    "media-drama",
+    "media-variety",
+    "media-music"
+  ];
+
+  let merged = [];
+
+ sourceKeys.forEach(key => {
+  const items = extractItems(sectionMap[key]);
+
+  if(Array.isArray(items)){
+    items.forEach(item => {
+
+      // 🔥 여기서 바로 섹션 정보 주입
+      item._sectionKey = key;
+
+      merged.push(item);
+    });
+  }
+});
+
+  // 🔥 최신성 점수 (0~1)
+  function getRecency(item){
+    const now = Date.now();
+
+    const t =
+      item.publishedAt ||
+      item.releaseDate ||
+      item.createdAt ||
+      item.date ||
+      null;
+
+    if(!t) return 0;
+
+    const time = new Date(t).getTime();
+    if(isNaN(time)) return 0;
+
+    const diffDays = (now - time) / (1000 * 60 * 60 * 24);
+
+    return Math.max(0, 1 - (diffDays / 30)); // 30일 기준
+  }
+
+  // 🔥 섹션 가중치 (영화/드라마 우선)
+  function getSectionWeight(item){
+    const key = item._sectionKey || '';
+
+    if(key === "media-movie") return 1.2;
+    if(key === "media-drama") return 1.15;
+    if(key === "media-variety") return 1.05;
+    if(key === "media-music") return 1.0;
+
+    return 1.0;
+  }
+
+  // 🔥 점수 계산 (완성형)
+  function getScore(item){
+
+    const views = item.views || item.viewCount || 0;
+    const popularity = item.popularity || item.score || 0;
+    const rating = item.rating || item.voteAverage || 0;
+    const recency = getRecency(item);
+    const weight = getSectionWeight(item);
+
+    const base =
+      views * 0.5 +
+      popularity * 0.2 +
+      rating * 0.1 +
+      recency * 100 * 0.2;
+
+    return base * weight;
+  }
+
+  // 🔥 정렬
+  merged.sort((a, b) => getScore(b) - getScore(a));
+
+  // 🔥 중복 제거
+  const seen = new Set();
+  const filtered = [];
+
+  for(const item of merged){
+    const key =
+      item.url ||
+      item.video ||
+      item.id ||
+      JSON.stringify(item);
+
+    if(seen.has(key)) continue;
+    seen.add(key);
+    filtered.push(item);
+  }
+
+  sectionMap["media-trending"] = {
+    items: filtered.slice(0, 50)
+  };
+
 })();
+
+    // hero
+    const heroRotateFrom = snapshot && snapshot.hero && (snapshot.hero.rotateFrom || snapshot.hero.source);
+    await applyHero(heroRotateFrom, sectionMap);
+
+    // sections
+    for(const line of lines){
+      const key = canonKey(line.getAttribute('data-psom-key') || '');
+      if(!key || key.indexOf('media-') !== 0) continue;
+
+      let items = extractItems(sectionMap[key]);
+      if(!items || items.length === 0){
+        items = await loadFeedItems(key);
+      }
+      applyLine(line, items);
+    }
+  }
+
+  if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
+  else main();
+
+})();
+
 
 /* ------------------------------------------------------------------
  * MARU Revenue AutoHook Loader
