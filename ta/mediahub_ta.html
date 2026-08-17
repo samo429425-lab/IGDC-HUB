@@ -5,7 +5,7 @@
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
-<title>MediaHub | Full Interface</title>
+<title>மீடியா ஹப் | முழு இடைமுகம்</title>
 <style>
   :root {
     --bg:#0f1116;
@@ -69,7 +69,7 @@
     border-radius: 8px;
     text-align: center;
     font-weight: 700;
-    color: #fff;
+    color: #17365D;
     flex: 0 0 150px;
     cursor: pointer;
     transition:transform .12s;
@@ -322,7 +322,7 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
 .section-blockchain 
 .section-blockchain .bc-tile:hover{
   background:#DDF2E6;
-  border-color:rgba(20,80,40,.28);
+  borderவழங்குநர்கள்(20,80,40,.28);
 }
 
 /* Responsive: keep gutters modest on small screens */
@@ -447,6 +447,7 @@ html, body {
     border-radius:8px; 
   }
 </style>
+
 <style id="edge-autohide-mobile">
 @media (pointer:coarse){
 :root{--edge:10px;--spd:.14s;--e:ease-out}
@@ -507,7 +508,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   .language-select { top:10px !important; right:12px !important; transform:none !important; }
 }
 </style>
-<!-- Mobile Providers Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
+<!-- Mobile வழங்குநர்கள் Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
 <style id="igdc-mobile-providers-drawer-left">
 @media (max-width:768px){
   :root{ --pvw: min(86vw, 320px); }
@@ -580,7 +581,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
     '<div id="providers-header-left">',
       '<div id="providers-title-left" >வழங்குநர்கள்</div>',
       '<input id="providers-search-left" type="search" placeholder="தேடல்..." aria-label="வழங்குநர்களைத் தேடுங்கள்" />',
-      '<button id="providers-close-left" aria-label="Close">✕</button>',
+      '<button id="providers-close-left" aria-label="மூடு">✕</button>',
     '</div>',
     '<div id="providers-body-left"></div>'
   ].join("");
@@ -645,8 +646,12 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 })();
 </script>
 <!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
+
 <!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
+
+
 <!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
+
 <style id="igdc-mobile-mediahub-patch-v3">
 /* === Mobile Optimization Patch — MediaHub (KR/ZH/EN) === */
 @media (max-width:768px){
@@ -940,7 +945,10 @@ body {
   }
   /* Hover unaffected except border/bg from the base design */
 </style>
+
 <!-- BC ultra-tight adjust: shrink button width slightly, gap=5px -->
+
+
 <!-- BC tight correction: text-only narrow, keep font size, exact 5px gaps -->
 <style id="bc-tight-correct-20251013">
   /* Exact inter-button gap */
@@ -964,6 +972,7 @@ body {
     letter-spacing:normal;
   }
 </style>
+
 <!-- Hero overflow hotfix (2025-10-13) -->
 <style id="mediahub-hero-overflow-hotfix">
   @media (max-width: 1024px){
@@ -1008,6 +1017,8 @@ body {
     }
   });
 })();</script>
+
+
 <style id="bc-mobile-80-lock-20251113">
 /* Mobile (<=900px): lock ~20% shrink for both text and button, with stable gaps */
 @media (max-width: 900px){
@@ -1038,6 +1049,7 @@ body {
   }
 }
 </style>
+
 <style id="mobile-footer-guard">
   html, body { height: auto; min-height: 100% !important; }
   @supports (height: 100dvh) {
@@ -1063,12 +1075,15 @@ body {
     main, .content-area { overflow: visible !important; }
   }
 </style>
-<link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
+
+<link rel="stylesheet" href="/assets/css/thumbs.standard.css">
+
 <style id="media-placeholder-style">
 .media-card{position:relative;width:320px;height:180px;flex:0 0 320px;border-radius:12px;overflow:hidden;background:#111;margin-right:12px}
 .media-card .thumb.ph{width:100%;height:100%;background:linear-gradient(135deg,#222,#333)}
 .media-card .meta{position:absolute;left:0;right:0;bottom:0;padding:10px;color:#eee;background:linear-gradient(to top,rgba(0,0,0,.6),transparent)}
 </style>
+
 <style id="mediahub-scroll-fix-2026-02">
 /* === MEDIA SCROLL BUTTON FINAL FIX === */
 
@@ -1143,28 +1158,23 @@ html, body {
   overflow-y: auto;
 }
 </style>
+
+
 <style id="qa-label-contrast-fix">
 .igdc-qa-title,
 .igdc-qa-field label,
 .igdc-qa-body label{
-  color:#555555 !important;
+  color:#555555;
   opacity:1 !important;
-  font-weight:500 !important;
+  font-weight: 500;
 }
 </style>
-<style id="ko-sidebar-spacing-unified">
-/* KO sidebar spacing: unify only button-to-button vertical spacing */
-.sidebar{
-  padding-top: 20px !important;
-}
-.sidebar a,
-.sidebar a#qnaOpenBtn,
-#qnaOpenBtn,
-.sidebar a[id*="qna"],
-a[id*="qna"]{
-  margin: 10px 12px !important;
-}
-</style>
+
+  <style id="sidebar-spacing-unify-v2">
+    .sidebar{padding-top:30px !important;}
+    .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
+  </style>
+
 <style id="igdc-desktop-footer-bottom-space-v1">
 /* Footer-only desktop nano patch: keep mobile layout unchanged. */
 @media (min-width:1025px){
@@ -1175,16 +1185,17 @@ a[id*="qna"]{
 </style>
 </head>
 <body>
-<div data-psom-key="media-hero" id="hero"><div class="hero-title"></div></div>
+<div id="hero" data-psom-key="media-hero"><div class="hero-title"></div></div>
+
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <div class="layout">
 <aside class="sidebar">
-<a href="home.html">🏠 முகப்பு</a>
-<a href="networkhub.html">🛒 சந்தை மையம்</a>
-<a href="distributionhub.html">🏭 விநியோக மையம்</a>
-<a href="socialnetwork.html">📢 சமூக வலைப்பின்னல்</a>
-<a href="mediahub.html">🎬 ஊடக மையம்</a>
-<a href="tour.html">🧳 பயணம் · சுற்றுலா · தங்குமிடம்</a>
+<a href="home_ta.html">🏠 முகப்பு</a>
+<a href="networkhub_ta.html">🛒 சந்தை மையம்</a>
+<a href="distributionhub_ta.html">🏭 விநியோக மையம்</a>
+<a href="socialnetwork_ta.html">📢 சமூக வலைப்பின்னல்</a>
+<a href="mediahub_ta.html">🎬 ஊடக மையம்</a>
+<a href="tour_ta.html">🧳 பயணம் · சுற்றுலா · தங்குமிடம்</a>
 <a href="literature_academic.html">📚 இலக்கியம் மற்றும் கல்வி பரிமாற்றம்</a>
 <a href="javascript:void(0)" id="qnaOpenBtn">💬 கேள்வி-பதில் தொடர்பு</a></aside>
 <main>
@@ -1205,1548 +1216,2066 @@ a[id*="qna"]{
 <select name="provider" style="padding:8px 10px; border-radius:10px; border:none; outline:none;"></select>
 <button style="padding:10px 16px; border-radius:10px; border:none; background:#2e6bff; color:#fff; font-weight:700; cursor:pointer;" type="submit">தேடு</button>
 </form>
-<!-- 플랫폼 링크 라인 -->
+<!-- provider link line -->
 <div class="section-title">உள்ளடக்க வழங்குநர்கள்</div>
 <div class="platform-line"><a class="platform-tile" href="https://www.netflix.com" target="_top">Netflix</a><a class="platform-tile" href="https://www.disneyplus.com" target="_top">Disney+</a><a class="platform-tile" href="https://www.amazon.com/primevideo" target="_top">Amazon Prime</a><a class="platform-tile" href="https://tv.apple.com" target="_top">Apple TV+</a><a class="platform-tile" href="https://www.youtube.com" target="_top">YouTube</a><a class="platform-tile" href="https://spotify.com" target="_top">Spotify</a><a class="platform-tile" href="https://www.melon.com" target="_top">Melon</a><a class="platform-tile" href="https://www.wavve.com" target="_top">Wavve</a><a class="platform-tile" href="https://www.hulu.com" target="_top">Hulu</a><a class="platform-tile" href="https://www.paramountplus.com" target="_top">Paramount+</a><a class="platform-tile" href="https://www.peacocktv.com" target="_top">Peacock</a><a class="platform-tile" href="https://www.tving.com" target="_top">Tving</a><a class="platform-tile" href="https://www.coupangplay.com" target="_top">Coupang Play</a><a class="platform-tile" href="https://music.youtube.com" target="_top">YouTube Music</a><a class="platform-tile" href="https://tidal.com" target="_top">Tidal</a><a class="platform-tile" href="https://www.deezer.com" target="_top">Deezer</a><a class="platform-tile" href="https://music.amazon.com" target="_top">Amazon Music</a><a class="platform-tile" href="https://www.bbc.co.uk/iplayer" target="_top">BBC iPlayer</a><a class="platform-tile" href="https://www.viki.com" target="_top">Rakuten Viki</a><a class="platform-tile" href="https://mubi.com" target="_top">Mubi</a><a class="platform-tile" href="https://www.crunchyroll.com" target="_top">Crunchyroll</a><a class="platform-tile" href="https://tv.kakao.com" target="_top">Kakao TV</a><a class="platform-tile" href="https://video.unext.jp" target="_top">U-NEXT</a></div>
-<!-- 지금 뜨는 콘텐츠 -->
+
+<!-- Trending Now -->
 <div class="section-title">🔥 தற்போது பிரபலமானவை</div>
 <div class="thumb-line" data-psom-key="media-trending">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">விரைவில் வருகிறது</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 </div>
-<!-- 최신 영화 -->
+
+<!-- Latest Movies -->
 <div class="section-title">🎬 சமீபத்திய திரைப்படங்கள்</div>
 <div class="thumb-line" data-psom-key="media-movie">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">விரைவில் வருகிறது</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 </div>
-<!-- 최신 드라마 -->
+
+<!-- Latest Dramas -->
 <div class="section-title">📺 சமீபத்திய நாடகங்கள்</div>
 <div class="thumb-line" data-psom-key="media-drama">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">விரைவில் வருகிறது</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 </div>
-<!-- 미스터리/스릴러 -->
+
+<!-- Mystery / Thriller -->
 <div class="section-title">🕵️‍♂️ மர்மம் / திரில்லர்</div>
 <div class="thumb-line" data-psom-key="media-thriller">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">விரைவில் வருகிறது</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 </div>
-<!-- 로멘스 -->
+
+<!-- Romance -->
 <div class="section-title">💖 காதல்</div>
 <div class="thumb-line" data-psom-key="media-romance">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">விரைவில் வருகிறது</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 </div>
-<!-- 예능/오락 -->
+
+<!-- Variety / Entertainment -->
 <div class="section-title">😂 வேரைட்டி / பொழுதுபோக்கு</div>
 <div class="thumb-line" data-psom-key="media-variety">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">விரைவில் வருகிறது</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 </div>
-<!-- 다큐/교양 -->
+
+<!-- Documentary / Culture -->
 <div class="section-title">🎥 ஆவணப்படம் / கலாச்சாரம்</div>
 <div class="thumb-line" data-psom-key="media-documentary">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">விரைவில் வருகிறது</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 </div>
-<!-- 애니메이션 -->
+
+<!-- Animation -->
 <div class="section-title">🐱 அசைவூட்டம்</div>
 <div class="thumb-line" data-psom-key="media-animation">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">விரைவில் வருகிறது</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 </div>
-<!-- 뮤비 -->
+
+<!-- Music Videos -->
 <div class="section-title">🎵 இசை வீடியோக்கள்</div>
 <div class="thumb-line" data-psom-key="media-music">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">விரைவில் வருகிறது</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 </div>
-<!-- 핫한 쇼츠 영상무비 -->
-<div class="section-title">🔥 ஹாட் ஷார்ட்ஸ் &amp; வீடியோ மூவீஸ்</div>
+
+<!-- Hot Shorts & Video Movies -->
+<div class="section-title">🔥 ஹாட் ஷார்ட்ஸ் & வீடியோ மூவீஸ்</div>
 <div class="thumb-line" data-psom-key="media-shorts">
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">Coming Soon</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-<div class="thumb ph"></div>
-<div class="meta">விரைவில் வருகிறது</div>
+  <div class="thumb ph"></div>
+  <div class="meta">விரைவில் வருகிறது</div>
 </a>
+
 </div>
 </div>
 </main>
 </div>
-<style id="media-scroll-performance-final">
-/* Media-only scroll performance stabilization. Keeps every card in normal layout so
-   mobile momentum can cross multiple cards without scrollWidth changing mid-gesture. */
-.thumb-line > .scroll-content{
-  scroll-behavior:auto !important;
-  scroll-snap-type:x proximity !important;
-  -webkit-overflow-scrolling:touch;
-  overscroll-behavior-inline:contain;
-  touch-action:pan-x pan-y !important;
-}
-.thumb-line > .scroll-content > .card{
-  scroll-snap-align:start;
-  scroll-snap-stop:normal;
-}
-</style>
+
 <script>
 /**
- * MediaHub Unified Scroll Script v2.1
- * - original line nodes are preserved
- * - one animation owner per row (no overlapping smooth-scroll timers)
- * - short click: one card (platform rows: one visible page)
- * - long press: continuous requestAnimationFrame motion
+ * MediaHub Unified Scroll Script (SAFE FULL BLOCK)
+ * ✅ thumb-line + platform-line 모두 지원
+ * ✅ "원본 라인 요소(.thumb-line/.platform-line)는 절대 교체/삭제하지 않음" (replaceChild 금지)
+ * ✅ 내부만 .scroll-content로 래핑하여 렌더러/초기화 코드와 충돌 방지
+ * - 짧은 클릭: 1장
+ * - 꾹 누름: "화면에 완전히(80%↑) 보이는 카드 수"만큼 이동
  */
-(function(){
-  "use strict";
-  const CARD_SELECTOR='.card';
-  const SHORT_CLICK_MS=220;
-  const HOLD_DELAY_MS=260;
-  const activeAnimations=new WeakMap();
 
-  function gapPx(el){const cs=getComputedStyle(el);return parseFloat(cs.gap||cs.columnGap||0)||0;}
-  function stride(container){const card=container.querySelector(CARD_SELECTOR);return card?(card.offsetWidth+gapPx(container)):Math.max(1,container.clientWidth);}
-  function clampLeft(container,value){return Math.max(0,Math.min(Math.max(0,container.scrollWidth-container.clientWidth),value));}
-  function stopAnimation(container){const state=activeAnimations.get(container);if(state&&state.raf)cancelAnimationFrame(state.raf);activeAnimations.delete(container);}
-  function animateTo(container,target,duration){
-    stopAnimation(container);
-    const start=container.scrollLeft,end=clampLeft(container,target),distance=end-start;
-    if(Math.abs(distance)<1){container.scrollLeft=end;return;}
-    const started=performance.now(),ms=Math.max(140,Number(duration)||260);
-    const state={raf:0};activeAnimations.set(container,state);
-    function frame(now){
-      const t=Math.min(1,(now-started)/ms);
-      const eased=1-Math.pow(1-t,3);
-      container.scrollLeft=start+distance*eased;
-      if(t<1){state.raf=requestAnimationFrame(frame);}else{container.scrollLeft=end;activeAnimations.delete(container);}
-    }
-    state.raf=requestAnimationFrame(frame);
-  }
-  function visiblePageTarget(container,dir,selector){
-    const items=Array.from(container.querySelectorAll(selector));if(!items.length)return container.scrollLeft;
-    const left=container.scrollLeft,right=left+container.clientWidth;
-    const visible=items.filter((item)=>item.offsetLeft>=left-1&&(item.offsetLeft+item.offsetWidth)<=right+1);
-    let first=0;
-    for(let i=0;i<items.length;i++){if(items[i].offsetLeft+items[i].offsetWidth>left+1){first=i;break;}}
-    const page=Math.max(1,visible.length||Math.floor(container.clientWidth/Math.max(1,items[0].offsetWidth+gapPx(container)))||1);
-    const target=Math.max(0,Math.min(items.length-1,first+dir*page));
-    return items[target].offsetLeft;
-  }
-  function oneCardTarget(container,dir){return container.scrollLeft+dir*stride(container);}
+(function () {
+  const CARD_SELECTOR = '.card';
+  const SHORT_CLICK_MS = 180;
+  const HOLD_INTERVAL_MS = 140;
+  const VISIBLE_RATIO = 0.8;
 
-  function ensureLineWrapped(line){
-    if(!line)return;
-    let content=line.querySelector(':scope > .scroll-content');
-    if(!content){
-      content=document.createElement('div');content.className='scroll-content';
-      Array.from(line.childNodes).forEach((node)=>content.appendChild(node));line.appendChild(content);
+  function getGapPx(el) {
+    const s = getComputedStyle(el);
+    return parseFloat(s.gap || s.columnGap || 0) || 0;
+  }
+
+  function getStride(container) {
+    const card = container.querySelector(CARD_SELECTOR);
+    return card ? (card.offsetWidth + getGapPx(container)) : container.clientWidth;
+  }
+
+  function getFullyVisibleCount(container) {
+    const L = container.scrollLeft;
+    const R = L + container.clientWidth;
+    let count = 0;
+
+    container.querySelectorAll(CARD_SELECTOR).forEach(card => {
+      const l = card.offsetLeft;
+      const r = l + card.offsetWidth;
+      const visible = Math.min(r, R) - Math.max(l, L);
+      const ratio = visible / (card.offsetWidth || 1);
+      if (ratio >= VISIBLE_RATIO) count++;
+    });
+
+    return Math.max(1, count);
+  }
+
+  function scrollByCards(container, count) {
+    const stride = getStride(container);
+    container.scrollTo({
+      left: container.scrollLeft + stride * count,
+      behavior: 'smooth'
+    });
+  }
+
+  // ✅ 원본 line 요소를 교체하지 않고, 내부만 래핑 + 버튼을 line 안에 생성
+  function ensureLineWrapped(line) {
+    if (!line || line.dataset.scrollWrapped === '1') return;
+
+    // scroll-content 없으면 생성해서 기존 자식들을 이동
+    let content = line.querySelector(':scope > .scroll-content');
+    if (!content) {
+      content = document.createElement('div');
+      content.className = 'scroll-content';
+
+      // 기존 자식들을 content로 이동 (버튼이 이미 있을 수 있으니, 생성 전에는 통째 이동)
+      const children = Array.from(line.childNodes);
+      children.forEach(n => content.appendChild(n));
+
+      line.appendChild(content);
     }
-    let left=line.querySelector(':scope > .scroll-btn.left');
-    let right=line.querySelector(':scope > .scroll-btn.right');
-    if(!left){left=document.createElement('button');left.className='scroll-btn left';left.type='button';left.textContent='‹';line.insertBefore(left,content);}
-    else if(left.nextSibling!==content)line.insertBefore(left,content);
-    if(!right){right=document.createElement('button');right.className='scroll-btn right';right.type='button';right.textContent='›';line.appendChild(right);}
-    else if(right.previousSibling!==content)line.appendChild(right);
+
+    // 버튼이 없으면 생성
+    let leftBtn = line.querySelector(':scope > .scroll-btn.left');
+    let rightBtn = line.querySelector(':scope > .scroll-btn.right');
+
+    if (!leftBtn) {
+      leftBtn = document.createElement('button');
+      leftBtn.className = 'scroll-btn left';
+      leftBtn.type = 'button';
+      leftBtn.textContent = '‹';
+      line.insertBefore(leftBtn, content);
+    } else {
+      // 혹시 content 뒤에 있으면 앞으로
+      if (leftBtn.nextSibling !== content) line.insertBefore(leftBtn, content);
+    }
+
+    if (!rightBtn) {
+      rightBtn = document.createElement('button');
+      rightBtn.className = 'scroll-btn right';
+      rightBtn.type = 'button';
+      rightBtn.textContent = '›';
+      line.appendChild(rightBtn);
+    } else {
+      // 혹시 content 앞에 있으면 뒤로
+      if (rightBtn.previousSibling !== content) line.appendChild(rightBtn);
+    }
+
+    // line에 wrapper 역할 클래스 부여 (CSS가 scroll-wrapper를 기대하는 경우 대응)
     line.classList.add('scroll-wrapper');
-    bind(line,content,left,right);
-    line.dataset.scrollWrapped='1';
+
+    // 바인딩 (중복 방지)
+    bindScroll(line);
+
+    line.dataset.scrollWrapped = '1';
   }
-  function bind(line,container,leftBtn,rightBtn){
-    if(line.dataset.scrollBound==='2')return;
-    let downAt=0,holdTimer=0,holdRaf=0,holding=false,lastTs=0,activeDir=0;
-    function stopHold(){if(holdTimer)clearTimeout(holdTimer);holdTimer=0;if(holdRaf)cancelAnimationFrame(holdRaf);holdRaf=0;holding=false;lastTs=0;}
-    function holdFrame(ts){
-      if(!holding)return;
-      if(!lastTs)lastTs=ts;
-      const dt=Math.min(34,ts-lastTs);lastTs=ts;
-      const velocity=Math.max(520,container.clientWidth*1.25);
-      container.scrollLeft=clampLeft(container,container.scrollLeft+activeDir*velocity*dt/1000);
-      holdRaf=requestAnimationFrame(holdFrame);
-    }
-    function press(dir,e){
-      e.preventDefault();stopHold();stopAnimation(container);activeDir=dir;downAt=performance.now();
-      holdTimer=setTimeout(()=>{holding=true;holdRaf=requestAnimationFrame(holdFrame);},HOLD_DELAY_MS);
-      try{e.currentTarget.setPointerCapture(e.pointerId);}catch(_error){}
-    }
-    function release(dir,e){
-      if(e)e.preventDefault();const elapsed=performance.now()-downAt;const wasHolding=holding;stopHold();
-      if(!wasHolding&&elapsed<SHORT_CLICK_MS+80){
-        const target=line.classList.contains('platform-line')?visiblePageTarget(container,dir,'.platform-tile'):oneCardTarget(container,dir);
-        animateTo(container,target,240);
+
+  function bindScroll(line) {
+    if (!line || line.dataset.scrollBound === '1') return;
+
+    const container = line.querySelector(':scope > .scroll-content');
+    if (!container) return;
+
+    const leftBtn = line.querySelector(':scope > .scroll-btn.left');
+    const rightBtn = line.querySelector(':scope > .scroll-btn.right');
+
+    let timer = null;
+    let pressStart = 0;
+
+    function clearTimer() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
       }
     }
-    [[leftBtn,-1],[rightBtn,1]].forEach(([btn,dir])=>{if(!btn)return;
-      btn.addEventListener('pointerdown',(e)=>press(dir,e));
-      btn.addEventListener('pointerup',(e)=>release(dir,e));
-      btn.addEventListener('pointercancel',()=>stopHold());
-      btn.addEventListener('lostpointercapture',()=>stopHold());
-    });
-    line.dataset.scrollBound='2';
+
+ function start(dir) {
+  pressStart = Date.now();
+  clearTimer();
+
+  const isPlatform = line.classList.contains('platform-line');
+
+  // ✅ 공급사 전용: "타일 100% 노출 기준"으로만 페이지 이동 + 항상 offsetLeft로 스냅
+  function providerStep(stepDir){
+    const items = Array.from(container.querySelectorAll('.platform-tile'));
+    if(!items.length) return;
+
+    const crect = container.getBoundingClientRect();
+    const EPS = 1;
+
+    // 1) 현재 화면에서 "완전 100% 보이는 타일"만
+    const fully = [];
+    for(let i=0;i<items.length;i++){
+      const r = items[i].getBoundingClientRect();
+      if(r.left >= crect.left - EPS && r.right <= crect.right + EPS) fully.push(i);
+    }
+
+    // 2) 기준 인덱스(완전노출이 없으면: 현재 L 기준으로 걸쳐진 다음 타일)
+    const L = container.scrollLeft;
+    let firstIdx = (fully.length ? fully[0] : (() => {
+      for(let i=0;i<items.length;i++){
+        const l = items[i].offsetLeft;
+        const rr = l + items[i].offsetWidth;
+        if(rr > L + EPS) return i;
+      }
+      return 0;
+    })());
+
+    const pageCount = Math.max(1, fully.length || 1);
+    const targetIdx = Math.max(0, Math.min(items.length - 1, firstIdx + stepDir * pageCount));
+
+    container.scrollTo({ left: items[targetIdx].offsetLeft, behavior:'smooth' });
   }
-  function initAll(){document.querySelectorAll('.thumb-line, .platform-line').forEach(ensureLineWrapped);}
-  let scheduled=false;
-  function scheduleInit(){if(scheduled)return;scheduled=true;requestAnimationFrame(()=>{scheduled=false;initAll();});}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',scheduleInit);else scheduleInit();
-  const mo=new MutationObserver(scheduleInit);mo.observe(document.documentElement,{childList:true,subtree:true});
+
+  timer = setInterval(() => {
+    if(isPlatform){
+      providerStep(dir);                 // ✅ 공급사: 반 잘리면 다음번에 "그 타일이 통으로" 시작되게 스냅
+    } else {
+      const visible = getFullyVisibleCount(container);  // ✅ 메인 10섹션(thumb-line): 기존 방식 유지
+      scrollByCards(container, dir * visible);
+    }
+  }, HOLD_INTERVAL_MS);
+}
+
+function end(dir) {
+  const elapsed = Date.now() - pressStart;
+  clearTimer();
+
+  if (elapsed < SHORT_CLICK_MS) {
+    const isPlatform = line.classList.contains('platform-line');
+
+    if(isPlatform){
+      // ✅ 공급사: 클릭도 "페이지 스냅"으로 (반 잘린 타일이 다음에 통으로 보이도록)
+      const items = Array.from(container.querySelectorAll('.platform-tile'));
+      if(!items.length) return;
+
+      const crect = container.getBoundingClientRect();
+      const EPS = 1;
+
+      const fully = [];
+      for(let i=0;i<items.length;i++){
+        const r = items[i].getBoundingClientRect();
+        if(r.left >= crect.left - EPS && r.right <= crect.right + EPS) fully.push(i);
+      }
+
+      const L = container.scrollLeft;
+      let firstIdx = (fully.length ? fully[0] : (() => {
+        for(let i=0;i<items.length;i++){
+          const l = items[i].offsetLeft;
+          const rr = l + items[i].offsetWidth;
+          if(rr > L + EPS) return i;
+        }
+        return 0;
+      })());
+
+      const pageCount = Math.max(1, fully.length || 1);
+      const targetIdx = Math.max(0, Math.min(items.length - 1, firstIdx + dir * pageCount));
+
+      container.scrollTo({ left: items[targetIdx].offsetLeft, behavior:'smooth' });
+    } else {
+      scrollByCards(container, dir * 1); // 기존: 짧은 클릭=1장
+    }
+  }
+}
+
+
+    function end(dir) {
+      const elapsed = Date.now() - pressStart;
+      clearTimer();
+      if (elapsed < SHORT_CLICK_MS) {
+        scrollByCards(container, dir * 1);
+      }
+    }
+
+    // ✅ 마우스 + 터치/펜 모두 대응 (pointer 이벤트)
+    function bindBtn(btn, dir) {
+      if (!btn) return;
+
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        try { btn.setPointerCapture(e.pointerId); } catch(_) {}
+        start(dir);
+      });
+
+      btn.addEventListener('pointerup', (e) => {
+        e.preventDefault();
+        end(dir);
+      });
+
+      btn.addEventListener('pointercancel', () => {
+        clearTimer();
+      });
+
+      btn.addEventListener('pointerleave', () => {
+        // 포인터가 밖으로 나가면 멈춤 (길게 누르다 이탈 시)
+        clearTimer();
+      });
+    }
+
+    bindBtn(rightBtn, 1);
+    bindBtn(leftBtn, -1);
+
+    line.dataset.scrollBound = '1';
+  }
+
+  function initAll() {
+    // ✅ 두 라인 모두 안전하게 처리 (원본 노드 유지)
+    document.querySelectorAll('.thumb-line, .platform-line').forEach(ensureLineWrapped);
+  }
+
+  document.addEventListener('DOMContentLoaded', initAll);
+
+  // ✅ 공급사 목록/카드가 "나중에 렌더"되는 경우 재적용 (원본 노드 유지라 충돌 없음)
+  const mo = new MutationObserver(() => initAll());
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+
 })();
 </script>
+
+
 <script>
 // Open provider search in a new tab, no backend dependency
 function handleVideoSearch(e){
@@ -2837,7 +3366,7 @@ function handleVideoSearch(e){
 
   let activeProvider = "youtube";
 
-  function renderProviders(){
+  function renderவழங்குநர்கள்(){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     const bar  = document.querySelector('.provider-bar');
@@ -2873,7 +3402,7 @@ function handleVideoSearch(e){
 
   function setProvider(p){
     activeProvider = p;
-    renderProviders();
+    renderவழங்குநர்கள்();
   }
 
   // Click on buttons -> set provider
@@ -2900,7 +3429,7 @@ function handleVideoSearch(e){
   }
 
   // initial render
-  renderProviders();
+  renderவழங்குநர்கள்();
 })();
 </script>
 <script>
@@ -2922,7 +3451,7 @@ function handleVideoSearch(e){
     {key:"vimeo",       tags:["global"], labels:{en:"Vimeo", ko:"Vimeo", zh:"Vimeo", ja:"Vimeo"}, url:"https://vimeo.com/search?q="},
     {key:"tving",       tags:["kr"],     labels:{en:"TVING", ko:"티빙", zh:"TVING", ja:"TVING"}, url:"https://www.tving.com/search?kwd="},
     {key:"wavve",       tags:["kr"],     labels:{en:"Wavve", ko:"웨이브", zh:"Wavve", ja:"Wavve"}, url:"https://www.wavve.com/search?query="},
-    {key:"coupangplay", tags:["kr"],     labels:{en:"Coupang Play", ko:"淘宝网플레이", zh:"Coupang Play", ja:"Coupang Play"}, url:"https://www.coupangplay.com/search?q="},
+    {key:"coupangplay", tags:["kr"],     labels:{en:"Coupang Play", ko:"쿠팡플레이", zh:"Coupang Play", ja:"Coupang Play"}, url:"https://www.coupangplay.com/search?q="},
     {key:"disneyplus",  tags:["global"], labels:{en:"Disney+", ko:"Disney+", zh:"Disney+", ja:"Disney+"}, url:"https://www.disneyplus.com/search?q="},
     {key:"primevideo",  tags:["global"], labels:{en:"Prime Video", ko:"Prime Video", zh:"Prime Video", ja:"Prime Video"}, url:"https://www.primevideo.com/search/ref=atv_nb_sr?phrase="},
     {key:"watcha",      tags:["kr"],     labels:{en:"WATCHA", ko:"왓챠", zh:"WATCHA", ja:"WATCHA"}, url:"https://watcha.com/ko-KR/search?query="},
@@ -2934,7 +3463,7 @@ function handleVideoSearch(e){
 
   function labelOf(p, lang){ return (p.labels && p.labels[lang]) || p.labels?.en || p.key; }
 
-  function orderProviders(lang){
+  function orderவழங்குநர்கள்(lang){
     const pri = { global:50, kr:40, cn:40, jp:40 };
     if (lang === "ko") { pri.kr = 10; pri.global = 30; pri.cn = 40; }
     else if (lang === "zh") { pri.cn = 10; pri.global = 30; pri.kr = 40; }
@@ -2956,13 +3485,13 @@ function handleVideoSearch(e){
 
   let currentLang = (window.__IGDC_LANG__?.current || detectLang());
 
-  function renderDropdown(){
+  function renderவழங்குநர்கள்(){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     if (!form || !sel) return;
-    const ordered = orderProviders(currentLang);
+    const ordered = orderவழங்குநர்கள்(currentLang);
     sel.innerHTML = "";
-    ordered.forEach(p => {
+    orderவழங்குநர்கள்(p => {
       const opt = document.createElement("option");
       opt.value = p.key;
       opt.textContent = labelOf(p, currentLang);
@@ -2985,7 +3514,7 @@ function handleVideoSearch(e){
       const sel = e.target.querySelector('select[name="provider"]');
       const key = sel?.value || "youtube";
       if(!q) return false;
-      const p = [...orderProviders(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
+      const p = [...orderவழங்குநர்கள்(currentLang)].find(x=>x.key===key) || PROVIDERS.find(x=>x.key==="youtube");
       window.open((p?.url || "https://www.youtube.com/results?search_query=") + encodeURIComponent(q), "_blank", "noopener,noreferrer");
       return false;
     }
@@ -2996,12 +3525,12 @@ function handleVideoSearch(e){
     try{
       window.__IGDC_LANG__.onChange(function(langCode){
         currentLang = (langCode||'en').split('-')[0].toLowerCase();
-        renderDropdown();
+        renderவழங்குநர்கள்();
       });
     }catch(e){}
   }
 
-  renderDropdown();
+  renderவழங்குநர்கள்();
 })();
 </script>
 <script>
@@ -3103,7 +3632,7 @@ function handleVideoSearch(e){
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar கேள்வி-பதில் link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -3188,7 +3717,7 @@ function handleVideoSearch(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='கேள்வி-பதில்';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -3275,6 +3804,7 @@ function handleVideoSearch(e){
       });
   })();
 </script>
+
 <script id="igdc-qa-script">
 (function(){
   if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
@@ -3321,7 +3851,7 @@ function handleVideoSearch(e){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const title = el("div","igdc-qa-title"); title.textContent = "கேள்வி-பதில்";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","மூடு");
     header.append(title, close);
 
@@ -3331,13 +3861,13 @@ function handleVideoSearch(e){
     const lA = el("label"); lA.textContent="பதில்";
     const tA = el("textarea","igdc-qa-text a"); tA.placeholder="ஒரு நிமிடம் காத்திருக்கவும், விரைவில் பதிலளிப்போம்.";
     const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="சமர்ப்பிக்கவும்";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="அழிக்கவும்";
+    const btnசமர்ப்பிக்கவும் = el("button","igdc-qa-btn primary"); btnசமர்ப்பிக்கவும்.textContent="சமர்ப்பிக்கவும்";
+    const btnஅழிக்கவும் = el("button","igdc-qa-btn muted"); btnஅழிக்கவும்.textContent="அழிக்கவும்";
     const note = el("div","igdc-qa-note"); note.textContent="※ எளிய கேள்விகளுக்கு AI உடனடியாக பதிலளிக்கும். தொழில்நுட்ப, பிழை அல்லது செயல்பாடு தொடர்பான பிரச்சினைகள் தானாகவே நிர்வாக கேள்வி-பதில்-க்கு அனுப்பப்படும்.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
-    actions.append(btnSubmit, btnClear);
+    actions.append(btnசமர்ப்பிக்கவும், btnஅழிக்கவும்);
     panel.append(header, body);
     modal.append(backdrop, panel);
     document.body.append(modal);
@@ -3385,9 +3915,9 @@ function handleVideoSearch(e){
     backdrop.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
 
-    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    btnஅழிக்கவும்.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnசமர்ப்பிக்கவும்.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnசமர்ப்பிக்கவும்.click(); }});
 
     async function fetchThreads(){
       const sb = await ensureSupabase(); if(!sb) return;
@@ -3403,8 +3933,8 @@ function handleVideoSearch(e){
       list.innerHTML="";
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"ப. (நிலுவையில்)";
+        const q = el("div","igdc-qa-thread-q"); q.textContent="கே. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("ப. "+row.answer):"ப. (நிலுவையில்)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "நிர்வாக கோரிக்கை":"பொது";
@@ -3426,7 +3956,7 @@ function handleVideoSearch(e){
       });
     }
 
-    async function autoAnswerIfNeeded(text){
+    async function autoபதில்IfNeeded(text){
       const technical = classifyTech(text);
       let answer = null;
       if(!technical){
@@ -3438,7 +3968,7 @@ function handleVideoSearch(e){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="செயல்பாடு தொடர்பான தொடர்புகள் நிர்வாகியால் ஆய்வு செய்து பின்னர் பதிலளிக்கப்படும்.";
+          if(/시간|운영시간|오픈|Contact/.test(text)) answer="செயல்பாடு தொடர்பான தொடர்புகள் நிர்வாகியால் ஆய்வு செய்து பின்னர் பதிலளிக்கப்படும்.";
           else if(/가격|비용|요금/.test(text)) answer="விலை/கட்டணம் தொடர்பான தகவல்களுக்கு இந்தப் பக்கத்தின் வழிகாட்டுதலைப் பார்க்கவும் மற்றும் கூடுதல் கேள்விகளை விடவும்.";
           else answer="தொடர்பு கொண்டதற்கு நன்றி. விரைவாக சரிபார்த்து உதவுகிறோம்.";
         }
@@ -3450,7 +3980,7 @@ function handleVideoSearch(e){
       const q = (tQ.value||"").trim();
       let a = (tA.value||"").trim();
       if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await autoAnswerIfNeeded(q);
+      const { technical, answer } = await autoபதில்IfNeeded(q);
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
@@ -3468,7 +3998,7 @@ function handleVideoSearch(e){
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
-    btnSubmit.addEventListener("click", submit);
+    btnசமர்ப்பிக்கவும்.addEventListener("click", submit);
 
     // realtime refresh
     (async()=>{ try{
@@ -3547,7 +4077,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     th.setAttribute('style', 'background-image:url(' + src.replace(/["']/g,'') + ');background-size:cover;background-position:center;');
     var meta = document.createElement('div');
     meta.className = 'meta';
-    meta.textContent = item.title || item.name || '미디어';
+    meta.textContent = item.title || item.name || 'Media';
     a.appendChild(th); a.appendChild(meta);
     return a;
   }
@@ -3619,7 +4149,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   let activeKey = (PROVIDERS[0] && PROVIDERS[0].key) || 'youtube';
 
-  function render(){
+  function renderவழங்குநர்கள்(){
     const form = document.querySelector('form.video-search');
     const sel  = form && form.querySelector('select[name="provider"]');
     const bar  = document.querySelector('.provider-bar');
@@ -3647,7 +4177,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       btn.style.cursor = "pointer";
       btn.style.background = p.key===activeKey ? "#2e6bff" : "#fff";
       btn.style.color = p.key===activeKey ? "#fff" : "#111";
-      btn.addEventListener('click', () => { activeKey = p.key; render(); });
+      btn.addEventListener('click', () => { activeKey = p.key; renderவழங்குநர்கள்(); });
       btn.addEventListener('click', (ev) => {
         if (ev.ctrlKey || ev.metaKey) window.open(PROVIDERS.find(x=>x.key===p.key)?.href || '#', '_blank', 'noopener');
       });
@@ -3656,7 +4186,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
 
   document.addEventListener('change', (e)=>{
-    if(e.target && e.target.matches('select[name="provider"]')){ activeKey = e.target.value; render(); }
+    if(e.target && e.target.matches('select[name="provider"]')){ activeKey = e.target.value; renderவழங்குநர்கள்(); }
   });
 
   const orig = window.handleVideoSearch;
@@ -3669,7 +4199,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     return false;
   };
 
-  render();
+  renderவழங்குநர்கள்();
 })();
 </script>
 <!-- stray text suppressed: <! patch: sync dropdown to platform tiles; remove stamp buttons > -->
@@ -3756,8 +4286,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }
     function onAnyScroll(){ notify(atTop()); }
     window.addEventListener('scroll', onAnyScroll, {passive:true});
-    /* Row scroll events are intentionally not captured here. Horizontal thumbnail
-       motion must not postMessage to the parent on every frame. */
+    document.addEventListener('scroll', onAnyScroll, {passive:true, capture:true});
     document.addEventListener('wheel', e=>{ if((e.deltaY||0)>0) notify(false); }, {passive:true,capture:true});
     var igdcTouchStartX=0, igdcTouchStartY=0, igdcTouchHideSent=false;
     document.addEventListener('touchstart', function(e){
@@ -3780,6 +4309,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 
+</script>
 <script id="sidebar-active-script-ko">
 (function(){
   function norm(n){
@@ -3811,6 +4341,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   window.addEventListener("popstate", applyActive);
 })();
 </script>
+
 <script id="edge-autohide-mobile-js">
 (function(){
   "use strict";
@@ -3888,27 +4419,78 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   bindEdge('.edge-right', 'right', 'show-right');
 })();
 </script>
+
+
 <script id="thumbline-drag-script">
-/* Desktop mouse drag only. Touch/pen are deliberately left to native momentum scrolling. */
+/*
+  MediaHub row drag (safe version)
+  - 세로 스크롤 방해 안 함
+  - pointerCapture 사용 안 함
+  - 가로 의도 명확할 때만 hijack
+*/
 (function(){
   "use strict";
-  const THRESHOLD=7;
-  function enableMouseDrag(scroller){
-    if(!scroller||scroller.dataset.mouseDragBound==='1')return;
-    let down=false,dragging=false,startX=0,startY=0,startLeft=0,pendingLeft=null,raf=0;
-    function flush(){raf=0;if(pendingLeft!=null){scroller.scrollLeft=pendingLeft;pendingLeft=null;}}
-    scroller.addEventListener('pointerdown',function(e){if(e.pointerType&&e.pointerType!=='mouse')return;down=true;dragging=false;startX=e.clientX;startY=e.clientY;startLeft=scroller.scrollLeft;});
-    scroller.addEventListener('pointermove',function(e){
-      if(!down||(e.pointerType&&e.pointerType!=='mouse'))return;const dx=e.clientX-startX,dy=e.clientY-startY;
-      if(!dragging){if(Math.abs(dx)<=THRESHOLD||Math.abs(dx)<=Math.abs(dy)+2)return;dragging=true;}
-      e.preventDefault();pendingLeft=startLeft-dx;if(!raf)raf=requestAnimationFrame(flush);
-    },{passive:false});
-    function end(){down=false;dragging=false;pendingLeft=null;if(raf)cancelAnimationFrame(raf);raf=0;}
-    scroller.addEventListener('pointerup',end,{passive:true});scroller.addEventListener('pointercancel',end,{passive:true});
-    scroller.dataset.mouseDragBound='1';
+
+  const THRESHOLD = 10;
+
+  function enableDrag(scroller){
+    if(!scroller) return;
+
+    let isDown = false;
+    let isDraggingX = false;
+    let startX = 0, startY = 0, startScrollLeft = 0;
+
+    function onDown(e){
+      isDown = true;
+      isDraggingX = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      startScrollLeft = scroller.scrollLeft;
+    }
+
+    function onMove(e){
+      if(!isDown) return;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if(!isDraggingX){
+        if(Math.abs(dx) > THRESHOLD && Math.abs(dx) > Math.abs(dy) + 4){
+          isDraggingX = true;
+        }else{
+          return; // 세로 스크롤 허용
+        }
+      }
+
+      // 가로 드래그일 때만 차단
+      e.preventDefault();
+      scroller.scrollLeft = startScrollLeft - dx;
+    }
+
+    function onUp(){
+      isDown = false;
+      isDraggingX = false;
+    }
+
+    scroller.addEventListener('pointerdown', onDown, { passive:true });
+    scroller.addEventListener('pointermove', onMove, { passive:false });
+    scroller.addEventListener('pointerup', onUp, { passive:true });
+    scroller.addEventListener('pointercancel', onUp, { passive:true });
   }
-  function boot(){document.querySelectorAll('.thumb-line').forEach((line)=>enableMouseDrag(line.querySelector(':scope > .scroll-content')||line));}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+
+  function boot(){
+    document.querySelectorAll('.thumb-line').forEach(line=>{
+      const scroller =
+        line.querySelector(':scope > .scroll-content') || line;
+      enableDrag(scroller);
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  }else{
+    boot();
+  }
 })();
 </script>
 <script id="igdc-qa-modal-script">
@@ -3932,7 +4514,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = 'Q&A';
+    title.textContent = 'கேள்வி-பதில்';
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4021,7 +4603,10 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   else apply();
 })();
 </script>
+
+
 <!-- thumbnail automapping -->
+
 <script>
 window.IGDC_QA=window.IGDC_QA||{};
 if(typeof window.IGDC_QA.open!=="function"){
@@ -4034,6 +4619,7 @@ window.addEventListener("message",function(ev){
   try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
 });
 </script>
+
 <script>
 (()=> {
   const form=document.querySelector('#qnaForm,[data-qna-form]');
@@ -4045,10 +4631,11 @@ window.addEventListener("message",function(ev){
     ta.value=''; alert('வெற்றிகரமாக அனுப்பப்பட்டது.');
   }
   if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('அனுப்புதல் தோல்வியடைந்தது'));});
-  const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
+  const btn=document.querySelector('#qnaசமர்ப்பிக்கவும்Btn,[data-qna-submit], form [type="submit"]');
   if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('அனுப்புதல் தோல்வியடைந்தது'));});
 })();
 </script>
+
 <style id="mobile-footer-guard-final">
   html, body { height: auto; min-height: 100% !important; }
   @supports (height: 100dvh) {
@@ -4070,20 +4657,73 @@ window.addEventListener("message",function(ev){
   footer { padding-bottom: max(28px, env(safe-area-inset-bottom)) !important; position: static !important; }
   /* MOBILE-FOOTER-GUARD: final */
 </style>
-<script id="media-lazy-reveal-v3">
-/* v3: keep all cards in normal flow. Only image decoding/network priority is lazy. */
+
+<script id="media-lazy-reveal-v2">
 (function(){
-  "use strict";
-  function tuneLine(line){
-    const scroller=line&&line.querySelector(':scope > .scroll-content')||line;if(!scroller)return;
-    Array.from(scroller.querySelectorAll(':scope > .card')).forEach((card,index)=>{
-      card.style.removeProperty('visibility');card.style.removeProperty('position');delete card.dataset.lazy;
-      const img=card.querySelector('img');if(!img)return;img.loading=index<7?'eager':'lazy';img.decoding='async';if(index>=7)try{img.fetchPriority='low';}catch(_error){}
+  const INITIAL = 7;
+  const STEP = 6;
+  const MAX = 50;
+
+  function setupSection(line){
+    if(!line) return;
+
+    const scroller = line.querySelector(':scope > .scroll-content') || line;
+    const cards = Array.from(scroller.querySelectorAll(':scope > .card'));
+    if(cards.length <= INITIAL) return;
+
+    // 1️⃣ 초기 표시
+    cards.forEach((card, i)=>{
+      if(i >= INITIAL){
+        card.dataset.lazy = "true";
+        card.style.visibility = "hidden";
+        card.style.position = "absolute";
+      }
     });
+
+    let revealed = INITIAL;
+
+    function revealBatch(){
+      const hidden = cards.filter(c => c.dataset.lazy === "true");
+      if(!hidden.length) return;
+
+      hidden.slice(0, STEP).forEach(card=>{
+        card.dataset.lazy = "loaded";
+        card.style.visibility = "";
+        card.style.position = "";
+      });
+
+      revealed += STEP;
+      if(revealed > MAX) revealed = MAX;
+    }
+
+    // 2️⃣ 버튼 클릭 시 확장
+    const wrapper = line.closest('.section-row') || line.parentElement;
+    if(wrapper){
+      wrapper.addEventListener('click', function(e){
+        if(e.target.closest('.scroll-btn')){
+          revealBatch();
+        }
+      });
+    }
+
+    // 3️⃣ 모바일 드래그 끝나면 확장
+    scroller.addEventListener('scroll', function(){
+      const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+      if(scroller.scrollLeft > maxScroll - 60){
+        revealBatch();
+      }
+    }, {passive:true});
   }
-  function boot(){document.querySelectorAll('.thumb-line[data-psom-key]').forEach(tuneLine);}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
-  let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;boot();});}).observe(document.documentElement,{childList:true,subtree:true});
+
+  function boot(){
+    document.querySelectorAll('.thumb-line[data-psom-key]').forEach(setupSection);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", boot);
+  }else{
+    boot();
+  }
 })();
 </script>
 <script>
@@ -4123,14 +4763,19 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
-<script defer="" src="/assets/js/media-hero-engine.js"></script>
-<script defer="" src="/assets/js/media-empty-handler.js"></script>
+
+<script defer src="/assets/js/auto-embed.instagram.js"></script>
+
+<script defer src="/assets/js/media-hero-engine.js"></script>
+<script defer src="/assets/js/media-empty-handler.js"></script>
+
+
 <!-- Media Hub AutoMap (정본) -->
-<script defer="" src="/assets/js/igdc-engagement-storage-bridge.js?v=20260629-media-v2"></script>
-<script defer="" src="/assets/js/mediahub-automap-v3.js?v=20260629-media-v2"></script>
-<script defer="" src="/assets/js/mediahub-ott-inline.v1.js?v=20260701-ott-stage7-10"></script>
-<script defer="" src="/assets/js/mediahub-playback-controller.v2.js?v=20260629-media-v2"></script>
+<script defer src="/assets/js/igdc-engagement-storage-bridge.js?v=20260629-media-v2"></script>
+<script defer src="/assets/js/mediahub-automap-v3.js?v=20260629-media-v2"></script>
+<script defer src="/assets/js/mediahub-ott-inline.v1.js?v=20260701-ott-stage7-10"></script>
+<script defer src="/assets/js/mediahub-playback-controller.v2.js?v=20260629-media-v2"></script>
+
 <script id="igdc-media-10section-frame">
 (function(){
   const LIMIT = 50;
@@ -4146,7 +4791,7 @@ window.addEventListener("message",function(ev){
     thumb.className = 'thumb ph';
     const meta = document.createElement('div');
     meta.className = 'meta';
-    meta.textContent = 'Coming Soon';
+    meta.textContent = 'விரைவில் வருகிறது';
     a.appendChild(thumb);
     a.appendChild(meta);
     return a;
@@ -4185,5 +4830,6 @@ window.addEventListener("message",function(ev){
   }
 })();
 </script>
+
 </body>
 </html>
