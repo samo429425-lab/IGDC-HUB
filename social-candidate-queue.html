@@ -426,26 +426,34 @@
           flex-direction: column;
         }
       }
+
+      .content-ops-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px; margin:12px 0; }
+      .content-ops-card { border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:12px; background:rgba(255,255,255,.025); }
+      .content-ops-card h3 { margin:0 0 6px; font-size:15px; }
+      .content-ops-count { font-size:22px; font-weight:800; margin:5px 0 9px; }
+      .content-ops-help { min-height:38px; }
+      .section-check-grid { display:flex; flex-wrap:wrap; gap:8px 14px; margin:10px 0; }
+      .section-check-grid label { display:inline-flex; align-items:center; gap:5px; }
+      .front-apply-box { border:1px solid rgba(72,190,255,.35); border-radius:10px; padding:14px; margin-top:14px; }
     </style>
   </head>
   <body>
     <main>
-      <h1>소셜 네트워크 허브 최신 콘텐츠 후보 관제</h1>
+      <h1>소셜 네트워크 콘텐츠 운영</h1>
       <p class="lead">
-        국가·언어에 맞는 공개 SNS 인플루언서를 선별한 뒤, 계정 자체가 아니라
-        각 인플루언서가 최근 공개한 영상·게시물을 9개 섹션별로 수집·검토합니다.
-        운영 채널 주소는 내부 식별과 중복 방지에만 보존합니다.
-        후보를 확정해도 <strong>실제 적용</strong> 버튼을 누르기 전까지 기존
-        샘플 슬롯은 유지하며 외부 플랫폼의 권한을 우회하지 않습니다.
+        이 화면의 주 관리 대상은 <strong>콘텐츠</strong>입니다. 9개 SNS별 최신 콘텐츠를 수집하고,
+        현재 후보·새 수집·프론트 적용 예정·예비 교체·보류·차단 상태를 분리해서 관리합니다.
+        인플루언서 등록부는 콘텐츠 수집을 돕는 보조 관리 영역으로 화면 하단에 분리합니다.
+        <strong>프론트 실제 적용</strong> 버튼을 누르기 전에는 기존 프론트 슬롯을 바꾸지 않습니다.
       </p>
       <div class="bar">
         <button id="refreshBtn">대기열 새로고침</button
         ><button id="diagnosticBtn" class="secondary">소셜 종합 점검 JSON</button
         ><button id="rotationBtn" class="secondary">최종 100개 다시 정리</button
         ><button id="publishPreviewBtn" class="publish">
-          실제 적용 전 미리보기</button
+          프론트 적용 예정 미리보기</button
         ><button id="topActualApplyBtn" class="publish">
-          전체 실콘텐츠 실제 적용 실행</button
+          전체 9개 SNS 프론트 실제 적용</button
         ><button id="snapshotDownloadBtn" class="secondary">
           적용 예정 JSON</button
         ><button id="applicationValidationJsonBtn" class="secondary">
@@ -516,10 +524,16 @@
           현재 선택 국가·권역·IP 소비성향을 그대로 승계해 최신 콘텐츠 수집 → 정책·품질 재평가 → 교체 예정 갱신을 순서대로 실행합니다.
           기본값은 관리자 검토용 교체 대기열까지만 만들며, 아래 체크를 켠 경우에만 마지막 실제 적용까지 진행합니다.
         </div>
+        <div id="aiSectionSelector" class="reviewbar" style="margin-top:12px"></div>
         <div class="collect-controls">
-          <button id="aiFullCycleBtn" class="publish" type="button">AI 전자동 관리 1회 실행</button>
-          <label class="small"><input id="aiAutomationApply" type="checkbox" /> 검토 후 실제 적용 단계까지 자동 실행</label>
+          <button id="aiSelectedSectionsBtn" type="button">선택 SNS AI 자동 수집·교체</button>
+          <button id="aiFullCycleBtn" class="publish" type="button">전체 9개 SNS AI 자동 수집·교체</button>
+          <label class="small"><input id="aiAutomationApply" type="checkbox" /> AI 작업 완료 후 프론트 실제 적용까지 실행</label>
           <span id="aiAutomationState" class="state">대기</span>
+        </div>
+        <div class="small">
+          자동화 범위: 최신 콘텐츠 수집 → 정책·품질 평가 → 공개 100개 + 예비 20개 정리 → 밀려난 콘텐츠 보류 대기 이동.
+          프론트 실제 적용은 위 체크를 켠 경우에만 마지막 단계에서 실행합니다.
         </div>
       </section>
       <section class="panel">
@@ -628,88 +642,89 @@
           <pre id="diagnosticJson" class="json"></pre>
         </div>
       </section>
-      <section id="tablePanel" class="panel hidden">
-        <div class="modal-head">
-          <div>
-            <h2 style="margin: 0">인플루언서 등록부 · 9개 SNS 섹션</h2>
-            <div class="small">
-              인플루언서를 기업 목록처럼 채널 링크 단위로 관리합니다. 최신
-              콘텐츠는 아래 후보·교체 대기열에서 별도로 관리하며, 한 번에 한
-              섹션만 펼쳐 과도한 이미지 로딩을 막습니다. 인플루언서 등록부와 최신 콘텐츠 대기열을 통틀어 한 번에 하나의 섹션만 열립니다.
-            </div>
-          </div>
-          <span id="candidateCapacityState" class="state"></span>
-        </div>
-        <div class="reviewbar">
-          <button id="registryDiagnosticBtn" class="secondary">인플루언서 등록부 점검 JSON</button
-          ><label class="small"><input id="selectAllFinalMaster" type="checkbox" /> 전체 섹션 선택</label
-          ><button id="selectAllFinalBtn" class="secondary">
-            현재 조회 전체 선택</button
-          ><button id="clearFinalSelectionBtn" class="secondary">
-            선택 전체 해제</button
-          ><button id="approveBtn">선택 인플루언서 승인</button
-          ><button id="moveWaitingBtn" class="secondary">
-            선택 검색 제외</button
-          ><button id="holdBtn" class="secondary">선택 등록 보류</button
-          ><button id="resetBtn" class="secondary">선택 재검토</button
-          ><button id="rejectBtn" class="danger">선택 반려</button
-          ><button id="blockBtn" class="danger">선택 영구 차단</button
-          ><label class="small"
-            ><input id="socialConfirm" type="checkbox" /> 공개성·안전성
-            확인</label
-          ><span style="flex: 1"></span
-          ><button id="aiAutoBtn" class="publish">AI 전자동 후보 정리</button>
-        </div>
-        <div id="sectionAccordion" class="section-accordion"></div>
-      </section>
       <section id="replacementControlPanel" class="panel">
         <div class="modal-head">
           <div>
-            <h2 style="margin:0">최신 콘텐츠 교체 운영</h2>
-            <div class="small">새로 수집된 콘텐츠, 현재 공개 후보, 교체 대기를 분리해서 보고 선택적으로 승격·교체·제외합니다. 기존 샘플은 삭제하지 않습니다.</div>
+            <h2 style="margin:0">콘텐츠 목록 · 상태별 관리</h2>
+            <div class="small">각 버튼은 실제 카드 목록을 엽니다. 목록이 없으면 0개라고 바로 표시됩니다. 인플루언서 목록과 섞이지 않습니다.</div>
           </div>
-          <span id="replacementControlState" class="state">대기열을 읽는 중</span>
+          <span id="replacementControlState" class="state">콘텐츠를 읽는 중</span>
         </div>
+        <div class="content-ops-grid">
+          <div class="content-ops-card">
+            <h3>전체 최신 콘텐츠 후보</h3><div id="contentCountAll" class="content-ops-count">0</div>
+            <div class="small content-ops-help">현재 관리 중인 최신 콘텐츠 후보 전체입니다.</div>
+            <button id="replacementViewAllBtn" class="secondary" type="button">목록 보기</button>
+          </div>
+          <div class="content-ops-card">
+            <h3>새로 수집된 최신 콘텐츠</h3><div id="contentCountNew" class="content-ops-count">0</div>
+            <div class="small content-ops-help">아직 공개 100/예비 20 정리에 들어가지 않은 새 후보입니다.</div>
+            <button id="replacementViewNewBtn" class="secondary" type="button">목록 보기</button>
+          </div>
+          <div class="content-ops-card">
+            <h3>프론트 적용 예정 콘텐츠</h3><div id="contentCountPublic" class="content-ops-count">0</div>
+            <div class="small content-ops-help">정책·품질 순위 상위 공개 대상입니다. 실제 프론트 반영 전 단계입니다.</div>
+            <button id="replacementViewPublicBtn" class="secondary" type="button">목록 보기</button>
+          </div>
+          <div class="content-ops-card">
+            <h3>예비 교체 후보</h3><div id="contentCountReserve" class="content-ops-count">0</div>
+            <div class="small content-ops-help">공개 대상 뒤의 예비 20개입니다.</div>
+            <button id="replacementViewWaitingBtn" class="secondary" type="button">목록 보기</button>
+          </div>
+          <div class="content-ops-card">
+            <h3>현재 프론트 공개 콘텐츠</h3><div id="contentCountFront" class="content-ops-count">0</div>
+            <div class="small content-ops-help">현재 social.snapshot.json에서 실제 소셜 콘텐츠로 확인되는 항목입니다.</div>
+            <button id="replacementViewFrontBtn" class="secondary" type="button">목록 보기</button>
+          </div>
+          <div class="content-ops-card">
+            <h3>보류 대기</h3><div id="contentCountHold" class="content-ops-count">0</div>
+            <div class="small content-ops-help">프론트나 후보에서 내린 뒤 복구·삭제·차단을 결정하는 임시 보관입니다.</div>
+            <button id="contentViewHoldBtn" class="secondary" type="button">목록 보기</button>
+          </div>
+        </div>
+        <div id="replacementViewResult" class="small" style="margin-top:10px; padding:10px 12px; border:1px solid rgba(255,255,255,.12); border-radius:8px;">위의 목록 보기 버튼을 누르면 해당 콘텐츠가 있는 첫 SNS 섹션이 아래에 열립니다.</div>
         <div class="reviewbar">
-          <button id="replacementViewAllBtn" class="secondary" type="button">전체 최신 콘텐츠</button>
-          <button id="replacementViewNewBtn" class="secondary" type="button">새로 수집된 후보</button>
-          <button id="replacementViewPublicBtn" class="secondary" type="button">현재 공개 후보</button>
-          <button id="replacementViewWaitingBtn" class="secondary" type="button">밀려난·교체 대기</button>
-          <button id="replacementPromoteBtn" type="button">선택 최종 후보로</button>
-          <button id="replacementDemoteBtn" class="secondary" type="button">선택 교체 대기로</button>
-          <button id="replacementExcludeBtn" class="danger" type="button">선택 검색 제외</button>
+          <button id="latestContentDiagnosticBtn" class="secondary" type="button">콘텐츠 목록 점검 JSON</button>
+          <button id="replacementPromoteBtn" type="button">선택 → 프론트 적용 예정으로</button>
+          <button id="replacementDemoteBtn" class="secondary" type="button">선택 → 예비 교체로</button>
+          <button id="replacementExcludeBtn" class="danger" type="button">선택 → 검색 제외</button>
+        </div>
+        <div class="front-apply-box">
+          <div style="font-weight:800;margin-bottom:6px">프론트 실제 적용</div>
+          <div class="small">후보 정리와 프론트 적용은 별개입니다. 아래 버튼을 눌러야 SearchBank 인계용 실제 적용 요청을 보냅니다.</div>
+          <div class="reviewbar" style="margin-top:10px">
+            <button id="publishAllBtn" class="publish" type="button">전체 9개 SNS 프론트 실제 적용</button>
+            <button id="pipelineVerificationJsonBtnInline" class="secondary" type="button">SearchBank 인계 점검 JSON</button>
+            <span id="frontApplyState" class="state">실제 적용 전</span>
+          </div>
         </div>
       </section>
       <section id="waitingPanel" class="panel hidden">
         <div class="modal-head">
           <div>
             <h2 style="margin: 0">
-              최신 콘텐츠 후보·교체 대기열 · 9개 SNS 섹션
+              콘텐츠 카드 목록 · 9개 SNS
             </h2>
             <div class="small">
-              등록된 인플루언서별 최신 공개 영상·게시물 1건을 표시합니다.
-              섹션별 콘텐츠 후보는 최대 120개(공개 100개 + 예비 20개)로 유지하며, 콘텐츠 기록을
-              삭제해도 인플루언서 등록부는 별도로 유지됩니다.
+              위 상태별 관리에서 선택한 콘텐츠만 표시합니다. 섹션당 후보 풀은 최대 120개(공개 100 + 예비 20)로 유지합니다.
+              한 번에 하나의 SNS 섹션만 펼쳐 썸네일 과부하를 막습니다.
             </div>
           </div>
           <span id="waitingCapacityState" class="state"></span>
         </div>
         <div class="reviewbar">
-          <button id="latestContentDiagnosticBtn" class="secondary">최신 콘텐츠 대기열 점검 JSON</button
-          ><label class="small"><input id="selectAllWaitingMaster" type="checkbox" /> 전체 섹션 선택</label
+          <label class="small"><input id="selectAllWaitingMaster" type="checkbox" /> 전체 섹션 선택</label
           ><button id="selectAllWaitingBtn" class="secondary">
             현재 조회 전체 선택</button
           ><button id="clearWaitingSelectionBtn" class="secondary">
             선택 전체 해제</button
-          ><button id="waitingPromoteBtn">선택 최종 후보로 올리기</button
-          ><button id="publishAllBtn" class="publish">
-            전체 9개 섹션 실제 적용</button
+          ><button id="waitingPromoteBtn">선택 → 프론트 적용 예정으로</button
           ><button id="unpublishAllScopeBtn" class="danger">
             전체 9개 섹션 실제 적용 해제</button
           ><button id="unpublishAllBtn" class="danger">
             선택 콘텐츠만 적용 취소</button
           ><button id="waitingDeleteBtn" class="danger">
-            선택 교체후보 삭제</button
+            선택 리스트 삭제</button
           ><button id="waitingBlockBtn" class="danger">선택 영구 차단</button>
         </div>
         <div id="waitingAccordion" class="section-accordion"></div>
@@ -794,8 +809,43 @@
         복귀하며, 해당 프론트 슬롯은 기존 샘플 또는 준비 중 슬롯으로
         되돌아갑니다.
       </p>
+      <div class="small" style="margin:18px 0 8px;font-weight:700">아래 영역은 콘텐츠 프론트 배치와 분리된 보조 관리입니다.</div>
+      <section id="tablePanel" class="panel hidden">
+        <div class="modal-head">
+          <div>
+            <h2 style="margin: 0">보조 관리 · 인플루언서 등록부</h2>
+            <div class="small">
+              인플루언서를 기업 목록처럼 채널 링크 단위로 관리합니다. 최신
+              콘텐츠는 아래 후보·교체 대기열에서 별도로 관리하며, 한 번에 한
+              섹션만 펼쳐 과도한 이미지 로딩을 막습니다. 인플루언서 등록부와 최신 콘텐츠 대기열을 통틀어 한 번에 하나의 섹션만 열립니다.
+            </div>
+          </div>
+          <span id="candidateCapacityState" class="state"></span>
+        </div>
+        <div class="reviewbar">
+          <button id="registryDiagnosticBtn" class="secondary">인플루언서 등록부 점검 JSON</button
+          ><label class="small"><input id="selectAllFinalMaster" type="checkbox" /> 전체 섹션 선택</label
+          ><button id="selectAllFinalBtn" class="secondary">
+            현재 조회 전체 선택</button
+          ><button id="clearFinalSelectionBtn" class="secondary">
+            선택 전체 해제</button
+          ><button id="approveBtn">선택 인플루언서 승인</button
+          ><button id="moveWaitingBtn" class="secondary">
+            선택 검색 제외</button
+          ><button id="holdBtn" class="secondary">선택 등록 보류</button
+          ><button id="resetBtn" class="secondary">선택 재검토</button
+          ><button id="rejectBtn" class="danger">선택 반려</button
+          ><button id="blockBtn" class="danger">선택 영구 차단</button
+          ><label class="small"
+            ><input id="socialConfirm" type="checkbox" /> 공개성·안전성
+            확인</label
+          ><span style="flex: 1"></span
+          ><button id="aiAutoBtn" class="publish">AI 전자동 후보 정리</button>
+        </div>
+        <div id="sectionAccordion" class="section-accordion"></div>
+      </section>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=24"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=27"></script>
   </body>
 </html>

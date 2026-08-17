@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v4.0 - distribution-style multi-section front operations */
+/* IGDC Media Candidate Queue v4.1 - front100 reserve120 persistent - distribution-style multi-section front operations */
 (function(){
   'use strict';
 
@@ -17,11 +17,12 @@
     'media-thriller':'스릴러·미스터리','media-romance':'로맨스','media-variety':'버라이어티·토크',
     'media-documentary':'다큐멘터리','media-animation':'애니메이션','media-music':'음악·공연','media-shorts':'쇼츠·단편'
   };
-  var SECTION_CAPACITY={'media-music':50,'media-shorts':50};
+  var SECTION_CAPACITY={};
   var DISCOVERY_CYCLE_LENGTH=12;
   var MIN_REGIONAL_LANES_PER_RUN=6;
-  function sectionCapacity(key){return key==='media-trending'?50:(SECTION_CAPACITY[key]||100);}
-  function sectionReserveCapacity(key){return key==='media-trending'?0:20;}
+  function sectionCapacity(key){return key==='media-trending'?100:(SECTION_CAPACITY[key]||100);}
+  function sectionReserveCapacity(key){return key==='media-trending'?0:120;}
+  function isReserveCandidate(row){return row&&row.candidateOnly!==false;}
 
   var $=function(id){return document.getElementById(id);};
   var text=function(value){return String(value==null?'':value).trim();};
@@ -249,28 +250,27 @@
       var list=sectionRows(key,rows);
       var open=key===openSectionKey;
       var capacity=sectionCapacity(key);
-      var fullCount=sectionRows(key,allActive).length;
+      var allSectionRows=sectionRows(key,allActive);
+      var fullCount=allSectionRows.length;
       var released=Number(frontReleaseState.sections&&frontReleaseState.sections[key]||0);
-      var primaryCount=Math.min(fullCount,capacity);
-      var reserveCount=Math.min(sectionReserveCapacity(key),Math.max(0,fullCount-capacity));
-      var overflowCount=Math.max(0,fullCount-capacity-sectionReserveCapacity(key));
+      var candidatePoolCount=allSectionRows.filter(isReserveCandidate).length;
+      var overflowCount=Math.max(0,candidatePoolCount-sectionReserveCapacity(key));
       var countLabel=key==='media-trending'?
-        primaryCount+' / '+capacity:
-        '본선 '+primaryCount+'/'+capacity+' · 예비 '+reserveCount+'/'+sectionReserveCapacity(key)+(overflowCount?' · 최신/추가 '+overflowCount:'');
+        '자동 프론트 '+released+'/'+capacity:
+        '프론트 '+released+'/'+capacity+' · 신규/교체 후보 '+Math.min(candidatePoolCount,sectionReserveCapacity(key))+'/'+sectionReserveCapacity(key)+(overflowCount?' · 기존 초과보존 '+overflowCount:'');
       if(list.length!==fullCount)countLabel+=' · 표시 '+list.length;
-      if(key!=='media-trending')countLabel+=' · 프론트 '+released;
       var headerActions=key==='media-trending'?
         '<div class="section-header-actions"><span class="pill section">자동 조합 섹션</span></div>':
-        '<div class="section-header-actions" data-section-key="'+esc(key)+'"><span class="pill section">프론트 '+released+'개</span><button type="button" class="section-ai-btn sectionAiBtn">이 섹션 AI 자동 정리</button><button type="button" class="section-match-btn sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="section-unmatch-btn sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 해제</button><button type="button" class="section-row-toggle sectionToggleBtn" data-section-key="'+esc(key)+'">'+(open?'목록 접기':'목록 펼치기')+'</button></div>';
+        '<div class="section-header-actions" data-section-key="'+esc(key)+'"><span class="pill section">프론트 '+released+'개</span><button type="button" class="section-ai-btn sectionAiBtn">이 섹션 AI 자동 정리</button><button type="button" class="section-match-btn sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="section-unmatch-btn sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 해제</button><button type="button" class="section-row-toggle sectionToggleBtn" data-section-key="'+esc(key)+'">'+(open?'목록 접기 ▲':'목록 펼치기 ▼')+'</button></div>';
       var selector=key==='media-trending'?'':'<div class="section-batch-select"><label><input type="checkbox" class="section-batch-check" data-section-key="'+esc(key)+'" '+(selectedFrontSections.has(key)?'checked':'')+'> 선택</label></div>';
       return '<section class="candidate-section'+(open?' open':'')+'" data-section-key="'+esc(key)+'">'+
-        '<div class="section-header">'+selector+'<button type="button" class="section-toggle" data-section-key="'+esc(key)+'" aria-expanded="'+(open?'true':'false')+'"><span class="section-toggle-main"><span class="section-toggle-title">'+esc(SECTION_LABELS[key]||key)+'</span><span class="section-count">'+countLabel+'</span></span><span class="section-chevron">⌄</span></button>'+headerActions+'</div>'+
+        '<div class="section-header">'+selector+'<button type="button" class="section-toggle" data-section-key="'+esc(key)+'" aria-expanded="'+(open?'true':'false')+'"><span class="section-toggle-main"><span class="section-toggle-title">'+esc(SECTION_LABELS[key]||key)+'</span><span class="section-count">'+countLabel+'</span></span></button>'+headerActions+'</div>'+
         (open?'<div class="section-body">'+sectionBodyHtml(key,list)+'</div>':'')+
       '</section>';
     }).join('');
     $('sectionAccordion').innerHTML=html;
     $('filterState').textContent='검색 조건 일치 '+rows.length+'개 / 전체 활성 후보 '+activeRows().length+'개 · 펼친 섹션만 썸네일 로드';
-    $('candidateCapacityState').textContent='일반 본선 100 + 예비 20 · 음악/쇼츠 본선 50 + 예비 20';
+    $('candidateCapacityState').textContent='프론트 섹션당 100 · 신규/교체 후보 풀 최대 120 · 기존 후보 보존 + 신규 추가';
     $('tablePanel').classList.remove('hidden');
     updateSectionBatchControls();
   }
@@ -602,7 +602,7 @@
     var total=0,errors=0,completed=new Set();
     var sectionCounts={};
     collectionSections.forEach(function(section){
-      sectionCounts[section]=activeRows().filter(function(row){return text(row.sectionKey)===section;}).length;
+      sectionCounts[section]=activeRows().filter(function(row){return text(row.sectionKey)===section&&isReserveCandidate(row);}).length;
     });
     collectAllRunning=true;collectorStopRequested=false;
     $('collectBtn').disabled=true;$('collectAllBtn').disabled=true;$('collectAdminExceptionBtn').disabled=true;$('collectorStopBtn').disabled=false;
@@ -611,7 +611,7 @@
         for(var index=0;index<collectionSections.length&&!collectorStopRequested;index+=1){
           var section=collectionSections[index];
           if(completed.has(section))continue;
-          var inventoryMaximum=sectionCapacity(section)+sectionReserveCapacity(section);
+          var inventoryMaximum=sectionReserveCapacity(section);
           var collectionTarget=Math.min(target,Math.max(0,inventoryMaximum-sectionCounts[section]));
           if(collectionTarget<=0){
             completed.add(section);
@@ -624,7 +624,7 @@
           total+=Number(result&&result.newSavedAll||0);
           sectionCounts[section]+=Number(result&&result.requestedSaved||0);
           if(result&&result.complete){
-            if(sectionCounts[section]>=sectionCapacity(section)&&!collectorStopRequested){
+            if(sectionCounts[section]>=Math.min(100,sectionReserveCapacity(section))&&!collectorStopRequested){
               try{
                 var research=await researchSectionQuality(section,sectionCounts[section]);
                 total+=Number(research&&research.newSavedAll||0);
@@ -692,7 +692,7 @@
     var message='선택한 '+ids.length+'개 후보를 현재 후보 목록에서 삭제할까요? 원본 영상은 삭제되지 않으며, 이후 리서치에서 같은 콘텐츠가 다시 발견되면 후보로 다시 들어올 수 있습니다.';
     if(!window.confirm(message))return;
     try{
-      var data=await post(ACT,{action:'forget',ids:ids,note:text(note),confirmPermanentDelete:true});
+      var data=await post(POOL,{action:'delete',ids:ids,note:text(note)});
       show('후보 목록에서 '+Number(data.deleted||data.updated||0)+'건을 삭제했습니다. 이후 리서치 재발견은 허용됩니다.','ok');
       if(sectionKey)selectedBySection[sectionKey]=new Set();
       await refresh();
@@ -709,8 +709,8 @@
         capacity:sectionCapacity(key),
         primaryCapacity:sectionCapacity(key),
         reserveCapacity:sectionReserveCapacity(key),
-        primaryCount:Math.min(list.length,sectionCapacity(key)),
-        reserveCount:Math.max(0,list.length-sectionCapacity(key)),
+        primaryCount:Number(frontReleaseState.sections&&frontReleaseState.sections[key]||0),
+        reserveCount:list.filter(isReserveCandidate).length,
         count:list.length,
         items:list
       };
@@ -1331,11 +1331,11 @@
     if(!$('poolRows'))return;
     if(!poolCache||!poolCache.sections){$('poolRows').innerHTML='<tr><td colspan="10" class="small">후보 운영 현황을 불러오지 못했습니다.</td></tr>';return;}
     var keys=poolSections();
-    $('poolSummary').innerHTML=keys.map(function(key){var sec=poolCache.sections[key]||{};return '<div class="card"><h2>'+esc(SECTION_LABELS[key]||key)+'</h2><div class="small">운영 '+Number(sec.primaryCount||0)+'/'+Number(sec.primaryCapacity||0)+' · 예비 '+Number(sec.reserveCount||0)+'/20 · 최신 '+Number(sec.latestCount||0)+' · 실제 프론트 '+Number(sec.publishedCount||0)+'</div></div>';}).join('');
+    $('poolSummary').innerHTML=keys.map(function(key){var sec=poolCache.sections[key]||{};return '<div class="card"><h2>'+esc(SECTION_LABELS[key]||key)+'</h2><div class="small">운영 '+Number(sec.primaryCount||0)+'/'+Number(sec.primaryCapacity||0)+' · 교체 후보 '+Number(sec.reserveCount||0)+'/120 · 최신분류 '+Number(sec.latestCount||0)+' · 실제 프론트 '+Number(sec.publishedCount||0)+'</div></div>';}).join('');
     var rows=[];var bucket=text($('poolBucketFilter')&&$('poolBucketFilter').value)||'latest';
-    keys.forEach(function(key){var sec=poolCache.sections[key]||{};var names=bucket==='all'?['primary','reserve','latest','held','overflow']:[bucket];names.forEach(function(name){(sec[name]||[]).forEach(function(row){rows.push(row);});});});
+    keys.forEach(function(key){var sec=poolCache.sections[key]||{};var names=bucket==='all'?['primary','reserve','latest','held','overflow']:(bucket==='reserve'?['reserve','latest']:[bucket]);names.forEach(function(name){(sec[name]||[]).forEach(function(row){rows.push(row);});});});
     rows.sort(function(a,b){return Number(b.score||0)-Number(a.score||0);});
-    var bucketLabel={primary:'현재 운영',reserve:'예비 후보',latest:'최신 후보',held:'보류',overflow:'교체 대기'};
+    var bucketLabel={primary:'현재 프론트',reserve:'교체 후보',latest:'최신 후보',held:'보류',overflow:'기존 초과보존'};
     $('poolRows').innerHTML=rows.length?rows.map(function(row){var id=text(row.id),checked=poolSelected.has(id),label=bucketLabel[row.bucket]||row.bucket||'-',klass=row.bucket==='primary'?'pool-status-primary':row.bucket==='reserve'?'pool-status-reserve':row.bucket==='latest'?'pool-status-latest':'pool-status-held';return '<tr><td><input class="poolRowCheck" type="checkbox" data-id="'+esc(id)+'" '+(checked?'checked':'')+'></td><td>'+pill(SECTION_LABELS[row.sectionKey]||row.sectionKey,'section')+'</td><td><span class="'+klass+'">'+esc(label)+'</span></td><td><strong>'+esc(row.title||'(제목 없음)')+'</strong><div class="small">'+esc(row.provider||'')+'</div></td><td>'+Number(row.score||0).toFixed(1)+'</td><td>'+esc(row.year||'-')+'</td><td>'+Number(row.downloads||0).toLocaleString()+'</td><td>'+esc(row.qualityHeight?row.qualityHeight+'p':'-')+'</td><td>'+esc(row.reviewStatus||'-')+' / '+esc(row.verificationStatus||'-')+'</td><td>'+(row.published?'배치 중':row.frontEnabled?'운영풀 후보':'비활성')+'</td></tr>';}).join(''):'<tr><td colspan="10" class="small">선택한 조건의 후보가 없습니다.</td></tr>';
     $('poolState').textContent='후보 운영 현황 · '+keys.length+'개 섹션 · 표시 '+rows.length+'개';
   }
@@ -1370,14 +1370,14 @@
       }else if(action==='hold'){
         data=await post(ACT,{action:'hold',ids:ids,note:'candidate_pool_hold'});
       }else if(action==='delete'){
-        data=await post(ACT,{action:'forget',ids:ids,note:'candidate_pool_delete_recollect_allowed',confirmPermanentDelete:true});
+        data=await post(POOL,{action:'delete',ids:ids});
       }else if(action==='permanent_block'){
         data=await post(ACT,{action:'block',ids:ids,note:'candidate_pool_permanent_block'});
       }else if(action==='auto'){
         var rowMap=poolSelectedRowMap();
         var heldIds=ids.filter(function(id){return lower(rowMap[id]&&rowMap[id].reviewStatus)==='hold';});
         var resumed=0;
-        if(heldIds.length){var restoreData=await post(ACT,{action:'resume',ids:heldIds,note:'candidate_pool_resume'});resumed=Number(restoreData.updated||0);}
+        if(heldIds.length){var restoreData=await post(ACT,{action:'reset',ids:heldIds,note:'candidate_pool_resume_to_pending'});resumed=Number(restoreData.updated||0);}
         var autoData=await post(POOL,{action:'auto',ids:ids});
         data=autoData||{};data.updated=Math.max(Number(data.updated||0),resumed);data.resumed=resumed;
       }
@@ -1404,7 +1404,7 @@
 
   async function sectionAutoRebalance(sectionKey){
     if(!sectionKey||MANUAL_SECTION_ORDER.indexOf(sectionKey)<0)return;
-    if(!window.confirm((SECTION_LABELS[sectionKey]||sectionKey)+' 섹션의 승인 완료 후보를 운영 슬롯 + 예비 20 기준으로 AI 자동 정리한 뒤 이 섹션만 프론트에 다시 반영할까요?'))return;
+    if(!window.confirm((SECTION_LABELS[sectionKey]||sectionKey)+' 섹션의 승인 완료 후보를 프론트 100 + 교체 후보 최대 120 기준으로 AI 자동 정리한 뒤 이 섹션만 프론트에 다시 반영할까요?'))return;
     setFrontButtonsDisabled(true);
     try{
       var data=await post(POOL,{action:'auto_rebalance',sectionKey:sectionKey});
@@ -1418,7 +1418,7 @@
 
   async function poolAutoRebalance(){
     var section=text($('poolSectionFilter').value);
-    if(!window.confirm((section?(SECTION_LABELS[section]||section)+' 섹션':'전체 섹션')+'의 승인 완료 후보를 비교해 운영 슬롯 + 예비 20개를 자동 재정렬할까요?\n\n인기·품질·최신성·재생 안정성을 비교하며, 관리자가 수동으로 내린 콘텐츠는 자동 복원하지 않습니다. 처리 후 기존 공식 프론트 반영 경로로 즉시 재배포합니다.'))return;
+    if(!window.confirm((section?(SECTION_LABELS[section]||section)+' 섹션':'전체 섹션')+'의 승인 완료 후보를 비교해 프론트 100 + 교체 후보 최대 120개를 자동 재정렬할까요?\n\n인기·품질·최신성·재생 안정성을 비교하며, 관리자가 수동으로 내린 콘텐츠는 자동 복원하지 않습니다. 처리 후 기존 공식 프론트 반영 경로로 즉시 재배포합니다.'))return;
     $('poolAutoRebalanceBtn').disabled=true;$('poolState').textContent='AI 자동 비교·치환 중';
     try{
       var data=await post(POOL,{action:'auto_rebalance',sectionKey:section});
@@ -1433,12 +1433,21 @@
     download(JSON.stringify(poolCache,null,2)+'\n','igdc-media-candidate-pool-status.json');
   }
 
+  function toggleCandidatePool(){
+    var panel=$('candidatePoolPanel'),btn=$('poolToggleBtn');if(!panel||!btn)return;
+    var collapsed=!panel.classList.contains('pool-collapsed');
+    panel.classList.toggle('pool-collapsed',collapsed);
+    btn.textContent=collapsed?'목록 펼치기 ▼':'목록 접기 ▲';
+    btn.setAttribute('aria-expanded',collapsed?'false':'true');
+  }
+
   function bind(){
     $('refreshBtn').onclick=refresh;
     $('poolRefreshBtn').onclick=refreshPool;
     $('poolResearchLatestBtn').onclick=researchLatestAll;
     $('poolAutoRebalanceBtn').onclick=poolAutoRebalance;
     $('poolDownloadBtn').onclick=downloadPool;
+    $('poolToggleBtn').onclick=toggleCandidatePool;
     $('poolSectionFilter').onchange=function(){poolSelected.clear();renderPool();};
     $('poolBucketFilter').onchange=function(){poolSelected.clear();$('poolSelectAll').checked=false;renderPool();};
     $('poolSelectAll').onchange=function(){var checked=this.checked;document.querySelectorAll('.poolRowCheck').forEach(function(el){el.checked=checked;var id=text(el.dataset.id);if(checked)poolSelected.add(id);else poolSelected.delete(id);});};

@@ -1,4 +1,4 @@
-/* IGDC Social Hub Influencer Registry + Latest Content Control v2.8.0 - content hold queue + single-open rendering + content pool 120 */
+/* IGDC Social Hub Influencer Registry + Latest Content Control v2.9.0 - content hold queue + single-open rendering + content pool 120 */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -39,6 +39,7 @@
     selectedInfluencers = new Set(),
     selectedContents = new Set(),
     selectedHoldContents = new Set(),
+    publishedContentIds = new Set(),
     waitingViewMode = "all";
   var $ = function (id) {
       return document.getElementById(id);
@@ -933,10 +934,13 @@
       '">선택 해제</button>' +
       '<button type="button" data-waiting-promote="' +
       esc(key) +
-      '">선택 최종 후보로</button>' +
+      '">선택 → 공개 후보로</button>' +
+      '<button class="publish" type="button" data-waiting-ai="' +
+      esc(key) +
+      '">이 SNS AI 자동 수집·교체</button>' +
       '<button class="publish" type="button" data-waiting-publish="' +
       esc(key) +
-      '">이 섹션 실제 적용</button>' +
+      '">이 SNS 프론트 실제 적용</button>' +
       '<button class="danger" type="button" data-waiting-unpublish-all="' +
       esc(key) +
       '">이 섹션 전체 적용 해제</button>' +
@@ -1007,10 +1011,11 @@
     return text(placementById[text(row && row.id)]);
   }
   function waitingViewAccept(row) {
-    var placement = waitingPlacement(row);
+    var placement = waitingPlacement(row), id = text(row && row.id);
     if (waitingViewMode === "public") return placement === "public_selected";
     if (waitingViewMode === "replacement") return placement === "replacement_waiting";
     if (waitingViewMode === "new") return !placement;
+    if (waitingViewMode === "front") return publishedContentIds.has(id);
     return true;
   }
   function updateReplacementControl(waitingAll, waitingVisible) {
@@ -1018,12 +1023,20 @@
     if (!el) return;
     var fresh = waitingAll.filter(function (r) { return !waitingPlacement(r); }).length,
       current = waitingAll.filter(function (r) { return waitingPlacement(r) === "public_selected"; }).length,
-      replacement = waitingAll.filter(function (r) { return waitingPlacement(r) === "replacement_waiting"; }).length;
-    el.textContent = "신규 수집 " + fresh + "개 · 현재 공개 후보 " + current + "개 · 교체 대기 " + replacement + "개 · 현재 보기 " + waitingVisible.length + "개";
-    ["replacementViewAllBtn","replacementViewNewBtn","replacementViewPublicBtn","replacementViewWaitingBtn"].forEach(function (id) {
+      replacement = waitingAll.filter(function (r) { return waitingPlacement(r) === "replacement_waiting"; }).length,
+      front = waitingAll.filter(function (r) { return publishedContentIds.has(text(r && r.id)); }).length,
+      hold = rows.filter(contentHold).length;
+    el.textContent = "전체 후보 " + waitingAll.length + "개 · 새 수집 " + fresh + "개 · 적용 예정 " + current + "개 · 예비 " + replacement + "개 · 현재 프론트 " + front + "개";
+    if ($("contentCountAll")) $("contentCountAll").textContent = waitingAll.length + "개";
+    if ($("contentCountNew")) $("contentCountNew").textContent = fresh + "개";
+    if ($("contentCountPublic")) $("contentCountPublic").textContent = current + "개";
+    if ($("contentCountReserve")) $("contentCountReserve").textContent = replacement + "개";
+    if ($("contentCountFront")) $("contentCountFront").textContent = front + "개";
+    if ($("contentCountHold")) $("contentCountHold").textContent = hold + "개";
+    ["replacementViewAllBtn","replacementViewNewBtn","replacementViewPublicBtn","replacementViewWaitingBtn","replacementViewFrontBtn"].forEach(function (id) {
       var b=$(id); if (b) b.classList.remove("publish");
     });
-    var activeId = waitingViewMode === "new" ? "replacementViewNewBtn" : waitingViewMode === "public" ? "replacementViewPublicBtn" : waitingViewMode === "replacement" ? "replacementViewWaitingBtn" : "replacementViewAllBtn";
+    var activeId = waitingViewMode === "new" ? "replacementViewNewBtn" : waitingViewMode === "public" ? "replacementViewPublicBtn" : waitingViewMode === "replacement" ? "replacementViewWaitingBtn" : waitingViewMode === "front" ? "replacementViewFrontBtn" : "replacementViewAllBtn";
     if ($(activeId)) $(activeId).classList.add("publish");
   }
   function renderSections() {
@@ -1291,6 +1304,23 @@
       return null;
     }
   }
+  async function loadPublishedState() {
+    publishedContentIds = new Set();
+    try {
+      var d = await staticJson(STATIC_SOCIAL_SNAPSHOT),
+        sections = (d && d.pages && d.pages.social && d.pages.social.sections) || {};
+      order.forEach(function (key) {
+        (Array.isArray(sections[key]) ? sections[key] : []).forEach(function (slot) {
+          var audit = (slot && slot.audit) || {}, id = publishedCandidateId(slot);
+          if (id && text(slot && slot.type) === "external_social" && text(audit.origin) === "social_candidates") publishedContentIds.add(id);
+        });
+      });
+    } catch (_e) {
+      publishedContentIds = new Set();
+    }
+    return publishedContentIds;
+  }
+
   async function refresh() {
     hide();
     $("refreshBtn").disabled = true;
@@ -1299,6 +1329,7 @@
       rows = (d.queue && d.queue.rows) || d.candidates || [];
       pruneSelections();
       await loadPlacement();
+      await loadPublishedState();
       renderSummary(d.summary);
       filters(d.summary);
       renderSections();
@@ -1658,7 +1689,7 @@
       index: index || 0,
       total: total || 1,
       section: section,
-      target: 100,
+      target: 120,
       batchSize: batchSize,
       countryCode: selectedCountry(),
       scopeMode: scopeMode(),
@@ -1766,7 +1797,7 @@
     } else {
       j.paused = false;
       j.total = order.length;
-      j.target = 100;
+      j.target = 120;
     }
     var failed = false;
     try {
@@ -1774,7 +1805,7 @@
         var continuing = resume && j.section === order[j.index];
         j.section = order[j.index];
         if (!continuing) {
-          j.target = 100;
+          j.target = 120;
           j.batchSize = Math.max(
             8,
             Math.min(12, Number($("collectorBatchSize").value) || 10),
@@ -2228,19 +2259,10 @@
       " 인플루언서들의 최종 최신 콘텐츠를 실제 프론트 슬롯에 적용할까요?"
     )) return false;
     try {
-      var previewQuery = new URLSearchParams({
-          includeSnapshot: "0",
-          sectionKey: sectionKey || "",
-          countryCode: scope.countryCode,
-          scopeMode: scopeMode(),
-          regionId: text($("collectorRegion").value),
-        }),
-        preview = await get(PUBLISH + "?" + previewQuery.toString());
-      if (Number(preview.eligibleRows || 0) < 1) {
-        throw new Error(
-          "검증을 통과한 실제 후보가 0개이므로 빈 적용본은 배포하지 않습니다.",
-        );
-      }
+      show(scopeName + " · " + target + " 실제 적용 요청을 전송하고 있습니다.", "warn");
+      if ($("frontApplyState")) $("frontApplyState").textContent = "실제 적용 요청 중";
+      // 서버 자체가 eligibleRows를 검증하므로 미리보기 GET을 선행하지 않는다.
+      // 이 버튼은 반드시 actual_front_apply POST를 직접 보내 저장/빌드 경로를 탄다.
       var d = await post(PUBLISH, {
         operation: "actual_front_apply",
         storeRelease: true,
@@ -2251,6 +2273,9 @@
         scopeMode: scopeMode(),
           regionId: text($("collectorRegion").value),
       });
+      if (!d.actualApplyRequested || !d.storeReleaseRequested) {
+        throw new Error("실제 적용 POST가 서버에서 actual_front_apply 저장 요청으로 인식되지 않았습니다.");
+      }
       if (!d.releaseStored) throw new Error("실제 적용 요청은 처리됐지만 stored social release가 생성되지 않았습니다. SearchBank 인계 전 단계에서 중단되었습니다.");
       diagnostic(d);
       var verifyQ = new URLSearchParams({
@@ -2261,6 +2286,7 @@
       });
       var verify = await getReport(PUBLISH + "?" + verifyQ.toString());
       diagnostic({ actualApply: d, searchBankHandoff: verify });
+      if ($("frontApplyState")) $("frontApplyState").textContent = d.releaseStored ? (d.buildTrigger && d.buildTrigger.ok ? "승인본 저장 · 배포 접수" : "승인본 저장 · 배포 대기") : "저장 실패";
       if (d.buildTrigger && d.buildTrigger.ok) {
         show(
           scopeName +
@@ -2278,6 +2304,7 @@
       }
       return true;
     } catch (e) {
+      if ($("frontApplyState")) $("frontApplyState").textContent = "실제 적용 실패";
       show(e.message || "실제 화면 적용을 완료하지 못했습니다.", "warn");
       return false;
     }
@@ -2431,9 +2458,46 @@
   function setWaitingView(mode) {
     waitingViewMode = mode || "all";
     openDetailQueue = "content";
-    if (!openDetailSection) openDetailSection = order[0] || "";
+    var candidates = visible().filter(function (row) {
+      return assetClass(row) === "latest_content" && !contentHold(row) && waitingViewAccept(row);
+    });
+    var firstSection = order.find(function (key) {
+      return candidates.some(function (row) { return row.sectionKey === key; });
+    }) || "";
+    openDetailSection = firstSection;
     renderSections();
+    var result = $("replacementViewResult");
+    if (result) {
+      if (!candidates.length) {
+        result.textContent = "현재 선택한 보기 조건에 해당하는 콘텐츠 후보가 없습니다.";
+        result.classList.remove("hidden");
+      } else {
+        var counts = order.map(function (key) {
+          var n = candidates.filter(function (row) { return row.sectionKey === key; }).length;
+          return n ? label(key) + " " + n + "개" : "";
+        }).filter(Boolean);
+        var modeName = waitingViewMode === "new" ? "새로 수집된 최신 콘텐츠" : waitingViewMode === "public" ? "프론트 적용 예정" : waitingViewMode === "replacement" ? "예비 교체 후보" : waitingViewMode === "front" ? "현재 프론트 공개 콘텐츠" : "전체 최신 콘텐츠 후보";
+        result.textContent = modeName + " " + candidates.length + "개 · " + counts.join(" · ");
+        result.classList.remove("hidden");
+      }
+    }
   }
+  function openHoldContentView() {
+    var holdRows = visible().filter(contentHold),
+      firstSection = order.find(function (key) {
+        return holdRows.some(function (row) { return row.sectionKey === key; });
+      }) || "";
+    openDetailQueue = "hold";
+    openDetailSection = firstSection;
+    renderSections();
+    var result = $("replacementViewResult");
+    if (result) {
+      result.textContent = holdRows.length
+        ? "보류 대기 " + holdRows.length + "개 · " + (firstSection ? label(firstSection) + " 목록을 열었습니다." : "")
+        : "현재 보류 대기 콘텐츠가 없습니다.";
+    }
+  }
+
   async function moveSelectedToReplacement() {
     var ids = selected(".waitingCheck");
     if (!ids.length) return show("교체 대기로 이동할 최신 콘텐츠를 선택해 주세요.", "warn");
@@ -2452,28 +2516,80 @@
     if (!ids.length) return show("완전 차단할 보류 콘텐츠를 선택해 주세요.", "warn");
     await run("permanent_block", ids);
   }
-  async function aiFullCycle() {
-    if (!confirm("현재 국가·권역 소비정책을 기준으로 9개 SNS 최신 콘텐츠 수집 → AI 후보 정리 → 교체 예정 갱신을 순서대로 실행할까요? 실제 적용은 아래 체크를 켠 경우에만 마지막에 실행됩니다.")) return;
-    var statusEl = $("aiAutomationState");
+  function renderAiSectionSelector() {
+    var host = $("aiSectionSelector");
+    if (!host) return;
+    host.innerHTML =
+      '<span class="small" style="font-weight:700">AI 자동화 대상 SNS</span>' +
+      order.map(function (key) {
+        return '<label class="small" style="display:inline-flex;align-items:center;gap:5px"><input class="aiSectionCheck" type="checkbox" value="' +
+          esc(key) + '" /> ' + esc(label(key)) + '</label>';
+      }).join("") +
+      '<button id="aiSelectAllSectionsBtn" class="secondary" type="button">9개 전체 선택</button>' +
+      '<button id="aiClearSectionsBtn" class="secondary" type="button">선택 해제</button>';
+    $("aiSelectAllSectionsBtn").onclick = function () {
+      host.querySelectorAll(".aiSectionCheck").forEach(function (el) { el.checked = true; });
+    };
+    $("aiClearSectionsBtn").onclick = function () {
+      host.querySelectorAll(".aiSectionCheck").forEach(function (el) { el.checked = false; });
+    };
+  }
+  function selectedAiSections() {
+    var host = $("aiSectionSelector");
+    return host ? Array.from(host.querySelectorAll(".aiSectionCheck:checked")).map(function (el) { return text(el.value); }).filter(Boolean) : [];
+  }
+  async function aiCycleSections(keys, skipConfirm) {
+    keys = Array.from(new Set((keys || []).filter(function (key) { return order.indexOf(key) >= 0; })));
+    if (!keys.length) return show("AI 자동화할 SNS 섹션을 선택해 주세요.", "warn");
+    if (!skipConfirm && !confirm(keys.map(label).join(", ") + " 섹션의 최신 콘텐츠 수집 → AI 평가 → 공개/예비 후보 재정리를 실행할까요?")) return false;
+    var statusEl = $("aiAutomationState"), oldCollector = $("collectorSection").value;
     try {
-      if (statusEl) statusEl.textContent = "1/3 최신 콘텐츠 수집 중";
-      var collected = await collectAll(true);
-      if (!collected) throw new Error("수집이 중단 또는 일시정지되어 자동 운영을 멈췄습니다.");
-      if (statusEl) statusEl.textContent = "2/3 정책·품질 기준 자동 정리 중";
-      var curated = await autoCurate("", true);
-      if (!curated) throw new Error("AI 후보 정리를 완료하지 못했습니다.");
-      waitingViewMode = "replacement";
+      stopRequested = false;
+      lockCollection(true);
+      for (var i = 0; i < keys.length; i++) {
+        var key = keys[i], j = newJob(key, i, keys.length);
+        if (statusEl) statusEl.textContent = "수집 " + (i + 1) + "/" + keys.length + " · " + label(key);
+        await collectSection(key, false, j);
+        j.done = i + 1;
+        saveJob(j);
+      }
+    } catch (e) {
+      if (statusEl) statusEl.textContent = "수집 중단 · " + (e.message || "오류");
+      show(e.message || "AI 자동 수집을 완료하지 못했습니다.", "warn");
+      return false;
+    } finally {
+      lockCollection(false);
+      stopRequested = false;
+      $("collectorSection").value = oldCollector;
+    }
+    try {
+      for (var n = 0; n < keys.length; n++) {
+        if (statusEl) statusEl.textContent = "AI 정리 " + (n + 1) + "/" + keys.length + " · " + label(keys[n]);
+        var curated = await autoCurate(keys[n], true);
+        if (!curated) throw new Error(label(keys[n]) + " AI 후보 정리를 완료하지 못했습니다.");
+      }
+      waitingViewMode = "all";
+      openDetailQueue = "content";
+      openDetailSection = keys[0];
       await refresh();
       if ($("aiAutomationApply") && $("aiAutomationApply").checked) {
-        if (statusEl) statusEl.textContent = "3/3 SearchBank 인계용 실제 적용 실행 중";
-        var applied = await actualApply("", true);
-        if (!applied) throw new Error("실제 적용 단계가 완료되지 않았습니다.");
+        if (statusEl) statusEl.textContent = "프론트 실제 적용 중";
+        for (var a = 0; a < keys.length; a++) {
+          var applied = await actualApply(keys[a], true);
+          if (!applied) throw new Error(label(keys[a]) + " 프론트 실제 적용을 완료하지 못했습니다.");
+        }
       }
-      if (statusEl) statusEl.textContent = "자동 운영 완료 · 교체 대기열 확인 가능";
+      if (statusEl) statusEl.textContent = "완료 · " + keys.length + "개 SNS";
+      show(keys.map(label).join(", ") + " AI 자동 운영을 완료했습니다.", "ok");
+      return true;
     } catch (e) {
       if (statusEl) statusEl.textContent = "자동 운영 중단 · " + (e.message || "오류");
-      show(e.message || "AI 전자동 관리를 완료하지 못했습니다.", "warn");
+      show(e.message || "AI 자동 운영을 완료하지 못했습니다.", "warn");
+      return false;
     }
+  }
+  async function aiFullCycle() {
+    return aiCycleSections(order.slice(), false);
   }
   function openPreview(url) {
     var safeUrl = text(url);
@@ -2584,6 +2700,7 @@
         run("permanent_block", sectionIds(container, key, "finalCheck"));
       else if ((key = event.target.dataset.waitingPromote))
         run("promote_candidate", sectionIds(container, key, "waitingCheck"));
+      else if ((key = event.target.dataset.waitingAi)) aiCycleSections([key], false);
       else if ((key = event.target.dataset.waitingPublish)) actualApply(key);
       else if ((key = event.target.dataset.waitingUnpublishAll))
         actualUnapplyAll(key);
@@ -2629,6 +2746,7 @@
   }
   function bind() {
     options();
+    renderAiSectionSelector();
     $("refreshBtn").onclick = refresh;
     $("diagnosticBtn").onclick = function () {
       runQueueDiagnostic("diagnostic", "소셜 종합 점검 JSON을 읽었습니다.");
@@ -2729,9 +2847,13 @@
     if ($("replacementViewNewBtn")) $("replacementViewNewBtn").onclick = function () { setWaitingView("new"); };
     if ($("replacementViewPublicBtn")) $("replacementViewPublicBtn").onclick = function () { setWaitingView("public"); };
     if ($("replacementViewWaitingBtn")) $("replacementViewWaitingBtn").onclick = function () { setWaitingView("replacement"); };
+    if ($("replacementViewFrontBtn")) $("replacementViewFrontBtn").onclick = function () { setWaitingView("front"); };
+    if ($("contentViewHoldBtn")) $("contentViewHoldBtn").onclick = openHoldContentView;
+    if ($("pipelineVerificationJsonBtnInline")) $("pipelineVerificationJsonBtnInline").onclick = downloadPipelineVerification;
     if ($("replacementPromoteBtn")) $("replacementPromoteBtn").onclick = function () { run("promote_candidate", selected(".waitingCheck")); };
     if ($("replacementDemoteBtn")) $("replacementDemoteBtn").onclick = moveSelectedToReplacement;
     if ($("replacementExcludeBtn")) $("replacementExcludeBtn").onclick = function () { run("delete", selected(".waitingCheck")); };
+    if ($("aiSelectedSectionsBtn")) $("aiSelectedSectionsBtn").onclick = function () { aiCycleSections(selectedAiSections(), false); };
     if ($("aiFullCycleBtn")) $("aiFullCycleBtn").onclick = aiFullCycle;
     $("unpublishAllScopeBtn").onclick = function () {
       actualUnapplyAll("");

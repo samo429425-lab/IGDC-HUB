@@ -282,14 +282,15 @@ function envFirst(){
 }
 function stripHtml(value){return text(value).replace(/<[^>]*>/g," ").replace(/&nbsp;|&#160;/gi," ").replace(/&amp;/gi,"&").replace(/&lt;/gi,"<").replace(/&gt;/gi,">").replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/\s+/g," ").trim();}
 function providerErrorCode(error){
+  const combined=[error&&error.code,error&&error.name,error&&error.message].map(lower).filter(Boolean).join(" ");
+  if(/abort|timeout/.test(combined))return "timeout";
+  const http=combined.match(/http[_-]?(\d{3})/);if(http)return "http_"+http[1];
   const code=lower(error&&error.code||error&&error.name||error&&error.message||"provider_error");
-  if(/abort|timeout/.test(code))return "timeout";
-  const http=code.match(/http[_-]?(\d{3})/);if(http)return "http_"+http[1];
   return code.slice(0,80)||"provider_error";
 }
 function providerErrorDetail(error){return text(error&&error.detail||error&&error.message).slice(0,240)||null;}
 function retryableProviderError(error){
-  const code=lower(error&&error.code||error&&error.name||error&&error.message||"");
+  const code=[error&&error.code,error&&error.name,error&&error.message].map(lower).filter(Boolean).join(" ");
   return /abort|timeout|http[_-]?(408|409|425|429|5\d\d)/.test(code);
 }
 function delay(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
@@ -1020,20 +1021,26 @@ async function fetchProductHtml(url,controller){
     "cache-control":"no-cache",
     "pragma":"no-cache"
   };
-  try{const response=await fetch(url,{redirect:"follow",signal:controller.signal,headers});if(!response.ok)return{ok:false,status:"http_"+response.status,url:response.url||url,html:""};const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return{ok:false,status:"non_html",url:response.url||url,html:""};const length=Number(response.headers.get("content-length")||0);if(length>1800000)return{ok:false,status:"page_too_large",url:response.url||url,html:""};return{ok:true,status:"ok",url:response.url||url,html:(await response.text()).slice(0,1400000)};}catch(error){return{ok:false,status:providerErrorCode(error),url,html:"",detail:providerErrorDetail(error)};}
+  try{const response=await fetch(url,{redirect:"follow",signal:controller.signal,headers});if(!response.ok)return{ok:false,status:"http_"+response.status,url:response.url||url,html:"",retryable:response.status===408||response.status===425||response.status===429||response.status>=500};const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return{ok:false,status:"non_html",url:response.url||url,html:"",retryable:false};const length=Number(response.headers.get("content-length")||0);if(length>1800000)return{ok:false,status:"page_too_large",url:response.url||url,html:"",retryable:false};return{ok:true,status:"ok",url:response.url||url,html:(await response.text()).slice(0,1400000),retryable:false};}catch(error){return{ok:false,status:providerErrorCode(error),url,html:"",detail:providerErrorDetail(error),retryable:retryableProviderError(error)};}
+}
+function retryableProductFetchStatus(status){
+  const code=lower(status);
+  return code==="timeout"||/^http_(408|425|429|5\d\d)$/.test(code)||/(network|fetch|econn|enotfound|eai_again)/.test(code);
 }
 async function discoverSupplierProductsStep(supplier,params){
-  const source=plain(supplier),supplierSiteUrl=absoluteHttpUrl(first(source.url,source.supplierSiteUrl),first(source.url,source.supplierSiteUrl));if(!supplierSiteUrl)return{ok:true,items:[],trace:{source:"supplier-product-discovery",status:"supplier_url_missing",count:0}};
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),19000);try{
+  const source=plain(supplier),supplierSiteUrl=absoluteHttpUrl(first(source.url,source.supplierSiteUrl),first(source.url,source.supplierSiteUrl));if(!supplierSiteUrl)return{ok:true,items:[],retryable:false,trace:{source:"supplier-product-discovery",status:"supplier_url_missing",count:0,retryable:false}};
+  const timeoutMs=Math.max(4500,Math.min(7500,Number(params&&params.timeoutMs)||6500));
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{
     const initialUrls=[supplierSiteUrl],candidateUrl=absoluteHttpUrl(supplierSiteUrl,source.sourceCandidateUrl);if(candidateUrl&&sameSite(supplierSiteUrl,candidateUrl)&&candidateUrl!==supplierSiteUrl)initialUrls.push(candidateUrl);
-    const initialPages=await Promise.all(initialUrls.map(url=>fetchProductHtml(url,controller))),validInitial=initialPages.filter(page=>page.ok);if(!validInitial.length){const firstFailure=initialPages[0]||{};return{ok:true,items:[],trace:{source:"supplier-product-discovery",status:firstFailure.status||"unavailable",detail:firstFailure.detail||null,supplierSiteUrl,count:0}};}
+    const initialPages=await Promise.all(initialUrls.map(url=>fetchProductHtml(url,controller))),validInitial=initialPages.filter(page=>page.ok);if(!validInitial.length){const firstFailure=initialPages[0]||{},status=firstFailure.status||"unavailable",retryable=firstFailure.retryable===true||retryableProductFetchStatus(status);return{ok:true,items:[],retryable,trace:{source:"supplier-product-discovery",status,detail:firstFailure.detail||null,supplierSiteUrl,count:0,retryable,timeoutMs}};}
     const supplierInfo={supplierId:text(source.supplierId),supplierName:first(source.title,source.name,source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),trustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),approvalReady:source.approvalReady===true,evidenceReady:source.evidenceReady===true,supplyLane:text(source.supplyLane)||"general",discoverySource:text(source.discoverySource)||"official_public_page",officialDirectoryUrl:text(source.officialDirectoryUrl)};let items=[],extraUrls=[];
     for(const page of validInitial){items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,50));extraUrls=extraUrls.concat(catalogPageUrls(page.html,page.url));}
     const uniqueExtras=[];for(const url of extraUrls){if(!url||initialUrls.includes(url)||uniqueExtras.includes(url))continue;uniqueExtras.push(url);if(uniqueExtras.length>=12)break;}
     const extras=await Promise.all(uniqueExtras.map(url=>fetchProductHtml(url,controller)));for(const page of extras)if(page.ok)items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,50));
     let sitemapCount=0;if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)).length<5){const sitemapUrls=await fetchProductSitemapUrls(supplierSiteUrl,controller,80);sitemapCount=sitemapUrls.length;for(const url of sitemapUrls){const priority=productPriorityInfo(supplierInfo.supplierName+" "+url);items.push({id:productIdSeed(url,"상품명 확인 중"),entityKind:"product_reference",productName:"상품명 확인 중",title:"상품명 확인 중",productUrl:url,url,imageUrl:"",imageOriginalUrl:"",imageSource:"sitemap_pending_inspection",videoUrl:"",videoContentUrl:"",videoEmbedUrl:"",videoThumbnailUrl:"",videoSource:"unresolved",supplierId:supplierInfo.supplierId,supplierName:supplierInfo.supplierName,supplierSiteUrl,supplierType:supplierInfo.supplierType,supplierTrustScore:supplierInfo.trustScore,supplierDecision:supplierInfo.supplierDecision,supplierApprovalReady:supplierInfo.approvalReady===true,supplierEvidenceReady:supplierInfo.evidenceReady===true,sourcePageUrl:supplierSiteUrl,jsonLdProduct:false,offerPresent:false,provisionalName:true,priorityScore:priority.score,priorityLabel:priority.label,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});}}
     const dedup=[],seen=new Set();for(const row of items){const key=ProductRanking.productIdentity(row);if(!key||seen.has(key)||!isProductDetailUrl(row.productUrl))continue;seen.add(key);dedup.push(row);if(dedup.length>=Math.max(10,Math.min(120,Number(params&&params.limit)||80)))break;}
-    return{ok:true,items:dedup,trace:{source:"supplier-product-discovery",status:"ok",supplierName:supplierInfo.supplierName,supplierSiteUrl,sourceCandidateChecked:initialUrls.length>1,catalogPagesChecked:validInitial.length+extras.filter(x=>x.ok).length,sitemapProductUrls:sitemapCount,count:dedup.length}};
+    const partialTimeout=controller.signal.aborted===true&&dedup.length===0,retryable=partialTimeout;
+    return{ok:true,items:dedup,retryable,trace:{source:"supplier-product-discovery",status:partialTimeout?"timeout":"ok",supplierName:supplierInfo.supplierName,supplierSiteUrl,sourceCandidateChecked:initialUrls.length>1,catalogPagesChecked:validInitial.length+extras.filter(x=>x.ok).length,sitemapProductUrls:sitemapCount,count:dedup.length,retryable,timeoutMs}};
   }finally{clearTimeout(timer);}
 }
 function prepareProductInspectionPool(rawItems,params){
@@ -1080,10 +1087,11 @@ function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
   return {invalid:false,reason:"",detail:""};
 }
 
-async function inspectProductCandidate(item){
+async function inspectProductCandidate(item,params){
   const row=plain(item),productUrl=ProductRanking.canonicalProductUrl(absoluteHttpUrl(row.productUrl,row.productUrl)),supplierSiteUrl=absoluteHttpUrl(row.supplierSiteUrl,row.supplierSiteUrl);if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false,inspectionComplete:true});
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),14000);try{
-    const page=await fetchProductHtml(productUrl,controller);if(!page.ok)return Object.assign({},row,{researchStatus:page.status,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString()});
+  const timeoutMs=Math.max(4500,Math.min(7500,Number(params&&params.timeoutMs)||6500));
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{
+    const page=await fetchProductHtml(productUrl,controller);if(!page.ok){const retryable=page.retryable===true||retryableProductFetchStatus(page.status);return Object.assign({},row,{researchStatus:page.status,productPageLive:retryable?row.productPageLive!==false:false,inspectionComplete:retryable?false:true,inspectionDeferred:retryable,inspectionRetryable:retryable,inspectedAt:new Date().toISOString()});}
     const invalidPage=productPageInvalidState(page.html,productUrl,page.url,supplierSiteUrl);
     if(invalidPage.invalid)return Object.assign({},row,{researchStatus:invalidPage.reason,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString(),inspectionError:{code:"PRODUCT_PAGE_INVALID",message:invalidPage.detail||invalidPage.reason},publicPublication:false,automaticImport:false});
     const supplierMeta={supplierId:row.supplierId,supplierName:row.supplierName,supplierSiteUrl:supplierSiteUrl||row.supplierSiteUrl,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady,evidenceReady:row.supplierEvidenceReady,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl};
@@ -1093,15 +1101,19 @@ async function inspectProductCandidate(item){
   }finally{clearTimeout(timer);}
 }
 
-async function inspectProductResearchStep(rawItems){
-  const items=array(rawItems).slice(0,4),results=await Promise.allSettled(items.map((item)=>withTimeout(inspectProductCandidate(item),16000)));
+async function inspectProductResearchStep(rawItems,params){
+  const timeoutMs=Math.max(4500,Math.min(7500,Number(params&&params.timeoutMs)||6500));
+  const items=array(rawItems).slice(0,4),results=await Promise.allSettled(items.map((item)=>withTimeout(inspectProductCandidate(item,{timeoutMs}),timeoutMs+1200)));
   const inspected=results.map((result,index)=>{
     if(result.status==="fulfilled")return result.value;
     const row=plain(items[index]),error=result.reason;
+    const retryable=retryableProviderError(error);
     return Object.assign({},row,{
-      researchStatus:"inspection_error",
-      productPageLive:false,
-      inspectionComplete:true,
+      researchStatus:retryable?"inspection_timeout":"inspection_error",
+      productPageLive:retryable?row.productPageLive!==false:false,
+      inspectionComplete:retryable?false:true,
+      inspectionDeferred:retryable,
+      inspectionRetryable:retryable,
       inspectedAt:new Date().toISOString(),
       inspectionError:{code:text(error&&error.code)||"INSPECTION_ERROR",message:text(error&&error.message||error)||"product inspection failed"},
       slotDecision:text(row.slotDecision)||"undecided",

@@ -15,7 +15,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.7.0-actual-apply-store-gate";
+  "social-snapshot-publish-v1.8.0-direct-actual-apply";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -636,7 +636,15 @@ exports.handler = async function (event) {
       appliedAllSections: !sectionKey,
       operation: unpublishSelected
         ? "selected_front_unpublish"
-        : "actual_front_apply",
+        : actualApplyOperation
+          ? "actual_front_apply"
+          : (operation || "preview"),
+      requestMethod: event.httpMethod,
+      effectiveOperation: unpublishSelected
+        ? "selected_front_unpublish"
+        : actualApplyOperation
+          ? "actual_front_apply"
+          : (operation || "preview"),
       requestedCandidateIds: candidateIds.length,
       removedSlots: unpublish ? unpublish.removedSlots : 0,
       removedBySection: unpublish ? unpublish.removedBySection : {},
