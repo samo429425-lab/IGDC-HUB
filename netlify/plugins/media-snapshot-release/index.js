@@ -6,9 +6,8 @@ const os=require("os");
 const path=require("path");
 const Adapter=require("../../functions/lib/media-searchbank-release-adapter.v1");
 
-const VERSION="igdc-media-snapshot-release-build-plugin-v2.4.0-public-deploy-confirmed";
+const VERSION="igdc-media-snapshot-release-build-plugin-v2.3.0-coherent-searchbank-entry";
 const DEFAULT_TABLE="media_snapshot_releases";
-let pendingAppliedContext=null;
 
 function text(value){return value==null?"":String(value).trim();}
 function lower(value){return text(value).toLowerCase();}
@@ -112,40 +111,6 @@ function atomicWrite(file,document){
   try{fs.writeFileSync(temporary,JSON.stringify(document,null,2)+"\n",{encoding:"utf8",mode:0o644});JSON.parse(fs.readFileSync(temporary,"utf8"));fs.renameSync(temporary,file);}
   finally{try{if(fs.existsSync(temporary))fs.unlinkSync(temporary);}catch(_error){}}
 }
-function publicDeployOrigin(){
-  for(const raw of [process.env.DEPLOY_PRIME_URL,process.env.DEPLOY_URL,process.env.URL]){
-    try{const u=new URL(text(raw));if(u.protocol==="https:")return u.origin;}catch(_error){}
-  }
-  return"";
-}
-function sleep(ms){return new Promise((resolve)=>setTimeout(resolve,ms));}
-async function fetchPublicJson(origin,filePath){
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);
-  try{
-    const response=await fetch(origin+filePath+(filePath.includes("?")?"&":"?")+"release_verify="+Date.now(),{signal:controller.signal,headers:{accept:"application/json","cache-control":"no-cache"}});
-    if(!response.ok)return{ok:false,reason:"http_"+response.status,document:null};
-    return{ok:true,reason:null,document:await response.json()};
-  }catch(error){return{ok:false,reason:/abort/i.test(text(error&&error.name))?"timeout":"fetch_failed",document:null};}
-  finally{clearTimeout(timer);}
-}
-async function verifyPublicDeployment(context){
-  const origin=publicDeployOrigin();
-  if(!origin)return{ok:false,reason:"public_deploy_origin_unavailable",origin:null};
-  let last={ok:false,reason:"not_checked",origin};
-  for(let attempt=1;attempt<=6;attempt++){
-    const [bank,media]=await Promise.all([fetchPublicJson(origin,"/data/search-bank.snapshot.json"),fetchPublicJson(origin,"/data/media.snapshot.json")]);
-    const bankHash=bank.ok?Adapter.sha256(bank.document):null;
-    const mediaHash=media.ok?Adapter.sha256(media.document):null;
-    const pipeline=media.ok&&media.document&&media.document.meta&&media.document.meta.releasePipeline||{};
-    const releaseMatches=text(pipeline.releaseId)===text(context.release.release_id);
-    const bankMatches=bank.ok&&bankHash===context.bankHash;
-    const mediaMatches=media.ok&&mediaHash===context.snapshotHash&&releaseMatches;
-    last={ok:bankMatches&&mediaMatches,origin,attempt,bank:{ok:bank.ok,reason:bank.reason,hash:bankHash,matches:bankMatches},media:{ok:media.ok,reason:media.reason,hash:mediaHash,matches:mediaMatches,releaseId:text(pipeline.releaseId),releaseMatches}};
-    if(last.ok)return last;
-    if(attempt<6)await sleep(1200);
-  }
-  last.reason="public_deploy_content_mismatch";return last;
-}
 function runSnapshotEngineIsolated(publishRoot,bank,template,releaseId){
   const stage=fs.mkdtempSync(path.join(os.tmpdir(),"igdc-media-release-"));
   const originalCwd=process.cwd(),enginePath=path.join(publishRoot,"netlify","functions","snapshot-engine.js");
@@ -236,45 +201,22 @@ module.exports={
         path.join(publishRoot,"data","media.snapshot.json"),
         path.join(publishRoot,"netlify","functions","data","media.snapshot.json")
       ].forEach((file)=>atomicWrite(file,final.snapshot));
+      await markApplied(settings,release,final.snapshot,final.hash);
+
       const report=Adapter.buildPipelineReport({
         release:Object.assign({},release,{snapshot:final.snapshot,snapshot_hash:final.hash}),
         snapshot:final.snapshot,searchBank:contract.bank,searchBankHash:contract.hash,outputHash:final.hash
       });
-      // Do not mark the durable release as applied inside onPostBuild. At this point
-      // files only exist in the build workspace; a failed/wrong-target deploy used to
-      // leave a false "applied" audit row while the public site still had 0 media.
-      pendingAppliedContext={settings,release,snapshot:final.snapshot,snapshotHash:final.hash,bankHash:contract.hash,report};
       utils.status.show({
         title:"IGDC 미디어 공개 파이프라인",
-        summary:"SearchBank → Snapshot Engine 파일 준비 완료 · 실제 배포 확인 대기",
+        summary:"SearchBank → Snapshot Engine → Media Snapshot 적용 완료",
         text:"release "+text(release.release_id)+" · "+report.output.totalManagedSlots+"개 · "+final.hash.slice(0,16)
       });
-      console.log("["+VERSION+"] build-ready",JSON.stringify(report));
+      console.log("["+VERSION+"]",JSON.stringify(report));
     }catch(error){
-      pendingAppliedContext=null;
       // Once a pending publication row has been loaded, remain fail-closed: do not
       // deploy a partially converted SearchBank/Media snapshot.
       utils.build.failBuild("승인 미디어의 SearchBank → Snapshot Engine → Media Snapshot 연결을 검증하지 못해 배포를 중단했습니다.",{error});
     }
-  },
-  onSuccess:async({utils})=>{
-    const context=pendingAppliedContext;
-    if(!context)return;
-    try{
-      const verification=await verifyPublicDeployment(context);
-      if(!verification.ok){
-        console.warn("["+VERSION+"] public deploy verification failed; release remains stored for retry:",JSON.stringify(verification));
-        utils.status.show({title:"IGDC 미디어 공개 파이프라인",summary:"배포는 끝났지만 공개 SearchBank/Media 파일 불일치 — release 재시도 대기",text:text(verification.reason)});
-        return;
-      }
-      await markApplied(context.settings,context.release,context.snapshot,context.snapshotHash);
-      utils.status.show({title:"IGDC 미디어 공개 파이프라인",summary:"실제 공개 SearchBank/Media 파일 검증 완료",text:"release "+text(context.release.release_id)+" · "+context.report.output.totalManagedSlots+"개"});
-      console.log("["+VERSION+"] public-confirmed",JSON.stringify({releaseId:text(context.release.release_id),origin:verification.origin,bankHash:context.bankHash,snapshotHash:context.snapshotHash,totalManagedSlots:context.report.output.totalManagedSlots}));
-      pendingAppliedContext=null;
-    }catch(error){
-      console.warn("["+VERSION+"] post-deploy audit failed; release remains stored for retry:",error&&error.message||error);
-      utils.status.show({title:"IGDC 미디어 공개 파이프라인",summary:"공개 검증 감사 저장 실패 — release 재시도 대기",text:text(error&&error.message||error)});
-    }
-  },
-  onError:async()=>{pendingAppliedContext=null;}
+  }
 };

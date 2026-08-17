@@ -12,7 +12,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
 const MediaReleaseAdapter = require("./lib/media-searchbank-release-adapter.v1");
 
-const VERSION = "media-snapshot-publish-v1.11.0-multi-section-batch-release";
+const VERSION = "media-snapshot-publish-v1.9.0-coherent-searchbank-entry";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
 
@@ -78,14 +78,14 @@ function managedCounts(snapshot){
   });
   return{sections,total};
 }
-function stampReleaseControl(snapshot, action, sectionKey, sectionKeys, actor, publicationRequested){
+function stampReleaseControl(snapshot, action, sectionKey, actor, publicationRequested){
   const next=clone(snapshot),counts=managedCounts(next);
   next.meta=Object.assign({},next.meta||{}, {
     generatedAt:MediaStore.nowIso(),
     generatedBy:"media-snapshot-publish",
     filled:counts.sections,
     releaseControl:{
-      action,sectionKey:sectionKey||null,sectionKeys:Array.isArray(sectionKeys)?sectionKeys:[],
+      action,sectionKey:sectionKey||null,
       requestedAt:MediaStore.nowIso(),
       requestedBy:MediaStore.compact(actor&&actor.email||actor&&actor.memberId||"admin",200),
       publicationRequested:publicationRequested===true
@@ -112,7 +112,7 @@ function statusPayload(release){
     ok:true,version:VERSION,hasRelease:true,
     releaseId:MediaStore.text(release.release_id),createdAt:MediaStore.text(release.created_at),
     releaseStatus:MediaStore.text(release.status)||"stored",
-    action:MediaStore.text(control.action)||"legacy_release",sectionKey:MediaStore.text(control.sectionKey)||null,sectionKeys:Array.isArray(control.sectionKeys)?control.sectionKeys:[],
+    action:MediaStore.text(control.action)||"legacy_release",sectionKey:MediaStore.text(control.sectionKey)||null,
     totalManagedSlots:counts.total,sections:counts.sections,
     pipelineApplied:pipeline.status==="applied",
     pipelineVersion:MediaStore.text(pipeline.version)||null,
@@ -193,32 +193,15 @@ async function pipelineStatusDocument(release,rows,probePublic){
   const publicBankMatches=publicBank.ok===true&&MediaStore.text(pipeline.searchBankHash)===publicBankHash;
   const publicMatches=publicReleaseMatches&&publicSectionsMatch&&publicBankMatches;
   const publicationTrigger=typeof MediaReleaseDispatch.configurationStatus==="function"?MediaReleaseDispatch.configurationStatus():{version:MediaReleaseDispatch.VERSION||null};
-  const approvedRows=Array.isArray(rows)?rows.length:0;
-  const eligibleRows=MANUAL_SECTIONS.reduce((sum,key)=>sum+Number(candidateSections[key]&&candidateSections[key].eligible||0),0);
-  const frontDisabledRows=MANUAL_SECTIONS.reduce((sum,key)=>sum+Number(candidateSections[key]&&candidateSections[key].frontDisabled||0),0);
-  const policyBlockedRows=MANUAL_SECTIONS.reduce((sum,key)=>sum+Number(candidateSections[key]&&candidateSections[key].blocked||0),0);
-  const searchBankApplied=releaseApplied&&!!MediaStore.text(pipeline.searchBankHash);
-  const snapshotEngineApplied=releaseApplied&&Array.isArray(pipeline.snapshotEngineCompletedHandlers)&&pipeline.snapshotEngineCompletedHandlers.includes("media");
-  let firstFailureStage=null,failureReason=null,nextAction=null;
-  if(approvedRows===0){firstFailureStage="candidate_approval";failureReason="최종 승인 후보가 0건입니다.";nextAction="관리자 승인 상태를 확인하십시오.";}
-  else if(eligibleRows===0){firstFailureStage="candidate_eligibility";failureReason="승인 후보는 있으나 frontEnabled·권리·검증 정책을 통과한 후보가 0건입니다.";nextAction="섹션별 frontDisabled/policyBlocked 수와 탈락 사유를 확인하십시오.";}
-  else if(!release){firstFailureStage="release_storage";failureReason="SearchBank 전달용 미디어 release가 저장되지 않았습니다.";nextAction="프론트 미디어 허브 반영 실행 후 release 저장 결과를 확인하십시오.";}
-  else if(releaseState.totalManaged===0){firstFailureStage="release_snapshot_generation";failureReason="적격 후보는 있으나 release 스냅샷 관리 슬롯이 0건입니다.";nextAction="섹션 용량·스냅샷 생성 정책을 확인하십시오.";}
-  else if(!searchBankApplied){firstFailureStage="searchbank_entry";failureReason="release는 존재하지만 SearchBank 적용 기록이 없습니다.";nextAction="미디어 Build Plugin과 SearchBank 어댑터 진입 로그를 확인하십시오.";}
-  else if(!snapshotEngineApplied){firstFailureStage="snapshot_engine";failureReason="SearchBank 적용 후 Snapshot Engine media 핸들러 완료 기록이 없습니다.";nextAction="Snapshot Engine media 처리 로그를 확인하십시오.";}
-  else if(probePublic&&publicBank.ok!==true){firstFailureStage="public_searchbank_probe";failureReason="공개 search-bank.snapshot.json을 읽지 못했습니다: "+MediaStore.text(publicBank.reason);nextAction="실제 배포 URL과 공개 data 경로를 확인하십시오.";}
-  else if(probePublic&&!publicBankMatches){firstFailureStage="public_searchbank_deploy";failureReason="빌드 내부 SearchBank 해시/미디어 항목과 공개 search-bank.snapshot.json이 일치하지 않습니다.";nextAction="Build Hook 대상 사이트와 Netlify publish 경계에서 data/search-bank.snapshot.json 반영 여부를 확인하십시오.";}
-  else if(probePublic&&publicMedia.ok!==true){firstFailureStage="public_media_probe";failureReason="공개 media.snapshot.json을 읽지 못했습니다: "+MediaStore.text(publicMedia.reason);nextAction="실제 배포 URL과 공개 data 경로를 확인하십시오.";}
-  else if(probePublic&&(!publicReleaseMatches||!publicSectionsMatch)){firstFailureStage="public_media_deploy";failureReason="공개 media.snapshot.json의 release 또는 섹션 콘텐츠가 빌드 결과와 일치하지 않습니다.";nextAction="Netlify 배포 완료 후 공개 media snapshot 치환 여부를 확인하십시오.";}
   return{
     ok:true,reportType:"igdc-media-front-pipeline-status",version:VERSION,adapterVersion:MediaReleaseAdapter.VERSION,components:componentStatus(),generatedAt:MediaStore.nowIso(),
-    pipelineComplete:releaseApplied&&(!probePublic||publicMatches),firstFailureStage,failureReason,nextAction,publicOrigin:probePublic?publicOrigin():null,
+    pipelineComplete:releaseApplied&&(!probePublic||publicMatches),
     stages:{
       releaseStorage:Object.assign({readable:true,latestReleasePresent:!!release,contract:"media-release-row-v1-canonical-columns-only"},componentStatus().releaseStorage||{}),
-      candidates:{source:"supabase.media_candidates",approvedRows,eligibleRows,frontDisabledRows,policyBlockedRows,sections:candidateSections},
+      candidates:{source:"supabase.media_candidates",approvedRows:Array.isArray(rows)?rows.length:0,eligibleRows:(Array.isArray(rows)?rows:[]).filter(MediaStore.snapshotEligible).length,sections:candidateSections},
       release:{present:!!release,releaseId,status:MediaStore.text(release&&release.status)||null,requestHash:MediaStore.text(pipeline.requestHash||release&&release.snapshot_hash)||null,outputHash:MediaStore.text(release&&release.snapshot_hash)||null,action:MediaStore.text(releaseSnapshot&&releaseSnapshot.meta&&releaseSnapshot.meta.releaseControl&&releaseSnapshot.meta.releaseControl.action)||null,totalManagedSlots:releaseState.totalManaged,publicationTrigger},
-      searchBank:{applied:searchBankApplied,hash:MediaStore.text(pipeline.searchBankHash)||null,releaseMediaItemCount:Number(pipeline.searchBankMediaCount||0),publicProbeChecked:publicBank.checked,publicProbeOk:publicBank.ok,publicProbeReason:publicBank.reason,publicHash:publicBankHash,publicHashMatches:publicBank.checked?publicBankMatches:null,publicReleaseMediaItemCount:publicBank.ok?publicBankItems.length:null},
-      snapshotEngine:{applied:snapshotEngineApplied,version:MediaStore.text(pipeline.snapshotEngineVersion)||null,completedHandlers:Array.isArray(pipeline.snapshotEngineCompletedHandlers)?pipeline.snapshotEngineCompletedHandlers:[],appliedAt:MediaStore.text(pipeline.appliedAt)||null},
+      searchBank:{applied:releaseApplied&&!!MediaStore.text(pipeline.searchBankHash),hash:MediaStore.text(pipeline.searchBankHash)||null,releaseMediaItemCount:Number(pipeline.searchBankMediaCount||0),publicProbeChecked:publicBank.checked,publicProbeOk:publicBank.ok,publicProbeReason:publicBank.reason,publicHash:publicBankHash,publicHashMatches:publicBank.checked?publicBankMatches:null,publicReleaseMediaItemCount:publicBank.ok?publicBankItems.length:null},
+      snapshotEngine:{applied:releaseApplied,version:MediaStore.text(pipeline.snapshotEngineVersion)||null,completedHandlers:Array.isArray(pipeline.snapshotEngineCompletedHandlers)?pipeline.snapshotEngineCompletedHandlers:[],appliedAt:MediaStore.text(pipeline.appliedAt)||null},
       publicMediaSnapshot:{checked:publicMedia.checked,ok:publicMedia.ok,reason:publicMedia.reason,releaseId:MediaStore.text(publicPipeline.releaseId)||null,releaseIdMatches:publicMedia.checked?publicReleaseMatches:null,sectionContentIdsMatch:publicMedia.checked?publicSectionsMatch:null,totalManagedSlots:publicMedia.ok?publicState.totalManaged:null}
     },
     sectionOrder:STATUS_SECTIONS,sections
@@ -244,26 +227,18 @@ exports.handler = async function(event){
     }
     const frontAction=MediaStore.text(params.frontAction)||(publishFront?"publish_all":"preview_all");
     const sectionKey=MediaStore.normalizeSection(params.sectionKey);
-    const rawSectionKeys=Array.isArray(params.sectionKeys)?params.sectionKeys:MediaStore.text(params.sectionKeys).split(",").filter(Boolean);
-    const sectionKeys=Array.from(new Set(rawSectionKeys.map((key)=>MediaStore.normalizeSection(key)).filter((key)=>MANUAL_SECTIONS.includes(key))));
     const sectionAction=frontAction==="publish_section"||frontAction==="stop_section";
-    const batchSectionAction=frontAction==="publish_sections"||frontAction==="stop_sections";
     if(sectionAction&&!sectionKey){
       const error=new Error("섹션별 프론트 작업에는 올바른 미디어 섹션 키가 필요합니다.");
       error.statusCode=400;error.code="media_release_section_required";throw error;
     }
-    if(batchSectionAction&&!sectionKeys.length){
-      const error=new Error("복수 섹션 프론트 작업에는 하나 이상의 올바른 미디어 섹션 키가 필요합니다.");
-      error.statusCode=400;error.code="media_release_sections_required";throw error;
-    }
-    if(!["preview_all","publish_all","publish_section","publish_sections","stop_section","stop_sections","stop_all"].includes(frontAction)){
+    if(!["preview_all","publish_all","publish_section","stop_section","stop_all"].includes(frontAction)){
       const error=new Error("지원하지 않는 프론트 공개 작업입니다.");
       error.statusCode=400;error.code="media_release_action_invalid";throw error;
     }
     const needsCandidates=!frontAction.startsWith("stop_");
     const allApprovedRows=needsCandidates?await MediaStore.selectCandidates(queryApproved(params.limit)):[];
-    const scopeKeys=sectionAction?[sectionKey]:(batchSectionAction?sectionKeys:[]);
-    const scopedApprovedRows=scopeKeys.length?allApprovedRows.filter((row)=>scopeKeys.includes(MediaStore.normalizeSection(row&&row.section_key))):allApprovedRows;
+    const scopedApprovedRows=sectionKey?allApprovedRows.filter((row)=>MediaStore.normalizeSection(row&&row.section_key)===sectionKey):allApprovedRows;
     const rows=scopedApprovedRows.filter(frontContentEnabled);
     const frontDisabledRows=scopedApprovedRows.filter((row)=>!frontContentEnabled(row));
     const base=baseSnapshot();
@@ -273,28 +248,24 @@ exports.handler = async function(event){
     const buildOptions=Number(params.capacityPerSection)>0?{capacityPerSection:Number(params.capacityPerSection)}:{};
     if(frontAction==="stop_all"){
       snapshot=cleanBase;
-    }else if(frontAction==="stop_section"||frontAction==="stop_sections"){
-      const keys=frontAction==="stop_section"?[sectionKey]:sectionKeys;
+    }else if(frontAction==="stop_section"){
       snapshot=clone(previous&&previous.snapshot||cleanBase);
       snapshot.sections=Object.assign({},snapshot.sections||{});
-      keys.forEach((key)=>{snapshot.sections[key]=clone(cleanBase.sections&&cleanBase.sections[key]||{key,title:key,slots:[]});});
-    }else if(frontAction==="publish_section"||frontAction==="publish_sections"){
-      const keys=frontAction==="publish_section"?[sectionKey]:sectionKeys;
+      snapshot.sections[sectionKey]=clone(cleanBase.sections&&cleanBase.sections[sectionKey]||{key:sectionKey,title:sectionKey,slots:[]});
+    }else if(frontAction==="publish_section"){
       const generated=MediaStore.buildSnapshot(cleanBase,Array.isArray(rows)?rows:[],buildOptions);
       snapshot=clone(previous&&previous.snapshot||cleanBase);
       snapshot.sections=Object.assign({},snapshot.sections||{});
-      keys.forEach((key)=>{snapshot.sections[key]=clone(generated.sections&&generated.sections[key]||cleanBase.sections[key]);});
+      snapshot.sections[sectionKey]=clone(generated.sections&&generated.sections[sectionKey]||cleanBase.sections[sectionKey]);
     }else{
       snapshot=MediaStore.buildSnapshot(cleanBase,Array.isArray(rows)?rows:[],buildOptions);
     }
-    snapshot=stampReleaseControl(snapshot,frontAction,sectionKey,batchSectionAction?sectionKeys:[],actor,publishFront);
+    snapshot=stampReleaseControl(snapshot,frontAction,sectionKey,actor,publishFront);
     // Hash exactly the JSON document that will be persisted. JSON persistence drops
     // undefined-valued properties; hashing the pre-serialization object makes the
     // build-time integrity check fail even though the release itself is valid.
     snapshot=JSON.parse(JSON.stringify(snapshot));
-    // Use the same serialized-JSON hash contract as the SearchBank release adapter.
-    // Supabase/public JSON cannot preserve `undefined` object properties.
-    const hash=MediaReleaseAdapter.sha256(snapshot);
+    const hash=MediaStore.sha256(snapshot);
     const eligible=Array.isArray(rows)?rows.filter(MediaStore.snapshotEligible).length:0;
     const blocked=Array.isArray(rows)?rows.filter((row)=>!MediaStore.snapshotEligible(row)).map((row)=>({id:MediaStore.text(row&&row.id),reasons:MediaStore.MediaPolicy.releaseEligibility(row).reasons})):[]; 
     const allowEmptySection=params.allowEmptySection===true||params.allowEmptySection==="true";
@@ -308,7 +279,7 @@ exports.handler = async function(event){
       snapshot,
       status: storeRelease ? "stored" : "preview",
       policyVersion:MediaStore.MediaPolicy.VERSION,
-      counts:{approvedRows:Array.isArray(scopedApprovedRows)?scopedApprovedRows.length:0,eligibleRows:eligible,frontDisabledRows:frontDisabledRows.length,policyBlockedRows:blocked.length,sections:snapshot.meta&&snapshot.meta.filled||{},frontAction,sectionKey:sectionKey||null,sectionKeys:batchSectionAction?sectionKeys:[]},
+      counts:{approvedRows:Array.isArray(scopedApprovedRows)?scopedApprovedRows.length:0,eligibleRows:eligible,frontDisabledRows:frontDisabledRows.length,policyBlockedRows:blocked.length,sections:snapshot.meta&&snapshot.meta.filled||{},frontAction,sectionKey:sectionKey||null},
       created_by:MediaStore.compact(actor.email || actor.memberId || "admin",200),
       created_at:MediaStore.nowIso()
     };
@@ -351,7 +322,7 @@ exports.handler = async function(event){
       ok:true,version:VERSION,policyVersion:MediaStore.MediaPolicy.VERSION,components:componentStatus(),
       baseFile:base.file,hash,approvedRows:Array.isArray(scopedApprovedRows)?scopedApprovedRows.length:0,
       eligibleRows:eligible,frontDisabledRows:frontDisabledRows.length,policyBlockedRows:blocked.length,
-      frontAction,sectionKey:sectionKey||null,sectionKeys:batchSectionAction?sectionKeys:[],frontState:statusPayload(Object.assign({},release,{snapshot})),
+      frontAction,sectionKey:sectionKey||null,frontState:statusPayload(Object.assign({},release,{snapshot})),
       blocked:params.includeBlocked==="1"?blocked:undefined,
       releaseStored:!!stored,stored,
       frontPublicationRequested:publishFront,
