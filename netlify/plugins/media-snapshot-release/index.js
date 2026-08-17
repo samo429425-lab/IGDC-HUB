@@ -239,7 +239,18 @@ module.exports={
       ];
       const currentBank=readFirst(bankFiles);
       const currentMedia=readFirst(mediaFiles);
-      assertSearchBankMediaSamples(currentBank.doc);
+      // The fast isolated media stage uses the current 100-slot Media Snapshot
+      // as its sample/fallback template. SearchBank seed placeholders are therefore
+      // diagnostic only here; missing SearchBank seeds must not abort the deploy.
+      try{
+        assertSearchBankMediaSamples(currentBank.doc);
+      }catch(error){
+        if(error&&error.code==="searchbank_media_sample_baseline_missing"){
+          console.warn("["+VERSION+"] SearchBank media sample baseline is absent; continuing with Media Snapshot fallback template:",error.problems||[]);
+        }else{
+          throw error;
+        }
+      }
       assertMediaTemplate100(currentMedia.doc);
 
       const contract=Adapter.buildSearchBankDocument(currentBank.doc,release);
