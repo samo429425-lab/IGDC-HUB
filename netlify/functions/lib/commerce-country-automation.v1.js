@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.18.1-unbounded-selected-supplier-product-research";
+const VERSION = "commerce-country-automation-v3.18.2-durable-supplier-ledger-product-research";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1900,9 +1900,21 @@ async function beginProductResearchJob(actorId, input) {
   }
 
   const supplierJob=await researchJobRule(scope);
-  if(!supplierJob||!["complete","committed"].includes(supplierJob.status)||!array(supplierJob.candidates).length){const error=new Error("책임 공급업체 단계별 리서치를 먼저 완료해야 공식 상품 목록을 조사할 수 있습니다.");error.statusCode=409;throw error;}
+  // Product research must follow the CURRENT durable supplier candidate ledger,
+  // not only the snapshot captured by the last supplier-research job.  A newly
+  // registered/selected supplier can therefore enter product research
+  // immediately even when it was added after that job was committed.
+  let durableSupplierRows=[];
+  try{durableSupplierRows=await listAutomationCandidates(scope.country,scope.region);}catch(_durableSupplierReadError){durableSupplierRows=[];}
+  const inactiveSupplierStates=new Set(["hold","held","blocked","suppressed","rejected","reject","disabled","excluded"]);
+  const currentDurableRows=array(durableSupplierRows).filter((row)=>!inactiveSupplierStates.has(lower(row&&row.status))&&!inactiveSupplierStates.has(lower(plain(row&&row.ai).operatorDecision)));
+  const historicalRows=supplierJob&&["complete","committed"].includes(supplierJob.status)?array(supplierJob.candidates):[];
+  const supplierRows=currentDurableRows.concat(historicalRows);
+  if(!supplierRows.length){const error=new Error("책임 공급업체 비공개 후보 원장에 상품 리서치할 활성 공급업체가 없습니다.");error.statusCode=409;throw error;}
   const sourcePool=[],seenSupplierSites=new Set();
-  for(const row of array(supplierJob.candidates)){const source=productSupplierSource(row);if(!source)continue;const key=productSupplierSourceKey(source);if(!key||seenSupplierSites.has(key))continue;seenSupplierSites.add(key);sourcePool.push(source);}
+  // Durable rows come first so the newest operator state/URL wins; the last
+  // research-job rows are only a compatibility fallback for older records.
+  for(const row of supplierRows){const source=productSupplierSource(row);if(!source)continue;const key=productSupplierSourceKey(source);if(!key||seenSupplierSites.has(key))continue;seenSupplierSites.add(key);sourcePool.push(source);}
   // No semantic cap on selected suppliers for product research. If 10, 27,
   // 48, 100 or more new suppliers are present, all unresearched suppliers enter
   // this job. advanceProductResearchJob still processes them incrementally so
@@ -1910,6 +1922,7 @@ async function beginProductResearchJob(actorId, input) {
   const allSupplierSources=sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName)));
   if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 비공개 상품 조사에 사용할 수 있는 공식 판매 출처 URL이 없습니다. 공급업체 후보의 공식 URL을 확인하세요.");error.statusCode=409;throw error;}
 
+  const supplierLedgerSourceId=text(supplierJob&&supplierJob.jobId)||"durable_supplier_candidate_ledger";
   const researchedKeys=researchedProductSupplierKeys(existing),supplierSourceFingerprint=productSupplierSourceFingerprint(allSupplierSources);
   const forceSourceRefresh=raw.refreshSources===true||raw.restart===true;
   // An explicit product-research click is also a reconciliation point.  Older
@@ -1937,10 +1950,10 @@ async function beginProductResearchJob(actorId, input) {
       const pendingSources=allSupplierSources.filter((source)=>!researchedKeys.has(productSupplierSourceKey(source)));
       const priorPendingKeys=array(existing.supplierSources).slice(Math.max(0,Number(existing.discoveryCursor||0))).map(productSupplierSourceKey).filter(Boolean).sort();
       const nextPendingKeys=pendingSources.map(productSupplierSourceKey).filter(Boolean).sort();
-      const sourceSetChanged=priorPendingKeys.join("\u001f")!==nextPendingKeys.join("\u001f")||text(existing.supplierResearchJobId)!==text(supplierJob.jobId);
+      const sourceSetChanged=priorPendingKeys.join("\u001f")!==nextPendingKeys.join("\u001f")||text(existing.supplierResearchJobId)!==supplierLedgerSourceId;
       if(sourceSetChanged||forceSourceRefresh){
-        existing.version=VERSION;existing.rankingVersion=ProductRanking.VERSION;existing.supplierResearchJobId=supplierJob.jobId;existing.supplierSources=pendingSources;existing.discoveryCursor=0;existing.currentSupplierSourceCount=allSupplierSources.length;existing.newSupplierSourceCount=pendingSources.length;existing.priorResearchedSupplierCount=researchedKeys.size;existing.supplierSourceFingerprint=supplierSourceFingerprint;existing.researchedSupplierKeys=Array.from(researchedKeys);existing.supplierRetryQueue=[];existing.supplierDiscoveryRetryCounts={};existing.temporarilyDeferredSupplierKeys=[];existing.productInspectionRetryCounts={};existing.productInspectionRetryPending=0;existing.temporarilyDeferredProductKeys=[];existing.finishedAt=null;existing.lastError=null;
-        existing.trace=array(existing.trace).concat([{at:iso(),source:"product-research-job",status:"running_source_delta_refreshed",currentSupplierSources:allSupplierSources.length,alreadyResearchedSuppliers:researchedKeys.size,pendingSupplierSources:pendingSources.length,supplierResearchJobId:supplierJob.jobId,explicitRefresh:forceSourceRefresh,sourcePolicy:"preserve_existing_products_and_researched_suppliers; append_only_current_unresearched_supplier_sources"}]).slice(-240);
+        existing.version=VERSION;existing.rankingVersion=ProductRanking.VERSION;existing.supplierResearchJobId=supplierLedgerSourceId;existing.supplierSources=pendingSources;existing.discoveryCursor=0;existing.currentSupplierSourceCount=allSupplierSources.length;existing.newSupplierSourceCount=pendingSources.length;existing.priorResearchedSupplierCount=researchedKeys.size;existing.supplierSourceFingerprint=supplierSourceFingerprint;existing.researchedSupplierKeys=Array.from(researchedKeys);existing.supplierRetryQueue=[];existing.supplierDiscoveryRetryCounts={};existing.temporarilyDeferredSupplierKeys=[];existing.productInspectionRetryCounts={};existing.productInspectionRetryPending=0;existing.temporarilyDeferredProductKeys=[];existing.finishedAt=null;existing.lastError=null;
+        existing.trace=array(existing.trace).concat([{at:iso(),source:"product-research-job",status:"running_source_delta_refreshed",currentSupplierSources:allSupplierSources.length,alreadyResearchedSuppliers:researchedKeys.size,pendingSupplierSources:pendingSources.length,supplierResearchJobId:supplierLedgerSourceId,explicitRefresh:forceSourceRefresh,sourcePolicy:"preserve_existing_products_and_researched_suppliers; append_only_current_unresearched_supplier_sources"}]).slice(-240);
         await saveProductJob(existing,actorId);
       }
     }
@@ -1948,14 +1961,14 @@ async function beginProductResearchJob(actorId, input) {
   }
   const supplierSources=allSupplierSources.filter((source)=>!researchedKeys.has(productSupplierSourceKey(source)));
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&existing.status==="complete"&&!supplierSources.length){
-    const view=Object.assign({},existing,{version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchJobId:supplierJob.jobId,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:0,priorResearchedSupplierCount:researchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(researchedKeys)});
+    const view=Object.assign({},existing,{version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchJobId:supplierLedgerSourceId,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:0,priorResearchedSupplierCount:researchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(researchedKeys)});
     return publicProductJob(view);
   }
 
   const rankingContext=await productRankingContext(scope);
   const preservedProducts=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.products):[],preservedRaw=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.rawProducts):[];
   const preservedProductIdentities=Array.from(new Set(preservedProducts.map((row)=>ProductRanking.productIdentity(row)).filter(Boolean))).slice(0,PRODUCT_PORTFOLIO_LIMIT);
-  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:preservedProducts.length,preservedRawCount:preservedRaw.length,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierJob.jobId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:supplierSources.length,priorResearchedSupplierCount:researchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(researchedKeys),supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,rawProducts:preservedRaw,inspectionPool:[],inspectCursor:0,productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],products:preservedProducts,preservedProductIdentities,stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:preservedProducts.length,skipped:0,failed:0},trace:[{at:now,source:"product-research-job",status:"cumulative_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previouslyResearchedSuppliers:researchedKeys.size,preservedProducts:preservedProducts.length,sourcePolicy:"preserve_existing_products_and_administrator_decisions; research_only_new_supplier_sources; all_selected_supplier_candidates_private_research; merge_exact_duplicates; downstream_release_evidence_gate_unchanged; administrator_approval_before_publication"}],errors:[],lastError:null};
+  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:preservedProducts.length,preservedRawCount:preservedRaw.length,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:supplierSources.length,priorResearchedSupplierCount:researchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(researchedKeys),supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,rawProducts:preservedRaw,inspectionPool:[],inspectCursor:0,productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],products:preservedProducts,preservedProductIdentities,stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:preservedProducts.length,skipped:0,failed:0},trace:[{at:now,source:"product-research-job",status:"cumulative_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previouslyResearchedSuppliers:researchedKeys.size,preservedProducts:preservedProducts.length,sourcePolicy:"preserve_existing_products_and_administrator_decisions; research_only_new_supplier_sources; all_selected_supplier_candidates_private_research; merge_exact_duplicates; downstream_release_evidence_gate_unchanged; administrator_approval_before_publication"}],errors:[],lastError:null};
   await saveProductJob(job,actorId);return publicProductJob(job);
 }
 
@@ -3896,7 +3909,17 @@ async function researchCandidateAction(actorId,input){
 
 async function listAutomationCandidates(countryCode, regionCode) {
   const country = normalizeCountry(countryCode); const region = normalizeRegion(regionCode || "NATIONWIDE", country) || "NATIONWIDE";
-  const rows = await SlotStore.select("gslot_candidates", "select=id,kind,title,official_url,status,source_ref,thumbnail_url,owner_note,source_payload,created_at,updated_at&source_ref=eq." + encodeURIComponent(SOURCE_REF) + "&order=updated_at.desc&limit=500");
+  // This is the durable supplier ledger, so never impose a semantic supplier
+  // count cap here. PostgREST pages are fetched until exhausted. The duplicate
+  // guard also prevents an infinite loop if an upstream proxy ignores offset.
+  const rows=[],seenRowIds=new Set(),pageSize=500;let offset=0;
+  while(true){
+    const page=array(await SlotStore.select("gslot_candidates", "select=id,kind,title,official_url,status,source_ref,thumbnail_url,owner_note,source_payload,created_at,updated_at&source_ref=eq." + encodeURIComponent(SOURCE_REF) + "&order=updated_at.desc&limit="+pageSize+"&offset="+offset));
+    let added=0;
+    for(const row of page){const id=text(row&&row.id)||sha256({url:row&&row.official_url,updatedAt:row&&row.updated_at});if(seenRowIds.has(id))continue;seenRowIds.add(id);rows.push(row);added+=1;}
+    if(page.length<pageSize||added===0)break;
+    offset+=page.length;
+  }
   return array(rows).filter((row) => {
     const automation = plain(row && row.source_payload && row.source_payload.aiAutomation);
     return normalizeCountry(automation.country) === country && normalizeRegion(automation.region || "NATIONWIDE", country) === region;
