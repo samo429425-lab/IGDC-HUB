@@ -11,7 +11,7 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 const MaruSearch=require("./maru-search");
 
-const VERSION="media-content-supplier-admin-v1.2.0-all-supplier-research-and-bulk-control";
+const VERSION="media-content-supplier-admin-v1.3.0-research-source-diagnostics";
 const TABLE=process.env.MEDIA_CONTENT_SUPPLIER_TABLE||"media_content_suppliers";
 const SUPPLIER_TYPES=new Set(["production","distributor","studio","rights_holder","agency","archive","other"]);
 const STATUSES=new Set(["candidate","active","paused","archived"]);
@@ -34,6 +34,25 @@ function supplierId(name,url){return "supplier_"+MediaStore.shortHash({name:lowe
 function normalizeType(v){const x=lower(v);return SUPPLIER_TYPES.has(x)?x:"other";}
 function normalizeStatus(v){const x=lower(v);return STATUSES.has(x)?x:"candidate";}
 function blockedConsumerHost(host){host=lower(host).replace(/^www\./,"");return BLOCKED_CONSUMER_HOSTS.some((d)=>host===d||host.endsWith("."+d));}
+
+function envConfigured(names){return names.some((name)=>!!text(process.env[name]));}
+function researchSourceStatus(){
+  const googleKey=envConfigured(["GOOGLE_API_KEY","GOOGLE_SEARCH_API_KEY","GOOGLE_CUSTOM_SEARCH_API_KEY","GOOGLE_CLOUD_API_KEY"]);
+  const googleCx=envConfigured(["GOOGLE_CSE_ID","GOOGLE_CX","GOOGLE_SEARCH_ENGINE_ID","GOOGLE_CUSTOM_SEARCH_ENGINE_ID","GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID"]);
+  const naverId=envConfigured(["NAVER_API_KEY","NAVER_CLIENT_ID","NAVER_SEARCH_CLIENT_ID","NAVER_OPENAPI_CLIENT_ID"]);
+  const naverSecret=envConfigured(["NAVER_CLIENT_SECRET","NAVER_API_SECRET","NAVER_SEARCH_CLIENT_SECRET","NAVER_OPENAPI_CLIENT_SECRET"]);
+  return{
+    googleCse:{configured:googleKey&&googleCx,keyConfigured:googleKey,cseConfigured:googleCx},
+    naver:{configured:naverId&&naverSecret,clientConfigured:naverId,secretConfigured:naverSecret},
+    bing:{configured:envConfigured(["BING_API_KEY","BING_SEARCH_API_KEY","AZURE_BING_SEARCH_API_KEY","BING_SUBSCRIPTION_KEY"])},
+    openAi:{configured:envConfigured(["OPENAI_API_KEY","OPENAI_KEY"])},
+    note:"키 값은 진단 JSON에 기록하지 않고 설정 여부만 표시합니다."
+  };
+}
+function compactTrace(meta){
+  const trace=Array.isArray(meta&&meta.trace)?meta.trace:[];
+  return trace.slice(-24).map((row)=>({name:text(row&&row.name),status:text(row&&row.status),count:Number(row&&row.count||0),mode:text(row&&row.mode)}));
+}
 function rest(query){return MediaStore.rest(TABLE,query||"");}
 function encodeEq(v){return "eq."+encodeURIComponent(text(v));}
 
@@ -182,7 +201,8 @@ async function researchLane(lane,event,perLane){
   try{
     const result=await MaruSearch.runEngine(event||{}, {q:lane.query,limit:perLane,deep:true,external:"deep",useExternalSources:true,type:"all"});
     const items=Array.isArray(result&&result.items)?result.items:Array.isArray(result&&result.results)?result.results:[];
-    return{lane,items,meta:{type:lane.type,query:lane.query,searched:items.length,ok:true,source:text(result&&result.source),servedFrom:text(result&&result.served_from),externalMode:result&&result.meta&&result.meta.externalMode||null}};
+    const meta=plain(result&&result.meta);
+    return{lane,items,meta:{type:lane.type,query:lane.query,searched:items.length,ok:true,source:text(result&&result.source),servedFrom:text(result&&result.served_from),externalMode:meta.externalMode||null,externalGatewayUsed:meta.externalGatewayUsed===true,totalCandidates:Number(meta.totalCandidates||0),trace:compactTrace(meta)}};
   }catch(error){
     return{lane,items:[],meta:{type:lane.type,query:lane.query,searched:0,ok:false,error:compact(error&&error.message||error,300)}};
   }
@@ -210,9 +230,13 @@ async function researchSuppliers(body,actor,event){
   const candidates=Array.from(byHost.values()).slice(0,limit);
   const saved=candidates.length?await upsertSuppliers(candidates):[];
   const byType={};for(const row of candidates){const t=normalizeType(row.supplier_type);byType[t]=(byType[t]||0)+1;}
+  const searched=laneResults.reduce((n,x)=>n+Number(x.searched||0),0);
+  const zeroResultLanes=laneResults.filter((x)=>x&&x.ok===true&&Number(x.searched||0)===0).length;
+  const failedLanes=laneResults.filter((x)=>!x||x.ok!==true).length;
   return{
-    policy:SUPPLIER_RESEARCH_POLICY,mode:body.mode==="all"?"all":"targeted",plan,laneResults,
-    searched:laneResults.reduce((n,x)=>n+Number(x.searched||0),0),qualified:candidates.length,saved:Array.isArray(saved)?saved.length:0,byType,
+    policy:SUPPLIER_RESEARCH_POLICY,mode:body.mode==="all"?"all":"targeted",plan,laneResults,searchSources:researchSourceStatus(),
+    searched,qualified:candidates.length,saved:Array.isArray(saved)?saved.length:0,byType,zeroResultLanes,failedLanes,
+    diagnosis:searched===0?"all_research_lanes_returned_zero_results":(candidates.length===0?"search_results_found_but_supplier_policy_rejected_all":"qualified_suppliers_found"),
     items:(Array.isArray(saved)?saved:candidates).map(publicSupplier)
   };
 }
@@ -265,7 +289,7 @@ async function collectSupplierContents(body,actor,event){
 }
 async function diagnostic(){
   const rows=await selectSuppliers("select=*&order=status.asc,name.asc&limit=5000");
-  return{ok:true,reportType:"igdc-media-content-supplier-diagnostic",version:VERSION,generatedAt:now(),table:TABLE,summary:summary(rows),suppliers:rows.map(publicSupplier),researchPolicy:SUPPLIER_RESEARCH_POLICY,ai:{configured:!!text(process.env.OPENAI_API_KEY||process.env.OPENAI_KEY),note:"공급사 탐색은 Maru Search 다중 검색 + 미디어 전용 공급사 정책 검증을 기본으로 하며, 후보 공개 승인 권한은 갖지 않습니다."},rules:{consumerPlatformsExcluded:BLOCKED_CONSUMER_HOSTS,researchCreatesCandidatesOnly:true,contentCollectionCreatesMediaCandidatesOnly:true,directFrontPublish:false,searchBankDirectWrite:false}};
+  return{ok:true,reportType:"igdc-media-content-supplier-diagnostic",version:VERSION,generatedAt:now(),table:TABLE,summary:summary(rows),suppliers:rows.map(publicSupplier),researchPolicy:SUPPLIER_RESEARCH_POLICY,searchSources:researchSourceStatus(),ai:{configured:!!text(process.env.OPENAI_API_KEY||process.env.OPENAI_KEY),note:"공급사 탐색은 Maru Search 다중 검색 + 미디어 전용 공급사 정책 검증을 기본으로 하며, 후보 공개 승인 권한은 갖지 않습니다."},rules:{consumerPlatformsExcluded:BLOCKED_CONSUMER_HOSTS,researchCreatesCandidatesOnly:true,contentCollectionCreatesMediaCandidatesOnly:true,directFrontPublish:false,searchBankDirectWrite:false}};
 }
 
 exports.handler=async function(event){
@@ -319,4 +343,4 @@ exports.handler=async function(event){
   }
 };
 
-exports._test={normalizeSupplier,researchCandidates,researchCandidatesStrict,buildSupplierResearchPlan,supplierSignalScore,inferSupplierType,resultUrl,resultName,blockedConsumerHost,summary,matchesSupplier,candidateFromSearch,SUPPLIER_RESEARCH_POLICY};
+exports._test={normalizeSupplier,researchCandidates,researchCandidatesStrict,buildSupplierResearchPlan,supplierSignalScore,inferSupplierType,resultUrl,resultName,blockedConsumerHost,summary,matchesSupplier,candidateFromSearch,researchSourceStatus,compactTrace,SUPPLIER_RESEARCH_POLICY};

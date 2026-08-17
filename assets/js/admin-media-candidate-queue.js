@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v3.7 - coherent media front pipeline client */
+/* IGDC Media Candidate Queue v3.8 - downloadable diagnostics + supplier trace + stable media front controls */
 (function(){
   'use strict';
 
@@ -344,15 +344,42 @@
     }catch(error){show(error.message,'warn');}
     finally{$('refreshBtn').disabled=false;}
   }
+  function pipelineFailureSummary(report){
+    if(!report||typeof report!=='object')return{stage:'pipeline_report_unavailable',reason:'프론트 파이프라인 점검 응답을 받지 못했습니다.'};
+    if(report.pipelineComplete===true)return{stage:null,reason:null};
+    return{
+      stage:text(report.firstFailureStage||report.failureStage||'pipeline_incomplete'),
+      reason:text(report.failureReason||report.nextAction||'프론트 파이프라인의 미완료 단계를 확인해야 합니다.')
+    };
+  }
   async function diagnostic(){
+    var button=$('diagnosticBtn'),downloadButton=$('downloadDiagnosticJsonBtn');
+    if(button)button.disabled=true;
+    if(downloadButton)downloadButton.disabled=true;
+    state.textContent='미디어 전체 점검 JSON 생성 중';
     try{
-      var data=await get(END+'?action=diagnostic');
-      diagnosticCache=data;
-      $('diagnosticJson').textContent=JSON.stringify(data,null,2);
-      $('diagnosticPanel').classList.remove('hidden');
-      $('downloadJsonBtn').disabled=false;
-      if(typeof $('diagnosticPanel').scrollIntoView==='function')$('diagnosticPanel').scrollIntoView({behavior:'smooth',block:'start'});
-    }catch(error){show(error.message,'warn');}
+      var candidate=await get(END+'?action=diagnostic');
+      var pipeline=null,pipelineError=null;
+      try{pipeline=await get(PUB+'?pipelineStatus=1&probePublic=1');}
+      catch(error){pipelineError={message:error.message,status:error.status||null};}
+      var failure=pipelineFailureSummary(pipeline);
+      diagnosticCache={
+        ok:!!(candidate&&candidate.ok!==false)&&!!pipeline&&!pipelineError,
+        reportType:'igdc-media-complete-diagnostic',
+        generatedAt:new Date().toISOString(),
+        candidateDiagnostic:candidate,
+        frontPipeline:pipeline,
+        frontPipelineError:pipelineError,
+        firstFailureStage:pipelineError?'pipeline_status_request_failed':failure.stage,
+        failureReason:pipelineError?pipelineError.message:failure.reason
+      };
+      if(downloadButton)downloadButton.disabled=false;
+      state.textContent=diagnosticCache.firstFailureStage?'점검 완료 · '+diagnosticCache.firstFailureStage:'점검 완료 · 전체 파이프라인 정상';
+      show(diagnosticCache.firstFailureStage?'미디어 점검 JSON 생성 완료 · 첫 미완료 단계: '+diagnosticCache.firstFailureStage:'미디어 전체 파이프라인 점검이 정상 완료됐습니다.',diagnosticCache.firstFailureStage?'warn':'ok');
+    }catch(error){
+      state.textContent='미디어 점검 실패';
+      show('미디어 점검 JSON 생성 실패: '+error.message,'warn');
+    }finally{if(button)button.disabled=false;}
   }
   function collectorJobKey(section){return'igdc.mediaCollector.job.'+section;}
   function discoveryCursorKey(section){return'igdc.mediaCollector.discoveryCursor.'+section;}
@@ -876,13 +903,25 @@
     var button=allMode?$('supplierResearchAllBtn'):$('supplierResearchBtn');button.disabled=true;$('supplierState').textContent=allMode?'AI 전체 공급사 리서치 준비 중':'공급사 정책 리서치 준비 중';
     try{
       var data=await post(SUP,{action:'research',mode:mode,query:text($('supplierResearchQuery').value),country:text($('supplierCountry').value),supplierType:allMode?'other':$('supplierType').value,limit:allMode?120:60});
+      supplierDiagnosticCache={
+        ok:true,reportType:'igdc-media-content-supplier-research-session',generatedAt:new Date().toISOString(),
+        lastResearch:data
+      };
       var lanes=Array.isArray(data.laneResults)?data.laneResults:[];
       var okLanes=lanes.filter(function(x){return x&&x.ok===true;}).length;
       var failedLanes=lanes.length-okLanes;
       await refreshSuppliers();
       var byType=data.byType||{};var typeText=Object.keys(byType).map(function(k){return supplierTypeLabel(k)+' '+Number(byType[k]||0);}).join(' · ');$('supplierState').textContent='리서치 '+okLanes+'/'+lanes.length+' 경로 · 검색 '+Number(data.searched||0)+' · 적격 '+Number(data.qualified||0)+' · 저장 '+Number(data.saved||0)+(typeText?' · '+typeText:'');
       if(Number(data.saved||0)>0)show('공급사 자동 리서치 완료 · 검색 '+Number(data.searched||0)+'건 · 정책 적격 '+Number(data.qualified||0)+'건 · 후보 '+Number(data.saved||0)+'건 저장','ok');
-      else show('공급사 검색은 실행됐지만 저장된 적격 공급사가 0건입니다. 검색 경로 '+okLanes+'/'+lanes.length+(failedLanes?' · 실패 '+failedLanes+'경로':'')+' · 검색 '+Number(data.searched||0)+'건. 공급사 점검 JSON에서 researchPolicy를 확인해 주세요.','warn');
+      else{
+        var sources=data.searchSources||{};
+        var configured=['googleCse','naver','bing'].filter(function(k){return sources[k]&&sources[k].configured===true;});
+        var diagnosis=text(data.diagnosis)||'no_qualified_supplier';
+        var reason=diagnosis==='all_research_lanes_returned_zero_results'
+          ?('검색 결과 자체가 0건입니다'+(configured.length?' · 사용 가능 외부 검색원 '+configured.join(', '):' · Google/Naver/Bing 외부 검색원 설정을 확인하세요'))
+          :'검색 결과는 있었지만 미디어 공급사 정책을 통과한 공급사가 0건입니다';
+        show('공급사 자동 리서치 완료 · '+reason+' · 경로 '+okLanes+'/'+lanes.length+(failedLanes?' · 실패 '+failedLanes+'경로':'')+' · 검색 '+Number(data.searched||0)+'건. 점검 JSON에 경로별 원인을 기록했습니다.','warn');
+      }
     }catch(error){$('supplierState').textContent='공급사 자동 리서치 실패';show('공급사 자동 리서치 실패: '+error.message,'warn');}
     finally{button.disabled=false;}
   }
@@ -911,10 +950,11 @@
   async function supplierDiagnostic(){
     var button=$('supplierDiagnosticBtn');button.disabled=true;$('supplierState').textContent='공급사 점검 JSON 생성 중';
     try{
-      var data=await get(SUP+'?action=diagnostic');supplierDiagnosticCache=data;
-      $('supplierDiagnosticJson').textContent=JSON.stringify(data,null,2);$('supplierDiagnosticJson').classList.remove('hidden');
+      var previous=supplierDiagnosticCache&&supplierDiagnosticCache.lastResearch?supplierDiagnosticCache.lastResearch:null;
+      var data=await get(SUP+'?action=diagnostic');
+      supplierDiagnosticCache=Object.assign({},data,{lastResearch:previous});
       $('supplierState').textContent='공급사 점검 JSON 생성 완료 · '+Number(data.summary&&data.summary.total||0)+'개';
-      show('공급사 점검 JSON을 화면에 생성했습니다.','ok');
+      show('공급사 점검 JSON 생성 완료 · 아래 JSON 다운로드에 진단값이 함께 포함됩니다.','ok');
     }catch(error){$('supplierState').textContent='공급사 점검 실패';show('공급사 점검 실패: '+error.message,'warn');}
     finally{button.disabled=false;}
   }
@@ -981,8 +1021,7 @@
       show('승격 가능 '+data.eligibleRows+'건 · 정책 차단 '+Number(data.policyBlockedRows||0)+'건'+(store?' · 승인 상태 저장 완료':''),'ok');
       if(!store&&data.snapshot){
         diagnosticCache=data;
-        $('diagnosticJson').textContent=JSON.stringify(data,null,2);
-        $('diagnosticPanel').classList.remove('hidden');
+        if($('downloadDiagnosticJsonBtn'))$('downloadDiagnosticJsonBtn').disabled=false;
       }
     }catch(error){show(error.message,'warn');}
   }
@@ -1385,8 +1424,8 @@
       if(collectButton){collectSupplierContents(text(collectButton.dataset.id));return;}
     });
     $('diagnosticBtn').onclick=diagnostic;
-    $('downloadJsonBtn').onclick=function(){
-      if(diagnosticCache)download(JSON.stringify(diagnosticCache,null,2)+'\n','igdc-media-candidate-diagnostic.json');
+    $('downloadDiagnosticJsonBtn').onclick=function(){
+      if(diagnosticCache)download(JSON.stringify(diagnosticCache,null,2)+'\n','igdc-media-complete-diagnostic.json');
     };
     $('downloadAllCandidateListBtn').onclick=exportAllCandidates;
     $('downloadPipelineStatusBtn').onclick=function(){downloadPipelineStatus('');};

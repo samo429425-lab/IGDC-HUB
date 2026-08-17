@@ -10,7 +10,7 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="media-candidate-pool-manager-v1.1.0-canonical-lifecycle-owner";
+const VERSION="media-candidate-pool-manager-v1.2.0-overflow-visible-and-recoverable";
 const MANAGER_SOURCE="media-candidate-pool-manager";
 const RESERVE_CAPACITY=20;
 const SECTION_CAPACITY=Object.freeze({"media-music":50,"media-shorts":50});
@@ -107,8 +107,12 @@ function buildState(rows,release){
     const publishedSet=releaseIds[section];
     const held=sectionRows.filter((r)=>lower(r&&r.review_status)==="hold").sort((a,b)=>dateMillis(b)-dateMillis(a)).slice(0,120);
     const eligible=sectionRows.filter(approvedEligible);
-    const enabled=eligible.filter((r)=>!manualDisabled(r)&&frontEnabled(r));
-    const scored=enabled.map((row)=>({row,score:candidateScore(row,publishedSet)})).sort((a,b)=>b.score-a.score||dateMillis(b.row)-dateMillis(a.row));
+    // Manager-disabled overflow rows remain part of the ranked pool. Only a true
+    // administrator/manual disable removes a candidate from automatic comparison.
+    // This prevents overflow candidates from disappearing from diagnostics and lets
+    // a later rebalance promote them back into reserve/primary when their score rises.
+    const selectable=eligible.filter((r)=>!manualDisabled(r));
+    const scored=selectable.map((row)=>({row,score:candidateScore(row,publishedSet)})).sort((a,b)=>b.score-a.score||dateMillis(b.row)-dateMillis(a.row));
     const primaryCap=capacity(section);
     const publishedRows=scored.filter((x)=>publishedSet.has(text(x.row.id)));
     const primary=[];const used=new Set();

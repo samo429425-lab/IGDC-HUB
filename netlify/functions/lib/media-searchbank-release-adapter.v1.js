@@ -10,7 +10,7 @@
 const crypto=require("crypto");
 const SearchBankEngine=require("../search-bank-engine.js");
 
-const VERSION="media-searchbank-release-adapter-v1.2.0-core-api-compatibility-gate";
+const VERSION="media-searchbank-release-adapter-v1.3.0-serialized-json-hash";
 const OWNER="media-release-searchbank-adapter";
 const SLOT_OWNER="media-snapshot-publish";
 const MANUAL_SECTIONS=Object.freeze([
@@ -26,7 +26,14 @@ function stableStringify(value){
   if(Array.isArray(value))return"["+value.map(stableStringify).join(",")+"]";
   return"{"+Object.keys(value).sort().map((key)=>JSON.stringify(key)+":"+stableStringify(value[key])).join(",")+"}";
 }
-function sha256(value){return crypto.createHash("sha256").update(typeof value==="string"?value:stableStringify(value)).digest("hex");}
+function sha256(value){
+  // Hash the JSON document exactly as it can exist on disk/public HTTP. SearchBank
+  // normalization can leave optional properties as `undefined` in memory; JSON.stringify
+  // omits those keys. Hashing the pre-serialization object therefore produced a false
+  // public mismatch even when the deployed JSON was byte-equivalent in content.
+  const canonical=typeof value==="string"?value:JSON.parse(JSON.stringify(value==null?{}:value));
+  return crypto.createHash("sha256").update(typeof canonical==="string"?canonical:stableStringify(canonical)).digest("hex");
+}
 function slotsOf(section){return Array.isArray(section)?section:(section&&Array.isArray(section.slots)?section.slots:[]);}
 function managedSlot(slot){return !!(slot&&slot.managedBy===SLOT_OWNER&&plain(slot.releaseContract).eligible===true);}
 function slotIdOf(slot){return text(slot&&(slot.contentId||slot.id));}

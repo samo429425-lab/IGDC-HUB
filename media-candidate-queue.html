@@ -67,6 +67,7 @@
   <div class="bar">
     <button id="refreshBtn">대기열 새로고침</button>
     <button id="diagnosticBtn" class="secondary">미디어 점검 JSON</button>
+    <button id="downloadDiagnosticJsonBtn" class="secondary" disabled>미디어 점검 다운로드</button>
     <button id="publishPreviewBtn" class="publish">승격 미리보기</button>
     <button id="storeReleaseBtn" class="publish">전체 최종 승인 실행</button>
     <button id="downloadSnapshotBtn" class="secondary">스냅샷 다운로드</button>
@@ -110,7 +111,6 @@
     </div>
     <div id="supplierBulkBar" class="supplier-actions hidden"><label class="small"><input type="checkbox" id="supplierSelectAll"> 전체 선택</label><button id="supplierBulkActivateBtn" class="publish">선택 활성</button><button id="supplierBulkPauseBtn" class="secondary">선택 중지</button><button id="supplierBulkRestoreBtn" class="secondary">선택 후보 복원</button><button id="supplierBulkArchiveBtn" class="danger">선택 보관</button><span id="supplierBulkState" class="state">선택 0개</span></div>
     <div class="tablewrap"><table class="supplier-table"><thead><tr><th class="supplier-select-col">선택</th><th>상태</th><th>공급사</th><th>유형</th><th>국가</th><th>웹주소</th><th>탐색어</th><th>최근 갱신</th><th>관리</th></tr></thead><tbody id="supplierRows"><tr><td colspan="9" class="small">공급사 목록을 불러오는 중입니다.</td></tr></tbody></table></div>
-    <pre id="supplierDiagnosticJson" class="json hidden"></pre>
   </section>
 
   <section class="panel">
@@ -189,14 +189,6 @@
   <section id="tablePanel" class="panel hidden">
     <div class="modal-head"><div><h2 style="margin:0">10개 섹션 영상 후보</h2><div class="small">한 번에 한 섹션만 펼쳐지고, 펼친 섹션의 썸네일만 불러옵니다. 각 섹션의 선택 작업은 다른 섹션에 영향을 주지 않으며, 정원을 넘은 후보도 숨기지 않고 점검할 수 있습니다.</div></div><span id="candidateCapacityState" class="state"></span></div>
     <div id="sectionAccordion" class="section-accordion"></div>
-  </section>
-
-  <section id="diagnosticPanel" class="panel hidden">
-    <div class="modal-head">
-      <h2 style="margin:0">미디어 후보 점검 JSON</h2>
-      <button id="downloadJsonBtn" class="secondary" disabled>점검 JSON 다운로드</button>
-    </div>
-    <pre id="diagnosticJson" class="json"></pre>
   </section>
 
   <section id="exclusionPanel" class="panel hidden">
