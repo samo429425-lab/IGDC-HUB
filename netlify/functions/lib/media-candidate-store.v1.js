@@ -10,7 +10,7 @@
 const crypto = require("crypto");
 const MediaPolicy = require("./media-candidate-policy.v2");
 
-const VERSION = "media-candidate-store-v1.3.0-release-minimal-insert-verified";
+const VERSION = "media-candidate-store-v1.4.0-preserve-samples-slot-replace";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE = process.env.MEDIA_CANDIDATE_TABLE || "media_candidates";
 const RELEASE_TABLE = process.env.MEDIA_SNAPSHOT_RELEASE_TABLE || "media_snapshot_releases";
@@ -306,43 +306,89 @@ function groupsBySection(rows){
   }));
   return out;
 }
+function isReplaceableMediaSlot(slot){
+  const s=plain(slot),raw=plain(s.raw),source=plain(s.source),ext=plain(s.extension);
+  const placeholder=plain(ext.placeholder);
+  const title=text(s.title||s.name),summary=text(s.summary||s.description);
+  const url=normalizeUrl(s.url||s.link||s.video||s.videoUrl||s.embedUrl);
+  const thumb=text(s.thumb||s.thumbnail||s.image||s.poster);
+  if(s.managedBy==="media-snapshot-publish")return true;
+  if(s.sample===true||s.isSample===true||s.placeholder===true||s.replaceableSlot===true)return true;
+  if(Object.keys(placeholder).length>0)return true;
+  if(lower(source.name)==="seed"||lower(raw.source)==="seed")return true;
+  if(/^seed placeholder\b/i.test(summary))return true;
+  if(/^(movie|drama|thriller|mystery|romance|variety|documentary|animation|music|shorts?)\s+slot\s+\d+$/i.test(title))return true;
+  if(!title&&!url)return true;
+  if(!title&&(thumb==="#"||!thumb||/placeholder/i.test(thumb)))return true;
+  return false;
+}
+function blankMediaSlot(slot,index){
+  return{slotId:Number(slot&&slot.slotId)||index+1,contentId:null,title:null,thumb:"#",provider:null};
+}
 function buildSnapshot(baseSnapshot, rows, opts){
   const base=plain(baseSnapshot);
   const sections=Object.assign({}, plain(base.sections));
   const groups=groupsBySection(rows.filter(snapshotEligible));
   const filled={};
+
   Object.keys(groups).forEach((sectionKey)=>{
     const current=sections[sectionKey];
     const sectionObj=Array.isArray(current)?{title:sectionKey,slots:current,key:sectionKey}:plain(current);
-    const slots=Array.isArray(sectionObj.slots)?sectionObj.slots.slice():[];
+    const sourceSlots=Array.isArray(sectionObj.slots)?sectionObj.slots.slice():[];
     const requestedCapacity=Number(opts && opts.capacityPerSection);
-    const policyCapacity=sectionKey==="media-music"||sectionKey==="media-shorts"?50:100;
-    const capacity=Math.max(1, Math.min(policyCapacity, Number.isFinite(requestedCapacity)&&requestedCapacity>0?requestedCapacity:policyCapacity));
+    const capacity=Math.max(1,Math.min(100,Number.isFinite(requestedCapacity)&&requestedCapacity>0?requestedCapacity:100));
+
+    const previousManagedIndex=new Map();
+    sourceSlots.slice(0,capacity).forEach((slot,index)=>{
+      if(slot&&slot.managedBy==="media-snapshot-publish"&&text(slot.contentId||slot.id)){
+        previousManagedIndex.set(text(slot.contentId||slot.id),index);
+      }
+    });
+
     const next=[];
     for(let i=0;i<capacity;i++){
-      const slot=plain(slots[i]);
-      const externallyManaged=text(slot.title) && slot.managedBy!=="media-snapshot-publish" && MediaPolicy.publicReleaseAllowed(slot);
-      next.push(externallyManaged?Object.assign({},slot):{slotId:i+1,contentId:null,title:null,thumb:"#",provider:null});
+      const slot=plain(sourceSlots[i]);
+      next.push(slot.managedBy==="media-snapshot-publish"?blankMediaSlot(slot,i):Object.assign({},slot,{slotId:Number(slot.slotId)||i+1}));
     }
-    let cursor=0;
-    groups[sectionKey].slice(0,capacity).forEach((row)=>{
-      while(cursor<next.length && text(next[cursor].title)) cursor+=1;
-      if(cursor<next.length){next[cursor]=publicSlot(row,cursor+1,next[cursor]);cursor+=1;}
+
+    const desired=groups[sectionKey].slice(0,capacity);
+    const placed=new Set();
+
+    desired.forEach((row)=>{
+      const id=text(row&&row.id),index=previousManagedIndex.get(id);
+      if(index===undefined||index<0||index>=next.length)return;
+      next[index]=publicSlot(row,index+1,next[index]);
+      placed.add(id);
     });
-    sections[sectionKey]=Object.assign({}, sectionObj, {key:sectionKey, slots:next});
-    filled[sectionKey]=next.filter((slot)=>slot && slot.managedBy==="media-snapshot-publish" && MediaPolicy.publicReleaseAllowed(slot)).length;
+
+    let cursor=0;
+    desired.forEach((row)=>{
+      const id=text(row&&row.id);
+      if(placed.has(id))return;
+      while(cursor<next.length&&!isReplaceableMediaSlot(next[cursor]))cursor+=1;
+      if(cursor<next.length){
+        next[cursor]=publicSlot(row,cursor+1,next[cursor]);
+        placed.add(id);
+        cursor+=1;
+      }
+    });
+
+    sections[sectionKey]=Object.assign({},sectionObj,{key:sectionKey,slots:next});
+    filled[sectionKey]=next.filter((slot)=>slot&&slot.managedBy==="media-snapshot-publish"&&MediaPolicy.publicReleaseAllowed(slot)).length;
   });
-  return Object.assign({}, base, {
-    version:"media.snapshot.generated.supabase.v1",
+
+  return Object.assign({},base,{
+    version:"media.snapshot.generated.supabase.v2.sample-preserving",
     type:"media_snapshot",
     sections,
-    meta:Object.assign({}, plain(base.meta), {
+    meta:Object.assign({},plain(base.meta),{
       generatedAt:nowIso(),
       generatedBy:"media-snapshot-publish",
       source:"supabase.media_candidates",
-      section1Policy:"media-trending is not manually seeded; only sections 2-10 are filled here.",
+      section1Policy:"media-trending is automatic; manual sections keep their committed 100-slot sample/real layout.",
       releasePolicy:MediaPolicy.VERSION,
-      capacities:{"media-music":50,"media-shorts":50,default:100},
+      capacities:{default:100},
+      samplePolicy:"preserve-seed-and-external; replace-only-blank-seed-or-previous-managed",
       filled
     })
   });

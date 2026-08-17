@@ -6,7 +6,7 @@ const os=require("os");
 const path=require("path");
 const Adapter=require("../../functions/lib/media-searchbank-release-adapter.v1");
 
-const VERSION="igdc-media-snapshot-release-build-plugin-v2.3.0-coherent-searchbank-entry";
+const VERSION="igdc-media-snapshot-release-build-plugin-v2.5.0-full-bank-sample-preserving";
 const DEFAULT_TABLE="media_snapshot_releases";
 
 function text(value){return value==null?"":String(value).trim();}
@@ -111,6 +111,45 @@ function atomicWrite(file,document){
   try{fs.writeFileSync(temporary,JSON.stringify(document,null,2)+"\n",{encoding:"utf8",mode:0o644});JSON.parse(fs.readFileSync(temporary,"utf8"));fs.renameSync(temporary,file);}
   finally{try{if(fs.existsSync(temporary))fs.unlinkSync(temporary);}catch(_error){}}
 }
+function mediaSectionKey(item){
+  const raw=text(item&&(item.psom_key||item.section||item.category||item.bind&&item.bind.section||item.bind&&item.bind.psom_key)).toLowerCase();
+  const aliases={movie:"media-movie",film:"media-movie",drama:"media-drama",series:"media-drama",thriller:"media-thriller",mystery:"media-thriller",romance:"media-romance",variety:"media-variety",entertainment:"media-variety",documentary:"media-documentary",animation:"media-animation",anime:"media-animation",music:"media-music",shorts:"media-shorts",short:"media-shorts"};
+  return raw.indexOf("media-")===0?raw:(aliases[raw]||"");
+}
+function assertSearchBankMediaSamples(bank){
+  const counts=Object.fromEntries(Adapter.MANUAL_SECTIONS.map((key)=>[key,0]));
+  (Array.isArray(bank&&bank.items)?bank.items:[]).forEach((item)=>{
+    const key=mediaSectionKey(item);
+    if(!Object.prototype.hasOwnProperty.call(counts,key))return;
+    const source=item&&item.source&&typeof item.source==="object"?text(item.source.name).toLowerCase():text(item&&item.source).toLowerCase();
+    const summary=text(item&&item.summary).toLowerCase();
+    const placeholder=item&&item.extension&&item.extension.placeholder;
+    if(source==="seed"||summary.indexOf("seed placeholder")===0||placeholder)counts[key]+=1;
+  });
+  const problems=Object.entries(counts).filter(([,count])=>count<100).map(([key,count])=>key+":"+count);
+  if(problems.length){
+    const error=new Error("searchbank_media_sample_baseline_missing:"+problems.join(","));
+    error.code="searchbank_media_sample_baseline_missing";
+    error.problems=problems;
+    throw error;
+  }
+  return counts;
+}
+function assertMediaTemplate100(snapshot){
+  const sections=snapshot&&snapshot.sections&&typeof snapshot.sections==="object"?snapshot.sections:{};
+  const problems=[];
+  Adapter.MANUAL_SECTIONS.forEach((key)=>{
+    const section=sections[key];
+    const slots=Array.isArray(section)?section:(section&&Array.isArray(section.slots)?section.slots:[]);
+    if(slots.length!==100)problems.push(key+":"+slots.length);
+  });
+  if(problems.length){
+    const error=new Error("media_snapshot_template_capacity_invalid:"+problems.join(","));
+    error.code="media_snapshot_template_capacity_invalid";
+    error.problems=problems;
+    throw error;
+  }
+}
 function runSnapshotEngineIsolated(publishRoot,bank,template,releaseId){
   const stage=fs.mkdtempSync(path.join(os.tmpdir(),"igdc-media-release-"));
   const originalCwd=process.cwd(),enginePath=path.join(publishRoot,"netlify","functions","snapshot-engine.js");
@@ -186,12 +225,25 @@ module.exports={
         path.join(publishRoot,"netlify","functions","data","search-bank.snapshot.json"),
         path.join(publishRoot,"netlify","functions","search-bank.snapshot.json")
       ];
-      const currentBank=readFirst(bankFiles),contract=Adapter.buildSearchBankDocument(currentBank.doc,release);
-      const stageBank={
-        meta:{source:"approved-media-release-searchbank-stage",mediaReleasePipeline:contract.bank.meta&&contract.bank.meta.mediaReleasePipeline},
-        items:Adapter.ownedItems(contract.bank,release.release_id)
-      };
-      const template=Adapter.buildEngineTemplate(release.snapshot);
+      const mediaFiles=[
+        path.join(publishRoot,"data","media.snapshot.json"),
+        path.join(publishRoot,"netlify","functions","data","media.snapshot.json")
+      ];
+      const currentBank=readFirst(bankFiles);
+      const currentMedia=readFirst(mediaFiles);
+      assertSearchBankMediaSamples(currentBank.doc);
+      assertMediaTemplate100(currentMedia.doc);
+
+      const contract=Adapter.buildSearchBankDocument(currentBank.doc,release);
+      const owned=Adapter.ownedItems(contract.bank,release.release_id);
+      const ownedIds=new Set(owned.map((item)=>text(item&&item.id)));
+      const stageBank=Object.assign({},contract.bank,{
+        // Approved real media must enter Snapshot Engine before the seed samples.
+        // The untouched Snapshot Engine protects real cards once inserted; the
+        // remaining seed cards then fill only the still-empty sample slots.
+        items:owned.concat((Array.isArray(contract.bank.items)?contract.bank.items:[]).filter((item)=>!ownedIds.has(text(item&&item.id))))
+      });
+      const template=Adapter.buildEngineTemplate(currentMedia.doc);
       const engine=runSnapshotEngineIsolated(publishRoot,stageBank,template,release.release_id);
       const final=Adapter.decorateEngineSnapshot(engine.snapshot,release,engine.report,contract.hash);
       safeManagedSlots(final.snapshot);
