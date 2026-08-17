@@ -40,6 +40,7 @@
     .section-header{display:flex;align-items:stretch;background:#13283e}.section-toggle{flex:1 1 auto;min-width:0;width:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-radius:0;background:#13283e;color:#edf6ff;text-align:left}
     .section-toggle:hover{background:#18334f}.section-toggle-main{display:flex;gap:10px;align-items:center;min-width:0}.section-toggle-title{font-size:16px}.section-count{background:#243953;border-radius:999px;padding:3px 9px;color:#cfe7ff;font-size:12px}
     .section-header-actions{display:flex;gap:6px;align-items:center;padding:7px 9px;border-left:1px solid #28405f;background:#102238;white-space:nowrap}.section-header-actions button{padding:7px 10px;font-size:12px}.section-header-actions .pill{font-size:11px}
+    .section-board-toolbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px;border:1px solid #35516f;border-radius:11px;background:#0a1523}.section-board-toolbar .section-select-all{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:850;color:#d8e9fa}.section-board-toolbar input,.section-batch-check{width:17px;height:17px;accent-color:#7de0d8}.section-board-toolbar .batch-spacer{flex:1 1 auto}.section-board-toolbar button{font-size:12px;padding:8px 10px}.section-batch-select{display:flex;align-items:center;gap:7px;padding:0 0 0 12px;white-space:nowrap}.section-batch-select label{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:850;color:#d8e9fa}.section-row-title{display:flex;align-items:center;gap:8px;min-width:0}.section-row-toggle{background:#24415e!important;color:#e8f5ff!important}.section-ai-btn{background:#2c5b7c!important;color:#eef9ff!important}.section-unmatch-btn{background:#7d3540!important;color:#fff0f2!important}.section-match-btn{background:#32734f!important;color:#ecfff4!important}.section-board-note{flex:1 0 100%;color:#9fb4c9;font-size:12px;line-height:1.45}
     #publishFrontBtn{box-shadow:0 0 0 2px rgba(255,208,112,.28) inset}
     .section-chevron{font-size:18px;transition:transform .18s}.candidate-section.open .section-chevron{transform:rotate(180deg)}
     .section-body{padding:14px}.section-actionbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:10px;border:1px solid #28405f;border-radius:11px;background:#0a1523;margin-bottom:12px}
@@ -72,8 +73,6 @@
     <button id="downloadDiagnosticJsonBtn" class="secondary" disabled>미디어 점검 다운로드</button>
     <button id="publishPreviewBtn" class="publish">승격 미리보기</button>
     <button id="storeReleaseBtn" class="publish">전체 최종 승인 실행</button>
-    <button id="publishFrontBtn" class="publish">전체 섹션 프론트 반영 실행</button>
-    <button id="stopFrontBtn" class="danger">전체 프론트 반영 취소·중지</button>
     <span id="frontReleaseState" class="state">프론트 반영 상태 확인 전</span>
     <button id="downloadSnapshotBtn" class="secondary">스냅샷 다운로드</button>
     <button id="downloadAllCandidateListBtn" class="secondary">전체 10개 섹션 후보 JSON</button>
@@ -189,7 +188,17 @@
   </section>
 
   <section id="tablePanel" class="panel hidden">
-    <div class="modal-head"><div><h2 style="margin:0">10개 섹션 영상 후보</h2><div class="small">한 번에 한 섹션만 펼쳐지고, 펼친 섹션의 썸네일만 불러옵니다. 각 섹션의 선택 작업은 다른 섹션에 영향을 주지 않으며, 정원을 넘은 후보도 숨기지 않고 점검할 수 있습니다.</div></div><span id="candidateCapacityState" class="state"></span></div>
+    <div class="modal-head"><div><h2 style="margin:0">10개 섹션 영상 후보</h2><div class="small">유통 섹션 운영과 같은 방식으로 실제 배치 대상 9개 섹션을 복수 선택해 한 번에 프론트 반영·해제할 수 있습니다. ‘지금 뜨는 콘텐츠’는 자동 조합 섹션이므로 수동 선택 대상에서 제외됩니다.</div></div><span id="candidateCapacityState" class="state"></span></div>
+    <div class="section-board-toolbar" aria-label="미디어 섹션 프론트 운영">
+      <label class="section-select-all"><input id="selectAllMediaSections" type="checkbox"> 9개 배치 섹션 전체 선택</label>
+      <span id="selectedMediaSectionCount" class="pill section">선택 섹션 0개</span>
+      <span class="batch-spacer"></span>
+      <button id="selectedSectionsPublishBtn" type="button" class="section-match-btn" disabled>선택 섹션 프론트 반영</button>
+      <button id="publishFrontBtn" type="button" class="section-match-btn">전체 섹션 프론트 반영</button>
+      <button id="selectedSectionsStopBtn" type="button" class="section-unmatch-btn" disabled>선택 섹션 반영 해제</button>
+      <button id="stopFrontBtn" type="button" class="section-unmatch-btn">전체 섹션 반영 해제</button>
+      <div class="section-board-note">체크한 여러 섹션은 하나의 release로 묶어 한 번만 배포합니다. 섹션별 개별 버튼도 그대로 사용할 수 있습니다.</div>
+    </div>
     <div id="sectionAccordion" class="section-accordion"></div>
   </section>
 
@@ -210,7 +219,7 @@
       <div class="tablewrap"><table><thead><tr><th>순번</th><th><input id="selectAllExcluded" type="checkbox"></th><th>현재 섹션</th><th>상태</th><th>영상</th><th>복원 목표</th><th>제외 사유</th><th>출처</th><th>제외일</th></tr></thead><tbody id="excludedRows"></tbody></table></div>
     </div>
   </section>
-  <p class="foot">전체 최종 승인 또는 섹션별 선택 승인 후, 전체/섹션별 프론트 반영 실행으로 미디어 허브에 적용됩니다.</p>
+  <p class="foot">전체 최종 승인 또는 섹션별 선택 승인 후, 10개 섹션 후보 영역에서 전체·복수 선택·개별 섹션 프론트 반영을 실행해 미디어 허브에 적용합니다.</p>
 </main>
 
 <div id="previewModal" class="modal hidden" role="dialog" aria-modal="true">

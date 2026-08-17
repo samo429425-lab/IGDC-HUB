@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v3.9 - visible global/section front controls + stable media front actions */
+/* IGDC Media Candidate Queue v4.0 - distribution-style multi-section front operations */
 (function(){
   'use strict';
 
@@ -11,6 +11,7 @@
   var SUP='/.netlify/functions/media-content-supplier-admin';
   var POOL='/.netlify/functions/media-candidate-pool-manager';
   var SECTION_ORDER=['media-trending','media-movie','media-drama','media-thriller','media-romance','media-variety','media-documentary','media-animation','media-music','media-shorts'];
+  var MANUAL_SECTION_ORDER=SECTION_ORDER.filter(function(key){return key!=='media-trending';});
   var SECTION_LABELS={
     'media-trending':'지금 뜨는 콘텐츠','media-movie':'영화','media-drama':'드라마·TV',
     'media-thriller':'스릴러·미스터리','media-romance':'로맨스','media-variety':'버라이어티·토크',
@@ -48,6 +49,7 @@
   var fullscreenUiTimer=null;
   var openSectionKey='';
   var selectedBySection={};
+  var selectedFrontSections=new Set();
   var frontReleaseState={hasRelease:false,totalManagedSlots:0,sections:{}};
   var supplierCache=[];
   var supplierDiagnosticCache=null;
@@ -259,9 +261,10 @@
       if(key!=='media-trending')countLabel+=' · 프론트 '+released;
       var headerActions=key==='media-trending'?
         '<div class="section-header-actions"><span class="pill section">자동 조합 섹션</span></div>':
-        '<div class="section-header-actions" data-section-key="'+esc(key)+'"><span class="pill section">프론트 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">중지</button></div>';
+        '<div class="section-header-actions" data-section-key="'+esc(key)+'"><span class="pill section">프론트 '+released+'개</span><button type="button" class="section-ai-btn sectionAiBtn">이 섹션 AI 자동 정리</button><button type="button" class="section-match-btn sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="section-unmatch-btn sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 해제</button><button type="button" class="section-row-toggle sectionToggleBtn" data-section-key="'+esc(key)+'">'+(open?'목록 접기':'목록 펼치기')+'</button></div>';
+      var selector=key==='media-trending'?'':'<div class="section-batch-select"><label><input type="checkbox" class="section-batch-check" data-section-key="'+esc(key)+'" '+(selectedFrontSections.has(key)?'checked':'')+'> 선택</label></div>';
       return '<section class="candidate-section'+(open?' open':'')+'" data-section-key="'+esc(key)+'">'+
-        '<div class="section-header"><button type="button" class="section-toggle" data-section-key="'+esc(key)+'" aria-expanded="'+(open?'true':'false')+'"><span class="section-toggle-main"><span class="section-toggle-title">'+esc(SECTION_LABELS[key]||key)+'</span><span class="section-count">'+countLabel+'</span></span><span class="section-chevron">⌄</span></button>'+headerActions+'</div>'+
+        '<div class="section-header">'+selector+'<button type="button" class="section-toggle" data-section-key="'+esc(key)+'" aria-expanded="'+(open?'true':'false')+'"><span class="section-toggle-main"><span class="section-toggle-title">'+esc(SECTION_LABELS[key]||key)+'</span><span class="section-count">'+countLabel+'</span></span><span class="section-chevron">⌄</span></button>'+headerActions+'</div>'+
         (open?'<div class="section-body">'+sectionBodyHtml(key,list)+'</div>':'')+
       '</section>';
     }).join('');
@@ -269,6 +272,7 @@
     $('filterState').textContent='검색 조건 일치 '+rows.length+'개 / 전체 활성 후보 '+activeRows().length+'개 · 펼친 섹션만 썸네일 로드';
     $('candidateCapacityState').textContent='일반 본선 100 + 예비 20 · 음악/쇼츠 본선 50 + 예비 20';
     $('tablePanel').classList.remove('hidden');
+    updateSectionBatchControls();
   }
   function exclusionRowHtml(row,index){
     var id=text(row.contentId||row.id),status=lower(row.reviewStatus);
@@ -992,7 +996,7 @@
     var approvable=activeRows().filter(function(row){return approvableStatuses.has(lower(row.reviewStatus));});
     if(!approvable.length){
       var alreadyApproved=activeRows().filter(function(row){return lower(row.reviewStatus)==='approved'&&lower(row.verificationStatus)==='approved_for_snapshot';}).length;
-      show(alreadyApproved?'전체 후보가 이미 최종 승인 상태입니다. 이제 전체 또는 섹션별 프론트 반영 실행을 눌러 주세요.':'최종 승인할 활성 후보가 없습니다.','ok');
+      show(alreadyApproved?'전체 후보가 이미 최종 승인 상태입니다. 아래 10개 섹션 후보 영역에서 전체·선택·개별 프론트 반영을 실행해 주세요.':'최종 승인할 활성 후보가 없습니다.','ok');
       return;
     }
     var bySection={};
@@ -1014,7 +1018,7 @@
       var verify=await get(PUB+'?pipelineStatus=1&probePublic=0');
       var verifiedApproved=Number(verify&&verify.stages&&verify.stages.candidates&&verify.stages.candidates.approvedRows||0);
       if(updated>0&&verifiedApproved===0)throw new Error('최종 승인 응답은 '+updated+'건이지만 재조회 결과 approvedRows가 0건입니다. 승인 DB 저장이 확정되지 않아 프론트 반영을 중단합니다.');
-      show('전체 최종 승인 '+updated+'건 완료 · 재조회 승인 '+verifiedApproved+'건 · 승인 API '+text(data.version||'-')+(skipped?' · 금지 신호 '+skipped+'건 자동 제외':'')+' · 상단 ‘전체 섹션 프론트 반영 실행’ 또는 각 섹션 제목줄의 ‘이 섹션 프론트 반영’을 눌러 주세요.','ok');
+      show('전체 최종 승인 '+updated+'건 완료 · 재조회 승인 '+verifiedApproved+'건 · 승인 API '+text(data.version||'-')+(skipped?' · 금지 신호 '+skipped+'건 자동 제외':'')+' · 10개 섹션 후보 영역에서 전체·선택·개별 섹션 프론트 반영을 실행해 주세요.','ok');
       var frontBtn=$('publishFrontBtn');if(frontBtn){frontBtn.focus({preventScroll:true});}
     }catch(error){show('전체 최종 승인 실패: '+error.message,'warn');}
     finally{if(button)button.disabled=false;}
@@ -1067,25 +1071,42 @@
       build_hook_request_failed:'Netlify 배포 요청에 실패했습니다.'
     })[text(value)]||text(value)||'프론트 배포가 시작되지 않았습니다.';
   }
-  function setFrontButtonsDisabled(disabled){
-    ['publishFrontBtn','stopFrontBtn','autoCurateBtn'].forEach(function(id){if($(id))$(id).disabled=disabled;});
-    document.querySelectorAll('.sectionFrontBtn,.contentFrontToggleBtn').forEach(function(button){button.disabled=disabled;});
+  function selectedFrontSectionKeys(){return MANUAL_SECTION_ORDER.filter(function(key){return selectedFrontSections.has(key);});}
+  function updateSectionBatchControls(){
+    var keys=selectedFrontSectionKeys(),allSelected=keys.length===MANUAL_SECTION_ORDER.length;
+    if($('selectedMediaSectionCount'))$('selectedMediaSectionCount').textContent='선택 섹션 '+keys.length+'개';
+    if($('selectedSectionsPublishBtn'))$('selectedSectionsPublishBtn').disabled=keys.length===0;
+    if($('selectedSectionsStopBtn'))$('selectedSectionsStopBtn').disabled=keys.length===0;
+    if($('selectAllMediaSections')){$('selectAllMediaSections').checked=allSelected;$('selectAllMediaSections').indeterminate=keys.length>0&&!allSelected;}
   }
-  function frontActionLabel(action,sectionKey){
+  function setFrontButtonsDisabled(disabled){
+    ['publishFrontBtn','stopFrontBtn','selectedSectionsPublishBtn','selectedSectionsStopBtn','selectAllMediaSections','autoCurateBtn'].forEach(function(id){if($(id))$(id).disabled=disabled;});
+    document.querySelectorAll('.sectionFrontBtn,.sectionAiBtn,.contentFrontToggleBtn,.section-batch-check').forEach(function(button){button.disabled=disabled;});
+    if(!disabled)updateSectionBatchControls();
+  }
+  function frontActionLabel(action,sectionKey,sectionKeys){
     var section=SECTION_LABELS[sectionKey]||sectionKey||'';
+    var batchCount=Array.isArray(sectionKeys)?sectionKeys.length:0;
     return({
-      publish_all:'전체 프론트 반영',stop_all:'전체 프론트 반영 취소·중지',
-      publish_section:section+' 섹션 프론트 반영',stop_section:section+' 섹션 반영 취소·중지'
+      publish_all:'전체 프론트 반영',stop_all:'전체 프론트 반영 해제',
+      publish_section:section+' 섹션 프론트 반영',stop_section:section+' 섹션 반영 해제',
+      publish_sections:'선택 '+batchCount+'개 섹션 프론트 반영',stop_sections:'선택 '+batchCount+'개 섹션 반영 해제'
     })[action]||action;
   }
-  async function frontMappingPreflight(action,sectionKey){
-    if(action==='stop_all'||action==='stop_section')return null;
+  async function frontMappingPreflight(action,sectionKey,sectionKeys){
+    if(action==='stop_all'||action==='stop_section'||action==='stop_sections')return null;
     var report=await get(PUB+'?pipelineStatus=1&probePublic=0');
     var approved=Number(report&&report.stages&&report.stages.candidates&&report.stages.candidates.approvedRows||0);
     var eligible=Number(report&&report.stages&&report.stages.candidates&&report.stages.candidates.eligibleRows||0);
     if(sectionKey){
       var sec=report&&report.stages&&report.stages.candidates&&report.stages.candidates.sections&&report.stages.candidates.sections[sectionKey]||{};
       approved=Number(sec.approved||0);eligible=Number(sec.eligible||0);
+    }else if(Array.isArray(sectionKeys)&&sectionKeys.length){
+      approved=0;eligible=0;
+      var emptyApproved=[],emptyEligible=[];
+      sectionKeys.forEach(function(key){var sec=report&&report.stages&&report.stages.candidates&&report.stages.candidates.sections&&report.stages.candidates.sections[key]||{};var a=Number(sec.approved||0),e=Number(sec.eligible||0);approved+=a;eligible+=e;if(a===0)emptyApproved.push(SECTION_LABELS[key]||key);else if(e===0)emptyEligible.push(SECTION_LABELS[key]||key);});
+      if(emptyApproved.length){var eb=new Error('선택 섹션 중 최종 승인 후보가 0건인 섹션이 있습니다: '+emptyApproved.join(', '));eb.code='front_preflight_selected_section_no_approved';throw eb;}
+      if(emptyEligible.length){var ee=new Error('선택 섹션 중 SearchBank로 보낼 공개 적격 후보가 0건인 섹션이 있습니다: '+emptyEligible.join(', '));ee.code='front_preflight_selected_section_no_eligible';throw ee;}
     }
     if(approved===0){
       var e=new Error((sectionKey?(SECTION_LABELS[sectionKey]||sectionKey)+' 섹션':'전체')+'의 최종 승인 후보가 0건입니다. 먼저 상단 ‘전체 최종 승인 실행’ 또는 해당 후보 승인을 완료해야 합니다. 현재 단계는 SearchBank 이전에서 중단되어 있습니다.');
@@ -1097,9 +1118,10 @@
     }
     return{approved:approved,eligible:eligible,report:report};
   }
-  async function publishFrontAction(action,sectionKey){
-    var label=frontActionLabel(action,sectionKey);
-    var stopping=action==='stop_all'||action==='stop_section';
+  async function publishFrontAction(action,sectionKey,sectionKeys){
+    sectionKeys=Array.isArray(sectionKeys)?sectionKeys.filter(function(key){return MANUAL_SECTION_ORDER.indexOf(key)>=0;}):[];
+    var label=frontActionLabel(action,sectionKey,sectionKeys);
+    var stopping=action==='stop_all'||action==='stop_section'||action==='stop_sections';
     var detail=stopping?
       '후보 대기열·승인·점검 기록은 삭제하지 않고 프론트 반영 대상에서만 내립니다. 원본 샘플 슬롯은 유지되며, 새 중지 상태가 이전 반영보다 우선 적용됩니다.':
       '승인·권리확인·공개검증을 모두 통과한 후보만 반영됩니다. 후보·시드·미검증·격리 항목은 공개되지 않습니다.';
@@ -1109,10 +1131,10 @@
     setFrontButtonsDisabled(true);
     try{
       if(mainButton)mainButton.textContent='프론트 반영 사전 점검 중';
-      var preflight=await frontMappingPreflight(action,sectionKey);
+      var preflight=await frontMappingPreflight(action,sectionKey,sectionKeys);
       if(mainButton)mainButton.textContent='프론트 반영 요청 중';
       var data=await post(PUB,{
-        storeRelease:true,publishFront:true,frontAction:action,sectionKey:sectionKey||'',
+        storeRelease:true,publishFront:true,frontAction:action,sectionKey:sectionKey||'',sectionKeys:sectionKeys,
         includeSnapshot:'0',includeBlocked:'1'
       });
       var dispatch=data.frontPublication||{};
@@ -1131,7 +1153,12 @@
       setFrontButtonsDisabled(false);
     }
   }
-  function publishFront(){return publishFrontAction('publish_all','');}
+  function publishFront(){return publishFrontAction('publish_all','',[]);}
+  function publishSelectedSections(stop){
+    var keys=selectedFrontSectionKeys();
+    if(!keys.length){show('프론트 작업할 섹션을 먼저 선택해 주세요.','warn');return;}
+    return publishFrontAction(stop?'stop_sections':'publish_sections','',keys);
+  }
 
   function candidateSources(row){
     var output=[];
@@ -1375,6 +1402,20 @@
     }finally{collectAllRunning=false;collectorStopRequested=false;$('poolResearchLatestBtn').disabled=false;$('collectorStopBtn').disabled=true;}
   }
 
+  async function sectionAutoRebalance(sectionKey){
+    if(!sectionKey||MANUAL_SECTION_ORDER.indexOf(sectionKey)<0)return;
+    if(!window.confirm((SECTION_LABELS[sectionKey]||sectionKey)+' 섹션의 승인 완료 후보를 운영 슬롯 + 예비 20 기준으로 AI 자동 정리한 뒤 이 섹션만 프론트에 다시 반영할까요?'))return;
+    setFrontButtonsDisabled(true);
+    try{
+      var data=await post(POOL,{action:'auto_rebalance',sectionKey:sectionKey});
+      var preflight=await frontMappingPreflight('publish_section',sectionKey,[]);
+      var pub=await post(PUB,{storeRelease:true,publishFront:true,frontAction:'publish_section',sectionKey:sectionKey,includeSnapshot:'0',includeBlocked:'1'});
+      var dispatch=pub.frontPublication||{};if(pub.releaseStored!==true||dispatch.queued!==true)throw new Error(frontPublishReason(dispatch.reason));
+      await refreshPool();await refresh();show((SECTION_LABELS[sectionKey]||sectionKey)+' 섹션 AI 자동 정리 '+Number(data.updated||0)+'건 · 프론트 재배포 요청 완료','ok');
+    }catch(error){show((SECTION_LABELS[sectionKey]||sectionKey)+' 섹션 AI 자동 정리 실패: '+error.message,'warn');}
+    finally{setFrontButtonsDisabled(false);}
+  }
+
   async function poolAutoRebalance(){
     var section=text($('poolSectionFilter').value);
     if(!window.confirm((section?(SECTION_LABELS[section]||section)+' 섹션':'전체 섹션')+'의 승인 완료 후보를 비교해 운영 슬롯 + 예비 20개를 자동 재정렬할까요?\n\n인기·품질·최신성·재생 안정성을 비교하며, 관리자가 수동으로 내린 콘텐츠는 자동 복원하지 않습니다. 처리 후 기존 공식 프론트 반영 경로로 즉시 재배포합니다.'))return;
@@ -1438,7 +1479,10 @@
     $('collectAllBtn').onclick=collectAll;
     $('autoCurateBtn').onclick=autoCurateAll;
     $('publishFrontBtn').onclick=publishFront;
-    $('stopFrontBtn').onclick=function(){publishFrontAction('stop_all','');};
+    $('stopFrontBtn').onclick=function(){publishFrontAction('stop_all','',[]);};
+    $('selectedSectionsPublishBtn').onclick=function(){publishSelectedSections(false);};
+    $('selectedSectionsStopBtn').onclick=function(){publishSelectedSections(true);};
+    $('selectAllMediaSections').onchange=function(){var checked=this.checked;selectedFrontSections.clear();if(checked)MANUAL_SECTION_ORDER.forEach(function(key){selectedFrontSections.add(key);});renderRows();};
     $('collectorStopBtn').onclick=function(){
       collectorStopRequested=true;this.disabled=true;$('collectorState').textContent='현재 묶음 후 일시정지';
     };
@@ -1470,7 +1514,7 @@
       var checked=this.checked;document.querySelectorAll('.excludedCheck').forEach(function(element){element.checked=checked;});
     };
     $('sectionAccordion').addEventListener('click',function(event){
-      var toggle=event.target.closest('.section-toggle');
+      var toggle=event.target.closest('.section-toggle,.sectionToggleBtn');
       if(toggle){
         var key=text(toggle.dataset.sectionKey);
         openSectionKey=openSectionKey===key?'':key;
@@ -1487,6 +1531,7 @@
       if(!section)return;
       var sectionKey=text(section.dataset.sectionKey);
       var selected=selectedBySection[sectionKey]||(selectedBySection[sectionKey]=new Set());
+      if(event.target.closest('.sectionAiBtn')){sectionAutoRebalance(sectionKey);return;}
       var sectionFrontButton=event.target.closest('.sectionFrontBtn');
       if(sectionFrontButton){publishFrontAction(text(sectionFrontButton.dataset.frontAction),sectionKey);return;}
       if(event.target.closest('.sectionPipelineJsonBtn')){downloadPipelineStatus(sectionKey);return;}
@@ -1505,6 +1550,8 @@
       }
     });
     $('sectionAccordion').addEventListener('change',function(event){
+      var batchCheck=event.target.closest('.section-batch-check');
+      if(batchCheck){var key=text(batchCheck.dataset.sectionKey);if(batchCheck.checked)selectedFrontSections.add(key);else selectedFrontSections.delete(key);updateSectionBatchControls();return;}
       var checkbox=event.target.closest('.candidate-card-check');
       if(!checkbox)return;
       var sectionKey=text(checkbox.dataset.sectionKey),id=text(checkbox.dataset.candidateId);
