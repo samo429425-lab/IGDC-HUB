@@ -6,7 +6,6 @@
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta charset="utf-8"/>
 <title>Tour</title>
-
 <style>
 body {
   margin: 0;
@@ -85,7 +84,6 @@ footer {
   font-size: 0.9rem;
 }
 </style>
-
 <style id="adpanel-adbox-round8">
 /* === Right AD panel card base (stable) === */
 
@@ -169,7 +167,6 @@ footer {
 .ad-panel .ad-box:nth-child(11) {
   margin-bottom: auto;
 }</style>
-
 <style id="adpanel-independent-scroll-v2">html, body { overflow-x: hidden !important; }
 .container {
   display: flex !important;
@@ -192,7 +189,6 @@ footer {
 }
 /* Visual cue: items beyond the fold */
 .ad-panel .ad-box:nth-child(n+11){ opacity: 0.98; }</style>
-
 <style id="adpanel-fit-cards-hide-scroll">/* Keep panel inside window and separate from main */
 html, body { overflow-x: hidden !important; }
 .container {
@@ -218,7 +214,6 @@ html, body { overflow-x: hidden !important; }
   text-decoration: none !important;
   color: inherit !important;
 }</style>
-
 <script id="adpanel-drag-scroll">
 (function(){
   var panel = document.querySelector('.ad-panel');
@@ -243,7 +238,6 @@ html, body { overflow-x: hidden !important; }
   });
 })();
 </script>
-
 <style id="adpanel-visible-7">/* Show ~7 cards before scroll (7 full + 20% of 8th) */</style>
 <style id="responsive-main-first">:root{
   --ad-slide: 0px;
@@ -254,7 +248,6 @@ html, body { overflow-x: hidden !important; }
   align-items:flex-start !important;
   gap:24px !important;
 }</style>
-
 <script id="responsive-main-first-js">
 (function(){
   var container = document.querySelector('.container');
@@ -312,13 +305,11 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
   applyLayout();
 })();
 </script>
-
 <style id="main-min-guard-30">html, body { overflow-x: hidden !important; }
 .container { display: flex !important; align-items: flex-start !important; gap: 24px !important; }
 .main-content { min-width: var(--main-min-30, 320px) !important; flex: 1 1 auto !important; }
 
  /* keep left fixed (no shrinking) */</style>
-
 <style id="panel-slides-vars"></style>
 <style id="lock-panels-until-main-50">:root {
     --left-col: 210px;
@@ -347,7 +338,6 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
   /* Safety: avoid horizontal scrolling due to column math */
   html, body { overflow-x: hidden !important; }</style>
-
 <style id="both-panels-shrink-when-main-lt50">:root {
     --left-col: 210px;
     --right-col: 274px;
@@ -490,7 +480,6 @@ function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
   touch-action: pan-y !important;
 }
 .ad-panel::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }</style>
-
 <style id="embedded-restore-scroll">/* Enable vertical scrolling when embedded in index (safe, minimal) */
 html, body {
   overflow-y: auto !important;
@@ -498,7 +487,6 @@ html, body {
   min-height: 100%;
   -webkit-overflow-scrolling: touch;
 }</style>
-
 <style id="sidebar-from-socialnetwork-20250908">/* sidebar rules copied from socialnetwork.html */
 .sidebar {
       width: 210px;
@@ -534,7 +522,7 @@ html, body {
 
 .sidebar{ padding-top: 0 !important; position: sticky; top: var(--top-pad) !important;}
 
-/* Sidebar Maswali na majibu link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ display:block; text-decoration:none;}
 
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
@@ -560,14 +548,12 @@ html, body {
 .sidebar{ padding-top: 20px !important;}
 
 .sidebar a:first-child{ margin-top: 6px !important;}</style>
-
 <style id="maincontent-padding-override">
 /* Override main-content top padding */
 .main-content {
   padding-top: 20px !important;
 }
 </style>
-
 <style id="btn-grid-size-balance-ko-20250909">
 /* Consistent, stable button layout (same rule as EN/ZH balance) */
 .btn-grid{
@@ -614,14 +600,13 @@ html, body {
 <!-- Mobile Optimization Patch v1 -->
 <!-- Mobile Ad Drawer v3 (push layout: stage shifts left while right drawer appears) -->
 <!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
-
 <style id="qa-empty-state-style">
 .igdc-qa-threads:empty::before,
 .qna-threads:empty::before,
 .qa-list:empty::before,
 .qna-list:empty::before,
 .igdc-qa-list:empty::before{
-  content: "Bado hakuna machapisho ya Maswali na majibu yaliyowekwa";
+  content: "아직 등록된 QnA가 없습니다";
   display: block;
   padding: 10px 12px;
   color: #666;
@@ -632,7 +617,6 @@ html, body {
   font-size: 0.95rem;
 }
 </style>
-
 <style id="mobile-title-fontsize-tour">
 @media (max-width: 768px){
   .main-content h2 {
@@ -641,7 +625,6 @@ html, body {
 }
 </style>
 <!-- Injected: exact blockchain styles cloned from socialnetwork.html -->
-
 <style id="bc-style-from-sn-20251013">
 .bc-tile{display:inline-block;padding:5px 8px;border-radius:999px;background:#a7f3d0;color:#064e3b;font-weight:500;text-decoration:none}
   .bc-tile:hover{background:#86efac}
@@ -677,7 +660,6 @@ html, body {
 }
 </style>
 <!-- BC text-condense + tight-gap patch -->
-
 <style id="bc-tight-text-20251013">/* 1) Buttons between-blockchain spacing: ~3px */
   .section-blockchain{ gap: 3px 3px !important; }
 
@@ -696,10 +678,7 @@ html, body {
   }
   /* Hover unaffected except border/bg from the base design */
 </style>
-
 <!-- BC ultra-tight adjust: shrink button width slightly, gap=5px -->
-
-
 <!-- BC tight correction: text-only narrow, keep font size, exact 5px gaps -->
 <style id="bc-tight-correct-20251013">/* Exact inter-button gap */
   .section-blockchain{ gap:5px 5px !important; }/* Button container: DO NOT scale; remove extra margins; tighten L/R padding only */
@@ -720,7 +699,6 @@ html, body {
     letter-spacing:normal;
   }
 </style>
-
 <style id="bc-size-override-20251017">
   /* Mobile-only: shrink blockchain buttons by 10% and unify gap to 5px */
   @media (max-width: 900px) {
@@ -735,31 +713,38 @@ html, body {
     }
   }
 </style>
-
 <style id="tour-mobile-rail-style">
 /* Desktop: right rail only. AutoMap inline display:block cannot revive the bottom rail. */
 @media (min-width:1025px){
   #tour-mobile-rail{ display:none !important; }
 }
 
-
 @media (max-width:1024px){
-  #tour-mobile-rail{ 
+  #tour-mobile-rail{
     display:block !important;
     background:#f7f9fb; border:1px solid #d6dce0; border-radius:10px;
     padding:10px 10px 14px; box-shadow:0 1px 4px rgba(0,0,0,.06);
   }
   #tour-mobile-rail .list{
-    display:flex; gap:10px; overflow-x:auto; padding:6px 4px;
-    scroll-snap-type:x mandatory;
+    display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding:6px 4px;
+    -webkit-overflow-scrolling:touch;
+    scroll-behavior:auto;
+    scroll-snap-type:x proximity;
+    touch-action:pan-x pan-y;
+    overscroll-behavior-x:contain;
+    scrollbar-width:none; -ms-overflow-style:none;
+  }
+  #tour-mobile-rail .list > .card,
+  #tour-mobile-rail .list > .ad-box{
+    scroll-snap-align:start;
+    scroll-snap-stop:normal;
   }
   #tour-mobile-rail .list::-webkit-scrollbar{ display:none; width:0; height:0; }
-  #tour-mobile-rail .list{ scrollbar-width:none; -ms-overflow-style:none; }
 }
 @media (max-width:1024px) and (orientation:portrait){
   #tour-mobile-rail .list > .card,
   #tour-mobile-rail .list > .ad-box{
-    flex: 0 0 100% !important; max-width:100% !important;
+    flex:0 0 100% !important; max-width:100% !important;
     height:auto !important; min-height:0 !important; max-height:none !important;
   }
   #tour-mobile-rail .list img,
@@ -769,11 +754,21 @@ html, body {
   }
 }
 @media (max-width:1024px) and (orientation:landscape){
+  #tour-mobile-rail .list{
+    /* Landscape only: release card-by-card snap capture so a stronger
+       native fling can coast across multiple thumbnails naturally. */
+    scroll-snap-type:none !important;
+    -webkit-overflow-scrolling:touch !important;
+    scroll-behavior:auto !important;
+  }
   #tour-mobile-rail .list > .card,
-  #tour-mobile-rail .list > .ad-box{ flex:0 0 min(300px,80%); max-width:min(300px,80%); }
+  #tour-mobile-rail .list > .ad-box{
+    flex:0 0 min(300px,80%);
+    max-width:min(300px,80%);
+    scroll-snap-stop:normal !important;
+  }
 }
 </style>
-
 <script id="tour-mobile-rail-js">
 (function(){
   function setAspect(card){
@@ -824,7 +819,6 @@ html, body {
   window.addEventListener('resize', toggle);
 })();
 </script>
-
 <style id="bc-mobile-80-gap3-tour-20251113">
 @media (max-width: 900px){
   /* Normalize any prior transforms/width locks, then apply consistent shrink */
@@ -896,9 +890,7 @@ html, body {
   /* Footer safety: home bar overlap */
   footer { padding-bottom: max(24px, env(safe-area-inset-bottom)) !important; position: static !important; }
 </style>
-
-<link rel="stylesheet" href="/assets/css/thumbs.standard.css">
-
+<link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
 <style id="tour-desktop-fill-and-scroll-fix">
 /* Desktop: main area must expand to fill space between sidebar and right panel */
 @media (min-width:1025px){
@@ -926,13 +918,19 @@ html, body {
   }
 }
 </style>
-
-
-  <style id="sidebar-spacing-unify-v2">
-    .sidebar{padding-top:30px !important;}
-    .sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
-  </style>
-
+<style id="ko-sidebar-spacing-unified">
+/* KO sidebar spacing: unify only button-to-button vertical spacing */
+.sidebar{
+  padding-top: 20px !important;
+}
+.sidebar a,
+.sidebar a#qnaOpenBtn,
+#qnaOpenBtn,
+.sidebar a[id*="qna"],
+a[id*="qna"]{
+  margin: 10px 12px !important;
+}
+</style>
 <style id="igdc-desktop-footer-bottom-space-v1">
 /* Footer-only desktop nano patch: keep mobile layout unchanged. */
 @media (min-width:1025px){
@@ -941,8 +939,54 @@ html, body {
   }
 }
 </style>
+<style id="igdc-product-card-caption-unified-tour-v1">
+/* Tour right product rail: keep the whole card clickable, with title below the media. */
+#rightAutoPanel.ad-panel > .ad-box > a,
+#tour-mobile-rail .ad-box > a{
+  display:grid !important;
+  grid-template-rows:minmax(0,1fr) auto !important;
+  align-items:stretch !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  line-height:normal !important;
+  background:#fff !important;
+}
+#rightAutoPanel.ad-panel > .ad-box > a > img,
+#tour-mobile-rail .ad-box > a > img{
+  grid-row:1 !important;
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  object-fit:cover !important;
+  object-position:center !important;
+  display:block !important;
+}
+#rightAutoPanel.ad-panel > .ad-box > a > .tour-card-title,
+#tour-mobile-rail .ad-box > a > .tour-card-title{
+  position:static !important;
+  grid-row:2 !important;
+  width:100% !important;
+  min-height:48px !important;
+  max-height:none !important;
+  margin:0 !important;
+  padding:7px 9px !important;
+  box-sizing:border-box !important;
+  display:block !important;
+  overflow:visible !important;
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+  word-break:keep-all !important;
+  color:#222 !important;
+  background:#fff !important;
+  text-shadow:none !important;
+  font-size:14px !important;
+  font-weight:600 !important;
+  line-height:1.35 !important;
+  text-align:left !important;
+}
+</style>
 </head>
-
 <body>
 <div id="hero"><div class="hero-title"></div></div>
 <div class="container">
@@ -975,7 +1019,7 @@ html, body {
 <div class="region-title">Asia</div>
 <div class="btn-grid"><a class="link-btn" href="https://www.hanatour.com" target="_blank">HanaTour <small>(HanaTour)</small></a>
 <a class="link-btn" href="https://www.modetour.com" target="_blank">Modetour<small>(ModeTour)</small></a>
-<a class="link-btn" href="https://www.yellowballoon.co.kr" target="_blank">Yellow Balloon Tour <small>(Yellow Balloon Tour)</small></a>
+<a class="link-btn" href="https://www.ybtour.co.kr" target="_blank">Yellow Balloon Tour <small>(Yellow Balloon Tour)</small></a>
 <a class="link-btn" href="https://www.trip.com" target="_blank">Trip.com <small>(携程)</small></a>
 <a class="link-btn" href="https://www.ctrip.com" target="_blank">Ctrip <small>(携程)</small></a>
 <a class="link-btn" href="https://www.qunar.com" target="_blank">Qunar <small>(去哪儿网)</small></a>
@@ -1054,15 +1098,13 @@ html, body {
 </div>
 </div>
 <script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.tour.json" data-interval="20000" src="/assets/js/hero.rotator.js"></script>
-
 <!-- Mobile rail for TOUR: directly above the footer (NOT inside) -->
 <section id="tour-mobile-rail" style="display:none; margin-top:14px;">
-  <div class="wrap">
-    <h3 class="title" style="margin:8px 0 6px; text-align:left;">💎 Bidhaa Maarufu 💎</h3>
-    <div class="list" aria-label="Vijipicha vilivyopendekezwa vya simu"></div>
-  </div>
+<div class="wrap">
+<h3 class="title" style="margin:8px 0 6px; text-align:left;">💎 Bidhaa Maarufu 💎</h3>
+<div aria-label="Vijipicha vilivyopendekezwa vya simu" class="list"></div>
+</div>
 </section>
-
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
     50 Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea <br/>
@@ -1134,7 +1176,7 @@ html, body {
     display: block;
     clear: both;
   }</style>
-</div>
+
 <!-- === Top Gap Tighten (to ~6px) / no panel size changes === -->
 <style id="top-gap-6px-only">
   .container{ padding-top: 6px !important; }
@@ -1147,7 +1189,7 @@ html, body {
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar Maswali na majibu link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -1204,7 +1246,7 @@ a[href^="mailto:"]:hover {
 }
 </style>
 <style id="qna-brand-only">
-/* === Maswali na majibu sidebar link color only (no other changes) === */
+/* === Q&A sidebar link color only (no other changes) === */
 :root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
 .sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
   display:block;
@@ -1216,7 +1258,7 @@ a[href^="mailto:"]:hover {
 .sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
 </style>
 <script id="igdc-qa-safety-bootstrap">
-// Ensures the Maswali na majibu popup opens when clicking the sidebar link,
+// Ensures the Q&A popup opens when clicking the sidebar link,
 // even if Supabase URL/Key are not configured yet.
 (function(){
   if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
@@ -1237,11 +1279,11 @@ a[href^="mailto:"]:hover {
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Maswali na majibu';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">Utendaji kamili utawezeshwa baada ya mipangilio ya hifadhi (Supabase url/key) kuunganishwa.</div>';
+        body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
         p.appendChild(h); p.appendChild(body);
         m.appendChild(b); m.appendChild(p);
         document.body.appendChild(m);
@@ -1324,7 +1366,6 @@ a[href^="mailto:"]:hover {
       });
   })();
 </script>
-
 <script id="igdc-qa-script">
 (function(){
   if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
@@ -1345,7 +1386,7 @@ a[href^="mailto:"]:hover {
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Maswali na majibu] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -1371,19 +1412,19 @@ a[href^="mailto:"]:hover {
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "Maswali na majibu";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","Funga");
+    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","닫기");
     header.append(title, close);
 
     const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="Swali";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="Weka swali lako...";
-    const lA = el("label"); lA.textContent="Jibu";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="Tafadhali subiri kidogo. Tutajibu hivi karibuni.";
+    const lQ = el("label"); lQ.textContent="질문";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="질문을 입력하세요...";
+    const lA = el("label"); lA.textContent="답변";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="조금만 기다리시면 금방 답변을 드리겠습니다.";
     const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="Wasilisha";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="Futa";
-    const note = el("div","igdc-qa-note"); note.textContent="※ Maswali rahisi yanajibiwa mara moja na AI. Masuala ya kiufundi/makosa/uendeshaji yanapelekwa moja kwa moja kwa Maswali na majibu ya msimamizi.";
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="등록하기";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="지우기";
+    const note = el("div","igdc-qa-note"); note.textContent="※ 가벼운 질문은 AI가 즉시 답변합니다. 기술/오류/운영 관련은 관리자 Q&A로 자동 전달됩니다.";
     const list = el("div","igdc-qa-threads");
 
     body.append(lQ,tQ,lA,tA,actions,note,list);
@@ -1454,18 +1495,18 @@ a[href^="mailto:"]:hover {
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (Inasubiri)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"A. (대기중)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "Ombi la msimamizi":"Jumla";
+        const tag = el("span"); tag.textContent = row.is_admin? "관리요청":"일반";
         const actions = el("div","igdc-qa-thread-actions");
         const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
         if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="Futa";
+          const del = el("button","igdc-qa-btn muted"); del.textContent="삭제";
           del.addEventListener("click", async ()=>{
             const sb = await ensureSupabase(); if(!sb) return;
             const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("Ufutaji umeshindikana (ruhusa/sera)"); return; }
+            if(error){ alert("삭제 실패(권한/정책)"); return; }
             await fetchThreads();
           });
           actions.append(del);
@@ -1488,9 +1529,9 @@ a[href^="mailto:"]:hover {
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="Maulizo ya uendeshaji yatajibiwa baada ya kukaguliwa na msimamizi.";
-          else if(/가격|비용|요금/.test(text)) answer="Tafadhali rejelea maelezo kwenye ukurasa kwa bei/ada. Acha swali la ziada ikihitajika.";
-          else answer="Asante kwa swali lako. Tutalipitia haraka na kukusaidia.";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="운영 관련 문의는 관리자 확인 후 회신됩니다.";
+          else if(/가격|비용|요금/.test(text)) answer="가격/요금 정보는 페이지 내 안내를 참고해주세요. 추가 문의는 남겨주세요.";
+          else answer="문의 감사합니다. 빠르게 확인하여 도와드리겠습니다.";
         }
       }
       return { technical, answer };
@@ -1504,7 +1545,7 @@ a[href^="mailto:"]:hover {
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
-        alert("Mipangilio ya hifadhi (Supabase url/key) bado haijaunganishwa, kwa hiyo uhifadhi wa upande wa seva umezimwa. Ikichapishwa kwenye wavuti, itaunganishwa kiotomatiki ikiwa SUPER_VARSAR.url/anonKey imewekwa.");
+        alert("저장 설정(Supabase url/key)이 아직 연결되지 않아 서버 저장은 비활성화 상태입니다. 웹에 배포 시 SUPER_VARSAR.url/anonKey를 설정하면 자동 연결됩니다.");
         return;
       }
       const record = {
@@ -1514,7 +1555,7 @@ a[href^="mailto:"]:hover {
         created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
       };
       const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("Uwasilishaji umeshindikana"); return; }
+      if(error){ alert("등록 실패"); return; }
       tQ.value=""; tA.value = a || "";
       await fetchThreads();
     }
@@ -1537,7 +1578,7 @@ a[href^="mailto:"]:hover {
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Maswali na majibu] auth 초기화 실패:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -1565,9 +1606,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
           var b=document.createElement('div'); b.className='igdc-qa-backdrop';
           var p=document.createElement('div'); p.className='igdc-qa-panel';
           var h=document.createElement('div'); h.className='igdc-qa-header';
-          var t=document.createElement('div'); t.textContent='Maswali na majibu';
+          var t=document.createElement('div'); t.textContent='Q&A';
           var x=document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Maswali na majibu connection ready';
+          var body=document.createElement('div'); body.className='igdc-qa-body'; body.textContent='Q&A 연결 준비됨';
           h.appendChild(t); h.appendChild(x); p.appendChild(h); p.appendChild(body);
           m.appendChild(b); m.appendChild(p); document.body.appendChild(m);
           function close(){ m.classList.remove('open'); }
@@ -1636,21 +1677,21 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Maswali na majibu';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
-      body.innerHTML = '<div class="igdc-qa-note">Utendaji kamili utawezeshwa baada ya mipangilio ya hifadhi (Supabase url/key) kuunganishwa.</div>';
+      body.innerHTML = '<div class="igdc-qa-note">저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.</div>';
 
-      // ensure the "Barua pepe ya mwakilishi" is shown only inside the modal
+      // ensure the "대표 이메일" is shown only inside the modal
 
       p.appendChild(h); p.appendChild(body);
       m.appendChild(b); m.appendChild(p);
       document.body.appendChild(m);
 
       function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+      function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }
       x.addEventListener('click', close);
       b.addEventListener('click', close);
 
@@ -1716,7 +1757,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
             parent.innerHTML = html;
           }
         });
-        // Remove any plain-text "Barua pepe ya mawasiliano: ..." remnants
+        // Remove any plain-text "대표 이메일: ..." remnants
         f.innerHTML = f.innerHTML.replace(/대표\s*이메일\s*:[^<]*<br\s*\/?>?/gi, '');
       });
     }catch(e){}
@@ -1730,19 +1771,19 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       var b = document.createElement('div'); b.className='igdc-qa-backdrop';
       var p = document.createElement('div'); p.className='igdc-qa-panel';
       var h = document.createElement('div'); h.className='igdc-qa-header';
-      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Maswali na majibu';
+      var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
       var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
       h.appendChild(t); h.appendChild(x);
 
       var body = document.createElement('div'); body.className='igdc-qa-body';
       var note = document.createElement('div'); note.className='igdc-qa-note';
-      note.textContent = 'Utendaji kamili utawezeshwa baada ya mipangilio ya hifadhi (Supabase url/key) kuunganishwa.';
+      note.textContent = '저장 설정(Supabase url/key) 연결 후 전체 기능이 활성화됩니다.';
       body.appendChild(note);
 
       // (1) Inject the contact email in creation path
 
       
-      // (2) Maswali na majibu threads list container
+      // (2) Q&A threads list container
       var listWrap = document.createElement('div');
       listWrap.className = 'igdc-qa-threads qna-list';
       // Placeholder item container; IGDC_QA loader will populate. Empty-state CSS will show if nothing.
@@ -1784,7 +1825,6 @@ p.appendChild(h); p.appendChild(body);
 })();
 </script>
 <script src="/assets/js/igdc-core.min.js"></script>
-
 <style id="igtc-mobile-instant-v2">
 @media (max-width:1024px){
   .sidebar, [class*="left-sidebar"], [class*="leftbar"], [class*="left-panel"],
@@ -1874,8 +1914,8 @@ window.addEventListener("message",function(ev){
                 wrap.id = 'igtc-qr-modal';
                 wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
                 wrap.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:16px;">'
-                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Payment QR</b>'
-                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">Funga</button></div>'
+                  + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>결제 QR</b>'
+                  + '<button id="igtc-qr-close" style="border:0;background:#eee;border-radius:8px;padding:6px 10px;cursor:pointer">닫기</button></div>'
                   + '<div id="igtc-qr-area"></div></div>';
                 document.body.appendChild(wrap);
                 var btn = document.getElementById('igtc-qr-close');
@@ -1910,14 +1950,13 @@ window.addEventListener("message",function(ev){
   async function postQ(){ const q=(ta.value||'').trim(); if(!q){ta.focus();return;}
     await fetch('/.netlify/functions/qa-proxy',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q,meta:{pageId,ts:Date.now(),ua:navigator.userAgent}})});
-    ta.value=''; alert('Sent successfully.');
+    ta.value=''; alert('전송되었습니다.');
   }
-  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('Sending failed'));});
+  if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('전송 실패'));});
   const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
-  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('Sending failed'));});
+  if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('전송 실패'));});
 })();
 </script>
-
 <script>
 // IGDC: report page height to parent index for iframe resizing
 (function(){
@@ -1955,11 +1994,215 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-
 <script id="igdc-unified-commerce-script">
-(function(){ /* disabled stale unified commerce helper */ })();
-</script>
+/*
+ IGDC Unified Commerce Script
+ --------------------------------------------------
+ 적용 대상:
+  - Distribution (이미 적용 가능)
+  - 나머지 4개 사이트 (Donation 제외, Media 제외)
+ 목적:
+  - 썸네일 클릭 자동 감지
+  - 상세 상품 자동 오픈 훅
+  - 구매하기 / 결제 / 장바구니 기존 버튼 그대로 사용
+  - 상세 하단에 리뷰 시스템 자동 장착 (쿠팡 방식)
+ --------------------------------------------------
+ 전제:
+  - 썸네일 카드 또는 상세 컨테이너에 data-product-id 존재
+  - IGTC.checkout(...) 기존 결제 로직 존재
+  - window.__IGDC_ROLE 존재
+ --------------------------------------------------
+ 삽입 위치:
+  - 각 페이지 </body> 바로 위
+*/
 
+(function (window, document) {
+  'use strict';
+
+  const IGDCCommerce = {
+    config: {
+      reviewApi: '/.netlify/functions/reviews',
+      reviewRootId: 'igdc-review-root',
+      minReviewChars: 10,
+      maxReviewChars: 2000
+    },
+
+    state: {
+      role: 'guest',
+      activeProductId: null
+    },
+
+    init() {
+      this.state.role = window.__IGDC_ROLE || 'guest';
+      this.bindThumbnailAutoHook();
+    },
+
+    /* 1️⃣ 썸네일 카드 클릭 자동 감지 */
+    bindThumbnailAutoHook() {
+      document.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-product-id]');
+        if (!card) return;
+
+        const productId = card.dataset.productId;
+        if (!productId) return;
+
+        // 기존 상세 상품 오픈 로직은 이미 각 페이지에 있음
+        // 여기서는 리뷰만 자동 부착
+        setTimeout(() => {
+          this.mountReview(productId);
+        }, 50);
+      });
+    },
+
+    /* 2️⃣ 리뷰 시스템 장착 */
+    mountReview(productId) {
+      if (this.state.activeProductId === productId) return;
+      this.state.activeProductId = productId;
+
+      let root = document.getElementById(this.config.reviewRootId);
+      if (!root) {
+        root = document.createElement('div');
+        root.id = this.config.reviewRootId;
+
+        const detailContainer =
+          document.querySelector('.product-detail') ||
+          document.querySelector('.product-modal') ||
+          document.querySelector('.detail-view') ||
+          document.body;
+
+        detailContainer.appendChild(root);
+      }
+
+      root.innerHTML = this.renderReviewShell();
+      this.bindReviewForm(root, productId);
+      this.loadReviews(productId);
+    },
+
+    /* 3️⃣ 리뷰 UI */
+    renderReviewShell() {
+      const canWrite = this.state.role !== 'guest';
+      return `
+        <section class="igdc-review">
+          <h3 class="igdc-review-title">상품 리뷰</h3>
+          <div id="igdc-review-list" class="igdc-review-list">로딩 중...</div>
+          ${canWrite ? this.renderReviewForm() : this.renderLoginHint()}
+        </section>
+      `;
+    },
+
+    renderReviewForm() {
+      return `
+        <form id="igdc-review-form" class="igdc-review-form">
+          <textarea
+            placeholder="상품 사용 경험을 공유해 주세요"
+            minlength="${this.config.minReviewChars}"
+            maxlength="${this.config.maxReviewChars}"
+            required></textarea>
+          <div class="igdc-review-actions">
+            <button type="submit">리뷰 등록</button>
+          </div>
+        </form>
+      `;
+    },
+
+    renderLoginHint() {
+      return `<div class="igdc-review-login-hint">
+        리뷰 작성은 로그인 후 가능합니다.
+      </div>`;
+    },
+
+    /* 4️⃣ 리뷰 이벤트 */
+    bindReviewForm(root, productId) {
+      const form = root.querySelector('#igdc-review-form');
+      if (!form) return;
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const textarea = form.querySelector('textarea');
+        const content = textarea.value.trim();
+
+        if (content.length < this.config.minReviewChars) {
+          alert(`리뷰는 최소 ${this.config.minReviewChars}자 이상 작성해 주세요.`);
+          return;
+        }
+
+        this.submitReview(productId, content)
+          .then(() => {
+            textarea.value = '';
+            this.loadReviews(productId);
+          })
+          .catch(() => alert('리뷰 등록 실패'));
+      });
+    },
+
+    /* 5️⃣ 리뷰 로딩 */
+    async loadReviews(productId) {
+      const list = document.getElementById('igdc-review-list');
+      if (!list) return;
+
+      list.textContent = '로딩 중...';
+
+      try {
+        const res = await fetch(
+          `${this.config.reviewApi}?productId=${encodeURIComponent(productId)}`
+        );
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          list.innerHTML = '<div class="igdc-review-empty">아직 리뷰가 없습니다.</div>';
+          return;
+        }
+
+        list.innerHTML = data.map(this.renderReviewItem).join('');
+      } catch {
+        list.textContent = '리뷰를 불러오지 못했습니다.';
+      }
+    },
+
+    async submitReview(productId, content) {
+      const res = await fetch(this.config.reviewApi, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, content })
+      });
+      if (!res.ok) throw new Error('submit failed');
+    },
+
+    renderReviewItem(item) {
+      const esc = (v) => String(v || '').replace(/[<>]/g, '');
+      return `
+        <div class="igdc-review-item">
+          <div class="igdc-review-meta">
+            <span>${esc(item.user || '익명')}</span>
+            <span>${esc(item.date || '')}</span>
+          </div>
+          <div class="igdc-review-content">${esc(item.content)}</div>
+        </div>
+      `;
+    }
+  };
+
+  /* 6️⃣ 기본 스타일 */
+  const style = document.createElement('style');
+  style.textContent = `
+    .igdc-review { margin-top:24px; border-top:1px solid #eee; padding-top:16px; }
+    .igdc-review-title { margin:0 0 12px; font-size:1.05rem; }
+    .igdc-review-list { display:flex; flex-direction:column; gap:10px; }
+    .igdc-review-item { border:1px solid #eee; border-radius:10px; padding:10px; background:#fafafa; }
+    .igdc-review-meta { font-size:.8rem; color:#666; display:flex; gap:8px; }
+    .igdc-review-content { margin-top:6px; line-height:1.5; }
+    .igdc-review-form textarea { width:100%; min-height:90px; padding:10px; border-radius:10px; border:1px solid #ddd; }
+    .igdc-review-actions { margin-top:8px; text-align:right; }
+    .igdc-review-actions button { padding:8px 14px; border-radius:10px; border:none; background:#2563eb; color:#fff; }
+    .igdc-review-empty, .igdc-review-login-hint { color:#666; }
+  `;
+  document.head.appendChild(style);
+
+  IGDCCommerce.init();
+  window.IGDCCommerce = IGDCCommerce;
+
+})(window, document);
+</script>
 <script id="rightpanel-dummy-engine-v2">
 (function(){
 
@@ -2029,7 +2272,7 @@ window.addEventListener("message",function(ev){
                color:#7a8da8;
                letter-spacing:.5px;
              ">
-            Inapakia...
+            Loading
           </div>
 
         </div>
@@ -2101,16 +2344,11 @@ window.addEventListener("message",function(ev){
 
 })();
 </script>
-
-<script defer src="/assets/js/placeholder-sweeper.js"></script>
-<script defer src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
-
-<script defer src="/assets/js/tour-automap.js"></script>
-
+<script defer="" src="/assets/js/placeholder-sweeper.js"></script>
+<script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+<script defer="" src="/assets/js/tour-automap.js"></script>
 <script src="/assets/js/maru-search.js"></script>
 <script src="/assets/js/maru-searchbank-sync.js"></script>
-
-
 <script id="igdc-tour-rightpanel-visible-count-sync-v2">
 (function(){
   'use strict';
@@ -2188,6 +2426,5 @@ window.addEventListener("message",function(ev){
   }
 })();
 </script>
-
 </body>
 </html>
