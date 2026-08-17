@@ -187,7 +187,13 @@
   </section>
 
   <section id="tablePanel" class="panel hidden">
-    <div class="modal-head"><div><h2 style="margin:0">10개 섹션 영상 후보</h2><div class="small">한 번에 한 섹션만 펼쳐지고, 펼친 섹션의 썸네일만 불러옵니다. 각 섹션의 선택 작업은 다른 섹션에 영향을 주지 않으며, 정원을 넘은 후보도 숨기지 않고 점검할 수 있습니다.</div></div><span id="candidateCapacityState" class="state"></span></div>
+    <div class="modal-head">
+      <div><h2 style="margin:0">10개 섹션 영상 후보</h2><div class="small">한 번에 한 섹션만 펼쳐지고, 펼친 섹션의 썸네일만 불러옵니다. 각 섹션의 선택 작업은 다른 섹션에 영향을 주지 않으며, 정원을 넘은 후보도 숨기지 않고 점검할 수 있습니다.</div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+        <button id="publishAllSectionsFrontBtn" type="button" class="publish">전체 10개 섹션 프론트 반영</button>
+        <span id="candidateCapacityState" class="state"></span>
+      </div>
+    </div>
     <div id="sectionAccordion" class="section-accordion"></div>
   </section>
 

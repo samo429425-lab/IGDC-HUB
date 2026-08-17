@@ -6,7 +6,7 @@ const os=require("os");
 const path=require("path");
 const Adapter=require("../../functions/lib/media-searchbank-release-adapter.v1");
 
-const VERSION="igdc-media-snapshot-release-build-plugin-v2.5.0-full-bank-sample-preserving";
+const VERSION="igdc-media-snapshot-release-build-plugin-v2.6.0-persistent-fast-media-stage";
 const DEFAULT_TABLE="media_snapshot_releases";
 
 function text(value){return value==null?"":String(value).trim();}
@@ -84,16 +84,21 @@ async function loadRelease(settings,expected){
   query.set("select","release_id,snapshot_hash,snapshot,status,created_at,created_by");
   if(expected.releaseId){
     query.set("release_id","eq."+expected.releaseId);
-    query.set("status","eq.stored");
-    query.set("limit","1");
+    query.set("status","in.(stored,applied)");
+    query.set("limit","2");
   }else{
-    query.set("status","eq.stored");
+    // A stored publication request has priority. If none is pending, the latest
+    // applied publication is re-applied to the build output so later GitHub
+    // deploys cannot silently revert the public SearchBank/Media snapshots.
+    query.set("status","in.(stored,applied)");
     query.set("order","created_at.desc");
     query.set("limit","25");
   }
   const body=await request(settings,"/rest/v1/"+encodeURIComponent(settings.table)+"?"+query.toString(),{method:"GET"});
-  const rows=Array.isArray(body)?body:[];
-  return rows.find(isPublicationRequest)||null;
+  const rows=(Array.isArray(body)?body:[]).filter(isPublicationRequest);
+  return rows.find((row)=>lower(row&&row.status)==="stored")
+    || rows.find((row)=>lower(row&&row.status)==="applied")
+    || null;
 }
 async function markApplied(settings,release,snapshot,hash){
   const query="release_id=eq."+encodeURIComponent(text(release.release_id));
@@ -218,7 +223,10 @@ module.exports={
       const requestHash=sha256(release.snapshot);
       if(requestHash!==text(release.snapshot_hash))throw new Error("media_snapshot_release_hash_mismatch");
       if(expected.releaseId&&expected.releaseId!==text(release.release_id))throw new Error("media_snapshot_release_id_mismatch");
-      if(expected.snapshotHash&&expected.snapshotHash!==requestHash)throw new Error("media_snapshot_hook_hash_mismatch");
+      // A repeated/delayed hook may point to the pre-engine stored hash while an
+      // already-applied row contains the final engine output hash. Enforce the
+      // incoming hash only for a still-pending stored request.
+      if(lower(release.status)==="stored"&&expected.snapshotHash&&expected.snapshotHash!==requestHash)throw new Error("media_snapshot_hook_hash_mismatch");
 
       const bankFiles=[
         path.join(publishRoot,"data","search-bank.snapshot.json"),
@@ -236,13 +244,14 @@ module.exports={
 
       const contract=Adapter.buildSearchBankDocument(currentBank.doc,release);
       const owned=Adapter.ownedItems(contract.bank,release.release_id);
-      const ownedIds=new Set(owned.map((item)=>text(item&&item.id)));
-      const stageBank=Object.assign({},contract.bank,{
-        // Approved real media must enter Snapshot Engine before the seed samples.
-        // The untouched Snapshot Engine protects real cards once inserted; the
-        // remaining seed cards then fill only the still-empty sample slots.
-        items:owned.concat((Array.isArray(contract.bank.items)?contract.bank.items:[]).filter((item)=>!ownedIds.has(text(item&&item.id))))
-      });
+      // Fast isolated media pass: the committed Media Snapshot already carries
+      // all replaceable sample slots. Snapshot Engine only needs the approved
+      // real media candidates here; feeding the entire multi-thousand-item bank
+      // made the old front publication pass unnecessarily slow and janky.
+      const stageBank={
+        meta:{source:"approved-media-release-searchbank-stage",mediaReleasePipeline:contract.bank.meta&&contract.bank.meta.mediaReleasePipeline},
+        items:owned
+      };
       const template=Adapter.buildEngineTemplate(currentMedia.doc);
       const engine=runSnapshotEngineIsolated(publishRoot,stageBank,template,release.release_id);
       const final=Adapter.decorateEngineSnapshot(engine.snapshot,release,engine.report,contract.hash);
@@ -253,7 +262,8 @@ module.exports={
         path.join(publishRoot,"data","media.snapshot.json"),
         path.join(publishRoot,"netlify","functions","data","media.snapshot.json")
       ].forEach((file)=>atomicWrite(file,final.snapshot));
-      await markApplied(settings,release,final.snapshot,final.hash);
+      const wasStored=lower(release.status)==="stored";
+      if(wasStored)await markApplied(settings,release,final.snapshot,final.hash);
 
       const report=Adapter.buildPipelineReport({
         release:Object.assign({},release,{snapshot:final.snapshot,snapshot_hash:final.hash}),
@@ -261,7 +271,7 @@ module.exports={
       });
       utils.status.show({
         title:"IGDC 미디어 공개 파이프라인",
-        summary:"SearchBank → Snapshot Engine → Media Snapshot 적용 완료",
+        summary:wasStored?"SearchBank → Snapshot Engine → Media Snapshot 신규 반영 완료":"기존 승인 프론트 매칭 재배포 유지 완료",
         text:"release "+text(release.release_id)+" · "+report.output.totalManagedSlots+"개 · "+final.hash.slice(0,16)
       });
       console.log("["+VERSION+"]",JSON.stringify(report));

@@ -18,12 +18,8 @@
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
   const MAIN_ROWS = 9;
   const MAIN_LIMIT = 100;
-  const MAIN_BATCH = 20;
   const RIGHT_LIMIT = 100;
-  const RIGHT_BATCH = 20;
   const RIGHT_SECTION_KEY = "rightPanel";
-  const mainRenderTokens = new WeakMap();
-  const rightRenderTokens = new WeakMap();
 
   function qs(sel, root) {
     return (root || document).querySelector(sel);
@@ -34,6 +30,7 @@
   function safeText(v) {
     return v == null ? "" : String(v);
   }
+
   function pickTitle(it) {
     return safeText(it && (it.title || it.name || it.text || it.label));
   }
@@ -65,63 +62,15 @@
     );
   }
 
-  function thumbCandidates(it) {
-    if (!it || typeof it !== "object") return [];
-
-    const card =
-      it.productCard && typeof it.productCard === "object"
-        ? it.productCard
-        : {};
-    const mapping =
-      it.productMapping && typeof it.productMapping === "object"
-        ? it.productMapping
-        : {};
-
-    const values = [
-      it.thumb,
-      it.image,
-      it.thumbnail,
-      it.imageUrl,
-      it.thumbnailUrl,
-      it.image_url,
-      it.thumbnail_url,
-      it.imageOriginalUrl,
-      it.image_original_url,
-      it.productImage,
-      it.product_image,
-      it.productImageUrl,
-      it.product_image_url,
-      card.thumb,
-      card.image,
-      card.thumbnail,
-      card.imageUrl,
-      card.thumbnailUrl,
-      card.image_url,
-      card.thumbnail_url,
-      mapping.thumb,
-      mapping.image,
-      mapping.thumbnail,
-      mapping.imageUrl,
-      mapping.thumbnailUrl,
-      mapping.image_url,
-      mapping.thumbnail_url,
-    ];
-
-    const seen = new Set();
-    return values
-      .map(function (value) {
-        return safeText(value).trim();
-      })
-      .filter(function (value) {
-        if (!value || seen.has(value)) return false;
-        seen.add(value);
-        return true;
-      });
-  }
-
   function pickThumb(it) {
-    const values = thumbCandidates(it);
-    return values.length ? values[0] : "";
+    return safeText(
+      it &&
+        (it.thumb ||
+          it.image ||
+          it.thumbnail ||
+          it.imageUrl ||
+          it.thumbnailUrl),
+    );
   }
 
   function pickDesc(it) {
@@ -375,7 +324,7 @@
       .slice(0, MAIN_LIMIT);
   }
 
-  async function loadCurrentSnapshot() {
+  async function loadSnapshot() {
     try {
       const current = await fetch(
         CURRENT_SNAPSHOT_URL + "?_=" + encodeURIComponent(Date.now()),
@@ -387,31 +336,30 @@
       if (current.ok) {
         const payload = await current.json();
         if (payload && payload.ok === true && payload.snapshot) {
-          return {
-            snapshot: payload.snapshot,
-            pipeline: {
-              source: "stored_release_current",
-              status: "front_readback_passed",
-              releaseId: payload.releaseId || null,
-              hash: payload.hash || null,
-              documentHash: payload.documentHash || null,
-              hashVerified: payload.hashVerified === true,
-              publicSlots: payload.publicSlots || null,
-              route: payload.route || null,
-              loadedAt: new Date().toISOString(),
-            },
+          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+            source: "stored_release_current",
+            status: "front_readback_passed",
+            releaseId: payload.releaseId || null,
+            hash: payload.hash || null,
+            documentHash: payload.documentHash || null,
+            hashVerified: payload.hashVerified === true,
+            publicSlots: payload.publicSlots || null,
+            route: payload.route || null,
+            loadedAt: new Date().toISOString(),
           };
+          return payload.snapshot;
         }
       }
     } catch (_e) {
-      /* 정적 스냅샷을 이미 별도로 요청 중이다. */
+      /* 기존 정적 스냅샷으로 안전하게 이어간다. */
     }
-    return null;
-  }
-
-  async function loadStaticSnapshot() {
     const res = await fetch(SNAPSHOT_URL, { cache: "no-store" });
     if (!res.ok) throw new Error("snapshot_load_failed:" + res.status);
+    window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+      source: "static_snapshot_fallback",
+      status: "stored_release_current_unavailable",
+      loadedAt: new Date().toISOString(),
+    };
     return res.json();
   }
 
@@ -479,21 +427,20 @@
 
     const raw = Array.isArray(items) ? items : [];
     const displayItems = raw.slice(0, MAIN_LIMIT);
-    while (displayItems.length < MAIN_LIMIT) displayItems.push(null);
 
-    // A new approved snapshot starts from one visible batch. Later cards are
-    // created only when the user reaches the end of this row.
-    let cards = getMainSlots(gridEl);
-    for (let i = MAIN_BATCH; i < cards.length; i++) {
-      if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
+    // 🔥 핵심: slot 강제 채움 (디스트리뷰션 방식)
+    while (displayItems.length < MAIN_LIMIT) {
+      displayItems.push(null);
     }
-    cards = getMainSlots(gridEl);
 
-    function ensureCards(required) {
-      cards = getMainSlots(gridEl);
-      if (cards.length >= required) return cards;
+    // 기존 카드 가져오기
+    let cards = getMainSlots(gridEl);
+
+    // 부족하면 카드 생성
+    if (cards.length < MAIN_LIMIT) {
       const frag = document.createDocumentFragment();
-      for (let i = cards.length; i < required; i++) {
+
+      for (let i = cards.length; i < MAIN_LIMIT; i++) {
         const a = document.createElement("a");
         a.className = "card";
         a.href = "#";
@@ -505,92 +452,39 @@
           <div class="desc"></div>
         </div>
       `;
+
         frag.appendChild(a);
       }
+
       gridEl.appendChild(frag);
-      return getMainSlots(gridEl);
-    }
 
-    const scrollHost = gridEl.closest(".row-scroller") || gridEl;
-    const job = { grid: gridEl, items: displayItems, offset: 0 };
-    mainRenderTokens.set(scrollHost, job);
-
-    function renderMore() {
-      if (mainRenderTokens.get(scrollHost) !== job) return;
-      const end = Math.min(job.offset + MAIN_BATCH, MAIN_LIMIT, job.items.length);
-      cards = ensureCards(end);
-      for (let i = job.offset; i < end; i++) {
-        const it = job.items[i] || null;
-        if (it) paintMainCard(cards[i], it);
-        else resetMainCardToDummy(cards[i]);
-      }
-      job.offset = end;
-    }
-
-    renderMore();
-    if (scrollHost.dataset.igdcSocialBatchBound === "1") return;
-    scrollHost.dataset.igdcSocialBatchBound = "1";
-    scrollHost.addEventListener("scroll", function () {
-      const current = mainRenderTokens.get(scrollHost);
-      if (!current || current.offset >= Math.min(MAIN_LIMIT, current.items.length)) return;
-      if (scrollHost.scrollLeft + scrollHost.clientWidth >= scrollHost.scrollWidth - 40) {
-        const activeGrid = current.grid;
-        const activeItems = current.items;
-        mountMainRowContinue(activeGrid, activeItems, current, scrollHost);
-      }
-    }, { passive: true });
-  }
-
-  function mountMainRowContinue(gridEl, displayItems, job, scrollHost) {
-    if (mainRenderTokens.get(scrollHost) !== job) return;
-    const end = Math.min(job.offset + MAIN_BATCH, MAIN_LIMIT, displayItems.length);
-    let cards = getMainSlots(gridEl);
-    if (cards.length < end) {
-      const frag = document.createDocumentFragment();
-      for (let i = cards.length; i < end; i++) {
-        const a = document.createElement("a");
-        a.className = "card";
-        a.href = "#";
-        a.innerHTML = '<div class="pic"></div><div class="meta"><div class="title"></div><div class="desc"></div></div>';
-        frag.appendChild(a);
-      }
-      gridEl.appendChild(frag);
+      // 다시 카드 목록 갱신
       cards = getMainSlots(gridEl);
     }
-    for (let i = job.offset; i < end; i++) {
-      const it = displayItems[i] || null;
-      if (it) paintMainCard(cards[i], it);
-      else resetMainCardToDummy(cards[i]);
-    }
-    job.offset = end;
-  }
 
-  function ensureRightCardCss() {
-    const id = "igdc-social-right-card-thumb-v1";
-    if (document.getElementById(id)) return;
-    const style = document.createElement("style");
-    style.id = id;
-    style.textContent = `
-[data-psom-key="rightPanel"] .ad-box.product-card{position:relative;line-height:normal!important;overflow:hidden!important;background:#fff!important;}
-[data-psom-key="rightPanel"] .ad-box.product-card > a{position:relative;display:flex!important;flex-direction:column!important;width:100%;height:100%;line-height:normal!important;overflow:hidden;border-radius:inherit;text-decoration:none!important;background:#fff!important;}
-[data-psom-key="rightPanel"] .ad-box.product-card > a > img.social-right-card-thumb{display:block;width:100%;height:auto!important;flex:1 1 auto!important;min-height:0!important;object-fit:contain;object-position:center;background:#fff;}
-[data-psom-key="rightPanel"] .ad-box.product-card > a > .social-right-card-title{position:static!important;flex:0 0 auto!important;box-sizing:border-box;min-height:42px;max-height:52px;padding:7px 9px;color:#222!important;font-weight:600;font-size:.88rem;line-height:1.3;text-align:left;background:#fff!important;text-shadow:none!important;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
-`;
-    document.head.appendChild(style);
+    // 데이터 렌더
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      const it = displayItems[i] || null;
+
+      if (it) paintMainCard(card, it);
+      else resetMainCardToDummy(card);
+    }
   }
 
   function getRightPanels() {
     return qsa('[data-psom-key="rightPanel"]');
   }
 
-  function getRightCards(panel, required) {
+  function getRightCards(panel) {
     if (!panel) return [];
 
     let cards = qsa(".ad-box", panel);
-    const wanted = Math.min(RIGHT_LIMIT, Math.max(0, required == null ? RIGHT_LIMIT : required));
-    if (cards.length < wanted) {
+
+    if (cards.length === 0) {
       const frag = document.createDocumentFragment();
-      for (let i = cards.length; i < wanted; i++) {
+
+      for (let i = 0; i < RIGHT_LIMIT; i++) {
         const box = document.createElement("div");
         box.className = "ad-box product-card";
         box.dataset.dummy = "1";
@@ -650,35 +544,7 @@
     a.href = url || "javascript:void(0)";
     a.target = url ? (isExternalUrl(url) ? "_blank" : "_self") : "_self";
     a.rel = "noopener";
-
-    // Right-panel cards used to be thumbnail cards. Rebuilding the anchor with
-    // textContent erased the existing <img> node and left title-only rows.
-    // Restore the thumbnail + caption contract without touching Social main.
-    ensureRightCardCss();
-    a.textContent = "";
-    const thumbs = thumbCandidates(it);
-    if (thumbs.length) {
-      const img = document.createElement("img");
-      img.className = "social-right-card-thumb";
-      img.alt = title;
-      img.loading = "lazy";
-      img.decoding = "async";
-      img.dataset.thumbIndex = "0";
-      img.addEventListener("error", function () {
-        const current = Number(img.dataset.thumbIndex || "0");
-        const next = current + 1;
-        if (next >= thumbs.length) return;
-        img.dataset.thumbIndex = String(next);
-        img.src = thumbs[next];
-      });
-      img.src = thumbs[0];
-      a.appendChild(img);
-    }
-    const cap = document.createElement("div");
-    cap.className = "social-right-card-title";
-    cap.textContent = title;
-    a.appendChild(cap);
-
+    a.textContent = title;
     a.dataset.productId = productId;
     a.dataset.productTitle = title;
     a.dataset.productLink = url;
@@ -794,23 +660,9 @@
     window.__SOCIAL_RIGHTPANEL_RENDER_OVERRIDE_READY__ = true;
 
     window.__IGDC_RIGHTPANEL_RENDER = function (items) {
-      const incoming = Array.isArray(items) ? items.slice(0, RIGHT_LIMIT) : [];
-      const hasRenderableImageItem = incoming.some(function (it) {
-        if (!it || isPlaceholderItem(it)) return false;
-        return !!(pickTitle(it).trim() && pickThumb(it).trim() && resolveItemUrl(it));
-      });
-
-      // A legacy/inline renderer can still call this hook with title-only rows.
-      // Once the verified scoped right-panel payload has arrived, never let a
-      // later title-only call erase those thumbnails.
-      if (hasRenderableImageItem || !lastRightPanelItems.length) {
-        lastRightPanelItems = incoming;
-      }
-
-      const renderItems = lastRightPanelItems.length ? lastRightPanelItems : incoming;
       const rightPanels = getRightPanels();
       rightPanels.forEach(function (panel) {
-        mountRightPanel(panel, renderItems);
+        mountRightPanel(panel, Array.isArray(items) ? items : []);
       });
     };
   }
@@ -828,7 +680,7 @@
       const url = resolveItemUrl(it);
       const thumb = pickThumb(it).trim();
 
-      return !!(title && thumb && url);
+      return !!(title || thumb || url);
     });
 
     const displayItems = usable.slice(0, RIGHT_LIMIT);
@@ -837,235 +689,93 @@
       displayItems.push(null);
     }
 
-    let cards = getRightCards(panel, RIGHT_BATCH);
-    for (let i = RIGHT_BATCH; i < cards.length; i++) {
-      if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
-    }
+    const cards = getRightCards(panel);
 
-    const scrollHost = panel.closest("#rpMobileScroller") || panel;
-    const job = { panel: panel, items: displayItems, offset: 0 };
-    rightRenderTokens.set(scrollHost, job);
+    for (let i = 0; i < cards.length; i++) {
+      const box = cards[i];
+      const it = displayItems[i];
 
-    function renderMore() {
-      if (rightRenderTokens.get(scrollHost) !== job) return;
-      const end = Math.min(job.offset + RIGHT_BATCH, RIGHT_LIMIT, job.items.length);
-      cards = getRightCards(panel, end);
-      for (let i = job.offset; i < end; i++) {
-        const it = job.items[i];
-        if (it) paintRightCard(cards[i], it);
-        else resetRightCardToDummy(cards[i]);
+      if (it) {
+        paintRightCard(box, it);
+      } else {
+        resetRightCardToDummy(box);
       }
-      job.offset = end;
     }
-
-    renderMore();
-    if (scrollHost.dataset.igdcSocialRightBatchBound === "1") return;
-    scrollHost.dataset.igdcSocialRightBatchBound = "1";
-    scrollHost.addEventListener("scroll", function () {
-      const current = rightRenderTokens.get(scrollHost);
-      if (!current || current.offset >= Math.min(RIGHT_LIMIT, current.items.length)) return;
-      const nearX = scrollHost.scrollWidth > scrollHost.clientWidth + 2 &&
-        scrollHost.scrollLeft + scrollHost.clientWidth >= scrollHost.scrollWidth - 40;
-      const nearY = scrollHost.scrollHeight > scrollHost.clientHeight + 2 &&
-        scrollHost.scrollTop + scrollHost.clientHeight >= scrollHost.scrollHeight - 40;
-      if (!nearX && !nearY) return;
-      const end = Math.min(current.offset + RIGHT_BATCH, RIGHT_LIMIT, current.items.length);
-      const activeCards = getRightCards(current.panel, end);
-      for (let i = current.offset; i < end; i++) {
-        const it = current.items[i];
-        if (it) paintRightCard(activeCards[i], it);
-        else resetRightCardToDummy(activeCards[i]);
-      }
-      current.offset = end;
-    }, { passive: true });
   }
 
-  let lastSnapshot = null;
-  let lastRightPanelSnapshot = null;
-  let lastRoute = routeFallback();
-  let lastRightPanelItems = [];
-  let runInFlight = null;
+  async function run() {
+    try {
+      const snap = await loadSnapshot();
+      const sections = getSections(snap);
+      const route = await loadCountryRoute();
+      if (!sections) return;
 
-  function renderSnapshot(snap, route, rightPanelSnapshot) {
-    const sections = getSections(snap);
-    if (!sections) return false;
-    // Social's 9 channel sections and the commercial right panel have different
-    // authorities. The latest stored Social release owns the 9 SNS rows.
-    // The Edge-routed static snapshot owns only the commercial right panel.
+      const grids = document.querySelectorAll("[data-psom-key]");
 
-    const grids = document.querySelectorAll("[data-psom-key]");
+      grids.forEach((grid) => {
+        const key = grid.getAttribute("data-psom-key");
+        if (!key) return;
 
-    grids.forEach((grid) => {
-      const key = grid.getAttribute("data-psom-key");
-      if (!key) return;
+        if (key === "rightPanel") return;
+        if (key === "social-maru") return;
 
-      if (key === "rightPanel") return;
-      if (key === "social-maru") return;
+        const raw = routedItems(snap, key, route) || sections[key];
 
-      const raw = routedItems(snap, key, route) || sections[key];
+        const items = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.items)
+            ? raw.items
+            : [];
 
-      const items = Array.isArray(raw)
-        ? raw
-        : Array.isArray(raw?.items)
-          ? raw.items
-          : [];
+        // 🔥 샘플 자동 주입 (데이터 없을 때)
+        const finalItems =
+          items.length > 0
+            ? items
+            : [
+                {
+                  title: key + " SAMPLE",
+                  url: "#",
+                  thumbnail: "",
+                },
+              ];
 
-      const finalItems =
-        items.length > 0
-          ? items
-          : [
-              {
-                title: key + " SAMPLE",
-                url: "#",
-                thumbnail: "",
-              },
-            ];
-
-      mountMainRow(grid, finalItems);
-    });
-
-    if (rightPanelSnapshot !== null) {
-      renderRightPanelSnapshot(rightPanelSnapshot || snap);
-    }
-
-    window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
-    window.__IGDC_SOCIAL_COUNTRY_ROUTE__ = {
-      countryCode: route.countryCode || null,
-      languages: route.languages || [],
-      source: route.source || "fallback",
-    };
-    return true;
-  }
-
-
-  function renderRightPanelSnapshot(snapshot) {
-    const sections = getSections(snapshot);
-    if (!sections) return false;
-
-    const raw = Array.isArray(sections.rightPanel)
-      ? sections.rightPanel
-      : Array.isArray(sections.rightPanel?.items)
-        ? sections.rightPanel.items
-        : [];
-
-    const nextItems = raw.length > 0 ? raw.slice(0, RIGHT_LIMIT) : [];
-    if (nextItems.length) lastRightPanelItems = nextItems;
-
-    const renderItems = lastRightPanelItems.length ? lastRightPanelItems : nextItems;
-    getRightPanels().forEach(function (panel) {
-      mountRightPanel(panel, renderItems);
-    });
-    return true;
-  }
-
-  function run() {
-    if (runInFlight) return runInFlight;
-
-    const staticPromise = loadStaticSnapshot();
-    const currentPromise = loadCurrentSnapshot();
-    const routePromise = loadCountryRoute();
-    let finalMainApplied = false;
-
-    // The scoped static request runs in parallel. It must never block the nine
-    // Social rows. When it arrives, update only the commercial right panel if
-    // the current Social release has already rendered.
-    staticPromise
-      .then(function (snap) {
-        lastRightPanelSnapshot = snap;
-        if (finalMainApplied) {
-          renderRightPanelSnapshot(snap);
-          if (window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__) {
-            window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__.rightPanelSource =
-              "country_scoped_static_snapshot";
-          }
-          return snap;
-        }
-
-        lastSnapshot = snap;
-        window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-          source: "static_snapshot_early",
-          status: "stored_release_current_pending",
-          rightPanelSource: "country_scoped_static_snapshot",
-          loadedAt: new Date().toISOString(),
-        };
-        renderSnapshot(snap, lastRoute, snap);
-        return snap;
-      })
-      .catch(function () {
-        return null;
+        mountMainRow(grid, finalItems);
       });
 
-    runInFlight = Promise.all([currentPromise, routePromise])
-      .then(function (results) {
-        const current = results[0];
-        lastRoute = results[1] || routeFallback();
+      const rightPanels = getRightPanels();
 
-        if (current && current.snapshot) {
-          finalMainApplied = true;
-          lastSnapshot = current.snapshot;
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = Object.assign(
-            {},
-            current.pipeline || {},
-            {
-              rightPanelSource: lastRightPanelSnapshot
-                ? "country_scoped_static_snapshot"
-                : "country_scoped_static_snapshot_pending",
-            },
-          );
+      if (rightPanels.length) {
+        const raw = Array.isArray(sections.rightPanel)
+          ? sections.rightPanel
+          : Array.isArray(sections.rightPanel?.items)
+            ? sections.rightPanel.items
+            : [];
 
-          // Do not wait for the scoped commercial snapshot. Render the Social
-          // rows immediately; the right panel is painted exactly once when the
-          // scoped snapshot arrives.
-          renderSnapshot(
-            lastSnapshot,
-            lastRoute,
-            lastRightPanelSnapshot || null,
-          );
-          return;
-        }
+        const finalItems = raw.length > 0 ? raw : [];
 
-        if (lastRightPanelSnapshot) {
-          finalMainApplied = true;
-          lastSnapshot = lastRightPanelSnapshot;
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-            source: "static_snapshot_fallback",
-            status: "stored_release_current_unavailable",
-            rightPanelSource: "country_scoped_static_snapshot",
-            loadedAt: new Date().toISOString(),
-          };
-          renderSnapshot(lastSnapshot, lastRoute, lastRightPanelSnapshot);
-        } else {
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-            source: "static_snapshot_pending",
-            status: "stored_release_current_unavailable",
-            rightPanelSource: "country_scoped_static_snapshot_pending",
-            loadedAt: new Date().toISOString(),
-          };
-        }
-      })
-      .catch(function (e) {
-        console.error("[social-automap-fixed] fail", e);
-      })
-      .finally(function () {
-        runInFlight = null;
-      });
+        rightPanels.forEach(function (panel) {
+          mountRightPanel(panel, finalItems);
+        });
+      }
 
-    return runInFlight;
+      window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
+      window.__IGDC_SOCIAL_COUNTRY_ROUTE__ = {
+        countryCode: route.countryCode || null,
+        languages: route.languages || [],
+        source: route.source || "fallback",
+      };
+    } catch (e) {
+      console.error("[social-automap-fixed] fail", e);
+    }
   }
 
   function boot() {
     installRightPanelClickRouter();
     installRightPanelRenderOverride();
-    window.__IGDC_SOCIAL_RIGHTPANEL_THUMBNAIL_RESTORE__ = "20260815-r5-nonblocking";
     run();
   }
   window.addEventListener("igdc:rightpanel:refresh", function () {
-    if (lastSnapshot)
-      renderSnapshot(
-        lastSnapshot,
-        lastRoute,
-        lastRightPanelSnapshot || null,
-      );
+    run();
   });
   boot();
 })();

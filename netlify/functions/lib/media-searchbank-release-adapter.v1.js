@@ -10,7 +10,7 @@
 const crypto=require("crypto");
 const SearchBankEngine=require("../search-bank-engine.js");
 
-const VERSION="media-searchbank-release-adapter-v1.4.0-full-bank-sample-preserving";
+const VERSION="media-searchbank-release-adapter-v1.3.0-serialized-json-hash";
 const OWNER="media-release-searchbank-adapter";
 const SLOT_OWNER="media-snapshot-publish";
 const MANUAL_SECTIONS=Object.freeze([
@@ -64,8 +64,8 @@ function desiredBySection(snapshot){
   return out;
 }
 
-function buildEngineTemplate(committedSnapshot){
-  const next=clone(committedSnapshot);
+function buildEngineTemplate(releaseSnapshot){
+  const next=clone(releaseSnapshot);
   next.sections=Object.assign({},plain(next.sections));
   MANUAL_SECTIONS.forEach((sectionKey)=>{
     const source=next.sections[sectionKey];
@@ -76,8 +76,7 @@ function buildEngineTemplate(committedSnapshot){
   });
   next.meta=Object.assign({},plain(next.meta),{
     generatedBy:"snapshot-engine-media-release-stage",
-    releasePipelineStage:"pre_snapshot_engine",
-    samplePreservation:"committed-media-snapshot+full-searchbank"
+    releasePipelineStage:"pre_snapshot_engine"
   });
   return next;
 }

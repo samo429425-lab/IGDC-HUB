@@ -1064,7 +1064,7 @@
     })[text(value)]||text(value)||'프론트 배포가 시작되지 않았습니다.';
   }
   function setFrontButtonsDisabled(disabled){
-    ['publishFrontBtn','stopFrontBtn','autoCurateBtn'].forEach(function(id){if($(id))$(id).disabled=disabled;});
+    ['publishFrontBtn','publishAllSectionsFrontBtn','stopFrontBtn','autoCurateBtn'].forEach(function(id){if($(id))$(id).disabled=disabled;});
     document.querySelectorAll('.sectionFrontBtn,.contentFrontToggleBtn').forEach(function(button){button.disabled=disabled;});
   }
   function frontActionLabel(action,sectionKey){
@@ -1434,6 +1434,7 @@
     $('collectAllBtn').onclick=collectAll;
     $('autoCurateBtn').onclick=autoCurateAll;
     $('publishFrontBtn').onclick=publishFront;
+    if($('publishAllSectionsFrontBtn'))$('publishAllSectionsFrontBtn').onclick=publishFront;
     $('stopFrontBtn').onclick=function(){publishFrontAction('stop_all','');};
     $('collectorStopBtn').onclick=function(){
       collectorStopRequested=true;this.disabled=true;$('collectorState').textContent='현재 묶음 후 일시정지';

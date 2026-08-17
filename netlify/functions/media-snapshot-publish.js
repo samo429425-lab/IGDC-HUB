@@ -12,7 +12,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
 const MediaReleaseAdapter = require("./lib/media-searchbank-release-adapter.v1");
 
-const VERSION = "media-snapshot-publish-v1.11.0-safe-base-100-slot";
+const VERSION = "media-snapshot-publish-v1.10.1-public-boundary-serialized-hash";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
 
@@ -69,20 +69,6 @@ function cleanBaseSnapshot(snapshot){
     next.sections[sectionKey]=objectSection;
   });
   return next;
-}
-function assertCommittedBaseSnapshot(snapshot){
-  const problems=[];
-  MANUAL_SECTIONS.forEach((sectionKey)=>{
-    const count=sectionSlots(snapshot&&snapshot.sections&&snapshot.sections[sectionKey]).length;
-    if(count!==100)problems.push(sectionKey+":"+count);
-  });
-  if(problems.length){
-    const error=new Error("현재 media.snapshot.json의 100슬롯 기준이 손상되어 프론트 반영을 중단했습니다: "+problems.join(", "));
-    error.statusCode=409;
-    error.code="media_base_snapshot_capacity_invalid";
-    error.problems=problems;
-    throw error;
-  }
 }
 function managedCounts(snapshot){
   const sections={};let total=0;
@@ -273,7 +259,6 @@ exports.handler = async function(event){
     const rows=scopedApprovedRows.filter(frontContentEnabled);
     const frontDisabledRows=scopedApprovedRows.filter((row)=>!frontContentEnabled(row));
     const base=baseSnapshot();
-    assertCommittedBaseSnapshot(base.doc);
     const cleanBase=cleanBaseSnapshot(base.doc);
     const previous=publishFront?await latestStoredRelease():null;
     let snapshot;
