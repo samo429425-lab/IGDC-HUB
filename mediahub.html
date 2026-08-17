@@ -1086,32 +1086,37 @@ body {
 
 <style id="mediahub-scroll-fix-2026-02">
 /* === MEDIA SCROLL BUTTON FINAL FIX === */
+.scroll-btn{ z-index:10000 !important; }
+.scroll-btn.left{ left:0px !important; }
+.scroll-btn.right{ right:0px !important; }
 
-.scroll-wrapper{
-  position:relative !important;
-  padding: 0 72px !important;
-  overflow: hidden !important;
+/* Desktop only: reserve space for the side arrow buttons. */
+@media (min-width:1025px){
+  .scroll-wrapper{
+    position:relative !important;
+    padding:0 72px !important;
+    overflow:hidden !important;
+  }
+  .scroll-content,
+  .thumb-line{
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:10px !important;
+    padding-right:5px !important;
+  }
 }
 
-.scroll-btn{
-  z-index:10000 !important;
-}
-
-.scroll-btn.left{
-  left:0px !important;
-}
-
-.scroll-btn.right{
-  right:0px !important;
-}
-
-/* content 영역은 버튼만큼 안쪽으로 */
-.scroll-content,
-.thumb-line{
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 10px !important;
-  padding-right: 5px !important;
+/* Mobile: never reserve desktop arrow-button space. */
+@media (max-width:1024px){
+  .scroll-wrapper,
+  .thumb-line,
+  .scroll-content{
+    box-sizing:border-box !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+  }
 }
 </style>
 <style id="mediahub-mobile-drag-fix">
@@ -4858,58 +4863,62 @@ window.addEventListener("message",function(ev){
 </script>
 
 
-<style id="igdc-mediahub-mobile-card-layout-final-20260818">
-/* Mobile media rows only. Desktop, AutoMap and data pipeline are untouched. */
+<style id="igdc-mediahub-mobile-card-layout-final-20260818-r2">
+/* Mobile media-card pin fix. */
 @media (max-width:1024px){
   .thumb-line[data-psom-key^="media-"],
+  .thumb-line[data-psom-key^="media-"].scroll-wrapper,
   .thumb-line[data-psom-key^="media-"] > .scroll-content{
     box-sizing:border-box !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
     gap:4px !important;
-    -webkit-overflow-scrolling:touch !important;
-    touch-action:pan-x pan-y !important;
   }
+
   .thumb-line[data-psom-key^="media-"] a.card.media-card{
+    box-sizing:border-box !important;
     margin-left:0 !important;
     margin-right:0 !important;
     scroll-snap-stop:normal !important;
   }
 }
 
-/* Portrait: one card fills the full visible media row from left to right. */
+/* Portrait: one card fills the complete visible row width. */
 @media (max-width:900px) and (orientation:portrait){
-  html,body{
+  html,
+  body,
+  .container,
+  .layout,
+  main,
+  .main,
+  .main-content,
+  .content,
+  .content-area{
+    box-sizing:border-box !important;
+    width:100% !important;
+    max-width:100% !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"],
+  .thumb-line[data-psom-key^="media-"].scroll-wrapper{
+    box-sizing:border-box !important;
     width:100% !important;
     max-width:100% !important;
     margin:0 !important;
-    padding-left:0 !important;
-    padding-right:0 !important;
-    overflow-x:hidden !important;
+    padding:0 !important;
+    overflow:hidden !important;
   }
-  main,.main,#main,.content,#content,.content-area,.main-content,.layout{
-    box-sizing:border-box !important;
-    width:100% !important;
-    max-width:100% !important;
-    margin-left:0 !important;
-    margin-right:0 !important;
-    padding-left:0 !important;
-    padding-right:0 !important;
-  }
-  .thumb-line[data-psom-key^="media-"]{
-    box-sizing:border-box !important;
-    width:100% !important;
-    max-width:100% !important;
-    margin-left:0 !important;
-    margin-right:0 !important;
-    padding-left:0 !important;
-    padding-right:0 !important;
-    gap:4px !important;
-    overflow-x:auto !important;
-    overflow-y:hidden !important;
-    scroll-snap-type:x mandatory !important;
-  }
+
   .thumb-line[data-psom-key^="media-"] > .scroll-content{
     box-sizing:border-box !important;
-    flex:1 0 100% !important;
+    display:flex !important;
+    flex-wrap:nowrap !important;
     width:100% !important;
     min-width:100% !important;
     max-width:100% !important;
@@ -4918,9 +4927,11 @@ window.addEventListener("message",function(ev){
     gap:4px !important;
     overflow-x:auto !important;
     overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    touch-action:pan-x pan-y !important;
     scroll-snap-type:x mandatory !important;
   }
-  .thumb-line[data-psom-key^="media-"] > a.card.media-card,
+
   .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card{
     box-sizing:border-box !important;
     width:100% !important;
@@ -4934,15 +4945,20 @@ window.addEventListener("message",function(ev){
     margin:0 !important;
     scroll-snap-align:start !important;
   }
-  .thumb-line[data-psom-key^="media-"] a.card.media-card > .thumb{
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card > .thumb{
     box-sizing:border-box !important;
     width:100% !important;
+    min-width:100% !important;
+    max-width:100% !important;
     height:auto !important;
     min-height:0 !important;
     max-height:none !important;
     aspect-ratio:16 / 9 !important;
+    margin:0 !important;
   }
-  .thumb-line[data-psom-key^="media-"] a.card.media-card > .thumb > img{
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card > .thumb > img{
     width:100% !important;
     height:100% !important;
     object-fit:cover !important;
@@ -4950,9 +4966,8 @@ window.addEventListener("message",function(ev){
   }
 }
 
-/* Landscape: compact gaps + unrestricted native momentum across several cards. */
+/* Landscape: keep compact gaps and native multi-card fling. */
 @media (max-width:1024px) and (orientation:landscape){
-  .thumb-line[data-psom-key^="media-"],
   .thumb-line[data-psom-key^="media-"] > .scroll-content{
     gap:4px !important;
     overflow-x:auto !important;
@@ -4963,7 +4978,8 @@ window.addEventListener("message",function(ev){
     scroll-behavior:auto !important;
     overscroll-behavior-x:contain !important;
   }
-  .thumb-line[data-psom-key^="media-"] a.card.media-card{
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card{
     margin-left:0 !important;
     margin-right:0 !important;
     scroll-snap-align:none !important;
