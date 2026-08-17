@@ -4929,7 +4929,11 @@ window.addEventListener("message",function(ev){
     overflow-y:hidden !important;
     -webkit-overflow-scrolling:touch !important;
     touch-action:pan-x pan-y !important;
-    scroll-snap-type:x mandatory !important;
+    /* Portrait keeps full-width cards, but native velocity must remain free.
+       proximity settles gentle swipes near a card without limiting hard flicks to one card. */
+    scroll-snap-type:x proximity !important;
+    scroll-behavior:auto !important;
+    overscroll-behavior-x:contain !important;
   }
 
   .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card{
@@ -4944,6 +4948,7 @@ window.addEventListener("message",function(ev){
     aspect-ratio:16 / 9 !important;
     margin:0 !important;
     scroll-snap-align:start !important;
+    scroll-snap-stop:normal !important;
   }
 
   .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card > .thumb{
