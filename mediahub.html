@@ -4452,6 +4452,10 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   function enableDrag(scroller){
     if(!scroller) return;
 
+    // Mobile/tablet: keep native inertial swipe.
+    // Manual scrollLeft dragging kills fling momentum on strong landscape swipes.
+    if(window.matchMedia && window.matchMedia('(pointer:coarse)').matches) return;
+
     let isDown = false;
     let isDraggingX = false;
     let startX = 0, startY = 0, startScrollLeft = 0;
@@ -4846,6 +4850,77 @@ window.addEventListener("message",function(ev){
   }
 })();
 </script>
+
+
+<style id="mediahub-mobile-orientation-scroll-final-20260817">
+/*
+  Pin-point mobile behavior fix
+  - Portrait: one thumbnail card fills the usable row width.
+  - Landscape: native inertial swipe; a strong flick may pass several cards.
+  - No change to Media Snapshot / AutoMap / desktop layout.
+*/
+@media (max-width:1024px) and (orientation:portrait){
+  .thumb-line[data-psom-key^="media-"],
+  .thumb-line[data-psom-key^="media-"] > .scroll-content{
+    width:100% !important;
+    max-width:100% !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    gap:0 !important;
+    scroll-snap-type:x mandatory !important;
+    touch-action:pan-x pan-y !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] .card,
+  .thumb-line[data-psom-key^="media-"] .media-card{
+    width:100% !important;
+    min-width:100% !important;
+    max-width:100% !important;
+    flex:0 0 100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    aspect-ratio:16 / 9 !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    scroll-snap-align:start !important;
+    scroll-snap-stop:normal !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] .thumb,
+  .thumb-line[data-psom-key^="media-"] .card img,
+  .thumb-line[data-psom-key^="media-"] .media-card img{
+    width:100% !important;
+    height:100% !important;
+    aspect-ratio:16 / 9 !important;
+    object-fit:cover !important;
+  }
+}
+
+@media (max-width:1024px) and (orientation:landscape){
+  .thumb-line[data-psom-key^="media-"],
+  .thumb-line[data-psom-key^="media-"] > .scroll-content{
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    touch-action:pan-x pan-y !important;
+    overscroll-behavior-x:contain !important;
+
+    /* Important: mandatory snapping arrests a strong flick after 1–2 cards.
+       Let native momentum determine distance, then settle naturally. */
+    scroll-snap-type:none !important;
+    scroll-behavior:auto !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] .card,
+  .thumb-line[data-psom-key^="media-"] .media-card{
+    scroll-snap-align:none !important;
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
 
 </body>
 </html>
