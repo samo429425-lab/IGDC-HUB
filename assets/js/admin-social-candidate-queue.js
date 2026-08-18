@@ -2758,6 +2758,13 @@
   function bind() {
     options();
     renderAiSectionSelector();
+
+    // Critical publication control is bound first.  The final front apply must
+    // remain usable even if a non-critical admin control later fails to bind.
+    if ($("publishAllBtn")) {
+      $("publishAllBtn").onclick = function () { return actualApply(""); };
+    }
+
     $("refreshBtn").onclick = refresh;
     $("diagnosticBtn").onclick = function () {
       runQueueDiagnostic("diagnostic", "소셜 종합 점검 JSON을 읽었습니다.");
@@ -2852,7 +2859,6 @@
     $("aiAutoBtn").onclick = function () {
       autoCurate("");
     };
-    $("publishAllBtn").onclick = function () { actualApply(""); };
     if ($("replacementViewAllBtn")) $("replacementViewAllBtn").onclick = function () { setWaitingView("all"); };
     if ($("replacementViewNewBtn")) $("replacementViewNewBtn").onclick = function () { setWaitingView("new"); };
     if ($("replacementViewPublicBtn")) $("replacementViewPublicBtn").onclick = function () { setWaitingView("public"); };

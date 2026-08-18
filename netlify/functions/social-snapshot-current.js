@@ -1,149 +1,172 @@
 "use strict";
 
 /**
- * Public read-only endpoint for the latest stored Social Hub release.
- * It exposes only the already-sanitized public snapshot document.
+ * Public read-only Social Hub snapshot endpoint.
+ *
+ * IMPORTANT PIPELINE CONTRACT
+ * ---------------------------
+ * The browser must read only the canonical Social snapshot produced by:
+ *   SearchBank Snapshot -> existing Snapshot Engine -> social.snapshot.json
+ *
+ * A stored Social release is only an approval/build input.  It is NOT a front
+ * snapshot and must never be returned directly to AutoMap.  Returning a stored
+ * release bypasses SearchBank/Snapshot Engine and can also replace reserved
+ * structural sections such as rightPanel with placeholders.
  */
-const SocialStore = require("./lib/social-candidate-store.v1");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-snapshot-current-v1.2.0-pipeline-readback";
+const VERSION = "social-snapshot-current-v1.3.0-canonical-readback";
 
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
-function releaseCountry(row) {
-  return text(
-    row &&
-      row.snapshot &&
-      row.snapshot.meta &&
-      row.snapshot.meta.applicationScope &&
-      row.snapshot.meta.applicationScope.countryCode,
-  ).toUpperCase();
+
+function response(statusCode, body, headers) {
+  return {
+    statusCode,
+    headers: Object.assign(
+      {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store, max-age=0",
+        "access-control-allow-origin": "*",
+      },
+      headers || {},
+    ),
+    body: JSON.stringify(body),
+  };
 }
-async function latestForToken(token) {
-  const rows = await SocialStore.selectReleases(
-    "select=release_id,status,snapshot_hash,snapshot,created_at,notes&status=eq.stored&notes=like." +
-      encodeURIComponent("scope=" + token + ";%") +
-      "&order=created_at.desc&limit=1",
-  );
-  return Array.isArray(rows) && rows[0];
+
+function clone(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
 }
-function publicSlotCounts(snapshot) {
+
+function loadCanonicalSnapshot() {
+  // Static require makes Netlify bundle the build-generated canonical mirror.
+  // The build script/Snapshot Engine updates this mirror before deployment.
+  try {
+    return clone(require("./data/social.snapshot.json"));
+  } catch (_e1) {
+    try {
+      return clone(require("./social.snapshot.json"));
+    } catch (_e2) {
+      return null;
+    }
+  }
+}
+
+function sectionItems(snapshot, key) {
   const sections =
     snapshot &&
     snapshot.pages &&
     snapshot.pages.social &&
     snapshot.pages.social.sections;
-  const counts = {};
-  let total = 0;
-  SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
-    const list = Array.isArray(sections && sections[sectionKey])
-      ? sections[sectionKey]
+  const raw = sections && sections[key];
+  return Array.isArray(raw)
+    ? raw
+    : raw && Array.isArray(raw.items)
+      ? raw.items
       : [];
-    counts[sectionKey] = list.filter((slot) => {
-      const audit = (slot && slot.audit) || {};
-      return (
-        SocialStore.text(slot && slot.type) === "external_social" &&
-        SocialStore.text(audit.origin) === "social_candidates"
-      );
-    }).length;
-    total += counts[sectionKey];
+}
+
+function isRealSocial(slot) {
+  if (!slot) return false;
+  const type = text(slot.type).toLowerCase();
+  const audit = slot.audit || {};
+  if (type === "external_social" && text(audit.origin) === "social_candidates")
+    return true;
+  if (slot.placeholder === true || slot.sample === true || slot.isSample === true)
+    return false;
+  return !!text(slot.contentId || slot.candidateId) && /^social-/.test(text(slot.section || slot.psom_key));
+}
+
+function publicSlotCounts(snapshot) {
+  const keys = [
+    "social-youtube",
+    "social-instagram",
+    "social-tiktok",
+    "social-facebook",
+    "social-wechat",
+    "social-weibo",
+    "social-pinterest",
+    "social-reddit",
+    "social-twitter",
+  ];
+  const bySection = {};
+  let total = 0;
+  keys.forEach((key) => {
+    const count = sectionItems(snapshot, key).filter(isRealSocial).length;
+    bySection[key] = count;
+    total += count;
   });
-  return { total, bySection: counts };
+  return { total, bySection };
+}
+
+function rightPanelSummary(snapshot) {
+  const rows = sectionItems(snapshot, "rightPanel");
+  const real = rows.filter((slot) => {
+    if (!slot) return false;
+    if (slot.placeholder === true || slot.sample === true || slot.isSample === true || text(slot.type).toLowerCase() === "placeholder")
+      return false;
+    return !!text(slot.title || slot.name || slot.productId || slot.id);
+  });
+  return { total: rows.length, real: real.length };
 }
 
 exports.handler = async function (event) {
-  if (event && event.httpMethod === "OPTIONS")
-    return SocialStore.response(204, {});
+  if (event && event.httpMethod === "OPTIONS") return response(204, {});
+  if (!event || event.httpMethod !== "GET")
+    return response(405, { ok: false, version: VERSION, error: "method_not_allowed" });
+
   try {
-    if (!event || event.httpMethod !== "GET")
-      return SocialStore.response(405, {
+    const route = CountryRouting.resolve(event, event.queryStringParameters || {});
+    const snapshot = loadCanonicalSnapshot();
+    if (!snapshot) {
+      return response(404, {
         ok: false,
         version: VERSION,
-        error: "method_not_allowed",
+        error: "canonical_social_snapshot_not_found",
       });
-    const route = CountryRouting.resolve(
-      event,
-      event.queryStringParameters || {},
-    );
-    const countryCode = text(route.countryCode).toUpperCase();
-    let exact = countryCode ? await latestForToken(countryCode) : null;
-    let global = exact ? null : await latestForToken("GLOBAL");
-    let release = exact || global;
-    if (!release) {
-      const rows = await SocialStore.selectReleases(
-        "select=release_id,status,snapshot_hash,snapshot,created_at,notes&status=eq.stored&order=created_at.desc&limit=25",
-      );
-      const list = Array.isArray(rows) ? rows : [];
-      exact = countryCode
-        ? list.find((row) => releaseCountry(row) === countryCode)
-        : null;
-      global = list.find((row) => !releaseCountry(row));
-      release = exact || global || null;
     }
-    if (!release || !release.snapshot) {
-      return SocialStore.response(
-        404,
-        {
-          ok: false,
-          version: VERSION,
-          error: "stored_social_release_not_found",
-        },
-        { "cache-control": "no-store, max-age=0" },
-      );
-    }
-    const documentHash = SocialStore.sha256(release.snapshot);
-    const publicSlots = publicSlotCounts(release.snapshot);
-    return SocialStore.response(
+
+    const publicSlots = publicSlotCounts(snapshot);
+    const rightPanel = rightPanelSummary(snapshot);
+
+    return response(
       200,
       {
         ok: true,
         version: VERSION,
-        releaseId: release.release_id,
-        hash: release.snapshot_hash,
-        documentHash,
-        hashVerified:
-          !!release.snapshot_hash && release.snapshot_hash === documentHash,
-        createdAt: release.created_at,
+        source: "canonical_social_snapshot",
         publicSlots,
+        rightPanel,
         route: {
-          countryCode: route.countryCode,
-          worldRegion: route.worldRegion,
-          matchedCountryApplication: !!exact,
-          usedGlobalFallback: !exact && !!global,
+          countryCode: route.countryCode || null,
+          worldRegion: route.worldRegion || null,
           rawIpStored: false,
         },
         pipeline: {
-          releaseLookup: "passed",
-          releaseScope:
-            exact && countryCode
-              ? "country_exact"
-              : global
-                ? "global_fallback"
-                : "legacy_fallback",
-          storedHashVerification:
-            release.snapshot_hash === documentHash ? "passed" : "failed",
-          frontPayloadReady: publicSlots.total > 0 ? "passed" : "empty",
+          frontReadSource: "data/social.snapshot.json",
+          requiredUpstream: [
+            "social_stored_release",
+            "search_bank_engine_contract",
+            "data/search-bank.snapshot.json",
+            "existing_snapshot_engine",
+            "data/social.snapshot.json",
+          ],
+          storedReleaseDirectRead: "disabled",
+          reservedRightPanelBypass: "disabled",
+          canonicalFrontPayload: publicSlots.total > 0 ? "real_social_present" : "sample_only",
         },
-        snapshot: release.snapshot,
+        snapshot,
       },
-      {
-        "cache-control": "no-store, max-age=0",
-        "access-control-allow-origin": "*",
-        vary: "x-country-code, x-nf-country, cf-ipcountry",
-      },
+      { vary: "x-country-code, x-nf-country, cf-ipcountry" },
     );
   } catch (error) {
-    return SocialStore.response(
-      error.statusCode || 500,
-      {
-        ok: false,
-        version: VERSION,
-        error: error.code || "social_snapshot_current_failed",
-        message: error.message || String(error),
-      },
-      { "cache-control": "no-store" },
-    );
+    return response(error.statusCode || 500, {
+      ok: false,
+      version: VERSION,
+      error: error.code || "social_snapshot_current_failed",
+      message: error.message || String(error),
+    });
   }
 };
