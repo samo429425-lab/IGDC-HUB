@@ -2055,11 +2055,26 @@ async function beginProductResearchJob(actorId, input) {
   }
 
   const rankingContext=await productRankingContext(scope);
-  const preservedProducts=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.products):[];
-  const preservedProductIdentities=Array.from(new Set(preservedProducts.map((row)=>ProductRanking.productIdentity(row)).filter(Boolean))).slice(0,PRODUCT_PORTFOLIO_LIMIT);
+  // The private product candidate ledger is the canonical baseline.  Do NOT
+  // copy the previous multi-hundred product-research payload into every new
+  // research job.  That made product_research_begin itself a large 502/504
+  // hotspot and, when it failed, the admin screen fell back to the already
+  // loaded candidate_ledger view so it looked as though no research ran.
+  //
+  // A new research cycle therefore starts lightweight: the existing candidate
+  // ledger stays untouched in gslot_candidates while this job contains only
+  // products discovered/inspected in the CURRENT supplier scan.  Staging
+  // upserts those rows back into the durable candidate ledger, where identical
+  // products are preserved, changed products are refreshed in place and truly
+  // new products are appended.
+  const previousCycleProductCount=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.products).length:0;
   const cycleResearchedKeys=forceSourceRefresh?[]:Array.from(priorResearchedKeys);
-  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:preservedProducts.length,preservedRawCount:0,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,rawProducts:[],inspectionPool:[],inspectCursor:0,productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],products:preservedProducts,preservedProductIdentities,stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"full_supplier_catalog_rescan_started":"supplier_delta_research_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,newSupplierSources:newSupplierSourceCount,priorCandidateProducts:preservedProducts.length,sourcePolicy:forceSourceRefresh?"keep_existing_candidate_list; restart_from_first_current_active_supplier_every_click; rescan_all_supplier_catalogs; refresh_same_product_in_place; deduplicate_by_supplier_product_id_or_canonical_url_or_exact_identity; append_only_new_products; candidate_count_not_fixed; administrator_approval_before_publication":"research_only_unresearched_supplier_delta; refresh_same_product_in_place; deduplicate_by_supplier_product_id_or_canonical_url_or_exact_identity; append_only_new_products; candidate_count_not_fixed; administrator_approval_before_publication"}],errors:[],lastError:null};
-  await saveProductJob(job,actorId);return publicProductJob(job);
+  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:0,preservedRawCount:0,candidateLedgerBaseline:true,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,rawProducts:[],inspectionPool:[],inspectCursor:0,productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],products:[],preservedProductIdentities:[],stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"candidate_ledger_preserved_supplier_rescan_started":"candidate_ledger_preserved_supplier_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,newSupplierSources:newSupplierSourceCount,previousResearchPayloadProducts:previousCycleProductCount,canonicalBaseline:"gslot_candidates_private_product_ledger",sourcePolicy:forceSourceRefresh?"preserve_candidate_ledger; lightweight_new_cycle; restart_from_first_current_active_supplier_every_click; rescan_existing_and_new_suppliers; upsert_changed_products_in_place; append_only_truly_new_products; no_publication":"preserve_candidate_ledger; research_only_unresearched_supplier_delta; upsert_changed_products_in_place; append_only_truly_new_products; no_publication"}],errors:[],lastError:null};
+  await saveProductJob(job,actorId);
+  // product_research_begin only needs to return progress metadata.  Returning
+  // the full historical product payload recreates the exact large-response
+  // failure this lightweight cycle is designed to remove.
+  return compactProductResearchStep(job);
 }
 
 function incrementalInspectionPool(job) {
@@ -2572,13 +2587,49 @@ function productCandidatePayload(actorId, scope, product, decision) {
     slotDecision: selected ? "slot_candidate" : "undecided", publicPublication: false, automaticImport: false, checkout: false, payment: false
   };
 }
-async function syncProductResearchPreview(actorId, scope, product) {
-  const readiness = ProductPipeline.researchReadiness(product); if (!readiness.queueEligible) return { status: "research_preview_skipped", candidateId: null, blockers: readiness.blockers };
-  const candidateId = productCandidateId(scope, product), existing = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
+async function syncProductResearchPreview(actorId, scope, productInput) {
+  const readiness = ProductPipeline.researchReadiness(productInput); if (!readiness.queueEligible) return { status: "research_preview_skipped", candidateId: null, blockers: readiness.blockers };
+  let product=productInput,candidateId=productCandidateId(scope, product);
+  let existing=array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload,official_url,thumbnail_url,title&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
+
+  // If the stable product identity changed only because a title/image changed,
+  // reuse the existing private-ledger row with the same canonical product URL.
+  // This keeps one product as one candidate while still allowing its current
+  // title/image/price/availability to be refreshed by a later research cycle.
+  if(!existing){
+    const currentUrl=productUrl(product);
+    if(currentUrl){
+      try{
+        const sameUrl=array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload,official_url,thumbnail_url,title&source_ref=eq." + encodeURIComponent(PRODUCT_SOURCE_REF) + "&official_url=eq." + encodeURIComponent(currentUrl) + "&limit=1"))[0];
+        if(sameUrl){existing=sameUrl;candidateId=text(sameUrl.id);product=Object.assign({},product,{candidateId});}
+      }catch(_sameUrlLookupError){}
+    }
+  }
+
   if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, currentStatus: text(existing.status) };
   const existingPayload = plain(existing && existing.source_payload), operatorDecision = lower(existingPayload.slotDecision), permanentExcluded = plain(existingPayload.queueControl).permanentExcluded === true;
-  if (existing && (permanentExcluded || ["slot_candidate","hold","reject","purge"].includes(operatorDecision) || !["approval_pending"].includes(lower(existing.status)))) return { status: "operator_state_preserved", candidateId, currentStatus: text(existing.status), decision: permanentExcluded ? "purge" : operatorDecision, approvedPlacement: plain(existingPayload.approvedPlacement) };
+  if(existing&&permanentExcluded)return { status: "operator_state_preserved", candidateId, currentStatus: text(existing.status), decision: "purge", approvedPlacement: plain(existingPayload.approvedPlacement) };
+
   const payload = productCandidatePayload(actorId, scope, product, "research_pending");
+
+  // A researched product may already have an administrator placement/hold or a
+  // later publication lifecycle state.  Refresh only its current product
+  // content and research assessments; never erase the operator decision,
+  // placement, queue control or publication lifecycle.
+  if(existing&&(["slot_candidate","hold","reject","purge"].includes(operatorDecision)||!["approval_pending"].includes(lower(existing.status)))){
+    const refreshedPayload=Object.assign({},existingPayload,{
+      title:payload.title,sourceTitle:payload.sourceTitle,url:payload.url,externalProductUrl:payload.externalProductUrl,image:payload.image,thumb:payload.thumb,
+      price:payload.price,priceCurrency:payload.priceCurrency,availability:payload.availability,productCard:payload.productCard,
+      marketKeys:payload.marketKeys,marketScope:payload.marketScope,countrySupply:payload.countrySupply,supplier:payload.supplier,
+      productRanking:payload.productRanking,supplierAssessment:payload.supplierAssessment,riskAssessment:payload.riskAssessment,
+      commercialAssessment:payload.commercialAssessment,valueAssessment:payload.valueAssessment,releaseReadiness:payload.releaseReadiness,
+      researchReadiness:payload.researchReadiness,connectionAdapter:payload.connectionAdapter,
+      commerceCandidate:Object.assign({},plain(existingPayload.commerceCandidate),plain(payload.commerceCandidate))
+    });
+    await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), {title:payload.title,official_url:payload.externalProductUrl,thumbnail_url:payload.image,source_payload:refreshedPayload,updated_at:iso()});
+    return { status: "operator_state_preserved_content_updated", candidateId, currentStatus: text(existing.status), decision: operatorDecision||null, approvedPlacement: plain(existingPayload.approvedPlacement) };
+  }
+
   const row = { id: candidateId, kind: "product", title: payload.title, official_url: payload.externalProductUrl, status: "approval_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: payload.image, description: "Private researched external-seller product card. Administrator selection, market evidence, revenue route and slot assignment remain pending.", owner_note: "Automatically placed in the private research queue only; no publication, checkout or payment.", source_payload: payload, updated_at: iso() };
   if (existing) { await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), row); return { status: "research_preview_updated", candidateId, decision: "undecided", approvedPlacement: null }; }
   row.created_at = iso(); row.created_by = text(actorId) || "product-research-orchestrator"; await SlotStore.insert("gslot_candidates", row, "return=representation"); return { status: "research_preview_created", candidateId, decision: "undecided", approvedPlacement: null };

@@ -237,6 +237,14 @@
       .section-toggle:hover {
         background: #18334f;
       }
+      .section-toggle-row { display:flex; align-items:stretch; background:#13283e; }
+      .section-toggle-row .section-toggle { flex:1; width:auto; }
+      .section-front-select {
+        display:flex; align-items:center; gap:7px; padding:0 14px;
+        border-right:1px solid #28405f; background:#0f2135; color:#cfe7ff;
+        font-size:12px; font-weight:700; white-space:nowrap; cursor:pointer;
+      }
+      .section-front-select input { width:16px; height:16px; accent-color:#45c7ff; }
       .section-toggle-main {
         display: flex;
         gap: 10px;
@@ -450,6 +458,8 @@
         <button id="refreshBtn">현재 상태 새로고침</button
         ><button id="systemAuditBtn" class="publish">소셜 네트워크 전체 시스템 점검</button
         ><button id="systemAuditDownloadBtn" class="secondary" disabled>전체 점검 JSON 다운로드</button
+        ><button id="socialFullRunBtn" class="publish" type="button">소셜 네트워크 전체 실행</button
+        ><button id="socialFullCancelBtn" class="danger" type="button">소셜 네트워크 전체 실행 취소</button
         ><button id="returnBtn" class="secondary">관리자 화면으로</button
         ><span id="state" class="state">연결 준비 중</span>
       </div>
@@ -559,9 +569,8 @@
           ><button id="searchBankImportBtn" class="secondary">
             SearchBank 실후보 반입</button
           ><span class="small"
-            >API 키가 없어도 공개 디렉터리에서 인플루언서를 찾고 YouTube 공개
-            RSS로 최신 영상을 8~10개씩 수집합니다. 설정된 Google·YouTube·Naver와
-            SearchBank 결과는 추가 탐색 경로로 함께 사용합니다.</span
+            ><strong>SearchBank 실후보 반입</strong>은 이미 SearchBank에서 발견된 공개 소셜 후보를 관리자 후보 목록으로 가져오는 자동 입력 경로입니다.
+            아래의 <strong>최신 콘텐츠 후보 반입</strong>은 관리자가 직접 공개 URL을 넣는 수동 입력 경로이므로 서로 역할이 다릅니다.</span
           >
         </div>
         <div id="providerStatus" class="progressbox hidden"></div>
@@ -574,9 +583,9 @@
       <section class="panel">
         <h2>공개 최신 콘텐츠 URL 직접 반입</h2>
         <div class="small">
-          검색 API가 없거나 제한된 플랫폼도 운영할 수 있는 보조 경로입니다.
-          위에서 국가와 여기의 섹션을 먼저 선택한 뒤 한 줄에 하나씩
-          붙여넣으세요. 형식:
+          <strong>최신 콘텐츠 후보 반입</strong>은 관리자가 직접 확인한 공개 SNS 콘텐츠 URL을 현재 SNS 후보 목록으로 넣는 수동 입력 경로입니다.
+          SearchBank 실후보 반입과는 별개이며, 검색 API가 없거나 제한된 플랫폼에서도 사용할 수 있습니다.
+          위에서 국가와 여기의 섹션을 먼저 선택한 뒤 한 줄에 하나씩 붙여넣으세요. 형식:
           <span class="mono">https://공개주소 | 채널명(선택) | 주제(선택)</span
           >. 영상·게시물 주소는 표시 후보로 유지하고, 확인 가능한 운영
           채널·프로필·커뮤니티 주소는 내부 식별자로 함께 보존합니다.
@@ -685,15 +694,20 @@
           <span id="waitingCapacityState" class="state"></span>
         </div>
         <div class="reviewbar">
-          <label class="small"><input id="selectAllWaitingMaster" type="checkbox" /> 전체 섹션 선택</label
+          <label class="small"><input id="selectAllWaitingMaster" type="checkbox" /> 현재 조회 콘텐츠 전체 선택</label
           ><button id="selectAllWaitingBtn" class="secondary">
-            현재 조회 전체 선택</button
+            현재 조회 콘텐츠 전체 선택</button
           ><button id="clearWaitingSelectionBtn" class="secondary">
-            선택 전체 해제</button
+            콘텐츠 선택 전체 해제</button
           ><button id="waitingPromoteBtn">선택 후보 등록</button
           ><button id="waitingDemoteBtn" class="secondary">선택 후보 등록 해제</button
-          ><button id="publishSelectedSectionsBtn" class="publish">선택 콘텐츠의 SNS 프론트 등록</button
+          ><button id="publishSelectedSectionsBtn" class="publish">선택 콘텐츠 SNS 프론트 등록</button
           ><button id="unpublishAllBtn" class="danger">선택 콘텐츠 프론트 등록 해제</button
+          ><span class="state" id="frontSectionSelectionState">프론트 섹션 선택 0/9</span
+          ><button id="selectAllFrontSectionsBtn" class="secondary" type="button">9개 프론트 섹션 전체 선택</button
+          ><button id="clearFrontSectionsBtn" class="secondary" type="button">프론트 섹션 선택 해제</button
+          ><button id="publishSelectedFrontSectionsBtn" class="publish" type="button">선택 섹션 프론트 등록</button
+          ><button id="unpublishSelectedFrontSectionsBtn" class="danger" type="button">선택 섹션 프론트 등록 해제</button
           ><button id="waitingDeleteBtn" class="danger">선택 리스트 삭제</button
           ><button id="waitingBlockBtn" class="danger">선택 영구 차단</button
           ><span style="flex:1"></span

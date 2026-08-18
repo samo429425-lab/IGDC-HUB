@@ -40,6 +40,7 @@
     selectedInfluencers = new Set(),
     selectedContents = new Set(),
     selectedHoldContents = new Set(),
+    selectedFrontSections = new Set(),
     publishedContentIds = new Set(),
     waitingViewMode = "all";
   var $ = function (id) {
@@ -776,7 +777,7 @@
       id +
       '"' +
       (checked ? " checked" : "") +
-      '" aria-label="' +
+      ' aria-label="' +
       esc(r.title || id) +
       ' 선택"><a class="candidate-thumb-button previewLink" href="' +
       esc(primaryUrl || "#") +
@@ -892,6 +893,24 @@
     selectQueue(queue, "", checked);
     updateMasterSelectionState();
   }
+  function selectedFrontSectionKeys() {
+    return order.filter(function (key) { return selectedFrontSections.has(key); });
+  }
+  function updateFrontSectionSelectionState() {
+    var keys = selectedFrontSectionKeys(), state = $("frontSectionSelectionState");
+    if (state) state.textContent = "프론트 섹션 선택 " + keys.length + "/" + order.length;
+    if ($("publishSelectedFrontSectionsBtn")) $("publishSelectedFrontSectionsBtn").disabled = keys.length === 0;
+    if ($("unpublishSelectedFrontSectionsBtn")) $("unpublishSelectedFrontSectionsBtn").disabled = keys.length === 0;
+  }
+  function setFrontSectionSelection(keys, checked) {
+    (keys || []).forEach(function (key) {
+      if (order.indexOf(key) < 0) return;
+      if (checked) selectedFrontSections.add(key);
+      else selectedFrontSections.delete(key);
+    });
+    renderSections();
+    updateFrontSectionSelectionState();
+  }
   function pruneSelections() {
     var ids = new Set(
       rows.map(function (row) {
@@ -962,7 +981,15 @@
           (isOpen ? "open" : "") +
           '" data-section="' +
           esc(key) +
-          '"><button class="section-toggle" type="button" ' +
+          '"><div class="section-toggle-row">' +
+          (queue === "waiting"
+            ? '<label class="section-front-select"><input class="frontSectionCheck" type="checkbox" data-front-section="' +
+              esc(key) +
+              '"' +
+              (selectedFrontSections.has(key) ? " checked" : "") +
+              '> 프론트 선택</label>'
+            : "") +
+          '<button class="section-toggle" type="button" ' +
           toggleAttribute +
           '="' +
           esc(key) +
@@ -971,7 +998,7 @@
           '</span><span class="section-count">' +
           part.length +
           (queue === "registry" ? "명" : "개") +
-          '</span></span><span class="section-chevron">⌄</span></button>' +
+          '</span></span><span class="section-chevron">⌄</span></button></div>' +
           (isOpen
             ? '<div class="section-body">' +
               (queue === "registry" ? finalActions(key) : queue === "hold" ? holdActions(key) : waitingActions(key)) +
@@ -1078,6 +1105,7 @@
     $("waitingPanel").classList.remove("hidden");
     if ($("holdPanel")) $("holdPanel").classList.remove("hidden");
     updateMasterSelectionState();
+    updateFrontSectionSelectionState();
   }
   function excludedRow(r, n) {
     var restore =
@@ -2040,7 +2068,7 @@
       var d = await post(ACTION, body);
       ids.forEach(function (id) {
         selectedInfluencers.delete(text(id));
-        selectedContents.delete(text(id));
+        if (action !== "promote_candidate") selectedContents.delete(text(id));
         selectedHoldContents.delete(text(id));
       });
       $("socialConfirm").checked = false;
@@ -2230,11 +2258,19 @@
     }
   }
   function candidateRegistered(row) {
+    if (!row || assetClass(row) !== "latest_content" || contentHold(row)) return false;
+    var thumbUrl = text(row.thumbnailUrl || (row.raw && row.raw.thumbnailUrl));
+    var hasRealThumb = /^https:\/\//i.test(thumbUrl) && !/placeholder|\/assets\/sample\//i.test(thumbUrl);
+    if (typeof row.promotable === "boolean") return row.promotable === true && hasRealThumb;
     return (
-      assetClass(row) === "latest_content" &&
-      !contentHold(row) &&
-      text(row && row.reviewStatus).toLowerCase() === "approved" &&
-      row.candidateOnly === false
+      text(row.reviewStatus).toLowerCase() === "approved" &&
+      /^(approved_for_snapshot|verified|approved)$/i.test(text(row.verificationStatus)) &&
+      row.candidateOnly === false &&
+      row.seedContent !== true &&
+      row.publicAccess === true &&
+      row.loginRequired !== true &&
+      /^https:\/\//i.test(text(row.sourceUrl || row.latestContentUrl)) &&
+      hasRealThumb
     );
   }
   function registeredContentIds(sectionKey) {
@@ -2294,6 +2330,38 @@
       return false;
 
     return actualApply("", true, registeredIds);
+  }
+
+  async function actualApplySelectedFrontSections() {
+    var keys = selectedFrontSectionKeys();
+    if (!keys.length) return show("프론트 등록할 SNS 섹션을 먼저 선택해 주세요.", "warn");
+    var ids = [];
+    keys.forEach(function (key) { ids = ids.concat(registeredContentIds(key)); });
+    ids = Array.from(new Set(ids));
+    if (!ids.length) return show("선택한 SNS 섹션에 SearchBank 인계 가능한 후보가 없습니다.", "warn");
+    if (!confirm(keys.map(label).join(", ") + " 섹션의 후보 " + ids.length + "개를 프론트 등록 대상으로 보낼까요?")) return false;
+    return actualApply("", true, ids);
+  }
+
+  async function actualUnapplySelectedFrontSections() {
+    var keys = selectedFrontSectionKeys();
+    if (!keys.length) return show("프론트 등록 해제할 SNS 섹션을 먼저 선택해 주세요.", "warn");
+    try {
+      var ids = [], d = await staticJson(STATIC_SOCIAL_SNAPSHOT),
+        sections = d && d.pages && d.pages.social && d.pages.social.sections || {};
+      keys.forEach(function (key) {
+        (Array.isArray(sections[key]) ? sections[key] : []).forEach(function (slot) {
+          var id = publishedCandidateId(slot);
+          if (id) ids.push(id);
+        });
+      });
+      ids = Array.from(new Set(ids));
+      if (!ids.length) return show(keys.map(label).join(", ") + "에 현재 실제 적용된 콘텐츠가 없습니다.", "warn");
+      return actualUnapplyIds(ids, "", keys.map(label).join(", ") + " 선택 섹션");
+    } catch (e) {
+      show(e.message || "선택 섹션의 현재 실제 적용 목록을 읽지 못했습니다.", "warn");
+      return false;
+    }
   }
 
   async function actualApplySection(sectionKey, skipConfirm) {
@@ -2882,6 +2950,15 @@
         run("permanent_block", sectionIds(container, key, "waitingCheck"));
     });
     container.addEventListener("change", function (event) {
+      if (event.target.matches(".frontSectionCheck")) {
+        var frontKey = text(event.target.dataset.frontSection);
+        if (order.indexOf(frontKey) >= 0) {
+          if (event.target.checked) selectedFrontSections.add(frontKey);
+          else selectedFrontSections.delete(frontKey);
+          updateFrontSectionSelectionState();
+        }
+        return;
+      }
       if (event.target.matches(".rowcheck")) {
         var target = event.target.matches(".finalCheck")
           ? selectedInfluencers
@@ -3028,6 +3105,13 @@
     if ($("publishSelectedSectionsBtn")) {
       $("publishSelectedSectionsBtn").onclick = actualApplySelectedSections;
     }
+    if ($("socialFullRunBtn")) $("socialFullRunBtn").onclick = function () { return actualApply(""); };
+    if ($("socialFullCancelBtn")) $("socialFullCancelBtn").onclick = function () { return actualUnapplyAll(""); };
+    if ($("selectAllFrontSectionsBtn")) $("selectAllFrontSectionsBtn").onclick = function () { setFrontSectionSelection(order, true); };
+    if ($("clearFrontSectionsBtn")) $("clearFrontSectionsBtn").onclick = function () { setFrontSectionSelection(order, false); };
+    if ($("publishSelectedFrontSectionsBtn")) $("publishSelectedFrontSectionsBtn").onclick = actualApplySelectedFrontSections;
+    if ($("unpublishSelectedFrontSectionsBtn")) $("unpublishSelectedFrontSectionsBtn").onclick = actualUnapplySelectedFrontSections;
+    updateFrontSectionSelectionState();
 
     $("refreshBtn").onclick = refresh;
     if ($("systemAuditBtn")) $("systemAuditBtn").onclick = runFullSystemDiagnostic;
