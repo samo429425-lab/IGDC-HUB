@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.0.0 - section-local controls + single final apply + content pool 120 */
+/* IGDC Social Hub Content Operations v3.1.0 - explicit candidate/front controls + full diagnostic */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -26,6 +26,7 @@
     }),
     rows = [],
     diagnosticCache = null,
+    systemAuditCache = null,
     openDetailQueue = "",
     openDetailSection = "",
     stopRequested = false,
@@ -925,32 +926,17 @@
   }
   function waitingActions(key) {
     return (
-      '<div class="section-actionbar"><span class="section-note small">최신 콘텐츠 후보는 섹션당 최대 120개(공개 100 + 예비 20)를 유지합니다.</span>' +
-      '<button class="secondary" type="button" data-waiting-select-all="' +
-      esc(key) +
-      '">섹션 전체 선택</button>' +
-      '<button class="secondary" type="button" data-waiting-clear-all="' +
-      esc(key) +
-      '">선택 해제</button>' +
-      '<button type="button" data-waiting-promote="' +
-      esc(key) +
-      '">선택 → 공개 후보로</button>' +
-      '<button class="publish" type="button" data-waiting-ai="' +
-      esc(key) +
-      '">이 SNS AI 자동 수집·교체</button>' +
-
-      '<button class="danger" type="button" data-waiting-unpublish-all="' +
-      esc(key) +
-      '">이 섹션 전체 적용 해제</button>' +
-      '<button class="danger" type="button" data-waiting-unpublish="' +
-      esc(key) +
-      '">선택 콘텐츠만 적용 취소</button>' +
-      '<button class="danger" type="button" data-waiting-delete="' +
-      esc(key) +
-      '">선택 교체후보 삭제</button>' +
-      '<button class="danger" type="button" data-waiting-block="' +
-      esc(key) +
-      '">선택 영구 차단</button></div>'
+      '<div class="section-actionbar"><span class="section-note small">후보 등록/해제와 프론트 등록/해제를 분리해서 관리합니다.</span>' +
+      '<button class="secondary" type="button" data-waiting-select-all="' + esc(key) + '">섹션 전체 선택</button>' +
+      '<button class="secondary" type="button" data-waiting-clear-all="' + esc(key) + '">선택 해제</button>' +
+      '<button type="button" data-waiting-promote="' + esc(key) + '">선택 후보 등록</button>' +
+      '<button class="secondary" type="button" data-waiting-demote="' + esc(key) + '">선택 후보 등록 해제</button>' +
+      '<button class="publish" type="button" data-waiting-publish="' + esc(key) + '">이 SNS 프론트 등록</button>' +
+      '<button class="danger" type="button" data-waiting-unpublish-all="' + esc(key) + '">이 SNS 프론트 등록 해제</button>' +
+      '<button class="danger" type="button" data-waiting-unpublish="' + esc(key) + '">선택 콘텐츠 프론트 해제</button>' +
+      '<button class="publish" type="button" data-waiting-ai="' + esc(key) + '">이 SNS AI 자동 수집·교체</button>' +
+      '<button class="danger" type="button" data-waiting-delete="' + esc(key) + '">선택 리스트 삭제</button>' +
+      '<button class="danger" type="button" data-waiting-block="' + esc(key) + '">선택 영구 차단</button></div>'
     );
   }
   function holdActions(key) {
@@ -1990,18 +1976,18 @@
         delete: "검색 제외",
         restore: "복원",
         forget: "기록 완전 삭제",
-        move_to_replacement: "교체 후보 대기열로 이동",
-        promote_candidate: "최종 후보로 올리기",
+        move_to_replacement: "후보 등록 해제",
+        promote_candidate: "후보 등록",
         delete_waiting: "리스트 기록 삭제",
       },
       name = names[action] || action;
     if (
-      (action === "approve" || action === "promote_candidate") &&
+      action === "approve" &&
       !(extra && extra.skipSafeCheck) &&
       !$("socialConfirm").checked
     ) {
       show(
-        "최종 후보로 올리기 전 공개성·안전성 확인 체크가 필요합니다.",
+        "인플루언서 승인 전 공개성·안전성 확인 체크가 필요합니다.",
         "warn",
       );
       return;
@@ -2243,6 +2229,25 @@
       return false;
     }
   }
+  function selectedContentSectionKeys() {
+    var ids = selectedContents;
+    return order.filter(function (key) {
+      return rows.some(function (row) {
+        return row.sectionKey === key && ids.has(text(row.id));
+      });
+    });
+  }
+  async function actualApplySelectedSections() {
+    var keys = selectedContentSectionKeys();
+    if (!keys.length) return show("프론트 등록할 콘텐츠 또는 SNS 섹션을 먼저 선택해 주세요.", "warn");
+    if (!confirm(keys.map(label).join(", ") + " 선택 SNS를 프론트에 등록할까요?")) return false;
+    for (var i = 0; i < keys.length; i++) {
+      var ok = await actualApply(keys[i], true);
+      if (!ok) return false;
+    }
+    show(keys.map(label).join(", ") + " 프론트 등록 요청을 완료했습니다.", "ok");
+    return true;
+  }
   async function actualApply(sectionKey, skipConfirm) {
     var target = sectionKey ? label(sectionKey) : "전체 9개 섹션",
       scope = currentScope(),
@@ -2254,7 +2259,7 @@
         "전 세계 공통";
     if (!skipConfirm && !confirm(
       scopeName + " 방문자에게 보일 " + target +
-      " 인플루언서들의 최종 최신 콘텐츠를 실제 프론트 슬롯에 적용할까요?"
+      " 등록 후보 콘텐츠를 실제 프론트 슬롯에 적용할까요?"
     )) return false;
     try {
       show(scopeName + " · " + target + " 실제 적용 요청을 전송하고 있습니다.", "warn");
@@ -2699,6 +2704,8 @@
         run("permanent_block", sectionIds(container, key, "finalCheck"));
       else if ((key = event.target.dataset.waitingPromote))
         run("promote_candidate", sectionIds(container, key, "waitingCheck"));
+      else if ((key = event.target.dataset.waitingDemote))
+        run("move_to_replacement", sectionIds(container, key, "waitingCheck"));
       else if ((key = event.target.dataset.waitingAi)) aiCycleSections([key], false);
       else if ((key = event.target.dataset.waitingPublish)) actualApply(key);
       else if ((key = event.target.dataset.waitingUnpublishAll))
@@ -2727,6 +2734,96 @@
       }
     });
   }
+  function summarizeCanonicalSnapshot(snapshot) {
+    var sections = snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections || {};
+    var main = {}, mainTotal = 0;
+    order.forEach(function (key) {
+      var list = Array.isArray(sections[key]) ? sections[key] : [];
+      var real = list.filter(function (slot) {
+        var audit = slot && slot.audit || {};
+        return text(slot && slot.type) === "external_social" && text(audit.origin) === "social_candidates";
+      }).length;
+      main[key] = { total: list.length, real: real };
+      mainTotal += real;
+    });
+    var right = Array.isArray(sections.rightPanel) ? sections.rightPanel : [];
+    var rightWithThumb = right.filter(function (item) {
+      return !!text(item && (item.thumb || item.thumbnail || item.image || item.img || item.imageUrl || item.thumbnailUrl));
+    }).length;
+    return {
+      mainSocial: { realTotal: mainTotal, bySection: main },
+      rightPanel: { total: right.length, withThumbnail: rightWithThumb },
+      socialMaruPresent: Array.isArray(sections["social-maru"]),
+    };
+  }
+  async function runFullSystemDiagnostic() {
+    try {
+      if ($("systemAuditBtn")) $("systemAuditBtn").disabled = true;
+      show("소셜 네트워크 전체 시스템을 점검하고 있습니다.", "warn");
+      await refresh();
+      var params = new URLSearchParams({
+        countryCode: selectedCountry(),
+        scopeMode: scopeMode(),
+        regionId: text($("collectorRegion").value),
+      });
+      var candidateReport = null, latestReport = null, pipelineReport = null, snapshot = null;
+      try { candidateReport = await getReport(REVIEW + "?action=diagnostic&" + params.toString()); } catch (e) { candidateReport = { ok:false, error:e.message || String(e) }; }
+      try { latestReport = await getReport(REVIEW + "?action=latest_content_diagnostic&" + params.toString()); } catch (e) { latestReport = { ok:false, error:e.message || String(e) }; }
+      try { pipelineReport = await getReport(PUBLISH + "?action=pipeline_diagnostic&" + params.toString()); } catch (e) { pipelineReport = { ok:false, error:e.message || String(e) }; }
+      try { snapshot = await staticJson(STATIC_SOCIAL_SNAPSHOT + "?_=" + Date.now()); } catch (e) { snapshot = null; }
+      var contentRows = rows.filter(function (r) { return assetClass(r) === "latest_content" && !excluded(r); });
+      var approvedRows = contentRows.filter(function (r) { return lower(r.reviewStatus) === "approved" && r.candidateOnly === false; });
+      var bySection = {};
+      order.forEach(function (key) {
+        var sectionRows = contentRows.filter(function (r) { return r.sectionKey === key; });
+        bySection[key] = {
+          candidates: sectionRows.length,
+          approvedCandidates: sectionRows.filter(function (r) { return lower(r.reviewStatus) === "approved" && r.candidateOnly === false; }).length,
+          held: sectionRows.filter(contentHold).length,
+          blocked: sectionRows.filter(blocked).length,
+        };
+      });
+      var canonical = summarizeCanonicalSnapshot(snapshot);
+      var result = {
+        ok: !!(candidateReport && candidateReport.ok !== false && pipelineReport && pipelineReport.ok === true),
+        reportType: "igdc-social-full-system-diagnostic",
+        generatedAt: new Date().toISOString(),
+        scope: currentScope(),
+        checks: {
+          candidateResearchAndRegistry: candidateReport,
+          latestContentQueue: latestReport,
+          candidateState: { total: contentRows.length, approved: approvedRows.length, bySection: bySection },
+          searchBankHandoff: pipelineReport,
+          canonicalFrontSnapshotReadOnly: canonical,
+          separation: {
+            managedMainSections: order.slice(),
+            rightPanelRole: "commerce_product_only",
+            socialMaruRole: "reserved_not_managed",
+          },
+        },
+      };
+      result.summary = {
+        candidateTotal: contentRows.length,
+        approvedCandidateTotal: approvedRows.length,
+        searchBankHandoff: pipelineReport && pipelineReport.pipeline ? pipelineReport.pipeline.searchBankSnapshotHandoff : "unknown",
+        canonicalMainRealTotal: canonical.mainSocial.realTotal,
+        rightPanelTotal: canonical.rightPanel.total,
+        rightPanelWithThumbnail: canonical.rightPanel.withThumbnail,
+      };
+      systemAuditCache = result;
+      diagnostic(result);
+      if ($("systemAuditDownloadBtn")) $("systemAuditDownloadBtn").disabled = false;
+      toggleDiagnosticPanel(true);
+      show(result.ok ? "전체 시스템 점검을 완료했습니다." : "전체 시스템 점검에서 확인할 항목이 발견됐습니다. JSON을 확인해 주세요.", result.ok ? "ok" : "warn");
+      return result;
+    } catch (e) {
+      show(e.message || "전체 시스템 점검을 완료하지 못했습니다.", "warn");
+      return null;
+    } finally {
+      if ($("systemAuditBtn")) $("systemAuditBtn").disabled = false;
+    }
+  }
+
   async function runQueueDiagnostic(action, successMessage, downloadName) {
     try {
       var q = new URLSearchParams({
@@ -2764,10 +2861,15 @@
     if ($("publishAllBtn")) {
       $("publishAllBtn").onclick = function () { return actualApply(""); };
     }
+    if ($("publishSelectedSectionsBtn")) {
+      $("publishSelectedSectionsBtn").onclick = actualApplySelectedSections;
+    }
 
     $("refreshBtn").onclick = refresh;
-    $("diagnosticBtn").onclick = function () {
-      runQueueDiagnostic("diagnostic", "소셜 종합 점검 JSON을 읽었습니다.");
+    if ($("systemAuditBtn")) $("systemAuditBtn").onclick = runFullSystemDiagnostic;
+    if ($("systemAuditDownloadBtn")) $("systemAuditDownloadBtn").onclick = function () {
+      if (!systemAuditCache) return show("먼저 전체 시스템 점검을 실행해 주세요.", "warn");
+      download("igdc-social-full-system-diagnostic-" + new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") + ".json", systemAuditCache);
     };
     if ($("registryDiagnosticBtn"))
       $("registryDiagnosticBtn").onclick = function () {
@@ -2881,6 +2983,9 @@
     };
     $("waitingPromoteBtn").onclick = function () {
       run("promote_candidate", selected(".waitingCheck"));
+    };
+    if ($("waitingDemoteBtn")) $("waitingDemoteBtn").onclick = function () {
+      run("move_to_replacement", selected(".waitingCheck"));
     };
     $("selectAllWaitingBtn").onclick = function () {
       toggleWholeQueue("content", true);

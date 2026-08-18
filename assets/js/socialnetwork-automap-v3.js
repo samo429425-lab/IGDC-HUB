@@ -544,7 +544,38 @@
     a.href = url || "javascript:void(0)";
     a.target = url ? (isExternalUrl(url) ? "_blank" : "_self") : "_self";
     a.rel = "noopener";
-    a.textContent = title;
+    a.textContent = "";
+    a.style.display = "flex";
+    a.style.flexDirection = "column";
+    a.style.height = "100%";
+    a.style.lineHeight = "normal";
+
+    const thumb = pickThumb(it).trim();
+    if (thumb) {
+      const img = document.createElement("img");
+      img.src = thumb;
+      img.alt = title;
+      img.loading = "lazy";
+      img.decoding = "async";
+      img.style.width = "100%";
+      img.style.height = "calc(100% - 44px)";
+      img.style.objectFit = "cover";
+      img.style.display = "block";
+      a.appendChild(img);
+    }
+    const caption = document.createElement("span");
+    caption.textContent = title;
+    caption.style.minHeight = "44px";
+    caption.style.height = "44px";
+    caption.style.padding = "6px 8px";
+    caption.style.boxSizing = "border-box";
+    caption.style.display = "flex";
+    caption.style.alignItems = "center";
+    caption.style.justifyContent = "center";
+    caption.style.overflow = "hidden";
+    caption.style.background = "#fff";
+    caption.style.color = "inherit";
+    a.appendChild(caption);
     a.dataset.productId = productId;
     a.dataset.productTitle = title;
     a.dataset.productLink = url;
@@ -586,6 +617,7 @@
     a.href = "javascript:void(0)";
     a.target = "_self";
     a.rel = "noopener";
+    a.removeAttribute("style");
     a.textContent = "RIGHT SAMPLE";
     a.dataset.productId = "";
     a.dataset.productTitle = "RIGHT SAMPLE";

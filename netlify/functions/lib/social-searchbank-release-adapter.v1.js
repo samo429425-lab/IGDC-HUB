@@ -22,7 +22,7 @@ const SocialStore = require("./social-candidate-store.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 const SearchBankEngine = require("../search-bank-engine");
 
-const VERSION = "social-searchbank-release-adapter-v1.3.0-searchbank-only-handoff";
+const VERSION = "social-searchbank-release-adapter-v1.3.0-searchbank-boundary-only";
 const RELEASE_FILE = "social-searchbank.release.snapshot.json";
 const REPORT_FILE = "social-pipeline.report.json";
 const SEARCH_BANK_FILE = "search-bank.snapshot.json";
@@ -514,6 +514,30 @@ async function latestStoredRelease() {
   );
   return Array.isArray(rows) ? rows[0] || null : null;
 }
+function finalSocialSummary(root, expectedIds) {
+  const file = outputPath(root, "social.snapshot.json");
+  const snapshot = readJson(file);
+  const sections = socialSections(snapshot);
+  const present = new Set();
+  const counts = {};
+  SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
+    const rows = Array.isArray(sections[sectionKey]) ? sections[sectionKey] : [];
+    counts[sectionKey] = rows.filter((row) => {
+      const id = text(row && (row.contentId || row.id));
+      if (id && expectedIds.has(id)) present.add(id);
+      return id && expectedIds.has(id);
+    }).length;
+  });
+  return {
+    file: "data/social.snapshot.json",
+    exists: !!snapshot,
+    hash: snapshot ? sha256(snapshot) : null,
+    expected: expectedIds.size,
+    present: present.size,
+    missingIds: Array.from(expectedIds).filter((id) => !present.has(id)),
+    counts,
+  };
+}
 async function publish(input) {
   const root = rootOf(input);
   const report = {
@@ -524,8 +548,7 @@ async function publish(input) {
       releaseRead: "not_started",
       policyAndPsomGate: "not_started",
       searchBankSnapshotHandoff: "not_started",
-      snapshotEngine: "not_started",
-      finalSocialSnapshotReadback: "not_started",
+      downstream: "owned_by_existing_pipeline",
     },
   };
   let release;
@@ -601,11 +624,9 @@ async function publish(input) {
     writes: handoff.writes,
   };
 
-  // SearchBank Snapshot is the terminal responsibility of this Social adapter.
-  // Existing downstream Snapshot Engine / social.snapshot / AutoMap are intentionally
-  // not called or read here.
-  report.pipeline.snapshotEngine = "existing_pipeline_not_touched";
-  report.pipeline.finalSocialSnapshotReadback = "existing_pipeline_not_touched";
+  // Handoff boundary: stop exactly at the ordinary SearchBank Snapshot.
+  // The existing build pipeline owns Snapshot Engine -> social.snapshot.json -> AutoMap.
+  report.pipeline.downstream = "existing_pipeline_next";
   report.status = "searchbank_handoff_complete";
   atomicWriteJson(outputPath(root, REPORT_FILE), report);
   return report;
