@@ -1973,8 +1973,15 @@ async function beginProductResearchJob(actorId, input) {
   // immediately even when it was added after that job was committed.
   let durableSupplierRows=[];
   try{durableSupplierRows=await listAutomationCandidates(scope.country,scope.region);}catch(_durableSupplierReadError){durableSupplierRows=[];}
-  const inactiveSupplierStates=new Set(["hold","held","blocked","suppressed","rejected","reject","disabled","excluded"]);
-  const currentDurableRows=array(durableSupplierRows).filter((row)=>!inactiveSupplierStates.has(lower(row&&row.status))&&!inactiveSupplierStates.has(lower(plain(row&&row.ai).operatorDecision)));
+  // The visible private supplier candidate list is a PRODUCT-RESEARCH source
+  // even when a deterministic supplier assessment stored the durable DB row as
+  // "hold" for missing release evidence.  "hold" here is not the same as an
+  // administrator removing the supplier from the private candidate list.
+  // Exclude only truly disabled/blocked/rejected durable rows, while preserving
+  // an explicit administrator operator hold as inactive.
+  const inactiveSupplierStatuses=new Set(["blocked","suppressed","rejected","reject","disabled","excluded"]);
+  const inactiveOperatorDecisions=new Set(["hold","held","blocked","suppressed","rejected","reject","disabled","excluded"]);
+  const currentDurableRows=array(durableSupplierRows).filter((row)=>!inactiveSupplierStatuses.has(lower(row&&row.status))&&!inactiveOperatorDecisions.has(lower(plain(row&&row.ai).operatorDecision)));
   const historicalRows=supplierJob&&["complete","committed"].includes(supplierJob.status)?array(supplierJob.candidates):[];
   const supplierRows=currentDurableRows.concat(historicalRows);
   if(!supplierRows.length){const error=new Error("책임 공급업체 비공개 후보 원장에 상품 리서치할 활성 공급업체가 없습니다.");error.statusCode=409;throw error;}
@@ -1991,10 +1998,17 @@ async function beginProductResearchJob(actorId, input) {
 
   const supplierLedgerSourceId=text(supplierJob&&supplierJob.jobId)||"durable_supplier_candidate_ledger";
   const priorResearchedKeys=researchedProductSupplierKeys(existing),supplierSourceFingerprint=productSupplierSourceFingerprint(allSupplierSources);
-  const forceSourceRefresh=raw.fullRescan===true||raw.refreshSources===true||raw.restart===true;
+  // product_research_begin is an explicit research command.  Except for the
+  // dedicated retryStaging branch handled above, EVERY begin call must start a
+  // fresh supplier-catalog cycle from supplier 1.  Do not depend on the admin
+  // screen's lastProductJson status: after the candidate-ledger view is loaded
+  // that UI status is "candidate_ledger", which previously caused restart=false
+  // and simply returned the old completed product job (for example the old 366
+  // rows) without touching the current supplier candidate list.
+  const forceSourceRefresh=raw.retryStaging!==true;
 
-  // Normal status/resume calls may continue an unfinished job. An explicit
-  // research restart is different: it MUST create a new cycle from supplier 1,
+  // Normal status/resume calls use product_research_status/product_research_step.
+  // An explicit product_research_begin always creates a new cycle from supplier 1,
   // regardless of whether the previous cycle is complete, inspecting, staging,
   // or already researched these suppliers in an earlier cycle.
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!forceSourceRefresh&&!["complete","cancelled","failed"].includes(existing.status)){

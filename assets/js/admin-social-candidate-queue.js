@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.1.0 - explicit candidate/front controls + full diagnostic */
+/* IGDC Social Hub Content Operations v3.2.0 - exact candidate-to-front handoff */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -2229,6 +2229,35 @@
       return false;
     }
   }
+  function candidateRegistered(row) {
+    return (
+      assetClass(row) === "latest_content" &&
+      !contentHold(row) &&
+      text(row && row.reviewStatus).toLowerCase() === "approved" &&
+      row.candidateOnly === false
+    );
+  }
+  function registeredContentIds(sectionKey) {
+    return rows
+      .filter(function (row) {
+        if (!candidateRegistered(row)) return false;
+        if (sectionKey && row.sectionKey !== sectionKey) return false;
+        return true;
+      })
+      .map(function (row) { return text(row && row.id); })
+      .filter(Boolean);
+  }
+  function selectedRegisteredContentIds(sectionKey) {
+    return Array.from(selectedContents).filter(function (id) {
+      return rows.some(function (row) {
+        return (
+          text(row && row.id) === id &&
+          candidateRegistered(row) &&
+          (!sectionKey || row.sectionKey === sectionKey)
+        );
+      });
+    });
+  }
   function selectedContentSectionKeys() {
     var ids = selectedContents;
     return order.filter(function (key) {
@@ -2238,17 +2267,68 @@
     });
   }
   async function actualApplySelectedSections() {
-    var keys = selectedContentSectionKeys();
-    if (!keys.length) return show("프론트 등록할 콘텐츠 또는 SNS 섹션을 먼저 선택해 주세요.", "warn");
-    if (!confirm(keys.map(label).join(", ") + " 선택 SNS를 프론트에 등록할까요?")) return false;
-    for (var i = 0; i < keys.length; i++) {
-      var ok = await actualApply(keys[i], true);
-      if (!ok) return false;
+    var selectedIds = Array.from(selectedContents);
+    if (!selectedIds.length)
+      return show("프론트 등록할 콘텐츠를 먼저 선택해 주세요.", "warn");
+
+    var registeredIds = selectedRegisteredContentIds("");
+    var unregisteredCount = selectedIds.length - registeredIds.length;
+    if (unregisteredCount > 0) {
+      return show(
+        "선택한 콘텐츠 중 " +
+          unregisteredCount +
+          "개가 아직 후보 등록 상태가 아닙니다. 먼저 '선택 후보 등록'을 실행한 뒤 프론트 등록을 해 주세요.",
+        "warn",
+      );
     }
-    show(keys.map(label).join(", ") + " 프론트 등록 요청을 완료했습니다.", "ok");
-    return true;
+
+    var keys = selectedContentSectionKeys();
+    if (
+      !confirm(
+        keys.map(label).join(", ") +
+          "에서 선택한 후보 " +
+          registeredIds.length +
+          "개를 프론트 등록 대상으로 보낼까요?",
+      )
+    )
+      return false;
+
+    return actualApply("", true, registeredIds);
   }
-  async function actualApply(sectionKey, skipConfirm) {
+
+  async function actualApplySection(sectionKey, skipConfirm) {
+    var selectedInSectionAll = Array.from(selectedContents).filter(function (id) {
+      return rows.some(function (row) {
+        return text(row && row.id) === id && row.sectionKey === sectionKey;
+      });
+    });
+    var selectedInSection = selectedRegisteredContentIds(sectionKey);
+    if (selectedInSectionAll.length) {
+      if (selectedInSection.length !== selectedInSectionAll.length) {
+        show(
+          label(sectionKey) +
+            "에서 선택한 콘텐츠 중 " +
+            (selectedInSectionAll.length - selectedInSection.length) +
+            "개가 아직 후보 등록 상태가 아닙니다. 먼저 '선택 후보 등록'을 실행해 주세요.",
+          "warn",
+        );
+        return false;
+      }
+      return actualApply(sectionKey, skipConfirm, selectedInSection);
+    }
+    var allRegistered = registeredContentIds(sectionKey);
+    if (!allRegistered.length) {
+      show(
+        label(sectionKey) +
+          "에 후보 등록이 완료된 콘텐츠가 없습니다. 먼저 콘텐츠를 선택해 '선택 후보 등록'을 실행해 주세요.",
+        "warn",
+      );
+      return false;
+    }
+    return actualApply(sectionKey, skipConfirm, null);
+  }
+
+  async function actualApply(sectionKey, skipConfirm, exactIds) {
     var target = sectionKey ? label(sectionKey) : "전체 9개 섹션",
       scope = currentScope(),
       scopeName =
@@ -2256,17 +2336,66 @@
           (scope.country.nameKo ||
             scope.country.nameEn ||
             scope.country.code)) ||
-        "전 세계 공통";
-    if (!skipConfirm && !confirm(
-      scopeName + " 방문자에게 보일 " + target +
-      " 등록 후보 콘텐츠를 실제 프론트 슬롯에 적용할까요?"
-    )) return false;
+        "전 세계 공통",
+      requestedIds = Array.isArray(exactIds)
+        ? Array.from(new Set(exactIds.map(text).filter(Boolean)))
+        : [];
+
+    if (requestedIds.length) {
+      var unresolved = requestedIds.filter(function (id) {
+        return !rows.some(function (row) {
+          return (
+            text(row && row.id) === id &&
+            candidateRegistered(row) &&
+            (!sectionKey || row.sectionKey === sectionKey)
+          );
+        });
+      });
+      if (unresolved.length) {
+        show(
+          "선택 콘텐츠 중 " +
+            unresolved.length +
+            "개가 후보 등록 상태가 아니어서 프론트 등록을 중단했습니다.",
+          "warn",
+        );
+        return false;
+      }
+    } else if (sectionKey && registeredContentIds(sectionKey).length < 1) {
+      show(
+        label(sectionKey) +
+          "에 후보 등록이 완료된 콘텐츠가 없어 프론트 등록할 수 없습니다.",
+        "warn",
+      );
+      return false;
+    } else if (!sectionKey && registeredContentIds("").length < 1) {
+      show(
+        "후보 등록이 완료된 최신 콘텐츠가 없습니다. 먼저 후보 등록을 해 주세요.",
+        "warn",
+      );
+      return false;
+    }
+
+    var applyLabel = requestedIds.length
+      ? target + " 선택 후보 " + requestedIds.length + "개"
+      : target + " 후보 등록 완료 콘텐츠";
+
+    if (
+      !skipConfirm &&
+      !confirm(
+        scopeName +
+          " 방문자에게 보일 " +
+          applyLabel +
+          "를 SearchBank 인계 대상으로 등록할까요?",
+      )
+    )
+      return false;
+
     try {
-      show(scopeName + " · " + target + " 실제 적용 요청을 전송하고 있습니다.", "warn");
-      if ($("frontApplyState")) $("frontApplyState").textContent = "실제 적용 요청 중";
-      // 서버 자체가 eligibleRows를 검증하므로 미리보기 GET을 선행하지 않는다.
-      // 이 버튼은 반드시 actual_front_apply POST를 직접 보내 저장/빌드 경로를 탄다.
-      var d = await post(PUBLISH, {
+      show(scopeName + " · " + applyLabel + " 실제 적용 요청을 전송하고 있습니다.", "warn");
+      if ($("frontApplyState"))
+        $("frontApplyState").textContent = "SearchBank 인계 요청 중";
+
+      var body = {
         operation: "actual_front_apply",
         storeRelease: true,
         confirmPublish: true,
@@ -2274,42 +2403,77 @@
         sectionKey: sectionKey || "",
         countryCode: scope.countryCode,
         scopeMode: scopeMode(),
-          regionId: text($("collectorRegion").value),
-      });
+        regionId: text($("collectorRegion").value),
+      };
+      if (requestedIds.length) body.candidateIds = requestedIds;
+
+      var d = await post(PUBLISH, body);
+
       if (!d.actualApplyRequested || !d.storeReleaseRequested) {
-        throw new Error("실제 적용 POST가 서버에서 actual_front_apply 저장 요청으로 인식되지 않았습니다.");
+        throw new Error(
+          "프론트 등록 POST가 서버에서 actual_front_apply 저장 요청으로 인식되지 않았습니다.",
+        );
       }
-      if (!d.releaseStored) throw new Error("실제 적용 요청은 처리됐지만 stored social release가 생성되지 않았습니다. SearchBank 인계 전 단계에서 중단되었습니다.");
+      if (requestedIds.length && d.exactCandidateSelectionApplied !== true) {
+        throw new Error(
+          "선택 콘텐츠 ID가 서버의 실제 적용 대상에 반영되지 않았습니다.",
+        );
+      }
+      if (
+        requestedIds.length &&
+        Number(d.resolvedCandidateRows || 0) !== requestedIds.length
+      ) {
+        throw new Error(
+          "선택 후보 " +
+            requestedIds.length +
+            "개 중 서버가 " +
+            Number(d.resolvedCandidateRows || 0) +
+            "개만 실제 적용 대상으로 확인했습니다.",
+        );
+      }
+      if (!d.releaseStored)
+        throw new Error(
+          "실제 적용 요청은 처리됐지만 stored social release가 생성되지 않았습니다. SearchBank 인계 전 단계에서 중단되었습니다.",
+        );
+
       download("igdc-social-actual-apply-result.json", d);
       diagnostic(d);
+
       var verifyQ = new URLSearchParams({
         action: "pipeline_diagnostic",
         countryCode: scope.countryCode,
         scopeMode: scopeMode(),
-        regionId: text($("collectorRegion").value)
+        regionId: text($("collectorRegion").value),
       });
       var verify = await getReport(PUBLISH + "?" + verifyQ.toString());
       diagnostic({ actualApply: d, searchBankHandoff: verify });
-      if ($("frontApplyState")) $("frontApplyState").textContent = d.releaseStored ? (d.buildTrigger && d.buildTrigger.ok ? "승인본 저장 · 배포 접수" : "승인본 저장 · 배포 대기") : "저장 실패";
+
+      if ($("frontApplyState"))
+        $("frontApplyState").textContent =
+          d.buildTrigger && d.buildTrigger.ok
+            ? "승인본 저장 · SearchBank 빌드 접수"
+            : "승인본 저장 · 빌드 대기";
+
       if (d.buildTrigger && d.buildTrigger.ok) {
         show(
           scopeName +
             " 범위의 " +
-            target +
-            " 승인본을 저장했고 정식 배포 빌드를 접수했습니다. 정책·PSOM 검증을 통과한 콘텐츠가 기존 SearchBank Snapshot에 들어가면 이후 Snapshot Engine→소셜 Snapshot→AutoMap 경로는 기존 구조대로 이어집니다.",
+            applyLabel +
+            " 승인본을 저장했고 SearchBank 반영 빌드를 접수했습니다. 소셜 작업은 SearchBank Snapshot JSON 도달까지만 담당하며 그 아래 렌더링 체인은 기존 시스템이 처리합니다.",
           "ok",
         );
       } else {
         show(
           scopeName +
-            " 범위의 승인본은 안전하게 저장됐지만 정식 배포는 아직 시작되지 않았습니다. Netlify 환경변수 SOCIAL_NETLIFY_BUILD_HOOK_URL을 설정한 뒤 다시 실제 적용을 실행해 주세요.",
+            " 범위의 승인본은 저장됐지만 SearchBank 반영 빌드가 시작되지 않았습니다. Build Hook 설정을 확인해 주세요.",
           "warn",
         );
       }
       return true;
     } catch (e) {
-      if ($("frontApplyState")) $("frontApplyState").textContent = "실제 적용 실패";
-      show(e.message || "실제 화면 적용을 완료하지 못했습니다.", "warn");
+      if ($("frontApplyState"))
+        $("frontApplyState").textContent = "SearchBank 인계 실패";
+      show(e.message || "프론트 등록을 완료하지 못했습니다.", "warn");
       return false;
     }
   }
@@ -2707,7 +2871,7 @@
       else if ((key = event.target.dataset.waitingDemote))
         run("move_to_replacement", sectionIds(container, key, "waitingCheck"));
       else if ((key = event.target.dataset.waitingAi)) aiCycleSections([key], false);
-      else if ((key = event.target.dataset.waitingPublish)) actualApply(key);
+      else if ((key = event.target.dataset.waitingPublish)) actualApplySection(key, false);
       else if ((key = event.target.dataset.waitingUnpublishAll))
         actualUnapplyAll(key);
       else if ((key = event.target.dataset.waitingUnpublish))

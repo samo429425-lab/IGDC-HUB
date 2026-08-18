@@ -15,7 +15,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.8.0-direct-actual-apply";
+  "social-snapshot-publish-v1.9.0-exact-candidate-apply";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -79,6 +79,50 @@ function scopeToken(route) {
   if (region) return "REGION:" + region;
   return "GLOBAL";
 }
+function fullStructuralBase(storedSnapshot) {
+  const seed = baseSnapshot();
+  const base = JSON.parse(JSON.stringify((seed && seed.doc) || {}));
+  const stored = storedSnapshot && typeof storedSnapshot === "object"
+    ? JSON.parse(JSON.stringify(storedSnapshot))
+    : null;
+  if (!stored) return { file: seed && seed.file || "static-social-snapshot", doc: base };
+
+  if (!base.pages) base.pages = {};
+  if (!base.pages.social) base.pages.social = {};
+  if (!base.pages.social.sections) base.pages.social.sections = {};
+
+  const storedSocial = stored.pages && stored.pages.social || {};
+  const storedSections = storedSocial.sections || {};
+
+  // Only the nine managed SNS sections may be inherited from a stored release.
+  // Reserved structural sections (social-maru, rightPanel) always stay exactly
+  // as deployed in the static Social snapshot so a partial release can never
+  // erase the right-side product cards or the MARU reserved section.
+  SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
+    if (Array.isArray(storedSections[sectionKey])) {
+      base.pages.social.sections[sectionKey] = JSON.parse(
+        JSON.stringify(storedSections[sectionKey]),
+      );
+    }
+  });
+
+  if (storedSocial.candidatePool && typeof storedSocial.candidatePool === "object") {
+    const currentPool = base.pages.social.candidatePool && typeof base.pages.social.candidatePool === "object"
+      ? base.pages.social.candidatePool
+      : {};
+    SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
+      if (Array.isArray(storedSocial.candidatePool[sectionKey])) {
+        currentPool[sectionKey] = JSON.parse(
+          JSON.stringify(storedSocial.candidatePool[sectionKey]),
+        );
+      }
+    });
+    base.pages.social.candidatePool = currentPool;
+  }
+
+  return { file: seed && seed.file || "static-social-snapshot", doc: base };
+}
+
 async function latestStoredBase(route) {
   try {
     const countryCode = text(route && route.countryCode).toUpperCase();
@@ -106,11 +150,13 @@ async function latestStoredBase(route) {
       const global = list.find((row) => !releaseCountry(row));
       latest = exact || ((countryCode || regionId) ? global : null);
     }
-    if (latest && latest.snapshot)
+    if (latest && latest.snapshot) {
+      const structural = fullStructuralBase(latest.snapshot);
       return {
-        file: "stored-current:" + latest.release_id,
-        doc: latest.snapshot,
+        file: "stored-current:" + latest.release_id + "+static-structural-base",
+        doc: structural.doc,
       };
+    }
   } catch (_error) {
     /* Static snapshot remains the safe fallback. */
   }
@@ -528,11 +574,17 @@ exports.handler = async function (event) {
       const allRows = await SocialStore.selectCandidates(
         approvedQuery(params.limit),
       );
-      rows = sectionKey
-        ? (Array.isArray(allRows) ? allRows : []).filter(
-            (row) => SocialStore.text(row && row.section_key) === sectionKey,
-          )
-        : allRows;
+      const approvedRows = Array.isArray(allRows) ? allRows : [];
+      const requestedIds = new Set(candidateIds);
+      rows = approvedRows.filter((row) => {
+        const rowId = SocialStore.text(row && row.id);
+        const rowSection = SocialStore.text(
+          row && (row.section_key || row.sectionKey),
+        );
+        if (requestedIds.size > 0 && !requestedIds.has(rowId)) return false;
+        if (sectionKey && rowSection !== sectionKey) return false;
+        return true;
+      });
       snapshot = SocialStore.buildSnapshot(
         base.doc,
         Array.isArray(rows) ? rows : [],
@@ -646,6 +698,12 @@ exports.handler = async function (event) {
           ? "actual_front_apply"
           : (operation || "preview"),
       requestedCandidateIds: candidateIds.length,
+      exactCandidateSelectionApplied:
+        !unpublishSelected && candidateIds.length > 0,
+      resolvedCandidateRows: Array.isArray(rows) ? rows.length : 0,
+      resolvedCandidateIds: Array.isArray(rows)
+        ? rows.map((row) => SocialStore.text(row && row.id)).filter(Boolean)
+        : [],
       removedSlots: unpublish ? unpublish.removedSlots : 0,
       removedBySection: unpublish ? unpublish.removedBySection : {},
       releaseStored: !!stored,

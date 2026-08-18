@@ -583,15 +583,9 @@ async function main() {
     if (!socialSearchBankHandoffRan) {
       const socialOnlyPublication = await publishSocialAfterCanonical();
       socialSearchBankHandoffRan = true;
-      // When Commerce had no publication work, the normal Snapshot Engine point
-      // was skipped.  If Social actually changed SearchBank, run the already-
-      // existing Snapshot Engine once so the normal downstream chain still runs.
-      if (socialOnlyPublication && String(socialOnlyPublication.status || "").toLowerCase() === "searchbank_handoff_complete") {
-        const socialOnlySnapshotReport = snapshots.run({ trigger: "netlify-build-social-searchbank-existing-pipeline" });
-        if (!socialOnlySnapshotReport || socialOnlySnapshotReport.ok !== true) {
-          throw new Error("Existing Snapshot Engine did not complete the Social-only SearchBank handoff.");
-        }
-      }
+      // Social stops at the ordinary SearchBank Snapshot boundary.
+      // Snapshot Engine -> social.snapshot.json -> AutoMap is the existing
+      // downstream pipeline and is intentionally not invoked or modified here.
     }
   }
 }
