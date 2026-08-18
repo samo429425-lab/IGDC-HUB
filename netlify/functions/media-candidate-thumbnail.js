@@ -9,10 +9,10 @@
 const MediaStore=require("./lib/media-candidate-store.v1");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="media-candidate-thumbnail-v1.0.0-provider-or-admin-frame";
+const VERSION="media-candidate-thumbnail-v1.1.0-fast-early-frame";
 const DEFAULT_BUCKET="media-candidate-thumbnails";
 const MAX_IMAGE_BYTES=1572864;
-const PROBE_TIMEOUT_MS=6500;
+const PROBE_TIMEOUT_MS=1800;
 
 function plain(value){return value&&typeof value==="object"&&!Array.isArray(value)?value:{};}
 function imageHeaders(){return{"accept":"image/*","user-agent":"IGDC-MARU-MediaThumbnail/1.0 (+https://igdc.info)"};}
@@ -207,15 +207,18 @@ exports.handler=async function(event){
     }
     const row=await loadRow(id);
     if(action==="resolve"){
-      const attempts=[];
-      for(const candidate of providerCandidates(row)){
+      const candidates=providerCandidates(row).slice(0,3);
+      // 공급사 썸네일 확인은 순차 대기하지 않고 동시에 짧게 검사한다.
+      const attempts=await Promise.all(candidates.map(async(candidate)=>{
         const probe=await probeImage(candidate.url);
-        attempts.push(Object.assign({mode:candidate.mode},probe));
-        if(probe.ok){
-          const url=probe.url||candidate.url;
-          await storeResolved(row,url,{version:VERSION,mode:"provider_thumbnail",providerMode:candidate.mode,probe},actor);
-          return MediaStore.response(200,{ok:true,version:VERSION,id,thumbUrl:url,captureRequired:false,attempts});
-        }
+        return Object.assign({mode:candidate.mode},probe);
+      }));
+      const firstOkIndex=attempts.findIndex((probe)=>probe&&probe.ok);
+      if(firstOkIndex>=0){
+        const candidate=candidates[firstOkIndex],probe=attempts[firstOkIndex];
+        const url=probe.url||candidate.url;
+        await storeResolved(row,url,{version:VERSION,mode:"provider_thumbnail",providerMode:candidate.mode,probe},actor);
+        return MediaStore.response(200,{ok:true,version:VERSION,id,thumbUrl:url,captureRequired:false,attempts});
       }
       const raw=plain(row.raw),source=plain(raw.sourceMetadata);
       const directVideo=MediaStore.normalizeUrl(row.video_url||raw.video_url)||

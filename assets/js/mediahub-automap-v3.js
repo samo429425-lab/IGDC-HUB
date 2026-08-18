@@ -18,6 +18,7 @@
   const D = document;
 
   const LIMIT = 50;
+  const SAMPLE_IMAGE = '/assets/images/media-sample-card.png';
 
   // Legacy feed-media fallback is disabled.
   // Keep the original snapshot -> automap -> front sample/real-content rendering process unchanged.
@@ -126,9 +127,14 @@
     a.href = 'javascript:void(0)';
     const thumb = D.createElement('div');
     thumb.className = 'thumb ph';
+    const img = D.createElement('img');
+    img.src = SAMPLE_IMAGE;
+    img.alt = 'Media Sample';
+    img.loading = 'lazy';
+    thumb.appendChild(img);
     const meta = D.createElement('div');
     meta.className = 'meta';
-    meta.textContent = 'Coming Soon';
+    meta.textContent = 'Sample';
     a.appendChild(thumb);
     a.appendChild(meta);
     return a;
@@ -241,6 +247,8 @@
       a.insertBefore(thumbBox, a.firstChild);
     }
 
+    // A real item must never expose the old gray .ph surface.
+    thumbBox.classList.remove('ph');
     let img = q('img', thumbBox);
     if(!img){
       img = D.createElement('img');
@@ -248,7 +256,12 @@
     }
     img.alt = title || '';
     img.loading = 'lazy';
-    if(thumb) img.src = thumb;
+    img.onerror = function(){
+      if(img.dataset.sampleFallback === '1') return;
+      img.dataset.sampleFallback = '1';
+      img.src = SAMPLE_IMAGE;
+    };
+    img.src = thumb || SAMPLE_IMAGE;
 
     let metaBox = q('.meta', a);
     if(!metaBox){
