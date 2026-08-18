@@ -1505,12 +1505,18 @@ async function beginResearchJob(actorId, input, event) {
   const persistentBlockedKeys=await persistentSupplierSuppressionKeys(scope),blockedSupplierKeys=Array.from(new Set(array(existing&&existing.blockedSupplierKeys).concat(persistentBlockedKeys).map(text).filter(Boolean)));
   const preservedCandidates=mergePreservedSupplierRows(array(existing&&existing.candidates),persistedSupplierRows).filter((row)=>supplierSurfaceDisposition(row,blockedSupplierKeys).state==="active"),preservedHolding=array(existing&&existing.supplierHoldingCandidates),preservedBlocked=array(existing&&existing.supplierBlockedCandidates),knownSupplierKeys=new Set();
   for(const row of array(persistedSupplierRows).concat(array(existing&&existing.candidates),preservedHolding,preservedBlocked)){const key=supplierResearchRootKey(row);if(key)knownSupplierKeys.add(key);}
-  const targetTotal=Math.max(1,Number(effective.maxCandidates||DEFAULT_MAX_CANDIDATES)),newCandidateTarget=Math.max(0,targetTotal-preservedCandidates.length);
+  // maxCandidates is the maximum NEW supplier candidates for THIS run.
+  // It is not a lifetime/cumulative ledger ceiling. Existing supplier rows are
+  // preserved and every new research run may append up to another 1..50 novel
+  // suppliers after URL/domain deduplication and operator suppression checks.
+  const perRunCandidateLimit=Math.max(1,Number(effective.maxCandidates||DEFAULT_MAX_CANDIDATES));
+  const newCandidateTarget=perRunCandidateLimit;
+  const targetTotal=preservedCandidates.length+perRunCandidateLimit;
 
   const selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},plan=augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope),now=iso(),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry);
   const novelSeeds=filterKnownSupplierItems(manualSeeds.concat(array(plan.seeds)),knownSupplierKeys);
   const initialStatus=newCandidateTarget<=0?"complete":(array(plan.tasks).length?"searching":"inspecting");
-  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,newCandidateTarget}),searchTasks:newCandidateTarget>0?array(plan.tasks):[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?array(plan.tasks).length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets)}};
+  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget}),searchTasks:newCandidateTarget>0?array(plan.tasks):[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?array(plan.tasks).length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets)}};
   if(newCandidateTarget>0&&!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,newCandidateTarget*4))}));job.status="inspecting";}
   await saveResearchJob(job,actorId);return publicResearchJob(job);
 }
@@ -1725,6 +1731,20 @@ function productProgress(job) {
     resumable: !["complete","cancelled"].includes(job.status)
   };
 }
+function productSupplierResearchCounts(job) {
+  const sources=array(job&&job.supplierSources),checkedCount=Math.max(0,Math.min(sources.length,Number(job&&job.discoveryCursor||0))),checked=sources.slice(0,checkedCount);
+  const explicitExisting=Number(job&&job.existingSupplierSourceCount);
+  const explicitNew=Number(job&&job.newSupplierSourceCount);
+  const grouped=sources.some((row)=>text(row&&row.researchCycleGroup));
+  const existingTotal=Number.isFinite(explicitExisting)?Math.max(0,explicitExisting):(grouped?sources.filter((row)=>text(row&&row.researchCycleGroup)==="existing").length:Number(job&&job.priorResearchedSupplierCount||0));
+  const newTotal=Number.isFinite(explicitNew)?Math.max(0,explicitNew):(grouped?sources.filter((row)=>text(row&&row.researchCycleGroup)==="new").length:Math.max(0,sources.length-existingTotal));
+  return {
+    existingTotal,
+    newTotal,
+    existingChecked:grouped?checked.filter((row)=>text(row&&row.researchCycleGroup)==="existing").length:Math.min(existingTotal,checkedCount),
+    newChecked:grouped?checked.filter((row)=>text(row&&row.researchCycleGroup)==="new").length:Math.max(0,checkedCount-Math.min(existingTotal,checkedCount))
+  };
+}
 function latestResearchProducts(job, rows) {
   if(!job)return[];
   const preserved=new Set(array(job.preservedProductIdentities).map(text).filter(Boolean));
@@ -1753,10 +1773,10 @@ function publicProductJob(job) {
     const provisionalPreview = specific && row && row.provisionalName === true;
     return ProductRanking.isReviewableProduct(row) || inspectedPreview || provisionalPreview;
   });
-  const latestProducts=latestResearchProducts(job,visibleProducts);
+  const latestProducts=latestResearchProducts(job,visibleProducts),supplierResearch=productSupplierResearchCounts(job);
   return {
     ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, rankingVersion: ProductRanking.VERSION, rankingPolicy: ProductRanking.POLICY, jobVersion: text(job.version), needsRefresh: text(job.version) !== VERSION, jobId: job.jobId, previousJobId:job.previousJobId||null, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
-    researchCycle:{mode:"repeatable_full_rescan",preserveExisting:true,restartFromFirstSupplierEveryRun:true,newProductsOnlyInspection:false,duplicatePolicy:"refresh_same_product_by_supplier_id_or_canonical_url_or_exact_identity; append_only_new_products",administratorDecisionPrecedence:true},
+    researchCycle:{mode:"repeatable_full_rescan",preserveExisting:true,restartFromFirstSupplierEveryRun:true,supplierGroups:"existing_and_new_separately_counted",newProductsOnlyInspection:false,duplicatePolicy:"refresh_same_product_by_supplier_id_or_canonical_url_or_exact_identity; append_only_new_products",administratorDecisionPrecedence:true},
     safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false, riskGateBeforeRevenueRanking: true, sponsorRequiresApprovedContract: true, sectionAssignmentsAreProposalsOnly: true, audienceAndRevenueValuePriority: true, noSectionQuotaFill: true, manualDecisionPrecedence: true, aiPrivatePlacementAutomation: true, affiliateSettlementTracking: true, payoutExecution: false },
     rankingContext: plain(job.rankingContext),
     progress: productProgress(job),
@@ -1764,8 +1784,11 @@ function publicProductJob(job) {
       suppliers: array(job.supplierSources).length,
       suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
       currentSupplierSources: Number(job.currentSupplierSourceCount||array(job.supplierSources).length),
-      newSupplierSources: Number(job.newSupplierSourceCount==null?array(job.supplierSources).length:job.newSupplierSourceCount),
-      previouslyResearchedSuppliers: Number(job.priorResearchedSupplierCount||0),
+      existingSupplierSources: supplierResearch.existingTotal,
+      existingSuppliersChecked: supplierResearch.existingChecked,
+      newSupplierSources: supplierResearch.newTotal,
+      newSuppliersChecked: supplierResearch.newChecked,
+      previouslyResearchedSuppliers: supplierResearch.existingTotal,
       supplierRetryPending: array(job.supplierRetryQueue).length,
       temporarilyDeferredSuppliers: array(job.temporarilyDeferredSupplierKeys).length,
       temporarilyDeferredProducts: array(job.temporarilyDeferredProductKeys).length,
@@ -1824,7 +1847,7 @@ function publicProductJob(job) {
 }
 
 function compactProductResearchStep(job) {
-  const products = array(job && job.products), stageSummary = plain(job && job.stageSummary);
+  const products = array(job && job.products), stageSummary = plain(job && job.stageSummary), supplierResearch=productSupplierResearchCounts(job);
   const decisions = { slotCandidates: 0, held: 0, rejected: 0, permanentExcluded: 0 };
   for (const row of products) {
     const decision = lower(row && row.slotDecision || "undecided");
@@ -1842,8 +1865,11 @@ function compactProductResearchStep(job) {
       suppliers: array(job.supplierSources).length,
       suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
       currentSupplierSources: Number(job.currentSupplierSourceCount||array(job.supplierSources).length),
-      newSupplierSources: Number(job.newSupplierSourceCount==null?array(job.supplierSources).length:job.newSupplierSourceCount),
-      previouslyResearchedSuppliers: Number(job.priorResearchedSupplierCount||0),
+      existingSupplierSources: supplierResearch.existingTotal,
+      existingSuppliersChecked: supplierResearch.existingChecked,
+      newSupplierSources: supplierResearch.newTotal,
+      newSuppliersChecked: supplierResearch.newChecked,
+      previouslyResearchedSuppliers: supplierResearch.existingTotal,
       supplierRetryPending: array(job.supplierRetryQueue).length,
       temporarilyDeferredSuppliers: array(job.temporarilyDeferredSupplierKeys).length,
       temporarilyDeferredProducts: array(job.temporarilyDeferredProductKeys).length,
@@ -1998,6 +2024,14 @@ async function beginProductResearchJob(actorId, input) {
 
   const supplierLedgerSourceId=text(supplierJob&&supplierJob.jobId)||"durable_supplier_candidate_ledger";
   const priorResearchedKeys=researchedProductSupplierKeys(existing),supplierSourceFingerprint=productSupplierSourceFingerprint(allSupplierSources);
+  // Keep "already researched supplier" and "new supplier" as separate research
+  // groups, but NEVER use that distinction to skip a supplier.  Every explicit
+  // research run rescans both groups from their official sites.  The grouping
+  // exists only for accurate progress/reporting and to make newly-added supplier
+  // research visible to the administrator.
+  const classifiedSupplierSources=allSupplierSources.map((source)=>Object.assign({},source,{researchCycleGroup:priorResearchedKeys.has(productSupplierSourceKey(source))?"existing":"new"}));
+  const existingSupplierSourceCount=classifiedSupplierSources.filter((source)=>source.researchCycleGroup==="existing").length;
+  const newSupplierSourceCount=classifiedSupplierSources.filter((source)=>source.researchCycleGroup==="new").length;
   // product_research_begin is an explicit research command.  Except for the
   // dedicated retryStaging branch handled above, EVERY begin call must start a
   // fresh supplier-catalog cycle from supplier 1.  Do not depend on the admin
@@ -2014,9 +2048,9 @@ async function beginProductResearchJob(actorId, input) {
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!forceSourceRefresh&&!["complete","cancelled","failed"].includes(existing.status)){
     return publicProductJob(existing);
   }
-  const supplierSources=forceSourceRefresh?allSupplierSources:allSupplierSources.filter((source)=>!priorResearchedKeys.has(productSupplierSourceKey(source)));
+  const supplierSources=forceSourceRefresh?classifiedSupplierSources:classifiedSupplierSources.filter((source)=>source.researchCycleGroup==="new");
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!forceSourceRefresh&&existing.status==="complete"&&!supplierSources.length){
-    const view=Object.assign({},existing,{version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchJobId:supplierLedgerSourceId,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:0,priorResearchedSupplierCount:priorResearchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(priorResearchedKeys)});
+    const view=Object.assign({},existing,{version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchJobId:supplierLedgerSourceId,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:Array.from(priorResearchedKeys)});
     return publicProductJob(view);
   }
 
@@ -2024,7 +2058,7 @@ async function beginProductResearchJob(actorId, input) {
   const preservedProducts=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.products):[];
   const preservedProductIdentities=Array.from(new Set(preservedProducts.map((row)=>ProductRanking.productIdentity(row)).filter(Boolean))).slice(0,PRODUCT_PORTFOLIO_LIMIT);
   const cycleResearchedKeys=forceSourceRefresh?[]:Array.from(priorResearchedKeys);
-  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:preservedProducts.length,preservedRawCount:0,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:supplierSources.length,priorResearchedSupplierCount:forceSourceRefresh?0:priorResearchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,rawProducts:[],inspectionPool:[],inspectCursor:0,productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],products:preservedProducts,preservedProductIdentities,stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"full_supplier_catalog_rescan_started":"supplier_delta_research_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:priorResearchedKeys.size,priorCandidateProducts:preservedProducts.length,sourcePolicy:forceSourceRefresh?"keep_existing_candidate_list; restart_from_first_current_active_supplier_every_click; rescan_all_supplier_catalogs; refresh_same_product_in_place; deduplicate_by_supplier_product_id_or_canonical_url_or_exact_identity; append_only_new_products; candidate_count_not_fixed; administrator_approval_before_publication":"research_only_unresearched_supplier_delta; refresh_same_product_in_place; deduplicate_by_supplier_product_id_or_canonical_url_or_exact_identity; append_only_new_products; candidate_count_not_fixed; administrator_approval_before_publication"}],errors:[],lastError:null};
+  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:preservedProducts.length,preservedRawCount:0,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,rawProducts:[],inspectionPool:[],inspectCursor:0,productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],products:preservedProducts,preservedProductIdentities,stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"full_supplier_catalog_rescan_started":"supplier_delta_research_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,newSupplierSources:newSupplierSourceCount,priorCandidateProducts:preservedProducts.length,sourcePolicy:forceSourceRefresh?"keep_existing_candidate_list; restart_from_first_current_active_supplier_every_click; rescan_all_supplier_catalogs; refresh_same_product_in_place; deduplicate_by_supplier_product_id_or_canonical_url_or_exact_identity; append_only_new_products; candidate_count_not_fixed; administrator_approval_before_publication":"research_only_unresearched_supplier_delta; refresh_same_product_in_place; deduplicate_by_supplier_product_id_or_canonical_url_or_exact_identity; append_only_new_products; candidate_count_not_fixed; administrator_approval_before_publication"}],errors:[],lastError:null};
   await saveProductJob(job,actorId);return publicProductJob(job);
 }
 
