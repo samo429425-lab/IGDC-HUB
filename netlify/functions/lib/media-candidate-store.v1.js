@@ -10,7 +10,8 @@
 const crypto = require("crypto");
 const MediaPolicy = require("./media-candidate-policy.v2");
 
-const VERSION = "media-candidate-store-v1.4.0-preserve-samples-slot-replace";
+const VERSION = "media-candidate-store-v1.4.1-thumb-optional-slot-safe";
+const MEDIA_SAMPLE_THUMB = "https://igdcglobal.com/assets/images/media-sample-card.png";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE = process.env.MEDIA_CANDIDATE_TABLE || "media_candidates";
 const RELEASE_TABLE = process.env.MEDIA_SNAPSHOT_RELEASE_TABLE || "media_snapshot_releases";
@@ -211,8 +212,7 @@ function validateCandidate(row){
 }
 function snapshotEligible(row){
   const urls=[row.source_url,row.video_url,row.embed_url].map(normalizeUrl).filter(Boolean);
-  const thumb=normalizeUrl(row.thumb_url);
-  return MediaPolicy.releaseEligibility(row).ok && !!row.title && !!thumb && urls.length>0;
+  return MediaPolicy.releaseEligibility(row).ok && !!row.title && urls.length>0;
 }
 function publicSlot(row, slotId, defaults){
   const base=plain(defaults);
@@ -232,7 +232,7 @@ function publicSlot(row, slotId, defaults){
     contentId: text(row.id),
     id: text(row.id),
     title: text(row.title),
-    thumb: normalizeUrl(row.thumb_url),
+    thumb: normalizeUrl(row.thumb_url) || MEDIA_SAMPLE_THUMB,
     provider: text(row.provider || row.source_host),
     url: sourceUrl,
     link: sourceUrl,

@@ -10,7 +10,8 @@
 const crypto=require("crypto");
 const SearchBankEngine=require("../search-bank-engine.js");
 
-const VERSION="media-searchbank-release-adapter-v1.3.0-serialized-json-hash";
+const VERSION="media-searchbank-release-adapter-v1.4.1-thumb-optional-slot-safe";
+const MEDIA_SAMPLE_THUMB="https://igdcglobal.com/assets/images/media-sample-card.png";
 const OWNER="media-release-searchbank-adapter";
 const SLOT_OWNER="media-snapshot-publish";
 const MANUAL_SECTIONS=Object.freeze([
@@ -64,8 +65,8 @@ function desiredBySection(snapshot){
   return out;
 }
 
-function buildEngineTemplate(releaseSnapshot){
-  const next=clone(releaseSnapshot);
+function buildEngineTemplate(committedSnapshot){
+  const next=clone(committedSnapshot);
   next.sections=Object.assign({},plain(next.sections));
   MANUAL_SECTIONS.forEach((sectionKey)=>{
     const source=next.sections[sectionKey];
@@ -76,7 +77,8 @@ function buildEngineTemplate(releaseSnapshot){
   });
   next.meta=Object.assign({},plain(next.meta),{
     generatedBy:"snapshot-engine-media-release-stage",
-    releasePipelineStage:"pre_snapshot_engine"
+    releasePipelineStage:"pre_snapshot_engine",
+    samplePreservation:"committed-media-snapshot+full-searchbank"
   });
   return next;
 }
@@ -85,11 +87,12 @@ function searchBankItem(slot,sectionKey,info,index){
   const id=slotIdOf(slot);
   const url=mediaUrl(slot);
   const releaseContract=plain(slot.releaseContract);
+  const thumb=/^https:\/\//i.test(text(slot.thumb))?text(slot.thumb):MEDIA_SAMPLE_THUMB;
   return{
     id,contentId:id,
     title:text(slot.title),summary:text(slot.summary),description:text(slot.description),
     url,link:url,videoUrl:text(slot.video)||url,embedUrl:text(slot.embedUrl),
-    thumb:text(slot.thumb),thumbnail:text(slot.thumb),image:text(slot.thumb),
+    thumb,thumbnail:thumb,image:thumb,
     provider:text(slot.provider),
     type:"video",mediaType:"video",page:"media",channel:"media",category:sectionKey,psom_key:sectionKey,
     bind:{page:"media",section:sectionKey,psom_key:sectionKey},
@@ -108,7 +111,7 @@ function searchBankItem(slot,sectionKey,info,index){
     media:{
       kind:"video",
       duration:Number(slot.durationSeconds||0)||null,
-      preview:{poster:text(slot.thumb),start:0,duration:5},
+      preview:{poster:thumb,start:0,duration:5},
       videoUrl:text(slot.video)||url,
       embedUrl:text(slot.embedUrl)||null
     },
@@ -146,7 +149,7 @@ function buildSearchBankDocument(existingBank,release){
   MANUAL_SECTIONS.forEach((sectionKey)=>{
     desired[sectionKey].forEach((slot,index)=>{
       const id=slotIdOf(slot),url=mediaUrl(slot);
-      if(!id||!text(slot.title)||!/^https:\/\//i.test(text(slot.thumb))||!/^https:\/\//i.test(url)){
+      if(!id||!text(slot.title)||!/^https:\/\//i.test(url)){
         throw new Error("media_release_slot_contract_invalid:"+sectionKey+":"+(index+1));
       }
       items.push(searchBankItem(slot,sectionKey,info,index));

@@ -751,80 +751,20 @@
   }
   function captureFrameDataUrl(row){
     return new Promise(function(resolve,reject){
-      var sources=candidateSources(row);
-      if(!sources.length){reject(new Error('직접 재생 주소가 없어 영상 프레임을 만들 수 없습니다.'));return;}
-      var video=document.createElement('video');
-      var sourceIndex=0,finished=false,attemptIndex=0;
-      var timer=setTimeout(function(){finishError(new Error('영상 프레임 준비 시간이 8초를 초과했습니다.'));},8000);
-      var TARGETS=[4,12]; // 전체 길이를 훑지 않고 초반 대표 프레임 1~2회만 시도
-
-      function cleanup(){
-        clearTimeout(timer);
-        try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_error){}
+      var sources=candidateSources(row);if(!sources.length){reject(new Error('직접 재생 주소가 없습니다.'));return;}
+      var video=document.createElement('video'),sourceIndex=0,targetIndex=0,finished=false,TARGETS=[1,3,6,10];
+      var timer=setTimeout(function(){finish(new Error('초반 프레임 캡처 시간이 초과되었습니다.'));},7000);
+      function clean(){clearTimeout(timer);try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_e){}}
+      function finish(err,data){if(finished)return;finished=true;clean();err?reject(err):resolve(data);}
+      function load(){if(sourceIndex>=sources.length){finish(new Error('초반 프레임을 캡처하지 못했습니다.'));return;}targetIndex=0;video.src=sources[sourceIndex].url;video.load();}
+      function nextSource(){sourceIndex+=1;load();}
+      function seek(){var d=Number(video.duration),t=TARGETS[targetIndex];if(isFinite(d)&&d>0)t=Math.min(t,Math.max(.15,d-.2));try{video.currentTime=Math.max(0,t);}catch(_e){shot();}}
+      function next(){targetIndex+=1;if(targetIndex>=TARGETS.length){nextSource();return;}seek();}
+      function shot(){
+        if(!video.videoWidth||!video.videoHeight){next();return;}
+        try{var c=document.createElement('canvas'),x=c.getContext('2d',{alpha:false});c.width=640;c.height=360;x.fillStyle='#000';x.fillRect(0,0,640,360);var r=Math.min(640/video.videoWidth,360/video.videoHeight),w=video.videoWidth*r,h=video.videoHeight*r;x.drawImage(video,(640-w)/2,(360-h)/2,w,h);var data=c.toDataURL('image/jpeg',.80);if(data&&data.length>1000){finish(null,data);return;}}catch(_e){}next();
       }
-      function finishError(error){if(finished)return;finished=true;cleanup();reject(error);}
-      function nextSource(){
-        sourceIndex+=1;attemptIndex=0;
-        if(sourceIndex>=sources.length){finishError(new Error('직접 재생 원본에서 빠른 썸네일 프레임을 만들지 못했습니다.'));return;}
-        loadSource();
-      }
-      function frameLooksUsable(context,width,height){
-        try{
-          var pixels=context.getImageData(0,0,width,height).data;
-          var sum=0,sum2=0,count=0,step=Math.max(4,Math.floor(pixels.length/(4*600)))*4;
-          for(var i=0;i<pixels.length;i+=step){
-            var y=(pixels[i]*0.2126)+(pixels[i+1]*0.7152)+(pixels[i+2]*0.0722);
-            sum+=y;sum2+=y*y;count+=1;
-          }
-          if(!count)return true;
-          var mean=sum/count,variance=(sum2/count)-(mean*mean);
-          return mean>14 && variance>45;
-        }catch(_error){return true;}
-      }
-      function draw(){
-        if(finished||!video.videoWidth||!video.videoHeight)return;
-        try{
-          var width=640,height=360,canvas=document.createElement('canvas'),context=canvas.getContext('2d',{alpha:false});
-          canvas.width=width;canvas.height=height;
-          context.fillStyle='#000';context.fillRect(0,0,width,height);
-          var ratio=Math.min(width/video.videoWidth,height/video.videoHeight);
-          var drawWidth=video.videoWidth*ratio,drawHeight=video.videoHeight*ratio;
-          context.drawImage(video,(width-drawWidth)/2,(height-drawHeight)/2,drawWidth,drawHeight);
-
-          // 첫 프레임이 검정/단색이면 딱 한 번만 두 번째 초반 지점으로 이동한다.
-          if(attemptIndex===0 && !frameLooksUsable(context,width,height)){
-            attemptIndex=1;seekTarget();return;
-          }
-          var dataUrl=canvas.toDataURL('image/jpeg',0.82);
-          finished=true;cleanup();resolve(dataUrl);
-        }catch(error){nextSource();}
-      }
-      function seekTarget(){
-        if(finished)return;
-        var duration=Number(video.duration),target=TARGETS[Math.min(attemptIndex,TARGETS.length-1)];
-        if(isFinite(duration)&&duration>0){target=Math.min(target,Math.max(0.25,duration-0.35));}
-        try{
-          if(target>0.25 && isFinite(target)) video.currentTime=target;
-          else draw();
-        }catch(_error){draw();}
-      }
-      function loadSource(){
-        if(finished)return;
-        if(sourceIndex>=sources.length){finishError(new Error('직접 재생 원본에서 빠른 썸네일 프레임을 만들지 못했습니다.'));return;}
-        attemptIndex=0;
-        try{video.pause();video.removeAttribute('src');video.load();}catch(_error){}
-        video.src=sources[sourceIndex].url;
-        video.load();
-      }
-
-      video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;
-      video.preload='metadata'; // 전체 파일 선로딩 금지
-      video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px';
-      video.onerror=nextSource;
-      video.onloadedmetadata=seekTarget;
-      video.onseeked=draw;
-      document.body.appendChild(video);
-      loadSource();
+      video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px';video.onerror=nextSource;video.onloadedmetadata=seek;video.onseeked=shot;document.body.appendChild(video);load();
     });
   }
   async function generateThumbnail(id,button){
@@ -832,7 +772,7 @@
     if(!row)return;
     button.disabled=true;
     try{
-      show('원본 썸네일 확인 후 초반 대표 프레임 1~2회만 빠르게 생성합니다.','ok');
+      show('1·3·6·10초 중 캡처 가능한 첫 프레임을 바로 사용합니다.','ok');
       var resolved=await post(THUMB,{action:'resolve',id:id});
       if(resolved.thumbUrl){show('원본 제공 썸네일을 후보에 연결했습니다.','ok');await refresh();return;}
       var dataUrl=await captureFrameDataUrl(row);

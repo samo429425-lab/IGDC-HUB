@@ -9,10 +9,10 @@
 const MediaStore=require("./lib/media-candidate-store.v1");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="media-candidate-thumbnail-v1.1.0-fast-early-frame";
+const VERSION="media-candidate-thumbnail-v1.2.0-first-available-frame";
 const DEFAULT_BUCKET="media-candidate-thumbnails";
 const MAX_IMAGE_BYTES=1572864;
-const PROBE_TIMEOUT_MS=1800;
+const PROBE_TIMEOUT_MS=1200;
 
 function plain(value){return value&&typeof value==="object"&&!Array.isArray(value)?value:{};}
 function imageHeaders(){return{"accept":"image/*","user-agent":"IGDC-MARU-MediaThumbnail/1.0 (+https://igdc.info)"};}
