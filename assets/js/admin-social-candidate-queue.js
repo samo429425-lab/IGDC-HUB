@@ -2294,6 +2294,85 @@
       });
     });
   }
+
+  // Front publication must never be blocked by a malformed candidate.
+  // Keep the selection count where possible by replacing an ineligible item
+  // with the next eligible candidate from the same SNS section.
+  function autoCompletePublishSelection(selectedIds, sectionKey) {
+    var sourceIds = Array.from(new Set((selectedIds || []).map(text).filter(Boolean)));
+    var selectedSet = new Set(sourceIds);
+    var finalIds = [];
+    var skipped = [];
+    var replacements = [];
+    var shortfall = 0;
+
+    var selectedRows = sourceIds
+      .map(function (id) {
+        return rows.find(function (row) { return text(row && row.id) === id; }) || null;
+      })
+      .filter(Boolean)
+      .filter(function (row) { return !sectionKey || row.sectionKey === sectionKey; });
+
+    var sectionKeys = Array.from(new Set(selectedRows.map(function (row) { return row.sectionKey; }).filter(Boolean)));
+    sectionKeys.forEach(function (key) {
+      var sectionSelected = selectedRows.filter(function (row) { return row.sectionKey === key; });
+      var valid = sectionSelected.filter(candidateRegistered);
+      var invalid = sectionSelected.filter(function (row) { return !candidateRegistered(row); });
+      valid.forEach(function (row) {
+        var id = text(row && row.id);
+        if (id && finalIds.indexOf(id) < 0) finalIds.push(id);
+      });
+      invalid.forEach(function (row) { skipped.push(text(row && row.id)); });
+
+      if (!invalid.length) return;
+      var fallback = rows
+        .filter(function (row) {
+          var id = text(row && row.id);
+          return (
+            row &&
+            row.sectionKey === key &&
+            candidateRegistered(row) &&
+            id &&
+            !selectedSet.has(id) &&
+            finalIds.indexOf(id) < 0
+          );
+        })
+        .sort(function (a, b) {
+          var aPublished = publishedContentIds.has(text(a && a.id)) ? 1 : 0;
+          var bPublished = publishedContentIds.has(text(b && b.id)) ? 1 : 0;
+          if (aPublished !== bPublished) return aPublished - bPublished;
+          var scoreDiff = score(b) - score(a);
+          if (scoreDiff) return scoreDiff;
+          return text(b.updatedAt || b.reviewedAt || b.createdAt).localeCompare(
+            text(a.updatedAt || a.reviewedAt || a.createdAt),
+          );
+        });
+
+      invalid.forEach(function (_row, index) {
+        var replacement = fallback[index];
+        if (!replacement) {
+          shortfall += 1;
+          return;
+        }
+        var replacementId = text(replacement.id);
+        if (replacementId && finalIds.indexOf(replacementId) < 0) {
+          finalIds.push(replacementId);
+          replacements.push({ sectionKey: key, id: replacementId });
+        }
+      });
+    });
+
+    // Keep the UI selection synchronized with what is actually sent.
+    skipped.forEach(function (id) { selectedContents.delete(id); });
+    replacements.forEach(function (item) { selectedContents.add(item.id); });
+
+    return {
+      ids: finalIds,
+      skipped: skipped,
+      replacements: replacements,
+      shortfall: shortfall,
+    };
+  }
   function selectedContentSectionKeys() {
     var ids = selectedContents;
     return order.filter(function (key) {
@@ -2307,13 +2386,20 @@
     if (!selectedIds.length)
       return show("프론트 등록할 콘텐츠를 먼저 선택해 주세요.", "warn");
 
-    var registeredIds = selectedRegisteredContentIds("");
-    var unregisteredCount = selectedIds.length - registeredIds.length;
-    if (unregisteredCount > 0) {
+    var completed = autoCompletePublishSelection(selectedIds, "");
+    var registeredIds = completed.ids;
+    if (!registeredIds.length) {
       return show(
-        "선택한 콘텐츠 중 " +
-          unregisteredCount +
-          "개가 아직 후보 등록 상태가 아닙니다. 먼저 '선택 후보 등록'을 실행한 뒤 프론트 등록을 해 주세요.",
+        "선택한 콘텐츠 중 SearchBank 인계 가능한 후보가 없습니다. 실제 썸네일·공개 상태·승인 상태를 확인해 주세요.",
+        "warn",
+      );
+    }
+    if (completed.skipped.length > 0) {
+      show(
+        "조건 미충족 후보 " + completed.skipped.length + "개는 자동 제외했고, 같은 SNS의 정상 후보 " +
+          completed.replacements.length + "개로 자동 보충했습니다" +
+          (completed.shortfall ? " (보충할 후보가 없는 " + completed.shortfall + "개는 빈자리로 두고 계속 진행)" : "") +
+          ".",
         "warn",
       );
     }
@@ -2330,6 +2416,13 @@
       return false;
 
     return actualApply("", true, registeredIds);
+  }
+
+  async function actualApplyAllRegistered(skipConfirm) {
+    var ids = registeredContentIds("");
+    if (!ids.length)
+      return show("SearchBank 인계 가능한 최신 콘텐츠 후보가 없습니다.", "warn");
+    return actualApply("", skipConfirm === true, ids);
   }
 
   async function actualApplySelectedFrontSections() {
@@ -2370,17 +2463,26 @@
         return text(row && row.id) === id && row.sectionKey === sectionKey;
       });
     });
-    var selectedInSection = selectedRegisteredContentIds(sectionKey);
     if (selectedInSectionAll.length) {
-      if (selectedInSection.length !== selectedInSectionAll.length) {
+      var completed = autoCompletePublishSelection(selectedInSectionAll, sectionKey);
+      var selectedInSection = completed.ids;
+      if (!selectedInSection.length) {
         show(
           label(sectionKey) +
-            "에서 선택한 콘텐츠 중 " +
-            (selectedInSectionAll.length - selectedInSection.length) +
-            "개가 아직 후보 등록 상태가 아닙니다. 먼저 '선택 후보 등록'을 실행해 주세요.",
+            "에서 SearchBank 인계 가능한 정상 후보를 찾지 못했습니다.",
           "warn",
         );
         return false;
+      }
+      if (completed.skipped.length) {
+        show(
+          label(sectionKey) +
+            "의 조건 미충족 후보 " + completed.skipped.length + "개는 자동 제외하고 정상 후보 " +
+            completed.replacements.length + "개로 자동 보충했습니다" +
+            (completed.shortfall ? " (" + completed.shortfall + "개는 대체 후보 부족)" : "") +
+            ".",
+          "warn",
+        );
       }
       return actualApply(sectionKey, skipConfirm, selectedInSection);
     }
@@ -3100,12 +3202,12 @@
     // Critical publication control is bound first.  The final front apply must
     // remain usable even if a non-critical admin control later fails to bind.
     if ($("publishAllBtn")) {
-      $("publishAllBtn").onclick = function () { return actualApply(""); };
+      $("publishAllBtn").onclick = function () { return actualApplyAllRegistered(false); };
     }
     if ($("publishSelectedSectionsBtn")) {
       $("publishSelectedSectionsBtn").onclick = actualApplySelectedSections;
     }
-    if ($("socialFullRunBtn")) $("socialFullRunBtn").onclick = function () { return actualApply(""); };
+    if ($("socialFullRunBtn")) $("socialFullRunBtn").onclick = function () { return actualApplyAllRegistered(false); };
     if ($("socialFullCancelBtn")) $("socialFullCancelBtn").onclick = function () { return actualUnapplyAll(""); };
     if ($("selectAllFrontSectionsBtn")) $("selectAllFrontSectionsBtn").onclick = function () { setFrontSectionSelection(order, true); };
     if ($("clearFrontSectionsBtn")) $("clearFrontSectionsBtn").onclick = function () { setFrontSectionSelection(order, false); };
