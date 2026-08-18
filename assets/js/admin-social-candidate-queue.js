@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.0.0 - section-local controls + single final apply + content pool 120 */
+/* IGDC Social Hub Influencer Registry + Latest Content Control v2.9.0 - content hold queue + single-open rendering + content pool 120 */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -938,7 +938,9 @@
       '<button class="publish" type="button" data-waiting-ai="' +
       esc(key) +
       '">이 SNS AI 자동 수집·교체</button>' +
-
+      '<button class="publish" type="button" data-waiting-publish="' +
+      esc(key) +
+      '">이 SNS 프론트 실제 적용</button>' +
       '<button class="danger" type="button" data-waiting-unpublish-all="' +
       esc(key) +
       '">이 섹션 전체 적용 해제</button>' +
@@ -1172,7 +1174,7 @@
   function diagnostic(data) {
     diagnosticCache = data;
     $("diagnosticJson").textContent = JSON.stringify(data, null, 2);
-    if ($("downloadJsonBtn")) $("downloadJsonBtn").disabled = false;
+    $("downloadJsonBtn").disabled = false;
   }
   function toggleDiagnosticPanel(forceOpen) {
     var body = $("diagnosticBody"), button = $("toggleDiagnosticPanelBtn");
@@ -2275,7 +2277,6 @@
         throw new Error("실제 적용 POST가 서버에서 actual_front_apply 저장 요청으로 인식되지 않았습니다.");
       }
       if (!d.releaseStored) throw new Error("실제 적용 요청은 처리됐지만 stored social release가 생성되지 않았습니다. SearchBank 인계 전 단계에서 중단되었습니다.");
-      download("igdc-social-actual-apply-result.json", d);
       diagnostic(d);
       var verifyQ = new URLSearchParams({
         action: "pipeline_diagnostic",
@@ -2743,18 +2744,6 @@
       show(e.message || "점검 JSON을 읽지 못했습니다.", "warn");
     }
   }
-
-  function toggleHoldPanel(forceOpen) {
-    var body = $("holdPanelBody"), btn = $("toggleHoldPanelBtn");
-    if (!body || !btn) return;
-    var shouldOpen = forceOpen === true || (forceOpen !== false && body.classList.contains("hidden"));
-    body.classList.toggle("hidden", !shouldOpen);
-    btn.textContent = shouldOpen ? "목록 닫기" : "목록 열기";
-    if (!shouldOpen) {
-      if (openDetailQueue === "hold") { openDetailQueue = ""; openDetailSection = ""; }
-      body.querySelectorAll(".section-body").forEach(function (el) { el.classList.add("hidden"); });
-    }
-  }
   function bind() {
     options();
     renderAiSectionSelector();
@@ -2770,7 +2759,7 @@
       $("latestContentDiagnosticBtn").onclick = function () {
         runQueueDiagnostic("latest_content_diagnostic", "최신 콘텐츠 후보·교체 대기열 점검 JSON을 읽었습니다.", "igdc-social-latest-content-diagnostic.json");
       };
-    if ($("downloadJsonBtn")) $("downloadJsonBtn").onclick = function () {
+    $("downloadJsonBtn").onclick = function () {
       if (diagnosticCache)
         download(
           "igdc-social-candidate-diagnostic-" +
@@ -2780,7 +2769,7 @@
         );
     };
     if ($("toggleDiagnosticPanelBtn")) $("toggleDiagnosticPanelBtn").onclick = function () { toggleDiagnosticPanel(); };
-    if ($("downloadCandidateListBtn")) $("downloadCandidateListBtn").onclick = function () {
+    $("downloadCandidateListBtn").onclick = function () {
       download("igdc-social-candidate-visible-list.json", {
         ok: true,
         generatedAt: new Date().toISOString(),
@@ -2811,12 +2800,12 @@
       this.disabled = true;
       $("collectorState").textContent = "현재 섹션 완료 후 일시정지";
     };
-    if ($("rotationBtn")) $("rotationBtn").onclick = rotate;
-    if ($("publishPreviewBtn")) $("publishPreviewBtn").onclick = publish;
-    if ($("snapshotDownloadBtn")) $("snapshotDownloadBtn").onclick = snapshot;
-    if ($("applicationValidationJsonBtn")) $("applicationValidationJsonBtn").onclick = downloadApplicationValidation;
-    if ($("actualAppliedJsonBtn")) $("actualAppliedJsonBtn").onclick = downloadActualApplied;
-    if ($("pipelineVerificationJsonBtn")) $("pipelineVerificationJsonBtn").onclick = downloadPipelineVerification;
+    $("rotationBtn").onclick = rotate;
+    $("publishPreviewBtn").onclick = publish;
+    $("snapshotDownloadBtn").onclick = snapshot;
+    $("applicationValidationJsonBtn").onclick = downloadApplicationValidation;
+    $("actualAppliedJsonBtn").onclick = downloadActualApplied;
+    $("pipelineVerificationJsonBtn").onclick = downloadPipelineVerification;
     $("returnBtn").onclick = function () {
       var p = new URLSearchParams(location.search),
         to = p.get("returnPath") || "/admin.html";
@@ -2853,20 +2842,19 @@
       autoCurate("");
     };
     $("publishAllBtn").onclick = function () { actualApply(""); };
+    if ($("topActualApplyBtn")) $("topActualApplyBtn").onclick = function () { actualApply(""); };
     if ($("replacementViewAllBtn")) $("replacementViewAllBtn").onclick = function () { setWaitingView("all"); };
     if ($("replacementViewNewBtn")) $("replacementViewNewBtn").onclick = function () { setWaitingView("new"); };
     if ($("replacementViewPublicBtn")) $("replacementViewPublicBtn").onclick = function () { setWaitingView("public"); };
     if ($("replacementViewWaitingBtn")) $("replacementViewWaitingBtn").onclick = function () { setWaitingView("replacement"); };
     if ($("replacementViewFrontBtn")) $("replacementViewFrontBtn").onclick = function () { setWaitingView("front"); };
-    if ($("contentViewHoldBtn")) $("contentViewHoldBtn").onclick = function () { toggleHoldPanel(true); openHoldContentView(); };
+    if ($("contentViewHoldBtn")) $("contentViewHoldBtn").onclick = openHoldContentView;
+    if ($("pipelineVerificationJsonBtnInline")) $("pipelineVerificationJsonBtnInline").onclick = downloadPipelineVerification;
+    if ($("replacementPromoteBtn")) $("replacementPromoteBtn").onclick = function () { run("promote_candidate", selected(".waitingCheck")); };
+    if ($("replacementDemoteBtn")) $("replacementDemoteBtn").onclick = moveSelectedToReplacement;
+    if ($("replacementExcludeBtn")) $("replacementExcludeBtn").onclick = function () { run("delete", selected(".waitingCheck")); };
     if ($("aiSelectedSectionsBtn")) $("aiSelectedSectionsBtn").onclick = function () { aiCycleSections(selectedAiSections(), false); };
     if ($("aiFullCycleBtn")) $("aiFullCycleBtn").onclick = aiFullCycle;
-    if ($("aiFullStopBtn")) $("aiFullStopBtn").onclick = function () {
-      stopRequested = true;
-      if ($("aiAutomationState")) $("aiAutomationState").textContent = "중단 요청됨";
-      show("AI 자동 운영 중단을 요청했습니다. 현재 처리 중인 작업이 끝나면 멈춥니다.", "warn");
-    };
-    if ($("toggleHoldPanelBtn")) $("toggleHoldPanelBtn").onclick = function () { toggleHoldPanel(); };
     $("unpublishAllScopeBtn").onclick = function () {
       actualUnapplyAll("");
     };

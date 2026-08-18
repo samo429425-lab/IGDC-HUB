@@ -447,8 +447,25 @@
         <strong>프론트 실제 적용</strong> 버튼을 누르기 전에는 기존 프론트 슬롯을 바꾸지 않습니다.
       </p>
       <div class="bar">
-        <button id="refreshBtn">전체 새로고침</button
-        ><button id="diagnosticBtn" class="secondary">전체 소셜 점검 JSON</button
+        <button id="refreshBtn">대기열 새로고침</button
+        ><button id="diagnosticBtn" class="secondary">소셜 종합 점검 JSON</button
+        ><button id="rotationBtn" class="secondary">최종 100개 다시 정리</button
+        ><button id="publishPreviewBtn" class="publish">
+          프론트 적용 예정 미리보기</button
+        ><button id="topActualApplyBtn" class="publish">
+          전체 9개 SNS 프론트 실제 적용</button
+        ><button id="snapshotDownloadBtn" class="secondary">
+          적용 예정 JSON</button
+        ><button id="applicationValidationJsonBtn" class="secondary">
+          후보 검증 JSON</button
+        ><button id="actualAppliedJsonBtn" class="secondary">
+          현재 프론트 적용본 JSON</button
+        ><button id="pipelineVerificationJsonBtn" class="secondary">
+          SearchBank 인계 검증 JSON</button
+        ><button id="downloadJsonBtn" class="secondary" disabled>
+          현재 점검 JSON</button
+        ><button id="downloadCandidateListBtn" class="secondary">
+          후보 목록 JSON</button
         ><button id="returnBtn" class="secondary">관리자 화면으로</button
         ><span id="state" class="state">연결 준비 중</span>
       </div>
@@ -510,8 +527,7 @@
         <div id="aiSectionSelector" class="reviewbar" style="margin-top:12px"></div>
         <div class="collect-controls">
           <button id="aiSelectedSectionsBtn" type="button">선택 SNS AI 자동 수집·교체</button>
-          <button id="aiFullCycleBtn" class="publish" type="button">전체 9개 SNS AI 자동 운영 시작</button>
-          <button id="aiFullStopBtn" class="secondary" type="button">AI 자동 운영 중단</button>
+          <button id="aiFullCycleBtn" class="publish" type="button">전체 9개 SNS AI 자동 수집·교체</button>
           <label class="small"><input id="aiAutomationApply" type="checkbox" /> AI 작업 완료 후 프론트 실제 적용까지 실행</label>
           <span id="aiAutomationState" class="state">대기</span>
         </div>
@@ -639,7 +655,6 @@
             <h3>전체 최신 콘텐츠 후보</h3><div id="contentCountAll" class="content-ops-count">0</div>
             <div class="small content-ops-help">현재 관리 중인 최신 콘텐츠 후보 전체입니다.</div>
             <button id="replacementViewAllBtn" class="secondary" type="button">목록 보기</button>
-            <button id="latestContentDiagnosticBtn" class="secondary" type="button">목록 점검 JSON</button>
           </div>
           <div class="content-ops-card">
             <h3>새로 수집된 최신 콘텐츠</h3><div id="contentCountNew" class="content-ops-count">0</div>
@@ -668,7 +683,21 @@
           </div>
         </div>
         <div id="replacementViewResult" class="small" style="margin-top:10px; padding:10px 12px; border:1px solid rgba(255,255,255,.12); border-radius:8px;">위의 목록 보기 버튼을 누르면 해당 콘텐츠가 있는 첫 SNS 섹션이 아래에 열립니다.</div>
-
+        <div class="reviewbar">
+          <button id="latestContentDiagnosticBtn" class="secondary" type="button">콘텐츠 목록 점검 JSON</button>
+          <button id="replacementPromoteBtn" type="button">선택 → 프론트 적용 예정으로</button>
+          <button id="replacementDemoteBtn" class="secondary" type="button">선택 → 예비 교체로</button>
+          <button id="replacementExcludeBtn" class="danger" type="button">선택 → 검색 제외</button>
+        </div>
+        <div class="front-apply-box">
+          <div style="font-weight:800;margin-bottom:6px">프론트 실제 적용</div>
+          <div class="small">후보 정리와 프론트 적용은 별개입니다. 아래 버튼을 눌러야 SearchBank 인계용 실제 적용 요청을 보냅니다.</div>
+          <div class="reviewbar" style="margin-top:10px">
+            <button id="publishAllBtn" class="publish" type="button">전체 9개 SNS 프론트 실제 적용</button>
+            <button id="pipelineVerificationJsonBtnInline" class="secondary" type="button">SearchBank 인계 점검 JSON</button>
+            <span id="frontApplyState" class="state">실제 적용 전</span>
+          </div>
+        </div>
       </section>
       <section id="waitingPanel" class="panel hidden">
         <div class="modal-head">
@@ -696,10 +725,7 @@
             선택 콘텐츠만 적용 취소</button
           ><button id="waitingDeleteBtn" class="danger">
             선택 리스트 삭제</button
-          ><button id="waitingBlockBtn" class="danger">선택 영구 차단</button
-          ><span style="flex:1"></span
-          ><button id="publishAllBtn" class="publish" type="button">전체 9개 SNS 프론트 실제 적용</button
-          ><span id="frontApplyState" class="state">실제 적용 전</span>
+          ><button id="waitingBlockBtn" class="danger">선택 영구 차단</button>
         </div>
         <div id="waitingAccordion" class="section-accordion"></div>
       </section>
@@ -714,12 +740,8 @@
               인플루언서 등록부는 이 보류 대기에 포함하지 않습니다.
             </div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <span id="holdCapacityState" class="state"></span>
-            <button id="toggleHoldPanelBtn" class="secondary" type="button">목록 열기</button>
-          </div>
+          <span id="holdCapacityState" class="state"></span>
         </div>
-        <div id="holdPanelBody" class="hidden">
         <div class="reviewbar">
           <button id="restoreHeldBtn" type="button">선택 리스트 복구</button>
           <button id="deleteHeldBtn" class="secondary" type="button">선택 리스트 삭제</button>
@@ -730,7 +752,6 @@
           복구 = 후보 리스트로 되돌림 · 리스트 삭제 = 현재 기록만 삭제(재수집 가능) · 완전 차단 = 관리자 해제 전 재수집 금지
         </div>
         <div id="holdAccordion" class="section-accordion"></div>
-        </div>
       </section>
       <section id="exclusionPanel" class="panel hidden">
         <div class="modal-head">
@@ -825,6 +846,6 @@
       </section>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=28"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=27"></script>
   </body>
 </html>
