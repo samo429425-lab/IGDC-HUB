@@ -762,7 +762,22 @@
       function next(){targetIndex+=1;if(targetIndex>=TARGETS.length){nextSource();return;}seek();}
       function shot(){
         if(!video.videoWidth||!video.videoHeight){next();return;}
-        try{var c=document.createElement('canvas'),x=c.getContext('2d',{alpha:false});c.width=640;c.height=360;x.fillStyle='#000';x.fillRect(0,0,640,360);var r=Math.min(640/video.videoWidth,360/video.videoHeight),w=video.videoWidth*r,h=video.videoHeight*r;x.drawImage(video,(640-w)/2,(360-h)/2,w,h);var data=c.toDataURL('image/jpeg',.80);if(data&&data.length>1000){finish(null,data);return;}}catch(_e){}next();
+        try{
+          // HD thumbnail: keep the fast early-frame capture, but render the chosen frame at 1280x720.
+          var c=document.createElement('canvas'),x=c.getContext('2d',{alpha:false});
+          var CW=1280,CH=720;c.width=CW;c.height=CH;
+          x.fillStyle='#000';x.fillRect(0,0,CW,CH);
+          var r=Math.min(CW/video.videoWidth,CH/video.videoHeight),w=video.videoWidth*r,h=video.videoHeight*r;
+          x.imageSmoothingEnabled=true;
+          if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';
+          x.drawImage(video,(CW-w)/2,(CH-h)/2,w,h);
+          var data=c.toDataURL('image/jpeg',.90);
+          // Keep the existing 1.5MB server limit safe without lowering pixel resolution.
+          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.84);
+          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.78);
+          if(data&&data.length>1000){finish(null,data);return;}
+        }catch(_e){}
+        next();
       }
       video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px';video.onerror=nextSource;video.onloadedmetadata=seek;video.onseeked=shot;document.body.appendChild(video);load();
     });
@@ -772,7 +787,7 @@
     if(!row)return;
     button.disabled=true;
     try{
-      show('1·3·6·10초 중 캡처 가능한 첫 프레임을 바로 사용합니다.','ok');
+      show('1·3·6·10초 중 첫 성공 프레임을 HD 1280×720 썸네일로 저장합니다.','ok');
       var resolved=await post(THUMB,{action:'resolve',id:id});
       if(resolved.thumbUrl){show('원본 제공 썸네일을 후보에 연결했습니다.','ok');await refresh();return;}
       var dataUrl=await captureFrameDataUrl(row);

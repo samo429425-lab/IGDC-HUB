@@ -1,5 +1,5 @@
 /*
- * IGDC / MARU MediaHub playback controller v2.3
+ * IGDC / MARU MediaHub playback controller v2.3.2 mobile-tap-restore
  * Device-aware inline player shell with safe native-app handoff hooks.
  *
  * Preserves the original Media Hub document, scroll restoration, OTT gate,
@@ -198,6 +198,11 @@
     state.restore = [];
   }
 
+  function notifySourceFailure(card, reason) {
+    try {
+      document.dispatchEvent(new CustomEvent('igdc:media-source-failed', { detail: { card: card, contentId: contentIdFor(card), reason: reason || 'media_source_failed' } }));
+    } catch (_) {}
+  }
   function appendLegacyPlayer(stage, card) {
     var c = copy(), source = sourceFor(card), youtube = youtubeId(source);
     if (youtube) {
@@ -206,6 +211,7 @@
       frame.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(youtube) + '?autoplay=1&rel=0';
       frame.allow = 'autoplay; fullscreen; picture-in-picture; encrypted-media';
       frame.setAttribute('allowfullscreen', '');
+      frame.addEventListener('error', function(){ notifySourceFailure(card, 'iframe_source_error'); }, { once:true });
       stage.appendChild(frame);
       return;
     }
@@ -217,6 +223,8 @@
       video.playsInline = true;
       video.preload = 'metadata';
       video.setAttribute('aria-label', titleFor(card));
+      video.addEventListener('error', function(){ notifySourceFailure(card, 'video_source_error'); }, { once:true });
+      video.addEventListener('stalled', function(){ setTimeout(function(){ if(video.isConnected && !video.ended && video.readyState < 2) notifySourceFailure(card, 'video_stalled_before_playable'); }, 4000); }, { once:true });
       appendCardTracks(video, card);
       stage.appendChild(video);
       return;
@@ -229,6 +237,7 @@
     panel.appendChild(create('div', '', c.unavailable));
     pending.appendChild(panel);
     stage.appendChild(pending);
+    notifySourceFailure(card, 'playable_source_unavailable');
   }
   function appendCardTracks(video, card) {
     var raw = text(card && card.dataset && (card.dataset.captions || card.dataset.subtitleTracks));
@@ -282,6 +291,8 @@
       if (video && !video.__igdcMediaBound) {
         video.__igdcMediaBound = true;
         ['play', 'pause', 'ended', 'loadedmetadata', 'emptied'].forEach(function (name) { video.addEventListener(name, syncButtons); });
+        video.addEventListener('error', function(){ notifySourceFailure(state.card, 'mounted_video_source_error'); }, { once:true });
+        video.addEventListener('stalled', function(){ setTimeout(function(){ if(video.isConnected && !video.ended && video.readyState < 2) notifySourceFailure(state.card, 'mounted_video_stalled_before_playable'); }, 4000); }, { once:true });
         try {
           var tracker = global.MaruRevenueTracker;
           if (tracker && typeof tracker.bindMedia === 'function') {
@@ -457,11 +468,47 @@
     global.requestAnimationFrame(function () { global.scrollTo(0, 0); stage.focus({ preventScroll: true }); frameHeight(); syncButtons(); });
   }
 
+  // Desktop/mouse click path.
   document.addEventListener('click', function (event) {
     var card = isMediaCard(event.target);
-    if (!card || state.open || card.getAttribute('data-placeholder') === 'true') return;
+    if (!card) return;
+    // If a mobile touchend already opened the inline player, suppress the delayed synthetic click.
+    if (state.open) { event.preventDefault(); event.stopImmediatePropagation(); return; }
+    if (card.getAttribute('data-placeholder') === 'true') return;
     event.preventDefault(); event.stopImmediatePropagation(); open(card);
   }, true);
+
+  // Mobile tap path. Native momentum/swipe remains untouched because only a short,
+  // low-movement tap is converted into playback. A horizontal flick never opens a card.
+  (function bindMobileTapPlayback(){
+    var touchCard=null,startX=0,startY=0,startAt=0,moved=false;
+    function pointOf(event,changed){
+      var list=changed?event.changedTouches:event.touches;
+      return list&&list.length?list[0]:null;
+    }
+    document.addEventListener('touchstart',function(event){
+      var card=isMediaCard(event.target),p=pointOf(event,false);
+      touchCard=(card&&card.getAttribute('data-placeholder')!=='true')?card:null;
+      moved=false;startAt=Date.now();
+      if(p){startX=p.clientX;startY=p.clientY;}
+    },{passive:true,capture:true});
+    document.addEventListener('touchmove',function(event){
+      if(!touchCard||moved)return;
+      var p=pointOf(event,false);if(!p)return;
+      if(Math.abs(p.clientX-startX)>12||Math.abs(p.clientY-startY)>12)moved=true;
+    },{passive:true,capture:true});
+    document.addEventListener('touchend',function(event){
+      var card=touchCard,p=pointOf(event,true),elapsed=Date.now()-startAt;
+      touchCard=null;
+      if(!card||moved||elapsed>700)return;
+      if(p&&(Math.abs(p.clientX-startX)>12||Math.abs(p.clientY-startY)>12))return;
+      if(state.open)return;
+      if(event.cancelable)event.preventDefault();
+      event.stopImmediatePropagation();
+      open(card);
+    },{passive:false,capture:true});
+    document.addEventListener('touchcancel',function(){touchCard=null;moved=false;},{passive:true,capture:true});
+  })();
   document.addEventListener('keydown', function (event) {
     if (!state.open) return;
     var tag = event.target && event.target.tagName;

@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.18.2-durable-supplier-ledger-product-research";
+const VERSION = "commerce-country-automation-v3.18.5-repeatable-full-product-refresh-stable-identity";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1642,8 +1642,75 @@ function merchandisePriority(value) {
   else if (tourProfile.diningAuxiliary) labels.push("지역 맛집·다이닝");
   return { score: labels.length * 40, label: labels[0] || "" };
 }
+function productResearchRefreshKeys(rowInput) {
+  const row=plain(rowInput),supplier=text(ProductRanking.supplierKey(row)),url=ProductRanking.canonicalProductUrl(first(row.productUrl,row.url));
+  if(!supplier)return[];
+  const explicit=lower(first(row.productSku,row.productSKU,row.sku,row.productId,row.product_id));
+  const urlId=lower(ProductRanking.productIdFromUrl(url));
+  const identity=text(ProductRanking.productIdentity(row));
+  const keys=[];
+  if(explicit)keys.push("explicit|"+supplier+"|"+explicit);
+  if(urlId)keys.push("urlid|"+supplier+"|"+urlId);
+  if(url)keys.push("url|"+supplier+"|"+url);
+  if(identity)keys.push("identity|"+identity);
+  return Array.from(new Set(keys));
+}
+function normalizeProductResearchRow(rowInput) {
+  const normalized=ProductRanking.mergeProductRows([], [rowInput], {limit:1});
+  return normalized.length?plain(normalized[0]):null;
+}
+function mergeProductResearchRefreshPair(currentInput, refreshedInput) {
+  const current=plain(currentInput),refreshed=plain(refreshedInput),next=Object.assign({},current);
+  // A repeated catalog research is a refresh of the SAME product, not another
+  // duplicate row. Refreshed non-empty catalog values win so price, stock,
+  // title, image, model/SKU and other inspected details can actually change.
+  for(const key of Object.keys(refreshed)){
+    const value=refreshed[key];
+    if(value===undefined||value===null)continue;
+    if(typeof value==="string"&&!value.trim())continue;
+    next[key]=value;
+  }
+  // Keep the stable row id. An existing administrator decision always wins over
+  // a research refresh; if an older duplicate row carries the only operator
+  // decision, preserve that decision while collapsing the duplicate.
+  next.id=text(current.id)||text(refreshed.id);
+  // Keep the already-issued internal identity/candidate id stable when this is
+  // the same supplier product.  The visible catalog fields may change, but a
+  // title/image refresh must update the existing queue row rather than create a
+  // second candidate id for the same product.
+  if(text(current.productIdentity))next.productIdentity=text(current.productIdentity);
+  if(text(current.candidateId))next.candidateId=text(current.candidateId);
+  const currentDecision=lower(current.slotDecision||"undecided"),refreshedDecision=lower(refreshed.slotDecision||"undecided");
+  const decisionSource=currentDecision!=="undecided"?current:(refreshedDecision!=="undecided"?refreshed:current);
+  for(const key of ["slotDecision","approvedPlacement","selectedPlacement","managementControl","frontPublication","candidateQueueSync","decisionAt","decisionBy","decisionSource"]){
+    if(decisionSource[key]!==undefined)next[key]=decisionSource[key];
+    else if(current[key]!==undefined)next[key]=current[key];
+  }
+  for(const key of ["createdAt","created_at"]){if(current[key]!==undefined)next[key]=current[key];}
+  next.publicPublication=false;
+  next.automaticImport=false;
+  next.duplicateCount=Math.max(1,Number(current.duplicateCount)||1,Number(refreshed.duplicateCount)||1);
+  next.duplicateReason="same_product_catalog_refresh";
+  return next;
+}
 function mergeProductRows(existing, incoming, max) {
-  return ProductRanking.mergeProductRows(existing, incoming, { limit: max || 300 });
+  const limit=Math.max(1,Math.min(2000,Number(max)||300)),out=[],keyIndex=new Map();
+  function register(row,index){for(const key of productResearchRefreshKeys(row))keyIndex.set(key,index);}
+  function findIndex(row){for(const key of productResearchRefreshKeys(row)){if(keyIndex.has(key))return keyIndex.get(key);}return -1;}
+  function add(raw){
+    const row=normalizeProductResearchRow(raw);if(!row)return;
+    const at=findIndex(row);
+    if(at>=0){out[at]=mergeProductResearchRefreshPair(out[at],row);register(out[at],at);return;}
+    if(out.length>=limit)return;
+    const index=out.length;out.push(row);register(row,index);
+  }
+  // Existing rows establish stable ids/operator decisions. Incoming rows from
+  // the current supplier catalog then refresh those rows in place. A new row is
+  // appended only when no same-supplier product id, canonical URL, or existing
+  // exact identity matches.
+  for(const row of array(existing))add(row);
+  for(const row of array(incoming))add(row);
+  return out;
 }
 
 function productProgress(job) {
@@ -1689,7 +1756,7 @@ function publicProductJob(job) {
   const latestProducts=latestResearchProducts(job,visibleProducts);
   return {
     ok: true, reportType: "igdc-country-product-reference-persisted-research", version: VERSION, rankingVersion: ProductRanking.VERSION, rankingPolicy: ProductRanking.POLICY, jobVersion: text(job.version), needsRefresh: text(job.version) !== VERSION, jobId: job.jobId, previousJobId:job.previousJobId||null, status: job.status, startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
-    researchCycle:{mode:"cumulative",preserveExisting:true,newProductsOnlyInspection:true,duplicatePolicy:"merge_and_enrich",administratorDecisionPrecedence:true},
+    researchCycle:{mode:"repeatable_full_rescan",preserveExisting:true,restartFromFirstSupplierEveryRun:true,newProductsOnlyInspection:false,duplicatePolicy:"refresh_same_product_by_supplier_id_or_canonical_url_or_exact_identity; append_only_new_products",administratorDecisionPrecedence:true},
     safety: { reviewOnly: true, partialDiscoveryVisible: true, actualProductImagesOnly: true, actualProductVideosOnly: true, companyLogoFallback: false, remoteImageReferenceOnly: true, remoteVideoReferenceOnly: true, copiesThirdPartyMedia: false, externalLinksOpenForAdministratorReview: true, sameTabBackNavigationExpected: true, automaticSlotPublication: false, automaticProductImport: false, checkout: false, payment: false, riskGateBeforeRevenueRanking: true, sponsorRequiresApprovedContract: true, sectionAssignmentsAreProposalsOnly: true, audienceAndRevenueValuePriority: true, noSectionQuotaFill: true, manualDecisionPrecedence: true, aiPrivatePlacementAutomation: true, affiliateSettlementTracking: true, payoutExecution: false },
     rankingContext: plain(job.rankingContext),
     progress: productProgress(job),
@@ -1923,59 +1990,37 @@ async function beginProductResearchJob(actorId, input) {
   if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 비공개 상품 조사에 사용할 수 있는 공식 판매 출처 URL이 없습니다. 공급업체 후보의 공식 URL을 확인하세요.");error.statusCode=409;throw error;}
 
   const supplierLedgerSourceId=text(supplierJob&&supplierJob.jobId)||"durable_supplier_candidate_ledger";
-  const researchedKeys=researchedProductSupplierKeys(existing),supplierSourceFingerprint=productSupplierSourceFingerprint(allSupplierSources);
-  const forceSourceRefresh=raw.refreshSources===true||raw.restart===true;
-  // An explicit product-research click is also a reconciliation point.  Older
-  // jobs did not always persist researchedSupplierKeys, so rebuild that history
-  // from the durable private product ledger before deciding which suppliers are
-  // genuinely new.  This preserves existing products and prevents duplicate
-  // research while ensuring newly-registered suppliers enter the next delta.
-  if(forceSourceRefresh){
-    try{
-      const durableProducts=await persistedProductRows(scope);
-      for(const row of array(durableProducts)){
-        const key=productSupplierSourceKey({supplierSiteUrl:first(row&&row.supplierSiteUrl,row&&row.supplierUrl,row&&row.sourcePageUrl)});
-        if(key)researchedKeys.add(key);
-      }
-    }catch(_ledgerHistoryError){}
-  }
+  const priorResearchedKeys=researchedProductSupplierKeys(existing),supplierSourceFingerprint=productSupplierSourceFingerprint(allSupplierSources);
+  const forceSourceRefresh=raw.fullRescan===true||raw.refreshSources===true||raw.restart===true;
 
-  // A running discovery job may outlive the supplier-search cycle that created
-  // it.  Refresh ONLY its still-unresearched source list from the current
-  // supplier ledger.  Already researched suppliers and already discovered
-  // products remain untouched, so clicking research again never duplicates
-  // work and newly registered suppliers are not stranded behind an old job.
-  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!["complete","cancelled","failed"].includes(existing.status)){
-    if(existing.status==="discovering"){
-      const pendingSources=allSupplierSources.filter((source)=>!researchedKeys.has(productSupplierSourceKey(source)));
-      const priorPendingKeys=array(existing.supplierSources).slice(Math.max(0,Number(existing.discoveryCursor||0))).map(productSupplierSourceKey).filter(Boolean).sort();
-      const nextPendingKeys=pendingSources.map(productSupplierSourceKey).filter(Boolean).sort();
-      const sourceSetChanged=priorPendingKeys.join("\u001f")!==nextPendingKeys.join("\u001f")||text(existing.supplierResearchJobId)!==supplierLedgerSourceId;
-      if(sourceSetChanged||forceSourceRefresh){
-        existing.version=VERSION;existing.rankingVersion=ProductRanking.VERSION;existing.supplierResearchJobId=supplierLedgerSourceId;existing.supplierSources=pendingSources;existing.discoveryCursor=0;existing.currentSupplierSourceCount=allSupplierSources.length;existing.newSupplierSourceCount=pendingSources.length;existing.priorResearchedSupplierCount=researchedKeys.size;existing.supplierSourceFingerprint=supplierSourceFingerprint;existing.researchedSupplierKeys=Array.from(researchedKeys);existing.supplierRetryQueue=[];existing.supplierDiscoveryRetryCounts={};existing.temporarilyDeferredSupplierKeys=[];existing.productInspectionRetryCounts={};existing.productInspectionRetryPending=0;existing.temporarilyDeferredProductKeys=[];existing.finishedAt=null;existing.lastError=null;
-        existing.trace=array(existing.trace).concat([{at:iso(),source:"product-research-job",status:"running_source_delta_refreshed",currentSupplierSources:allSupplierSources.length,alreadyResearchedSuppliers:researchedKeys.size,pendingSupplierSources:pendingSources.length,supplierResearchJobId:supplierLedgerSourceId,explicitRefresh:forceSourceRefresh,sourcePolicy:"preserve_existing_products_and_researched_suppliers; append_only_current_unresearched_supplier_sources"}]).slice(-240);
-        await saveProductJob(existing,actorId);
-      }
-    }
+  // Normal status/resume calls may continue an unfinished job. An explicit
+  // research restart is different: it MUST create a new cycle from supplier 1,
+  // regardless of whether the previous cycle is complete, inspecting, staging,
+  // or already researched these suppliers in an earlier cycle.
+  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!forceSourceRefresh&&!["complete","cancelled","failed"].includes(existing.status)){
     return publicProductJob(existing);
   }
-  const supplierSources=allSupplierSources.filter((source)=>!researchedKeys.has(productSupplierSourceKey(source)));
-  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&existing.status==="complete"&&!supplierSources.length){
-    const view=Object.assign({},existing,{version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchJobId:supplierLedgerSourceId,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:0,priorResearchedSupplierCount:researchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(researchedKeys)});
+  const supplierSources=forceSourceRefresh?allSupplierSources:allSupplierSources.filter((source)=>!priorResearchedKeys.has(productSupplierSourceKey(source)));
+  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!forceSourceRefresh&&existing.status==="complete"&&!supplierSources.length){
+    const view=Object.assign({},existing,{version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchJobId:supplierLedgerSourceId,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:0,priorResearchedSupplierCount:priorResearchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(priorResearchedKeys)});
     return publicProductJob(view);
   }
 
   const rankingContext=await productRankingContext(scope);
-  const preservedProducts=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.products):[],preservedRaw=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.rawProducts):[];
+  const preservedProducts=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.products):[];
   const preservedProductIdentities=Array.from(new Set(preservedProducts.map((row)=>ProductRanking.productIdentity(row)).filter(Boolean))).slice(0,PRODUCT_PORTFOLIO_LIMIT);
-  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:preservedProducts.length,preservedRawCount:preservedRaw.length,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:supplierSources.length,priorResearchedSupplierCount:researchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:Array.from(researchedKeys),supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,rawProducts:preservedRaw,inspectionPool:[],inspectCursor:0,productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],products:preservedProducts,preservedProductIdentities,stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:preservedProducts.length,skipped:0,failed:0},trace:[{at:now,source:"product-research-job",status:"cumulative_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previouslyResearchedSuppliers:researchedKeys.size,preservedProducts:preservedProducts.length,sourcePolicy:"preserve_existing_products_and_administrator_decisions; research_only_new_supplier_sources; all_selected_supplier_candidates_private_research; merge_exact_duplicates; downstream_release_evidence_gate_unchanged; administrator_approval_before_publication"}],errors:[],lastError:null};
+  const cycleResearchedKeys=forceSourceRefresh?[]:Array.from(priorResearchedKeys);
+  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:preservedProducts.length,preservedRawCount:0,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,newSupplierSourceCount:supplierSources.length,priorResearchedSupplierCount:forceSourceRefresh?0:priorResearchedKeys.size,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,rawProducts:[],inspectionPool:[],inspectCursor:0,productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],products:preservedProducts,preservedProductIdentities,stagePool:[],stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"full_supplier_catalog_rescan_started":"supplier_delta_research_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:priorResearchedKeys.size,priorCandidateProducts:preservedProducts.length,sourcePolicy:forceSourceRefresh?"keep_existing_candidate_list; restart_from_first_current_active_supplier_every_click; rescan_all_supplier_catalogs; refresh_same_product_in_place; deduplicate_by_supplier_product_id_or_canonical_url_or_exact_identity; append_only_new_products; candidate_count_not_fixed; administrator_approval_before_publication":"research_only_unresearched_supplier_delta; refresh_same_product_in_place; deduplicate_by_supplier_product_id_or_canonical_url_or_exact_identity; append_only_new_products; candidate_count_not_fixed; administrator_approval_before_publication"}],errors:[],lastError:null};
   await saveProductJob(job,actorId);return publicProductJob(job);
 }
 
 function incrementalInspectionPool(job) {
-  const preserved=new Set(array(job.preservedProductIdentities).map(text).filter(Boolean));
-  const newRows=array(job.rawProducts).filter((row)=>!preserved.has(ProductRanking.productIdentity(row)));
-  return RegionalSelector.prepareProductInspectionPool(newRows,{limit:Math.max(120,Math.min(PRODUCT_PORTFOLIO_LIMIT,array(job.supplierSources).length*40))});
+  // Each research cycle inspects the products discovered from the CURRENT
+  // active supplier catalog.  Prior candidate rows are not a fixed baseline:
+  // matching identities may be refreshed, new products may be added, and
+  // downstream runtime revalidation can replace/exclude stale candidates.
+  const currentCycleRows=array(job.rawProducts);
+  return RegionalSelector.prepareProductInspectionPool(currentCycleRows,{limit:Math.max(120,Math.min(PRODUCT_PORTFOLIO_LIMIT,array(job.supplierSources).length*40))});
 }
 async function productResearchJobStatus(input) {
   const options = plain(input), job = await loadProductResearchJob(researchScope(options));

@@ -18,8 +18,12 @@
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
   const MAIN_ROWS = 9;
   const MAIN_LIMIT = 100;
+  const MAIN_BATCH = 20;
   const RIGHT_LIMIT = 100;
+  const RIGHT_BATCH = 20;
   const RIGHT_SECTION_KEY = "rightPanel";
+  const mainRenderTokens = new WeakMap();
+  const rightRenderTokens = new WeakMap();
 
   function qs(sel, root) {
     return (root || document).querySelector(sel);
@@ -30,7 +34,6 @@
   function safeText(v) {
     return v == null ? "" : String(v);
   }
-
   function pickTitle(it) {
     return safeText(it && (it.title || it.name || it.text || it.label));
   }
@@ -324,7 +327,7 @@
       .slice(0, MAIN_LIMIT);
   }
 
-  async function loadSnapshot() {
+  async function loadCurrentSnapshot() {
     try {
       const current = await fetch(
         CURRENT_SNAPSHOT_URL + "?_=" + encodeURIComponent(Date.now()),
@@ -336,30 +339,31 @@
       if (current.ok) {
         const payload = await current.json();
         if (payload && payload.ok === true && payload.snapshot) {
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-            source: "stored_release_current",
-            status: "front_readback_passed",
-            releaseId: payload.releaseId || null,
-            hash: payload.hash || null,
-            documentHash: payload.documentHash || null,
-            hashVerified: payload.hashVerified === true,
-            publicSlots: payload.publicSlots || null,
-            route: payload.route || null,
-            loadedAt: new Date().toISOString(),
+          return {
+            snapshot: payload.snapshot,
+            pipeline: {
+              source: "stored_release_current",
+              status: "front_readback_passed",
+              releaseId: payload.releaseId || null,
+              hash: payload.hash || null,
+              documentHash: payload.documentHash || null,
+              hashVerified: payload.hashVerified === true,
+              publicSlots: payload.publicSlots || null,
+              route: payload.route || null,
+              loadedAt: new Date().toISOString(),
+            },
           };
-          return payload.snapshot;
         }
       }
     } catch (_e) {
-      /* 기존 정적 스냅샷으로 안전하게 이어간다. */
+      /* 정적 스냅샷을 이미 별도로 요청 중이다. */
     }
+    return null;
+  }
+
+  async function loadStaticSnapshot() {
     const res = await fetch(SNAPSHOT_URL, { cache: "no-store" });
     if (!res.ok) throw new Error("snapshot_load_failed:" + res.status);
-    window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-      source: "static_snapshot_fallback",
-      status: "stored_release_current_unavailable",
-      loadedAt: new Date().toISOString(),
-    };
     return res.json();
   }
 
@@ -427,20 +431,21 @@
 
     const raw = Array.isArray(items) ? items : [];
     const displayItems = raw.slice(0, MAIN_LIMIT);
+    while (displayItems.length < MAIN_LIMIT) displayItems.push(null);
 
-    // 🔥 핵심: slot 강제 채움 (디스트리뷰션 방식)
-    while (displayItems.length < MAIN_LIMIT) {
-      displayItems.push(null);
-    }
-
-    // 기존 카드 가져오기
+    // A new approved snapshot starts from one visible batch. Later cards are
+    // created only when the user reaches the end of this row.
     let cards = getMainSlots(gridEl);
+    for (let i = MAIN_BATCH; i < cards.length; i++) {
+      if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
+    }
+    cards = getMainSlots(gridEl);
 
-    // 부족하면 카드 생성
-    if (cards.length < MAIN_LIMIT) {
+    function ensureCards(required) {
+      cards = getMainSlots(gridEl);
+      if (cards.length >= required) return cards;
       const frag = document.createDocumentFragment();
-
-      for (let i = cards.length; i < MAIN_LIMIT; i++) {
+      for (let i = cards.length; i < required; i++) {
         const a = document.createElement("a");
         a.className = "card";
         a.href = "#";
@@ -452,39 +457,78 @@
           <div class="desc"></div>
         </div>
       `;
-
         frag.appendChild(a);
       }
-
       gridEl.appendChild(frag);
+      return getMainSlots(gridEl);
+    }
 
-      // 다시 카드 목록 갱신
+    const scrollHost = gridEl.closest(".row-scroller") || gridEl;
+    const job = { grid: gridEl, items: displayItems, offset: 0 };
+    mainRenderTokens.set(scrollHost, job);
+
+    function renderMore() {
+      if (mainRenderTokens.get(scrollHost) !== job) return;
+      const end = Math.min(job.offset + MAIN_BATCH, MAIN_LIMIT, job.items.length);
+      cards = ensureCards(end);
+      for (let i = job.offset; i < end; i++) {
+        const it = job.items[i] || null;
+        if (it) paintMainCard(cards[i], it);
+        else resetMainCardToDummy(cards[i]);
+      }
+      job.offset = end;
+    }
+
+    renderMore();
+    if (scrollHost.dataset.igdcSocialBatchBound === "1") return;
+    scrollHost.dataset.igdcSocialBatchBound = "1";
+    scrollHost.addEventListener("scroll", function () {
+      const current = mainRenderTokens.get(scrollHost);
+      if (!current || current.offset >= Math.min(MAIN_LIMIT, current.items.length)) return;
+      if (scrollHost.scrollLeft + scrollHost.clientWidth >= scrollHost.scrollWidth - 40) {
+        const activeGrid = current.grid;
+        const activeItems = current.items;
+        mountMainRowContinue(activeGrid, activeItems, current, scrollHost);
+      }
+    }, { passive: true });
+  }
+
+  function mountMainRowContinue(gridEl, displayItems, job, scrollHost) {
+    if (mainRenderTokens.get(scrollHost) !== job) return;
+    const end = Math.min(job.offset + MAIN_BATCH, MAIN_LIMIT, displayItems.length);
+    let cards = getMainSlots(gridEl);
+    if (cards.length < end) {
+      const frag = document.createDocumentFragment();
+      for (let i = cards.length; i < end; i++) {
+        const a = document.createElement("a");
+        a.className = "card";
+        a.href = "#";
+        a.innerHTML = '<div class="pic"></div><div class="meta"><div class="title"></div><div class="desc"></div></div>';
+        frag.appendChild(a);
+      }
+      gridEl.appendChild(frag);
       cards = getMainSlots(gridEl);
     }
-
-    // 데이터 렌더
-    for (let i = 0; i < cards.length; i++) {
-      const card = cards[i];
+    for (let i = job.offset; i < end; i++) {
       const it = displayItems[i] || null;
-
-      if (it) paintMainCard(card, it);
-      else resetMainCardToDummy(card);
+      if (it) paintMainCard(cards[i], it);
+      else resetMainCardToDummy(cards[i]);
     }
+    job.offset = end;
   }
 
   function getRightPanels() {
     return qsa('[data-psom-key="rightPanel"]');
   }
 
-  function getRightCards(panel) {
+  function getRightCards(panel, required) {
     if (!panel) return [];
 
     let cards = qsa(".ad-box", panel);
-
-    if (cards.length === 0) {
+    const wanted = Math.min(RIGHT_LIMIT, Math.max(0, required == null ? RIGHT_LIMIT : required));
+    if (cards.length < wanted) {
       const frag = document.createDocumentFragment();
-
-      for (let i = 0; i < RIGHT_LIMIT; i++) {
+      for (let i = cards.length; i < wanted; i++) {
         const box = document.createElement("div");
         box.className = "ad-box product-card";
         box.dataset.dummy = "1";
@@ -721,84 +765,165 @@
       displayItems.push(null);
     }
 
-    const cards = getRightCards(panel);
-
-    for (let i = 0; i < cards.length; i++) {
-      const box = cards[i];
-      const it = displayItems[i];
-
-      if (it) {
-        paintRightCard(box, it);
-      } else {
-        resetRightCardToDummy(box);
-      }
+    let cards = getRightCards(panel, RIGHT_BATCH);
+    for (let i = RIGHT_BATCH; i < cards.length; i++) {
+      if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
     }
+
+    const scrollHost = panel.closest("#rpMobileScroller") || panel;
+    const job = { panel: panel, items: displayItems, offset: 0 };
+    rightRenderTokens.set(scrollHost, job);
+
+    function renderMore() {
+      if (rightRenderTokens.get(scrollHost) !== job) return;
+      const end = Math.min(job.offset + RIGHT_BATCH, RIGHT_LIMIT, job.items.length);
+      cards = getRightCards(panel, end);
+      for (let i = job.offset; i < end; i++) {
+        const it = job.items[i];
+        if (it) paintRightCard(cards[i], it);
+        else resetRightCardToDummy(cards[i]);
+      }
+      job.offset = end;
+    }
+
+    renderMore();
+    if (scrollHost.dataset.igdcSocialRightBatchBound === "1") return;
+    scrollHost.dataset.igdcSocialRightBatchBound = "1";
+    scrollHost.addEventListener("scroll", function () {
+      const current = rightRenderTokens.get(scrollHost);
+      if (!current || current.offset >= Math.min(RIGHT_LIMIT, current.items.length)) return;
+      const nearX = scrollHost.scrollWidth > scrollHost.clientWidth + 2 &&
+        scrollHost.scrollLeft + scrollHost.clientWidth >= scrollHost.scrollWidth - 40;
+      const nearY = scrollHost.scrollHeight > scrollHost.clientHeight + 2 &&
+        scrollHost.scrollTop + scrollHost.clientHeight >= scrollHost.scrollHeight - 40;
+      if (!nearX && !nearY) return;
+      const end = Math.min(current.offset + RIGHT_BATCH, RIGHT_LIMIT, current.items.length);
+      const activeCards = getRightCards(current.panel, end);
+      for (let i = current.offset; i < end; i++) {
+        const it = current.items[i];
+        if (it) paintRightCard(activeCards[i], it);
+        else resetRightCardToDummy(activeCards[i]);
+      }
+      current.offset = end;
+    }, { passive: true });
   }
 
-  async function run() {
-    try {
-      const snap = await loadSnapshot();
-      const sections = getSections(snap);
-      const route = await loadCountryRoute();
-      if (!sections) return;
+  let lastSnapshot = null;
+  let lastRoute = routeFallback();
+  let runInFlight = null;
 
-      const grids = document.querySelectorAll("[data-psom-key]");
+  function renderSnapshot(snap, route) {
+    const sections = getSections(snap);
+    if (!sections) return false;
 
-      grids.forEach((grid) => {
-        const key = grid.getAttribute("data-psom-key");
-        if (!key) return;
+    const grids = document.querySelectorAll("[data-psom-key]");
 
-        if (key === "rightPanel") return;
-        if (key === "social-maru") return;
+    grids.forEach((grid) => {
+      const key = grid.getAttribute("data-psom-key");
+      if (!key) return;
 
-        const raw = routedItems(snap, key, route) || sections[key];
+      if (key === "rightPanel") return;
+      if (key === "social-maru") return;
 
-        const items = Array.isArray(raw)
-          ? raw
-          : Array.isArray(raw?.items)
-            ? raw.items
-            : [];
+      const raw = routedItems(snap, key, route) || sections[key];
 
-        // 🔥 샘플 자동 주입 (데이터 없을 때)
-        const finalItems =
-          items.length > 0
-            ? items
-            : [
-                {
-                  title: key + " SAMPLE",
-                  url: "#",
-                  thumbnail: "",
-                },
-              ];
+      const items = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.items)
+          ? raw.items
+          : [];
 
-        mountMainRow(grid, finalItems);
+      const finalItems =
+        items.length > 0
+          ? items
+          : [
+              {
+                title: key + " SAMPLE",
+                url: "#",
+                thumbnail: "",
+              },
+            ];
+
+      mountMainRow(grid, finalItems);
+    });
+
+    const rightPanels = getRightPanels();
+
+    if (rightPanels.length) {
+      const raw = Array.isArray(sections.rightPanel)
+        ? sections.rightPanel
+        : Array.isArray(sections.rightPanel?.items)
+          ? sections.rightPanel.items
+          : [];
+
+      const finalItems = raw.length > 0 ? raw : [];
+
+      rightPanels.forEach(function (panel) {
+        mountRightPanel(panel, finalItems);
+      });
+    }
+
+    window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
+    window.__IGDC_SOCIAL_COUNTRY_ROUTE__ = {
+      countryCode: route.countryCode || null,
+      languages: route.languages || [],
+      source: route.source || "fallback",
+    };
+    return true;
+  }
+
+  function run() {
+    if (runInFlight) return runInFlight;
+
+    const staticPromise = loadStaticSnapshot();
+    const currentPromise = loadCurrentSnapshot();
+    const routePromise = loadCountryRoute();
+    let finalApplied = false;
+
+    const earlyStatic = staticPromise
+      .then(function (snap) {
+        if (!finalApplied) {
+          lastSnapshot = snap;
+          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+            source: "static_snapshot_early",
+            status: "stored_release_current_pending",
+            loadedAt: new Date().toISOString(),
+          };
+          renderSnapshot(snap, lastRoute);
+        }
+        return snap;
+      })
+      .catch(function () {
+        return null;
       });
 
-      const rightPanels = getRightPanels();
+    runInFlight = Promise.all([currentPromise, routePromise])
+      .then(async function (results) {
+        const current = results[0];
+        lastRoute = results[1] || routeFallback();
+        finalApplied = true;
+        if (current && current.snapshot) {
+          lastSnapshot = current.snapshot;
+          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = current.pipeline;
+        } else {
+          lastSnapshot = await earlyStatic;
+          if (!lastSnapshot) throw new Error("snapshot_load_failed");
+          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+            source: "static_snapshot_fallback",
+            status: "stored_release_current_unavailable",
+            loadedAt: new Date().toISOString(),
+          };
+        }
+        renderSnapshot(lastSnapshot, lastRoute);
+      })
+      .catch(function (e) {
+        console.error("[social-automap-fixed] fail", e);
+      })
+      .finally(function () {
+        runInFlight = null;
+      });
 
-      if (rightPanels.length) {
-        const raw = Array.isArray(sections.rightPanel)
-          ? sections.rightPanel
-          : Array.isArray(sections.rightPanel?.items)
-            ? sections.rightPanel.items
-            : [];
-
-        const finalItems = raw.length > 0 ? raw : [];
-
-        rightPanels.forEach(function (panel) {
-          mountRightPanel(panel, finalItems);
-        });
-      }
-
-      window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
-      window.__IGDC_SOCIAL_COUNTRY_ROUTE__ = {
-        countryCode: route.countryCode || null,
-        languages: route.languages || [],
-        source: route.source || "fallback",
-      };
-    } catch (e) {
-      console.error("[social-automap-fixed] fail", e);
-    }
+    return runInFlight;
   }
 
   function boot() {
@@ -807,7 +932,7 @@
     run();
   }
   window.addEventListener("igdc:rightpanel:refresh", function () {
-    run();
+    if (lastSnapshot) renderSnapshot(lastSnapshot, lastRoute);
   });
   boot();
 })();
