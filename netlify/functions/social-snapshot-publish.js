@@ -79,50 +79,6 @@ function scopeToken(route) {
   if (region) return "REGION:" + region;
   return "GLOBAL";
 }
-function fullStructuralBase(storedSnapshot) {
-  const seed = baseSnapshot();
-  const base = JSON.parse(JSON.stringify((seed && seed.doc) || {}));
-  const stored = storedSnapshot && typeof storedSnapshot === "object"
-    ? JSON.parse(JSON.stringify(storedSnapshot))
-    : null;
-  if (!stored) return { file: seed && seed.file || "static-social-snapshot", doc: base };
-
-  if (!base.pages) base.pages = {};
-  if (!base.pages.social) base.pages.social = {};
-  if (!base.pages.social.sections) base.pages.social.sections = {};
-
-  const storedSocial = stored.pages && stored.pages.social || {};
-  const storedSections = storedSocial.sections || {};
-
-  // Only the nine managed SNS sections may be inherited from a stored release.
-  // Reserved structural sections (social-maru, rightPanel) always stay exactly
-  // as deployed in the static Social snapshot so a partial release can never
-  // erase the right-side product cards or the MARU reserved section.
-  SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
-    if (Array.isArray(storedSections[sectionKey])) {
-      base.pages.social.sections[sectionKey] = JSON.parse(
-        JSON.stringify(storedSections[sectionKey]),
-      );
-    }
-  });
-
-  if (storedSocial.candidatePool && typeof storedSocial.candidatePool === "object") {
-    const currentPool = base.pages.social.candidatePool && typeof base.pages.social.candidatePool === "object"
-      ? base.pages.social.candidatePool
-      : {};
-    SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
-      if (Array.isArray(storedSocial.candidatePool[sectionKey])) {
-        currentPool[sectionKey] = JSON.parse(
-          JSON.stringify(storedSocial.candidatePool[sectionKey]),
-        );
-      }
-    });
-    base.pages.social.candidatePool = currentPool;
-  }
-
-  return { file: seed && seed.file || "static-social-snapshot", doc: base };
-}
-
 async function latestStoredBase(route) {
   try {
     const countryCode = text(route && route.countryCode).toUpperCase();
@@ -150,13 +106,11 @@ async function latestStoredBase(route) {
       const global = list.find((row) => !releaseCountry(row));
       latest = exact || ((countryCode || regionId) ? global : null);
     }
-    if (latest && latest.snapshot) {
-      const structural = fullStructuralBase(latest.snapshot);
+    if (latest && latest.snapshot)
       return {
-        file: "stored-current:" + latest.release_id + "+static-structural-base",
-        doc: structural.doc,
+        file: "stored-current:" + latest.release_id,
+        doc: latest.snapshot,
       };
-    }
   } catch (_error) {
     /* Static snapshot remains the safe fallback. */
   }

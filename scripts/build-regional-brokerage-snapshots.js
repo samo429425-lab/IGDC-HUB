@@ -33,7 +33,7 @@ async function publishSocialIndependently() {
     };
   }
   try {
-    const result = await socialRelease.publish({ root, snapshotEngine: snapshots });
+    const result = await socialRelease.publish({ root });
     return Object.assign({}, result || {}, { isolated: true });
   } catch (error) {
     return {
@@ -52,11 +52,8 @@ const SOCIAL_CHECKPOINT_TARGETS = [
   path.join("data", "search-bank.snapshot.json"),
   path.join("netlify", "functions", "data", "search-bank.snapshot.json"),
   path.join("netlify", "functions", "search-bank.snapshot.json"),
-  path.join("data", "social.snapshot.json"),
   path.join("data", "social-searchbank.release.snapshot.json"),
-  path.join("data", "social-pipeline.report.json"),
-  path.join("netlify", "functions", "data", "social.snapshot.json"),
-  path.join("netlify", "functions", "social.snapshot.json")
+  path.join("data", "social-pipeline.report.json")
 ];
 
 function createSocialCheckpoint() {
@@ -569,7 +566,21 @@ async function main() {
     // This is the authoritative Social handoff point: the Commerce canonical
     // publisher has finished (or preserved/rolled back), so Social can merge
     // into the final SearchBank snapshot without being overwritten later.
-    await publishSocialAfterCanonical();
+    const socialPublication = await publishSocialAfterCanonical();
+    const socialStatus = String(socialPublication && socialPublication.status || "").toLowerCase();
+    const insertedSocial = Number(
+      socialPublication && socialPublication.searchBankSnapshot &&
+      socialPublication.searchBankSnapshot.insertedRealSocialCandidateItems || 0
+    );
+    if (socialStatus === "searchbank_handoff_complete" && insertedSocial > 0) {
+      // Do not modify downstream engines. Hand the already-written SearchBank Snapshot
+      // to the site's existing Snapshot Engine exactly once at the normal build layer.
+      const downstream = snapshots.run({ trigger: "netlify-build-existing-pipeline-after-social-searchbank" });
+      if (!downstream || downstream.ok !== true) {
+        throw new Error("Existing Snapshot Engine did not consume the completed Social SearchBank handoff.");
+      }
+      process.stdout.write(JSON.stringify({ socialDownstream: downstream }, null, 2) + "\n");
+    }
   }
 }
 

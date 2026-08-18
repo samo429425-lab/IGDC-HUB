@@ -22,7 +22,7 @@ const SocialStore = require("./social-candidate-store.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 const SearchBankEngine = require("../search-bank-engine");
 
-const VERSION = "social-searchbank-release-adapter-v1.2.0-searchbank-engine-contract-handoff";
+const VERSION = "social-searchbank-release-adapter-v1.3.0-searchbank-only-handoff";
 const RELEASE_FILE = "social-searchbank.release.snapshot.json";
 const REPORT_FILE = "social-pipeline.report.json";
 const SEARCH_BANK_FILE = "search-bank.snapshot.json";
@@ -514,33 +514,8 @@ async function latestStoredRelease() {
   );
   return Array.isArray(rows) ? rows[0] || null : null;
 }
-function finalSocialSummary(root, expectedIds) {
-  const file = outputPath(root, "social.snapshot.json");
-  const snapshot = readJson(file);
-  const sections = socialSections(snapshot);
-  const present = new Set();
-  const counts = {};
-  SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
-    const rows = Array.isArray(sections[sectionKey]) ? sections[sectionKey] : [];
-    counts[sectionKey] = rows.filter((row) => {
-      const id = text(row && (row.contentId || row.id));
-      if (id && expectedIds.has(id)) present.add(id);
-      return id && expectedIds.has(id);
-    }).length;
-  });
-  return {
-    file: "data/social.snapshot.json",
-    exists: !!snapshot,
-    hash: snapshot ? sha256(snapshot) : null,
-    expected: expectedIds.size,
-    present: present.size,
-    missingIds: Array.from(expectedIds).filter((id) => !present.has(id)),
-    counts,
-  };
-}
 async function publish(input) {
   const root = rootOf(input);
-  const snapshotEngine = input && input.snapshotEngine;
   const report = {
     version: VERSION,
     generatedAt: new Date().toISOString(),
@@ -626,40 +601,12 @@ async function publish(input) {
     writes: handoff.writes,
   };
 
-  if (!snapshotEngine || typeof snapshotEngine.run !== "function") {
-    // SearchBank handoff is complete. A caller may deliberately let the
-    // existing downstream build stage perform Snapshot Engine publication.
-    report.pipeline.snapshotEngine = "deferred_existing_pipeline";
-    report.pipeline.finalSocialSnapshotReadback = "deferred_existing_pipeline";
-    report.status = "searchbank_handoff_complete";
-    atomicWriteJson(outputPath(root, REPORT_FILE), report);
-    return report;
-  }
-
-  const engineReport = snapshotEngine.run({
-    targetPage: "social",
-    bank: handoff.bank,
-    trigger: "netlify-build-social-searchbank-snapshot-handoff",
-  });
-  if (engineReport && engineReport.ok === false) {
-    const error = new Error("SOCIAL_SNAPSHOT_ENGINE_REPORTED_FAILURE");
-    error.code = "social_snapshot_engine_reported_failure";
-    throw error;
-  }
-  report.pipeline.snapshotEngine = "passed";
-  report.snapshotEngineReport = engineReport || null;
-  const expectedIds = new Set(gate.accepted.map((item) => text(item.id)).filter(Boolean));
-  const final = finalSocialSummary(root, expectedIds);
-  report.finalSocialSnapshot = final;
-  report.pipeline.finalSocialSnapshotReadback =
-    final.exists && final.present === final.expected ? "passed" : "failed";
-  report.status =
-    report.pipeline.finalSocialSnapshotReadback === "passed"
-      ? "published"
-      : "blocked";
-  if (report.status !== "published") {
-    report.reason = "final_social_snapshot_readback_mismatch";
-  }
+  // SearchBank Snapshot is the terminal responsibility of this Social adapter.
+  // Existing downstream Snapshot Engine / social.snapshot / AutoMap are intentionally
+  // not called or read here.
+  report.pipeline.snapshotEngine = "existing_pipeline_not_touched";
+  report.pipeline.finalSocialSnapshotReadback = "existing_pipeline_not_touched";
+  report.status = "searchbank_handoff_complete";
   atomicWriteJson(outputPath(root, REPORT_FILE), report);
   return report;
 }
