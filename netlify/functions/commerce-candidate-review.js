@@ -15,7 +15,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.9.2-optional-sponsorship-mode";
+const VERSION = "commerce-candidate-review-api-v1.9.3-large-ledger-scoped-read";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -40,6 +40,10 @@ function bool(v){return v===true||["1","true","yes","on","approved","verified","
 function isObject(v){return !!v&&typeof v==="object"&&!Array.isArray(v);}
 function plain(v){return isObject(v)?v:{};}
 function safeUrl(v){try{const u=new URL(text(v));return u.protocol==="https:"?u.toString():"";}catch(_e){return "";}}
+// Read-only management projections do not need PostgREST exact row counts.
+// Avoiding Prefer: count=exact keeps large global ledgers from doing a second
+// full count scan for every paged/scoped admin request.
+async function lightSelect(table,query){return SlotStore.request(SlotStore.rest(table,query),{method:"GET"});}
 function json(statusCode, body){return {statusCode,headers:{"content-type":"application/json; charset=utf-8","cache-control":"private, no-store, max-age=0","x-content-type-options":"nosniff","access-control-allow-headers":"Content-Type, Authorization","access-control-allow-methods":"GET,POST,OPTIONS"},body:statusCode===204?"":JSON.stringify(body)};}
 function parse(event){try{return event&&event.body?JSON.parse(event.isBase64Encoded?Buffer.from(event.body,"base64").toString("utf8"):event.body):{};}catch(_e){const err=new Error("요청 JSON 형식이 올바르지 않습니다.");err.statusCode=400;throw err;}}
 function roles(member){return Array.from(new Set((member&&member.roles||[]).map(lower).filter(Boolean)));}
@@ -87,6 +91,112 @@ async function liveProductResearchQueue(){
     return {ok:relationErrors.length===0,rows:output,storageError:null,relationErrors};
   }catch(error){return {ok:false,rows:[],storageError:text(error&&error.message||error),relationErrors:[]};}
 }
+
+function scopedRegionValues(country,regionInput){
+  const region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE";
+  return region==="NATIONWIDE"?["NATIONWIDE"]:[region,"NATIONWIDE"];
+}
+function candidateScopeQuery(basePath,country,region,limit){
+  const countryPath=basePath+"->>country",regionPath=basePath+"->>region";
+  return "select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at"+
+    "&source_ref=eq."+encodeURIComponent(ProductPipeline.SOURCE_REF)+
+    "&source_payload->"+countryPath+"=eq."+encodeURIComponent(country)+
+    "&source_payload->"+regionPath+"=eq."+encodeURIComponent(region)+
+    "&order=updated_at.desc&limit="+Math.max(1,Number(limit)||600);
+}
+function marketScopeQuery(country,region,limit){
+  return "select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at"+
+    "&source_ref=eq."+encodeURIComponent(ProductPipeline.SOURCE_REF)+
+    "&source_payload->marketScope->>marketCountry=eq."+encodeURIComponent(country)+
+    "&source_payload->marketScope->>marketRegion=eq."+encodeURIComponent(region)+
+    "&order=updated_at.desc&limit="+Math.max(1,Number(limit)||600);
+}
+async function fallbackPagedScopeRows(country,region,maxRows){
+  const out=[],seen=new Set(),pageSize=120,maxPages=20;
+  for(let offset=0,page=0;page<maxPages&&out.length<maxRows;page+=1,offset+=pageSize){
+    const rows=await lightSelect("gslot_candidates","select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at&source_ref=eq."+encodeURIComponent(ProductPipeline.SOURCE_REF)+"&order=updated_at.desc&limit="+pageSize+"&offset="+offset);
+    const pageRows=Array.isArray(rows)?rows:[];
+    for(const row of pageRows){
+      const id=text(row&&row.id);if(!id||seen.has(id))continue;
+      const payload=plain(row&&row.source_payload);if(!scopeMatch(payload,country,region).matched)continue;
+      seen.add(id);out.push(row);if(out.length>=maxRows)break;
+    }
+    if(pageRows.length<pageSize)break;
+  }
+  return out;
+}
+async function scopedProductCandidateRows(countryInput,regionInput,limitInput){
+  const country=normalizeCountry(countryInput),region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE";
+  const limit=Math.max(50,Math.min(650,Number(limitInput)||550));
+  if(!country||country==="GLOBAL")return [];
+  const seen=new Map(),regions=scopedRegionValues(country,region);
+  // Current product candidates always carry marketScope. Older rows may only
+  // carry countrySupply/placement, so use those only when the primary projection
+  // did not fill the requested management page.
+  const specs=["marketScope","countrySupply","placement"];
+  let queryFailed=false;
+  for(const spec of specs){
+    for(const regionValue of regions){
+      if(seen.size>=limit)break;
+      try{
+        const query=spec==="marketScope"?marketScopeQuery(country,regionValue,limit):candidateScopeQuery(spec,country,regionValue,limit);
+        const rows=await lightSelect("gslot_candidates",query);
+        for(const row of Array.isArray(rows)?rows:[]){
+          const id=text(row&&row.id);if(!id||seen.has(id))continue;
+          if(!scopeMatch(plain(row&&row.source_payload),country,region).matched)continue;
+          seen.set(id,row);if(seen.size>=limit)break;
+        }
+      }catch(_error){queryFailed=true;}
+    }
+    if(seen.size>=limit)break;
+  }
+  if(!seen.size&&queryFailed){
+    try{for(const row of await fallbackPagedScopeRows(country,region,limit)){const id=text(row&&row.id);if(id&&!seen.has(id))seen.set(id,row);}}catch(_fallbackError){}
+  }
+  return Array.from(seen.values()).sort((a,b)=>text(b&&b.updated_at).localeCompare(text(a&&a.updated_at))).slice(0,limit);
+}
+function candidateIdBatches(ids,size){const out=[];for(let i=0;i<ids.length;i+=size)out.push(ids.slice(i,i+size));return out;}
+async function scopedRelationRows(table,fields,ids,order){
+  const rows=[],errors=[];
+  for(const batch of candidateIdBatches(ids,100)){
+    if(!batch.length)continue;
+    const encoded="("+batch.map((id)=>encodeURIComponent(id)).join(",")+")";
+    try{
+      const found=await lightSelect(table,"select="+fields+"&candidate_id=in."+encoded+(order?"&order="+order:"")+"&limit=2500");
+      rows.push(...(Array.isArray(found)?found:[]));
+    }catch(error){errors.push(text(error&&error.message||error));}
+  }
+  return {rows,errors};
+}
+async function scopedLiveProductResearchQueue(country,region,limit){
+  try{
+    const candidates=await scopedProductCandidateRows(country,region,limit);
+    if(!candidates.length)return {ok:true,rows:[],storageError:null,relationErrors:[]};
+    const ids=candidates.map((row)=>text(row&&row.id)).filter(Boolean),settled=await Promise.all([
+      scopedRelationRows("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,updated_at",ids,"updated_at.desc"),
+      scopedRelationRows("gslot_candidate_availability","candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at",ids,"updated_at.desc"),
+      scopedRelationRows("gslot_candidate_revenue","id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at",ids,"updated_at.desc"),
+      scopedRelationRows("gslot_candidate_evidence","id,candidate_id,evidence_type,evidence_url,note,verified,created_at",ids,"created_at.desc")
+    ]);
+    const grouped={assignments:new Map(),markets:new Map(),revenues:new Map(),evidence:new Map()};
+    function add(map,row){const id=text(row&&row.candidate_id);if(!id)return;if(!map.has(id))map.set(id,[]);map.get(id).push(row);}
+    settled[0].rows.forEach((row)=>add(grouped.assignments,row));settled[1].rows.forEach((row)=>add(grouped.markets,row));settled[2].rows.forEach((row)=>add(grouped.revenues,row));settled[3].rows.forEach((row)=>add(grouped.evidence,row));
+    const output=candidates.map((candidate)=>{const id=text(candidate&&candidate.id);return ProductPipeline.liveQueueRow(candidate,{assignments:grouped.assignments.get(id)||[],markets:grouped.markets.get(id)||[],revenues:grouped.revenues.get(id)||[],evidence:grouped.evidence.get(id)||[]});});
+    const names=["assignments","markets","revenues","evidence"],relationErrors=[];settled.forEach((result,index)=>result.errors.forEach((message)=>relationErrors.push({source:names[index],message})));
+    return {ok:relationErrors.length===0,rows:output,storageError:null,relationErrors};
+  }catch(error){return {ok:false,rows:[],storageError:text(error&&error.message||error),relationErrors:[]};}
+}
+async function scopedStage(root,country,region){
+  const stored=CommerceIntake.readStage(root)||{schema:"commerce-candidate-staging.snapshot.v1",summary:{considered:0},candidates:[]};
+  const storedScoped=filteredStage(stored,country,region),live=await scopedLiveProductResearchQueue(country,region,550),merged=new Map();
+  for(const row of Array.isArray(storedScoped.candidates)?storedScoped.candidates:[])merged.set(text(row&&row.candidateId),row);
+  for(const row of live.rows||[])merged.set(text(row&&row.candidateId),row);
+  const candidates=Array.from(merged.values()).filter(Boolean),eligible=candidates.filter((row)=>row&&row.releaseEligible===true).length,registrySyncReady=candidates.filter((row)=>text(row&&row.stageStatus)==="registry_sync_ready"||text(row&&row.lifecycle&&row.lifecycle.stage)==="registry_sync_ready").length;
+  const liveIds=new Set((live.rows||[]).map((row)=>text(row&&row.candidateId)).filter(Boolean)),storedRows=Array.isArray(storedScoped.candidates)?storedScoped.candidates:[],liveOnly=candidates.filter((row)=>liveIds.has(text(row&&row.candidateId))&&!storedRows.some((item)=>text(item&&item.candidateId)===text(row&&row.candidateId))).length;
+  const base=Object.assign({},storedScoped,{candidates,summary:Object.assign({},plain(storedScoped.summary),{considered:candidates.length,eligibleForRelease:eligible,held:candidates.length-eligible,registrySyncReady,goLiveAuditCandidates:registrySyncReady+eligible,liveResearchQueue:live.rows.length,liveResearchQueueOnly:liveOnly,stagedReleaseQueue:storedRows.length}),source:Object.assign({},plain(storedScoped.source),{liveResearchQueueCount:live.rows.length,liveResearchQueueOnlyCount:liveOnly,stagedReleaseQueueCount:storedRows.length,liveQueueStorageAvailable:live.storageError?false:true,liveQueueStorageError:live.storageError||null}),pipeline:{version:ProductPipeline.VERSION,livePrivateResearchQueue:true,privateStagingSnapshot:true,automaticPublication:false,paymentExecution:false,relationErrors:live.relationErrors||[]}});
+  return filteredStage(base,country,region);
+}
+
 async function stage(root){
   const stored=CommerceIntake.readStage(root)||{schema:"commerce-candidate-staging.snapshot.v1",summary:{considered:0},candidates:[]};
   const live=await liveProductResearchQueue();
@@ -210,9 +320,9 @@ async function locationStatus(doc){
   const registry=countryRegistry();
   const allowedCountryCodes=new Set(registry.countries.map((row)=>normalizeCountry(row&&row.code)).filter(Boolean));
   const settled=await Promise.allSettled([
-    SlotStore.select("gslot_countries","select=code,name,region_code,enabled,legal_source_id,updated_at&order=code.asc&limit=1000"),
-    SlotStore.select("gslot_candidate_availability","select=candidate_id,country_code,region_code,availability_state,updated_at&order=updated_at.desc&limit=5000"),
-    SlotStore.select("gslot_slot_assignments","select=candidate_id,country_code,region_code,state,publication_status,manual_pinned,updated_at&order=updated_at.desc&limit=5000")
+    lightSelect("gslot_countries","select=code,name,region_code,enabled,legal_source_id,updated_at&order=code.asc&limit=1000"),
+    lightSelect("gslot_candidate_availability","select=candidate_id,country_code,region_code,availability_state,updated_at&order=updated_at.desc&limit=5000"),
+    lightSelect("gslot_slot_assignments","select=candidate_id,country_code,region_code,state,publication_status,manual_pinned,updated_at&order=updated_at.desc&limit=5000")
   ]);
   const countryRows=safeRows(settled[0]),availability=safeRows(settled[1]),assignments=safeRows(settled[2]);
   const map=new Map();
@@ -243,7 +353,7 @@ async function locationStatus(doc){
   const unscoped=(Array.isArray(doc&&doc.candidates)?doc.candidates:[]).filter((row)=>candidateScopes(row).length===0);
   const countries=Array.from(map.values()).map((entry)=>({
     code:entry.code,name:entry.nameKo,nameKo:entry.nameKo,nameEn:entry.nameEn,worldRegion:entry.worldRegion,enabled:entry.enabled,requiresSubdivision:entry.requiresSubdivision,subdivisionType:entry.subdivisionType,
-    candidateCount:entry.candidateIds.size,releaseEligible:entry.eligibleIds.size,held:entry.heldIds.size,availabilityCount:entry.availabilityIds.size,assignmentCount:entry.assignmentIds.size,manualPinnedCount:entry.manualPinnedIds.size,
+    candidateCount:new Set(Array.from(entry.candidateIds).concat(Array.from(entry.availabilityIds),Array.from(entry.assignmentIds))).size,releaseEligible:entry.eligibleIds.size,held:entry.heldIds.size,availabilityCount:entry.availabilityIds.size,assignmentCount:entry.assignmentIds.size,manualPinnedCount:entry.manualPinnedIds.size,
     regions:Array.from(new Set(entry.subdivisions.map((row)=>row.code).concat(Array.from(entry.observedRegions)))).sort(),subdivisions:entry.subdivisions,lastUpdated:entry.lastUpdated||null,
     aiState:"inherit",status:entry.candidateIds.size?"candidate_data":((entry.availabilityIds.size||entry.assignmentIds.size)?"registry_only":"ready_empty")
   })).sort((a,b)=>{const ao=(registry.regions.find((r)=>r.id===a.worldRegion)||{}).order||999;const bo=(registry.regions.find((r)=>r.id===b.worldRegion)||{}).order||999;return ao-bo||a.nameKo.localeCompare(b.nameKo,"ko")||a.code.localeCompare(b.code);});
@@ -520,17 +630,22 @@ exports.handler=async function(event){
     const member=await resolveCurrentAdmin(event);
     const body=method==="GET"?{}:parse(event);const action=lower((event.queryStringParameters||{}).action||body.action||"summary");
     if(method==="GET"){
-      requireRole(member,"read");const raw=await stage(process.cwd());const query=event.queryStringParameters||{};
+      requireRole(member,"read");const query=event.queryStringParameters||{};
+      // Session/geo/location boot reads must never hydrate the global private
+      // product queue. The previous handler built the entire 2,500-row live stage
+      // before even checking the action, which made every admin page susceptible
+      // to 502/504 once one country accumulated a large research ledger.
       if(action==="session")return json(200,sessionDoc(member));
       if(action==="geo")return json(200,geoProbe(event));
-      if(action==="locations")return json(200,await locationStatus(raw));
+      if(action==="locations")return json(200,await locationStatus({candidates:[]}));
       const probe=geoProbe(event);const requested=text(query.country).toUpperCase();
       const scopeCountry=requested||(probe.resolved?probe.country:"UNRESOLVED");
       const scopeRegion=text(query.region)||(probe.resolved?(probe.region||"NATIONWIDE"):"");
-      const doc=filteredStage(raw,scopeCountry,scopeRegion);
+      const doc=await scopedStage(process.cwd(),scopeCountry,scopeRegion);
       if(action==="dashboard"){
-        const summary=summaryDoc(doc),diagnostic=diagnosticDoc(doc,member);
-        return json(200,{ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,500),diagnostic});
+        const summary=summaryDoc(doc),response={ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,500)};
+        if(!["1","true","yes"].includes(lower(query.compact)))response.diagnostic=diagnosticDoc(doc,member);
+        return json(200,response);
       }
       if(action==="summary")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc)});
       if(action==="candidates")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc),candidates:(doc.candidates||[]).slice(0,500)});

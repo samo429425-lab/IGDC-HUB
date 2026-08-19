@@ -63,7 +63,12 @@ exports.handler=async function(event){
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
     if(action==="trust_policy")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,marketSignalPolicy:MarketSignals.POLICY});
-    const state=await Automation.configState();
+    // Most country/product actions do not use configuration state. Loading it for
+    // every request used to make a large research ledger capable of blocking an
+    // unrelated status/AI/front action. Hydrate settings only for the three read
+    // paths that actually need them.
+    const needsConfigState=action==="catalog"||action==="diagnostic"||action==="scope";
+    const state=needsConfigState?await Automation.configState():null;
     if(action==="catalog")return json(200,catalog(state));
     if(action==="diagnostic")return json(200,Automation.diagnostic(state));
     if(action==="global_control_diagnostic")return json(200,await Automation.globalControlDiagnostic());
@@ -172,7 +177,10 @@ exports.handler=async function(event){
           const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
           batchResult={ok:true,status:persisted?(blocked?"partial":"pending_finalize"):(blocked?"blocked":"empty"),action:"prepare_publication_batch",requested:plan.targets.length,queued:0,persisted,pendingBuild:persisted,blocked,items,preparation,refresh,repairUnpublish,release:{queued:false,reason:"deferred_single_build_finalize"},automaticPublication:false,publicSnapshotConfirmed:false,buildVerificationRequired:true};
         }else{
-          const liveDoc=await CandidateReview.stage(process.cwd());
+          // prepareProductFrontTargets already verified and durably persisted the
+          // selected candidate lifecycle. Do not perform a second global candidate
+          // staging scan here; at 1,000+ products that duplicate scan can time out.
+          const liveDoc={candidates:[]};
           const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true},scope,liveDoc);
           const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
           const items=repairItems.concat(preparationBlocked,publishItems);
