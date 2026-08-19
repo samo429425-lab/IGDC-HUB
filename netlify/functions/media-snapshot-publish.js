@@ -12,7 +12,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
 const MediaReleaseAdapter = require("./lib/media-searchbank-release-adapter.v1");
 
-const VERSION = "media-snapshot-publish-v1.10.1-public-boundary-serialized-hash";
+const VERSION = "media-snapshot-publish-v1.12.1-coherent-selection-pipeline";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
 
@@ -56,7 +56,7 @@ function frontContentEnabled(row){
 }
 function sectionSlots(section){return Array.isArray(section)?section:(section&&Array.isArray(section.slots)?section.slots:[]);}
 function blankSlot(slot,index){
-  return{slotId:Number(slot&&slot.slotId)||index+1,contentId:null,title:null,thumb:"#",provider:null};
+  return{slotId:Number(slot&&slot.slotId)||index+1,contentId:null,title:null,thumb:"#",provider:null,placeholder:true};
 }
 function cleanBaseSnapshot(snapshot){
   const next=clone(snapshot);
@@ -64,12 +64,39 @@ function cleanBaseSnapshot(snapshot){
   MANUAL_SECTIONS.forEach((sectionKey)=>{
     const original=next.sections[sectionKey];
     const objectSection=Array.isArray(original)?{key:sectionKey,title:sectionKey,slots:original}:Object.assign({},original||{key:sectionKey,title:sectionKey});
-    const slots=sectionSlots(original).map((slot,index)=>slot&&slot.managedBy==="media-snapshot-publish"?blankSlot(slot,index):clone(slot));
+    const slots=sectionSlots(original).map((slot,index)=>{
+      if(slot&&slot.managedBy==="media-snapshot-publish"){
+        return slot.fallbackSample&&typeof slot.fallbackSample==="object"?Object.assign(clone(slot.fallbackSample),{slotId:Number(slot.slotId)||index+1}):blankSlot(slot,index);
+      }
+      return clone(slot);
+    });
     objectSection.slots=slots;
     next.sections[sectionKey]=objectSection;
   });
   return next;
 }
+function attachCommittedFallbacks(snapshot, committedBase){
+  const next=clone(snapshot),base=clone(committedBase);
+  next.sections=Object.assign({},next.sections||{});
+  MANUAL_SECTIONS.forEach((sectionKey)=>{
+    const current=next.sections[sectionKey];
+    const baseSlots=sectionSlots(base.sections&&base.sections[sectionKey]);
+    const objectSection=Array.isArray(current)?{key:sectionKey,title:sectionKey,slots:current}:Object.assign({},current||{key:sectionKey,title:sectionKey});
+    const slots=sectionSlots(current).slice();
+    const capacity=Math.max(MediaStore.FRONT_CAPACITY,slots.length,baseSlots.length);
+    while(slots.length<capacity)slots.push({slotId:slots.length+1,contentId:null,title:null,thumb:"#",provider:null,placeholder:true});
+    objectSection.slots=slots.slice(0,MediaStore.FRONT_CAPACITY).map((slot,index)=>{
+      const out=Object.assign({},slot,{slotId:index+1});
+      if(out.managedBy==="media-snapshot-publish"&&!out.fallbackSample){
+        out.fallbackSample=MediaStore.sampleFallbackFor(baseSlots[index]||{},index);
+      }
+      return out;
+    });
+    next.sections[sectionKey]=objectSection;
+  });
+  return next;
+}
+
 function managedCounts(snapshot){
   const sections={};let total=0;
   MANUAL_SECTIONS.forEach((sectionKey)=>{
@@ -78,14 +105,14 @@ function managedCounts(snapshot){
   });
   return{sections,total};
 }
-function stampReleaseControl(snapshot, action, sectionKey, actor, publicationRequested){
+function stampReleaseControl(snapshot, action, sectionKey, sectionKeys, actor, publicationRequested){
   const next=clone(snapshot),counts=managedCounts(next);
   next.meta=Object.assign({},next.meta||{}, {
     generatedAt:MediaStore.nowIso(),
     generatedBy:"media-snapshot-publish",
     filled:counts.sections,
     releaseControl:{
-      action,sectionKey:sectionKey||null,
+      action,sectionKey:sectionKey||null,sectionKeys:Array.isArray(sectionKeys)?sectionKeys:[],
       requestedAt:MediaStore.nowIso(),
       requestedBy:MediaStore.compact(actor&&actor.email||actor&&actor.memberId||"admin",200),
       publicationRequested:publicationRequested===true
@@ -112,7 +139,7 @@ function statusPayload(release){
     ok:true,version:VERSION,hasRelease:true,
     releaseId:MediaStore.text(release.release_id),createdAt:MediaStore.text(release.created_at),
     releaseStatus:MediaStore.text(release.status)||"stored",
-    action:MediaStore.text(control.action)||"legacy_release",sectionKey:MediaStore.text(control.sectionKey)||null,
+    action:MediaStore.text(control.action)||"legacy_release",sectionKey:MediaStore.text(control.sectionKey)||null,sectionKeys:Array.isArray(control.sectionKeys)?control.sectionKeys:[],
     totalManagedSlots:counts.total,sections:counts.sections,
     pipelineApplied:pipeline.status==="applied",
     pipelineVersion:MediaStore.text(pipeline.version)||null,
@@ -244,40 +271,51 @@ exports.handler = async function(event){
     }
     const frontAction=MediaStore.text(params.frontAction)||(publishFront?"publish_all":"preview_all");
     const sectionKey=MediaStore.normalizeSection(params.sectionKey);
+    const rawSectionKeys=Array.isArray(params.sectionKeys)?params.sectionKeys:MediaStore.text(params.sectionKeys).split(",").filter(Boolean);
+    const sectionKeys=Array.from(new Set(rawSectionKeys.map((key)=>MediaStore.normalizeSection(key)).filter((key)=>MANUAL_SECTIONS.includes(key))));
     const sectionAction=frontAction==="publish_section"||frontAction==="stop_section";
+    const batchSectionAction=frontAction==="publish_sections"||frontAction==="stop_sections";
     if(sectionAction&&!sectionKey){
       const error=new Error("섹션별 프론트 작업에는 올바른 미디어 섹션 키가 필요합니다.");
       error.statusCode=400;error.code="media_release_section_required";throw error;
     }
-    if(!["preview_all","publish_all","publish_section","stop_section","stop_all"].includes(frontAction)){
+    if(batchSectionAction&&!sectionKeys.length){
+      const error=new Error("복수 섹션 프론트 작업에는 하나 이상의 올바른 미디어 섹션 키가 필요합니다.");
+      error.statusCode=400;error.code="media_release_sections_required";throw error;
+    }
+    if(!["preview_all","publish_all","publish_section","publish_sections","stop_section","stop_sections","stop_all"].includes(frontAction)){
       const error=new Error("지원하지 않는 프론트 공개 작업입니다.");
       error.statusCode=400;error.code="media_release_action_invalid";throw error;
     }
     const needsCandidates=!frontAction.startsWith("stop_");
     const allApprovedRows=needsCandidates?await MediaStore.selectCandidates(queryApproved(params.limit)):[];
-    const scopedApprovedRows=sectionKey?allApprovedRows.filter((row)=>MediaStore.normalizeSection(row&&row.section_key)===sectionKey):allApprovedRows;
+    const scopeKeys=sectionAction?[sectionKey]:(batchSectionAction?sectionKeys:[]);
+    const scopedApprovedRows=scopeKeys.length?allApprovedRows.filter((row)=>scopeKeys.includes(MediaStore.normalizeSection(row&&row.section_key))):allApprovedRows;
     const rows=scopedApprovedRows.filter(frontContentEnabled);
     const frontDisabledRows=scopedApprovedRows.filter((row)=>!frontContentEnabled(row));
     const base=baseSnapshot();
     const cleanBase=cleanBaseSnapshot(base.doc);
-    const previous=publishFront?await latestStoredRelease():null;
+    const previous=(publishFront||storeRelease)?await latestStoredRelease():null;
+    const persistentBase=previous&&previous.snapshot?attachCommittedFallbacks(previous.snapshot,cleanBase):cleanBase;
     let snapshot;
     const buildOptions=Number(params.capacityPerSection)>0?{capacityPerSection:Number(params.capacityPerSection)}:{};
     if(frontAction==="stop_all"){
       snapshot=cleanBase;
-    }else if(frontAction==="stop_section"){
-      snapshot=clone(previous&&previous.snapshot||cleanBase);
+    }else if(frontAction==="stop_section"||frontAction==="stop_sections"){
+      const keys=frontAction==="stop_section"?[sectionKey]:sectionKeys;
+      snapshot=clone(persistentBase);
       snapshot.sections=Object.assign({},snapshot.sections||{});
-      snapshot.sections[sectionKey]=clone(cleanBase.sections&&cleanBase.sections[sectionKey]||{key:sectionKey,title:sectionKey,slots:[]});
-    }else if(frontAction==="publish_section"){
-      const generated=MediaStore.buildSnapshot(cleanBase,Array.isArray(rows)?rows:[],buildOptions);
-      snapshot=clone(previous&&previous.snapshot||cleanBase);
+      keys.forEach((key)=>{snapshot.sections[key]=clone(cleanBase.sections&&cleanBase.sections[key]||{key,title:key,slots:[]});});
+    }else if(frontAction==="publish_section"||frontAction==="publish_sections"){
+      const keys=frontAction==="publish_section"?[sectionKey]:sectionKeys;
+      const generated=MediaStore.buildSnapshot(persistentBase,Array.isArray(rows)?rows:[],buildOptions);
+      snapshot=clone(persistentBase);
       snapshot.sections=Object.assign({},snapshot.sections||{});
-      snapshot.sections[sectionKey]=clone(generated.sections&&generated.sections[sectionKey]||cleanBase.sections[sectionKey]);
+      keys.forEach((key)=>{snapshot.sections[key]=clone(generated.sections&&generated.sections[key]||cleanBase.sections[key]);});
     }else{
-      snapshot=MediaStore.buildSnapshot(cleanBase,Array.isArray(rows)?rows:[],buildOptions);
+      snapshot=MediaStore.buildSnapshot(persistentBase,Array.isArray(rows)?rows:[],buildOptions);
     }
-    snapshot=stampReleaseControl(snapshot,frontAction,sectionKey,actor,publishFront);
+    snapshot=stampReleaseControl(snapshot,frontAction,sectionKey,batchSectionAction?sectionKeys:[],actor,publishFront);
     // Hash exactly the JSON document that will be persisted. JSON persistence drops
     // undefined-valued properties; hashing the pre-serialization object makes the
     // build-time integrity check fail even though the release itself is valid.
@@ -298,7 +336,7 @@ exports.handler = async function(event){
       snapshot,
       status: storeRelease ? "stored" : "preview",
       policyVersion:MediaStore.MediaPolicy.VERSION,
-      counts:{approvedRows:Array.isArray(scopedApprovedRows)?scopedApprovedRows.length:0,eligibleRows:eligible,frontDisabledRows:frontDisabledRows.length,policyBlockedRows:blocked.length,sections:snapshot.meta&&snapshot.meta.filled||{},frontAction,sectionKey:sectionKey||null},
+      counts:{approvedRows:Array.isArray(scopedApprovedRows)?scopedApprovedRows.length:0,eligibleRows:eligible,frontDisabledRows:frontDisabledRows.length,policyBlockedRows:blocked.length,sections:snapshot.meta&&snapshot.meta.filled||{},frontAction,sectionKey:sectionKey||null,sectionKeys:batchSectionAction?sectionKeys:[]},
       created_by:MediaStore.compact(actor.email || actor.memberId || "admin",200),
       created_at:MediaStore.nowIso()
     };
@@ -341,7 +379,7 @@ exports.handler = async function(event){
       ok:true,version:VERSION,policyVersion:MediaStore.MediaPolicy.VERSION,components:componentStatus(),
       baseFile:base.file,hash,approvedRows:Array.isArray(scopedApprovedRows)?scopedApprovedRows.length:0,
       eligibleRows:eligible,frontDisabledRows:frontDisabledRows.length,policyBlockedRows:blocked.length,
-      frontAction,sectionKey:sectionKey||null,frontState:statusPayload(Object.assign({},release,{snapshot})),
+      frontAction,sectionKey:sectionKey||null,sectionKeys:batchSectionAction?sectionKeys:[],frontState:statusPayload(Object.assign({},release,{snapshot})),
       blocked:params.includeBlocked==="1"?blocked:undefined,
       releaseStored:!!stored,stored,
       frontPublicationRequested:publishFront,

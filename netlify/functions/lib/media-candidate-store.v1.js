@@ -10,12 +10,15 @@
 const crypto = require("crypto");
 const MediaPolicy = require("./media-candidate-policy.v2");
 
-const VERSION = "media-candidate-store-v1.4.1-thumb-optional-slot-safe";
+const VERSION = "media-candidate-store-v1.3.1-persistent-front-reserve120-thumb-optional";
 const MEDIA_SAMPLE_THUMB = "https://igdcglobal.com/assets/images/media-sample-card.png";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE = process.env.MEDIA_CANDIDATE_TABLE || "media_candidates";
+const FRONT_CAPACITY = 100;
+const RESERVE_CAPACITY = 120;
+const INACTIVE_RESERVE_STATUSES = new Set(["rejected","permanent_blocked","search_excluded","deleted","exclusion_released"]);
 const RELEASE_TABLE = process.env.MEDIA_SNAPSHOT_RELEASE_TABLE || "media_snapshot_releases";
-const RELEASE_WRITE_COLUMNS = Object.freeze(["release_id","snapshot_hash","snapshot","status","created_at","created_by"]);
+const RELEASE_WRITE_COLUMNS = new Set(["release_id","snapshot_hash","snapshot","status","created_by","created_at"]);
 const ALLOWED_SECTIONS = new Set([
   "media-movie",
   "media-drama",
@@ -121,6 +124,43 @@ async function upsertCandidates(rows){
   if(!rows.length) return [];
   return supabase(rest(CANDIDATE_TABLE,"on_conflict=id"), {method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=representation"},body:JSON.stringify(rows)});
 }
+function reserveCandidateActive(row){
+  if(!row || row.candidate_only === false) return false;
+  return !INACTIVE_RESERVE_STATUSES.has(lower(row.review_status));
+}
+async function sectionReserveState(sectionKey){
+  const section=normalizeSection(sectionKey);
+  if(!section) return {sectionKey:"",count:0,ids:new Set(),capacity:RESERVE_CAPACITY,remaining:0};
+  const query="select=id,section_key,review_status,candidate_only&section_key="+encodeEq(section)+"&limit=1000";
+  const rows=await selectCandidates(query);
+  const active=(Array.isArray(rows)?rows:[]).filter(reserveCandidateActive);
+  return {sectionKey:section,count:active.length,ids:new Set(active.map((row)=>text(row&&row.id)).filter(Boolean)),capacity:RESERVE_CAPACITY,remaining:Math.max(0,RESERVE_CAPACITY-active.length)};
+}
+async function appendCandidatesWithinReserve(rows, capacity){
+  const cap=Math.max(1,Math.min(RESERVE_CAPACITY,Number(capacity)||RESERVE_CAPACITY));
+  const incoming=Array.isArray(rows)?rows:[];
+  const grouped={};
+  incoming.forEach((row)=>{const section=normalizeSection(row&&row.section_key);if(section)(grouped[section]||(grouped[section]=[])).push(row);});
+  const accepted=[],skippedExisting=[],skippedCapacity=[],states={};
+  for(const section of Object.keys(grouped)){
+    const query="select=id,section_key,review_status,candidate_only&section_key="+encodeEq(section)+"&limit=1000";
+    const existing=await selectCandidates(query);
+    const all=Array.isArray(existing)?existing:[];
+    const allIds=new Set(all.map((row)=>text(row&&row.id)).filter(Boolean));
+    const active=all.filter(reserveCandidateActive);
+    let remaining=Math.max(0,cap-active.length);
+    for(const row of grouped[section]){
+      const id=text(row&&row.id);if(!id)continue;
+      if(allIds.has(id)){skippedExisting.push(id);continue;}
+      if(remaining<=0){skippedCapacity.push(id);continue;}
+      accepted.push(row);allIds.add(id);remaining-=1;
+    }
+    states[section]={existingActive:active.length,capacity:cap,remainingAfter:remaining};
+  }
+  const saved=accepted.length?await upsertCandidates(accepted):[];
+  return {saved:Array.isArray(saved)?saved:accepted,accepted,skippedExisting,skippedCapacity,states,capacity:cap};
+}
+
 async function updateCandidates(ids, patch){
   const list=Array.from(new Set(array(ids).map(text).filter(Boolean)));
   if(!list.length) return [];
@@ -131,35 +171,9 @@ async function deleteCandidates(ids){
   if(!list.length) return [];
   return supabase(rest(CANDIDATE_TABLE,"id="+encodeIn(list)), {method:"DELETE",headers:{Prefer:"return=representation"}});
 }
-function canonicalReleaseRow(row){
-  const source=plain(row);
-  const output={};
-  for(const key of RELEASE_WRITE_COLUMNS){
-    if(source[key]!==undefined)output[key]=source[key];
-  }
-  return output;
-}
-async function insertRelease(row){
-  const payload=canonicalReleaseRow(row);
-  // Snapshot payloads can be hundreds of KB. Do not request the same JSON back from
-  // PostgREST after INSERT; the caller performs an authoritative select-by-id check.
-  await supabase(rest(RELEASE_TABLE), {method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify([payload])});
-  return {inserted:true,release_id:text(payload.release_id),snapshot_hash:text(payload.snapshot_hash)};
-}
-async function selectReleaseById(releaseId){
-  const id=text(releaseId);
-  if(!id)return null;
-  const query=new URLSearchParams();
-  query.set("select",RELEASE_WRITE_COLUMNS.join(","));
-  query.set("release_id",encodeEq(id));
-  query.set("limit","1");
-  const body=await supabase(rest(RELEASE_TABLE,query.toString()),{method:"GET"});
-  return Array.isArray(body)&&body[0]?body[0]:null;
-}
-function releaseStorageContract(){
-  const cfg=config();
-  return{version:VERSION,table:cfg.releaseTable,writeColumns:RELEASE_WRITE_COLUMNS.slice(),urlSource:cfg.urlSource,keySource:cfg.keySource};
-}
+function releaseStorageContract(){return {ok:true,table:RELEASE_TABLE,writeColumns:Array.from(RELEASE_WRITE_COLUMNS),durable:true,source:"supabase"};}
+async function insertRelease(row){const clean={};for(const key of RELEASE_WRITE_COLUMNS){if(row&&row[key]!==undefined)clean[key]=row[key];}return supabase(rest(RELEASE_TABLE), {method:"POST",headers:{Prefer:"return=representation"},body:JSON.stringify([clean])});}
+async function selectReleaseById(releaseId){const id=text(releaseId);if(!id)return null;const rows=await supabase(rest(RELEASE_TABLE,"select=release_id,snapshot_hash,snapshot,status,created_by,created_at&release_id="+encodeEq(id)+"&limit=1"),{method:"GET"});return Array.isArray(rows)&&rows[0]?rows[0]:null;}
 function normalizeCandidate(input, actor){
   const row=plain(input);
   const section=normalizeSection(row.section_key || row.sectionKey || row.section || row.targetSection || row.category);
@@ -214,6 +228,40 @@ function snapshotEligible(row){
   const urls=[row.source_url,row.video_url,row.embed_url].map(normalizeUrl).filter(Boolean);
   return MediaPolicy.releaseEligibility(row).ok && !!row.title && urls.length>0;
 }
+function slotImage(slot){return text(slot&&(slot.thumb||slot.thumbnail||slot.image||slot.poster));}
+function slotUrl(slot){return text(slot&&(slot.url||slot.link||slot.video||slot.embedUrl));}
+function slotLooksLikeSample(slot){
+  if(!slot || typeof slot!=="object")return true;
+  if(slot.sample===true||slot.isSample===true||slot.placeholder===true||slot.replaceableSlot===true||slot.candidateOnly===true||slot.seedContent===true)return true;
+  if(slot.managedBy==="media-snapshot-publish")return false;
+  const title=text(slot.title||slot.name),image=slotImage(slot).toLowerCase(),url=slotUrl(slot).toLowerCase();
+  if(!title&&(!url||url==="#"||url.startsWith("javascript:")))return true;
+  if(image.includes("/assets/sample/")||image.includes("placeholder"))return true;
+  if(/^media\s+(?:item|slot)\s+\d+$/i.test(title))return true;
+  return slot.managedBy!=="media-snapshot-publish"&&!MediaPolicy.publicReleaseAllowed(slot);
+}
+function sampleFallbackFor(slot,index){
+  const current=plain(slot);
+  if(current.fallbackSample&&typeof current.fallbackSample==="object")return Object.assign({},current.fallbackSample,{slotId:Number(current.slotId)||Number(current.fallbackSample.slotId)||index+1});
+  if(slotLooksLikeSample(current))return Object.assign({},current,{slotId:Number(current.slotId)||index+1});
+  return {slotId:Number(current.slotId)||index+1,contentId:null,title:null,thumb:"#",provider:null,placeholder:true};
+}
+function scoreSignals(value){
+  const row=plain(value),raw=plain(row.raw),source=plain(raw.sourceMetadata);
+  const rank=Number(raw.rankingScore||row.rankingScore||row.ranking_score||((text(row.priority).match(/(\d+(?:\.\d+)?)/)||[])[1])||0);
+  const height=Number(source.height||raw.height||((text(row.quality_hint||row.quality).match(/(\d{3,4})p/i)||[])[1])||0);
+  const year=Number(raw.year||source.year||row.year||0),downloads=Number(source.downloads||raw.downloads||0),latency=Number(plain(raw.playbackProbe||source.playbackProbe).latencyMs||0);
+  const score=rank+Math.min(10,Math.max(0,(height-720)/144))+(year>=2024?5:year>=2020?3:year>=2015?1:0)+Math.min(4,Math.log10(Math.max(1,downloads)))-(latency>3000?3:latency>1800?1:0);
+  return {rank,height,year,downloads,latency,score};
+}
+function shouldReplacePublishedSlot(existing,row){
+  if(!existing||existing.managedBy!=="media-snapshot-publish")return false;
+  const oldS=scoreSignals(existing),newS=scoreSignals(row);
+  if(newS.score>=oldS.score+8)return true;
+  if(newS.year>=oldS.year+2&&newS.height>=Math.max(1080,oldS.height)&&newS.rank>=oldS.rank-2)return true;
+  return false;
+}
+
 function publicSlot(row, slotId, defaults){
   const base=plain(defaults);
   const raw=plain(row.raw);
@@ -227,8 +275,10 @@ function publicSlot(row, slotId, defaults){
     label:compact(track.label || track.language || "subtitle",160),
     language:compact(track.language || "und",20)
   })).filter((track)=>track.src);
+  const fallbackSample=sampleFallbackFor(base,(Number(slotId)||1)-1);
   return Object.assign({}, base, {
     slotId: Number(slotId)||base.slotId||1,
+    fallbackSample,
     contentId: text(row.id),
     id: text(row.id),
     title: text(row.title),
@@ -261,6 +311,12 @@ function publicSlot(row, slotId, defaults){
     },
     candidateOnly: false,
     seedContent: false,
+    sample: false,
+    isSample: false,
+    placeholder: false,
+    replaceableSlot: false,
+    source: {name:text(row.provider || row.source_host),platform:text(raw.platform || source.platform)},
+    extension: undefined,
     verificationStatus: "approved_for_snapshot",
     managedBy:"media-snapshot-publish",
     releaseContract:{
@@ -286,6 +342,8 @@ function groupsBySection(rows){
     const as=plain(ar.sourceMetadata),bs=plain(br.sourceMetadata);
     const apriority=Number((text(a&&a.priority).match(/(\d+(?:\.\d+)?)/)||[])[1]||0);
     const bpriority=Number((text(b&&b.priority).match(/(\d+(?:\.\d+)?)/)||[])[1]||0);
+    const amanual=/^999/.test(text(a&&a.priority)),bmanual=/^999/.test(text(b&&b.priority));
+    if(amanual!==bmanual)return bmanual?1:-1;
     const arank=Number(ar.rankingScore||a&&a.ranking_score||apriority||0);
     const brank=Number(br.rankingScore||b&&b.ranking_score||bpriority||0);
     if(arank!==brank)return brank-arank;
@@ -306,96 +364,57 @@ function groupsBySection(rows){
   }));
   return out;
 }
-function isReplaceableMediaSlot(slot){
-  const s=plain(slot),raw=plain(s.raw),source=plain(s.source),ext=plain(s.extension);
-  const placeholder=plain(ext.placeholder);
-  const title=text(s.title||s.name),summary=text(s.summary||s.description);
-  const url=normalizeUrl(s.url||s.link||s.video||s.videoUrl||s.embedUrl);
-  const thumb=text(s.thumb||s.thumbnail||s.image||s.poster);
-  if(s.managedBy==="media-snapshot-publish")return true;
-  if(s.sample===true||s.isSample===true||s.placeholder===true||s.replaceableSlot===true)return true;
-  if(Object.keys(placeholder).length>0)return true;
-  if(lower(source.name)==="seed"||lower(raw.source)==="seed")return true;
-  if(/^seed placeholder\b/i.test(summary))return true;
-  if(/^(movie|drama|thriller|mystery|romance|variety|documentary|animation|music|shorts?)\s+slot\s+\d+$/i.test(title))return true;
-  if(!title&&!url)return true;
-  if(!title&&(thumb==="#"||!thumb||/placeholder/i.test(thumb)))return true;
-  return false;
-}
-function blankMediaSlot(slot,index){
-  return{slotId:Number(slot&&slot.slotId)||index+1,contentId:null,title:null,thumb:"#",provider:null};
-}
 function buildSnapshot(baseSnapshot, rows, opts){
-  const base=plain(baseSnapshot);
-  const sections=Object.assign({}, plain(base.sections));
-  const groups=groupsBySection(rows.filter(snapshotEligible));
-  const filled={};
-
+  const base=plain(baseSnapshot),sections=Object.assign({},plain(base.sections));
+  const groups=groupsBySection((Array.isArray(rows)?rows:[]).filter(snapshotEligible));
+  const filled={},replacementLog={};
   Object.keys(groups).forEach((sectionKey)=>{
     const current=sections[sectionKey];
     const sectionObj=Array.isArray(current)?{title:sectionKey,slots:current,key:sectionKey}:plain(current);
     const sourceSlots=Array.isArray(sectionObj.slots)?sectionObj.slots.slice():[];
-    const requestedCapacity=Number(opts && opts.capacityPerSection);
-    const capacity=Math.max(1,Math.min(100,Number.isFinite(requestedCapacity)&&requestedCapacity>0?requestedCapacity:100));
-
-    const previousManagedIndex=new Map();
-    sourceSlots.slice(0,capacity).forEach((slot,index)=>{
-      if(slot&&slot.managedBy==="media-snapshot-publish"&&text(slot.contentId||slot.id)){
-        previousManagedIndex.set(text(slot.contentId||slot.id),index);
-      }
-    });
-
+    const requestedCapacity=Number(opts&&opts.capacityPerSection);
+    const capacity=Math.max(1,Math.min(FRONT_CAPACITY,Number.isFinite(requestedCapacity)&&requestedCapacity>0?requestedCapacity:FRONT_CAPACITY));
     const next=[];
     for(let i=0;i<capacity;i++){
-      const slot=plain(sourceSlots[i]);
-      next.push(slot.managedBy==="media-snapshot-publish"?blankMediaSlot(slot,i):Object.assign({},slot,{slotId:Number(slot.slotId)||i+1}));
+      const original=plain(sourceSlots[i]),fallback=sampleFallbackFor(original,i);
+      if(original.managedBy==="media-snapshot-publish"&&MediaPolicy.publicReleaseAllowed(original))next.push(Object.assign({},original,{slotId:i+1,fallbackSample:fallback}));
+      else if(text(original.title)&&!slotLooksLikeSample(original)&&MediaPolicy.publicReleaseAllowed(original))next.push(Object.assign({},original,{slotId:i+1,fallbackSample:fallback}));
+      else next.push(Object.assign({},fallback,{slotId:i+1}));
     }
-
-    const desired=groups[sectionKey].slice(0,capacity);
-    const placed=new Set();
-
-    desired.forEach((row)=>{
-      const id=text(row&&row.id),index=previousManagedIndex.get(id);
-      if(index===undefined||index<0||index>=next.length)return;
-      next[index]=publicSlot(row,index+1,next[index]);
-      placed.add(id);
-    });
-
-    let cursor=0;
-    desired.forEach((row)=>{
-      const id=text(row&&row.id);
-      if(placed.has(id))return;
-      while(cursor<next.length&&!isReplaceableMediaSlot(next[cursor]))cursor+=1;
-      if(cursor<next.length){
-        next[cursor]=publicSlot(row,cursor+1,next[cursor]);
-        placed.add(id);
-        cursor+=1;
+    const candidateRows=groups[sectionKey].slice(),byId=new Map(candidateRows.map((row)=>[text(row&&row.id),row])),used=new Set();
+    for(let i=0;i<next.length;i++){
+      const slot=next[i],id=text(slot&&slot.contentId||slot&&slot.id);
+      if(slot&&slot.managedBy==="media-snapshot-publish"&&id&&byId.has(id)){next[i]=publicSlot(byId.get(id),i+1,slot);used.add(id);}
+    }
+    for(const row of candidateRows){
+      const id=text(row&&row.id);if(!id||used.has(id))continue;
+      const index=next.findIndex((slot)=>slotLooksLikeSample(slot));if(index<0)break;
+      next[index]=publicSlot(row,index+1,next[index]);used.add(id);
+    }
+    const replaced=[];
+    for(const row of candidateRows){
+      const id=text(row&&row.id);if(!id||used.has(id))continue;
+      let replaceIndex=-1,lowestScore=Infinity;
+      for(let i=0;i<next.length;i++){
+        const slot=next[i];if(!slot||slot.managedBy!=="media-snapshot-publish")continue;
+        const sc=scoreSignals(slot).score;if(sc<lowestScore&&shouldReplacePublishedSlot(slot,row)){lowestScore=sc;replaceIndex=i;}
       }
-    });
-
+      if(replaceIndex>=0){const previous=next[replaceIndex];next[replaceIndex]=publicSlot(row,replaceIndex+1,previous);used.add(id);replaced.push({slotId:replaceIndex+1,from:text(previous.contentId||previous.id),to:id,reason:"quality_recency_policy"});}
+    }
     sections[sectionKey]=Object.assign({},sectionObj,{key:sectionKey,slots:next});
     filled[sectionKey]=next.filter((slot)=>slot&&slot.managedBy==="media-snapshot-publish"&&MediaPolicy.publicReleaseAllowed(slot)).length;
+    replacementLog[sectionKey]=replaced;
   });
-
-  return Object.assign({},base,{
-    version:"media.snapshot.generated.supabase.v2.sample-preserving",
-    type:"media_snapshot",
-    sections,
-    meta:Object.assign({},plain(base.meta),{
-      generatedAt:nowIso(),
-      generatedBy:"media-snapshot-publish",
-      source:"supabase.media_candidates",
-      section1Policy:"media-trending is automatic; manual sections keep their committed 100-slot sample/real layout.",
-      releasePolicy:MediaPolicy.VERSION,
-      capacities:{default:100},
-      samplePolicy:"preserve-seed-and-external; replace-only-blank-seed-or-previous-managed",
-      filled
-    })
-  });
+  return Object.assign({},base,{version:"media.snapshot.generated.supabase.v2",type:"media_snapshot",sections,meta:Object.assign({},plain(base.meta),{
+    generatedAt:nowIso(),generatedBy:"media-snapshot-publish",source:"supabase.media_candidates",
+    section1Policy:"media-trending is automatic; manual sections retain current matches until a verified quality/recency replacement wins.",releasePolicy:MediaPolicy.VERSION,
+    capacities:{default:FRONT_CAPACITY,frontPerSection:FRONT_CAPACITY,candidateReserveMax:RESERVE_CAPACITY},persistencePolicy:"preserve_existing_front_then_fill_samples_then_quality_recency_replace",replacementLog,filled
+  })});
 }
+
 module.exports={
-  VERSION, CANDIDATE_TABLE, RELEASE_TABLE, RELEASE_WRITE_COLUMNS, ALLOWED_SECTIONS,
+  VERSION, CANDIDATE_TABLE, RELEASE_TABLE, RELEASE_WRITE_COLUMNS, ALLOWED_SECTIONS, FRONT_CAPACITY, RESERVE_CAPACITY,
   text, lower, compact, bool, plain, array, nowIso, sha256, shortHash, normalizeUrl, hostOf, normalizeSection, roleList, requireRole,
-  response, parseBody, config, supabase, rest, encodeEq, encodeIn, selectCandidates, upsertCandidates, updateCandidates, deleteCandidates, canonicalReleaseRow, insertRelease, selectReleaseById, releaseStorageContract,
-  normalizeCandidate, validateCandidate, snapshotEligible, publicSlot, buildSnapshot, MediaPolicy
+  response, parseBody, config, supabase, rest, encodeEq, encodeIn, selectCandidates, upsertCandidates, appendCandidatesWithinReserve, sectionReserveState, updateCandidates, deleteCandidates, insertRelease, selectReleaseById, releaseStorageContract,
+  normalizeCandidate, validateCandidate, snapshotEligible, publicSlot, buildSnapshot, scoreSignals, shouldReplacePublishedSlot, sampleFallbackFor, slotLooksLikeSample, MediaPolicy
 };
