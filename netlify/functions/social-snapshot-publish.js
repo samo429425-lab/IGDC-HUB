@@ -15,7 +15,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.11.0-exact-release-build-handoff";
+  "social-snapshot-publish-v1.12.0-publication-plan-handoff";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -212,7 +212,7 @@ function buildHookStatus() {
     ],
   };
 }
-async function triggerCanonicalBuild(release, operation, route) {
+async function triggerCanonicalBuild(release, operation, route, handoff) {
   const setting = buildHookSetting();
   if (!setting.value) {
     return {
@@ -249,6 +249,12 @@ async function triggerCanonicalBuild(release, operation, route) {
       message: "Netlify Build Hook은 HTTPS 주소여야 합니다.",
     };
   }
+  const plan = handoff && handoff.publicationPlan && typeof handoff.publicationPlan === "object"
+    ? handoff.publicationPlan
+    : {};
+  const planHash = text(handoff && handoff.publicationPlanHash) || SocialStore.sha256(plan);
+  const planCount = Object.values(plan).reduce((sum, list) =>
+    sum + (Array.isArray(list) ? list.length : 0), 0);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
   try {
@@ -271,6 +277,15 @@ async function triggerCanonicalBuild(release, operation, route) {
         countryCode: text(route && route.countryCode).toUpperCase() || null,
         worldRegion: text(route && (route.worldRegion || route.regionId)) || null,
         operation: text(operation) || "publish",
+        // Canonical publication manifest.  This is intentionally only the
+        // candidate IDs per managed SNS section, not rendered card payload.
+        // The Netlify build re-reads those exact approved candidates from the
+        // existing Supabase candidate store and then passes them through the
+        // existing SearchBank contract.  This removes the empty release-table
+        // lookup as a hard dependency without creating a browser/front bypass.
+        publicationPlan: plan,
+        publicationPlanHash: planHash,
+        publicationPlanCount: planCount,
         requestedAt: new Date().toISOString(),
       }),
       signal: controller.signal,
@@ -706,58 +721,64 @@ exports.handler = async function (event) {
       ),
       created_at: SocialStore.nowIso(),
     };
+    const publicationPlan = releasedIdsBySection(snapshot);
+    const publicationPlanHash = SocialStore.sha256(publicationPlan);
+    const publicationPlanCount = Object.values(publicationPlan).reduce(
+      (sum, list) => sum + (Array.isArray(list) ? list.length : 0),
+      0,
+    );
+
+    // Release-table persistence remains an audit layer, but it is no longer a
+    // hard gate for the canonical build.  The uploaded diagnostics repeatedly
+    // showed 83 approved candidates while storedRelease stayed missing, which
+    // meant SearchBank was never even entered.  The authoritative build handoff
+    // is therefore the exact, hash-verified publication manifest above.
     let stored = null;
+    let storedVerified = false;
+    let releaseStoreWarning = null;
     if (storeRelease) {
       try {
         stored = await storeReleaseCompat(release);
+        if (stored && (!Array.isArray(stored) || stored.length > 0)) {
+          try {
+            storedVerified = await verifyStoredRelease(release);
+          } catch (verifyError) {
+            releaseStoreWarning = {
+              code: (verifyError && verifyError.code) || "social_release_readback_failed",
+              message: text(verifyError && verifyError.message) || "stored release readback failed",
+            };
+          }
+          if (!storedVerified && !releaseStoreWarning) {
+            releaseStoreWarning = {
+              code: "social_release_readback_failed",
+              message: "stored release readback returned no exact matching row",
+            };
+          }
+        } else {
+          releaseStoreWarning = {
+            code: "social_release_store_empty",
+            message: "release insert returned no representation",
+          };
+        }
       } catch (storeError) {
-        return SocialStore.response(storeError.statusCode || 502, {
-          ok: false,
-          version: VERSION,
-          error: storeError.code || "social_release_store_failed",
-          stage: "stored_social_release",
-          message:
-            "실제 적용 승인본을 저장하지 못해 SearchBank 인계 전에 중단했습니다. " +
-            (storeError.message || String(storeError)),
-          releaseId: release.release_id,
-          eligibleRows: eligible,
-          buildHook: buildHookStatus(),
-        });
+        releaseStoreWarning = {
+          code: (storeError && storeError.code) || "social_release_store_failed",
+          statusCode: storeError && storeError.statusCode || null,
+          message: text(storeError && storeError.message) || String(storeError),
+        };
       }
     }
-    if (storeRelease && (!stored || (Array.isArray(stored) && stored.length < 1))) {
-      return SocialStore.response(502, {
-        ok: false, version: VERSION, error: "social_release_store_failed",
-        message: "실제 적용 승인본을 저장하지 못해 SearchBank 인계 전에 중단했습니다.",
-        releaseId: release.release_id, eligibleRows: eligible, buildHook: buildHookStatus()
-      });
-    }
-    let storedVerified = false;
-    if (storeRelease && stored) {
-      try {
-        storedVerified = await verifyStoredRelease(release);
-      } catch (_verifyError) {
-        storedVerified = false;
-      }
-      if (!storedVerified) {
-        return SocialStore.response(502, {
-          ok: false,
-          version: VERSION,
-          error: "social_release_readback_failed",
-          stage: "stored_social_release",
-          message: "승인본 저장 응답은 받았지만 저장본 재확인이 실패해 SearchBank 빌드를 시작하지 않았습니다.",
-          releaseId: release.release_id,
-          eligibleRows: eligible,
-          buildHook: buildHookStatus(),
-        });
-      }
-    }
+
     let buildTrigger = null;
-    if (storeRelease && storedVerified) {
+    if (storeRelease) {
       buildTrigger = await triggerCanonicalBuild(
         release,
         unpublishSelected ? "unpublish" : "publish",
         route,
+        {
+          publicationPlan,
+          publicationPlanHash,
+        },
       );
     }
     if (
@@ -807,12 +828,19 @@ exports.handler = async function (event) {
       removedBySection: unpublish ? unpublish.removedBySection : {},
       releaseStored: !!stored,
       releaseStoredVerified: storedVerified,
+      releaseStoreWarning,
+      publicationPlanHash,
+      publicationPlanCount,
+      publicationPlanBySection: Object.fromEntries(
+        Object.entries(publicationPlan).map(([key, list]) => [key, Array.isArray(list) ? list.length : 0]),
+      ),
+      canonicalPublicationPlan: true,
       actualFrontApplyStored: !!stored && storedVerified && !unpublishSelected,
       actualFrontUnpublishStored: !!stored && storedVerified && unpublishSelected,
       actualFrontApplyQueued:
-        !!stored && storedVerified && !!buildTrigger && buildTrigger.ok && !unpublishSelected,
+        !!buildTrigger && buildTrigger.ok && !unpublishSelected,
       actualFrontUnpublishQueued:
-        !!stored && storedVerified && !!buildTrigger && buildTrigger.ok && unpublishSelected,
+        !!buildTrigger && buildTrigger.ok && unpublishSelected,
       actualApplyRequested: actualApplyOperation,
       storeReleaseRequested: storeRelease,
       frontPublicationStatus: !storeRelease
@@ -837,7 +865,8 @@ exports.handler = async function (event) {
         canonicalBuildPipeline: true,
         publicSnapshotSource: "/data/social.snapshot.json",
         pipelineOrder: [
-          "stored_social_release",
+          "administrator_publication_plan",
+          "optional_stored_social_release_audit",
           "social_policy_and_psom_gate",
           "data/search-bank.snapshot.json",
           "existing_snapshot_engine",

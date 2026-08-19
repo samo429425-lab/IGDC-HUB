@@ -22,7 +22,7 @@ const SocialStore = require("./social-candidate-store.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 const SearchBankEngine = require("../search-bank-engine");
 
-const VERSION = "social-searchbank-release-adapter-v1.4.0-exact-release-build-readback";
+const VERSION = "social-searchbank-release-adapter-v1.5.0-publication-plan-source";
 const RELEASE_FILE = "social-searchbank.release.snapshot.json";
 const REPORT_FILE = "social-pipeline.report.json";
 const SEARCH_BANK_FILE = "search-bank.snapshot.json";
@@ -219,7 +219,7 @@ function releaseToBank(release) {
     meta: {
       schema: "search-bank.social-release.snapshot.v1",
       adapterVersion: VERSION,
-      source: "supabase.social_snapshot_releases",
+      source: text(release && release.handoff_source) || "supabase.social_snapshot_releases",
       releaseId: text(release && release.release_id),
       releaseHash: text(release && release.snapshot_hash),
       generatedAt: new Date().toISOString(),
@@ -525,10 +525,139 @@ function incomingReleaseExpectation() {
       countryCode: text(body.countryCode).toUpperCase(),
       worldRegion: text(body.worldRegion),
       operation: text(body.operation) || "publish",
+      publicationPlan: body.publicationPlan && typeof body.publicationPlan === "object"
+        ? body.publicationPlan
+        : null,
+      publicationPlanHash: text(body.publicationPlanHash),
+      publicationPlanCount: Number(body.publicationPlanCount || 0),
     };
   } catch (_error) {
     return {};
   }
+}
+
+function normalizePublicationPlan(plan) {
+  const source = plan && typeof plan === "object" ? plan : {};
+  const out = {};
+  SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
+    const list = Array.isArray(source[sectionKey]) ? source[sectionKey] : [];
+    out[sectionKey] = Array.from(new Set(list.map(text).filter(Boolean))).slice(0, 100);
+  });
+  return out;
+}
+function publicationPlanIds(plan) {
+  const out = [];
+  SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
+    (plan[sectionKey] || []).forEach((id) => out.push({ id, sectionKey }));
+  });
+  return out;
+}
+function readSocialBaseForPlan(root) {
+  const files = [
+    path.join(root, "data", "social.snapshot.json"),
+    path.join(root, "netlify", "functions", "data", "social.snapshot.json"),
+    path.join(root, "netlify", "functions", "social.snapshot.json"),
+  ];
+  for (const file of files) {
+    const doc = readJson(file);
+    if (doc) return { file, doc };
+  }
+  const sections = {};
+  SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => { sections[sectionKey] = []; });
+  return {
+    file: "generated-empty-social-base",
+    doc: { version: "social.snapshot.empty", type: "social_snapshot", pages: { social: { sections } }, meta: {} },
+  };
+}
+async function selectExactPublicationCandidates(plan) {
+  const requested = publicationPlanIds(plan);
+  const ids = requested.map((row) => row.id);
+  const rows = [];
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const batch = ids.slice(offset, offset + 100);
+    if (!batch.length) continue;
+    const query = "select=*&id=" + SocialStore.encodeIn(batch) + "&limit=" + batch.length;
+    const part = await SocialStore.selectCandidates(query);
+    if (Array.isArray(part)) rows.push(...part);
+  }
+  const byId = new Map(rows.map((row) => [text(row && row.id), row]));
+  const accepted = [];
+  const rejected = [];
+  requested.forEach((request) => {
+    const row = byId.get(request.id);
+    if (!row) {
+      rejected.push({ id: request.id, sectionKey: request.sectionKey, reason: "candidate_not_found" });
+      return;
+    }
+    const actualSection = text(row.section_key || row.sectionKey);
+    if (actualSection !== request.sectionKey) {
+      rejected.push({ id: request.id, sectionKey: request.sectionKey, actualSection, reason: "section_mismatch" });
+      return;
+    }
+    if (!SocialStore.isApprovedForSnapshot(row)) {
+      rejected.push({ id: request.id, sectionKey: request.sectionKey, reason: "candidate_no_longer_snapshot_eligible" });
+      return;
+    }
+    accepted.push(row);
+  });
+  return { requested, rows, accepted, rejected };
+}
+async function releaseFromPublicationPlan(root, expected) {
+  const normalizedPlan = normalizePublicationPlan(expected && expected.publicationPlan);
+  const actualPlanHash = sha256(normalizedPlan);
+  if (!expected || !expected.publicationPlan || !expected.publicationPlanHash) {
+    const error = new Error("SOCIAL_PUBLICATION_PLAN_MISSING");
+    error.code = "social_publication_plan_missing";
+    throw error;
+  }
+  if (text(expected.publicationPlanHash) !== actualPlanHash) {
+    const error = new Error("SOCIAL_PUBLICATION_PLAN_HASH_MISMATCH");
+    error.code = "social_publication_plan_hash_mismatch";
+    error.details = { expectedHash: text(expected.publicationPlanHash), actualHash: actualPlanHash };
+    throw error;
+  }
+  const selected = await selectExactPublicationCandidates(normalizedPlan);
+  const requestedCount = selected.requested.length;
+  if (requestedCount > 0 && selected.accepted.length < 1) {
+    const error = new Error("SOCIAL_PUBLICATION_PLAN_NO_ELIGIBLE_CANDIDATES");
+    error.code = "social_publication_plan_no_eligible_candidates";
+    error.details = { requestedCount, rejected: selected.rejected.slice(0, 100) };
+    throw error;
+  }
+  const base = readSocialBaseForPlan(root);
+  const route = {
+    countryCode: text(expected.countryCode).toUpperCase(),
+    worldRegion: text(expected.worldRegion),
+    regionId: text(expected.worldRegion),
+    scopeMode: text(expected.scopeMode) || (text(expected.countryCode) ? "country" : "global"),
+  };
+  const snapshot = SocialStore.buildSnapshot(base.doc, selected.accepted, { route });
+  const documentHash = sha256(snapshot);
+  const release = {
+    release_id: text(expected.releaseId) || "social_plan_" + documentHash.slice(0, 20),
+    status: "build_publication_plan",
+    snapshot_hash: documentHash,
+    snapshot,
+    created_at: new Date().toISOString(),
+    notes: "canonical_build_publication_plan;plan_hash=" + actualPlanHash,
+    handoff_source: "supabase.social_candidates_exact_publication_plan",
+  };
+  return {
+    release,
+    source: "build_hook_publication_plan",
+    expected,
+    verification: {
+      ok: true,
+      planHash: actualPlanHash,
+      requestedCount,
+      acceptedCount: selected.accepted.length,
+      rejectedCount: selected.rejected.length,
+      rejected: selected.rejected.slice(0, 100),
+      baseFile: path.relative(root, base.file).replace(/\\/g, "/"),
+      documentHash,
+    },
+    directError: null,
+  };
 }
 function releaseMatchesExpectation(release, expected) {
   if (!release || !release.snapshot) return { ok: false, reason: "stored_social_release_not_found" };
@@ -639,8 +768,12 @@ async function releaseFromFunctionReadback(expected) {
     clearTimeout(timer);
   }
 }
-async function loadStoredReleaseForBuild() {
+async function loadStoredReleaseForBuild(rootInput) {
   const expected = incomingReleaseExpectation();
+  const root = path.resolve(rootInput || process.cwd());
+  if (expected.publicationPlan && expected.publicationPlanHash) {
+    return releaseFromPublicationPlan(root, expected);
+  }
   let directError = null;
   try {
     const release = await latestStoredRelease(expected);
@@ -712,7 +845,7 @@ async function publish(input) {
   let release;
   let releaseLoad;
   try {
-    releaseLoad = await loadStoredReleaseForBuild();
+    releaseLoad = await loadStoredReleaseForBuild(root);
     release = releaseLoad && releaseLoad.release;
   } catch (error) {
     report.reason = error && error.code || "social_release_store_unavailable";
@@ -813,6 +946,8 @@ module.exports = {
   searchBankPaths,
   releaseToBank,
   incomingReleaseExpectation,
+  normalizePublicationPlan,
+  releaseFromPublicationPlan,
   releaseMatchesExpectation,
   loadStoredReleaseForBuild,
   policyGate,

@@ -12,7 +12,7 @@
 
 const crypto = require("crypto");
 
-const VERSION = "commerce-product-ranking-v1.14.2-optional-sponsorship-rail";
+const VERSION = "commerce-product-ranking-v1.14.3-administrator-policy-priority";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -895,8 +895,8 @@ function portfolioValueAssessment(rowInput, category, risk, supplier, audience, 
   };
 }
 
-function proposedSections(rowInput, category, risk, commercial, supplierInput, valueInput) {
-  const row = plain(rowInput), out = [], evidence = plain(row.evidence), supplier = plain(supplierInput), value = plain(valueInput);
+function proposedSections(rowInput, category, risk, commercial, supplierInput, valueInput, contextInput, policyAssessmentInput) {
+  const row = plain(rowInput), out = [], evidence = plain(row.evidence), supplier = plain(supplierInput), value = plain(valueInput), context = plain(contextInput), policyAssessment = plain(policyAssessmentInput);
   const audience = plain(value.audience), revenueValue = plain(value.revenue);
   const baseScore = Number(value.portfolioPriorityScore || commercial.potentialScore || 0);
   const hay = lower([row.productName, row.title, row.supplierName, row.supplierType, row.description, row.summary, category.tags.join(" ")].join(" "));
@@ -941,6 +941,9 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const localOrigin = cooperative || category.tags.includes("local_products") || category.tags.includes("agriculture_fishery_forestry");
   const recurringEssential = ["food_household_essentials","beauty_personal_care","baby_family_education","agriculture_fishery_forestry"].includes(category.primary) && Number(audience.repeatPurchaseScore || 0) >= 60;
   const tourProfile = tourRightProfile(row);
+  const policyText=lower(array(context.priorityDirections).concat(array(context.manualPriorityTargets)).concat(text(context.finalDecision)?[context.finalDecision]:[]).join(" "));
+  const policyTourIntent=/(투어|관광|여행|등산|캠핑|골프|스포츠|맛집|레스토랑|tour|travel|tourism|hiking|camping|golf|sports|restaurant|旅行|旅遊|旅游|登山|露营|露營|高尔夫|高爾夫|スポーツ|レストラン|viaje|turismo|senderismo|golfe?|deporte|restaurante|voyage|tourisme|randonnée|reise|tourismus|wandern|viagem|trilha|esporte|путеше|туризм|поход|гольф|спорт|ресторан|سفر|سياحة|تخييم|جولف|رياضة|مطعم|यात्र|पर्यटन|ट्रेक|गोल्फ|खेल|रेस्तरां|ท่องเที่ยว|เดินป่า|กอล์ฟ|กีฬา|ร้านอาหาร|du lịch|leo núi|thể thao|nhà hàng|wisata|mendaki|olahraga|restoran|seyahat|turizm|yürüyüş|spor)/i.test(policyText);
+  const policyTourMatch=policyTourIntent&&policyAssessment.active===true&&Number(policyAssessment.score||0)>0;
   const travel = category.primary === "travel_local_services" || tourProfile.service;
   const localService = travel || /(지역서비스|방문서비스|예약|상담|local service)/i.test(hay);
   const highTrust = risk.gatePassed === true && supplier.approvalReady === true && Number(supplier.trustScore || 0) >= 82;
@@ -1031,6 +1034,9 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   if (tourDiningAuxiliary && officialProductText && risk.gatePassed === true) {
     add("tour", "tour", baseScore - 10, "지역 맛집·레스토랑·카페 등 여행 동선 보조 상업 콘텐츠", "tour_right_local_dining_auxiliary", []);
   }
+  if (policyTourMatch && risk.gatePassed === true && !out.some((row)=>row.key==="tour|tour")) {
+    add("tour", "tour", baseScore + 4, "관리자 확정 정책과 일치하는 투어 우측 우선 검토 대상", "administrator_policy_tour_right_priority", []);
+  }
   if ((commercial.visual || commercial.promotional || localOrigin || socialLifestyle) && (socialLifestyle || Number(audience.audienceDemandScore || 0) >= 52)) {
     add("social", "rightPanel", baseScore + (socialLifestyle ? 2 : -3), socialLifestyle ? "패션·뷰티·가족 소비재의 소셜 반응 검토" : "소셜 반응 가능성과 실제 수요가 함께 확인된 상품", socialLifestyle ? "social_lifestyle_offer" : "social_context_market_offer", socialLifestyle ? [] : (socialMarketEvidence ? [] : ["socialMarketEvidence"]));
   }
@@ -1071,6 +1077,23 @@ function releaseReadiness(rowInput, risk, commercial, supplier, valueInput) {
   };
 }
 
+
+function policyTermList(values){
+  const stop=new Set(["공식","업체","상품","제품","관련","위주","우선","선별","리서치","검색","운영","정책","적용","포함","추천","판매","온라인","구매","서비스","the","and","for","with","official","product","products","supplier","suppliers","research","search","priority","policy"]),out=[];
+  for(const raw of array(values)){
+    for(const token of text(raw).toLowerCase().replace(/https?:\/\/\S+/g," ").split(/[^\p{L}\p{N}]+/u)){
+      if(token.length<2||stop.has(token)||out.includes(token))continue;
+      out.push(token);if(out.length>=48)return out;
+    }
+  }
+  return out;
+}
+function administratorPolicyAssessment(rowInput, contextInput){
+  const row=plain(rowInput),context=plain(contextInput),priority=policyTermList(array(context.manualPriorityTargets).concat(array(context.priorityDirections)).concat(text(context.finalDecision)?[context.finalDecision]:[])),avoid=policyTermList(array(context.manualBlockedTargets).concat(array(context.avoidDirections))),hay=lower([row.productName,row.title,row.sourceTitle,row.description,row.summary,row.productCategory,row.supplierName,row.supplierType,row.productUrl,row.url].map(text).join(" "));
+  const positiveHits=priority.filter(term=>hay.includes(term)).slice(0,12),negativeHits=avoid.filter(term=>hay.includes(term)).slice(0,12);
+  const score=Math.max(-20,Math.min(20,positiveHits.length*4-negativeHits.length*8));
+  return {active:context.administratorPolicyActive===true,score,positiveHits,negativeHits,matched:positiveHits.length>0||negativeHits.length>0,manualPrecedence:true,riskGateChanged:false};
+}
 function evaluateProduct(rowInput, contextInput) {
   const row = plain(rowInput), category = classifyCategory(row), productRisk = riskAssessment(row), supplier = supplierAssessment(row);
   const risk = Object.assign({}, productRisk, {
@@ -1080,10 +1103,17 @@ function evaluateProduct(rowInput, contextInput) {
     blockers: Array.from(new Set(array(productRisk.blockers).concat(array(supplier.blockers)))),
     concerns: Array.from(new Set(array(productRisk.concerns).concat(array(supplier.concerns))))
   });
+  const policyAssessment = administratorPolicyAssessment(row, contextInput);
   const commercial = commercialAssessment(row, category, risk, contextInput);
   const audience = audienceValueAssessment(row, category, risk, commercial, contextInput);
   const revenueValue = revenueValueAssessment(row, audience, commercial);
   const value = portfolioValueAssessment(row, category, risk, supplier, audience, revenueValue, commercial);
+  // Administrator policy changes priority, never the trust/risk gate.  Positive
+  // matches can lift an otherwise comparable safe product; avoid/block matches
+  // suppress ranking but do not silently delete the research evidence.
+  if(policyAssessment.active&&risk.gatePassed){
+    value.portfolioPriorityScore=Math.round(clamp(Number(value.portfolioPriorityScore||0)+policyAssessment.score,0,100,0));
+  }
   commercial.rankingEligible = risk.gatePassed;
   commercial.potentialScore = value.portfolioPriorityScore;
   commercial.audienceDemandScore = audience.audienceDemandScore;
@@ -1091,7 +1121,7 @@ function evaluateProduct(rowInput, contextInput) {
   commercial.privatePlacementEligible = value.privatePlacementEligible;
   if (!risk.gatePassed) commercial.potentialScore = Math.min(Number(commercial.potentialScore) || 0, 34);
   const identity = productIdentity(row), family = productFamilyKey(row), displayFamily = displayFamilyKey(row);
-  const sections = proposedSections(row, category, risk, commercial, supplier, value), release = releaseReadiness(row, risk, commercial, supplier, value);
+  const sections = proposedSections(row, category, risk, commercial, supplier, value, contextInput, policyAssessment), release = releaseReadiness(row, risk, commercial, supplier, value);
   return Object.assign({}, row, {
     productUrl: canonicalProductUrl(first(row.productUrl, row.url)) || first(row.productUrl, row.url),
     url: canonicalProductUrl(first(row.productUrl, row.url)) || first(row.productUrl, row.url),
@@ -1101,6 +1131,7 @@ function evaluateProduct(rowInput, contextInput) {
     displayFamilyKey: displayFamily,
     supplierKey: supplierKey(row),
     supplierAssessment: supplier,
+    administratorPolicyAssessment: policyAssessment,
     productCategory: category.primary,
     productCategoryTags: category.tags,
     categoryScores: category.scores,

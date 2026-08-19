@@ -2612,9 +2612,9 @@
             "개만 실제 적용 대상으로 확인했습니다.",
         );
       }
-      if (!d.releaseStored)
+      if (!(d.buildTrigger && d.buildTrigger.ok))
         throw new Error(
-          "실제 적용 요청은 처리됐지만 stored social release가 생성되지 않았습니다. SearchBank 인계 전 단계에서 중단되었습니다.",
+          "실제 적용 후보는 확인됐지만 SearchBank 반영 빌드가 접수되지 않았습니다.",
         );
 
       download("igdc-social-actual-apply-result.json", d);
@@ -2632,15 +2632,20 @@
       if ($("frontApplyState"))
         $("frontApplyState").textContent =
           d.buildTrigger && d.buildTrigger.ok
-            ? "승인본 저장 · SearchBank 빌드 접수"
-            : "승인본 저장 · 빌드 대기";
+            ? (d.releaseStoredVerified
+                ? "승인본 저장 · SearchBank 빌드 접수"
+                : "게시 계획 확정 · SearchBank 빌드 접수")
+            : "SearchBank 빌드 대기";
 
       if (d.buildTrigger && d.buildTrigger.ok) {
         show(
           scopeName +
             " 범위의 " +
             applyLabel +
-            " 승인본을 저장했고 SearchBank 반영 빌드를 접수했습니다. 소셜 작업은 SearchBank Snapshot JSON 도달까지만 담당하며 그 아래 렌더링 체인은 기존 시스템이 처리합니다.",
+            (d.releaseStoredVerified
+              ? " 승인본을 저장했고 SearchBank 반영 빌드를 접수했습니다. "
+              : " 게시 계획을 확정했고 SearchBank 반영 빌드를 접수했습니다. ") +
+            "소셜 작업은 SearchBank Snapshot JSON 도달까지만 담당하며 그 아래 렌더링 체인은 기존 시스템이 처리합니다.",
           "ok",
         );
       } else {
