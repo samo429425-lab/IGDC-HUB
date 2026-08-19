@@ -14,7 +14,6 @@
 
   // --- config ---
   const SNAPSHOT_URL = "/data/social.snapshot.json";
-  const CURRENT_SNAPSHOT_URL = "/.netlify/functions/social-snapshot-current";
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
   const MAIN_ROWS = 9;
   const MAIN_LIMIT = 100;
@@ -325,40 +324,6 @@
         );
       })
       .slice(0, MAIN_LIMIT);
-  }
-
-  async function loadCurrentSnapshot() {
-    try {
-      const current = await fetch(
-        CURRENT_SNAPSHOT_URL + "?_=" + encodeURIComponent(Date.now()),
-        {
-        cache: "no-store",
-        credentials: "same-origin",
-        },
-      );
-      if (current.ok) {
-        const payload = await current.json();
-        if (payload && payload.ok === true && payload.snapshot) {
-          return {
-            snapshot: payload.snapshot,
-            pipeline: {
-              source: "stored_release_current",
-              status: "front_readback_passed",
-              releaseId: payload.releaseId || null,
-              hash: payload.hash || null,
-              documentHash: payload.documentHash || null,
-              hashVerified: payload.hashVerified === true,
-              publicSlots: payload.publicSlots || null,
-              route: payload.route || null,
-              loadedAt: new Date().toISOString(),
-            },
-          };
-        }
-      }
-    } catch (_e) {
-      /* 정적 스냅샷을 이미 별도로 요청 중이다. */
-    }
-    return null;
   }
 
   async function loadStaticSnapshot() {
@@ -875,45 +840,15 @@
   function run() {
     if (runInFlight) return runInFlight;
 
-    const staticPromise = loadStaticSnapshot();
-    const currentPromise = loadCurrentSnapshot();
-    const routePromise = loadCountryRoute();
-    let finalApplied = false;
-
-    const earlyStatic = staticPromise
-      .then(function (snap) {
-        if (!finalApplied) {
-          lastSnapshot = snap;
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-            source: "static_snapshot_early",
-            status: "stored_release_current_pending",
-            loadedAt: new Date().toISOString(),
-          };
-          renderSnapshot(snap, lastRoute);
-        }
-        return snap;
-      })
-      .catch(function () {
-        return null;
-      });
-
-    runInFlight = Promise.all([currentPromise, routePromise])
-      .then(async function (results) {
-        const current = results[0];
+    runInFlight = Promise.all([loadStaticSnapshot(), loadCountryRoute()])
+      .then(function (results) {
+        lastSnapshot = results[0];
         lastRoute = results[1] || routeFallback();
-        finalApplied = true;
-        if (current && current.snapshot) {
-          lastSnapshot = current.snapshot;
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = current.pipeline;
-        } else {
-          lastSnapshot = await earlyStatic;
-          if (!lastSnapshot) throw new Error("snapshot_load_failed");
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-            source: "static_snapshot_fallback",
-            status: "stored_release_current_unavailable",
-            loadedAt: new Date().toISOString(),
-          };
-        }
+        window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+          source: "canonical_static_social_snapshot",
+          status: "final_snapshot_loaded",
+          loadedAt: new Date().toISOString(),
+        };
         renderSnapshot(lastSnapshot, lastRoute);
       })
       .catch(function (e) {

@@ -89,6 +89,38 @@ function removeSocialCheckpoint(checkpoint) {
   }
 }
 
+const SOCIAL_RESERVED_SECTION_KEYS = ["social-maru", "rightPanel"];
+const SOCIAL_SNAPSHOT_MIRRORS = [
+  path.join(root, "data", "social.snapshot.json"),
+  path.join(root, "netlify", "functions", "data", "social.snapshot.json"),
+];
+
+function captureSocialReservedSections() {
+  return SOCIAL_SNAPSHOT_MIRRORS.filter(file => fs.existsSync(file)).map(file => {
+    const doc = readJson(file);
+    const sections = doc && doc.pages && doc.pages.social && doc.pages.social.sections || {};
+    const reserved = {};
+    SOCIAL_RESERVED_SECTION_KEYS.forEach(key => {
+      if (Object.prototype.hasOwnProperty.call(sections, key)) {
+        reserved[key] = JSON.parse(JSON.stringify(sections[key]));
+      }
+    });
+    return { file, reserved };
+  });
+}
+
+function restoreSocialReservedSections(captured) {
+  for (const row of captured || []) {
+    if (!row || !row.file || !fs.existsSync(row.file)) continue;
+    const doc = readJson(row.file);
+    if (!doc || !doc.pages || !doc.pages.social || !doc.pages.social.sections) continue;
+    Object.keys(row.reserved || {}).forEach(key => {
+      doc.pages.social.sections[key] = JSON.parse(JSON.stringify(row.reserved[key]));
+    });
+    fs.writeFileSync(row.file, JSON.stringify(doc, null, 2) + "\n", "utf8");
+  }
+}
+
 async function publishSocialAfterCanonical() {
   const socialCheckpoint = createSocialCheckpoint();
   let socialPublication;
@@ -583,9 +615,33 @@ async function main() {
     if (!socialSearchBankHandoffRan) {
       const socialOnlyPublication = await publishSocialAfterCanonical();
       socialSearchBankHandoffRan = true;
-      // Social stops at the ordinary SearchBank Snapshot boundary.
-      // Snapshot Engine -> social.snapshot.json -> AutoMap is the existing
-      // downstream pipeline and is intentionally not invoked or modified here.
+      // When Commerce did not reach its normal full Snapshot Engine call, finish
+      // only the Social branch with the already-existing targeted engine path.
+      // The Snapshot Engine itself is not changed, and no other front is run.
+      if (
+        String(socialOnlyPublication && socialOnlyPublication.status || "").toLowerCase() ===
+        "searchbank_handoff_complete"
+      ) {
+        const reservedSocialSections = captureSocialReservedSections();
+        const socialSnapshotReport = snapshots.run({
+          targetPage: "social",
+          socialReleaseId: socialOnlyPublication.releaseId || null,
+        });
+        restoreSocialReservedSections(reservedSocialSections);
+        if (
+          !socialSnapshotReport ||
+          socialSnapshotReport.ok !== true ||
+          !Array.isArray(socialSnapshotReport.completedHandlers) ||
+          !socialSnapshotReport.completedHandlers.includes("social")
+        ) {
+          throw new Error(
+            "Existing Snapshot Engine did not complete the Social SearchBank-to-front handoff.",
+          );
+        }
+        process.stdout.write(
+          JSON.stringify({ socialSnapshot: socialSnapshotReport }, null, 2) + "\n",
+        );
+      }
     }
   }
 }
