@@ -15,7 +15,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.9.0-exact-candidate-apply";
+  "social-snapshot-publish-v1.10.0-release-store-schema-pin";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -646,7 +646,35 @@ exports.handler = async function (event) {
       created_at: SocialStore.nowIso(),
     };
     let stored = null;
-    if (storeRelease) stored = await SocialStore.insertRelease(release);
+    if (storeRelease) {
+      // Persist only the release columns already used by every current read path.
+      // Runtime diagnostics and the SearchBank adapter both read this exact set;
+      // optional publisher metadata stays inside the in-memory response/snapshot.
+      const releaseStoreRow = {
+        release_id: release.release_id,
+        status: release.status,
+        snapshot_hash: release.snapshot_hash,
+        snapshot: release.snapshot,
+        notes: release.notes,
+        created_at: release.created_at,
+      };
+      try {
+        stored = await SocialStore.insertRelease(releaseStoreRow);
+      } catch (storeError) {
+        return SocialStore.response(storeError.statusCode || 502, {
+          ok: false,
+          version: VERSION,
+          error: storeError.code || "social_release_store_failed",
+          stage: "stored_social_release",
+          message:
+            "실제 적용 승인본을 저장하지 못해 SearchBank 인계 전에 중단했습니다. " +
+            (storeError.message || String(storeError)),
+          releaseId: release.release_id,
+          eligibleRows: eligible,
+          buildHook: buildHookStatus(),
+        });
+      }
+    }
     if (storeRelease && (!stored || (Array.isArray(stored) && stored.length < 1))) {
       return SocialStore.response(502, {
         ok: false, version: VERSION, error: "social_release_store_failed",
