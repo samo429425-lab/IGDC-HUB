@@ -22,7 +22,7 @@ const SocialStore = require("./social-candidate-store.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 const SearchBankEngine = require("../search-bank-engine");
 
-const VERSION = "social-searchbank-release-adapter-v1.3.0-searchbank-boundary-only";
+const VERSION = "social-searchbank-release-adapter-v1.3.1-partial-reject-continue";
 const RELEASE_FILE = "social-searchbank.release.snapshot.json";
 const REPORT_FILE = "social-pipeline.report.json";
 const SEARCH_BANK_FILE = "search-bank.snapshot.json";
@@ -305,7 +305,11 @@ function passThroughSearchBankEngineContract(items) {
     accepted.push(contracted);
   }
   return {
-    ok: rejected.length === 0 && accepted.length > 0,
+    // One malformed candidate must never stop every other approved Social row.
+    // SearchBank remains authoritative per item: continue when at least one row
+    // passed the existing engine contract and report rejected rows separately.
+    ok: accepted.length > 0,
+    clean: rejected.length === 0,
     engineVersion: SearchBankEngine.SEARCH_BANK_ENGINE_VERSION,
     contractVersion: SearchBankEngine.SEARCH_BANK_CONTRACT_VERSION,
     accepted,
@@ -363,7 +367,7 @@ function policyGate(root, bank) {
     if (!id) reasons.push("CANDIDATE_ID_MISSING");
     if (!text(item.title)) reasons.push("TITLE_MISSING");
     if (!validHttps(url)) reasons.push("PUBLIC_HTTPS_URL_REQUIRED");
-    if (!image || isPlaceholderImage(image)) reasons.push("REAL_THUMBNAIL_REQUIRED");
+    if (!validHttps(image) || isPlaceholderImage(image)) reasons.push("REAL_HTTPS_THUMBNAIL_REQUIRED");
     if (item.publicAccess !== true) reasons.push("PUBLIC_ACCESS_REQUIRED");
     if (item.searchBankEligible === false || item.snapshotEligible === false || item.frontSupplyAllowed === false) reasons.push("SEARCHBANK_OR_SNAPSHOT_NOT_ELIGIBLE");
     if (["blocked", "critical", "illegal", "unsafe", "rejected"].includes(lower(item.riskLevel))) reasons.push("RISK_BLOCKED");

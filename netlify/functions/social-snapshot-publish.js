@@ -15,7 +15,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.10.0-release-store-schema-pin";
+  "social-snapshot-publish-v1.10.1-release-store-readback";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -292,6 +292,45 @@ async function triggerCanonicalBuild(release, operation) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function storeReleaseCompat(release) {
+  // The original release contract includes audit/rotation columns. Keep that
+  // canonical shape first. Some older deployments used a reduced table shape,
+  // so retry only when PostgREST explicitly reports an unknown-column/schema
+  // mismatch. A failed POST is atomic, therefore this cannot duplicate a row.
+  try {
+    return await SocialStore.insertRelease(release);
+  } catch (error) {
+    const message = text(error && error.message).toLowerCase();
+    const schemaMismatch =
+      error && error.code === "social_supabase_http_error" &&
+      (/column|schema cache|could not find/.test(message));
+    if (!schemaMismatch) throw error;
+    const minimal = {
+      release_id: release.release_id,
+      status: release.status,
+      snapshot_hash: release.snapshot_hash,
+      snapshot: release.snapshot,
+      notes: release.notes,
+      created_at: release.created_at,
+    };
+    return SocialStore.insertRelease(minimal);
+  }
+}
+
+async function verifyStoredRelease(release) {
+  const rows = await SocialStore.selectReleases(
+    "select=release_id,status,snapshot_hash,created_at&release_id=eq." +
+      encodeURIComponent(text(release.release_id)) +
+      "&status=eq.stored&limit=1",
+  );
+  const row = Array.isArray(rows) && rows[0];
+  return !!(
+    row &&
+    text(row.release_id) === text(release.release_id) &&
+    text(row.snapshot_hash) === text(release.snapshot_hash)
+  );
 }
 
 async function latestStoredReleaseForRoute(route) {
@@ -647,19 +686,8 @@ exports.handler = async function (event) {
     };
     let stored = null;
     if (storeRelease) {
-      // Persist only the release columns already used by every current read path.
-      // Runtime diagnostics and the SearchBank adapter both read this exact set;
-      // optional publisher metadata stays inside the in-memory response/snapshot.
-      const releaseStoreRow = {
-        release_id: release.release_id,
-        status: release.status,
-        snapshot_hash: release.snapshot_hash,
-        snapshot: release.snapshot,
-        notes: release.notes,
-        created_at: release.created_at,
-      };
       try {
-        stored = await SocialStore.insertRelease(releaseStoreRow);
+        stored = await storeReleaseCompat(release);
       } catch (storeError) {
         return SocialStore.response(storeError.statusCode || 502, {
           ok: false,
@@ -682,8 +710,28 @@ exports.handler = async function (event) {
         releaseId: release.release_id, eligibleRows: eligible, buildHook: buildHookStatus()
       });
     }
-    let buildTrigger = null;
+    let storedVerified = false;
     if (storeRelease && stored) {
+      try {
+        storedVerified = await verifyStoredRelease(release);
+      } catch (_verifyError) {
+        storedVerified = false;
+      }
+      if (!storedVerified) {
+        return SocialStore.response(502, {
+          ok: false,
+          version: VERSION,
+          error: "social_release_readback_failed",
+          stage: "stored_social_release",
+          message: "승인본 저장 응답은 받았지만 저장본 재확인이 실패해 SearchBank 빌드를 시작하지 않았습니다.",
+          releaseId: release.release_id,
+          eligibleRows: eligible,
+          buildHook: buildHookStatus(),
+        });
+      }
+    }
+    let buildTrigger = null;
+    if (storeRelease && storedVerified) {
       buildTrigger = await triggerCanonicalBuild(
         release,
         unpublishSelected ? "unpublish" : "publish",
@@ -735,12 +783,13 @@ exports.handler = async function (event) {
       removedSlots: unpublish ? unpublish.removedSlots : 0,
       removedBySection: unpublish ? unpublish.removedBySection : {},
       releaseStored: !!stored,
-      actualFrontApplyStored: !!stored && !unpublishSelected,
-      actualFrontUnpublishStored: !!stored && unpublishSelected,
+      releaseStoredVerified: storedVerified,
+      actualFrontApplyStored: !!stored && storedVerified && !unpublishSelected,
+      actualFrontUnpublishStored: !!stored && storedVerified && unpublishSelected,
       actualFrontApplyQueued:
-        !!stored && !!buildTrigger && buildTrigger.ok && !unpublishSelected,
+        !!stored && storedVerified && !!buildTrigger && buildTrigger.ok && !unpublishSelected,
       actualFrontUnpublishQueued:
-        !!stored && !!buildTrigger && buildTrigger.ok && unpublishSelected,
+        !!stored && storedVerified && !!buildTrigger && buildTrigger.ok && unpublishSelected,
       actualApplyRequested: actualApplyOperation,
       storeReleaseRequested: storeRelease,
       frontPublicationStatus: !storeRelease
