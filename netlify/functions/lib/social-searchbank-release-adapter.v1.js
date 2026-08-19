@@ -22,7 +22,7 @@ const SocialStore = require("./social-candidate-store.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 const SearchBankEngine = require("../search-bank-engine");
 
-const VERSION = "social-searchbank-release-adapter-v1.3.1-partial-reject-continue";
+const VERSION = "social-searchbank-release-adapter-v1.4.0-exact-release-build-readback";
 const RELEASE_FILE = "social-searchbank.release.snapshot.json";
 const REPORT_FILE = "social-pipeline.report.json";
 const SEARCH_BANK_FILE = "search-bank.snapshot.json";
@@ -512,11 +512,165 @@ function mergeIntoSearchBankSnapshot(input) {
     bank: merged,
   };
 }
-async function latestStoredRelease() {
-  const rows = await SocialStore.selectReleases(
-    "select=release_id,status,snapshot_hash,snapshot,created_at,notes&status=eq.stored&order=created_at.desc&limit=1",
-  );
+function incomingReleaseExpectation() {
+  const raw = text(process.env.INCOMING_HOOK_BODY);
+  if (!raw) return {};
+  try {
+    const body = JSON.parse(raw);
+    if (!body || body.trigger !== "approved-social-snapshot-release") return {};
+    return {
+      releaseId: text(body.releaseId),
+      snapshotHash: text(body.snapshotHash),
+      scopeMode: lower(body.scopeMode) === "country" ? "country" : "global",
+      countryCode: text(body.countryCode).toUpperCase(),
+      worldRegion: text(body.worldRegion),
+      operation: text(body.operation) || "publish",
+    };
+  } catch (_error) {
+    return {};
+  }
+}
+function releaseMatchesExpectation(release, expected) {
+  if (!release || !release.snapshot) return { ok: false, reason: "stored_social_release_not_found" };
+  const actualId = text(release.release_id);
+  const storedHash = text(release.snapshot_hash);
+  const documentHash = sha256(release.snapshot);
+  if (expected && expected.releaseId && expected.releaseId !== actualId) {
+    return { ok: false, reason: "social_release_id_mismatch", actualId, storedHash, documentHash };
+  }
+  if (storedHash && storedHash !== documentHash) {
+    return { ok: false, reason: "social_release_stored_hash_mismatch", actualId, storedHash, documentHash };
+  }
+  if (expected && expected.snapshotHash && expected.snapshotHash !== documentHash) {
+    return { ok: false, reason: "social_release_hook_hash_mismatch", actualId, storedHash, documentHash };
+  }
+  return { ok: true, actualId, storedHash, documentHash };
+}
+async function latestStoredRelease(expected) {
+  const query = new URLSearchParams();
+  query.set("select", "release_id,status,snapshot_hash,snapshot,created_at,notes");
+  query.set("status", "eq.stored");
+  if (expected && expected.releaseId) query.set("release_id", "eq." + expected.releaseId);
+  query.set("order", "created_at.desc");
+  query.set("limit", "1");
+  const rows = await SocialStore.selectReleases(query.toString());
   return Array.isArray(rows) ? rows[0] || null : null;
+}
+function publicSiteBaseUrl() {
+  const names = ["URL", "DEPLOY_PRIME_URL", "DEPLOY_URL", "SITE_URL"];
+  for (const name of names) {
+    const raw = text(process.env[name]);
+    if (!raw) continue;
+    try {
+      const url = new URL(raw);
+      if (url.protocol === "https:" && url.hostname) return { name, value: url.origin };
+    } catch (_error) {}
+  }
+  return { name: null, value: "" };
+}
+async function releaseFromFunctionReadback(expected) {
+  // This fallback still reads the exact stored Social release on the server.
+  // It exists only for Netlify build environments where the Supabase service
+  // key is intentionally scoped to Functions. The returned release identity
+  // and SHA-256 must match INCOMING_HOOK_BODY before SearchBank sees it.
+  if (!expected || !expected.releaseId || !expected.snapshotHash) {
+    const error = new Error("SOCIAL_EXACT_RELEASE_EXPECTATION_MISSING");
+    error.code = "social_exact_release_expectation_missing";
+    throw error;
+  }
+  const site = publicSiteBaseUrl();
+  if (!site.value) {
+    const error = new Error("SOCIAL_RELEASE_READBACK_SITE_URL_MISSING");
+    error.code = "social_release_readback_site_url_missing";
+    throw error;
+  }
+  const url = new URL("/.netlify/functions/social-snapshot-current", site.value);
+  if (expected.scopeMode === "global") {
+    url.searchParams.set("scopeMode", "global");
+  } else if (expected.countryCode) {
+    url.searchParams.set("countryCode", expected.countryCode);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: { accept: "application/json", "cache-control": "no-cache" },
+      signal: controller.signal,
+    });
+    const raw = await response.text();
+    let body = null;
+    try { body = raw ? JSON.parse(raw) : null; } catch (_error) { body = null; }
+    if (!response.ok || !body || body.ok !== true || !body.snapshot) {
+      const error = new Error("SOCIAL_RELEASE_FUNCTION_READBACK_FAILED:" + response.status);
+      error.code = "social_release_function_readback_failed";
+      throw error;
+    }
+    const release = {
+      release_id: text(body.releaseId),
+      status: "stored",
+      snapshot_hash: text(body.hash),
+      snapshot: body.snapshot,
+      created_at: text(body.createdAt),
+      notes: "build_exact_release_readback",
+    };
+    const match = releaseMatchesExpectation(release, expected);
+    if (!match.ok || body.hashVerified !== true || text(body.documentHash) !== match.documentHash) {
+      const error = new Error((match && match.reason) || "SOCIAL_RELEASE_READBACK_HASH_MISMATCH");
+      error.code = (match && match.reason) || "social_release_readback_hash_mismatch";
+      error.details = {
+        expectedReleaseId: expected.releaseId,
+        expectedSnapshotHash: expected.snapshotHash,
+        returnedReleaseId: text(body.releaseId),
+        returnedStoredHash: text(body.hash),
+        returnedDocumentHash: text(body.documentHash),
+        computedDocumentHash: match && match.documentHash || null,
+      };
+      throw error;
+    }
+    return {
+      release,
+      source: "function_exact_readback",
+      endpointSource: site.name,
+      endpoint: url.origin + url.pathname,
+      verification: match,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function loadStoredReleaseForBuild() {
+  const expected = incomingReleaseExpectation();
+  let directError = null;
+  try {
+    const release = await latestStoredRelease(expected);
+    if (release && release.snapshot) {
+      const verification = releaseMatchesExpectation(release, expected);
+      if (!verification.ok) {
+        const error = new Error(verification.reason);
+        error.code = verification.reason;
+        error.details = verification;
+        throw error;
+      }
+      return { release, source: "supabase_direct", expected, verification, directError: null };
+    }
+    directError = "stored_social_release_not_found";
+  } catch (error) {
+    directError = text(error && (error.code || error.message)) || String(error);
+    // Identity/hash mismatches are fail-closed. Only storage/config/read
+    // unavailability may use the exact server-side readback bridge.
+    if (/mismatch/i.test(directError)) throw error;
+  }
+  if (expected.releaseId && expected.snapshotHash) {
+    const fallback = await releaseFromFunctionReadback(expected);
+    return Object.assign({ expected, directError }, fallback);
+  }
+  if (directError && directError !== "stored_social_release_not_found") {
+    const error = new Error(directError);
+    error.code = "social_release_store_unavailable";
+    throw error;
+  }
+  return { release: null, source: "none", expected, verification: null, directError };
 }
 function finalSocialSummary(root, expectedIds) {
   const file = outputPath(root, "social.snapshot.json");
@@ -556,14 +710,29 @@ async function publish(input) {
     },
   };
   let release;
+  let releaseLoad;
   try {
-    release = await latestStoredRelease();
+    releaseLoad = await loadStoredReleaseForBuild();
+    release = releaseLoad && releaseLoad.release;
   } catch (error) {
-    report.reason = "social_release_store_unavailable";
+    report.reason = error && error.code || "social_release_store_unavailable";
     report.error = text(error && error.message) || String(error);
+    report.details = error && error.details || null;
+    report.releaseRead = {
+      source: "failed",
+      expected: incomingReleaseExpectation(),
+    };
     atomicWriteJson(outputPath(root, REPORT_FILE), report);
     return report;
   }
+  report.releaseRead = {
+    source: releaseLoad && releaseLoad.source || "none",
+    expected: releaseLoad && releaseLoad.expected || {},
+    directError: releaseLoad && releaseLoad.directError || null,
+    endpointSource: releaseLoad && releaseLoad.endpointSource || null,
+    endpoint: releaseLoad && releaseLoad.endpoint || null,
+    verification: releaseLoad && releaseLoad.verification || null,
+  };
   if (!release || !release.snapshot) {
     report.reason = "stored_social_release_not_found";
     atomicWriteJson(outputPath(root, REPORT_FILE), report);
@@ -643,6 +812,9 @@ module.exports = {
   SEARCH_BANK_FILE,
   searchBankPaths,
   releaseToBank,
+  incomingReleaseExpectation,
+  releaseMatchesExpectation,
+  loadStoredReleaseForBuild,
   policyGate,
   passThroughSearchBankEngineContract,
   mergeIntoSearchBankSnapshot,

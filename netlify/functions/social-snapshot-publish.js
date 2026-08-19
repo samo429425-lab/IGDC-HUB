@@ -15,7 +15,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.10.1-release-store-readback";
+  "social-snapshot-publish-v1.11.0-exact-release-build-handoff";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -212,7 +212,7 @@ function buildHookStatus() {
     ],
   };
 }
-async function triggerCanonicalBuild(release, operation) {
+async function triggerCanonicalBuild(release, operation, route) {
   const setting = buildHookSetting();
   if (!setting.value) {
     return {
@@ -258,6 +258,20 @@ async function triggerCanonicalBuild(release, operation) {
       body: JSON.stringify({
         trigger_title:
           "IGDC Social " + operation + " " + text(release.release_id),
+        // Netlify exposes a build-hook JSON body as INCOMING_HOOK_BODY.
+        // Carry only the exact already-stored release identity/scope so the
+        // build-time Social adapter can verify that it consumes the same
+        // administrator-approved release even when Supabase secrets are scoped
+        // to Functions instead of Builds. This is a server-side handoff marker,
+        // never a browser/front rendering shortcut.
+        trigger: "approved-social-snapshot-release",
+        releaseId: text(release.release_id),
+        snapshotHash: text(release.snapshot_hash),
+        scopeMode: text(route && route.countryCode) ? "country" : "global",
+        countryCode: text(route && route.countryCode).toUpperCase() || null,
+        worldRegion: text(route && (route.worldRegion || route.regionId)) || null,
+        operation: text(operation) || "publish",
+        requestedAt: new Date().toISOString(),
       }),
       signal: controller.signal,
     });
@@ -321,15 +335,17 @@ async function storeReleaseCompat(release) {
 
 async function verifyStoredRelease(release) {
   const rows = await SocialStore.selectReleases(
-    "select=release_id,status,snapshot_hash,created_at&release_id=eq." +
+    "select=release_id,status,snapshot_hash,snapshot,created_at&release_id=eq." +
       encodeURIComponent(text(release.release_id)) +
       "&status=eq.stored&limit=1",
   );
   const row = Array.isArray(rows) && rows[0];
   return !!(
     row &&
+    row.snapshot &&
     text(row.release_id) === text(release.release_id) &&
-    text(row.snapshot_hash) === text(release.snapshot_hash)
+    text(row.snapshot_hash) === text(release.snapshot_hash) &&
+    SocialStore.sha256(row.snapshot) === text(release.snapshot_hash)
   );
 }
 
@@ -635,6 +651,12 @@ exports.handler = async function (event) {
         },
       );
     }
+    // Canonicalize to the exact JSON shape that Supabase JSONB stores before
+    // calculating the release hash. publicSocialSlot intentionally uses
+    // undefined for optional fields; JSON storage removes those keys. Hashing
+    // the in-memory pre-serialization object would therefore produce a hash
+    // that can never match the stored release read back by the build.
+    snapshot = JSON.parse(JSON.stringify(snapshot));
     const hash = SocialStore.sha256(snapshot);
     const rotation = (snapshot.meta && snapshot.meta.rotation) || {};
     const eligible = Array.isArray(rows)
@@ -735,6 +757,7 @@ exports.handler = async function (event) {
       buildTrigger = await triggerCanonicalBuild(
         release,
         unpublishSelected ? "unpublish" : "publish",
+        route,
       );
     }
     if (

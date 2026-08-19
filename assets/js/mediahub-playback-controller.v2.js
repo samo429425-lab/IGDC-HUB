@@ -5,8 +5,8 @@
  * Preserves the original Media Hub document, scroll restoration, OTT gate,
  * fullscreen flow, and existing card renderer. Adds previous/next navigation,
  * play/pause, subtitle on/off, browser-history back restoration, and a paid
- * subtitle-translation entry point that remains disabled until PG execution
- * and a secure entitlement-aware translation bridge are both live.
+ * subtitle-translation entry point stays visible but returns a localized paid-service
+ * preparation notice until the future translation/payment service is intentionally enabled.
  */
 (function (global, document) {
   'use strict';
@@ -38,41 +38,80 @@
     orientationTimer: 0,
     fullscreenBodyOverflow: null,
     justExitedFullscreenAt: 0,
-    orientationLocked: false
+    orientationLocked: false,
+    orientationChangingUntil: 0,
+    nativeVideoFullscreen: false
   };
 
   var COPY = {
-    ko: {back:'← 목록으로 돌아가기',previous:'이전',play:'재생',pause:'일시정지',next:'다음',captionsOn:'자막 켜기',captionsOff:'자막 끄기',translate:'자막 번역',fullscreen:'전체 화면',exitFullscreen:'전체 화면 나가기',preparing:'콘텐츠를 준비 중입니다.',unavailable:'이 콘텐츠의 재생 소스가 아직 연결되지 않았습니다.',translationPending:'자막 번역은 유료 서비스입니다. PG 승인과 안전한 이용권 확인 연결이 완료된 뒤 활성화됩니다.',translationUnavailable:'현재 선택된 자막이 없거나 번역 가능한 자막이 연결되지 않았습니다.'},
-    en: {back:'← Back to list',previous:'Previous',play:'Play',pause:'Pause',next:'Next',captionsOn:'Captions on',captionsOff:'Captions off',translate:'Translate captions',fullscreen:'Fullscreen',exitFullscreen:'Exit fullscreen',preparing:'Content is being prepared.',unavailable:'A playable source has not been connected yet.',translationPending:'Caption translation is a paid service. It will be enabled after PG approval and secure entitlement verification are connected.',translationUnavailable:'No selected or translatable caption track is currently connected.'},
-    de: {back:'← Zurück zur Liste',previous:'Zurück',play:'Wiedergabe',pause:'Pause',next:'Weiter',captionsOn:'Untertitel ein',captionsOff:'Untertitel aus',translate:'Untertitel übersetzen',fullscreen:'Vollbild',exitFullscreen:'Vollbild beenden',preparing:'Inhalt wird vorbereitet.',unavailable:'Für diesen Inhalt ist noch keine Wiedergabequelle verbunden.',translationPending:'Die Untertitelübersetzung ist kostenpflichtig und wird nach PG-Freigabe und sicherer Berechtigungsprüfung aktiviert.',translationUnavailable:'Es ist keine ausgewählte oder übersetzbare Untertitelspur verbunden.'},
-    es: {back:'← Volver a la lista',previous:'Anterior',play:'Reproducir',pause:'Pausar',next:'Siguiente',captionsOn:'Subtítulos activados',captionsOff:'Subtítulos desactivados',translate:'Traducir subtítulos',fullscreen:'Pantalla completa',exitFullscreen:'Salir de pantalla completa',preparing:'Preparando el contenido.',unavailable:'Aún no hay una fuente de reproducción conectada.',translationPending:'La traducción de subtítulos es un servicio de pago y se activará tras la aprobación de PG y la verificación segura del acceso.',translationUnavailable:'No hay una pista de subtítulos seleccionada o traducible.'},
-    fr: {back:'← Retour à la liste',previous:'Précédent',play:'Lire',pause:'Pause',next:'Suivant',captionsOn:'Sous-titres activés',captionsOff:'Sous-titres désactivés',translate:'Traduire les sous-titres',fullscreen:'Plein écran',exitFullscreen:'Quitter le plein écran',preparing:'Préparation du contenu.',unavailable:'Aucune source de lecture n’est encore connectée.',translationPending:'La traduction des sous-titres est un service payant, activé après approbation PG et vérification sécurisée des droits.',translationUnavailable:'Aucune piste de sous-titres sélectionnée ou traduisible n’est connectée.'},
-    it: {back:'← Torna all’elenco',previous:'Precedente',play:'Riproduci',pause:'Pausa',next:'Successivo',captionsOn:'Sottotitoli attivi',captionsOff:'Sottotitoli disattivi',translate:'Traduci sottotitoli',fullscreen:'Schermo intero',exitFullscreen:'Esci da schermo intero',preparing:'Preparazione del contenuto.',unavailable:'Non è ancora collegata una sorgente riproducibile.',translationPending:'La traduzione dei sottotitoli è un servizio a pagamento e sarà attivata dopo l’approvazione PG e la verifica sicura dell’accesso.',translationUnavailable:'Non è collegata alcuna traccia sottotitoli selezionata o traducibile.'},
-    pt: {back:'← Voltar à lista',previous:'Anterior',play:'Reproduzir',pause:'Pausar',next:'Seguinte',captionsOn:'Legendas ligadas',captionsOff:'Legendas desligadas',translate:'Traduzir legendas',fullscreen:'Ecrã inteiro',exitFullscreen:'Sair do ecrã inteiro',preparing:'A preparar o conteúdo.',unavailable:'Ainda não existe uma fonte de reprodução ligada.',translationPending:'A tradução de legendas é um serviço pago e será ativada após aprovação PG e verificação segura do acesso.',translationUnavailable:'Não existe uma faixa de legendas selecionada ou traduzível.'},
-    nl: {back:'← Terug naar lijst',previous:'Vorige',play:'Afspelen',pause:'Pauzeren',next:'Volgende',captionsOn:'Ondertitels aan',captionsOff:'Ondertitels uit',translate:'Ondertitels vertalen',fullscreen:'Volledig scherm',exitFullscreen:'Volledig scherm sluiten',preparing:'Inhoud wordt voorbereid.',unavailable:'Er is nog geen afspeelbare bron gekoppeld.',translationPending:'Ondertitelvertaling is een betaalde dienst en wordt geactiveerd na PG-goedkeuring en veilige toegangscontrole.',translationUnavailable:'Er is geen geselecteerde of vertaalbare ondertiteltrack gekoppeld.'},
-    pl: {back:'← Wróć do listy',previous:'Poprzedni',play:'Odtwórz',pause:'Pauza',next:'Następny',captionsOn:'Napisy włączone',captionsOff:'Napisy wyłączone',translate:'Tłumacz napisy',fullscreen:'Pełny ekran',exitFullscreen:'Wyjdź z pełnego ekranu',preparing:'Przygotowywanie treści.',unavailable:'Nie podłączono jeszcze źródła odtwarzania.',translationPending:'Tłumaczenie napisów jest usługą płatną i zostanie aktywowane po zatwierdzeniu PG oraz bezpiecznej weryfikacji uprawnień.',translationUnavailable:'Nie podłączono wybranej ani możliwej do tłumaczenia ścieżki napisów.'},
-    sv: {back:'← Tillbaka till listan',previous:'Föregående',play:'Spela',pause:'Pausa',next:'Nästa',captionsOn:'Undertexter på',captionsOff:'Undertexter av',translate:'Översätt undertexter',fullscreen:'Helskärm',exitFullscreen:'Avsluta helskärm',preparing:'Innehållet förbereds.',unavailable:'Ingen spelbar källa är ansluten ännu.',translationPending:'Översättning av undertexter är en betaltjänst och aktiveras efter PG-godkännande och säker behörighetskontroll.',translationUnavailable:'Ingen vald eller översättningsbar undertext är ansluten.'},
-    hu: {back:'← Vissza a listához',previous:'Előző',play:'Lejátszás',pause:'Szünet',next:'Következő',captionsOn:'Felirat be',captionsOff:'Felirat ki',translate:'Felirat fordítása',fullscreen:'Teljes képernyő',exitFullscreen:'Kilépés a teljes képernyőből',preparing:'A tartalom előkészítése folyamatban.',unavailable:'Még nincs csatlakoztatva lejátszható forrás.',translationPending:'A feliratfordítás fizetős szolgáltatás, amely PG-jóváhagyás és biztonságos jogosultság-ellenőrzés után aktiválódik.',translationUnavailable:'Nincs kiválasztott vagy fordítható feliratsáv.'},
-    ru: {back:'← Назад к списку',previous:'Предыдущее',play:'Воспроизвести',pause:'Пауза',next:'Следующее',captionsOn:'Субтитры вкл.',captionsOff:'Субтитры выкл.',translate:'Перевести субтитры',fullscreen:'Полный экран',exitFullscreen:'Выйти из полного экрана',preparing:'Подготовка контента.',unavailable:'Источник воспроизведения ещё не подключён.',translationPending:'Перевод субтитров — платная услуга. Она будет включена после одобрения PG и безопасной проверки прав доступа.',translationUnavailable:'Нет выбранной или доступной для перевода дорожки субтитров.'},
-    uk: {back:'← Назад до списку',previous:'Попереднє',play:'Відтворити',pause:'Пауза',next:'Наступне',captionsOn:'Субтитри увімкнено',captionsOff:'Субтитри вимкнено',translate:'Перекласти субтитри',fullscreen:'На весь екран',exitFullscreen:'Вийти з повного екрана',preparing:'Підготовка вмісту.',unavailable:'Джерело відтворення ще не підключено.',translationPending:'Переклад субтитрів є платною послугою й буде активований після схвалення PG та безпечної перевірки прав.',translationUnavailable:'Немає вибраної або придатної для перекладу доріжки субтитрів.'},
-    tr: {back:'← Listeye dön',previous:'Önceki',play:'Oynat',pause:'Duraklat',next:'Sonraki',captionsOn:'Altyazı açık',captionsOff:'Altyazı kapalı',translate:'Altyazıyı çevir',fullscreen:'Tam ekran',exitFullscreen:'Tam ekrandan çık',preparing:'İçerik hazırlanıyor.',unavailable:'Henüz oynatılabilir bir kaynak bağlanmadı.',translationPending:'Altyazı çevirisi ücretli bir hizmettir; PG onayı ve güvenli yetki doğrulamasından sonra etkinleştirilir.',translationUnavailable:'Seçili veya çevrilebilir bir altyazı parçası bağlı değil.'},
-    ar: {back:'← العودة إلى القائمة',previous:'السابق',play:'تشغيل',pause:'إيقاف مؤقت',next:'التالي',captionsOn:'تشغيل الترجمة',captionsOff:'إيقاف الترجمة',translate:'ترجمة النصوص',fullscreen:'ملء الشاشة',exitFullscreen:'الخروج من ملء الشاشة',preparing:'جارٍ تجهيز المحتوى.',unavailable:'لم يتم ربط مصدر تشغيل بعد.',translationPending:'ترجمة النصوص خدمة مدفوعة وستُفعّل بعد موافقة PG والتحقق الآمن من صلاحية الاستخدام.',translationUnavailable:'لا يوجد مسار نصوص محدد أو قابل للترجمة.'},
-    fa: {back:'← بازگشت به فهرست',previous:'قبلی',play:'پخش',pause:'مکث',next:'بعدی',captionsOn:'زیرنویس روشن',captionsOff:'زیرنویس خاموش',translate:'ترجمه زیرنویس',fullscreen:'تمام‌صفحه',exitFullscreen:'خروج از تمام‌صفحه',preparing:'محتوا در حال آماده‌سازی است.',unavailable:'هنوز منبع قابل پخشی متصل نشده است.',translationPending:'ترجمه زیرنویس یک خدمت پولی است و پس از تأیید PG و بررسی امن مجوز فعال می‌شود.',translationUnavailable:'هیچ زیرنویس انتخاب‌شده یا قابل ترجمه‌ای متصل نیست.'},
-    ur: {back:'← فہرست پر واپس جائیں',previous:'پچھلا',play:'چلائیں',pause:'روکیں',next:'اگلا',captionsOn:'سب ٹائٹل آن',captionsOff:'سب ٹائٹل آف',translate:'سب ٹائٹل ترجمہ کریں',fullscreen:'مکمل اسکرین',exitFullscreen:'مکمل اسکرین سے باہر',preparing:'مواد تیار کیا جا رہا ہے۔',unavailable:'ابھی کوئی قابلِ پلے ذریعہ منسلک نہیں ہے۔',translationPending:'سب ٹائٹل ترجمہ ایک بامعاوضہ خدمت ہے اور PG منظوری اور محفوظ اجازت کی تصدیق کے بعد فعال ہوگا۔',translationUnavailable:'کوئی منتخب یا قابلِ ترجمہ سب ٹائٹل ٹریک منسلک نہیں ہے۔'},
-    hi: {back:'← सूची पर वापस जाएँ',previous:'पिछला',play:'चलाएँ',pause:'रोकें',next:'अगला',captionsOn:'उपशीर्षक चालू',captionsOff:'उपशीर्षक बंद',translate:'उपशीर्षक अनुवाद',fullscreen:'पूर्ण स्क्रीन',exitFullscreen:'पूर्ण स्क्रीन से बाहर',preparing:'सामग्री तैयार की जा रही है।',unavailable:'अभी कोई चलाने योग्य स्रोत जुड़ा नहीं है।',translationPending:'उपशीर्षक अनुवाद एक सशुल्क सेवा है और PG स्वीकृति व सुरक्षित अधिकार जाँच के बाद सक्रिय होगा।',translationUnavailable:'कोई चयनित या अनुवाद योग्य उपशीर्षक ट्रैक जुड़ा नहीं है।'},
-    bn: {back:'← তালিকায় ফিরুন',previous:'আগেরটি',play:'চালান',pause:'বিরতি',next:'পরেরটি',captionsOn:'সাবটাইটেল চালু',captionsOff:'সাবটাইটেল বন্ধ',translate:'সাবটাইটেল অনুবাদ',fullscreen:'পূর্ণ পর্দা',exitFullscreen:'পূর্ণ পর্দা থেকে বের হন',preparing:'কনটেন্ট প্রস্তুত করা হচ্ছে।',unavailable:'এখনও কোনো চালানোযোগ্য উৎস যুক্ত নেই।',translationPending:'সাবটাইটেল অনুবাদ একটি পেইড সেবা; PG অনুমোদন ও নিরাপদ অধিকার যাচাইয়ের পর সক্রিয় হবে।',translationUnavailable:'কোনো নির্বাচিত বা অনুবাদযোগ্য সাবটাইটেল ট্র্যাক যুক্ত নেই।'},
-    ta: {back:'← பட்டியலுக்குத் திரும்பு',previous:'முந்தையது',play:'இயக்கு',pause:'இடைநிறுத்து',next:'அடுத்தது',captionsOn:'வசனம் இயக்கு',captionsOff:'வசனம் அணை',translate:'வசனம் மொழிபெயர்',fullscreen:'முழுத் திரை',exitFullscreen:'முழுத் திரையிலிருந்து வெளியேறு',preparing:'உள்ளடக்கம் தயாராகிறது.',unavailable:'இயக்கக்கூடிய மூலம் இன்னும் இணைக்கப்படவில்லை.',translationPending:'வசன மொழிபெயர்ப்பு கட்டண சேவையாகும்; PG ஒப்புதல் மற்றும் பாதுகாப்பான உரிமைச் சரிபார்ப்புக்குப் பிறகு செயல்படும்.',translationUnavailable:'தேர்ந்தெடுக்கப்பட்ட அல்லது மொழிபெயர்க்கக்கூடிய வசன தடம் இல்லை.'},
-    th: {back:'← กลับไปยังรายการ',previous:'ก่อนหน้า',play:'เล่น',pause:'หยุดชั่วคราว',next:'ถัดไป',captionsOn:'เปิดคำบรรยาย',captionsOff:'ปิดคำบรรยาย',translate:'แปลคำบรรยาย',fullscreen:'เต็มหน้าจอ',exitFullscreen:'ออกจากเต็มหน้าจอ',preparing:'กำลังเตรียมเนื้อหา',unavailable:'ยังไม่ได้เชื่อมต่อแหล่งเล่นที่ใช้ได้',translationPending:'การแปลคำบรรยายเป็นบริการแบบชำระเงิน และจะเปิดใช้หลังการอนุมัติ PG และการตรวจสอบสิทธิ์อย่างปลอดภัย',translationUnavailable:'ไม่มีแทร็กคำบรรยายที่เลือกหรือแปลได้'},
-    vi: {back:'← Quay lại danh sách',previous:'Trước',play:'Phát',pause:'Tạm dừng',next:'Tiếp',captionsOn:'Bật phụ đề',captionsOff:'Tắt phụ đề',translate:'Dịch phụ đề',fullscreen:'Toàn màn hình',exitFullscreen:'Thoát toàn màn hình',preparing:'Đang chuẩn bị nội dung.',unavailable:'Chưa kết nối nguồn phát có thể sử dụng.',translationPending:'Dịch phụ đề là dịch vụ trả phí và sẽ được bật sau khi PG được phê duyệt và quyền sử dụng được xác minh an toàn.',translationUnavailable:'Không có bản phụ đề đã chọn hoặc có thể dịch.'},
-    id: {back:'← Kembali ke daftar',previous:'Sebelumnya',play:'Putar',pause:'Jeda',next:'Berikutnya',captionsOn:'Subtitel aktif',captionsOff:'Subtitel nonaktif',translate:'Terjemahkan subtitel',fullscreen:'Layar penuh',exitFullscreen:'Keluar dari layar penuh',preparing:'Konten sedang disiapkan.',unavailable:'Sumber pemutaran belum terhubung.',translationPending:'Terjemahan subtitel adalah layanan berbayar dan akan diaktifkan setelah persetujuan PG serta verifikasi hak akses yang aman.',translationUnavailable:'Tidak ada trek subtitel yang dipilih atau dapat diterjemahkan.'},
-    ms: {back:'← Kembali ke senarai',previous:'Sebelumnya',play:'Main',pause:'Jeda',next:'Seterusnya',captionsOn:'Sari kata hidup',captionsOff:'Sari kata mati',translate:'Terjemah sari kata',fullscreen:'Skrin penuh',exitFullscreen:'Keluar skrin penuh',preparing:'Kandungan sedang disediakan.',unavailable:'Sumber main balik belum disambungkan.',translationPending:'Terjemahan sari kata ialah perkhidmatan berbayar dan akan diaktifkan selepas kelulusan PG serta pengesahan hak yang selamat.',translationUnavailable:'Tiada trek sari kata dipilih atau boleh diterjemah.'},
-    tl: {back:'← Bumalik sa listahan',previous:'Nakaraan',play:'I-play',pause:'I-pause',next:'Susunod',captionsOn:'Bukas ang subtitle',captionsOff:'Patay ang subtitle',translate:'Isalin ang subtitle',fullscreen:'Buong screen',exitFullscreen:'Lumabas sa buong screen',preparing:'Inihahanda ang nilalaman.',unavailable:'Wala pang nakakabit na mapapatugtog na source.',translationPending:'Bayad na serbisyo ang pagsasalin ng subtitle at ia-activate pagkatapos ng PG approval at ligtas na pag-verify ng karapatan.',translationUnavailable:'Walang napili o maisasaling subtitle track.'},
-    sw: {back:'← Rudi kwenye orodha',previous:'Iliyotangulia',play:'Cheza',pause:'Sitisha',next:'Inayofuata',captionsOn:'Manukuu yamewashwa',captionsOff:'Manukuu yamezimwa',translate:'Tafsiri manukuu',fullscreen:'Skrini nzima',exitFullscreen:'Toka skrini nzima',preparing:'Maudhui yanaandaliwa.',unavailable:'Bado hakuna chanzo cha kucheza kilichounganishwa.',translationPending:'Tafsiri ya manukuu ni huduma ya kulipia na itawezeshwa baada ya idhini ya PG na uthibitishaji salama wa ruhusa.',translationUnavailable:'Hakuna wimbo wa manukuu uliochaguliwa au unaoweza kutafsiriwa.'},
-    uz: {back:'← Ro‘yxatga qaytish',previous:'Oldingi',play:'Ijro',pause:'Pauza',next:'Keyingi',captionsOn:'Subtitr yoqilgan',captionsOff:'Subtitr o‘chirilgan',translate:'Subtitrni tarjima qilish',fullscreen:'To‘liq ekran',exitFullscreen:'To‘liq ekrandan chiqish',preparing:'Kontent tayyorlanmoqda.',unavailable:'Hali ijro manbasi ulanmagan.',translationPending:'Subtitr tarjimasi pullik xizmat bo‘lib, PG tasdig‘i va xavfsiz huquq tekshiruvidan so‘ng faollashadi.',translationUnavailable:'Tanlangan yoki tarjima qilinadigan subtitr yo‘li ulanmagan.'},
-    ja: {back:'← 一覧に戻る',previous:'前へ',play:'再生',pause:'一時停止',next:'次へ',captionsOn:'字幕オン',captionsOff:'字幕オフ',translate:'字幕を翻訳',fullscreen:'全画面',exitFullscreen:'全画面を終了',preparing:'コンテンツを準備しています。',unavailable:'再生ソースがまだ接続されていません。',translationPending:'字幕翻訳は有料サービスです。PG承認と安全な利用権確認の接続後に有効になります。',translationUnavailable:'選択中または翻訳可能な字幕トラックがありません。'},
-    zh: {back:'← 返回列表',previous:'上一个',play:'播放',pause:'暂停',next:'下一个',captionsOn:'开启字幕',captionsOff:'关闭字幕',translate:'翻译字幕',fullscreen:'全屏',exitFullscreen:'退出全屏',preparing:'正在准备内容。',unavailable:'尚未连接可播放的来源。',translationPending:'字幕翻译是付费服务，将在 PG 审批和安全权限验证完成后启用。',translationUnavailable:'当前没有已选择或可翻译的字幕轨道。'},
-    zht: {back:'← 返回清單',previous:'上一個',play:'播放',pause:'暫停',next:'下一個',captionsOn:'開啟字幕',captionsOff:'關閉字幕',translate:'翻譯字幕',fullscreen:'全螢幕',exitFullscreen:'結束全螢幕',preparing:'正在準備內容。',unavailable:'尚未連接可播放的來源。',translationPending:'字幕翻譯是付費服務，將於 PG 核准及安全權限驗證完成後啟用。',translationUnavailable:'目前沒有已選取或可翻譯的字幕軌。'}
+    ko: {back:'← 목록으로 돌아가기',previous:'이전',play:'재생',pause:'일시정지',next:'다음',captionsOn:'자막 켜기',captionsOff:'자막 끄기',translate:'자막 번역',fullscreen:'전체 화면',exitFullscreen:'전체 화면 나가기',preparing:'콘텐츠를 준비 중입니다.',unavailable:'이 콘텐츠의 재생 소스가 아직 연결되지 않았습니다.',translationPending:'자막 번역은 유료 서비스입니다. 현재 서비스 준비 중입니다.',translationUnavailable:'현재 선택된 자막이 없거나 번역 가능한 자막이 연결되지 않았습니다.'},
+    en: {back:'← Back to list',previous:'Previous',play:'Play',pause:'Pause',next:'Next',captionsOn:'Captions on',captionsOff:'Captions off',translate:'Translate captions',fullscreen:'Fullscreen',exitFullscreen:'Exit fullscreen',preparing:'Content is being prepared.',unavailable:'A playable source has not been connected yet.',translationPending:'Caption translation is a paid service. The service is currently being prepared.',translationUnavailable:'No selected or translatable caption track is currently connected.'},
+    de: {back:'← Zurück zur Liste',previous:'Zurück',play:'Wiedergabe',pause:'Pause',next:'Weiter',captionsOn:'Untertitel ein',captionsOff:'Untertitel aus',translate:'Untertitel übersetzen',fullscreen:'Vollbild',exitFullscreen:'Vollbild beenden',preparing:'Inhalt wird vorbereitet.',unavailable:'Für diesen Inhalt ist noch keine Wiedergabequelle verbunden.',translationPending:'Die Übersetzung von Untertiteln ist ein kostenpflichtiger Dienst. Der Dienst wird derzeit vorbereitet.',translationUnavailable:'Es ist keine ausgewählte oder übersetzbare Untertitelspur verbunden.'},
+    es: {back:'← Volver a la lista',previous:'Anterior',play:'Reproducir',pause:'Pausar',next:'Siguiente',captionsOn:'Subtítulos activados',captionsOff:'Subtítulos desactivados',translate:'Traducir subtítulos',fullscreen:'Pantalla completa',exitFullscreen:'Salir de pantalla completa',preparing:'Preparando el contenido.',unavailable:'Aún no hay una fuente de reproducción conectada.',translationPending:'La traducción de subtítulos es un servicio de pago. El servicio está actualmente en preparación.',translationUnavailable:'No hay una pista de subtítulos seleccionada o traducible.'},
+    fr: {back:'← Retour à la liste',previous:'Précédent',play:'Lire',pause:'Pause',next:'Suivant',captionsOn:'Sous-titres activés',captionsOff:'Sous-titres désactivés',translate:'Traduire les sous-titres',fullscreen:'Plein écran',exitFullscreen:'Quitter le plein écran',preparing:'Préparation du contenu.',unavailable:'Aucune source de lecture n’est encore connectée.',translationPending:'La traduction des sous-titres est un service payant. Le service est actuellement en préparation.',translationUnavailable:'Aucune piste de sous-titres sélectionnée ou traduisible n’est connectée.'},
+    it: {back:'← Torna all’elenco',previous:'Precedente',play:'Riproduci',pause:'Pausa',next:'Successivo',captionsOn:'Sottotitoli attivi',captionsOff:'Sottotitoli disattivi',translate:'Traduci sottotitoli',fullscreen:'Schermo intero',exitFullscreen:'Esci da schermo intero',preparing:'Preparazione del contenuto.',unavailable:'Non è ancora collegata una sorgente riproducibile.',translationPending:'La traduzione dei sottotitoli è un servizio a pagamento. Il servizio è attualmente in preparazione.',translationUnavailable:'Non è collegata alcuna traccia sottotitoli selezionata o traducibile.'},
+    pt: {back:'← Voltar à lista',previous:'Anterior',play:'Reproduzir',pause:'Pausar',next:'Seguinte',captionsOn:'Legendas ligadas',captionsOff:'Legendas desligadas',translate:'Traduzir legendas',fullscreen:'Ecrã inteiro',exitFullscreen:'Sair do ecrã inteiro',preparing:'A preparar o conteúdo.',unavailable:'Ainda não existe uma fonte de reprodução ligada.',translationPending:'A tradução de legendas é um serviço pago. O serviço está atualmente em preparação.',translationUnavailable:'Não existe uma faixa de legendas selecionada ou traduzível.'},
+    nl: {back:'← Terug naar lijst',previous:'Vorige',play:'Afspelen',pause:'Pauzeren',next:'Volgende',captionsOn:'Ondertitels aan',captionsOff:'Ondertitels uit',translate:'Ondertitels vertalen',fullscreen:'Volledig scherm',exitFullscreen:'Volledig scherm sluiten',preparing:'Inhoud wordt voorbereid.',unavailable:'Er is nog geen afspeelbare bron gekoppeld.',translationPending:'Ondertitelvertaling is een betaalde dienst. De dienst wordt momenteel voorbereid.',translationUnavailable:'Er is geen geselecteerde of vertaalbare ondertiteltrack gekoppeld.'},
+    pl: {back:'← Wróć do listy',previous:'Poprzedni',play:'Odtwórz',pause:'Pauza',next:'Następny',captionsOn:'Napisy włączone',captionsOff:'Napisy wyłączone',translate:'Tłumacz napisy',fullscreen:'Pełny ekran',exitFullscreen:'Wyjdź z pełnego ekranu',preparing:'Przygotowywanie treści.',unavailable:'Nie podłączono jeszcze źródła odtwarzania.',translationPending:'Tłumaczenie napisów jest usługą płatną. Usługa jest obecnie przygotowywana.',translationUnavailable:'Nie podłączono wybranej ani możliwej do tłumaczenia ścieżki napisów.'},
+    sv: {back:'← Tillbaka till listan',previous:'Föregående',play:'Spela',pause:'Pausa',next:'Nästa',captionsOn:'Undertexter på',captionsOff:'Undertexter av',translate:'Översätt undertexter',fullscreen:'Helskärm',exitFullscreen:'Avsluta helskärm',preparing:'Innehållet förbereds.',unavailable:'Ingen spelbar källa är ansluten ännu.',translationPending:'Översättning av undertexter är en betaltjänst. Tjänsten förbereds för närvarande.',translationUnavailable:'Ingen vald eller översättningsbar undertext är ansluten.'},
+    hu: {back:'← Vissza a listához',previous:'Előző',play:'Lejátszás',pause:'Szünet',next:'Következő',captionsOn:'Felirat be',captionsOff:'Felirat ki',translate:'Felirat fordítása',fullscreen:'Teljes képernyő',exitFullscreen:'Kilépés a teljes képernyőből',preparing:'A tartalom előkészítése folyamatban.',unavailable:'Még nincs csatlakoztatva lejátszható forrás.',translationPending:'A feliratfordítás fizetős szolgáltatás. A szolgáltatás jelenleg előkészítés alatt áll.',translationUnavailable:'Nincs kiválasztott vagy fordítható feliratsáv.'},
+    ru: {back:'← Назад к списку',previous:'Предыдущее',play:'Воспроизвести',pause:'Пауза',next:'Следующее',captionsOn:'Субтитры вкл.',captionsOff:'Субтитры выкл.',translate:'Перевести субтитры',fullscreen:'Полный экран',exitFullscreen:'Выйти из полного экрана',preparing:'Подготовка контента.',unavailable:'Источник воспроизведения ещё не подключён.',translationPending:'Перевод субтитров — платная услуга. Сервис сейчас готовится к запуску.',translationUnavailable:'Нет выбранной или доступной для перевода дорожки субтитров.'},
+    uk: {back:'← Назад до списку',previous:'Попереднє',play:'Відтворити',pause:'Пауза',next:'Наступне',captionsOn:'Субтитри увімкнено',captionsOff:'Субтитри вимкнено',translate:'Перекласти субтитри',fullscreen:'На весь екран',exitFullscreen:'Вийти з повного екрана',preparing:'Підготовка вмісту.',unavailable:'Джерело відтворення ще не підключено.',translationPending:'Переклад субтитрів — платна послуга. Сервіс наразі готується до запуску.',translationUnavailable:'Немає вибраної або придатної для перекладу доріжки субтитрів.'},
+    tr: {back:'← Listeye dön',previous:'Önceki',play:'Oynat',pause:'Duraklat',next:'Sonraki',captionsOn:'Altyazı açık',captionsOff:'Altyazı kapalı',translate:'Altyazıyı çevir',fullscreen:'Tam ekran',exitFullscreen:'Tam ekrandan çık',preparing:'İçerik hazırlanıyor.',unavailable:'Henüz oynatılabilir bir kaynak bağlanmadı.',translationPending:'Altyazı çevirisi ücretli bir hizmettir. Hizmet şu anda hazırlanmaktadır.',translationUnavailable:'Seçili veya çevrilebilir bir altyazı parçası bağlı değil.'},
+    ar: {back:'← العودة إلى القائمة',previous:'السابق',play:'تشغيل',pause:'إيقاف مؤقت',next:'التالي',captionsOn:'تشغيل الترجمة',captionsOff:'إيقاف الترجمة',translate:'ترجمة النصوص',fullscreen:'ملء الشاشة',exitFullscreen:'الخروج من ملء الشاشة',preparing:'جارٍ تجهيز المحتوى.',unavailable:'لم يتم ربط مصدر تشغيل بعد.',translationPending:'ترجمة النصوص خدمة مدفوعة. الخدمة قيد الإعداد حالياً.',translationUnavailable:'لا يوجد مسار نصوص محدد أو قابل للترجمة.'},
+    fa: {back:'← بازگشت به فهرست',previous:'قبلی',play:'پخش',pause:'مکث',next:'بعدی',captionsOn:'زیرنویس روشن',captionsOff:'زیرنویس خاموش',translate:'ترجمه زیرنویس',fullscreen:'تمام‌صفحه',exitFullscreen:'خروج از تمام‌صفحه',preparing:'محتوا در حال آماده‌سازی است.',unavailable:'هنوز منبع قابل پخشی متصل نشده است.',translationPending:'ترجمه زیرنویس یک خدمت پولی است. این خدمت در حال آماده‌سازی است.',translationUnavailable:'هیچ زیرنویس انتخاب‌شده یا قابل ترجمه‌ای متصل نیست.'},
+    ur: {back:'← فہرست پر واپس جائیں',previous:'پچھلا',play:'چلائیں',pause:'روکیں',next:'اگلا',captionsOn:'سب ٹائٹل آن',captionsOff:'سب ٹائٹل آف',translate:'سب ٹائٹل ترجمہ کریں',fullscreen:'مکمل اسکرین',exitFullscreen:'مکمل اسکرین سے باہر',preparing:'مواد تیار کیا جا رہا ہے۔',unavailable:'ابھی کوئی قابلِ پلے ذریعہ منسلک نہیں ہے۔',translationPending:'سب ٹائٹل ترجمہ ایک بامعاوضہ خدمت ہے۔ یہ سروس فی الحال تیاری میں ہے۔',translationUnavailable:'کوئی منتخب یا قابلِ ترجمہ سب ٹائٹل ٹریک منسلک نہیں ہے۔'},
+    hi: {back:'← सूची पर वापस जाएँ',previous:'पिछला',play:'चलाएँ',pause:'रोकें',next:'अगला',captionsOn:'उपशीर्षक चालू',captionsOff:'उपशीर्षक बंद',translate:'उपशीर्षक अनुवाद',fullscreen:'पूर्ण स्क्रीन',exitFullscreen:'पूर्ण स्क्रीन से बाहर',preparing:'सामग्री तैयार की जा रही है।',unavailable:'अभी कोई चलाने योग्य स्रोत जुड़ा नहीं है।',translationPending:'उपशीर्षक अनुवाद एक सशुल्क सेवा है। यह सेवा अभी तैयार की जा रही है।',translationUnavailable:'कोई चयनित या अनुवाद योग्य उपशीर्षक ट्रैक जुड़ा नहीं है।'},
+    bn: {back:'← তালিকায় ফিরুন',previous:'আগেরটি',play:'চালান',pause:'বিরতি',next:'পরেরটি',captionsOn:'সাবটাইটেল চালু',captionsOff:'সাবটাইটেল বন্ধ',translate:'সাবটাইটেল অনুবাদ',fullscreen:'পূর্ণ পর্দা',exitFullscreen:'পূর্ণ পর্দা থেকে বের হন',preparing:'কনটেন্ট প্রস্তুত করা হচ্ছে।',unavailable:'এখনও কোনো চালানোযোগ্য উৎস যুক্ত নেই।',translationPending:'সাবটাইটেল অনুবাদ একটি পেইড সেবা। সেবাটি বর্তমানে প্রস্তুত করা হচ্ছে।',translationUnavailable:'কোনো নির্বাচিত বা অনুবাদযোগ্য সাবটাইটেল ট্র্যাক যুক্ত নেই।'},
+    ta: {back:'← பட்டியலுக்குத் திரும்பு',previous:'முந்தையது',play:'இயக்கு',pause:'இடைநிறுத்து',next:'அடுத்தது',captionsOn:'வசனம் இயக்கு',captionsOff:'வசனம் அணை',translate:'வசனம் மொழிபெயர்',fullscreen:'முழுத் திரை',exitFullscreen:'முழுத் திரையிலிருந்து வெளியேறு',preparing:'உள்ளடக்கம் தயாராகிறது.',unavailable:'இயக்கக்கூடிய மூலம் இன்னும் இணைக்கப்படவில்லை.',translationPending:'வசன மொழிபெயர்ப்பு கட்டண சேவையாகும். இந்த சேவை தற்போது தயாராகிறது.',translationUnavailable:'தேர்ந்தெடுக்கப்பட்ட அல்லது மொழிபெயர்க்கக்கூடிய வசன தடம் இல்லை.'},
+    th: {back:'← กลับไปยังรายการ',previous:'ก่อนหน้า',play:'เล่น',pause:'หยุดชั่วคราว',next:'ถัดไป',captionsOn:'เปิดคำบรรยาย',captionsOff:'ปิดคำบรรยาย',translate:'แปลคำบรรยาย',fullscreen:'เต็มหน้าจอ',exitFullscreen:'ออกจากเต็มหน้าจอ',preparing:'กำลังเตรียมเนื้อหา',unavailable:'ยังไม่ได้เชื่อมต่อแหล่งเล่นที่ใช้ได้',translationPending:'การแปลคำบรรยายเป็นบริการแบบชำระเงิน ขณะนี้บริการกำลังอยู่ระหว่างการเตรียมพร้อม',translationUnavailable:'ไม่มีแทร็กคำบรรยายที่เลือกหรือแปลได้'},
+    vi: {back:'← Quay lại danh sách',previous:'Trước',play:'Phát',pause:'Tạm dừng',next:'Tiếp',captionsOn:'Bật phụ đề',captionsOff:'Tắt phụ đề',translate:'Dịch phụ đề',fullscreen:'Toàn màn hình',exitFullscreen:'Thoát toàn màn hình',preparing:'Đang chuẩn bị nội dung.',unavailable:'Chưa kết nối nguồn phát có thể sử dụng.',translationPending:'Dịch phụ đề là dịch vụ trả phí. Dịch vụ hiện đang được chuẩn bị.',translationUnavailable:'Không có bản phụ đề đã chọn hoặc có thể dịch.'},
+    id: {back:'← Kembali ke daftar',previous:'Sebelumnya',play:'Putar',pause:'Jeda',next:'Berikutnya',captionsOn:'Subtitel aktif',captionsOff:'Subtitel nonaktif',translate:'Terjemahkan subtitel',fullscreen:'Layar penuh',exitFullscreen:'Keluar dari layar penuh',preparing:'Konten sedang disiapkan.',unavailable:'Sumber pemutaran belum terhubung.',translationPending:'Terjemahan subtitel adalah layanan berbayar. Layanan ini sedang dipersiapkan.',translationUnavailable:'Tidak ada trek subtitel yang dipilih atau dapat diterjemahkan.'},
+    ms: {back:'← Kembali ke senarai',previous:'Sebelumnya',play:'Main',pause:'Jeda',next:'Seterusnya',captionsOn:'Sari kata hidup',captionsOff:'Sari kata mati',translate:'Terjemah sari kata',fullscreen:'Skrin penuh',exitFullscreen:'Keluar skrin penuh',preparing:'Kandungan sedang disediakan.',unavailable:'Sumber main balik belum disambungkan.',translationPending:'Terjemahan sari kata ialah perkhidmatan berbayar. Perkhidmatan ini sedang disediakan.',translationUnavailable:'Tiada trek sari kata dipilih atau boleh diterjemah.'},
+    tl: {back:'← Bumalik sa listahan',previous:'Nakaraan',play:'I-play',pause:'I-pause',next:'Susunod',captionsOn:'Bukas ang subtitle',captionsOff:'Patay ang subtitle',translate:'Isalin ang subtitle',fullscreen:'Buong screen',exitFullscreen:'Lumabas sa buong screen',preparing:'Inihahanda ang nilalaman.',unavailable:'Wala pang nakakabit na mapapatugtog na source.',translationPending:'Bayad na serbisyo ang pagsasalin ng subtitle. Inihahanda pa ang serbisyong ito.',translationUnavailable:'Walang napili o maisasaling subtitle track.'},
+    sw: {back:'← Rudi kwenye orodha',previous:'Iliyotangulia',play:'Cheza',pause:'Sitisha',next:'Inayofuata',captionsOn:'Manukuu yamewashwa',captionsOff:'Manukuu yamezimwa',translate:'Tafsiri manukuu',fullscreen:'Skrini nzima',exitFullscreen:'Toka skrini nzima',preparing:'Maudhui yanaandaliwa.',unavailable:'Bado hakuna chanzo cha kucheza kilichounganishwa.',translationPending:'Tafsiri ya manukuu ni huduma ya kulipia. Huduma hii inaandaliwa kwa sasa.',translationUnavailable:'Hakuna wimbo wa manukuu uliochaguliwa au unaoweza kutafsiriwa.'},
+    uz: {back:'← Ro‘yxatga qaytish',previous:'Oldingi',play:'Ijro',pause:'Pauza',next:'Keyingi',captionsOn:'Subtitr yoqilgan',captionsOff:'Subtitr o‘chirilgan',translate:'Subtitrni tarjima qilish',fullscreen:'To‘liq ekran',exitFullscreen:'To‘liq ekrandan chiqish',preparing:'Kontent tayyorlanmoqda.',unavailable:'Hali ijro manbasi ulanmagan.',translationPending:'Subtitr tarjimasi pullik xizmatdir. Xizmat hozir tayyorlanmoqda.',translationUnavailable:'Tanlangan yoki tarjima qilinadigan subtitr yo‘li ulanmagan.'},
+    ja: {back:'← 一覧に戻る',previous:'前へ',play:'再生',pause:'一時停止',next:'次へ',captionsOn:'字幕オン',captionsOff:'字幕オフ',translate:'字幕を翻訳',fullscreen:'全画面',exitFullscreen:'全画面を終了',preparing:'コンテンツを準備しています。',unavailable:'再生ソースがまだ接続されていません。',translationPending:'字幕翻訳は有料サービスです。現在サービス準備中です。',translationUnavailable:'選択中または翻訳可能な字幕トラックがありません。'},
+    zh: {back:'← 返回列表',previous:'上一个',play:'播放',pause:'暂停',next:'下一个',captionsOn:'开启字幕',captionsOff:'关闭字幕',translate:'翻译字幕',fullscreen:'全屏',exitFullscreen:'退出全屏',preparing:'正在准备内容。',unavailable:'尚未连接可播放的来源。',translationPending:'字幕翻译是付费服务。当前服务正在准备中。',translationUnavailable:'当前没有已选择或可翻译的字幕轨道。'},
+    zht: {back:'← 返回清單',previous:'上一個',play:'播放',pause:'暫停',next:'下一個',captionsOn:'開啟字幕',captionsOff:'關閉字幕',translate:'翻譯字幕',fullscreen:'全螢幕',exitFullscreen:'結束全螢幕',preparing:'正在準備內容。',unavailable:'尚未連接可播放的來源。',translationPending:'字幕翻譯是付費服務。目前服務準備中。',translationUnavailable:'目前沒有已選取或可翻譯的字幕軌。'}
   };
+
+  var PAID_PREPARING = {
+    ko:'자막 번역은 유료 서비스입니다. 현재 서비스 준비 중입니다.',
+    en:'Caption translation is a paid service. The service is currently being prepared.',
+    de:'Die Übersetzung von Untertiteln ist ein kostenpflichtiger Dienst. Der Dienst wird derzeit vorbereitet.',
+    es:'La traducción de subtítulos es un servicio de pago. El servicio está actualmente en preparación.',
+    fr:'La traduction des sous-titres est un service payant. Le service est actuellement en préparation.',
+    it:'La traduzione dei sottotitoli è un servizio a pagamento. Il servizio è attualmente in preparazione.',
+    pt:'A tradução de legendas é um serviço pago. O serviço está atualmente em preparação.',
+    nl:'Ondertitelvertaling is een betaalde dienst. De dienst wordt momenteel voorbereid.',
+    pl:'Tłumaczenie napisów jest usługą płatną. Usługa jest obecnie przygotowywana.',
+    sv:'Översättning av undertexter är en betaltjänst. Tjänsten förbereds för närvarande.',
+    hu:'A feliratfordítás fizetős szolgáltatás. A szolgáltatás jelenleg előkészítés alatt áll.',
+    ru:'Перевод субтитров — платная услуга. Сервис сейчас готовится к запуску.',
+    uk:'Переклад субтитрів — платна послуга. Сервіс наразі готується до запуску.',
+    tr:'Altyazı çevirisi ücretli bir hizmettir. Hizmet şu anda hazırlanmaktadır.',
+    ar:'ترجمة النصوص خدمة مدفوعة. الخدمة قيد الإعداد حالياً.',
+    fa:'ترجمه زیرنویس یک خدمت پولی است. این خدمت در حال آماده‌سازی است.',
+    ur:'سب ٹائٹل ترجمہ ایک بامعاوضہ خدمت ہے۔ یہ سروس فی الحال تیاری میں ہے۔',
+    hi:'उपशीर्षक अनुवाद एक सशुल्क सेवा है। यह सेवा अभी तैयार की जा रही है।',
+    bn:'সাবটাইটেল অনুবাদ একটি পেইড সেবা। সেবাটি বর্তমানে প্রস্তুত করা হচ্ছে।',
+    ta:'வசன மொழிபெயர்ப்பு கட்டண சேவையாகும். இந்த சேவை தற்போது தயாராகிறது.',
+    th:'การแปลคำบรรยายเป็นบริการแบบชำระเงิน ขณะนี้บริการกำลังอยู่ระหว่างการเตรียมพร้อม',
+    vi:'Dịch phụ đề là dịch vụ trả phí. Dịch vụ hiện đang được chuẩn bị.',
+    id:'Terjemahan subtitel adalah layanan berbayar. Layanan ini sedang dipersiapkan.',
+    ms:'Terjemahan sari kata ialah perkhidmatan berbayar. Perkhidmatan ini sedang disediakan.',
+    tl:'Bayad na serbisyo ang pagsasalin ng subtitle. Inihahanda pa ang serbisyong ito.',
+    sw:'Tafsiri ya manukuu ni huduma ya kulipia. Huduma hii inaandaliwa kwa sasa.',
+    uz:'Subtitr tarjimasi pullik xizmatdir. Xizmat hozir tayyorlanmoqda.',
+    ja:'字幕翻訳は有料サービスです。現在サービス準備中です。',
+    zh:'字幕翻译是付费服务。当前服务正在准备中。',
+    zht:'字幕翻譯是付費服務。目前服務準備中。'
+  };
+
+  Object.keys(PAID_PREPARING).forEach(function (langKey) {
+    if (COPY[langKey]) COPY[langKey].translationPending = PAID_PREPARING[langKey];
+  });
 
   function copy() {
     var lang = String((document.documentElement && document.documentElement.lang) || 'ko').toLowerCase();
@@ -231,6 +270,8 @@
     style.textContent = [
       '#igdc-media-detail-view{--maru-bg:#06080c;--maru-bar:rgba(13,17,23,.90);--maru-line:rgba(255,255,255,.11);--maru-text:#eef3f8;--maru-muted:#9ba8b8;--maru-accent:#61a9ff;position:relative!important;z-index:50;display:block;width:100%!important;height:var(--maru-inline-h,calc(100dvh - 1px))!important;min-height:320px!important;max-width:100%!important;overflow:hidden;background:var(--maru-bg);color:var(--maru-text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;isolation:isolate}',
       '#igdc-media-detail-view *{box-sizing:border-box}',
+      'body.igdc-media-player-only> :not(#igdc-media-detail-view):not(script):not(style):not(link){display:none!important}',
+      'body.igdc-media-player-only{margin:0!important;padding:0!important;background:#000!important;overflow:hidden}',
       '#igdc-media-detail-view:fullscreen,#igdc-media-detail-view:-webkit-full-screen,#igdc-media-detail-view.igdc-mobile-fullscreen-fallback{position:fixed!important;inset:0!important;left:0!important;top:0!important;right:0!important;bottom:0!important;z-index:2147483000!important;width:var(--maru-vw,100vw)!important;height:var(--maru-vh,100dvh)!important;min-width:var(--maru-vw,100vw)!important;min-height:var(--maru-vh,100dvh)!important;max-width:var(--maru-vw,100vw)!important;max-height:var(--maru-vh,100dvh)!important;margin:0!important;overflow:hidden!important;background:#000}',
       '.igdc-maru-topbar{position:absolute;top:0;left:0;right:0;height:54px;display:flex;align-items:center;gap:8px;padding:0 10px;background:linear-gradient(180deg,rgba(15,19,24,.94),rgba(15,19,24,.78));border-bottom:1px solid var(--maru-line);backdrop-filter:blur(14px);z-index:18}',
       '.igdc-maru-brand{font-weight:750;letter-spacing:.02em;white-space:nowrap;color:#f3f7fb}',
@@ -263,13 +304,18 @@
       '@media(max-width:1024px){.scroll-wrapper{box-sizing:border-box!important;width:100%!important;max-width:100%!important;margin-left:0!important;margin-right:0!important;padding-left:0!important;padding-right:0!important;overflow:hidden!important}.thumb-line[data-psom-key^="media-"],.thumb-line[data-psom-key^="media-"]>.scroll-content{box-sizing:border-box!important;margin-left:0!important;margin-right:0!important;padding-left:0!important;padding-right:0!important;gap:4px!important}}',
       '@media(max-width:1024px) and (orientation:portrait){html,body,.container,.layout,main,.main,.main-content,.content,.content-area{box-sizing:border-box!important;width:100%!important;max-width:100%!important;margin-left:0!important;margin-right:0!important;padding-left:0!important;padding-right:0!important}.thumb-line[data-psom-key^="media-"],.thumb-line[data-psom-key^="media-"].scroll-wrapper{box-sizing:border-box!important;width:100%!important;max-width:100%!important;margin:0!important;padding:0!important;overflow:hidden!important}.thumb-line[data-psom-key^="media-"]>.scroll-content{box-sizing:border-box!important;display:flex!important;flex-wrap:nowrap!important;width:100%!important;min-width:100%!important;max-width:100%!important;margin:0!important;padding:0!important;gap:4px!important;overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-x pan-y!important;scroll-snap-type:x proximity!important;scroll-behavior:auto!important;overscroll-behavior-x:contain!important}.thumb-line[data-psom-key^="media-"]>.scroll-content>a.card.media-card,.thumb-line[data-psom-key^="media-"]>a.card.media-card{box-sizing:border-box!important;width:100%!important;min-width:100%!important;max-width:100%!important;flex:0 0 100%!important;height:auto!important;min-height:0!important;max-height:none!important;aspect-ratio:16/9!important;margin:0!important;scroll-snap-align:start!important;scroll-snap-stop:normal!important}.thumb-line[data-psom-key^="media-"] a.card.media-card>.thumb{box-sizing:border-box!important;width:100%!important;min-width:100%!important;max-width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;aspect-ratio:16/9!important;margin:0!important}.thumb-line[data-psom-key^="media-"] a.card.media-card>.thumb>img{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important}}',
       '@media(max-width:1024px) and (orientation:landscape){.thumb-line[data-psom-key^="media-"]>.scroll-content{gap:4px!important;overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-x pan-y!important;scroll-snap-type:none!important;scroll-behavior:auto!important;overscroll-behavior-x:contain!important}.thumb-line[data-psom-key^="media-"] a.card.media-card{scroll-snap-align:none!important;scroll-snap-stop:normal!important}}',
-      '@media(max-width:820px),(pointer:coarse){.igdc-maru-topbar{height:50px;padding:0 6px}.igdc-maru-brand{font-size:13px}.igdc-maru-back-btn{max-width:150px;padding:0 7px!important;font-size:12px}.igdc-maru-menu{display:none!important}.igdc-maru-controlbar{min-height:84px!important;padding:6px 7px max(10px,env(safe-area-inset-bottom))!important}.igdc-maru-progress-row{height:32px;gap:7px;margin-bottom:4px}.igdc-maru-controls-row{position:absolute;right:7px;bottom:max(8px,env(safe-area-inset-bottom));left:auto;justify-content:flex-end;gap:7px;min-height:42px;max-width:100%}.igdc-maru-controls-row>[data-media-action]:not([data-mobile-inline="1"]){display:none!important}.igdc-maru-controls-row>.igdc-maru-spacer{display:none!important}.igdc-maru-icon-btn{width:44px;height:42px}.igdc-maru-text-btn{min-width:44px;height:42px;padding:0 7px;font-size:11.5px}.igdc-maru-volume{display:none}.igdc-maru-panel{top:auto;bottom:96px;right:7px;width:min(360px,calc(100vw - 14px));max-height:calc(100% - 150px);padding-bottom:max(12px,env(safe-area-inset-bottom))}.igdc-media-detail-notice{bottom:100px}.igdc-media-detail-stage{width:100%!important;height:100%!important;min-width:0!important;min-height:0!important}.igdc-media-detail-stage> :not(.igdc-media-detail-pending):not(.igdc-transport-overlay){width:100%!important;height:100%!important}.igdc-transport-overlay{left:50%;top:50%;bottom:auto;transform:translate(-50%,-50%);gap:14px}.igdc-transport-overlay .igdc-maru-icon-btn,.igdc-transport-overlay .igdc-maru-text-btn{width:62px;height:62px;background:rgba(5,8,12,.52)}.igdc-transport-overlay [data-media-action="play"]{width:88px;height:88px}.igdc-transport-overlay [data-media-action="seek-back"],.igdc-transport-overlay [data-media-action="seek-forward"]{width:68px;height:68px}.igdc-transport-overlay [data-media-action="previous"],.igdc-transport-overlay [data-media-action="next"]{width:60px;height:60px}}',
-      '@media(max-height:520px) and (orientation:landscape){.igdc-maru-topbar{height:44px}.igdc-maru-controlbar{min-height:72px!important;padding-top:3px!important;padding-bottom:max(5px,env(safe-area-inset-bottom))!important}.igdc-maru-progress-row{height:27px}.igdc-maru-controls-row{bottom:max(5px,env(safe-area-inset-bottom));min-height:36px}.igdc-maru-icon-btn,.igdc-maru-text-btn{height:36px}.igdc-maru-panel{top:auto;bottom:82px;max-height:calc(100% - 126px)}.igdc-transport-overlay{top:50%;gap:12px}.igdc-transport-overlay [data-media-action="play"]{width:84px;height:84px}}'
+      '@media(max-width:820px),(pointer:coarse){.igdc-maru-topbar{height:calc(50px + env(safe-area-inset-top));padding:env(safe-area-inset-top) max(6px,env(safe-area-inset-right)) 0 max(6px,env(safe-area-inset-left))}.igdc-maru-brand{font-size:13px}.igdc-maru-back-btn{max-width:150px;padding:0 7px!important;font-size:12px}.igdc-maru-menu{display:none!important}.igdc-maru-controlbar{min-height:84px!important;padding:6px 7px max(10px,env(safe-area-inset-bottom))!important}.igdc-maru-progress-row{height:32px;gap:7px;margin-bottom:4px}.igdc-maru-controls-row{position:absolute;right:max(7px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));left:auto;justify-content:flex-end;gap:7px;min-height:42px;max-width:100%}.igdc-maru-controls-row>[data-media-action]:not([data-mobile-inline="1"]){display:none!important}.igdc-maru-controls-row>.igdc-maru-spacer{display:none!important}.igdc-maru-icon-btn{width:44px;height:42px}.igdc-maru-text-btn{min-width:44px;height:42px;padding:0 7px;font-size:11.5px}.igdc-maru-volume{display:none}.igdc-maru-panel{top:auto;bottom:96px;right:max(7px,env(safe-area-inset-right));width:min(360px,calc(100vw - 14px));max-height:calc(100% - 150px);padding-bottom:max(12px,env(safe-area-inset-bottom))}.igdc-media-detail-notice{bottom:100px}.igdc-media-detail-stage{width:100%!important;height:100%!important;min-width:0!important;min-height:0!important}.igdc-media-detail-stage> :not(.igdc-media-detail-pending):not(.igdc-transport-overlay){width:100%!important;height:100%!important}.igdc-transport-overlay{left:50%;top:50%;bottom:auto;transform:translate(-50%,-50%);gap:14px}.igdc-transport-overlay .igdc-maru-icon-btn,.igdc-transport-overlay .igdc-maru-text-btn{width:62px;height:62px;background:rgba(5,8,12,.52)}.igdc-transport-overlay [data-media-action="play"]{width:88px;height:88px}.igdc-transport-overlay [data-media-action="seek-back"],.igdc-transport-overlay [data-media-action="seek-forward"]{width:68px;height:68px}.igdc-transport-overlay [data-media-action="previous"],.igdc-transport-overlay [data-media-action="next"]{width:60px;height:60px}}',
+      '@media(max-height:520px) and (orientation:landscape){.igdc-maru-topbar{height:calc(44px + env(safe-area-inset-top))}.igdc-maru-controlbar{min-height:72px!important;padding-top:3px!important;padding-bottom:max(5px,env(safe-area-inset-bottom))!important}.igdc-maru-progress-row{height:27px}.igdc-maru-controls-row{bottom:max(5px,env(safe-area-inset-bottom));min-height:36px}.igdc-maru-icon-btn,.igdc-maru-text-btn{height:36px}.igdc-maru-panel{top:auto;bottom:82px;max-height:calc(100% - 126px)}.igdc-transport-overlay{top:50%;gap:12px}.igdc-transport-overlay [data-media-action="play"]{width:84px;height:84px}}'
     ].join('');
     document.head.appendChild(style);
   }
 
+  // Mobile list geometry must be correct on the first paint, before any card is tapped.
+  if (document.head) injectStyle();
+  else document.addEventListener('DOMContentLoaded', injectStyle, { once:true });
+
   function hideList(card) {
+    if(document.body)document.body.classList.add('igdc-media-player-only');
     var roots = [];
     function add(node) { if (node && roots.indexOf(node) < 0) roots.push(node); }
     add(document.getElementById('hero'));
@@ -290,6 +336,7 @@
     state.restore.forEach(function (entry) { entry.node.style.display = 'none'; entry.node.setAttribute('aria-hidden', 'true'); });
   }
   function restoreList() {
+    if(document.body)document.body.classList.remove('igdc-media-player-only');
     state.restore.forEach(function (entry) {
       entry.node.style.display = entry.display;
       if (entry.ariaHidden == null) entry.node.removeAttribute('aria-hidden'); else entry.node.setAttribute('aria-hidden', entry.ariaHidden);
@@ -404,8 +451,10 @@
     var notice=state.detail&&state.detail.querySelector('.igdc-media-detail-notice'); if(!notice)return; notice.textContent=message; notice.setAttribute('data-open','true'); clearTimeout(notice.__maruTimer); notice.__maruTimer=setTimeout(function(){notice.removeAttribute('data-open');},hold||4200);
   }
   function requestTranslation() {
-    var c=copy(),video=currentVideo(); if(!video||!hasCaptions(video)||!captionsEnabled()){showNotice(c.translationUnavailable);return;}
-    global.fetch('/.netlify/functions/status',{cache:'no-store',credentials:'same-origin'}).then(function(r){return r.ok?r.json():null;}).then(function(status){var bridge=global.IGDCMediaHubSubtitleTranslation;if(!status||!status.pg||status.pg.executionEnabled!==true||!bridge||typeof bridge.request!=='function'){showNotice(c.translationPending);return;}bridge.request({card:state.card,stage:state.stage,video:video,contentId:contentIdFor(state.card)});}).catch(function(){showNotice(c.translationPending);});
+    var lang=String((document.documentElement&&document.documentElement.lang)||'ko').toLowerCase();
+    if(lang==='zh-hant'||lang==='zh-tw'||lang==='zh-hk')lang='zht';
+    lang=lang.split('-')[0];
+    showNotice(PAID_PREPARING[lang]||PAID_PREPARING.en,5200);
   }
 
   function safeName(value) { return String(value||'maru-media').replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim().slice(0,90)||'maru-media'; }
@@ -540,13 +589,17 @@
     setTimeout(restoreFullscreenAfterViewportChange, 320);
   }
   function fullscreenElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+  function currentVideoFullscreen() {
+    var video=currentVideo();
+    try { return !!(state.nativeVideoFullscreen || (video && video.webkitDisplayingFullscreen)); } catch(_) { return !!state.nativeVideoFullscreen; }
+  }
   function lockMobileLandscape() {
     // Follow the user's current mobile orientation; never force landscape.
     state.orientationLocked=false;
   }
   function unlockMobileOrientation() { state.orientationLocked=false; }
   function fallbackFullscreenActive() { return !!(state.detail && state.detail.classList.contains('igdc-mobile-fullscreen-fallback')); }
-  function isPlayerFullscreen() { return !!fullscreenElement() || fallbackFullscreenActive(); }
+  function isPlayerFullscreen() { return !!fullscreenElement() || currentVideoFullscreen() || fallbackFullscreenActive(); }
   function hideChromeNow() {
     if(!state.detail)return;
     clearTimeout(state.chromeTimer);
@@ -567,15 +620,26 @@
     }
     syncUi();
   }
+  function activateFallbackFullscreen() {
+    if(!state.detail)return;
+    state.detail.classList.add('igdc-mobile-fullscreen-fallback');
+    markFullscreenUi(true);
+    normalizePlayerGeometry();
+    if(isMobilePlaybackDevice())hideChromeNow();
+  }
   function leaveFullscreen() {
     state.mobileFullscreenIntent=false;
     state.justExitedFullscreenAt=Date.now();
+    state.orientationChangingUntil=0;
     try {
       if(state.detail)state.detail.classList.remove('igdc-mobile-fullscreen-fallback');
-      if(!isMobilePlaybackDevice()){
-        var exit=document.exitFullscreen||document.webkitExitFullscreen;
-        if(fullscreenElement()&&exit){var r=exit.call(document);if(r&&r.catch)r.catch(function(){});}
+      var video=currentVideo();
+      if(currentVideoFullscreen() && video && typeof video.webkitExitFullscreen==='function'){
+        try{video.webkitExitFullscreen();}catch(_videoExit){}
       }
+      state.nativeVideoFullscreen=false;
+      var exit=document.exitFullscreen||document.webkitExitFullscreen;
+      if(fullscreenElement()&&exit){var r=exit.call(document);if(r&&r.catch)r.catch(function(){});}
     } catch(_) {}
     markFullscreenUi(false);
     global.requestAnimationFrame(function(){normalizePlayerGeometry();requestPlaybackFromGesture();});
@@ -587,29 +651,43 @@
     if(isPlayerFullscreen()){markFullscreenUi(true);lockMobileLandscape();return;}
     var target=state.detail;
 
-    // Mobile uses MARU's own viewport-full player shell instead of the browser
-    // Fullscreen API. This avoids Android Chrome's fullscreen exit guidance and
-    // also works on iPhone/iPad browsers where arbitrary-element fullscreen is
-    // more restricted. The video stays playsinline and the whole MARU shell
-    // occupies the current visual viewport.
-    if(isMobilePlaybackDevice()){
-      target.classList.add('igdc-mobile-fullscreen-fallback');
-      markFullscreenUi(true);
-      normalizePlayerGeometry();
-      hideChromeNow();
-      return;
-    }
-
-    // Desktop keeps genuine browser fullscreen.
+    // Real browser fullscreen is the first choice on mobile and desktop. It
+    // hides browser chrome when the browser permits it. The CSS viewport shell
+    // is only a compatibility fallback (not the primary mobile mode).
     try {
       var request=target.requestFullscreen||target.webkitRequestFullscreen;
       if(request){
-        var r;
-        try { r=request.call(target,{navigationUI:'hide'}); } catch(_arg) { r=request.call(target); }
-        if(r&&r.then)r.then(function(){markFullscreenUi(true);normalizePlayerGeometry();}).catch(function(){if(state.detail===target&&!fullscreenElement()){target.classList.add('igdc-mobile-fullscreen-fallback');markFullscreenUi(true);normalizePlayerGeometry();}});
-        else markFullscreenUi(true);
-      }else{target.classList.add('igdc-mobile-fullscreen-fallback');markFullscreenUi(true);}
-    } catch(_){target.classList.add('igdc-mobile-fullscreen-fallback');markFullscreenUi(true);}
+        var result;
+        try { result=request.call(target,{navigationUI:'hide'}); } catch(_arg) { result=request.call(target); }
+        if(result&&result.then){
+          result.then(function(){
+            if(state.detail!==target)return;
+            target.classList.remove('igdc-mobile-fullscreen-fallback');
+            markFullscreenUi(true);normalizePlayerGeometry();
+          }).catch(function(){
+            if(state.detail!==target||fullscreenElement())return;
+            var video=currentVideo();
+            if(isMobilePlaybackDevice()&&video&&typeof video.webkitEnterFullscreen==='function'){
+              try{state.nativeVideoFullscreen=true;video.webkitEnterFullscreen();markFullscreenUi(true);return;}catch(_videoFs){state.nativeVideoFullscreen=false;}
+            }
+            activateFallbackFullscreen();
+          });
+        }else{
+          // WebKit may return void. Let fullscreenchange confirm the state; the
+          // player remains full-viewport while that event is pending.
+          markFullscreenUi(true);
+          global.setTimeout(function(){
+            if(state.detail===target&&!fullscreenElement()&&!currentVideoFullscreen())activateFallbackFullscreen();
+          },180);
+        }
+        return;
+      }
+      var video=currentVideo();
+      if(isMobilePlaybackDevice()&&video&&typeof video.webkitEnterFullscreen==='function'){
+        try{state.nativeVideoFullscreen=true;video.webkitEnterFullscreen();markFullscreenUi(true);return;}catch(_native){state.nativeVideoFullscreen=false;}
+      }
+      activateFallbackFullscreen();
+    } catch(_){activateFallbackFullscreen();}
   }
   function toggleFullscreen(){if(isPlayerFullscreen())leaveFullscreen();else enterPlayerFullscreen();}
 
@@ -642,6 +720,8 @@
     if(!video||video.__igdcMaruWebPlayerBound)return; video.__igdcMaruWebPlayerBound=true; try{video.controls=false;video.playsInline=true;video.setAttribute('playsinline','');video.setAttribute('webkit-playsinline','');}catch(_){}
     ['play','pause','ended','loadedmetadata','durationchange','ratechange','volumechange','emptied'].forEach(function(name){video.addEventListener(name,function(){syncUi();if(name==='play'){if(isMobilePlaybackDevice())hideChromeNow();else showChrome(2600);}else if(name==='pause'||name==='ended')showChrome();});});
     video.addEventListener('timeupdate',updateTimeUi); video.addEventListener('error',function(){notifySourceFailure(state.card,'mounted_video_source_error');},{once:true});
+    video.addEventListener('webkitbeginfullscreen',function(){state.nativeVideoFullscreen=true;state.mobileFullscreenIntent=true;markFullscreenUi(true);normalizePlayerGeometry();});
+    video.addEventListener('webkitendfullscreen',function(){state.nativeVideoFullscreen=false;state.mobileFullscreenIntent=false;markFullscreenUi(false);global.requestAnimationFrame(normalizePlayerGeometry);});
     try { var tracker=global.MaruRevenueTracker;if(tracker&&typeof tracker.bindMedia==='function')tracker.bindMedia(video,{id:contentIdFor(state.card),contentId:contentIdFor(state.card),title:titleFor(state.card),mediaType:'video',url:sourceFor(state.card)},{service:'mediahub-playback',pageType:'media',revenueLine:'media_watchtime'}); } catch(_){}
     normalizePlayerGeometry();
     if(state.playRequested)requestPlaybackFromGesture();
@@ -689,7 +769,7 @@
   }
 
   function disposeStage(){try{if(state.stage&&global.IGDCMediaHubOTTInline&&typeof global.IGDCMediaHubOTTInline.dispose==='function')global.IGDCMediaHubOTTInline.dispose(state.stage);}catch(_){}if(state.mutationObserver){state.mutationObserver.disconnect();state.mutationObserver=null;}}
-  function close(options){options=options||{};if(!state.open)return;if(!options.fromHistory&&state.historyToken&&global.history&&global.history.state&&global.history.state.igdcMediaToken===state.historyToken){global.history.back();return;}cancelClipCapture();if(isPlayerFullscreen())leaveFullscreen();disposeStage();if(state.detail)state.detail.remove();restoreList();var y=state.scrollY;state.open=false;state.detail=null;state.stage=null;state.card=null;state.historyToken='';state.lastCaptionValue='';state.panel='';state.playRequested=false;state.mobileFullscreenIntent=false;state.justExitedFullscreenAt=0;unlockMobileOrientation();clearTimeout(state.chromeTimer);clearTimeout(state.orientationTimer);if(state.fullscreenBodyOverflow!==null){document.body.style.overflow=state.fullscreenBodyOverflow;state.fullscreenBodyOverflow=null;}global.requestAnimationFrame(function(){global.scrollTo(0,y);frameHeight();});}
+  function close(options){options=options||{};if(!state.open)return;if(!options.fromHistory&&state.historyToken&&global.history&&global.history.state&&global.history.state.igdcMediaToken===state.historyToken){global.history.back();return;}cancelClipCapture();if(isPlayerFullscreen())leaveFullscreen();disposeStage();if(state.detail)state.detail.remove();restoreList();var y=state.scrollY;state.open=false;state.detail=null;state.stage=null;state.card=null;state.historyToken='';state.lastCaptionValue='';state.panel='';state.playRequested=false;state.mobileFullscreenIntent=false;state.justExitedFullscreenAt=0;state.orientationChangingUntil=0;state.nativeVideoFullscreen=false;unlockMobileOrientation();clearTimeout(state.chromeTimer);clearTimeout(state.orientationTimer);if(state.fullscreenBodyOverflow!==null){document.body.style.overflow=state.fullscreenBodyOverflow;state.fullscreenBodyOverflow=null;}global.requestAnimationFrame(function(){global.scrollTo(0,y);frameHeight();});}
   function switchCard(card){if(!card||!state.open||card===state.card)return;cancelClipCapture();disposeStage();state.card=card;state.lastCaptionValue='';state.playRequested=isMobilePlaybackDevice();state.detail.setAttribute('aria-label',titleFor(card));state.stage.textContent='';appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();requestPlaybackFromGesture();global.scrollTo(0,0);syncUi();showChrome(3200);}
   function move(direction){var card=adjacentCard(direction);if(card)switchCard(card);}
 
@@ -713,7 +793,7 @@
     syncUi();
   }
 
-  function open(card,options){options=options||{};if(!card)return;if(state.open){switchCard(card);return;}injectStyle();attemptNativePlayer(card);state.open=true;state.card=card;state.scrollY=global.scrollY||global.pageYOffset||0;state.panel='';state.playRequested=!!options.autoPlay||isMobilePlaybackDevice();state.mobileFullscreenIntent=!!options.autoFullscreen&&isMobilePlaybackDevice();if(state.fullscreenBodyOverflow===null)state.fullscreenBodyOverflow=document.body.style.overflow||'';hideList(card);var shell=buildPlayerShell(card);state.detail=shell.detail;state.stage=shell.stage;if(options.autoFullscreen===true&&isMobilePlaybackDevice()){state.detail.classList.add('igdc-mobile-fullscreen-fallback');document.body.style.overflow='hidden';}document.body.appendChild(shell.detail);if(options.autoFullscreen===true&&isMobilePlaybackDevice())markFullscreenUi(true);normalizePlayerGeometry();appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();
+  function open(card,options){options=options||{};if(!card)return;if(state.open){switchCard(card);return;}injectStyle();attemptNativePlayer(card);state.open=true;state.card=card;state.scrollY=global.scrollY||global.pageYOffset||0;state.panel='';state.playRequested=!!options.autoPlay||isMobilePlaybackDevice();state.mobileFullscreenIntent=!!options.autoFullscreen&&isMobilePlaybackDevice();if(state.fullscreenBodyOverflow===null)state.fullscreenBodyOverflow=document.body.style.overflow||'';hideList(card);var shell=buildPlayerShell(card);state.detail=shell.detail;state.stage=shell.stage;document.body.appendChild(shell.detail);normalizePlayerGeometry();appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();
     state.detail.addEventListener('click',function(event){var p=event.target.closest&&event.target.closest('[data-media-panel]');if(p){openPanel(p.dataset.mediaPanel);return;}var cap=event.target.closest&&event.target.closest('[data-caption-value],[data-caption-index]');if(cap){selectCaption(cap.dataset.captionValue!=null?cap.dataset.captionValue:cap.dataset.captionIndex);return;}var a=event.target.closest&&event.target.closest('[data-media-action]');if(a){handleAction(a.dataset.mediaAction,a.dataset.mediaValue);showChrome(2600);return;}if(event.target===state.stage||event.target===currentVideo()||(event.target.closest&&event.target.closest('.igdc-media-detail-stage'))){if(isMobilePlaybackDevice())toggleChrome();else togglePlay();}});
     var seek=state.detail.querySelector('[data-media-seek]');seek.addEventListener('input',function(){var video=currentVideo();if(video&&Number.isFinite(video.duration)){video.currentTime=video.duration*(Number(seek.value)||0)/1000;updateTimeUi();showChrome(2400);}});
     var vol=state.detail.querySelector('[data-media-volume]');vol.addEventListener('input',function(){setVolume((Number(vol.value)||0)/100);});
@@ -730,8 +810,17 @@
   global.addEventListener('popstate',function(){if(!state.open)return;if(isPlayerFullscreen()){leaveFullscreen();if(global.history&&global.history.pushState){state.historyToken='media-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);try{global.history.pushState({igdcMedia:true,igdcMediaToken:state.historyToken},'',global.location.href);}catch(_){}}normalizePlayerGeometry();hideChromeNow();return;}close({fromHistory:true});});
   function fullscreenChanged(){
     if(!state.detail)return;
-    if(fullscreenElement()||fallbackFullscreenActive()){
+    if(fullscreenElement()||currentVideoFullscreen()||fallbackFullscreenActive()){
+      if(fullscreenElement()&&state.detail)state.detail.classList.remove('igdc-mobile-fullscreen-fallback');
       markFullscreenUi(true);normalizePlayerGeometry();lockMobileLandscape();return;
+    }
+    // Some mobile browsers transiently drop element fullscreen during a
+    // physical rotation. Preserve the full-player state with the viewport
+    // fallback only for that short orientation-change window.
+    if(isMobilePlaybackDevice()&&state.mobileFullscreenIntent&&Date.now()<state.orientationChangingUntil){
+      activateFallbackFullscreen();
+      requestPlaybackFromGesture();
+      return;
     }
     if(isMobilePlaybackDevice()&&state.mobileFullscreenIntent) state.justExitedFullscreenAt=Date.now();
     state.mobileFullscreenIntent=false;
@@ -739,12 +828,16 @@
     requestPlaybackFromGesture();
     global.requestAnimationFrame(normalizePlayerGeometry);
   }
+  function orientationViewportRepair(){
+    if(state.open&&isPlayerFullscreen())state.orientationChangingUntil=Date.now()+1400;
+    scheduleViewportRepair();
+  }
   document.addEventListener('fullscreenchange',fullscreenChanged);document.addEventListener('webkitfullscreenchange',fullscreenChanged);
   global.addEventListener('resize',scheduleViewportRepair,{passive:true});
-  global.addEventListener('orientationchange',scheduleViewportRepair,{passive:true});
+  global.addEventListener('orientationchange',orientationViewportRepair,{passive:true});
   if(global.visualViewport)global.visualViewport.addEventListener('resize',scheduleViewportRepair,{passive:true});
-  try{if(global.screen&&global.screen.orientation&&global.screen.orientation.addEventListener)global.screen.orientation.addEventListener('change',scheduleViewportRepair,{passive:true});}catch(_){}
+  try{if(global.screen&&global.screen.orientation&&global.screen.orientation.addEventListener)global.screen.orientation.addEventListener('change',orientationViewportRepair,{passive:true});}catch(_){}
 
-  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.0.0-mobile-fullscreen-portrait-restore';
-  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.0.0-mobile-fullscreen-portrait-restore'};
+  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.2.0-web-stable-mobile-fullscreen-paid-notice';
+  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.2.0-web-stable-mobile-fullscreen-paid-notice'};
 })(window, document);

@@ -1188,6 +1188,17 @@
     $("diagnosticJson").textContent = JSON.stringify(data, null, 2);
     if ($("downloadJsonBtn")) $("downloadJsonBtn").disabled = false;
   }
+  function toggleRegistryPanel(forceOpen) {
+    var body = $("registryPanelBody"), button = $("toggleRegistryPanelBtn");
+    if (!body || !button) return;
+    var open = typeof forceOpen === "boolean"
+      ? forceOpen
+      : body.classList.contains("hidden");
+    body.classList.toggle("hidden", !open);
+    button.textContent = open ? "등록부 접기" : "등록부 펼치기";
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
   function toggleDiagnosticPanel(forceOpen) {
     var body = $("diagnosticBody"), button = $("toggleDiagnosticPanelBtn");
     if (!body || !button) return;
@@ -3221,6 +3232,7 @@
       if (!systemAuditCache) return show("먼저 전체 시스템 점검을 실행해 주세요.", "warn");
       download("igdc-social-full-system-diagnostic-" + new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") + ".json", systemAuditCache);
     };
+    if ($("toggleRegistryPanelBtn")) $("toggleRegistryPanelBtn").onclick = function () { toggleRegistryPanel(); };
     if ($("registryDiagnosticBtn"))
       $("registryDiagnosticBtn").onclick = function () {
         runQueueDiagnostic("registry_diagnostic", "인플루언서 등록부 점검 JSON을 읽었습니다.", "igdc-social-influencer-registry-diagnostic.json");

@@ -814,31 +814,34 @@
             </div>
           </div>
           <span id="candidateCapacityState" class="state"></span>
+          <button id="toggleRegistryPanelBtn" class="secondary" type="button" aria-expanded="false">등록부 펼치기</button>
         </div>
-        <div class="reviewbar">
-          <button id="registryDiagnosticBtn" class="secondary">인플루언서 등록부 점검 JSON</button
-          ><label class="small"><input id="selectAllFinalMaster" type="checkbox" /> 전체 섹션 선택</label
-          ><button id="selectAllFinalBtn" class="secondary">
-            현재 조회 전체 선택</button
-          ><button id="clearFinalSelectionBtn" class="secondary">
-            선택 전체 해제</button
-          ><button id="approveBtn">선택 인플루언서 승인</button
-          ><button id="moveWaitingBtn" class="secondary">
-            선택 검색 제외</button
-          ><button id="holdBtn" class="secondary">선택 등록 보류</button
-          ><button id="resetBtn" class="secondary">선택 재검토</button
-          ><button id="rejectBtn" class="danger">선택 반려</button
-          ><button id="blockBtn" class="danger">선택 영구 차단</button
-          ><label class="small"
-            ><input id="socialConfirm" type="checkbox" /> 공개성·안전성
-            확인</label
-          ><span style="flex: 1"></span
-          ><button id="aiAutoBtn" class="publish">AI 전자동 후보 정리</button>
+        <div id="registryPanelBody" class="hidden">
+          <div class="reviewbar">
+            <button id="registryDiagnosticBtn" class="secondary">인플루언서 등록부 점검 JSON</button
+            ><label class="small"><input id="selectAllFinalMaster" type="checkbox" /> 전체 섹션 선택</label
+            ><button id="selectAllFinalBtn" class="secondary">
+              현재 조회 전체 선택</button
+            ><button id="clearFinalSelectionBtn" class="secondary">
+              선택 전체 해제</button
+            ><button id="approveBtn">선택 인플루언서 승인</button
+            ><button id="moveWaitingBtn" class="secondary">
+              선택 검색 제외</button
+            ><button id="holdBtn" class="secondary">선택 등록 보류</button
+            ><button id="resetBtn" class="secondary">선택 재검토</button
+            ><button id="rejectBtn" class="danger">선택 반려</button
+            ><button id="blockBtn" class="danger">선택 영구 차단</button
+            ><label class="small"
+              ><input id="socialConfirm" type="checkbox" /> 공개성·안전성
+              확인</label
+            ><span style="flex: 1"></span
+            ><button id="aiAutoBtn" class="publish">AI 전자동 후보 정리</button>
+          </div>
+          <div id="sectionAccordion" class="section-accordion"></div>
         </div>
-        <div id="sectionAccordion" class="section-accordion"></div>
       </section>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=33"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=34"></script>
   </body>
 </html>

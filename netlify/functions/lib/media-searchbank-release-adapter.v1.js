@@ -10,8 +10,7 @@
 const crypto=require("crypto");
 const SearchBankEngine=require("../search-bank-engine.js");
 
-const VERSION="media-searchbank-release-adapter-v1.4.1-thumb-optional-slot-safe";
-const MEDIA_SAMPLE_THUMB="https://igdcglobal.com/assets/images/media-sample-card.png";
+const VERSION="media-searchbank-release-adapter-v1.5.0-thumb-required-front-safe";
 const OWNER="media-release-searchbank-adapter";
 const SLOT_OWNER="media-snapshot-publish";
 const MANUAL_SECTIONS=Object.freeze([
@@ -42,6 +41,14 @@ function blankSlot(slot,index){
   return{slotId:Number(slot&&slot.slotId)||index+1,contentId:null,title:null,thumb:"#",provider:null};
 }
 function mediaUrl(slot){return text(slot&&(slot.video||slot.embedUrl||slot.url||slot.link));}
+function isPlaceholderThumbnail(value){
+  const raw=text(value).toLowerCase();
+  return !raw||raw==="#"||raw.includes("media-sample-card.png")||raw.includes("placeholder")||raw.includes("placehold.co")||raw.includes("placehold.it");
+}
+function usableThumbnail(slot){
+  const thumb=text(slot&&(slot.thumb||slot.thumbnail||slot.image));
+  return /^https:\/\//i.test(thumb)&&!isPlaceholderThumbnail(thumb)?thumb:"";
+}
 
 function releaseInfo(release){
   const snapshot=plain(release&&release.snapshot);
@@ -60,7 +67,7 @@ function releaseInfo(release){
 function desiredBySection(snapshot){
   const sections=plain(snapshot&&snapshot.sections),out={};
   MANUAL_SECTIONS.forEach((sectionKey)=>{
-    out[sectionKey]=slotsOf(sections[sectionKey]).filter(managedSlot).map(clone);
+    out[sectionKey]=slotsOf(sections[sectionKey]).filter((slot)=>managedSlot(slot)&&!!usableThumbnail(slot)).map(clone);
   });
   return out;
 }
@@ -87,7 +94,7 @@ function searchBankItem(slot,sectionKey,info,index){
   const id=slotIdOf(slot);
   const url=mediaUrl(slot);
   const releaseContract=plain(slot.releaseContract);
-  const thumb=/^https:\/\//i.test(text(slot.thumb))?text(slot.thumb):MEDIA_SAMPLE_THUMB;
+  const thumb=usableThumbnail(slot);
   return{
     id,contentId:id,
     title:text(slot.title),summary:text(slot.summary),description:text(slot.description),
@@ -149,7 +156,7 @@ function buildSearchBankDocument(existingBank,release){
   MANUAL_SECTIONS.forEach((sectionKey)=>{
     desired[sectionKey].forEach((slot,index)=>{
       const id=slotIdOf(slot),url=mediaUrl(slot);
-      if(!id||!text(slot.title)||!/^https:\/\//i.test(url)){
+      if(!id||!text(slot.title)||!/^https:\/\//i.test(url)||!usableThumbnail(slot)){
         throw new Error("media_release_slot_contract_invalid:"+sectionKey+":"+(index+1));
       }
       items.push(searchBankItem(slot,sectionKey,info,index));
@@ -201,7 +208,7 @@ function buildSearchBankDocument(existingBank,release){
       action:info.action,sectionKey:info.sectionKey,generatedAt:new Date().toISOString(),
       searchBankEngineVersion:text(enginePass&&enginePass.version)||coreApi.engineVersion,
       searchBankEngineAccepted:accepted.length,searchBankEngineRejected:rejected.length,
-      mediaItemCount:accepted.length,sections:Object.fromEntries(MANUAL_SECTIONS.map((key)=>[key,accepted.filter((item)=>text(item.section||item.psom_key||item.category)===key).length]))
+      mediaItemCount:accepted.length,thumbnailPolicy:"real managed media requires a non-placeholder HTTPS thumbnail",sections:Object.fromEntries(MANUAL_SECTIONS.map((key)=>[key,accepted.filter((item)=>text(item.section||item.psom_key||item.category)===key).length]))
     }
   });
   return{bank,mediaItems:accepted,rejected,enginePass,info,desired,hash:sha256(bank)};
