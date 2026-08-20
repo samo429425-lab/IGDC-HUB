@@ -270,9 +270,9 @@ function restoreSocialDomainIntoCanonical(baseCapture) {
     if (key.id) ids.add(key.id);
     if (key.url && key.url !== "#") urls.add(key.url);
   }
-  const canonicalHashBefore = sha256(canonicalDoc.items);
+  const canonicalHashBefore = sha256Value(canonicalDoc.items);
   const mergedItems = canonicalDoc.items.concat(safeSocialItems);
-  const canonicalPrefixHashAfter = sha256(mergedItems.slice(0, canonicalDoc.items.length));
+  const canonicalPrefixHashAfter = sha256Value(mergedItems.slice(0, canonicalDoc.items.length));
   if (canonicalPrefixHashAfter !== canonicalHashBefore) {
     throw new Error("Distribution Canonical invariant failed while preserving Social rows.");
   }
@@ -391,6 +391,12 @@ function validateExplicitCommerceSelection(upstream, intent) {
     fullQueuePreserved:true,
     missingCandidateIds:[]
   };
+}
+
+function sha256Value(value) {
+  // Hash an in-memory JSON value for same-build invariants. This is deliberately
+  // local and deterministic; it does not change or validate any snapshot data.
+  return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 function sha256File(file) {
@@ -823,11 +829,24 @@ async function main() {
     throw error;
   }
   const ipSlotReport = ipSlots.publish({ root, trigger: "netlify-build-canonical-ip-slots", fallbackTemplates: publishFallback.templates });
-  if (ipSlotReport.status !== "published") {
-    throw new Error("Canonical IP Slot Publisher blocked build: " + JSON.stringify(ipSlotReport.errors || ipSlotReport));
+  const ipSlotErrors = Array.isArray(ipSlotReport && ipSlotReport.errors) ? ipSlotReport.errors.map(String) : [];
+  const scopedOutputs = Array.isArray(ipSlotReport && ipSlotReport.scopedOutputs) ? ipSlotReport.scopedOutputs : [];
+  const onlyScopedRenderFailures = ipSlotErrors.length > 0 && ipSlotErrors.every((problem) => problem.startsWith("IP_SLOT_RENDER_FAILED:"));
+  const partialIpPublication = ipSlotReport.status !== "published" && onlyScopedRenderFailures && scopedOutputs.length > 0;
+  if (ipSlotReport.status !== "published" && !partialIpPublication) {
+    // Core policy/source/manifest failures remain hard-stop conditions. A single
+    // country/region render failure must not take every other market offline.
+    throw new Error("Canonical IP Slot Publisher blocked build: " + JSON.stringify(ipSlotErrors.length ? ipSlotErrors : ipSlotReport));
+  }
+  if (partialIpPublication) {
+    ipSlotReport.degraded = true;
+    ipSlotReport.degradedReason = "partial-country-region-render-failure";
+    ipSlotReport.degradedErrors = ipSlotErrors.slice();
   }
   const ipSlotVerification = ipSlots.verifyPublished({ root });
   if (!ipSlotVerification.ok) {
+    // Hash/policy/manifest integrity failures affect published output itself and
+    // are therefore still global safety failures, not country-level soft fails.
     throw new Error("Canonical IP Slot Publisher integrity failure: " + JSON.stringify(ipSlotVerification.problems));
   }
   const rootFallbackVerification = verifyPublishedRootSampleFallbacks(ipSlotReport);
@@ -836,7 +855,16 @@ async function main() {
   }
   const canonicalToIpVerification = verifyCanonicalToIpOutputs(ipSlotReport);
   if (!canonicalToIpVerification.ok) {
-    throw new Error("Canonical SearchBank products did not reach their country/IP front snapshots: " + JSON.stringify(canonicalToIpVerification.problems));
+    const expectedCount = Array.isArray(canonicalToIpVerification.expected) ? canonicalToIpVerification.expected.length : 0;
+    const outputCount = Number(canonicalToIpVerification.outputCount || 0);
+    if (expectedCount > 0 && outputCount <= 0) {
+      // No scoped output at all means the Distribution materialization path is
+      // globally broken. Keep the previous deploy rather than publish a dead hub.
+      throw new Error("Canonical SearchBank products did not reach any country/IP front snapshot: " + JSON.stringify(canonicalToIpVerification.problems));
+    }
+    canonicalToIpVerification.degraded = true;
+    canonicalToIpVerification.degradedReason = "partial-country-region-output-missing";
+    process.stderr.write("Distribution country/region soft-fail: " + JSON.stringify(canonicalToIpVerification.problems) + "\n");
   }
 
   process.stdout.write(JSON.stringify({
