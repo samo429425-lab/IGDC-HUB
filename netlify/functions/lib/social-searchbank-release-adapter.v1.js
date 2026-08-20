@@ -768,9 +768,30 @@ async function releaseFromFunctionReadback(expected) {
     clearTimeout(timer);
   }
 }
-async function loadStoredReleaseForBuild(rootInput) {
+async function loadStoredReleaseForBuild(rootInput, options) {
   const expected = incomingReleaseExpectation();
   const root = path.resolve(rootInput || process.cwd());
+  const allowLatestStored = !!(options && options.allowLatestStored === true);
+  const explicitHookIntent = !!(
+    (expected.publicationPlan && expected.publicationPlanHash) ||
+    (expected.releaseId && expected.snapshotHash)
+  );
+
+  // Never replay the last stored Social release just because some unrelated
+  // Netlify deploy happens to execute this adapter.  The shared SearchBank may
+  // only be changed by an explicit Social build hook, or by the canonical
+  // Commerce transaction when it deliberately asks to preserve the currently
+  // published Social state.
+  if (!explicitHookIntent && !allowLatestStored) {
+    return {
+      release: null,
+      source: "none",
+      expected,
+      verification: null,
+      directError: "social_build_intent_not_explicit",
+    };
+  }
+
   if (expected.publicationPlan && expected.publicationPlanHash) {
     return releaseFromPublicationPlan(root, expected);
   }
@@ -845,7 +866,9 @@ async function publish(input) {
   let release;
   let releaseLoad;
   try {
-    releaseLoad = await loadStoredReleaseForBuild(root);
+    releaseLoad = await loadStoredReleaseForBuild(root, {
+      allowLatestStored: !!(input && input.allowLatestStored === true),
+    });
     release = releaseLoad && releaseLoad.release;
   } catch (error) {
     report.reason = error && error.code || "social_release_store_unavailable";
