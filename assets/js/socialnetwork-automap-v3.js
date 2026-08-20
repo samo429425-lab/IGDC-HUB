@@ -1,9 +1,10 @@
 // socialnetwork-automap.v3.fixed.js
 // 목적:
-// 1) Social 메인 9섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
+// 1) Social 메인 9섹션은 정적 Social Snapshot의 샘플 슬롯을 먼저 표시하고, 최신 저장 Social Release가 도착하면 실콘텐츠만 자동 치환한다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
 // 3) 메인 Social과 rightPanel의 fetch/render/state를 완전히 분리해 어느 한쪽 지연/실패가 다른 쪽을 막지 않는다.
 // 4) Social runtime readback은 rightPanel/social-maru를 절대 읽거나 덮지 않는다.
+// 5) 해시 경고/부분 데이터/썸네일 실패는 프론트 전체 차단 사유가 아니다. 해당 슬롯은 샘플 프로브를 유지한다.
 
 (function () {
   "use strict";
@@ -13,7 +14,7 @@
   window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
 
   // --- config ---
-  const RIGHT_SNAPSHOT_URL = "/data/social.snapshot.json"; // Edge-routed Canonical Distribution/IP snapshot; rightPanel only
+  const RIGHT_SNAPSHOT_URL = "/data/social.snapshot.json"; // Edge-routed Canonical Distribution/IP snapshot. rightPanel ownership stays Distribution; main reads only its own 9 section shells as soft baseline.
   const CURRENT_SNAPSHOT_URL = "/.netlify/functions/social-snapshot-current";
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
   const MAIN_ROWS = 9;
@@ -31,6 +32,17 @@
     "social-reddit",
     "social-twitter",
   ]);
+  const MAIN_SECTION_LABELS = {
+    "social-youtube": "YouTube",
+    "social-instagram": "Instagram",
+    "social-tiktok": "TikTok",
+    "social-facebook": "Facebook",
+    "social-wechat": "WeChat",
+    "social-weibo": "Weibo",
+    "social-pinterest": "Pinterest",
+    "social-reddit": "Reddit",
+    "social-twitter": "X (Twitter)",
+  };
   const mainRenderTokens = new WeakMap();
 
   function qs(sel, root) {
@@ -336,14 +348,21 @@
       if (!res.ok) return null;
       const payload = await res.json();
       if (!payload || payload.ok !== true || !payload.snapshot) return null;
-      if (payload.hashVerified === false) return null;
+      // Stored-release hash disagreement is diagnostic, not a front-render hard stop.
+      // The endpoint already exposes the sanitized public snapshot. Keep service alive
+      // and surface the warning so operators can inspect it without losing all slots.
       return {
         snapshot: payload.snapshot,
         pipeline: {
           source: "stored_release_current",
-          status: "front_readback_passed",
+          status: payload.hashVerified === false
+            ? "front_readback_hash_warning"
+            : "front_readback_passed",
+          integrityWarning: payload.hashVerified === false ? "stored_hash_mismatch" : null,
+          hashVerified: payload.hashVerified !== false,
           releaseId: payload.releaseId || null,
           hash: payload.hash || null,
+          documentHash: payload.documentHash || null,
           publicSlots: payload.publicSlots || null,
           route: payload.route || null,
           loadedAt: new Date().toISOString(),
@@ -424,18 +443,84 @@
     }
   }
 
-  function paintMainCard(card, it) {
+  function escapeXml(value) {
+    return safeText(value).replace(/[&<>"']/g, function (ch) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[ch];
+    });
+  }
+
+  function sampleThumbDataUri(sectionKey, slotIndex) {
+    const label = MAIN_SECTION_LABELS[sectionKey] || "SOCIAL";
+    const number = String(Math.max(1, Number(slotIndex) || 1)).padStart(3, "0");
+    // Tiny self-contained SVG: no external request, deterministic, and visible even
+    // when a country has no current content yet. It is a slot diagnostic probe only.
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">' +
+      '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eaf2fb"/><stop offset="1" stop-color="#f8fbff"/></linearGradient></defs>' +
+      '<rect width="640" height="360" rx="18" fill="url(#g)"/>' +
+      '<rect x="18" y="18" width="604" height="324" rx="14" fill="none" stroke="#86a9cf" stroke-width="3" stroke-dasharray="12 9"/>' +
+      '<text x="320" y="155" text-anchor="middle" font-family="Arial,sans-serif" font-size="42" font-weight="700" fill="#174f86">' + escapeXml(label) + '</text>' +
+      '<text x="320" y="210" text-anchor="middle" font-family="Arial,sans-serif" font-size="24" fill="#4f6f8f">SAMPLE SLOT ' + number + '</text>' +
+      '<text x="320" y="252" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" fill="#68839d">AUTO REPLACE READY</text>' +
+      '</svg>';
+    return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+  }
+
+  function makeSampleProbe(sectionKey, slotIndex) {
+    const label = MAIN_SECTION_LABELS[sectionKey] || sectionKey || "Social";
+    const number = String(Math.max(1, Number(slotIndex) || 1)).padStart(3, "0");
+    return {
+      __igdcSampleProbe: true,
+      id: "sample_probe_" + sectionKey + "_" + number,
+      title: label + " · SAMPLE " + number,
+      description: "Sample slot · auto replace ready",
+      url: "#",
+    };
+  }
+
+  function isMainRealItem(it) {
+    if (!it || it.__igdcSampleProbe === true) return false;
+    const type = safeText(it.type).trim().toLowerCase();
+    const sourcePlatform = safeText(it && it.source && it.source.platform).trim().toLowerCase();
+    const id = pickProductId(it);
+    const title = pickTitle(it).trim();
+    if (type === "placeholder" || sourcePlatform === "placeholder" || /^ph_/i.test(id)) return false;
+    if (title === "Loading…" || title === "Loading..." || title === "Loading") return false;
+    // Do not reject a genuine approved row merely because its thumbnail or URL
+    // is temporarily missing. The sample probe supplies the visual fallback.
+    return !!(id || title || pickUrl(it).trim() !== "#" || pickThumb(it).trim());
+  }
+
+  function prepareMainDisplayItems(sectionKey, items) {
+    const real = (Array.isArray(items) ? items : []).filter(isMainRealItem).slice(0, MAIN_LIMIT);
+    const out = real.slice();
+    while (out.length < MAIN_LIMIT) out.push(makeSampleProbe(sectionKey, out.length + 1));
+    return out;
+  }
+
+  function paintMainCard(card, it, sectionKey, slotIndex) {
     if (!card) return;
 
-    const url = pickUrl(it);
-    const title = pickTitle(it) || "Item";
+    const sample = !!(it && it.__igdcSampleProbe === true);
+    const rawUrl = pickUrl(it);
+    const url = sample ? "#" : rawUrl;
+    const title = pickTitle(it) || (MAIN_SECTION_LABELS[sectionKey] || "Social");
     const desc = pickDesc(it) || " ";
-    const thumb = pickThumb(it);
+    const realThumb = sample ? "" : pickThumb(it).trim();
+    const probeThumb = sampleThumbDataUri(sectionKey, slotIndex);
 
     card.href = url || "#";
-    card.target = url && url !== "#" ? "_blank" : "_self";
+    card.target = !sample && url && url !== "#" ? "_blank" : "_self";
     card.rel = "noopener";
-    card.removeAttribute("data-dummy");
+    card.dataset.slotIndex = String(slotIndex || 1);
+    card.dataset.contentState = sample ? "sample" : "real";
+    if (sample) {
+      card.dataset.placeholder = "true";
+      card.dataset.dummy = "1";
+    } else {
+      card.removeAttribute("data-placeholder");
+      card.removeAttribute("data-dummy");
+    }
 
     const pic = qs(".pic", card);
     const metaTitle = qs(".title", card);
@@ -448,18 +533,31 @@
     }
 
     if (pic) {
-      if (thumb) {
-        pic.textContent = "";
-        pic.style.backgroundImage = "url('" + thumb.replace(/'/g, "%27") + "')";
-        pic.style.backgroundSize = "cover";
-        pic.style.backgroundPosition = "center";
-      } else {
-        pic.style.backgroundImage = "";
-        pic.textContent = "•";
+      pic.textContent = "";
+      // Always paint the local probe first. A real thumbnail replaces it only
+      // after the browser confirms the image loaded successfully.
+      pic.style.backgroundImage = "url('" + probeThumb.replace(/'/g, "%27") + "')";
+      pic.style.backgroundSize = "cover";
+      pic.style.backgroundPosition = "center";
+      pic.dataset.thumbState = sample ? "sample" : (realThumb ? "loading" : "sample-fallback");
+
+      if (realThumb) {
+        const token = safeText(Date.now()) + "_" + Math.random().toString(36).slice(2);
+        card.dataset.thumbToken = token;
+        const preloader = new Image();
+        preloader.onload = function () {
+          if (card.dataset.thumbToken !== token) return;
+          pic.style.backgroundImage = "url('" + realThumb.replace(/'/g, "%27") + "')";
+          pic.dataset.thumbState = "real";
+        };
+        preloader.onerror = function () {
+          if (card.dataset.thumbToken !== token) return;
+          pic.dataset.thumbState = "sample-fallback";
+        };
+        preloader.src = realThumb;
       }
     }
   }
-
   function resetMainCardToDummy(card) {
     if (!card) return;
 
@@ -484,12 +582,10 @@
     }
   }
 
-  function mountMainRow(gridEl, items) {
+  function mountMainRow(gridEl, items, sectionKey) {
     if (!gridEl) return;
 
-    const raw = Array.isArray(items) ? items : [];
-    const displayItems = raw.slice(0, MAIN_LIMIT);
-    while (displayItems.length < MAIN_LIMIT) displayItems.push(null);
+    const displayItems = prepareMainDisplayItems(sectionKey, items);
 
     // A new approved snapshot starts from one visible batch. Later cards are
     // created only when the user reaches the end of this row.
@@ -516,7 +612,7 @@
     }
 
     const scrollHost = gridEl.closest(".row-scroller") || gridEl;
-    const job = { grid: gridEl, items: displayItems, offset: 0 };
+    const job = { grid: gridEl, items: displayItems, offset: 0, sectionKey: sectionKey };
     mainRenderTokens.set(scrollHost, job);
 
     function renderMore() {
@@ -524,9 +620,8 @@
       const end = Math.min(job.offset + MAIN_BATCH, MAIN_LIMIT, job.items.length);
       cards = ensureCards(end);
       for (let i = job.offset; i < end; i++) {
-        const it = job.items[i] || null;
-        if (it) paintMainCard(cards[i], it);
-        else resetMainCardToDummy(cards[i]);
+        const it = job.items[i] || makeSampleProbe(sectionKey, i + 1);
+        paintMainCard(cards[i], it, sectionKey, i + 1);
       }
       job.offset = end;
       normalizeMainCardLayout(gridEl);
@@ -563,9 +658,8 @@
       cards = getMainSlots(gridEl);
     }
     for (let i = job.offset; i < end; i++) {
-      const it = displayItems[i] || null;
-      if (it) paintMainCard(cards[i], it);
-      else resetMainCardToDummy(cards[i]);
+      const it = displayItems[i] || makeSampleProbe(job.sectionKey, i + 1);
+      paintMainCard(cards[i], it, job.sectionKey, i + 1);
     }
     job.offset = end;
     normalizeMainCardLayout(gridEl);
@@ -696,11 +790,10 @@
         : Array.isArray(raw && raw.items)
           ? raw.items
           : [];
-      const realItems = items.filter(function (it) {
-        return it && !isPlaceholderItem(it);
-      });
-      if (!realItems.length) return;
-      mountMainRow(grid, realItems);
+      // Placeholder rows are converted into visible sample thumbnail probes.
+      // Genuine rows replace probes from slot 1 onward; partial sections keep
+      // the remaining probes so missing slots are immediately visible.
+      mountMainRow(grid, items, key);
     });
 
     window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
@@ -757,25 +850,63 @@
   function runMain() {
     if (mainRunInFlight) return mainRunInFlight;
 
-    mainRunInFlight = Promise.all([loadCurrentSnapshot(), loadCountryRoute()])
-      .then(function (results) {
+    // Reuse the already-running /data/social.snapshot.json request instead of
+    // creating a second heavy fetch. For main rows we read ONLY the 9 Social
+    // sections; rightPanel remains owned/rendered exclusively by runRightPanel().
+    const staticPromise = getInitialRightSnapshotPromise();
+    const currentPromise = loadCurrentSnapshot();
+    const routePromise = loadCountryRoute();
+    let finalApplied = false;
+
+    const earlyStatic = staticPromise
+      .then(function (snap) {
+        if (!snap || finalApplied) return snap;
+        lastMainSnapshot = snap;
+        window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+          source: "static_social_slot_baseline",
+          status: "sample_probes_ready_current_pending",
+          loadedAt: new Date().toISOString(),
+        };
+        renderMainSnapshot(snap, lastRoute);
+        return snap;
+      })
+      .catch(function () { return null; });
+
+    mainRunInFlight = Promise.all([currentPromise, routePromise])
+      .then(async function (results) {
         const current = results[0];
         lastRoute = results[1] || routeFallback();
+        finalApplied = true;
 
-        // No Distribution/static fallback here. Social main is a Social-owned
-        // surface and remains independent from the commercial right panel.
-        if (!(current && current.snapshot)) {
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-            source: "stored_release_current",
-            status: "stored_release_current_unavailable",
-            loadedAt: new Date().toISOString(),
-          };
-          return false;
+        if (current && current.snapshot) {
+          lastMainSnapshot = current.snapshot;
+          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = current.pipeline;
+          return renderMainSnapshot(lastMainSnapshot, lastRoute);
         }
 
-        lastMainSnapshot = current.snapshot;
-        window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = current.pipeline;
-        return renderMainSnapshot(lastMainSnapshot, lastRoute);
+        const staticSnap = await earlyStatic;
+        if (staticSnap) {
+          lastMainSnapshot = staticSnap;
+          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+            source: "static_social_slot_fallback",
+            status: "stored_release_unavailable_sample_probes_kept",
+            loadedAt: new Date().toISOString(),
+          };
+          return renderMainSnapshot(lastMainSnapshot, lastRoute);
+        }
+
+        // Last-resort soft fallback: do not leave the entire Social surface blank.
+        // Paint deterministic local probes so operators can see which slots exist.
+        document.querySelectorAll("[data-psom-key]").forEach(function (grid) {
+          const key = grid.getAttribute("data-psom-key");
+          if (key && MANAGED_MAIN_KEYS.has(key)) mountMainRow(grid, [], key);
+        });
+        window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+          source: "browser_probe_fallback",
+          status: "snapshot_unavailable_sample_probes_kept",
+          loadedAt: new Date().toISOString(),
+        };
+        return true;
       })
       .catch(function (e) {
         console.error("[social-main-automap] fail", e);
@@ -787,7 +918,6 @@
 
     return mainRunInFlight;
   }
-
   function boot() {
     // Start the Distribution/IP right-panel request first and independently,
     // exactly like Network/Tour. Social release lookup runs in parallel and can
