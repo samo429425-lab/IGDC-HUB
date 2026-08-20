@@ -1,9 +1,9 @@
 // socialnetwork-automap.v3.fixed.js
 // 목적:
-// 1) social.snapshot.json 실데이터가 있으면 메인 9섹션 + 우측 패널에 꽂는다.
+// 1) social.snapshot.json 실데이터가 있으면 소셜 메인 9섹션에만 꽂는다.
 // 2) 실데이터가 없으면 기존 HTML/더미를 절대 지우지 않는다.
 // 3) key는 하드코딩 최소화: HTML의 data-psom-key를 그대로 읽는다.
-// 4) 우측 패널도 실데이터가 있을 때만 기존 더미를 밀어내고 교체한다.
+// 4) rightPanel은 유통 전용 소유 영역이므로 이 AutoMap은 읽기/렌더/클릭 라우팅하지 않는다.
 
 (function () {
   "use strict";
@@ -18,11 +18,7 @@
   const MAIN_ROWS = 9;
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 20;
-  const RIGHT_LIMIT = 100;
-  const RIGHT_BATCH = 20;
-  const RIGHT_SECTION_KEY = "rightPanel";
   const mainRenderTokens = new WeakMap();
-  const rightRenderTokens = new WeakMap();
 
   function qs(sel, root) {
     return (root || document).querySelector(sel);
@@ -191,35 +187,6 @@
     return "";
   }
 
-  function resolveElementUrl(el) {
-    if (!el) return "";
-
-    return safeText(
-      (el.dataset &&
-        (el.dataset.checkoutUrl ||
-          el.dataset.paymentUrl ||
-          el.dataset.contentUrl ||
-          el.dataset.pageUrl ||
-          el.dataset.internalUrl ||
-          el.dataset.productUrl ||
-          el.dataset.productLink ||
-          el.dataset.detailUrl ||
-          el.dataset.href ||
-          el.dataset.url)) ||
-        el.getAttribute("data-checkout-url") ||
-        el.getAttribute("data-payment-url") ||
-        el.getAttribute("data-content-url") ||
-        el.getAttribute("data-page-url") ||
-        el.getAttribute("data-internal-url") ||
-        el.getAttribute("data-product-url") ||
-        el.getAttribute("data-product-link") ||
-        el.getAttribute("data-detail-url") ||
-        el.getAttribute("data-href") ||
-        el.getAttribute("href") ||
-        "",
-    ).trim();
-  }
-
   function isRealItem(it) {
     return !!it;
   }
@@ -337,6 +304,71 @@
     return qsa("a.card", gridEl);
   }
 
+  function mainCtaLabel(gridEl) {
+    const existing = qs("a.card .cta", gridEl);
+    return safeText(existing && existing.textContent).trim() || "Open";
+  }
+
+  function mainCardMarkup(gridEl) {
+    const label = mainCtaLabel(gridEl);
+    return (
+      '<div class="pic"></div>' +
+      '<div class="meta">' +
+      '<div class="title"></div>' +
+      '<div class="desc"></div>' +
+      '<div class="cta">' + label.replace(/[&<>"']/g, function (ch) {
+        return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch];
+      }) + '</div>' +
+      '</div>'
+    );
+  }
+
+  function normalizeMainCardLayout(gridEl) {
+    if (!gridEl) return;
+    const cards = getMainSlots(gridEl);
+    if (!cards.length) return;
+
+    let maxTitleHeight = 0;
+    cards.forEach(function (card) {
+      const title = qs(".title", card);
+      const desc = qs(".desc", card);
+      const meta = qs(".meta", card);
+      const cta = qs(".cta", card);
+
+      if (desc) {
+        // Keep the text in the DOM for the detail/full-screen viewer,
+        // but do not expose supplier/production description on the front card.
+        desc.style.display = "none";
+      }
+      if (meta) meta.style.flex = "1 1 auto";
+      if (cta) cta.style.marginTop = "auto";
+      if (title) {
+        title.style.minHeight = "0px";
+        maxTitleHeight = Math.max(maxTitleHeight, title.getBoundingClientRect().height);
+      }
+      card.style.minHeight = "0px";
+    });
+
+    if (maxTitleHeight > 0) {
+      cards.forEach(function (card) {
+        const title = qs(".title", card);
+        if (title) title.style.minHeight = Math.ceil(maxTitleHeight) + "px";
+      });
+    }
+
+    // Equalize the full card height within this SNS section so every CTA
+    // sits on the same bottom line, based on that section's longest title.
+    let maxCardHeight = 0;
+    cards.forEach(function (card) {
+      maxCardHeight = Math.max(maxCardHeight, card.getBoundingClientRect().height);
+    });
+    if (maxCardHeight > 0) {
+      cards.forEach(function (card) {
+        card.style.minHeight = Math.ceil(maxCardHeight) + "px";
+      });
+    }
+  }
+
   function paintMainCard(card, it) {
     if (!card) return;
 
@@ -355,7 +387,10 @@
     const metaDesc = qs(".desc", card);
 
     if (metaTitle) metaTitle.textContent = title;
-    if (metaDesc) metaDesc.textContent = desc;
+    if (metaDesc) {
+      metaDesc.textContent = desc;
+      metaDesc.style.display = "none";
+    }
 
     if (pic) {
       if (thumb) {
@@ -383,7 +418,10 @@
     const metaDesc = qs(".desc", card);
 
     if (metaTitle) metaTitle.textContent = "Loading";
-    if (metaDesc) metaDesc.textContent = "Preparing";
+    if (metaDesc) {
+      metaDesc.textContent = "Preparing";
+      metaDesc.style.display = "none";
+    }
 
     if (pic) {
       pic.style.backgroundImage = "";
@@ -415,13 +453,7 @@
         a.className = "card";
         a.href = "#";
 
-        a.innerHTML = `
-        <div class="pic"></div>
-        <div class="meta">
-          <div class="title"></div>
-          <div class="desc"></div>
-        </div>
-      `;
+        a.innerHTML = mainCardMarkup(gridEl);
         frag.appendChild(a);
       }
       gridEl.appendChild(frag);
@@ -442,6 +474,7 @@
         else resetMainCardToDummy(cards[i]);
       }
       job.offset = end;
+      normalizeMainCardLayout(gridEl);
     }
 
     renderMore();
@@ -468,7 +501,7 @@
         const a = document.createElement("a");
         a.className = "card";
         a.href = "#";
-        a.innerHTML = '<div class="pic"></div><div class="meta"><div class="title"></div><div class="desc"></div></div>';
+        a.innerHTML = mainCardMarkup(gridEl);
         frag.appendChild(a);
       }
       gridEl.appendChild(frag);
@@ -480,297 +513,7 @@
       else resetMainCardToDummy(cards[i]);
     }
     job.offset = end;
-  }
-
-  function getRightPanels() {
-    return qsa('[data-psom-key="rightPanel"]');
-  }
-
-  function getRightCards(panel, required) {
-    if (!panel) return [];
-
-    let cards = qsa(".ad-box", panel);
-    const wanted = Math.min(RIGHT_LIMIT, Math.max(0, required == null ? RIGHT_LIMIT : required));
-    if (cards.length < wanted) {
-      const frag = document.createDocumentFragment();
-      for (let i = cards.length; i < wanted; i++) {
-        const box = document.createElement("div");
-        box.className = "ad-box product-card";
-        box.dataset.dummy = "1";
-        box.dataset.productId = "";
-        box.dataset.productTitle = "RIGHT SAMPLE";
-        box.dataset.productLink = "";
-        box.dataset.productUrl = "";
-        box.dataset.detailUrl = "";
-        box.dataset.href = "";
-        box.innerHTML =
-          '<a href="javascript:void(0)" aria-disabled="true" data-product-id="" data-product-title="RIGHT SAMPLE" data-product-link="">RIGHT SAMPLE</a>';
-        frag.appendChild(box);
-      }
-
-      panel.appendChild(frag);
-      cards = qsa(".ad-box", panel);
-    }
-
-    return cards;
-  }
-
-  function paintRightCard(box, it) {
-    if (!box) return;
-
-    if (isPlaceholderItem(it)) {
-      resetRightCardToDummy(box);
-      return;
-    }
-
-    const url = resolveItemUrl(it);
-    const title = pickTitle(it) || "Item";
-    const productId = pickProductId(it);
-    const rawUrl = pickUrl(it).trim();
-    const externalUrl =
-      rawUrl && isExternalUrl(rawUrl) && !isBadPlaceholderUrl(rawUrl)
-        ? rawUrl
-        : "";
-
-    box.className = "ad-box product-card";
-    box.removeAttribute("data-dummy");
-    box.dataset.productId = productId;
-    box.dataset.productTitle = title;
-    box.dataset.productLink = url;
-    box.dataset.productUrl = url;
-    box.dataset.detailUrl = url;
-    box.dataset.href = url;
-    if (externalUrl) box.dataset.externalUrl = externalUrl;
-    else delete box.dataset.externalUrl;
-
-    let a = qs("a", box);
-    if (!a) {
-      box.innerHTML = "";
-      a = document.createElement("a");
-      box.appendChild(a);
-    }
-
-    a.href = url || "javascript:void(0)";
-    a.target = url ? (isExternalUrl(url) ? "_blank" : "_self") : "_self";
-    a.rel = "noopener";
-    a.textContent = "";
-    a.style.display = "flex";
-    a.style.flexDirection = "column";
-    a.style.height = "100%";
-    a.style.lineHeight = "normal";
-
-    const thumb = pickThumb(it).trim();
-    if (thumb) {
-      const img = document.createElement("img");
-      img.src = thumb;
-      img.alt = title;
-      img.loading = "lazy";
-      img.decoding = "async";
-      img.style.width = "100%";
-      img.style.height = "calc(100% - 44px)";
-      img.style.objectFit = "cover";
-      img.style.display = "block";
-      a.appendChild(img);
-    }
-    const caption = document.createElement("span");
-    caption.textContent = title;
-    caption.style.minHeight = "44px";
-    caption.style.height = "44px";
-    caption.style.padding = "6px 8px";
-    caption.style.boxSizing = "border-box";
-    caption.style.display = "flex";
-    caption.style.alignItems = "center";
-    caption.style.justifyContent = "center";
-    caption.style.overflow = "hidden";
-    caption.style.background = "#fff";
-    caption.style.color = "inherit";
-    a.appendChild(caption);
-    a.dataset.productId = productId;
-    a.dataset.productTitle = title;
-    a.dataset.productLink = url;
-    a.dataset.productUrl = url;
-    a.dataset.detailUrl = url;
-    if (it && it.affiliateOutboundUrl) a.dataset.affiliateOutbound = "1";
-    if (it && it.externalOutboundUrl) a.dataset.externalOutbound = "1";
-    a.dataset.href = url;
-    if (externalUrl) a.dataset.externalUrl = externalUrl;
-    else delete a.dataset.externalUrl;
-
-    if (url) {
-      a.removeAttribute("aria-disabled");
-    } else {
-      a.setAttribute("aria-disabled", "true");
-    }
-  }
-
-  function resetRightCardToDummy(box) {
-    if (!box) return;
-
-    box.className = "ad-box product-card";
-    box.dataset.dummy = "1";
-    box.dataset.productId = "";
-    box.dataset.productTitle = "RIGHT SAMPLE";
-    box.dataset.productLink = "";
-    box.dataset.productUrl = "";
-    box.dataset.detailUrl = "";
-    box.dataset.href = "";
-    delete box.dataset.externalUrl;
-
-    let a = qs("a", box);
-    if (!a) {
-      box.innerHTML = "";
-      a = document.createElement("a");
-      box.appendChild(a);
-    }
-
-    a.href = "javascript:void(0)";
-    a.target = "_self";
-    a.rel = "noopener";
-    a.removeAttribute("style");
-    a.textContent = "RIGHT SAMPLE";
-    a.dataset.productId = "";
-    a.dataset.productTitle = "RIGHT SAMPLE";
-    a.dataset.productLink = "";
-    a.dataset.productUrl = "";
-    a.dataset.detailUrl = "";
-    a.dataset.href = "";
-    delete a.dataset.externalUrl;
-    a.setAttribute("aria-disabled", "true");
-  }
-
-  function installRightPanelClickRouter() {
-    if (window.__SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__) return;
-    window.__SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__ = true;
-
-    document.addEventListener(
-      "click",
-      function (e) {
-        if (e.defaultPrevented) return;
-        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
-        if (e.target && e.target.closest && e.target.closest(".rscroll"))
-          return;
-
-        const hit =
-          e.target &&
-          e.target.closest &&
-          e.target.closest(
-            '[data-psom-key="rightPanel"] [data-checkout], ' +
-              '[data-psom-key="rightPanel"] .product-card, ' +
-              '[data-psom-key="rightPanel"] .ad-box, ' +
-              '[data-psom-key="rightPanel"] a[href]',
-          );
-
-        if (!hit) return;
-
-        // 결제 훅은 기존 IGTC checkout 로직에 맡긴다.
-        if (hit.closest && hit.closest("[data-checkout]")) return;
-
-        const box = hit.closest
-          ? hit.closest(".product-card, .ad-box") || hit
-          : hit;
-        const a =
-          hit.matches && hit.matches("a[href]")
-            ? hit
-            : box.querySelector
-              ? box.querySelector("a[href]")
-              : null;
-
-        const url = resolveElementUrl(box) || resolveElementUrl(a);
-
-        if (!isValidSecondUrl(url)) {
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (isExternalUrl(url)) {
-          window.open(url, "_blank", "noopener");
-        } else {
-          window.location.assign(url);
-        }
-      },
-      true,
-    );
-  }
-
-  function installRightPanelRenderOverride() {
-    if (window.__SOCIAL_RIGHTPANEL_RENDER_OVERRIDE_READY__) return;
-    window.__SOCIAL_RIGHTPANEL_RENDER_OVERRIDE_READY__ = true;
-
-    window.__IGDC_RIGHTPANEL_RENDER = function (items) {
-      const rightPanels = getRightPanels();
-      rightPanels.forEach(function (panel) {
-        mountRightPanel(panel, Array.isArray(items) ? items : []);
-      });
-    };
-  }
-
-  function mountRightPanel(panel, items) {
-    if (!panel) return;
-
-    const raw = Array.isArray(items) ? items : [];
-
-    const usable = raw.filter(function (it) {
-      if (!it) return false;
-      if (isPlaceholderItem(it)) return false;
-
-      const title = pickTitle(it).trim();
-      const url = resolveItemUrl(it);
-      const thumb = pickThumb(it).trim();
-
-      return !!(title || thumb || url);
-    });
-
-    const displayItems = usable.slice(0, RIGHT_LIMIT);
-
-    while (displayItems.length < RIGHT_LIMIT) {
-      displayItems.push(null);
-    }
-
-    let cards = getRightCards(panel, RIGHT_BATCH);
-    for (let i = RIGHT_BATCH; i < cards.length; i++) {
-      if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
-    }
-
-    const scrollHost = panel.closest("#rpMobileScroller") || panel;
-    const job = { panel: panel, items: displayItems, offset: 0 };
-    rightRenderTokens.set(scrollHost, job);
-
-    function renderMore() {
-      if (rightRenderTokens.get(scrollHost) !== job) return;
-      const end = Math.min(job.offset + RIGHT_BATCH, RIGHT_LIMIT, job.items.length);
-      cards = getRightCards(panel, end);
-      for (let i = job.offset; i < end; i++) {
-        const it = job.items[i];
-        if (it) paintRightCard(cards[i], it);
-        else resetRightCardToDummy(cards[i]);
-      }
-      job.offset = end;
-    }
-
-    renderMore();
-    if (scrollHost.dataset.igdcSocialRightBatchBound === "1") return;
-    scrollHost.dataset.igdcSocialRightBatchBound = "1";
-    scrollHost.addEventListener("scroll", function () {
-      const current = rightRenderTokens.get(scrollHost);
-      if (!current || current.offset >= Math.min(RIGHT_LIMIT, current.items.length)) return;
-      const nearX = scrollHost.scrollWidth > scrollHost.clientWidth + 2 &&
-        scrollHost.scrollLeft + scrollHost.clientWidth >= scrollHost.scrollWidth - 40;
-      const nearY = scrollHost.scrollHeight > scrollHost.clientHeight + 2 &&
-        scrollHost.scrollTop + scrollHost.clientHeight >= scrollHost.scrollHeight - 40;
-      if (!nearX && !nearY) return;
-      const end = Math.min(current.offset + RIGHT_BATCH, RIGHT_LIMIT, current.items.length);
-      const activeCards = getRightCards(current.panel, end);
-      for (let i = current.offset; i < end; i++) {
-        const it = current.items[i];
-        if (it) paintRightCard(activeCards[i], it);
-        else resetRightCardToDummy(activeCards[i]);
-      }
-      current.offset = end;
-    }, { passive: true });
+    normalizeMainCardLayout(gridEl);
   }
 
   let lastSnapshot = null;
@@ -812,21 +555,7 @@
       mountMainRow(grid, finalItems);
     });
 
-    const rightPanels = getRightPanels();
-
-    if (rightPanels.length) {
-      const raw = Array.isArray(sections.rightPanel)
-        ? sections.rightPanel
-        : Array.isArray(sections.rightPanel?.items)
-          ? sections.rightPanel.items
-          : [];
-
-      const finalItems = raw.length > 0 ? raw : [];
-
-      rightPanels.forEach(function (panel) {
-        mountRightPanel(panel, finalItems);
-      });
-    }
+    // rightPanel is distribution-owned. Social AutoMap must never render it.
 
     window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
     window.__IGDC_SOCIAL_COUNTRY_ROUTE__ = {
@@ -862,13 +591,10 @@
   }
 
   function boot() {
-    installRightPanelClickRouter();
-    installRightPanelRenderOverride();
+    // Social owns only the 9 main SNS sections. rightPanel remains fully
+    // distribution-owned and receives no Social click/render overrides.
     run();
   }
-  window.addEventListener("igdc:rightpanel:refresh", function () {
-    if (lastSnapshot) renderSnapshot(lastSnapshot, lastRoute);
-  });
   boot();
 })();
 

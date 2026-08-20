@@ -13,7 +13,6 @@ const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_
 function text(value){return value==null?"":String(value).trim();}
 function lower(value){return text(value).toLowerCase().replace(/[\s.]+/g,"_");}
 function json(statusCode,body){return{statusCode,headers:{"content-type":"application/json; charset=utf-8","cache-control":"private, no-store, max-age=0","x-content-type-options":"nosniff","access-control-allow-headers":"Content-Type, Authorization","access-control-allow-methods":"GET,POST,OPTIONS"},body:statusCode===204?"":JSON.stringify(body)};}
-function safeErrorMessage(error){const raw=text(error&&error.message||error);if(!raw)return"요청 처리 중 서버 응답이 중단되었습니다.";if(raw.length>700||/<(?:!doctype|html|head|body|script|style)\b/i.test(raw)||/cloudflare|web server is down|error code 52[01]|gateway time-?out/i.test(raw))return"서버 또는 상위 게이트웨이 응답이 지연·중단되었습니다. 이미 저장된 원장은 유지됩니다.";return raw;}
 function parse(event){try{return event&&event.body?JSON.parse(event.isBase64Encoded?Buffer.from(event.body,"base64").toString("utf8"):event.body):{};}catch(_e){const error=new Error("요청 JSON 형식이 올바르지 않습니다.");error.statusCode=400;throw error;}}
 function roleList(actor){return Array.from(new Set((actor&&actor.roles||[]).map(lower).filter(Boolean)));}
 function requireRole(actor,write){const allowed=write?WRITE_ROLES:READ_ROLES;const roles=roleList(actor);if(!roles.some((role)=>allowed.has(role))){const error=new Error(write?"국가·지역 자동화 설정 권한이 없습니다.":"국가·지역 책임 공급업체 관제는 관리자·운영진만 사용할 수 있습니다.");error.statusCode=403;throw error;}return roles;}
@@ -64,12 +63,7 @@ exports.handler=async function(event){
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
     if(action==="trust_policy")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,marketSignalPolicy:MarketSignals.POLICY});
-    // Most country/product actions do not use configuration state. Loading it for
-    // every request used to make a large research ledger capable of blocking an
-    // unrelated status/AI/front action. Hydrate settings only for the three read
-    // paths that actually need them.
-    const needsConfigState=action==="catalog"||action==="diagnostic"||action==="scope";
-    const state=needsConfigState?await Automation.configState():null;
+    const state=await Automation.configState();
     if(action==="catalog")return json(200,catalog(state));
     if(action==="diagnostic")return json(200,Automation.diagnostic(state));
     if(action==="global_control_diagnostic")return json(200,await Automation.globalControlDiagnostic());
@@ -179,10 +173,7 @@ exports.handler=async function(event){
           const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
           batchResult={ok:true,status:persisted?(blocked?"partial":"pending_finalize"):(blocked?"blocked":"empty"),action:"prepare_publication_batch",requested:plan.targets.length,queued:0,persisted,pendingBuild:persisted,blocked,items,preparation,refresh,repairUnpublish,release:{queued:false,reason:"deferred_single_build_finalize"},automaticPublication:false,publicSnapshotConfirmed:false,buildVerificationRequired:true};
         }else{
-          // prepareProductFrontTargets already verified and durably persisted the
-          // selected candidate lifecycle. Do not perform a second global candidate
-          // staging scan here; at 1,000+ products that duplicate scan can time out.
-          const liveDoc={candidates:[]};
+          const liveDoc=await CandidateReview.stage(process.cwd());
           const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true},scope,liveDoc);
           const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
           const items=repairItems.concat(preparationBlocked,publishItems);
@@ -228,5 +219,5 @@ exports.handler=async function(event){
     if(action==="candidate_action")return json(200,await Automation.candidateAction(actorId,body));
     if(action==="research_candidate_action")return json(200,await Automation.researchCandidateAction(actorId,body));
     return json(404,{ok:false,error:"지원하지 않는 국가·지역 관제 요청입니다."});
-  }catch(error){return json(error&&error.statusCode||500,{ok:false,error:safeErrorMessage(error),code:text(error&&error.code)||null});}
+  }catch(error){return json(error&&error.statusCode||500,{ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null});}
 };

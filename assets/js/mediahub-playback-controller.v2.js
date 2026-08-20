@@ -1,5 +1,5 @@
 /*
- * IGDC / MARU MediaHub playback controller v3.3.1 mobile immersive + resume restore
+ * IGDC / MARU MediaHub playback controller v3.4.0 mobile immersive hard-lock + resume restore
  * Device-aware inline player shell with safe native-app handoff hooks.
  *
  * Preserves the original Media Hub document, scroll restoration, OTT gate,
@@ -33,6 +33,7 @@
     clipCancelled: false,
     lastVolume: 1,
     mobileFullscreenIntent: false,
+    mobileImmersiveActive: false,
     playRequested: false,
     orientationTimer: 0,
     fullscreenBodyOverflow: null,
@@ -135,12 +136,19 @@
   }
   function isMobilePlaybackDevice() {
     try {
-      var ua=String(global.navigator&&global.navigator.userAgent||'');
-      var mobileUa=/Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(ua);
+      var nav=global.navigator||{};
+      var ua=String(nav.userAgent||'');
+      var mobileUa=/Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini|SamsungBrowser/i.test(ua);
+      var uaDataMobile=!!(nav.userAgentData&&nav.userAgentData.mobile);
+      var touchPoints=Number(nav.maxTouchPoints||0);
+      var ipadDesktop=/Macintosh/i.test(ua)&&touchPoints>1;
+      var desktopUa=/Windows NT|CrOS|X11|Linux x86_64/i.test(ua)||(/Macintosh/i.test(ua)&&!ipadDesktop);
       var coarse=!!(global.matchMedia&&global.matchMedia('(pointer:coarse)').matches);
-      var touch=!!((global.navigator&&Number(global.navigator.maxTouchPoints||0)>0)||('ontouchstart' in global));
-      var viewport=Number(global.innerWidth||99999);
-      return !!(mobileUa||((coarse||touch)&&viewport<=1100));
+      var noHover=!!(global.matchMedia&&global.matchMedia('(hover:none)').matches);
+      var touch=!!(touchPoints>0||('ontouchstart' in global));
+      var viewport=Number(global.innerWidth||document.documentElement.clientWidth||99999);
+      if(desktopUa&&!mobileUa&&!uaDataMobile&&!ipadDesktop)return false;
+      return !!(mobileUa||uaDataMobile||ipadDesktop||((coarse||noHover||touch)&&viewport<=1366));
     } catch (_) { return false; }
   }
   function isMediaCard(node) { return node && node.closest && node.closest('.thumb-line[data-psom-key^="media-"] a.card'); }
@@ -669,9 +677,10 @@
   function restoreFullscreenAfterViewportChange() {
     if (!state.open || !state.detail) return;
     normalizePlayerGeometry();
+    if(isMobilePlaybackDevice()&&state.mobileImmersiveActive)applyMobileImmersiveGeometry(true);
     requestPlaybackFromGesture();
     if (isPlayerFullscreen()) lockMobileLandscape();
-    global.requestAnimationFrame(function(){ normalizePlayerGeometry(); syncUi(); });
+    global.requestAnimationFrame(function(){ normalizePlayerGeometry(); if(isMobilePlaybackDevice()&&state.mobileImmersiveActive)applyMobileImmersiveGeometry(true); syncUi(); });
   }
   function scheduleViewportRepair() {
     if (!state.open) return;
@@ -690,8 +699,11 @@
     state.orientationLocked=false;
   }
   function unlockMobileOrientation() { state.orientationLocked=false; }
-  function fallbackFullscreenActive() { return !!(state.detail && state.detail.classList.contains('igdc-mobile-fullscreen-fallback')); }
-  function isPlayerFullscreen() { return !!fullscreenElement() || currentVideoFullscreen() || fallbackFullscreenActive(); }
+  function fallbackFullscreenActive() { return !!(state.mobileImmersiveActive || (state.detail && state.detail.classList.contains('igdc-mobile-fullscreen-fallback'))); }
+  function isPlayerFullscreen() {
+    if(isMobilePlaybackDevice()) return !!state.mobileImmersiveActive;
+    return !!fullscreenElement() || currentVideoFullscreen() || fallbackFullscreenActive();
+  }
   function hideChromeNow() {
     if(!state.detail)return;
     clearTimeout(state.chromeTimer);
@@ -712,19 +724,49 @@
     }
     syncUi();
   }
+  function applyMobileImmersiveGeometry(on) {
+    if(!state.detail)return;
+    var props=['position','inset','left','top','right','bottom','z-index','width','height','min-width','min-height','max-width','max-height','margin','overflow','background'];
+    if(!on){
+      props.forEach(function(prop){state.detail.style.removeProperty(prop);});
+      return;
+    }
+    var size=mobileViewportSize();
+    state.detail.style.setProperty('position','fixed','important');
+    state.detail.style.setProperty('inset','0','important');
+    state.detail.style.setProperty('left','0','important');
+    state.detail.style.setProperty('top','0','important');
+    state.detail.style.setProperty('right','0','important');
+    state.detail.style.setProperty('bottom','0','important');
+    state.detail.style.setProperty('z-index','2147483000','important');
+    state.detail.style.setProperty('width',size.width+'px','important');
+    state.detail.style.setProperty('height',size.height+'px','important');
+    state.detail.style.setProperty('min-width',size.width+'px','important');
+    state.detail.style.setProperty('min-height',size.height+'px','important');
+    state.detail.style.setProperty('max-width',size.width+'px','important');
+    state.detail.style.setProperty('max-height',size.height+'px','important');
+    state.detail.style.setProperty('margin','0','important');
+    state.detail.style.setProperty('overflow','hidden','important');
+    state.detail.style.setProperty('background','#000','important');
+  }
   function activateFallbackFullscreen() {
     if(!state.detail)return;
+    state.mobileImmersiveActive=true;
+    state.mobileFullscreenIntent=true;
     state.detail.classList.add('igdc-mobile-fullscreen-fallback');
+    applyMobileImmersiveGeometry(true);
     markFullscreenUi(true);
     normalizePlayerGeometry();
     if(isMobilePlaybackDevice())hideChromeNow();
   }
   function leaveFullscreen() {
     state.mobileFullscreenIntent=false;
+    state.mobileImmersiveActive=false;
     state.justExitedFullscreenAt=Date.now();
     state.orientationChangingUntil=0;
     try {
       if(state.detail)state.detail.classList.remove('igdc-mobile-fullscreen-fallback');
+      if(isMobilePlaybackDevice())applyMobileImmersiveGeometry(false);
       state.nativeVideoFullscreen=false;
       if(!isMobilePlaybackDevice()){
         var exit=document.exitFullscreen||document.webkitExitFullscreen;
@@ -775,7 +817,7 @@
       activateFallbackFullscreen();
     } catch(_){activateFallbackFullscreen();}
   }
-  function toggleFullscreen(){if(isPlayerFullscreen())leaveFullscreen();else enterPlayerFullscreen();}
+  function toggleFullscreen(){if(isMobilePlaybackDevice()){if(state.mobileImmersiveActive)leaveFullscreen();else enterPlayerFullscreen();return;}if(isPlayerFullscreen())leaveFullscreen();else enterPlayerFullscreen();}
 
   function showChrome(hold) {
     if(!state.detail)return; clearTimeout(state.chromeTimer); state.detail.classList.add('igdc-chrome-visible');
@@ -867,7 +909,7 @@
   }
 
   function disposeStage(){saveCurrentProgress(true);clearInterval(state.youtubePollTimer);state.youtubePollTimer=0;try{if(state.stage&&global.IGDCMediaHubOTTInline&&typeof global.IGDCMediaHubOTTInline.dispose==='function')global.IGDCMediaHubOTTInline.dispose(state.stage);}catch(_){}if(state.mutationObserver){state.mutationObserver.disconnect();state.mutationObserver=null;}state.youtubeFrame=null;}
-  function close(options){options=options||{};if(!state.open)return;saveCurrentProgress(true);if(!options.fromHistory&&state.historyToken&&global.history&&global.history.state&&global.history.state.igdcMediaToken===state.historyToken){global.history.back();return;}cancelClipCapture();if(isPlayerFullscreen())leaveFullscreen();disposeStage();if(state.detail)state.detail.remove();restoreList();var y=state.scrollY;state.open=false;state.detail=null;state.stage=null;state.card=null;state.historyToken='';state.lastCaptionValue='';state.panel='';state.playRequested=false;state.mobileFullscreenIntent=false;state.justExitedFullscreenAt=0;state.orientationChangingUntil=0;state.nativeVideoFullscreen=false;state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;unlockMobileOrientation();clearTimeout(state.chromeTimer);clearTimeout(state.orientationTimer);if(state.fullscreenBodyOverflow!==null){document.body.style.overflow=state.fullscreenBodyOverflow;state.fullscreenBodyOverflow=null;}global.requestAnimationFrame(function(){global.scrollTo(0,y);frameHeight();});}
+  function close(options){options=options||{};if(!state.open)return;saveCurrentProgress(true);if(!options.fromHistory&&state.historyToken&&global.history&&global.history.state&&global.history.state.igdcMediaToken===state.historyToken){global.history.back();return;}cancelClipCapture();if(isPlayerFullscreen())leaveFullscreen();disposeStage();if(state.detail)state.detail.remove();restoreList();var y=state.scrollY;state.open=false;state.detail=null;state.stage=null;state.card=null;state.historyToken='';state.lastCaptionValue='';state.panel='';state.playRequested=false;state.mobileFullscreenIntent=false;state.mobileImmersiveActive=false;state.justExitedFullscreenAt=0;state.orientationChangingUntil=0;state.nativeVideoFullscreen=false;state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;unlockMobileOrientation();clearTimeout(state.chromeTimer);clearTimeout(state.orientationTimer);if(state.fullscreenBodyOverflow!==null){document.body.style.overflow=state.fullscreenBodyOverflow;state.fullscreenBodyOverflow=null;}global.requestAnimationFrame(function(){global.scrollTo(0,y);frameHeight();});}
   function switchCard(card){if(!card||!state.open||card===state.card)return;saveCurrentProgress(true);cancelClipCapture();disposeStage();state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;state.card=card;state.lastCaptionValue='';state.playRequested=isMobilePlaybackDevice();state.detail.setAttribute('aria-label',titleFor(card));state.stage.textContent='';appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();requestPlaybackFromGesture();global.scrollTo(0,0);syncUi();showChrome(3200);}
   function move(direction){var card=adjacentCard(direction);if(card)switchCard(card);}
 
@@ -891,13 +933,13 @@
     syncUi();
   }
 
-  function open(card,options){options=options||{};if(!card)return;if(state.open){switchCard(card);return;}injectStyle();if(!isMobilePlaybackDevice())attemptNativePlayer(card);state.open=true;state.card=card;state.scrollY=global.scrollY||global.pageYOffset||0;state.panel='';state.playRequested=!!options.autoPlay||isMobilePlaybackDevice();state.mobileFullscreenIntent=!!options.autoFullscreen&&isMobilePlaybackDevice();if(state.fullscreenBodyOverflow===null)state.fullscreenBodyOverflow=document.body.style.overflow||'';hideList(card);var shell=buildPlayerShell(card);state.detail=shell.detail;state.stage=shell.stage;document.body.appendChild(shell.detail);normalizePlayerGeometry();appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();
+  function open(card,options){options=options||{};if(!card)return;if(state.open){switchCard(card);return;}injectStyle();var mobileMode=isMobilePlaybackDevice();if(!mobileMode)attemptNativePlayer(card);state.open=true;state.card=card;state.scrollY=global.scrollY||global.pageYOffset||0;state.panel='';state.playRequested=!!options.autoPlay||mobileMode;state.mobileFullscreenIntent=mobileMode||!!options.autoFullscreen;state.mobileImmersiveActive=false;if(state.fullscreenBodyOverflow===null)state.fullscreenBodyOverflow=document.body.style.overflow||'';hideList(card);var shell=buildPlayerShell(card);state.detail=shell.detail;state.stage=shell.stage;document.body.appendChild(shell.detail);if(mobileMode)activateFallbackFullscreen();else normalizePlayerGeometry();appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();if(mobileMode)applyMobileImmersiveGeometry(true);
     state.detail.addEventListener('click',function(event){var p=event.target.closest&&event.target.closest('[data-media-panel]');if(p){openPanel(p.dataset.mediaPanel);return;}var cap=event.target.closest&&event.target.closest('[data-caption-value],[data-caption-index]');if(cap){selectCaption(cap.dataset.captionValue!=null?cap.dataset.captionValue:cap.dataset.captionIndex);return;}var a=event.target.closest&&event.target.closest('[data-media-action]');if(a){handleAction(a.dataset.mediaAction,a.dataset.mediaValue);showChrome(2600);return;}if(event.target===state.stage||event.target===currentVideo()||(event.target.closest&&event.target.closest('.igdc-media-detail-stage'))){if(isMobilePlaybackDevice())toggleChrome();else togglePlay();}});
     var seek=state.detail.querySelector('[data-media-seek]');seek.addEventListener('input',function(){var video=currentVideo();if(video&&Number.isFinite(video.duration)){video.currentTime=video.duration*(Number(seek.value)||0)/1000;updateTimeUi();showChrome(2400);}});
     var vol=state.detail.querySelector('[data-media-volume]');vol.addEventListener('input',function(){setVolume((Number(vol.value)||0)/100);});
     state.detail.addEventListener('pointermove',function(ev){if(isMobilePlaybackDevice())return;var y=Number(ev.clientY);if(y<100||y>global.innerHeight-170)showChrome(2200);});
     if(options.autoPlay===true||isMobilePlaybackDevice())requestPlaybackFromGesture();
-    if(options.autoFullscreen===true)enterPlayerFullscreen();
+    if(!mobileMode&&options.autoFullscreen===true)enterPlayerFullscreen();
     if(!options.fromHistory&&global.history&&global.history.pushState){state.historyToken='media-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);try{global.history.pushState({igdcMedia:true,igdcMediaToken:state.historyToken},'',global.location.href);}catch(_){state.historyToken='';}}
     global.requestAnimationFrame(function(){global.scrollTo(0,0);state.stage.focus({preventScroll:true});frameHeight();syncUi();normalizePlayerGeometry();if(isMobilePlaybackDevice())hideChromeNow();else showChrome(2200);});
   }
@@ -950,6 +992,6 @@
   if(global.visualViewport)global.visualViewport.addEventListener('resize',scheduleViewportRepair,{passive:true});
   try{if(global.screen&&global.screen.orientation&&global.screen.orientation.addEventListener)global.screen.orientation.addEventListener('change',orientationViewportRepair,{passive:true});}catch(_){}
 
-  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.3.1-mobile-immersive-resume-5s-no-native-handoff';
-  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.3.1-mobile-immersive-resume-5s-no-native-handoff'};
+  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.4.0-mobile-immersive-hard-lock-resume-5s';
+  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.4.0-mobile-immersive-hard-lock-resume-5s'};
 })(window, document);

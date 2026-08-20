@@ -257,17 +257,6 @@
     </div>
   </details>
 
-  <details id="latestProductPanel" class="panel hidden heavy-data-panel" data-heavy-panel="latest-products">
-    <summary class="heavy-panel-summary">
-      <span><strong>최신 상품 리서치 목록</strong> <span id="latestProductSummary" class="small">0건</span></span>
-      <span id="latestProductToggleLabel" class="pill info">목록 펼치기</span>
-    </summary>
-    <div class="heavy-panel-content">
-      <div class="small">가장 최근 상품 리서치 사이클에서 새로 발견되거나 다시 확인된 상품만 표시합니다. 기존 전체 상품 후보 원장을 복제하지 않으며, 상품 이미지는 실제 원본 썸네일만 사용합니다.</div>
-      <div id="latestProductGrid" class="product-group-grid"><div class="small">아직 최신 리서치 상품이 없습니다.</div></div>
-    </div>
-  </details>
-
   <section id="productResearchPanel" class="panel">
     <div class="panel-heading"><h2>공식 상품 리서치·후보 심사·18개 섹션 배치 관리</h2></div>
     <div class="small">책임 공급업체의 공식 상품 상세페이지를 조사한 뒤 상품 후보 목록에서 원본을 확인하고 배치 섹션을 지정합니다. 섹션에 지정된 상품은 후보 목록에서 빠져 비공개 섹션 배치 예정 목록으로 이동합니다. 최종 프론트 실상품 매칭 버튼은 기존 실상품 공급 개방 점검과 빌드 게이트를 호출하며, 그 게이트를 통과한 상품만 게재 요청됩니다.</div>
@@ -283,6 +272,14 @@
     <div id="productFrontSyncState" class="front-sync-state">AI 자동 배치 결과를 관리자가 확인한 뒤 프론트 실상품 매칭을 실행합니다. 실제 게재는 기존 공개 안전 게이트와 빌드 대기열을 통과한 상품만 요청되며, 매칭 해제도 별도 확인 절차로 실행합니다.</div>
     <div id="productResearchStats" class="product-progress"></div>
     <div id="productDecisionStats" class="product-decision-stats" aria-live="polite"></div>
+
+    <details id="latestProductPanel" class="product-management-details heavy-data-panel" data-heavy-panel="latest-products">
+      <summary class="heavy-panel-summary"><span><strong>최신 상품 리서치 목록</strong> <span id="latestProductSummary" class="small">0건</span></span><span id="latestProductToggleLabel" class="pill info">목록 펼치기</span></summary>
+      <div class="heavy-panel-content">
+        <div class="small">현재 선택 국가·지역의 이번 상품 리서치 사이클에서 점검이 끝난 최신 상품만 표시합니다. 목록을 펼칠 때 국가·지역 분할 원장에서 최신 상태를 읽으며, 여기의 상품은 아직 공개되지 않습니다. 리서치 완료 또는 서버 일시정지 확인 후 대기열 등록을 실행할 수 있습니다.</div>
+        <div id="latestProductGrid" class="product-candidate-groups"><div class="small">아직 최신 리서치 상품을 불러오지 않았습니다.</div></div>
+      </div>
+    </details>
 
     <details id="productCandidatePanel" class="product-management-details heavy-data-panel" data-heavy-panel="product-candidates">
       <summary class="heavy-panel-summary"><span><strong>전체 상품 후보·배치 관리 목록</strong> <span id="productCandidateSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="product-section-ai-button" data-section-ai-auto="__all__">미배정·빈 배정정보 AI 자동 복구</button><span id="productCandidateToggleLabel" class="pill info">목록 펼치기</span></span></summary>
@@ -450,7 +447,7 @@
 </div>
 
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-country-control.js?v=50"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=51"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=2"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=1"></script>
 </body>
