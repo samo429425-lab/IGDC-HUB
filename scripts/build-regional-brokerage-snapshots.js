@@ -100,7 +100,7 @@ function removeSocialCheckpoint(checkpoint) {
 
 function incomingSocialHookIntent() {
   const raw = String(process.env.INCOMING_HOOK_BODY || "").trim();
-  if (!raw) return { explicit: false, rawAvailable: false, releaseId: null, publicationPlanCount: 0 };
+  if (!raw) return { explicit: false, rawAvailable: false, releaseId: null, operation: null, publicationPlanPresent: false, publicationPlanCount: 0, actualPublicationPlanCount: 0 };
   try {
     const body = JSON.parse(raw);
     const trigger = String(body && body.trigger || "").toLowerCase();
@@ -108,7 +108,11 @@ function incomingSocialHookIntent() {
     const snapshotHash = String(body && body.snapshotHash || "").trim();
     const plan = body && body.publicationPlan && typeof body.publicationPlan === "object" ? body.publicationPlan : null;
     const planHash = String(body && body.publicationPlanHash || "").trim();
+    const operation = String(body && body.operation || "publish").trim().toLowerCase() || "publish";
     const publicationPlanCount = Number(body && body.publicationPlanCount || 0);
+    const actualPublicationPlanCount = plan
+      ? Object.values(plan).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0)
+      : 0;
     const explicit = trigger === "approved-social-snapshot-release" && !!(
       (plan && planHash) || (releaseId && snapshotHash)
     );
@@ -116,9 +120,13 @@ function incomingSocialHookIntent() {
       explicit,
       rawAvailable: true,
       trigger: trigger || null,
+      operation,
       releaseId: releaseId || null,
       snapshotHash: snapshotHash || null,
-      publicationPlanCount
+      publicationPlanPresent: !!plan,
+      publicationPlanCount,
+      actualPublicationPlanCount,
+      publicationPlanCountMismatch: !!plan && publicationPlanCount !== actualPublicationPlanCount
     };
   } catch (error) {
     return {
@@ -126,7 +134,10 @@ function incomingSocialHookIntent() {
       rawAvailable: true,
       parseError: String(error && error.message || error),
       releaseId: null,
-      publicationPlanCount: 0
+      operation: null,
+      publicationPlanPresent: false,
+      publicationPlanCount: 0,
+      actualPublicationPlanCount: 0
     };
   }
 }
@@ -573,6 +584,25 @@ async function main() {
   // materialize the Social target. Commerce/Distribution publishers are not
   // entered at all on this branch.
   if (explicitSocialPublicationInBuild) {
+    // Defensive compatibility for already-queued/older Social build hooks:
+    // a normal publish with an empty manifest is not an unpublish. Preserve the
+    // committed site and finish the build without touching SearchBank. New
+    // publisher code blocks this before the hook is queued, but this guard also
+    // protects deployments already waiting in Netlify's queue.
+    if (incomingSocialIntent.publicationPlanPresent === true && incomingSocialIntent.operation !== "unpublish" && Number(incomingSocialIntent.actualPublicationPlanCount || 0) === 0) {
+      process.stdout.write(JSON.stringify({
+        incomingSocialIntent,
+        socialPublication: {
+          status: "preserved",
+          isolated: true,
+          reason: "empty_social_publish_plan_rejected_before_write",
+          searchBank: "unchanged",
+          snapshotEngine: "not-run",
+          note: "Zero-row publish is a safe no-op; only explicit unpublish may carry an empty plan."
+        }
+      }, null, 2) + "\n");
+      return;
+    }
     const socialPublication = await publishSocialSafely({
       allowLatestStored: false,
       materializeSnapshot: true

@@ -22,7 +22,7 @@ const SocialStore = require("./social-candidate-store.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 const SearchBankEngine = require("../search-bank-engine");
 
-const VERSION = "social-searchbank-release-adapter-v1.5.0-publication-plan-source";
+const VERSION = "social-searchbank-release-adapter-v1.5.1-safe-empty-unpublish";
 const RELEASE_FILE = "social-searchbank.release.snapshot.json";
 const REPORT_FILE = "social-pipeline.report.json";
 const SEARCH_BANK_FILE = "search-bank.snapshot.json";
@@ -265,10 +265,12 @@ function searchBankEngineContext(item) {
   };
 }
 
-function passThroughSearchBankEngineContract(items) {
+function passThroughSearchBankEngineContract(items, options) {
+  const sourceItems = Array.isArray(items) ? items : [];
+  const allowEmpty = !!(options && options.allowEmpty === true);
   const accepted = [];
   const rejected = [];
-  for (const raw of Array.isArray(items) ? items : []) {
+  for (const raw of sourceItems) {
     const item = JSON.parse(JSON.stringify(raw || {}));
     const ctx = searchBankEngineContext(item);
     let contracted;
@@ -304,12 +306,17 @@ function passThroughSearchBankEngineContract(items) {
     }
     accepted.push(contracted);
   }
+  const emptyAccepted = allowEmpty && sourceItems.length === 0;
   return {
     // One malformed candidate must never stop every other approved Social row.
     // SearchBank remains authoritative per item: continue when at least one row
-    // passed the existing engine contract and report rejected rows separately.
-    ok: accepted.length > 0,
+    // passed the existing engine contract. The sole zero-row exception is an
+    // explicit administrator unpublish, which removes only previously published
+    // Social candidate rows while preserving sample slots and every other domain.
+    ok: accepted.length > 0 || emptyAccepted,
     clean: rejected.length === 0,
+    emptyAccepted,
+    inputCount: sourceItems.length,
     engineVersion: SearchBankEngine.SEARCH_BANK_ENGINE_VERSION,
     contractVersion: SearchBankEngine.SEARCH_BANK_CONTRACT_VERSION,
     accepted,
@@ -445,14 +452,20 @@ function mergeIntoSearchBankSnapshot(input) {
     error.details = { rejected: gate.rejected.slice(0, 100), counts: gate.counts };
     throw error;
   }
-  const engineGate = passThroughSearchBankEngineContract(gate.accepted);
+  const operation = lower(input && input.operation);
+  const allowEmptyUnpublish = operation === "unpublish" && gate.accepted.length === 0;
+  const engineGate = passThroughSearchBankEngineContract(gate.accepted, {
+    allowEmpty: allowEmptyUnpublish,
+  });
   if (!engineGate.ok) {
     const error = new Error("SOCIAL_SEARCHBANK_ENGINE_CONTRACT_REJECTED");
     error.code = "social_searchbank_engine_contract_rejected";
     error.details = {
       engineVersion: engineGate.engineVersion,
       contractVersion: engineGate.contractVersion,
+      operation: operation || null,
       acceptedCount: engineGate.accepted.length,
+      inputCount: engineGate.inputCount,
       rejected: engineGate.rejected.slice(0, 100)
     };
     throw error;
@@ -505,8 +518,11 @@ function mergeIntoSearchBankSnapshot(input) {
     searchBankEngine: {
       version: engineGate.engineVersion,
       contractVersion: engineGate.contractVersion,
+      operation: operation || null,
+      inputCount: engineGate.inputCount,
       accepted: engineGate.accepted.length,
-      rejected: engineGate.rejected.length
+      rejected: engineGate.rejected.length,
+      emptyUnpublishAccepted: engineGate.emptyAccepted === true
     },
     writes,
     bank: merged,
@@ -928,7 +944,12 @@ async function publish(input) {
 
   let handoff;
   try {
-    handoff = mergeIntoSearchBankSnapshot({ root, release, converted });
+    handoff = mergeIntoSearchBankSnapshot({
+      root,
+      release,
+      converted,
+      operation: releaseLoad && releaseLoad.expected && releaseLoad.expected.operation,
+    });
   } catch (error) {
     report.status = "blocked";
     report.reason = error.code || "searchbank_snapshot_handoff_failed";

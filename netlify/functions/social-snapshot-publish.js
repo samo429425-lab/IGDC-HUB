@@ -15,7 +15,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.12.0-publication-plan-handoff";
+  "social-snapshot-publish-v1.12.1-empty-plan-guard";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -255,6 +255,19 @@ async function triggerCanonicalBuild(release, operation, route, handoff) {
   const planHash = text(handoff && handoff.publicationPlanHash) || SocialStore.sha256(plan);
   const planCount = Object.values(plan).reduce((sum, list) =>
     sum + (Array.isArray(list) ? list.length : 0), 0);
+  // A zero-row publish is never equivalent to an unpublish. Treat it as a
+  // safe no-op before Netlify is called so a temporary/empty candidate read
+  // cannot replace a valid Social release or fail a site build. An explicit
+  // unpublish is the only operation allowed to carry an empty publication plan.
+  if (text(operation).toLowerCase() !== "unpublish" && planCount === 0) {
+    return {
+      ok: false,
+      status: "empty_publication_plan",
+      environment: setting.name,
+      releaseId: text(release && release.release_id) || null,
+      message: "공개할 승인 소셜 콘텐츠가 0건이므로 기존 프론트를 보존하고 Netlify 배포를 시작하지 않았습니다.",
+    };
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
   try {
@@ -727,6 +740,23 @@ exports.handler = async function (event) {
       (sum, list) => sum + (Array.isArray(list) ? list.length : 0),
       0,
     );
+
+    // Fail closed before writing a stored release or queuing Netlify when a
+    // normal publish unexpectedly resolves to zero real candidates. This is
+    // intentionally different from an explicit unpublish, where zero rows is
+    // the valid final state. Keeping the two operations distinct prevents an
+    // intermittent empty read from becoming a destructive persisted release.
+    if (storeRelease && !unpublishSelected && publicationPlanCount === 0) {
+      return SocialStore.response(409, {
+        ok: false,
+        version: VERSION,
+        reason: "empty_publication_plan",
+        publicationPlanCount: 0,
+        preservedExistingFront: true,
+        buildQueued: false,
+        message: "공개할 승인 소셜 콘텐츠가 0건으로 계산되어 기존 프론트를 보존했습니다. 후보 상태를 새로고침한 뒤 다시 실행해 주세요.",
+      });
+    }
 
     // Release-table persistence remains an audit layer, but it is no longer a
     // hard gate for the canonical build.  The uploaded diagnostics repeatedly
