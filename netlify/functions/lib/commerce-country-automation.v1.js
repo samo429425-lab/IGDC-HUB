@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.18.8-chunked-worldwide-policy-queue-stable";
+const VERSION = "commerce-country-automation-v3.18.6-repeatable-research-pause-queue";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -32,10 +32,6 @@ const PRODUCT_JOB_PREFIX = "igdc_product_research_job_";
 const PRODUCT_JOB_SCHEMA = "igdc-country-product-reference-research-job.v1";
 const PRODUCT_RUNTIME_PREFIX = "igdc_product_research_runtime_";
 const PRODUCT_RUNTIME_SCHEMA = "igdc-country-product-reference-research-runtime.v1";
-const PRODUCT_CHUNK_PREFIX = "igdc_product_research_chunk_";
-const PRODUCT_CHUNK_SCHEMA = "igdc-country-product-reference-research-chunk.v1";
-const PRODUCT_CHUNK_SIZE = 50;
-const PRODUCT_CHUNK_READ_CONCURRENCY = 4;
 const SOURCE_REF = "commerce-country-supplier-discovery";
 const PRODUCT_SOURCE_REF = "country-product-ranking-review";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -45,10 +41,10 @@ const DEFAULT_SCOPES_PER_RUN = 12;
 const MAX_SCOPES_PER_RUN = 24;
 const PRODUCT_PORTFOLIO_LIMIT = 2400;
 const PRODUCT_STATUS_PAGE_LIMIT = 200;
-const PRODUCT_STAGE_BATCH = 10;
-const PRODUCT_STAGE_CONCURRENCY = 2;
-const PRODUCT_PARTIAL_STAGE_BATCH = 10;
-const PRODUCT_PARTIAL_STAGE_CONCURRENCY = 2;
+const PRODUCT_STAGE_BATCH = 12;
+const PRODUCT_STAGE_CONCURRENCY = 4;
+const PRODUCT_PARTIAL_STAGE_BATCH = 20;
+const PRODUCT_PARTIAL_STAGE_CONCURRENCY = 5;
 const PRODUCT_SECTION_CAPACITY = 100;
 const PRODUCT_AI_ENRICH_BATCH = 12;
 const PRODUCT_SECTION_KEYS = Object.freeze([
@@ -1297,9 +1293,8 @@ function manualSupplierSeed(scope,row){
 function activeManualSupplierSeeds(registry){return array(registry&&registry.suppliers).filter((row)=>row&&row.adminPinned===true&&row.state!=="disabled"&&supplierRootUrl(row.officialUrl)).map((row)=>manualSupplierSeed(registry.scope,row));}
 function reindexCandidateRows(rows){return array(rows).map((row,index)=>Object.assign({},row,{rank:index+1,aiAssessment:Object.assign({},plain(row&&row.aiAssessment),{rank:index+1})}));}
 function preservePinnedReviewPool(pool,sources){const out=[],seen=new Set();for(const row of array(sources).filter((item)=>item&&item.adminPinned===true).concat(array(pool))){const url=researchCandidateUrl(row),key=text(url).toLowerCase();if(!key||seen.has(key))continue;seen.add(key);out.push(row);}return out.slice(0,SUPPLIER_REVIEW_LIMIT);}
-function supplierRankEntries(reviewPool,maxCandidates,policyHintsInput){
-  const hints=plain(policyHintsInput);
-  const scored=deterministicAssessment(reviewPool).map((assessment,index)=>({item:reviewPool[index],assessment,originalIndex:index,policyAffinity:supplierPolicyAffinity(reviewPool[index],hints)})).sort((a,b)=>Number(b.item&&b.item.adminPinned===true)-Number(a.item&&a.item.adminPinned===true)||Number(b.assessment.hardGatePassed===true)-Number(a.assessment.hardGatePassed===true)||Number(b.assessment.trustScore||0)-Number(a.assessment.trustScore||0)||Number(b.policyAffinity||0)-Number(a.policyAffinity||0)||Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0));
+function supplierRankEntries(reviewPool,maxCandidates){
+  const scored=deterministicAssessment(reviewPool).map((assessment,index)=>({item:reviewPool[index],assessment,originalIndex:index})).sort((a,b)=>Number(b.item&&b.item.adminPinned===true)-Number(a.item&&a.item.adminPinned===true)||Number(b.assessment.hardGatePassed===true)-Number(a.assessment.hardGatePassed===true)||Number(b.assessment.trustScore||0)-Number(a.assessment.trustScore||0)||Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0));
   const pinned=scored.filter((row)=>row.item&&row.item.adminPinned===true),normal=scored.filter((row)=>!(row.item&&row.item.adminPinned===true)),limit=Math.max(1,Number(maxCandidates)||DEFAULT_MAX_CANDIDATES);return pinned.concat(normal.slice(0,Math.max(0,limit-pinned.length)));
 }
 function researchCandidateUrl(item) { try { const value = first(item && item.supplierOfficialUrl, item && item.url, item && item.href, item && item.link && item.link.url, item && item.link); const url = new URL(text(value)); if (!["https:","http:"].includes(url.protocol) || url.username || url.password || !url.hostname) return ""; url.hash = ""; return url.toString(); } catch (_error) { return ""; } }
@@ -1493,41 +1488,6 @@ function augmentTourRightResearchPlan(planInput, scopeInput) {
   plan.rows=rows;plan.tasks=tasks;plan.diagnostics=Object.assign({},plain(plan.diagnostics),{tourRightCommercialPolicy:true,tourRightQueriesAdded:added,tourRightLocale:locale,tourRightDiningAuxiliary:true});
   return plan;
 }
-function administratorPriorityResearchPhrases(policyInput){
-  const policy=plain(policyInput),out=[],seen=new Set(),values=array(policy.manualPriorityTargets).concat(array(policy.priorityDirections));
-  if(text(policy.finalDecision))values.push(policy.finalDecision);
-  for(const raw of values){
-    let phrase=text(raw).replace(/https?:\/\/\S+/gi," ").replace(/\s+/g," ").trim();
-    if(!phrase||/^https?:/i.test(phrase))continue;
-    phrase=phrase.slice(0,180);
-    const key=lower(phrase);
-    if(key.length<2||seen.has(key))continue;
-    seen.add(key);out.push(phrase);
-    if(out.length>=6)break;
-  }
-  return out;
-}
-function augmentAdministratorPriorityResearchPlan(planInput,scopeInput,policyInput){
-  const plan=Object.assign({},plain(planInput)),scope=plain(scopeInput),policy=plain(policyInput),phrases=administratorPriorityResearchPhrases(policy);
-  if(!phrases.length)return plan;
-  const rows=array(plan.rows).slice(),tasks=array(plan.tasks).slice(),seen=new Set(rows.map((row)=>lower(row&&row.query)));
-  const locale=tourRightResearchLocale(first(rows[0]&&rows[0].locale,array(plan.locales)[0],scope.country==="KR"?"ko":"en"));
-  const localName=text(first(rows[0]&&rows[0].localName,scope.country)),suffix=locale==="ko"?"공식 판매업체 제조사 전문점":"official supplier manufacturer store";
-  let added=0;
-  for(const phrase of phrases){
-    const query=(localName+" "+phrase+" "+suffix).replace(/\s+/g," ").trim().slice(0,880),key=lower(query);
-    if(!query||seen.has(key))continue;
-    seen.add(key);
-    const rowIndex=rows.length,row={query,locale,origin:"administrator-policy-priority",lane:"administrator-priority",localName};
-    rows.push(row);
-    if(scope.country==="KR")tasks.push({lane:"naver",rowIndex,query,locale,origin:row.origin,supplyLane:row.lane,attempt:0});
-    tasks.push({lane:"google",rowIndex,query,locale,origin:row.origin,supplyLane:row.lane,attempt:0});
-    tasks.push({lane:"sanmaru",rowIndex,query,locale,origin:row.origin,supplyLane:row.lane,attempt:0});
-    added+=1;
-  }
-  plan.rows=rows;plan.tasks=tasks;plan.diagnostics=Object.assign({},plain(plan.diagnostics),{administratorPolicyDiscovery:true,administratorPolicyQueriesAdded:added,administratorPolicyQueryLimit:6});
-  return plan;
-}
 
 async function beginResearchJob(actorId, input, event) {
   const raw=plain(input),scope=researchScope(raw),state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region),existing=await researchJobRule(scope),context=await researchContext(scope);
@@ -1562,10 +1522,10 @@ async function beginResearchJob(actorId, input, event) {
   const newCandidateTarget=perRunCandidateLimit;
   const targetTotal=preservedCandidates.length+perRunCandidateLimit;
 
-  const selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},plan=augmentAdministratorPriorityResearchPlan(augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope),scope,context.policyControl),now=iso(),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry);
+  const selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},plan=augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope),now=iso(),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry);
   const novelSeeds=filterKnownSupplierItems(manualSeeds.concat(array(plan.seeds)),knownSupplierKeys);
   const initialStatus=newCandidateTarget<=0?"complete":(array(plan.tasks).length?"searching":"inspecting");
-  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget}),searchTasks:newCandidateTarget>0?array(plan.tasks):[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?array(plan.tasks).length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
+  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget}),searchTasks:newCandidateTarget>0?array(plan.tasks):[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?array(plan.tasks).length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets)}};
   if(newCandidateTarget>0&&!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,newCandidateTarget*4))}));job.status="inspecting";}
   await saveResearchJob(job,actorId);return publicResearchJob(job);
 }
@@ -1579,7 +1539,7 @@ async function advanceResearchJob(actorId, input, event) {
       const task = array(job.searchTasks)[Number(job.searchCursor || 0)];
       if (!task) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 4)) })); job.status = "inspecting"; job.inspectCursor = 0; }
       else {
-        const result = await RegionalSelector.searchSupplierResearchStep(event || {}, Object.assign({}, selectorInput, { task, limit: Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES), timeoutMs: 7000 }));
+        const result = await RegionalSelector.searchSupplierResearchStep(event || {}, Object.assign({}, selectorInput, { task, limit: Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) }));
         const novelItems=filterKnownSupplierItems(result.items,new Set(array(job.knownSupplierKeys)));
         job.supplierHoldingCandidates=mergeSupplierHolding(job.supplierHoldingCandidates,novelItems,job.blockedSupplierKeys,300); job.supplierBlockedCandidates=mergeSupplierBlocked(job.supplierBlockedCandidates,novelItems,job.blockedSupplierKeys,300); job.rawCandidates = mergeResearchItems(job.rawCandidates, novelItems, SUPPLIER_RAW_LIMIT, job.blockedSupplierKeys); job.trace = array(job.trace).concat([Object.assign({ at: iso(), attempt: Number(task.attempt || 0), returned:Number(array(result.items).length), novel:Number(novelItems.length), duplicateExistingSkipped:Math.max(0,array(result.items).length-novelItems.length) }, plain(result.trace))]); job.searchCursor = Number(job.searchCursor || 0) + 1;
         if (retryableResearchStatus(result.status) && Number(task.attempt || 0) < 1) job.searchTasks.push(Object.assign({}, task, { attempt: Number(task.attempt || 0) + 1, retryOf: Number(job.searchCursor || 0) - 1 }));
@@ -1589,10 +1549,10 @@ async function advanceResearchJob(actorId, input, event) {
       const batch = array(job.inspectionPool).slice(Number(job.inspectCursor || 0), Number(job.inspectCursor || 0) + 3);
       if (!batch.length) {
         job.reviewPool=preservePinnedReviewPool(RegionalSelector.buildSupplierReviewPool(job.rawCandidates,job.inspectedCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_REVIEW_LIMIT,Math.max(Number(job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*3,60))})),array(job.inspectedCandidates).concat(array(job.rawCandidates)));
-        job.rankQueue=supplierRankEntries(job.reviewPool,Math.max(0,Number(job.newCandidateTarget!=null?job.newCandidateTarget:(job.effective&&job.effective.maxCandidates)||DEFAULT_MAX_CANDIDATES)),plain(job.selectorInput).policyHints).map((row)=>row.item);job.status="ranking";job.rankCursor=0;job.rankAttempt=0;
+        job.rankQueue=supplierRankEntries(job.reviewPool,Math.max(0,Number(job.newCandidateTarget!=null?job.newCandidateTarget:(job.effective&&job.effective.maxCandidates)||DEFAULT_MAX_CANDIDATES))).map((row)=>row.item);job.status="ranking";job.rankCursor=0;job.rankAttempt=0;
       } else {
-        const inspected = await RegionalSelector.inspectSupplierResearchStep(batch, Object.assign({},selectorInput,{timeoutMs:6500})); job.inspectedCandidates = mergeResearchItems(job.inspectedCandidates, inspected.items, 300); job.inspectCursor = Number(job.inspectCursor || 0) + batch.length; job.trace = array(job.trace).concat([{ source: "page-evidence-inspection", status: "ok", at: iso(), count: array(inspected.items).length, done: job.inspectCursor, total: array(job.inspectionPool).length }]);
-        if(job.inspectCursor>=array(job.inspectionPool).length){job.reviewPool=preservePinnedReviewPool(RegionalSelector.buildSupplierReviewPool(job.rawCandidates,job.inspectedCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_REVIEW_LIMIT,Math.max(Number(job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*3,60))})),array(job.inspectedCandidates).concat(array(job.rawCandidates)));job.rankQueue=supplierRankEntries(job.reviewPool,Math.max(0,Number(job.newCandidateTarget!=null?job.newCandidateTarget:(job.effective&&job.effective.maxCandidates)||DEFAULT_MAX_CANDIDATES)),plain(job.selectorInput).policyHints).map((row)=>row.item);job.status="ranking";job.rankCursor=0;job.rankAttempt=0;}
+        const inspected = await RegionalSelector.inspectSupplierResearchStep(batch, selectorInput); job.inspectedCandidates = mergeResearchItems(job.inspectedCandidates, inspected.items, 300); job.inspectCursor = Number(job.inspectCursor || 0) + batch.length; job.trace = array(job.trace).concat([{ source: "page-evidence-inspection", status: "ok", at: iso(), count: array(inspected.items).length, done: job.inspectCursor, total: array(job.inspectionPool).length }]);
+        if(job.inspectCursor>=array(job.inspectionPool).length){job.reviewPool=preservePinnedReviewPool(RegionalSelector.buildSupplierReviewPool(job.rawCandidates,job.inspectedCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_REVIEW_LIMIT,Math.max(Number(job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*3,60))})),array(job.inspectedCandidates).concat(array(job.rawCandidates)));job.rankQueue=supplierRankEntries(job.reviewPool,Math.max(0,Number(job.newCandidateTarget!=null?job.newCandidateTarget:(job.effective&&job.effective.maxCandidates)||DEFAULT_MAX_CANDIDATES))).map((row)=>row.item);job.status="ranking";job.rankCursor=0;job.rankAttempt=0;}
       }
     } else if (job.status === "ranking") {
       const start = Number(job.rankCursor || 0), batch = array(job.rankQueue).slice(start, start + 3);
@@ -1602,7 +1562,7 @@ async function advanceResearchJob(actorId, input, event) {
         if (ai.error && retryableResearchStatus(ai.error) && Number(job.rankAttempt || 0) < 1) { job.rankAttempt = Number(job.rankAttempt || 0) + 1; job.trace = array(job.trace).concat([{ source: "openai-ranking", status: "retry_scheduled", at: iso(), batchStart: start, error: ai.error }]); }
         else { for (let index = 0; index < batch.length; index += 1) job.rankedEntries.push({ item: batch[index], originalIndex: start + index, assessment: Object.assign({ provider: ai.provider, model: ai.model }, ai.assessments[index] || deterministicAssessment([batch[index]])[0]) }); job.rankCursor = start + batch.length; job.rankAttempt = 0; job.trace = array(job.trace).concat([{ source: "openai-ranking", status: ai.error ? "deterministic_fallback_after_retry" : "ok", at: iso(), batchStart: start, count: batch.length, error: ai.error || null }]); if (job.rankCursor >= array(job.rankQueue).length) job.status = "complete"; }
       }
-      if(job.status==="complete"){const rankedAll=array(job.rankedEntries).sort((a,b)=>Number(b.item&&b.item.adminPinned===true)-Number(a.item&&a.item.adminPinned===true)||Number(b.assessment.approvalReady===true)-Number(a.assessment.approvalReady===true)||Number(b.assessment.hardGatePassed===true)-Number(a.assessment.hardGatePassed===true)||Number(b.assessment.trustScore||b.assessment.score||0)-Number(a.assessment.trustScore||a.assessment.score||0)||supplierPolicyAffinity(b.item,plain(job.selectorInput).policyHints)-supplierPolicyAffinity(a.item,plain(job.selectorInput).policyHints)||Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0)||itemTitle(a.item).localeCompare(itemTitle(b.item))),seenRanked=new Set(),known=new Set(array(job.knownSupplierKeys)),ranked=rankedAll.filter((entry)=>{const key=supplierResearchRootKey(entry&&entry.item);if(!key||known.has(key)||seenRanked.has(key))return false;seenRanked.add(key);return true;}).slice(0,Math.max(0,Number(job.newCandidateTarget||0)));job.newCandidates=ranked.map((entry,index)=>stagedCandidateRow(entry,index+1));job.candidates=reindexCandidateRows(array(job.preservedCandidates).concat(job.newCandidates));job.finishedAt=iso();}
+      if(job.status==="complete"){const rankedAll=array(job.rankedEntries).sort((a,b)=>Number(b.item&&b.item.adminPinned===true)-Number(a.item&&a.item.adminPinned===true)||Number(b.assessment.approvalReady===true)-Number(a.assessment.approvalReady===true)||Number(b.assessment.hardGatePassed===true)-Number(a.assessment.hardGatePassed===true)||Number(b.assessment.trustScore||b.assessment.score||0)-Number(a.assessment.trustScore||a.assessment.score||0)||Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0)||itemTitle(a.item).localeCompare(itemTitle(b.item))),seenRanked=new Set(),known=new Set(array(job.knownSupplierKeys)),ranked=rankedAll.filter((entry)=>{const key=supplierResearchRootKey(entry&&entry.item);if(!key||known.has(key)||seenRanked.has(key))return false;seenRanked.add(key);return true;}).slice(0,Math.max(0,Number(job.newCandidateTarget||0)));job.newCandidates=ranked.map((entry,index)=>stagedCandidateRow(entry,index+1));job.candidates=reindexCandidateRows(array(job.preservedCandidates).concat(job.newCandidates));job.finishedAt=iso();}
     }
     job.lastError = null; await saveResearchJob(job, actorId); return publicResearchJob(job);
   } catch (error) {
@@ -1628,70 +1588,6 @@ async function commitResearchJob(actorId, input) {
 
 function productJobId(scope) { return PRODUCT_JOB_PREFIX + lower(scope.country) + "_" + lower(scope.region || "NATIONWIDE").replace(/[^a-z0-9_-]/g, "_"); }
 function productRuntimeId(scope) { return PRODUCT_RUNTIME_PREFIX + lower(scope.country) + "_" + lower(scope.region || "NATIONWIDE").replace(/[^a-z0-9_-]/g, "_"); }
-function productChunkScopeToken(scope){return lower(scope.country)+"_"+lower(scope.region||"NATIONWIDE").replace(/[^a-z0-9_-]/g,"_").slice(0,40);}
-function productChunkJobToken(jobId){return sha256(text(jobId)).slice(0,18);}
-function productChunkPrefix(scope,jobId,kind){return PRODUCT_CHUNK_PREFIX+productChunkScopeToken(scope)+"_"+productChunkJobToken(jobId)+"_"+lower(kind||"result")+"_";}
-function productChunkId(scope,jobId,kind,index){return productChunkPrefix(scope,jobId,kind)+String(Math.max(0,Number(index)||0)).padStart(3,"0");}
-async function productChunkRule(scope,jobId,kind,index){
-  const id=productChunkId(scope,jobId,kind,index),rows=await SlotStore.request(SlotStore.rest("gslot_policies","select=id,rule,updated_at&id=eq."+encodeURIComponent(id)+"&limit=1"),{method:"GET"}),row=array(rows)[0],rule=plain(row&&row.rule);
-  return rule&&rule.schema===PRODUCT_CHUNK_SCHEMA&&text(rule.jobId)===text(jobId)&&lower(rule.kind)===lower(kind)?Object.assign({},rule):{schema:PRODUCT_CHUNK_SCHEMA,version:VERSION,jobId:text(jobId),kind:lower(kind),index:Number(index)||0,rows:[]};
-}
-async function saveProductChunk(scope,jobId,kind,index,rowsInput,actorId){
-  const now=iso(),rows=array(rowsInput).slice(0,PRODUCT_CHUNK_SIZE).map(compactProductWorkingRow),rule={schema:PRODUCT_CHUNK_SCHEMA,version:VERSION,jobId:text(jobId),kind:lower(kind),index:Number(index)||0,count:rows.length,rows,updatedAt:now,updatedBy:text(actorId)||"country-product-research-orchestrator"},row={id:productChunkId(scope,jobId,kind,index),name:"국가 상품 리서치 "+lower(kind)+" 분할 원장",scope_hub:"country-product-reference-research-chunk",scope_country:scope.country,scope_region:scope.region==="NATIONWIDE"?null:scope.region,enabled:true,rule,updated_at:now,updated_by:rule.updatedBy};
-  await SlotStore.insert("gslot_policies",row,"resolution=merge-duplicates,return=minimal");return rule;
-}
-async function removeProductChunks(scope,jobId){
-  if(!text(jobId))return;for(const kind of ["discovery","result"]){const prefix=productChunkPrefix(scope,jobId,kind);try{await SlotStore.request(SlotStore.rest("gslot_policies","scope_hub=eq.country-product-reference-research-chunk&id=like."+encodeURIComponent(prefix+"*")),{method:"DELETE",headers:{Prefer:"return=minimal"}});}catch(_error){}}
-}
-function productChunkCountField(kind){return lower(kind)==="discovery"?"discoveryResultCount":"resultCount";}
-function productChunkIdentityField(kind){return lower(kind)==="discovery"?"discoveryIdentities":"resultIdentities";}
-async function appendProductChunkRows(job,kind,rowsInput,actorId){
-  const scope=plain(job.scope),kindName=lower(kind),countField=productChunkCountField(kindName),identityField=productChunkIdentityField(kindName),known=new Set(array(job[identityField]).map(text).filter(Boolean)),incoming=[];
-  for(const raw of array(rowsInput)){const row=compactProductWorkingRow(raw),identity=ProductRanking.productIdentity(row)||text(row.id);if(!identity||known.has(identity))continue;known.add(identity);incoming.push(Object.assign({},row,kindName==="result"?{researchCycleJobId:text(job.jobId)}:{}));}
-  if(!incoming.length){job[identityField]=Array.from(known).slice(0,PRODUCT_PORTFOLIO_LIMIT);return{appended:[],count:Number(job[countField]||0)};}
-  let count=Math.max(0,Number(job[countField]||0)),cursor=0,appended=[];
-  while(cursor<incoming.length&&count<PRODUCT_PORTFOLIO_LIMIT){
-    let chunkIndex=Math.floor(count/PRODUCT_CHUNK_SIZE),offset=count%PRODUCT_CHUNK_SIZE,chunk=await productChunkRule(scope,job.jobId,kindName,chunkIndex),chunkRows=array(chunk.rows);
-    // If a prior request wrote this chunk but the small job checkpoint failed,
-    // reconcile from the deterministic chunk before appending again.
-    if(chunkRows.length>offset){count=chunkIndex*PRODUCT_CHUNK_SIZE+chunkRows.length;chunkIndex=Math.floor(count/PRODUCT_CHUNK_SIZE);offset=count%PRODUCT_CHUNK_SIZE;if(offset===0&&count<PRODUCT_PORTFOLIO_LIMIT){chunk=await productChunkRule(scope,job.jobId,kindName,chunkIndex);chunkRows=array(chunk.rows);}else chunkRows=array(chunk.rows);}
-    const existingIds=new Set(chunkRows.map((row)=>ProductRanking.productIdentity(row)||text(row&&row.id)).filter(Boolean));
-    const capacity=Math.max(0,PRODUCT_CHUNK_SIZE-chunkRows.length),take=[];
-    while(cursor<incoming.length&&take.length<capacity&&count+take.length<PRODUCT_PORTFOLIO_LIMIT){const row=incoming[cursor++],identity=ProductRanking.productIdentity(row)||text(row.id);if(existingIds.has(identity))continue;existingIds.add(identity);take.push(Object.assign({},row,kindName==="result"?{researchResultIndex:count+take.length}:{}));}
-    if(!take.length){if(capacity<=0){count=(chunkIndex+1)*PRODUCT_CHUNK_SIZE;continue;}break;}
-    const saved=await saveProductChunk(scope,job.jobId,kindName,chunkIndex,chunkRows.concat(take),actorId);appended=appended.concat(take);count=chunkIndex*PRODUCT_CHUNK_SIZE+array(saved.rows).length;
-  }
-  job[countField]=Math.min(PRODUCT_PORTFOLIO_LIMIT,count);job[identityField]=Array.from(known).slice(0,PRODUCT_PORTFOLIO_LIMIT);job[kindName==="result"?"resultChunkCount":"discoveryChunkCount"]=Math.ceil(Number(job[countField]||0)/PRODUCT_CHUNK_SIZE);return{appended,count:Number(job[countField]||0)};
-}
-async function readProductChunkRange(job,kind,offsetInput,limitInput){
-  const kindName=lower(kind),count=Math.max(0,Number(job[productChunkCountField(kindName)]||0)),offset=Math.max(0,Math.min(count,Number(offsetInput)||0)),limit=Math.max(0,Math.min(PRODUCT_STATUS_PAGE_LIMIT,Number(limitInput)||PRODUCT_STATUS_PAGE_LIMIT));if(!limit||offset>=count)return[];
-  const end=Math.min(count,offset+limit),firstChunk=Math.floor(offset/PRODUCT_CHUNK_SIZE),lastChunk=Math.floor((end-1)/PRODUCT_CHUNK_SIZE),indexes=[];for(let i=firstChunk;i<=lastChunk;i++)indexes.push(i);const chunks=[];
-  for(let pos=0;pos<indexes.length;pos+=PRODUCT_CHUNK_READ_CONCURRENCY){const group=indexes.slice(pos,pos+PRODUCT_CHUNK_READ_CONCURRENCY),settled=await Promise.all(group.map((index)=>productChunkRule(job.scope,job.jobId,kindName,index)));chunks.push(...settled);}
-  const rows=[];for(const chunk of chunks)rows.push(...array(chunk.rows));const relativeStart=offset-firstChunk*PRODUCT_CHUNK_SIZE;return rows.slice(relativeStart,relativeStart+(end-offset));
-}
-async function readAllProductChunkRows(job,kind){const count=Math.max(0,Number(job[productChunkCountField(kind)]||0)),out=[];for(let offset=0;offset<count;offset+=PRODUCT_STATUS_PAGE_LIMIT)out.push(...await readProductChunkRange(job,kind,offset,PRODUCT_STATUS_PAGE_LIMIT));return out.slice(0,PRODUCT_PORTFOLIO_LIMIT);}
-function summarizeProductResultRows(rowsInput){
-  const stats={inspected:0,withImage:0,withVideo:0,readyForAdminReview:0,queueEligible:0,slotCandidates:0,held:0,rejected:0,permanentExcluded:0};
-  for(const row of array(rowsInput)){if(row&&row.inspectionComplete===true)stats.inspected+=1;if(productImageUrl(row))stats.withImage+=1;if(productVideoUrl(row))stats.withVideo+=1;if(row&&row.researchStatus==="ready_for_admin_review")stats.readyForAdminReview+=1;if(row&&row.inspectionComplete===true&&ProductPipeline.researchReadiness(row).queueEligible===true)stats.queueEligible+=1;const d=lower(row&&row.slotDecision||"undecided");if(d==="slot_candidate")stats.slotCandidates+=1;else if(d==="hold")stats.held+=1;else if(d==="reject")stats.rejected+=1;else if(d==="purge")stats.permanentExcluded+=1;}return stats;
-}
-function mergeProductResultStats(baseInput,deltaInput){const base=Object.assign({inspected:0,withImage:0,withVideo:0,readyForAdminReview:0,queueEligible:0,slotCandidates:0,held:0,rejected:0,permanentExcluded:0},plain(baseInput)),delta=plain(deltaInput);for(const key of Object.keys(base))base[key]=Math.max(0,Number(base[key]||0)+Number(delta[key]||0));return base;}
-async function appendInspectedProductResults(job,rowsInput,actorId){
-  const raw=array(rowsInput);if(!raw.length)return[];const evaluated=ProductRanking.buildPortfolio(raw,plain(job.rankingContext)).products,evaluatedMap=new Map(array(evaluated).map((row)=>[ProductRanking.productIdentity(row)||text(row&&row.id),row])),ordered=raw.map((row)=>evaluatedMap.get(ProductRanking.productIdentity(row)||text(row&&row.id))||row);
-  const before=Math.max(0,Number(job.resultCount||0)),result=await appendProductChunkRows(job,"result",ordered,actorId);job.resultStorage="chunked_v1";
-  // Stats follow the durable chunk count rather than the in-memory append list.
-  // If a previous request wrote a chunk but timed out before saving the small
-  // job checkpoint, reconciliation below counts that durable row exactly once.
-  const after=Math.max(before,Number(result.count||job.resultCount||0));
-  if(after>before){const durableRows=await readProductChunkRange(job,"result",before,after-before);job.resultStats=mergeProductResultStats(job.resultStats,summarizeProductResultRows(durableRows));}
-  return result.appended;
-}
-async function listProductChunkIndexes(scope,jobId,kind){const prefix=productChunkPrefix(scope,jobId,kind),rows=await SlotStore.request(SlotStore.rest("gslot_policies","select=id&scope_hub=eq.country-product-reference-research-chunk&id=like."+encodeURIComponent(prefix+"*")+"&order=id.asc&limit=64"),{method:"GET"});return array(rows).map((row)=>{const m=text(row&&row.id).match(/_(\d{3})$/);return m?Number(m[1]):-1;}).filter((n)=>n>=0);}
-async function migrateLegacyProductResultsStep(job,actorId,maxChunks){
-  if(job.resultStorage==="chunked_v1")return{complete:true,migrated:Number(job.resultCount||0),total:Number(job.resultCount||0)};const legacy=array(job.products).slice(0,PRODUCT_PORTFOLIO_LIMIT),total=legacy.length;if(!total){job.resultStorage="chunked_v1";job.resultCount=0;job.resultChunkCount=0;job.resultIdentities=[];job.resultStats=summarizeProductResultRows([]);await saveProductJob(job,actorId);return{complete:true,migrated:0,total:0};}
-  const existing=new Set(await listProductChunkIndexes(job.scope,job.jobId,"result")),totalChunks=Math.ceil(total/PRODUCT_CHUNK_SIZE),limit=Math.max(1,Math.min(4,Number(maxChunks)||3));let written=0;
-  for(let chunkIndex=0;chunkIndex<totalChunks&&written<limit;chunkIndex++){if(existing.has(chunkIndex))continue;const start=chunkIndex*PRODUCT_CHUNK_SIZE,rows=legacy.slice(start,start+PRODUCT_CHUNK_SIZE).map((row,offset)=>Object.assign({},row,{researchResultIndex:start+offset,researchCycleJobId:text(row&&row.researchCycleJobId)||text(job.jobId)}));await saveProductChunk(job.scope,job.jobId,"result",chunkIndex,rows,actorId);existing.add(chunkIndex);written+=1;}
-  const complete=existing.size>=totalChunks,migrated=Math.min(total,existing.size*PRODUCT_CHUNK_SIZE);if(complete){job.resultStorage="chunked_v1";job.resultCount=total;job.resultChunkCount=totalChunks;job.resultIdentities=legacy.map((row)=>ProductRanking.productIdentity(row)||text(row&&row.id)).filter(Boolean).slice(0,PRODUCT_PORTFOLIO_LIMIT);job.resultStats=summarizeProductResultRows(legacy);job.products=[];job.currentCycleTouchedIdentities=[];await saveProductJob(job,actorId);}return{complete,migrated,total,chunkCount:existing.size,totalChunks};
-}
 async function productRuntimeRule(scope) {
   const rows = await SlotStore.select("gslot_policies", "select=id,rule,updated_at,updated_by&id=eq." + encodeURIComponent(productRuntimeId(scope)) + "&limit=1");
   const row = array(rows)[0], rule = plain(row && row.rule);
@@ -1829,16 +1725,11 @@ async function saveProductJob(job, actorId) {
   const now = iso(); job.updatedAt = now;
   const row = { id: productJobId(job.scope), name: "국가 공식 상품 이미지·원본 링크 리서치 작업", scope_hub: "country-product-reference-research-job", scope_country: job.scope.country, scope_region: job.scope.region === "NATIONWIDE" ? null : job.scope.region, enabled: !["complete","cancelled"].includes(job.status), rule: job, updated_at: now, updated_by: text(actorId) || "country-product-research-orchestrator" };
   if (!job.createdAt) { job.createdAt = now; row.created_at = now; }
-  const chunkedDiscovery=job.discoveryStorage==="chunked_v1", chunkedResults=job.resultStorage==="chunked_v1";
-  const storedRule=Object.assign({},job,{
-    rawProducts:chunkedDiscovery?[]:array(job.rawProducts).map(compactProductWorkingRow),
-    inspectionPool:job.inspectionStorage==="discovery_chunks_v1"?[]:array(job.inspectionPool).map(compactProductWorkingRow),
-    products:chunkedResults?[]:array(job.products).map(compactProductWorkingRow),
-    trace:array(job.trace).slice(-120),errors:array(job.errors).slice(-40)
-  });
-  row.rule=storedRule;
-  await SlotStore.insert("gslot_policies", row, "resolution=merge-duplicates,return=minimal");
-  return job;
+  // The caller already owns the in-memory job object; asking PostgREST to echo
+  // the entire multi-megabyte JSON rule back on every checkpoint doubles the
+  // transfer/memory cost and can turn an otherwise successful durable write
+  // into a gateway timeout.  Persist durably but request no representation.
+  await SlotStore.insert("gslot_policies", row, "resolution=merge-duplicates,return=minimal"); return job;
 }
 function productUrl(item) { return ProductRanking.canonicalProductUrl(first(item && item.productUrl, item && item.url)); }
 function productImageUrl(item) { return ProductRanking.safeProductImageUrl(first(item && item.imageUrl, item && item.imageOriginalUrl)); }
@@ -1932,23 +1823,9 @@ function mergeProductRows(existing, incoming, max) {
 }
 
 function productRawProductCount(job) {
-  if(job&&job.discoveryStorage==="chunked_v1")return Math.max(0,Number(job.discoveryResultCount||0));
   return Math.max(Number(job && job.rawProductCount || 0), array(job && job.rawProducts).length);
 }
 function prepareProductInspectionPhase(job) {
-  if(job&&job.discoveryStorage==="chunked_v1"){
-    job.rawProductCount=Math.max(Number(job.rawProductCount||0),Number(job.discoveryResultCount||0));
-    job.inspectionStorage="discovery_chunks_v1";
-    job.inspectionProcessedBase=0;
-    job.inspectionTotalCount=Math.max(0,Number(job.discoveryResultCount||0));
-    job.inspectCursor=0;
-    job.productInspectionRetryRefs=[];
-    job.productInspectionRetryCounts={};
-    job.productInspectionRetryPending=0;
-    job.inspectionPool=[];
-    job.rawProducts=[];
-    return;
-  }
   const rawCount = array(job.rawProducts).length, pool = incrementalInspectionPool(job);
   job.rawProductCount = Math.max(Number(job.rawProductCount || 0), rawCount);
   job.inspectionPool = pool;
@@ -1957,6 +1834,9 @@ function prepareProductInspectionPhase(job) {
   job.inspectCursor = 0;
   job.productInspectionRetryCounts = plain(job.productInspectionRetryCounts);
   job.productInspectionRetryPending = 0;
+  // The inspection pool is the durable remaining-work copy.  Keeping the same
+  // raw rows in rawProducts as well made each checkpoint carry two complete
+  // product lists before inspected products were added as a third list.
   job.rawProducts = [];
 }
 function compactProductInspectionCheckpoint(job, force) {
@@ -1969,19 +1849,8 @@ function compactProductInspectionCheckpoint(job, force) {
   job.inspectionTotalCount = Math.max(Number(job.inspectionTotalCount || 0), Number(job.inspectionProcessedBase || 0) + array(job.inspectionPool).length);
 }
 function prepareProductStagingPhase(job) {
-  if(job&&job.resultStorage==="chunked_v1"){
-    const stats=plain(job.resultStats),eligible=Math.max(0,Number(stats.queueEligible||0));
-    job.stagePool=[];
-    job.stagePoolFormat="result_cursor_v1";
-    job.stageTotalCount=Math.max(0,Number(job.resultCount||0));
-    job.stageCursor=0;
-    job.stageSummary={eligible,created:0,updated:0,preserved:0,skipped:0,failed:0};
-    job.status="staging";
-    job.inspectionPool=[];
-    job.inspectCursor=Math.max(0,Number(job.inspectionTotalCount||job.inspectCursor||0));
-    job.productInspectionRetryPending=0;
-    return;
-  }
+  // Every row reaching this phase has already been inspected.  Rebuilding the
+  // portfolio from raw discovery rows is both redundant and expensive.
   const portfolio = ProductRanking.buildPortfolio(array(job.products), plain(job.rankingContext));
   const eligible = array(portfolio.products).filter((row) => ProductPipeline.researchReadiness(row).queueEligible === true).slice(0, PRODUCT_PORTFOLIO_LIMIT);
   const seen = new Set(), ids = [];
@@ -2011,69 +1880,16 @@ function productStageBatch(job, start, count) {
   }
   return slice.map((id) => byIdentity.get(text(id)) || byId.get(text(id))).filter(Boolean);
 }
-
-function compactResearchValue(value, depth, key) {
-  depth=Number(depth||0);key=lower(key||"");
-  if(value==null||typeof value==="boolean"||typeof value==="number")return value;
-  if(typeof value==="string")return value.length>1600?value.slice(0,1600):value;
-  if(depth>=4)return undefined;
-  if(/(?:html|body|document|rawhtml|pagehtml|script|stylesheet|headers|cookies|dom|screenshot|binary|base64)/i.test(key))return undefined;
-  if(Array.isArray(value)){
-    const out=[];for(const item of value.slice(0,24)){const v=compactResearchValue(item,depth+1,key);if(v!==undefined)out.push(v);}return out;
-  }
-  if(typeof value==="object"){
-    const out={};let count=0;
-    for(const [k,v0] of Object.entries(value)){
-      if(count>=64)break;
-      if(/(?:html|body|document|rawhtml|pagehtml|script|stylesheet|headers|cookies|dom|screenshot|binary|base64)/i.test(k))continue;
-      const v=compactResearchValue(v0,depth+1,k);if(v!==undefined){out[k]=v;count+=1;}
-    }
-    return out;
-  }
-  return undefined;
-}
-function compactProductWorkingRow(rowInput){
-  const row=plain(rowInput),out=compactResearchValue(row,0,"product")||{};
-  // Always preserve the identity/evidence fields used by ranking, queue staging
-  // and administrator review even if a provider returned a very large object.
-  ["id","productIdentity","productName","title","sourceTitle","productUrl","url","imageUrl","imageOriginalUrl","videoUrl","videoContentUrl","videoEmbedUrl","price","priceCurrency","availability","supplierId","supplierName","supplierSiteUrl","supplierOfficialUrl","supplierType","researchStatus","inspectedAt","updatedAt","lastVerifiedAt","researchCycleJobId","researchResultIndex"].forEach((key)=>{if(row[key]!=null)out[key]=typeof row[key]==="string"&&row[key].length>1600?row[key].slice(0,1600):row[key];});
-  ["inspectionComplete","productPageLive","sameSupplierSite","jsonLdProduct","offerPresent","supplierEvidenceReady","supplierApprovalReady","provisionalName","inspectionDeferred"].forEach((key)=>{if(row[key]!=null)out[key]=row[key];});
-  return out;
-}
-function policySearchTerms(values){
-  const stop=new Set(["공식","업체","상품","제품","관련","위주","우선","선별","리서치","검색","운영","정책","적용","포함","추천","판매","온라인","구매","서비스","the","and","for","with","official","product","products","supplier","suppliers","research","search","priority","policy"]),out=[];
-  for(const raw of array(values)){
-    for(const token of text(raw).toLowerCase().replace(/https?:\/\/\S+/g," ").split(/[^\p{L}\p{N}]+/u)){
-      if(token.length<2||stop.has(token)||out.includes(token))continue;out.push(token);if(out.length>=40)return out;
-    }
-  }
-  return out;
-}
-function supplierPolicyAffinity(item, policyHintsInput){
-  const hints=plain(policyHintsInput),priority=policySearchTerms(array(hints.manualPriorityTargets).concat(array(hints.priorityDirections)).concat(text(hints.finalDecision)?[hints.finalDecision]:[])),avoid=policySearchTerms(array(hints.manualBlockedTargets).concat(array(hints.avoidDirections))),hay=lower([itemTitle(item),item&&item.name,item&&item.url,item&&item.link,item&&item.supplierOfficialUrl,plain(item&&item.payload).supplyLane].map(text).join(" "));
-  let positive=0,negative=0;for(const term of priority)if(hay.includes(term))positive+=1;for(const term of avoid)if(hay.includes(term))negative+=1;
-  return Math.max(-20,Math.min(20,positive*4-negative*8));
-}
 function productProgress(job) {
   const supplierTotal = array(job.supplierSources).length, supplierDone = Math.min(supplierTotal, Number(job.discoveryCursor || 0));
-  let inspectDone,inspectTotal,retryPending;
-  if(job&&job.inspectionStorage==="discovery_chunks_v1"){
-    inspectTotal=Math.max(0,Number(job.inspectionTotalCount||job.discoveryResultCount||0));
-    inspectDone=Math.min(inspectTotal,Math.max(0,Number(job.inspectCursor||0)));
-    retryPending=array(job.productInspectionRetryRefs).length;
-  }else{
-    const legacyInspectTotal = array(job.inspectionPool).length;
-    inspectDone = Number.isFinite(Number(job.inspectionProcessedBase)) || Number.isFinite(Number(job.inspectionTotalCount)) ? Math.max(0, Number(job.inspectionProcessedBase || 0) + Number(job.inspectCursor || 0)) : Math.min(legacyInspectTotal, Number(job.inspectCursor || 0));
-    inspectTotal = Number(job.inspectionTotalCount || 0) > 0 ? Math.max(inspectDone, Number(job.inspectionTotalCount || 0)) : legacyInspectTotal;
-    retryPending=Number(job.productInspectionRetryPending||0);
-  }
-  const stageSummary=plain(job.stageSummary),stageTotal=job&&job.resultStorage==="chunked_v1"?Math.max(0,Number(stageSummary.eligible||plain(job.resultStats).queueEligible||0)):(Number(job.stageTotalCount || 0) > 0 ? Number(job.stageTotalCount || 0) : array(job.stagePool).length);
-  const stageDone=job&&job.resultStorage==="chunked_v1"?Math.min(stageTotal,Math.max(0,Number(stageSummary.created||0)+Number(stageSummary.updated||0)+Number(stageSummary.preserved||0)+Number(stageSummary.skipped||0))):Math.min(stageTotal,Number(job.stageCursor||0));
+  const legacyInspectTotal = array(job.inspectionPool).length, inspectDone = Number.isFinite(Number(job.inspectionProcessedBase)) || Number.isFinite(Number(job.inspectionTotalCount)) ? Math.max(0, Number(job.inspectionProcessedBase || 0) + Number(job.inspectCursor || 0)) : Math.min(legacyInspectTotal, Number(job.inspectCursor || 0));
+  const inspectTotal = Number(job.inspectionTotalCount || 0) > 0 ? Math.max(inspectDone, Number(job.inspectionTotalCount || 0)) : legacyInspectTotal;
+  const stageTotal = Number(job.stageTotalCount || 0) > 0 ? Number(job.stageTotalCount || 0) : array(job.stagePool).length, stageDone = Math.min(stageTotal, Number(job.stageCursor || 0));
   return {
     stage: job.status,
     discovery: { done: supplierDone, total: supplierTotal, retryPending: array(job.supplierRetryQueue).length, temporarilyDeferred: array(job.temporarilyDeferredSupplierKeys).length },
-    inspection: { done: inspectDone, total: inspectTotal, retryPending, temporarilyDeferred: array(job.temporarilyDeferredProductKeys).length },
-    privateQueue: { done: stageDone, total: stageTotal, summary: stageSummary },
+    inspection: { done: inspectDone, total: inspectTotal, retryPending: Number(job.productInspectionRetryPending || 0), temporarilyDeferred: array(job.temporarilyDeferredProductKeys).length },
+    privateQueue: { done: stageDone, total: stageTotal, summary: plain(job.stageSummary) },
     resumable: !["complete","cancelled"].includes(job.status)
   };
 }
@@ -2094,15 +1910,13 @@ function productSupplierResearchCounts(job) {
 function latestResearchProducts(job, rows) {
   if(!job)return[];
   const preserved=new Set(array(job.preservedProductIdentities).map(text).filter(Boolean));
-  const touched=new Set(array(job.currentCycleTouchedIdentities).map(text).filter(Boolean));
   const startedAt=Date.parse(text(job.startedAt))||0;
   const out=[];
   for(const row of array(rows)){
     if(!row)continue;
     const identity=ProductRanking.productIdentity(row);
     const inspectedAt=Date.parse(text(first(row.inspectedAt,row.updatedAt,row.lastVerifiedAt)))||0;
-    const cycleJobId=text(row.researchCycleJobId);
-    if((identity&&touched.has(identity))||(cycleJobId&&cycleJobId===text(job.jobId))||(identity&&!preserved.has(identity))||(startedAt>0&&inspectedAt>=startedAt)){
+    if((identity&&!preserved.has(identity))||(startedAt>0&&inspectedAt>=startedAt)){
       out.push(row);
       if(out.length>=PRODUCT_PORTFOLIO_LIMIT)break;
     }
@@ -2196,62 +2010,78 @@ function publicProductJob(job) {
 }
 
 function compactProductResearchStep(job) {
-  if(!job)return{ok:true,compact:true,reportType:"igdc-country-product-reference-research-progress",version:VERSION,rankingVersion:ProductRanking.VERSION,status:"not_started",progress:{},summary:{},pipeline:{version:ProductPipeline.VERSION,automaticPrivateResearchStaging:true,automaticPublicPublication:false,stageSummary:{},nextGate:"not_started"}};
-  const products=array(job.products),stageSummary=plain(job.stageSummary),supplierResearch=productSupplierResearchCounts(job),chunked=job.resultStorage==="chunked_v1",stats=chunked?plain(job.resultStats):summarizeProductResultRows(products);
-  const decisions=chunked?{slotCandidates:Number(stats.slotCandidates||0),held:Number(stats.held||0),rejected:Number(stats.rejected||0),permanentExcluded:Number(stats.permanentExcluded||0)}:{slotCandidates:0,held:0,rejected:0,permanentExcluded:0};
-  if(!chunked){for(const row of products){const decision=lower(row&&row.slotDecision||"undecided");if(decision==="slot_candidate")decisions.slotCandidates+=1;else if(decision==="hold")decisions.held+=1;else if(decision==="reject")decisions.rejected+=1;else if(decision==="purge")decisions.permanentExcluded+=1;}}
-  const resultCount=chunked?Math.max(0,Number(job.resultCount||0)):products.length;
+  const products = array(job && job.products), stageSummary = plain(job && job.stageSummary), supplierResearch=productSupplierResearchCounts(job);
+  const decisions = { slotCandidates: 0, held: 0, rejected: 0, permanentExcluded: 0 };
+  for (const row of products) {
+    const decision = lower(row && row.slotDecision || "undecided");
+    if (decision === "slot_candidate") decisions.slotCandidates += 1;
+    else if (decision === "hold") decisions.held += 1;
+    else if (decision === "reject") decisions.rejected += 1;
+    else if (decision === "purge") decisions.permanentExcluded += 1;
+  }
   return {
-    ok:true,compact:true,reportType:"igdc-country-product-reference-research-progress",
-    version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:job.jobId,status:job.status,
-    startedAt:job.startedAt,finishedAt:job.finishedAt||null,updatedAt:job.updatedAt||null,scope:job.scope,
-    progress:productProgress(job),
-    summary:Object.assign({
-      suppliers:array(job.supplierSources).length,
-      suppliersChecked:Math.min(array(job.supplierSources).length,Number(job.discoveryCursor||0)),
-      currentSupplierSources:Number(job.currentSupplierSourceCount||array(job.supplierSources).length),
-      existingSupplierSources:supplierResearch.existingTotal,
-      existingSuppliersChecked:supplierResearch.existingChecked,
-      newSupplierSources:supplierResearch.newTotal,
-      newSuppliersChecked:supplierResearch.newChecked,
-      previouslyResearchedSuppliers:supplierResearch.existingTotal,
-      supplierRetryPending:array(job.supplierRetryQueue).length,
-      temporarilyDeferredSuppliers:array(job.temporarilyDeferredSupplierKeys).length,
-      temporarilyDeferredProducts:array(job.temporarilyDeferredProductKeys).length,
-      latestResearchProducts:chunked?resultCount:latestResearchProducts(job,products).length,
-      discovered:resultCount,
-      discoveredRaw:productRawProductCount(job),
-      inspected:chunked?Number(stats.inspected||0):products.filter((row)=>row&&row.inspectionComplete===true).length,
-      withImage:chunked?Number(stats.withImage||0):products.filter((row)=>!!productImageUrl(row)).length,
-      withVideo:chunked?Number(stats.withVideo||0):products.filter((row)=>!!productVideoUrl(row)).length,
-      readyForAdminReview:chunked?Number(stats.readyForAdminReview||0):products.filter((row)=>row&&row.researchStatus==="ready_for_admin_review").length,
-      privateResearchQueueEligible:chunked?Number(stats.queueEligible||0):products.filter((row)=>row&&row.inspectionComplete===true&&ProductPipeline.researchReadiness(row).queueEligible===true).length,
-      privateResearchQueueStaged:Number(stageSummary.created||0)+Number(stageSummary.updated||0)+Number(stageSummary.preserved||0)
-    },decisions),
-    pipeline:{version:ProductPipeline.VERSION,automaticPrivateResearchStaging:true,automaticPublicPublication:false,stageSummary,nextGate:job.status==="complete"?"administrator_product_selection_and_commerce_evidence":text(job.status)},
-    aiAutomationDraft:plain(job.aiAutomationDraft),
-    storage:chunked?{mode:"country_region_chunked_v1",chunkSize:PRODUCT_CHUNK_SIZE,discoveryChunks:Number(job.discoveryChunkCount||0),resultChunks:Number(job.resultChunkCount||0)}:{mode:"legacy_inline"},
-    lastError:job.lastError||null
+    ok: true, compact: true, reportType: "igdc-country-product-reference-research-progress",
+    version: VERSION, rankingVersion: ProductRanking.VERSION, jobId: job.jobId, status: job.status,
+    startedAt: job.startedAt, finishedAt: job.finishedAt || null, updatedAt: job.updatedAt || null, scope: job.scope,
+    progress: productProgress(job),
+    summary: Object.assign({
+      suppliers: array(job.supplierSources).length,
+      suppliersChecked: Math.min(array(job.supplierSources).length, Number(job.discoveryCursor || 0)),
+      currentSupplierSources: Number(job.currentSupplierSourceCount||array(job.supplierSources).length),
+      existingSupplierSources: supplierResearch.existingTotal,
+      existingSuppliersChecked: supplierResearch.existingChecked,
+      newSupplierSources: supplierResearch.newTotal,
+      newSuppliersChecked: supplierResearch.newChecked,
+      previouslyResearchedSuppliers: supplierResearch.existingTotal,
+      supplierRetryPending: array(job.supplierRetryQueue).length,
+      temporarilyDeferredSuppliers: array(job.temporarilyDeferredSupplierKeys).length,
+      temporarilyDeferredProducts: array(job.temporarilyDeferredProductKeys).length,
+      discovered: products.length,
+      discoveredRaw: productRawProductCount(job),
+      inspected: products.filter((row) => row && row.inspectionComplete === true).length,
+      withImage: products.filter((row) => !!productImageUrl(row)).length,
+      withVideo: products.filter((row) => !!productVideoUrl(row)).length,
+      readyForAdminReview: products.filter((row) => row && row.researchStatus === "ready_for_admin_review").length,
+      privateResearchQueueEligible: products.filter((row) => row && row.inspectionComplete === true && ProductPipeline.researchReadiness(row).queueEligible === true).length,
+      privateResearchQueueStaged: Number(stageSummary.created || 0) + Number(stageSummary.updated || 0) + Number(stageSummary.preserved || 0)
+    }, decisions),
+    pipeline: { version: ProductPipeline.VERSION, automaticPrivateResearchStaging: true, automaticPublicPublication: false, stageSummary, nextGate: job.status === "complete" ? "administrator_product_selection_and_commerce_evidence" : text(job.status) },
+    aiAutomationDraft: plain(job.aiAutomationDraft),
+    lastError: job.lastError || null
   };
 }
 
-async function fastProductResearchStatus(job, input) {
-  const options=plain(input);
-  if(!job)return{ok:true,fast:true,reportType:"igdc-country-product-reference-research-status",version:VERSION,rankingVersion:ProductRanking.VERSION,status:"not_started",products:[],latestProducts:[],summary:{},progress:{},pagination:{enabled:true,offset:0,limit:0,total:0,returned:0,nextOffset:null,hasMore:false}};
-  const base=compactProductResearchStep(job),token=text(options.fast),match=/^(page|latest):(\d+):(\d+)$/.exec(token);
-  if(job.resultStorage==="chunked_v1"){
-    const kind=match?match[1]:"page",total=Math.max(0,Number(job.resultCount||0)),offset=match?Math.max(0,Math.min(total,Number(match[2]||0))):0,limit=match?Math.max(25,Math.min(PRODUCT_STATUS_PAGE_LIMIT,Number(match[3]||PRODUCT_STATUS_PAGE_LIMIT))):PRODUCT_STATUS_PAGE_LIMIT;
-    const rows=await readProductChunkRange(job,"result",offset,limit),nextOffset=offset+rows.length;
-    base.fast=true;base.reportType="igdc-country-product-reference-research-fast-status";
-    base.products=kind==="latest"?[]:rows;
-    base.latestProducts=kind==="latest"?rows:[];
-    base.pagination={enabled:true,kind,offset,limit,total,returned:rows.length,nextOffset:nextOffset<total?nextOffset:null,hasMore:nextOffset<total};
-    return base;
-  }
-  const allProducts=array(job.products).filter((row)=>{if(!row)return false;const url=productUrl(row),image=productImageUrl(row),decision=lower(row.slotDecision||"undecided");return!!url||!!image||decision!=="undecided"||row.inspectionComplete===true;}).slice(0,PRODUCT_PORTFOLIO_LIMIT),allLatest=latestResearchProducts(job,allProducts);
-  const legacyMatch=/^(page|latest):(\d+):(\d+)$/.exec(token),kind=legacyMatch?legacyMatch[1]:"page",sourceRows=kind==="latest"?allLatest:allProducts,offset=legacyMatch?Math.max(0,Math.min(sourceRows.length,Number(legacyMatch[2]||0))):0,limit=legacyMatch?Math.max(25,Math.min(PRODUCT_STATUS_PAGE_LIMIT,Number(legacyMatch[3]||PRODUCT_STATUS_PAGE_LIMIT))):PRODUCT_STATUS_PAGE_LIMIT,rows=sourceRows.slice(offset,offset+limit),nextOffset=offset+rows.length;
-  const latestKeys=new Set(allLatest.map((row)=>text(row&&row.id)||productUrl(row)||ProductRanking.productIdentity(row)).filter(Boolean));
-  base.fast=true;base.reportType="igdc-country-product-reference-research-fast-status";base.products=kind==="latest"?[]:rows;base.latestProducts=kind==="latest"?rows:rows.filter((row)=>latestKeys.has(text(row&&row.id)||productUrl(row)||ProductRanking.productIdentity(row)));base.pagination={enabled:true,kind,offset,limit,total:sourceRows.length,returned:rows.length,nextOffset:nextOffset<sourceRows.length?nextOffset:null,hasMore:nextOffset<sourceRows.length};base.summary=Object.assign({},plain(base.summary),{latestResearchProducts:allLatest.length});return base;
+function fastProductResearchStatus(job, input) {
+  const options = plain(input);
+  if (!job) return { ok: true, fast: true, reportType: "igdc-country-product-reference-research-status", version: VERSION, rankingVersion: ProductRanking.VERSION, status: "not_started", products: [], latestProducts: [], summary: {}, progress: {}, pagination: { enabled: true, offset: 0, limit: 0, total: 0, returned: 0, nextOffset: null, hasMore: false } };
+  const base = compactProductResearchStep(job);
+  const allProducts = array(job.products).filter((row) => {
+    if (!row) return false;
+    const url = productUrl(row), image = productImageUrl(row), decision = lower(row.slotDecision || "undecided");
+    return !!url || !!image || decision !== "undecided" || row.inspectionComplete === true;
+  }).slice(0, PRODUCT_PORTFOLIO_LIMIT);
+  const token = text(options.fast);
+  const pageMatch = /^page:(\d+):(\d+)$/.exec(token);
+  const offset = pageMatch ? Math.max(0, Math.min(allProducts.length, Math.floor(Number(pageMatch[1] || 0) || 0))) : 0;
+  const limit = pageMatch ? Math.max(25, Math.min(PRODUCT_STATUS_PAGE_LIMIT, Math.floor(Number(pageMatch[2] || PRODUCT_STATUS_PAGE_LIMIT) || PRODUCT_STATUS_PAGE_LIMIT))) : PRODUCT_STATUS_PAGE_LIMIT;
+  const products = allProducts.slice(offset, offset + limit);
+  const allLatest = latestResearchProducts(job, allProducts);
+  const latestKeys = new Set(allLatest.map((row) => text(row && row.id) || productUrl(row) || ProductRanking.productIdentity(row)).filter(Boolean));
+  const latestProducts = products.filter((row) => latestKeys.has(text(row && row.id) || productUrl(row) || ProductRanking.productIdentity(row)));
+  const settlement = allProducts.map((row) => normalizeAffiliateSettlement(row && row.affiliateSettlement, { existing: row && row.affiliateSettlement }));
+  const nextOffset = offset + products.length;
+  base.fast = true;
+  base.reportType = "igdc-country-product-reference-research-fast-status";
+  base.products = products;
+  base.latestProducts = latestProducts;
+  base.pagination = { enabled: true, offset, limit, total: allProducts.length, returned: products.length, nextOffset: nextOffset < allProducts.length ? nextOffset : null, hasMore: nextOffset < allProducts.length };
+  base.summary = Object.assign({}, plain(base.summary), {
+    latestResearchProducts: allLatest.length,
+    settlementReadyProducts: settlement.filter((row) => row.settlementReady === true).length,
+    onlineAffiliateActive: settlement.filter((row) => affiliateSettlementStage(row.stage) === "online_affiliate_active" && row.settlementReady === true).length,
+    formalPartners: settlement.filter((row) => affiliateSettlementStage(row.stage) === "formal_partner" && row.settlementReady === true).length
+  });
+  return base;
 }
 
 function productResearchStepResponse(job, input) {
@@ -2326,13 +2156,7 @@ async function productRankingContext(scope) {
     marketSignalSources: array(marketPlan.sourcePlans),
     administratorPolicyActive: policyControl && policyControl.active === true,
     administratorPolicySources: array(policyControl && policyControl.sources),
-    priorityDirections: array(policyControl && policyControl.priorityDirections),
-    avoidDirections: array(policyControl && policyControl.avoidDirections),
-    manualPriorityTargets: array(policyControl && policyControl.manualPriorityTargets),
-    manualBlockedTargets: array(policyControl && policyControl.manualBlockedTargets),
-    finalDecision: text(policyControl && policyControl.finalDecision),
-    policyPrecedence: array(policyControl && policyControl.precedence),
-    safety: { advisoryWeightsOnly: true, administratorPolicyRankingApplied: true, riskGateChanged: false, supplierApprovalChanged: false, productImport: false, publicPublication: false }
+    safety: { advisoryWeightsOnly: true, riskGateChanged: false, supplierApprovalChanged: false, productImport: false, publicPublication: false }
   };
 }
 async function beginProductResearchJob(actorId, input) {
@@ -2416,11 +2240,11 @@ async function beginProductResearchJob(actorId, input) {
   // upserts those rows back into the durable candidate ledger, where identical
   // products are preserved, changed products are refreshed in place and truly
   // new products are appended.
-  const previousCycleProductCount=existing&&existing.schema===PRODUCT_JOB_SCHEMA?(existing.resultStorage==="chunked_v1"?Number(existing.resultCount||0):array(existing.products).length):0;
+  const previousCycleProductCount=existing&&existing.schema===PRODUCT_JOB_SCHEMA?array(existing.products).length:0;
   const cycleResearchedKeys=forceSourceRefresh?[]:Array.from(priorResearchedKeys);
-  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:0,preservedRawCount:0,candidateLedgerBaseline:true,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,discoveryStorage:"chunked_v1",discoveryResultCount:0,discoveryChunkCount:0,discoveryIdentities:[],rawProducts:[],rawProductCount:0,inspectionStorage:"discovery_chunks_v1",inspectionPool:[],inspectionProcessedBase:0,inspectionTotalCount:0,inspectCursor:0,productInspectionRetryRefs:[],productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],resultStorage:"chunked_v1",resultCount:0,resultChunkCount:0,resultIdentities:[],resultStats:summarizeProductResultRows([]),products:[],preservedProductIdentities:[],currentCycleTouchedIdentities:[],stagePool:[],stagePoolFormat:"result_cursor_v1",stageTotalCount:0,stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},partialQueueStagedIdentities:[],partialQueueLast:null,trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"candidate_ledger_preserved_supplier_rescan_started":"candidate_ledger_preserved_supplier_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,newSupplierSources:newSupplierSourceCount,previousResearchPayloadProducts:previousCycleProductCount,storage:"country_region_chunked_v1",chunkSize:PRODUCT_CHUNK_SIZE,canonicalBaseline:"gslot_candidates_private_product_ledger",sourcePolicy:forceSourceRefresh?"preserve_candidate_ledger; lightweight_chunked_new_cycle; restart_from_first_current_active_supplier_every_click; rescan_existing_and_new_suppliers; upsert_changed_products_in_place; append_only_truly_new_products; no_publication":"preserve_candidate_ledger; lightweight_chunked_new_cycle; research_only_unresearched_supplier_delta; upsert_changed_products_in_place; append_only_truly_new_products; no_publication"}],errors:[],lastError:null};
+  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:0,preservedRawCount:0,candidateLedgerBaseline:true,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,rawProducts:[],rawProductCount:0,inspectionPool:[],inspectionProcessedBase:0,inspectionTotalCount:0,inspectCursor:0,productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],products:[],preservedProductIdentities:[],stagePool:[],stagePoolFormat:"identity_v1",stageTotalCount:0,stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},partialQueueStagedIdentities:[],partialQueueLast:null,trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"candidate_ledger_preserved_supplier_rescan_started":"candidate_ledger_preserved_supplier_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,newSupplierSources:newSupplierSourceCount,previousResearchPayloadProducts:previousCycleProductCount,canonicalBaseline:"gslot_candidates_private_product_ledger",sourcePolicy:forceSourceRefresh?"preserve_candidate_ledger; lightweight_new_cycle; restart_from_first_current_active_supplier_every_click; rescan_existing_and_new_suppliers; upsert_changed_products_in_place; append_only_truly_new_products; no_publication":"preserve_candidate_ledger; research_only_unresearched_supplier_delta; upsert_changed_products_in_place; append_only_truly_new_products; no_publication"}],errors:[],lastError:null};
   await saveProductJob(job,actorId);
-  await saveProductRuntime(scope,actorId,{jobId:job.jobId,pauseRequested:false,paused:false,pauseMode:"manual",pauseRequestedAt:null,resumedAt:null,partialQueueScanCursor:0,partialQueueStagedIdentities:[],partialQueueUnstagedIdentities:[],partialQueueLast:null,checkpoint:productRuntimeCheckpoint(compactProductResearchStep(job),scope)});
+  await saveProductRuntime(scope,actorId,{jobId:job.jobId,pauseRequested:false,paused:false,pauseMode:"manual",pauseRequestedAt:null,resumedAt:null,partialQueueStagedIdentities:[],partialQueueUnstagedIdentities:[],partialQueueLast:null,checkpoint:productRuntimeCheckpoint(compactProductResearchStep(job),scope)});
   // product_research_begin only needs to return progress metadata.  Returning
   // the full historical product payload recreates the exact large-response
   // failure this lightweight cycle is designed to remove.
@@ -2436,226 +2260,142 @@ function incrementalInspectionPool(job) {
   return RegionalSelector.prepareProductInspectionPool(currentCycleRows,{limit:Math.max(120,Math.min(PRODUCT_PORTFOLIO_LIMIT,array(job.supplierSources).length*40))});
 }
 async function productResearchJobStatus(input) {
-  const options=plain(input),scope=researchScope(options),compactRequested=options.compact===true||options.compact==="1"||lower(options.compact)==="true";
-  let runtime={};try{runtime=await productRuntimeRule(scope);}catch(_runtimeReadError){runtime={};}
-  if(compactRequested&&runtime.pauseRequested===true&&runtime.checkpoint&&(!text(runtime.jobId)||text(runtime.jobId)===text(runtime.checkpoint.jobId)))return attachProductRuntime(productRuntimeCheckpoint(runtime.checkpoint,scope),runtime);
-  const job=await loadProductResearchJob(scope);
-  if(compactRequested)return attachProductRuntime(compactProductResearchStep(job),runtime);
-  if(options.fast===true||options.fast==="1"||lower(options.fast)==="true"||/^(?:page|latest):\d+:\d+$/.test(text(options.fast)))return attachProductRuntime(await fastProductResearchStatus(job,options),runtime);
-  if(job&&job.resultStorage==="chunked_v1"){
-    const rows=await readAllProductChunkRows(job,"result"),view=Object.assign({},job,{products:rows,rawProducts:[]});
-    return attachProductRuntime(publicProductJob(view),runtime);
+  const options = plain(input), scope = researchScope(options), compactRequested = options.compact === true || options.compact === "1" || lower(options.compact) === "true";
+  let runtime = {};
+  try { runtime = await productRuntimeRule(scope); } catch (_runtimeReadError) { runtime = {}; }
+  // A pause checkpoint is deliberately kept in its own small row.  When the
+  // previous in-flight request ended in 502/504/521, the admin page can recover
+  // the exact last acknowledged progress without first pulling the multi-MB
+  // product job merely to decide whether the pause button should be active.
+  if (compactRequested && runtime.pauseRequested === true && runtime.checkpoint && (!text(runtime.jobId) || text(runtime.jobId) === text(runtime.checkpoint.jobId))) {
+    return attachProductRuntime(productRuntimeCheckpoint(runtime.checkpoint, scope), runtime);
   }
-  return attachProductRuntime(publicProductJob(job),runtime);
+  const job = await loadProductResearchJob(scope);
+  if (compactRequested) return attachProductRuntime(compactProductResearchStep(job), runtime);
+  if (options.fast === true || options.fast === "1" || lower(options.fast) === "true" || /^page:\d+:\d+$/.test(text(options.fast))) return attachProductRuntime(fastProductResearchStatus(job, options), runtime);
+  return attachProductRuntime(publicProductJob(job), runtime);
 }
 async function advanceProductResearchJob(actorId, input) {
-  const scope=researchScope(input),requestedJobId=text(input&&input.jobId);
-  let runtime={};try{runtime=await productRuntimeRule(scope);}catch(_runtimeReadError){runtime={};}
-  const pauseMatches=runtime.pauseRequested===true&&(!text(runtime.jobId)||!requestedJobId||text(runtime.jobId)===requestedJobId);
-  if(pauseMatches&&runtime.checkpoint)return attachProductRuntime(productRuntimeCheckpoint(runtime.checkpoint,scope),runtime);
-  const job=await productJobRule(scope);if(!job||job.schema!==PRODUCT_JOB_SCHEMA){const error=new Error("진행 중인 공식 상품 리서치 작업이 없습니다.");error.statusCode=404;throw error;}
-  if(requestedJobId&&text(job.jobId)&&requestedJobId!==text(job.jobId)){const error=new Error("현재 국가·지역의 최신 상품 리서치 작업과 요청 작업 ID가 일치하지 않습니다.");error.statusCode=409;throw error;}
-  if(pauseMatches)return attachProductRuntime(productResearchStepResponse(job,input),runtime);
-  if(["complete","cancelled"].includes(job.status))return attachProductRuntime(productResearchStepResponse(job,input),runtime);
-
-  // Legacy v12.10/v12.11 jobs may already contain hundreds of inspected rows in
-  // one JSON rule. Migrate only a few 50-row chunks per request before doing any
-  // new network work. The legacy array is dropped only after every chunk exists.
-  if(job.resultStorage!=="chunked_v1"&&array(job.products).length>80){
-    const migration=await migrateLegacyProductResultsStep(job,actorId,3);
-    if(!migration.complete){
-      const view=compactProductResearchStep(job);view.migration=Object.assign({active:true,kind:"legacy_results_to_country_region_chunks"},migration);
-      return attachProductRuntime(view,runtime);
-    }
-  }
-
-  try{
-    if(job.status==="discovering"){
+  const scope = researchScope(input), requestedJobId = text(input && input.jobId);
+  let runtime = {};
+  try { runtime = await productRuntimeRule(scope); } catch (_runtimeReadError) { runtime = {}; }
+  const pauseMatches = runtime.pauseRequested === true && (!text(runtime.jobId) || !requestedJobId || text(runtime.jobId) === requestedJobId);
+  if (pauseMatches && runtime.checkpoint) return attachProductRuntime(productRuntimeCheckpoint(runtime.checkpoint, scope), runtime);
+  const job = await productJobRule(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("진행 중인 공식 상품 리서치 작업이 없습니다."); error.statusCode = 404; throw error; }
+  if (pauseMatches) return attachProductRuntime(productResearchStepResponse(job, input), runtime);
+  if (["complete","cancelled"].includes(job.status)) return attachProductRuntime(productResearchStepResponse(job, input), runtime);
+  try {
+    if (job.status === "discovering") {
       const sources=array(job.supplierSources),cursor=Number(job.discoveryCursor||0),retryQueue=array(job.supplierRetryQueue);
       let source=null,retryKey="",retryMode=false;
-      if(cursor<sources.length)source=sources[cursor];
+      if(cursor<sources.length){source=sources[cursor];}
       else if(retryQueue.length){retryKey=text(retryQueue.shift());job.supplierRetryQueue=retryQueue;source=sources.find((row)=>productSupplierSourceKey(row)===retryKey)||null;retryMode=true;}
-      if(!source){prepareProductInspectionPhase(job);job.status="inspecting";}
-      else{
+      if (!source) { prepareProductInspectionPhase(job); job.status = "inspecting"; }
+      else {
         let result;
-        try{result=await RegionalSelector.discoverSupplierProductsStep(source,{country:scope.country,region:scope.region,limit:100,timeoutMs:7000});}
-        catch(discoveryError){result={ok:true,items:[],retryable:true,trace:{source:"supplier-product-discovery",status:"step_exception",detail:text(discoveryError&&discoveryError.message),code:text(discoveryError&&discoveryError.code)||null,retryable:true}};job.errors=array(job.errors).concat([{at:iso(),stage:"discovering",supplierKey:productSupplierSourceKey(source),message:text(discoveryError&&discoveryError.message)||"supplier_product_discovery_failed",recoverable:true}]).slice(-60);}
-        const sourceSettlement=normalizeAffiliateSettlement(source.affiliateSettlement,{existing:source.affiliateSettlement});
-        const discoveredItems=array(result.items).map((row)=>compactProductWorkingRow(Object.assign({},row,{affiliateSettlement:sourceSettlement,affiliateStage:sourceSettlement.stage,supplierAdminPinned:source.adminPinned===true,supplierAffiliatePriority:sourceSettlement.stageRank})));
-        if(job.discoveryStorage==="chunked_v1"){
-          await appendProductChunkRows(job,"discovery",discoveredItems,actorId);
-          job.rawProductCount=Math.max(Number(job.rawProductCount||0),Number(job.discoveryResultCount||0));
-        }else job.rawProducts=mergeProductRows(job.rawProducts,discoveredItems,PRODUCT_PORTFOLIO_LIMIT);
-        const researchedKey=productSupplierSourceKey(source),trace=plain(result.trace),retryable=result.retryable===true||trace.retryable===true,retryCounts=plain(job.supplierDiscoveryRetryCounts);job.supplierDiscoveryRetryCounts=retryCounts;
-        if(retryable&&!discoveredItems.length&&researchedKey){const attempt=Number(retryCounts[researchedKey]||0)+1;retryCounts[researchedKey]=attempt;if(attempt<3){const queue=array(job.supplierRetryQueue);if(!queue.includes(researchedKey))queue.push(researchedKey);job.supplierRetryQueue=queue;}else{const deferred=array(job.temporarilyDeferredSupplierKeys);if(!deferred.includes(researchedKey))deferred.push(researchedKey);job.temporarilyDeferredSupplierKeys=deferred;}}
-        else if(researchedKey){if(!array(job.researchedSupplierKeys).includes(researchedKey))job.researchedSupplierKeys=array(job.researchedSupplierKeys).concat([researchedKey]);job.temporarilyDeferredSupplierKeys=array(job.temporarilyDeferredSupplierKeys).filter((key)=>key!==researchedKey);}
+        try{
+          result=await RegionalSelector.discoverSupplierProductsStep(source,{country:scope.country,region:scope.region,limit:100,timeoutMs:7500});
+        }catch(discoveryError){
+          result={ok:true,items:[],retryable:true,trace:{source:"supplier-product-discovery",status:"step_exception",detail:text(discoveryError&&discoveryError.message),code:text(discoveryError&&discoveryError.code)||null,retryable:true}};
+          job.errors=array(job.errors).concat([{at:iso(),stage:"discovering",supplierKey:productSupplierSourceKey(source),message:text(discoveryError&&discoveryError.message)||"supplier_product_discovery_failed",recoverable:true}]).slice(-60);
+        }
+        const sourceSettlement = normalizeAffiliateSettlement(source.affiliateSettlement, { existing: source.affiliateSettlement });
+        const discoveredItems = array(result.items).map((row) => Object.assign({}, row, { affiliateSettlement: sourceSettlement, affiliateStage: sourceSettlement.stage, supplierAdminPinned: source.adminPinned === true, supplierAffiliatePriority: sourceSettlement.stageRank }));
+        job.rawProducts = mergeProductRows(job.rawProducts, discoveredItems, PRODUCT_PORTFOLIO_LIMIT);
+        const researchedKey=productSupplierSourceKey(source),trace=plain(result.trace),retryable=result.retryable===true||trace.retryable===true;
+        const retryCounts=plain(job.supplierDiscoveryRetryCounts);job.supplierDiscoveryRetryCounts=retryCounts;
+        if(retryable&&!discoveredItems.length&&researchedKey){
+          const attempt=Number(retryCounts[researchedKey]||0)+1;retryCounts[researchedKey]=attempt;
+          if(attempt<3){const queue=array(job.supplierRetryQueue);if(!queue.includes(researchedKey))queue.push(researchedKey);job.supplierRetryQueue=queue;}
+          else{const deferred=array(job.temporarilyDeferredSupplierKeys);if(!deferred.includes(researchedKey))deferred.push(researchedKey);job.temporarilyDeferredSupplierKeys=deferred;}
+        }else if(researchedKey){
+          if(!array(job.researchedSupplierKeys).includes(researchedKey))job.researchedSupplierKeys=array(job.researchedSupplierKeys).concat([researchedKey]);
+          job.temporarilyDeferredSupplierKeys=array(job.temporarilyDeferredSupplierKeys).filter((key)=>key!==researchedKey);
+        }
         if(!retryMode)job.discoveryCursor=cursor+1;
-        job.trace=array(job.trace).concat([Object.assign({at:iso(),supplierIndex:retryMode?cursor:job.discoveryCursor-1,supplierKey:researchedKey||null,retryMode,retryAttempt:researchedKey?Number(retryCounts[researchedKey]||0):0,chunked:job.discoveryStorage==="chunked_v1",discoveredTotal:productRawProductCount(job)},trace)]).slice(-240);
-        if(job.discoveryCursor>=sources.length&&!array(job.supplierRetryQueue).length){prepareProductInspectionPhase(job);job.status="inspecting";}
+        job.trace = array(job.trace).concat([Object.assign({ at: iso(), supplierIndex: retryMode?cursor:job.discoveryCursor-1, supplierKey:researchedKey||null, retryMode, retryAttempt:researchedKey?Number(retryCounts[researchedKey]||0):0 }, trace)]).slice(-240);
+        if (job.discoveryCursor >= sources.length && !array(job.supplierRetryQueue).length) { prepareProductInspectionPhase(job); job.status = "inspecting"; }
       }
-    }else if(job.status==="inspecting"){
-      if(job.inspectionStorage==="discovery_chunks_v1"){
-        const total=Math.max(0,Number(job.inspectionTotalCount||job.discoveryResultCount||0)),sequentialCursor=Math.min(total,Math.max(0,Number(job.inspectCursor||0))),retryRefs=array(job.productInspectionRetryRefs);
-        let refs=[],sequential=false;
-        if(sequentialCursor<total){sequential=true;for(let index=sequentialCursor;index<Math.min(total,sequentialCursor+2);index++)refs.push({index,attempt:0});}
-        else if(retryRefs.length){refs=retryRefs.splice(0,2);job.productInspectionRetryRefs=retryRefs;}
-        if(!refs.length){prepareProductStagingPhase(job);}
-        else{
-          const sourceRows=[];
-          for(const ref of refs){const row=(await readProductChunkRange(job,"discovery",Number(ref.index||0),1))[0];if(row)sourceRows.push(Object.assign({},row,{_researchSourceIndex:Number(ref.index||0),_researchRetryAttempt:Number(ref.attempt||0)}));}
-          const result=sourceRows.length?await RegionalSelector.inspectProductResearchStep(sourceRows,{country:scope.country,region:scope.region,timeoutMs:6000}):{items:[]};
-          const completed=[],deferredKeys=array(job.temporarilyDeferredProductKeys),pending=array(job.productInspectionRetryRefs);
-          const byIndex=new Map(sourceRows.map((row)=>[Number(row._researchSourceIndex),row]));
-          for(let pos=0;pos<sourceRows.length;pos++){
-            const sourceRow=sourceRows[pos],item=array(result.items)[pos]||sourceRow,index=Number(sourceRow._researchSourceIndex),identity=ProductRanking.productIdentity(item)||ProductRanking.productIdentity(sourceRow),retryable=item&&item.inspectionDeferred===true,previousAttempt=Number(sourceRow._researchRetryAttempt||0);
-            if(retryable){
-              const attempt=previousAttempt+1;
-              if(attempt<3&&!pending.some((ref)=>Number(ref.index)===index))pending.push({index,attempt});
-              else if(identity&&!deferredKeys.includes(identity))deferredKeys.push(identity);
-            }else{
-              const compactItem=compactProductWorkingRow(Object.assign({},item,{inspectedAt:text(item&&item.inspectedAt)||iso(),researchCycleJobId:job.jobId}));
-              completed.push(compactItem);
-              if(identity){const at=deferredKeys.indexOf(identity);if(at>=0)deferredKeys.splice(at,1);}
+    } else if (job.status === "inspecting") {
+      const batch = array(job.inspectionPool).slice(Number(job.inspectCursor || 0), Number(job.inspectCursor || 0) + 4);
+      if (!batch.length) {
+        prepareProductStagingPhase(job);
+      } else {
+        const result = await RegionalSelector.inspectProductResearchStep(batch, { country: scope.country, region: scope.region, timeoutMs: 6500 });
+        const retryCounts=plain(job.productInspectionRetryCounts),deferredKeys=array(job.temporarilyDeferredProductKeys),completed=[];let retryPending=0;
+        job.productInspectionRetryCounts=retryCounts;
+        for(const item of array(result.items)){
+          const identity=ProductRanking.productIdentity(item),retryable=item&&item.inspectionDeferred===true;
+          if(retryable&&identity){
+            const attempt=Number(retryCounts[identity]||0)+1;retryCounts[identity]=attempt;
+            if(attempt<3){job.inspectionPool=array(job.inspectionPool).concat([Object.assign({},item,{inspectionDeferred:false})]);retryPending+=1;}
+            else if(!deferredKeys.includes(identity))deferredKeys.push(identity);
+          }else{completed.push(item);if(identity){const index=deferredKeys.indexOf(identity);if(index>=0)deferredKeys.splice(index,1);}}
+        }
+        if(completed.length)job.products = mergeProductRows(job.products, completed, PRODUCT_PORTFOLIO_LIMIT);
+        job.temporarilyDeferredProductKeys=deferredKeys;job.productInspectionRetryPending=retryPending;
+        job.inspectCursor = Number(job.inspectCursor || 0) + batch.length;
+        job.inspectionTotalCount = Math.max(Number(job.inspectionTotalCount || 0), Number(job.inspectionProcessedBase || 0) + array(job.inspectionPool).length);
+        const beforeCompactProgress = productProgress(job);
+        job.trace = array(job.trace).concat([{ at: iso(), source: "product-page-inspection", status: "ok", count: completed.length, deferred: array(result.items).length-completed.length, retryPending, done: Number(beforeCompactProgress.inspection.done||0), total: Number(beforeCompactProgress.inspection.total||0) }]).slice(-240);
+        if (job.inspectCursor >= array(job.inspectionPool).length) {
+          compactProductInspectionCheckpoint(job, true);
+          prepareProductStagingPhase(job);
+        } else {
+          compactProductInspectionCheckpoint(job, false);
+        }
+      }
+    } else if (job.status === "staging") {
+      const stageSlice = array(job.stagePool).slice(Number(job.stageCursor || 0), Number(job.stageCursor || 0) + PRODUCT_STAGE_BATCH), batch = productStageBatch(job, Number(job.stageCursor || 0), PRODUCT_STAGE_BATCH);
+      if (!stageSlice.length) { job.status = "complete"; job.finishedAt = iso(); }
+      else if (!batch.length) {
+        job.stageSummary.skipped = Number(job.stageSummary.skipped || 0) + stageSlice.length;
+        job.stageCursor = Number(job.stageCursor || 0) + stageSlice.length;
+        if (job.stageCursor >= Number(job.stageTotalCount || array(job.stagePool).length)) { job.status = "complete"; job.finishedAt = iso(); }
+      } else {
+        // The normal completion queue keeps the established 12-item checkpoint
+        // size, but DB writes are deliberately capped to four concurrent rows.
+        // A 12-way Promise.all spike was unnecessary and could collide with the
+        // large research-job checkpoint on slower Supabase/Netlify intervals.
+        const missingFromBatch = Math.max(0, stageSlice.length - batch.length);
+        if (missingFromBatch) job.stageSummary.skipped = Number(job.stageSummary.skipped || 0) + missingFromBatch;
+        for (let offset = 0; offset < batch.length; offset += PRODUCT_STAGE_CONCURRENCY) {
+          const group = batch.slice(offset, offset + PRODUCT_STAGE_CONCURRENCY);
+          const settled = await Promise.allSettled(group.map((product) => syncProductResearchPreview(actorId, scope, product)));
+          for (let resultIndex = 0; resultIndex < settled.length; resultIndex += 1) {
+            const result = settled[resultIndex], stagedProduct = group[resultIndex];
+            if (result.status !== "fulfilled") { job.stageSummary.failed += 1; job.errors = array(job.errors).concat([{ at: iso(), stage: "staging", message: text(result.reason && result.reason.message || result.reason) }]); continue; }
+            const state = text(result.value && result.value.status), preservedDecision = lower(result.value && result.value.decision), identity = ProductRanking.productIdentity(stagedProduct);
+            if (["slot_candidate","hold","reject","purge"].includes(preservedDecision)) {
+              const productIndex = array(job.products).findIndex((row) => ProductRanking.productIdentity(row) === identity);
+              if (productIndex >= 0) {
+                job.products[productIndex] = Object.assign({}, job.products[productIndex], { slotDecision: preservedDecision, publicPublication: false, automaticImport: false });
+                if (preservedDecision === "slot_candidate") job.products[productIndex].approvedPlacement = plain(result.value.approvedPlacement);
+                else delete job.products[productIndex].approvedPlacement;
+              }
             }
+            if (/created/.test(state)) job.stageSummary.created += 1;
+            else if (/updated/.test(state)) job.stageSummary.updated += 1;
+            else if (/preserved/.test(state)) job.stageSummary.preserved += 1;
+            else job.stageSummary.skipped += 1;
           }
-          if(completed.length)await appendInspectedProductResults(job,completed,actorId);
-          if(sequential)job.inspectCursor=Math.min(total,sequentialCursor+refs.length);
-          job.productInspectionRetryRefs=pending.slice(0,PRODUCT_PORTFOLIO_LIMIT);job.productInspectionRetryPending=job.productInspectionRetryRefs.length;job.temporarilyDeferredProductKeys=deferredKeys;
-          const progress=productProgress(job);job.trace=array(job.trace).concat([{at:iso(),source:"product-page-inspection",status:"ok",count:completed.length,deferred:sourceRows.length-completed.length,retryPending:job.productInspectionRetryRefs.length,done:Number(progress.inspection.done||0),total:Number(progress.inspection.total||0),chunked:true}]).slice(-240);
-          if(Number(job.inspectCursor||0)>=total&&!job.productInspectionRetryRefs.length)prepareProductStagingPhase(job);
         }
-      }else{
-        const batch=array(job.inspectionPool).slice(Number(job.inspectCursor||0),Number(job.inspectCursor||0)+2);
-        if(!batch.length)prepareProductStagingPhase(job);
-        else{
-          const result=await RegionalSelector.inspectProductResearchStep(batch,{country:scope.country,region:scope.region,timeoutMs:6000}),retryCounts=plain(job.productInspectionRetryCounts),deferredKeys=array(job.temporarilyDeferredProductKeys),completed=[];let retryPending=0;job.productInspectionRetryCounts=retryCounts;
-          for(const item of array(result.items)){const identity=ProductRanking.productIdentity(item),retryable=item&&item.inspectionDeferred===true;if(retryable&&identity){const attempt=Number(retryCounts[identity]||0)+1;retryCounts[identity]=attempt;if(attempt<3){job.inspectionPool=array(job.inspectionPool).concat([Object.assign({},item,{inspectionDeferred:false})]);retryPending+=1;}else if(!deferredKeys.includes(identity))deferredKeys.push(identity);}else{const compactItem=compactProductWorkingRow(Object.assign({},item,{inspectedAt:text(item&&item.inspectedAt)||iso(),researchCycleJobId:job.jobId}));completed.push(compactItem);}}
-          if(completed.length){if(job.resultStorage==="chunked_v1")await appendInspectedProductResults(job,completed,actorId);else job.products=mergeProductRows(job.products,completed,PRODUCT_PORTFOLIO_LIMIT);}
-          job.temporarilyDeferredProductKeys=deferredKeys;job.productInspectionRetryPending=retryPending;job.inspectCursor=Number(job.inspectCursor||0)+batch.length;job.inspectionTotalCount=Math.max(Number(job.inspectionTotalCount||0),Number(job.inspectionProcessedBase||0)+array(job.inspectionPool).length);
-          const progress=productProgress(job);job.trace=array(job.trace).concat([{at:iso(),source:"product-page-inspection",status:"ok",count:completed.length,deferred:array(result.items).length-completed.length,retryPending,done:Number(progress.inspection.done||0),total:Number(progress.inspection.total||0),chunked:job.resultStorage==="chunked_v1"}]).slice(-240);
-          if(job.inspectCursor>=array(job.inspectionPool).length){compactProductInspectionCheckpoint(job,true);prepareProductStagingPhase(job);}else compactProductInspectionCheckpoint(job,false);
-        }
-      }
-    }else if(job.status==="staging"){
-      if(job.resultStorage==="chunked_v1"){
-        const total=Math.max(0,Number(job.resultCount||0)),start=Math.max(0,Number(job.stageCursor||0)),handled=new Set(array(runtime.partialQueueStagedIdentities).map(text).filter(Boolean)),explicitlyUnstaged=new Set(array(runtime.partialQueueUnstagedIdentities).map(text).filter(Boolean));
-        if(start>=total){job.status="complete";job.finishedAt=iso();job.stageSummary.failed=0;}
-        else{
-          const sourceRows=await readProductChunkRange(job,"result",start,Math.min(30,total-start)),evaluated=ProductRanking.buildPortfolio(sourceRows,plain(job.rankingContext)).products,evaluatedMap=new Map(array(evaluated).map((row)=>[ProductRanking.productIdentity(row)||text(row&&row.id),row])),batch=[];let scanned=0;
-          for(let i=0;i<sourceRows.length;i++){const raw=sourceRows[i],identity=ProductRanking.productIdentity(raw)||text(raw&&raw.id),product=evaluatedMap.get(identity)||raw;scanned=i+1;if(!identity||explicitlyUnstaged.has(identity)||handled.has(identity))continue;if(product.inspectionComplete!==true||ProductPipeline.researchReadiness(product).queueEligible!==true)continue;batch.push({identity,product,absoluteIndex:start+i});if(batch.length>=PRODUCT_STAGE_BATCH)break;}
-          let firstFailed=null,stepFailures=0;
-          for(let offset=0;offset<batch.length;offset+=PRODUCT_STAGE_CONCURRENCY){
-            const group=batch.slice(offset,offset+PRODUCT_STAGE_CONCURRENCY),settled=await Promise.allSettled(group.map((entry)=>syncProductResearchPreview(actorId,scope,entry.product)));
-            for(let i=0;i<settled.length;i++){const result=settled[i],entry=group[i];if(result.status!=="fulfilled"){stepFailures+=1;if(firstFailed==null||entry.absoluteIndex<firstFailed)firstFailed=entry.absoluteIndex;job.errors=array(job.errors).concat([{at:iso(),stage:"staging",productId:text(entry.product&&entry.product.id),message:text(result.reason&&result.reason.message||result.reason)}]).slice(-60);continue;}const state=text(result.value&&result.value.status);if(/created/.test(state))job.stageSummary.created=Number(job.stageSummary.created||0)+1;else if(/updated/.test(state))job.stageSummary.updated=Number(job.stageSummary.updated||0)+1;else if(/preserved/.test(state))job.stageSummary.preserved=Number(job.stageSummary.preserved||0)+1;else job.stageSummary.skipped=Number(job.stageSummary.skipped||0)+1;handled.add(entry.identity);}
-          }
-          job.stageSummary.failed=stepFailures;
-          job.stageCursor=firstFailed==null?Math.min(total,start+Math.max(1,scanned)):Math.max(start,firstFailed);
-          runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT)});
-          job.trace=array(job.trace).concat([{at:iso(),source:"private-product-research-queue",status:stepFailures?"partial_failure":"ok",count:batch.length,scanDone:job.stageCursor,scanTotal:total,eligibleTotal:Number(job.stageSummary.eligible||plain(job.resultStats).queueEligible||0),chunked:true}]).slice(-240);
-          if(job.stageCursor>=total&&stepFailures===0){job.status="complete";job.finishedAt=iso();}
-        }
-      }else{
-        const stageSlice=array(job.stagePool).slice(Number(job.stageCursor||0),Number(job.stageCursor||0)+PRODUCT_STAGE_BATCH),batch=productStageBatch(job,Number(job.stageCursor||0),PRODUCT_STAGE_BATCH);
-        if(!stageSlice.length){job.status="complete";job.finishedAt=iso();}
-        else if(!batch.length){job.stageSummary.skipped=Number(job.stageSummary.skipped||0)+stageSlice.length;job.stageCursor=Number(job.stageCursor||0)+stageSlice.length;if(job.stageCursor>=Number(job.stageTotalCount||array(job.stagePool).length)){job.status="complete";job.finishedAt=iso();}}
-        else{for(let offset=0;offset<batch.length;offset+=PRODUCT_STAGE_CONCURRENCY){const group=batch.slice(offset,offset+PRODUCT_STAGE_CONCURRENCY),settled=await Promise.allSettled(group.map((product)=>syncProductResearchPreview(actorId,scope,product)));for(let i=0;i<settled.length;i++){const result=settled[i];if(result.status!=="fulfilled"){job.stageSummary.failed=Number(job.stageSummary.failed||0)+1;continue;}const state=text(result.value&&result.value.status);if(/created/.test(state))job.stageSummary.created+=1;else if(/updated/.test(state))job.stageSummary.updated+=1;else if(/preserved/.test(state))job.stageSummary.preserved+=1;else job.stageSummary.skipped+=1;}}job.stageCursor=Number(job.stageCursor||0)+stageSlice.length;if(job.stageCursor>=Number(job.stageTotalCount||array(job.stagePool).length)){job.status="complete";job.finishedAt=iso();}}
+        job.stageCursor = Number(job.stageCursor || 0) + stageSlice.length;
+        job.trace = array(job.trace).concat([{ at: iso(), source: "private-product-research-queue", status: "ok", count: batch.length, done: job.stageCursor, total: Number(job.stageTotalCount || array(job.stagePool).length) }]).slice(-240);
+        if (job.stageCursor >= Number(job.stageTotalCount || array(job.stagePool).length)) { job.status = "complete"; job.finishedAt = iso(); }
       }
     }
-    job.lastError=null;await saveProductJob(job,actorId);
-    const afterRuntime=await refreshPausedProductRuntime(scope,actorId,job,requestedJobId);
-    return attachProductRuntime(productResearchStepResponse(job,input),afterRuntime);
-  }catch(error){
-    job.lastError={at:iso(),stage:job.status,message:text(error&&error.message),code:text(error&&error.code)||null};job.errors=array(job.errors).concat([job.lastError]).slice(-60);
-    try{await saveProductJob(job,actorId);}catch(_saveError){}
-    try{await refreshPausedProductRuntime(scope,actorId,job,requestedJobId);}catch(_runtimeCheckpointError){}
+    job.lastError = null; await saveProductJob(job, actorId);
+    const afterRuntime = await refreshPausedProductRuntime(scope, actorId, job, requestedJobId);
+    return attachProductRuntime(productResearchStepResponse(job, input), afterRuntime);
+  } catch (error) {
+    job.lastError = { at: iso(), stage: job.status, message: text(error && error.message), code: text(error && error.code) || null }; job.errors = array(job.errors).concat([job.lastError]);
+    try { await saveProductJob(job, actorId); } catch (_saveError) {}
+    try { await refreshPausedProductRuntime(scope, actorId, job, requestedJobId); } catch (_runtimeCheckpointError) {}
     throw error;
   }
 }
-
-async function resolveChunkedProductSelection(job,input){
-  const refs=array(input&&input.productRefs).slice(0,100),ids=new Set(array(input&&input.productIds).map(text).filter(Boolean).slice(0,100)),out=[],seen=new Set();
-  if(refs.length){
-    const byChunk=new Map();
-    for(const ref of refs){const index=Math.floor(Number(ref&&ref.resultIndex));if(!Number.isFinite(index)||index<0||index>=Number(job.resultCount||0))continue;const chunkIndex=Math.floor(index/PRODUCT_CHUNK_SIZE);if(!byChunk.has(chunkIndex))byChunk.set(chunkIndex,[]);byChunk.get(chunkIndex).push({index,id:text(ref&&ref.id)});}
-    for(const [chunkIndex,entries] of byChunk){const chunk=await productChunkRule(job.scope,job.jobId,"result",chunkIndex),rows=array(chunk.rows);for(const entry of entries){const row=rows[entry.index-chunkIndex*PRODUCT_CHUNK_SIZE],id=text(row&&row.id),identity=ProductRanking.productIdentity(row);if(!row||(entry.id&&entry.id!==id&&entry.id!==identity))continue;const key=identity||id;if(key&&!seen.has(key)){seen.add(key);out.push(row);}}}
-    if(out.length)return out;
-  }
-  if(!ids.size)return[];
-  const total=Math.max(0,Number(job.resultCount||0));
-  for(let offset=0;offset<total&&out.length<ids.size;offset+=PRODUCT_STATUS_PAGE_LIMIT){const rows=await readProductChunkRange(job,"result",offset,PRODUCT_STATUS_PAGE_LIMIT);for(const row of rows){const id=text(row&&row.id),identity=ProductRanking.productIdentity(row);if((ids.has(id)||ids.has(identity))&&!seen.has(identity||id)){seen.add(identity||id);out.push(row);}}}
-  return out;
-}
-async function unmatchPrivateResearchRows(actorId,scope,products,handled,explicitlyUnstaged){
-  let removed=0,skipped=0,blocked=0,failed=0;const details=[];
-  for(const product of array(products).slice(0,100)){
-    const identity=ProductRanking.productIdentity(product);
-    try{
-      let candidateId=productCandidateId(scope,product),candidate=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url&id=eq."+encodeURIComponent(candidateId)+"&limit=1"))[0];
-      if(!candidate){const currentUrl=productUrl(product);if(currentUrl)candidate=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&official_url=eq."+encodeURIComponent(currentUrl)+"&limit=1"))[0];if(candidate)candidateId=text(candidate.id);}
-      if(!candidate||text(candidate.source_ref)!==PRODUCT_SOURCE_REF){skipped+=1;handled.delete(identity);if(identity)explicitlyUnstaged.add(identity);details.push({productId:text(product.id),candidateId:candidateId||null,status:"not_registered"});continue;}
-      const payload=plain(candidate.source_payload),decision=lower(payload.slotDecision||"undecided"),control=plain(payload.managementControl),front=plain(payload.frontPublication),frontStatus=lower(front.status),status=lower(candidate.status||"approval_pending");
-      const protectedState=decision!=="undecided"||control.administratorLocked===true||!["approval_pending","research_pending"].includes(status)||["queued","publish_requested","published","matched","active","unpublish_requested"].includes(frontStatus);
-      let assignmentExists=false;if(!protectedState)assignmentExists=array(await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=1")).length>0;
-      if(protectedState||assignmentExists){blocked+=1;details.push({productId:text(product.id),candidateId,status:"protected_downstream_state"});continue;}
-      await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(candidateId));removed+=1;handled.delete(identity);if(identity)explicitlyUnstaged.add(identity);details.push({productId:text(product.id),candidateId,status:"queue_unmatched"});
-    }catch(error){failed+=1;details.push({productId:text(product&&product.id),candidateId:null,status:"failed",error:text(error&&error.message||error)});}
-  }
-  return{removed,skipped,blocked,failed,details};
-}
-async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime,scope,operation){
-  const requestedIds=new Set(array(input&&input.productIds).map(text).filter(Boolean).slice(0,100)),hasSelection=requestedIds.size>0||array(input&&input.productRefs).length>0,handled=new Set(array(runtime.partialQueueStagedIdentities).map(text).filter(Boolean)),explicitlyUnstaged=new Set(array(runtime.partialQueueUnstagedIdentities).map(text).filter(Boolean));
-  if(operation==="unmatch"){
-    if(!hasSelection){const error=new Error("대기열 매칭을 해제할 최신 상품을 선택하세요.");error.statusCode=400;throw error;}
-    const rows=await resolveChunkedProductSelection(job,input),result=await unmatchPrivateResearchRows(actorId,scope,rows,handled,explicitlyUnstaged),partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"unmatch",source:"latest_list_manual",eligible:rows.length,done:result.removed,remaining:0,attempted:rows.length,handled:result.removed,removed:result.removed,skipped:result.skipped,blocked:result.blocked,failed:result.failed,complete:true,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsPreserved:true,automaticFullCompletionStagingUnchanged:true,stagedAt:iso(),stagedBy:text(actorId)||"administrator",details:result.details};
-    runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
-    return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,latestResearchRowsPreserved:true,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
-  }
-
-  let scanCursor=Math.max(0,Number(runtime.partialQueueScanCursor||0)),selectedRows=hasSelection?await resolveChunkedProductSelection(job,input):[],batch=[],scanned=0,total=Math.max(0,Number(job.resultCount||0));
-  if(hasSelection){
-    for(const raw of selectedRows){const identity=ProductRanking.productIdentity(raw)||text(raw&&raw.id);if(!identity||handled.has(identity))continue;const evaluated=ProductRanking.buildPortfolio([raw],plain(job.rankingContext)).products[0]||raw;if(evaluated.inspectionComplete===true&&ProductPipeline.researchReadiness(evaluated).queueEligible===true)batch.push({identity,product:evaluated,absoluteIndex:Number(raw.researchResultIndex)});if(batch.length>=PRODUCT_PARTIAL_STAGE_BATCH)break;}
-  }else{
-    while(scanCursor<total&&batch.length<PRODUCT_PARTIAL_STAGE_BATCH){
-      const rows=await readProductChunkRange(job,"result",scanCursor,Math.min(40,total-scanCursor));if(!rows.length){scanCursor=total;break;}
-      const evaluated=ProductRanking.buildPortfolio(rows,plain(job.rankingContext)).products,evaluatedMap=new Map(array(evaluated).map((row)=>[ProductRanking.productIdentity(row)||text(row&&row.id),row]));
-      let localScanned=0;
-      for(let i=0;i<rows.length;i++){const raw=rows[i],identity=ProductRanking.productIdentity(raw)||text(raw&&raw.id),product=evaluatedMap.get(identity)||raw;localScanned=i+1;if(!identity||handled.has(identity)||explicitlyUnstaged.has(identity))continue;if(product.inspectionComplete!==true||ProductPipeline.researchReadiness(product).queueEligible!==true)continue;batch.push({identity,product,absoluteIndex:scanCursor+i});if(batch.length>=PRODUCT_PARTIAL_STAGE_BATCH)break;}
-      scanned+=localScanned;scanCursor+=Math.max(1,localScanned);
-      if(localScanned<rows.length||batch.length>=PRODUCT_PARTIAL_STAGE_BATCH)break;
-    }
-  }
-
-  const summary={created:0,updated:0,preserved:0,skipped:0,failed:0};let firstFailed=null;
-  for(let offset=0;offset<batch.length;offset+=PRODUCT_PARTIAL_STAGE_CONCURRENCY){
-    const group=batch.slice(offset,offset+PRODUCT_PARTIAL_STAGE_CONCURRENCY),settled=await Promise.allSettled(group.map((entry)=>syncProductResearchPreview(actorId,scope,entry.product)));
-    for(let i=0;i<settled.length;i++){const result=settled[i],entry=group[i];if(result.status!=="fulfilled"){summary.failed+=1;if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}const state=text(result.value&&result.value.status);if(/created/.test(state))summary.created+=1;else if(/updated/.test(state))summary.updated+=1;else if(/preserved/.test(state))summary.preserved+=1;else summary.skipped+=1;handled.add(entry.identity);explicitlyUnstaged.delete(entry.identity);}
-  }
-  if(!hasSelection&&firstFailed!=null)scanCursor=Math.min(scanCursor,firstFailed);
-  const globalEligibleTotal=Math.max(0,Number(plain(job.resultStats).queueEligible||0)-Math.min(Number(plain(job.resultStats).queueEligible||0),explicitlyUnstaged.size)),globalDone=Math.min(globalEligibleTotal,handled.size),globalRemaining=Math.max(0,globalEligibleTotal-globalDone);
-  const selectedEligible=hasSelection?selectedRows.filter((row)=>row&&row.inspectionComplete===true&&ProductPipeline.researchReadiness(row).queueEligible===true):[],selectedPending=hasSelection?selectedEligible.filter((row)=>{const identity=ProductRanking.productIdentity(row)||text(row&&row.id);return identity&&!handled.has(identity);}):[],eligibleTotal=hasSelection?selectedEligible.length:globalEligibleTotal,done=hasSelection?Math.max(0,eligibleTotal-selectedPending.length):globalDone,remaining=hasSelection?selectedPending.length:globalRemaining,complete=hasSelection?(remaining===0&&summary.failed===0):(scanCursor>=total&&summary.failed===0);
-  const partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"stage",source:lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual"),eligible:eligibleTotal,done,remaining,attempted:batch.length,handled:summary.created+summary.updated+summary.preserved+summary.skipped,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,blocked:hasSelection?Math.max(0,selectedRows.length-batch.length):0,failed:summary.failed,complete,researchStatus:job.status,researchCursorPreserved:true,automaticFullCompletionStagingUnchanged:true,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
-  runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueScanCursor:hasSelection?Number(runtime.partialQueueScanCursor||0):scanCursor,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
-  return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,onlyInspectionCompleteProducts:true,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
-}
-
-
-async function stageCurrentProductResearchQueue(actorId,input){
-  const scope=researchScope(input),operation=lower(input&&input.operation)==="unmatch"?"unmatch":"stage";
-  let runtime={};try{runtime=await productRuntimeRule(scope);}catch(_runtimeReadError){runtime={};}
-  const job=await productJobRule(scope);
-  if(!job||job.schema!==PRODUCT_JOB_SCHEMA){const error=new Error("현재 조사분을 등록할 공식 상품 리서치 작업이 없습니다.");error.statusCode=404;throw error;}
-  const requestedJobId=text(input&&input.jobId);if(requestedJobId&&text(job.jobId)&&requestedJobId!==text(job.jobId)){const error=new Error("현재 국가·지역의 최신 상품 리서치 작업과 요청 작업 ID가 일치하지 않습니다. 상태를 새로 읽은 뒤 다시 실행하세요.");error.statusCode=409;throw error;}
-  if(job.resultStorage!=="chunked_v1"&&array(job.products).length>80){
-    const migration=await migrateLegacyProductResultsStep(job,actorId,3);
-    if(!migration.complete){
-      const partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"stage",source:"legacy_migration",migration:true,migrationKind:"legacy_results_to_country_region_chunks",eligible:0,done:0,remaining:Math.max(0,Number(migration.total||0)-Number(migration.migrated||0)),attempted:0,handled:0,failed:0,complete:false,researchStatus:job.status,researchCursorPreserved:true,migrated:Number(migration.migrated||0),migrationTotal:Number(migration.total||0),chunkCount:Number(migration.chunkCount||0),totalChunks:Number(migration.totalChunks||0)};
-      return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,legacyMigrationOnly:true,automaticPublicPublication:false,automaticSlotPlacement:false}};
-    }
-  }
-  if(job.resultStorage==="chunked_v1")return stageCurrentProductResearchQueueChunked(actorId,input,job,runtime,scope,operation);
-  return stageCurrentProductResearchQueueLegacy(actorId,input);
-}
-async function stageCurrentProductResearchQueueLegacy(actorId, input) {
+async function stageCurrentProductResearchQueue(actorId, input) {
   const scope = researchScope(input), operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "stage";
   let runtime = {};
   try { runtime = await productRuntimeRule(scope); } catch (_runtimeReadError) { runtime = {}; }
@@ -2749,17 +2489,10 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
   const pending = Array.from(eligibleByIdentity.entries()).filter(([identity]) => !handled.has(identity));
   const batch = pending.slice(0, PRODUCT_PARTIAL_STAGE_BATCH), summary = { created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 };
   if (batch.length) {
-    // Evaluate only this small checkpoint through the current ranking/policy
-    // context before it enters the private queue.  This makes a paused/manual
-    // queue obey the same saved administrator policy as normal full completion
-    // without rebuilding the whole country portfolio on every click.
-    const evaluatedBatch=ProductRanking.buildPortfolio(batch.map(([,product])=>product),plain(job.rankingContext)).products;
-    const evaluatedByIdentity=new Map(array(evaluatedBatch).map((row)=>[ProductRanking.productIdentity(row),row]));
-    const rankedBatch=batch.map(([identity,product])=>[identity,evaluatedByIdentity.get(identity)||product]);
-    // Ten products per request and two concurrent DB writes keep each serverless
-    // checkpoint bounded while preserving deterministic progress.
-    for (let offset = 0; offset < rankedBatch.length; offset += PRODUCT_PARTIAL_STAGE_CONCURRENCY) {
-      const group = rankedBatch.slice(offset, offset + PRODUCT_PARTIAL_STAGE_CONCURRENCY);
+    // Cap concurrent candidate-ledger writes. Twenty products per request keeps
+    // progress efficient while five-at-a-time DB work avoids a connection spike.
+    for (let offset = 0; offset < batch.length; offset += PRODUCT_PARTIAL_STAGE_CONCURRENCY) {
+      const group = batch.slice(offset, offset + PRODUCT_PARTIAL_STAGE_CONCURRENCY);
       const settled = await Promise.allSettled(group.map(([, product]) => syncProductResearchPreview(actorId, scope, product)));
       for (let index = 0; index < settled.length; index += 1) {
         const result = settled[index], identity = group[index][0];
