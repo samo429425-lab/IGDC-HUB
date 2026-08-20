@@ -1,5 +1,5 @@
 /*
- * IGDC / MARU MediaHub playback controller v3.5.0 mobile three-state immersive/inline/list + resume restore
+ * IGDC / MARU MediaHub playback controller v3.6.0 mobile single-entry three-state immersive/inline/list + resume restore
  * Device-aware inline player shell with safe native-app handoff hooks.
  *
  * Preserves the original Media Hub document, scroll restoration, OTT gate,
@@ -155,7 +155,15 @@
   }
   function isMobileSession() { return !!(state.open && state.mobileSession); }
   function isMobileUiMode() { return !!(state.mobileSession || isMobilePlaybackDevice()); }
-  function isMediaCard(node) { return node && node.closest && node.closest('.thumb-line[data-psom-key^="media-"] a.card'); }
+  function isMediaCard(node) {
+    if(!node || !node.closest) return null;
+    var card=node.closest('a.card.media-card, .thumb-line[data-psom-key^="media-"] a.card');
+    if(!card) return null;
+    // Restrict the broader selector to MediaHub cards only.
+    var inMediaRow=!!(card.closest&&card.closest('.thumb-line[data-psom-key^="media-"]'));
+    var marked=!!(card.classList&&card.classList.contains('media-card'));
+    return (inMediaRow||marked)?card:null;
+  }
   function titleFor(card) {
     return text(card && card.dataset && (card.dataset.mediaTitle || card.dataset.title)) ||
       text(card && card.querySelector && card.querySelector('.meta') && card.querySelector('.meta').textContent) || 'Media';
@@ -361,7 +369,7 @@
       '#igdc-media-detail-view{--maru-bg:#06080c;--maru-bar:rgba(13,17,23,.90);--maru-line:rgba(255,255,255,.11);--maru-text:#eef3f8;--maru-muted:#9ba8b8;--maru-accent:#61a9ff;position:relative!important;z-index:50;display:block;width:100%!important;height:var(--maru-inline-h,calc(100dvh - 1px))!important;min-height:320px!important;max-width:100%!important;overflow:hidden;background:var(--maru-bg);color:var(--maru-text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;isolation:isolate}',
       '#igdc-media-detail-view *{box-sizing:border-box}',
       'body.igdc-media-player-only> :not(#igdc-media-detail-view):not(script):not(style):not(link){display:none!important}',
-      'body.igdc-media-player-only{margin:0!important;padding:0!important;background:#000!important;overflow:hidden}',
+      'html.igdc-media-player-only,body.igdc-media-player-only{margin:0!important;padding:0!important;background:#000!important;overflow:hidden!important;overscroll-behavior:none!important}',
       'body.igdc-media-player-only #igdc-media-detail-view.igdc-mobile-inline-player{position:relative!important;inset:auto!important;left:auto!important;top:auto!important;right:auto!important;bottom:auto!important;z-index:50!important;width:100%!important;max-width:100%!important;margin:0!important;background:#000!important}',
       '#igdc-media-detail-view[data-mobile-view="immersive"] .igdc-media-detail-stage video,#igdc-media-detail-view[data-mobile-view="immersive"] .igdc-media-detail-stage iframe{object-fit:contain!important;background:#000!important}',
       '#igdc-media-detail-view:fullscreen,#igdc-media-detail-view:-webkit-full-screen,#igdc-media-detail-view.igdc-mobile-fullscreen-fallback{position:fixed!important;inset:0!important;left:0!important;top:0!important;right:0!important;bottom:0!important;z-index:2147483000!important;width:var(--maru-vw,100vw)!important;height:var(--maru-vh,100dvh)!important;min-width:var(--maru-vw,100vw)!important;min-height:var(--maru-vh,100dvh)!important;max-width:var(--maru-vw,100vw)!important;max-height:var(--maru-vh,100dvh)!important;margin:0!important;overflow:hidden!important;background:#000}',
@@ -407,6 +415,7 @@
   else document.addEventListener('DOMContentLoaded', injectStyle, { once:true });
 
   function hideList(card) {
+    if(document.documentElement)document.documentElement.classList.add('igdc-media-player-only');
     if(document.body)document.body.classList.add('igdc-media-player-only');
     var roots = [];
     function add(node) { if (node && roots.indexOf(node) < 0) roots.push(node); }
@@ -428,6 +437,7 @@
     state.restore.forEach(function (entry) { entry.node.style.display = 'none'; entry.node.setAttribute('aria-hidden', 'true'); });
   }
   function restoreList() {
+    if(document.documentElement)document.documentElement.classList.remove('igdc-media-player-only');
     if(document.body)document.body.classList.remove('igdc-media-player-only');
     state.restore.forEach(function (entry) {
       entry.node.style.display = entry.display;
@@ -1041,6 +1051,6 @@
   if(global.visualViewport)global.visualViewport.addEventListener('resize',scheduleViewportRepair,{passive:true});
   try{if(global.screen&&global.screen.orientation&&global.screen.orientation.addEventListener)global.screen.orientation.addEventListener('change',orientationViewportRepair,{passive:true});}catch(_){}
 
-  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.5.0-mobile-three-state-immersive-inline-list-resume-5s';
-  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.5.0-mobile-three-state-immersive-inline-list-resume-5s'};
+  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.6.0-mobile-single-entry-three-state-immersive-inline-list-resume-5s';
+  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.6.0-mobile-single-entry-three-state-immersive-inline-list-resume-5s'};
 })(window, document);

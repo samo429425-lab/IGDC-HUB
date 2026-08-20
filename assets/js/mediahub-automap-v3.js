@@ -54,9 +54,13 @@
   }
 
   async function fetchJson(url){
-    const r = await fetch(url, { cache: 'default', credentials: 'same-origin' });
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    return await r.json();
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(()=>controller.abort(), 2200) : 0;
+    try{
+      const r = await fetch(url, { cache: 'default', credentials: 'same-origin', signal: controller ? controller.signal : undefined });
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } finally { if(timer) clearTimeout(timer); }
   }
 
   async function loadSnapshotAny(){
@@ -219,6 +223,15 @@
     if(!v||v==='#')return true;
     return v.indexOf('media-sample-card.png')>=0||v.indexOf('placeholder')>=0||v.indexOf('placehold.co')>=0||v.indexOf('placehold.it')>=0;
   }
+  function isSyntheticSampleItem(item){
+    if(!item)return false;
+    const thumb=rawThumbnail(item).toLowerCase();
+    if(thumb.indexOf('media-sample-card.png')>=0)return true;
+    const title=String(item.title||item.name||'').trim();
+    const cid=String(item.contentId||item.id||'').trim();
+    const provider=item.provider&&typeof item.provider==='object'?String(item.provider.name||''):String(item.provider||'');
+    return /^sample(?:\s+\d+)?$/i.test(title)&&(/^media-[a-z0-9-]+:\d+$/i.test(cid)||/^seed$/i.test(provider));
+  }
   function safeFrontThumbnail(value){
     const v=String(value||'').trim();
     if(isPlaceholderThumb(v))return '';
@@ -226,6 +239,7 @@
     return '';
   }
   function providerThumbnailCandidates(item){
+    if(isSyntheticSampleItem(item))return [];
     const id = youtubeIdForThumb(mediaSourceForThumb(item));
     if(!id)return [];
     const enc=encodeURIComponent(id);
@@ -297,7 +311,7 @@
     });
   }
   function clearMediaDataset(a){
-    ['provider','mediaTitle','igdcContentId','contentId','mediaSource','captions','windowsPlayerUrl','androidPlayerUrl','maruAppUrl','thumbPending','thumbRecovery'].forEach((key)=>{try{delete a.dataset[key];}catch(_e){}});
+    ['provider','mediaTitle','igdcContentId','contentId','mediaSource','captions','windowsPlayerUrl','androidPlayerUrl','maruAppUrl','thumbPending','thumbRecovery','autoThumbQueued','autoThumbSource'].forEach((key)=>{try{delete a.dataset[key];}catch(_e){}});
   }
   function resetAnchorToPlaceholder(a, reason){
     if(!a)return;
@@ -327,10 +341,37 @@
     const videoId = ensureContentId(item);
     if(!videoId){quarantineItem(a,item,'content_id_missing');return false;}
 
-    a.href = `/media/watch.html?id=${encodeURIComponent(videoId)}`;
-    a.removeAttribute('target');a.removeAttribute('rel');a.onclick=null;
+    // The MARU/IGDC playback controller is the single playback entry point.
+    // Keeping href inert also prevents a mobile tap race from falling through
+    // to the legacy watch page before delegated listeners can intercept it.
+    a.href = 'javascript:void(0)';
+    a.removeAttribute('target');a.removeAttribute('rel');
+    a.onclick = function(event){
+      try {
+        if(event){event.preventDefault();event.stopPropagation();}
+        const player = window.IGDCMediaHubPlayback;
+        if(player && typeof player.open === 'function'){
+          player.open(a,{autoPlay:true,autoFullscreen:true});
+          return false;
+        }
+        // Very short startup race only: retry locally, never navigate away.
+        let tries=0;
+        const timer=setInterval(function(){
+          tries+=1;
+          const latePlayer=window.IGDCMediaHubPlayback;
+          if(latePlayer && typeof latePlayer.open==='function'){
+            clearInterval(timer);
+            latePlayer.open(a,{autoPlay:true,autoFullscreen:true});
+          }else if(tries>=20){
+            clearInterval(timer);
+          }
+        },50);
+      } catch(_e){}
+      return false;
+    };
     delete a.dataset.thumbQuarantineReason;
-    if(item && item.provider) a.dataset.provider = item.provider;
+    a.__igdcMediaItem=item;
+    if(item && item.provider) a.dataset.provider = typeof item.provider==='object' ? String(item.provider.name||item.provider.platform||'') : item.provider;
     if(title) a.dataset.mediaTitle = title;
     a.dataset.igdcContentId = String(videoId);a.dataset.contentId = String(videoId);
     if(item){
@@ -344,17 +385,28 @@
       if(item.maruAppUrl) a.dataset.maruAppUrl = String(item.maruAppUrl);
     }
 
-    let thumbBox=q('.thumb',a);if(!thumbBox){thumbBox=D.createElement('div');thumbBox.className='thumb';a.insertBefore(thumbBox,a.firstChild);}thumbBox.classList.remove('ph');
+    let thumbBox=q('.thumb',a);if(!thumbBox){thumbBox=D.createElement('div');thumbBox.className='thumb ph';a.insertBefore(thumbBox,a.firstChild);}else thumbBox.classList.add('ph');
     let img=q('img',thumbBox);if(!img){img=D.createElement('img');thumbBox.appendChild(img);}
+    let meta=q('.meta',a);if(!meta){meta=D.createElement('div');meta.className='meta';a.appendChild(meta);}meta.textContent='Sample';
+    a.setAttribute('data-placeholder','true');
     img.alt=title||'';img.loading='lazy';img.decoding='async';img.dataset.autoThumbResolved='1';
-    img.onerror=function(){
-      if(a.dataset.thumbRecovery==='1'){quarantineItem(a,item,'thumbnail_recovery_failed');return;}
-      resetAnchorToPlaceholder(a,'thumbnail_load_failed');
-      recoverThumbnail(a,item);
-    };
-    img.src=thumb;
-    let meta=q('.meta',a);if(!meta){meta=D.createElement('div');meta.className='meta';a.appendChild(meta);}meta.textContent=title;
-    a.removeAttribute('data-placeholder');delete a.dataset.thumbPending;
+    // Keep the blue MEDIA SAMPLE artwork visible until a real thumbnail has
+    // actually loaded and passed validation. Off-screen cards do not start
+    // network thumbnail work at all; this avoids large request bursts at boot.
+    let settled=false,slowTimer=0,watcher=null,loader=null,loadStarted=false;
+    function stopWatch(){if(slowTimer)clearTimeout(slowTimer);slowTimer=0;if(watcher){try{watcher.disconnect();}catch(_e){}watcher=null;}}
+    function activate(){if(settled||!a.isConnected)return;settled=true;stopWatch();img.src=thumb;thumbBox.classList.remove('ph');meta.textContent=title;a.removeAttribute('data-placeholder');delete a.dataset.thumbPending;delete a.dataset.thumbQuarantineReason;}
+    function fail(reason){if(settled)return;settled=true;stopWatch();if(loader){try{loader.onload=null;loader.onerror=null;}catch(_e){}loader=null;}if(a.dataset.thumbRecovery==='1'){quarantineItem(a,item,reason||'thumbnail_recovery_failed');return;}resetAnchorToPlaceholder(a,reason||'thumbnail_load_failed');recoverThumbnail(a,item);}
+    function beginLoad(){
+      if(settled||loadStarted||!a.isConnected)return;loadStarted=true;
+      loader=new Image();loader.decoding='async';
+      slowTimer=setTimeout(()=>{if(!settled)fail('thumbnail_slow');},2600);
+      loader.onload=function(){if(settled)return;if(loader.naturalWidth>=120&&loader.naturalHeight>=68)activate();else fail('thumbnail_too_small');};
+      loader.onerror=function(){fail('thumbnail_load_failed');};
+      loader.src=thumb;
+      if(loader.complete){if(loader.naturalWidth>=120&&loader.naturalHeight>=68)activate();else if(loader.naturalWidth===0)fail('thumbnail_load_failed');}
+    }
+    if('IntersectionObserver' in window){watcher=new IntersectionObserver((entries)=>{for(const entry of entries){if(entry.isIntersecting){watcher.disconnect();watcher=null;beginLoad();break;}}},{root:null,rootMargin:'260px 320px',threshold:.01});watcher.observe(a);}else setTimeout(beginLoad,0);
     return true;
   }
   function runAutoThumbQueue(){
@@ -379,22 +431,41 @@
       card.__igdcThumbItem=item;card.dataset.autoThumbSource=source;autoThumbObserver.observe(card);
     }else setTimeout(()=>enqueueAutoThumb(card,item,source),0);
   }
-  async function recoverThumbnail(card,item){
-    if(!card||!item)return;
-    card.dataset.thumbPending='1';card.dataset.thumbRecovery='1';
-    const providerCandidates=providerThumbnailCandidates(item);
-    for(const candidate of providerCandidates){
-      if(await preflightImage(candidate,1500)){
-        if(card.isConnected)bindItemToAnchor(card,item,candidate);
-        return;
+  const recoveryQueue=[];let recoveryBusy=false;let recoveryObserver=null;
+  function enqueueRecovery(card,item){if(!card||!item||card.dataset.thumbRecoveryQueued==='1')return;card.dataset.thumbRecoveryQueued='1';recoveryQueue.push({card,item});runRecoveryQueue();}
+  async function runRecoveryQueue(){
+    if(recoveryBusy||!recoveryQueue.length)return;recoveryBusy=true;
+    const job=recoveryQueue.shift(),card=job.card,item=job.item;
+    try{
+      if(!card||!card.isConnected||isSyntheticSampleItem(item)){if(card&&card.isConnected)resetAnchorToPlaceholder(card,'sample_slot');return;}
+      const providerCandidates=providerThumbnailCandidates(item);
+      for(const candidate of providerCandidates){if(await preflightImage(candidate,1200)){if(card.isConnected)bindItemToAnchor(card,item,candidate);return;}}
+      const source=mediaSourceForThumb(item);
+      if(directVideoForThumb(source)){
+        const dataUrl=await captureVisibleVideoFrame(source);
+        if(dataUrl&&card.isConnected){card.dataset.thumbRecovery='1';bindItemToAnchor(card,item,dataUrl);return;}
+        if(card.isConnected)quarantineItem(card,item,'thumbnail_capture_failed');return;
       }
-    }
-    const source=mediaSourceForThumb(item);
-    if(directVideoForThumb(source)){scheduleDirectCapture(card,item,source);return;}
-    quarantineItem(card,item,'thumbnail_unavailable');
+      if(card.isConnected)quarantineItem(card,item,'thumbnail_unavailable');
+    } finally {recoveryBusy=false;setTimeout(runRecoveryQueue,0);}
+  }
+  function recoverThumbnail(card,item){
+    if(!card||!item)return;
+    if(isSyntheticSampleItem(item)){resetAnchorToPlaceholder(card,'sample_slot');return;}
+    card.dataset.thumbPending='1';card.dataset.thumbRecovery='1';
+    if('IntersectionObserver' in window){
+      if(!recoveryObserver)recoveryObserver=new IntersectionObserver((entries)=>{entries.forEach((entry)=>{if(!entry.isIntersecting)return;const el=entry.target;recoveryObserver.unobserve(el);enqueueRecovery(el,el.__igdcRecoveryItem);});},{root:null,rootMargin:'220px 0px',threshold:.01});
+      card.__igdcRecoveryItem=item;recoveryObserver.observe(card);
+    }else setTimeout(()=>enqueueRecovery(card,item),0);
+  }
+  function playbackMarkedUnavailable(item){
+    if(!item)return true;
+    if(item.playbackReady===false||item.frontPlaybackReady===false||item.sourceReady===false||item.playable===false)return true;
+    const status=String(item.playbackStatus||item.sourceStatus||item.playabilityStatus||'').trim().toLowerCase();
+    return /(?:slow|timeout|failed|unplayable|unavailable|blocked|broken)/.test(status);
   }
   function isFrontCandidate(item){
-    if(!item)return false;
+    if(!item||isSyntheticSampleItem(item)||playbackMarkedUnavailable(item))return false;
     const title=String(item.title||item.name||item.text||'').trim();
     const source=mediaSourceForThumb(item);
     const id=ensureContentId(item);
@@ -410,6 +481,7 @@
     const ph=ensurePlaceholders(line);
     const immediate=[],pending=[];
     for(const item of items){
+      if(isSyntheticSampleItem(item))continue;
       if(!isFrontCandidate(item))continue;
       const thumb=safeFrontThumbnail(rawThumbnail(item));
       if(thumb)immediate.push({item,thumb});
@@ -450,6 +522,21 @@
       }
     }
   }
+
+  D.addEventListener('igdc:media-source-failed',(event)=>{
+    const detail=event&&event.detail||{};
+    let card=detail.card&&detail.card.closest?detail.card.closest('a.card'):detail.card;
+    if(!card&&detail.contentId){
+      const wanted=String(detail.contentId);
+      card=qa('a.card[data-content-id],a.card[data-igdc-content-id]').find((el)=>
+        String(el.dataset.contentId||el.dataset.igdcContentId||'')===wanted
+      )||null;
+    }
+    if(!card||card.getAttribute('data-placeholder')==='true')return;
+    const item=card.__igdcMediaItem||{contentId:detail.contentId,title:card.dataset.mediaTitle||'',url:card.dataset.mediaSource||''};
+    quarantineItem(card,item,'playback_'+String(detail.reason||'source_failed'));
+    try{D.dispatchEvent(new CustomEvent('igdc:media-playback-quarantine',{detail:{contentId:detail.contentId||ensureContentId(item),reason:detail.reason||'source_failed'}}));}catch(_e){}
+  });
 
   async function main(){
     const lines = qa('.thumb-line[data-psom-key]');
@@ -540,7 +627,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='3.2.1-front-thumbnail-gate-balanced-trending';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='3.3.2-fast-deferred-thumb-sample-lock-playback-quarantine';
 })();
 
 
