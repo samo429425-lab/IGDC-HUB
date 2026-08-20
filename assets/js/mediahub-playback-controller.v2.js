@@ -1,5 +1,5 @@
 /*
- * IGDC / MARU MediaHub playback controller v3.4.0 mobile immersive hard-lock + resume restore
+ * IGDC / MARU MediaHub playback controller v3.5.0 mobile three-state immersive/inline/list + resume restore
  * Device-aware inline player shell with safe native-app handoff hooks.
  *
  * Preserves the original Media Hub document, scroll restoration, OTT gate,
@@ -34,6 +34,8 @@
     lastVolume: 1,
     mobileFullscreenIntent: false,
     mobileImmersiveActive: false,
+    mobileSession: false,
+    mobileViewMode: 'list',
     playRequested: false,
     orientationTimer: 0,
     fullscreenBodyOverflow: null,
@@ -151,6 +153,8 @@
       return !!(mobileUa||uaDataMobile||ipadDesktop||((coarse||noHover||touch)&&viewport<=1366));
     } catch (_) { return false; }
   }
+  function isMobileSession() { return !!(state.open && state.mobileSession); }
+  function isMobileUiMode() { return !!(state.mobileSession || isMobilePlaybackDevice()); }
   function isMediaCard(node) { return node && node.closest && node.closest('.thumb-line[data-psom-key^="media-"] a.card'); }
   function titleFor(card) {
     return text(card && card.dataset && (card.dataset.mediaTitle || card.dataset.title)) ||
@@ -358,6 +362,8 @@
       '#igdc-media-detail-view *{box-sizing:border-box}',
       'body.igdc-media-player-only> :not(#igdc-media-detail-view):not(script):not(style):not(link){display:none!important}',
       'body.igdc-media-player-only{margin:0!important;padding:0!important;background:#000!important;overflow:hidden}',
+      'body.igdc-media-player-only #igdc-media-detail-view.igdc-mobile-inline-player{position:relative!important;inset:auto!important;left:auto!important;top:auto!important;right:auto!important;bottom:auto!important;z-index:50!important;width:100%!important;max-width:100%!important;margin:0!important;background:#000!important}',
+      '#igdc-media-detail-view[data-mobile-view="immersive"] .igdc-media-detail-stage video,#igdc-media-detail-view[data-mobile-view="immersive"] .igdc-media-detail-stage iframe{object-fit:contain!important;background:#000!important}',
       '#igdc-media-detail-view:fullscreen,#igdc-media-detail-view:-webkit-full-screen,#igdc-media-detail-view.igdc-mobile-fullscreen-fallback{position:fixed!important;inset:0!important;left:0!important;top:0!important;right:0!important;bottom:0!important;z-index:2147483000!important;width:var(--maru-vw,100vw)!important;height:var(--maru-vh,100dvh)!important;min-width:var(--maru-vw,100vw)!important;min-height:var(--maru-vh,100dvh)!important;max-width:var(--maru-vw,100vw)!important;max-height:var(--maru-vh,100dvh)!important;margin:0!important;overflow:hidden!important;background:#000}',
       '.igdc-maru-topbar{position:absolute;top:0;left:0;right:0;height:54px;display:flex;align-items:center;gap:8px;padding:0 10px;background:linear-gradient(180deg,rgba(15,19,24,.94),rgba(15,19,24,.78));border-bottom:1px solid var(--maru-line);backdrop-filter:blur(14px);z-index:18}',
       '.igdc-maru-brand{font-weight:750;letter-spacing:.02em;white-space:nowrap;color:#f3f7fb}',
@@ -677,10 +683,10 @@
   function restoreFullscreenAfterViewportChange() {
     if (!state.open || !state.detail) return;
     normalizePlayerGeometry();
-    if(isMobilePlaybackDevice()&&state.mobileImmersiveActive)applyMobileImmersiveGeometry(true);
+    if(isMobileSession()&&state.mobileViewMode==='immersive')applyMobileImmersiveGeometry(true);
     requestPlaybackFromGesture();
     if (isPlayerFullscreen()) lockMobileLandscape();
-    global.requestAnimationFrame(function(){ normalizePlayerGeometry(); if(isMobilePlaybackDevice()&&state.mobileImmersiveActive)applyMobileImmersiveGeometry(true); syncUi(); });
+    global.requestAnimationFrame(function(){ normalizePlayerGeometry(); if(isMobileSession()&&state.mobileViewMode==='immersive')applyMobileImmersiveGeometry(true); syncUi(); });
   }
   function scheduleViewportRepair() {
     if (!state.open) return;
@@ -699,9 +705,9 @@
     state.orientationLocked=false;
   }
   function unlockMobileOrientation() { state.orientationLocked=false; }
-  function fallbackFullscreenActive() { return !!(state.mobileImmersiveActive || (state.detail && state.detail.classList.contains('igdc-mobile-fullscreen-fallback'))); }
+  function fallbackFullscreenActive() { return !!((isMobileSession() && state.mobileViewMode==='immersive') || state.mobileImmersiveActive || (state.detail && state.detail.classList.contains('igdc-mobile-fullscreen-fallback'))); }
   function isPlayerFullscreen() {
-    if(isMobilePlaybackDevice()) return !!state.mobileImmersiveActive;
+    if(isMobileSession()) return state.mobileViewMode==='immersive';
     return !!fullscreenElement() || currentVideoFullscreen() || fallbackFullscreenActive();
   }
   function hideChromeNow() {
@@ -715,12 +721,12 @@
     if(on){
       document.body.style.overflow='hidden';
       normalizePlayerGeometry();
-      if(isMobilePlaybackDevice()) hideChromeNow(); else showChrome(2600);
+      if(isMobileSession()) hideChromeNow(); else showChrome(2600);
     }else{
       if(state.fullscreenBodyOverflow!==null)document.body.style.overflow=state.fullscreenBodyOverflow;
       unlockMobileOrientation();
       normalizePlayerGeometry();
-      hideChromeNow();
+      if(isMobileSession()) showChrome(4800); else hideChromeNow();
     }
     syncUi();
   }
@@ -749,42 +755,74 @@
     state.detail.style.setProperty('overflow','hidden','important');
     state.detail.style.setProperty('background','#000','important');
   }
+  function setMobileViewMode(mode) {
+    if(!state.detail || !isMobileSession()) return;
+    mode = mode === 'immersive' ? 'immersive' : 'inline';
+    state.mobileViewMode = mode;
+    state.mobileImmersiveActive = mode === 'immersive';
+    state.mobileFullscreenIntent = mode === 'immersive';
+    state.detail.dataset.mobileView = mode;
+    state.detail.classList.toggle('igdc-mobile-fullscreen-fallback', mode === 'immersive');
+    state.detail.classList.toggle('igdc-mobile-inline-player', mode === 'inline');
+    if(mode === 'immersive') {
+      applyMobileImmersiveGeometry(true);
+      markFullscreenUi(true);
+      normalizePlayerGeometry();
+      hideChromeNow();
+    } else {
+      applyMobileImmersiveGeometry(false);
+      markFullscreenUi(false);
+      normalizePlayerGeometry();
+      showChrome(4800);
+    }
+    requestPlaybackFromGesture();
+    global.requestAnimationFrame(function(){
+      if(!state.detail)return;
+      if(state.mobileViewMode==='immersive')applyMobileImmersiveGeometry(true);
+      normalizePlayerGeometry();
+      syncUi();
+    });
+  }
   function activateFallbackFullscreen() {
     if(!state.detail)return;
+    if(isMobileSession()) {
+      setMobileViewMode('immersive');
+      return;
+    }
     state.mobileImmersiveActive=true;
     state.mobileFullscreenIntent=true;
     state.detail.classList.add('igdc-mobile-fullscreen-fallback');
     applyMobileImmersiveGeometry(true);
     markFullscreenUi(true);
     normalizePlayerGeometry();
-    if(isMobilePlaybackDevice())hideChromeNow();
   }
   function leaveFullscreen() {
+    if(isMobileSession()) {
+      state.justExitedFullscreenAt=Date.now();
+      state.orientationChangingUntil=0;
+      setMobileViewMode('inline');
+      return;
+    }
     state.mobileFullscreenIntent=false;
     state.mobileImmersiveActive=false;
     state.justExitedFullscreenAt=Date.now();
     state.orientationChangingUntil=0;
     try {
       if(state.detail)state.detail.classList.remove('igdc-mobile-fullscreen-fallback');
-      if(isMobilePlaybackDevice())applyMobileImmersiveGeometry(false);
       state.nativeVideoFullscreen=false;
-      if(!isMobilePlaybackDevice()){
-        var exit=document.exitFullscreen||document.webkitExitFullscreen;
-        if(fullscreenElement()&&exit){var r=exit.call(document);if(r&&r.catch)r.catch(function(){});}
-      }
+      var exit=document.exitFullscreen||document.webkitExitFullscreen;
+      if(fullscreenElement()&&exit){var r=exit.call(document);if(r&&r.catch)r.catch(function(){});}
     } catch(_) {}
     markFullscreenUi(false);
     global.requestAnimationFrame(function(){normalizePlayerGeometry();requestPlaybackFromGesture();});
   }
   function enterPlayerFullscreen() {
     if(!state.detail)return;
-    if(isMobilePlaybackDevice()){
-      // Mobile uses IGDC's own full-viewport immersive shell. Do not call the
-      // browser Fullscreen API or iOS native video fullscreen: Android Chrome's
-      // exit-fullscreen education banner and platform-specific takeovers are avoided.
-      state.mobileFullscreenIntent=true;
-      activateFallbackFullscreen();
-      requestPlaybackFromGesture();
+    if(isMobileSession()) {
+      // Mobile fullscreen is an IGDC-controlled immersive viewport state. It is
+      // intentionally independent from the browser Fullscreen API so Android
+      // and iOS use the same transition model and rotation never drops to list.
+      setMobileViewMode('immersive');
       return;
     }
     normalizePlayerGeometry();
@@ -805,8 +843,6 @@
             activateFallbackFullscreen();
           });
         }else{
-          // WebKit may return void. Let fullscreenchange confirm the state; the
-          // player remains full-viewport while that event is pending.
           markFullscreenUi(true);
           global.setTimeout(function(){
             if(state.detail===target&&!fullscreenElement()&&!currentVideoFullscreen())activateFallbackFullscreen();
@@ -817,7 +853,14 @@
       activateFallbackFullscreen();
     } catch(_){activateFallbackFullscreen();}
   }
-  function toggleFullscreen(){if(isMobilePlaybackDevice()){if(state.mobileImmersiveActive)leaveFullscreen();else enterPlayerFullscreen();return;}if(isPlayerFullscreen())leaveFullscreen();else enterPlayerFullscreen();}
+  function toggleFullscreen(){
+    if(isMobileSession()){
+      if(state.mobileViewMode==='immersive')setMobileViewMode('inline');
+      else setMobileViewMode('immersive');
+      return;
+    }
+    if(isPlayerFullscreen())leaveFullscreen();else enterPlayerFullscreen();
+  }
 
   function showChrome(hold) {
     if(!state.detail)return; clearTimeout(state.chromeTimer); state.detail.classList.add('igdc-chrome-visible');
@@ -833,6 +876,7 @@
   }
   function syncUi() {
     if(!state.detail)return; var c=copy(),e=extraCopy(),video=currentVideo(),hasVideo=!!video;
+    var backBtn=state.detail.querySelector('[data-media-action="back"]');if(backBtn){var backText=(isMobileSession()&&state.mobileViewMode==='immersive')?c.exitFullscreen:backLabel();setButtonGraphic(backBtn,'back',backText);setControlLabel(backBtn,backText);}
     var playButtons=state.detail.querySelectorAll('[data-media-action="play"]');Array.prototype.forEach.call(playButtons,function(play){play.disabled=!hasVideo;setButtonGraphic(play,hasVideo&&!video.paused?'pause':'play','');setControlLabel(play,hasVideo&&!video.paused?c.pause:c.play);});
     var prev=state.detail.querySelector('[data-media-action="previous"]');if(prev)prev.disabled=!adjacentCard(-1);var next=state.detail.querySelector('[data-media-action="next"]');if(next)next.disabled=!adjacentCard(1);
     var cc=state.detail.querySelector('[data-media-action="captions"]');if(cc){cc.disabled=!hasVideo||!hasCaptions(video);cc.dataset.active=captionsEnabled()?'true':'false';setControlLabel(cc,captionsEnabled()?c.captionsOff:c.captionsOn);}
@@ -855,11 +899,11 @@
       if(name==='loadedmetadata')applyResumeOnce();
       if(name==='pause')saveResumePosition(state.card,video.currentTime,video.duration,true,false);
       if(name==='ended')saveResumePosition(state.card,video.currentTime,video.duration,true,true);
-      syncUi();if(name==='play'){if(isMobilePlaybackDevice())hideChromeNow();else showChrome(2600);}else if(name==='pause'||name==='ended')showChrome();
+      syncUi();if(name==='play'){if(isMobileSession())hideChromeNow();else showChrome(2600);}else if(name==='pause'||name==='ended')showChrome();
     });});
     video.addEventListener('timeupdate',function(){updateTimeUi();saveResumePosition(state.card,video.currentTime,video.duration,false,false);}); video.addEventListener('error',function(){notifySourceFailure(state.card,'mounted_video_source_error');},{once:true});
     // iOS must stay inline inside the IGDC immersive shell. Native WebKit video fullscreen is not used.
-    video.addEventListener('webkitbeginfullscreen',function(){try{if(isMobilePlaybackDevice()&&typeof video.webkitExitFullscreen==='function')video.webkitExitFullscreen();}catch(_){}state.nativeVideoFullscreen=false;});
+    video.addEventListener('webkitbeginfullscreen',function(){try{if(isMobileSession()&&typeof video.webkitExitFullscreen==='function')video.webkitExitFullscreen();}catch(_){}state.nativeVideoFullscreen=false;});
     video.addEventListener('webkitendfullscreen',function(){state.nativeVideoFullscreen=false;global.requestAnimationFrame(normalizePlayerGeometry);});
     if(video.readyState>=1)applyResumeOnce();
     try { var tracker=global.MaruRevenueTracker;if(tracker&&typeof tracker.bindMedia==='function')tracker.bindMedia(video,{id:contentIdFor(state.card),contentId:contentIdFor(state.card),title:titleFor(state.card),mediaType:'video',url:sourceFor(state.card)},{service:'mediahub-playback',pageType:'media',revenueLine:'media_watchtime'}); } catch(_){}
@@ -909,8 +953,8 @@
   }
 
   function disposeStage(){saveCurrentProgress(true);clearInterval(state.youtubePollTimer);state.youtubePollTimer=0;try{if(state.stage&&global.IGDCMediaHubOTTInline&&typeof global.IGDCMediaHubOTTInline.dispose==='function')global.IGDCMediaHubOTTInline.dispose(state.stage);}catch(_){}if(state.mutationObserver){state.mutationObserver.disconnect();state.mutationObserver=null;}state.youtubeFrame=null;}
-  function close(options){options=options||{};if(!state.open)return;saveCurrentProgress(true);if(!options.fromHistory&&state.historyToken&&global.history&&global.history.state&&global.history.state.igdcMediaToken===state.historyToken){global.history.back();return;}cancelClipCapture();if(isPlayerFullscreen())leaveFullscreen();disposeStage();if(state.detail)state.detail.remove();restoreList();var y=state.scrollY;state.open=false;state.detail=null;state.stage=null;state.card=null;state.historyToken='';state.lastCaptionValue='';state.panel='';state.playRequested=false;state.mobileFullscreenIntent=false;state.mobileImmersiveActive=false;state.justExitedFullscreenAt=0;state.orientationChangingUntil=0;state.nativeVideoFullscreen=false;state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;unlockMobileOrientation();clearTimeout(state.chromeTimer);clearTimeout(state.orientationTimer);if(state.fullscreenBodyOverflow!==null){document.body.style.overflow=state.fullscreenBodyOverflow;state.fullscreenBodyOverflow=null;}global.requestAnimationFrame(function(){global.scrollTo(0,y);frameHeight();});}
-  function switchCard(card){if(!card||!state.open||card===state.card)return;saveCurrentProgress(true);cancelClipCapture();disposeStage();state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;state.card=card;state.lastCaptionValue='';state.playRequested=isMobilePlaybackDevice();state.detail.setAttribute('aria-label',titleFor(card));state.stage.textContent='';appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();requestPlaybackFromGesture();global.scrollTo(0,0);syncUi();showChrome(3200);}
+  function close(options){options=options||{};if(!state.open)return;saveCurrentProgress(true);if(!options.fromHistory&&state.historyToken&&global.history&&global.history.state&&global.history.state.igdcMediaToken===state.historyToken){global.history.back();return;}cancelClipCapture();if(isPlayerFullscreen())leaveFullscreen();disposeStage();if(state.detail)state.detail.remove();restoreList();var y=state.scrollY;state.open=false;state.detail=null;state.stage=null;state.card=null;state.historyToken='';state.lastCaptionValue='';state.panel='';state.playRequested=false;state.mobileFullscreenIntent=false;state.mobileImmersiveActive=false;state.mobileSession=false;state.mobileViewMode='list';state.justExitedFullscreenAt=0;state.orientationChangingUntil=0;state.nativeVideoFullscreen=false;state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;unlockMobileOrientation();clearTimeout(state.chromeTimer);clearTimeout(state.orientationTimer);if(state.fullscreenBodyOverflow!==null){document.body.style.overflow=state.fullscreenBodyOverflow;state.fullscreenBodyOverflow=null;}global.requestAnimationFrame(function(){global.scrollTo(0,y);frameHeight();});}
+  function switchCard(card){if(!card||!state.open||card===state.card)return;saveCurrentProgress(true);cancelClipCapture();disposeStage();state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;state.card=card;state.lastCaptionValue='';state.playRequested=isMobileSession();state.detail.setAttribute('aria-label',titleFor(card));state.stage.textContent='';appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();requestPlaybackFromGesture();global.scrollTo(0,0);syncUi();showChrome(3200);}
   function move(direction){var card=adjacentCard(direction);if(card)switchCard(card);}
 
   function buildPlayerShell(card) {
@@ -925,51 +969,56 @@
     row.appendChild(iconButton('captions','',c.captionsOn,'CC'));row.appendChild(iconButton('subtitle-panel','',e.subtitleTrack,'Sub'));row.appendChild(iconButton('audio','',e.audio,'Audio'));row.appendChild(iconButton('speed','',e.speed,'1×'));row.appendChild(mobileInline(iconButton('mute','volume',e.mute,'')));
     var volume=create('label','igdc-maru-volume'),vr=document.createElement('input');vr.type='range';vr.min='0';vr.max='100';vr.value='100';vr.dataset.mediaVolume='1';volume.appendChild(vr);row.appendChild(volume);
     row.appendChild(iconButton('loop','loop',e.loopOn,''));row.appendChild(mobileInline(iconButton('shot','camera',e.shot,'')));row.appendChild(mobileInline(iconButton('tools-panel','gear',e.settings,'')));row.appendChild(mobileInline(iconButton('fullscreen','fullscreen',c.fullscreen,'')));
-    bar.appendChild(progress);if(!isMobilePlaybackDevice())bar.appendChild(center);bar.appendChild(row);var notice=create('p','igdc-media-detail-notice');notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');detail.appendChild(top);detail.appendChild(panel);detail.appendChild(stage);if(isMobilePlaybackDevice())detail.appendChild(center);detail.appendChild(bar);detail.appendChild(notice);return{detail:detail,stage:stage};
+    bar.appendChild(progress);if(!isMobileUiMode())bar.appendChild(center);bar.appendChild(row);var notice=create('p','igdc-media-detail-notice');notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');detail.appendChild(top);detail.appendChild(panel);detail.appendChild(stage);if(isMobileUiMode())detail.appendChild(center);detail.appendChild(bar);detail.appendChild(notice);return{detail:detail,stage:stage};
   }
 
   function handleAction(action,value) {
-    if(action==='back')close();else if(action==='fullscreen')toggleFullscreen();else if(action==='previous')move(-1);else if(action==='next')move(1);else if(action==='play')togglePlay();else if(action==='seek-back')seekBy(-10);else if(action==='seek-forward')seekBy(10);else if(action==='captions')toggleCaptions();else if(action==='subtitle-panel')openPanel('subtitle');else if(action==='audio'){var video=currentVideo(),tracks=video&&video.audioTracks;if(tracks&&tracks.length>1){var active=0;for(var i=0;i<tracks.length;i+=1)if(tracks[i].enabled)active=i;var next=(active+1)%tracks.length;for(var j=0;j<tracks.length;j+=1)tracks[j].enabled=j===next;showNotice((tracks[next].label||tracks[next].language||extraCopy().audioDefault));}else showNotice(extraCopy().noAudioTracks);}else if(action==='speed')cycleSpeed();else if(action==='mute')toggleMute();else if(action==='loop')toggleLoop();else if(action==='fit')setFit(state.fitMode==='cover'?'contain':'cover');else if(action==='fit-contain')setFit('contain');else if(action==='fit-cover')setFit('cover');else if(action==='shot')captureFrame();else if(action==='clip')captureClip(Number(value)||20);else if(action==='pip')togglePip();else if(action==='tools-panel')openPanel('tools');else if(action==='translate')requestTranslation();
+    if(action==='back'){if(isMobileSession()&&state.mobileViewMode==='immersive')setMobileViewMode('inline');else close();}else if(action==='fullscreen')toggleFullscreen();else if(action==='previous')move(-1);else if(action==='next')move(1);else if(action==='play')togglePlay();else if(action==='seek-back')seekBy(-10);else if(action==='seek-forward')seekBy(10);else if(action==='captions')toggleCaptions();else if(action==='subtitle-panel')openPanel('subtitle');else if(action==='audio'){var video=currentVideo(),tracks=video&&video.audioTracks;if(tracks&&tracks.length>1){var active=0;for(var i=0;i<tracks.length;i+=1)if(tracks[i].enabled)active=i;var next=(active+1)%tracks.length;for(var j=0;j<tracks.length;j+=1)tracks[j].enabled=j===next;showNotice((tracks[next].label||tracks[next].language||extraCopy().audioDefault));}else showNotice(extraCopy().noAudioTracks);}else if(action==='speed')cycleSpeed();else if(action==='mute')toggleMute();else if(action==='loop')toggleLoop();else if(action==='fit')setFit(state.fitMode==='cover'?'contain':'cover');else if(action==='fit-contain')setFit('contain');else if(action==='fit-cover')setFit('cover');else if(action==='shot')captureFrame();else if(action==='clip')captureClip(Number(value)||20);else if(action==='pip')togglePip();else if(action==='tools-panel')openPanel('tools');else if(action==='translate')requestTranslation();
     syncUi();
   }
 
-  function open(card,options){options=options||{};if(!card)return;if(state.open){switchCard(card);return;}injectStyle();var mobileMode=isMobilePlaybackDevice();if(!mobileMode)attemptNativePlayer(card);state.open=true;state.card=card;state.scrollY=global.scrollY||global.pageYOffset||0;state.panel='';state.playRequested=!!options.autoPlay||mobileMode;state.mobileFullscreenIntent=mobileMode||!!options.autoFullscreen;state.mobileImmersiveActive=false;if(state.fullscreenBodyOverflow===null)state.fullscreenBodyOverflow=document.body.style.overflow||'';hideList(card);var shell=buildPlayerShell(card);state.detail=shell.detail;state.stage=shell.stage;document.body.appendChild(shell.detail);if(mobileMode)activateFallbackFullscreen();else normalizePlayerGeometry();appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();if(mobileMode)applyMobileImmersiveGeometry(true);
-    state.detail.addEventListener('click',function(event){var p=event.target.closest&&event.target.closest('[data-media-panel]');if(p){openPanel(p.dataset.mediaPanel);return;}var cap=event.target.closest&&event.target.closest('[data-caption-value],[data-caption-index]');if(cap){selectCaption(cap.dataset.captionValue!=null?cap.dataset.captionValue:cap.dataset.captionIndex);return;}var a=event.target.closest&&event.target.closest('[data-media-action]');if(a){handleAction(a.dataset.mediaAction,a.dataset.mediaValue);showChrome(2600);return;}if(event.target===state.stage||event.target===currentVideo()||(event.target.closest&&event.target.closest('.igdc-media-detail-stage'))){if(isMobilePlaybackDevice())toggleChrome();else togglePlay();}});
+  function open(card,options){options=options||{};if(!card)return;if(state.open){switchCard(card);return;}injectStyle();var mobileMode=isMobilePlaybackDevice();if(!mobileMode)attemptNativePlayer(card);state.open=true;state.mobileSession=mobileMode;state.mobileViewMode=mobileMode?'inline':'list';state.card=card;state.scrollY=global.scrollY||global.pageYOffset||0;state.panel='';state.playRequested=!!options.autoPlay||mobileMode;state.mobileFullscreenIntent=false;state.mobileImmersiveActive=false;if(state.fullscreenBodyOverflow===null)state.fullscreenBodyOverflow=document.body.style.overflow||'';hideList(card);var shell=buildPlayerShell(card);state.detail=shell.detail;state.stage=shell.stage;document.body.appendChild(shell.detail);if(mobileMode)setMobileViewMode('immersive');else normalizePlayerGeometry();appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();if(mobileMode&&state.mobileViewMode==='immersive')applyMobileImmersiveGeometry(true);
+    state.detail.addEventListener('click',function(event){var p=event.target.closest&&event.target.closest('[data-media-panel]');if(p){openPanel(p.dataset.mediaPanel);return;}var cap=event.target.closest&&event.target.closest('[data-caption-value],[data-caption-index]');if(cap){selectCaption(cap.dataset.captionValue!=null?cap.dataset.captionValue:cap.dataset.captionIndex);return;}var a=event.target.closest&&event.target.closest('[data-media-action]');if(a){handleAction(a.dataset.mediaAction,a.dataset.mediaValue);showChrome(2600);return;}if(event.target===state.stage||event.target===currentVideo()||(event.target.closest&&event.target.closest('.igdc-media-detail-stage'))){if(isMobileSession())toggleChrome();else togglePlay();}});
     var seek=state.detail.querySelector('[data-media-seek]');seek.addEventListener('input',function(){var video=currentVideo();if(video&&Number.isFinite(video.duration)){video.currentTime=video.duration*(Number(seek.value)||0)/1000;updateTimeUi();showChrome(2400);}});
     var vol=state.detail.querySelector('[data-media-volume]');vol.addEventListener('input',function(){setVolume((Number(vol.value)||0)/100);});
-    state.detail.addEventListener('pointermove',function(ev){if(isMobilePlaybackDevice())return;var y=Number(ev.clientY);if(y<100||y>global.innerHeight-170)showChrome(2200);});
-    if(options.autoPlay===true||isMobilePlaybackDevice())requestPlaybackFromGesture();
+    state.detail.addEventListener('pointermove',function(ev){if(isMobileSession())return;var y=Number(ev.clientY);if(y<100||y>global.innerHeight-170)showChrome(2200);});
+    if(options.autoPlay===true||isMobileSession())requestPlaybackFromGesture();
     if(!mobileMode&&options.autoFullscreen===true)enterPlayerFullscreen();
     if(!options.fromHistory&&global.history&&global.history.pushState){state.historyToken='media-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);try{global.history.pushState({igdcMedia:true,igdcMediaToken:state.historyToken},'',global.location.href);}catch(_){state.historyToken='';}}
-    global.requestAnimationFrame(function(){global.scrollTo(0,0);state.stage.focus({preventScroll:true});frameHeight();syncUi();normalizePlayerGeometry();if(isMobilePlaybackDevice())hideChromeNow();else showChrome(2200);});
+    global.requestAnimationFrame(function(){global.scrollTo(0,0);state.stage.focus({preventScroll:true});frameHeight();syncUi();normalizePlayerGeometry();if(isMobileSession())hideChromeNow();else showChrome(2200);});
   }
 
   document.addEventListener('click',function(event){var card=isMediaCard(event.target);if(!card)return;if(state.open){event.preventDefault();event.stopImmediatePropagation();return;}if(card.getAttribute('data-placeholder')==='true')return;event.preventDefault();event.stopImmediatePropagation();open(card,{autoFullscreen:isMobilePlaybackDevice(),autoPlay:true});},true);
   (function bindMobileTapPlayback(){var touchCard=null,startX=0,startY=0,startAt=0,moved=false;function pointOf(event,changed){var list=changed?event.changedTouches:event.touches;return list&&list.length?list[0]:null;}document.addEventListener('touchstart',function(event){var card=isMediaCard(event.target),p=pointOf(event,false);touchCard=(card&&card.getAttribute('data-placeholder')!=='true')?card:null;moved=false;startAt=Date.now();if(p){startX=p.clientX;startY=p.clientY;}},{passive:true,capture:true});document.addEventListener('touchmove',function(event){if(!touchCard||moved)return;var p=pointOf(event,false);if(!p)return;if(Math.abs(p.clientX-startX)>12||Math.abs(p.clientY-startY)>12)moved=true;},{passive:true,capture:true});document.addEventListener('touchend',function(event){var card=touchCard,p=pointOf(event,true),elapsed=Date.now()-startAt;touchCard=null;if(!card||moved||elapsed>700)return;if(p&&(Math.abs(p.clientX-startX)>12||Math.abs(p.clientY-startY)>12))return;if(state.open)return;if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();open(card,{autoFullscreen:true,autoPlay:true});},{passive:false,capture:true});document.addEventListener('touchcancel',function(){touchCard=null;moved=false;},{passive:true,capture:true});})();
   document.addEventListener('keydown',function(event){if(!state.open)return;var tag=event.target&&event.target.tagName;if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA')return;if(event.key==='Escape'){if(state.panel){state.panel='';var p=state.detail&&state.detail.querySelector('.igdc-maru-panel');if(p)p.hidden=true;showChrome(2000);}else if(isPlayerFullscreen()){event.preventDefault();leaveFullscreen();}else close();}else if(event.key===' '||event.code==='Space'){event.preventDefault();togglePlay();}else if(event.key==='ArrowLeft'){event.preventDefault();seekBy(-10);}else if(event.key==='ArrowRight'){event.preventDefault();seekBy(10);}else if(event.key==='ArrowUp'){event.preventDefault();var v=currentVideo();if(v)setVolume(Math.min(1,(v.muted?0:v.volume)+.05));}else if(event.key==='ArrowDown'){event.preventDefault();var v2=currentVideo();if(v2)setVolume(Math.max(0,(v2.muted?0:v2.volume)-.05));}else if(event.key.toLowerCase()==='f'){event.preventDefault();toggleFullscreen();}else if(event.key.toLowerCase()==='m'){event.preventDefault();toggleMute();}else if(event.key.toLowerCase()==='c'){event.preventDefault();toggleCaptions();}},true);
-  global.addEventListener('popstate',function(){if(!state.open)return;if(isPlayerFullscreen()){leaveFullscreen();if(global.history&&global.history.pushState){state.historyToken='media-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);try{global.history.pushState({igdcMedia:true,igdcMediaToken:state.historyToken},'',global.location.href);}catch(_){}}normalizePlayerGeometry();hideChromeNow();return;}close({fromHistory:true});});
+  global.addEventListener('popstate',function(){if(!state.open)return;if((isMobileSession()&&state.mobileViewMode==='immersive')||(!isMobileSession()&&isPlayerFullscreen())){leaveFullscreen();if(global.history&&global.history.pushState){state.historyToken='media-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);try{global.history.pushState({igdcMedia:true,igdcMediaToken:state.historyToken},'',global.location.href);}catch(_){}}normalizePlayerGeometry();hideChromeNow();return;}close({fromHistory:true});});
   function fullscreenChanged(){
     if(!state.detail)return;
+    // Mobile never uses browser/native fullscreen as a state source. Its view
+    // mode is controlled only by the IGDC immersive <-> inline state machine.
+    if(isMobileSession()){
+      if(state.mobileViewMode==='immersive'){
+        applyMobileImmersiveGeometry(true);
+        state.detail.classList.add('igdc-mobile-fullscreen-fallback');
+        markFullscreenUi(true);
+      }else{
+        state.detail.classList.remove('igdc-mobile-fullscreen-fallback');
+        applyMobileImmersiveGeometry(false);
+        markFullscreenUi(false);
+      }
+      return;
+    }
     if(fullscreenElement()||currentVideoFullscreen()||fallbackFullscreenActive()){
       if(fullscreenElement()&&state.detail)state.detail.classList.remove('igdc-mobile-fullscreen-fallback');
       markFullscreenUi(true);normalizePlayerGeometry();lockMobileLandscape();return;
     }
-    // Some mobile browsers transiently drop element fullscreen during a
-    // physical rotation. Preserve the full-player state with the viewport
-    // fallback only for that short orientation-change window.
-    if(isMobilePlaybackDevice()&&state.mobileFullscreenIntent&&Date.now()<state.orientationChangingUntil){
-      activateFallbackFullscreen();
-      requestPlaybackFromGesture();
-      return;
-    }
-    if(isMobilePlaybackDevice()&&state.mobileFullscreenIntent) state.justExitedFullscreenAt=Date.now();
     state.mobileFullscreenIntent=false;
     markFullscreenUi(false);
     requestPlaybackFromGesture();
     global.requestAnimationFrame(normalizePlayerGeometry);
   }
   function orientationViewportRepair(){
-    if(state.open&&isPlayerFullscreen())state.orientationChangingUntil=Date.now()+1400;
+    if(isMobileSession()&&state.mobileViewMode==='immersive')state.orientationChangingUntil=Date.now()+1400;
     scheduleViewportRepair();
   }
   global.addEventListener('message',function(event){
@@ -992,6 +1041,6 @@
   if(global.visualViewport)global.visualViewport.addEventListener('resize',scheduleViewportRepair,{passive:true});
   try{if(global.screen&&global.screen.orientation&&global.screen.orientation.addEventListener)global.screen.orientation.addEventListener('change',orientationViewportRepair,{passive:true});}catch(_){}
 
-  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.4.0-mobile-immersive-hard-lock-resume-5s';
-  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.4.0-mobile-immersive-hard-lock-resume-5s'};
+  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.5.0-mobile-three-state-immersive-inline-list-resume-5s';
+  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.5.0-mobile-three-state-immersive-inline-list-resume-5s'};
 })(window, document);

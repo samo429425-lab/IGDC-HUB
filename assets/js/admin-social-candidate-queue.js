@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.2.0 - exact candidate-to-front handoff */
+/* IGDC Social Hub Content Operations v3.3.0 - admin queue continuity / front-unpublish isolation */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -42,7 +42,10 @@
     selectedHoldContents = new Set(),
     selectedFrontSections = new Set(),
     publishedContentIds = new Set(),
-    waitingViewMode = "all";
+    waitingViewMode = "all",
+    latestContentIndex = new Map(),
+    lastVisibleRows = [],
+    searchBankImportBusy = false;
   var $ = function (id) {
       return document.getElementById(id);
     },
@@ -643,13 +646,13 @@
     );
     $("filterPanel").classList.remove("hidden");
   }
-  function visible() {
+  function visible(sourceRows) {
     var q = lower($("searchInput").value),
       section = text($("sectionFilter").value),
       platform = text($("platformFilter").value),
       risk = text($("riskFilter").value),
       review = text($("reviewFilter").value);
-    return countryScopedActive()
+    return (Array.isArray(sourceRows) ? sourceRows : countryScopedActive())
       .filter(function (r) {
         if (section && r.sectionKey !== section) return false;
         if (platform && r.platform !== platform) return false;
@@ -725,25 +728,27 @@
           esc(r.creatorName || r.title || "공개 미리보기") +
           "</span>";
   }
+  function rebuildLatestContentIndex(sourceRows) {
+    latestContentIndex = new Map();
+    (Array.isArray(sourceRows) ? sourceRows : countryScopedActive()).forEach(function (row) {
+      if (assetClass(row) !== "latest_content") return;
+      var identity = channelIdentity(row);
+      if (!identity) return;
+      var previous = latestContentIndex.get(identity);
+      if (!previous) {
+        latestContentIndex.set(identity, row);
+        return;
+      }
+      var rowDate = Date.parse(text(row.contentPublishedAt)) || 0;
+      var previousDate = Date.parse(text(previous.contentPublishedAt)) || 0;
+      if (rowDate > previousDate || (rowDate === previousDate && score(row) > score(previous))) {
+        latestContentIndex.set(identity, row);
+      }
+    });
+  }
   function latestForInfluencer(r) {
     var identity = channelIdentity(r);
-    if (!identity) return null;
-    return (
-      countryScopedActive()
-        .filter(function (row) {
-          return (
-            assetClass(row) === "latest_content" &&
-            channelIdentity(row) === identity
-          );
-        })
-        .sort(function (a, b) {
-          return (
-            (Date.parse(text(b.contentPublishedAt)) || 0) -
-              (Date.parse(text(a.contentPublishedAt)) || 0) ||
-            score(b) - score(a)
-          );
-        })[0] || null
-    );
+    return identity ? latestContentIndex.get(identity) || null : null;
   }
   function item(r, queue) {
     var id = esc(r.id),
@@ -856,7 +861,8 @@
     });
   }
   function queueRows(queue, section) {
-    return visible().filter(function (row) {
+    var source = lastVisibleRows.length ? lastVisibleRows : visible();
+    return source.filter(function (row) {
       var kindOk = assetClass(row) === (queue === "registry" ? "influencer_registry" : "latest_content");
       if (!kindOk) return false;
       if (queue === "hold" && !contentHold(row)) return false;
@@ -864,14 +870,45 @@
       return !section || row.sectionKey === section;
     });
   }
+  function selectionSet(queue) {
+    return queue === "registry" ? selectedInfluencers : queue === "hold" ? selectedHoldContents : selectedContents;
+  }
+  function queueCheckboxSelector(queue) {
+    return queue === "registry" ? ".finalCheck" : queue === "hold" ? ".holdCheck" : ".waitingCheck";
+  }
+  function updateSectionSelectionState() {
+    document.querySelectorAll(".registrySectionCheck").forEach(function (el) {
+      var key = text(el.dataset.registrySection);
+      var part = queueRows("registry", key);
+      var selectedCount = part.filter(function (row) { return selectedInfluencers.has(text(row.id)); }).length;
+      el.checked = part.length > 0 && selectedCount === part.length;
+      el.indeterminate = selectedCount > 0 && selectedCount < part.length;
+      el.disabled = part.length === 0;
+    });
+  }
+  function syncQueueSelectionDom(queue, section) {
+    var target = selectionSet(queue), selector = queueCheckboxSelector(queue);
+    document.querySelectorAll(selector).forEach(function (el) {
+      var id = text(el.dataset.candidateId);
+      var row = rows.find(function (value) { return text(value.id) === id; });
+      if (section && (!row || row.sectionKey !== section)) return;
+      var checked = target.has(id);
+      el.checked = checked;
+      var card = el.closest && el.closest(".candidate-card");
+      if (card) card.classList.toggle("selected", checked);
+    });
+    updateMasterSelectionState();
+    updateSectionSelectionState();
+  }
   function selectQueue(queue, section, checked) {
-    var target =
-      queue === "registry" ? selectedInfluencers : queue === "hold" ? selectedHoldContents : selectedContents;
+    var target = selectionSet(queue);
     queueRows(queue, section).forEach(function (row) {
       if (checked) target.add(text(row.id));
       else target.delete(text(row.id));
     });
-    renderSections();
+    // Selection must be immediate even with hundreds of influencer rows. Do not
+    // rebuild every accordion/card just to toggle checkboxes.
+    syncQueueSelectionDom(queue, section);
     show(
       (section ? label(section) + " " : "현재 조회 범위 ") +
         (queue === "registry" ? "인플루언서" : "최신 콘텐츠") +
@@ -888,10 +925,10 @@
       el.indeterminate = count > 0 && count < list.length;
       el.disabled = list.length === 0;
     });
+    updateSectionSelectionState();
   }
   function toggleWholeQueue(queue, checked) {
     selectQueue(queue, "", checked);
-    updateMasterSelectionState();
   }
   function selectedFrontSectionKeys() {
     return order.filter(function (key) { return selectedFrontSections.has(key); });
@@ -935,6 +972,12 @@
       '<button type="button" data-section-approve="' +
       esc(key) +
       '">선택 인플루언서 승인</button>' +
+      '<button class="secondary" type="button" data-section-import-content="' +
+      esc(key) +
+      '">이 SNS 실후보 반입</button>' +
+      '<button class="secondary" type="button" data-section-open-content="' +
+      esc(key) +
+      '">이 SNS 콘텐츠 후보 열기</button>' +
       '<button class="publish" type="button" data-section-ai="' +
       esc(key) +
       '">AI 자동 정리</button>' +
@@ -988,7 +1031,11 @@
               '"' +
               (selectedFrontSections.has(key) ? " checked" : "") +
               '> 프론트 선택</label>'
-            : "") +
+            : queue === "registry"
+              ? '<label class="section-front-select"><input class="registrySectionCheck" type="checkbox" data-registry-section="' +
+                esc(key) +
+                '"> 섹션 선택</label>'
+              : "") +
           '<button class="section-toggle" type="button" ' +
           toggleAttribute +
           '="' +
@@ -1051,7 +1098,9 @@
     if ($(activeId)) $(activeId).classList.add("publish");
   }
   function renderSections() {
-    var list = visible(),
+    var scopedRows = countryScopedActive();
+    rebuildLatestContentIndex(scopedRows);
+    var list = visible(scopedRows),
       finalList = list.filter(function (row) {
         return assetClass(row) === "influencer_registry";
       }),
@@ -1060,6 +1109,7 @@
       }),
       holdList = list.filter(contentHold),
       waitingList = waitingAll.filter(waitingViewAccept);
+    lastVisibleRows = list.slice();
     $("filterState").textContent =
       "표시 " +
       list.length +
@@ -1105,6 +1155,7 @@
     $("waitingPanel").classList.remove("hidden");
     if ($("holdPanel")) $("holdPanel").classList.remove("hidden");
     updateMasterSelectionState();
+    updateSectionSelectionState();
     updateFrontSectionSelectionState();
   }
   function excludedRow(r, n) {
@@ -1194,9 +1245,20 @@
     var open = typeof forceOpen === "boolean"
       ? forceOpen
       : body.classList.contains("hidden");
+    if (!open && openDetailQueue === "registry") {
+      // Closing the registry closes every SNS subsection too.
+      openDetailQueue = "";
+      openDetailSection = "";
+    }
     body.classList.toggle("hidden", !open);
     button.textContent = open ? "등록부 접기" : "등록부 펼치기";
     button.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      // Always reopen cleanly with all nine section bodies folded.
+      openDetailQueue = "";
+      openDetailSection = "";
+      renderSections();
+    }
   }
 
   function toggleDiagnosticPanel(forceOpen) {
@@ -1351,8 +1413,7 @@
       var d = await get(REVIEW + "?action=candidates");
       rows = (d.queue && d.queue.rows) || d.candidates || [];
       pruneSelections();
-      await loadPlacement();
-      await loadPublishedState();
+      await Promise.all([loadPlacement(), loadPublishedState()]);
       renderSummary(d.summary);
       filters(d.summary);
       renderSections();
@@ -1905,37 +1966,108 @@
     }
     return !failed && !j.paused;
   }
-  async function importSearchBank() {
+  function legacyFrontUnpublishHoldIds(sectionKey) {
+    return rows
+      .filter(function (row) {
+        return (
+          assetClass(row) === "latest_content" &&
+          contentHold(row) &&
+          text(row.reviewNote) === "actual_unpublish_to_content_hold" &&
+          (!sectionKey || row.sectionKey === sectionKey)
+        );
+      })
+      .map(function (row) { return text(row.id); })
+      .filter(Boolean);
+  }
+  async function repairLegacyFrontUnpublishHolds(sectionKey) {
+    var ids = legacyFrontUnpublishHoldIds(sectionKey);
+    if (!ids.length) return 0;
+    var result = await post(ACTION, {
+      action: "approve",
+      ids: ids,
+      note: "restore_from_legacy_front_unpublish",
+      confirmSocialSafe: true,
+      countryCode: selectedCountry(),
+      scopeMode: scopeMode(),
+      regionId: text($("collectorRegion").value),
+    });
+    return Number(result.updated || 0);
+  }
+  function openContentSection(sectionKey) {
+    waitingViewMode = "all";
+    openDetailQueue = "content";
+    var key = sectionKey;
+    if (!key) {
+      key = order.find(function (candidateKey) {
+        return lastVisibleRows.some(function (row) {
+          return row.sectionKey === candidateKey && assetClass(row) === "latest_content" && !contentHold(row);
+        });
+      }) || "";
+    }
+    openDetailSection = key || "";
+    renderSections();
+    var panel = $("waitingPanel");
+    if (panel && typeof panel.scrollIntoView === "function") {
+      setTimeout(function () { panel.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
+    }
+  }
+  async function importSearchBank(sectionKey) {
+    if (searchBankImportBusy) {
+      show("SearchBank 실후보 반입이 이미 진행 중입니다.", "warn");
+      return null;
+    }
+    searchBankImportBusy = true;
+    var button = $("searchBankImportBtn");
+    if (button) button.disabled = true;
     try {
-      var d = await post(PIPELINE, {
-        action: "import_searchbank",
-        limit: 5000,
-      });
+      var repaired = await repairLegacyFrontUnpublishHolds(sectionKey || "");
+      show(
+        (sectionKey ? label(sectionKey) + " · " : "") +
+          "SearchBank 실후보를 관리자 후보 목록으로 반입하고 있습니다.",
+        "warn",
+      );
+      var body = { action: "import_searchbank", limit: 5000 };
+      if (sectionKey) body.sectionKey = sectionKey;
+      var d = await post(PIPELINE, body);
       diagnostic(d);
       await refresh();
+      openContentSection(sectionKey || "");
       show(
-        "SearchBank 실후보 반입 완료: 후보 " +
+        (sectionKey ? label(sectionKey) + " · " : "") +
+          "SearchBank 실후보 반입 완료: 후보 " +
           Number(d.accepted || 0) +
           "개, 저장 " +
           Number(d.saved || 0) +
-          "개. seed·placeholder는 안전하게 제외됩니다.",
-        Number(d.accepted || 0) ? "ok" : "warn",
+          "개" +
+          (repaired ? ", 이전 프론트 해제로 잘못 보류된 " + repaired + "개 복구" : "") +
+          ". seed·placeholder는 제외되고 콘텐츠 후보 목록을 열었습니다.",
+        Number(d.accepted || 0) || repaired ? "ok" : "warn",
       );
+      return d;
     } catch (e) {
-      show(e.message, "warn");
+      show(e.message || "SearchBank 실후보 반입 실패", "warn");
+      return null;
+    } finally {
+      searchBankImportBusy = false;
+      if (button) button.disabled = false;
     }
   }
   async function intakeChannels(dryRun) {
     var raw = text($("channelIntakeText").value),
       state = $("channelIntakeState");
+    var section = text($("collectorSection").value);
     if (!raw) {
+      if (!dryRun) {
+        // No manual URL was supplied: use the already discovered SearchBank
+        // candidates for the selected SNS instead of making the button appear dead.
+        return importSearchBank(section);
+      }
       show(
-        "반입할 공개 최신 영상 또는 게시물 URL을 한 줄 이상 입력해 주세요.",
+        "직접 URL 점검에는 공개 최신 영상 또는 게시물 URL을 한 줄 이상 입력해 주세요.",
         "warn",
       );
       return;
     }
-    var section = text($("collectorSection").value);
     state.textContent = dryRun
       ? "최신 콘텐츠 주소 점검 중"
       : "최신 콘텐츠 후보 반입 중";
@@ -1954,7 +2086,10 @@
       });
       var report = d.channelIntake || {};
       diagnostic(d);
-      if (!dryRun) await refresh();
+      if (!dryRun) {
+        await refresh();
+        openContentSection(section);
+      }
       state.textContent =
         "변환 " +
         Number(report.resolvedLatestContents || report.resolvedChannels || 0) +
@@ -2060,6 +2195,7 @@
         ? prompt(name + " 처리 메모를 입력하세요. 비워도 됩니다.", "") || ""
         : name);
     try {
+      show(name + " 처리 요청 중 · " + ids.length + "건", "warn");
       var body = Object.assign(
         {
           action: action,
@@ -2084,6 +2220,7 @@
       });
       $("socialConfirm").checked = false;
       if (!(extra && extra.skipRefresh)) await refresh();
+      if (action === "promote_candidate") openContentSection("");
       show(
         name + " 처리 " + Number(d.updated || d.deleted || 0) + "건 완료",
         "ok",
@@ -2430,6 +2567,8 @@
   }
 
   async function actualApplyAllRegistered(skipConfirm) {
+    var repaired = await repairLegacyFrontUnpublishHolds("");
+    if (repaired) await refresh();
     var ids = registeredContentIds("");
     if (!ids.length)
       return show("SearchBank 인계 가능한 최신 콘텐츠 후보가 없습니다.", "warn");
@@ -2439,6 +2578,11 @@
   async function actualApplySelectedFrontSections() {
     var keys = selectedFrontSectionKeys();
     if (!keys.length) return show("프론트 등록할 SNS 섹션을 먼저 선택해 주세요.", "warn");
+    var repaired = 0;
+    for (var repairIndex = 0; repairIndex < keys.length; repairIndex++) {
+      repaired += await repairLegacyFrontUnpublishHolds(keys[repairIndex]);
+    }
+    if (repaired) await refresh();
     var ids = [];
     keys.forEach(function (key) { ids = ids.concat(registeredContentIds(key)); });
     ids = Array.from(new Set(ids));
@@ -2469,6 +2613,8 @@
   }
 
   async function actualApplySection(sectionKey, skipConfirm) {
+    var repaired = await repairLegacyFrontUnpublishHolds(sectionKey);
+    if (repaired) await refresh();
     var selectedInSectionAll = Array.from(selectedContents).filter(function (id) {
       return rows.some(function (row) {
         return text(row && row.id) === id && row.sectionKey === sectionKey;
@@ -2721,8 +2867,7 @@
           (scope.country.nameKo ||
             scope.country.nameEn ||
             scope.country.code)) ||
-        "전 세계 공통",
-      movedToWaiting = false;
+        "전 세계 공통";
     if (!ids.length) {
       show("실제 적용을 취소할 최신 콘텐츠를 먼저 선택해 주세요.", "warn");
       return;
@@ -2732,15 +2877,13 @@
         scopeName +
           " 범위의 " +
           target +
-          "에서 실제 적용을 취소할 " +
+          "에서 " +
           ids.length +
-          "개 콘텐츠를 프론트에서 내리고 콘텐츠 보류 대기창으로 이동할까요?",
+          "개 콘텐츠를 프론트에서만 내릴까요? 후보 등록·승인 상태는 그대로 유지되므로 나중에 다시 즉시 등록할 수 있습니다.",
       )
     )
       return;
     try {
-      await run("hold", ids, { skipConfirm: true, skipRefresh: true, body: { note: "actual_unpublish_to_content_hold" } });
-      movedToWaiting = true;
       var d = await post(PUBLISH, {
         operation: "unpublish_selected",
         candidateIds: ids,
@@ -2750,7 +2893,7 @@
         sectionKey: sectionKey || "",
         countryCode: scope.countryCode,
         scopeMode: scopeMode(),
-          regionId: text($("collectorRegion").value),
+        regionId: text($("collectorRegion").value),
       });
       diagnostic(d);
       ids.forEach(function (id) {
@@ -2762,23 +2905,17 @@
           scopeName +
             " 범위의 선택 콘텐츠 " +
             ids.length +
-            "개를 콘텐츠 보류 대기창으로 이동했고, 실제 적용 취소 정식 빌드를 접수했습니다. 배포 완료 후 프론트에서 내려갑니다.",
+            "개는 프론트 등록만 해제했고 후보 목록·승인 상태는 유지했습니다. 배포 완료 후 프론트에서만 내려갑니다.",
           "ok",
         );
       } else {
         show(
-          "선택 콘텐츠는 보류 대기창으로 이동했고 적용 취소본도 저장됐지만, SOCIAL_NETLIFY_BUILD_HOOK_URL 미설정으로 정식 배포가 시작되지 않았습니다.",
+          "프론트 등록 해제본은 저장됐지만 정식 배포가 시작되지 않았습니다. 후보 목록·승인 상태는 변경하지 않았습니다.",
           "warn",
         );
       }
     } catch (e) {
-      show(
-        movedToWaiting
-          ? "선택 콘텐츠는 보류 대기창으로 이동했지만 프론트 적용 취소 저장을 완료하지 못했습니다. 같은 항목을 다시 선택해 적용 취소를 실행해 주세요. · " +
-              (e.message || "저장 실패")
-          : e.message || "선택 콘텐츠 적용 취소를 완료하지 못했습니다.",
-        "warn",
-      );
+      show(e.message || "선택 콘텐츠 프론트 등록 해제를 완료하지 못했습니다.", "warn");
     }
   }
   async function actualUnapply(sectionKey) {
@@ -3049,6 +3186,10 @@
         blockHeld(sectionIds(container, key, "holdCheck"));
       else if ((key = event.target.dataset.sectionApprove))
         run("approve", sectionIds(container, key, "finalCheck"));
+      else if ((key = event.target.dataset.sectionImportContent))
+        importSearchBank(key);
+      else if ((key = event.target.dataset.sectionOpenContent))
+        openContentSection(key);
       else if ((key = event.target.dataset.sectionAi)) autoCurate(key);
       else if ((key = event.target.dataset.sectionBlock))
         run("permanent_block", sectionIds(container, key, "finalCheck"));
@@ -3068,6 +3209,11 @@
         run("permanent_block", sectionIds(container, key, "waitingCheck"));
     });
     container.addEventListener("change", function (event) {
+      if (event.target.matches(".registrySectionCheck")) {
+        var registryKey = text(event.target.dataset.registrySection);
+        if (order.indexOf(registryKey) >= 0) selectQueue("registry", registryKey, event.target.checked);
+        return;
+      }
       if (event.target.matches(".frontSectionCheck")) {
         var frontKey = text(event.target.dataset.frontSection);
         if (order.indexOf(frontKey) >= 0) {
