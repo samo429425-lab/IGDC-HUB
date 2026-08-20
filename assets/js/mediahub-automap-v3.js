@@ -311,7 +311,7 @@
     });
   }
   function clearMediaDataset(a){
-    ['provider','mediaTitle','igdcContentId','contentId','mediaSource','captions','windowsPlayerUrl','androidPlayerUrl','maruAppUrl','thumbPending','thumbRecovery','autoThumbQueued','autoThumbSource'].forEach((key)=>{try{delete a.dataset[key];}catch(_e){}});
+    ['provider','mediaTitle','igdcContentId','contentId','mediaSource','captions','windowsPlayerUrl','androidPlayerUrl','maruAppUrl','thumbPending','thumbRecovery','autoThumbQueued','autoThumbSource','thumbPendingKind','frontOrder'].forEach((key)=>{try{delete a.dataset[key];}catch(_e){}});
   }
   function resetAnchorToPlaceholder(a, reason){
     if(!a)return;
@@ -324,6 +324,7 @@
     img.onload=null;img.onerror=null;img.src=SAMPLE_IMAGE;img.alt='Media Sample';img.loading='lazy';img.decoding='async';
     const meta=q('.meta',a)||D.createElement('div');if(!meta.parentNode){meta.className='meta';a.appendChild(meta);}meta.textContent='Sample';
     if(reason)a.dataset.thumbQuarantineReason=reason;else delete a.dataset.thumbQuarantineReason;
+    scheduleCompact(a);
   }
   function quarantineItem(a,item,reason){
     resetAnchorToPlaceholder(a,reason||'thumbnail_unavailable');
@@ -389,13 +390,14 @@
     let img=q('img',thumbBox);if(!img){img=D.createElement('img');thumbBox.appendChild(img);}
     let meta=q('.meta',a);if(!meta){meta=D.createElement('div');meta.className='meta';a.appendChild(meta);}meta.textContent='Sample';
     a.setAttribute('data-placeholder','true');
+    a.dataset.thumbPending='1';a.dataset.thumbPendingKind='ready';
     img.alt=title||'';img.loading='lazy';img.decoding='async';img.dataset.autoThumbResolved='1';
     // Keep the blue MEDIA SAMPLE artwork visible until a real thumbnail has
     // actually loaded and passed validation. Off-screen cards do not start
     // network thumbnail work at all; this avoids large request bursts at boot.
     let settled=false,slowTimer=0,watcher=null,loader=null,loadStarted=false;
     function stopWatch(){if(slowTimer)clearTimeout(slowTimer);slowTimer=0;if(watcher){try{watcher.disconnect();}catch(_e){}watcher=null;}}
-    function activate(){if(settled||!a.isConnected)return;settled=true;stopWatch();img.src=thumb;thumbBox.classList.remove('ph');meta.textContent=title;a.removeAttribute('data-placeholder');delete a.dataset.thumbPending;delete a.dataset.thumbQuarantineReason;}
+    function activate(){if(settled||!a.isConnected)return;settled=true;stopWatch();img.src=thumb;thumbBox.classList.remove('ph');meta.textContent=title;a.removeAttribute('data-placeholder');delete a.dataset.thumbPending;delete a.dataset.thumbPendingKind;delete a.dataset.thumbRecovery;delete a.dataset.thumbQuarantineReason;scheduleCompact(a);}
     function fail(reason){if(settled)return;settled=true;stopWatch();if(loader){try{loader.onload=null;loader.onerror=null;}catch(_e){}loader=null;}if(a.dataset.thumbRecovery==='1'){quarantineItem(a,item,reason||'thumbnail_recovery_failed');return;}resetAnchorToPlaceholder(a,reason||'thumbnail_load_failed');recoverThumbnail(a,item);}
     function beginLoad(){
       if(settled||loadStarted||!a.isConnected)return;loadStarted=true;
@@ -452,7 +454,7 @@
   function recoverThumbnail(card,item){
     if(!card||!item)return;
     if(isSyntheticSampleItem(item)){resetAnchorToPlaceholder(card,'sample_slot');return;}
-    card.dataset.thumbPending='1';card.dataset.thumbRecovery='1';
+    card.dataset.thumbPending='1';card.dataset.thumbPendingKind='recovery';card.dataset.thumbRecovery='1';
     if('IntersectionObserver' in window){
       if(!recoveryObserver)recoveryObserver=new IntersectionObserver((entries)=>{entries.forEach((entry)=>{if(!entry.isIntersecting)return;const el=entry.target;recoveryObserver.unobserve(el);enqueueRecovery(el,el.__igdcRecoveryItem);});},{root:null,rootMargin:'220px 0px',threshold:.01});
       card.__igdcRecoveryItem=item;recoveryObserver.observe(card);
@@ -472,6 +474,88 @@
     return !!(title&&source&&id);
   }
 
+  function numeric(item, keys){
+    for(const key of keys){
+      const value=Number(item&&item[key]);
+      if(Number.isFinite(value))return value;
+    }
+    return 0;
+  }
+  function thumbnailReadyScore(item){
+    const thumb=safeFrontThumbnail(rawThumbnail(item));
+    if(!thumb)return 0;
+    let score=700;
+    if(item&&(item.thumbnailVerified===true||item.thumbVerified===true||item.thumbnailReady===true||item.frontThumbnailReady===true))score+=220;
+    const status=String(item&&(item.thumbnailStatus||item.thumbStatus||item.imageStatus)||'').toLowerCase();
+    if(/(?:verified|ready|approved|valid|ok)/.test(status))score+=140;
+    if(/(?:failed|invalid|broken|slow|timeout|missing|blocked)/.test(status))score-=900;
+    const w=numeric(item,['thumbnailWidth','thumbWidth','imageWidth']);
+    const h=numeric(item,['thumbnailHeight','thumbHeight','imageHeight']);
+    if(w>=640&&h>=360)score+=100; else if(w>=320&&h>=180)score+=50;
+    return score;
+  }
+  function playbackReadyScore(item){
+    if(playbackMarkedUnavailable(item))return -3000;
+    let score=300;
+    if(item&&(item.playbackReady===true||item.frontPlaybackReady===true||item.sourceReady===true||item.playable===true))score+=180;
+    const latency=numeric(item,['playbackLatencyMs','probeLatencyMs','latencyMs','loadLatencyMs']);
+    if(latency>0){if(latency<=1200)score+=120;else if(latency<=2500)score+=60;else if(latency>5000)score-=800;}
+    const status=String(item&&(item.playbackStatus||item.sourceStatus||item.playabilityStatus)||'').toLowerCase();
+    if(/(?:ready|verified|approved|playable|ok)/.test(status))score+=100;
+    return score;
+  }
+  function recencyScore(item){
+    const raw=item&&(item.publishedAt||item.releaseDate||item.createdAt||item.updatedAt||item.date);
+    if(!raw)return 0;
+    const time=new Date(raw).getTime();if(!Number.isFinite(time))return 0;
+    const days=Math.max(0,(Date.now()-time)/86400000);
+    return Math.max(0,160-(days*3));
+  }
+  function engagementScore(item){
+    const views=numeric(item,['views','viewCount']);
+    const popularity=numeric(item,['popularity','score','rankingScore','qualityScore']);
+    const rating=numeric(item,['rating','voteAverage']);
+    const metrics=item&&item.metrics&&typeof item.metrics==='object'?item.metrics:{};
+    const watch=Number(metrics.watchTime||0), likes=Number(metrics.like||0), recommends=Number(metrics.recommend||0);
+    return Math.min(220,Math.log10(Math.max(1,views))*28)+Math.min(160,popularity*2)+Math.min(90,rating*9)+Math.min(90,Math.log10(Math.max(1,watch+likes+recommends))*18);
+  }
+  function frontPriority(item){
+    return thumbnailReadyScore(item)+playbackReadyScore(item)+recencyScore(item)+engagementScore(item);
+  }
+  function isTrendingReadyCandidate(item){
+    return isFrontCandidate(item)&&thumbnailReadyScore(item)>0&&playbackReadyScore(item)>0;
+  }
+  function compactLine(line){
+    if(!line)return;
+    const container=getContainer(line);
+    const cards=qa('a.card',container);
+    if(cards.length<2)return;
+    const ranked=cards.slice().sort((a,b)=>{
+      const bucket=(el)=>{
+        if(el.getAttribute('data-placeholder')!=='true')return 0;
+        if(el.dataset.thumbPendingKind==='ready')return 1;
+        if(el.dataset.thumbPending==='1'||el.dataset.thumbRecovery==='1')return 2;
+        return 3;
+      };
+      const ba=bucket(a),bb=bucket(b);
+      if(ba!==bb)return ba-bb;
+      const oa=Number(a.dataset.frontOrder),ob=Number(b.dataset.frontOrder);
+      if(Number.isFinite(oa)&&Number.isFinite(ob)&&oa!==ob)return oa-ob;
+      if(Number.isFinite(oa)&&!Number.isFinite(ob))return -1;
+      if(!Number.isFinite(oa)&&Number.isFinite(ob))return 1;
+      return 0;
+    });
+    let changed=false;for(let i=0;i<cards.length;i++){if(cards[i]!==ranked[i]){changed=true;break;}}
+    if(!changed)return;
+    ranked.forEach((card)=>container.appendChild(card));
+  }
+  function scheduleCompact(a){
+    const line=a&&a.closest&&a.closest('.thumb-line[data-psom-key]');
+    if(!line||line.__igdcCompactQueued)return;
+    line.__igdcCompactQueued=true;
+    requestAnimationFrame(()=>{line.__igdcCompactQueued=false;compactLine(line);});
+  }
+
   function fillAnchor(a,item){
     return bindItemToAnchor(a,item,safeFrontThumbnail(rawThumbnail(item)));
   }
@@ -479,18 +563,32 @@
   function applyLine(line, items){
     if(!Array.isArray(items) || items.length === 0) return;
     const ph=ensurePlaceholders(line);
+    const ranked=items.filter(isFrontCandidate).slice().sort((a,b)=>frontPriority(b)-frontPriority(a));
     const immediate=[],pending=[];
-    for(const item of items){
+    for(const item of ranked){
       if(isSyntheticSampleItem(item))continue;
-      if(!isFrontCandidate(item))continue;
       const thumb=safeFrontThumbnail(rawThumbnail(item));
       if(thumb)immediate.push({item,thumb});
       else if(providerThumbnailCandidates(item).length||directVideoForThumb(mediaSourceForThumb(item)))pending.push(item);
       if(immediate.length+pending.length>=LIMIT)break;
     }
     let slot=0;
-    for(const entry of immediate){if(slot>=ph.length||slot>=LIMIT)break;bindItemToAnchor(ph[slot++],entry.item,entry.thumb);}
-    for(const item of pending){if(slot>=ph.length||slot>=LIMIT)break;const card=ph[slot++];resetAnchorToPlaceholder(card,'thumbnail_pending');recoverThumbnail(card,item);}
+    for(const entry of immediate){
+      if(slot>=ph.length||slot>=LIMIT)break;
+      const card=ph[slot];
+      card.dataset.frontOrder=String(slot);
+      bindItemToAnchor(card,entry.item,entry.thumb);
+      slot++;
+    }
+    for(const item of pending){
+      if(slot>=ph.length||slot>=LIMIT)break;
+      const card=ph[slot];
+      resetAnchorToPlaceholder(card,'thumbnail_pending');
+      card.dataset.frontOrder=String(slot);
+      recoverThumbnail(card,item);
+      slot++;
+    } 
+    compactLine(line);
   }
 
   async function applyHero(heroRotateKeys, sectionMap){
@@ -551,7 +649,7 @@
 // ===== MEDIA TRENDING BALANCED AUTO-COMBINE =====
 (function(){
   if(!sectionMap)return;
-  const existing=extractItems(sectionMap['media-trending']).filter(isFrontCandidate);
+  const existing=extractItems(sectionMap['media-trending']).filter(isTrendingReadyCandidate);
 
   const sourceKeys=['media-movie','media-drama','media-variety','media-music'];
   function recency(item){
@@ -562,15 +660,14 @@
     return Math.max(0,1-(days/45));
   }
   function score(item){
-    const views=Number(item&&(item.views||item.viewCount)||0);
-    const popularity=Number(item&&(item.popularity||item.score||item.rankingScore)||0);
-    const rating=Number(item&&(item.rating||item.voteAverage)||0);
-    return (views*.5)+(popularity*.25)+(rating*.1)+(recency(item)*100*.15);
+    // "지금 뜨는 콘텐츠"는 단순 최신순이 아니라 실제 재생 가능성,
+    // 정상 썸네일, 콘텐츠 품질/반응, 최신성을 함께 본다.
+    return frontPriority(item)+(recency(item)*140);
   }
   function dedupeKey(item){return String(item&&(item.contentId||item.id||item.video||item.url||item.link)||JSON.stringify(item||{}));}
   const seen=new Set(),lanes={};
   sourceKeys.forEach((key)=>{
-    const list=extractItems(sectionMap[key]).filter(isFrontCandidate).map((item)=>Object.assign({},item,{_sectionKey:key}));
+    const list=extractItems(sectionMap[key]).filter(isTrendingReadyCandidate).map((item)=>Object.assign({},item,{_sectionKey:key}));
     list.sort((a,b)=>score(b)-score(a));
     lanes[key]=list.filter((item)=>{const id=dedupeKey(item);if(!id||seen.has(key+'|'+id))return false;seen.add(key+'|'+id);return true;});
   });
@@ -627,7 +724,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='3.3.2-fast-deferred-thumb-sample-lock-playback-quarantine';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='3.8.0-ready-first-compact-quality-trending';
 })();
 
 

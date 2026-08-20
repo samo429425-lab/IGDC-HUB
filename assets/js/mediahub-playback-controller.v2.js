@@ -1,5 +1,5 @@
 /*
- * IGDC / MARU MediaHub playback controller v3.7.0 same-origin parent-frame takeover + three-state immersive/inline/list + resume restore
+ * IGDC / MARU MediaHub playback controller v3.8.0 true browser fullscreen + same-origin parent-frame takeover + three-state immersive/inline/list + resume restore
  * Device-aware inline player shell with safe native-app handoff hooks.
  *
  * Preserves the original Media Hub document, scroll restoration, OTT gate,
@@ -50,7 +50,10 @@
     youtubeDuration: 0,
     youtubeEnded: false,
     youtubePollTimer: 0,
-    parentViewportBinding: null
+    parentViewportBinding: null,
+    mobileNativeFullscreenPending: false,
+    mobileNativeFullscreenActive: false,
+    mobileNativeExitIntent: false
   };
 
   var COPY = {
@@ -309,6 +312,119 @@
       return { window: parentWindow, document: parentDocument, frame: frame };
     } catch (_) { return null; }
   }
+  function parentFullscreenElement(ctx) {
+    try {
+      var doc = ctx && ctx.document;
+      return doc ? (doc.fullscreenElement || doc.webkitFullscreenElement || null) : null;
+    } catch (_) { return null; }
+  }
+  function mobileNativeFullscreenActive() {
+    var ctx = parentFrameContext();
+    return !!(parentFullscreenElement(ctx) || fullscreenElement() || currentVideoFullscreen() || state.mobileNativeFullscreenActive);
+  }
+  function tryIosNativeVideoFullscreen() {
+    var video = currentVideo();
+    if (!video || typeof video.webkitEnterFullscreen !== 'function') return false;
+    try {
+      state.mobileNativeFullscreenPending = true;
+      video.webkitEnterFullscreen();
+      state.nativeVideoFullscreen = true;
+      state.mobileNativeFullscreenActive = true;
+      state.mobileNativeFullscreenPending = false;
+      return true;
+    } catch (_) { state.mobileNativeFullscreenPending = false; return false; }
+  }
+  function requestMobileNativeFullscreen() {
+    if (!isMobileSession() || !state.detail) return false;
+    var ctx = parentFrameContext();
+    // Fullscreen the parent #mainFrame itself when MediaHub is embedded. This
+    // removes browser chrome and avoids leaving the top site shell visible.
+    var target = ctx && ctx.frame ? ctx.frame : state.detail;
+    var request = target && (target.requestFullscreen || target.webkitRequestFullscreen);
+    if (!request) return tryIosNativeVideoFullscreen();
+    state.mobileNativeFullscreenPending = true;
+    try {
+      var result;
+      try { result = request.call(target, { navigationUI:'hide' }); } catch (_arg) { result = request.call(target); }
+      if (result && typeof result.then === 'function') {
+        var watchdog = setTimeout(function(){
+          if(!state.mobileNativeFullscreenPending)return;
+          state.mobileNativeFullscreenPending=false;
+          state.mobileNativeFullscreenActive=mobileNativeFullscreenActive();
+          if(!state.mobileNativeFullscreenActive)tryIosNativeVideoFullscreen();
+        },1500);
+        result.then(function(){
+          clearTimeout(watchdog);
+          state.mobileNativeFullscreenPending = false;
+          state.mobileNativeFullscreenActive = true;
+          normalizePlayerGeometry();
+          hideChromeNow();
+          syncUi();
+        }).catch(function(){
+          clearTimeout(watchdog);
+          state.mobileNativeFullscreenPending = false;
+          state.mobileNativeFullscreenActive = false;
+          tryIosNativeVideoFullscreen();
+        });
+      } else {
+        setTimeout(function(){
+          state.mobileNativeFullscreenPending = false;
+          state.mobileNativeFullscreenActive = mobileNativeFullscreenActive();
+          if (!state.mobileNativeFullscreenActive) tryIosNativeVideoFullscreen();
+        }, 120);
+      }
+      return true;
+    } catch (_) {
+      state.mobileNativeFullscreenPending = false;
+      state.mobileNativeFullscreenActive = false;
+      return tryIosNativeVideoFullscreen();
+    }
+  }
+  function exitMobileNativeFullscreen() {
+    if (!isMobileSession()) return;
+    state.mobileNativeExitIntent = true;
+    var ctx = parentFrameContext();
+    var doc = ctx && ctx.document ? ctx.document : document;
+    var active = doc && (doc.fullscreenElement || doc.webkitFullscreenElement);
+    var exit = doc && (doc.exitFullscreen || doc.webkitExitFullscreen);
+    if (active && exit) {
+      try {
+        var result = exit.call(doc);
+        if (result && typeof result.catch === 'function') result.catch(function(){});
+        return;
+      } catch (_) {}
+    }
+    var video = currentVideo();
+    try {
+      if (video && video.webkitDisplayingFullscreen && typeof video.webkitExitFullscreen === 'function') {
+        video.webkitExitFullscreen();
+        return;
+      }
+    } catch (_) {}
+    state.mobileNativeFullscreenActive = false;
+    state.mobileNativeExitIntent = false;
+  }
+  function handleParentFullscreenChange() {
+    if (!state.open || !isMobileSession()) return;
+    var active = !!parentFullscreenElement(parentFrameContext());
+    state.mobileNativeFullscreenActive = active || currentVideoFullscreen();
+    if (active) {
+      state.mobileNativeFullscreenPending = false;
+      if (state.mobileViewMode === 'immersive') {
+        applyMobileImmersiveGeometry(true);
+        hideChromeNow();
+        normalizePlayerGeometry();
+        syncUi();
+      }
+      return;
+    }
+    if (state.mobileNativeFullscreenPending) return;
+    if (state.mobileViewMode === 'immersive' && !currentVideoFullscreen()) {
+      state.mobileNativeExitIntent = false;
+      setMobileViewMode('inline', { skipNativeExit:true, skipNativeRequest:true });
+    }
+  }
+
   function ensureParentViewportStyle(ctx) {
     if (!ctx || !ctx.document) return;
     var id = 'igdc-mediahub-parent-frame-takeover-v37';
@@ -356,6 +472,7 @@
     try { binding.win.removeEventListener('resize', binding.handler); } catch (_) {}
     try { binding.win.removeEventListener('orientationchange', binding.handler); } catch (_) {}
     try { if (binding.vv) { binding.vv.removeEventListener('resize', binding.handler); binding.vv.removeEventListener('scroll', binding.handler); } } catch (_) {}
+    try { if (binding.doc && binding.fullscreenHandler) { binding.doc.removeEventListener('fullscreenchange', binding.fullscreenHandler); binding.doc.removeEventListener('webkitfullscreenchange', binding.fullscreenHandler); } } catch (_) {}
     state.parentViewportBinding = null;
   }
   function bindParentViewportRepair(ctx) {
@@ -371,7 +488,9 @@
     try { ctx.window.addEventListener('orientationchange', handler, {passive:true}); } catch (_) {}
     var vv = ctx.window.visualViewport;
     try { if (vv) { vv.addEventListener('resize', handler, {passive:true}); vv.addEventListener('scroll', handler, {passive:true}); } } catch (_) {}
-    state.parentViewportBinding = { win:ctx.window, vv:vv, handler:handler };
+    var fullscreenHandler = function(){ handleParentFullscreenChange(); };
+    try { ctx.document.addEventListener('fullscreenchange', fullscreenHandler); ctx.document.addEventListener('webkitfullscreenchange', fullscreenHandler); } catch (_) {}
+    state.parentViewportBinding = { win:ctx.window, vv:vv, doc:ctx.document, handler:handler, fullscreenHandler:fullscreenHandler };
   }
   function setParentFrameMode(mode) {
     var ctx = parentFrameContext();
@@ -573,7 +692,8 @@
       var resumeAt=readResumePosition(card), origin='';
       try{origin=encodeURIComponent(global.location.origin||'');}catch(_origin){}
       frame.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(youtube) + '?autoplay=1&rel=0&playsinline=1&enablejsapi=1' + (origin?'&origin='+origin:'') + (resumeAt>0?'&start='+Math.floor(resumeAt):'');
-      frame.allow = 'autoplay; picture-in-picture; encrypted-media';
+      frame.allow = 'autoplay; fullscreen; picture-in-picture; encrypted-media';
+      frame.setAttribute('allowfullscreen',''); frame.setAttribute('webkitallowfullscreen','');
       frame.dataset.igdcYoutube='1'; frame.dataset.igdcContentId=contentIdFor(card)||'';
       state.youtubeFrame=frame;state.youtubeCurrentTime=resumeAt||0;state.youtubeDuration=0;state.youtubeEnded=false;
       frame.addEventListener('load', function(){
@@ -879,8 +999,9 @@
     state.detail.style.setProperty('overflow','hidden','important');
     state.detail.style.setProperty('background','#000','important');
   }
-  function setMobileViewMode(mode) {
+  function setMobileViewMode(mode, options) {
     if(!state.detail || !isMobileSession()) return;
+    options = options || {};
     mode = mode === 'immersive' ? 'immersive' : 'inline';
     state.mobileViewMode = mode;
     // The Media Hub document lives inside the top-level #mainFrame. A fixed
@@ -899,7 +1020,12 @@
       markFullscreenUi(true);
       normalizePlayerGeometry();
       hideChromeNow();
+      // CSS takeover removes the IGDC header. The real Fullscreen API removes
+      // the browser address/navigation bar as well. This call stays in the
+      // original user gesture stack; iOS falls back to native video fullscreen.
+      if(!options.skipNativeRequest) requestMobileNativeFullscreen();
     } else {
+      if(!options.skipNativeExit) exitMobileNativeFullscreen();
       applyMobileImmersiveGeometry(false);
       markFullscreenUi(false);
       normalizePlayerGeometry();
@@ -949,9 +1075,9 @@
   function enterPlayerFullscreen() {
     if(!state.detail)return;
     if(isMobileSession()) {
-      // Mobile fullscreen is an IGDC-controlled immersive viewport state. It is
-      // intentionally independent from the browser Fullscreen API so Android
-      // and iOS use the same transition model and rotation never drops to list.
+      // Mobile uses the IGDC immersive shell plus the real browser Fullscreen
+      // API so the browser address/navigation bar disappears. iOS uses native
+      // video fullscreen only when arbitrary-element fullscreen is unavailable.
       setMobileViewMode('immersive');
       return;
     }
@@ -985,8 +1111,8 @@
   }
   function toggleFullscreen(){
     if(isMobileSession()){
-      if(state.mobileViewMode==='immersive')setMobileViewMode('inline');
-      else setMobileViewMode('immersive');
+      if(state.mobileViewMode==='immersive')leaveFullscreen();
+      else enterPlayerFullscreen();
       return;
     }
     if(isPlayerFullscreen())leaveFullscreen();else enterPlayerFullscreen();
@@ -1032,9 +1158,10 @@
       syncUi();if(name==='play'){if(isMobileSession())hideChromeNow();else showChrome(2600);}else if(name==='pause'||name==='ended')showChrome();
     });});
     video.addEventListener('timeupdate',function(){updateTimeUi();saveResumePosition(state.card,video.currentTime,video.duration,false,false);}); video.addEventListener('error',function(){notifySourceFailure(state.card,'mounted_video_source_error');},{once:true});
-    // iOS must stay inline inside the IGDC immersive shell. Native WebKit video fullscreen is not used.
-    video.addEventListener('webkitbeginfullscreen',function(){try{if(isMobileSession()&&typeof video.webkitExitFullscreen==='function')video.webkitExitFullscreen();}catch(_){}state.nativeVideoFullscreen=false;});
-    video.addEventListener('webkitendfullscreen',function(){state.nativeVideoFullscreen=false;global.requestAnimationFrame(normalizePlayerGeometry);});
+    // iOS fallback: when arbitrary-element Fullscreen API is unavailable,
+    // allow WebKit's native video fullscreen so Safari chrome is fully hidden.
+    video.addEventListener('webkitbeginfullscreen',function(){state.nativeVideoFullscreen=true;state.mobileNativeFullscreenActive=true;state.mobileNativeFullscreenPending=false;if(isMobileSession()){state.mobileViewMode='immersive';markFullscreenUi(true);hideChromeNow();}});
+    video.addEventListener('webkitendfullscreen',function(){state.nativeVideoFullscreen=false;state.mobileNativeFullscreenActive=false;state.mobileNativeFullscreenPending=false;if(isMobileSession()&&state.mobileViewMode==='immersive')setMobileViewMode('inline',{skipNativeExit:true,skipNativeRequest:true});global.requestAnimationFrame(normalizePlayerGeometry);});
     if(video.readyState>=1)applyResumeOnce();
     try { var tracker=global.MaruRevenueTracker;if(tracker&&typeof tracker.bindMedia==='function')tracker.bindMedia(video,{id:contentIdFor(state.card),contentId:contentIdFor(state.card),title:titleFor(state.card),mediaType:'video',url:sourceFor(state.card)},{service:'mediahub-playback',pageType:'media',revenueLine:'media_watchtime'}); } catch(_){}
     normalizePlayerGeometry();
@@ -1083,7 +1210,7 @@
   }
 
   function disposeStage(){saveCurrentProgress(true);clearInterval(state.youtubePollTimer);state.youtubePollTimer=0;try{if(state.stage&&global.IGDCMediaHubOTTInline&&typeof global.IGDCMediaHubOTTInline.dispose==='function')global.IGDCMediaHubOTTInline.dispose(state.stage);}catch(_){}if(state.mutationObserver){state.mutationObserver.disconnect();state.mutationObserver=null;}state.youtubeFrame=null;}
-  function close(options){options=options||{};if(!state.open)return;saveCurrentProgress(true);if(isMobileSession()&&state.mobileViewMode!=='immersive')setParentFrameMode('list');if(!options.fromHistory&&state.historyToken&&global.history&&global.history.state&&global.history.state.igdcMediaToken===state.historyToken){global.history.back();return;}cancelClipCapture();if(isPlayerFullscreen())leaveFullscreen();disposeStage();if(state.detail)state.detail.remove();restoreList();var y=state.scrollY;state.open=false;state.detail=null;state.stage=null;state.card=null;state.historyToken='';state.lastCaptionValue='';state.panel='';state.playRequested=false;state.mobileFullscreenIntent=false;state.mobileImmersiveActive=false;state.mobileSession=false;state.mobileViewMode='list';unbindParentViewportRepair();state.justExitedFullscreenAt=0;state.orientationChangingUntil=0;state.nativeVideoFullscreen=false;state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;unlockMobileOrientation();clearTimeout(state.chromeTimer);clearTimeout(state.orientationTimer);if(state.fullscreenBodyOverflow!==null){document.body.style.overflow=state.fullscreenBodyOverflow;state.fullscreenBodyOverflow=null;}global.requestAnimationFrame(function(){global.scrollTo(0,y);frameHeight();});}
+  function close(options){options=options||{};if(!state.open)return;saveCurrentProgress(true);if(isMobileSession()&&state.mobileViewMode!=='immersive')setParentFrameMode('list');if(!options.fromHistory&&state.historyToken&&global.history&&global.history.state&&global.history.state.igdcMediaToken===state.historyToken){global.history.back();return;}cancelClipCapture();if(isPlayerFullscreen())leaveFullscreen();disposeStage();if(state.detail)state.detail.remove();restoreList();var y=state.scrollY;state.open=false;state.detail=null;state.stage=null;state.card=null;state.historyToken='';state.lastCaptionValue='';state.panel='';state.playRequested=false;state.mobileFullscreenIntent=false;state.mobileImmersiveActive=false;state.mobileSession=false;state.mobileViewMode='list';unbindParentViewportRepair();state.justExitedFullscreenAt=0;state.orientationChangingUntil=0;state.nativeVideoFullscreen=false;state.mobileNativeFullscreenPending=false;state.mobileNativeFullscreenActive=false;state.mobileNativeExitIntent=false;state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;unlockMobileOrientation();clearTimeout(state.chromeTimer);clearTimeout(state.orientationTimer);if(state.fullscreenBodyOverflow!==null){document.body.style.overflow=state.fullscreenBodyOverflow;state.fullscreenBodyOverflow=null;}global.requestAnimationFrame(function(){global.scrollTo(0,y);frameHeight();});}
   function switchCard(card){if(!card||!state.open||card===state.card)return;saveCurrentProgress(true);cancelClipCapture();disposeStage();state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;state.card=card;state.lastCaptionValue='';state.playRequested=isMobileSession();state.detail.setAttribute('aria-label',titleFor(card));state.stage.textContent='';appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();requestPlaybackFromGesture();global.scrollTo(0,0);syncUi();showChrome(3200);}
   function move(direction){var card=adjacentCard(direction);if(card)switchCard(card);}
 
@@ -1107,7 +1234,7 @@
     syncUi();
   }
 
-  function open(card,options){options=options||{};if(!card)return;if(state.open){switchCard(card);return;}injectStyle();var mobileMode=isMobilePlaybackDevice();if(!mobileMode)attemptNativePlayer(card);state.open=true;state.mobileSession=mobileMode;state.mobileViewMode=mobileMode?'inline':'list';state.card=card;state.scrollY=global.scrollY||global.pageYOffset||0;state.panel='';state.playRequested=!!options.autoPlay||mobileMode;state.mobileFullscreenIntent=false;state.mobileImmersiveActive=false;if(state.fullscreenBodyOverflow===null)state.fullscreenBodyOverflow=document.body.style.overflow||'';hideList(card);var shell=buildPlayerShell(card);state.detail=shell.detail;state.stage=shell.stage;document.body.appendChild(shell.detail);if(mobileMode)setMobileViewMode('immersive');else normalizePlayerGeometry();appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();if(mobileMode&&state.mobileViewMode==='immersive')applyMobileImmersiveGeometry(true);
+  function open(card,options){options=options||{};if(!card)return;if(state.open){switchCard(card);return;}injectStyle();var mobileMode=isMobilePlaybackDevice();if(!mobileMode)attemptNativePlayer(card);state.open=true;state.mobileSession=mobileMode;state.mobileViewMode=mobileMode?'inline':'list';state.card=card;state.scrollY=global.scrollY||global.pageYOffset||0;state.panel='';state.playRequested=!!options.autoPlay||mobileMode;state.mobileFullscreenIntent=false;state.mobileImmersiveActive=false;state.mobileNativeFullscreenPending=false;state.mobileNativeFullscreenActive=false;state.mobileNativeExitIntent=false;if(state.fullscreenBodyOverflow===null)state.fullscreenBodyOverflow=document.body.style.overflow||'';hideList(card);var shell=buildPlayerShell(card);state.detail=shell.detail;state.stage=shell.stage;document.body.appendChild(shell.detail);appendPlayer(state.stage,card);if(mobileMode)setMobileViewMode('immersive');else normalizePlayerGeometry();observeStage();normalizePlayerGeometry();if(mobileMode&&state.mobileViewMode==='immersive')applyMobileImmersiveGeometry(true);
     state.detail.addEventListener('click',function(event){var p=event.target.closest&&event.target.closest('[data-media-panel]');if(p){openPanel(p.dataset.mediaPanel);return;}var cap=event.target.closest&&event.target.closest('[data-caption-value],[data-caption-index]');if(cap){selectCaption(cap.dataset.captionValue!=null?cap.dataset.captionValue:cap.dataset.captionIndex);return;}var a=event.target.closest&&event.target.closest('[data-media-action]');if(a){handleAction(a.dataset.mediaAction,a.dataset.mediaValue);showChrome(2600);return;}if(event.target===state.stage||event.target===currentVideo()||(event.target.closest&&event.target.closest('.igdc-media-detail-stage'))){if(isMobileSession())toggleChrome();else togglePlay();}});
     var seek=state.detail.querySelector('[data-media-seek]');seek.addEventListener('input',function(){var video=currentVideo();if(video&&Number.isFinite(video.duration)){video.currentTime=video.duration*(Number(seek.value)||0)/1000;updateTimeUi();showChrome(2400);}});
     var vol=state.detail.querySelector('[data-media-volume]');vol.addEventListener('input',function(){setVolume((Number(vol.value)||0)/100);});
@@ -1124,9 +1251,16 @@
   global.addEventListener('popstate',function(){if(!state.open)return;if((isMobileSession()&&state.mobileViewMode==='immersive')||(!isMobileSession()&&isPlayerFullscreen())){leaveFullscreen();if(global.history&&global.history.pushState){state.historyToken='media-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);try{global.history.pushState({igdcMedia:true,igdcMediaToken:state.historyToken},'',global.location.href);}catch(_){}}normalizePlayerGeometry();hideChromeNow();return;}close({fromHistory:true});});
   function fullscreenChanged(){
     if(!state.detail)return;
-    // Mobile never uses browser/native fullscreen as a state source. Its view
-    // mode is controlled only by the IGDC immersive <-> inline state machine.
+    // Mobile view state is IGDC-controlled, while native fullscreen is observed
+    // so a system/browser exit returns to the inline player instead of leaving
+    // a stale immersive shell behind.
     if(isMobileSession()){
+      var nativeActive=!!fullscreenElement()||currentVideoFullscreen()||!!parentFullscreenElement(parentFrameContext());
+      state.mobileNativeFullscreenActive=nativeActive;
+      if(!nativeActive&&!state.mobileNativeFullscreenPending&&state.mobileViewMode==='immersive'){
+        setMobileViewMode('inline',{skipNativeExit:true,skipNativeRequest:true});
+        return;
+      }
       if(state.mobileViewMode==='immersive'){
         applyMobileImmersiveGeometry(true);
         state.detail.classList.add('igdc-mobile-fullscreen-fallback');
@@ -1174,6 +1308,6 @@
   if(global.visualViewport)global.visualViewport.addEventListener('resize',scheduleViewportRepair,{passive:true});
   try{if(global.screen&&global.screen.orientation&&global.screen.orientation.addEventListener)global.screen.orientation.addEventListener('change',orientationViewportRepair,{passive:true});}catch(_){}
 
-  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.7.0-parent-frame-takeover-three-state-immersive-inline-list-resume-5s';
-  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.7.0-parent-frame-takeover-three-state-immersive-inline-list-resume-5s'};
+  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.8.0-native-browser-fullscreen-parent-frame-three-state-quality-ready';
+  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.8.0-native-browser-fullscreen-parent-frame-three-state-quality-ready'};
 })(window, document);
