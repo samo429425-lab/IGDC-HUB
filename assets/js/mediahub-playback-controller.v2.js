@@ -1,5 +1,5 @@
 /*
- * IGDC / MARU MediaHub playback controller v3.6.0 mobile single-entry three-state immersive/inline/list + resume restore
+ * IGDC / MARU MediaHub playback controller v3.7.0 same-origin parent-frame takeover + three-state immersive/inline/list + resume restore
  * Device-aware inline player shell with safe native-app handoff hooks.
  *
  * Preserves the original Media Hub document, scroll restoration, OTT gate,
@@ -49,7 +49,8 @@
     youtubeCurrentTime: 0,
     youtubeDuration: 0,
     youtubeEnded: false,
-    youtubePollTimer: 0
+    youtubePollTimer: 0,
+    parentViewportBinding: null
   };
 
   var COPY = {
@@ -298,6 +299,119 @@
     var target = index + direction;
     return target >= 0 && target < cards.length ? cards[target] : null;
   }
+  function parentFrameContext() {
+    try {
+      var parentWindow = global.parent;
+      if (!parentWindow || parentWindow === global || !parentWindow.document) return null;
+      var parentDocument = parentWindow.document;
+      var frame = parentDocument.getElementById('mainFrame') || parentDocument.querySelector('iframe#mainFrame,iframe[name="mainFrame"]');
+      if (!frame || frame.contentWindow !== global) return null;
+      return { window: parentWindow, document: parentDocument, frame: frame };
+    } catch (_) { return null; }
+  }
+  function ensureParentViewportStyle(ctx) {
+    if (!ctx || !ctx.document) return;
+    var id = 'igdc-mediahub-parent-frame-takeover-v37';
+    if (ctx.document.getElementById(id)) return;
+    var style = ctx.document.createElement('style');
+    style.id = id;
+    style.textContent = [
+      'html.igdc-mediahub-parent-immersive,body.igdc-mediahub-parent-immersive{margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important;width:100%!important;height:var(--igdc-media-parent-vh,100dvh)!important;min-height:var(--igdc-media-parent-vh,100dvh)!important}',
+      'body.igdc-mediahub-parent-immersive> :not(#mainFrame):not(script):not(style):not(link){display:none!important}',
+      'body.igdc-mediahub-parent-immersive #mainFrame{position:fixed!important;left:var(--igdc-media-parent-left,0px)!important;top:var(--igdc-media-parent-top,0px)!important;right:auto!important;bottom:auto!important;width:var(--igdc-media-parent-vw,100vw)!important;height:var(--igdc-media-parent-vh,100dvh)!important;min-width:var(--igdc-media-parent-vw,100vw)!important;min-height:var(--igdc-media-parent-vh,100dvh)!important;max-width:var(--igdc-media-parent-vw,100vw)!important;max-height:var(--igdc-media-parent-vh,100dvh)!important;margin:0!important;border:0!important;padding:0!important;z-index:2147483000!important;background:#000!important;display:block!important}',
+      'html.igdc-mediahub-parent-inline,body.igdc-mediahub-parent-inline{overflow:hidden!important;min-height:var(--igdc-media-parent-vh,100dvh)!important}',
+      'body.igdc-mediahub-parent-inline #mainFrame{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;height:var(--igdc-media-parent-inline-h,60dvh)!important;min-height:var(--igdc-media-parent-inline-h,60dvh)!important;max-height:var(--igdc-media-parent-inline-h,60dvh)!important;margin:0!important;border:0!important;padding:0!important;background:#000!important}'
+    ].join('\n');
+    (ctx.document.head || ctx.document.documentElement).appendChild(style);
+  }
+  function parentViewport(ctx) {
+    var win = ctx && ctx.window;
+    var doc = ctx && ctx.document;
+    var vv = win && win.visualViewport;
+    var width = Math.max(1, Math.round((vv && vv.width) || (win && win.innerWidth) || (doc && doc.documentElement.clientWidth) || 1));
+    var height = Math.max(1, Math.round((vv && vv.height) || (win && win.innerHeight) || (doc && doc.documentElement.clientHeight) || 1));
+    var left = Math.max(0, Math.round((vv && vv.offsetLeft) || 0));
+    var top = Math.max(0, Math.round((vv && vv.offsetTop) || 0));
+    return { width:width, height:height, left:left, top:top };
+  }
+  function updateParentViewportVars(ctx, mode) {
+    if (!ctx) return;
+    var root = ctx.document.documentElement;
+    var frame = ctx.frame;
+    var v = parentViewport(ctx);
+    root.style.setProperty('--igdc-media-parent-vw', v.width + 'px');
+    root.style.setProperty('--igdc-media-parent-vh', v.height + 'px');
+    root.style.setProperty('--igdc-media-parent-left', v.left + 'px');
+    root.style.setProperty('--igdc-media-parent-top', v.top + 'px');
+    if (mode === 'inline') {
+      var rect = frame.getBoundingClientRect();
+      var frameTop = Math.max(v.top, Math.round(rect.top));
+      var available = Math.max(180, v.height - Math.max(0, frameTop - v.top));
+      root.style.setProperty('--igdc-media-parent-inline-h', available + 'px');
+    }
+  }
+  function unbindParentViewportRepair() {
+    var binding = state.parentViewportBinding;
+    if (!binding) return;
+    try { binding.win.removeEventListener('resize', binding.handler); } catch (_) {}
+    try { binding.win.removeEventListener('orientationchange', binding.handler); } catch (_) {}
+    try { if (binding.vv) { binding.vv.removeEventListener('resize', binding.handler); binding.vv.removeEventListener('scroll', binding.handler); } } catch (_) {}
+    state.parentViewportBinding = null;
+  }
+  function bindParentViewportRepair(ctx) {
+    if (!ctx || state.parentViewportBinding) return;
+    var handler = function () {
+      if (!state.open || !state.mobileSession) return;
+      var current = parentFrameContext();
+      if (!current) return;
+      updateParentViewportVars(current, state.mobileViewMode);
+      global.requestAnimationFrame(function(){ normalizePlayerGeometry(); });
+    };
+    try { ctx.window.addEventListener('resize', handler, {passive:true}); } catch (_) {}
+    try { ctx.window.addEventListener('orientationchange', handler, {passive:true}); } catch (_) {}
+    var vv = ctx.window.visualViewport;
+    try { if (vv) { vv.addEventListener('resize', handler, {passive:true}); vv.addEventListener('scroll', handler, {passive:true}); } } catch (_) {}
+    state.parentViewportBinding = { win:ctx.window, vv:vv, handler:handler };
+  }
+  function setParentFrameMode(mode) {
+    var ctx = parentFrameContext();
+    if (!ctx) return false;
+    ensureParentViewportStyle(ctx);
+    bindParentViewportRepair(ctx);
+    var parentWindow = ctx.window, parentDocument = ctx.document, frame = ctx.frame;
+    var key = '__IGDC_MEDIA_PARENT_FRAME_STATE_V37__';
+    var parentState = parentWindow[key] || (parentWindow[key] = { mode:'list', savedScrollY:0 });
+    mode = mode === 'immersive' ? 'immersive' : (mode === 'inline' ? 'inline' : 'list');
+    if (parentState.mode === 'list' && mode !== 'list') parentState.savedScrollY = parentWindow.scrollY || parentWindow.pageYOffset || 0;
+    parentState.mode = mode;
+    parentWindow.__IGDC_MEDIA_PARENT_PLAYER_MODE__ = mode;
+    frame.setAttribute('allow','autoplay; fullscreen; picture-in-picture; encrypted-media');
+    frame.setAttribute('allowfullscreen','');
+    frame.setAttribute('webkitallowfullscreen','');
+    var html = parentDocument.documentElement, body = parentDocument.body;
+    html.classList.toggle('igdc-mediahub-parent-immersive', mode === 'immersive');
+    body.classList.toggle('igdc-mediahub-parent-immersive', mode === 'immersive');
+    html.classList.toggle('igdc-mediahub-parent-inline', mode === 'inline');
+    body.classList.toggle('igdc-mediahub-parent-inline', mode === 'inline');
+    if (mode === 'immersive') {
+      // Inline mode uses a fixed pixel height variable. Immersive mode must
+      // ignore all old child auto-height values and use the current parent
+      // visual viewport on every entry and every orientation change.
+      parentDocument.documentElement.style.removeProperty('--igdc-media-parent-inline-h');
+      try { parentWindow.scrollTo(0,0); } catch (_) {}
+      updateParentViewportVars(ctx, mode);
+    } else if (mode === 'inline') {
+      try { parentWindow.scrollTo(0,0); } catch (_) {}
+      updateParentViewportVars(ctx, mode);
+    } else {
+      parentDocument.documentElement.style.removeProperty('--igdc-media-parent-inline-h');
+      try { parentWindow.scrollTo(0,parentState.savedScrollY || 0); } catch (_) {}
+      unbindParentViewportRepair();
+    }
+    try { parentWindow.requestAnimationFrame(function(){ updateParentViewportVars(ctx, mode); }); } catch (_) {}
+    return true;
+  }
+
   function frameHeight() {
     try {
       if (global.parent === global || !global.parent.postMessage) return;
@@ -769,6 +883,12 @@
     if(!state.detail || !isMobileSession()) return;
     mode = mode === 'immersive' ? 'immersive' : 'inline';
     state.mobileViewMode = mode;
+    // The Media Hub document lives inside the top-level #mainFrame. A fixed
+    // child element cannot cover the parent header/nav, so promote the parent
+    // iframe itself for immersive mode and size it to the remaining viewport
+    // for inline mode. This same-origin takeover is temporary and restored on
+    // return to the media list.
+    setParentFrameMode(mode);
     state.mobileImmersiveActive = mode === 'immersive';
     state.mobileFullscreenIntent = mode === 'immersive';
     state.detail.dataset.mobileView = mode;
@@ -963,7 +1083,7 @@
   }
 
   function disposeStage(){saveCurrentProgress(true);clearInterval(state.youtubePollTimer);state.youtubePollTimer=0;try{if(state.stage&&global.IGDCMediaHubOTTInline&&typeof global.IGDCMediaHubOTTInline.dispose==='function')global.IGDCMediaHubOTTInline.dispose(state.stage);}catch(_){}if(state.mutationObserver){state.mutationObserver.disconnect();state.mutationObserver=null;}state.youtubeFrame=null;}
-  function close(options){options=options||{};if(!state.open)return;saveCurrentProgress(true);if(!options.fromHistory&&state.historyToken&&global.history&&global.history.state&&global.history.state.igdcMediaToken===state.historyToken){global.history.back();return;}cancelClipCapture();if(isPlayerFullscreen())leaveFullscreen();disposeStage();if(state.detail)state.detail.remove();restoreList();var y=state.scrollY;state.open=false;state.detail=null;state.stage=null;state.card=null;state.historyToken='';state.lastCaptionValue='';state.panel='';state.playRequested=false;state.mobileFullscreenIntent=false;state.mobileImmersiveActive=false;state.mobileSession=false;state.mobileViewMode='list';state.justExitedFullscreenAt=0;state.orientationChangingUntil=0;state.nativeVideoFullscreen=false;state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;unlockMobileOrientation();clearTimeout(state.chromeTimer);clearTimeout(state.orientationTimer);if(state.fullscreenBodyOverflow!==null){document.body.style.overflow=state.fullscreenBodyOverflow;state.fullscreenBodyOverflow=null;}global.requestAnimationFrame(function(){global.scrollTo(0,y);frameHeight();});}
+  function close(options){options=options||{};if(!state.open)return;saveCurrentProgress(true);if(isMobileSession()&&state.mobileViewMode!=='immersive')setParentFrameMode('list');if(!options.fromHistory&&state.historyToken&&global.history&&global.history.state&&global.history.state.igdcMediaToken===state.historyToken){global.history.back();return;}cancelClipCapture();if(isPlayerFullscreen())leaveFullscreen();disposeStage();if(state.detail)state.detail.remove();restoreList();var y=state.scrollY;state.open=false;state.detail=null;state.stage=null;state.card=null;state.historyToken='';state.lastCaptionValue='';state.panel='';state.playRequested=false;state.mobileFullscreenIntent=false;state.mobileImmersiveActive=false;state.mobileSession=false;state.mobileViewMode='list';unbindParentViewportRepair();state.justExitedFullscreenAt=0;state.orientationChangingUntil=0;state.nativeVideoFullscreen=false;state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;unlockMobileOrientation();clearTimeout(state.chromeTimer);clearTimeout(state.orientationTimer);if(state.fullscreenBodyOverflow!==null){document.body.style.overflow=state.fullscreenBodyOverflow;state.fullscreenBodyOverflow=null;}global.requestAnimationFrame(function(){global.scrollTo(0,y);frameHeight();});}
   function switchCard(card){if(!card||!state.open||card===state.card)return;saveCurrentProgress(true);cancelClipCapture();disposeStage();state.youtubeFrame=null;state.youtubeCurrentTime=0;state.youtubeDuration=0;state.youtubeEnded=false;state.card=card;state.lastCaptionValue='';state.playRequested=isMobileSession();state.detail.setAttribute('aria-label',titleFor(card));state.stage.textContent='';appendPlayer(state.stage,card);observeStage();normalizePlayerGeometry();requestPlaybackFromGesture();global.scrollTo(0,0);syncUi();showChrome(3200);}
   function move(direction){var card=adjacentCard(direction);if(card)switchCard(card);}
 
@@ -1028,7 +1148,10 @@
     global.requestAnimationFrame(normalizePlayerGeometry);
   }
   function orientationViewportRepair(){
-    if(isMobileSession()&&state.mobileViewMode==='immersive')state.orientationChangingUntil=Date.now()+1400;
+    if(isMobileSession()){
+      if(state.mobileViewMode==='immersive')state.orientationChangingUntil=Date.now()+1400;
+      setParentFrameMode(state.mobileViewMode);
+    }
     scheduleViewportRepair();
   }
   global.addEventListener('message',function(event){
@@ -1042,7 +1165,7 @@
     if(Number(info.playerState)===0||Number(data.info&&data.info.playerState)===0)state.youtubeEnded=true;
     saveResumePosition(state.card,state.youtubeCurrentTime,state.youtubeDuration,false,state.youtubeEnded);
   },false);
-  global.addEventListener('pagehide',function(){saveCurrentProgress(true);},{capture:true});
+  global.addEventListener('pagehide',function(){saveCurrentProgress(true);if(isMobileSession())setParentFrameMode('list');},{capture:true});
   document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')saveCurrentProgress(true);});
 
   document.addEventListener('fullscreenchange',fullscreenChanged);document.addEventListener('webkitfullscreenchange',fullscreenChanged);
@@ -1051,6 +1174,6 @@
   if(global.visualViewport)global.visualViewport.addEventListener('resize',scheduleViewportRepair,{passive:true});
   try{if(global.screen&&global.screen.orientation&&global.screen.orientation.addEventListener)global.screen.orientation.addEventListener('change',orientationViewportRepair,{passive:true});}catch(_){}
 
-  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.6.0-mobile-single-entry-three-state-immersive-inline-list-resume-5s';
-  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.6.0-mobile-single-entry-three-state-immersive-inline-list-resume-5s'};
+  global.__IGDC_MEDIAHUB_PLAYER_VERSION__='3.7.0-parent-frame-takeover-three-state-immersive-inline-list-resume-5s';
+  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'3.7.0-parent-frame-takeover-three-state-immersive-inline-list-resume-5s'};
 })(window, document);

@@ -1,9 +1,9 @@
 // socialnetwork-automap.v3.fixed.js
 // 목적:
-// 1) social.snapshot.json 실데이터가 있으면 소셜 메인 9섹션에만 꽂는다.
-// 2) 실데이터가 없으면 기존 HTML/더미를 절대 지우지 않는다.
-// 3) key는 하드코딩 최소화: HTML의 data-psom-key를 그대로 읽는다.
-// 4) rightPanel은 유통 전용 소유 영역이므로 이 AutoMap은 읽기/렌더/클릭 라우팅하지 않는다.
+// 1) Social 메인 9섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
+// 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
+// 3) 메인 Social과 rightPanel의 fetch/render/state를 완전히 분리해 어느 한쪽 지연/실패가 다른 쪽을 막지 않는다.
+// 4) Social runtime readback은 rightPanel/social-maru를 절대 읽거나 덮지 않는다.
 
 (function () {
   "use strict";
@@ -13,11 +13,24 @@
   window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
 
   // --- config ---
-  const SNAPSHOT_URL = "/data/social.snapshot.json";
+  const RIGHT_SNAPSHOT_URL = "/data/social.snapshot.json"; // Edge-routed Canonical Distribution/IP snapshot; rightPanel only
+  const CURRENT_SNAPSHOT_URL = "/.netlify/functions/social-snapshot-current";
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
   const MAIN_ROWS = 9;
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 20;
+  const RIGHT_LIMIT = 100;
+  const MANAGED_MAIN_KEYS = new Set([
+    "social-youtube",
+    "social-instagram",
+    "social-tiktok",
+    "social-facebook",
+    "social-wechat",
+    "social-weibo",
+    "social-pinterest",
+    "social-reddit",
+    "social-twitter",
+  ]);
   const mainRenderTokens = new WeakMap();
 
   function qs(sel, root) {
@@ -293,10 +306,52 @@
       .slice(0, MAIN_LIMIT);
   }
 
-  async function loadStaticSnapshot() {
-    const res = await fetch(SNAPSHOT_URL, { cache: "no-store" });
-    if (!res.ok) throw new Error("snapshot_load_failed:" + res.status);
-    return res.json();
+  async function fetchRightPanelSnapshot() {
+    try {
+      const res = await fetch(RIGHT_SNAPSHOT_URL, { cache: "no-store", priority: "high" });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  // Same load behavior as Network/Tour right panels: start the Canonical/IP
+  // request immediately, share one in-flight promise, and never impose a
+  // client-side timeout. A real HTTP/network failure may be retried later.
+  let initialRightSnapshotPromise = null;
+  function getInitialRightSnapshotPromise() {
+    if (!initialRightSnapshotPromise) {
+      initialRightSnapshotPromise = fetchRightPanelSnapshot();
+    }
+    return initialRightSnapshotPromise;
+  }
+
+  async function loadCurrentSnapshot() {
+    try {
+      const res = await fetch(
+        CURRENT_SNAPSHOT_URL + "?_=" + encodeURIComponent(Date.now()),
+        { cache: "no-store", credentials: "same-origin" },
+      );
+      if (!res.ok) return null;
+      const payload = await res.json();
+      if (!payload || payload.ok !== true || !payload.snapshot) return null;
+      if (payload.hashVerified === false) return null;
+      return {
+        snapshot: payload.snapshot,
+        pipeline: {
+          source: "stored_release_current",
+          status: "front_readback_passed",
+          releaseId: payload.releaseId || null,
+          hash: payload.hash || null,
+          publicSlots: payload.publicSlots || null,
+          route: payload.route || null,
+          loadedAt: new Date().toISOString(),
+        },
+      };
+    } catch (_e) {
+      return null;
+    }
   }
 
   function getMainSlots(gridEl) {
@@ -516,46 +571,137 @@
     normalizeMainCardLayout(gridEl);
   }
 
-  let lastSnapshot = null;
-  let lastRoute = routeFallback();
-  let runInFlight = null;
+  function ensureRightCardCss() {
+    const id = "igdc-social-right-card-render-v2";
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = `
+[data-psom-key="rightPanel"] .ad-box.product-card{position:relative;line-height:normal!important;overflow:hidden!important;background:#fff!important;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a{position:relative;display:flex!important;flex-direction:column!important;width:100%;height:100%;line-height:normal!important;overflow:hidden;border-radius:inherit;text-decoration:none!important;background:#fff!important;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a > img.social-right-card-thumb{display:block;width:100%;height:auto!important;flex:1 1 auto!important;min-height:0!important;object-fit:contain;object-position:center;background:#fff;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a > .social-right-card-title{position:static!important;flex:0 0 auto!important;box-sizing:border-box;min-height:42px;max-height:52px;padding:7px 9px;color:#222!important;font-weight:600;font-size:.88rem;line-height:1.3;text-align:left;background:#fff!important;text-shadow:none!important;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+`;
+    document.head.appendChild(style);
+  }
 
-  function renderSnapshot(snap, route) {
+  function getRightPanels() {
+    return qsa('[data-psom-key="rightPanel"]');
+  }
+
+  function rightUsableItems(items) {
+    return (Array.isArray(items) ? items : []).filter(function (it) {
+      if (!it || isPlaceholderItem(it)) return false;
+      return !!(pickTitle(it).trim() && pickThumb(it).trim() && resolveItemUrl(it));
+    }).slice(0, RIGHT_LIMIT);
+  }
+
+  function makeRightCard() {
+    const box = document.createElement("div");
+    box.className = "ad-box product-card";
+    const a = document.createElement("a");
+    box.appendChild(a);
+    return box;
+  }
+
+  function paintRightCard(box, it, index) {
+    if (!box || !it) return;
+    const title = pickTitle(it) || "Item";
+    const url = resolveItemUrl(it);
+    const productId = pickProductId(it);
+    const thumb = pickThumb(it).trim();
+    if (!url || !thumb) return;
+
+    ensureRightCardCss();
+    box.className = "ad-box product-card";
+    box.removeAttribute("data-dummy");
+    box.dataset.productId = productId;
+    box.dataset.productTitle = title;
+    box.dataset.productLink = url;
+    box.dataset.productUrl = url;
+    box.dataset.detailUrl = url;
+    box.dataset.href = url;
+
+    let a = qs("a", box);
+    if (!a) {
+      a = document.createElement("a");
+      box.textContent = "";
+      box.appendChild(a);
+    }
+    a.textContent = "";
+    a.href = url;
+    a.target = isExternalUrl(url) ? "_top" : "_self";
+    a.rel = "noopener";
+    if (isExternalUrl(url)) a.setAttribute("data-igdc-external", "top");
+    else a.removeAttribute("data-igdc-external");
+    a.dataset.productId = productId;
+    a.dataset.productTitle = title;
+    a.dataset.productLink = url;
+
+    const img = document.createElement("img");
+    img.className = "social-right-card-thumb";
+    img.src = thumb;
+    img.alt = title;
+    const firstView = Number(index) >= 0 && Number(index) < 8;
+    img.loading = firstView ? "eager" : "lazy";
+    img.decoding = "async";
+    if (firstView) {
+      try { img.fetchPriority = "high"; } catch (_e) {}
+    }
+    a.appendChild(img);
+
+    const cap = document.createElement("div");
+    cap.className = "social-right-card-title";
+    cap.textContent = title;
+    a.appendChild(cap);
+  }
+
+  function mountRightPanel(panel, items) {
+    if (!panel) return;
+    const usable = rightUsableItems(items);
+
+    // Match Network/Tour right-panel behavior. Once the Canonical/IP snapshot
+    // has answered, stale "Loading" shells are not kept. No generic/global
+    // product feed is substituted here.
+    panel.innerHTML = "";
+    if (!usable.length) return;
+
+    const frag = document.createDocumentFragment();
+    usable.forEach(function (it, index) {
+      const box = makeRightCard();
+      paintRightCard(box, it, index);
+      frag.appendChild(box);
+    });
+    panel.appendChild(frag);
+  }
+
+  let lastMainSnapshot = null;
+  let lastRoute = routeFallback();
+  let mainRunInFlight = null;
+  let rightRunInFlight = null;
+  let rightApplied = false;
+
+  function renderMainSnapshot(snap, route) {
     const sections = getSections(snap);
     if (!sections) return false;
 
     const grids = document.querySelectorAll("[data-psom-key]");
-
-    grids.forEach((grid) => {
+    grids.forEach(function (grid) {
       const key = grid.getAttribute("data-psom-key");
-      if (!key) return;
-
-      if (key === "rightPanel") return;
-      if (key === "social-maru") return;
+      if (!key || !MANAGED_MAIN_KEYS.has(key)) return;
 
       const raw = routedItems(snap, key, route) || sections[key];
-
       const items = Array.isArray(raw)
         ? raw
-        : Array.isArray(raw?.items)
+        : Array.isArray(raw && raw.items)
           ? raw.items
           : [];
-
-      const finalItems =
-        items.length > 0
-          ? items
-          : [
-              {
-                title: key + " SAMPLE",
-                url: "#",
-                thumbnail: "",
-              },
-            ];
-
-      mountMainRow(grid, finalItems);
+      const realItems = items.filter(function (it) {
+        return it && !isPlaceholderItem(it);
+      });
+      if (!realItems.length) return;
+      mountMainRow(grid, realItems);
     });
-
-    // rightPanel is distribution-owned. Social AutoMap must never render it.
 
     window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
     window.__IGDC_SOCIAL_COUNTRY_ROUTE__ = {
@@ -566,36 +712,104 @@
     return true;
   }
 
-  function run() {
-    if (runInFlight) return runInFlight;
+  function renderRightPanelSnapshot(snap) {
+    // Strict ownership boundary: read ONLY rightPanel from the Edge-routed
+    // Canonical Distribution/IP document. Social main rows in that document,
+    // if present structurally, are deliberately ignored.
+    const sections = getSections(snap);
+    if (!sections) return false;
+    const rightRaw = Array.isArray(sections.rightPanel)
+      ? sections.rightPanel
+      : Array.isArray(sections.rightPanel && sections.rightPanel.items)
+        ? sections.rightPanel.items
+        : Array.isArray(sections.rightPanel && sections.rightPanel.slots)
+          ? sections.rightPanel.slots
+          : [];
+    getRightPanels().forEach(function (panel) { mountRightPanel(panel, rightRaw); });
+    window.__IGDC_SOCIAL_RIGHTPANEL_PIPELINE__ = {
+      source: RIGHT_SNAPSHOT_URL,
+      owner: "distribution",
+      scope: "canonical-ip-routed",
+      loadedAt: new Date().toISOString(),
+    };
+    return true;
+  }
 
-    runInFlight = Promise.all([loadStaticSnapshot(), loadCountryRoute()])
+  function runRightPanel() {
+    if (rightApplied) return Promise.resolve(true);
+    if (rightRunInFlight) return rightRunInFlight;
+
+    rightRunInFlight = (async function () {
+      const snap = await getInitialRightSnapshotPromise();
+      if (!snap) {
+        initialRightSnapshotPromise = null;
+        return false;
+      }
+      renderRightPanelSnapshot(snap);
+      rightApplied = true;
+      return true;
+    })().finally(function () {
+      rightRunInFlight = null;
+    });
+    return rightRunInFlight;
+  }
+
+  function runMain() {
+    if (mainRunInFlight) return mainRunInFlight;
+
+    mainRunInFlight = Promise.all([loadCurrentSnapshot(), loadCountryRoute()])
       .then(function (results) {
-        lastSnapshot = results[0];
+        const current = results[0];
         lastRoute = results[1] || routeFallback();
-        window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-          source: "canonical_static_social_snapshot",
-          status: "final_snapshot_loaded",
-          loadedAt: new Date().toISOString(),
-        };
-        renderSnapshot(lastSnapshot, lastRoute);
+
+        // No Distribution/static fallback here. Social main is a Social-owned
+        // surface and remains independent from the commercial right panel.
+        if (!(current && current.snapshot)) {
+          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+            source: "stored_release_current",
+            status: "stored_release_current_unavailable",
+            loadedAt: new Date().toISOString(),
+          };
+          return false;
+        }
+
+        lastMainSnapshot = current.snapshot;
+        window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = current.pipeline;
+        return renderMainSnapshot(lastMainSnapshot, lastRoute);
       })
       .catch(function (e) {
-        console.error("[social-automap-fixed] fail", e);
+        console.error("[social-main-automap] fail", e);
+        return false;
       })
       .finally(function () {
-        runInFlight = null;
+        mainRunInFlight = null;
       });
 
-    return runInFlight;
+    return mainRunInFlight;
   }
 
   function boot() {
-    // Social owns only the 9 main SNS sections. rightPanel remains fully
-    // distribution-owned and receives no Social click/render overrides.
-    run();
+    // Start the Distribution/IP right-panel request first and independently,
+    // exactly like Network/Tour. Social release lookup runs in parallel and can
+    // neither delay nor overwrite the right panel.
+    runRightPanel();
+    runMain();
   }
-  boot();
+
+  window.addEventListener("igdc:rightpanel:refresh", function () {
+    rightApplied = false;
+    initialRightSnapshotPromise = null;
+    runRightPanel();
+  });
+
+  // Start the canonical right-panel request immediately; DOM events reuse it.
+  getInitialRightSnapshotPromise();
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    setTimeout(boot, 0);
+  } else {
+    document.addEventListener("DOMContentLoaded", boot, { once: true });
+    window.addEventListener("load", boot, { once: true });
+  }
 })();
 
 /* ------------------------------------------------------------------
