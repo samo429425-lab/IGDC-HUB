@@ -32,6 +32,17 @@ async function publishSocialIndependently(options) {
       reason: "social_release_adapter_invalid"
     };
   }
+  // Never execute an older adapter that writes Social rows into the shared
+  // Canonical Commerce SearchBank. Distribution remains safe even when this
+  // shared build file is deployed a moment before the Social package.
+  if (typeof socialRelease.socialBankPaths !== "function" ||
+      String(socialRelease.SOCIAL_BANK_FILE || "") !== "social-searchbank.release.snapshot.json") {
+    return {
+      status: "skipped",
+      isolated: true,
+      reason: "legacy_shared_searchbank_social_adapter_blocked"
+    };
+  }
   try {
     const result = await socialRelease.publish({
       root,
@@ -49,17 +60,15 @@ async function publishSocialIndependently(options) {
 }
 
 const SOCIAL_CHECKPOINT_TARGETS = [
-  // Social writes into the ordinary shared SearchBank. Keep all three mirrors
-  // transactional so a failed Social handoff can never leave Distribution or
-  // another front domain half-overwritten.
-  path.join("data", "search-bank.snapshot.json"),
-  path.join("netlify", "functions", "data", "search-bank.snapshot.json"),
-  path.join("netlify", "functions", "search-bank.snapshot.json"),
+  // Social is physically isolated from the Commerce/Distribution canonical
+  // SearchBank. Checkpoint only Social-owned handoff/snapshot files.
   path.join("data", "social.snapshot.json"),
   path.join("data", "social-searchbank.release.snapshot.json"),
   path.join("data", "social-pipeline.report.json"),
   path.join("netlify", "functions", "data", "social.snapshot.json"),
-  path.join("netlify", "functions", "social.snapshot.json")
+  path.join("netlify", "functions", "social.snapshot.json"),
+  path.join("netlify", "functions", "data", "social-searchbank.release.snapshot.json"),
+  path.join("netlify", "functions", "social-searchbank.release.snapshot.json")
 ];
 
 function createSocialCheckpoint() {
@@ -140,6 +149,28 @@ function incomingSocialHookIntent() {
   }
 }
 
+function loadDedicatedSocialBank() {
+  const files = [
+    path.join(root, "data", "social-searchbank.release.snapshot.json"),
+    path.join(root, "netlify", "functions", "data", "social-searchbank.release.snapshot.json"),
+    path.join(root, "netlify", "functions", "social-searchbank.release.snapshot.json")
+  ];
+  const errors = [];
+  for (const file of files) {
+    if (!fileExists(file)) continue;
+    try {
+      const doc = readJson(file);
+      if (doc && Array.isArray(doc.items)) {
+        return { ok: true, file, relative: path.relative(root, file).replace(/\\/g, "/"), bank: doc, errors };
+      }
+      errors.push({ file: path.relative(root, file).replace(/\\/g, "/"), reason: "invalid_shape" });
+    } catch (error) {
+      errors.push({ file: path.relative(root, file).replace(/\\/g, "/"), reason: String(error && error.message || error) });
+    }
+  }
+  return { ok: false, file: null, relative: null, bank: null, errors };
+}
+
 async function publishSocialSafely(options) {
   options = options || {};
   const checkpoint = createSocialCheckpoint();
@@ -154,7 +185,14 @@ async function publishSocialSafely(options) {
       return Object.assign({}, result || {}, { rollback: "restored", restored });
     }
     if (options.materializeSnapshot === true) {
-      const report = snapshots.run({ targetPage: "social" });
+      const loaded = loadDedicatedSocialBank();
+      if (!loaded.ok) {
+        const error = new Error("Dedicated Social SearchBank handoff is missing or invalid.");
+        error.code = "SOCIAL_DEDICATED_BANK_UNAVAILABLE";
+        error.details = loaded.errors;
+        throw error;
+      }
+      const report = snapshots.run({ targetPage: "social", bank: loaded.bank });
       if (!report || report.ok !== true) {
         const error = new Error("Social target Snapshot Engine materialization failed.");
         error.code = "SOCIAL_SNAPSHOT_MATERIALIZATION_FAILED";
@@ -162,7 +200,8 @@ async function publishSocialSafely(options) {
       }
       result = Object.assign({}, result, {
         snapshotEngine: report,
-        downstream: "social-target-materialized"
+        downstream: "dedicated-social-bank-to-social-snapshot",
+        socialBankFile: loaded.relative
       });
     }
     return result;
@@ -172,7 +211,7 @@ async function publishSocialSafely(options) {
     try { restored = restoreSocialCheckpoint(checkpoint); }
     catch (restoreError) { rollbackError = String(restoreError && restoreError.message || restoreError); }
     if (rollbackError) {
-      const safetyError = new Error("Social publication failed and rollback could not restore the shared SearchBank state: " + rollbackError);
+      const safetyError = new Error("Social publication failed and rollback could not restore the isolated Social state: " + rollbackError);
       safetyError.code = "SOCIAL_PUBLICATION_ROLLBACK_FAILED";
       throw safetyError;
     }
@@ -187,110 +226,6 @@ async function publishSocialSafely(options) {
   } finally {
     removeSocialCheckpoint(checkpoint);
   }
-}
-
-const SOCIAL_OWNED_SECTIONS = new Set([
-  "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter"
-]);
-
-function searchBankMirrorPaths() {
-  return [
-    path.join(root, "data", "search-bank.snapshot.json"),
-    path.join(root, "netlify", "functions", "data", "search-bank.snapshot.json"),
-    path.join(root, "netlify", "functions", "search-bank.snapshot.json")
-  ];
-}
-
-function cloneJson(value) { return JSON.parse(JSON.stringify(value)); }
-
-function captureSocialSearchBankBase() {
-  for (const file of searchBankMirrorPaths()) {
-    if (!fileExists(file)) continue;
-    try {
-      const doc = readJson(file);
-      if (doc && Array.isArray(doc.items)) return { file, doc: cloneJson(doc) };
-    } catch (_error) {}
-  }
-  return { file: null, doc: { items: [], meta: {} } };
-}
-
-function socialOwnedSearchBankItem(item) {
-  if (!item || typeof item !== "object") return false;
-  const bind = item.bind && typeof item.bind === "object" ? item.bind : {};
-  const section = String(item.psom_key || item.section || bind.section || "").trim();
-  const page = String(item.page || item.channel || bind.page || "").trim().toLowerCase();
-  // rightPanel is deliberately excluded: it is Distribution-owned even though
-  // it is displayed on the Social page.
-  return page === "social" && SOCIAL_OWNED_SECTIONS.has(section);
-}
-
-function atomicWriteJson(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temp = file + ".tmp-" + process.pid + "-" + Date.now();
-  fs.writeFileSync(temp, JSON.stringify(value, null, 2) + "\n", "utf8");
-  fs.renameSync(temp, file);
-}
-
-function stableItemIdentity(item) {
-  const id = String(item && (item.id || item.contentId || item.candidateId || item.snapshotRecordId) || "").trim();
-  const url = String(item && (item.url || item.link || item.href) || "").trim().toLowerCase();
-  return { id, url };
-}
-
-function restoreSocialDomainIntoCanonical(baseCapture) {
-  const primary = path.join(root, "data", "search-bank.snapshot.json");
-  if (!fileExists(primary)) return { ok: false, reason: "canonical_searchbank_missing" };
-  const canonicalDoc = readJson(primary);
-  if (!canonicalDoc || !Array.isArray(canonicalDoc.items)) return { ok: false, reason: "canonical_searchbank_invalid" };
-  const previous = baseCapture && baseCapture.doc && Array.isArray(baseCapture.doc.items) ? baseCapture.doc.items : [];
-  const socialItems = previous.filter(socialOwnedSearchBankItem);
-  if (!socialItems.length) return { ok: true, preserved: 0, skippedCollisions: 0, total: canonicalDoc.items.length };
-
-  // Distribution/Commerce is authoritative on this branch. Re-attaching the
-  // previously committed Social nine-section rows must never run a broad merge
-  // or sanitizer over Canonical products. Preserve Canonical rows exactly; add
-  // only Social rows whose identity cannot collide with a Canonical row.
-  const ids = new Set();
-  const urls = new Set();
-  for (const item of canonicalDoc.items) {
-    const key = stableItemIdentity(item);
-    if (key.id) ids.add(key.id);
-    if (key.url && key.url !== "#") urls.add(key.url);
-  }
-  const safeSocialItems = [];
-  const collisions = [];
-  for (const item of socialItems) {
-    const key = stableItemIdentity(item);
-    if ((key.id && ids.has(key.id)) || (key.url && key.url !== "#" && urls.has(key.url))) {
-      collisions.push({ id: key.id || null, url: key.url || null });
-      continue;
-    }
-    safeSocialItems.push(item);
-    if (key.id) ids.add(key.id);
-    if (key.url && key.url !== "#") urls.add(key.url);
-  }
-  const canonicalHashBefore = sha256Value(canonicalDoc.items);
-  const mergedItems = canonicalDoc.items.concat(safeSocialItems);
-  const canonicalPrefixHashAfter = sha256Value(mergedItems.slice(0, canonicalDoc.items.length));
-  if (canonicalPrefixHashAfter !== canonicalHashBefore) {
-    throw new Error("Distribution Canonical invariant failed while preserving Social rows.");
-  }
-  const merged = Object.assign({}, canonicalDoc, {
-    items: mergedItems,
-    meta: Object.assign({}, canonicalDoc.meta || {}, {
-      socialDomainPreservation: {
-        mode: "append-social-nine-only-canonical-immutable",
-        preserved: safeSocialItems.length,
-        skippedCollisions: collisions.length,
-        rightPanelOwnedBy: "distribution",
-        canonicalHash: canonicalHashBefore,
-        preservedAt: new Date().toISOString()
-      }
-    })
-  });
-  for (const file of searchBankMirrorPaths()) atomicWriteJson(file, merged);
-  return { ok: true, preserved: safeSocialItems.length, skippedCollisions: collisions.length, collisions: collisions.slice(0, 25), canonicalHash: canonicalHashBefore, total: mergedItems.length };
 }
 
 const COMMERCE_CHECKPOINT_TARGETS = [
@@ -391,12 +326,6 @@ function validateExplicitCommerceSelection(upstream, intent) {
     fullQueuePreserved:true,
     missingCandidateIds:[]
   };
-}
-
-function sha256Value(value) {
-  // Hash an in-memory JSON value for same-build invariants. This is deliberately
-  // local and deterministic; it does not change or validate any snapshot data.
-  return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 function sha256File(file) {
@@ -617,6 +546,55 @@ function productionDeployBuild() {
   return String(process.env.CONTEXT || "").trim().toLowerCase() === "production";
 }
 
+function compactSocialReport(report) {
+  if (!report || typeof report !== "object") return report || null;
+  const gate = report.policyGate && typeof report.policyGate === "object" ? report.policyGate : null;
+  const handoff = report.searchBankSnapshot && typeof report.searchBankSnapshot === "object" ? report.searchBankSnapshot : null;
+  return {
+    version: report.version || null,
+    status: report.status || null,
+    reason: report.reason || null,
+    isolated: report.isolated === true,
+    releaseId: report.releaseId || null,
+    releaseRead: report.releaseRead ? {
+      source: report.releaseRead.source || null,
+      directError: report.releaseRead.directError || null
+    } : null,
+    policyGate: gate ? {
+      ok: gate.ok === true,
+      acceptedCount: Number(gate.acceptedCount || 0),
+      rejectedCount: Number(gate.rejectedCount || 0),
+      counts: gate.counts || {},
+      rejectedSample: Array.isArray(gate.rejected) ? gate.rejected.slice(0, 10) : []
+    } : null,
+    searchBankSnapshot: handoff ? {
+      file: handoff.file || null,
+      hash: handoff.hash || null,
+      finalTotalItems: handoff.finalTotalItems == null ? null : Number(handoff.finalTotalItems),
+      sharedSearchBankUntouched: handoff.sharedSearchBankUntouched === true,
+      searchBankEngine: handoff.searchBankEngine ? {
+        version: handoff.searchBankEngine.version || null,
+        contractVersion: handoff.searchBankEngine.contractVersion || null,
+        inputCount: Number(handoff.searchBankEngine.inputCount || 0),
+        accepted: Number(handoff.searchBankEngine.accepted || 0),
+        rejected: Number(handoff.searchBankEngine.rejected || 0)
+      } : null
+    } : null,
+    pipeline: report.pipeline || null,
+    rollback: report.rollback || null
+  };
+}
+
+function compactProblems(list, limit) {
+  const source = Array.isArray(list) ? list.map(value => String(value)) : [];
+  const max = Math.max(1, Number(limit) || 20);
+  return {
+    count: source.length,
+    sample: source.slice(0, max),
+    truncated: source.length > max
+  };
+}
+
 async function main() {
   const incomingCommerceIntent = incomingCommerceHookIntent();
   const incomingSocialIntent = incomingSocialHookIntent();
@@ -640,7 +618,7 @@ async function main() {
     writePreservedBuild(reason, details);
   }
 
-  // A Social release changes only the nine Social main rows in SearchBank, but
+  // A Social release changes only the isolated Social SearchBank handoff, but
   // a Netlify deploy is a fresh filesystem. Therefore Social cannot return early:
   // the durable Commerce state must be rehydrated in the same build and the
   // Distribution-owned country/region snapshots must be regenerated before the
@@ -656,30 +634,25 @@ async function main() {
         status: "preserved",
         isolated: true,
         reason: "empty_social_publish_plan_rejected_before_write",
-        searchBank: "unchanged",
+        sharedSearchBank: "unchanged",
         snapshotEngine: "deferred-to-shared-build",
         note: "Zero-row publish is a safe no-op; Distribution scoped outputs are still rebuilt before deploy."
       };
     } else {
       explicitSocialPublication = await publishSocialSafely({
         allowLatestStored: false,
-        // Do not materialize Social yet. The full Snapshot Engine runs after the
-        // durable Commerce canonical state has been reconstructed, so both domains
-        // are emitted from one consistent SearchBank generation.
+        // Do not materialize Social yet. Commerce/Distribution canonical state is
+        // reconstructed independently first; Social then uses its dedicated bank.
         materializeSnapshot: false
       });
       if (String(explicitSocialPublication && explicitSocialPublication.status || "").toLowerCase() !== "searchbank_handoff_complete") {
-        const error = new Error("Explicit Social publication did not complete its SearchBank handoff: " + JSON.stringify(explicitSocialPublication));
+        const error = new Error("Explicit Social publication did not complete its isolated SearchBank handoff: " + JSON.stringify(compactSocialReport(explicitSocialPublication)));
         error.code = "EXPLICIT_SOCIAL_SEARCHBANK_HANDOFF_FAILED";
         throw error;
       }
     }
   }
 
-  // Capture only Social-owned SearchBank rows before the proven Distribution
-  // build runs. If Commerce rewrites its canonical bank, these rows are merged
-  // back before the shared Snapshot Engine. rightPanel is never captured here.
-  const preCommerceSocialBase = captureSocialSearchBankBase();
   const commerceCheckpoint = createCommerceCheckpoint();
   try {
 
@@ -796,24 +769,74 @@ async function main() {
     throw new Error("Canonical Snapshot Publisher integrity failure: " + JSON.stringify(published.problems));
   }
 
-  // Preserve only the previously committed Social nine-section rows before the
-  // shared Snapshot Engine runs. A Distribution/Commerce build NEVER replays a
-  // stored Social release. Social publication is allowed only on the explicit
-  // Social-only hook branch above, so one domain cannot silently rewrite the
-  // other during an unrelated deploy.
-  const socialPreservation = restoreSocialDomainIntoCanonical(preCommerceSocialBase);
-  const socialRefresh = {
-    status: "not-run",
-    reason: "stored-social-replay-disabled-on-commerce-build",
-    allowLatestStored: false
-  };
-
-  // Only commercial Snapshot surfaces are built here. Donation has an
-  // independent endpoint/snapshot contract and is intentionally excluded.
-  const snapshotEngineReport = snapshots.run({ canonicalReleaseId: publication.releaseId });
-  if (!snapshotEngineReport || snapshotEngineReport.ok !== true) {
-    throw new Error("Snapshot Engine did not complete the SearchBank-to-front merge layer.");
+  // Domain ownership boundary:
+  // - data/search-bank.snapshot.json is Canonical Commerce/Distribution ONLY.
+  // - Social main nine uses data/social-searchbank.release.snapshot.json.
+  // Social must never be appended to Canonical after publication because that
+  // invalidates Canonical manifest hashes and makes the IP publisher reject the
+  // entire Distribution path.
+  let socialRefresh = explicitSocialPublication;
+  if (!explicitSocialPublicationInBuild) {
+    // A fresh Netlify filesystem does not inherit the previous deploy output.
+    // Safely rehydrate the latest stored Social release into the isolated bank;
+    // this cannot mutate Canonical Commerce/Distribution state.
+    socialRefresh = await publishSocialSafely({
+      allowLatestStored: true,
+      materializeSnapshot: false
+    });
   }
+
+  // Materialize only Distribution-owned surfaces from the Canonical bank.
+  // Media is intentionally untouched. Social main nine is materialized from its
+  // dedicated bank below; Social rightPanel is owned by the IP/Distribution path.
+  const distributionSnapshotReports = [];
+  for (const targetPage of ["home", "network", "distribution", "tour"]) {
+    const report = snapshots.run({ targetPage, canonicalReleaseId: publication.releaseId });
+    if (!report || report.ok !== true) {
+      const error = new Error("Snapshot Engine failed for Distribution-owned target: " + targetPage);
+      error.code = "DISTRIBUTION_SNAPSHOT_TARGET_FAILED";
+      error.targetPage = targetPage;
+      throw error;
+    }
+    distributionSnapshotReports.push(report);
+  }
+
+  let socialSnapshotReport = null;
+  const socialStatus = String(socialRefresh && socialRefresh.status || "").toLowerCase();
+  if (socialStatus === "searchbank_handoff_complete") {
+    const socialBank = loadDedicatedSocialBank();
+    if (!socialBank.ok) {
+      if (explicitSocialPublicationInBuild) {
+        const error = new Error("Explicit Social release completed but its dedicated bank cannot be read.");
+        error.code = "SOCIAL_DEDICATED_BANK_UNAVAILABLE";
+        error.details = socialBank.errors;
+        throw error;
+      }
+    } else {
+      socialSnapshotReport = snapshots.run({ targetPage: "social", bank: socialBank.bank });
+      if (!socialSnapshotReport || socialSnapshotReport.ok !== true) {
+        if (explicitSocialPublicationInBuild) {
+          const error = new Error("Explicit Social Snapshot materialization failed.");
+          error.code = "SOCIAL_SNAPSHOT_MATERIALIZATION_FAILED";
+          throw error;
+        }
+        socialSnapshotReport = {
+          ok: false,
+          degraded: true,
+          reason: "stored-social-materialization-failed-preserve-static-social"
+        };
+      }
+    }
+  }
+
+  const snapshotEngineReport = {
+    ok: distributionSnapshotReports.every(row => row && row.ok === true),
+    mode: "domain-isolated-targeted-materialization",
+    canonicalCommerceTargets: distributionSnapshotReports,
+    socialTarget: socialSnapshotReport,
+    media: "untouched",
+    donation: "untouched"
+  };
 
   const regionalReport = regional.publishFromSearchBank({ root, trigger: "netlify-build-canonical" });
 
@@ -836,7 +859,7 @@ async function main() {
   if (ipSlotReport.status !== "published" && !partialIpPublication) {
     // Core policy/source/manifest failures remain hard-stop conditions. A single
     // country/region render failure must not take every other market offline.
-    throw new Error("Canonical IP Slot Publisher blocked build: " + JSON.stringify(ipSlotErrors.length ? ipSlotErrors : ipSlotReport));
+    throw new Error("Canonical IP Slot Publisher blocked build: " + JSON.stringify(ipSlotErrors.length ? compactProblems(ipSlotErrors, 20) : { status: ipSlotReport && ipSlotReport.status, errors: compactProblems(ipSlotErrors, 20) }));
   }
   if (partialIpPublication) {
     ipSlotReport.degraded = true;
@@ -847,7 +870,7 @@ async function main() {
   if (!ipSlotVerification.ok) {
     // Hash/policy/manifest integrity failures affect published output itself and
     // are therefore still global safety failures, not country-level soft fails.
-    throw new Error("Canonical IP Slot Publisher integrity failure: " + JSON.stringify(ipSlotVerification.problems));
+    throw new Error("Canonical IP Slot Publisher integrity failure: " + JSON.stringify(compactProblems(ipSlotVerification.problems, 20)));
   }
   const rootFallbackVerification = verifyPublishedRootSampleFallbacks(ipSlotReport);
   if (!rootFallbackVerification.ok) {
@@ -860,11 +883,11 @@ async function main() {
     if (expectedCount > 0 && outputCount <= 0) {
       // No scoped output at all means the Distribution materialization path is
       // globally broken. Keep the previous deploy rather than publish a dead hub.
-      throw new Error("Canonical SearchBank products did not reach any country/IP front snapshot: " + JSON.stringify(canonicalToIpVerification.problems));
+      throw new Error("Canonical SearchBank products did not reach any country/IP front snapshot: " + JSON.stringify(compactProblems(canonicalToIpVerification.problems, 20)));
     }
     canonicalToIpVerification.degraded = true;
     canonicalToIpVerification.degradedReason = "partial-country-region-output-missing";
-    process.stderr.write("Distribution country/region soft-fail: " + JSON.stringify(canonicalToIpVerification.problems) + "\n");
+    process.stderr.write("Distribution country/region soft-fail: " + JSON.stringify(compactProblems(canonicalToIpVerification.problems, 20)) + "\n");
   }
 
   process.stdout.write(JSON.stringify({
@@ -878,9 +901,11 @@ async function main() {
     published,
     socialIsolation: {
       incomingSocialIntent,
-      explicitPublication: explicitSocialPublication,
-      preservation: socialPreservation,
-      refresh: socialRefresh,
+      explicitPublication: compactSocialReport(explicitSocialPublication),
+      canonicalCommerceSearchBankMutation: false,
+      dedicatedBank: "data/social-searchbank.release.snapshot.json",
+      refresh: compactSocialReport(socialRefresh),
+      socialSnapshot: socialSnapshotReport,
       rightPanelOwnedBy: "distribution"
     },
     donation: { mode: "independent-runtime-contract-not-touched" },

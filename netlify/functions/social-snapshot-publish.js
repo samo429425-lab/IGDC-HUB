@@ -4,8 +4,9 @@
  * Builds and validates a Social release from approved Supabase candidates.
  * Runtime functions never write deployed static files. A confirmed release is
  * stored first, then the configured Netlify build hook runs the existing line:
- * Social release -> Social/PSOM policy gate -> ordinary SearchBank Snapshot ->
- * existing Snapshot Engine -> social.snapshot.json.
+ * Social release -> Social/PSOM policy gate -> dedicated Social SearchBank handoff ->
+ * existing Snapshot Engine (social target only) -> social.snapshot.json.
+ * Commerce/Distribution canonical SearchBank is never rewritten by this path.
  */
 const fs = require("fs");
 const path = require("path");
@@ -15,7 +16,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.12.1-empty-plan-guard";
+  "social-snapshot-publish-v1.13.0-dedicated-social-bank";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -319,7 +320,7 @@ async function triggerCanonicalBuild(release, operation, route, handoff) {
       httpStatus: response.status,
       releaseId: text(release.release_id),
       message:
-        "정식 빌드가 접수됐습니다. 승인 소셜 콘텐츠는 정책·PSOM 검증을 거쳐 기존 SearchBank Snapshot에 인계되고, 이후 기존 Snapshot Engine 경로가 이어집니다.",
+        "정식 빌드가 접수됐습니다. 승인 소셜 콘텐츠는 정책·PSOM 검증을 거쳐 Social 전용 SearchBank 인계 파일에 저장되고, 기존 Snapshot Engine의 Social 대상 경로로 이어집니다.",
     };
   } catch (error) {
     return {
@@ -407,7 +408,7 @@ function releasedIdsBySection(snapshot) {
   return result;
 }
 function searchBankSnapshotState(root, expectedIds) {
-  const files = SocialSearchBankReleaseAdapter.searchBankPaths(root);
+  const files = SocialSearchBankReleaseAdapter.socialBankPaths(root);
   const mirrorRows = [];
   let primary = null;
   for (const file of files) {
@@ -448,7 +449,7 @@ function searchBankSnapshotState(root, expectedIds) {
     }
   }
   const hashes = mirrorRows.filter((row) => row.present).map((row) => row.hash);
-  const mirrorConsensus = hashes.length === files.length && new Set(hashes).size === 1;
+  const mirrorConsensus = hashes.length > 0 && new Set(hashes).size === 1;
   return {
     checked: true,
     source: primary ? primary.file : null,
@@ -478,8 +479,8 @@ async function runtimePipelineDiagnostic(route) {
     pipelineModel: [
       "stored_social_release",
       "social_policy_and_psom_gate",
-      "data/search-bank.snapshot.json",
-      "existing_snapshot_engine",
+      "data/social-searchbank.release.snapshot.json",
+      "existing_snapshot_engine_social_target",
       "data/social.snapshot.json",
       "existing_social_automap",
     ],
@@ -893,13 +894,15 @@ exports.handler = async function (event) {
         socialSnapshotMutation: false,
         frontReadsLatestStoredSnapshot: false,
         canonicalBuildPipeline: true,
+        socialSearchBankIsolated: true,
+        sharedCommerceSearchBankMutation: false,
         publicSnapshotSource: "/data/social.snapshot.json",
         pipelineOrder: [
           "administrator_publication_plan",
           "optional_stored_social_release_audit",
           "social_policy_and_psom_gate",
-          "data/search-bank.snapshot.json",
-          "existing_snapshot_engine",
+          "data/social-searchbank.release.snapshot.json",
+          "existing_snapshot_engine_social_target",
           "data/social.snapshot.json",
           "existing_social_automap",
         ],

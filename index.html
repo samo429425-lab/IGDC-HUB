@@ -4188,6 +4188,224 @@ function normLang(l){
 </script>
 <!-- /IGDC canonical auth bar and role gate v1 -->
 
+<!-- IGDC donation arrow nano-pin v2: visual-only trigger, menu indices untouched -->
+<style id="igdc-donation-arrow-nanopin-v2-css">
+  /* Keep original Donation link in DOM for index/i18n/route stability, but never render it. */
+  nav [data-igdc-donation-nav="1"] { display:none !important; }
+
+  /* Pre-hide until the existing OS0/Auth0 donation gate resolves the country/token claim. */
+  #igdcDonationArrowTrigger { display:none; }
+  html:not([data-igdc-donation-ready="1"]) #igdcDonationArrowTrigger { display:none !important; }
+
+  #igdcDonationArrowTrigger{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    z-index:1999;
+    width:34px;
+    height:38px;
+    align-items:center;
+    justify-content:center;
+    box-sizing:border-box;
+    cursor:pointer;
+    user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    color:#168a45;
+    border-radius:14px;
+    outline:none;
+  }
+  #igdcDonationArrowTrigger svg{
+    width:26px;
+    height:30px;
+    overflow:visible;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.16)) drop-shadow(0 0 4px rgba(255,164,132,.22));
+    transition:transform .12s ease, filter .12s ease;
+  }
+  #igdcDonationArrowTrigger path{
+    stroke:url(#igdcDonationArrowGradient);
+    transition:stroke .12s ease;
+  }
+  #igdcDonationArrowTrigger:hover svg,
+  #igdcDonationArrowTrigger:focus-visible svg{
+    transform:translateY(1px) scale(1.05);
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.15)) drop-shadow(0 0 6px rgba(88,214,128,.38));
+  }
+  #igdcDonationArrowTrigger:active svg,
+  #igdcDonationArrowTrigger.is-pressed svg{
+    transform:translateY(2px) scale(.94);
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.12)) drop-shadow(0 0 7px rgba(255,151,116,.48));
+  }
+  #igdcDonationArrowTrigger:active path,
+  #igdcDonationArrowTrigger.is-pressed path{
+    stroke:#ff9b76 !important;
+  }
+
+  #igdcDonationArrowTip{
+    position:absolute;
+    top:calc(100% + 7px);
+    left:50%;
+    transform:translateX(-50%) translateY(-2px);
+    min-width:max-content;
+    padding:6px 10px;
+    border:1px solid rgba(0,0,0,.12);
+    border-radius:9px;
+    background:rgba(255,255,255,.98);
+    color:#2d3439;
+    box-shadow:0 4px 12px rgba(0,0,0,.16);
+    font-size:13px;
+    font-weight:700;
+    line-height:1.15;
+    white-space:nowrap;
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    transition:opacity .12s ease, transform .12s ease, visibility .12s ease;
+  }
+  #igdcDonationArrowTip::before{
+    content:"";
+    position:absolute;
+    left:50%;
+    top:-5px;
+    width:8px;
+    height:8px;
+    transform:translateX(-50%) rotate(45deg);
+    background:#fff;
+    border-left:1px solid rgba(0,0,0,.10);
+    border-top:1px solid rgba(0,0,0,.10);
+  }
+  #igdcDonationArrowTrigger:hover #igdcDonationArrowTip,
+  #igdcDonationArrowTrigger:focus-visible #igdcDonationArrowTip{
+    opacity:1;
+    visibility:visible;
+    transform:translateX(-50%) translateY(0);
+  }
+
+  /* On touch layouts the existing Hide button is intentionally absent; keep the arrow usable after download. */
+  @media (hover:none) and (pointer:coarse), (any-pointer:coarse){
+    #igdcDonationArrowTrigger{
+      position:relative;
+      top:auto;
+      left:auto !important;
+      transform:none;
+      margin:0 7px;
+      flex:0 0 34px;
+    }
+    #igdcDonationArrowTip{ display:none; }
+  }
+</style>
+<script id="igdc-donation-arrow-nanopin-v2-js">
+(function(){
+  'use strict';
+  if (window.__IGDC_DONATION_ARROW_NANOPIN_V2__) return;
+  window.__IGDC_DONATION_ARROW_NANOPIN_V2__ = true;
+
+  var raf = 0;
+
+  function donationLabel(){
+    try{
+      var lang = (typeof currentLang !== 'undefined' && currentLang) ? currentLang :
+                 ((document.documentElement.getAttribute('lang') || 'ko').toLowerCase());
+      var src = (typeof menuText !== 'undefined' && menuText && (menuText[lang] || menuText.ko)) || null;
+      if (Array.isArray(src) && src.length && Array.isArray(src[0])) src = src[0];
+      if (Array.isArray(src) && src[6] != null) return String(src[6]);
+    }catch(_){ }
+    return '💝 후원';
+  }
+
+  function syncLabel(){
+    var tip = document.getElementById('igdcDonationArrowTip');
+    if (tip) tip.textContent = donationLabel();
+  }
+
+  function positionArrow(){
+    raf = 0;
+    var nav = document.querySelector('nav');
+    var trigger = document.getElementById('igdcDonationArrowTrigger');
+    var download = nav && nav.querySelector('a[data-page-index="9"]');
+    var hide = document.getElementById('igdcNavToggleBtn');
+    if (!nav || !trigger || !download || !hide) return;
+
+    try{
+      var hideStyle = window.getComputedStyle(hide);
+      if (hideStyle.display === 'none' || hideStyle.visibility === 'hidden') {
+        trigger.style.removeProperty('left');
+        return;
+      }
+      var nb = nav.getBoundingClientRect();
+      var db = download.getBoundingClientRect();
+      var hb = hide.getBoundingClientRect();
+      var center;
+      if (db.right <= hb.left) center = (db.right + hb.left) / 2;
+      else if (hb.right <= db.left) center = (hb.right + db.left) / 2;
+      else center = ((db.left + db.right) + (hb.left + hb.right)) / 4;
+      trigger.style.left = Math.round(center - nb.left) + 'px';
+    }catch(_){ }
+  }
+
+  function schedulePosition(){
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(function(){ syncLabel(); positionArrow(); });
+  }
+
+  function ensureArrow(){
+    var nav = document.querySelector('nav');
+    if (!nav) return null;
+    var trigger = document.getElementById('igdcDonationArrowTrigger');
+    if (!trigger){
+      trigger = document.createElement('span');
+      trigger.id = 'igdcDonationArrowTrigger';
+      trigger.setAttribute('role','button');
+      trigger.setAttribute('tabindex','0');
+      trigger.setAttribute('aria-hidden','true');
+      trigger.setAttribute('aria-label','Donation');
+      trigger.innerHTML = '<svg viewBox="0 0 30 34" aria-hidden="true" focusable="false">' +
+        '<defs><linearGradient id="igdcDonationArrowGradient" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0%" stop-color="#0d7f3d"/><stop offset="58%" stop-color="#32b85f"/><stop offset="100%" stop-color="#ffad88"/>' +
+        '</linearGradient></defs>' +
+        '<path d="M15 3.5 L15 20.5 M7.5 14.5 L15 22.5 L22.5 14.5" fill="none" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '</svg><span id="igdcDonationArrowTip">💝 후원</span>';
+      var hide = document.getElementById('igdcNavToggleBtn');
+      if (hide && hide.parentNode === nav) nav.insertBefore(trigger, hide);
+      else nav.appendChild(trigger);
+
+      function activate(ev){
+        if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+        trigger.classList.add('is-pressed');
+        window.setTimeout(function(){ trigger.classList.remove('is-pressed'); }, 180);
+        if (typeof loadPage === 'function') return loadPage(6, ev || null);
+        return false;
+      }
+      trigger.addEventListener('click', activate);
+      trigger.addEventListener('keydown', function(ev){
+        if (ev.key === 'Enter' || ev.key === ' ') activate(ev);
+      });
+    }
+    syncLabel();
+    schedulePosition();
+    return trigger;
+  }
+
+  function init(){
+    ensureArrow();
+    schedulePosition();
+    window.addEventListener('resize', schedulePosition, { passive:true });
+    window.addEventListener('pageshow', schedulePosition);
+    document.addEventListener('igdc:langchange', schedulePosition, true);
+    document.addEventListener('osauth:ready', schedulePosition, true);
+    document.addEventListener('osauth:done', schedulePosition, true);
+    try{
+      var nav = document.querySelector('nav');
+      if (nav) new MutationObserver(schedulePosition).observe(nav, { childList:true, subtree:true, characterData:true });
+    }catch(_){ }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once:true });
+  else init();
+})();
+</script>
+<!-- /IGDC donation arrow nano-pin v2 -->
+
 <!-- IGDC donation navigation auth/country gate v1 -->
 <script id="igdc-donation-nav-gate-v1">
 (function(){
@@ -4274,8 +4492,17 @@ function normLang(l){
       allowed = isOwnerOrAdmin(roles) || !isBlocked(payload);
     }
 
-    link.style.display = allowed ? '' : 'none';
-    link.setAttribute('aria-hidden', allowed ? 'false' : 'true');
+    /* Original Donation anchor stays in its canonical DOM/index position but is visual-only hidden. */
+    link.style.display = 'none';
+    link.setAttribute('aria-hidden', 'true');
+
+    /* The new arrow inherits this exact existing donation gate result (including country/IP claim and role bypass). */
+    var arrow = document.getElementById('igdcDonationArrowTrigger');
+    if (arrow) {
+      arrow.style.display = allowed ? 'inline-flex' : 'none';
+      arrow.setAttribute('aria-hidden', allowed ? 'false' : 'true');
+      arrow.setAttribute('tabindex', allowed ? '0' : '-1');
+    }
     document.documentElement.dataset.igdcDonationReady = '1';
   }
 

@@ -34,10 +34,14 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.3-distribution-section-order";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.4-social-domain-isolation";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
+const SOCIAL_MANAGED_MAIN_SECTIONS = new Set([
+  "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
+  "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter"
+]);
 
 function uniq(arr) {
   const out = [];
@@ -241,6 +245,22 @@ function sanitizeSectionCollection(sections, pageName) {
     }
     if (sectionValue && typeof sectionValue === "object" && Array.isArray(sectionValue.slots)) {
       sectionValue.slots = capSnapshotList(sanitizeSnapshotArray(sectionValue.slots, pageName, sectionKey), pageName, sectionKey);
+    }
+  }
+  return sections;
+}
+
+function sanitizeLimitSections(sections, pageName) {
+  if (pageName !== "social") return sanitizeSectionCollection(sections, pageName);
+  if (!sections || typeof sections !== "object") return sections;
+  for (const sectionKey of SOCIAL_MANAGED_MAIN_SECTIONS) {
+    const sectionValue = sections[sectionKey];
+    if (Array.isArray(sectionValue)) {
+      sections[sectionKey] = capSnapshotList(sanitizeSnapshotArray(sectionValue, "social", sectionKey), "social", sectionKey);
+      continue;
+    }
+    if (sectionValue && typeof sectionValue === "object" && Array.isArray(sectionValue.slots)) {
+      sectionValue.slots = capSnapshotList(sanitizeSnapshotArray(sectionValue.slots, "social", sectionKey), "social", sectionKey);
     }
   }
   return sections;
@@ -502,7 +522,7 @@ function enforceSnapshotFileLimit(pageName, bankItems) {
   const snapshot = found.data || {};
   const sections = getSnapshotSections(snapshot, pageName);
   if (!sections) return;
-  sanitizeSectionCollection(sections, pageName);
+  sanitizeLimitSections(sections, pageName);
 
   const usedIds = new Set();
   for (const sectionValue of Object.values(sections)) {
@@ -532,7 +552,7 @@ function enforceSnapshotFileLimit(pageName, bankItems) {
     if (changed) usedIds.add(id);
   }
 
-  sanitizeSectionCollection(sections, pageName);
+  sanitizeLimitSections(sections, pageName);
   setSnapshotSections(snapshot, pageName, sections);
   writeSnapshotJson(fileName, snapshot);
 }
@@ -1336,6 +1356,13 @@ writeSnapshotJson(fileName, snapshot);
 
 /* ===== SOCIAL SNAPSHOT MERGE ===== */
 
+function isManagedSocialPublishedRow(item) {
+  if (!item || typeof item !== "object") return false;
+  const audit = item.audit && typeof item.audit === "object" ? item.audit : {};
+  return String(audit.origin || "").trim() === "social_candidates" ||
+    !!(item.socialCandidatePublication && item.socialCandidatePublication.candidateId);
+}
+
 function handleSocialSnapshot(bank) {
 
   const fileName = "social.snapshot.json";
@@ -1350,15 +1377,41 @@ function handleSocialSnapshot(bank) {
   if (!snapshot.pages.social) snapshot.pages.social = { sections: {} };
   if (!snapshot.pages.social.sections) snapshot.pages.social.sections = {};
 
-  const sections = sanitizeSectionCollection(snapshot.pages.social.sections, "social");
+  // Social target execution must not normalize Distribution-owned rightPanel
+  // or the reserved social-maru section. Sanitize only the nine managed SNS
+  // sections so those foreign/reserved sections remain byte-equivalent as data.
+  const sections = snapshot.pages.social.sections;
+  for (const managedKey of SOCIAL_MANAGED_MAIN_SECTIONS) {
+    const value = sections[managedKey];
+    if (Array.isArray(value)) {
+      sections[managedKey] = capSnapshotList(
+        sanitizeSnapshotArray(value, "social", managedKey),
+        "social",
+        managedKey,
+      );
+    } else if (value && typeof value === "object" && Array.isArray(value.slots)) {
+      value.slots = capSnapshotList(
+        sanitizeSnapshotArray(value.slots, "social", managedKey),
+        "social",
+        managedKey,
+      );
+    }
+  }
   const bankItems = bank.items || [];
 
   const sectionKeys = Object.keys(sections);
 
   for (const sectionKey of sectionKeys) {
 
-    const existing = sections[sectionKey] || [];
-    const existingIds = new Set(existing.map(i => i.id));
+    // The nine managed SNS sections are authoritative release surfaces: remove
+    // only rows previously published by the Social candidate pipeline, while
+    // preserving structural/sample/manual rows. rightPanel and social-maru are
+    // never in SOCIAL_MANAGED_MAIN_SECTIONS and are therefore untouched.
+    let existing = sections[sectionKey] || [];
+    if (SOCIAL_MANAGED_MAIN_SECTIONS.has(sectionKey) && Array.isArray(existing)) {
+      existing = existing.filter(item => !isManagedSocialPublishedRow(item));
+    }
+    const existingIds = new Set(existing.map(i => i && (i.id || i.contentId)).filter(Boolean));
 
     const supply = bankItems.filter(item => {
       if (!pageMatches(item, "social")) return false;

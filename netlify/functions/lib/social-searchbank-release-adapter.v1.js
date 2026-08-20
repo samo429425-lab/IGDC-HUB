@@ -4,16 +4,14 @@
  * Social -> SearchBank Snapshot handoff bridge.
  *
  * Purpose:
- *   approved Social release -> strict Social/PSOM policy gate -> existing
- *   SearchBank Snapshot mirrors -> existing Snapshot Engine -> Social Snapshot.
+ *   approved Social release -> strict Social/PSOM policy gate -> dedicated
+ *   Social SearchBank handoff -> existing Snapshot Engine (social target only).
  *
  * Safety:
- * - SearchBank Engine code is not modified.
- * - Snapshot Engine code is not modified.
+ * - SearchBank Engine contract code is reused but not modified.
+ * - Commerce/Distribution data/search-bank.snapshot.json is never written here.
  * - Social HTML / Automap files are not modified.
- * - Existing SearchBank sample/placeholder rows are never deleted.
- * - Only prior real rows previously published by this social-candidate bridge
- *   are replaced by the latest authoritative stored Social release.
+ * - rightPanel remains Distribution-owned; social-maru remains reserved.
  */
 const fs = require("fs");
 const path = require("path");
@@ -22,10 +20,11 @@ const SocialStore = require("./social-candidate-store.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 const SearchBankEngine = require("../search-bank-engine");
 
-const VERSION = "social-searchbank-release-adapter-v1.6.0-domain-isolation";
+const VERSION = "social-searchbank-release-adapter-v1.7.0-dedicated-bank";
 const RELEASE_FILE = "social-searchbank.release.snapshot.json";
 const REPORT_FILE = "social-pipeline.report.json";
 const SEARCH_BANK_FILE = "search-bank.snapshot.json";
+const SOCIAL_BANK_FILE = RELEASE_FILE;
 const SOCIAL_MAIN_SECTION_SET = new Set(SocialStore.Policy.SECTION_KEYS);
 
 function text(value) {
@@ -76,6 +75,13 @@ function searchBankPaths(root) {
     path.join(root, "data", SEARCH_BANK_FILE),
     path.join(root, "netlify", "functions", "data", SEARCH_BANK_FILE),
     path.join(root, "netlify", "functions", SEARCH_BANK_FILE),
+  ];
+}
+function socialBankPaths(root) {
+  return [
+    path.join(root, "data", SOCIAL_BANK_FILE),
+    path.join(root, "netlify", "functions", "data", SOCIAL_BANK_FILE),
+    path.join(root, "netlify", "functions", SOCIAL_BANK_FILE),
   ];
 }
 function socialSections(snapshot) {
@@ -201,7 +207,7 @@ function sourceItem(slot, sectionKey, release) {
       approvedAt: text(audit.approved_at),
       createdAt: text(release.created_at),
     },
-    snapshotSource: "data/" + SEARCH_BANK_FILE,
+    snapshotSource: "data/" + SOCIAL_BANK_FILE,
   };
 }
 function releaseToBank(release) {
@@ -509,6 +515,10 @@ function loadSearchBankSnapshot(root) {
   };
 }
 function mergeIntoSearchBankSnapshot(input) {
+  // Legacy function name retained for compatibility. Since v1.6 this function
+  // NEVER mutates the Commerce/Distribution canonical SearchBank. Social has a
+  // dedicated SearchBank-shaped handoff document that is consumed by the
+  // existing Snapshot Engine with targetPage:"social".
   const root = rootOf(input);
   const release = input && input.release;
   const converted = input && input.converted ? input.converted : releaseToBank(release);
@@ -516,7 +526,7 @@ function mergeIntoSearchBankSnapshot(input) {
   if (!gate.ok) {
     const error = new Error("SOCIAL_SEARCHBANK_POLICY_GATE_REJECTED");
     error.code = "social_searchbank_policy_gate_rejected";
-    error.details = { rejected: gate.rejected.slice(0, 100), counts: gate.counts };
+    error.details = { rejected: gate.rejected.slice(0, 25), rejectedCount: gate.rejected.length, counts: gate.counts };
     throw error;
   }
   const operation = lower(input && input.operation);
@@ -533,102 +543,54 @@ function mergeIntoSearchBankSnapshot(input) {
       operation: operation || null,
       acceptedCount: engineGate.accepted.length,
       inputCount: engineGate.inputCount,
-      rejected: engineGate.rejected.slice(0, 100)
+      rejectedCount: engineGate.rejected.length,
+      rejected: engineGate.rejected.slice(0, 25),
     };
     throw error;
   }
-  const loaded = loadSearchBankSnapshot(root);
-  const current = loaded.doc;
-  const oldItems = Array.isArray(current.items) ? current.items : [];
 
-  // Social owns only the nine Social main-section REAL rows. Everything else
-  // (Commerce/Distribution, rightPanel, other hubs, samples/placeholders) is a
-  // protected foreign domain and must remain byte-for-byte equivalent as JSON.
-  const preserved = oldItems.filter((item) => !isSocialOwnedMainRealItem(item));
-  const previousRealCount = oldItems.length - preserved.length;
-  const sampleSocialCountBefore = oldItems.filter(isSocialSampleItem).length;
-  const incoming = engineGate.accepted;
-  const protectedBeforeHash = protectedNonSocialHash(current);
-  const protectedExactBeforeHash = sha256(preserved);
-
-  // Refuse to use Social as a mirror-repair mechanism. If the three SearchBank
-  // mirrors already disagree in a non-Social domain, Social must stop before any
-  // write instead of choosing one mirror and overwriting the others.
-  const mirrorProtection = [];
-  for (const file of searchBankPaths(root)) {
-    const doc = readJson(file);
-    if (!doc || !Array.isArray(doc.items)) continue;
-    const protectedHash = protectedNonSocialHash(doc);
-    mirrorProtection.push({ path: path.relative(root, file).replace(/\\/g, "/"), protectedHash });
-    if (protectedHash !== protectedBeforeHash) {
-      const error = new Error("SOCIAL_SEARCHBANK_NON_SOCIAL_MIRROR_DIVERGENCE");
-      error.code = "social_searchbank_non_social_mirror_divergence";
-      error.details = { expected: protectedBeforeHash, mirrors: mirrorProtection };
-      throw error;
-    }
-  }
-
-  // Never call the broad SearchBank merge on a Social delta: dedupe rules are
-  // allowed to choose winners and could therefore remove a foreign-domain row.
-  // Cross-domain collisions are rejected; otherwise protected rows are copied
-  // unchanged and the validated Social delta is appended.
-  const collisionGate = filterCrossDomainCollisions(preserved, incoming);
-  const safeIncoming = collisionGate.accepted;
-  if (incoming.length > 0 && safeIncoming.length === 0) {
-    const error = new Error("SOCIAL_SEARCHBANK_ALL_ROWS_COLLIDE_WITH_PROTECTED_DOMAIN");
-    error.code = "social_searchbank_all_rows_collide_with_protected_domain";
-    error.details = { collisions: collisionGate.collisions.slice(0, 100) };
-    throw error;
-  }
-  const mergedItems = preserved.concat(safeIncoming);
-  const merged = Object.assign({}, current, {
-    items: mergedItems,
-    meta: Object.assign({}, current.meta || {}, {
-      generated_at: (current.meta && current.meta.generated_at) || undefined,
-      socialCandidateHandoff: {
-        version: VERSION,
-        mode: "social-nine-delta-non-social-immutable",
-        searchBankEngineVersion: engineGate.engineVersion,
-        searchBankContractVersion: engineGate.contractVersion,
-        releaseId: text(release && release.release_id),
-        releaseHash: text(release && release.snapshot_hash),
-        updatedAt: new Date().toISOString(),
-        previousRealSocialCandidateItems: previousRealCount,
-        insertedRealSocialCandidateItems: safeIncoming.length,
-        skippedCrossDomainCollisions: collisionGate.collisions.length,
-        sampleSocialItemsPreserved: sampleSocialCountBefore,
-        protectedNonSocialHash: protectedBeforeHash,
-        sectionCounts: gate.counts,
-        psomFile: gate.psomFile,
-      },
+  const socialBank = PublicSnapshot.sanitizeDocument(Object.assign({}, converted.bank, {
+    meta: Object.assign({}, converted.bank && converted.bank.meta || {}, {
+      schema: "search-bank.social-release.snapshot.v2",
+      adapterVersion: VERSION,
+      ownership: "social-main-nine-only",
+      canonicalCommerceSearchBankMutation: false,
+      rightPanelOwnedBy: "distribution",
+      operation: operation || "publish",
+      generatedAt: new Date().toISOString(),
+      itemCount: engineGate.accepted.length,
+      rejectedCount: engineGate.rejected.length,
+      note: "Dedicated Social SearchBank handoff. data/search-bank.snapshot.json remains Commerce/Distribution canonical and is never rewritten by Social.",
     }),
-  });
-  const protectedAfterHash = protectedNonSocialHash(merged);
-  const protectedExactAfterHash = sha256(protectedNonSocialItems(merged));
-  if (protectedAfterHash !== protectedBeforeHash || protectedExactAfterHash !== protectedExactBeforeHash) {
-    const error = new Error("SOCIAL_SEARCHBANK_NON_SOCIAL_INVARIANT_FAILED");
-    error.code = "social_searchbank_non_social_invariant_failed";
-    error.details = { before: protectedBeforeHash, after: protectedAfterHash, exactBefore: protectedExactBeforeHash, exactAfter: protectedExactAfterHash };
-    throw error;
-  }
-  const digest = sha256(merged);
+    items: engineGate.accepted,
+  }));
+  const digest = sha256(socialBank);
   const writes = [];
-  for (const file of searchBankPaths(root)) {
-    atomicWriteJson(file, merged);
-    writes.push({ path: path.relative(root, file).replace(/\\/g, "/"), sha256: digest, itemCount: merged.items.length });
+  for (const file of socialBankPaths(root)) {
+    atomicWriteJson(file, socialBank);
+    writes.push({
+      path: path.relative(root, file).replace(/\\/g, "/"),
+      sha256: digest,
+      itemCount: socialBank.items.length,
+    });
   }
+
   return {
     ok: true,
     releaseId: text(release && release.release_id),
     hash: digest,
-    previousTotalItems: oldItems.length,
-    finalTotalItems: merged.items.length,
-    previousRealSocialCandidateItems: previousRealCount,
-    insertedRealSocialCandidateItems: safeIncoming.length,
-    skippedCrossDomainCollisions: collisionGate.collisions.length,
-    crossDomainCollisionSample: collisionGate.collisions.slice(0, 25),
-    sampleSocialItemsPreserved: sampleSocialCountBefore,
-    protectedNonSocialInvariant: { before: protectedBeforeHash, after: protectedAfterHash, exactBefore: protectedExactBeforeHash, exactAfter: protectedExactAfterHash, unchanged: protectedAfterHash === protectedBeforeHash && protectedExactAfterHash === protectedExactBeforeHash },
+    previousTotalItems: null,
+    finalTotalItems: socialBank.items.length,
+    previousRealSocialCandidateItems: null,
+    insertedRealSocialCandidateItems: socialBank.items.length,
+    skippedCrossDomainCollisions: 0,
+    crossDomainCollisionSample: [],
+    sampleSocialItemsPreserved: null,
+    protectedNonSocialInvariant: {
+      mode: "structural-isolation",
+      sharedSearchBankTouched: false,
+      unchanged: true,
+    },
     counts: gate.counts,
     psomFile: gate.psomFile,
     searchBankEngine: {
@@ -638,12 +600,14 @@ function mergeIntoSearchBankSnapshot(input) {
       inputCount: engineGate.inputCount,
       accepted: engineGate.accepted.length,
       rejected: engineGate.rejected.length,
-      emptyUnpublishAccepted: engineGate.emptyAccepted === true
+      rejectedSample: engineGate.rejected.slice(0, 25),
     },
     writes,
-    bank: merged,
+    bankFile: "data/" + SOCIAL_BANK_FILE,
+    sharedSearchBankUntouched: true,
   };
 }
+
 function incomingReleaseExpectation() {
   const raw = text(process.env.INCOMING_HOOK_BODY);
   if (!raw) return {};
@@ -1049,15 +1013,6 @@ async function publish(input) {
   }
   report.pipeline.policyAndPsomGate = "passed";
 
-  // Keep a small dedicated handoff audit file for administrators, but the
-  // authoritative downstream source is the ordinary SearchBank Snapshot.
-  const auditBank = PublicSnapshot.sanitizeDocument(Object.assign({}, converted.bank, {
-    meta: Object.assign({}, converted.bank.meta || {}, {
-      note: "Audit mirror only. Authoritative handoff is data/search-bank.snapshot.json.",
-    }),
-  }));
-  atomicWriteJson(outputPath(root, RELEASE_FILE), auditBank);
-
   let handoff;
   try {
     handoff = mergeIntoSearchBankSnapshot({
@@ -1077,7 +1032,7 @@ async function publish(input) {
   }
   report.pipeline.searchBankSnapshotHandoff = "passed";
   report.searchBankSnapshot = {
-    file: "data/" + SEARCH_BANK_FILE,
+    file: handoff.bankFile || ("data/" + SOCIAL_BANK_FILE),
     hash: handoff.hash,
     previousTotalItems: handoff.previousTotalItems,
     finalTotalItems: handoff.finalTotalItems,
@@ -1091,11 +1046,13 @@ async function publish(input) {
     psomFile: handoff.psomFile,
     searchBankEngine: handoff.searchBankEngine,
     writes: handoff.writes,
+    sharedSearchBankUntouched: handoff.sharedSearchBankUntouched === true,
   };
 
-  // Handoff boundary: stop exactly at the ordinary SearchBank Snapshot.
-  // The existing build pipeline owns Snapshot Engine -> social.snapshot.json -> AutoMap.
-  report.pipeline.downstream = "existing_pipeline_next";
+  // Handoff boundary: the dedicated Social bank is complete. The build pipeline
+  // passes that bank to the existing Snapshot Engine with targetPage:"social".
+  // Commerce/Distribution canonical SearchBank and IP manifests remain untouched.
+  report.pipeline.downstream = "dedicated_social_bank_ready_for_snapshot_engine";
   report.status = "searchbank_handoff_complete";
   atomicWriteJson(outputPath(root, REPORT_FILE), report);
   return report;
@@ -1106,7 +1063,9 @@ module.exports = {
   RELEASE_FILE,
   REPORT_FILE,
   SEARCH_BANK_FILE,
+  SOCIAL_BANK_FILE,
   searchBankPaths,
+  socialBankPaths,
   releaseToBank,
   incomingReleaseExpectation,
   normalizePublicationPlan,
