@@ -54,13 +54,12 @@
   }
 
   async function fetchJson(url){
-    const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = controller ? setTimeout(()=>controller.abort(), 2200) : 0;
-    try{
-      const r = await fetch(url, { cache: 'default', credentials: 'same-origin', signal: controller ? controller.signal : undefined });
-      if(!r.ok) throw new Error('HTTP ' + r.status);
-      return await r.json();
-    } finally { if(timer) clearTimeout(timer); }
+    // Never abort the front snapshot because it is merely slow. A slow snapshot
+    // must be allowed to finish; only an actual HTTP/network failure falls
+    // through to the next snapshot candidate.
+    const r = await fetch(url, { cache: 'default', credentials: 'same-origin' });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
   }
 
   async function loadSnapshotAny(){
@@ -270,9 +269,10 @@
     return new Promise((resolve)=>{
       const video=D.createElement('video');
       let targetIndex=0,done=false;
-      const timeout=setTimeout(()=>finish(''),3800);
+      // Queue-yield only: a slow source is deferred, never rejected.
+      const timeout=setTimeout(()=>finish(null),8000);
       function clean(){clearTimeout(timeout);try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_e){}}
-      function finish(value){if(done)return;done=true;clean();resolve(value||'');}
+      function finish(value){if(done)return;done=true;clean();resolve(value);}
       function seekNext(){
         if(targetIndex>=AUTO_THUMB_TARGETS.length){finish('');return;}
         let t=AUTO_THUMB_TARGETS[targetIndex++];
@@ -303,15 +303,17 @@
     return new Promise((resolve)=>{
       if(!safeFrontThumbnail(url)){resolve(false);return;}
       const probe=new Image();let done=false;
-      const timer=setTimeout(()=>finish(false),Math.max(700,Number(timeoutMs)||1600));
-      function finish(ok){if(done)return;done=true;clearTimeout(timer);probe.onload=null;probe.onerror=null;resolve(!!ok);}
+      // This timer only yields the recovery queue. null means "still pending";
+      // it is never treated as a rejection or permanent failure.
+      const timer=setTimeout(()=>finish(null),Math.max(5000,Number(timeoutMs)||5000));
+      function finish(ok){if(done)return;done=true;clearTimeout(timer);probe.onload=null;probe.onerror=null;resolve(ok);}
       probe.onload=function(){finish(probe.naturalWidth>=120&&probe.naturalHeight>=68);};
       probe.onerror=function(){finish(false);};
       probe.decoding='async';probe.src=url;
     });
   }
   function clearMediaDataset(a){
-    ['provider','mediaTitle','igdcContentId','contentId','mediaSource','captions','windowsPlayerUrl','androidPlayerUrl','maruAppUrl','thumbPending','thumbRecovery','autoThumbQueued','autoThumbSource','thumbPendingKind','frontOrder'].forEach((key)=>{try{delete a.dataset[key];}catch(_e){}});
+    ['provider','mediaTitle','igdcContentId','contentId','mediaSource','captions','windowsPlayerUrl','androidPlayerUrl','maruAppUrl','thumbPending','thumbRecovery','autoThumbQueued','autoThumbSource','thumbPendingKind','frontOrder','frontPriority'].forEach((key)=>{try{delete a.dataset[key];}catch(_e){}});
   }
   function resetAnchorToPlaceholder(a, reason){
     if(!a)return;
@@ -326,6 +328,23 @@
     if(reason)a.dataset.thumbQuarantineReason=reason;else delete a.dataset.thumbQuarantineReason;
     scheduleCompact(a);
   }
+  function deferThumbnail(a,item,reason){
+    if(!a||!item)return;
+    resetAnchorToPlaceholder(a,reason||'thumbnail_pending');
+    a.__igdcRecoveryItem=item;
+    a.dataset.thumbPending='1';
+    a.dataset.thumbPendingKind='deferred';
+    a.dataset.thumbRecovery='1';
+    scheduleCompact(a);
+    // Do not loop aggressively. Retry later without turning elapsed time into
+    // an eligibility gate. A later success promotes the card automatically.
+    setTimeout(()=>{
+      if(!a.isConnected||a.getAttribute('data-placeholder')!=='true')return;
+      delete a.dataset.thumbRecoveryQueued;
+      recoverThumbnail(a,item);
+    },12000);
+  }
+
   function quarantineItem(a,item,reason){
     resetAnchorToPlaceholder(a,reason||'thumbnail_unavailable');
     const record={
@@ -333,6 +352,10 @@
     };
     if(!thumbQuarantine.some((r)=>r.contentId&&r.contentId===record.contentId))thumbQuarantine.push(record);
     try{D.dispatchEvent(new CustomEvent('igdc:media-thumbnail-quarantine',{detail:record}));}catch(_e){}
+    // If a high-ranked thumbnail is explicitly broken, immediately try
+    // the next already-ranked real-thumbnail candidate instead of leaving a
+    // Sample hole in the visible front group.
+    setTimeout(()=>{ if(a&&a.isConnected&&a.getAttribute('data-placeholder')==='true') refillFromReserve(a); },0);
   }
   function bindItemToAnchor(a,item,thumbOverride){
     const title = (item && (item.title || item.name || item.text || '')) || '';
@@ -375,6 +398,7 @@
     if(item && item.provider) a.dataset.provider = typeof item.provider==='object' ? String(item.provider.name||item.provider.platform||'') : item.provider;
     if(title) a.dataset.mediaTitle = title;
     a.dataset.igdcContentId = String(videoId);a.dataset.contentId = String(videoId);
+    try { a.dataset.frontPriority = String(Math.round(frontPriority(item))); } catch(_e) {}
     if(item){
       const directUrl = /\.(mp4|webm|ogv|ogg|m4v)(?:[?#].*)?$/i.test(String(item.url || '')) || /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/)/i.test(String(item.url || '')) ? item.url : '';
       const mediaSource = item.video || item.streamUrl || item.mediaUrl || item.playbackUrl || item.sourceUrl || item.embedUrl || directUrl || '';
@@ -395,14 +419,13 @@
     // Keep the blue MEDIA SAMPLE artwork visible until a real thumbnail has
     // actually loaded and passed validation. Off-screen cards do not start
     // network thumbnail work at all; this avoids large request bursts at boot.
-    let settled=false,slowTimer=0,watcher=null,loader=null,loadStarted=false;
-    function stopWatch(){if(slowTimer)clearTimeout(slowTimer);slowTimer=0;if(watcher){try{watcher.disconnect();}catch(_e){}watcher=null;}}
+    let settled=false,watcher=null,loader=null,loadStarted=false;
+    function stopWatch(){if(watcher){try{watcher.disconnect();}catch(_e){}watcher=null;}}
     function activate(){if(settled||!a.isConnected)return;settled=true;stopWatch();img.src=thumb;thumbBox.classList.remove('ph');meta.textContent=title;a.removeAttribute('data-placeholder');delete a.dataset.thumbPending;delete a.dataset.thumbPendingKind;delete a.dataset.thumbRecovery;delete a.dataset.thumbQuarantineReason;scheduleCompact(a);}
     function fail(reason){if(settled)return;settled=true;stopWatch();if(loader){try{loader.onload=null;loader.onerror=null;}catch(_e){}loader=null;}if(a.dataset.thumbRecovery==='1'){quarantineItem(a,item,reason||'thumbnail_recovery_failed');return;}resetAnchorToPlaceholder(a,reason||'thumbnail_load_failed');recoverThumbnail(a,item);}
     function beginLoad(){
       if(settled||loadStarted||!a.isConnected)return;loadStarted=true;
       loader=new Image();loader.decoding='async';
-      slowTimer=setTimeout(()=>{if(!settled)fail('thumbnail_slow');},2600);
       loader.onload=function(){if(settled)return;if(loader.naturalWidth>=120&&loader.naturalHeight>=68)activate();else fail('thumbnail_too_small');};
       loader.onerror=function(){fail('thumbnail_load_failed');};
       loader.src=thumb;
@@ -417,6 +440,7 @@
     const job=autoThumbQueue.shift();
     captureVisibleVideoFrame(job.source).then((dataUrl)=>{
       if(dataUrl&&job.card&&job.card.isConnected){job.card.dataset.thumbRecovery='1';bindItemToAnchor(job.card,job.item,dataUrl);}
+      else if(dataUrl===null&&job.card&&job.card.isConnected)deferThumbnail(job.card,job.item,'thumbnail_capture_deferred');
       else if(job.card&&job.card.isConnected)quarantineItem(job.card,job.item,'thumbnail_capture_failed');
     }).finally(()=>{autoThumbBusy=false;setTimeout(runAutoThumbQueue,0);});
   }
@@ -440,12 +464,25 @@
     const job=recoveryQueue.shift(),card=job.card,item=job.item;
     try{
       if(!card||!card.isConnected||isSyntheticSampleItem(item)){if(card&&card.isConnected)resetAnchorToPlaceholder(card,'sample_slot');return;}
+      const raw=safeFrontThumbnail(rawThumbnail(item));
+      if(raw){
+        const rawState=await preflightImage(raw,5000);
+        if(rawState===true){if(card.isConnected)bindItemToAnchor(card,item,raw);return;}
+        if(rawState===null){if(card.isConnected)deferThumbnail(card,item,'thumbnail_load_deferred');return;}
+      }
       const providerCandidates=providerThumbnailCandidates(item);
-      for(const candidate of providerCandidates){if(await preflightImage(candidate,1200)){if(card.isConnected)bindItemToAnchor(card,item,candidate);return;}}
+      let providerDeferred=false;
+      for(const candidate of providerCandidates){
+        const providerState=await preflightImage(candidate,5000);
+        if(providerState===true){if(card.isConnected)bindItemToAnchor(card,item,candidate);return;}
+        if(providerState===null)providerDeferred=true;
+      }
+      if(providerDeferred){if(card.isConnected)deferThumbnail(card,item,'provider_thumbnail_deferred');return;}
       const source=mediaSourceForThumb(item);
       if(directVideoForThumb(source)){
         const dataUrl=await captureVisibleVideoFrame(source);
         if(dataUrl&&card.isConnected){card.dataset.thumbRecovery='1';bindItemToAnchor(card,item,dataUrl);return;}
+        if(dataUrl===null&&card.isConnected){deferThumbnail(card,item,'thumbnail_capture_deferred');return;}
         if(card.isConnected)quarantineItem(card,item,'thumbnail_capture_failed');return;
       }
       if(card.isConnected)quarantineItem(card,item,'thumbnail_unavailable');
@@ -462,9 +499,10 @@
   }
   function playbackMarkedUnavailable(item){
     if(!item)return true;
-    if(item.playbackReady===false||item.frontPlaybackReady===false||item.sourceReady===false||item.playable===false)return true;
     const status=String(item.playbackStatus||item.sourceStatus||item.playabilityStatus||'').trim().toLowerCase();
-    return /(?:slow|timeout|failed|unplayable|unavailable|blocked|broken)/.test(status);
+    // Only explicit hard failures are excluded. "slow", "timeout", "pending"
+    // and false-ready flags remain candidates and are simply ranked later.
+    return /(?:failed|unplayable|unavailable|blocked|broken|invalid|error|denied|forbidden)/.test(status);
   }
   function isFrontCandidate(item){
     if(!item||isSyntheticSampleItem(item)||playbackMarkedUnavailable(item))return false;
@@ -488,7 +526,8 @@
     if(item&&(item.thumbnailVerified===true||item.thumbVerified===true||item.thumbnailReady===true||item.frontThumbnailReady===true))score+=220;
     const status=String(item&&(item.thumbnailStatus||item.thumbStatus||item.imageStatus)||'').toLowerCase();
     if(/(?:verified|ready|approved|valid|ok)/.test(status))score+=140;
-    if(/(?:failed|invalid|broken|slow|timeout|missing|blocked)/.test(status))score-=900;
+    if(/(?:failed|invalid|broken|blocked|error)/.test(status))score-=900;
+    else if(/(?:slow|timeout|pending|processing|queued)/.test(status))score-=70;
     const w=numeric(item,['thumbnailWidth','thumbWidth','imageWidth']);
     const h=numeric(item,['thumbnailHeight','thumbHeight','imageHeight']);
     if(w>=640&&h>=360)score+=100; else if(w>=320&&h>=180)score+=50;
@@ -499,9 +538,10 @@
     let score=300;
     if(item&&(item.playbackReady===true||item.frontPlaybackReady===true||item.sourceReady===true||item.playable===true))score+=180;
     const latency=numeric(item,['playbackLatencyMs','probeLatencyMs','latencyMs','loadLatencyMs']);
-    if(latency>0){if(latency<=1200)score+=120;else if(latency<=2500)score+=60;else if(latency>5000)score-=800;}
+    if(latency>0){if(latency<=1200)score+=120;else if(latency<=2500)score+=60;else if(latency>5000)score-=70;}
     const status=String(item&&(item.playbackStatus||item.sourceStatus||item.playabilityStatus)||'').toLowerCase();
     if(/(?:ready|verified|approved|playable|ok)/.test(status))score+=100;
+    else if(/(?:slow|timeout|pending|processing|queued)/.test(status))score-=45;
     return score;
   }
   function recencyScore(item){
@@ -522,42 +562,93 @@
   function frontPriority(item){
     return thumbnailReadyScore(item)+playbackReadyScore(item)+recencyScore(item)+engagementScore(item);
   }
+  function thumbnailExplicitlyPending(item){
+    if(!item)return false;
+    if(item.thumbnailReady===false||item.thumbReady===false||item.frontThumbnailReady===false)return true;
+    const status=String(item.thumbnailStatus||item.thumbStatus||item.imageStatus||'').trim().toLowerCase();
+    return /(?:pending|generating|processing|queued|recovering|capture|creating)/.test(status);
+  }
   function isTrendingReadyCandidate(item){
-    return isFrontCandidate(item)&&thumbnailReadyScore(item)>0&&playbackReadyScore(item)>0;
+    return isFrontCandidate(item)&&!thumbnailExplicitlyPending(item)&&thumbnailReadyScore(item)>0&&playbackReadyScore(item)>0;
   }
   function compactLine(line){
     if(!line)return;
     const container=getContainer(line);
     const cards=qa('a.card',container);
     if(cards.length<2)return;
-    const ranked=cards.slice().sort((a,b)=>{
-      const bucket=(el)=>{
-        if(el.getAttribute('data-placeholder')!=='true')return 0;
-        if(el.dataset.thumbPendingKind==='ready')return 1;
-        if(el.dataset.thumbPending==='1'||el.dataset.thumbRecovery==='1')return 2;
-        return 3;
-      };
-      const ba=bucket(a),bb=bucket(b);
-      if(ba!==bb)return ba-bb;
+    const ranked=cards.map((card,index)=>({card,index})).sort((A,B)=>{
+      const a=A.card,b=B.card;
+      // Hard rule: a card is front-eligible only after a real thumbnail has
+      // actually loaded and data-placeholder has been removed. Every Sample,
+      // pending thumbnail, recovery item and quarantine slot stays behind all
+      // verified/rendered cards.
+      const pa=a.getAttribute('data-placeholder')==='true'?1:0;
+      const pb=b.getAttribute('data-placeholder')==='true'?1:0;
+      if(pa!==pb)return pa-pb;
+      if(pa===0){
+        const qaScore=Number(a.dataset.frontPriority||0),qbScore=Number(b.dataset.frontPriority||0);
+        if(Number.isFinite(qaScore)&&Number.isFinite(qbScore)&&qaScore!==qbScore)return qbScore-qaScore;
+      }
       const oa=Number(a.dataset.frontOrder),ob=Number(b.dataset.frontOrder);
       if(Number.isFinite(oa)&&Number.isFinite(ob)&&oa!==ob)return oa-ob;
       if(Number.isFinite(oa)&&!Number.isFinite(ob))return -1;
       if(!Number.isFinite(oa)&&Number.isFinite(ob))return 1;
-      return 0;
-    });
+      // Stable final tie-breaker so repeated compaction never oscillates.
+      return A.index-B.index;
+    }).map((row)=>row.card);
     let changed=false;for(let i=0;i<cards.length;i++){if(cards[i]!==ranked[i]){changed=true;break;}}
     if(!changed)return;
     ranked.forEach((card)=>container.appendChild(card));
   }
-  function scheduleCompact(a){
-    const line=a&&a.closest&&a.closest('.thumb-line[data-psom-key]');
+  function scheduleCompactLine(line){
     if(!line||line.__igdcCompactQueued)return;
     line.__igdcCompactQueued=true;
     requestAnimationFrame(()=>{line.__igdcCompactQueued=false;compactLine(line);});
   }
+  function scheduleCompact(a){
+    const line=a&&a.matches&&a.matches('.thumb-line[data-psom-key]')?a:(a&&a.closest&&a.closest('.thumb-line[data-psom-key]'));
+    scheduleCompactLine(line);
+  }
+  function installReadyFirstCompactionWatch(){
+    if(window.__IGDC_MEDIA_READY_FIRST_OBSERVER__)return;
+    const observer=new MutationObserver((records)=>{
+      const lines=new Set();
+      for(const record of records){
+        let node=record.target;
+        if(node&&node.nodeType===1){
+          const line=node.matches&&node.matches('.thumb-line[data-psom-key]')?node:(node.closest&&node.closest('.thumb-line[data-psom-key]'));
+          if(line)lines.add(line);
+        }
+        if(record.addedNodes){
+          record.addedNodes.forEach((added)=>{
+            if(!added||added.nodeType!==1)return;
+            const line=added.matches&&added.matches('.thumb-line[data-psom-key]')?added:(added.closest&&added.closest('.thumb-line[data-psom-key]'));
+            if(line)lines.add(line);
+          });
+        }
+      }
+      lines.forEach(scheduleCompactLine);
+    });
+    observer.observe(D.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-placeholder','data-thumb-pending','data-thumb-pending-kind','data-thumb-recovery','data-front-priority','data-front-order']});
+    window.__IGDC_MEDIA_READY_FIRST_OBSERVER__=observer;
+  }
 
   function fillAnchor(a,item){
     return bindItemToAnchor(a,item,safeFrontThumbnail(rawThumbnail(item)));
+  }
+
+  function refillFromReserve(a){
+    const line=a&&a.closest&&a.closest('.thumb-line[data-psom-key]');
+    const queue=line&&line.__igdcFrontReserveQueue;
+    if(!queue||!queue.length)return false;
+    while(queue.length){
+      const entry=queue.shift();
+      if(!entry||!entry.item||!entry.thumb)continue;
+      a.dataset.frontOrder=String(entry.order);
+      bindItemToAnchor(a,entry.item,entry.thumb);
+      return true;
+    }
+    return false;
   }
 
   function applyLine(line, items){
@@ -565,21 +656,32 @@
     const ph=ensurePlaceholders(line);
     const ranked=items.filter(isFrontCandidate).slice().sort((a,b)=>frontPriority(b)-frontPriority(a));
     const immediate=[],pending=[];
+    const scanLimit=Math.max(LIMIT*3,LIMIT);
     for(const item of ranked){
       if(isSyntheticSampleItem(item))continue;
       const thumb=safeFrontThumbnail(rawThumbnail(item));
-      if(thumb)immediate.push({item,thumb});
-      else if(providerThumbnailCandidates(item).length||directVideoForThumb(mediaSourceForThumb(item)))pending.push(item);
-      if(immediate.length+pending.length>=LIMIT)break;
+      // A URL by itself is not enough when the snapshot explicitly says the
+      // thumbnail is still pending/generating. Such items stay behind the
+      // already-renderable group until their thumbnail is actually ready.
+      if(thumb&&!thumbnailExplicitlyPending(item))immediate.push({item,thumb});
+      else if(thumb||providerThumbnailCandidates(item).length||directVideoForThumb(mediaSourceForThumb(item)))pending.push(item);
+      if(immediate.length+pending.length>=scanLimit)break;
     }
+    // Keep extra pre-ranked items with real thumbnail URLs as a reserve. A slot
+    // whose thumbnail fails is refilled from here immediately, so valid content
+    // behind it is never stranded behind a blue Sample card.
+    line.__igdcFrontReserveQueue=immediate.slice(LIMIT).map((entry,index)=>({item:entry.item,thumb:entry.thumb,order:LIMIT+index}));
     let slot=0;
-    for(const entry of immediate){
+    for(const entry of immediate.slice(0,LIMIT)){
       if(slot>=ph.length||slot>=LIMIT)break;
       const card=ph[slot];
       card.dataset.frontOrder=String(slot);
       bindItemToAnchor(card,entry.item,entry.thumb);
       slot++;
     }
+    // Thumbnail-generation/recovery candidates are allowed only after every
+    // ready-thumbnail candidate. They remain Sample placeholders until recovery
+    // actually succeeds; compaction then promotes them ahead of all Samples.
     for(const item of pending){
       if(slot>=ph.length||slot>=LIMIT)break;
       const card=ph[slot];
@@ -587,7 +689,7 @@
       card.dataset.frontOrder=String(slot);
       recoverThumbnail(card,item);
       slot++;
-    } 
+    }
     compactLine(line);
   }
 
@@ -631,14 +733,17 @@
       )||null;
     }
     if(!card||card.getAttribute('data-placeholder')==='true')return;
+    const reason=String(detail.reason||'source_failed').toLowerCase();
+    if(/(?:slow|timeout|stall|stalled|waiting|pending)/.test(reason))return;
     const item=card.__igdcMediaItem||{contentId:detail.contentId,title:card.dataset.mediaTitle||'',url:card.dataset.mediaSource||''};
-    quarantineItem(card,item,'playback_'+String(detail.reason||'source_failed'));
+    quarantineItem(card,item,'playback_'+reason);
     try{D.dispatchEvent(new CustomEvent('igdc:media-playback-quarantine',{detail:{contentId:detail.contentId||ensureContentId(item),reason:detail.reason||'source_failed'}}));}catch(_e){}
   });
 
   async function main(){
     const lines = qa('.thumb-line[data-psom-key]');
     if(lines.length === 0) return;
+    installReadyFirstCompactionWatch();
 
     // stabilize layout first
     lines.forEach(ensurePlaceholders);
@@ -719,12 +824,16 @@
       }
       applyLine(line, items);
     }
+    // Async image decode/recovery and any later renderer must not be allowed to
+    // reintroduce Sample/real interleaving. Re-compact a few times after the
+    // initial mapping as an additional deterministic safety net.
+    [0,120,420,1100,2600].forEach((delay)=>setTimeout(()=>lines.forEach(compactLine),delay));
   }
 
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='3.8.0-ready-first-compact-quality-trending';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='4.2.1-soft-queue-no-time-reject-ready-first-trending';
 })();
 
 
