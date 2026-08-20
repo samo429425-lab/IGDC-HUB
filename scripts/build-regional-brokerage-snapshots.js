@@ -20,35 +20,46 @@ async function publishSocialIndependently(options) {
   try {
     socialRelease = require(adapterPath);
   } catch (error) {
-    return { status: "skipped", isolated: true, reason: "social_release_adapter_unavailable", error: String(error && error.message || error) };
+    return {
+      status: "skipped",
+      isolated: true,
+      reason: "social_release_adapter_unavailable",
+      error: String(error && error.message || error)
+    };
   }
   if (!socialRelease || typeof socialRelease.publish !== "function") {
-    return { status: "skipped", isolated: true, reason: "social_release_adapter_invalid" };
+    return {
+      status: "skipped",
+      isolated: true,
+      reason: "social_release_adapter_invalid"
+    };
   }
   try {
-    // The Social adapter owns only the handoff into the ordinary SearchBank
-    // mirrors.  Snapshot Engine remains the one shared downstream renderer.
     const result = await socialRelease.publish({
       root,
-      allowLatestStored: !!(options && options.allowLatestStored === true),
+      allowLatestStored: !!(options && options.allowLatestStored === true)
     });
     return Object.assign({}, result || {}, { isolated: true });
   } catch (error) {
-    return { status: "failed", isolated: true, reason: "social_release_execution_failed", error: String(error && error.message || error) };
+    return {
+      status: "failed",
+      isolated: true,
+      reason: "social_release_execution_failed",
+      error: String(error && error.message || error)
+    };
   }
 }
 
 const SOCIAL_CHECKPOINT_TARGETS = [
-  // SearchBank mirrors written by the Social adapter.
+  // Social writes into the ordinary shared SearchBank. Keep all three mirrors
+  // transactional so a failed Social handoff can never leave Distribution or
+  // another front domain half-overwritten.
   path.join("data", "search-bank.snapshot.json"),
   path.join("netlify", "functions", "data", "search-bank.snapshot.json"),
   path.join("netlify", "functions", "search-bank.snapshot.json"),
-  // Social handoff audit/report plus the downstream Social snapshots.  The
-  // latter are included because a Social-only build materializes exactly the
-  // social target through the existing Snapshot Engine.
+  path.join("data", "social.snapshot.json"),
   path.join("data", "social-searchbank.release.snapshot.json"),
   path.join("data", "social-pipeline.report.json"),
-  path.join("data", "social.snapshot.json"),
   path.join("netlify", "functions", "data", "social.snapshot.json"),
   path.join("netlify", "functions", "social.snapshot.json")
 ];
@@ -82,62 +93,14 @@ function restoreSocialCheckpoint(checkpoint) {
 }
 
 function removeSocialCheckpoint(checkpoint) {
-  if (checkpoint && checkpoint.checkpointRoot) fs.rmSync(checkpoint.checkpointRoot, { recursive: true, force: true });
-}
-
-async function publishSocialSafely(options) {
-  options = options || {};
-  const materializeSnapshot = options.materializeSnapshot === true;
-  const socialCheckpoint = createSocialCheckpoint();
-  let socialPublication;
-  try {
-    socialPublication = await publishSocialIndependently({
-      allowLatestStored: options.allowLatestStored === true,
-    });
-    const status = String(socialPublication && socialPublication.status || "").toLowerCase();
-    if (["blocked", "failed", "skipped"].includes(status)) {
-      const restored = restoreSocialCheckpoint(socialCheckpoint);
-      socialPublication = Object.assign({}, socialPublication, { rollback: "restored", restored });
-    } else if (materializeSnapshot && status === "searchbank_handoff_complete") {
-      // A Social-only deploy must not wait for a future Commerce build.  Feed
-      // the just-updated ordinary SearchBank through the existing Snapshot
-      // Engine, but restrict execution to the Social page. Distribution and
-      // its IP snapshots are therefore not rebuilt or overwritten here.
-      const socialSnapshotReport = snapshots.run({ targetPage: "social" });
-      if (!socialSnapshotReport || socialSnapshotReport.ok !== true) {
-        const error = new Error("Social-only Snapshot Engine materialization failed.");
-        error.code = "SOCIAL_SNAPSHOT_MATERIALIZATION_FAILED";
-        throw error;
-      }
-      socialPublication = Object.assign({}, socialPublication, { snapshotEngine: socialSnapshotReport, downstream: "social-target-materialized" });
-    }
-  } catch (error) {
-    let restored = [], rollbackError = null;
-    try { restored = restoreSocialCheckpoint(socialCheckpoint); }
-    catch (restoreError) { rollbackError = String(restoreError && restoreError.message || restoreError); }
-    socialPublication = {
-      status: "failed", isolated: true, reason: error && error.code || "social_publication_execution_failed",
-      error: String(error && error.message || error), rollback: rollbackError ? "failed" : "restored", restored, rollbackError
-    };
-    if (rollbackError) {
-      const safetyError = new Error("Social publication failed and rollback could not restore the prior SearchBank/Snapshot state: " + rollbackError);
-      safetyError.code = "SOCIAL_PUBLICATION_ROLLBACK_FAILED";
-      throw safetyError;
-    }
-  } finally {
-    removeSocialCheckpoint(socialCheckpoint);
+  if (checkpoint && checkpoint.checkpointRoot) {
+    fs.rmSync(checkpoint.checkpointRoot, { recursive: true, force: true });
   }
-  process.stdout.write(JSON.stringify({ socialPublication }, null, 2) + "\n");
-  if (["blocked", "failed", "skipped"].includes(String(socialPublication && socialPublication.status || "").toLowerCase())) {
-    process.stderr.write("Social publication was isolated and prior SearchBank/Snapshot state was preserved: " + JSON.stringify(socialPublication) + "\n");
-  }
-  return socialPublication;
 }
-
 
 function incomingSocialHookIntent() {
   const raw = String(process.env.INCOMING_HOOK_BODY || "").trim();
-  if (!raw) return { explicit:false, rawAvailable:false, releaseId:null, publicationPlanCount:0 };
+  if (!raw) return { explicit: false, rawAvailable: false, releaseId: null, publicationPlanCount: 0 };
   try {
     const body = JSON.parse(raw);
     const trigger = String(body && body.trigger || "").toLowerCase();
@@ -149,98 +112,140 @@ function incomingSocialHookIntent() {
     const explicit = trigger === "approved-social-snapshot-release" && !!(
       (plan && planHash) || (releaseId && snapshotHash)
     );
-    return { explicit, rawAvailable:true, trigger:trigger || null, releaseId:releaseId || null, snapshotHash:snapshotHash || null, publicationPlanCount };
+    return {
+      explicit,
+      rawAvailable: true,
+      trigger: trigger || null,
+      releaseId: releaseId || null,
+      snapshotHash: snapshotHash || null,
+      publicationPlanCount
+    };
   } catch (error) {
-    return { explicit:false, rawAvailable:true, parseError:String(error && error.message || error), releaseId:null, publicationPlanCount:0 };
+    return {
+      explicit: false,
+      rawAvailable: true,
+      parseError: String(error && error.message || error),
+      releaseId: null,
+      publicationPlanCount: 0
+    };
   }
 }
+
+async function publishSocialSafely(options) {
+  options = options || {};
+  const checkpoint = createSocialCheckpoint();
+  let result;
+  try {
+    result = await publishSocialIndependently({
+      allowLatestStored: options.allowLatestStored === true
+    });
+    const status = String(result && result.status || "").toLowerCase();
+    if (status !== "searchbank_handoff_complete") {
+      const restored = restoreSocialCheckpoint(checkpoint);
+      return Object.assign({}, result || {}, { rollback: "restored", restored });
+    }
+    if (options.materializeSnapshot === true) {
+      const report = snapshots.run({ targetPage: "social" });
+      if (!report || report.ok !== true) {
+        const error = new Error("Social target Snapshot Engine materialization failed.");
+        error.code = "SOCIAL_SNAPSHOT_MATERIALIZATION_FAILED";
+        throw error;
+      }
+      result = Object.assign({}, result, {
+        snapshotEngine: report,
+        downstream: "social-target-materialized"
+      });
+    }
+    return result;
+  } catch (error) {
+    let restored = [];
+    let rollbackError = null;
+    try { restored = restoreSocialCheckpoint(checkpoint); }
+    catch (restoreError) { rollbackError = String(restoreError && restoreError.message || restoreError); }
+    if (rollbackError) {
+      const safetyError = new Error("Social publication failed and rollback could not restore the shared SearchBank state: " + rollbackError);
+      safetyError.code = "SOCIAL_PUBLICATION_ROLLBACK_FAILED";
+      throw safetyError;
+    }
+    return {
+      status: "failed",
+      isolated: true,
+      reason: error && error.code || "social_publication_execution_failed",
+      error: String(error && error.message || error),
+      rollback: "restored",
+      restored
+    };
+  } finally {
+    removeSocialCheckpoint(checkpoint);
+  }
+}
+
+const SOCIAL_OWNED_SECTIONS = new Set([
+  "social-maru",
+  "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
+  "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter"
+]);
 
 function searchBankMirrorPaths() {
   return [
     path.join(root, "data", "search-bank.snapshot.json"),
     path.join(root, "netlify", "functions", "data", "search-bank.snapshot.json"),
-    path.join(root, "netlify", "functions", "search-bank.snapshot.json"),
+    path.join(root, "netlify", "functions", "search-bank.snapshot.json")
   ];
 }
 
-function cloneJson(value) {
-  return JSON.parse(JSON.stringify(value));
-}
+function cloneJson(value) { return JSON.parse(JSON.stringify(value)); }
 
-function captureSearchBankBase() {
+function captureSocialSearchBankBase() {
   for (const file of searchBankMirrorPaths()) {
     if (!fileExists(file)) continue;
     try {
       const doc = readJson(file);
-      if (doc && Array.isArray(doc.items)) {
-        return { file, doc: cloneJson(doc), hash: crypto.createHash("sha256").update(JSON.stringify(doc)).digest("hex") };
-      }
+      if (doc && Array.isArray(doc.items)) return { file, doc: cloneJson(doc) };
     } catch (_error) {}
   }
-  return { file:null, doc:{ items:[], meta:{} }, hash:null };
+  return { file: null, doc: { items: [], meta: {} } };
 }
 
-function isCanonicalCommerceItem(item) {
+function socialOwnedSearchBankItem(item) {
   if (!item || typeof item !== "object") return false;
-  if (item.canonicalPublication && typeof item.canonicalPublication === "object") return true;
-  if (item.commerceCandidatePublication && typeof item.commerceCandidatePublication === "object") return true;
-  if (item.canonicalSource && typeof item.canonicalSource === "object" && item.placement && typeof item.placement === "object") return true;
-  const placement = item.placement && typeof item.placement === "object" ? item.placement : {};
-  return placement.locked === true && !!placement.mappingVersion && !!item.canonicalEvidence;
+  const bind = item.bind && typeof item.bind === "object" ? item.bind : {};
+  const section = String(item.psom_key || item.section || bind.section || "").trim();
+  const page = String(item.page || item.channel || bind.page || "").trim().toLowerCase();
+  // rightPanel is deliberately excluded: it is Distribution-owned even though
+  // it is displayed on the Social page.
+  return page === "social" && SOCIAL_OWNED_SECTIONS.has(section);
 }
 
 function atomicWriteJson(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive:true });
-  const tmp = file + ".tmp-" + process.pid + "-" + Date.now();
-  fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", "utf8");
-  fs.renameSync(tmp, file);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = file + ".tmp-" + process.pid + "-" + Date.now();
+  fs.writeFileSync(temp, JSON.stringify(value, null, 2) + "\n", "utf8");
+  fs.renameSync(temp, file);
 }
 
-function composeCanonicalWithPreservedSearchBank(baseCapture) {
+function restoreSocialDomainIntoCanonical(baseCapture) {
   const primary = path.join(root, "data", "search-bank.snapshot.json");
-  const canonicalDoc = fileExists(primary) ? readJson(primary) : null;
-  if (!canonicalDoc || !Array.isArray(canonicalDoc.items)) {
-    const error = new Error("Canonical publisher did not leave a valid SearchBank document to compose.");
-    error.code = "CANONICAL_SEARCHBANK_COMPOSITION_SOURCE_MISSING";
-    throw error;
-  }
-  const previous = baseCapture && baseCapture.doc && Array.isArray(baseCapture.doc.items)
-    ? baseCapture.doc.items
-    : [];
-  // Canonical Commerce owns only its own prior canonical envelopes. All other
-  // SearchBank domains (Home/Media/Tour/Donation/Social samples or prior Social
-  // candidates) remain intact. The Social adapter, when actually invoked,
-  // replaces only its own candidate envelopes afterward.
-  const preserved = previous.filter(item => !isCanonicalCommerceItem(item));
-  const mergedItems = SearchBankEngine.mergeBankItems(preserved, canonicalDoc.items);
-  const merged = PublicSnapshot.sanitizeDocument(Object.assign({}, baseCapture && baseCapture.doc || {}, canonicalDoc, {
+  if (!fileExists(primary)) return { ok: false, reason: "canonical_searchbank_missing" };
+  const canonicalDoc = readJson(primary);
+  if (!canonicalDoc || !Array.isArray(canonicalDoc.items)) return { ok: false, reason: "canonical_searchbank_invalid" };
+  const previous = baseCapture && baseCapture.doc && Array.isArray(baseCapture.doc.items) ? baseCapture.doc.items : [];
+  const socialItems = previous.filter(socialOwnedSearchBankItem);
+  if (!socialItems.length) return { ok: true, preserved: 0, total: canonicalDoc.items.length };
+  const mergedItems = SearchBankEngine.mergeBankItems(canonicalDoc.items, socialItems);
+  const merged = PublicSnapshot.sanitizeDocument(Object.assign({}, canonicalDoc, {
     items: mergedItems,
-    meta: Object.assign({}, baseCapture && baseCapture.doc && baseCapture.doc.meta || {}, canonicalDoc.meta || {}, {
-      sharedSearchBankComposition: {
-        mode: "preserve-noncommerce-plus-canonical-commerce",
-        previousTotal: previous.length,
-        preservedNonCommerce: preserved.length,
-        canonicalCommerce: canonicalDoc.items.length,
-        finalTotal: mergedItems.length,
-        composedAt: new Date().toISOString(),
-      },
-    }),
+    meta: Object.assign({}, canonicalDoc.meta || {}, {
+      socialDomainPreservation: {
+        mode: "preserve-social-owned-sections-only",
+        preserved: socialItems.length,
+        rightPanelOwnedBy: "distribution",
+        preservedAt: new Date().toISOString()
+      }
+    })
   }));
-  const hash = crypto.createHash("sha256").update(JSON.stringify(merged)).digest("hex");
-  const writes = [];
-  for (const file of searchBankMirrorPaths()) {
-    atomicWriteJson(file, merged);
-    writes.push({ path:path.relative(root,file).replace(/\\/g,"/"), hash, count:mergedItems.length });
-  }
-  return {
-    ok:true,
-    previousTotal:previous.length,
-    preservedNonCommerce:preserved.length,
-    canonicalCommerce:canonicalDoc.items.length,
-    finalTotal:mergedItems.length,
-    hash,
-    writes,
-  };
+  for (const file of searchBankMirrorPaths()) atomicWriteJson(file, merged);
+  return { ok: true, preserved: socialItems.length, total: mergedItems.length };
 }
 
 const COMMERCE_CHECKPOINT_TARGETS = [
@@ -563,182 +568,232 @@ async function main() {
   const explicitAdminPublicationInBuild = incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish";
   const explicitSocialPublicationInBuild = incomingSocialIntent.explicit === true;
 
-  // The shared SearchBank is one transaction. Social is never allowed to run
-  // alone against a stale checkout: Commerce is reconstructed first, every
-  // non-Commerce SearchBank domain is preserved, then Social is merged.
-  const commerceCheckpoint = createCommerceCheckpoint();
-  try {
-    const searchBankBase = captureSearchBankBase();
-    const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
-    const upstream = loadConfirmedUpstream(commerceRegistrySync);
-    if (!upstream.ok) {
-      writePreservedBuild(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors, incomingCommerceIntent, incomingSocialIntent });
-      if (explicitAdminPublicationInBuild || explicitSocialPublicationInBuild) {
-        const error = new Error("Explicit publication was blocked because the authoritative Commerce/SearchBank baseline could not be reconstructed: " + upstream.reason);
-        error.code = "SHARED_SEARCHBANK_BASELINE_NOT_AUTHORITATIVE";
-        throw error;
-      }
-      return;
-    }
-
-    const queueAuthoritative = upstream.queueAuthoritative === true;
-    const incomingCommerceSelection = validateExplicitCommerceSelection(upstream, incomingCommerceIntent);
-
-    const sampleFallback = ipSlots.captureSampleFallbackTemplates({ root });
-    if (!sampleFallback.ok) {
-      writePreservedBuild("sample-fallback-template-capture-failed", { commerceRegistrySync, problems: sampleFallback.problems || [], incomingSocialIntent });
-      if (explicitAdminPublicationInBuild || explicitSocialPublicationInBuild) {
-        const error = new Error("Explicit publication was blocked because the current fallback templates could not be captured.");
-        error.code = "SHARED_SEARCHBANK_FALLBACK_CAPTURE_FAILED";
-        throw error;
-      }
-      return;
-    }
-
-    let intake;
-    try {
-      intake = commerceIntake.build({
-        root,
-        items: queueAuthoritative ? [] : upstream.doc.items,
-        trigger: "netlify-build-private-candidate-stage",
-        reviewQueueDoc: queueAuthoritative ? upstream.doc : undefined,
-        write: true
-      });
-    } catch (error) {
-      writePreservedBuild("candidate-intake-preflight-failed", { commerceRegistrySync, candidateCount: upstream.candidateCount, error: String(error && error.message || error), incomingSocialIntent });
-      if (explicitAdminPublicationInBuild || explicitSocialPublicationInBuild) throw error;
-      return;
-    }
-
-    if (!intake.ok) {
-      writePreservedBuild("candidate-intake-not-ready", { commerceRegistrySync, candidateCount: upstream.candidateCount, problems: intake.problems || [], incomingSocialIntent });
-      if (explicitAdminPublicationInBuild || explicitSocialPublicationInBuild) {
-        const error = new Error("Explicit publication was blocked because Commerce Candidate Intake is not ready.");
-        error.code = "SHARED_SEARCHBANK_COMMERCE_INTAKE_NOT_READY";
-        throw error;
-      }
-      return;
-    }
-    if (!intake.releaseGate || intake.releaseGate.enabled !== true) {
-      writePreservedBuild("candidate-release-not-authorized", { commerceRegistrySync, candidateCount: upstream.candidateCount, releaseGate: intake.releaseGate || null, incomingSocialIntent });
-      if (explicitAdminPublicationInBuild || explicitSocialPublicationInBuild) {
-        const error = new Error("Explicit publication was blocked because the authoritative Commerce release gate is not open.");
-        error.code = "SHARED_SEARCHBANK_COMMERCE_RELEASE_NOT_AUTHORIZED";
-        throw error;
-      }
-      return;
-    }
-
-    const releaseItems = Array.isArray(intake.releaseItems) ? intake.releaseItems : [];
-    const administratorRequestedCount = Number(intake && intake.releaseGate && intake.releaseGate.requestedCount || commerceRegistrySync && commerceRegistrySync.requestedCount || 0);
-    if (releaseItems.length === 0 && administratorRequestedCount > 0) {
-      const held = Array.isArray(intake && intake.stage && intake.stage.candidates)
-        ? intake.stage.candidates.filter(row => row && row.releaseEligible !== true).slice(0, 25).map(row => ({ candidateId: row.candidateId, reasons: row.reasons, administratorFrontMatch: row.administratorFrontMatch || null }))
-        : [];
-      throw new Error("Administrator publication queue contained " + administratorRequestedCount + " requested products, but Commerce Candidate Intake released none: " + JSON.stringify({ summary: intake.summary || {}, heldSample: held }));
-    }
-    if (releaseItems.length === 0 && !queueAuthoritative) {
-      writePreservedBuild("no-release-ready-candidates", { commerceRegistrySync, candidateCount: upstream.candidateCount, intakeSummary: intake.summary || null, incomingSocialIntent });
-      if (explicitSocialPublicationInBuild) {
-        const error = new Error("Social publication was blocked because no authoritative Commerce baseline could be rebuilt.");
-        error.code = "SOCIAL_BUILD_REQUIRES_COMMERCE_BASELINE";
-        throw error;
-      }
-      return;
-    }
-
-    const publicationBank = Object.assign({}, upstream.doc, {
-      schema: "search-bank.release-input.v1",
-      generatedAt: new Date().toISOString(),
-      source: "commerce-candidate-intake-release",
-      items: releaseItems
-    });
-    const publication = canonical.publish({ root, trigger: "netlify-build-country-region-admin-publication", bank: publicationBank, requireMirrorConsensus: false });
-    if (publication.status !== "published") throw new Error("Canonical Snapshot Publisher blocked build: " + JSON.stringify(publication.errors || publication));
-    if (!publication.counts) throw new Error("Canonical Snapshot Publisher did not return candidate counts.");
-    if (Number(publication.counts.accepted || 0) <= 0 && administratorRequestedCount > 0) {
-      throw new Error("Canonical Snapshot Publisher rejected every administrator-requested product. Inspect data/canonical-snapshot/audit/latest.json before publishing sample-only output.");
-    }
-    if (Number(publication.counts.accepted || 0) <= 0 && !queueAuthoritative) {
-      throw new Error("Canonical Snapshot Publisher produced no accepted candidates without an authoritative administrator withdrawal state.");
-    }
-
-    const published = canonical.verifyPublished({ root });
-    if (!published.ok) throw new Error("Canonical Snapshot Publisher integrity failure: " + JSON.stringify(published.problems));
-
-    // Restore every non-Commerce SearchBank domain that the Commerce canonical
-    // publisher does not own. This is the missing isolation boundary that kept
-    // Social and Distribution from coexisting across fresh Netlify builds.
-    const sharedComposition = composeCanonicalWithPreservedSearchBank(searchBankBase);
-
-    // On an explicit Social build, the adapter consumes only that exact hook
-    // manifest. On a Commerce build it may read the latest stored Social release
-    // solely to preserve the currently published main-9 Social state.
+  // An explicit Social release is a Social-only transaction. It may update only
+  // the nine Social main sections inside the shared SearchBank and then only
+  // materialize the Social target. Commerce/Distribution publishers are not
+  // entered at all on this branch.
+  if (explicitSocialPublicationInBuild) {
     const socialPublication = await publishSocialSafely({
-      materializeSnapshot: false,
-      allowLatestStored: !explicitSocialPublicationInBuild,
+      allowLatestStored: false,
+      materializeSnapshot: true
     });
-    const socialStatus = String(socialPublication && socialPublication.status || "").toLowerCase();
-    if (explicitSocialPublicationInBuild && socialStatus !== "searchbank_handoff_complete") {
+    process.stdout.write(JSON.stringify({ incomingSocialIntent, socialPublication }, null, 2) + "\n");
+    if (String(socialPublication && socialPublication.status || "").toLowerCase() !== "searchbank_handoff_complete") {
       const error = new Error("Explicit Social publication did not complete its SearchBank handoff: " + JSON.stringify(socialPublication));
       error.code = "EXPLICIT_SOCIAL_SEARCHBANK_HANDOFF_FAILED";
       throw error;
     }
+    return;
+  }
 
-    const snapshotEngineReport = snapshots.run({ canonicalReleaseId: publication.releaseId });
-    if (!snapshotEngineReport || snapshotEngineReport.ok !== true) {
-      throw new Error("Snapshot Engine did not complete the SearchBank-to-front merge layer.");
+  // Capture only Social-owned SearchBank rows before the proven Distribution
+  // build runs. If Commerce rewrites its canonical bank, these rows are merged
+  // back before the shared Snapshot Engine. rightPanel is never captured here.
+  const preCommerceSocialBase = captureSocialSearchBankBase();
+  const commerceCheckpoint = createCommerceCheckpoint();
+  try {
+
+  // This sync only refreshes the private approved-candidate review queue. It
+  // never writes a public Snapshot and cannot by itself publish front cards.
+  const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
+
+  // A generic zero-count queue is never authoritative. The sole exception is
+  // an explicit durable unpublication marker produced by the administrator
+  // refresh/repair flow; that intentional empty set restores sample fallback.
+  const upstream = loadConfirmedUpstream(commerceRegistrySync);
+  if (!upstream.ok) {
+    if (incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish") {
+      throw new Error("Explicit administrator Front Match reached the Netlify build, but the authoritative Global Slot publication queue could not be loaded: " + upstream.reason + " | " + JSON.stringify({commerceRegistrySync,incomingCommerceIntent}));
     }
+    writePreservedBuild(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors, incomingCommerceIntent });
+    return;
+  }
+  const queueAuthoritative = upstream.queueAuthoritative === true;
+  // candidateIds from the clicked button identify the delta that was just
+  // changed. They must never truncate the authoritative queue: Canonical writes
+  // a complete public document, so filtering here turns a one-section match
+  // into an invalid partial replacement. Validate the delta and rebuild from
+  // the full durable publication queue instead.
+  const incomingCommerceSelection = validateExplicitCommerceSelection(upstream, incomingCommerceIntent);
 
-    const regionalReport = regional.publishFromSearchBank({ root, trigger: "netlify-build-canonical" });
-    const ipSlotReport = ipSlots.publish({ root, trigger: "netlify-build-canonical-ip-slots", fallbackTemplates: sampleFallback.templates });
-    if (ipSlotReport.status !== "published") throw new Error("Canonical IP Slot Publisher blocked build: " + JSON.stringify(ipSlotReport.errors || ipSlotReport));
-    const ipSlotVerification = ipSlots.verifyPublished({ root });
-    if (!ipSlotVerification.ok) throw new Error("Canonical IP Slot Publisher integrity failure: " + JSON.stringify(ipSlotVerification.problems));
-    const rootFallbackVerification = verifyPublishedRootSampleFallbacks(ipSlotReport);
-    if (!rootFallbackVerification.ok) throw new Error("Canonical IP root sample-fallback integrity failure: " + JSON.stringify(rootFallbackVerification.problems));
-    const canonicalToIpVerification = verifyCanonicalToIpOutputs(ipSlotReport);
-    if (!canonicalToIpVerification.ok) throw new Error("Canonical SearchBank products did not reach their country/IP front snapshots: " + JSON.stringify(canonicalToIpVerification.problems));
-
-    process.stdout.write(JSON.stringify({
+  // Capture the committed safe sample templates before Snapshot Engine writes
+  // any real-product documents. They are restored at root whenever the request
+  // IP has no matching country/region real-product snapshot.
+  const sampleFallback = ipSlots.captureSampleFallbackTemplates({ root });
+  if (!sampleFallback.ok) {
+    writePreservedBuild("sample-fallback-template-capture-failed", {
       commerceRegistrySync,
-      incomingCommerceIntent,
-      incomingSocialIntent,
-      incomingCommerceSelection,
-      upstream: { candidateCount: upstream.candidateCount, sourceMode: upstream.sourceMode || null, warning: upstream.warning || null, queueAuthoritative, mirrors: upstream.mirrors },
-      intake: { releaseGate: intake.releaseGate, summary: intake.summary, releaseItemCount: releaseItems.length },
-      publicationInput: { source: publicationBank.source, itemCount: publicationBank.items.length },
-      publication,
-      published,
-      sharedComposition,
-      social: socialPublication,
-      donation: { mode: "independent-runtime-contract-not-touched" },
-      snapshotEngine: snapshotEngineReport,
-      canonicalToIpVerification,
-      regional: regionalReport,
-      ipSlots: ipSlotReport,
-      ipSlotVerification,
-      rootFallbackVerification
-    }, null, 2) + "\n");
+      problems: sampleFallback.problems || []
+    });
+    return;
+  }
+
+  // Build and persist the private candidate stage on every qualified build.
+  // This makes the ordered research/revenue/assignment pipeline visible to the
+  // candidate queue and go-live audit even while the public release key is off.
+  // The intake writer touches only private staging/audit files; Canonical and
+  // front snapshots remain blocked by the independent release gate below.
+  let intake;
+  try {
+    intake = commerceIntake.build({
+      root,
+      // An authoritative Global Slot review queue is already the normalized
+      // administrator source. Feeding the same queue envelopes through the raw
+      // SearchBank input a second time creates duplicate malformed candidates
+      // and can leave the private stage pinned to an old held result.
+      items: queueAuthoritative ? [] : upstream.doc.items,
+      trigger: "netlify-build-private-candidate-stage",
+      reviewQueueDoc: queueAuthoritative ? upstream.doc : undefined,
+      write: true
+    });
   } catch (error) {
-    let restored = [], rollbackError = null;
+    writePreservedBuild("candidate-intake-preflight-failed", {
+      commerceRegistrySync,
+      candidateCount: upstream.candidateCount,
+      error: String(error && error.message || error)
+    });
+    return;
+  }
+
+  if (!intake.ok) {
+    writePreservedBuild("candidate-intake-not-ready", {
+      commerceRegistrySync,
+      candidateCount: upstream.candidateCount,
+      problems: intake.problems || []
+    });
+    return;
+  }
+
+  if (!intake.releaseGate || intake.releaseGate.enabled !== true) {
+    writePreservedBuild("candidate-release-not-authorized", {
+      commerceRegistrySync,
+      candidateCount: upstream.candidateCount,
+      releaseGate: intake.releaseGate || null
+    });
+    return;
+  }
+
+  const releaseItems = Array.isArray(intake.releaseItems) ? intake.releaseItems : [];
+  const administratorRequestedCount = Number(intake && intake.releaseGate && intake.releaseGate.requestedCount || commerceRegistrySync && commerceRegistrySync.requestedCount || 0);
+  if (releaseItems.length === 0 && administratorRequestedCount > 0) {
+    const held = Array.isArray(intake && intake.stage && intake.stage.candidates) ? intake.stage.candidates.filter(row => row && row.releaseEligible !== true).slice(0,25).map(row => ({candidateId:row.candidateId,reasons:row.reasons,administratorFrontMatch:row.administratorFrontMatch||null})) : [];
+    throw new Error("Administrator publication queue contained " + administratorRequestedCount + " requested products, but Commerce Candidate Intake released none: " + JSON.stringify({summary:intake.summary||{},heldSample:held}));
+  }
+  if (releaseItems.length === 0 && !queueAuthoritative) {
+    writePreservedBuild("no-release-ready-candidates", {
+      commerceRegistrySync,
+      candidateCount: upstream.candidateCount,
+      intakeSummary: intake.summary || null
+    });
+    return;
+  }
+
+  // Canonical publication must receive the actual post-intake release set.
+  // The previous bridge passed the pre-intake upstream document, so explicit
+  // administrator products were visible in the private queue but never entered
+  // SearchBank or any front Snapshot. An authoritative empty set is preserved
+  // for explicit withdrawal and therefore restores the safe sample fallbacks.
+  const publicationBank = Object.assign({}, upstream.doc, {
+    schema: "search-bank.release-input.v1",
+    generatedAt: new Date().toISOString(),
+    source: "commerce-candidate-intake-release",
+    items: releaseItems
+  });
+  const publication = canonical.publish({ root, trigger: "netlify-build-country-region-admin-publication", bank: publicationBank, requireMirrorConsensus: false });
+  if (publication.status !== "published") {
+    throw new Error("Canonical Snapshot Publisher blocked build: " + JSON.stringify(publication.errors || publication));
+  }
+  if (!publication.counts) {
+    throw new Error("Canonical Snapshot Publisher did not return candidate counts.");
+  }
+  if (Number(publication.counts.accepted || 0) <= 0 && administratorRequestedCount > 0) {
+    throw new Error("Canonical Snapshot Publisher rejected every administrator-requested product. Inspect data/canonical-snapshot/audit/latest.json before publishing sample-only output.");
+  }
+  if (Number(publication.counts.accepted || 0) <= 0 && !queueAuthoritative) {
+    throw new Error("Canonical Snapshot Publisher produced no accepted candidates without an authoritative administrator withdrawal state.");
+  }
+
+  const published = canonical.verifyPublished({ root });
+  if (!published.ok) {
+    throw new Error("Canonical Snapshot Publisher integrity failure: " + JSON.stringify(published.problems));
+  }
+
+  // Preserve the previously committed Social-owned sections before the shared
+  // Snapshot Engine runs. Then, when a stored Social release is available,
+  // refresh only Social candidate rows through the same SearchBank contract.
+  // Failure to refresh never deletes the preserved Social rows.
+  const socialPreservation = restoreSocialDomainIntoCanonical(preCommerceSocialBase);
+  const socialRefresh = await publishSocialSafely({
+    allowLatestStored: true,
+    materializeSnapshot: false
+  });
+
+  // Only commercial Snapshot surfaces are built here. Donation has an
+  // independent endpoint/snapshot contract and is intentionally excluded.
+  const snapshotEngineReport = snapshots.run({ canonicalReleaseId: publication.releaseId });
+  if (!snapshotEngineReport || snapshotEngineReport.ok !== true) {
+    throw new Error("Snapshot Engine did not complete the SearchBank-to-front merge layer.");
+  }
+
+  const regionalReport = regional.publishFromSearchBank({ root, trigger: "netlify-build-canonical" });
+  const ipSlotReport = ipSlots.publish({ root, trigger: "netlify-build-canonical-ip-slots", fallbackTemplates: sampleFallback.templates });
+  if (ipSlotReport.status !== "published") {
+    throw new Error("Canonical IP Slot Publisher blocked build: " + JSON.stringify(ipSlotReport.errors || ipSlotReport));
+  }
+  const ipSlotVerification = ipSlots.verifyPublished({ root });
+  if (!ipSlotVerification.ok) {
+    throw new Error("Canonical IP Slot Publisher integrity failure: " + JSON.stringify(ipSlotVerification.problems));
+  }
+  const rootFallbackVerification = verifyPublishedRootSampleFallbacks(ipSlotReport);
+  if (!rootFallbackVerification.ok) {
+    throw new Error("Canonical IP root sample-fallback integrity failure: " + JSON.stringify(rootFallbackVerification.problems));
+  }
+  const canonicalToIpVerification = verifyCanonicalToIpOutputs(ipSlotReport);
+  if (!canonicalToIpVerification.ok) {
+    throw new Error("Canonical SearchBank products did not reach their country/IP front snapshots: " + JSON.stringify(canonicalToIpVerification.problems));
+  }
+
+  process.stdout.write(JSON.stringify({
+    commerceRegistrySync,
+    incomingCommerceIntent,
+    incomingCommerceSelection,
+    upstream: { candidateCount: upstream.candidateCount, sourceMode: upstream.sourceMode || null, warning: upstream.warning || null, queueAuthoritative, mirrors: upstream.mirrors },
+    intake: { releaseGate: intake.releaseGate, summary: intake.summary, releaseItemCount: releaseItems.length },
+    publicationInput: { source: publicationBank.source, itemCount: publicationBank.items.length },
+    publication,
+    published,
+    socialIsolation: {
+      incomingSocialIntent,
+      preservation: socialPreservation,
+      refresh: socialRefresh,
+      rightPanelOwnedBy: "distribution"
+    },
+    donation: { mode: "independent-runtime-contract-not-touched" },
+    snapshotEngine: snapshotEngineReport,
+    canonicalToIpVerification,
+    regional: regionalReport,
+    ipSlots: ipSlotReport,
+    ipSlotVerification,
+    rootFallbackVerification
+  }, null, 2) + "\n");
+  } catch (error) {
+    let restored = [];
+    let rollbackError = null;
     try {
       restored = restoreCommerceCheckpoint(commerceCheckpoint);
     } catch (restoreError) {
       rollbackError = String(restoreError && restoreError.message || restoreError);
     }
-    process.stderr.write("Shared SearchBank publication failed; prior SearchBank/Snapshot state was restored: " + JSON.stringify({
+    process.stderr.write("Commerce release did not publish; Social build remains independent: " + JSON.stringify({
       status: "failed",
       isolated: true,
-      reason: "shared_searchbank_publication_failed",
+      reason: "commerce_release_execution_failed",
       error: String(error && error.message || error),
       rollback: rollbackError ? "failed" : "restored",
       restored,
-      rollbackError,
-      incomingCommerceIntent,
-      incomingSocialIntent,
+      rollbackError
     }) + "\n");
-    if (rollbackError || explicitAdminPublicationInBuild || explicitSocialPublicationInBuild) throw error;
+    if (rollbackError || explicitAdminPublicationInBuild) throw error;
   } finally {
     removeCommerceCheckpoint(commerceCheckpoint);
   }
