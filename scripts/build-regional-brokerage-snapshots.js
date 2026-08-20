@@ -607,16 +607,38 @@ function writePreservedBuild(reason, details) {
   }, null, 2) + "\n");
 }
 
+function productionDeployBuild() {
+  return String(process.env.CONTEXT || "").trim().toLowerCase() === "production";
+}
+
 async function main() {
   const incomingCommerceIntent = incomingCommerceHookIntent();
   const incomingSocialIntent = incomingSocialHookIntent();
   const explicitAdminPublicationInBuild = incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish";
   const explicitSocialPublicationInBuild = incomingSocialIntent.explicit === true;
+  const mustMaterializeDistribution = explicitAdminPublicationInBuild || explicitSocialPublicationInBuild || productionDeployBuild();
+  let explicitSocialPublication = null;
 
-  // An explicit Social release is a Social-only transaction. It may update only
-  // the nine Social main sections inside the shared SearchBank and then only
-  // materialize the Social target. Commerce/Distribution publishers are not
-  // entered at all on this branch.
+  function preserveOrFail(reason, details) {
+    // data/auto is build output, not a committed source tree. On a fresh Netlify
+    // production build, returning before the regional/IP publishers would deploy
+    // root sample fallbacks without the Distribution-owned scoped snapshots.
+    // Fail closed so the previous production deploy stays live instead.
+    const manifest = path.join(root, "data", "auto", "ip-slot-manifest.json");
+    if (mustMaterializeDistribution && !fileExists(manifest)) {
+      const error = new Error("Distribution scoped outputs were not materialized in this fresh build: " + reason);
+      error.code = "DISTRIBUTION_SCOPED_OUTPUTS_NOT_MATERIALIZED";
+      error.details = details || null;
+      throw error;
+    }
+    writePreservedBuild(reason, details);
+  }
+
+  // A Social release changes only the nine Social main rows in SearchBank, but
+  // a Netlify deploy is a fresh filesystem. Therefore Social cannot return early:
+  // the durable Commerce state must be rehydrated in the same build and the
+  // Distribution-owned country/region snapshots must be regenerated before the
+  // deploy is allowed to become active.
   if (explicitSocialPublicationInBuild) {
     // Defensive compatibility for already-queued/older Social build hooks:
     // a normal publish with an empty manifest is not an unpublish. Preserve the
@@ -624,30 +646,28 @@ async function main() {
     // publisher code blocks this before the hook is queued, but this guard also
     // protects deployments already waiting in Netlify's queue.
     if (incomingSocialIntent.publicationPlanPresent === true && incomingSocialIntent.operation !== "unpublish" && Number(incomingSocialIntent.actualPublicationPlanCount || 0) === 0) {
-      process.stdout.write(JSON.stringify({
-        incomingSocialIntent,
-        socialPublication: {
-          status: "preserved",
-          isolated: true,
-          reason: "empty_social_publish_plan_rejected_before_write",
-          searchBank: "unchanged",
-          snapshotEngine: "not-run",
-          note: "Zero-row publish is a safe no-op; only explicit unpublish may carry an empty plan."
-        }
-      }, null, 2) + "\n");
-      return;
+      explicitSocialPublication = {
+        status: "preserved",
+        isolated: true,
+        reason: "empty_social_publish_plan_rejected_before_write",
+        searchBank: "unchanged",
+        snapshotEngine: "deferred-to-shared-build",
+        note: "Zero-row publish is a safe no-op; Distribution scoped outputs are still rebuilt before deploy."
+      };
+    } else {
+      explicitSocialPublication = await publishSocialSafely({
+        allowLatestStored: false,
+        // Do not materialize Social yet. The full Snapshot Engine runs after the
+        // durable Commerce canonical state has been reconstructed, so both domains
+        // are emitted from one consistent SearchBank generation.
+        materializeSnapshot: false
+      });
+      if (String(explicitSocialPublication && explicitSocialPublication.status || "").toLowerCase() !== "searchbank_handoff_complete") {
+        const error = new Error("Explicit Social publication did not complete its SearchBank handoff: " + JSON.stringify(explicitSocialPublication));
+        error.code = "EXPLICIT_SOCIAL_SEARCHBANK_HANDOFF_FAILED";
+        throw error;
+      }
     }
-    const socialPublication = await publishSocialSafely({
-      allowLatestStored: false,
-      materializeSnapshot: true
-    });
-    process.stdout.write(JSON.stringify({ incomingSocialIntent, socialPublication }, null, 2) + "\n");
-    if (String(socialPublication && socialPublication.status || "").toLowerCase() !== "searchbank_handoff_complete") {
-      const error = new Error("Explicit Social publication did not complete its SearchBank handoff: " + JSON.stringify(socialPublication));
-      error.code = "EXPLICIT_SOCIAL_SEARCHBANK_HANDOFF_FAILED";
-      throw error;
-    }
-    return;
   }
 
   // Capture only Social-owned SearchBank rows before the proven Distribution
@@ -669,7 +689,7 @@ async function main() {
     if (incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish") {
       throw new Error("Explicit administrator Front Match reached the Netlify build, but the authoritative Global Slot publication queue could not be loaded: " + upstream.reason + " | " + JSON.stringify({commerceRegistrySync,incomingCommerceIntent}));
     }
-    writePreservedBuild(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors, incomingCommerceIntent });
+    preserveOrFail(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors, incomingCommerceIntent });
     return;
   }
   const queueAuthoritative = upstream.queueAuthoritative === true;
@@ -679,18 +699,6 @@ async function main() {
   // into an invalid partial replacement. Validate the delta and rebuild from
   // the full durable publication queue instead.
   const incomingCommerceSelection = validateExplicitCommerceSelection(upstream, incomingCommerceIntent);
-
-  // Capture the committed safe sample templates before Snapshot Engine writes
-  // any real-product documents. They are restored at root whenever the request
-  // IP has no matching country/region real-product snapshot.
-  const sampleFallback = ipSlots.captureSampleFallbackTemplates({ root });
-  if (!sampleFallback.ok) {
-    writePreservedBuild("sample-fallback-template-capture-failed", {
-      commerceRegistrySync,
-      problems: sampleFallback.problems || []
-    });
-    return;
-  }
 
   // Build and persist the private candidate stage on every qualified build.
   // This makes the ordered research/revenue/assignment pipeline visible to the
@@ -711,7 +719,7 @@ async function main() {
       write: true
     });
   } catch (error) {
-    writePreservedBuild("candidate-intake-preflight-failed", {
+    preserveOrFail("candidate-intake-preflight-failed", {
       commerceRegistrySync,
       candidateCount: upstream.candidateCount,
       error: String(error && error.message || error)
@@ -720,7 +728,7 @@ async function main() {
   }
 
   if (!intake.ok) {
-    writePreservedBuild("candidate-intake-not-ready", {
+    preserveOrFail("candidate-intake-not-ready", {
       commerceRegistrySync,
       candidateCount: upstream.candidateCount,
       problems: intake.problems || []
@@ -729,7 +737,7 @@ async function main() {
   }
 
   if (!intake.releaseGate || intake.releaseGate.enabled !== true) {
-    writePreservedBuild("candidate-release-not-authorized", {
+    preserveOrFail("candidate-release-not-authorized", {
       commerceRegistrySync,
       candidateCount: upstream.candidateCount,
       releaseGate: intake.releaseGate || null
@@ -744,7 +752,7 @@ async function main() {
     throw new Error("Administrator publication queue contained " + administratorRequestedCount + " requested products, but Commerce Candidate Intake released none: " + JSON.stringify({summary:intake.summary||{},heldSample:held}));
   }
   if (releaseItems.length === 0 && !queueAuthoritative) {
-    writePreservedBuild("no-release-ready-candidates", {
+    preserveOrFail("no-release-ready-candidates", {
       commerceRegistrySync,
       candidateCount: upstream.candidateCount,
       intakeSummary: intake.summary || null
@@ -802,7 +810,19 @@ async function main() {
   }
 
   const regionalReport = regional.publishFromSearchBank({ root, trigger: "netlify-build-canonical" });
-  const ipSlotReport = ipSlots.publish({ root, trigger: "netlify-build-canonical-ip-slots", fallbackTemplates: sampleFallback.templates });
+
+  // Capture IP/root templates only AFTER Snapshot Engine has materialized the
+  // current Social main nine sections. The Social IP document is partial: its
+  // rightPanel is Distribution-owned, but its nine main sections must come from
+  // the just-published Social snapshot. Reusing the pre-Snapshot template would
+  // silently roll Social back when the IP publisher writes the root fallback.
+  const publishFallback = ipSlots.captureSampleFallbackTemplates({ root });
+  if (!publishFallback.ok) {
+    const error = new Error("Post-Snapshot IP fallback capture failed: " + JSON.stringify(publishFallback.problems || []));
+    error.code = "POST_SNAPSHOT_IP_FALLBACK_CAPTURE_FAILED";
+    throw error;
+  }
+  const ipSlotReport = ipSlots.publish({ root, trigger: "netlify-build-canonical-ip-slots", fallbackTemplates: publishFallback.templates });
   if (ipSlotReport.status !== "published") {
     throw new Error("Canonical IP Slot Publisher blocked build: " + JSON.stringify(ipSlotReport.errors || ipSlotReport));
   }
@@ -830,6 +850,7 @@ async function main() {
     published,
     socialIsolation: {
       incomingSocialIntent,
+      explicitPublication: explicitSocialPublication,
       preservation: socialPreservation,
       refresh: socialRefresh,
       rightPanelOwnedBy: "distribution"
@@ -859,7 +880,7 @@ async function main() {
       restored,
       rollbackError
     }) + "\n");
-    if (rollbackError || explicitAdminPublicationInBuild) throw error;
+    if (rollbackError || mustMaterializeDistribution) throw error;
   } finally {
     removeCommerceCheckpoint(commerceCheckpoint);
   }

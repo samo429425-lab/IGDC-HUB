@@ -91,9 +91,21 @@ function existingSnapshotPaths(fileName) {
 }
 
 function readSnapshotJson(fileName) {
-  const p = firstExistingPath(fileName);
-  if (!p) return { path: "", data: null };
-  return { path: p, data: readJson(p) };
+  // Mirrors are ordered by public preference, but an existing first mirror may
+  // be truncated/corrupt while a later mirror is valid. Never let one damaged
+  // JSON path cut the whole SearchBank -> Snapshot mapping chain. Read the first
+  // parseable mirror instead; writeSnapshotJson() will subsequently normalize all
+  // existing mirrors back to the same valid document.
+  const errors = [];
+  for (const p of snapshotPathCandidates(fileName)) {
+    try {
+      if (!fs.existsSync(p) || !fs.statSync(p).isFile()) continue;
+      return { path: p, data: readJson(p), errors };
+    } catch (error) {
+      errors.push({ path: p, error: String(error && error.message || error) });
+    }
+  }
+  return { path: "", data: null, errors };
 }
 
 function writeSnapshotJson(fileName, data) {
