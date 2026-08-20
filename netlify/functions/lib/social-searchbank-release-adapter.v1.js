@@ -22,10 +22,11 @@ const SocialStore = require("./social-candidate-store.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 const SearchBankEngine = require("../search-bank-engine");
 
-const VERSION = "social-searchbank-release-adapter-v1.5.1-safe-empty-unpublish";
+const VERSION = "social-searchbank-release-adapter-v1.6.0-domain-isolation";
 const RELEASE_FILE = "social-searchbank.release.snapshot.json";
 const REPORT_FILE = "social-pipeline.report.json";
 const SEARCH_BANK_FILE = "search-bank.snapshot.json";
+const SOCIAL_MAIN_SECTION_SET = new Set(SocialStore.Policy.SECTION_KEYS);
 
 function text(value) {
   return value == null ? "" : String(value).trim();
@@ -409,6 +410,64 @@ function isPriorSocialCandidateItem(item) {
     !!(item.socialCandidatePublication && item.socialCandidatePublication.candidateId)
   );
 }
+function socialItemSection(item) {
+  const bind = item && item.bind && typeof item.bind === "object" ? item.bind : {};
+  return text(item && (item.psom_key || item.section || bind.section));
+}
+function isSocialOwnedMainRealItem(item) {
+  if (!item || typeof item !== "object") return false;
+  const bind = item.bind && typeof item.bind === "object" ? item.bind : {};
+  const page = lower(item.page || item.channel || bind.page);
+  const section = socialItemSection(item);
+  if (page !== "social" || !SOCIAL_MAIN_SECTION_SET.has(section)) return false;
+  return !isSocialSampleItem(item);
+}
+function protectedNonSocialItems(doc) {
+  const items = Array.isArray(doc && doc.items) ? doc.items : [];
+  return items.filter((item) => !isSocialOwnedMainRealItem(item));
+}
+function protectedNonSocialHash(doc) {
+  // SearchBank item order is not a domain ownership change. Normalize order so
+  // benign mirror ordering differences do not block a Social publication.
+  const rows = protectedNonSocialItems(doc).map((item) => ({
+    key: [
+      text(item && (item.id || item.contentId || item.candidateId || item.snapshotRecordId)),
+      lower(item && (item.url || item.link || item.href)),
+      socialItemSection(item),
+      lower(item && (item.page || item.channel || (item.bind && item.bind.page))),
+      sha256(item),
+    ].join("\u0001"),
+    item,
+  }));
+  rows.sort((a, b) => a.key.localeCompare(b.key));
+  return sha256(rows.map((row) => row.item));
+}
+function itemIdentity(item) {
+  return {
+    id: text(item && (item.id || item.contentId || item.candidateId || item.snapshotRecordId)),
+    url: lower(item && (item.url || item.link || item.href)),
+  };
+}
+function filterCrossDomainCollisions(preserved, incoming) {
+  const ids = new Set();
+  const urls = new Set();
+  for (const item of Array.isArray(preserved) ? preserved : []) {
+    const key = itemIdentity(item);
+    if (key.id) ids.add(key.id);
+    if (key.url && key.url !== "#") urls.add(key.url);
+  }
+  const accepted = [];
+  const collisions = [];
+  for (const item of Array.isArray(incoming) ? incoming : []) {
+    const key = itemIdentity(item);
+    if ((key.id && ids.has(key.id)) || (key.url && key.url !== "#" && urls.has(key.url))) {
+      collisions.push({ id: key.id || null, url: key.url || null, section: socialItemSection(item) || null });
+      continue;
+    }
+    accepted.push(item);
+  }
+  return { accepted, collisions };
+}
 function isSocialSampleItem(item) {
   if (!item || typeof item !== "object") return false;
   const section = text(item.psom_key || item.section || (item.bind && item.bind.section));
@@ -416,11 +475,19 @@ function isSocialSampleItem(item) {
   if (isPriorSocialCandidateItem(item)) return false;
   const url = lower(item.url || item.link || item.href);
   const title = lower(item.title || item.name);
+  const summary = lower(item.summary || item.description);
+  const source = item.source && typeof item.source === "object" ? item.source : {};
+  const extension = item.extension && typeof item.extension === "object" ? item.extension : {};
+  const tags = Array.isArray(item.tags) ? item.tags.map(lower) : [];
   return (
     item.sample === true ||
     item.placeholder === true ||
     item.replaceableSlot === true ||
+    !!(extension.placeholder && typeof extension.placeholder === "object") ||
+    lower(source.name) === "seed" ||
+    tags.includes("seed") ||
     title.includes("seed placeholder") ||
+    summary.includes("seed placeholder") ||
     url === "#" ||
     url.includes("example.com") ||
     lower(item.thumbnail || item.thumb || item.image).includes("placeholder")
@@ -473,31 +540,77 @@ function mergeIntoSearchBankSnapshot(input) {
   const loaded = loadSearchBankSnapshot(root);
   const current = loaded.doc;
   const oldItems = Array.isArray(current.items) ? current.items : [];
-  const preserved = oldItems.filter((item) => !isPriorSocialCandidateItem(item));
+
+  // Social owns only the nine Social main-section REAL rows. Everything else
+  // (Commerce/Distribution, rightPanel, other hubs, samples/placeholders) is a
+  // protected foreign domain and must remain byte-for-byte equivalent as JSON.
+  const preserved = oldItems.filter((item) => !isSocialOwnedMainRealItem(item));
   const previousRealCount = oldItems.length - preserved.length;
   const sampleSocialCountBefore = oldItems.filter(isSocialSampleItem).length;
   const incoming = engineGate.accepted;
-  const mergedItems = SearchBankEngine.mergeBankItems(preserved, incoming);
-  const merged = PublicSnapshot.sanitizeDocument(Object.assign({}, current, {
+  const protectedBeforeHash = protectedNonSocialHash(current);
+  const protectedExactBeforeHash = sha256(preserved);
+
+  // Refuse to use Social as a mirror-repair mechanism. If the three SearchBank
+  // mirrors already disagree in a non-Social domain, Social must stop before any
+  // write instead of choosing one mirror and overwriting the others.
+  const mirrorProtection = [];
+  for (const file of searchBankPaths(root)) {
+    const doc = readJson(file);
+    if (!doc || !Array.isArray(doc.items)) continue;
+    const protectedHash = protectedNonSocialHash(doc);
+    mirrorProtection.push({ path: path.relative(root, file).replace(/\\/g, "/"), protectedHash });
+    if (protectedHash !== protectedBeforeHash) {
+      const error = new Error("SOCIAL_SEARCHBANK_NON_SOCIAL_MIRROR_DIVERGENCE");
+      error.code = "social_searchbank_non_social_mirror_divergence";
+      error.details = { expected: protectedBeforeHash, mirrors: mirrorProtection };
+      throw error;
+    }
+  }
+
+  // Never call the broad SearchBank merge on a Social delta: dedupe rules are
+  // allowed to choose winners and could therefore remove a foreign-domain row.
+  // Cross-domain collisions are rejected; otherwise protected rows are copied
+  // unchanged and the validated Social delta is appended.
+  const collisionGate = filterCrossDomainCollisions(preserved, incoming);
+  const safeIncoming = collisionGate.accepted;
+  if (incoming.length > 0 && safeIncoming.length === 0) {
+    const error = new Error("SOCIAL_SEARCHBANK_ALL_ROWS_COLLIDE_WITH_PROTECTED_DOMAIN");
+    error.code = "social_searchbank_all_rows_collide_with_protected_domain";
+    error.details = { collisions: collisionGate.collisions.slice(0, 100) };
+    throw error;
+  }
+  const mergedItems = preserved.concat(safeIncoming);
+  const merged = Object.assign({}, current, {
     items: mergedItems,
     meta: Object.assign({}, current.meta || {}, {
       generated_at: (current.meta && current.meta.generated_at) || undefined,
       socialCandidateHandoff: {
         version: VERSION,
-        mode: "searchbank-engine-contract-merge-preserve-samples",
+        mode: "social-nine-delta-non-social-immutable",
         searchBankEngineVersion: engineGate.engineVersion,
         searchBankContractVersion: engineGate.contractVersion,
         releaseId: text(release && release.release_id),
         releaseHash: text(release && release.snapshot_hash),
         updatedAt: new Date().toISOString(),
         previousRealSocialCandidateItems: previousRealCount,
-        insertedRealSocialCandidateItems: incoming.length,
+        insertedRealSocialCandidateItems: safeIncoming.length,
+        skippedCrossDomainCollisions: collisionGate.collisions.length,
         sampleSocialItemsPreserved: sampleSocialCountBefore,
+        protectedNonSocialHash: protectedBeforeHash,
         sectionCounts: gate.counts,
         psomFile: gate.psomFile,
       },
     }),
-  }));
+  });
+  const protectedAfterHash = protectedNonSocialHash(merged);
+  const protectedExactAfterHash = sha256(protectedNonSocialItems(merged));
+  if (protectedAfterHash !== protectedBeforeHash || protectedExactAfterHash !== protectedExactBeforeHash) {
+    const error = new Error("SOCIAL_SEARCHBANK_NON_SOCIAL_INVARIANT_FAILED");
+    error.code = "social_searchbank_non_social_invariant_failed";
+    error.details = { before: protectedBeforeHash, after: protectedAfterHash, exactBefore: protectedExactBeforeHash, exactAfter: protectedExactAfterHash };
+    throw error;
+  }
   const digest = sha256(merged);
   const writes = [];
   for (const file of searchBankPaths(root)) {
@@ -511,8 +624,11 @@ function mergeIntoSearchBankSnapshot(input) {
     previousTotalItems: oldItems.length,
     finalTotalItems: merged.items.length,
     previousRealSocialCandidateItems: previousRealCount,
-    insertedRealSocialCandidateItems: incoming.length,
+    insertedRealSocialCandidateItems: safeIncoming.length,
+    skippedCrossDomainCollisions: collisionGate.collisions.length,
+    crossDomainCollisionSample: collisionGate.collisions.slice(0, 25),
     sampleSocialItemsPreserved: sampleSocialCountBefore,
+    protectedNonSocialInvariant: { before: protectedBeforeHash, after: protectedAfterHash, exactBefore: protectedExactBeforeHash, exactAfter: protectedExactAfterHash, unchanged: protectedAfterHash === protectedBeforeHash && protectedExactAfterHash === protectedExactBeforeHash },
     counts: gate.counts,
     psomFile: gate.psomFile,
     searchBankEngine: {
@@ -967,7 +1083,10 @@ async function publish(input) {
     finalTotalItems: handoff.finalTotalItems,
     previousRealSocialCandidateItems: handoff.previousRealSocialCandidateItems,
     insertedRealSocialCandidateItems: handoff.insertedRealSocialCandidateItems,
+    skippedCrossDomainCollisions: handoff.skippedCrossDomainCollisions || 0,
+    crossDomainCollisionSample: handoff.crossDomainCollisionSample || [],
     sampleSocialItemsPreserved: handoff.sampleSocialItemsPreserved,
+    protectedNonSocialInvariant: handoff.protectedNonSocialInvariant || null,
     counts: handoff.counts,
     psomFile: handoff.psomFile,
     searchBankEngine: handoff.searchBankEngine,

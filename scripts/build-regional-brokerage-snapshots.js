@@ -11,8 +11,6 @@ const regional = require(path.join(root, "netlify", "functions", "lib", "regiona
 const ipSlots = require(path.join(root, "netlify", "functions", "lib", "ip-slot-snapshot-publisher.v1"));
 const commerceRegistry = require(path.join(root, "netlify", "functions", "lib", "commerce-candidate-registry-sync.v1"));
 const commerceIntake = require(path.join(root, "netlify", "functions", "lib", "commerce-candidate-intake.v1"));
-const SearchBankEngine = require(path.join(root, "netlify", "functions", "search-bank-engine"));
-const PublicSnapshot = require(path.join(root, "netlify", "functions", "lib", "public-snapshot-sanitizer.v1"));
 
 async function publishSocialIndependently(options) {
   const adapterPath = path.join(root, "netlify", "functions", "lib", "social-searchbank-release-adapter.v1");
@@ -192,7 +190,6 @@ async function publishSocialSafely(options) {
 }
 
 const SOCIAL_OWNED_SECTIONS = new Set([
-  "social-maru",
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
   "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter"
 ]);
@@ -235,6 +232,12 @@ function atomicWriteJson(file, value) {
   fs.renameSync(temp, file);
 }
 
+function stableItemIdentity(item) {
+  const id = String(item && (item.id || item.contentId || item.candidateId || item.snapshotRecordId) || "").trim();
+  const url = String(item && (item.url || item.link || item.href) || "").trim().toLowerCase();
+  return { id, url };
+}
+
 function restoreSocialDomainIntoCanonical(baseCapture) {
   const primary = path.join(root, "data", "search-bank.snapshot.json");
   if (!fileExists(primary)) return { ok: false, reason: "canonical_searchbank_missing" };
@@ -242,21 +245,52 @@ function restoreSocialDomainIntoCanonical(baseCapture) {
   if (!canonicalDoc || !Array.isArray(canonicalDoc.items)) return { ok: false, reason: "canonical_searchbank_invalid" };
   const previous = baseCapture && baseCapture.doc && Array.isArray(baseCapture.doc.items) ? baseCapture.doc.items : [];
   const socialItems = previous.filter(socialOwnedSearchBankItem);
-  if (!socialItems.length) return { ok: true, preserved: 0, total: canonicalDoc.items.length };
-  const mergedItems = SearchBankEngine.mergeBankItems(canonicalDoc.items, socialItems);
-  const merged = PublicSnapshot.sanitizeDocument(Object.assign({}, canonicalDoc, {
+  if (!socialItems.length) return { ok: true, preserved: 0, skippedCollisions: 0, total: canonicalDoc.items.length };
+
+  // Distribution/Commerce is authoritative on this branch. Re-attaching the
+  // previously committed Social nine-section rows must never run a broad merge
+  // or sanitizer over Canonical products. Preserve Canonical rows exactly; add
+  // only Social rows whose identity cannot collide with a Canonical row.
+  const ids = new Set();
+  const urls = new Set();
+  for (const item of canonicalDoc.items) {
+    const key = stableItemIdentity(item);
+    if (key.id) ids.add(key.id);
+    if (key.url && key.url !== "#") urls.add(key.url);
+  }
+  const safeSocialItems = [];
+  const collisions = [];
+  for (const item of socialItems) {
+    const key = stableItemIdentity(item);
+    if ((key.id && ids.has(key.id)) || (key.url && key.url !== "#" && urls.has(key.url))) {
+      collisions.push({ id: key.id || null, url: key.url || null });
+      continue;
+    }
+    safeSocialItems.push(item);
+    if (key.id) ids.add(key.id);
+    if (key.url && key.url !== "#") urls.add(key.url);
+  }
+  const canonicalHashBefore = sha256(canonicalDoc.items);
+  const mergedItems = canonicalDoc.items.concat(safeSocialItems);
+  const canonicalPrefixHashAfter = sha256(mergedItems.slice(0, canonicalDoc.items.length));
+  if (canonicalPrefixHashAfter !== canonicalHashBefore) {
+    throw new Error("Distribution Canonical invariant failed while preserving Social rows.");
+  }
+  const merged = Object.assign({}, canonicalDoc, {
     items: mergedItems,
     meta: Object.assign({}, canonicalDoc.meta || {}, {
       socialDomainPreservation: {
-        mode: "preserve-social-owned-sections-only",
-        preserved: socialItems.length,
+        mode: "append-social-nine-only-canonical-immutable",
+        preserved: safeSocialItems.length,
+        skippedCollisions: collisions.length,
         rightPanelOwnedBy: "distribution",
+        canonicalHash: canonicalHashBefore,
         preservedAt: new Date().toISOString()
       }
     })
-  }));
+  });
   for (const file of searchBankMirrorPaths()) atomicWriteJson(file, merged);
-  return { ok: true, preserved: socialItems.length, total: mergedItems.length };
+  return { ok: true, preserved: safeSocialItems.length, skippedCollisions: collisions.length, collisions: collisions.slice(0, 25), canonicalHash: canonicalHashBefore, total: mergedItems.length };
 }
 
 const COMMERCE_CHECKPOINT_TARGETS = [
@@ -748,15 +782,17 @@ async function main() {
     throw new Error("Canonical Snapshot Publisher integrity failure: " + JSON.stringify(published.problems));
   }
 
-  // Preserve the previously committed Social-owned sections before the shared
-  // Snapshot Engine runs. Then, when a stored Social release is available,
-  // refresh only Social candidate rows through the same SearchBank contract.
-  // Failure to refresh never deletes the preserved Social rows.
+  // Preserve only the previously committed Social nine-section rows before the
+  // shared Snapshot Engine runs. A Distribution/Commerce build NEVER replays a
+  // stored Social release. Social publication is allowed only on the explicit
+  // Social-only hook branch above, so one domain cannot silently rewrite the
+  // other during an unrelated deploy.
   const socialPreservation = restoreSocialDomainIntoCanonical(preCommerceSocialBase);
-  const socialRefresh = await publishSocialSafely({
-    allowLatestStored: true,
-    materializeSnapshot: false
-  });
+  const socialRefresh = {
+    status: "not-run",
+    reason: "stored-social-replay-disabled-on-commerce-build",
+    allowLatestStored: false
+  };
 
   // Only commercial Snapshot surfaces are built here. Donation has an
   // independent endpoint/snapshot contract and is intentionally excluded.
