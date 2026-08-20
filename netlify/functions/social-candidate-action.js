@@ -9,7 +9,7 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "social-candidate-action-v1.4.1-batched-admin-actions";
+const VERSION = "social-candidate-action-v1.4.0-final-replacement-country-scope";
 const ACTIONS = new Set([
   "approve",
   "hold",
@@ -87,25 +87,8 @@ async function requestedRows(ids) {
 }
 async function updateIndividually(rows, makePatch) {
   const updated = [];
-  const list = Array.isArray(rows) ? rows : [];
-  const concurrency = 8;
-  for (let index = 0; index < list.length; index += concurrency) {
-    const batch = list.slice(index, index + concurrency);
-    const results = await Promise.all(
-      batch.map((row) => SocialStore.updateCandidates([row.id], makePatch(row))),
-    );
-    results.forEach((result) => {
-      if (Array.isArray(result)) updated.push.apply(updated, result);
-    });
-  }
-  return updated;
-}
-async function updateInBatches(ids, patch, batchSize = 100) {
-  const list = Array.from(new Set((ids || []).map(SocialStore.text).filter(Boolean)));
-  const updated = [];
-  const size = Math.max(1, Math.min(100, Number(batchSize) || 100));
-  for (let index = 0; index < list.length; index += size) {
-    const result = await SocialStore.updateCandidates(list.slice(index, index + size), patch);
+  for (const row of rows) {
+    const result = await SocialStore.updateCandidates([row.id], makePatch(row));
     if (Array.isArray(result)) updated.push.apply(updated, result);
   }
   return updated;
@@ -533,11 +516,7 @@ exports.handler = async function (event) {
       );
     } else {
       const patch = patchFor(action, body, actor);
-      // A registry-wide action can contain 800+ influencer IDs. Sending all IDs
-      // in one PostgREST id=in.(...) URL can exceed proxy/URL limits and make
-      // the approval appear to hang or do nothing. Keep the same atomic patch
-      // semantics, but apply it in bounded batches.
-      updated = await updateInBatches(ids, patch, 100);
+      updated = await SocialStore.updateCandidates(ids, patch);
     }
     return SocialStore.response(200, {
       ok: true,
