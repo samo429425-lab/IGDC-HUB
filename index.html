@@ -3579,6 +3579,23 @@ function normLang(l){
     }
     return -1;
   }
+  /* Front iframe links must reuse the parent shell instead of navigating the iframe to a public shell route. */
+  function frontHubIndexFromHref(href){
+    try{
+      var url = new URL(href || '', location.origin);
+      if (url.origin !== location.origin) return -1;
+      var roots = {
+        home:0,
+        networkhub:1,
+        distributionhub:2,
+        socialnetwork:3,
+        mediahub:4,
+        tour:5
+      };
+      var root = toRootName(url.pathname);
+      return Object.prototype.hasOwnProperty.call(roots, root) ? roots[root] : -1;
+    }catch(e){ return -1; }
+  }
   function policyPublicPath(root){
     var paths = {
       "terms": "/terms",
@@ -3645,6 +3662,15 @@ function normLang(l){
           var link = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
           if (!link) return;
           var href = link.href || link.getAttribute('href') || '';
+
+          /* Sidebar + Home hub buttons: keep the one existing index shell and replace only mainFrame. */
+          var frontIndex = frontHubIndexFromHref(href);
+          if (frontIndex >= 0 && frontIndex <= 5) {
+            ev.preventDefault();
+            if (typeof loadPage === 'function') loadPage(frontIndex, null);
+            return;
+          }
+
           if (!policyPageHref(href)) return;
           ev.preventDefault();
           navigatePolicyFromFrame(href);
@@ -4217,7 +4243,7 @@ function normLang(l){
     width:132px;
     height:76px;
     padding:0;
-    display:flex;
+    display:none;
     align-items:flex-start;
     justify-content:center;
     box-sizing:border-box;
@@ -4574,16 +4600,17 @@ function normLang(l){
       allowed = isOwnerOrAdmin(roles) || !isBlocked(payload);
     }
 
-    /* Original Donation anchor stays in its canonical DOM/index position but is visual-only hidden. */
-    link.style.display = 'none';
-    link.setAttribute('aria-hidden', 'true');
+    /* Preserve the original Donation menu gate state exactly; CSS keeps the old anchor visual-only hidden. */
+    link.style.display = allowed ? '' : 'none';
+    link.setAttribute('aria-hidden', allowed ? 'false' : 'true');
 
-    /* The new arrow inherits this exact existing donation gate result (including country/IP claim and role bypass). */
+    /* The replacement arrow follows the original Donation menu state 1:1. */
     var arrow = document.getElementById('igdcDonationArrowTrigger');
+    var menuAllowed = link.style.display !== 'none' && link.getAttribute('aria-hidden') !== 'true';
     if (arrow) {
-      arrow.style.display = allowed ? 'inline-flex' : 'none';
-      arrow.setAttribute('aria-hidden', allowed ? 'false' : 'true');
-      arrow.setAttribute('tabindex', allowed ? '0' : '-1');
+      arrow.style.display = menuAllowed ? 'inline-flex' : 'none';
+      arrow.setAttribute('aria-hidden', menuAllowed ? 'false' : 'true');
+      arrow.setAttribute('tabindex', menuAllowed ? '0' : '-1');
     }
     document.documentElement.dataset.igdcDonationReady = '1';
   }

@@ -7,7 +7,7 @@
  *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
  *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
  *  - 우측 패널 없음(처리하지 않음)
- *  - Hero는 snapshot.hero.rotateFrom 순서로 1개 썸네일을 골라 img src에 적용(가능한 경우)
+ *  - Hero는 전체 섹션 후보를 인기/랭킹 + 최신성 + 재생 가능성 + 고해상도로 별도 선별하고 클릭 재생한다.
  */
 (function () {
   'use strict';
@@ -104,6 +104,7 @@
 
   function extractItems(section){
     if(!section) return [];
+    if(Array.isArray(section)) return section;
     if(Array.isArray(section.items)) return section.items;
     if(Array.isArray(section.slots)) return slotsToItems(section);
     return [];
@@ -313,7 +314,7 @@
     });
   }
   function clearMediaDataset(a){
-    ['provider','mediaTitle','igdcContentId','contentId','mediaSource','captions','windowsPlayerUrl','androidPlayerUrl','maruAppUrl','thumbPending','thumbRecovery','autoThumbQueued','autoThumbSource','thumbPendingKind','frontOrder','frontPriority'].forEach((key)=>{try{delete a.dataset[key];}catch(_e){}});
+    ['provider','mediaTitle','igdcContentId','contentId','mediaSource','captions','windowsPlayerUrl','androidPlayerUrl','maruAppUrl','thumbPending','thumbRecovery','autoThumbQueued','autoThumbSource','thumbPendingKind','frontOrder','frontPriority','thumbEager'].forEach((key)=>{try{delete a.dataset[key];}catch(_e){}});
   }
   function resetAnchorToPlaceholder(a, reason){
     if(!a)return;
@@ -426,12 +427,23 @@
     function beginLoad(){
       if(settled||loadStarted||!a.isConnected)return;loadStarted=true;
       loader=new Image();loader.decoding='async';
+      try{if(a.dataset.thumbEager==='1'&&'fetchPriority' in loader)loader.fetchPriority='high';}catch(_e){}
       loader.onload=function(){if(settled)return;if(loader.naturalWidth>=120&&loader.naturalHeight>=68)activate();else fail('thumbnail_too_small');};
       loader.onerror=function(){fail('thumbnail_load_failed');};
       loader.src=thumb;
       if(loader.complete){if(loader.naturalWidth>=120&&loader.naturalHeight>=68)activate();else if(loader.naturalWidth===0)fail('thumbnail_load_failed');}
     }
-    if('IntersectionObserver' in window){watcher=new IntersectionObserver((entries)=>{for(const entry of entries){if(entry.isIntersecting){watcher.disconnect();watcher=null;beginLoad();break;}}},{root:null,rootMargin:'260px 320px',threshold:.01});watcher.observe(a);}else setTimeout(beginLoad,0);
+    if(a.dataset.thumbEager==='1'){
+      // First-screen cards should start immediately instead of waiting for the
+      // next IntersectionObserver turn. This improves perceived front render
+      // without waking every off-screen thumbnail request.
+      if(typeof requestAnimationFrame==='function') requestAnimationFrame(beginLoad); else setTimeout(beginLoad,0);
+    }else if('IntersectionObserver' in window){
+      // Pre-warm only cards that are close vertically AND horizontally. The
+      // larger vertical margin prepares the next rows while horizontal margin
+      // keeps request bursts bounded to the first visible cards in each rail.
+      watcher=new IntersectionObserver((entries)=>{for(const entry of entries){if(entry.isIntersecting){watcher.disconnect();watcher=null;beginLoad();break;}}},{root:null,rootMargin:'900px 360px',threshold:.01});watcher.observe(a);
+    }else setTimeout(beginLoad,0);
     return true;
   }
   function runAutoThumbQueue(){
@@ -562,6 +574,146 @@
   function frontPriority(item){
     return thumbnailReadyScore(item)+playbackReadyScore(item)+recencyScore(item)+engagementScore(item);
   }
+
+  function heroImageCandidates(item){
+    if(!item||isSyntheticSampleItem(item))return [];
+    const values=[
+      item.heroImage,item.heroImageUrl,item.heroThumbnail,item.heroThumb,
+      item.backdrop,item.backdropUrl,item.backdropImage,item.backdropPath,
+      item.highResThumbnail,item.thumbnailHigh,item.thumbnailHD,item.hdThumbnail,
+      item.maxresThumbnail,item.largeThumbnail,item.thumbnailLarge,
+      item.image1920,item.image1280,item.coverImage,item.coverUrl,
+      rawThumbnail(item)
+    ];
+    const source=mediaSourceForThumb(item),yt=youtubeIdForThumb(source);
+    if(yt){
+      const enc=encodeURIComponent(yt);
+      // Hero only: try the high-resolution provider assets first. These are
+      // dimension-checked before use, so YouTube's tiny fallback placeholder
+      // can never be blown up into the hero.
+      values.push(
+        'https://i.ytimg.com/vi/'+enc+'/maxresdefault.jpg',
+        'https://i.ytimg.com/vi/'+enc+'/sddefault.jpg',
+        'https://i.ytimg.com/vi/'+enc+'/hqdefault.jpg'
+      );
+    }
+    const seen=new Set(),out=[];
+    for(const value of values){
+      const url=safeFrontThumbnail(value);
+      if(!url||seen.has(url))continue;
+      seen.add(url);out.push(url);
+    }
+    return out;
+  }
+  function heroRankScore(item){
+    // Hero ranking is intentionally independent from rail order. It combines
+    // front readiness, popularity/ranking, recency and quality so the hero is
+    // never just "the first card in a section".
+    let score=frontPriority(item);
+    const rank=numeric(item,['heroScore','rankingScore','qualityScore','score','popularity']);
+    const views=numeric(item,['views','viewCount']);
+    const rating=numeric(item,['rating','voteAverage']);
+    const w=numeric(item,['heroWidth','backdropWidth','thumbnailWidth','thumbWidth','imageWidth']);
+    const h=numeric(item,['heroHeight','backdropHeight','thumbnailHeight','thumbHeight','imageHeight']);
+    const hasDedicatedHero=!!(item&&(item.heroImage||item.heroImageUrl||item.heroThumbnail||item.heroThumb||item.backdrop||item.backdropUrl||item.backdropImage||item.highResThumbnail||item.thumbnailHD||item.hdThumbnail||item.maxresThumbnail||item.image1920||item.image1280));
+    score+=Math.min(560,rank*4.5)+Math.min(220,Math.log10(Math.max(1,views))*30)+Math.min(110,rating*11)+(hasDedicatedHero?520:0);
+    if(w>=1920&&h>=1080)score+=420;
+    else if(w>=1280&&h>=720)score+=280;
+    else if(w>=960&&h>=540)score+=150;
+    return score;
+  }
+  function heroResolutionTier(w,h){
+    w=Number(w||0);h=Number(h||0);
+    if(w>=1920&&h>=1080)return 3;
+    if(w>=1280&&h>=720)return 2;
+    if(w>=960&&h>=540)return 1;
+    return 0;
+  }
+  function heroResolutionHint(item,url,index){
+    const w=numeric(item,['heroWidth','backdropWidth','thumbnailWidth','thumbWidth','imageWidth']);
+    const h=numeric(item,['heroHeight','backdropHeight','thumbnailHeight','thumbHeight','imageHeight']);
+    const tier=heroResolutionTier(w,h);
+    if(tier)return tier;
+    const text=String(url||'').toLowerCase();
+    if(/(?:maxres|1920|1080|fullhd|full-hd)/.test(text)||item.image1920||item.maxresThumbnail)return 3;
+    if(/(?:1280|720|hd|sddefault)/.test(text)||item.image1280||item.thumbnailHD||item.hdThumbnail||item.highResThumbnail)return 2;
+    if(index===0&&(item.heroImage||item.heroImageUrl||item.backdrop||item.backdropUrl||item.backdropImage))return 2;
+    return 1;
+  }
+  function heroPlaybackCard(item,heroImg){
+    const wanted=String(ensureContentId(item)||'');
+    if(wanted){
+      const existing=qa('a.card.media-card[data-content-id],a.card.media-card[data-igdc-content-id]').find((card)=>
+        String(card.dataset.contentId||card.dataset.igdcContentId||'')===wanted && card.getAttribute('data-placeholder')!=='true'
+      );
+      if(existing)return existing;
+    }
+    const card=D.createElement('a');
+    card.className='card media-card igdc-hero-playback-card';
+    card.href='javascript:void(0)';
+    card.dataset.mediaTitle=String(item&&((item.title||item.name||item.text)||'')||'');
+    if(wanted){card.dataset.contentId=wanted;card.dataset.igdcContentId=wanted;}
+    const source=mediaSourceForThumb(item);
+    if(source)card.dataset.mediaSource=String(source);
+    if(item&&item.provider)card.dataset.provider=typeof item.provider==='object'?String(item.provider.name||item.provider.platform||''):String(item.provider);
+    if(item){
+      const captions=item.captions||item.subtitleTracks||item.subtitles;
+      if(Array.isArray(captions)&&captions.length){try{card.dataset.captions=JSON.stringify(captions);}catch(_e){}}
+      if(item.windowsPlayerUrl)card.dataset.windowsPlayerUrl=String(item.windowsPlayerUrl);
+      if(item.androidPlayerUrl)card.dataset.androidPlayerUrl=String(item.androidPlayerUrl);
+      if(item.maruAppUrl)card.dataset.maruAppUrl=String(item.maruAppUrl);
+    }
+    const image=D.createElement('img');
+    image.src=String(heroImg&&heroImg.currentSrc||heroImg&&heroImg.src||rawThumbnail(item)||'');
+    image.alt=card.dataset.mediaTitle||'';
+    card.appendChild(image);
+    card.__igdcMediaItem=item;
+    return card;
+  }
+  function bindHeroPlayback(heroImg,item){
+    if(!heroImg||!item)return;
+    const hero=heroImg.closest&&heroImg.closest('.hero');
+    const title=String(item.title||item.name||item.text||'').trim();
+    const target=hero||heroImg;
+    target.setAttribute('role','button');
+    target.setAttribute('tabindex','0');
+    target.setAttribute('aria-label',(title?title+' - ':'')+'재생');
+    target.style.cursor='pointer';
+    target.dataset.igdcHeroPlayable='true';
+    heroImg.dataset.igdcHeroPlayable='true';
+    function play(event){
+      if(event){event.preventDefault();event.stopPropagation();}
+      const player=window.IGDCMediaHubPlayback;
+      if(!player||typeof player.open!=='function')return false;
+      const card=heroPlaybackCard(item,heroImg);
+      player.open(card,{autoPlay:true,autoFullscreen:false});
+      return false;
+    }
+    target.onclick=play;
+    target.onkeydown=function(event){
+      if(event&&(event.key==='Enter'||event.key===' '||event.code==='Space')){event.preventDefault();play(event);}
+    };
+  }
+  function probeHeroImage(url){
+    return new Promise((resolve)=>{
+      if(!safeFrontThumbnail(url)){resolve(null);return;}
+      const img=new Image();let done=false;
+      const timer=setTimeout(()=>finish(null),4500);
+      function finish(value){if(done)return;done=true;clearTimeout(timer);img.onload=null;img.onerror=null;resolve(value);}
+      img.onload=function(){
+        const w=Number(img.naturalWidth||0),h=Number(img.naturalHeight||0);
+        // Never stretch a small card thumbnail into the hero. 960x540 is the
+        // minimum accepted source; 1280x720+ receives a stronger score later.
+        finish(w>=960&&h>=540?{url,w,h}:null);
+      };
+      img.onerror=function(){finish(null);};
+      img.decoding='async';
+      // Probes run in the background and must not steal bandwidth from first-paint rails.
+      try{ if('fetchPriority' in img) img.fetchPriority='low'; }catch(_e){}
+      img.src=url;
+      if(img.complete&&img.naturalWidth){img.onload();}
+    });
+  }
   function thumbnailExplicitlyPending(item){
     if(!item)return false;
     if(item.thumbnailReady===false||item.thumbReady===false||item.frontThumbnailReady===false)return true;
@@ -672,10 +824,15 @@
     // behind it is never stranded behind a blue Sample card.
     line.__igdcFrontReserveQueue=immediate.slice(LIMIT).map((entry,index)=>({item:entry.item,thumb:entry.thumb,order:LIMIT+index}));
     let slot=0;
+    const lineKey=canonKey(line.getAttribute('data-psom-key')||'');
+    // Only the first visible cards of the first three rails are eager. All
+    // other cards remain lazy/pre-warmed, preventing the old all-at-once burst.
+    const eagerLimit=lineKey==='media-trending'?6:(lineKey==='media-movie'||lineKey==='media-drama'?4:0);
     for(const entry of immediate.slice(0,LIMIT)){
       if(slot>=ph.length||slot>=LIMIT)break;
       const card=ph[slot];
       card.dataset.frontOrder=String(slot);
+      if(slot<eagerLimit)card.dataset.thumbEager='1';else delete card.dataset.thumbEager;
       bindItemToAnchor(card,entry.item,entry.thumb);
       slot++;
     }
@@ -694,34 +851,85 @@
   }
 
   async function applyHero(heroRotateKeys, sectionMap){
-    const heroImg = q('.hero img');
-    if(!heroImg) return;
+    const heroImg=q('.hero img');
+    if(!heroImg)return;
 
-    const keys = Array.isArray(heroRotateKeys) ? heroRotateKeys.map(canonKey) : [];
-    if(keys.length === 0) return;
-
-    // snapshot first
-    for(const k of keys){
-      const items = extractItems(sectionMap[k]);
-      const first = items && items[0];
-      const thumb = first && safeFrontThumbnail(rawThumbnail(first));
-      if(thumb){
-        heroImg.src = thumb;
-        return;
+    // Do not inherit rail order. Build one cross-section pool and let the hero
+    // have its own popularity + recency + quality ranking. rotateFrom remains a
+    // mild preference only, never an exclusive source list.
+    const preferred=new Set((Array.isArray(heroRotateKeys)?heroRotateKeys:[]).map(canonKey));
+    const sectionKeys=Object.keys(sectionMap||{}).map(canonKey).filter((key)=>/^media-/.test(key));
+    const pool=[],seenItems=new Set();
+    for(const key of sectionKeys){
+      const items=extractItems(sectionMap[key]);
+      for(const item of items.slice(0,80)){
+        if(!isFrontCandidate(item)||thumbnailExplicitlyPending(item))continue;
+        const id=ensureContentId(item)||mediaSourceForThumb(item)||rawThumbnail(item);
+        if(!id||seenItems.has(id))continue;
+        seenItems.add(id);
+        pool.push({item,section:key,preferred:preferred.has(key)});
       }
     }
+    if(!pool.length)return;
 
-    // fallback feed (best-effort)
-    for(const k of keys){
-      const items = await loadFeedItems(k);
-      const first = items && items[0];
-      const thumb = first && safeFrontThumbnail(rawThumbnail(first));
-      if(thumb){
-        heroImg.src = thumb;
-        return;
-      }
+    pool.sort((a,b)=>{
+      const as=heroRankScore(a.item)+(a.preferred?80:0),bs=heroRankScore(b.item)+(b.preferred?80:0);
+      return bs-as;
+    });
+    const candidates=[],seenUrls=new Set();
+    // Probe a bounded but wider top pool than V44. This gives a true 1920x1080
+    // asset a fair chance without delaying the normal rail render.
+    for(const row of pool.slice(0,32)){
+      const item=row.item;
+      const base=heroRankScore(item)+(row.preferred?80:0);
+      const urls=heroImageCandidates(item);
+      urls.slice(0,3).forEach((url,index)=>{
+        if(seenUrls.has(url))return;
+        seenUrls.add(url);
+        candidates.push({url,item,score:base+(120-(index*24)),hint:heroResolutionHint(item,url,index)});
+      });
     }
+    if(!candidates.length)return;
+    candidates.sort((a,b)=>b.score-a.score);
+
+    // Probe likely Full-HD assets first, then fill the bounded probe set with
+    // the hottest remaining candidates. This improves 1080p discovery without
+    // launching a large burst of image requests that could slow the rails.
+    const hinted=candidates.filter((row)=>row.hint>=3).sort((a,b)=>b.score-a.score).slice(0,8);
+    const probeSet=hinted.slice();
+    for(const candidate of candidates){
+      if(probeSet.length>=16)break;
+      if(probeSet.indexOf(candidate)>=0)continue;
+      probeSet.push(candidate);
+    }
+    const checked=await Promise.all(probeSet.map(async(candidate)=>{
+      const probe=await probeHeroImage(candidate.url);
+      if(!probe)return null;
+      const tier=heroResolutionTier(probe.w,probe.h);
+      const dimBonus=tier===3?520:(tier===2?340:180);
+      return Object.assign({},candidate,probe,{tier,finalScore:candidate.score+dimBonus});
+    }));
+    const valid=checked.filter(Boolean);
+    if(!valid.length)return;
+
+    // If a Full-HD source exists among the ranked/healthy candidates, prefer
+    // the best Full-HD candidate. Only fall back to 720p/540p when no higher
+    // tier is actually available.
+    const bestTier=Math.max.apply(null,valid.map((row)=>row.tier));
+    const tierPool=valid.filter((row)=>row.tier===bestTier).sort((a,b)=>b.finalScore-a.finalScore);
+    const best=tierPool[0];
+    heroImg.loading='eager';heroImg.decoding='async';
+    try{heroImg.fetchPriority='high';}catch(_e){}
+    heroImg.src=best.url;
+    heroImg.alt=String(best.item.title||best.item.name||best.item.text||'Featured media');
+    heroImg.dataset.igdcHeroContentId=String(ensureContentId(best.item)||'');
+    heroImg.dataset.igdcHeroSourceWidth=String(best.w||'');
+    heroImg.dataset.igdcHeroSourceHeight=String(best.h||'');
+    heroImg.dataset.igdcHeroResolutionTier=String(best.tier||0);
+    heroImg.dataset.igdcHeroQuality=best.tier>=3?'ranked-fullhd':(best.tier===2?'ranked-hd':'ranked-hero');
+    bindHeroPlayback(heroImg,best.item);
   }
+
 
   D.addEventListener('igdc:media-source-failed',(event)=>{
     const detail=event&&event.detail||{};
@@ -809,21 +1017,26 @@
   sectionMap['media-trending']={items:mixed.slice(0,50)};
 })();
 
-    // hero
-    const heroRotateFrom = snapshot && snapshot.hero && (snapshot.hero.rotateFrom || snapshot.hero.source);
-    await applyHero(heroRotateFrom, sectionMap);
+    // Hero quality probing runs independently. It must never hold back the
+    // section rails while high-resolution candidates are being verified.
+    const heroRotateFrom=snapshot&&snapshot.hero&&(snapshot.hero.rotateFrom||snapshot.hero.source);
+    Promise.resolve().then(()=>applyHero(heroRotateFrom,sectionMap)).catch(()=>{});
 
-    // sections
+    // Apply every snapshot-backed rail immediately. Any optional feed fallback
+    // is scheduled independently instead of serially blocking the following
+    // sections. (Fallback is currently disabled in production.)
+    const fallbackJobs=[];
     for(const line of lines){
-      const key = canonKey(line.getAttribute('data-psom-key') || '');
-      if(!key || key.indexOf('media-') !== 0) continue;
-
-      let items = extractItems(sectionMap[key]);
-      if(!items || items.length === 0){
-        items = await loadFeedItems(key);
+      const key=canonKey(line.getAttribute('data-psom-key')||'');
+      if(!key||key.indexOf('media-')!==0)continue;
+      const items=extractItems(sectionMap[key]);
+      if(items&&items.length){
+        applyLine(line,items);
+      }else if(ENABLE_FEED_MEDIA_FALLBACK){
+        fallbackJobs.push(loadFeedItems(key).then((feedItems)=>{if(feedItems&&feedItems.length)applyLine(line,feedItems);}));
       }
-      applyLine(line, items);
     }
+    if(fallbackJobs.length)Promise.allSettled(fallbackJobs).then(()=>lines.forEach(compactLine));
     // Async image decode/recovery and any later renderer must not be allowed to
     // reintroduce Sample/real interleaving. Re-compact a few times after the
     // initial mapping as an additional deterministic safety net.
@@ -833,7 +1046,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='4.2.1-soft-queue-no-time-reject-ready-first-trending';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='4.5.0-ranked-fullhd-clickable-hero';
 })();
 
 
