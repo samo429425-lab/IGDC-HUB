@@ -1,4 +1,4 @@
-/* IGDC Social AI Policy Dialog v1.0.0
+/* IGDC Social AI Policy Dialog v1.1.0
  * Admin-only conversation/policy layer. Never writes SearchBank/Snapshot/front.
  */
 (function () {
@@ -39,6 +39,15 @@
   window.IGDCSocialAI = {
     policyFor: policyFor,
     policyEnvelope: function(sectionKey,purpose){ return policyFor(sectionKey,purpose); },
+    policyBundle: function(sectionKey,purposes){
+      var out=policyFor(sectionKey,"")||{};
+      (Array.isArray(purposes)?purposes:[purposes]).filter(Boolean).forEach(function(purpose){
+        out=mergePolicy(out,policyFor(sectionKey,purpose)||{});
+      });
+      out.sectionKey=sectionKey||out.sectionKey||"";
+      out.scopeType="combined";
+      return Object.keys(out).length?out:null;
+    },
     allPolicies: policies
   };
 
@@ -80,8 +89,18 @@
     m=document.createElement("div"); m.id="socialAiPolicyModal"; m.className="social-ai-modal";
     m.innerHTML='<div class="social-ai-box" role="dialog" aria-modal="true"><div class="social-ai-head"><strong id="socialAiTitle">AI 정책 대화</strong><span id="socialAiScope" class="social-ai-scope-note"></span><button type="button" id="socialAiClose" class="social-ai-close">닫기</button></div><div id="socialAiTranscript" class="social-ai-transcript"></div><div id="socialAiPolicyPreview" class="social-ai-policy">현재 정책 없음</div><div class="social-ai-compose"><textarea id="socialAiInput" placeholder="수집·제외·보강·인플루언서 운영 방향을 말하거나 입력하세요."></textarea><button type="button" id="socialAiSend">보내기</button></div><div class="social-ai-actions"><button type="button" id="socialAiMic" class="social-ai-mic">🎙 음성 입력</button><button type="button" id="socialAiSpeak">🔊 답변 읽기</button><button type="button" id="socialAiApply" class="publish">정책 적용</button><button type="button" id="socialAiClear" class="secondary">대화 지우기</button><span id="socialAiState" class="state">대기</span></div></div>';
     document.body.appendChild(m);
-    document.getElementById("socialAiClose").onclick=function(){ m.classList.remove("open"); stopListening(); };
-    m.addEventListener("click",function(e){ if(e.target===m){m.classList.remove("open");stopListening();} });
+    function closeModal(){ m.classList.remove("open"); stopListening(); }
+    document.getElementById("socialAiClose").onclick=closeModal;
+    m.addEventListener("click",function(e){ if(e.target===m) closeModal(); });
+    if(!m.__igdcEscBound){
+      m.__igdcEscBound=true;
+      document.addEventListener("keydown",function(e){
+        if(e.key==="Escape" && m.classList.contains("open")){
+          e.preventDefault();
+          closeModal();
+        }
+      },true);
+    }
     document.getElementById("socialAiSend").onclick=sendCurrent;
     document.getElementById("socialAiApply").onclick=applyDraft;
     document.getElementById("socialAiClear").onclick=clearCurrent;
@@ -117,6 +136,7 @@
     document.getElementById("socialAiScope").textContent=current.scopeType+(current.sectionKey?" · "+current.sectionKey:"");
     document.getElementById("socialAiInput").value=""; document.getElementById("socialAiState").textContent="대기"; renderChat(); m.classList.add("open");
   }
+  window.IGDCSocialAI.openDialog=openDialog;
   async function sendCurrent(){
     var input=document.getElementById("socialAiInput"), message=text(input.value); if(!message) return;
     var key=policyId(current.scopeType,current.sectionKey), all=chats(), history=(all[key]||[]).slice(-12);
@@ -155,10 +175,21 @@
   }
   function addAfter(target,id,scopeType,sectionKey,label){ if(!target||document.getElementById(id))return; var b=makeButton("AI 정책 대화",scopeType,sectionKey,label);b.id=id;target.insertAdjacentElement("afterend",b); }
   function installStaticButtons(){
-    addAfter(document.getElementById("aiFullCycleBtn"),"socialAiGlobalTalkBtn","global","","전체 전자동 Social 운영");
-    addAfter(document.getElementById("collectAllBtn")||document.getElementById("collectSectionBtn"),"socialAiCollectorTalkBtn","collector","","최신 콘텐츠 수집 전체 정책");
-    addAfter(document.getElementById("latestContentDiagnosticBtn")||document.getElementById("replacementViewAllBtn"),"socialAiContentTalkBtn","content","","콘텐츠 목록·상태 관리");
+    /* Main panel buttons are placed explicitly in the HTML so they stay on the requested title rows. */
     addAfter(document.getElementById("aiAutoBtn"),"socialAiInfluencerTalkBtn","influencer","","인플루언서 등록부 전체 정책");
+    document.querySelectorAll("[data-social-ai-open]").forEach(function(btn){
+      if(btn.__igdcAiBound) return;
+      btn.__igdcAiBound=true;
+      btn.addEventListener("click",function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        openDialog(
+          btn.getAttribute("data-social-ai-scope")||"global",
+          btn.getAttribute("data-social-ai-section")||"",
+          btn.getAttribute("data-social-ai-label")||"Social"
+        );
+      });
+    });
   }
   function installSectionButtons(){
     document.querySelectorAll("[data-waiting-ai]").forEach(function(target){var key=target.getAttribute("data-waiting-ai");if(!key||target.parentNode.querySelector('[data-ai-dialog-content="'+key+'"]'))return;var b=makeButton("AI 정책 대화","content",key,(SECTION_LABELS[key]||key)+" 콘텐츠");b.dataset.aiDialogContent=key;target.insertAdjacentElement("afterend",b);});

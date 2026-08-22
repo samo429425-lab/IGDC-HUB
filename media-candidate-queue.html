@@ -91,6 +91,7 @@
         <div id="supplierSummary" class="supplier-summary"><span class="state">공급사 목록 확인 전</span></div>
       </div>
       <div class="supplier-actions">
+        <button type="button" class="secondary media-ai-talk-btn" data-media-ai-scope="supplier" data-media-ai-label="콘텐츠 공급사 관리">AI 정책 대화</button>
         <button id="supplierRefreshBtn" class="secondary">공급사 새로고침</button>
         <button id="supplierDiagnosticBtn" class="secondary">공급사 점검 JSON</button>
         <button id="supplierDownloadJsonBtn" class="secondary">공급사 JSON 다운로드</button>
@@ -118,7 +119,7 @@
   </section>
 
   <section class="panel">
-    <h2>품질 중심 공개 영상 수집</h2>
+    <div class="supplier-head"><h2 style="margin:0">품질 중심 공개 영상 수집</h2><div class="supplier-actions"><button type="button" class="secondary media-ai-talk-btn" data-media-ai-scope="collector" data-media-ai-label="품질 중심 공개 영상 수집">AI 정책 대화</button></div></div>
     <div class="small">최신·인기·권리표시 장편과 중국권·동남아권·유럽권·남미권·북미권 자료를 독립 경로로 교차 탐색하고, 2000년 이후 실제 1080p 이상, 섹션별 전체 길이, 최소 비트레이트, 분류 확신도와 실제 원본 응답속도를 함께 검사합니다. 기존 프론트 매칭은 그대로 보존하고 새 리서치는 기존 후보를 삭제하지 않은 채 추가합니다. 각 수동 섹션은 프론트 100슬롯을 유지하며, 신규·교체 후보 풀은 섹션별 최대 120개까지만 보관합니다. 새 후보는 기존 매칭과 품질·최신성·재생 안정성을 비교한 뒤 더 나을 때만 치환합니다. 명백한 포르노·헨타이·불법 신호는 차단하고, 애매한 성인성·권리·분류 신호는 관리자 검토로 격리합니다. 일반 로맨스는 차단하지 않습니다.</div>
     <div class="collect-controls">
       <select id="collectorSection">
@@ -153,6 +154,7 @@
         <div class="small">기존 프론트 매칭과 새로 리서치된 후보를 분리해 관리합니다. 모든 수동 섹션은 프론트 100슬롯을 유지하고, 신규·교체 후보는 기존 후보를 보존한 채 섹션별 최대 120개까지 누적합니다. 최신 후보는 기존 프론트 매칭과 품질·인기·최신성·재생 안정성·섹션 적합도를 비교한 뒤 더 나을 때만 치환합니다. 상태는 보류(보관·복구 가능), 삭제(현재 후보에서 제거·향후 재검색 허용), 영구 제외·차단(일반 재수집 차단)으로 분리합니다. AI 자동 치환은 관리자 승인·권리검증을 이미 통과한 후보끼리만 실행하며, 수동 보류·영구 제외 콘텐츠는 자동 복원하지 않습니다.</div>
       </div>
       <div class="pool-actions">
+        <button type="button" class="secondary media-ai-talk-btn" data-media-ai-scope="pool" data-media-ai-label="운영 후보·예비 후보·최신 리서치 후보 관리">AI 정책 대화</button>
         <button id="poolRefreshBtn" class="secondary">후보 운영 현황 새로고침</button>
         <button id="poolResearchLatestBtn">최신 후보 전체 리서치</button>
         <button id="poolAutoRebalanceBtn" class="publish">AI 전자동 비교·치환</button>
@@ -189,7 +191,7 @@
   </section>
 
   <section id="tablePanel" class="panel hidden">
-    <div class="modal-head"><div><h2 style="margin:0">10개 섹션 영상 후보</h2><div class="small">유통 섹션 운영과 같은 방식으로 실제 배치 대상 9개 섹션을 복수 선택해 한 번에 프론트 반영·해제할 수 있습니다. ‘지금 뜨는 콘텐츠’는 자동 조합 섹션이므로 수동 선택 대상에서 제외됩니다.</div></div><span id="candidateCapacityState" class="state"></span></div>
+    <div class="modal-head"><div><h2 style="margin:0">10개 섹션 영상 후보</h2><div class="small">유통 섹션 운영과 같은 방식으로 실제 배치 대상 9개 섹션을 복수 선택해 한 번에 프론트 반영·해제할 수 있습니다. ‘지금 뜨는 콘텐츠’는 자동 조합 섹션이므로 수동 선택 대상에서 제외됩니다.</div></div><div class="supplier-actions"><button type="button" class="secondary media-ai-talk-btn" data-media-ai-scope="sections" data-media-ai-label="10개 섹션 영상 후보 전체 정책">AI 정책 대화</button><span id="candidateCapacityState" class="state"></span></div></div>
     <div class="section-board-toolbar" aria-label="미디어 섹션 프론트 운영">
       <label class="section-select-all"><input id="selectAllMediaSections" type="checkbox"> 9개 배치 섹션 전체 선택</label>
       <span id="selectedMediaSectionCount" class="pill section">선택 섹션 0개</span>
@@ -240,6 +242,7 @@
   </div>
 </div>
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-media-candidate-queue.js?v=26"></script>
+<script src="/assets/js/admin-media-ai-dialog.js?v=1"></script>
+<script src="/assets/js/admin-media-candidate-queue.js?v=27"></script>
 </body>
 </html>

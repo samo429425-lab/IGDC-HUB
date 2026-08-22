@@ -16,7 +16,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.13.0-dedicated-social-bank";
+  "social-snapshot-publish-v1.13.1-sequence-diagnostic";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -792,10 +792,14 @@ exports.handler = async function (event) {
           };
         }
       } catch (storeError) {
+        const storeMessage = text(storeError && storeError.message) || String(storeError);
         releaseStoreWarning = {
           code: (storeError && storeError.code) || "social_release_store_failed",
           statusCode: storeError && storeError.statusCode || null,
-          message: text(storeError && storeError.message) || String(storeError),
+          message: storeMessage,
+          remediation: /social_snapshot_releases_id_seq|permission denied for sequence/i.test(storeMessage)
+            ? "Apply supabase/social_snapshot_releases_sequence_grant.sql once; canonical publicationPlan build handoff remains independent."
+            : null,
         };
       }
     }

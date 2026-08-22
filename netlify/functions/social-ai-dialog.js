@@ -9,7 +9,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const SocialStore = require("./lib/social-candidate-store.v1");
 const RuntimePolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "social-ai-dialog-v1.0.0-policy-only";
+const VERSION = "social-ai-dialog-v1.1.0-ip-preference-active-influencer";
 function text(v) { return v == null ? "" : String(v).trim(); }
 async function actorFor(event) {
   const actor = await SharedAdminAuth.resolveUser(event);
@@ -27,12 +27,16 @@ function localDraft(message, scopeType, sectionKey) {
   const pairs = [
     [/여행|관광|travel|tour/i, "travel"], [/음악|공연|music|performance/i, "music"],
     [/교육|학습|education|learning/i, "education"], [/예술|미술|art|design/i, "art"],
+    [/뷰티|미용|beauty/i, "beauty"], [/건강|웰니스|health|wellness/i, "health"],
+    [/자연|nature/i, "nature"], [/가족|family/i, "family"],
     [/기술|테크|technology|tech/i, "technology"], [/라이프스타일|lifestyle/i, "lifestyle"],
   ];
   pairs.forEach(([rx, term]) => { if (rx.test(m)) include.push(term); });
   const excludes = [
-    [/정치|politic/i, "politics"], [/성인|음란|explicit|adult/i, "explicit"],
-    [/도박|gambl/i, "gambling"], [/과도한 광고|스팸|spam/i, "spam"],
+    [/정치|선거|정당|politic|election|partisan/i, "politics"],
+    [/폭력|잔혹|violence|gore/i, "violence"],
+    [/성인|음란|explicit|adult|porn/i, "explicit"],
+    [/도박|gambl|casino/i, "gambling"], [/과도한 광고|스팸|spam/i, "spam"],
   ];
   excludes.forEach(([rx, term]) => { if (rx.test(m)) exclude.push(term); });
   return RuntimePolicy.normalize({
@@ -71,6 +75,9 @@ async function askConfiguredAI(body) {
     "Return JSON only with keys reply and policy.",
     "policy keys: scopeType, sectionKey, instructions, includeTopics, excludeTopics, preferredCreatorTraits, blockedCreatorTraits, freshnessDays, requireThumbnail, replaceDeadUrls, minSafetyScore, minTrustScore, notes.",
     "Never propose direct writes to SearchBank, Snapshot, Distribution, rightPanel, or front pages. The policy only guides Social candidate collection and curation before the existing SearchBank pipeline.",
+    "Treat selected/IP country as audience-preference weighting, never as a creator-production-country ban. Prefer what users in that market actively like, including global content.",
+    "Influencer registry should favor currently active creators with strong followers, recent posting, rising views/likes/recommendations and healthy engagement; do not fill quotas with dormant accounts.",
+    "Default healthy themes include music, travel/tourism, beauty, health/wellness, education/learning, art/culture, nature and family/lifestyle. Exclude political/partisan, graphic violence, explicit/adult sexual, gambling and other unsafe content.",
     "Keep safety/quality requirements conservative and preserve administrator approval boundaries.",
   ].join(" ");
   const prompt = system + "\nSCOPE=" + text(body.scopeType || "global") + " SECTION=" + text(body.sectionKey) +

@@ -7,7 +7,7 @@
  *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
  *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
  *  - 우측 패널 없음(처리하지 않음)
- *  - Hero는 전체 섹션 후보를 최신성 → 인기/랭킹 → 고해상도 순으로 선별하고 클릭 재생한다.
+ *  - Hero는 프론트에 실제 렌더링된 카드만 대상으로 랭킹/인기 → 실제 화질(최소 1280x720) → 최신성 순으로 선별하고 클릭 재생한다.
  */
 (function () {
   'use strict';
@@ -640,9 +640,9 @@
     return 0;
   }
 
-  // V48 hero policy: 1) newest day first, 2) popularity/ranking next,
-  // 3) actual image quality next. 1080p+ is strongly preferred, but an older
-  // 1080p item must not permanently block a newer/hot 720p item.
+  // V49 hero policy: select only from content already rendered on the front rails.
+  // Priority: 1) ranking/popularity, 2) verified image quality, 3) freshness.
+  // Hero image floor is a hard 1280x720. Automap never invents a hero card.
   function heroFreshnessDay(item){
     if(!item)return 0;
     const raw=item.publishedAt||item.published_at||item.releaseDate||item.release_date||item.createdAt||item.created_at||item.updatedAt||item.updated_at||item.premiereDate||item.premieredAt||item.date;
@@ -677,21 +677,21 @@
     return Math.min(40000000,w*h);
   }
   function heroPreProbeCompare(a,b){
-    const ad=heroFreshnessDay(a&&a.item),bd=heroFreshnessDay(b&&b.item);
-    if(ad!==bd)return bd-ad;
     const ar=heroPopularityMetric(a&&a.item),br=heroPopularityMetric(b&&b.item);
     if(ar!==br)return br-ar;
     const ah=Number(a&&a.hint||0),bh=Number(b&&b.hint||0);
     if(ah!==bh)return bh-ah;
+    const ad=heroFreshnessDay(a&&a.item),bd=heroFreshnessDay(b&&b.item);
+    if(ad!==bd)return bd-ad;
     return Number(b&&b.score||0)-Number(a&&a.score||0);
   }
   function heroResolvedCompare(a,b){
-    const ad=Number(a&&a.freshnessDay||heroFreshnessDay(a&&a.item)),bd=Number(b&&b.freshnessDay||heroFreshnessDay(b&&b.item));
-    if(ad!==bd)return bd-ad;
     const ar=Number(a&&a.popularityMetric||heroPopularityMetric(a&&a.item)),br=Number(b&&b.popularityMetric||heroPopularityMetric(b&&b.item));
     if(ar!==br)return br-ar;
     const aq=Number(a&&a.qualityMetric||heroQualityMetric(a&&a.w,a&&a.h)),bq=Number(b&&b.qualityMetric||heroQualityMetric(b&&b.w,b&&b.h));
     if(aq!==bq)return bq-aq;
+    const ad=Number(a&&a.freshnessDay||heroFreshnessDay(a&&a.item)),bd=Number(b&&b.freshnessDay||heroFreshnessDay(b&&b.item));
+    if(ad!==bd)return bd-ad;
     return Number(b&&b.finalScore||0)-Number(a&&a.finalScore||0);
   }
   function heroResolutionHint(item,url,index){
@@ -1001,22 +1001,21 @@
 
   function mergeHeroRows(preferred,sectionMap){
     const merged=[],byKey=new Map();
-    // Rendered cards first: they prove that the actual front mapping succeeded.
-    for(const row of renderedHeroRows(preferred).concat(snapshotHeroRows(preferred,sectionMap))){
+    // Hero may only use cards that the Automap has already rendered successfully.
+    // Snapshot-only rows are intentionally excluded so the hero itself can never
+    // hide a broken rail mapping or bypass the normal front render path.
+    for(const row of renderedHeroRows(preferred)){
       const key=heroItemKey(row.item)||(row.card&&String(row.card.dataset.contentId||row.card.dataset.igdcContentId||''));
-      if(!key)continue;
-      const old=byKey.get(key);
-      if(!old){byKey.set(key,row);merged.push(row);continue;}
-      if(row.domReady&&!old.domReady){Object.assign(old,row);}
+      if(!key||byKey.has(key))continue;
+      byKey.set(key,row);merged.push(row);
     }
     return merged;
   }
 
   function commitHeroChoice(heroImg,best){
     if(!heroImg||!best||!best.item||!best.url||best.tier<2)return false;
-    // V48 compares the same policy used for selection: newest day first, then
-    // popularity/ranking, then real resolution. This intentionally allows a
-    // newer/hot 720p hero to replace an older 1080p hero.
+    // Compare with the same policy used for selection: ranking/popularity first,
+    // verified resolution second, freshness third. The 1280x720 floor is hard.
     const currentItem=heroRuntime.currentItem;
     if(currentItem&&heroRuntime.currentUrl){
       const current={
@@ -1068,12 +1067,14 @@
     if(!pool.length)return false;
 
     pool.sort((a,b)=>{
-      // Candidate discovery follows the final policy too: latest first, then
-      // ranking/popularity. Image quality is verified afterwards.
-      const ad=heroFreshnessDay(a.item),bd=heroFreshnessDay(b.item);
-      if(ad!==bd)return bd-ad;
+      // Pre-probe ordering mirrors the requested hero policy as closely as possible:
+      // ranking/popularity first, known HD hint second, freshness third.
       const ar=heroPopularityMetric(a.item),br=heroPopularityMetric(b.item);
       if(ar!==br)return br-ar;
+      const aq=heroResolutionTier(a.renderedW,a.renderedH),bq=heroResolutionTier(b.renderedW,b.renderedH);
+      if(aq!==bq)return bq-aq;
+      const ad=heroFreshnessDay(a.item),bd=heroFreshnessDay(b.item);
+      if(ad!==bd)return bd-ad;
       const as=heroRankScore(a.item)+(a.preferred?80:0)+(a.domReady?140:0)-heroPendingPenalty(a.item);
       const bs=heroRankScore(b.item)+(b.preferred?80:0)+(b.domReady?140:0)-heroPendingPenalty(b.item);
       return bs-as;
@@ -1113,9 +1114,7 @@
     function chooseBest(rows){
       const valid=rows.filter((row)=>row&&row.tier>=2);
       if(!valid.length)return null;
-      // Latest day > ranking/popularity > actual resolution (720p minimum).
-      // This keeps 1080p/1440p/4K as a strong quality preference without
-      // allowing an old image to beat newer/hot content solely on pixels.
+      // Ranking/popularity > actual resolution > freshness (720p minimum).
       return valid.slice().sort(heroResolvedCompare)[0]||null;
     }
     async function checkedCandidate(candidate,timeoutMs){

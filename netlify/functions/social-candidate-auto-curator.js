@@ -13,8 +13,9 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-auto-curator-v1.2.0-ai-policy-envelope";
+  "social-candidate-auto-curator-v1.3.0-active-influencer-ip-preference";
 const MAX_PER_SECTION = SocialStore.POOL_MAX_PER_SECTION || 350;
+const INFLUENCER_REGISTRY_LIMIT_PER_SECTION = 200;
 
 function text(value) {
   return value == null ? "" : String(value).trim();
@@ -37,6 +38,58 @@ function chunks(values, size) {
 }
 function reviewKey(row) {
   return text(row && (row.review_status || row.reviewStatus)).toLowerCase();
+}
+function metric(row, names) {
+  const raw = SocialStore.plain(row && row.raw);
+  const engagement = SocialStore.plain(row && row.engagement);
+  const rawEngagement = SocialStore.plain(raw.engagement);
+  for (const name of names || []) {
+    const values = [
+      row && row[name], engagement[name], rawEngagement[name], raw[name],
+      raw.metrics && raw.metrics[name], raw.statistics && raw.statistics[name]
+    ];
+    for (const value of values) {
+      const n = Number(value);
+      if (Number.isFinite(n) && n >= 0) return n;
+    }
+  }
+  return 0;
+}
+function publishedAtMs(row) {
+  const raw = SocialStore.plain(row && row.raw);
+  const values = [
+    row && row.content_published_at, row && row.contentPublishedAt,
+    raw.contentPublishedAt, raw.content_published_at, raw.publishedAt, raw.published_at,
+    row && row.updated_at
+  ];
+  for (const value of values) {
+    const ms = Date.parse(text(value));
+    if (Number.isFinite(ms)) return ms;
+  }
+  return 0;
+}
+function logSignal(value, weight) {
+  const n = Math.max(0, Number(value) || 0);
+  return n > 0 ? Math.log10(n + 1) * weight : 0;
+}
+function activeInfluenceScore(row) {
+  let score = 0;
+  score += logSignal(metric(row, ["subscriberCount", "subscribers", "followers", "followerCount"]), 12);
+  score += logSignal(metric(row, ["viewCount", "views", "plays", "playCount"]), 7);
+  score += logSignal(metric(row, ["likes", "likeCount", "reactions", "reactionCount"]), 9);
+  score += logSignal(metric(row, ["recommendations", "recommendCount", "shares", "shareCount"]), 8);
+  score += logSignal(metric(row, ["comments", "commentCount"]), 5);
+  score += Math.min(24, logSignal(metric(row, ["videoCount", "postCount", "posts", "contentCount"]), 5));
+  const ms = publishedAtMs(row);
+  if (ms) {
+    const ageDays = Math.max(0, (Date.now() - ms) / 86400000);
+    if (ageDays <= 3) score += 34;
+    else if (ageDays <= 7) score += 28;
+    else if (ageDays <= 30) score += 20;
+    else if (ageDays <= 90) score += 10;
+    else if (ageDays > 180) score -= 18;
+  }
+  return score;
 }
 function eligible(row, route, aiPolicy) {
   const raw = SocialStore.plain(row && row.raw);
@@ -65,14 +118,9 @@ function eligible(row, route, aiPolicy) {
     return { ok: false, reason: "channel_asset_required" };
   const aiVerdict = AIPolicy.evaluate(row, normalizedAI);
   if (!aiVerdict.ok) return { ok: false, reason: aiVerdict.reason };
-  const scopes = CountryRouting.scopesFrom(row);
-  if (
-    route.countryCode &&
-    scopes.countries.length &&
-    !scopes.countries.includes(route.countryCode)
-  ) {
-    return { ok: false, reason: "country_scope_mismatch" };
-  }
+  // Country/IP is a preference weight, not a creator-origin exclusion.
+  // CountryRouting.matchScore() below boosts locally preferred rows while
+  // same-region/global healthy content stays eligible.
   return { ok: true };
 }
 function rejectionSummary(entries) {
@@ -157,27 +205,40 @@ exports.handler = async function (event) {
     const approvedIds = [];
     const bySection = {};
     Object.keys(groups).forEach((section) => {
-      const rankRows = (items) =>
+      const rankRows = (items, influencerMode) =>
         items.slice().sort((a, b) => {
           const av = AIPolicy.evaluate(a, aiPolicy);
           const bv = AIPolicy.evaluate(b, aiPolicy);
-          return (SocialStore.rowScore(b) + CountryRouting.matchScore(b, route) + Number(bv.scoreAdjustment || 0)) -
-            (SocialStore.rowScore(a) + CountryRouting.matchScore(a, route) + Number(av.scoreAdjustment || 0));
+          const aScore =
+            SocialStore.rowScore(a) +
+            CountryRouting.matchScore(a, route) +
+            Number(av.scoreAdjustment || 0) +
+            (influencerMode ? activeInfluenceScore(a) : activeInfluenceScore(a) * 0.35);
+          const bScore =
+            SocialStore.rowScore(b) +
+            CountryRouting.matchScore(b, route) +
+            Number(bv.scoreAdjustment || 0) +
+            (influencerMode ? activeInfluenceScore(b) : activeInfluenceScore(b) * 0.35);
+          return bScore - aScore;
         });
       const influencers = rankRows(
         groups[section].filter(
           (row) => SocialStore.assetClassOf(row) === "influencer_registry",
         ),
-      ).slice(0, MAX_PER_SECTION);
+        true,
+      ).slice(0, INFLUENCER_REGISTRY_LIMIT_PER_SECTION);
       const contents = rankRows(
         groups[section].filter(
           (row) => SocialStore.assetClassOf(row) === "latest_content",
         ),
+        false,
       ).slice(0, MAX_PER_SECTION);
       const selected = influencers.concat(contents);
       bySection[section] = {
         eligible: groups[section].length,
         influencerRegistry: influencers.length,
+        influencerRegistryLimit: INFLUENCER_REGISTRY_LIMIT_PER_SECTION,
+        influencerSelection: "active_followers_engagement_recency_quality_ip_preference",
         latestContentPool: contents.length,
         registeredCandidatePool: selected.length,
       };

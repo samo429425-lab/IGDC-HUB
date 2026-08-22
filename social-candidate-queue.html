@@ -465,7 +465,10 @@
       </div>
       <div id="notice" class="notice hidden"></div>
       <section class="panel" id="countryScopePanel">
-        <h2>전 세계 권역 · 국가 · 접속 국가(IP) 관리 범위</h2>
+        <div class="modal-head">
+          <h2 style="margin:0">전 세계 권역 · 국가 · 접속 국가(IP) 관리 범위</h2>
+          <button type="button" class="social-ai-talk-btn" data-social-ai-open="1" data-social-ai-scope="global" data-social-ai-label="전 세계 권역·국가·IP 선호 정책">AI 정식 대화</button>
+        </div>
         <div class="small">
           소셜 허브는 주·성 단위로 나누지 않습니다. 국가를 직접 선택하면 해당
           국가의 실제 소비 성향을 우선하고, 국가를 선택하지 않으면 접속 IP 국가를
@@ -513,7 +516,10 @@
         </div>
       </section>
       <section class="panel" id="aiAutomationPanel">
-        <h2>AI 전자동 소셜 운영</h2>
+        <div class="modal-head">
+          <h2 style="margin:0">AI 전자동 소셜 운영</h2>
+          <button type="button" class="social-ai-talk-btn" data-social-ai-open="1" data-social-ai-scope="global" data-social-ai-label="AI 전자동 소셜 운영">AI 정식 대화</button>
+        </div>
         <div class="small">
           현재 선택 국가·권역·IP 소비성향을 그대로 승계해 최신 콘텐츠 수집 → 정책·품질 재평가 → 교체 예정 갱신을 순서대로 실행합니다.
           기본값은 관리자 검토용 교체 대기열까지만 만들며, 아래 체크를 켠 경우에만 마지막 실제 적용까지 진행합니다.
@@ -531,8 +537,11 @@
           프론트 실제 적용은 위 체크를 켠 경우에만 마지막 단계에서 실행합니다.
         </div>
       </section>
-      <section class="panel">
-        <h2>섹션별 공개 SNS 최신 콘텐츠 수집</h2>
+      <section class="panel" id="latestContentCollectorPanel">
+        <div class="modal-head">
+          <h2 style="margin:0">섹션별 공개 SNS 최신 콘텐츠 수집</h2>
+          <button type="button" class="social-ai-talk-btn" data-social-ai-open="1" data-social-ai-scope="collector" data-social-ai-label="섹션별 공개 SNS 최신 콘텐츠 수집">AI 정식 대화</button>
+        </div>
         <div class="small">
           한 번에 100개를 검색하지 않습니다. 선택한 섹션을 8~10개 단위로
           조사·검증·저장합니다. 국가별 선호 언어를 검색어와 배치 기준에
@@ -642,6 +651,7 @@
             <h2 style="margin:0">콘텐츠 목록 · 상태별 관리</h2>
             <div class="small">각 버튼은 실제 카드 목록을 엽니다. 목록이 없으면 0개라고 바로 표시됩니다. 인플루언서 목록과 섞이지 않습니다.</div>
           </div>
+          <button type="button" class="social-ai-talk-btn" data-social-ai-open="1" data-social-ai-scope="content" data-social-ai-label="콘텐츠 목록·상태별 관리">AI 정식 대화</button>
           <span id="replacementControlState" class="state">콘텐츠를 읽는 중</span>
         </div>
         <div class="content-ops-grid">
@@ -842,7 +852,7 @@
       </section>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=35"></script>
-    <script src="/assets/js/admin-social-ai-dialog.js?v=1"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=36"></script>
+    <script src="/assets/js/admin-social-ai-dialog.js?v=2"></script>
   </body>
 </html>

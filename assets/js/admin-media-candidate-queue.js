@@ -1,4 +1,4 @@
-/* IGDC Media Candidate Queue v3.9 - thumbnail quarantine lane + supplier trace + stable media front controls */
+/* IGDC Media Candidate Queue v4.0 - section selection + AI policy bridge + stable media front controls */
 (function(){
   'use strict';
 
@@ -21,6 +21,21 @@
   var MIN_REGIONAL_LANES_PER_RUN=6;
   function sectionCapacity(key){return key==='media-trending'?50:(SECTION_CAPACITY[key]||100);}
   function sectionReserveCapacity(key){return key==='media-trending'?0:20;}
+  function manualSectionKeys(){return SECTION_ORDER.filter(function(key){return key!=='media-trending';});}
+  function mediaAiPolicy(sectionKey,purpose){
+    try{
+      if(window.IGDCMediaAI&&typeof window.IGDCMediaAI.policyEnvelope==='function')return window.IGDCMediaAI.policyEnvelope(sectionKey||'',purpose||'global')||null;
+    }catch(_e){}
+    return null;
+  }
+  function mediaAiQuery(sectionKey,purpose){
+    var p=mediaAiPolicy(sectionKey,purpose);
+    if(!p)return'';
+    var parts=[];
+    if(Array.isArray(p.includeTopics))parts=parts.concat(p.includeTopics);
+    if(Array.isArray(p.preferredContentTraits))parts=parts.concat(p.preferredContentTraits);
+    return parts.map(text).filter(Boolean).slice(0,10).join(' ');
+  }
 
   var $=function(id){return document.getElementById(id);};
   var text=function(value){return String(value==null?'':value).trim();};
@@ -53,6 +68,7 @@
   var supplierDiagnosticCache=null;
   var poolCache=null;
   var poolSelected=new Set();
+  var selectedMediaSections=new Set();
 
   function token(){
     try{
@@ -274,12 +290,19 @@
         '본선 '+primaryCount+'/'+capacity+' · 예비 '+reserveCount+'/'+sectionReserveCapacity(key)+(overflowCount?' · 최신/추가 '+overflowCount:'');
       if(list.length!==fullCount)countLabel+=' · 표시 '+list.length;
       if(key!=='media-trending')countLabel+=' · 프론트 '+released;
+      var batchAllowed=key!=='media-trending';
+      var batchChecked=batchAllowed&&selectedMediaSections.has(key);
       return '<section class="candidate-section'+(open?' open':'')+'" data-section-key="'+esc(key)+'">'+
-        '<button type="button" class="section-toggle" data-section-key="'+esc(key)+'" aria-expanded="'+(open?'true':'false')+'"><span class="section-toggle-main"><span class="section-toggle-title">'+esc(SECTION_LABELS[key]||key)+'</span><span class="section-count">'+countLabel+'</span></span><span class="section-chevron">⌄</span></button>'+
+        '<div class="section-header">'+
+          (batchAllowed?'<label class="section-batch-select"><input type="checkbox" class="section-batch-check" data-section-key="'+esc(key)+'" '+(batchChecked?'checked':'')+' aria-label="'+esc(SECTION_LABELS[key]||key)+' 섹션 선택"><span>섹션 선택</span></label>':'')+
+          '<button type="button" class="section-toggle" data-section-key="'+esc(key)+'" aria-expanded="'+(open?'true':'false')+'"><span class="section-toggle-main"><span class="section-toggle-title">'+esc(SECTION_LABELS[key]||key)+'</span><span class="section-count">'+countLabel+'</span></span><span class="section-chevron">⌄</span></button>'+
+          '<div class="section-header-actions"><button type="button" class="secondary sectionAiPolicyBtn" data-section-key="'+esc(key)+'">AI 정책 대화</button></div>'+
+        '</div>'+
         (open?'<div class="section-body">'+sectionBodyHtml(key,list)+'</div>':'')+
       '</section>';
     }).join('');
     $('sectionAccordion').innerHTML=html;
+    updateMediaSectionBatchUi();
     $('filterState').textContent='검색 조건 일치 '+rows.length+'개 / 전체 활성 후보 '+activeRows().length+'개 · 펼친 섹션만 썸네일 로드';
     $('candidateCapacityState').textContent='일반 본선 100 + 예비 20 · 음악/쇼츠 본선 50 + 예비 20';
     $('tablePanel').classList.remove('hidden');
@@ -457,7 +480,7 @@
           data=await post(COL,{
             source:'internet_archive',section:section,target:remaining,
             batchSize:Math.min(3,remaining-job.saved),page:job.page,batchMode:true,
-            qualityResearch:true
+            qualityResearch:true,aiPolicy:mediaAiPolicy(section,'collector'),policyQuery:mediaAiQuery(section,'collector')
           });
         }catch(error){
           if((error.status===502||error.status===503||error.status===504)&&attempts<3){
@@ -495,7 +518,7 @@
       var body={
         source:'internet_archive',section:section,target:1,batchSize:1,
         identifier:text($('adminArchiveIdentifier').value),adminException:true,
-        overrideReason:text($('adminOverrideReason').value)
+        overrideReason:text($('adminOverrideReason').value),aiPolicy:mediaAiPolicy(section,'collector'),policyQuery:mediaAiQuery(section,'collector')
       };
       if(!body.identifier||!body.overrideReason){show('관리자 지정 주소와 사유가 필요합니다.','warn');return;}
       $('collectBtn').disabled=true;$('collectAllBtn').disabled=true;$('collectAdminExceptionBtn').disabled=true;
@@ -538,7 +561,7 @@
         while(attempts<3&&!data){
           attempts+=1;
           try{
-            data=await post(COL,{source:'internet_archive',section:job.section,target:job.target,batchSize:requestBatchSize,page:job.page,batchMode:true});
+            data=await post(COL,{source:'internet_archive',section:job.section,target:job.target,batchSize:requestBatchSize,page:job.page,batchMode:true,aiPolicy:mediaAiPolicy(job.section,'collector'),policyQuery:mediaAiQuery(job.section,'collector')});
           }catch(error){
             if((error.status===502||error.status===503||error.status===504)&&attempts<3){
               $('collectorState').textContent='외부 원본 지연 · '+attempts+'차 재시도';
@@ -921,7 +944,8 @@
     if(!window.confirm((allMode?'프로덕션·배급사·콘텐츠 배포사·스튜디오·권리보유사·국제세일즈 에이전시·아카이브를 전체 탐색':'선택한 유형 중심으로 공급사를 탐색')+'할까요?\n\n소비자 스트리밍·SNS 플랫폼은 제외하고, 결과는 공급사 후보로만 저장됩니다. 자동 활성·프론트 공개는 하지 않습니다.'))return;
     var button=allMode?$('supplierResearchAllBtn'):$('supplierResearchBtn');button.disabled=true;$('supplierState').textContent=allMode?'AI 전체 공급사 리서치 준비 중':'공급사 정책 리서치 준비 중';
     try{
-      var data=await post(SUP,{action:'research',mode:mode,query:text($('supplierResearchQuery').value),country:text($('supplierCountry').value),supplierType:allMode?'other':$('supplierType').value,limit:allMode?120:60});
+      var baseQuery=text($('supplierResearchQuery').value),policyQuery=mediaAiQuery('', 'supplier');
+      var data=await post(SUP,{action:'research',mode:mode,query:[baseQuery,policyQuery].filter(Boolean).join(' '),country:text($('supplierCountry').value),supplierType:allMode?'other':$('supplierType').value,limit:allMode?120:60,aiPolicy:mediaAiPolicy('', 'supplier')});
       supplierDiagnosticCache={
         ok:true,reportType:'igdc-media-content-supplier-research-session',generatedAt:new Date().toISOString(),
         lastResearch:data
@@ -962,7 +986,7 @@
     if(!window.confirm(row.name+' 공급사에서 '+(SECTION_LABELS[section]||section)+' 콘텐츠 후보를 리서치할까요?\n\n찾은 영상은 후보 대기열에만 들어가며 자동 승인·자동 공개되지 않습니다.'))return;
     $('supplierState').textContent='공급사 영상 후보 리서치 중';
     try{
-      var data=await post(SUP,{action:'collect_contents',id:id,section:section,limit:30});
+      var data=await post(SUP,{action:'collect_contents',id:id,section:section,limit:30,aiPolicy:mediaAiPolicy(section,'supplier')});
       await refresh();
       $('supplierState').textContent='영상 후보 '+Number(data.saved||0)+'건 저장';
       show(row.name+' · 검색 '+Number(data.searched||0)+'건 · 미디어 후보 '+Number(data.saved||0)+'건을 대기열에 저장했습니다.','ok');
@@ -1055,7 +1079,7 @@
       while(batches<100){
         batches+=1;
         $('collectorState').textContent='AI 후보 정리 '+batches+'차 처리 중';
-        var data=await post(AUTO,{cursor:cursor,batchSize:15});
+        var data=await post(AUTO,{cursor:cursor,batchSize:15,aiPolicy:mediaAiPolicy('', 'pool')});
         ['scanned','processed','updated','moved','quarantined'].forEach(function(key){
           total[key]+=Number(data[key]||0);
         });
@@ -1085,7 +1109,7 @@
     })[text(value)]||text(value)||'프론트 배포가 시작되지 않았습니다.';
   }
   function setFrontButtonsDisabled(disabled){
-    ['publishFrontBtn','publishAllSectionsFrontBtn','stopFrontBtn','autoCurateBtn'].forEach(function(id){if($(id))$(id).disabled=disabled;});
+    ['publishFrontBtn','publishAllSectionsFrontBtn','stopFrontBtn','selectedSectionsPublishBtn','selectedSectionsStopBtn','autoCurateBtn'].forEach(function(id){if($(id))$(id).disabled=disabled;});
     document.querySelectorAll('.sectionFrontBtn,.contentFrontToggleBtn').forEach(function(button){button.disabled=disabled;});
   }
   function frontActionLabel(action,sectionKey){
@@ -1114,6 +1138,49 @@
     }
     return{approved:approved,eligible:eligible,report:report};
   }
+  function updateMediaSectionBatchUi(){
+    var keys=manualSectionKeys();
+    var count=keys.filter(function(key){return selectedMediaSections.has(key);}).length;
+    var all=$('selectAllMediaSections');
+    if(all){all.checked=count===keys.length&&keys.length>0;all.indeterminate=count>0&&count<keys.length;}
+    if($('selectedMediaSectionCount'))$('selectedMediaSectionCount').textContent='선택 섹션 '+count+'개';
+    if($('selectedSectionsPublishBtn'))$('selectedSectionsPublishBtn').disabled=count===0;
+    if($('selectedSectionsStopBtn'))$('selectedSectionsStopBtn').disabled=count===0;
+    document.querySelectorAll('.section-batch-check').forEach(function(box){box.checked=selectedMediaSections.has(text(box.dataset.sectionKey));});
+  }
+  function setAllMediaSections(checked){
+    selectedMediaSections.clear();
+    if(checked)manualSectionKeys().forEach(function(key){selectedMediaSections.add(key);});
+    updateMediaSectionBatchUi();renderRows();
+  }
+  async function publishSelectedSections(stopping){
+    var keys=manualSectionKeys().filter(function(key){return selectedMediaSections.has(key);});
+    if(!keys.length){show('먼저 반영할 섹션을 선택해 주세요.','warn');return;}
+    var label=stopping?'선택 섹션 반영 해제':'선택 섹션 프론트 반영';
+    if(!window.confirm(label+' · '+keys.map(function(k){return SECTION_LABELS[k]||k;}).join(', ')+' 을 실행할까요?'))return;
+    setFrontButtonsDisabled(true);
+    try{
+      if(!stopping){for(var i=0;i<keys.length;i+=1)await frontMappingPreflight('publish_section',keys[i]);}
+      var bulkAction=stopping?'stop_sections':'publish_sections';
+      var data=null,bulkOk=false;
+      try{
+        data=await post(PUB,{storeRelease:true,publishFront:true,frontAction:bulkAction,sectionKeys:keys,includeSnapshot:'0',includeBlocked:'1'});
+        bulkOk=!!data;
+      }catch(error){
+        if(!(error.status===400||error.status===404||error.status===409||error.status===422))throw error;
+      }
+      if(!bulkOk){
+        for(var j=0;j<keys.length;j+=1){
+          data=await post(PUB,{storeRelease:true,publishFront:true,frontAction:stopping?'stop_section':'publish_section',sectionKey:keys[j],includeSnapshot:'0',includeBlocked:'1'});
+        }
+      }
+      if(data&&data.frontState)frontReleaseState=data.frontState;
+      renderRows();
+      show(label+' 완료 · '+keys.length+'개 섹션','ok');
+    }catch(error){show(label+' 실패: '+error.message,'warn');}
+    finally{setFrontButtonsDisabled(false);updateMediaSectionBatchUi();}
+  }
+
   async function publishFrontAction(action,sectionKey){
     var label=frontActionLabel(action,sectionKey);
     var stopping=action==='stop_all'||action==='stop_section';
@@ -1397,7 +1464,7 @@
     if(!window.confirm((section?(SECTION_LABELS[section]||section)+' 섹션':'전체 섹션')+'의 승인 완료 후보를 비교해 운영 슬롯 + 예비 20개를 자동 재정렬할까요?\n\n인기·품질·최신성·재생 안정성을 비교하며, 관리자가 수동으로 내린 콘텐츠는 자동 복원하지 않습니다. 처리 후 기존 공식 프론트 반영 경로로 즉시 재배포합니다.'))return;
     $('poolAutoRebalanceBtn').disabled=true;$('poolState').textContent='AI 자동 비교·치환 중';
     try{
-      var data=await post(POOL,{action:'auto_rebalance',sectionKey:section});
+      var data=await post(POOL,{action:'auto_rebalance',sectionKey:section,aiPolicy:mediaAiPolicy(section,'pool')});
       var pub=await post(PUB,{storeRelease:true,publishFront:true,frontAction:section?'publish_section':'publish_all',sectionKey:section||undefined,includeSnapshot:'0',includeBlocked:'1'});
       var dispatch=pub.frontPublication||{};if(dispatch.queued!==true)throw new Error(frontPublishReason(dispatch.reason));
       await refreshPool();await refresh();show('AI 자동 비교·치환 완료 · 후보 상태 '+Number(data.updated||0)+'건 조정 · 프론트 재배포 요청 완료','ok');
@@ -1455,6 +1522,9 @@
     $('collectAllBtn').onclick=collectAll;
     $('autoCurateBtn').onclick=autoCurateAll;
     $('publishFrontBtn').onclick=publishFront;
+    if($('selectAllMediaSections'))$('selectAllMediaSections').onchange=function(){setAllMediaSections(this.checked);};
+    if($('selectedSectionsPublishBtn'))$('selectedSectionsPublishBtn').onclick=function(){publishSelectedSections(false);};
+    if($('selectedSectionsStopBtn'))$('selectedSectionsStopBtn').onclick=function(){publishSelectedSections(true);};
     if($('publishAllSectionsFrontBtn'))$('publishAllSectionsFrontBtn').onclick=publishFront;
     $('stopFrontBtn').onclick=function(){publishFrontAction('stop_all','');};
     $('collectorStopBtn').onclick=function(){
@@ -1488,6 +1558,8 @@
       var checked=this.checked;document.querySelectorAll('.excludedCheck').forEach(function(element){element.checked=checked;});
     };
     $('sectionAccordion').addEventListener('click',function(event){
+      var aiButton=event.target.closest('.sectionAiPolicyBtn');
+      if(aiButton){var aiKey=text(aiButton.dataset.sectionKey);if(window.IGDCMediaAI&&typeof window.IGDCMediaAI.openDialog==='function')window.IGDCMediaAI.openDialog('section',aiKey,(SECTION_LABELS[aiKey]||aiKey)+' 섹션');return;}
       var toggle=event.target.closest('.section-toggle');
       if(toggle){
         var key=text(toggle.dataset.sectionKey);
@@ -1523,6 +1595,8 @@
       }
     });
     $('sectionAccordion').addEventListener('change',function(event){
+      var sectionBatch=event.target.closest('.section-batch-check');
+      if(sectionBatch){var key=text(sectionBatch.dataset.sectionKey);if(sectionBatch.checked)selectedMediaSections.add(key);else selectedMediaSections.delete(key);updateMediaSectionBatchUi();return;}
       var checkbox=event.target.closest('.candidate-card-check');
       if(!checkbox)return;
       var sectionKey=text(checkbox.dataset.sectionKey),id=text(checkbox.dataset.candidateId);
