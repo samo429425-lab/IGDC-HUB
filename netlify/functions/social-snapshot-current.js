@@ -7,7 +7,7 @@
 const SocialStore = require("./lib/social-candidate-store.v1");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-snapshot-current-v1.2.0-pipeline-readback";
+const VERSION = "social-snapshot-current-v1.3.0-durable-stored-release-fallback";
 
 function text(value) {
   return value == null ? "" : String(value).trim();
@@ -80,7 +80,10 @@ exports.handler = async function (event) {
         ? list.find((row) => releaseCountry(row) === countryCode)
         : null;
       global = list.find((row) => !releaseCountry(row));
-      release = exact || global || null;
+      // A stored release is a durable publication record. If routing metadata
+      // changed after publication, do not blank the public Social main page:
+      // use the newest valid stored release as a last-resort Social-only read.
+      release = exact || global || list.find((row) => row && row.snapshot) || null;
     }
     if (!release || !release.snapshot) {
       return SocialStore.response(
@@ -121,7 +124,7 @@ exports.handler = async function (event) {
               ? "country_exact"
               : global
                 ? "global_fallback"
-                : "legacy_fallback",
+                : "latest_stored_fallback",
           storedHashVerification:
             release.snapshot_hash === documentHash ? "passed" : "failed",
           frontPayloadReady: publicSlots.total > 0 ? "passed" : "empty",

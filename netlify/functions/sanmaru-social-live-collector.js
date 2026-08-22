@@ -16,9 +16,9 @@ const AdminAuth = require("./lib/commerce-candidate-auth.v1");
 const MaruSearch = require("./maru-search");
 const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
-const CountryContentPolicy = require("./lib/social-country-content-policy.v1");
+const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.8.0-country-content-policy";
+const VERSION = "sanmaru-social-live-collector-v1.8.0-ai-policy-envelope";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -263,12 +263,10 @@ function rejectionSummary(entries) {
   });
   return out;
 }
-function sectionPlan(sectionKey, route) {
+function sectionPlan(sectionKey) {
   const platform = Policy.PLATFORM_BY_SECTION[sectionKey];
-  const basePolicy = Policy.PLATFORM_POLICIES[platform];
-  if (!platform || !basePolicy) return null;
-  const policy = CountryContentPolicy.applyToPlatformPolicy(basePolicy, route || {}, platform);
-  return { sectionKey, platform, policy };
+  const policy = Policy.PLATFORM_POLICIES[platform];
+  return platform && policy ? { sectionKey, platform, policy } : null;
 }
 function flattenKeyValues(value, output) {
   const out = output || {};
@@ -464,30 +462,14 @@ function languageQueryTerm(route) {
   const primary = languages[0] || "en";
   return LATEST_QUERY_TERMS[primary] || LATEST_QUERY_TERMS.en;
 }
-function regionQueryTerm(route) {
-  const regionId = SocialStore.text(route && (route.worldRegion || route.regionId));
-  if (!regionId) return "";
-  const region = CountryRouting.regionCatalog().find((row) => SocialStore.text(row && row.id) === regionId);
-  return region ? SocialStore.text(region.nameEn || region.nameKo || region.id) : regionId.replace(/_/g, " ");
-}
 function scopedQueries(plan, cursor, passes, route) {
   const base = plan.policy.collectionQueries || [];
   const offset = Math.max(0, Number(cursor || 0) || 0);
   const count = Math.max(1, Math.min(MAX_QUERY_PASSES, Number(passes || DEFAULT_QUERY_PASSES) || DEFAULT_QUERY_PASSES));
   const queries = [];
-  const country = countryQueryTerm(route);
-  const region = regionQueryTerm(route);
-  const language = languageQueryTerm(route);
   for (let index = 0; index < count; index += 1) {
     const baseQuery = base[(offset + index) % base.length] || (plan.platform + " useful creator");
-    const mode = (offset + index) % 5;
-    if (country && mode <= 2) {
-      queries.push([baseQuery, "popular in", country, language].filter(Boolean).join(" "));
-    } else if (region && mode === 3) {
-      queries.push([baseQuery, "popular in", region, language].filter(Boolean).join(" "));
-    } else {
-      queries.push([baseQuery, language].filter(Boolean).join(" "));
-    }
+    queries.push([baseQuery, countryQueryTerm(route), languageQueryTerm(route)].filter(Boolean).join(" "));
   }
   return Array.from(new Set(queries));
 }
@@ -587,36 +569,14 @@ async function publicDirectorySearch(plan, route, limit, offset) {
     publicDirectoryRequest(plan, route, limit, offset, false)
   ]);
   const primary = results[0];
-  const broad = results[1];
-  const seen = new Set();
-  const localTarget = Math.max(1, Math.ceil(Math.max(1, Number(limit) || 1) * 0.65));
-  const merged = [];
-  (primary.items || []).slice(0, localTarget).forEach((item) => {
-    const key = SocialStore.text(item.channelUrl || item.url).toLowerCase();
-    if (!key || seen.has(key)) return;
-    seen.add(key);
-    item.publicDirectoryAffinity = "country_exact";
-    merged.push(item);
-  });
-  (broad.items || []).forEach((item) => {
-    if (merged.length >= Math.max(1, Number(limit) || 1)) return;
-    const key = SocialStore.text(item.channelUrl || item.url).toLowerCase();
-    if (!key || seen.has(key)) return;
-    seen.add(key);
-    item.publicDirectoryCountryFallback = true;
-    item.publicDirectoryAffinity = "global_discovery";
-    merged.push(item);
-  });
-  return {
-    provider: "wikidata-public-social-directory",
-    status: primary.status === "ok" || broad.status === "ok" ? "ok" : primary.status,
-    countryStrict: false,
-    countryWeighted: true,
-    countryPrimaryCount: (primary.items || []).length,
-    globalDiscoveryCount: (broad.items || []).length,
-    offset,
-    items: merged
-  };
+  const globalFallback = results[1];
+  if (primary.items.length) return primary;
+  globalFallback.countryFallback = true;
+  globalFallback.countryPrimaryCount = 0;
+  globalFallback.countryPrimaryStatus = primary.status;
+  globalFallback.countryPrimaryError = primary.error || null;
+  globalFallback.items.forEach((item) => { item.publicDirectoryCountryFallback = true; });
+  return globalFallback;
 }
 function youtubeLanguageCode(route) {
   const primary = CountryRouting.normalizeLanguages(route && route.languages)[0] || "";
@@ -1034,6 +994,9 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route) {
   ]);
   const routeLanguages = route && route.languages || [];
   const explicitCountry = SocialStore.text(item && item.country).toUpperCase();
+  if (route && route.countryCode && explicitCountry && explicitCountry !== route.countryCode) {
+    return { ok: false, reason: "country_creator_mismatch" };
+  }
   const category = firstText([item && item.category, categoryFromQuery(platform, queryText)]);
   const itemLanguage = CountryRouting.normalizeLanguage(item && (item.lang || item.language));
   const language = itemLanguage && routeLanguages.includes(itemLanguage)
@@ -1063,9 +1026,9 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route) {
     description: firstText([item && item.description, item && item.summary, item && item.snippet]).slice(0, 1200),
     creatorName: creatorName.slice(0, 180),
     language,
-    countryScopes: explicitCountry && CountryRouting.countryRow(explicitCountry)
-      ? [explicitCountry]
-      : [],
+    countryScopes: item && item.publicDirectoryCountryFallback
+      ? []
+      : (route && route.countryCode ? [route.countryCode] : []),
     languageScopes: routeLanguages,
     category,
     publicAccess: true,
@@ -1283,7 +1246,7 @@ exports.handler = async function(event) {
         publicSnapshotMutation: false,
         searchBankCoreMutation: false,
         sampleSlotMutation: false,
-        countryRouting: { version: CountryRouting.VERSION, scope: "country_region_global_consumption_weighted", ipStorage: false }
+        countryRouting: { version: CountryRouting.VERSION, scope: "country_only", ipStorage: false }
       });
     }
     if (event.httpMethod !== "POST") return SocialStore.response(405, { ok: false, version: VERSION, error: "method_not_allowed" });
@@ -1291,12 +1254,13 @@ exports.handler = async function(event) {
     const actor = await requireCollectorActor(event);
     const body = SocialStore.parseBody(event);
     const sectionKey = Policy.normalizeSectionKey(body.sectionKey || body.section || body.targetSection);
-    const route = CountryRouting.resolve(event, body);
-    const plan = sectionPlan(sectionKey, route);
+    const plan = sectionPlan(sectionKey);
     if (!plan) return SocialStore.response(400, { ok: false, version: VERSION, error: "invalid_social_section", allowedSections: Policy.SECTION_KEYS });
 
     const dryRun = flag(body.dryRun || body.dry_run);
     const batchSize = Math.max(1, Math.min(MAX_BATCH_SIZE, Number(body.batchSize || body.batch_size || body.limit || DEFAULT_BATCH_SIZE) || DEFAULT_BATCH_SIZE));
+    const route = CountryRouting.resolve(event, body);
+    const aiPolicy = AIPolicy.normalize(body.aiPolicy || {});
 
     if (/^(intake_channels|intake_urls|direct_intake)$/i.test(SocialStore.text(body.action))) {
       const intake = await intakeCandidates(body, plan, route);
@@ -1342,9 +1306,11 @@ exports.handler = async function(event) {
     const providerGroup = queryCursor % PROVIDER_GROUP_COUNT;
     const researchCursor = Math.floor(queryCursor / PROVIDER_GROUP_COUNT);
     const qualitySweep = flag(body.qualitySweep || body.quality_sweep);
-    const queries = scopedQueries(plan, researchCursor, passes, route).map((query) =>
-      qualitySweep ? query + " popular high quality active official" : query
-    );
+    const aiQuerySuffix = AIPolicy.querySuffix(aiPolicy);
+    const queries = scopedQueries(plan, researchCursor, passes, route).map((query) => {
+      var value = qualitySweep ? query + " popular high quality active official" : query;
+      return aiQuerySuffix ? value + " " + aiQuerySuffix : value;
+    });
     const perQueryLimit = Math.max(1, Math.min(MAX_BATCH_SIZE, Math.ceil(target / queries.length)));
     const catalogSize = Math.max(1, plan.policy.collectionQueries.length);
     const searchStart = Math.max(1, Math.min(91, Number(body.searchStart || body.search_start || (Math.floor(researchCursor / catalogSize) * perQueryLimit + 1)) || 1));
@@ -1368,8 +1334,14 @@ exports.handler = async function(event) {
     );
     const rejected = resolved.rejected;
     const candidates = resolved.candidates;
+    const policyAccepted = [];
+    candidates.forEach((candidate) => {
+      const verdict = AIPolicy.evaluate(candidate, aiPolicy);
+      if (verdict.ok) policyAccepted.push(candidate);
+      else rejected.push({ id: candidate && candidate.id, reason: verdict.reason });
+    });
 
-    const selected = candidates.slice(0, target);
+    const selected = policyAccepted.slice(0, target);
     const submitted = [];
     selected.forEach((candidate, index) => {
       if (resolved.influencers[index]) submitted.push(resolved.influencers[index]);
@@ -1400,6 +1372,14 @@ exports.handler = async function(event) {
       providerGroupCount: PROVIDER_GROUP_COUNT,
       searchStart,
       qualitySweep,
+      aiPolicy: {
+        applied: !!(body.aiPolicy && typeof body.aiPolicy === "object"),
+        scopeType: aiPolicy.scopeType,
+        includeTopics: aiPolicy.includeTopics,
+        excludeTopics: aiPolicy.excludeTopics,
+        requireThumbnail: aiPolicy.requireThumbnail,
+        replaceDeadUrls: aiPolicy.replaceDeadUrls
+      },
       queries,
       searchedRows: searchResults.reduce((sum, result) => sum + result.items.length, 0),
       resolutionRows: resolved.resolutionRows,

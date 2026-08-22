@@ -1,10 +1,9 @@
 // socialnetwork-automap.v3.fixed.js
 // 목적:
-// 1) Social 메인 9섹션은 Netlify 배포에 확정된 /data/social.snapshot.json을 공개 기준으로 읽는다.
-//    브라우저 세션/Supabase runtime readback 상태와 무관하게 명시적 등록 해제 전까지 같은 배포 Snapshot을 유지한다.
+// 1) Social 메인 9섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
 // 3) 메인 Social과 rightPanel의 fetch/render/state를 완전히 분리해 어느 한쪽 지연/실패가 다른 쪽을 막지 않는다.
-// 4) Social 메인 렌더는 9개 MANAGED_MAIN_KEYS만 읽고 rightPanel/social-maru를 절대 렌더/덮어쓰기하지 않는다.
+// 4) Social runtime readback은 rightPanel/social-maru를 절대 읽거나 덮지 않는다.
 
 (function () {
   "use strict";
@@ -15,7 +14,7 @@
 
   // --- config ---
   const RIGHT_SNAPSHOT_URL = "/data/social.snapshot.json"; // Edge-routed Canonical Distribution/IP snapshot; rightPanel only
-  const MAIN_SNAPSHOT_URL = "/data/social.snapshot.json"; // deployed canonical Social main nine; persistent public source
+  const CURRENT_SNAPSHOT_URL = "/.netlify/functions/social-snapshot-current";
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
   const MAIN_ROWS = 9;
   const MAIN_LIMIT = 100;
@@ -330,43 +329,23 @@
 
   async function loadCurrentSnapshot() {
     try {
-      // Public persistence boundary: the successful Netlify build already wrote
-      // the approved Social release through SearchBank -> Snapshot Engine into
-      // this deployed document. Read that durable deploy artifact directly so
-      // closing/reopening the browser cannot depend on a transient release-table
-      // readback. The renderer below still consumes only MANAGED_MAIN_KEYS.
       const res = await fetch(
-        MAIN_SNAPSHOT_URL + "?_=" + encodeURIComponent(Date.now()),
+        CURRENT_SNAPSHOT_URL + "?_=" + encodeURIComponent(Date.now()),
         { cache: "no-store", credentials: "same-origin" },
       );
       if (!res.ok) return null;
-      const snapshot = await res.json();
-      const sections = getSections(snapshot);
-      if (!sections) return null;
-
-      let publicSlots = 0;
-      MANAGED_MAIN_KEYS.forEach(function (key) {
-        const rows = Array.isArray(sections[key])
-          ? sections[key]
-          : Array.isArray(sections[key] && sections[key].items)
-            ? sections[key].items
-            : [];
-        publicSlots += rows.filter(function (slot) {
-          const audit = (slot && slot.audit) || {};
-          return (
-            safeText(slot && slot.type) === "external_social" &&
-            safeText(audit.origin) === "social_candidates"
-          );
-        }).length;
-      });
-
+      const payload = await res.json();
+      if (!payload || payload.ok !== true || !payload.snapshot) return null;
+      if (payload.hashVerified === false) return null;
       return {
-        snapshot: snapshot,
+        snapshot: payload.snapshot,
         pipeline: {
-          source: "deployed_social_snapshot",
-          status: "persistent_front_snapshot_loaded",
-          url: MAIN_SNAPSHOT_URL,
-          publicSlots: publicSlots,
+          source: "stored_release_current",
+          status: "front_readback_passed",
+          releaseId: payload.releaseId || null,
+          hash: payload.hash || null,
+          publicSlots: payload.publicSlots || null,
+          route: payload.route || null,
           loadedAt: new Date().toISOString(),
         },
       };
@@ -470,30 +449,66 @@
 
     if (pic) {
       if (thumb) {
-        pic.textContent = "";
-        pic.style.backgroundImage = "url('" + thumb.replace(/'/g, "%27") + "')";
-        pic.style.backgroundSize = "cover";
-        pic.style.backgroundPosition = "center";
-      } else {
+        const expectedThumb = thumb;
+        const probe = new Image();
+        card.dataset.thumbProbe = expectedThumb;
         pic.style.backgroundImage = "";
-        pic.textContent = "•";
+        pic.textContent = "…";
+        probe.onload = function () {
+          if (card.dataset.thumbProbe !== expectedThumb) return;
+          pic.textContent = "";
+          pic.style.backgroundImage = "url('" + expectedThumb.replace(/'/g, "%27") + "')";
+          pic.style.backgroundSize = "cover";
+          pic.style.backgroundPosition = "center";
+        };
+        probe.onerror = function () {
+          if (card.dataset.thumbProbe !== expectedThumb) return;
+          const grid = card.closest("[data-psom-key]");
+          const index = getMainSlots(grid).indexOf(card);
+          resetMainCardToDummy(card, grid, index < 0 ? 0 : index);
+        };
+        probe.src = expectedThumb;
+      } else {
+        const grid = card.closest("[data-psom-key]");
+        const index = getMainSlots(grid).indexOf(card);
+        resetMainCardToDummy(card, grid, index < 0 ? 0 : index);
       }
     }
   }
 
-  function resetMainCardToDummy(card) {
+  function sampleLabelForKey(key) {
+    const labels = {
+      "social-youtube": "YouTube",
+      "social-instagram": "Instagram",
+      "social-tiktok": "TikTok",
+      "social-facebook": "Facebook",
+      "social-wechat": "WeChat",
+      "social-weibo": "Weibo",
+      "social-pinterest": "Pinterest",
+      "social-reddit": "Reddit",
+      "social-twitter": "X · Twitter",
+    };
+    return labels[key] || "SNS";
+  }
+
+  function resetMainCardToDummy(card, gridEl, slotIndex) {
     if (!card) return;
+
+    const key = safeText(gridEl && gridEl.getAttribute("data-psom-key"));
+    const label = sampleLabelForKey(key);
+    const number = String((Number(slotIndex) || 0) + 1).padStart(3, "0");
 
     card.href = "#";
     card.target = "_self";
     card.rel = "noopener";
     card.dataset.dummy = "1";
+    card.dataset.sample = "1";
 
     const pic = qs(".pic", card);
     const metaTitle = qs(".title", card);
     const metaDesc = qs(".desc", card);
 
-    if (metaTitle) metaTitle.textContent = "Loading";
+    if (metaTitle) metaTitle.textContent = label + " · SAMPLE " + number;
     if (metaDesc) {
       metaDesc.textContent = "Preparing";
       metaDesc.style.display = "none";
@@ -501,7 +516,9 @@
 
     if (pic) {
       pic.style.backgroundImage = "";
-      pic.textContent = "";
+      pic.style.backgroundSize = "";
+      pic.style.backgroundPosition = "";
+      pic.textContent = label;
     }
   }
 
@@ -547,7 +564,7 @@
       for (let i = job.offset; i < end; i++) {
         const it = job.items[i] || null;
         if (it) paintMainCard(cards[i], it);
-        else resetMainCardToDummy(cards[i]);
+        else resetMainCardToDummy(cards[i], gridEl, i);
       }
       job.offset = end;
       normalizeMainCardLayout(gridEl);
@@ -586,7 +603,7 @@
     for (let i = job.offset; i < end; i++) {
       const it = displayItems[i] || null;
       if (it) paintMainCard(cards[i], it);
-      else resetMainCardToDummy(cards[i]);
+      else resetMainCardToDummy(cards[i], gridEl, i);
     }
     job.offset = end;
     normalizeMainCardLayout(gridEl);
@@ -720,7 +737,9 @@
       const realItems = items.filter(function (it) {
         return it && !isPlaceholderItem(it);
       });
-      if (!realItems.length) return;
+      // Empty/invalid Social data must never leave the section blank.
+      // The local sample row is a visual fallback only; it never enters
+      // SearchBank/Snapshot and is automatically replaced by real items.
       mountMainRow(grid, realItems);
     });
 
@@ -775,6 +794,15 @@
     return rightRunInFlight;
   }
 
+  function renderMainSamples() {
+    document.querySelectorAll("[data-psom-key]").forEach(function (grid) {
+      const key = grid.getAttribute("data-psom-key");
+      if (!key || !MANAGED_MAIN_KEYS.has(key)) return;
+      mountMainRow(grid, []);
+    });
+    window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
+  }
+
   function runMain() {
     if (mainRunInFlight) return mainRunInFlight;
 
@@ -787,11 +815,12 @@
         // surface and remains independent from the commercial right panel.
         if (!(current && current.snapshot)) {
           window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-            source: "deployed_social_snapshot",
-            status: "deployed_social_snapshot_unavailable",
+            source: "local_sample_fallback",
+            status: "stored_release_current_unavailable_samples_preserved",
             loadedAt: new Date().toISOString(),
           };
-          return false;
+          renderMainSamples();
+          return true;
         }
 
         lastMainSnapshot = current.snapshot;
@@ -800,7 +829,8 @@
       })
       .catch(function (e) {
         console.error("[social-main-automap] fail", e);
-        return false;
+        renderMainSamples();
+        return true;
       })
       .finally(function () {
         mainRunInFlight = null;

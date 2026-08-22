@@ -307,9 +307,16 @@
     return request(url, {}, false);
   }
   async function post(url, body) {
+    var payload = Object.assign({}, body || {});
+    if ((url === LIVE || url === AUTO) && window.IGDCSocialAI && typeof window.IGDCSocialAI.policyEnvelope === "function") {
+      var purpose = url === LIVE ? "collector" : "content";
+      var sectionKey = text(payload.sectionKey || payload.section || payload.targetSection);
+      var aiPolicy = window.IGDCSocialAI.policyEnvelope(sectionKey, purpose);
+      if (aiPolicy) payload.aiPolicy = aiPolicy;
+    }
     return request(
       url,
-      { method: "POST", body: JSON.stringify(body || {}) },
+      { method: "POST", body: JSON.stringify(payload) },
       true,
     );
   }

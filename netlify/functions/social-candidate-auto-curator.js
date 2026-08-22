@@ -10,9 +10,10 @@
 const SocialStore = require("./lib/social-candidate-store.v1");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
+const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-auto-curator-v1.1.0-registry-content-paired-selection";
+  "social-candidate-auto-curator-v1.2.0-ai-policy-envelope";
 const MAX_PER_SECTION = SocialStore.POOL_MAX_PER_SECTION || 350;
 
 function text(value) {
@@ -37,7 +38,7 @@ function chunks(values, size) {
 function reviewKey(row) {
   return text(row && (row.review_status || row.reviewStatus)).toLowerCase();
 }
-function eligible(row, route) {
+function eligible(row, route, aiPolicy) {
   const raw = SocialStore.plain(row && row.raw);
   const validation = SocialStore.validateCandidate(row);
   if (!validation.ok)
@@ -55,12 +56,15 @@ function eligible(row, route) {
     return { ok: false, reason: "public_channel_required" };
   if (text(row.risk_level) === "blocked")
     return { ok: false, reason: "safety_blocked" };
-  if (Number(row.safety_score || 0) < 65)
-    return { ok: false, reason: "safety_score_below_65" };
-  if (Number(row.trust_score || 0) < 50)
-    return { ok: false, reason: "trust_score_below_50" };
+  const normalizedAI = AIPolicy.normalize(aiPolicy || {});
+  if (Number(row.safety_score || 0) < normalizedAI.minSafetyScore)
+    return { ok: false, reason: "safety_score_below_ai_policy_minimum" };
+  if (Number(row.trust_score || 0) < normalizedAI.minTrustScore)
+    return { ok: false, reason: "trust_score_below_ai_policy_minimum" };
   if (raw.channelAsset !== true)
     return { ok: false, reason: "channel_asset_required" };
+  const aiVerdict = AIPolicy.evaluate(row, normalizedAI);
+  if (!aiVerdict.ok) return { ok: false, reason: aiVerdict.reason };
   const scopes = CountryRouting.scopesFrom(row);
   if (
     route.countryCode &&
@@ -102,6 +106,7 @@ exports.handler = async function (event) {
       });
     const actor = await actorFor(event);
     const body = SocialStore.parseBody(event);
+    const aiPolicy = AIPolicy.normalize(body.aiPolicy || {});
     if (body.confirmAutoCurate !== true && body.confirmAutoCurate !== "true") {
       return SocialStore.response(400, {
         ok: false,
@@ -136,7 +141,7 @@ exports.handler = async function (event) {
       const section = text(row && row.section_key);
       if (requestedSection && section !== requestedSection) return;
       if (!groups[section]) return;
-      const check = eligible(row, route);
+      const check = eligible(row, route, aiPolicy);
       if (!check.ok) {
         rejected.push({ id: row && row.id, section, reason: check.reason });
         return;
@@ -153,12 +158,12 @@ exports.handler = async function (event) {
     const bySection = {};
     Object.keys(groups).forEach((section) => {
       const rankRows = (items) =>
-        items.slice().sort(
-          (a, b) =>
-            SocialStore.rowScore(b) +
-            CountryRouting.matchScore(b, route) -
-            (SocialStore.rowScore(a) + CountryRouting.matchScore(a, route)),
-        );
+        items.slice().sort((a, b) => {
+          const av = AIPolicy.evaluate(a, aiPolicy);
+          const bv = AIPolicy.evaluate(b, aiPolicy);
+          return (SocialStore.rowScore(b) + CountryRouting.matchScore(b, route) + Number(bv.scoreAdjustment || 0)) -
+            (SocialStore.rowScore(a) + CountryRouting.matchScore(a, route) + Number(av.scoreAdjustment || 0));
+        });
       const influencers = rankRows(
         groups[section].filter(
           (row) => SocialStore.assetClassOf(row) === "influencer_registry",
@@ -227,6 +232,12 @@ exports.handler = async function (event) {
       rejectedCount: rejected.length,
       rejectedByReason: rejectionSummary(rejected),
       rejectedPreview: rejected.slice(0, 100),
+      aiPolicy: {
+        applied: !!(body.aiPolicy && typeof body.aiPolicy === "object"),
+        scopeType: aiPolicy.scopeType,
+        includeTopics: aiPolicy.includeTopics,
+        excludeTopics: aiPolicy.excludeTopics
+      },
       snapshotPublication: false,
       publicSlotMutation: false,
       manualReplacementOverridesPreserved: true,
