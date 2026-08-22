@@ -98,7 +98,11 @@ function isReleasedSocialSlot(slot) {
     text(slot && slot.type) === "external_social" &&
     text(audit.origin) === "social_candidates" &&
     !!text(slot && slot.title) &&
-    /^https:\/\//i.test(text(slot && (slot.url || slot.href || slot.link)))
+    /^https:\/\//i.test(text(slot && (
+      slot.url || slot.href || slot.link || slot.sourceUrl || slot.source_url ||
+      slot.latestContentUrl || slot.latest_content_url || slot.sourceContentUrl ||
+      slot.source_content_url || slot.permalink
+    )))
   );
 }
 function sourceItem(slot, sectionKey, release) {
@@ -109,7 +113,11 @@ function sourceItem(slot, sectionKey, release) {
     slot &&
       (slot.contentId || slot.candidateId || audit.candidate_id || slot.id),
   );
-  const url = text(slot && (slot.url || slot.href || slot.link));
+  const url = text(slot && (
+    slot.url || slot.href || slot.link || slot.sourceUrl || slot.source_url ||
+    slot.latestContentUrl || slot.latest_content_url || slot.sourceContentUrl ||
+    slot.source_content_url || slot.permalink
+  ));
   const thumbnail = text(
     slot &&
       (slot.thumbnailUrl || slot.thumbnail || slot.thumb || slot.imageUrl || slot.image),

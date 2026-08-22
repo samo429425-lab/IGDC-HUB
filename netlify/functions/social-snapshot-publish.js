@@ -16,7 +16,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.13.1-sequence-diagnostic";
+  "social-snapshot-publish-v1.13.2-idempotent-plan";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -741,6 +741,9 @@ exports.handler = async function (event) {
       (sum, list) => sum + (Array.isArray(list) ? list.length : 0),
       0,
     );
+    const currentPublicationPlan = releasedIdsBySection(base.doc);
+    const currentPublicationPlanHash = SocialStore.sha256(currentPublicationPlan);
+    const idempotentNoop = storeRelease && publicationPlanHash === currentPublicationPlanHash;
 
     // Fail closed before writing a stored release or queuing Netlify when a
     // normal publish unexpectedly resolves to zero real candidates. This is
@@ -756,6 +759,33 @@ exports.handler = async function (event) {
         preservedExistingFront: true,
         buildQueued: false,
         message: "공개할 승인 소셜 콘텐츠가 0건으로 계산되어 기존 프론트를 보존했습니다. 후보 상태를 새로고침한 뒤 다시 실행해 주세요.",
+      });
+    }
+
+    if (idempotentNoop) {
+      return SocialStore.response(200, {
+        ok: true,
+        version: VERSION,
+        operation: unpublishSelected ? "selected_front_unpublish" : "actual_front_apply",
+        actualApplyRequested: actualApplyOperation,
+        storeReleaseRequested: storeRelease,
+        requestedCandidateIds: candidateIds.length,
+        exactCandidateSelectionApplied: candidateIds.length > 0,
+        resolvedCandidateRows: Array.isArray(rows) ? rows.length : 0,
+        resolvedCandidateIds: Array.isArray(rows) ? rows.map((row) => text(row && row.id)).filter(Boolean) : [],
+        releaseStored: false,
+        releaseStoredVerified: false,
+        actualFrontApplyStored: true,
+        actualFrontApplyQueued: false,
+        idempotentNoop: true,
+        duplicateBuildPrevented: true,
+        publicationPlanHash,
+        publicationPlanCount,
+        publicationPlanBySection: Object.fromEntries(
+          Object.entries(publicationPlan).map(([key, list]) => [key, Array.isArray(list) ? list.length : 0]),
+        ),
+        buildTrigger: { ok: true, status: "idempotent_noop", queued: false },
+        message: "현재 공개 상태와 동일한 콘텐츠 구성이므로 중복 저장·중복 빌드를 실행하지 않았습니다.",
       });
     }
 

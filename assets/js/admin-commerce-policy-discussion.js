@@ -21,6 +21,7 @@
   var currentWorkspace = null;
   var currentResponse = null;
   var pendingSavePayload = null;
+  var currentWorkspaceType = 'global';
   var TOKEN_KEYS = [
     'osauth.tokens.v2', 'osauth.tokens.v1', 'igdc.tokens', 'igdc_auth_tokens',
     'auth0_tokens', 'auth0spa', 'igdc_id_token', 'id_token', 'auth0_id_token'
@@ -160,20 +161,45 @@
     };
   }
 
-  function buildScope(type) {
+  function buildScope(type, options) {
     var state = scopeState();
-    if (type === 'global') return { scopeType: 'global' };
-    if (type === 'regional') {
+    var opts = options && typeof options === 'object' ? options : {};
+    var workspaceKey = text(opts.workspaceKey || 'policy') || 'policy';
+    var workspaceLabel = text(opts.workspaceLabel || '');
+    var base;
+    if (type === 'global') base = { scopeType: 'global' };
+    else if (type === 'regional') {
       if (!state.regionGroup) throw new Error('먼저 권역을 선택해 주세요.');
-      return { scopeType: 'regional', regionGroup: state.regionGroup };
+      base = { scopeType: 'regional', regionGroup: state.regionGroup };
+    } else {
+      if (!state.country) throw new Error('먼저 국가를 선택해 주세요.');
+      base = { scopeType: 'country', regionGroup: state.regionGroup, countryCode: state.country, subdivisionCode: state.region };
     }
-    if (!state.country) throw new Error('먼저 국가를 선택해 주세요.');
-    return {
-      scopeType: 'country',
-      regionGroup: state.regionGroup,
-      countryCode: state.country,
-      subdivisionCode: state.region
-    };
+    base.workspaceKey = workspaceKey;
+    if (workspaceLabel) base.workspaceLabel = workspaceLabel;
+    return base;
+  }
+
+  function canonicalWorkspace(scope) {
+    return !scope || !text(scope.workspaceKey) || text(scope.workspaceKey) === 'policy';
+  }
+
+  function detectLanguage(value) {
+    var sample = text(value);
+    if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(sample)) return 'ko-KR';
+    if (/[ぁ-んァ-ヶ]/.test(sample)) return 'ja-JP';
+    if (/[一-鿿]/.test(sample)) return 'zh-CN';
+    if (/[؀-ۿ]/.test(sample)) return 'ar-SA';
+    if (/[ऀ-ॿ]/.test(sample)) return 'hi-IN';
+    if (/[฀-๿]/.test(sample)) return 'th-TH';
+    return 'en-US';
+  }
+
+  function responseLanguage() {
+    var select = $('policyVoiceLanguage');
+    var selected = select ? text(select.value) : 'auto';
+    if (selected && selected !== 'auto') return selected;
+    return detectLanguage($('policyInstruction') && $('policyInstruction').value);
   }
 
   function modalNotice(message, kind) {
@@ -198,23 +224,51 @@
   }
 
   function updateBadge(scope, workspace) {
+    if (!canonicalWorkspace(scope)) return;
     var id = scope.scopeType === 'global' ? 'globalPolicyState' : scope.scopeType === 'regional' ? 'regionalPolicyState' : 'countryPolicyState';
     var element = $(id);
     if (element) element.textContent = '관리자 정책: ' + workspaceStatus(workspace);
+  }
+
+  function selectedMessageIds() {
+    return Array.prototype.map.call(document.querySelectorAll('[data-policy-message-select]:checked'), function (box) {
+      return text(box.value);
+    }).filter(Boolean);
+  }
+
+  function syncMessageSelection() {
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('[data-policy-message-select]'));
+    var selected = boxes.filter(function (box) { return box.checked; });
+    var all = $('policyMessageSelectAll');
+    if (all) {
+      all.checked = boxes.length > 0 && selected.length === boxes.length;
+      all.indeterminate = selected.length > 0 && selected.length < boxes.length;
+      all.disabled = !boxes.length;
+    }
+    if ($('policyMessageSelectedCount')) $('policyMessageSelectedCount').textContent = '선택 ' + selected.length + '건';
+    if ($('policyMessageDeleteBtn')) $('policyMessageDeleteBtn').disabled = !selected.length;
+    if ($('policyMessageClearBtn')) $('policyMessageClearBtn').disabled = !boxes.length;
   }
 
   function renderMessages(messages) {
     var element = $('policyTranscript');
     var rows = Array.isArray(messages) ? messages : [];
     if (!rows.length) {
-      element.innerHTML = '<div class="small">저장된 협의 기록이 없습니다.</div>';
+      element.innerHTML = '<div class="small">저장된 대화 기록이 없습니다.</div>';
+      syncMessageSelection();
       return;
     }
-    element.innerHTML = rows.map(function (row) {
-      var role = row.role === 'assistant' ? 'assistant' : 'user';
-      return '<div class="policy-message ' + role + '"><strong>' + (role === 'assistant' ? 'AI' : '관리자') + '</strong>\n' + esc(row.content || '') + '</div>';
+    element.innerHTML = rows.map(function (row, index) {
+      var role = row.role === 'assistant' ? 'assistant' : row.role === 'system' ? 'system' : 'user';
+      var label = role === 'assistant' ? 'AI' : role === 'system' ? '시스템' : '관리자';
+      var id = text(row.id || ('message_' + index));
+      var created = text(row.createdAt);
+      return '<div class="policy-message ' + role + '"><label class="policy-message-select"><input type="checkbox" data-policy-message-select="1" value="' + esc(id) + '"> 선택</label><strong>' + label + '</strong>' +
+        (created ? '<span class="policy-message-time">' + esc(created.slice(0, 16).replace('T', ' ')) + '</span>' : '') +
+        '<div class="policy-message-content">' + esc(row.content || '') + '</div></div>';
     }).join('');
     element.scrollTop = element.scrollHeight;
+    syncMessageSelection();
   }
 
   function proposalData(workspace) {
@@ -232,7 +286,7 @@
     }
     var summary = text(proposal && proposal.summary) || latestAssistant;
     if (summary) {
-      window.dispatchEvent(new CustomEvent('igdc:policy-ai-response', { detail: { text: summary } }));
+      window.dispatchEvent(new CustomEvent('igdc:policy-ai-response', { detail: { text: summary, language: text(proposal && proposal.language && proposal.language.code) || responseLanguage() } }));
     }
   }
 
@@ -252,10 +306,16 @@
     currentWorkspace = workspace;
     var proposal = proposalData(workspace);
     var scope = workspace.scope || {};
-    $('policyScopeLabel').textContent = scope.scopeLabel || scope.scopeType || '';
+    var workspaceName = text(workspace.workspaceLabel || scope.workspaceLabel);
+    $('policyScopeLabel').textContent = (scope.scopeLabel || scope.scopeType || '') + (workspaceName ? ' · ' + workspaceName : '');
     $('policyInstruction').value = workspace.administratorInstruction || '';
     $('policyFinalDecision').value = workspace.finalDecision || '';
-    $('policyStatus').value = workspace.status || 'draft';
+    var canonical = canonicalWorkspace(scope);
+    $('policyStatus').value = canonical ? (workspace.status || 'draft') : 'draft';
+    $('policyStatus').disabled = !canonical;
+    if ($('policyPromoteBtn')) $('policyPromoteBtn').classList.toggle('hidden', canonical);
+    if ($('policyWorkspaceDeleteBtn')) $('policyWorkspaceDeleteBtn').classList.toggle('hidden', canonical);
+    if ($('policyDecisionClearBtn')) $('policyDecisionClearBtn').disabled = !text(workspace.finalDecision) && !(workspace.categoryWeights && Object.keys(workspace.categoryWeights).some(function (key) { return Number(workspace.categoryWeights[key]) !== 0; }));
     $('policyValidityDays').value = workspace.validityDays || 30;
     $('policyWeights').value = JSON.stringify(
       workspace.categoryWeights && Object.keys(workspace.categoryWeights).length ? workspace.categoryWeights : (proposal.categoryWeights || {}),
@@ -266,7 +326,7 @@
     $('policyAvoidDirections').value = (workspace.avoidDirections && workspace.avoidDirections.length ? workspace.avoidDirections : (proposal.avoidDirections || [])).join('\n');
     $('policyPriorityTargets').value = (workspace.manualPriorityTargets && workspace.manualPriorityTargets.length ? workspace.manualPriorityTargets : (proposal.manualPriorityTargets || [])).join('\n');
     $('policyBlockedTargets').value = (workspace.manualBlockedTargets && workspace.manualBlockedTargets.length ? workspace.manualBlockedTargets : (proposal.manualBlockedTargets || [])).join('\n');
-    $('policyProposal').textContent = Object.keys(proposal).length ? JSON.stringify(proposal, null, 2) : 'AI와 협의하면 구조화된 정책안이 표시됩니다.';
+    $('policyProposal').textContent = Object.keys(proposal).length ? JSON.stringify(proposal, null, 2) : 'AI와 대화하면 운영 의견과 구조화된 제안이 표시됩니다.';
     renderMessages(workspace.messages || []);
     var isCountry = scope.scopeType === 'country';
     $('policyCountryFields').classList.toggle('hidden', !isCountry);
@@ -283,27 +343,28 @@
     element.classList.remove('hidden');
   }
 
-  async function openPolicy(type) {
+  async function openPolicy(type, options) {
     clearModalNotice();
+    currentWorkspaceType = type || 'global';
     try {
-      currentScope = buildScope(type);
+      currentScope = buildScope(currentWorkspaceType, options || {});
     } catch (error) {
       pageNotice(error.message, 'warn');
       return;
     }
     $('policyModal').classList.remove('hidden');
-    $('policyModalTitle').textContent = type === 'global'
-      ? '전 세계 정책 입안·AI 협의'
-      : type === 'regional'
-        ? '선택 권역 정책 입안·AI 협의'
-        : '선택 국가 정책 입안·AI 협의·수동 통제';
-    $('policyScopeLabel').textContent = '정책 작업공간을 불러오는 중입니다.';
+    var workspaceName = text(currentScope.workspaceLabel);
+    $('policyModalTitle').textContent = workspaceName ? workspaceName + ' · AI 운영·정책 대화' :
+      currentWorkspaceType === 'global' ? '전 세계 정책 입안·AI 협의' :
+      currentWorkspaceType === 'regional' ? '선택 권역 정책 입안·AI 협의' : '선택 국가 정책 입안·AI 협의·수동 통제';
+    $('policyScopeLabel').textContent = 'AI 대화 작업공간을 불러오는 중입니다.';
     try {
       var data = await api('policy_workspace', 'GET', currentScope);
       currentResponse = data;
       renderWorkspace(data.workspace);
+      setTimeout(function () { if ($('policyInstruction')) $('policyInstruction').focus(); }, 0);
     } catch (error) {
-      modalNotice(error.message || '정책 작업공간을 불러오지 못했습니다.', 'fail');
+      modalNotice(error.message || 'AI 대화 작업공간을 불러오지 못했습니다.', 'fail');
     }
   }
 
@@ -326,7 +387,7 @@
   }
 
   function setBusy(busy) {
-    ['policyDiscussBtn', 'policySaveBtn', 'policyCloseBtn', 'policyConfirmSaveBtn'].forEach(function (id) {
+    ['policyDiscussBtn', 'policySaveBtn', 'policyCloseBtn', 'policyConfirmSaveBtn', 'policyMessageDeleteBtn', 'policyMessageClearBtn', 'policyDecisionClearBtn', 'policyWorkspaceDeleteBtn', 'policyPromoteBtn'].forEach(function (id) {
       var element = $(id);
       if (element) element.disabled = !!busy;
     });
@@ -342,7 +403,8 @@
     }
     setBusy(true);
     try {
-      var data = await api('policy_ai_discuss', 'POST', {}, { scope: currentScope, instruction: instruction });
+      var language = responseLanguage();
+      var data = await api('policy_ai_discuss', 'POST', {}, { scope: currentScope, instruction: instruction, language: language });
       currentResponse = data;
       renderWorkspace(data.workspace);
       var proposal = data.ai && data.ai.proposal || {};
@@ -354,12 +416,10 @@
         $('policyBlockedTargets').value = (proposal.manualBlockedTargets || []).join('\n');
       }
       $('policyProposal').textContent = JSON.stringify(proposal, null, 2);
-      var speechText = text(proposal.summary) || 'AI 정책안을 작성했습니다.';
-      window.dispatchEvent(new CustomEvent('igdc:policy-ai-response', { detail: { text: speechText } }));
       modalNotice(
         data.ai && data.ai.error
-          ? 'AI 협의는 제한 모드로 저장됐습니다: ' + data.ai.error
-          : 'AI 정책안을 작성하고 협의 기록을 저장했습니다. 관리자 최종 결정을 확인해 주세요.',
+          ? 'AI 대화는 제한 모드로 저장됐습니다: ' + data.ai.error
+          : (canonicalWorkspace(currentScope) ? 'AI 정책안을 작성하고 대화 기록을 저장했습니다. 관리자 최종 결정을 확인해 주세요.' : '이 블록의 운영 대화와 AI 제안을 저장했습니다. 필요한 내용만 정책 초안으로 반영할 수 있습니다.'),
         data.ai && data.ai.error ? 'warn' : 'ok'
       );
       return true;
@@ -386,7 +446,7 @@
       scope: currentScope,
       administratorInstruction: text($('policyInstruction').value),
       finalDecision: text($('policyFinalDecision').value),
-      status: $('policyStatus').value,
+      status: canonicalWorkspace(currentScope) ? $('policyStatus').value : 'draft',
       validityDays: Number($('policyValidityDays').value) || 30,
       categoryWeights: weightsValue(),
       priorityDirections: lines($('policyPriorityDirections').value),
@@ -467,11 +527,96 @@
       currentResponse = data;
       renderWorkspace(data.workspace);
       closeConfirm();
-      modalNotice('관리자 결정과 정책 통제 내용을 저장했습니다. 활성 정책은 다음 자동 수집부터 일반 AI보다 우선 적용됩니다.', 'ok');
+      modalNotice(canonicalWorkspace(currentScope) ? '관리자 결정과 정책 통제 내용을 저장했습니다. 활성 정책은 다음 자동 수집부터 일반 AI보다 우선 적용됩니다.' : '이 블록의 운영 결정·메모를 저장했습니다. 아직 운영 정책에는 자동 반영되지 않습니다.', 'ok');
     } catch (error) {
       modalNotice(error.message || '관리자 정책 저장에 실패했습니다.', 'fail');
       $('policyConfirmModal').classList.add('hidden');
       pendingSavePayload = null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reloadCurrentWorkspace() {
+    if (!currentScope) return null;
+    var data = await api('policy_workspace', 'GET', currentScope);
+    currentResponse = data;
+    renderWorkspace(data.workspace);
+    return data;
+  }
+
+  async function deleteSelectedMessages(all) {
+    var ids = all ? [] : selectedMessageIds();
+    if (!all && !ids.length) {
+      modalNotice('삭제할 대화 기록을 선택해 주세요.', 'warn');
+      return;
+    }
+    var countText = all ? '이 작업공간의 저장된 대화 기록 전체' : '선택한 대화 기록 ' + ids.length + '건';
+    if (!window.confirm(countText + '를 삭제합니다. 최종 정책·관리자 결정은 별도로 유지됩니다. 계속할까요?')) return;
+    setBusy(true);
+    try {
+      var data = await api('policy_messages_delete', 'POST', {}, { scope: currentScope, messageIds: ids, all: all === true });
+      currentResponse = data;
+      renderWorkspace(data.workspace);
+      modalNotice('대화 기록 ' + Number(data.deleted || 0) + '건을 삭제했습니다.', 'ok');
+    } catch (error) {
+      modalNotice(error.message || '대화 기록을 삭제하지 못했습니다.', 'fail');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearSavedDecision() {
+    if (!currentScope) return;
+    if (!window.confirm('이 작업공간에 저장된 관리자 최종 결정·가중치·우선/제외 방향을 삭제하고 초안 상태로 되돌립니다. 대화 기록은 유지합니다. 계속할까요?')) return;
+    setBusy(true);
+    try {
+      var data = await api('policy_decision_clear', 'POST', {}, { scope: currentScope });
+      currentResponse = data;
+      renderWorkspace(data.workspace);
+      modalNotice('저장된 결정·정책 내용을 삭제했습니다. 대화 기록은 그대로 유지했습니다.', 'ok');
+    } catch (error) {
+      modalNotice(error.message || '저장된 결정 내용을 삭제하지 못했습니다.', 'fail');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteCurrentWorkspace() {
+    if (!currentScope || canonicalWorkspace(currentScope)) return;
+    var label = text(currentScope.workspaceLabel || currentScope.workspaceKey);
+    if (!window.confirm('[' + label + '] 작업공간의 대화 기록·저장 결정 전체를 삭제합니다. 정식 정책 작업공간에는 영향을 주지 않습니다. 계속할까요?')) return;
+    setBusy(true);
+    try {
+      var data = await api('policy_workspace_delete', 'POST', {}, { scope: currentScope });
+      currentResponse = data;
+      renderWorkspace(data.workspace);
+      modalNotice('이 블록의 AI 대화 작업공간을 초기화했습니다.', 'ok');
+    } catch (error) {
+      modalNotice(error.message || '작업공간을 삭제하지 못했습니다.', 'fail');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function promoteCurrentToPolicy() {
+    if (!currentScope || canonicalWorkspace(currentScope)) return;
+    var decision = text($('policyFinalDecision').value);
+    if (!decision) {
+      var proposal = proposalData(currentWorkspace);
+      decision = text(proposal.summary) || text($('policyInstruction').value);
+    }
+    if (!decision) {
+      modalNotice('정책 초안으로 반영할 관리자 결정 또는 대화 내용을 먼저 작성해 주세요.', 'warn');
+      return;
+    }
+    if (!window.confirm('이 블록에서 협의한 내용을 현재 국가·권역·전 세계의 정식 정책 작업공간에 "초안"으로 복사합니다. 자동 활성화되지는 않습니다. 계속할까요?')) return;
+    setBusy(true);
+    try {
+      await api('policy_promote', 'POST', {}, { scope: currentScope, finalDecision: decision, status: 'draft' });
+      modalNotice('이 블록의 결정 내용을 정식 정책 작업공간에 초안으로 반영했습니다. 정책 버튼에서 다시 확인·수정·활성화할 수 있습니다.', 'ok');
+    } catch (error) {
+      modalNotice(error.message || '정책 초안으로 반영하지 못했습니다.', 'fail');
     } finally {
       setBusy(false);
     }
@@ -530,6 +675,19 @@
     $('policyDiscussBtn').addEventListener('click', discuss);
     $('policySaveBtn').addEventListener('click', requestSaveReview);
     $('policyDownloadBtn').addEventListener('click', download);
+    if ($('policyMessageSelectAll')) $('policyMessageSelectAll').addEventListener('change', function () {
+      var checked = this.checked;
+      Array.prototype.forEach.call(document.querySelectorAll('[data-policy-message-select]'), function (box) { box.checked = checked; });
+      syncMessageSelection();
+    });
+    if ($('policyTranscript')) $('policyTranscript').addEventListener('change', function (event) {
+      if (event.target && event.target.matches('[data-policy-message-select]')) syncMessageSelection();
+    });
+    if ($('policyMessageDeleteBtn')) $('policyMessageDeleteBtn').addEventListener('click', function () { deleteSelectedMessages(false); });
+    if ($('policyMessageClearBtn')) $('policyMessageClearBtn').addEventListener('click', function () { deleteSelectedMessages(true); });
+    if ($('policyDecisionClearBtn')) $('policyDecisionClearBtn').addEventListener('click', clearSavedDecision);
+    if ($('policyWorkspaceDeleteBtn')) $('policyWorkspaceDeleteBtn').addEventListener('click', deleteCurrentWorkspace);
+    if ($('policyPromoteBtn')) $('policyPromoteBtn').addEventListener('click', promoteCurrentToPolicy);
     $('policyConfirmSaveBtn').addEventListener('click', commitSave);
     $('policyConfirmEditBtn').addEventListener('click', function () {
       closeConfirm();
@@ -543,6 +701,17 @@
     $('policyConfirmModal').addEventListener('click', function (event) {
       if (event.target === $('policyConfirmModal')) closeConfirm();
     });
+    document.addEventListener('click', function (event) {
+      var button = event.target && event.target.closest ? event.target.closest('[data-policy-workspace]') : null;
+      if (!button) return;
+      event.preventDefault();
+      event.stopPropagation();
+      var requestedType = text(button.getAttribute('data-policy-scope') || 'country');
+      openPolicy(requestedType, {
+        workspaceKey: text(button.getAttribute('data-policy-workspace')),
+        workspaceLabel: text(button.getAttribute('data-policy-workspace-label'))
+      });
+    });
     document.addEventListener('keydown', function (event) {
       if (event.key !== 'Escape') return;
       if (!$('policyConfirmModal').classList.contains('hidden')) {
@@ -555,6 +724,10 @@
 
   window.IGDCPolicyDiscussion = {
     open: openPolicy,
+    openWorkspace: function (options) {
+      options = options || {};
+      return openPolicy(text(options.scopeType || 'country'), options);
+    },
     close: closePolicy,
     discuss: discuss,
     getCurrentScope: function () { return currentScope; },

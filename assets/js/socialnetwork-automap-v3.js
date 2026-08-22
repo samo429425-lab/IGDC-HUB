@@ -50,7 +50,14 @@
     return (
       safeText(
         it &&
-          (it.affiliateOutboundUrl ||
+          (it.sourceUrl ||
+            it.source_url ||
+            it.latestContentUrl ||
+            it.latest_content_url ||
+            it.sourceContentUrl ||
+            it.source_content_url ||
+            it.permalink ||
+            it.affiliateOutboundUrl ||
             it.affiliate_outbound_url ||
             it.externalOutboundUrl ||
             it.external_outbound_url ||
@@ -109,6 +116,26 @@
           it.id ||
           ""),
     ).trim();
+  }
+
+  function dedupeMainItems(items) {
+    const seenIds = new Set();
+    const seenUrls = new Set();
+    const out = [];
+    (Array.isArray(items) ? items : []).forEach(function (it) {
+      if (!it) return;
+      const id = pickProductId(it).toLowerCase();
+      const url = pickUrl(it).trim().toLowerCase();
+      const sample = isPlaceholderItem(it);
+      if (!sample) {
+        if (id && seenIds.has(id)) return;
+        if (url && url !== "#" && seenUrls.has(url)) return;
+      }
+      if (id) seenIds.add(id);
+      if (url && url !== "#") seenUrls.add(url);
+      out.push(it);
+    });
+    return out;
   }
 
   function isExternalUrl(url) {
@@ -501,6 +528,7 @@
     const thumb = pickThumb(it);
 
     card.href = url || "#";
+    card.dataset.contentUrl = url || "#";
     card.target = url && url !== "#" ? "_blank" : "_self";
     card.rel = "noopener";
     card.removeAttribute("data-dummy");
@@ -736,11 +764,12 @@
       // exactly. candidatePool is administrative reserve/ranking context and must
       // never bypass the real+SAMPLE replacement state already decided upstream.
       const raw = sections[key];
-      const items = Array.isArray(raw)
+      const sourceItems = Array.isArray(raw)
         ? raw
         : Array.isArray(raw && raw.items)
           ? raw.items
           : [];
+      const items = dedupeMainItems(sourceItems);
       // Do not filter SAMPLE rows here. If Snapshot Engine sends a sample slot,
       // render it; if it sends nothing, clear the row. This makes SAMPLE slots
       // a real end-to-end pipeline diagnostic instead of a browser fallback.

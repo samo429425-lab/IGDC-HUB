@@ -1504,9 +1504,15 @@ window.addEventListener('resize', function(){
     var key = grid.getAttribute('data-psom-key') || '';
     if(!key || key === 'rightPanel') return;
 
+    var href = (card.getAttribute('href') || '').trim();
+    if(href && href !== '#'){
+      // Real SNS content: use the exact outbound URL delivered by Snapshot/Automap.
+      // Do not intercept it with the preview viewer.
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
-
     openViewer(card);
   }, true);
 })();
@@ -1547,7 +1553,7 @@ window.addEventListener('resize', function(){
 })();
 </script>
  
-<script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260404psom"></script>
+<script defer src="/assets/js/socialnetwork-automap-v3.js?v=20260822-social-v4-link"></script>
   
   <script id="igtc-checkout-trigger-v1">
 (function(){

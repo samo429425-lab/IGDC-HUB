@@ -17,6 +17,7 @@
   var askSubmitted = false;
   var busy = false;
   var lastSpeakText = '';
+  var lastSpeakLanguage = '';
   var lastFocusedTarget = 'policyInstruction';
   var TARGET_IDS = [
     'policyInstruction', 'policyFinalDecision', 'policyPriorityDirections',
@@ -25,6 +26,17 @@
 
   function text(value) {
     return String(value == null ? '' : value).trim();
+  }
+
+  function detectTextLanguage(value) {
+    var sample = text(value);
+    if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(sample)) return 'ko-KR';
+    if (/[ぁ-んァ-ヶ]/.test(sample)) return 'ja-JP';
+    if (/[一-鿿]/.test(sample)) return 'zh-CN';
+    if (/[؀-ۿ]/.test(sample)) return 'ar-SA';
+    if (/[ऀ-ॿ]/.test(sample)) return 'hi-IN';
+    if (/[฀-๿]/.test(sample)) return 'th-TH';
+    return '';
   }
 
   function state(label, detail) {
@@ -37,6 +49,10 @@
   function selectedLanguage() {
     var selected = $('policyVoiceLanguage') ? $('policyVoiceLanguage').value : 'auto';
     if (selected && selected !== 'auto') return selected;
+    var instruction = $('policyInstruction');
+    var target = activeTarget();
+    var detected = detectTextLanguage((target && target.value) || (instruction && instruction.value) || '');
+    if (detected) return detected;
     var browserLanguage = text(navigator.language || document.documentElement.lang || 'ko-KR');
     if (/^[a-z]{2,3}(-[A-Z]{2})?$/.test(browserLanguage)) return browserLanguage;
     return browserLanguage.toLowerCase().indexOf('ko') === 0 ? 'ko-KR' : 'en-US';
@@ -279,7 +295,7 @@
     }
     stopRecognition(false);
     stopSpeech();
-    var language = selectedLanguage();
+    var language = lastSpeakLanguage || detectTextLanguage(content) || selectedLanguage();
     var utterance = new SpeechSynthesisUtterance(content.slice(0, 3500));
     utterance.lang = language;
     utterance.rate = 1;
@@ -294,12 +310,34 @@
     }
   }
 
+  function clearActiveTarget() {
+    stopRecognition(false);
+    var target = activeTarget();
+    if (!target) return;
+    target.value = '';
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    target.focus();
+    state('입력 내용 삭제', '선택한 입력창을 비웠습니다. 다시 입력하거나 녹음할 수 있습니다.');
+  }
+
+  function redoDictation() {
+    var target = activeTarget();
+    if (!target) return;
+    target.value = '';
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    target.focus();
+    state('다시 녹음 준비', '기존 입력을 지우고 새 음성 입력을 시작합니다.');
+    startRecognition('dictate', false);
+  }
+
   function updateButtons() {
     var supported = !!SpeechRecognitionConstructor;
     var dictateButton = $('policyVoiceDictateBtn');
     var askButton = $('policyVoiceAskBtn');
     var speakButton = $('policyVoiceSpeakBtn');
     var stopButton = $('policyVoiceStopBtn');
+    var clearButton = $('policyVoiceClearBtn');
+    var redoButton = $('policyVoiceRedoBtn');
     if (dictateButton) {
       dictateButton.disabled = busy || !supported;
       dictateButton.textContent = activeMode === 'dictate' ? '음성 입력 종료' : '음성 입력';
@@ -310,6 +348,8 @@
     }
     if (speakButton) speakButton.disabled = busy;
     if (stopButton) stopButton.disabled = !activeMode && !(window.speechSynthesis && window.speechSynthesis.speaking);
+    if (clearButton) clearButton.disabled = busy;
+    if (redoButton) redoButton.disabled = busy || !supported;
   }
 
   function rememberTarget(event) {
@@ -326,6 +366,8 @@
     $('policyVoiceAskBtn').addEventListener('click', askByVoice);
     $('policyVoiceSpeakBtn').addEventListener('click', speak);
     $('policyVoiceStopBtn').addEventListener('click', stop);
+    if ($('policyVoiceClearBtn')) $('policyVoiceClearBtn').addEventListener('click', clearActiveTarget);
+    if ($('policyVoiceRedoBtn')) $('policyVoiceRedoBtn').addEventListener('click', redoDictation);
     TARGET_IDS.forEach(function (id) {
       var element = $(id);
       if (element) element.addEventListener('focus', rememberTarget);
@@ -335,7 +377,13 @@
     });
     window.addEventListener('igdc:policy-ai-response', function (event) {
       lastSpeakText = text(event && event.detail && event.detail.text);
-      if (lastSpeakText) state('AI 답변 준비', '답변 읽기 버튼으로 음성 재생할 수 있습니다.');
+      lastSpeakLanguage = text(event && event.detail && event.detail.language) || detectTextLanguage(lastSpeakText) || selectedLanguage();
+      if (lastSpeakText) {
+        state('AI 답변 준비', '답변 읽기 버튼으로 같은 언어의 음성 재생을 할 수 있습니다.');
+        if ($('policyVoiceConversationMode') && $('policyVoiceConversationMode').checked) {
+          setTimeout(function () { if (lastSpeakText) speak(); }, 320);
+        }
+      }
     });
     window.addEventListener('igdc:policy-busy', function (event) {
       busy = !!(event && event.detail && event.detail.busy);
@@ -359,7 +407,9 @@
     ask: askByVoice,
     speak: speak,
     stop: stop,
-    setSpeakText: function (value) { lastSpeakText = text(value); },
+    clearActiveTarget: clearActiveTarget,
+    redo: redoDictation,
+    setSpeakText: function (value, language) { lastSpeakText = text(value); lastSpeakLanguage = text(language) || detectTextLanguage(lastSpeakText); },
     get state() { return activeMode || 'off'; }
   };
 

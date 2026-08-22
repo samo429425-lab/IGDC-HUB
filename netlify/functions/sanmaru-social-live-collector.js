@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.9.0-multiplatform-latest-content";
+const VERSION = "sanmaru-social-live-collector-v1.9.1-multiplatform-link-thumbnail";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -1181,9 +1181,10 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, c
     mediaPreview.poster,
     mediaPreview.image
   ]);
-  const publicMetadata = suppliedThumbnail
-    ? {}
-    : await publicPageMetadata(platform, resolved.latestContentUrl);
+  // Latest-content cards must prefer metadata from the actual post/video URL.
+  // A registry/profile thumbnail is only a last fallback and must never prevent
+  // us from attempting to read the real content thumbnail.
+  const publicMetadata = await publicPageMetadata(platform, resolved.latestContentUrl);
   const title = firstText([
     latest.title,
     enrichment.title,
@@ -1225,7 +1226,7 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, c
     channelAsset: true,
     latestContentAsset: true,
     contentPublishedAt: firstText([latest.publishedAt, item && item.publishedAt, item && item.published_at, item && item.pubDate, item && item.date]),
-    thumbnailUrl: firstText([suppliedThumbnail, publicMetadata.thumbnail]),
+    thumbnailUrl: firstText([latest.thumbnail, publicMetadata.thumbnail, enrichment.thumbnail, suppliedThumbnail]),
     channelThumbnailUrl: firstText([
       item && item.channelThumbnail,
       item && item.channelThumbnailUrl,
@@ -1615,17 +1616,18 @@ exports.handler = async function(event) {
     const rejected = resolved.rejected;
     const candidates = resolved.candidates;
     const policyAccepted = [];
-    candidates.forEach((candidate) => {
+    candidates.forEach((candidate, index) => {
       const verdict = AIPolicy.evaluate(candidate, aiPolicy);
-      if (verdict.ok) policyAccepted.push(candidate);
+      if (verdict.ok) policyAccepted.push({ candidate, influencer: resolved.influencers[index] || null });
       else rejected.push({ id: candidate && candidate.id, reason: verdict.reason });
     });
 
-    const selected = policyAccepted.slice(0, target);
+    const selectedPairs = policyAccepted.slice(0, target);
+    const selected = selectedPairs.map((pair) => pair.candidate);
     const submitted = [];
-    selected.forEach((candidate, index) => {
-      if (resolved.influencers[index]) submitted.push(resolved.influencers[index]);
-      submitted.push(candidate);
+    selectedPairs.forEach((pair) => {
+      if (pair.influencer) submitted.push(pair.influencer);
+      submitted.push(pair.candidate);
     });
     const gatewayResponse = await CandidateGateway.handler(
       gatewayEvent(event, submitted, sectionKey, dryRun, submitted.length || 1)

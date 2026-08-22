@@ -1435,9 +1435,9 @@ function handleSocialSnapshot(bank) {
         title: item.title || item.name || "Untitled",
         description: item.description || item.summary || "",
         summary: item.summary || "",
-        url: item.url || item.link || "#",
-        link: item.link || item.url || "#",
-        href: item.href || item.url || item.link || "#",
+        url: item.url || item.link || item.href || item.sourceUrl || item.source_url || item.latestContentUrl || item.latest_content_url || item.sourceContentUrl || item.source_content_url || item.permalink || "#",
+        link: item.link || item.url || item.href || item.sourceUrl || item.source_url || item.latestContentUrl || item.latest_content_url || item.sourceContentUrl || item.source_content_url || item.permalink || "#",
+        href: item.href || item.url || item.link || item.sourceUrl || item.source_url || item.latestContentUrl || item.latest_content_url || item.sourceContentUrl || item.source_content_url || item.permalink || "#",
         thumb:
           item.thumbnail ||
           item.thumb ||
