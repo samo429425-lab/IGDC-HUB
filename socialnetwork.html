@@ -681,35 +681,11 @@ a[id*="qna"]{
     })();
   </script>
 
-  <script>
+  <script id="social-snapshot-sample-owner-bridge">
     (function(){
-      var DEMO = {
-        'social-youtube': { icon:'▶️', title:'YouTube', row:'Row 1 · 미리보기' },
-        'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · 미리보기' },
-        'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · 미리보기' },
-        'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · 미리보기' },
-        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · 미리보기' },
-        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · 미리보기' },
-        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · 미리보기' },
-        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · 미리보기' },
-        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · 미리보기' }
-      };
-      function makeCard(meta){
-        var a = document.createElement('a'); a.className='card'; a.href='#';
-        a.innerHTML = '<div class="pic"><span>'+meta.icon+'</span></div><div class="meta"><div class="title">'+meta.title+'</div><div class="desc">'+meta.row+'</div><div class="cta">열기</div></div>';
-        return a;
-      }
-      function seedMainPlaceholders(){
-        document.querySelectorAll('.thumb-grid[data-psom-key]').forEach(function(grid){
-          if(grid.getAttribute('data-psom-key') === 'rightPanel') return;
-          if(grid.querySelector('a.card')) return;
-          var key = grid.getAttribute('data-psom-key'); var meta = DEMO[key]; if(!meta) return;
-          var inner = grid.querySelector('.thumb-inner') || grid;
-          if(inner.children.length) inner.innerHTML='';
-          for(var i=0;i<100;i++) inner.appendChild(makeCard(meta));
-        });
-      }
-      if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', seedMainPlaceholders, {once:true}); } else { seedMainPlaceholders(); }
+      // Compatibility hook only. Social SAMPLE rows are owned by the
+      // SearchBank/Snapshot pipeline; the browser must never generate them.
+      function seedMainPlaceholders(){ return false; }
       window.__SOCIAL_PLACEHOLDER_SEED__ = seedMainPlaceholders;
     })();
   </script>

@@ -424,8 +424,76 @@
     }
   }
 
+  function sampleLabelForSection(key) {
+    const labels = {
+      "social-youtube": "YouTube",
+      "social-instagram": "Instagram",
+      "social-tiktok": "TikTok",
+      "social-facebook": "Facebook",
+      "social-wechat": "WeChat",
+      "social-weibo": "Weibo",
+      "social-pinterest": "Pinterest",
+      "social-reddit": "Reddit",
+      "social-twitter": "X (Twitter)",
+    };
+    return labels[safeText(key)] || "SNS";
+  }
+
+  function snapshotSampleNumber(it, card) {
+    const id = pickProductId(it);
+    const m = String(id || "").match(/(?:_|:)(\d{1,3})$/);
+    if (m) return String(Number(m[1]) || 1).padStart(3, "0");
+    try {
+      const grid = card && card.closest && card.closest("[data-psom-key]");
+      const idx = grid ? getMainSlots(grid).indexOf(card) : -1;
+      return String((idx >= 0 ? idx : 0) + 1).padStart(3, "0");
+    } catch (_e) {
+      return "001";
+    }
+  }
+
+  function paintSnapshotSampleCard(card, it) {
+    if (!card || !it) return;
+    const grid = card.closest && card.closest("[data-psom-key]");
+    const key = safeText(grid && grid.getAttribute("data-psom-key"));
+    const label = sampleLabelForSection(key);
+    const number = snapshotSampleNumber(it, card);
+
+    card.href = "#";
+    card.target = "_self";
+    card.rel = "noopener";
+    card.dataset.sample = "1";
+    card.dataset.snapshotSample = "1";
+    card.removeAttribute("data-dummy");
+
+    const pic = qs(".pic", card);
+    const metaTitle = qs(".title", card);
+    const metaDesc = qs(".desc", card);
+    if (metaTitle) metaTitle.textContent = label + " · SAMPLE " + number;
+    if (metaDesc) {
+      metaDesc.textContent = pickDesc(it) || "Snapshot sample slot";
+      metaDesc.style.display = "none";
+    }
+    if (pic) {
+      pic.style.backgroundImage = "";
+      pic.style.backgroundSize = "";
+      pic.style.backgroundPosition = "";
+      pic.textContent = label;
+    }
+  }
+
   function paintMainCard(card, it) {
-    if (!card) return;
+    if (!card || !it) return;
+
+    // SAMPLE ownership is upstream. Automap never creates sample rows; it only
+    // renders a sample when that row actually arrived in the Social snapshot.
+    if (isPlaceholderItem(it)) {
+      paintSnapshotSampleCard(card, it);
+      return;
+    }
+
+    card.removeAttribute("data-sample");
+    card.removeAttribute("data-snapshot-sample");
 
     const url = pickUrl(it);
     const title = pickTitle(it) || "Item";
@@ -449,90 +517,28 @@
 
     if (pic) {
       if (thumb) {
-        const expectedThumb = thumb;
-        const probe = new Image();
-        card.dataset.thumbProbe = expectedThumb;
-        pic.style.backgroundImage = "";
-        pic.textContent = "…";
-        probe.onload = function () {
-          if (card.dataset.thumbProbe !== expectedThumb) return;
-          pic.textContent = "";
-          pic.style.backgroundImage = "url('" + expectedThumb.replace(/'/g, "%27") + "')";
-          pic.style.backgroundSize = "cover";
-          pic.style.backgroundPosition = "center";
-        };
-        probe.onerror = function () {
-          if (card.dataset.thumbProbe !== expectedThumb) return;
-          const grid = card.closest("[data-psom-key]");
-          const index = getMainSlots(grid).indexOf(card);
-          resetMainCardToDummy(card, grid, index < 0 ? 0 : index);
-        };
-        probe.src = expectedThumb;
+        pic.textContent = "";
+        pic.style.backgroundImage = "url('" + thumb.replace(/'/g, "%27") + "')";
+        pic.style.backgroundSize = "cover";
+        pic.style.backgroundPosition = "center";
       } else {
-        const grid = card.closest("[data-psom-key]");
-        const index = getMainSlots(grid).indexOf(card);
-        resetMainCardToDummy(card, grid, index < 0 ? 0 : index);
+        pic.style.backgroundImage = "";
+        pic.textContent = "•";
       }
     }
   }
 
-  function sampleLabelForKey(key) {
-    const labels = {
-      "social-youtube": "YouTube",
-      "social-instagram": "Instagram",
-      "social-tiktok": "TikTok",
-      "social-facebook": "Facebook",
-      "social-wechat": "WeChat",
-      "social-weibo": "Weibo",
-      "social-pinterest": "Pinterest",
-      "social-reddit": "Reddit",
-      "social-twitter": "X · Twitter",
-    };
-    return labels[key] || "SNS";
-  }
-
-  function resetMainCardToDummy(card, gridEl, slotIndex) {
-    if (!card) return;
-
-    const key = safeText(gridEl && gridEl.getAttribute("data-psom-key"));
-    const label = sampleLabelForKey(key);
-    const number = String((Number(slotIndex) || 0) + 1).padStart(3, "0");
-
-    card.href = "#";
-    card.target = "_self";
-    card.rel = "noopener";
-    card.dataset.dummy = "1";
-    card.dataset.sample = "1";
-
-    const pic = qs(".pic", card);
-    const metaTitle = qs(".title", card);
-    const metaDesc = qs(".desc", card);
-
-    if (metaTitle) metaTitle.textContent = label + " · SAMPLE " + number;
-    if (metaDesc) {
-      metaDesc.textContent = "Preparing";
-      metaDesc.style.display = "none";
-    }
-
-    if (pic) {
-      pic.style.backgroundImage = "";
-      pic.style.backgroundSize = "";
-      pic.style.backgroundPosition = "";
-      pic.textContent = label;
-    }
-  }
 
   function mountMainRow(gridEl, items) {
     if (!gridEl) return;
 
-    const raw = Array.isArray(items) ? items : [];
+    const raw = Array.isArray(items) ? items.filter(Boolean) : [];
     const displayItems = raw.slice(0, MAIN_LIMIT);
-    while (displayItems.length < MAIN_LIMIT) displayItems.push(null);
 
-    // A new approved snapshot starts from one visible batch. Later cards are
-    // created only when the user reaches the end of this row.
+    // Snapshot is the sole owner of both real rows and SAMPLE rows. Trim stale
+    // DOM cards to the exact snapshot length; never pad missing rows locally.
     let cards = getMainSlots(gridEl);
-    for (let i = MAIN_BATCH; i < cards.length; i++) {
+    for (let i = displayItems.length; i < cards.length; i++) {
       if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
     }
     cards = getMainSlots(gridEl);
@@ -564,7 +570,6 @@
       for (let i = job.offset; i < end; i++) {
         const it = job.items[i] || null;
         if (it) paintMainCard(cards[i], it);
-        else resetMainCardToDummy(cards[i], gridEl, i);
       }
       job.offset = end;
       normalizeMainCardLayout(gridEl);
@@ -603,7 +608,6 @@
     for (let i = job.offset; i < end; i++) {
       const it = displayItems[i] || null;
       if (it) paintMainCard(cards[i], it);
-      else resetMainCardToDummy(cards[i], gridEl, i);
     }
     job.offset = end;
     normalizeMainCardLayout(gridEl);
@@ -728,19 +732,19 @@
       const key = grid.getAttribute("data-psom-key");
       if (!key || !MANAGED_MAIN_KEYS.has(key)) return;
 
-      const raw = routedItems(snap, key, route) || sections[key];
+      // Front rendering consumes the Snapshot Engine's published section slots
+      // exactly. candidatePool is administrative reserve/ranking context and must
+      // never bypass the real+SAMPLE replacement state already decided upstream.
+      const raw = sections[key];
       const items = Array.isArray(raw)
         ? raw
         : Array.isArray(raw && raw.items)
           ? raw.items
           : [];
-      const realItems = items.filter(function (it) {
-        return it && !isPlaceholderItem(it);
-      });
-      // Empty/invalid Social data must never leave the section blank.
-      // The local sample row is a visual fallback only; it never enters
-      // SearchBank/Snapshot and is automatically replaced by real items.
-      mountMainRow(grid, realItems);
+      // Do not filter SAMPLE rows here. If Snapshot Engine sends a sample slot,
+      // render it; if it sends nothing, clear the row. This makes SAMPLE slots
+      // a real end-to-end pipeline diagnostic instead of a browser fallback.
+      mountMainRow(grid, items.filter(Boolean));
     });
 
     window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
@@ -794,15 +798,6 @@
     return rightRunInFlight;
   }
 
-  function renderMainSamples() {
-    document.querySelectorAll("[data-psom-key]").forEach(function (grid) {
-      const key = grid.getAttribute("data-psom-key");
-      if (!key || !MANAGED_MAIN_KEYS.has(key)) return;
-      mountMainRow(grid, []);
-    });
-    window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
-  }
-
   function runMain() {
     if (mainRunInFlight) return mainRunInFlight;
 
@@ -811,16 +806,29 @@
         const current = results[0];
         lastRoute = results[1] || routeFallback();
 
-        // No Distribution/static fallback here. Social main is a Social-owned
-        // surface and remains independent from the commercial right panel.
+        // Prefer the durable stored Social release. If that readback is temporarily
+        // unavailable, read the canonical Snapshot Engine output already published
+        // at /data/social.snapshot.json. This is a read-only recovery path: it does
+        // not create candidates, mutate SearchBank/Snapshot, or synthesize SAMPLE cards.
         if (!(current && current.snapshot)) {
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-            source: "local_sample_fallback",
-            status: "stored_release_current_unavailable_samples_preserved",
-            loadedAt: new Date().toISOString(),
-          };
-          renderMainSamples();
-          return true;
+          return fetchRightPanelSnapshot().then(function (canonicalSnapshot) {
+            if (!canonicalSnapshot) {
+              window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+                source: "stored_release_current+canonical_snapshot_engine_output",
+                status: "both_readbacks_unavailable_preserve_existing_slots",
+                loadedAt: new Date().toISOString(),
+              };
+              return false;
+            }
+            lastMainSnapshot = canonicalSnapshot;
+            window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+              source: "canonical_snapshot_engine_output",
+              status: "front_readback_recovered",
+              url: RIGHT_SNAPSHOT_URL,
+              loadedAt: new Date().toISOString(),
+            };
+            return renderMainSnapshot(lastMainSnapshot, lastRoute);
+          });
         }
 
         lastMainSnapshot = current.snapshot;
@@ -829,8 +837,7 @@
       })
       .catch(function (e) {
         console.error("[social-main-automap] fail", e);
-        renderMainSamples();
-        return true;
+        return false;
       })
       .finally(function () {
         mainRunInFlight = null;
