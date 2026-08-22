@@ -575,6 +575,16 @@
     return thumbnailReadyScore(item)+playbackReadyScore(item)+recencyScore(item)+engagementScore(item);
   }
 
+  function renderedHeroThumbnail(item){
+    const wanted=String(ensureContentId(item)||'');
+    if(!wanted)return '';
+    const card=qa('a.card.media-card[data-content-id],a.card.media-card[data-igdc-content-id]').find((el)=>
+      String(el.dataset.contentId||el.dataset.igdcContentId||'')===wanted && el.getAttribute('data-placeholder')!=='true'
+    );
+    const img=card&&q('img',card);
+    if(!img||!img.naturalWidth||!img.naturalHeight)return '';
+    return safeFrontThumbnail(img.currentSrc||img.src||'');
+  }
   function heroImageCandidates(item){
     if(!item||isSyntheticSampleItem(item))return [];
     const values=[
@@ -583,9 +593,9 @@
       item.highResThumbnail,item.thumbnailHigh,item.thumbnailHD,item.hdThumbnail,
       item.maxresThumbnail,item.largeThumbnail,item.thumbnailLarge,
       item.image1920,item.image1280,item.coverImage,item.coverUrl,
-      rawThumbnail(item)
+      renderedHeroThumbnail(item),rawThumbnail(item)
     ];
-    const source=mediaSourceForThumb(item),yt=youtubeIdForThumb(source);
+    const source=mediaSourceForThumb(item),yt=youtubeIdForThumb(source)||youtubeIdForThumb(rawThumbnail(item));
     if(yt){
       const enc=encodeURIComponent(yt);
       // Hero only: try the high-resolution provider assets first. These are
@@ -694,21 +704,22 @@
       if(event&&(event.key==='Enter'||event.key===' '||event.code==='Space')){event.preventDefault();play(event);}
     };
   }
-  function probeHeroImage(url){
+  function probeHeroImage(url, timeoutMs){
     return new Promise((resolve)=>{
       if(!safeFrontThumbnail(url)){resolve(null);return;}
       const img=new Image();let done=false;
-      const timer=setTimeout(()=>finish(null),4500);
+      const timer=setTimeout(()=>finish(null),Math.max(700,Number(timeoutMs)||4500));
       function finish(value){if(done)return;done=true;clearTimeout(timer);img.onload=null;img.onerror=null;resolve(value);}
       img.onload=function(){
         const w=Number(img.naturalWidth||0),h=Number(img.naturalHeight||0);
-        // Never stretch a small card thumbnail into the hero. 960x540 is the
-        // minimum accepted source; 1280x720+ receives a stronger score later.
-        finish(w>=960&&h>=540?{url,w,h}:null);
+        // V46: quality is a ranking tier, not a hard rejection gate. A valid
+        // lower-resolution image may be used only as a temporary/last-resort
+        // hero so the hero never goes blank while 1080p/720p assets are absent
+        // or still being generated.
+        finish(w>=320&&h>=180?{url,w,h}:null);
       };
       img.onerror=function(){finish(null);};
       img.decoding='async';
-      // Probes run in the background and must not steal bandwidth from first-paint rails.
       try{ if('fetchPriority' in img) img.fetchPriority='low'; }catch(_e){}
       img.src=url;
       if(img.complete&&img.naturalWidth){img.onload();}
@@ -850,74 +861,13 @@
     compactLine(line);
   }
 
-  async function applyHero(heroRotateKeys, sectionMap){
-    const heroImg=q('.hero img');
-    if(!heroImg)return;
-
-    // Do not inherit rail order. Build one cross-section pool and let the hero
-    // have its own popularity + recency + quality ranking. rotateFrom remains a
-    // mild preference only, never an exclusive source list.
-    const preferred=new Set((Array.isArray(heroRotateKeys)?heroRotateKeys:[]).map(canonKey));
-    const sectionKeys=Object.keys(sectionMap||{}).map(canonKey).filter((key)=>/^media-/.test(key));
-    const pool=[],seenItems=new Set();
-    for(const key of sectionKeys){
-      const items=extractItems(sectionMap[key]);
-      for(const item of items.slice(0,80)){
-        if(!isFrontCandidate(item)||thumbnailExplicitlyPending(item))continue;
-        const id=ensureContentId(item)||mediaSourceForThumb(item)||rawThumbnail(item);
-        if(!id||seenItems.has(id))continue;
-        seenItems.add(id);
-        pool.push({item,section:key,preferred:preferred.has(key)});
-      }
-    }
-    if(!pool.length)return;
-
-    pool.sort((a,b)=>{
-      const as=heroRankScore(a.item)+(a.preferred?80:0),bs=heroRankScore(b.item)+(b.preferred?80:0);
-      return bs-as;
-    });
-    const candidates=[],seenUrls=new Set();
-    // Probe a bounded but wider top pool than V44. This gives a true 1920x1080
-    // asset a fair chance without delaying the normal rail render.
-    for(const row of pool.slice(0,32)){
-      const item=row.item;
-      const base=heroRankScore(item)+(row.preferred?80:0);
-      const urls=heroImageCandidates(item);
-      urls.slice(0,3).forEach((url,index)=>{
-        if(seenUrls.has(url))return;
-        seenUrls.add(url);
-        candidates.push({url,item,score:base+(120-(index*24)),hint:heroResolutionHint(item,url,index)});
-      });
-    }
-    if(!candidates.length)return;
-    candidates.sort((a,b)=>b.score-a.score);
-
-    // Probe likely Full-HD assets first, then fill the bounded probe set with
-    // the hottest remaining candidates. This improves 1080p discovery without
-    // launching a large burst of image requests that could slow the rails.
-    const hinted=candidates.filter((row)=>row.hint>=3).sort((a,b)=>b.score-a.score).slice(0,8);
-    const probeSet=hinted.slice();
-    for(const candidate of candidates){
-      if(probeSet.length>=16)break;
-      if(probeSet.indexOf(candidate)>=0)continue;
-      probeSet.push(candidate);
-    }
-    const checked=await Promise.all(probeSet.map(async(candidate)=>{
-      const probe=await probeHeroImage(candidate.url);
-      if(!probe)return null;
-      const tier=heroResolutionTier(probe.w,probe.h);
-      const dimBonus=tier===3?520:(tier===2?340:180);
-      return Object.assign({},candidate,probe,{tier,finalScore:candidate.score+dimBonus});
-    }));
-    const valid=checked.filter(Boolean);
-    if(!valid.length)return;
-
-    // If a Full-HD source exists among the ranked/healthy candidates, prefer
-    // the best Full-HD candidate. Only fall back to 720p/540p when no higher
-    // tier is actually available.
-    const bestTier=Math.max.apply(null,valid.map((row)=>row.tier));
-    const tierPool=valid.filter((row)=>row.tier===bestTier).sort((a,b)=>b.finalScore-a.finalScore);
-    const best=tierPool[0];
+  function heroPendingPenalty(item){
+    return thumbnailExplicitlyPending(item)?260:0;
+  }
+  function commitHeroChoice(heroImg,best){
+    if(!heroImg||!best||!best.item||!best.url)return false;
+    const currentTier=Number(heroImg.dataset.igdcHeroResolutionTier||-1);
+    if(currentTier>Number(best.tier||0))return false;
     heroImg.loading='eager';heroImg.decoding='async';
     try{heroImg.fetchPriority='high';}catch(_e){}
     heroImg.src=best.url;
@@ -926,8 +876,98 @@
     heroImg.dataset.igdcHeroSourceWidth=String(best.w||'');
     heroImg.dataset.igdcHeroSourceHeight=String(best.h||'');
     heroImg.dataset.igdcHeroResolutionTier=String(best.tier||0);
-    heroImg.dataset.igdcHeroQuality=best.tier>=3?'ranked-fullhd':(best.tier===2?'ranked-hd':'ranked-hero');
+    heroImg.dataset.igdcHeroQuality=best.tier>=3?'ranked-fullhd':(best.tier===2?'ranked-hd':(best.tier===1?'ranked-hero':'ranked-fallback'));
     bindHeroPlayback(heroImg,best.item);
+    return true;
+  }
+  async function applyHero(heroRotateKeys, sectionMap){
+    const heroImg=q('.hero img');
+    if(!heroImg)return false;
+
+    // Build a cross-section pool. "pending" means defer/lower priority, never
+    // exclusion: rails may finish those thumbnails shortly after initial paint.
+    const preferred=new Set((Array.isArray(heroRotateKeys)?heroRotateKeys:[]).map(canonKey));
+    const sectionKeys=Object.keys(sectionMap||{}).map(canonKey).filter((key)=>/^media-/.test(key));
+    const pool=[],seenItems=new Set();
+    for(const key of sectionKeys){
+      const items=extractItems(sectionMap[key]);
+      for(const item of items.slice(0,100)){
+        if(!isFrontCandidate(item))continue;
+        const id=ensureContentId(item)||mediaSourceForThumb(item)||rawThumbnail(item);
+        if(!id||seenItems.has(id))continue;
+        seenItems.add(id);
+        pool.push({item,section:key,preferred:preferred.has(key),pending:thumbnailExplicitlyPending(item)});
+      }
+    }
+    if(!pool.length)return false;
+
+    pool.sort((a,b)=>{
+      const as=heroRankScore(a.item)+(a.preferred?80:0)-heroPendingPenalty(a.item);
+      const bs=heroRankScore(b.item)+(b.preferred?80:0)-heroPendingPenalty(b.item);
+      return bs-as;
+    });
+
+    const candidates=[],seenUrls=new Set();
+    for(const row of pool.slice(0,48)){
+      const item=row.item;
+      const base=heroRankScore(item)+(row.preferred?80:0)-heroPendingPenalty(item);
+      const urls=heroImageCandidates(item);
+      urls.slice(0,4).forEach((url,index)=>{
+        if(seenUrls.has(url))return;
+        seenUrls.add(url);
+        candidates.push({url,item,score:base+(120-(index*24)),hint:heroResolutionHint(item,url,index),pending:row.pending});
+      });
+    }
+    if(!candidates.length)return false;
+    candidates.sort((a,b)=>b.score-a.score);
+
+    // Give likely 1080p/720p assets first chance, then hot candidates. This is
+    // broader than V45 but still bounded and independent from rail rendering.
+    const highHint=candidates.filter((row)=>row.hint>=2).sort((a,b)=>b.score-a.score).slice(0,14);
+    const probeSet=highHint.slice();
+    for(const candidate of candidates){
+      if(probeSet.length>=24)break;
+      if(probeSet.indexOf(candidate)>=0)continue;
+      probeSet.push(candidate);
+    }
+
+    function chooseBest(rows){
+      const valid=rows.filter(Boolean);
+      if(!valid.length)return null;
+      const bestTier=Math.max.apply(null,valid.map((row)=>row.tier));
+      return valid.filter((row)=>row.tier===bestTier).sort((a,b)=>b.finalScore-a.finalScore)[0]||null;
+    }
+    async function checkedCandidate(candidate,timeoutMs){
+      const probe=await probeHeroImage(candidate.url,timeoutMs);
+      if(!probe)return null;
+      const tier=heroResolutionTier(probe.w,probe.h);
+      const dimBonus=tier===3?620:(tier===2?420:(tier===1?230:0));
+      return Object.assign({},candidate,probe,{tier,finalScore:candidate.score+dimBonus});
+    }
+
+    // First paint: verify a small hot set quickly and put a real image in the
+    // hero as soon as possible. This is only a display fallback; candidates
+    // that miss the quick window are NOT rejected and remain in the full pass.
+    const quickSet=candidates.slice(0,8);
+    const fullPromise=Promise.all(probeSet.map((candidate)=>checkedCandidate(candidate,4500)));
+    const quick=await Promise.all(quickSet.map((candidate)=>checkedCandidate(candidate,1200)));
+    const quickBest=chooseBest(quick);
+    if(quickBest)commitHeroChoice(heroImg,quickBest);
+
+    // Full quality pass: 1080p wins when available; otherwise 720p, 540p, and
+    // finally a valid lower-resolution fallback. Never leave the hero empty
+    // merely because an HD source was unavailable at the first moment.
+    const full=await fullPromise;
+    const best=chooseBest(full);
+    if(!best)return !!quickBest;
+    return commitHeroChoice(heroImg,best)||!!quickBest;
+  }
+  function scheduleHeroRefresh(heroRotateKeys,sectionMap){
+    // Initial selection runs immediately. Follow-up passes catch thumbnails
+    // that complete after rail mapping/generation without blocking the page.
+    const run=()=>Promise.resolve(applyHero(heroRotateKeys,sectionMap)).catch(()=>false);
+    run();
+    [900,2600,6500].forEach((delay)=>setTimeout(run,delay));
   }
 
 
@@ -1020,7 +1060,7 @@
     // Hero quality probing runs independently. It must never hold back the
     // section rails while high-resolution candidates are being verified.
     const heroRotateFrom=snapshot&&snapshot.hero&&(snapshot.hero.rotateFrom||snapshot.hero.source);
-    Promise.resolve().then(()=>applyHero(heroRotateFrom,sectionMap)).catch(()=>{});
+    scheduleHeroRefresh(heroRotateFrom,sectionMap);
 
     // Apply every snapshot-backed rail immediately. Any optional feed fallback
     // is scheduled independently instead of serially blocking the following
@@ -1046,7 +1086,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='4.5.0-ranked-fullhd-clickable-hero';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='4.6.0-hero-quality-fallback-refresh';
 })();
 
 
