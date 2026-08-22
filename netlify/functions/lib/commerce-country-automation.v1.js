@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.18.9-explicit-queue-handoff";
+const VERSION = "commerce-country-automation-v3.18.10-management-list-delete";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1740,6 +1740,15 @@ function attachProductRuntime(dataInput, runtimeInput) {
       privateQueue: Object.assign({}, plain(plain(data.progress).privateQueue), { done: Number(partialQueue.done || 0), total: Number(partialQueue.eligible || 0) })
     });
   }
+  const sameJob = !text(runtime.jobId) || !text(data.jobId) || text(runtime.jobId) === text(data.jobId), deletedLatest = sameJob ? new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)) : new Set();
+  if (deletedLatest.size) {
+    const visibleLatest = array(data.latestProducts).filter((row) => !deletedLatest.has(ProductRanking.productIdentity(row) || text(row && row.id)));
+    if (Array.isArray(data.latestProducts)) data.latestProducts = visibleLatest;
+    data.summary = Object.assign({}, plain(data.summary), { latestResearchProducts: Math.max(0, Number(plain(data.summary).latestResearchProducts || 0) - deletedLatest.size) });
+    const pagination = plain(data.pagination);
+    if (lower(pagination.kind) === "latest") data.pagination = Object.assign({}, pagination, { total: Math.max(0, Number(pagination.total || 0) - deletedLatest.size), returned: visibleLatest.length });
+    data.pipeline = Object.assign({}, plain(data.pipeline), { latestResearchDeleted: deletedLatest.size });
+  }
   return data;
 }
 async function productResearchPauseControl(actorId, input) {
@@ -2094,6 +2103,16 @@ function productSupplierResearchCounts(job) {
     newChecked:grouped?checked.filter((row)=>text(row&&row.researchCycleGroup)==="new").length:Math.max(0,checkedCount-Math.min(existingTotal,checkedCount))
   };
 }
+function explicitlyInvalidLatestProduct(rowInput) {
+  const row=plain(rowInput),status=lower(row.researchStatus),risk=plain(row.riskAssessment);
+  /* Global markets often return temporary 403/429/5xx responses.  Do not make
+     those soft failures disappear.  Auto-hide only explicit dead/wrong-detail
+     evidence; everything else remains operator-reviewable and deletable. */
+  if (["http_404","http_410","invalid_product_url","product_page_explicit_invalid_message","product_page_redirected_to_seller_home"].includes(status)) return true;
+  if (risk.explicitUnavailable === true) return true;
+  if (row.sameSupplierSite === false && status === "supplier_product_domain_mismatch") return true;
+  return false;
+}
 function latestResearchProducts(job, rows) {
   if(!job)return[];
   const preserved=new Set(array(job.preservedProductIdentities).map(text).filter(Boolean));
@@ -2101,7 +2120,7 @@ function latestResearchProducts(job, rows) {
   const startedAt=Date.parse(text(job.startedAt))||0;
   const out=[];
   for(const row of array(rows)){
-    if(!row)continue;
+    if(!row||explicitlyInvalidLatestProduct(row))continue;
     const identity=ProductRanking.productIdentity(row);
     const inspectedAt=Date.parse(text(first(row.inspectedAt,row.updatedAt,row.lastVerifiedAt)))||0;
     const cycleJobId=text(row.researchCycleJobId);
@@ -2115,10 +2134,11 @@ function latestResearchProducts(job, rows) {
 
 function publicProductJob(job) {
   if (!job) return { ok: true, reportType: "igdc-country-product-reference-research-status", version: VERSION, rankingVersion: ProductRanking.VERSION, status: "not_started", products: [] };
-  const sourceProducts = array(job.rawProducts).concat(array(job.products));
+  const sourceProducts = array(job.rawProducts).concat(array(job.products)).filter((row) => row && row.managementListHidden !== true);
   const portfolio = ProductRanking.buildPortfolio(sourceProducts, plain(job.rankingContext));
   const allRankedProducts = array(portfolio.products);
   const visibleProducts = allRankedProducts.filter((row) => {
+    if (row && row.managementListHidden === true) return false;
     const specific = ProductRanking.isSpecificProductUrl(productUrl(row));
     const inspectedPreview = specific && row && row.inspectionComplete === true && !!productImageUrl(row);
     const provisionalPreview = specific && row && row.provisionalName === true;
@@ -2251,7 +2271,7 @@ async function fastProductResearchStatus(job, input) {
     base.pagination={enabled:true,kind,offset,limit,total,returned:rows.length,nextOffset:nextOffset<total?nextOffset:null,hasMore:nextOffset<total};
     return base;
   }
-  const allProducts=array(job.products).filter((row)=>{if(!row)return false;const url=productUrl(row),image=productImageUrl(row),decision=lower(row.slotDecision||"undecided");return!!url||!!image||decision!=="undecided"||row.inspectionComplete===true;}).slice(0,PRODUCT_PORTFOLIO_LIMIT),allLatest=latestResearchProducts(job,allProducts);
+  const allProducts=array(job.products).filter((row)=>{if(!row||row.managementListHidden===true)return false;const url=productUrl(row),image=productImageUrl(row),decision=lower(row.slotDecision||"undecided");return!!url||!!image||decision!=="undecided"||row.inspectionComplete===true;}).slice(0,PRODUCT_PORTFOLIO_LIMIT),allLatest=latestResearchProducts(job,allProducts);
   const legacyMatch=/^(page|latest):(\d+):(\d+)$/.exec(token),kind=legacyMatch?legacyMatch[1]:"page",sourceRows=kind==="latest"?allLatest:allProducts,offset=legacyMatch?Math.max(0,Math.min(sourceRows.length,Number(legacyMatch[2]||0))):0,limit=legacyMatch?Math.max(25,Math.min(PRODUCT_STATUS_PAGE_LIMIT,Number(legacyMatch[3]||PRODUCT_STATUS_PAGE_LIMIT))):PRODUCT_STATUS_PAGE_LIMIT,rows=sourceRows.slice(offset,offset+limit),nextOffset=offset+rows.length;
   const latestKeys=new Set(allLatest.map((row)=>text(row&&row.id)||productUrl(row)||ProductRanking.productIdentity(row)).filter(Boolean));
   base.fast=true;base.reportType="igdc-country-product-reference-research-fast-status";base.products=kind==="latest"?[]:rows;base.latestProducts=kind==="latest"?rows:rows.filter((row)=>latestKeys.has(text(row&&row.id)||productUrl(row)||ProductRanking.productIdentity(row)));base.pagination={enabled:true,kind,offset,limit,total:sourceRows.length,returned:rows.length,nextOffset:nextOffset<sourceRows.length?nextOffset:null,hasMore:nextOffset<sourceRows.length};base.summary=Object.assign({},plain(base.summary),{latestResearchProducts:allLatest.length});return base;
@@ -2427,7 +2447,7 @@ async function beginProductResearchJob(actorId, input) {
   const cycleResearchedKeys=forceSourceRefresh?[]:Array.from(priorResearchedKeys);
   const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:0,preservedRawCount:0,candidateLedgerBaseline:true,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,discoveryStorage:"chunked_v1",discoveryResultCount:0,discoveryChunkCount:0,discoveryIdentities:[],rawProducts:[],rawProductCount:0,inspectionStorage:"discovery_chunks_v1",inspectionPool:[],inspectionProcessedBase:0,inspectionTotalCount:0,inspectCursor:0,productInspectionRetryRefs:[],productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],resultStorage:"chunked_v1",resultCount:0,resultChunkCount:0,resultIdentities:[],resultStats:summarizeProductResultRows([]),products:[],preservedProductIdentities:[],currentCycleTouchedIdentities:[],stagePool:[],stagePoolFormat:"result_cursor_v1",stageTotalCount:0,stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},partialQueueStagedIdentities:[],partialQueueLast:null,trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"candidate_ledger_preserved_supplier_rescan_started":"candidate_ledger_preserved_supplier_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,newSupplierSources:newSupplierSourceCount,previousResearchPayloadProducts:previousCycleProductCount,storage:"country_region_chunked_v1",chunkSize:PRODUCT_CHUNK_SIZE,canonicalBaseline:"gslot_candidates_private_product_ledger",sourcePolicy:forceSourceRefresh?"preserve_candidate_ledger; lightweight_chunked_new_cycle; restart_from_first_current_active_supplier_every_click; rescan_existing_and_new_suppliers; upsert_changed_products_in_place; append_only_truly_new_products; no_publication":"preserve_candidate_ledger; lightweight_chunked_new_cycle; research_only_unresearched_supplier_delta; upsert_changed_products_in_place; append_only_truly_new_products; no_publication"}],errors:[],lastError:null};
   await saveProductJob(job,actorId);
-  await saveProductRuntime(scope,actorId,{jobId:job.jobId,pauseRequested:false,paused:false,pauseMode:"manual",pauseRequestedAt:null,resumedAt:null,partialQueueScanCursor:0,partialQueueStagedIdentities:[],partialQueueUnstagedIdentities:[],partialQueueLast:null,checkpoint:productRuntimeCheckpoint(compactProductResearchStep(job),scope)});
+  await saveProductRuntime(scope,actorId,{jobId:job.jobId,pauseRequested:false,paused:false,pauseMode:"manual",pauseRequestedAt:null,resumedAt:null,partialQueueScanCursor:0,partialQueueStagedIdentities:[],partialQueueUnstagedIdentities:[],latestResearchDeletedIdentities:[],partialQueueLast:null,checkpoint:productRuntimeCheckpoint(compactProductResearchStep(job),scope)});
   // product_research_begin only needs to return progress metadata.  Returning
   // the full historical product payload recreates the exact large-response
   // failure this lightweight cycle is designed to remove.
@@ -2598,6 +2618,14 @@ async function unmatchPrivateResearchRows(actorId,scope,products,handled,explici
 }
 async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime,scope,operation){
   const requestedIds=new Set(array(input&&input.productIds).map(text).filter(Boolean).slice(0,100)),hasSelection=requestedIds.size>0||array(input&&input.productRefs).length>0,handled=new Set(array(runtime.partialQueueStagedIdentities).map(text).filter(Boolean)),explicitlyUnstaged=new Set(array(runtime.partialQueueUnstagedIdentities).map(text).filter(Boolean));
+  if(operation==="delete"){
+    if(!hasSelection){const error=new Error("대기열에서 삭제할 최신 상품을 선택하세요.");error.statusCode=400;throw error;}
+    const rows=await resolveChunkedProductSelection(job,input),result=await unmatchPrivateResearchRows(actorId,scope,rows,handled,explicitlyUnstaged),deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));let deleted=0;
+    for(let i=0;i<rows.length;i++){const row=rows[i],detail=array(result.details)[i]||{},status=text(detail.status),identity=ProductRanking.productIdentity(row)||text(row&&row.id);if(identity&&(status==="queue_unmatched"||status==="not_registered")){deletedLatest.add(identity);deleted+=1;}}
+    const partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"delete",source:"latest_list_manual",eligible:rows.length,done:deleted,remaining:0,attempted:rows.length,handled:deleted,deleted,removed:result.removed,skipped:result.skipped,blocked:result.blocked,failed:result.failed,complete:true,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsPreserved:false,latestResearchRowsDeleted:deleted,automaticFullCompletionStaging:false,stagedAt:iso(),stagedBy:text(actorId)||"administrator",details:result.details};
+    runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT),latestResearchDeletedIdentities:Array.from(deletedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
+    return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,currentCycleListDeleteOnly:true,rediscoveryAllowedNextResearch:true,protectedDownstreamStatePreserved:true,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
+  }
   if(operation==="unmatch"){
     if(!hasSelection){const error=new Error("대기열 매칭을 해제할 최신 상품을 선택하세요.");error.statusCode=400;throw error;}
     const rows=await resolveChunkedProductSelection(job,input),result=await unmatchPrivateResearchRows(actorId,scope,rows,handled,explicitlyUnstaged),partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"unmatch",source:"latest_list_manual",eligible:rows.length,done:result.removed,remaining:0,attempted:rows.length,handled:result.removed,removed:result.removed,skipped:result.skipped,blocked:result.blocked,failed:result.failed,complete:true,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsPreserved:true,automaticFullCompletionStaging:false,stagedAt:iso(),stagedBy:text(actorId)||"administrator",details:result.details};
@@ -2634,14 +2662,14 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
 
 
 async function stageCurrentProductResearchQueue(actorId,input){
-  const scope=researchScope(input),operation=lower(input&&input.operation)==="unmatch"?"unmatch":"stage";
+  const scope=researchScope(input),requestedOperation=lower(input&&input.operation),operation=requestedOperation==="unmatch"?"unmatch":(requestedOperation==="delete"?"delete":"stage");
   let runtime={};try{runtime=await productRuntimeRule(scope);}catch(_runtimeReadError){runtime={};}
   const job=await productJobRule(scope);
   if(!job||job.schema!==PRODUCT_JOB_SCHEMA){const error=new Error("현재 조사분을 등록할 공식 상품 리서치 작업이 없습니다.");error.statusCode=404;throw error;}
   const requestedJobId=text(input&&input.jobId);if(requestedJobId&&text(job.jobId)&&requestedJobId!==text(job.jobId)){const error=new Error("현재 국가·지역의 최신 상품 리서치 작업과 요청 작업 ID가 일치하지 않습니다. 상태를 새로 읽은 뒤 다시 실행하세요.");error.statusCode=409;throw error;}
   const durablePaused=runtime.pauseRequested===true&&(!text(runtime.jobId)||text(runtime.jobId)===text(job.jobId));
   if(operation==="stage"&&job.status!=="complete"&&!durablePaused){const error=new Error("상품 리서치가 진행 중입니다. 리서치 완료 또는 서버 일시정지 확인 후 현재 조사분을 대기열에 등록하세요.");error.statusCode=409;error.code="PRODUCT_RESEARCH_QUEUE_PHASE_NOT_READY";throw error;}
-  if(job.resultStorage!=="chunked_v1"&&array(job.products).length>80){
+  if(operation!=="delete"&&job.resultStorage!=="chunked_v1"&&array(job.products).length>80){
     const migration=await migrateLegacyProductResultsStep(job,actorId,3);
     if(!migration.complete){
       const partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"stage",source:"legacy_migration",migration:true,migrationKind:"legacy_results_to_country_region_chunks",eligible:0,done:0,remaining:Math.max(0,Number(migration.total||0)-Number(migration.migrated||0)),attempted:0,handled:0,failed:0,complete:false,researchStatus:job.status,researchCursorPreserved:true,migrated:Number(migration.migrated||0),migrationTotal:Number(migration.total||0),chunkCount:Number(migration.chunkCount||0),totalChunks:Number(migration.totalChunks||0)};
@@ -2652,7 +2680,7 @@ async function stageCurrentProductResearchQueue(actorId,input){
   return stageCurrentProductResearchQueueLegacy(actorId,input);
 }
 async function stageCurrentProductResearchQueueLegacy(actorId, input) {
-  const scope = researchScope(input), operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "stage";
+  const scope = researchScope(input), requestedOperation = lower(input && input.operation), operation = requestedOperation === "unmatch" ? "unmatch" : (requestedOperation === "delete" ? "delete" : "stage");
   let runtime = {};
   try { runtime = await productRuntimeRule(scope); } catch (_runtimeReadError) { runtime = {}; }
   const job = await productJobRule(scope);
@@ -2677,6 +2705,15 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
   const requestedRows = requestedIds.size ? portfolioRows.filter((row) => requestedIds.has(text(row && row.id)) || requestedIds.has(ProductRanking.productIdentity(row))) : portfolioRows;
   const handled = new Set(array(runtime.partialQueueStagedIdentities).concat(array(job.partialQueueStagedIdentities)).map(text).filter(Boolean));
   const explicitlyUnstaged = new Set(array(runtime.partialQueueUnstagedIdentities).concat(array(job.partialQueueUnstagedIdentities)).map(text).filter(Boolean));
+
+  if (operation === "delete") {
+    if (!requestedIds.size) { const error = new Error("대기열에서 삭제할 최신 상품을 선택하세요."); error.statusCode = 400; throw error; }
+    const result = await unmatchPrivateResearchRows(actorId, scope, requestedRows.slice(0, 100), handled, explicitlyUnstaged), deletedLatest = new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)); let deleted = 0;
+    for (let i = 0; i < requestedRows.length && i < 100; i += 1) { const row = requestedRows[i], detail = array(result.details)[i] || {}, status = text(detail.status), identity = ProductRanking.productIdentity(row) || text(row && row.id); if (identity && (status === "queue_unmatched" || status === "not_registered")) { deletedLatest.add(identity); deleted += 1; } }
+    const partialQueue = { schema:"igdc-product-research-partial-private-queue.v3", operation:"delete", source:"latest_list_manual", eligible:requestedRows.length, done:deleted, remaining:0, attempted:requestedRows.length, handled:deleted, deleted, removed:result.removed, skipped:result.skipped, blocked:result.blocked, failed:result.failed, complete:true, researchStatus:job.status, researchCursorPreserved:true, latestResearchRowsPreserved:false, latestResearchRowsDeleted:deleted, automaticFullCompletionStaging:false, stagedAt:iso(), stagedBy:text(actorId)||"administrator", details:result.details };
+    runtime = await saveProductRuntime(scope, actorId, { jobId:job.jobId, partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT), partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT), latestResearchDeletedIdentities:Array.from(deletedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT), partialQueueLast:partialQueue });
+    return { ok:true, reportType:"igdc-country-product-reference-partial-queue-stage", version:VERSION, jobId:job.jobId, status:job.status, scope:job.scope, partialQueue, pause:publicProductRuntime(runtime,job.jobId), safety:{ researchCursorPreserved:true, currentCycleListDeleteOnly:true, rediscoveryAllowedNextResearch:true, protectedDownstreamStatePreserved:true, automaticPublicPublication:false, automaticSlotPlacement:false, checkout:false, payment:false } };
+  }
 
   // Latest-product queue unmatch is intentionally narrower than reject/purge.
   // It removes only an undecided private research-queue row and leaves the
@@ -3121,7 +3158,7 @@ function automaticManagementControl(actorId, mode, runId, extra) {
   }, plain(extra));
 }
 function productAutomationPlanningSource(job) {
-  return array(job.rawProducts).concat(array(job.products).map((row) => productAdministratorLocked(row) ? plain(row) : stripAutomaticProductPlacement(row)));
+  return array(job.rawProducts).concat(array(job.products).map((row) => productAdministratorLocked(row) ? plain(row) : stripAutomaticProductPlacement(row))).filter((row)=>row&&row.managementListHidden!==true);
 }
 function productNeedsAutomationEnrichment(rowInput) {
   const row = plain(rowInput), decision = lower(row.slotDecision || "undecided");
@@ -3279,10 +3316,21 @@ async function syncProductCandidateQueue(actorId, scope, product, decision) {
 }
 async function productCandidateAction(actorId, input) {
   const scope = researchScope(input), job = await loadProductResearchJob(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
-  const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","purge","undecided","ai_reclassify","affiliate_settlement"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
+  const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","purge","undecided","ai_reclassify","affiliate_settlement","remove_from_list"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
   const portfolio = ProductRanking.buildPortfolio(array(job.rawProducts).concat(array(job.products)), plain(job.rankingContext));
   const evaluated = array(portfolio.products).find((row) => text(row && row.id) === id); if (!evaluated) { const error = new Error("상품 후보를 찾을 수 없습니다. 최신 상품 리서치 상태를 다시 읽어 주세요."); error.statusCode = 404; throw error; }
   const identity = text(evaluated.productIdentity), index = array(job.products).findIndex((row) => text(row && row.id) === id || ProductRanking.productIdentity(row) === identity); if (index < 0) { const error = new Error("상세페이지 검증을 마친 상품 후보를 찾을 수 없습니다. 발견 단계 상품은 검증 완료 후 판정할 수 있습니다."); error.statusCode = 404; throw error; }
+  if (decision === "remove_from_list") {
+    const current=plain(job.products[index]),now=iso(),frontStatus=lower(plain(current.frontPublication).status);
+    if (["queued","publish_requested","published","matched","active","unpublish_requested","unpublish_failed"].includes(frontStatus)) { const error=new Error("프론트 매칭·게재 요청 상태의 상품은 먼저 매칭 해제를 완료한 뒤 목록에서 삭제하세요."); error.statusCode=409; throw error; }
+    const candidateId=productCandidateId(scope,current);
+    try { const existingCandidate=array(await frontSyncSelectCandidates([candidateId]))[0]; if(existingCandidate) await productCandidateLedgerAction(actorId,{countryCode:scope.country,subdivisionCode:scope.region,candidateId,decision:"remove_from_list"}); } catch(error) { if(Number(error&&error.statusCode)===409)throw error; }
+    const next=Object.assign({},current,evaluated,{slotDecision:"undecided",managementListHidden:true,managementListHiddenAt:now,managementListHiddenBy:text(actorId)||"administrator",publicPublication:false,automaticImport:false,managementControl:{schema:"igdc-product-management-control.v1",source:"administrator_remove_from_list",administratorLocked:false,aiReclassificationAllowed:true,updatedAt:now,updatedBy:text(actorId)||"administrator"}});
+    delete next.approvedPlacement;delete next.selectedPlacement;delete next.primaryPlacement;
+    const hiddenIdentity=identity||ProductRanking.productIdentity(next),hideSame=(rowInput)=>{const row=plain(rowInput),sameId=text(row.id)===id,sameIdentity=hiddenIdentity&&ProductRanking.productIdentity(row)===hiddenIdentity;if(!sameId&&!sameIdentity)return rowInput;const hidden=Object.assign({},row,{managementListHidden:true,managementListHiddenAt:now,managementListHiddenBy:text(actorId)||"administrator"});delete hidden.approvedPlacement;delete hidden.selectedPlacement;delete hidden.primaryPlacement;return hidden;};
+    job.products=array(job.products).map(hideSame);job.products[index]=next;job.rawProducts=array(job.rawProducts).map(hideSame);job.version=VERSION;job.rankingVersion=ProductRanking.VERSION;job.updatedAt=now;job.trace=array(job.trace).concat([{at:now,source:"product-management-list",status:"removed_from_list",productId:id,candidateId,rediscoveryAllowed:true,permanentExcluded:false,publicPublication:false}]).slice(-240);await saveProductJob(job,actorId);
+    const result=publicProductJob(job);result.actionResult={productId:id,candidateId,decision:"remove_from_list",removedFromManagementList:true,rediscoveryAllowed:true,permanentExcluded:false,publicPublication:false,paymentExecution:false};return result;
+  }
   if (decision === "affiliate_settlement") {
     const current = plain(job.products[index]), now = iso(), settlement = normalizeAffiliateSettlement(input && input.affiliateSettlement, { existing: current.affiliateSettlement, validate: true, operatorApproved: true, administratorSelected: true, actorId });
     const next = Object.assign({}, current, evaluated, { affiliateSettlement: settlement, affiliateStage: settlement.stage, affiliateSettlementUpdatedAt: now, affiliateSettlementUpdatedBy: text(actorId) || "administrator", publicPublication: false, automaticImport: false });
@@ -3378,6 +3426,15 @@ async function productCandidateLedgerAction(actorId, input) {
     payload.slotDecision = "hold"; status = "hold"; payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
   } else if (decision === "reject" || decision === "purge") {
     payload.slotDecision = decision; status = decision === "purge" ? "suppressed" : "rejected"; payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
+  } else if (decision === "remove_from_list") {
+    const frontStatus=lower(plain(payload.frontPublication).status),assignments=array(await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,state,publication_status,updated_at",[candidateId]));
+    const activePublication=["queued","publish_requested","published","matched","active","unpublish_requested","unpublish_failed"].includes(frontStatus)||assignments.some((assignment)=>["queued","publish_requested","published","matched","active","unpublish_requested","unpublish_failed"].includes(lower(assignment&&assignment.publication_status)));
+    if(activePublication){const error=new Error("프론트 매칭·게재 요청 상태의 상품은 먼저 매칭 해제를 완료한 뒤 목록에서 삭제하세요.");error.statusCode=409;throw error;}
+    for(const assignment of assignments){if(!text(assignment&&assignment.id))continue;try{await SlotStore.update("gslot_slot_assignments","id=eq."+encodeURIComponent(text(assignment.id)),{state:"hold",publication_status:"unmatched",updated_at:now,updated_by:actor});}catch(_assignmentDemoteError){}}
+    payload.slotDecision="undecided";delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;status="approval_pending";effectiveDecision="removed_from_list";
+    payload.queueControl=Object.assign({},plain(payload.queueControl),{schema:"igdc-private-product-queue-control.v1",action:"remove_from_list",managementListHidden:true,permanentExcluded:false,rediscoveryAllowed:true,decidedAt:now,decidedBy:actor});
+    payload.managementControl={schema:"igdc-product-management-control.v1",source:"administrator_remove_from_list",administratorLocked:false,aiReclassificationAllowed:true,decidedAt:now,decidedBy:actor};
+    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{status:"unmatched",queued:false,pendingBuild:false,publicSnapshotConfirmed:false,updatedAt:now,updatedBy:actor});
   } else if (decision === "affiliate_settlement") {
     payload.affiliateSettlement = normalizeAffiliateSettlement(input && input.affiliateSettlement, { existing: payload.affiliateSettlement }); effectiveDecision = lower(payload.slotDecision || "undecided");
   } else { const error = new Error("지원하지 않는 상품 후보 관리 작업입니다."); error.statusCode = 400; throw error; }
@@ -3473,6 +3530,10 @@ function candidateRuntimeCard(payloadInput, productInput) {
 }
 async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, optionsInput) {
   const scope = researchScope(input), actor = text(actorId) || "administrator", options = plain(optionsInput), ids = Array.from(new Set(array(candidateIdsInput).map(text).filter(Boolean))).slice(0, 500);
+  /* Placement/reclassification buttons must use the policy that is active NOW,
+     not only the policy snapshot that happened to exist when the candidate was
+     first researched.  One scoped read per AI action keeps this lightweight. */
+  const liveRankingContext = options.reassign !== false ? await productRankingContext(scope) : null;
   const rebalance = options.rebalance === true, suppliedBalanceCounts = Object.keys(plain(options.balanceCounts)).length > 0;
   let workingCounts = normalizeProductSectionCounts(options.balanceCounts);
   let tourDiningAutomaticCount = Math.max(0, Math.floor(Number(options.tourDiningAutomaticCount || 0) || 0));
@@ -3519,7 +3580,8 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       continue;
     }
     const inspected = Object.keys(inspectedRaw).length ? Object.assign({}, sourceProduct, inspectedRaw, { candidateId:id, id:id }) : Object.assign({}, sourceProduct, { candidateId:id, id:id, productPageLive:false, inspectionComplete:true, researchStatus:"inspection_error" });
-    const health = candidateRuntimeHealth(inspected), priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), manualLocked = candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement), tourProfile = ProductRanking.tourRightProfile(inspected);
+    const policyEvaluated = liveRankingContext ? (array(ProductRanking.buildPortfolio([inspected], liveRankingContext).products)[0] || inspected) : inspected;
+    const health = candidateRuntimeHealth(inspected), priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(policyEvaluated, existingPayload), manualLocked = candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement), tourProfile = ProductRanking.tourRightProfile(policyEvaluated);
     let nextDecision = currentDecision, nextPlacement = currentPlacement, status = text(row.status) || "research_pending", assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey), changeReason = "runtime_revalidated", currentBalanceReleased = false;
     const releaseCurrentBalance = () => {
       if (!rebalance || currentBalanceReleased || currentDecision !== "slot_candidate" || !validProductSectionKey(currentKey)) return;
@@ -3724,6 +3786,10 @@ async function productAiAutomation(actorId, input) {
     compact.aiAutomationResult={schema:"igdc-product-ai-private-placement-result.v4-draft-finalize",mode:"queue_sync",aiRunToken:runToken||null,queueSyncAttempted:queueBatch.attempted,queueSynced:queueBatch.synced,queueSyncFailed:queueBatch.failed,queueSyncRemaining:queueBatch.remaining,queueSyncBatchSize:PRODUCT_AI_QUEUE_SYNC_BATCH,automaticPublication:false,automaticProductImport:false,checkout:false,paymentExecution:false};
     return compact;
   }
+  /* An administrator may have just changed policy through the product-policy
+     room. Refresh the scoped policy before this explicit AI placement pass;
+     manual locks still keep precedence below. */
+  job.rankingContext = await productRankingContext(scope);
   const repairProductIds = new Set(array(job.products).filter((rowInput) => {
     const row = plain(rowInput), decision = lower(row.slotDecision || "undecided"), key = productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement);
     return decision === "slot_candidate" && !validProductSectionKey(key) && !productAdministratorLocked(row);
