@@ -351,7 +351,7 @@
     </details>
 
     <section id="productTransitionAuditPanel" class="product-transition-audit" aria-label="대기열·배치 전환 검증">
-      <div class="product-transition-audit-head"><div><h3>대기열·배치 전환 검증</h3><div class="small">최신 리서치 → 비공개 상품 대기열 → 후보 관리 → 18개 섹션 배치 사이의 수량과 연결 상태를 읽기 전용으로 교차 점검합니다. 이 검증은 프론트 공개·상품 수입·결제를 실행하지 않습니다.</div></div><button id="productTransitionAuditBtn" type="button" class="secondary">대기열·배치 전환 검증</button></div>
+      <div class="product-transition-audit-head"><div><h3>대기열·배치 전환 검증</h3><div class="small">최신 리서치 → 비공개 상품 대기열 → 후보 관리 → 18개 섹션 배치 사이의 수량과 연결 상태를 읽기 전용으로 교차 점검합니다. 이 검증은 프론트 공개·상품 수입·결제를 실행하지 않습니다.</div></div><div class="actions"><button id="productTransitionAuditBtn" type="button" class="secondary">대기열·배치 전환 검증</button><button id="productTransitionAuditDownloadBtn" type="button" class="ghost" disabled>검증 JSON 다운로드</button></div></div>
       <div id="productTransitionAuditGrid" class="product-transition-audit-grid"><div class="product-transition-audit-item"><span class="small">검증 상태</span><strong>대기</strong></div></div>
       <div id="productTransitionAuditState" class="product-transition-audit-state">대기열 등록 또는 후보 정리 후 검증 버튼을 누르면 현재 국가·지역의 리서치 상태와 상품 후보 원장을 다시 읽어 연결 수량을 확인합니다.</div>
     </section>
@@ -417,6 +417,7 @@
         <textarea id="policyInstruction" placeholder="운영 문제, 개선 아이디어, 상품 배치 기준, 공급사 판단 또는 정책 질문을 입력하거나 음성으로 말씀하세요."></textarea>
         <div class="compact-actions"><button id="policyDiscussBtn" type="button">AI와 대화·검토</button><button id="policyDownloadBtn" type="button" class="secondary">작업공간 JSON 다운로드</button></div>
         <label for="policyProposal">AI 제안 구조</label><pre id="policyProposal" class="policy-proposal">AI와 대화하면 운영 의견과 구조화된 제안이 표시됩니다.</pre>
+        <div class="policy-state"><strong>AI 관리 실행</strong><div class="small" style="margin-top:5px">현재 열어 둔 리서치·후보·섹션 블록의 목록만 대상으로 실행안을 다시 계산합니다. 실행 전 미리보기와 관리자 승인이 필수이며, 이 버튼에서는 프론트 공개·GitHub/Netlify 빌드·결제를 실행하지 않습니다.</div><pre id="policyExecutionPlan" class="policy-proposal" style="margin-top:8px;max-height:220px">먼저 AI와 대화해 실행안을 만드세요.</pre><div class="compact-actions"><button id="policyExecutionPreviewBtn" type="button" class="secondary" disabled>실행 대상 미리보기</button><button id="policyExecutionApplyBtn" type="button" disabled>관리자 승인·AI 실행</button></div><div id="policyExecutionState" class="small" style="margin-top:7px">실행 대기</div></div>
       </div>
       <div class="policy-box">
         <h3>관리자 최종 결정·저장</h3>
@@ -459,8 +460,8 @@
 </div>
 
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20260823-2"></script>
-<script src="/assets/js/admin-commerce-policy-discussion.js?v=20260823-2"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20260825-1"></script>
+<script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
 </body>
 </html>

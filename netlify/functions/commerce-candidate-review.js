@@ -15,7 +15,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.10.0-3000-ledger";
+const VERSION = "commerce-candidate-review-api-v1.10.1-3000-ledger-cleanup-state";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -83,9 +83,13 @@ async function liveProductResearchQueue(){
     relationRows[3].forEach((row)=>add(grouped.evidence,row));
     const output=candidates.map((candidate)=>{
       const id=text(candidate&&candidate.id);
-      return ProductPipeline.liveQueueRow(candidate,{
+      const live=ProductPipeline.liveQueueRow(candidate,{
         assignments:grouped.assignments.get(id)||[],markets:grouped.markets.get(id)||[],revenues:grouped.revenues.get(id)||[],evidence:grouped.evidence.get(id)||[]
       });
+      const payload=plain(candidate&&candidate.source_payload);
+      live.queueControl=plain(payload.queueControl);
+      live.slotDecision=text(payload.slotDecision);
+      return live;
     });
     const relationErrors=settled.map((result,index)=>result.status==="rejected"?{source:["assignments","markets","revenues","evidence"][index],message:text(result.reason&&result.reason.message||result.reason)}:null).filter(Boolean);
     return {ok:relationErrors.length===0,rows:output,storageError:null,relationErrors};
@@ -181,7 +185,7 @@ async function scopedLiveProductResearchQueue(country,region,limit){
     const grouped={assignments:new Map(),markets:new Map(),revenues:new Map(),evidence:new Map()};
     function add(map,row){const id=text(row&&row.candidate_id);if(!id)return;if(!map.has(id))map.set(id,[]);map.get(id).push(row);}
     settled[0].rows.forEach((row)=>add(grouped.assignments,row));settled[1].rows.forEach((row)=>add(grouped.markets,row));settled[2].rows.forEach((row)=>add(grouped.revenues,row));settled[3].rows.forEach((row)=>add(grouped.evidence,row));
-    const output=candidates.map((candidate)=>{const id=text(candidate&&candidate.id);return ProductPipeline.liveQueueRow(candidate,{assignments:grouped.assignments.get(id)||[],markets:grouped.markets.get(id)||[],revenues:grouped.revenues.get(id)||[],evidence:grouped.evidence.get(id)||[]});});
+    const output=candidates.map((candidate)=>{const id=text(candidate&&candidate.id),payload=plain(candidate&&candidate.source_payload),live=ProductPipeline.liveQueueRow(candidate,{assignments:grouped.assignments.get(id)||[],markets:grouped.markets.get(id)||[],revenues:grouped.revenues.get(id)||[],evidence:grouped.evidence.get(id)||[]});live.queueControl=plain(payload.queueControl);live.slotDecision=text(payload.slotDecision);return live;});
     const names=["assignments","markets","revenues","evidence"],relationErrors=[];settled.forEach((result,index)=>result.errors.forEach((message)=>relationErrors.push({source:names[index],message})));
     return {ok:relationErrors.length===0,rows:output,storageError:null,relationErrors};
   }catch(error){return {ok:false,rows:[],storageError:text(error&&error.message||error),relationErrors:[]};}

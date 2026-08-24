@@ -9,7 +9,7 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.1.0-3000-admin-list-state";
+const VERSION = "commerce-candidate-queue-control-v1.1.1-3000-admin-list-cleanup";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject"]);
 const RELATION_TABLES = Object.freeze([
@@ -43,6 +43,10 @@ async function deleteRelations(candidateId){
   }
   return results;
 }
+async function releaseSectionAssignment(candidateId){
+  try{const rows=await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId));return{ok:true,count:Array.isArray(rows)?rows.length:0};}
+  catch(error){return{ok:false,error:text(error&&error.message||error)};}
+}
 async function applyAction(actorId,row,action){
   const id=text(row&&row.id),payload=Object.assign({},plain(row&&row.source_payload)),now=new Date().toISOString();
   if(action==="dismiss"){
@@ -63,10 +67,12 @@ async function applyAction(actorId,row,action){
   });
   payload.queueControl=queueControl;
   payload.review=Object.assign({},plain(payload.review),{
-    state:action==="purge"?"permanent_excluded":"hidden_from_country_queue",
+    state:action==="purge"?"permanent_excluded":action==="reject"?"rejected":action==="remove_from_list"?"removed_from_list":"hold",
     decidedAt:now,
     decidedBy:text(actorId)||"administrator"
   });
+  const assignmentCleanup=await releaseSectionAssignment(id);
+  payload.frontPublication=Object.assign({},plain(payload.frontPublication),{operation:"unmatch",status:"deferred_section_release",queued:false,pendingBuild:true,publicSnapshotConfirmed:false,buildVerificationRequired:true,deferredBuild:true,requestedAt:now,requestedBy:text(actorId)||"administrator"});
   const status=action==="purge"?"suppressed":action==="reject"?"reject":"hold";
   const note=action==="purge"
     ?"관리자가 이 상품 후보를 보류·제외 관리에서 영구 제외했습니다. 자동 상품 리서치가 같은 후보를 다시 승격하지 않도록 원장 기록을 보존합니다."
@@ -74,7 +80,7 @@ async function applyAction(actorId,row,action){
       ?"관리자가 이 상품 후보를 현재 후보·배치 목록에서 제외하고 보류·제외 관리로 이동했습니다. 영구 삭제는 수행하지 않았습니다."
       :"관리자가 이 상품 후보를 현재 국가 관제 목록에서 숨기거나 보류했습니다. 원장과 기존 검토 기록은 보존합니다.";
   await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status,source_payload:payload,owner_note:note,updated_at:now});
-  return {id,action,status};
+  return {id,action,status,assignmentCleanup,frontBuildDispatched:false};
 }
 
 exports.handler=async function(event){

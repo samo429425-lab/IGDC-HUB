@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.19.0-3000-ledger-admin-execution";
+const VERSION = "commerce-country-automation-v3.19.1-3000-ledger-cleanup-execution";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1742,11 +1742,11 @@ function attachProductRuntime(dataInput, runtimeInput) {
   }
   const sameJob = !text(runtime.jobId) || !text(data.jobId) || text(runtime.jobId) === text(data.jobId), deletedLatest = sameJob ? new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)) : new Set();
   if (deletedLatest.size) {
-    const visibleLatest = array(data.latestProducts).filter((row) => !deletedLatest.has(ProductRanking.productIdentity(row) || text(row && row.id)));
+    const pagination = plain(data.pagination), alreadyFiltered = lower(pagination.kind) === "latest" && pagination.deletedFiltered === true;
+    const visibleLatest = alreadyFiltered ? array(data.latestProducts) : array(data.latestProducts).filter((row) => !deletedLatest.has(ProductRanking.productIdentity(row) || text(row && row.id)));
     if (Array.isArray(data.latestProducts)) data.latestProducts = visibleLatest;
-    data.summary = Object.assign({}, plain(data.summary), { latestResearchProducts: Math.max(0, Number(plain(data.summary).latestResearchProducts || 0) - deletedLatest.size) });
-    const pagination = plain(data.pagination);
-    if (lower(pagination.kind) === "latest") data.pagination = Object.assign({}, pagination, { total: Math.max(0, Number(pagination.total || 0) - deletedLatest.size), returned: visibleLatest.length });
+    if (!alreadyFiltered) data.summary = Object.assign({}, plain(data.summary), { latestResearchProducts: Math.max(0, Number(plain(data.summary).latestResearchProducts || 0) - deletedLatest.size) });
+    if (lower(pagination.kind) === "latest" && !alreadyFiltered) data.pagination = Object.assign({}, pagination, { total: Math.max(0, Number(pagination.total || 0) - deletedLatest.size), returned: visibleLatest.length });
     data.pipeline = Object.assign({}, plain(data.pipeline), { latestResearchDeleted: deletedLatest.size });
   }
   return data;
@@ -2248,22 +2248,41 @@ function compactProductResearchStep(job) {
 }
 
 async function fastProductResearchStatus(job, input) {
-  const options=plain(input);
+  const options=plain(input), deletedLatest=new Set(array(options.__deletedLatestIdentities).map(text).filter(Boolean));
   if(!job)return{ok:true,fast:true,reportType:"igdc-country-product-reference-research-status",version:VERSION,rankingVersion:ProductRanking.VERSION,status:"not_started",products:[],latestProducts:[],summary:{},progress:{},pagination:{enabled:true,offset:0,limit:0,total:0,returned:0,nextOffset:null,hasMore:false}};
   const base=compactProductResearchStep(job),token=text(options.fast),match=/^(page|latest):(\d+):(\d+)$/.exec(token);
   if(job.resultStorage==="chunked_v1"){
-    const kind=match?match[1]:"page",total=Math.max(0,Number(job.resultCount||0)),offset=match?Math.max(0,Math.min(total,Number(match[2]||0))):0,limit=match?Math.max(25,Math.min(PRODUCT_STATUS_PAGE_LIMIT,Number(match[3]||PRODUCT_STATUS_PAGE_LIMIT))):PRODUCT_STATUS_PAGE_LIMIT;
-    const rows=await readProductChunkRange(job,"result",offset,limit),nextOffset=offset+rows.length;
+    const kind=match?match[1]:"page",rawTotal=Math.max(0,Number(job.resultCount||0)),visibleTotal=kind==="latest"?Math.max(0,rawTotal-deletedLatest.size):rawTotal,offset=match?Math.max(0,Math.min(visibleTotal,Number(match[2]||0))):0,limit=match?Math.max(25,Math.min(PRODUCT_STATUS_PAGE_LIMIT,Number(match[3]||PRODUCT_STATUS_PAGE_LIMIT))):PRODUCT_STATUS_PAGE_LIMIT;
+    let rows=[];
+    if(kind!=="latest"||!deletedLatest.size){rows=await readProductChunkRange(job,"result",offset,limit);}
+    else{
+      // Offset/limit are expressed in the VISIBLE latest-research list. Scan raw
+      // chunks only until the requested visible window is filled so deleted rows
+      // can never reappear or create pagination holes.
+      let rawOffset=0,visibleIndex=0;
+      while(rawOffset<rawTotal&&rows.length<limit){
+        const batch=await readProductChunkRange(job,"result",rawOffset,PRODUCT_STATUS_PAGE_LIMIT);if(!batch.length)break;
+        for(const row of batch){
+          const identity=ProductRanking.productIdentity(row)||text(row&&row.id);if(identity&&deletedLatest.has(identity))continue;
+          if(visibleIndex>=offset&&rows.length<limit)rows.push(row);
+          visibleIndex+=1;
+          if(rows.length>=limit)break;
+        }
+        rawOffset+=batch.length;
+      }
+    }
+    const nextOffset=offset+rows.length;
     base.fast=true;base.reportType="igdc-country-product-reference-research-fast-status";
     base.products=kind==="latest"?[]:rows;
     base.latestProducts=kind==="latest"?rows:[];
-    base.pagination={enabled:true,kind,offset,limit,total,returned:rows.length,nextOffset:nextOffset<total?nextOffset:null,hasMore:nextOffset<total};
+    base.summary=Object.assign({},plain(base.summary),kind==="latest"?{latestResearchProducts:visibleTotal}:{});
+    base.pagination={enabled:true,kind,offset,limit,total:visibleTotal,returned:rows.length,nextOffset:nextOffset<visibleTotal?nextOffset:null,hasMore:nextOffset<visibleTotal,deletedFiltered:kind==="latest"&&deletedLatest.size>0};
     return base;
   }
-  const allProducts=array(job.products).filter((row)=>{if(!row)return false;const url=productUrl(row),image=productImageUrl(row),decision=lower(row.slotDecision||"undecided");return!!url||!!image||decision!=="undecided"||row.inspectionComplete===true;}).slice(0,PRODUCT_PORTFOLIO_LIMIT),allLatest=latestResearchProducts(job,allProducts);
+  const allProducts=array(job.products).filter((row)=>{if(!row)return false;const url=productUrl(row),image=productImageUrl(row),decision=lower(row.slotDecision||"undecided");return!!url||!!image||decision!=="undecided"||row.inspectionComplete===true;}).slice(0,PRODUCT_PORTFOLIO_LIMIT),rawLatest=latestResearchProducts(job,allProducts),allLatest=deletedLatest.size?rawLatest.filter((row)=>!deletedLatest.has(ProductRanking.productIdentity(row)||text(row&&row.id))):rawLatest;
   const legacyMatch=/^(page|latest):(\d+):(\d+)$/.exec(token),kind=legacyMatch?legacyMatch[1]:"page",sourceRows=kind==="latest"?allLatest:allProducts,offset=legacyMatch?Math.max(0,Math.min(sourceRows.length,Number(legacyMatch[2]||0))):0,limit=legacyMatch?Math.max(25,Math.min(PRODUCT_STATUS_PAGE_LIMIT,Number(legacyMatch[3]||PRODUCT_STATUS_PAGE_LIMIT))):PRODUCT_STATUS_PAGE_LIMIT,rows=sourceRows.slice(offset,offset+limit),nextOffset=offset+rows.length;
   const latestKeys=new Set(allLatest.map((row)=>text(row&&row.id)||productUrl(row)||ProductRanking.productIdentity(row)).filter(Boolean));
-  base.fast=true;base.reportType="igdc-country-product-reference-research-fast-status";base.products=kind==="latest"?[]:rows;base.latestProducts=kind==="latest"?rows:rows.filter((row)=>latestKeys.has(text(row&&row.id)||productUrl(row)||ProductRanking.productIdentity(row)));base.pagination={enabled:true,kind,offset,limit,total:sourceRows.length,returned:rows.length,nextOffset:nextOffset<sourceRows.length?nextOffset:null,hasMore:nextOffset<sourceRows.length};base.summary=Object.assign({},plain(base.summary),{latestResearchProducts:allLatest.length});return base;
+  base.fast=true;base.reportType="igdc-country-product-reference-research-fast-status";base.products=kind==="latest"?[]:rows;base.latestProducts=kind==="latest"?rows:rows.filter((row)=>latestKeys.has(text(row&&row.id)||productUrl(row)||ProductRanking.productIdentity(row)));base.pagination={enabled:true,kind,offset,limit,total:sourceRows.length,returned:rows.length,nextOffset:nextOffset<sourceRows.length?nextOffset:null,hasMore:nextOffset<sourceRows.length,deletedFiltered:kind==="latest"&&deletedLatest.size>0};base.summary=Object.assign({},plain(base.summary),{latestResearchProducts:allLatest.length});return base;
 }
 
 function productResearchStepResponse(job, input) {
@@ -2457,7 +2476,7 @@ async function productResearchJobStatus(input) {
   if(compactRequested&&runtime.pauseRequested===true&&runtime.checkpoint&&(!text(runtime.jobId)||text(runtime.jobId)===text(runtime.checkpoint.jobId)))return attachProductRuntime(productRuntimeCheckpoint(runtime.checkpoint,scope),runtime);
   const job=await loadProductResearchJob(scope);
   if(compactRequested)return attachProductRuntime(compactProductResearchStep(job),runtime);
-  if(options.fast===true||options.fast==="1"||lower(options.fast)==="true"||/^(?:page|latest):\d+:\d+$/.test(text(options.fast)))return attachProductRuntime(await fastProductResearchStatus(job,options),runtime);
+  if(options.fast===true||options.fast==="1"||lower(options.fast)==="true"||/^(?:page|latest):\d+:\d+$/.test(text(options.fast)))return attachProductRuntime(await fastProductResearchStatus(job,Object.assign({},options,{__deletedLatestIdentities:array(runtime.latestResearchDeletedIdentities)})),runtime);
   if(job&&job.resultStorage==="chunked_v1"){
     const rows=await readAllProductChunkRows(job,"result"),view=Object.assign({},job,{products:rows,rawProducts:[]});
     return attachProductRuntime(publicProductJob(view),runtime);
@@ -3318,7 +3337,7 @@ async function syncProductCandidateQueue(actorId, scope, product, decision) {
 }
 async function productCandidateAction(actorId, input) {
   const scope = researchScope(input), job = await loadProductResearchJob(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
-  const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","purge","undecided","ai_reclassify","affiliate_settlement"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
+  const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","purge","undecided","ai_reclassify","remove_from_list","affiliate_settlement"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
   const portfolio = ProductRanking.buildPortfolio(array(job.rawProducts).concat(array(job.products)), plain(job.rankingContext));
   const evaluated = array(portfolio.products).find((row) => text(row && row.id) === id); if (!evaluated) { const error = new Error("상품 후보를 찾을 수 없습니다. 최신 상품 리서치 상태를 다시 읽어 주세요."); error.statusCode = 404; throw error; }
   const identity = text(evaluated.productIdentity), index = array(job.products).findIndex((row) => text(row && row.id) === id || ProductRanking.productIdentity(row) === identity); if (index < 0) { const error = new Error("상세페이지 검증을 마친 상품 후보를 찾을 수 없습니다. 발견 단계 상품은 검증 완료 후 판정할 수 있습니다."); error.statusCode = 404; throw error; }
@@ -3356,7 +3375,7 @@ async function productCandidateAction(actorId, input) {
     const occupied = array(job.products).filter((row) => lower(row && row.slotDecision) === "slot_candidate" && ProductRanking.productIdentity(row) !== currentIdentity && productPlacementKey(row && (row.approvedPlacement || row.selectedPlacement || row.primaryPlacement)) === selectedKey).length;
     if (occupied >= PRODUCT_SECTION_CAPACITY) { const error = new Error("선택 섹션은 이미 100개 상품으로 가득 찼습니다. 기존 배치 예정 상품을 후보 목록으로 내린 뒤 다시 지정해 주세요."); error.statusCode = 409; throw error; }
   }
-  const effectiveDecision = decision === "ai_reclassify" ? "undecided" : decision, current = plain(job.products[index]), now = iso();
+  const effectiveDecision = decision === "ai_reclassify" ? "undecided" : (decision === "remove_from_list" ? "hold" : decision), current = plain(job.products[index]), now = iso();
   const preservedSettlement = normalizeAffiliateSettlement(current.affiliateSettlement || evaluated.affiliateSettlement, { existing: current.affiliateSettlement || evaluated.affiliateSettlement });
   const next = Object.assign({}, current, evaluated, { affiliateSettlement: preservedSettlement, affiliateStage: preservedSettlement.stage,
     slotDecision: effectiveDecision,
@@ -3371,8 +3390,25 @@ async function productCandidateAction(actorId, input) {
       schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, publicPublication: false, productImport: false, checkout: false, paymentExecution: false, updatedAt: now, updatedBy: text(actorId) || "administrator"
     }
   });
-  if (effectiveDecision === "slot_candidate") next.approvedPlacement = Object.assign({}, approvedPlacement, { key: productPlacementKey(approvedPlacement), administratorSelected: true, aiSelected: false, proposalOnly: false, publicPublication: false, selectedAt: now, selectedBy: text(actorId) || "administrator" });
-  else { delete next.approvedPlacement; delete next.selectedPlacement; }
+  if (effectiveDecision === "slot_candidate") {
+    next.approvedPlacement = Object.assign({}, approvedPlacement, { key: productPlacementKey(approvedPlacement), administratorSelected: true, aiSelected: false, proposalOnly: false, publicPublication: false, selectedAt: now, selectedBy: text(actorId) || "administrator" });
+    next.queueControl = Object.assign({}, plain(next.queueControl), { hiddenFromCountryQueue:false, permanentExcluded:false, action:"section_selected", restoredAt:now, restoredBy:text(actorId)||"administrator" });
+  } else {
+    delete next.approvedPlacement; delete next.selectedPlacement;
+    if (decision === "remove_from_list") {
+      next.queueControl = Object.assign({}, plain(next.queueControl), { schema:"igdc-private-product-queue-control.v1", action:"remove_from_list", hiddenFromCountryQueue:true, permanentExcluded:false, rediscoveryAllowed:true, decidedAt:now, decidedBy:text(actorId)||"administrator" });
+      next.review = Object.assign({}, plain(next.review), { state:"removed_from_list", decidedAt:now, decidedBy:text(actorId)||"administrator" });
+    } else if (decision === "undecided" || decision === "ai_reclassify") {
+      next.queueControl = Object.assign({}, plain(next.queueControl), { hiddenFromCountryQueue:false, permanentExcluded:false, action:"restored", restoredAt:now, restoredBy:text(actorId)||"administrator" });
+    }
+  }
+  let assignmentCleanup={ok:true,count:0};
+  if (effectiveDecision !== "slot_candidate") {
+    const candidateId=productCandidateId(scope,next);
+    try { const removed=await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId)); assignmentCleanup={ok:true,count:array(removed).length}; }
+    catch (error) { assignmentCleanup={ok:false,error:text(error&&error.message)||"assignment_release_failed"}; }
+    next.frontPublication = Object.assign({}, plain(next.frontPublication), { operation:"unmatch", status:"deferred_section_release", queued:false, persisted:true, pendingBuild:true, publicSnapshotConfirmed:false, buildVerificationRequired:true, deferredBuild:true, requestedAt:now, requestedBy:text(actorId)||"administrator" });
+  }
   job.products[index] = next;
   const savedProduct = job.products[index], queueSync = await syncProductCandidateQueue(actorId, scope, savedProduct, effectiveDecision);
   job.version = VERSION; job.rankingVersion = ProductRanking.VERSION;
@@ -3380,7 +3416,7 @@ async function productCandidateAction(actorId, input) {
   await saveProductJob(job, actorId);
   const result = publicProductJob(job);
   result.candidateQueue = queueSync;
-  result.actionResult = { productId: id, decision, effectiveDecision, placement: effectiveDecision === "slot_candidate" ? plain(savedProduct.approvedPlacement) : null, administratorLocked: decision !== "ai_reclassify", publicPublication: false, paymentExecution: false };
+  result.actionResult = { productId: id, decision, effectiveDecision, placement: effectiveDecision === "slot_candidate" ? plain(savedProduct.approvedPlacement) : null, assignmentCleanup, deferredFrontBuild:effectiveDecision !== "slot_candidate", administratorLocked: decision !== "ai_reclassify", publicPublication: false, paymentExecution: false };
   return result;
 }
 
@@ -3402,28 +3438,46 @@ async function productCandidateLedgerAction(actorId, input) {
   const rows = await frontSyncSelectCandidates([candidateId]), row = plain(rows[0]);
   if (!Object.keys(row).length || text(row.source_ref) !== PRODUCT_SOURCE_REF) { const error = new Error("선택 상품 후보 원장을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   const payload = Object.assign({}, plain(row.source_payload)), now = iso(), actor = text(actorId) || "administrator";
-  let status = text(row.status) || "approval_pending", placement = null, effectiveDecision = decision;
+  let status = text(row.status) || "approval_pending", placement = null, effectiveDecision = decision, releaseAssignment = false;
   if (decision === "slot_candidate") {
     const key = text(input && input.placementKey), sourcePlacement = array(payload.proposedPlacements).find((item) => productPlacementKey(item) === key) || { key };
     placement = candidateLedgerPlacementRecord(scope, sourcePlacement, actor, "administrator");
     if (!placement) { const error = new Error("지정할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
     payload.slotDecision = "slot_candidate"; payload.approvedPlacement = placement; payload.placement = placement; status = "approval_pending";
+    payload.queueControl = Object.assign({}, plain(payload.queueControl), { hiddenFromCountryQueue:false, permanentExcluded:false, action:"section_selected", restoredAt:now, restoredBy:actor });
     payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
   } else if (decision === "undecided" || decision === "ai_reclassify") {
-    payload.slotDecision = "undecided"; delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement; status = "research_pending";
+    payload.slotDecision = "undecided"; delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement; status = "research_pending"; releaseAssignment = true;
+    payload.queueControl = Object.assign({}, plain(payload.queueControl), { hiddenFromCountryQueue:false, permanentExcluded:false, action:"restored", restoredAt:now, restoredBy:actor });
     payload.managementControl = { schema: "igdc-product-management-control.v1", source: decision === "ai_reclassify" ? "administrator_ai_reclassify" : "administrator", administratorLocked: decision !== "ai_reclassify", aiReclassificationAllowed: decision === "ai_reclassify", decidedAt: now, decidedBy: actor };
     effectiveDecision = "undecided";
   } else if (decision === "hold") {
-    payload.slotDecision = "hold"; status = "hold"; payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
+    payload.slotDecision = "hold"; status = "hold"; releaseAssignment = true;
+    payload.queueControl = Object.assign({}, plain(payload.queueControl), { schema:"igdc-private-product-queue-control.v1", action:"hold", hiddenFromCountryQueue:true, permanentExcluded:false, decidedAt:now, decidedBy:actor });
+    payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
+  } else if (decision === "remove_from_list") {
+    payload.slotDecision = "hold"; status = "hold"; releaseAssignment = true; effectiveDecision = "hold";
+    payload.queueControl = Object.assign({}, plain(payload.queueControl), { schema:"igdc-private-product-queue-control.v1", action:"remove_from_list", hiddenFromCountryQueue:true, permanentExcluded:false, rediscoveryAllowed:true, decidedAt:now, decidedBy:actor });
+    payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator_list_cleanup", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
   } else if (decision === "reject" || decision === "purge") {
-    payload.slotDecision = decision; status = decision === "purge" ? "suppressed" : "rejected"; payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
+    payload.slotDecision = decision; status = decision === "purge" ? "suppressed" : "rejected"; releaseAssignment = true;
+    payload.queueControl = Object.assign({}, plain(payload.queueControl), { schema:"igdc-private-product-queue-control.v1", action:decision, hiddenFromCountryQueue:true, permanentExcluded:decision==="purge", rediscoveryAllowed:decision!=="purge", decidedAt:now, decidedBy:actor });
+    payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
   } else if (decision === "affiliate_settlement") {
     payload.affiliateSettlement = normalizeAffiliateSettlement(input && input.affiliateSettlement, { existing: payload.affiliateSettlement }); effectiveDecision = lower(payload.slotDecision || "undecided");
   } else { const error = new Error("지원하지 않는 상품 후보 관리 작업입니다."); error.statusCode = 400; throw error; }
+
+  let assignmentCleanup={ok:true,count:0};
+  if (releaseAssignment) {
+    try { const removed=await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId)); assignmentCleanup={ok:true,count:array(removed).length}; }
+    catch (error) { assignmentCleanup={ok:false,error:text(error&&error.message)||"assignment_release_failed"}; }
+    delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement;
+    payload.frontPublication = Object.assign({}, plain(payload.frontPublication), { schema:"igdc-product-front-publication-control.v4", candidateId, operation:"unmatch", status:"deferred_section_release", queued:false, persisted:true, pendingBuild:true, publicSnapshotConfirmed:false, buildVerificationRequired:true, deferredBuild:true, requestedAt:now, requestedBy:actor });
+  }
   payload.decisionAt = now; payload.decisionBy = actor; payload.decisionSource = "candidate_ledger_control"; payload.publicPublication = false; payload.automaticImport = false;
-  if (decision !== "affiliate_settlement") payload.review = Object.assign({}, plain(payload.review), { state: effectiveDecision === "slot_candidate" ? "pending" : effectiveDecision, decidedAt: now, decidedBy: actor });
+  if (decision !== "affiliate_settlement") payload.review = Object.assign({}, plain(payload.review), { state: decision === "remove_from_list" ? "removed_from_list" : (effectiveDecision === "slot_candidate" ? "pending" : effectiveDecision), decidedAt: now, decidedBy: actor });
   await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: payload, updated_at: now });
-  return { ok: true, candidateLedger: true, candidateId, actionResult: { candidateId, decision, effectiveDecision, placement, status, publicPublication: false, paymentExecution: false } };
+  return { ok: true, candidateLedger: true, candidateId, actionResult: { candidateId, decision, effectiveDecision, placement, status, assignmentCleanup, deferredFrontBuild:releaseAssignment, publicPublication: false, paymentExecution: false } };
 }
 async function productCandidateLedgerBulkAction(actorId, input) {
   const scope = researchScope(input), ids = Array.from(new Set(array(input && (input.candidateIds || input.productIds)).map(text).filter(Boolean))).slice(0, 3000), decision = lower(input && input.decision), placementKey = text(input && input.placementKey);

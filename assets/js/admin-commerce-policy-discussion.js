@@ -1,4 +1,4 @@
-/* IGDC administrator policy discussion workspace v1.4.0-admin-execution-preview
+/* IGDC administrator policy discussion workspace v1.4.1-admin-execution-controls
  * - global/region/country policy drafting and AI discussion
  * - administrator decision preview before persistence
  * - manual country priority/blocked targets remain above normal automation
@@ -451,7 +451,7 @@
   }
 
   function setBusy(busy) {
-    ['policyDiscussBtn', 'policySaveBtn', 'policyCloseBtn', 'policyConfirmSaveBtn', 'policyMessageDeleteBtn', 'policyMessageClearBtn', 'policyDecisionClearBtn', 'policyWorkspaceDeleteBtn', 'policyPromoteBtn'].forEach(function (id) {
+    ['policyDiscussBtn', 'policySaveBtn', 'policyCloseBtn', 'policyConfirmSaveBtn', 'policyMessageDeleteBtn', 'policyMessageClearBtn', 'policyDecisionClearBtn', 'policyWorkspaceDeleteBtn', 'policyPromoteBtn', 'policyExecutionPreviewBtn', 'policyExecutionApplyBtn'].forEach(function (id) {
       var element = $(id);
       if (element) element.disabled = !!busy;
     });
