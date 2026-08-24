@@ -7,7 +7,7 @@
  *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
  *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
  *  - 우측 패널 없음(처리하지 않음)
- *  - Hero는 프론트에 실제 렌더링된 카드만 대상으로 랭킹/인기 → 실제 화질(최소 1280x720) → 최신성 순으로 선별하고 클릭 재생한다.
+ *  - Hero는 프론트에 실제 렌더링된 영화/드라마 카드 1개를 확대 바로가기처럼 사용한다. HD 이미지를 우선 확보하고, 없으면 실제 카드 썸네일을 임시 표시한 뒤 고화질 소스로 승격한다.
  */
 (function () {
   'use strict';
@@ -735,6 +735,36 @@
     card.__igdcMediaItem=item;
     return card;
   }
+  function heroCaptionText(item){
+    const title=String(item&&((item.title||item.name||item.text)||'')||'').trim();
+    const provider=item&&item.provider?(typeof item.provider==='object'?String(item.provider.name||item.provider.platform||''):String(item.provider)):'';
+    const rawDate=item&&(item.publishedAt||item.releaseDate||item.premiereDate||item.date||'');
+    let dateText='';
+    if(rawDate){
+      const d=new Date(rawDate);
+      if(Number.isFinite(d.getTime()))dateText=String(d.getFullYear());
+    }
+    const detail=[provider.trim(),dateText].filter(Boolean).join(' · ');
+    return{title,detail};
+  }
+  function updateHeroCaption(hero,item){
+    if(!hero||!item)return;
+    let caption=q('.igdc-media-hero-caption',hero);
+    if(!caption){
+      caption=D.createElement('div');
+      caption.className='igdc-media-hero-caption';
+      caption.setAttribute('aria-hidden','true');
+      caption.setAttribute('dir','auto');
+      caption.style.cssText='position:absolute;left:0;right:0;bottom:0;z-index:3;padding:28px 24px 18px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.78));color:#fff;pointer-events:none;box-sizing:border-box;text-align:start;';
+      const title=D.createElement('div');title.className='igdc-media-hero-title';title.style.cssText='font-size:clamp(18px,2.2vw,32px);font-weight:800;line-height:1.15;text-shadow:0 1px 3px rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      const detail=D.createElement('div');detail.className='igdc-media-hero-detail';detail.style.cssText='margin-top:6px;font-size:clamp(12px,1.1vw,15px);font-weight:600;opacity:.92;text-shadow:0 1px 2px rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      caption.appendChild(title);caption.appendChild(detail);hero.appendChild(caption);
+    }
+    const text=heroCaptionText(item);
+    const titleEl=q('.igdc-media-hero-title',caption),detailEl=q('.igdc-media-hero-detail',caption);
+    if(titleEl)titleEl.textContent=text.title;
+    if(detailEl){detailEl.textContent=text.detail;detailEl.style.display=text.detail?'block':'none';}
+  }
   function bindHeroPlayback(heroImg,item){
     if(!heroImg||!item)return;
     const hero=heroImg.closest&&heroImg.closest('.hero');
@@ -742,22 +772,73 @@
     const target=hero||heroImg;
     target.setAttribute('role','button');
     target.setAttribute('tabindex','0');
-    target.setAttribute('aria-label',(title?title+' - ':'')+'재생');
+    target.setAttribute('aria-label',title||'Media');
     target.style.cursor='pointer';
     target.dataset.igdcHeroPlayable='true';
     heroImg.dataset.igdcHeroPlayable='true';
+    updateHeroCaption(hero,item);
     function play(event){
       if(event){event.preventDefault();event.stopPropagation();}
+      const card=heroPlaybackCard(item,heroImg);
+      // When the same content is already rendered in Movie/Drama, route the hero
+      // through the exact card click handler. This keeps web/mobile/OTT behavior
+      // identical to tapping the rail card itself.
+      if(card&&card.isConnected&&!card.classList.contains('igdc-hero-playback-card')&&typeof card.click==='function'){
+        card.click();
+        return false;
+      }
       const player=window.IGDCMediaHubPlayback;
       if(!player||typeof player.open!=='function')return false;
-      const card=heroPlaybackCard(item,heroImg);
-      player.open(card,{autoPlay:true,autoFullscreen:false});
+      player.open(card,{autoPlay:true,autoFullscreen:true});
       return false;
     }
     target.onclick=play;
     target.onkeydown=function(event){
       if(event&&(event.key==='Enter'||event.key===' '||event.code==='Space')){event.preventDefault();play(event);}
     };
+  }
+  function captureHeroFrameForItem(item){
+    if(!item)return Promise.resolve(null);
+    const source=mediaSourceForThumb(item);
+    if(!directVideoForThumb(source))return Promise.resolve(null);
+    const key=heroItemKey(item)||source;
+    if(heroRuntime.frameCaptureCache.has(key))return heroRuntime.frameCaptureCache.get(key);
+    const promise=new Promise((resolve)=>{
+      const video=D.createElement('video');let done=false,targetIndex=0;
+      const targets=[1,3,6,10];
+      const timer=setTimeout(()=>finish(null),9000);
+      function clean(){clearTimeout(timer);try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_e){}}
+      function finish(value){if(done)return;done=true;clean();resolve(value);}
+      function seekNext(){
+        if(targetIndex>=targets.length){finish(null);return;}
+        let t=targets[targetIndex++],d=Number(video.duration);
+        if(Number.isFinite(d)&&d>0)t=Math.min(t,Math.max(.15,d-.2));
+        try{video.currentTime=Math.max(.05,t);}catch(_e){finish(null);}
+      }
+      video.onloadedmetadata=function(){
+        if(Number(video.videoWidth||0)<1280||Number(video.videoHeight||0)<720){finish(null);return;}
+        seekNext();
+      };
+      video.onseeked=function(){
+        if(Number(video.videoWidth||0)<1280||Number(video.videoHeight||0)<720){finish(null);return;}
+        try{
+          const c=D.createElement('canvas'),ctx=c.getContext('2d',{alpha:false});
+          if(!ctx){finish(null);return;}
+          const CW=1280,CH=720;c.width=CW;c.height=CH;
+          const r=Math.max(CW/video.videoWidth,CH/video.videoHeight);
+          const sw=CW/r,sh=CH/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
+          ctx.drawImage(video,sx,sy,sw,sh,0,0,CW,CH);
+          if(!frameLooksUsable(ctx,CW,CH)){seekNext();return;}
+          finish({url:c.toDataURL('image/jpeg',.88),w:CW,h:CH});
+        }catch(_e){finish(null);}
+      };
+      video.onerror=function(){finish(null);};
+      video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';
+      video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px;top:-9999px';
+      (D.body||D.documentElement).appendChild(video);video.src=source;video.load();
+    });
+    heroRuntime.frameCaptureCache.set(key,promise);
+    return promise;
   }
   function probeHeroImage(url, timeoutMs){
     return new Promise((resolve)=>{
@@ -924,7 +1005,7 @@
   const heroRuntime={
     rotateKeys:[],sectionMap:null,timer:null,running:false,rerun:false,
     currentItem:null,currentUrl:'',currentTier:-1,currentScore:-Infinity,
-    failedUrls:new Set()
+    failedUrls:new Set(),frameCaptureCache:new Map()
   };
 
   function heroItemKey(item){
@@ -1011,20 +1092,27 @@
   }
 
   function commitHeroChoice(heroImg,best){
-    if(!heroImg||!best||!best.item||!best.url||best.tier<2)return false;
-    // Compare with the same policy used for selection: freshness first,
-    // ranking/hotness second, verified resolution third. The 1280x720 floor is hard.
+    if(!heroImg||!best||!best.item||!best.url)return false;
+    const tier=Number(best.tier||0);
+    const provisional=best.provisional===true;
+    if(tier<2&&!provisional)return false;
     const currentItem=heroRuntime.currentItem;
     if(currentItem&&heroRuntime.currentUrl){
-      const current={
-        item:currentItem,
-        freshnessDay:Number(heroImg.dataset.igdcHeroFreshnessDay||heroFreshnessDay(currentItem)),
-        popularityMetric:Number(heroImg.dataset.igdcHeroPopularityMetric||heroPopularityMetric(currentItem)),
-        qualityMetric:Number(heroImg.dataset.igdcHeroQualityMetric||heroQualityMetric(heroImg.dataset.igdcHeroSourceWidth,heroImg.dataset.igdcHeroSourceHeight)),
-        finalScore:Number(heroImg.dataset.igdcHeroFinalScore||heroRuntime.currentScore||0),
-        w:Number(heroImg.dataset.igdcHeroSourceWidth||0),h:Number(heroImg.dataset.igdcHeroSourceHeight||0)
-      };
-      if(heroResolvedCompare(best,current)>=0)return false;
+      const currentTier=Number(heroRuntime.currentTier||0);
+      // A low-resolution card fallback is temporary: any verified HD movie/drama
+      // candidate may replace it. Once HD is installed, never downgrade to fallback.
+      if(currentTier>=2&&tier<2)return false;
+      if(!(currentTier<2&&tier>=2)){
+        const current={
+          item:currentItem,
+          freshnessDay:Number(heroImg.dataset.igdcHeroFreshnessDay||heroFreshnessDay(currentItem)),
+          popularityMetric:Number(heroImg.dataset.igdcHeroPopularityMetric||heroPopularityMetric(currentItem)),
+          qualityMetric:Number(heroImg.dataset.igdcHeroQualityMetric||heroQualityMetric(heroImg.dataset.igdcHeroSourceWidth,heroImg.dataset.igdcHeroSourceHeight)),
+          finalScore:Number(heroImg.dataset.igdcHeroFinalScore||heroRuntime.currentScore||0),
+          w:Number(heroImg.dataset.igdcHeroSourceWidth||0),h:Number(heroImg.dataset.igdcHeroSourceHeight||0)
+        };
+        if(heroResolvedCompare(best,current)>=0)return false;
+      }
     }
     heroImg.loading='eager';heroImg.decoding='async';
     try{heroImg.fetchPriority='high';}catch(_e){}
@@ -1035,7 +1123,7 @@
       try{heroRuntime.failedUrls.add(selectedUrl);}catch(_e){}
       heroImg.removeAttribute('data-igdc-hero-resolution-tier');
       heroImg.removeAttribute('data-igdc-hero-final-score');
-      heroRuntime.currentTier=-1;heroRuntime.currentScore=-Infinity;
+      heroRuntime.currentItem=null;heroRuntime.currentUrl='';heroRuntime.currentTier=-1;heroRuntime.currentScore=-Infinity;
       requestHeroRefresh(80);
     };
     heroImg.onload=function(){if(heroImg.dataset.igdcHeroAttemptUrl===selectedUrl)heroImg.dataset.igdcHeroLoaded='true';};
@@ -1044,15 +1132,15 @@
     heroImg.dataset.igdcHeroContentId=String(ensureContentId(best.item)||'');
     heroImg.dataset.igdcHeroSourceWidth=String(best.w||'');
     heroImg.dataset.igdcHeroSourceHeight=String(best.h||'');
-    heroImg.dataset.igdcHeroResolutionTier=String(best.tier||0);
+    heroImg.dataset.igdcHeroResolutionTier=String(tier);
     heroImg.dataset.igdcHeroFinalScore=String(best.finalScore||0);
     heroImg.dataset.igdcHeroFreshnessDay=String(best.freshnessDay||heroFreshnessDay(best.item)||0);
     heroImg.dataset.igdcHeroPopularityMetric=String(best.popularityMetric||heroPopularityMetric(best.item)||0);
-    heroImg.dataset.igdcHeroQualityMetric=String(best.qualityMetric||heroQualityMetric(best.w,best.h)||0);
-    heroImg.dataset.igdcHeroQuality=best.tier>=3?'ranked-fullhd-or-better':'ranked-hd';
+    heroImg.dataset.igdcHeroQualityMetric=String(best.qualityMetric!==undefined?best.qualityMetric:heroQualityMetric(best.w,best.h));
+    heroImg.dataset.igdcHeroQuality=tier>=3?'ranked-fullhd-or-better':(tier>=2?'ranked-hd':'card-thumbnail-fallback');
     bindHeroPlayback(heroImg,best.item);
     heroRuntime.currentItem=best.item;heroRuntime.currentUrl=selectedUrl;
-    heroRuntime.currentTier=best.tier;heroRuntime.currentScore=best.finalScore||0;
+    heroRuntime.currentTier=tier;heroRuntime.currentScore=best.finalScore||0;
     return true;
   }
 
@@ -1067,7 +1155,7 @@
 
     pool.sort((a,b)=>{
       // Requested hero policy: newest movie/drama first, then hot/ranked,
-      // then verified image quality. Image quality still has a 1280x720 floor.
+      // then verified image quality. Image quality still has a 1280x720 target.
       const ad=heroFreshnessDay(a.item),bd=heroFreshnessDay(b.item);
       if(ad!==bd)return bd-ad;
       const ar=heroPopularityMetric(a.item),br=heroPopularityMetric(b.item);
@@ -1078,6 +1166,21 @@
       const bs=heroRankScore(b.item)+(b.preferred?80:0)+(b.domReady?140:0)-heroPendingPenalty(b.item);
       return bs-as;
     });
+
+    // Never leave the hero empty while HD verification is still running. The first
+    // successfully rendered movie/drama card becomes an immediate, clickable
+    // provisional hero. A verified 1280x720+ image replaces it as soon as available.
+    const fallbackRow=pool.find((row)=>row&&row.renderedUrl&&row.renderedW>=120&&row.renderedH>=68);
+    if(fallbackRow){
+      const fallbackTier=heroResolutionTier(fallbackRow.renderedW,fallbackRow.renderedH);
+      commitHeroChoice(heroImg,{
+        url:fallbackRow.renderedUrl,item:fallbackRow.item,card:fallbackRow.card,
+        w:fallbackRow.renderedW,h:fallbackRow.renderedH,tier:fallbackTier,provisional:fallbackTier<2,
+        qualityMetric:heroQualityMetric(fallbackRow.renderedW,fallbackRow.renderedH),
+        freshnessDay:heroFreshnessDay(fallbackRow.item),popularityMetric:heroPopularityMetric(fallbackRow.item),
+        finalScore:heroRankScore(fallbackRow.item)+(fallbackRow.preferred?80:0)+(fallbackRow.domReady?140:0)
+      });
+    }
 
     const candidates=[],seenUrls=new Set();
     for(const row of pool.slice(0,64)){
@@ -1098,7 +1201,7 @@
         candidates.push({url,item,card:row.card,score:base+(120-(index*16)),hint:heroResolutionHint(item,url,index),knownW:0,knownH:0,domReady:row.domReady});
       });
     }
-    if(!candidates.length)return false;
+    if(!candidates.length)return !!heroRuntime.currentItem;
 
     function resolveKnown(candidate){
       const w=Number(candidate.knownW||0),h=Number(candidate.knownH||0);
@@ -1148,9 +1251,25 @@
       probeSet.push(candidate);
     }
     const checked=await Promise.all(probeSet.map((candidate)=>checkedCandidate(candidate,3600)));
-    const best=chooseBest(checked);
-    if(!best)return !!knownBest;
-    return commitHeroChoice(heroImg,best)||!!knownBest;
+    let best=chooseBest(checked);
+
+    // If provider/backdrop assets are not HD, try a real 1280x720 frame from the
+    // top-ranked direct movie/drama video. This is a genuine frame capture; low-res
+    // sources are never upscaled and cross-origin failures simply fall back safely.
+    if(!best){
+      for(const row of pool.slice(0,6)){
+        const captured=await captureHeroFrameForItem(row.item);
+        if(!captured)continue;
+        const tier=heroResolutionTier(captured.w,captured.h);
+        if(tier<2)continue;
+        best={url:captured.url,item:row.item,card:row.card,w:captured.w,h:captured.h,tier,
+          qualityMetric:heroQualityMetric(captured.w,captured.h),freshnessDay:heroFreshnessDay(row.item),
+          popularityMetric:heroPopularityMetric(row.item),finalScore:heroRankScore(row.item)+(row.preferred?80:0)+(row.domReady?140:0)+520};
+        break;
+      }
+    }
+    if(!best)return !!knownBest||!!heroRuntime.currentItem;
+    return commitHeroChoice(heroImg,best)||!!knownBest||!!heroRuntime.currentItem;
   }
 
   function requestHeroRefresh(delay){
@@ -1294,7 +1413,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.0.0-hero-movie-drama-latest-hot-hd';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.3.0-hero-card-link-hd-fallback';
 })();
 
 

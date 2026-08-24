@@ -10,7 +10,7 @@
 const crypto = require("crypto");
 const MediaPolicy = require("./media-candidate-policy.v2");
 
-const VERSION = "media-candidate-store-v1.6.0-dimension-aware-front-hero";
+const VERSION = "media-candidate-store-v1.7.0-hero-backdrop-pass-through";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE = process.env.MEDIA_CANDIDATE_TABLE || "media_candidates";
 const RELEASE_TABLE = process.env.MEDIA_SNAPSHOT_RELEASE_TABLE || "media_snapshot_releases";
@@ -248,6 +248,20 @@ function publicSlot(row, slotId, defaults){
   const source=plain(raw.sourceMetadata);
   const policy=MediaPolicy.releaseEligibility(row);
   const thumbMeta=thumbnailMeta(row),thumbUrl=usableThumbnailUrl(row.thumb_url);
+  const heroCandidates=[
+    raw.heroImage,raw.heroImageUrl,raw.heroThumbnail,raw.heroThumb,raw.backdrop,raw.backdropUrl,raw.backdropImage,
+    raw.highResThumbnail,raw.thumbnailHD,raw.hdThumbnail,raw.maxresThumbnail,raw.image1920,raw.image1280,
+    source.heroImage,source.heroImageUrl,source.heroThumbnail,source.heroThumb,source.backdrop,source.backdropUrl,source.backdropImage,
+    source.highResThumbnail,source.thumbnailHD,source.hdThumbnail,source.maxresThumbnail,source.image1920,source.image1280
+  ];
+  const alternateHeroUrl=heroCandidates.map(usableThumbnailUrl).find(Boolean)||"";
+  const alternateHeroWidth=Number(raw.heroWidth||raw.backdropWidth||source.heroWidth||source.backdropWidth||0)||0;
+  const alternateHeroHeight=Number(raw.heroHeight||raw.backdropHeight||source.heroHeight||source.backdropHeight||0)||0;
+  const heroUrl=thumbMeta.heroReady?thumbUrl:alternateHeroUrl;
+  const heroWidth=thumbMeta.heroReady?thumbMeta.width:alternateHeroWidth;
+  const heroHeight=thumbMeta.heroReady?thumbMeta.height:alternateHeroHeight;
+  const heroKnown=heroWidth>0&&heroHeight>0;
+  const heroReady=!!heroUrl&&heroKnown&&heroWidth>=1280&&heroHeight>=720;
   const sourceUrl=normalizeUrl(row.source_url || row.embed_url || row.video_url);
   const videoUrl=normalizeUrl(row.video_url);
   const embedUrl=normalizeUrl(row.embed_url);
@@ -268,10 +282,10 @@ function publicSlot(row, slotId, defaults){
     thumbnailHeight:thumbMeta.height||null,
     thumbnailReady:thumbMeta.known?thumbMeta.frontReady:true,
     thumbnailStatus:thumbMeta.known?(thumbMeta.frontReady?"verified":"below_front_floor"):"verified_url",
-    heroImage:thumbMeta.heroReady?thumbUrl:undefined,
-    heroWidth:thumbMeta.heroReady?thumbMeta.width:null,
-    heroHeight:thumbMeta.heroReady?thumbMeta.height:null,
-    heroThumbnailReady:thumbMeta.heroReady,
+    heroImage:heroUrl||undefined,
+    heroWidth:heroWidth||null,
+    heroHeight:heroHeight||null,
+    heroThumbnailReady:heroUrl?(heroKnown?heroReady:null):false,
     provider: text(row.provider || row.source_host),
     url: sourceUrl,
     link: sourceUrl,
