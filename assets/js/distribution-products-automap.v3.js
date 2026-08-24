@@ -10,8 +10,8 @@
 // - A partial regional response overlays only the sections it actually contains.
 (function(){
   'use strict';
-  if(window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V9__) return;
-  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V9__=true;
+  if(window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V8__) return;
+  window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V8__=true;
 
   const STATIC_SNAPSHOT_URL='/data/distribution.snapshot.json';
   const REGIONAL_SNAPSHOT_URL=''; // Edge-routed canonical snapshot is the only source.
@@ -29,23 +29,23 @@
   const INITIAL_SEED_PER_SECTION=0;
   const STATIC_TIMEOUT=12000;
   const REGIONAL_TIMEOUT=8500;
-  const CACHE_PREFIX='igdc:distribution:instant-render:v6:';
+  const CACHE_PREFIX='igdc:distribution:instant-render:v5:';
 
   const SECTION_MAP=[
     {key:'distribution-recommend',selector:'[data-psom-key="distribution-recommend"]',limit:LIMIT_MAIN,label:'Recommend Item'},
-    {key:'distribution-sponsor',selector:'[data-psom-key="distribution-sponsor"]',limit:LIMIT_MAIN,label:'Sponsor Item'},
-    {key:'distribution-trending',selector:'[data-psom-key="distribution-trending"]',limit:LIMIT_MAIN,label:'Trending Item'},
     {key:'distribution-new',selector:'[data-psom-key="distribution-new"]',limit:LIMIT_MAIN,label:'New Item'},
+    {key:'distribution-trending',selector:'[data-psom-key="distribution-trending"]',limit:LIMIT_MAIN,label:'Trending Item'},
     {key:'distribution-special',selector:'[data-psom-key="distribution-special"]',limit:LIMIT_MAIN,label:'Special Item'},
+    {key:'distribution-sponsor',selector:'[data-psom-key="distribution-sponsor"]',limit:LIMIT_MAIN,label:'Sponsor Item'},
     {key:'distribution-others',selector:'[data-psom-key="distribution-others"]',limit:LIMIT_MAIN,label:'Product Item'},
     {key:'distribution-right',selector:'[data-psom-key="distribution-right"]',limit:LIMIT_RIGHT,label:'Recommended Brand'}
   ];
   const ALIAS={
     'distribution-recommend':'distribution_1',
-    'distribution-new':'distribution_4',
+    'distribution-new':'distribution_2',
     'distribution-trending':'distribution_3',
-    'distribution-special':'distribution_5',
-    'distribution-sponsor':'distribution_2',
+    'distribution-special':'distribution_4',
+    'distribution-sponsor':'distribution_5',
     'distribution-others':'distribution_6',
     'distribution-right':'distribution_7'
   };
@@ -111,9 +111,12 @@
       description:pick(item,['description','summary']),
       thumb:pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']),
       image:pick(item,['image','thumbnail','thumb','imageUrl']),
-      url:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','url','href','link']),
-      href:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','href','url','link']),
-      link:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','link','url','href']),
+      // Canonical publication keeps the verified seller detail route under
+      // product/display/detail/checkout fields. Preserve those fields here
+      // instead of dropping them during the compact snapshot pass.
+      url:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink','displayUrl','url','href','link']),
+      href:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink','displayUrl','href','url','link']),
+      link:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink','displayUrl','link','url','href']),
       affiliateOutboundUrl:pick(item,['affiliateOutboundUrl','affiliate_outbound_url']),
       externalOutboundUrl:pick(item,['externalOutboundUrl','external_outbound_url']),
       affiliate:item&&item.affiliate&&typeof item.affiliate==='object'?item.affiliate:null,
@@ -260,7 +263,7 @@
         // thumbnail-loader.compat.min.js honours this flag on Distribution Hub.
         // It must not append a late network feed after this renderer owns the slots.
         box.dataset.mounted='1';
-        box.dataset.distributionAutomap='v9';
+        box.dataset.distributionAutomap='v8';
       }
     });
   }
