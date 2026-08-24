@@ -84,6 +84,39 @@ function nowIso() {
 function unique(values) {
   return Array.from(new Set(array(values).map(text).filter(Boolean)));
 }
+function sameHttpsUrl(a, b) {
+  const left = Policy.normalizeUrl(a);
+  const right = Policy.normalizeUrl(b);
+  if (!left || !right) return false;
+  try {
+    const l = new URL(left);
+    const r = new URL(right);
+    return (l.origin + l.pathname.replace(/\/+$/, "") + l.search) ===
+      (r.origin + r.pathname.replace(/\/+$/, "") + r.search);
+  } catch (_e) {
+    return left === right;
+  }
+}
+function platformContentUrl(platform, value) {
+  const url = Policy.normalizeUrl(value);
+  if (!url) return "";
+  let u;
+  try { u = new URL(url); } catch (_e) { return ""; }
+  const p = String(platform || Policy.platformFromHost(url) || "").toLowerCase();
+  const path = u.pathname || "/";
+  const host = u.hostname.toLowerCase().replace(/^www\./, "");
+  let ok = false;
+  if (p === "youtube") ok = host === "youtu.be" || /^\/(watch|shorts|live|embed)(?:\/|$)/i.test(path) || (path === "/watch" && !!u.searchParams.get("v"));
+  else if (p === "instagram") ok = /^\/(p|reel|reels|tv)\//i.test(path);
+  else if (p === "tiktok") ok = /^\/@[^/]+\/video\//i.test(path);
+  else if (p === "facebook") ok = /^\/(reel|watch|videos|posts|photo|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos)\//i.test(path);
+  else if (p === "wechat") ok = /^\/s(?:\/|$)/i.test(path) || !!u.searchParams.get("__biz");
+  else if (p === "weibo") ok = /^\/(detail|status)\//i.test(path);
+  else if (p === "pinterest") ok = /^\/pin\//i.test(path) || host === "pin.it";
+  else if (p === "reddit") ok = /\/comments\//i.test(path) || host === "redd.it";
+  else if (p === "twitter") ok = /\/status\//i.test(path);
+  return ok ? url : "";
+}
 function roleList(member) {
   return Array.from(
     new Set(
@@ -328,15 +361,20 @@ function normalizeCandidate(input, actor) {
       plain(row.bind).platform,
     sourceInput,
   );
-  const requestedContentUrl =
-    assetClass === "latest_content"
-      ? Policy.normalizeUrl(
+  const explicitContentUrl = Policy.normalizeUrl(
     row.latestContentUrl ||
       row.latest_content_url ||
       row.sourceContentUrl ||
       row.source_content_url ||
-      (row.latestContentAsset || row.latest_content_asset ? sourceInput : ""),
-        )
+      "",
+  );
+  const requestedContentUrl =
+    assetClass === "latest_content"
+      ? explicitContentUrl ||
+        platformContentUrl(platformInput, sourceInput) ||
+        (row.latestContentAsset || row.latest_content_asset
+          ? Policy.normalizeUrl(sourceInput)
+          : "")
       : "";
   const channelInput = text(
     row.channelUrl || row.channel_url || row.accountUrl || sourceInput,
@@ -354,7 +392,9 @@ function normalizeCandidate(input, actor) {
     const validLatestContent =
       requestedContentUrl &&
       contentPlatform &&
-      contentPlatform === (platformInput || channel.platform);
+      contentPlatform === (platformInput || channel.platform) &&
+      (platformContentUrl(contentPlatform, requestedContentUrl) ||
+        !sameHttpsUrl(requestedContentUrl, channel.channelUrl));
     row = Object.assign({}, row, {
       sourceUrl: validLatestContent
         ? requestedContentUrl
@@ -1114,7 +1154,23 @@ function publicSocialSlot(row, slotId, defaults) {
   const base = plain(defaults);
   const r = plain(row);
   const raw = plain(r.raw);
-  const sourceUrl = text(r.source_url || r.sourceUrl);
+  const platformHint = text(
+    r.platform || PLATFORM_BY_SECTION[text(r.section_key || r.sectionKey)] || "social",
+  );
+  const latestContentUrl = text(
+    platformContentUrl(
+      platformHint,
+      raw.latestContentUrl ||
+        raw.latest_content_url ||
+        raw.sourceContentUrl ||
+        raw.source_content_url ||
+        plain(r.evidence).latestContentUrl ||
+        r.latestContentUrl ||
+        r.latest_content_url ||
+        "",
+    ),
+  );
+  const sourceUrl = latestContentUrl || text(r.source_url || r.sourceUrl);
   const thumb = text(
     r.thumbnail_url ||
       r.thumbnailUrl ||
@@ -1124,7 +1180,7 @@ function publicSocialSlot(row, slotId, defaults) {
       "",
   );
   const section = text(r.section_key || r.sectionKey);
-  const platform = text(r.platform || PLATFORM_BY_SECTION[section] || "social");
+  const platform = platformHint;
   const now = nowIso();
   const channelUrl = text(
     raw.channelUrl || raw.channel_url || plain(r.evidence).channelUrl,
@@ -1174,9 +1230,9 @@ function publicSocialSlot(row, slotId, defaults) {
           "channel",
       ),
       channelAsset: true,
-      latestContentAsset: true,
+      latestContentAsset: !!latestContentUrl || platformContentUrl(platform, sourceUrl) !== "",
       channelUrl: channelUrl || undefined,
-      latestContentUrl: sourceUrl,
+      latestContentUrl: latestContentUrl || sourceUrl,
       contentPublishedAt: contentPublishedAt || undefined,
       category: text(raw.category),
       topicTags: unique(raw.tags).slice(0, 12),

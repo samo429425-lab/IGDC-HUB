@@ -2430,7 +2430,7 @@
       row.seedContent !== true &&
       row.publicAccess === true &&
       row.loginRequired !== true &&
-      /^https:\/\//i.test(text(row.sourceUrl || row.latestContentUrl)) &&
+      /^https:\/\//i.test(text(row.latestContentUrl || row.sourceUrl)) &&
       hasRealThumb
     );
   }

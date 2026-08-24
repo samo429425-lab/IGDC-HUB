@@ -91,6 +91,6 @@
   document.addEventListener('click',function(e){
     var a=e.target&&e.target.closest&&e.target.closest('#rightAutoPanel a,#rpMobileGrid a');
     if(a&&pending(a.getAttribute('href'))){e.preventDefault();e.stopPropagation();openPending(a);return;}
-    var card=e.target&&e.target.closest&&e.target.closest('.thumb-grid[data-psom-key] a.card');if(!card)return;var grid=card.closest('.thumb-grid[data-psom-key]'),key=grid&&grid.getAttribute('data-psom-key')||'';if(!key||key==='rightPanel')return;e.preventDefault();openViewer(card);
+    var card=e.target&&e.target.closest&&e.target.closest('.thumb-grid[data-psom-key] a.card');if(!card)return;var grid=card.closest('.thumb-grid[data-psom-key]'),key=grid&&grid.getAttribute('data-psom-key')||'';if(!key||key==='rightPanel')return;var href=t(card.getAttribute('href')).trim();if(!pending(href))return;e.preventDefault();openViewer(card);
   },true);
 })();
