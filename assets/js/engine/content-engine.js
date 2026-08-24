@@ -393,14 +393,15 @@
 
       function focusParentShell(){
         if (!state.active || state.returning) return;
-        try{
-          if (typeof pd.hasFocus === 'function' && !pd.hasFocus()) return;
-        }catch(_){}
+        // IMPORTANT: when a cross-origin seller page owns keyboard focus,
+        // parent.document.hasFocus() may be false. The previous guard returned
+        // at exactly that moment, so Escape could never reach the IGDC shell.
+        // Reclaim keyboard focus at the shell level while keeping mouse use of
+        // the embedded seller page available.
+        try{ if (p && p.focus) p.focus(); }catch(_){}
         try{
           const s = ensureSentinel();
-          if (pd.activeElement === state.frame || pd.activeElement === pd.body || !pd.activeElement){
-            if (s && s.focus) s.focus({preventScroll:true});
-          }
+          if (s && s.focus) s.focus({preventScroll:true});
         }catch(_){}
       }
 
@@ -412,9 +413,12 @@
             return;
           }
           try{
+            // If the cross-origin mainFrame becomes the active element, pull
+            // keyboard focus straight back to the IGDC shell. This is what
+            // makes Escape behave like the browser Back button.
             if (pd.activeElement === state.frame) focusParentShell();
           }catch(_){}
-        }, 100);
+        }, 80);
       }
 
       function goBackLikeBrowser(){
@@ -459,7 +463,8 @@
         p.addEventListener('blur', function(){
           if (!state.active || state.returning) return;
           p.setTimeout(focusParentShell, 0);
-          p.setTimeout(focusParentShell, 60);
+          p.setTimeout(focusParentShell, 40);
+          p.setTimeout(focusParentShell, 120);
         }, true);
 
         pd.addEventListener('focusout', function(){
